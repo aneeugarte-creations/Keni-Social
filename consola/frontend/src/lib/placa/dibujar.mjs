@@ -48,10 +48,12 @@ function ajustar(ctx, texto, maxAncho, maxAlto, fontFor, tamMax, tamMin, maxLine
   return { tam: tamMin, lineas, altoLinea: Math.round(tamMin * interlineado) };
 }
 
-function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco) {
+function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom) {
   if (!img) return;
   const iw = img.width, ih = img.height;
-  const escala = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
+  const z = zoom && zoom > 0 ? zoom : 1; // reencuadre: factor de acercamiento dentro del marco
+  const base = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
+  const escala = base * z;
   const dw = iw * escala, dh = ih * escala;
   const fx = foco ? foco[0] : 0.5, fy = foco ? foco[1] : 0.45;
   const dx = x + (w - dw) * fx;
@@ -118,9 +120,15 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   const familia = familiaReal(t.familia);
   const fontFor = (tam) => `${t.peso || 700} ${Math.round(tam)}px "${familia}"`;
   const aj = t.auto_ajuste || { max_lineas: 4, tam_min: 40 };
+  // Interletra (letter-spacing): la fija ANTES de medir para que el wrap/chip cuadre. La soportan
+  // tanto el canvas del navegador como @napi-rs/canvas (Skia). Se restablece al final.
+  const interletra = t.interletra || 0;
+  if (interletra) ctx.letterSpacing = `${interletra}px`;
   const { lineas, altoLinea } = ajustar(
     ctx, texto, t.w, 0, fontFor, t.tamano, aj.tam_min, aj.max_lineas, t.interlineado || 1.14,
   );
+  // Contorno del texto (legibilidad sobre fotos): se traza DEBAJO del relleno.
+  const contorno = t.contorno && t.contorno.grosor > 0 ? t.contorno : null;
   ctx.textBaseline = "top";
   ctx.textAlign = t.alineacion === "centro" ? "center" : t.alineacion === "derecha" ? "right" : "left";
   const tx = t.alineacion === "centro" ? t.x + t.w / 2 : t.alineacion === "derecha" ? t.x + t.w : t.x;
@@ -144,17 +152,25 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
       dibujarChipLinea(ctx, t, ctx.measureText(ln).width, y, altoLinea, tx);
     }
     if (justif && !ultima) {
-      dibujarLineaJustificada(ctx, ln, t.x, y, t.w, t.color, t.sombra);
+      dibujarLineaJustificada(ctx, ln, t.x, y, t.w, t.color, t.sombra, contorno);
     } else {
+      const lx = justif ? t.x : tx;
       if (t.sombra) {
         ctx.fillStyle = t.sombra.color || "#000000";
-        ctx.fillText(ln, (justif ? t.x : tx) + (t.sombra.dx ?? 2), y + (t.sombra.dy ?? 2));
+        ctx.fillText(ln, lx + (t.sombra.dx ?? 2), y + (t.sombra.dy ?? 2));
+      }
+      if (contorno) {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = contorno.grosor;
+        ctx.strokeStyle = contorno.color || "#000000";
+        ctx.strokeText(ln, lx, y);
       }
       ctx.fillStyle = t.color;
-      ctx.fillText(ln, justif ? t.x : tx, y);
+      ctx.fillText(ln, lx, y);
     }
     y += altoLinea;
   }
+  if (interletra) ctx.letterSpacing = "0px";
 }
 
 // Dibuja el chip (fondo/pleca) de UNA línea de texto, ajustado a su ancho. `lineTop` es la
@@ -184,22 +200,29 @@ function dibujarChipLinea(ctx, t, lineWidth, lineTop, altoLinea, tx) {
 
 // Dibuja una línea con las palabras repartidas para llenar `ancho` (justificado). Una palabra
 // suelta cae a la izquierda. textAlign se fuerza a "left" (posicionamos cada palabra a mano).
-function dibujarLineaJustificada(ctx, linea, x, y, ancho, color, sombra) {
+function dibujarLineaJustificada(ctx, linea, x, y, ancho, color, sombra, contorno) {
   const palabras = linea.split(/\s+/).filter(Boolean);
   ctx.textAlign = "left";
-  if (palabras.length <= 1) {
-    if (sombra) { ctx.fillStyle = sombra.color || "#000000"; ctx.fillText(linea, x + (sombra.dx ?? 2), y + (sombra.dy ?? 2)); }
+  const pinta = (txt, px) => {
+    if (sombra) { ctx.fillStyle = sombra.color || "#000000"; ctx.fillText(txt, px + (sombra.dx ?? 2), y + (sombra.dy ?? 2)); }
+    if (contorno) {
+      ctx.lineJoin = "round";
+      ctx.lineWidth = contorno.grosor;
+      ctx.strokeStyle = contorno.color || "#000000";
+      ctx.strokeText(txt, px, y);
+    }
     ctx.fillStyle = color;
-    ctx.fillText(linea, x, y);
+    ctx.fillText(txt, px, y);
+  };
+  if (palabras.length <= 1) {
+    pinta(linea, x);
     return;
   }
   const anchoPalabras = palabras.reduce((s, p) => s + ctx.measureText(p).width, 0);
   const hueco = (ancho - anchoPalabras) / (palabras.length - 1);
   let cx = x;
   for (const p of palabras) {
-    if (sombra) { ctx.fillStyle = sombra.color || "#000000"; ctx.fillText(p, cx + (sombra.dx ?? 2), y + (sombra.dy ?? 2)); }
-    ctx.fillStyle = color;
-    ctx.fillText(p, cx, y);
+    pinta(p, cx);
     cx += ctx.measureText(p).width + hueco;
   }
 }
@@ -336,7 +359,7 @@ function dibujarCapa(ctx, capa, env) {
       const img = env.I[capa.objeto];
       const filtro = cssFiltro(capa.filtros);
       if (filtro) ctx.filter = filtro;
-      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco);
+      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom);
       if (filtro) ctx.filter = "none";
       break;
     }

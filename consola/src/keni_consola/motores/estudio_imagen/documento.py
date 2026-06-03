@@ -81,7 +81,8 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
     """Campos comunes a toda capa (geometría + estado)."""
     caja = _caja(c, "La capa")
     op = c.get("opacidad", 1)
-    return {
+    nombre = c.get("nombre")
+    base = {
         "id": _id(c),
         **caja,
         "rotacion": float(c.get("rotacion", 0) or 0),
@@ -90,6 +91,11 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
         "visible": bool(c.get("visible", True)),
         "bloqueada": bool(c.get("bloqueada", False)),
     }
+    # `nombre` (etiqueta editable en el panel de capas) es opcional: solo se persiste si lo trae,
+    # para no ensuciar los documentos antiguos. El render lo ignora.
+    if isinstance(nombre, str) and nombre.strip():
+        base["nombre"] = nombre.strip()
+    return base
 
 
 def _filtros(f: Any) -> dict[str, float] | None:
@@ -114,12 +120,15 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         isinstance(foco, (list, tuple)) and len(foco) == 2 and all(_num(f) for f in foco),
         "El foco de la imagen debe ser [x,y] entre 0 y 1.",
     )
+    zoom = c.get("zoom", 1)
     return {
         **_base(c),
         "tipo": "imagen",
         "objeto": str(c.get("objeto", "") or ""),
         "ajuste": c.get("ajuste") if c.get("ajuste") in _AJUSTES else "cover",
         "foco": [float(foco[0]), float(foco[1])],
+        # Reencuadre dentro del marco: factor de acercamiento (1 = ajuste base). Acotado a [1, 6].
+        "zoom": min(6.0, max(1.0, float(zoom))) if _num(zoom) else 1.0,
         "filtros": _filtros(c.get("filtros")),
     }
 
@@ -145,6 +154,14 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
             "dy": int(sombra.get("dy", 2)),
             "color": sombra["color"] if _es_hex(sombra.get("color")) else "#000000",
         }
+    # Contorno del texto (legibilidad sobre fotos): solo si trae grosor > 0.
+    contorno = c.get("contorno")
+    contorno_limpio = None
+    if isinstance(contorno, dict) and _num(contorno.get("grosor")) and float(contorno["grosor"]) > 0:
+        contorno_limpio = {
+            "color": contorno["color"] if _es_hex(contorno.get("color")) else "#000000",
+            "grosor": float(contorno["grosor"]),
+        }
     aj = c.get("auto_ajuste") or {}
     familia = c["familia"] if isinstance(c.get("familia"), str) and c.get("familia") else "sans"
     return {
@@ -159,11 +176,13 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
         "alineacion": c.get("alineacion") if c.get("alineacion") in _ALINEACIONES else "izquierda",
         "mayusculas": bool(c.get("mayusculas", False)),
         "interlineado": float(c.get("interlineado", 1.14)),
+        "interletra": float(c.get("interletra", 0)) if _num(c.get("interletra")) else 0.0,
         "auto_ajuste": {
             "max_lineas": int(aj.get("max_lineas", 4)),
             "tam_min": int(aj.get("tam_min", 40)),
         },
         "sombra": sombra_limpia,
+        "contorno": contorno_limpio,
         "chip": chip_limpio,
         "ancla": c.get("ancla") if c.get("ancla") in ("arriba", "abajo") else "arriba",
     }

@@ -36,6 +36,7 @@ function NodoImagenAjustada({
   h,
   ajuste,
   foco,
+  zoom = 1,
   filtros,
   props,
 }: {
@@ -44,6 +45,7 @@ function NodoImagenAjustada({
   h: number;
   ajuste: "cover" | "contain";
   foco: [number, number];
+  zoom?: number;
   filtros: Filtros;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any;
@@ -51,7 +53,8 @@ function NodoImagenAjustada({
   const ref = useRef<Konva.Image | null>(null);
   const iw = img.width || 1;
   const ih = img.height || 1;
-  const escala = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
+  const base = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
+  const escala = base * (zoom > 0 ? zoom : 1);
   const dw = iw * escala;
   const dh = ih * escala;
   const ix = (w - dw) * (foco[0] ?? 0.5);
@@ -155,7 +158,7 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
       if (!img) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} filtros={c.filtros} props={props} />;
+      return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} props={props} />;
     }
     case "logo": {
       const c = capa as CapaLogo;
@@ -193,6 +196,10 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
           fill={c.color}
           align={ALIN[c.alineacion] ?? "left"}
           lineHeight={c.interlineado}
+          letterSpacing={c.interletra || 0}
+          stroke={c.contorno?.color}
+          strokeWidth={c.contorno?.grosor ?? 0}
+          fillAfterStrokeEnabled
           shadowColor={c.sombra?.color}
           shadowOffsetX={c.sombra?.dx}
           shadowOffsetY={c.sombra?.dy}

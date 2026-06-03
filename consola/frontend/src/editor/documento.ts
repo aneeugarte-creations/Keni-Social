@@ -23,6 +23,7 @@ export interface Fondo {
 export interface CapaBase {
   id: string;
   tipo: TipoCapa;
+  nombre?: string; // etiqueta editable en el panel de capas (el render la ignora)
   x: number;
   y: number;
   w: number;
@@ -46,6 +47,7 @@ export interface CapaImagen extends CapaBase {
   objeto: string; // id de media ("" = vacío/placeholder)
   ajuste: Ajuste;
   foco: [number, number];
+  zoom: number; // reencuadre dentro del marco (1 = ajuste base)
   filtros: Filtros | null;
 }
 
@@ -60,6 +62,10 @@ export interface Chip {
   pad_y: number;
   radio: number;
 }
+export interface Contorno {
+  color: string;
+  grosor: number;
+}
 
 export interface CapaTexto extends CapaBase {
   tipo: "texto";
@@ -72,8 +78,10 @@ export interface CapaTexto extends CapaBase {
   alineacion: Alineacion;
   mayusculas: boolean;
   interlineado: number;
+  interletra: number; // letter-spacing en px
   auto_ajuste: { max_lineas: number; tam_min: number };
   sombra: Sombra | null;
+  contorno: Contorno | null;
   chip: Chip | null;
   ancla: "arriba" | "abajo";
 }
@@ -157,8 +165,10 @@ export function nuevaCapaTexto(parcial: Partial<CapaTexto> = {}): CapaTexto {
     alineacion: "izquierda",
     mayusculas: false,
     interlineado: 1.14,
+    interletra: 0,
     auto_ajuste: { max_lineas: 4, tam_min: 40 },
     sombra: null,
+    contorno: null,
     chip: null,
     ancla: "arriba",
     ...parcial,
@@ -172,6 +182,7 @@ export function nuevaCapaImagen(objeto: string, parcial: Partial<CapaImagen> = {
     objeto,
     ajuste: "cover",
     foco: [0.5, 0.5],
+    zoom: 1,
     filtros: null,
     ...parcial,
   };
