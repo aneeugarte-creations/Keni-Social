@@ -419,6 +419,45 @@ def test_piezas_sin_fecha_o_fuera_de_rango_se_descartan():
 
 
 @respx.mock
+def test_seguidores_van_con_subject_account_y_metrica_por_red():
+    """La serie de followers se pide con subject=account y la métrica correcta por red.
+
+    Confirmado contra la API real: sin `subject=account` la llamada da 400 (por eso antes
+    `seguidores_netos` salía 0). Instagram usa la métrica `followers`.
+    """
+    _mock_perfiles(_perfil(instagram="x"))
+    _mock_posts("instagram", [_post_ig("p1", 100, 10)])
+    capturadas: list[httpx.Request] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        capturadas.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "metric": "followers",
+                        "values": [
+                            {"dateTime": "2026-05-20T00:00:00", "value": 1000},
+                            {"dateTime": "2026-05-26T00:00:00", "value": 1050},
+                        ],
+                    }
+                ]
+            },
+        )
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    assert resumen.seguidores_netos == 50  # 1050 - 1000
+    assert capturadas, "no se llamó a timelines para followers"
+    req = capturadas[0]
+    assert req.url.params.get("subject") == "account"
+    assert req.url.params.get("metric") == "followers"  # instagram
+
+
+@respx.mock
 def test_seguidores_netos_ultimo_menos_primero():
     """seguidores_netos = (último punto - primer punto) de la serie de followers."""
     # IG conectada + con posts -> entra en por_plataforma -> se le calculan seguidores.

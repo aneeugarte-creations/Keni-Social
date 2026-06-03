@@ -112,19 +112,24 @@ _PERFIL_RED: dict[str, Plataforma] = {
 _METRICA_VIS = "vis"
 _METRICA_INT = "int"
 _METRICA_ALC = "alc"
-# Métrica de SEGUIDORES por red (tamaño de comunidad). SUPUESTO sin confirmar:
-# los nombres salen del enum de `/v2/analytics/timelines`; el swagger no fija de
-# forma inequívoca cuál es "la" de followers por red. Se usa para calcular el NETO
-# del periodo (último punto - primer punto de la serie), no como agregado SUM.
-# YouTube llama "subscribers" a sus seguidores. Si la métrica no está disponible
-# para una red, simplemente no se incluye y `seguidores_netos` queda en 0.
+# Métrica de SEGUIDORES por red (tamaño de comunidad, un STOCK acumulado). Nombres
+# CONFIRMADOS contra la API real (cuenta del piloto AMX): la serie de community vive en
+# `/v2/analytics/timelines` con `subject=account` (¡imprescindible!) y un nombre de métrica
+# distinto por red:
+#   - facebook:  pageFollows        - instagram: followers
+#   - tiktok:    followers_count    - youtube:   totalSubscribers
+# (Antes faltaba `subject=account` y los nombres de FB/YT/TikTok eran erróneos -> 400, por
+# eso `seguidores_netos` salía 0 en todas.) El neto del periodo = último - primer punto.
+# Si la red no expone followers (o no está conectada) la serie viene vacía -> 0 (honesto).
 _METRICA_SEG = "seg"
+# Valor de `subject` para las métricas de cuenta/community en timelines (followers).
+_SUBJECT_CUENTA = "account"
 _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     Plataforma.facebook: {
         _METRICA_VIS: "impressions",
         _METRICA_INT: "interactions",
         _METRICA_ALC: "impressionsunique",
-        _METRICA_SEG: "followers",
+        _METRICA_SEG: "pageFollows",
     },
     Plataforma.instagram: {
         _METRICA_VIS: "impressions",
@@ -140,12 +145,12 @@ _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     Plataforma.tiktok: {
         _METRICA_VIS: "views",
         _METRICA_INT: "interactions",
-        _METRICA_SEG: "followers",
+        _METRICA_SEG: "followers_count",
     },
     Plataforma.youtube: {
         _METRICA_VIS: "views",
         _METRICA_INT: "interactions",
-        _METRICA_SEG: "subscribers",
+        _METRICA_SEG: "totalSubscribers",
     },
 }
 
@@ -462,6 +467,8 @@ class FuenteMetricol:
                     **self._params_base(cuenta_id),
                     "network": _RED_METRICOOL[plat],
                     "metric": metrica,
+                    # subject=account: imprescindible para las métricas de community/followers.
+                    "subject": _SUBJECT_CUENTA,
                     "from": desde.isoformat() + "T00:00:00",
                     "to": hasta.isoformat() + "T23:59:59",
                 },
@@ -530,6 +537,8 @@ class FuenteMetricol:
                     **self._params_base(cuenta_id),
                     "network": _RED_METRICOOL[plat],
                     "metric": metrica,
+                    # subject=account: imprescindible para la serie de followers.
+                    "subject": _SUBJECT_CUENTA,
                     "from": desde.isoformat() + "T00:00:00",
                     "to": hasta.isoformat() + "T23:59:59",
                 },
