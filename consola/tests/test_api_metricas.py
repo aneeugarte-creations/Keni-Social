@@ -274,7 +274,7 @@ def test_piezas_export_json_trae_top_y_peores(cliente):
 
     data = json.loads(r.text)
     assert len(data["top"]) == 10 and len(data["peores"]) == 10
-    assert len(data["filas"]) == 10
+    assert len(data["filas"]) == 20  # top (10) + peores (10)
 
 
 def test_piezas_export_fmt_desconocido_cae_a_csv(cliente):
