@@ -215,7 +215,7 @@ _TOPE_PIEZAS = 100_000
 
 
 def construir_analitica_piezas(rango: str = "mes", marca: str | None = None) -> dict:
-    """Analítica de piezas del periodo: estadísticas + top 5 + peores 5 + distribución.
+    """Analítica de piezas del periodo: estadísticas + top 10 + peores 10 + distribución.
 
     Coste 0 de API: reúsa las piezas que `mejores_piezas` ya descarga del periodo.
     `marca=None` agrega todas las cuentas en alcance (tab "Todas"); con marca, esa

@@ -25,8 +25,8 @@ def test_analitica_piezas_marca(muestra):
     assert a["cuenta"] == "claro_sports"
     assert a["fuente"] == "muestra"
     assert a["total"] > 0
-    assert len(a["top"]) == 5
-    assert len(a["peores"]) == 5
+    assert len(a["top"]) == 10
+    assert len(a["peores"]) == 10
     # top/peores ordenados por VISUALIZACIONES (alcance absoluto): top = las más vistas
     # (desc), peores = las menos vistas; el badge `rendimiento_relativo` queda anotado.
     vistas_top = [p["visualizaciones"] for p in a["top"]]
@@ -44,9 +44,9 @@ def test_analitica_piezas_marca(muestra):
 
 
 def test_analitica_piezas_global_orden_por_vistas(muestra):
-    # marca=None agrega todas las marcas; top = las 5 más vistas globalmente (desc).
+    # marca=None agrega todas las marcas; top = las 10 más vistas globalmente (desc).
     a = servicio.construir_analitica_piezas("mes", None)
-    assert len(a["top"]) == 5 and len(a["peores"]) == 5
+    assert len(a["top"]) == 10 and len(a["peores"]) == 10
     vistas_top = [p["visualizaciones"] for p in a["top"]]
     assert vistas_top == sorted(vistas_top, reverse=True)
     assert max(p["visualizaciones"] for p in a["peores"]) <= min(vistas_top)
