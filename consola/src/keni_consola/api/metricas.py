@@ -104,9 +104,13 @@ def _fuente_combinada(rep_a: dict, rep_b: dict) -> str:
 
 
 def _comparar_totales(total_a: dict, total_b: dict) -> dict:
-    """Comparativa del total consolidado de dos reportes (4 metricas)."""
+    """Comparativa del total consolidado: vistas, interacciones y engagement.
+
+    NO incluye `alcance`: no se mide con la fuente de posts (sería siempre null y la UI ya
+    no lo muestra). Emitirlo dejaba una fila con valor null que reventaba el comparador.
+    """
     metricas = []
-    for clave in ("visualizaciones", "alcance", "interacciones"):
+    for clave in ("visualizaciones", "interacciones"):
         va = total_a.get(clave)
         vb = total_b.get(clave)
         metricas.append(
@@ -156,8 +160,8 @@ def _comparar_por_marca(rep_a: dict, rep_b: dict) -> list[dict]:
                 "marca_id": cid,
                 "marca": _nombre_marca_id(cid, nombres),
                 "comparativa": _comparar_totales(
-                    {k: ra.get(k, 0) for k in ("visualizaciones", "alcance", "interacciones", "engagement_pct")},
-                    {k: rb.get(k, 0) for k in ("visualizaciones", "alcance", "interacciones", "engagement_pct")},
+                    {k: ra.get(k, 0) for k in ("visualizaciones", "interacciones", "engagement_pct")},
+                    {k: rb.get(k, 0) for k in ("visualizaciones", "interacciones", "engagement_pct")},
                 )["metricas"],
             }
         )
@@ -300,6 +304,19 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
     return salida
 
 
+def _engagement_pct(interacciones, visualizaciones) -> float:
+    """Engagement de DISPLAY = interacciones ÷ vistas × 100 (0.0 si no hay vistas).
+
+    El `engagement_pct` AGREGADO del resumen es `None` cuando la marca tiene varias redes
+    (denominadores heterogéneos, ADR/#138). Para el reporte que pinta la UI lo derivamos
+    siempre como un número (int/vis), igual que ya hacían las tablas en cliente: así nunca
+    llega `null` (que reventaba el comparador) y el engagement deja de salir "—" en todo.
+    """
+    vis = visualizaciones or 0
+    inter = interacciones or 0
+    return round(inter / vis * 100, 1) if vis else 0.0
+
+
 def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     """Forma JSON del reporte para el SPA: total + cuentas con nombres resueltos."""
     nombres = rep.get("nombres") or {}
@@ -312,9 +329,10 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
                 "marca_id": cid,
                 "marca": _nombre_marca_id(cid, nombres),
                 "visualizaciones": r.get("visualizaciones", 0),
-                "alcance": r.get("alcance", 0),
+                # alcance no se mide con posts -> 0 (nunca null; la UI ya no lo muestra).
+                "alcance": r.get("alcance") or 0,
                 "interacciones": r.get("interacciones", 0),
-                "engagement_pct": r.get("engagement_pct", 0.0),
+                "engagement_pct": _engagement_pct(r.get("interacciones"), r.get("visualizaciones")),
             }
         )
     por_red = _agregar_por_red(rep)
@@ -329,9 +347,9 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
         "fuente": rep.get("fuente") or "muestra",
         "total": {
             "visualizaciones": t.get("visualizaciones", 0),
-            "alcance": t.get("alcance", 0),
+            "alcance": t.get("alcance") or 0,
             "interacciones": t.get("interacciones", 0),
-            "engagement_pct": t.get("engagement_pct", 0.0),
+            "engagement_pct": _engagement_pct(t.get("interacciones"), t.get("visualizaciones")),
         },
         "cuentas": cuentas,
         "por_red": por_red,

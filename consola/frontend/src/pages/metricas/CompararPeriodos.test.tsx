@@ -87,6 +87,27 @@ describe("CompararPeriodos", () => {
     expect(rango_a).not.toBe("mes");
   });
 
+  it("no revienta con valores null (métrica no comparable) -> muestra '—'", async () => {
+    // Regresión: una métrica con valor null (p.ej. 'alcance', que ya no se mide, o
+    // engagement no comparable entre redes) reventaba TODA la página vía
+    // `valor.toLocaleString` sin guardia. Ahora se muestra "—".
+    const respNull = {
+      ...RESP,
+      total: {
+        metricas: [
+          { metrica: "alcance", a: null, b: null, diferencia: null, variacion_pct: null },
+          { metrica: "visualizaciones", a: 1000, b: 1500, diferencia: 500, variacion_pct: 50 },
+        ],
+      },
+    } as unknown as CompararMetricas;
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(respNull);
+    renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
+
+    // Render asíncrono (la query resuelve): si reventara, esto lanzaría. El valor null
+    // de 'alcance' se pinta "—" en vez de tirar la página.
+    expect((await screen.findAllByText("—")).length).toBeGreaterThan(0);
+  });
+
   it("muestra el desglose por marca con el nombre legible (no el id crudo)", async () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
