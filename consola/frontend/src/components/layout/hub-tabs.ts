@@ -3,7 +3,6 @@ import {
   BookText,
   CalendarCheck,
   CalendarClock,
-  FileText,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -71,8 +70,8 @@ export const TABS_PARRILLA: ItemTabHub[] = [
 // Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las
 // plantillas de contenido (antes la página "Activos", absorbida como pestaña).
 export const TABS_BIBLIOTECA: ItemTabHub[] = [
-  { ruta: "/contenido/biblioteca/documentos", etiqueta: "Documentos", icono: BookText },
-  { ruta: "/contenido/biblioteca/plantillas", etiqueta: "Plantillas", icono: FileText },
+  // Una sola Biblioteca: prompts + línea editorial + plantillas, con filtros (sin sub-pestañas).
+  { ruta: "/contenido/biblioteca/documentos", etiqueta: "Biblioteca", icono: BookText },
   { ruta: "/contenido/biblioteca/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
   // Algoritmos: inteligencia de plataforma (cambios de algoritmo por red). Vive en
   // la Biblioteca porque su salida son las fichas editoriales de cada plataforma.

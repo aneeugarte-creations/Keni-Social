@@ -41,8 +41,6 @@ const Rota = lazy(() => import("@/pages/Rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 
-const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
-
 const Actividad = lazy(() => import("@/pages/Actividad"));
 const Pipelines = lazy(() => import("@/pages/Pipelines"));
 
@@ -138,14 +136,14 @@ export const router = createBrowserRouter([
           { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
           // Editor profesional por capas (Konva): diseña/edita el Documento de la pieza.
           { path: "editor", element: <EditorPro /> },
-          // Hub Biblioteca: documentos (prompts + línea editorial) + plantillas de
-          // contenido (antes su propia página "Activos", ahora una pestaña más).
+          // Hub Biblioteca: UNA sola Biblioteca (prompts + línea editorial + plantillas) con
+          // filtros; "plantillas" se fusionó en "documentos" (redirige por compatibilidad).
           {
             path: "biblioteca",
             children: [
               { index: true, element: <Navigate to="documentos" replace /> },
               { path: "documentos", element: <Biblioteca /> },
-              { path: "plantillas", element: <PlantillasContenido /> },
+              { path: "plantillas", element: <Navigate to="/contenido/biblioteca/documentos" replace /> },
               { path: "estrategia", element: <EstrategiaMarcas /> },
               // Algoritmos: inteligencia de plataforma (alimenta las fichas editoriales).
               { path: "algoritmos", element: <Algoritmos /> },

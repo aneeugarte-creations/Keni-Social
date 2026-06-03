@@ -1,36 +1,20 @@
+/**
+ * Diálogo de crear/editar una plantilla de contenido (catálogo unificado). Extraído de la
+ * antigua página de Plantillas para reutilizarlo desde la Biblioteca unificada (las plantillas
+ * son ahora un tipo más dentro de la misma navegación). Incluye el editor de variables y el
+ * historial de versiones (git), a la par que los documentos.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  FileText,
-  History,
-  Loader2,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Trash2,
-  Wand2,
-  X,
-} from "lucide-react";
+import { History, Loader2, Plus, RotateCcw, Wand2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
-import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
-import {
-  desdeMarca,
-  desdeRed,
-  ningunaParam,
-} from "@/components/comunes/selectores";
-import { DialogoAplicarPlantilla } from "@/components/plantillas/DialogoAplicarPlantilla";
+import { desdeMarca, desdeRed, ningunaParam } from "@/components/comunes/selectores";
 import { clavesEnEstructura } from "@/components/plantillas/util";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Markdown } from "@/components/ui/Markdown";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,27 +37,18 @@ import type {
   VariablePlantilla,
 } from "@/types";
 
-const CLAVE_PLANTILLAS_CONTENIDO = ["plantillas-contenido"] as const;
+export const CLAVE_PLANTILLAS_CONTENIDO = ["plantillas-contenido"] as const;
 const CLAVE_OPCIONES_PUBLICACIONES = ["publicaciones", "opciones"] as const;
 
-const CABECERA = {
-  titulo: "Plantillas",
-  descripcion:
-    "Catálogo unificado de plantillas de copy reutilizables: planas (texto fijo por marca/red) " +
-    "y de estructura por tipo de nota recurrente (gol, alineación, efeméride…) con variables " +
-    "{{...}}. No publica nada: solo acelera armar piezas.",
-};
-
-/** Formulario controlado de crear/editar una plantilla del catálogo unificado. */
 interface FormPlantilla {
   nombre: string;
   modo: ModoPlantilla;
   tipo_nota: string;
   descripcion: string;
-  marca: string; // centinela MARCA_TODAS = sin marca
-  red: string; // centinela RED_TODAS = sin red
-  contenido: string; // modo 'plano'
-  estructura: string; // modo 'estructura'
+  marca: string;
+  red: string;
+  contenido: string;
+  estructura: string;
   variables: VariablePlantilla[];
 }
 
@@ -88,51 +64,46 @@ const FORM_VACIO: FormPlantilla = {
   variables: [],
 };
 
-export default function PlantillasContenido() {
-  const qc = useQueryClient();
+function formDe(p: PlantillaContenido): FormPlantilla {
+  return {
+    nombre: p.nombre,
+    modo: p.modo,
+    tipo_nota: p.tipo_nota,
+    descripcion: p.descripcion,
+    marca: desdeMarca(p.marca),
+    red: desdeRed(p.red),
+    contenido: p.contenido,
+    estructura: p.estructura,
+    variables: p.variables,
+  };
+}
 
-  const query = useQuery({
-    queryKey: CLAVE_PLANTILLAS_CONTENIDO,
-    queryFn: ({ signal }) => api.plantillasContenido(undefined, signal),
-  });
-  // Marcas/redes desde el catálogo NEUTRO de publicaciones (antes /api/skills, retirado).
+export function DialogoEditarPlantilla({
+  plantilla,
+  abierto,
+  onCerrar,
+}: {
+  /** Plantilla a editar, o `null` para crear una nueva. */
+  plantilla: PlantillaContenido | null;
+  abierto: boolean;
+  onCerrar: () => void;
+}) {
+  const qc = useQueryClient();
+  const editId = plantilla?.id ?? null;
+  const [form, setForm] = React.useState<FormPlantilla>(FORM_VACIO);
+  const [historialAbierto, setHistorialAbierto] = React.useState(false);
+
+  // Carga el formulario al abrir (de la plantilla dada, o vacío para crear).
+  React.useEffect(() => {
+    if (abierto) setForm(plantilla ? formDe(plantilla) : FORM_VACIO);
+  }, [abierto, plantilla]);
+
   const opciones = useQuery<OpcionesPublicaciones>({
     queryKey: CLAVE_OPCIONES_PUBLICACIONES,
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
-
-  const plantillas = query.data?.plantillas ?? [];
   const marcas = opciones.data?.marcas ?? [];
   const redes = opciones.data?.redes ?? [];
-
-  // --- Diálogo de edición/creación ---
-  const [abierto, setAbierto] = React.useState(false);
-  const [editId, setEditId] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState<FormPlantilla>(FORM_VACIO);
-  // Diálogo de historial de versiones (git) de la plantilla en edición.
-  const [historialAbierto, setHistorialAbierto] = React.useState(false);
-
-  function abrirCrear() {
-    setEditId(null);
-    setForm(FORM_VACIO);
-    setAbierto(true);
-  }
-
-  function abrirEditar(p: PlantillaContenido) {
-    setEditId(p.id);
-    setForm({
-      nombre: p.nombre,
-      modo: p.modo,
-      tipo_nota: p.tipo_nota,
-      descripcion: p.descripcion,
-      marca: desdeMarca(p.marca),
-      red: desdeRed(p.red),
-      contenido: p.contenido,
-      estructura: p.estructura,
-      variables: p.variables,
-    });
-    setAbierto(true);
-  }
 
   const guardar = useMutation({
     mutationFn: async () => {
@@ -144,7 +115,6 @@ export default function PlantillasContenido() {
         descripcion: form.descripcion,
         marca: ningunaParam(form.marca),
         red: ningunaParam(form.red),
-        // Solo enviamos el cuerpo del modo activo; el otro queda vacío en el servidor.
         contenido: esPlano ? form.contenido : "",
         estructura: esPlano ? "" : form.estructura,
         variables: esPlano ? [] : form.variables,
@@ -154,22 +124,12 @@ export default function PlantillasContenido() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CLAVE_PLANTILLAS_CONTENIDO });
-      setAbierto(false);
+      onCerrar();
       toast.success(editId ? "Plantilla actualizada." : "Plantilla creada.");
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "No se pudo guardar."),
   });
 
-  const eliminar = useMutation({
-    mutationFn: (id: string) => api.eliminarPlantillaContenido(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CLAVE_PLANTILLAS_CONTENIDO });
-      toast.success("Plantilla borrada.");
-    },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "No se pudo borrar."),
-  });
-
-  // --- Variables del formulario ---
   function setVariable(i: number, parcial: Partial<VariablePlantilla>) {
     setForm((f) => ({
       ...f,
@@ -177,31 +137,21 @@ export default function PlantillasContenido() {
     }));
   }
   function anadirVariable() {
-    setForm((f) => ({
-      ...f,
-      variables: [...f.variables, { clave: "", etiqueta: "", ejemplo: "" }],
-    }));
+    setForm((f) => ({ ...f, variables: [...f.variables, { clave: "", etiqueta: "", ejemplo: "" }] }));
   }
   function quitarVariable(i: number) {
     setForm((f) => ({ ...f, variables: f.variables.filter((_, idx) => idx !== i) }));
   }
 
-  // Avisos: claves usadas en la estructura pero no declaradas como variable.
   const clavesEstructura = clavesEnEstructura(form.estructura);
   const clavesDeclaradas = new Set(form.variables.map((v) => v.clave).filter(Boolean));
   const sinDeclarar = clavesEstructura.filter((c) => !clavesDeclaradas.has(c));
 
-  // Auto-completar: declara las claves usadas en la estructura que faltan (`sinDeclarar`),
-  // una variable por cada una con la clave precargada (etiqueta/ejemplo en blanco). Respeta
-  // el orden en que aparecen en la estructura y no toca las ya declaradas.
   function autocompletarVariables() {
     if (sinDeclarar.length === 0) return;
     setForm((f) => ({
       ...f,
-      variables: [
-        ...f.variables,
-        ...sinDeclarar.map((clave) => ({ clave, etiqueta: "", ejemplo: "" })),
-      ],
+      variables: [...f.variables, ...sinDeclarar.map((clave) => ({ clave, etiqueta: "", ejemplo: "" }))],
     }));
   }
 
@@ -210,72 +160,20 @@ export default function PlantillasContenido() {
   const puedeGuardar = form.nombre.trim() !== "" && cuerpoLleno;
 
   return (
-    <div>
-      <PageHeader
-        titulo={CABECERA.titulo}
-        descripcion={CABECERA.descripcion}
-        acciones={
-          <Button onClick={abrirCrear} size="sm">
-            <Plus className="mr-1.5 h-4 w-4" /> Nueva plantilla
-          </Button>
-        }
-      />
-
-      {query.isError && (
-        <BloqueError
-          titulo="No se pudieron cargar las plantillas"
-          mensaje={query.error instanceof Error ? query.error.message : "Error al cargar."}
-          onReintentar={() => query.refetch()}
-        />
-      )}
-
-      {query.isPending && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-40 w-full" />
-          ))}
-        </div>
-      )}
-
-      {query.isSuccess && plantillas.length === 0 && (
-        <EstadoVacio
-          icono={FileText}
-          titulo="Aún no hay plantillas de contenido"
-          texto="Crea una estructura por tipo de nota recurrente para no empezar de cero cada vez."
-        />
-      )}
-
-      {plantillas.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {plantillas.map((p) => (
-            <TarjetaPlantilla
-              key={p.id}
-              plantilla={p}
-              onEditar={() => abrirEditar(p)}
-              onBorrar={() => eliminar.mutate(p.id)}
-              borrando={eliminar.isPending && eliminar.variables === p.id}
-            />
-          ))}
-        </div>
-      )}
-
-      <Dialog open={abierto} onOpenChange={setAbierto}>
+    <>
+      <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editId ? "Editar plantilla" : "Nueva plantilla"}</DialogTitle>
             <DialogDescription>
               Elige el modo: <strong>plano</strong> (texto fijo reutilizable) o{" "}
               <strong>estructura</strong> con marcadores{" "}
-              <code className="rounded bg-muted px-1">{"{{variable}}"}</code> que se rellenan al
-              aplicar.
+              <code className="rounded bg-muted px-1">{"{{variable}}"}</code> que se rellenan al aplicar.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <Tabs
-              value={form.modo}
-              onValueChange={(v) => setForm((f) => ({ ...f, modo: v as ModoPlantilla }))}
-            >
+            <Tabs value={form.modo} onValueChange={(v) => setForm((f) => ({ ...f, modo: v as ModoPlantilla }))}>
               <TabsList className="grid w-full grid-cols-2 sm:w-80">
                 <TabsTrigger value="plano">Texto plano</TabsTrigger>
                 <TabsTrigger value="estructura">Estructura</TabsTrigger>
@@ -369,16 +267,8 @@ export default function PlantillasContenido() {
                       <p className="text-xs text-amber-600 dark:text-amber-400">
                         Variables usadas sin declarar: {sinDeclarar.join(", ")}.
                       </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7"
-                        onClick={autocompletarVariables}
-                        title="Declara automáticamente las variables usadas en la estructura que aún no existen"
-                      >
-                        <Wand2 className="mr-1 h-3.5 w-3.5" />
-                        Auto-completar variables
+                      <Button type="button" variant="outline" size="sm" className="h-7" onClick={autocompletarVariables}>
+                        <Wand2 className="mr-1 h-3.5 w-3.5" /> Auto-completar variables
                       </Button>
                     </div>
                   )}
@@ -398,31 +288,10 @@ export default function PlantillasContenido() {
                   )}
                   {form.variables.map((v, i) => (
                     <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
-                      <Input
-                        value={v.clave}
-                        onChange={(e) => setVariable(i, { clave: e.target.value })}
-                        placeholder="clave"
-                        aria-label={`Clave de la variable ${i + 1}`}
-                      />
-                      <Input
-                        value={v.etiqueta}
-                        onChange={(e) => setVariable(i, { etiqueta: e.target.value })}
-                        placeholder="Etiqueta"
-                        aria-label={`Etiqueta de la variable ${i + 1}`}
-                      />
-                      <Input
-                        value={v.ejemplo}
-                        onChange={(e) => setVariable(i, { ejemplo: e.target.value })}
-                        placeholder="Ejemplo"
-                        aria-label={`Ejemplo de la variable ${i + 1}`}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => quitarVariable(i)}
-                        aria-label={`Quitar variable ${i + 1}`}
-                      >
+                      <Input value={v.clave} onChange={(e) => setVariable(i, { clave: e.target.value })} placeholder="clave" aria-label={`Clave de la variable ${i + 1}`} />
+                      <Input value={v.etiqueta} onChange={(e) => setVariable(i, { etiqueta: e.target.value })} placeholder="Etiqueta" aria-label={`Etiqueta de la variable ${i + 1}`} />
+                      <Input value={v.ejemplo} onChange={(e) => setVariable(i, { ejemplo: e.target.value })} placeholder="Ejemplo" aria-label={`Ejemplo de la variable ${i + 1}`} />
+                      <Button type="button" variant="ghost" size="icon" onClick={() => quitarVariable(i)} aria-label={`Quitar variable ${i + 1}`}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -434,18 +303,11 @@ export default function PlantillasContenido() {
 
           <DialogFooter>
             {editId && (
-              <Button
-                variant="outline"
-                className="mr-auto"
-                onClick={() => setHistorialAbierto(true)}
-                title="Historial de versiones"
-              >
+              <Button variant="outline" className="mr-auto" onClick={() => setHistorialAbierto(true)} title="Historial de versiones">
                 <History className="mr-1.5 h-4 w-4" /> Historial
               </Button>
             )}
-            <Button variant="outline" onClick={() => setAbierto(false)}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
             <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar || guardar.isPending}>
               {guardar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               {editId ? "Guardar" : "Crear"}
@@ -460,25 +322,14 @@ export default function PlantillasContenido() {
           abierto={historialAbierto}
           onCerrar={() => setHistorialAbierto(false)}
           onRestaurada={(p) => {
-            // Refleja la versión restaurada en el formulario abierto y refresca la lista.
-            setForm({
-              nombre: p.nombre,
-              modo: p.modo,
-              tipo_nota: p.tipo_nota,
-              descripcion: p.descripcion,
-              marca: desdeMarca(p.marca),
-              red: desdeRed(p.red),
-              contenido: p.contenido,
-              estructura: p.estructura,
-              variables: p.variables,
-            });
+            setForm(formDe(p));
             qc.invalidateQueries({ queryKey: CLAVE_PLANTILLAS_CONTENIDO });
             setHistorialAbierto(false);
             toast.success("Versión restaurada.");
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -540,9 +391,7 @@ function DialogHistorialPlantilla({
                   <li key={v.sha}>
                     <button
                       onClick={() => setVerSha(v.sha)}
-                      className={`w-full px-3 py-2 text-left text-xs hover:bg-muted ${
-                        v.sha === verSha ? "bg-muted" : ""
-                      }`}
+                      className={`w-full px-3 py-2 text-left text-xs hover:bg-muted ${v.sha === verSha ? "bg-muted" : ""}`}
                     >
                       <span className="block font-medium">{v.mensaje}</span>
                       <span className="mt-0.5 block text-muted-foreground">
@@ -556,9 +405,7 @@ function DialogHistorialPlantilla({
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             {!verSha ? (
-              <p className="text-sm text-muted-foreground">
-                Elige una versión para verla y, si quieres, restaurarla.
-              </p>
+              <p className="text-sm text-muted-foreground">Elige una versión para verla y, si quieres, restaurarla.</p>
             ) : (
               <>
                 <div className="flex items-center gap-2">
@@ -585,9 +432,7 @@ function DialogHistorialPlantilla({
                   {versionQuery.isPending ? (
                     <Skeleton className="h-24 w-full" />
                   ) : (
-                    <pre className="whitespace-pre-wrap text-xs">
-                      {ver ? (ver.modo === "plano" ? ver.contenido : ver.estructura) || "—" : "—"}
-                    </pre>
+                    <Markdown>{ver ? (ver.modo === "plano" ? ver.contenido : ver.estructura) || "_Sin contenido_" : "_Sin contenido_"}</Markdown>
                   )}
                 </div>
               </>
@@ -596,80 +441,5 @@ function DialogHistorialPlantilla({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Tarjeta de una plantilla. Click izquierdo sobre la tarjeta = editar (acción
- * primaria); editar y borrar viven también en el menú contextual (click derecho)
- * y en el kebab "⋮". El CTA "Aplicar" (rellenar variables) se mantiene como botón
- * dominante full-width abajo.
- */
-function TarjetaPlantilla({
-  plantilla,
-  onEditar,
-  onBorrar,
-  borrando,
-}: {
-  plantilla: PlantillaContenido;
-  onEditar: () => void;
-  onBorrar: () => void;
-  borrando: boolean;
-}) {
-  const [aplicando, setAplicando] = React.useState(false);
-
-  // Acción primaria = editar. Editar (explícito) + borrar (con confirmación), al menú.
-  const acciones: EntradaMenuContextual[] = [
-    { etiqueta: "Editar", icono: Pencil, onClick: onEditar },
-    { separador: true },
-    {
-      etiqueta: "Borrar",
-      icono: Trash2,
-      onClick: async () => {
-        if (await confirmar({ mensaje: `¿Borrar la plantilla "${plantilla.nombre}"?`, destructivo: true, textoConfirmar: "Borrar" })) onBorrar();
-      },
-      destructivo: true,
-      deshabilitado: borrando,
-    },
-  ];
-
-  return (
-    <FilaConAcciones
-      como="div"
-      onPrimaria={onEditar}
-      acciones={acciones}
-      etiquetaAcciones={`Acciones de "${plantilla.nombre}"`}
-      kebab="hover"
-      className="rounded-xl border border-border bg-card text-card-foreground"
-    >
-      <CardHeader className="pb-2 pr-10">
-        <CardTitle className="text-base">{plantilla.nombre}</CardTitle>
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant={plantilla.modo === "plano" ? "default" : "secondary"}>
-            {plantilla.modo === "plano" ? "Texto plano" : "Estructura"}
-          </Badge>
-          {plantilla.tipo_nota && <Badge variant="secondary">{plantilla.tipo_nota}</Badge>}
-          {plantilla.marca && <Badge variant="outline">{plantilla.marca_nombre || plantilla.marca}</Badge>}
-          {plantilla.red && <Badge variant="outline">{plantilla.red_nombre || plantilla.red}</Badge>}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {plantilla.descripcion && (
-          <p className="text-sm text-muted-foreground">{plantilla.descripcion}</p>
-        )}
-        <pre className="max-h-24 overflow-hidden whitespace-pre-wrap rounded bg-muted p-2 text-xs">
-          {plantilla.modo === "plano" ? plantilla.contenido : plantilla.estructura}
-        </pre>
-        <Button variant="secondary" size="sm" className="w-full" onClick={() => setAplicando(true)}>
-          <Wand2 className="mr-1.5 h-4 w-4" /> Aplicar
-        </Button>
-      </CardContent>
-
-      <DialogoAplicarPlantilla
-        plantilla={plantilla}
-        abierto={aplicando}
-        onCerrar={() => setAplicando(false)}
-      />
-    </FilaConAcciones>
   );
 }

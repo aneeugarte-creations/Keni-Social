@@ -18,12 +18,14 @@ import {
   FileText,
   Folder,
   History,
+  LayoutTemplate,
   Loader2,
   Plus,
   RotateCcw,
   Send,
   Settings2,
   Trash2,
+  Wand2,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -32,6 +34,8 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
+import { DialogoAplicarPlantilla } from "@/components/plantillas/DialogoAplicarPlantilla";
+import { DialogoEditarPlantilla } from "@/components/plantillas/DialogoEditarPlantilla";
 import { EditorWysiwyg } from "@/components/editor/EditorWysiwyg";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Badge } from "@/components/ui/badge";
@@ -53,12 +57,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
-import type { DocumentoBiblioteca, TargetLanzamiento } from "@/types";
+import type { DocumentoBiblioteca, PlantillaContenido, TargetLanzamiento } from "@/types";
 
-type Filtro = "todo" | "prompt" | "editorial";
+type Filtro = "todo" | "prompt" | "editorial" | "plantilla";
 type TipoTarget = TargetLanzamiento["tipo"] | "archivo";
 type FiltroEstado = "todo" | "activo" | "borrador" | "archivado";
 
@@ -93,11 +96,16 @@ export default function Biblioteca() {
 
   // --- Navegación / lista ---
   const [filtro, setFiltro] = React.useState<Filtro>("todo");
+  const [marcaFiltro, setMarcaFiltro] = React.useState("");
   const [q, setQ] = React.useState("");
   const [estadoFiltro, setEstadoFiltro] = React.useState<FiltroEstado>("todo");
   const [etiquetaFiltro, setEtiquetaFiltro] = React.useState<string | null>(null);
   const [enPapelera, setEnPapelera] = React.useState(false);
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
+  // Plantillas: edición/creación y aplicar (viven en la misma navegación que los documentos).
+  const [plantillaEdit, setPlantillaEdit] = React.useState<PlantillaContenido | null>(null);
+  const [plantillaDialogo, setPlantillaDialogo] = React.useState(false);
+  const [plantillaAplicar, setPlantillaAplicar] = React.useState<PlantillaContenido | null>(null);
   // Config avanzada (estado, etiquetas, clase/marcas, atribución) plegada tras el engranaje.
   const [ajustesAbiertos, setAjustesAbiertos] = React.useState(false);
   const [historialAbierto, setHistorialAbierto] = React.useState(false);
@@ -115,8 +123,12 @@ export default function Biblioteca() {
   const [valorRen, setValorRen] = React.useState("");
   const enRenRef = React.useRef(false);
 
+  // Los documentos (prompts + editorial) solo se piden si el filtro no es exclusivamente plantillas.
+  const mostrarDocs = filtro !== "plantilla";
+  const mostrarPlantillas = filtro === "todo" || filtro === "plantilla";
   const docsQuery = useQuery({
-    queryKey: ["biblioteca", filtro, q, estadoFiltro, etiquetaFiltro],
+    queryKey: ["biblioteca", filtro, q, estadoFiltro, etiquetaFiltro, marcaFiltro],
+    enabled: mostrarDocs,
     queryFn: ({ signal }) =>
       api.biblioteca(
         {
@@ -124,10 +136,26 @@ export default function Biblioteca() {
           q: q || undefined,
           estado: estadoFiltro === "todo" ? undefined : estadoFiltro,
           etiqueta: etiquetaFiltro || undefined,
+          marca: marcaFiltro || undefined,
         },
         signal,
       ),
   });
+  // Plantillas: se piden TODAS y se filtran en cliente (para no ocultar las "generales" al
+  // filtrar por marca). La búsqueda `q` también filtra por nombre/descripción.
+  const plantillasQuery = useQuery({
+    queryKey: ["plantillas-contenido"],
+    queryFn: ({ signal }) => api.plantillasContenido(undefined, signal),
+    enabled: mostrarPlantillas,
+  });
+  const plantillas = React.useMemo(() => {
+    const aguja = q.trim().toLowerCase();
+    return (plantillasQuery.data?.plantillas ?? []).filter((p) => {
+      if (marcaFiltro && p.marca && p.marca !== marcaFiltro) return false;
+      if (aguja && !(`${p.nombre} ${p.descripcion}`.toLowerCase().includes(aguja))) return false;
+      return true;
+    });
+  }, [plantillasQuery.data, marcaFiltro, q]);
   const papeleraQuery = useQuery({
     queryKey: ["biblioteca-papelera"],
     queryFn: ({ signal }) => api.papeleraBiblioteca(signal),
@@ -220,6 +248,37 @@ export default function Biblioteca() {
             </span>
           </button>
         )}
+      </li>
+    );
+  }
+  function filaPlantilla(p: PlantillaContenido) {
+    return (
+      <li key={`pl-${p.id}`} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted">
+        <button
+          onClick={() => {
+            setPlantillaEdit(p);
+            setPlantillaDialogo(true);
+          }}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+          title={p.nombre}
+        >
+          <LayoutTemplate className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 block break-words leading-snug">{p.nombre}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+              {p.modo === "plano" ? "Texto plano" : p.tipo_nota || "Estructura"}
+            </span>
+          </span>
+        </button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 shrink-0"
+          title="Aplicar (rellenar variables)"
+          onClick={() => setPlantillaAplicar(p)}
+        >
+          <Wand2 className="h-3.5 w-3.5" />
+        </Button>
       </li>
     );
   }
@@ -380,14 +439,26 @@ export default function Biblioteca() {
     <div className="flex h-full min-h-0 gap-4">
       {/* ───────── Sidebar ───────── */}
       <aside className="flex w-64 shrink-0 flex-col gap-3">
+        {/* Filtros (no pestañas): tipo + marca. Una sola Biblioteca para todo. */}
         <div className="flex items-center gap-2">
-          <Tabs value={filtro} onValueChange={(v) => setFiltro(v as Filtro)} className="flex-1">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="todo">Todo</TabsTrigger>
-              <TabsTrigger value="prompt">Prompts</TabsTrigger>
-              <TabsTrigger value="editorial">Editorial</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <Select value={filtro} onValueChange={(v) => setFiltro(v as Filtro)}>
+            <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todo">Todo</SelectItem>
+              <SelectItem value="prompt">Prompts</SelectItem>
+              <SelectItem value="editorial">Editorial</SelectItem>
+              <SelectItem value="plantilla">Plantillas</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={marcaFiltro || "__todas__"} onValueChange={(v) => setMarcaFiltro(v === "__todas__" ? "" : v)}>
+            <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__todas__">Todas las marcas</SelectItem>
+              {(marcasQuery.data?.marcas ?? []).map((m) => (
+                <SelectItem key={m.id} value={m.id}>{m.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <Input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
         {/* Facetas: estado del ciclo de vida + etiquetas transversales. */}
@@ -424,21 +495,39 @@ export default function Biblioteca() {
           </div>
         ) : null}
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => crearMut.mutate("prompt")}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Prompt
-          </Button>
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => crearMut.mutate("editorial")}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Editorial
-          </Button>
+          {mostrarDocs ? (
+            <>
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => crearMut.mutate("prompt")}>
+                <Plus className="mr-1 h-3.5 w-3.5" /> Prompt
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => crearMut.mutate("editorial")}>
+                <Plus className="mr-1 h-3.5 w-3.5" /> Editorial
+              </Button>
+            </>
+          ) : null}
+          {mostrarPlantillas ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setPlantillaEdit(null);
+                setPlantillaDialogo(true);
+              }}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Plantilla
+            </Button>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
-          {docsQuery.isPending ? (
+          {mostrarDocs ? (
+            docsQuery.isPending ? (
             <div className="space-y-2 p-2">
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
             </div>
-          ) : documentos.length === 0 ? (
+          ) : documentos.length === 0 && filtro !== "todo" ? (
             <p className="p-3 text-sm text-muted-foreground">No hay documentos. Crea uno arriba.</p>
           ) : buscando ? (
             // Buscando: lista plana (resultados de todas las carpetas), con la carpeta como pista.
@@ -520,7 +609,28 @@ export default function Biblioteca() {
                 ),
               )}
             </div>
-          )}
+          )
+          ) : null}
+
+          {/* Sección de PLANTILLAS dentro de la misma lista (filtro Todo o Plantillas). */}
+          {mostrarPlantillas ? (
+            <div>
+              {mostrarDocs ? (
+                <div className="bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Plantillas
+                </div>
+              ) : null}
+              {plantillasQuery.isPending ? (
+                <div className="space-y-2 p-2"><Skeleton className="h-8 w-full" /></div>
+              ) : plantillas.length === 0 ? (
+                <p className="p-3 text-sm text-muted-foreground">
+                  {mostrarDocs ? "Sin plantillas." : "No hay plantillas. Crea una arriba."}
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">{plantillas.map((p) => filaPlantilla(p))}</ul>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <Button size="sm" variant="ghost" onClick={() => setEnPapelera((v) => !v)}>
@@ -734,6 +844,20 @@ export default function Biblioteca() {
             qc.invalidateQueries({ queryKey: ["biblioteca"] });
             setHistorialAbierto(false);
           }}
+        />
+      ) : null}
+
+      {/* ───────── Plantillas: crear/editar (con variables + historial) y aplicar ───────── */}
+      <DialogoEditarPlantilla
+        plantilla={plantillaEdit}
+        abierto={plantillaDialogo}
+        onCerrar={() => setPlantillaDialogo(false)}
+      />
+      {plantillaAplicar ? (
+        <DialogoAplicarPlantilla
+          plantilla={plantillaAplicar}
+          abierto={!!plantillaAplicar}
+          onCerrar={() => setPlantillaAplicar(null)}
         />
       ) : null}
     </div>
