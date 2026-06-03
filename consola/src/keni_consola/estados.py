@@ -223,6 +223,17 @@ FLUJO_EVENTO = "evento"
 PRIORIDADES_CONTENIDO: tuple[str, ...] = PRIORIDADES_EVENTO
 PRIORIDAD_CONTENIDO_DEFECTO = PRIORIDAD_EVENTO_DEFECTO
 
+# Taller GREEN / brainstorming: estados de una IDEA de contenido evergreen. La IA (o una
+# persona) PROPONE; el equipo APRUEBA o DESCARTA; solo para las aprobadas se genera la pieza
+# (`flujo='evergreen'` en el tablero). Operacional; vive en Postgres (`green_ideas.estado`).
+ESTADOS_GREEN_IDEA: tuple[str, ...] = ("propuesta", "aprobada", "descartada")
+ESTADO_GREEN_PROPUESTA = "propuesta"
+ESTADO_GREEN_APROBADA = "aprobada"
+ESTADO_GREEN_DESCARTADA = "descartada"
+
+# Origen de una idea evergreen: propuesta por la IA en el taller, o tecleada a mano.
+ORIGENES_GREEN_IDEA: tuple[str, ...] = ("ia", "manual")
+
 # Tipo de contenido: de DÓNDE sale la imagen de la pieza.
 #   - `ia`:      se genera con IA (texto -> imagen).
 #   - `galeria`: se sube/elige de la biblioteca de medios.

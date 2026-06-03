@@ -12,6 +12,8 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
   - `/api/metricas/piezas-export`: descarga del Top 5 / Peores 5 de piezas (csv|md|json).
   - `/api/metricas/piezas-por-etiqueta`: rendimiento del periodo por serie/tipo (cruce
     piezas↔contenido para resolver tipo_contenido + etiquetas; Item C).
+  - `/api/metricas/lineas`: rendimiento del periodo por LÍNEA (etiqueta clase `vertical`)
+    y por ORIGEN (clase `origen`); "qué línea funciona" + dual editorial-vs-impuesto.
   - `/api/metricas/export.{csv,md,json}`: descargas (misma serializacion que el CLI).
 
 DEFERIDO / BLOQUEADO — "procedencia de la audiencia" (de dónde viene quién ve el
@@ -31,7 +33,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, metricas_cache, metricas_pieza, repos
+from .. import marcas, metricas_cache, metricas_linea, metricas_pieza, repos
 
 _log = logging.getLogger("keni_consola.api.metricas")
 
@@ -634,6 +636,47 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     )
 
 
+async def lineas(request: Request) -> Response:
+    """GET /api/metricas/lineas: rendimiento del periodo por LÍNEA y por ORIGEN.
+
+    Agrupa el rendimiento REAL de las piezas del periodo por su LÍNEA editorial (etiqueta
+    clase `vertical`) y por su ORIGEN (clase `origen`), cruzando las piezas de la fuente
+    única de métricas con su `contenido` de la BD (enlace por `id_post_metricool`; fallback
+    fuzzy por título), igual que `piezas-por-etiqueta`. Devuelve, por cada cubo, nº de
+    piezas + suma de visualizaciones + suma de interacciones + engagement medio. Las piezas
+    sin línea/origen caen en "Sin línea"/"Sin origen".
+
+    `?marca=` (en forma `id_metricas`) acota; sin marca, todas. `?rango=` (preset o token).
+    Trabajo bloqueante (BD + listado de piezas de la fuente) en executor para no congelar
+    el event loop.
+    """
+    marca_metricas = request.query_params.get("marca") or None
+    marca_consola = _marca_consola_de_metricas(marca_metricas)
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    try:
+        payload = await asyncio.get_running_loop().run_in_executor(
+            None, metricas_linea.lineas_y_origenes, rango, marca_consola, marca_metricas
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al generar la analítica por línea (rango=%s, marca=%s).",
+            rango, marca_metricas or "todas",
+        )
+        return JSONResponse(
+            {"error": "No se pudo generar la analítica por línea."}, status_code=500
+        )
+    return JSONResponse(
+        {
+            "marca": marca_metricas or "",
+            "rango": rango,
+            "etiqueta_rango": _etiqueta_rango(rango),
+            **payload,
+        }
+    )
+
+
 def _rango_opcional(raw: str | None) -> str | None:
     """Rango para /estado y /refrescar: preset o token válido, si no None (sin combo)."""
     if not raw:
@@ -850,6 +893,7 @@ RUTAS = [
     Route("/api/metricas/piezas-export", piezas_export, methods=["GET"]),
     Route("/api/metricas/piezas-rendimiento", piezas_rendimiento, methods=["GET"]),
     Route("/api/metricas/piezas-por-etiqueta", piezas_por_etiqueta, methods=["GET"]),
+    Route("/api/metricas/lineas", lineas, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/seguidores", seguidores, methods=["GET"]),
     Route("/api/metricas/desglose", desglose, methods=["GET"]),

@@ -1458,6 +1458,61 @@ def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Taller GREEN / brainstorming: ideas evergreen. La fachada delega 1:1 en db; #
+# la validacion vive en `api/green`.                                          #
+# --------------------------------------------------------------------------- #
+
+
+def crear_green_idea(
+    *,
+    marca: str = "",
+    titulo: str = "",
+    descripcion: str = "",
+    estado: str = "propuesta",
+    origen: str = "ia",
+    generacion_id: str = "",
+    contenido_id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """Crea una idea de contenido evergreen. Delegado en `db.py`."""
+    return db.crear_green_idea(
+        marca=marca,
+        titulo=titulo,
+        descripcion=descripcion,
+        estado=estado,
+        origen=origen,
+        generacion_id=generacion_id,
+        contenido_id=contenido_id,
+        creado=creado,
+        actualizado=actualizado,
+        id=id,
+    )
+
+
+def listar_green_ideas(
+    *, marca: str | None = None, estado: str | None = None
+) -> list[dict[str, Any]]:
+    """Lista ideas evergreen (recientes primero). Delegado en `db.py`."""
+    return db.listar_green_ideas(marca=marca, estado=estado)
+
+
+def obtener_green_idea(idea_id: str) -> dict[str, Any] | None:
+    return db.obtener_green_idea(idea_id)
+
+
+def actualizar_green_idea(
+    idea_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_green_idea(idea_id, campos)
+
+
+def borrar_green_idea(idea_id: str) -> bool:
+    return db.borrar_green_idea(idea_id)
+
+
+# --------------------------------------------------------------------------- #
 # Ola COLABORACION: comentarios + versiones de copy + aprobacion multinivel    #
 # --------------------------------------------------------------------------- #
 # Tres familias APENDIDAS al tablero de contenido (Planable-style). La fachada solo

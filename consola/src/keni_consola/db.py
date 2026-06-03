@@ -1060,6 +1060,29 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         PRIMARY KEY (fuente_id, clave)
     )
     """,
+    # TALLER GREEN / BRAINSTORMING: ideas de contenido EVERGREEN propuestas (por IA o a mano)
+    # que el equipo aprueba o descarta ANTES de generar nada. La IA NO redacta a ciegas: primero
+    # PROPONE ideas (`origen='ia'`, `estado='propuesta'`); una persona las marca `aprobada` o
+    # `descartada`; solo para las APROBADAS se genera la pieza (`flujo='evergreen'` en el tablero)
+    # y se enlaza en `contenido_id`. `generacion_id` apunta a la generacion IA que las propuso
+    # (para trazar el lote). `creado` preserva el orden "recientes primero".
+    """
+    CREATE TABLE IF NOT EXISTS green_ideas (
+        id            TEXT PRIMARY KEY,
+        marca         TEXT NOT NULL DEFAULT '',
+        titulo        TEXT NOT NULL DEFAULT '',
+        descripcion   TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'propuesta',
+        origen        TEXT NOT NULL DEFAULT 'ia',
+        generacion_id TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_green_ideas_marca ON green_ideas (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_green_ideas_estado ON green_ideas (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_green_ideas_creado ON green_ideas (creado)",
     # Grupos de hashtags reutilizables (nombre + lista de tags JSON) por marca. `hashtags`
     # es un JSON serializado de strings (igual patron que `biblioteca_media.etiquetas`).
     # `creado` preserva el orden "recientes primero".
@@ -6153,6 +6176,148 @@ def borrar_etiqueta(etiqueta_id: str) -> bool:
             "DELETE FROM contenido_etiquetas WHERE etiqueta_id = ?", (etiqueta_id,)
         )
         cur = con.execute("DELETE FROM etiquetas WHERE id = ?", (etiqueta_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Taller GREEN / brainstorming: ideas evergreen (propuesta -> aprobada/descartada)
+# --------------------------------------------------------------------------- #
+# La IA PROPONE ideas evergreen; una persona las aprueba o descarta; solo para las
+# aprobadas se genera la pieza (`flujo='evergreen'` en el tablero). NO valida aqui
+# (lo hace `api/green`); este modulo es persistencia pura. Mismo patron que etiquetas.
+
+_COLS_GREEN_IDEA = (
+    "id",
+    "marca",
+    "titulo",
+    "descripcion",
+    "estado",
+    "origen",
+    "generacion_id",
+    "contenido_id",
+    "creado",
+    "actualizado",
+)
+_SELECT_GREEN_IDEA = f"SELECT {', '.join(_COLS_GREEN_IDEA)} FROM green_ideas"
+_CAMPOS_EDITABLES_GREEN_IDEA: tuple[str, ...] = (
+    "titulo",
+    "descripcion",
+    "estado",
+    "contenido_id",
+)
+
+
+def _fila_a_green_idea(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `green_ideas` en dict."""
+    return {col: fila[col] for col in _COLS_GREEN_IDEA}
+
+
+def crear_green_idea(
+    *,
+    marca: str = "",
+    titulo: str = "",
+    descripcion: str = "",
+    estado: str = "propuesta",
+    origen: str = "ia",
+    generacion_id: str = "",
+    contenido_id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """Inserta una idea de contenido evergreen y la devuelve. NO valida (lo hace la API)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "marca": marca or "",
+        "titulo": titulo or "",
+        "descripcion": descripcion or "",
+        "estado": estado or "propuesta",
+        "origen": origen or "ia",
+        "generacion_id": generacion_id or "",
+        "contenido_id": contenido_id or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_GREEN_IDEA)
+        con.execute(
+            f"INSERT INTO green_ideas ({', '.join(_COLS_GREEN_IDEA)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_GREEN_IDEA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def listar_green_ideas(
+    *, marca: str | None = None, estado: str | None = None
+) -> list[dict[str, Any]]:
+    """Lista ideas evergreen, recientes primero. Filtros opcionales por `marca`/`estado`."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if estado:
+        clausulas.append("estado = ?")
+        params.append(estado)
+    sql = _SELECT_GREEN_IDEA
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY creado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_green_idea(f) for f in filas]
+
+
+def obtener_green_idea(idea_id: str) -> dict[str, Any] | None:
+    """Una idea evergreen por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_GREEN_IDEA} WHERE id = ?", (idea_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_green_idea(fila) if fila is not None else None
+
+
+def actualizar_green_idea(idea_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita parcialmente una idea; None si no existe. Filtra a la lista blanca."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_GREEN_IDEA}
+    if not cambios:
+        return obtener_green_idea(idea_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, idea_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE green_ideas SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(f"{_SELECT_GREEN_IDEA} WHERE id = ?", (idea_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_green_idea(fila) if fila is not None else None
+
+
+def borrar_green_idea(idea_id: str) -> bool:
+    """Borra una idea evergreen. True si existia."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM green_ideas WHERE id = ?", (idea_id,))
         con.commit()
         return cur.rowcount > 0
     finally:

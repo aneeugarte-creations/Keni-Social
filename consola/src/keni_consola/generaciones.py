@@ -106,6 +106,9 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 TIPOS = (
     "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
     "parrilla-import",
+    # Taller GREEN / brainstorming: `green-ideas` = la PROPUESTA de ideas evergreen (IA);
+    # `green` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
+    "green-ideas", "green",
 )
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
