@@ -35,6 +35,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -43,6 +44,39 @@ from .. import config
 from . import stream
 
 _log = logging.getLogger("keni_consola.runner")
+
+# Máximo de líneas de stderr que retenemos del subproceso (las ÚLTIMAS): para loguear el
+# motivo de un fallo sin crecer sin límite. El stderr se DRENA en un hilo daemon desde el
+# arranque (ver `_DrenadorStderr` / `lanzar_proc`); si no, `claude --verbose` puede llenar
+# el buffer de la tubería (~64 KB) y BLOQUEARSE escribiendo en stderr → deja de producir
+# stdout → `leer_stream` espera para siempre (deadlock). Drenar en paralelo lo evita.
+_MAX_STDERR_LINEAS = 2000
+
+
+class _DrenadorStderr:
+    """Drena el stderr de un subproceso en un hilo daemon, reteniendo las últimas líneas.
+
+    Evita el deadlock por buffer de tubería lleno (claude bloqueado escribiendo en stderr
+    mientras `leer_stream` espera stdout). `texto()` espera brevemente al hilo y devuelve lo
+    capturado (acotado a `_MAX_STDERR_LINEAS`)."""
+
+    def __init__(self, pipe: object) -> None:
+        self._lineas: deque[str] = deque(maxlen=_MAX_STDERR_LINEAS)
+        self._hilo = threading.Thread(target=self._drenar, args=(pipe,), daemon=True)
+        self._hilo.start()
+
+    def _drenar(self, pipe: object) -> None:
+        if pipe is None:
+            return
+        try:
+            for linea in pipe:  # iteración línea a línea (text mode, bufsize=1)
+                self._lineas.append(linea)
+        except Exception:  # noqa: BLE001 -- drenar stderr nunca debe romper nada
+            pass
+
+    def texto(self, *, timeout: float = 1.0) -> str:
+        self._hilo.join(timeout=timeout)
+        return "".join(self._lineas)
 
 
 class ColaLlenaError(RuntimeError):
@@ -138,13 +172,15 @@ def lanzar_proc(
     En Windows no hay grupos POSIX, pero el piloto corre en macOS/Linux. argv como lista
     (sin shell). El llamante elige stdout/stderr/text via los kwargs fijos de aqui.
 
-    `stderr=PIPE` (antes DEVNULL): los errores de `claude` (auth, flag invalido, crash)
-    iban a /dev/null y un fallo quedaba mudo. Ahora se captura y, si el proceso acaba con
-    returncode != 0, se loguea (truncado) en `esperar()`. El stderr se DRENA SOLO tras
-    cerrar el proceso (stdout lo agota `leer_stream` y el volumen de stderr es bajo), asi
-    no hay riesgo de bloqueo por buffer lleno.
+    `stderr=PIPE` (antes DEVNULL): los errores de `claude` (auth, flag invalido, crash) se
+    capturan para loguearlos si returncode != 0. CRÍTICO: el stderr se DRENA EN PARALELO
+    desde el arranque (hilo daemon `_DrenadorStderr`), NO solo al cerrar. Con `--verbose` y
+    un prompt grande, `claude` puede escribir > 64 KB en stderr; si nadie lo drena, el buffer
+    de la tubería se llena, `claude` se BLOQUEA escribiendo en stderr y deja de producir
+    stdout → `leer_stream` espera para siempre (deadlock observado en imports grandes). El
+    drenador retiene las últimas líneas para `_loguear_stderr`.
     """
-    return subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
+    proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
         argv,
         cwd=cwd,
         env=env,
@@ -154,6 +190,9 @@ def lanzar_proc(
         bufsize=1,
         start_new_session=True,
     )
+    # Drena stderr YA (hilo daemon): evita el deadlock por buffer de tubería lleno.
+    proc._keni_stderr = _DrenadorStderr(proc.stderr)  # type: ignore[attr-defined]
+    return proc
 
 
 def matar_arbol(proc: subprocess.Popen, *, espera: float = 10.0) -> None:
@@ -184,17 +223,23 @@ _MAX_STDERR_LOG = 4096
 
 
 def _loguear_stderr(proc: subprocess.Popen) -> None:
-    """Si el proceso acabo con returncode != 0/None, lee su stderr y lo loguea (truncado).
+    """Si el proceso acabo con returncode != 0/None, loguea su stderr (truncado).
 
-    Best-effort: se llama tras cerrar el proceso (stdout ya agotado por `leer_stream`),
-    asi drenar stderr no bloquea. Antes el stderr iba a DEVNULL y un fallo de `claude`
-    (auth, flag invalido, crash) quedaba mudo; ahora deja rastro en el log.
+    El stderr lo capturó EN PARALELO el `_DrenadorStderr` que monta `lanzar_proc` (no se
+    lee aquí del pipe: a estas alturas el drenador ya lo agotó). Best-effort: nunca rompe el
+    cierre. Antes iba a DEVNULL y un fallo de `claude` (auth, flag inválido, crash) era mudo.
     """
     rc = proc.returncode
-    if rc is None or rc == 0 or proc.stderr is None:
+    if rc is None or rc == 0:
         return
+    dren = getattr(proc, "_keni_stderr", None)
     try:
-        err = proc.stderr.read() or ""
+        if dren is not None:
+            err = dren.texto()
+        elif proc.stderr is not None:
+            err = proc.stderr.read() or ""
+        else:
+            return
     except Exception:  # noqa: BLE001 -- leer el stderr nunca debe romper la finalizacion
         return
     err = err.strip()
