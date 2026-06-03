@@ -1,43 +1,41 @@
 """Tests de la lógica PURA de formato de imagen (`dominio.formato_imagen`).
 
-Sin I/O ni Pillow: comprueba que `formato_correcto` acepta un aspecto solo si encaja en algún
-lienzo que la red admite (matriz `formatos_red`), con tolerancia, y rechaza el resto.
+Sin I/O ni Pillow: `formato_correcto` acepta una imagen si su aspecto es uno de los lienzos
+CANÓNICOS de social (9:16, 4:5, 1:1, 16:9), independientemente de la red (el equipo cruza
+formatos), con tolerancia; y rechaza aspectos raros (banners, thumbnails apaisados).
 """
 
 from __future__ import annotations
 
+import pytest
+
 from keni_consola.dominio import formato_imagen as fi
 
 
-def test_instagram_acepta_feed_4x5_y_reel_9x16():
-    # Instagram admite feed (4:5) y vertical (9:16).
-    assert fi.formato_correcto("instagram", 1080, 1350) is True   # 4:5
-    assert fi.formato_correcto("instagram", 1080, 1920) is True   # 9:16
-    # 1:1 NO está entre los lienzos de instagram -> rechazado.
-    assert fi.formato_correcto("instagram", 1080, 1080) is False
-
-
-def test_x_solo_acepta_horizontal_16x9():
-    assert fi.formato_correcto("x", 1600, 900) is True            # 16:9
-    assert fi.formato_correcto("x", 1080, 1350) is False          # 4:5 no vale en X
-
-
-def test_tiktok_solo_vertical():
-    assert fi.formato_correcto("tiktok", 1080, 1920) is True      # 9:16
-    assert fi.formato_correcto("tiktok", 1080, 1080) is False     # 1:1 no
+@pytest.mark.parametrize(
+    "ancho,alto",
+    [
+        (1080, 1920),  # 9:16 vertical
+        (1080, 1350),  # 4:5  feed (lo que el equipo postea de hecho)
+        (1080, 1080),  # 1:1  cuadrado
+        (1600, 900),   # 16:9 horizontal
+    ],
+)
+def test_acepta_cualquier_lienzo_canonico_en_cualquier_red(ancho, alto):
+    # El mismo tamaño vale para CUALQUIER red: no se ata el formato a la red.
+    for red in ("instagram", "facebook", "x", "tiktok", "youtube", "web"):
+        assert fi.formato_correcto(red, ancho, alto) is True
 
 
 def test_tolerancia_admite_pocos_pixeles_de_mas():
-    # 1086x1350 ~ 0.804, dentro del 6% de 0.8 (4:5): pasa.
-    assert fi.formato_correcto("instagram", 1086, 1350) is True
-    # 1080x1500 ~ 0.72, fuera del 6% de 0.8 y de 0.5625: no pasa.
-    assert fi.formato_correcto("instagram", 1080, 1500) is False
+    assert fi.formato_correcto("instagram", 1086, 1350) is True   # ~0.804 ≈ 4:5
+    assert fi.formato_correcto("x", 1280, 718) is True            # ~1.783 ≈ 16:9
 
 
-def test_red_sin_matriz_no_exige_formato():
-    # `web` no está en la matriz de formatos: cualquier imagen vale.
-    assert fi.formato_correcto("web", 800, 173) is True
-    assert fi.formato_correcto("desconocida", 123, 456) is True
+def test_rechaza_aspectos_no_canonicos():
+    assert fi.formato_correcto("facebook", 1200, 628) is False    # 1.91:1 (link card)
+    assert fi.formato_correcto("instagram", 1080, 1500) is False  # 0.72, fuera de 4:5 y 1:1
+    assert fi.formato_correcto("x", 1500, 500) is False           # 3:1 banner
 
 
 def test_dimensiones_no_positivas_son_invalidas():

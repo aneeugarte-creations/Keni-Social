@@ -53,8 +53,8 @@ def test_copy_in_obligatorio_salvo_exencion(monkeypatch):
 
 
 def test_base_lista_formato_de_imagen_incorrecto(monkeypatch):
-    # 1:1 no es un lienzo de instagram (solo feed 4:5 / vertical 9:16).
-    monkeypatch.setattr(auto_avance, "_dimensiones", lambda _n: (1080, 1080))
+    # 1200x628 (1.91:1, "link card") NO es un lienzo canónico de social -> no avanza.
+    monkeypatch.setattr(auto_avance, "_dimensiones", lambda _n: (1200, 628))
     assert auto_avance.base_lista(_pub()) is False
 
 
