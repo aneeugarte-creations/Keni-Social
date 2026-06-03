@@ -620,6 +620,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         enlace                TEXT NOT NULL DEFAULT '',
         evergreen             INTEGER NOT NULL DEFAULT 0,
         es_publicacion        INTEGER NOT NULL DEFAULT 0,
+        copy_in_exento        INTEGER NOT NULL DEFAULT 0,
+        qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
         actualizado           TEXT NOT NULL DEFAULT ''
@@ -1256,6 +1258,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_grupos_hashtags(con)
     _migrar_columnas_noticias_algoritmo(con)
     _migrar_columnas_etiquetas(con)
+    _migrar_columnas_contenido_plataforma(con)
     _sembrar_fuentes_hub_desde_rss(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
@@ -1325,6 +1328,29 @@ def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
     if "sugerida" not in _columnas_existentes(con, "noticias_algoritmo"):
         con.execute(
             "ALTER TABLE noticias_algoritmo ADD COLUMN IF NOT EXISTS sugerida INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _migrar_columnas_contenido_plataforma(con: Any) -> None:
+    """Anade `copy_in_exento` y `qa_auto_hash` a `contenido_plataforma` (idempotente).
+
+    Columnas del auto-avance (Flujo: "dale el OK" automatico): `copy_in_exento` marca una
+    pieza como exenta de copy-in (imagen dramatica/autoexplicativa que no lo necesita);
+    `qa_auto_hash` guarda el hash del copy para el que se lanzo la QA automatica, para no
+    relanzarla en cada barrido. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya estan.
+    """
+    if not _tabla_existe(con, "contenido_plataforma"):
+        return
+    cols = _columnas_existentes(con, "contenido_plataforma")
+    if "copy_in_exento" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS copy_in_exento INTEGER NOT NULL DEFAULT 0"
+        )
+    if "qa_auto_hash" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS qa_auto_hash TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -4001,6 +4027,8 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "enlace",
     "evergreen",
     "es_publicacion",
+    "copy_in_exento",
+    "qa_auto_hash",
     "hora_post",
     "creado",
     "actualizado",
@@ -4015,6 +4043,7 @@ _BOOLS_CONTENIDO_PLATAFORMA = (
     "falta_publicar",
     "evergreen",
     "es_publicacion",
+    "copy_in_exento",
 )
 # Campos editables de una fila por plataforma (lista blanca). `id`, `contenido_id`,
 # `red`, `es_publicacion`, `creado` y `actualizado` no se editan (los dos ultimos los
@@ -4069,6 +4098,8 @@ def crear_contenido_plataforma(
     enlace: str = "",
     evergreen: bool = False,
     es_publicacion: bool = False,
+    copy_in_exento: bool = False,
+    qa_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -4108,6 +4139,8 @@ def crear_contenido_plataforma(
         "enlace": enlace or "",
         "evergreen": 1 if evergreen else 0,
         "es_publicacion": 1 if es_publicacion else 0,
+        "copy_in_exento": 1 if copy_in_exento else 0,
+        "qa_auto_hash": qa_auto_hash or "",
         "hora_post": hora_post or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
@@ -6871,7 +6904,8 @@ _SELECT_PUBLICACION = (
     "cp.preparado_en AS preparado_en, cp.id_post_metricool AS id_post_metricool, "
     "cp.falta_copy AS falta_copy, cp.falta_imagen AS falta_imagen, "
     "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
-    "cp.evergreen AS evergreen, cp.actualizado AS pactualizado, "
+    "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
+    "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
     "c.tipo_contenido AS tipo_contenido "
@@ -6921,6 +6955,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "origen": f["origen"] or "",
         "imagen": f["imagen"] or "",
         "evergreen": bool(f["evergreen"]),
+        # Auto-avance: exencion de copy-in + hash del copy con QA auto lanzada.
+        "copy_in_exento": bool(f["copy_in_exento"]),
+        "qa_auto_hash": f["qa_auto_hash"] or "",
     }
 
 

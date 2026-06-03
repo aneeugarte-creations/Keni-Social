@@ -129,6 +129,17 @@ function ChecklistProduccion({ publicacion }: { publicacion: Publicacion }) {
           </label>
         ))}
       </div>
+      {/* Exención de copy-in: el auto-avance exige copy-in salvo que se marque aquí (imágenes
+          dramáticas/autoexplicativas a las que el texto dentro de la imagen solo estorba). */}
+      <label className="flex cursor-pointer items-center gap-2 border-t border-border/60 pt-2 text-sm">
+        <Checkbox
+          checked={!!publicacion.copy_in_exento}
+          disabled={actualizar.isPending}
+          onCheckedChange={(v) => actualizar.mutate({ copy_in_exento: !!v })}
+          aria-label="No necesita copy-in"
+        />
+        Esta imagen no necesita copy-in
+      </label>
     </div>
   );
 }

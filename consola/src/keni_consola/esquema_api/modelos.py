@@ -781,6 +781,9 @@ class Publicacion(TypedDict):
     imagen: str
     imagen_url: str
     evergreen: bool
+    # Auto-avance: la pieza esta EXENTA de copy-in (imagen dramatica/autoexplicativa que no lo
+    # necesita). Opcional: las piezas legadas no lo traen y el feed lo lee como False.
+    copy_in_exento: NotRequired[bool]
 
 
 class RespuestaPublicaciones(TypedDict):

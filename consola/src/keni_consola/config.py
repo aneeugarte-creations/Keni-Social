@@ -267,6 +267,15 @@ ENV_AUTOGEN_ARTE = "KENI_AUTOGEN_ARTE"
 ENV_AUTOGEN_ARTE_INTERVALO_HORAS = "KENI_AUTOGEN_ARTE_INTERVALO_HORAS"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
+# Auto-avance "dale el OK" (Flujo D): un hilo demonio lleva SOLO a `en_revision` (abre los OK
+# del equipo) las piezas en borrador que ya tienen copy out, copy in (o exención), imagen con
+# formato correcto y QA pasado (🟢/🟡). De paso, lanza la QA editorial por pieza de las que aún
+# no la tienen, para que el veredicto exista. CONSERVADOR por defecto (OFF): sin el flag, mandar
+# a revisión sigue siendo manual. `KENI_AUTO_AVANCE_MAX` acota los lanzamientos de QA por barrido.
+ENV_AUTO_AVANCE = "KENI_AUTO_AVANCE"
+ENV_AUTO_AVANCE_INTERVALO_HORAS = "KENI_AUTO_AVANCE_INTERVALO_HORAS"
+ENV_AUTO_AVANCE_MAX = "KENI_AUTO_AVANCE_MAX"
+
 # Reaper de generaciones zombi: una generacion `ejecutando` cuyo proceso murio (reinicio/
 # OOM/cuelgue) queda colgada para siempre. El reaper la cierra como `error` pasada una
 # antigüedad MUY superior al wall-timeout (asi nunca mata una viva). Siempre activo.
@@ -407,6 +416,12 @@ AUTOGEN_MAX_DEF = 3
 # seguido, cap bajo por barrido), porque cada item llama al proveedor de imagen (coste).
 AUTOGEN_ARTE_INTERVALO_HORAS_DEF = 1
 AUTOGEN_ARTE_MAX_DEF = 3
+
+# Auto-avance "dale el OK": barre seguido (def 1h) y acota cuántas QA editoriales lanza por
+# barrido (def 4), porque cada una es un `claude -p` (coste). Avanzar a en_revisión no tiene
+# coste de IA; el cap solo limita los lanzamientos de QA pendiente.
+AUTO_AVANCE_INTERVALO_HORAS_DEF = 1
+AUTO_AVANCE_MAX_DEF = 4
 
 # Pipeline de contenido CI→CD→QA: barrido HORARIO (def 1h) por marca y cap bajo por barrido
 # (def 3), porque cada item ingerido lanza un `claude -p` (coste). El cap del worker
@@ -1123,6 +1138,28 @@ def autogen_arte_intervalo_horas() -> int:
     return _entero(
         ENV_AUTOGEN_ARTE_INTERVALO_HORAS, AUTOGEN_ARTE_INTERVALO_HORAS_DEF, minimo=1
     )
+
+
+def auto_avance_activo() -> bool:
+    """True si el daemon de auto-avance "dale el OK" debe arrancar (`KENI_AUTO_AVANCE`).
+
+    Def OFF (conservador): mandar una pieza a revisión sigue siendo manual. Con el flag, un
+    hilo demonio lleva a `en_revision` las piezas listas (copy out + copy in/exención + imagen
+    con formato correcto + QA 🟢/🟡) y lanza la QA editorial de las que aún no la tienen.
+    """
+    return _crudo(ENV_AUTO_AVANCE).lower() in _VERDADEROS
+
+
+def auto_avance_intervalo_horas() -> int:
+    """Cada cuantas horas barre el daemon de auto-avance (`KENI_AUTO_AVANCE_INTERVALO_HORAS`, def 1, min 1)."""
+    return _entero(
+        ENV_AUTO_AVANCE_INTERVALO_HORAS, AUTO_AVANCE_INTERVALO_HORAS_DEF, minimo=1
+    )
+
+
+def auto_avance_max() -> int:
+    """Máximo de QA editoriales a lanzar por barrido de auto-avance (`KENI_AUTO_AVANCE_MAX`, def 4, min 1)."""
+    return _entero(ENV_AUTO_AVANCE_MAX, AUTO_AVANCE_MAX_DEF, minimo=1)
 
 
 def media_gc_activo() -> bool:

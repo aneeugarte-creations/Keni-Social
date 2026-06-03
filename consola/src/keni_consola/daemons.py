@@ -48,6 +48,7 @@ def main() -> int:
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
+    from .auto_avance import iniciar_auto_avance
     from .autogen_arte import iniciar_autogen_arte
     from .autogen_copy import iniciar_autogen
     from .comercial import iniciar_captura_programada
@@ -80,6 +81,10 @@ def main() -> int:
     # copy+arte y valida, registrando cada etapa en "Actividad IA"; deja borradores en revision.
     # No barre salvo KENI_PIPELINE=1 (def OFF); nunca publica.
     iniciar_pipeline()
+    # Auto-avance "dale el OK" (Flujo D): lleva SOLO a en_revision las piezas listas (copy out +
+    # copy in/exención + imagen con formato + QA 🟢/🟡) y lanza la QA de las que falte. GATEADO:
+    # no barre salvo KENI_AUTO_AVANCE=1 (def OFF). Abre los OK del equipo; nunca aprueba ni publica.
+    iniciar_auto_avance()
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).

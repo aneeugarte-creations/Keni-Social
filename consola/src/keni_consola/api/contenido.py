@@ -429,7 +429,14 @@ async def actualizar_plataforma(request: Request) -> Response:
         if datos["estado"] not in ESTADOS_CONTENIDO_PLATAFORMA:
             return JSONResponse({"error": "Estado de plataforma inválido."}, status_code=400)
         campos["estado"] = datos["estado"]
-    for flag in ("falta_copy", "falta_imagen", "falta_revision", "falta_publicar", "evergreen"):
+    for flag in (
+        "falta_copy",
+        "falta_imagen",
+        "falta_revision",
+        "falta_publicar",
+        "evergreen",
+        "copy_in_exento",
+    ):
         if flag in datos:
             campos[flag] = bool(datos[flag])
     for clave in (

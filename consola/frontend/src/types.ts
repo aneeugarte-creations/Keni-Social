@@ -1408,6 +1408,7 @@ export interface CuerpoActualizarPlataforma {
   hora_post?: string;
   veredicto?: string;
   evergreen?: boolean;
+  copy_in_exento?: boolean;
 }
 
 export interface RespuestaContenidoItem {

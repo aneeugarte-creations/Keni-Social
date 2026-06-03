@@ -18,7 +18,7 @@
  * NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, MessageSquare, Send, XCircle } from "lucide-react";
+import { Check, Loader2, MessageSquare, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -62,8 +62,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
   // Hay cadena configurada => pintamos el panel "dale el OK"; si no, camino simple (legado).
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
-  // Borrador con copy ya generado: el equipo puede mandarlo a revisión para juntar los OK.
-  const listoParaOK = publicacion.estado === "borrador" && !!publicacion.contenido;
 
   const tras = (mensaje: string) => () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -73,12 +71,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   };
   const onError = (e: unknown) => toast.error(mensajeError(e));
 
-  // Mandar a revisión: monta la cadena (IA + Edición + Coordinación) y abre los OK del equipo.
-  const pedirOK = useMutation({
-    mutationFn: () => api.enviarARevision(publicacion.id),
-    onSuccess: tras("Pieza lista para que el equipo dé su OK."),
-    onError,
-  });
   // Fallback para piezas legadas que estén en revisión SIN cadena (aprobar/rechazar forwardea).
   const aprobar = useMutation({
     mutationFn: () => api.aprobarPublicacion(publicacion.id),
@@ -128,19 +120,11 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         />
       </div>
 
-      {/* Acciones en línea: pedir OK / dar OK (legado) / comentar. El gate vive en el panel. */}
+      {/* Acciones en línea: dar OK (legado) / comentar. El gate vive en el panel. Una pieza
+          entra SOLA a revisión cuando está lista (copy out + copy in/exención + imagen con
+          formato + QA): no hay botón manual de "pedir OK". */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        {listoParaOK ? (
-          // Borrador con copy: el equipo lo manda a revisión para empezar a juntar los OK.
-          <Button size="sm" onClick={() => pedirOK.mutate()} disabled={pedirOK.isPending}>
-            {pedirOK.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Pedir OK del equipo
-          </Button>
-        ) : enRevision && !tieneCadena && !cadenaQuery.isLoading ? (
+        {enRevision && !tieneCadena && !cadenaQuery.isLoading ? (
           // Fallback (piezas legadas en revisión SIN cadena): aprobar/rechazar forwardea.
           <>
             <Button variant="positive" size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
@@ -166,7 +150,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               ? publicacion.revisor_nombre
                 ? `Lista para publicar · último OK: ${publicacion.revisor_nombre}`
                 : "Lista para publicar"
-              : "La IA todavía está preparando esta pieza."}
+              : "La IA prepara esta pieza; entrará a revisión sola cuando esté lista."}
           </span>
         ) : null}
         <Button
