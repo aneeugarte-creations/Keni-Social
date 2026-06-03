@@ -29,6 +29,10 @@ export interface EstadoEditor {
   quitar: (id: string) => void;
   duplicar: (id: string) => void;
   reordenar: (id: string, delta: number) => void;
+  traerAlFrente: (id: string) => void;
+  enviarAlFondo: (id: string) => void;
+  // Alinea la capa respecto al lienzo (o, si se pasa, una caja de referencia).
+  alinear: (id: string, modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => void;
   setFondo: (fondo: Documento["fondo"]) => void;
 
   // Historial. `comenzarGesto` toma una instantánea ANTES de un arrastre/transform para que
@@ -130,6 +134,35 @@ export function crearStoreEditor(inicial: Documento) {
             doc.capas.map((c) => (c.id === id ? ({ ...c, z: Math.max(0, c.z + delta) } as Capa) : c)),
           ),
         ),
+
+      traerAlFrente: (id) =>
+        aplicar((doc) => {
+          const max = doc.capas.reduce((m, c) => Math.max(m, c.z), 0);
+          return conCapas(doc, doc.capas.map((c) => (c.id === id ? ({ ...c, z: max + 1 } as Capa) : c)));
+        }),
+
+      enviarAlFondo: (id) =>
+        aplicar((doc) => {
+          const min = doc.capas.reduce((m, c) => Math.min(m, c.z), 0);
+          return conCapas(doc, doc.capas.map((c) => (c.id === id ? ({ ...c, z: min - 1 } as Capa) : c)));
+        }),
+
+      alinear: (id, modo) =>
+        aplicar((doc) => {
+          const f = doc.formato;
+          return conCapas(
+            doc,
+            doc.capas.map((c) => {
+              if (c.id !== id) return c;
+              if (modo === "izq") return { ...c, x: 0 } as Capa;
+              if (modo === "centroH") return { ...c, x: Math.round((f.w - c.w) / 2) } as Capa;
+              if (modo === "der") return { ...c, x: f.w - c.w } as Capa;
+              if (modo === "arriba") return { ...c, y: 0 } as Capa;
+              if (modo === "centroV") return { ...c, y: Math.round((f.h - c.h) / 2) } as Capa;
+              return { ...c, y: f.h - c.h } as Capa; // abajo
+            }),
+          );
+        }),
 
       setFondo: (fondo) => aplicar((doc) => ({ ...doc, fondo })),
 
