@@ -32,6 +32,9 @@ const RATIO_FIJO = new Set<Capa["tipo"]>(["imagen", "logo"]);
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 4;
 
+// Portapapeles de capa (módulo, para copiar/pegar incluso entre pestañas del workspace).
+let _portapapeles: Capa | null = null;
+
 function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: number; h: number }) {
   const img = useImagen(fondo.tipo === "imagen" ? fondo.imagen?.media_id : null);
   if (fondo.tipo === "color") return <Rect x={0} y={0} width={w} height={h} fill={fondo.color} listening={false} />;
@@ -134,6 +137,26 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
       if (!sel) return;
       const capa = st.documento.capas.find((c) => c.id === sel);
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); return st.quitar(sel); }
+      if (meta && (e.key === "c" || e.key === "C")) {
+        const capa = st.documento.capas.find((c) => c.id === sel);
+        if (capa) _portapapeles = structuredClone(capa);
+        return;
+      }
+      if (meta && (e.key === "v" || e.key === "V")) {
+        if (!_portapapeles) return;
+        e.preventDefault();
+        const z = Math.max(0, ...st.documento.capas.map((c) => c.z)) + 1;
+        const copia = {
+          ...structuredClone(_portapapeles),
+          id: `${_portapapeles.tipo}-${Date.now().toString(36)}-${Math.floor(performance.now())}`,
+          x: _portapapeles.x + 24,
+          y: _portapapeles.y + 24,
+          z,
+        } as Capa;
+        st.agregar(copia);
+        st.seleccionar(copia.id);
+        return;
+      }
       if (meta && (e.key === "d" || e.key === "D")) { e.preventDefault(); return st.duplicar(sel); }
       if (meta && e.key === "]") { e.preventDefault(); return st.traerAlFrente(sel); }
       if (meta && e.key === "[") { e.preventDefault(); return st.enviarAlFondo(sel); }

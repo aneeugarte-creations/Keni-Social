@@ -222,7 +222,15 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
         <Campo etiqueta="Alto"><Num valor={capa.h} onChange={(v) => set({ h: v } as Partial<Capa>)} /></Campo>
         <Campo etiqueta="Rotación"><Num valor={capa.rotacion} onChange={(v) => set({ rotacion: v } as Partial<Capa>)} /></Campo>
         <Campo etiqueta="Opacidad">
-          <Num valor={capa.opacidad} paso={0.1} onChange={(v) => set({ opacidad: Math.min(1, Math.max(0, v)) } as Partial<Capa>)} />
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={capa.opacidad}
+            onChange={(e) => set({ opacidad: Number(e.target.value) } as Partial<Capa>)}
+            className="w-20"
+          />
         </Campo>
       </div>
 
@@ -273,6 +281,35 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               <option value="justificado">Justificado</option>
             </select>
           </Campo>
+          <Campo etiqueta="Interlineado">
+            <Num valor={(capa as CapaTexto).interlineado} paso={0.05} onChange={(v) => set({ interlineado: v } as Partial<Capa>)} />
+          </Campo>
+          <Campo etiqueta="Sombra">
+            <input
+              type="checkbox"
+              checked={!!(capa as CapaTexto).sombra}
+              onChange={(e) => set({ sombra: e.target.checked ? { dx: 2, dy: 2, color: "#000000" } : null } as Partial<Capa>)}
+            />
+          </Campo>
+          <Campo etiqueta="Fondo (chip)">
+            <input
+              type="checkbox"
+              checked={!!(capa as CapaTexto).chip}
+              onChange={(e) =>
+                set({ chip: e.target.checked ? { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } : null } as Partial<Capa>)
+              }
+            />
+          </Campo>
+          {(capa as CapaTexto).chip && (
+            <Campo etiqueta="Color del chip">
+              <input
+                type="color"
+                value={(capa as CapaTexto).chip!.color}
+                onChange={(e) => set({ chip: { ...(capa as CapaTexto).chip!, color: e.target.value } } as Partial<Capa>)}
+                className="h-6 w-10"
+              />
+            </Campo>
+          )}
         </div>
       )}
 
