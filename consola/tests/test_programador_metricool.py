@@ -18,7 +18,7 @@ mockan la carga de config de Metricool (no necesitan un TOML real).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
 
@@ -169,7 +169,9 @@ def test_borrador_facebook_preserva_fecha_programada(monkeypatch):
     }
     borrador = _borrador_de_publicacion(pub)
     assert borrador is not None
-    assert borrador.publicar_en == datetime(2026, 5, 30, 18, 0)
+    # Tras la migración a fechas UTC-conscientes (`programador._parsear_fecha`), la fecha
+    # de pared sin zona se normaliza a UTC-aware (el envío a Metricool ya la convierte a CDMX).
+    assert borrador.publicar_en == datetime(2026, 5, 30, 18, 0, tzinfo=timezone.utc)
 
 
 # --------------------------------------------------------------------------- #
