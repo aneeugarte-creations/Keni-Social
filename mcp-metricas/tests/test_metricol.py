@@ -20,7 +20,7 @@ from keni_metricas.config import Config, MetricoolConfig, construir_fuente
 from keni_metricas.fuentes.base import FuenteMetricas
 from keni_metricas.fuentes.metricol import BASE, FuenteMetricol, _fecha
 from keni_metricas.fuentes.muestra import FuenteMuestra
-from keni_metricas.schema import Plataforma, ResumenMetricas
+from keni_metricas.schema import MotivoOmision, Plataforma, ResumenMetricas
 
 # Rango ABSOLUTO (no relativo a hoy) para que las piezas mock con fecha 2026-05-xx caigan
 # siempre dentro de [desde, hasta] y pasen el filtro de rango, de forma determinista.
@@ -54,6 +54,45 @@ def _serie(valor: float) -> dict:
     }
 
 
+def _perfil(blog_id: str = "1234567", **redes) -> dict:
+    """Perfil de `/admin/simpleProfiles`: una red con valor truthy = conectada."""
+    base = {
+        "id": int(blog_id),
+        "twitter": None,
+        "facebook": None,
+        "instagram": None,
+        "tiktok": None,
+        "youtube": None,
+    }
+    base.update(redes)
+    return base
+
+
+def _mock_perfiles(*perfiles: dict) -> None:
+    """Mockea `/admin/simpleProfiles` (lista de perfiles del usuario)."""
+    respx.get(f"{BASE}/admin/simpleProfiles").mock(
+        return_value=httpx.Response(200, json=list(perfiles))
+    )
+
+
+def _post_ig(id_: str, vis: int, inter: int, fecha: str = "2026-05-20T10:00:00") -> dict:
+    """Un post de Instagram con la forma real de `/v2/analytics/posts/instagram`."""
+    return {
+        "postId": id_,
+        "publishedAt": {"dateTime": fecha, "timezone": "UTC"},
+        "views": vis,
+        "interactions": inter,
+        "url": f"https://instagram.com/p/{id_}",
+    }
+
+
+def _mock_posts(net: str, posts: list[dict]) -> None:
+    """Mockea `/v2/analytics/posts/{net}` con una lista de posts."""
+    respx.get(f"{BASE}/v2/analytics/posts/{net}").mock(
+        return_value=httpx.Response(200, json={"data": posts})
+    )
+
+
 @respx.mock
 def test_es_una_fuente_metricas():
     """FuenteMetricol cumple el contrato `FuenteMetricas` (mismo que muestra)."""
@@ -64,26 +103,21 @@ def test_es_una_fuente_metricas():
 
 
 @respx.mock
-def test_resumen_mapea_respuesta_metricool():
-    """Una respuesta de Metricool se mapea a ResumenMetricas (contrato intacto)."""
-    # Instagram: vis=impressions, int=interactions, alc=reach (PLATAFORMAS_CON_ALCANCE).
-    def responder(request: httpx.Request) -> httpx.Response:
-        metric = request.url.params.get("metric")
-        valores = {"impressions": 10000, "interactions": 300, "reach": 8000}
-        return httpx.Response(200, json=_serie(valores.get(metric, 0)))
-
-    ruta = respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+def test_resumen_agrega_los_posts_del_periodo_por_red():
+    """resumen suma los POSTS del periodo por red (vis+inter) -> ResumenMetricas."""
+    _mock_perfiles(_perfil(instagram="unotv_"))  # IG conectada
+    _mock_posts("instagram", [_post_ig("p1", 6000, 200), _post_ig("p2", 4000, 100)])
 
     with httpx.Client() as cli:
         resumen = _fuente(cli).resumen("claro_sports", RANGO)
 
-    assert ruta.called
     assert isinstance(resumen, ResumenMetricas)
     assert resumen.cuenta == "claro_sports"
     assert resumen.fuente == "metricool"
-    assert resumen.visualizaciones == 10000
-    assert resumen.interacciones == 300
-    assert resumen.alcance == 8000  # Meta/IG sí mide alcance
+    assert resumen.visualizaciones == 10000  # 6000 + 4000
+    assert resumen.interacciones == 300  # 200 + 100
+    # alcance no se deriva del post de forma uniforme -> None (honesto, no se inventa).
+    assert resumen.alcance is None
     assert resumen.engagement_pct == pytest.approx(3.0)  # 300/10000 -> 3.0
     assert [m.plataforma for m in resumen.por_plataforma] == [Plataforma.instagram]
     assert resumen.cobertura is not None and resumen.cobertura.completa
@@ -92,17 +126,18 @@ def test_resumen_mapea_respuesta_metricool():
 @respx.mock
 def test_resumen_envia_autenticacion_correcta():
     """X-Mc-Auth en header; userId/blogId en query (doc oficial de Metricool)."""
+    _mock_perfiles(_perfil(instagram="x"))
     capturadas: list[httpx.Request] = []
 
     def responder(request: httpx.Request) -> httpx.Response:
         capturadas.append(request)
-        return httpx.Response(200, json=_serie(1))
+        return httpx.Response(200, json={"data": [_post_ig("p1", 100, 10)]})
 
-    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(side_effect=responder)
     with httpx.Client() as cli:
         _fuente(cli).resumen("claro_sports", RANGO)
 
-    assert capturadas, "no se hizo ninguna llamada"
+    assert capturadas, "no se hizo ninguna llamada a los posts"
     req = capturadas[0]
     assert req.headers.get("X-Mc-Auth") == "TOK"
     assert req.url.params.get("userId") == "999"
@@ -110,10 +145,24 @@ def test_resumen_envia_autenticacion_correcta():
 
 
 @respx.mock
-def test_plataforma_que_falla_se_omite_en_cobertura():
-    """Si la API falla en una plataforma, se OMITE (no inventa ceros)."""
-    respx.get(f"{BASE}/v2/analytics/timelines").mock(
-        return_value=httpx.Response(500, json={"error": "boom"})
+def test_red_no_conectada_se_omite_con_motivo():
+    """Una red que NO está conectada en Metricool (simpleProfiles) se omite con motivo."""
+    _mock_perfiles(_perfil())  # ninguna red conectada (instagram=None)
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    assert resumen.por_plataforma == []
+    assert resumen.cobertura is not None
+    assert Plataforma.instagram in resumen.cobertura.omitidas
+    assert resumen.cobertura.motivo["instagram"] == MotivoOmision.no_conectada
+
+
+@respx.mock
+def test_posts_que_fallan_se_omiten_en_cobertura():
+    """Red conectada pero la API de posts falla -> se OMITE (no inventa ceros)."""
+    _mock_perfiles(_perfil(instagram="x"))  # conectada...
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(403, json={"error": "boom"})  # ...pero la lectura falla
     )
     with httpx.Client() as cli:
         resumen = _fuente(cli).resumen("claro_sports", RANGO)
@@ -121,6 +170,7 @@ def test_plataforma_que_falla_se_omite_en_cobertura():
     assert resumen.por_plataforma == []
     assert resumen.cobertura is not None
     assert Plataforma.instagram in resumen.cobertura.omitidas
+    assert resumen.cobertura.motivo["instagram"] == MotivoOmision.error_api
 
 
 @respx.mock
@@ -371,27 +421,27 @@ def test_piezas_sin_fecha_o_fuera_de_rango_se_descartan():
 @respx.mock
 def test_seguidores_netos_ultimo_menos_primero():
     """seguidores_netos = (último punto - primer punto) de la serie de followers."""
+    # IG conectada + con posts -> entra en por_plataforma -> se le calculan seguidores.
+    _mock_perfiles(_perfil(instagram="x"))
+    _mock_posts("instagram", [_post_ig("p1", 100, 10)])
+
     def responder(request: httpx.Request) -> httpx.Response:
-        metric = request.url.params.get("metric")
-        if metric in ("followers", "communitySize", "subscribers"):
-            # Comunidad: 1000 al inicio del periodo, 1075 al final -> neto +75.
-            return httpx.Response(
-                200,
-                json={
-                    "data": [
-                        {
-                            "metric": metric,
-                            "values": [
-                                {"dateTime": "2026-05-20T00:00:00", "value": 1000},
-                                {"dateTime": "2026-05-23T00:00:00", "value": 1050},
-                                {"dateTime": "2026-05-26T00:00:00", "value": 1075},
-                            ],
-                        }
-                    ]
-                },
-            )
-        # vis/int: un agregado cualquiera para que la plataforma "responda".
-        return httpx.Response(200, json=_serie(100))
+        # Comunidad (followers): 1000 al inicio del periodo, 1075 al final -> neto +75.
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "metric": "followers",
+                        "values": [
+                            {"dateTime": "2026-05-20T00:00:00", "value": 1000},
+                            {"dateTime": "2026-05-23T00:00:00", "value": 1050},
+                            {"dateTime": "2026-05-26T00:00:00", "value": 1075},
+                        ],
+                    }
+                ]
+            },
+        )
 
     respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
     with httpx.Client() as cli:
@@ -404,22 +454,22 @@ def test_seguidores_netos_ultimo_menos_primero():
 @respx.mock
 def test_seguidores_netos_degrada_a_cero_sin_serie():
     """Sin serie de followers (o un solo punto) seguidores_netos = 0, no inventa."""
+    _mock_perfiles(_perfil(instagram="x"))
+    _mock_posts("instagram", [_post_ig("p1", 100, 10)])
+
     def responder(request: httpx.Request) -> httpx.Response:
-        metric = request.url.params.get("metric")
-        if metric in ("followers", "communitySize", "subscribers"):
-            # Serie con un único punto: no hay variación medible -> 0.
-            return httpx.Response(
-                200,
-                json={
-                    "data": [
-                        {
-                            "metric": metric,
-                            "values": [{"dateTime": "2026-05-20T00:00:00", "value": 1000}],
-                        }
-                    ]
-                },
-            )
-        return httpx.Response(200, json=_serie(100))
+        # Serie con un único punto: no hay variación medible -> 0.
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "metric": "followers",
+                        "values": [{"dateTime": "2026-05-20T00:00:00", "value": 1000}],
+                    }
+                ]
+            },
+        )
 
     respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
     with httpx.Client() as cli:
@@ -538,9 +588,16 @@ def test_fuente_resuelve_credenciales_distintas_por_marca():
 
     def responder(request: httpx.Request) -> httpx.Response:
         capturadas.append(request)
-        return httpx.Response(200, json=_serie(1))
+        return httpx.Response(200, json={"data": [_post_ig("p1", 100, 10)]})
 
-    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    # Perfiles por blog_id (ambas con instagram conectada) + posts que capturan la auth.
+    respx.get(f"{BASE}/admin/simpleProfiles").mock(
+        return_value=httpx.Response(
+            200,
+            json=[{"id": "blogCS", "instagram": "cs"}, {"id": "blogUNO", "instagram": "uno"}],
+        )
+    )
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(side_effect=responder)
     marcas = {
         "claro_sports": {
             "user_token": "TOK_CS",

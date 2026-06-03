@@ -213,9 +213,10 @@ _REDES_AUDITABLES: tuple[str, ...] = ("facebook", "instagram", "x", "tiktok", "y
 _MOTIVO_COBERTURA: dict[str, str | None] = {
     "con_datos": None,
     "sin_metricas": "Conectada, pero sin actividad ni métricas en este rango.",
+    "no_conectada": "Esta red no está conectada a Metricool para la marca.",
     "sin_lectura": (
-        "No se pudo leer de Metricool: la red no está conectada o la métrica no está "
-        "disponible en el plan."
+        "No se pudo leer de Metricool: error temporal de la API o métrica no disponible "
+        "en el plan."
     ),
     "no_configurada": "Esta red no está dada de alta en Metricool para la marca.",
     "sin_credenciales": "Faltan credenciales para leer esta red.",

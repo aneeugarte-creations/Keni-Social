@@ -35,6 +35,11 @@ const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }>
     texto: "text-amber-700 dark:text-amber-400",
     punto: "bg-amber-500",
   },
+  no_conectada: {
+    etiqueta: "No conectada",
+    texto: "text-muted-foreground",
+    punto: "bg-muted-foreground/40",
+  },
   sin_lectura: {
     etiqueta: "Sin lectura",
     texto: "text-rose-700 dark:text-rose-400",

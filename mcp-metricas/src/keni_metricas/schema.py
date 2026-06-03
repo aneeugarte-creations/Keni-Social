@@ -98,6 +98,7 @@ class MotivoOmision(StrEnum):
     sin_credenciales = "sin_credenciales"  # no hay adaptador (credenciales insuficientes)
     presupuesto_agotado = "presupuesto_agotado"  # se agoto el rate-limit de la plataforma
     error_api = "error_api"  # el adaptador respondio None/[] por fallo de la API
+    no_conectada = "no_conectada"  # la marca NO tiene esa red conectada en Metricool (simpleProfiles)
 
 
 class Cobertura(BaseModel):

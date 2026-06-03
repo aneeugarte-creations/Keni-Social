@@ -55,7 +55,6 @@ from datetime import date, datetime, timedelta
 import httpx
 
 from ..schema import (
-    PLATAFORMAS_CON_ALCANCE,
     Cobertura,
     Cuenta,
     MetricaPieza,
@@ -85,6 +84,20 @@ _RED_METRICOOL: dict[Plataforma, str] = {
     Plataforma.x: "twitter",
     Plataforma.tiktok: "tiktok",
     Plataforma.youtube: "youtube",
+}
+
+# Campo de `/admin/simpleProfiles` -> Plataforma de keni. Un valor "truthy" en ese
+# campo del perfil (id de la página/usuario de la red) significa que la marca TIENE esa
+# red CONECTADA en Metricool. Permite distinguir "no conectada" (la marca no la tiene
+# dada de alta) de "conectada pero sin datos en el rango": antes ambas caían en el mismo
+# "error" engañoso. Confirmado contra la cuenta real del piloto (X no está conectada en
+# ninguna marca; YouTube solo en Claro Sports).
+_PERFIL_RED: dict[str, Plataforma] = {
+    "facebook": Plataforma.facebook,
+    "instagram": Plataforma.instagram,
+    "twitter": Plataforma.x,
+    "tiktok": Plataforma.tiktok,
+    "youtube": Plataforma.youtube,
 }
 
 # Métricas de Metricool por red para (visualizaciones, interacciones, alcance).
@@ -136,29 +149,44 @@ _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     },
 }
 
-# Alias de campos al parsear un post de `/v2/analytics/posts/{network}` (forma no
-# fijada por el swagger; ver SUPUESTOS). Se prueba cada alias en orden.
-_ALIAS_ID = ("id", "postId", "providerId")
-_ALIAS_FECHA = ("publishedAt", "publicationDate", "dateTime", "date", "createdAt")
-_ALIAS_VIS = ("impressions", "views", "reach", "visualizations")
+# Alias de campos al parsear un post de `/v2/analytics/posts/{network}`. La forma del
+# post DIFIERE por red (confirmado contra la API real de Metricool del piloto AMX):
+#   - Instagram: publishedAt, views, interactions, reach, likes/comments/shares/saved.
+#   - Facebook:  created (objeto) / timestamp (epoch ms), impressions, reactions,
+#                comments, shares, linkclicks, videoViews.
+#   - TikTok:    createTime (ISO), viewCount, likeCount/commentCount/shareCount,
+#                averageTimeWatched, videoId, shareUrl, title/videoDescription.
+#   - YouTube:   publishedAt, views, likes/comments/shares, videoId, watchUrl, title.
+# Se prueban TODOS los alias en orden, así un mismo parser cubre las cuatro redes (antes
+# solo encajaba Instagram y TikTok/Facebook se descartaban enteros por no reconocer ni
+# su fecha ni sus vistas).
+_ALIAS_ID = ("id", "postId", "providerId", "videoId")
+_ALIAS_FECHA = (
+    "publishedAt", "publicationDate", "dateTime", "date", "createdAt",
+    "createTime", "created", "timestamp",
+)
+# viewCount = TikTok; impressions = Facebook; views = Instagram/YouTube; reach = fallback.
+_ALIAS_VIS = ("impressions", "views", "viewCount", "reach", "visualizations")
 _ALIAS_INT = ("interactions", "engagement", "engagements")
-_ALIAS_TEXTO = ("text", "title", "message", "caption", "content")
-_ALIAS_URL = ("url", "permalink", "permalinkUrl", "link")
-# Alias granulares por pieza (forma del post NO fijada por el swagger; ver
-# SUPUESTOS del módulo). Nombres plausibles de Metricool/redes; si ninguno viene,
-# el campo queda en None (degradación honesta), nunca 0 inventado.
+_ALIAS_TEXTO = ("text", "title", "message", "caption", "content", "videoDescription")
+_ALIAS_URL = ("url", "permalink", "permalinkUrl", "link", "shareUrl", "watchUrl", "embedLink")
+# Alias granulares por pieza. Nombres reales de Metricool/redes; si ninguno viene, el
+# campo queda en None (degradación honesta), nunca 0 inventado.
 _ALIAS_LIKES = ("likes", "favorites", "reactions", "likeCount")
-_ALIAS_COMENTARIOS = ("comments", "replies", "commentsCount")
-_ALIAS_COMPARTIDOS = ("shares", "retweets", "reposts", "sharesCount")
+_ALIAS_COMENTARIOS = ("comments", "replies", "commentsCount", "commentCount")
+_ALIAS_COMPARTIDOS = ("shares", "retweets", "reposts", "sharesCount", "shareCount")
 _ALIAS_GUARDADOS = ("saves", "saved", "bookmarks", "savedCount")
 # OJO: sin el alias genérico "views" a propósito. En posts de imagen/carrusel Metricool
 # usa "views"/"impressions" para las visualizaciones GENERALES; si lo tomáramos aquí,
 # `video_views` duplicaría `visualizaciones` en piezas que no son vídeo. Solo campos
 # específicos de vídeo -> None en imágenes (honesto), valor real en reels/vídeos.
 _ALIAS_VIDEO_VIEWS = ("videoViews", "plays", "videoViewCount", "reelPlays", "videoPlayCount")
-_ALIAS_TIEMPO_VIS = ("avgWatchTime", "averageWatchTime", "avgTimeWatched", "averageViewDuration")
-_ALIAS_CLICS = ("linkClicks", "clicks", "urlClicks", "websiteClicks", "linkClicksCount")
-_ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format")
+_ALIAS_TIEMPO_VIS = (
+    "avgWatchTime", "averageWatchTime", "avgTimeWatched", "averageViewDuration",
+    "averageTimeWatched",
+)
+_ALIAS_CLICS = ("linkClicks", "clicks", "urlClicks", "websiteClicks", "linkClicksCount", "linkclicks")
+_ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format", "videoType")
 # Seguidores ganados/atribuidos a UN post: casi seguro Metricool no lo expone a
 # nivel post; se captura si algún alias lo trae, si no queda None.
 _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
@@ -309,6 +337,9 @@ class FuenteMetricol:
     ):
         self._marcas = marcas
         self._cli = cliente or cliente_http()
+        # cache cuenta_id -> set[Plataforma] conectadas (de simpleProfiles); None si la
+        # consulta de perfiles falló (entonces no se filtra por conexión: se intenta todo).
+        self._conectadas_cache: dict[str, set[Plataforma] | None] = {}
 
     # --- identidad / HTTP (resuelta POR MARCA) ------------------------------
     def _headers(self, cuenta_id: str) -> dict:
@@ -351,11 +382,24 @@ class FuenteMetricol:
         marca = self._marca(cuenta_id)
         desde, hasta, _ = resolver_rango(rango)
         plats = self._plataformas(marca)
+        conectadas = self._redes_conectadas(cuenta_id)
 
         por_plataforma: list[MetricaPlataforma] = []
         cobertura = Cobertura()
         for plat in plats:
-            m = self._metrica_plataforma(cuenta_id, plat, desde, hasta)
+            # 1) Red que la marca NO tiene conectada en Metricool (lo dice simpleProfiles):
+            #    se omite con un motivo claro, no como "error" engañoso. Si la consulta de
+            #    perfiles falló (conectadas=None) no se filtra: se intenta leer igualmente.
+            if conectadas is not None and plat not in conectadas:
+                cobertura.omitidas.append(plat)
+                cobertura.motivo[plat.value] = MotivoOmision.no_conectada
+                continue
+            # 2) Agregado por red SUMANDO los posts del periodo. Es la fuente UNIFORME que
+            #    funciona en todas las redes; `/v2/analytics/timelines` tiene un vocabulario
+            #    de métrica distinto por red (y en Instagram ni encaja), así que solo daba
+            #    datos de TikTok. Sumar posts da vistas+interacciones reales y consistentes
+            #    con las piezas que ve el usuario.
+            m = self._metrica_plataforma_desde_posts(cuenta_id, plat, desde, hasta)
             if m is None:
                 cobertura.omitidas.append(plat)
                 cobertura.motivo[plat.value] = MotivoOmision.error_api
@@ -509,58 +553,69 @@ class FuenteMetricol:
                 por_fecha[f] = _entero(valor)
         return sorted(por_fecha.items())
 
-    def _metrica_plataforma(
+    def _redes_conectadas(self, cuenta_id: str) -> set[Plataforma] | None:
+        """Redes que la marca tiene CONECTADAS en Metricool, vía `/admin/simpleProfiles`.
+
+        El perfil de la marca (su `blogId`) trae un campo por red (`facebook`,
+        `instagram`, `twitter`, `tiktok`, `youtube`) con el id de la cuenta enlazada o
+        `null`; un valor truthy = conectada. Permite marcar "no conectada" con honestidad
+        en vez de "error" (p.ej. X no está conectada en ninguna marca del piloto). Se
+        cachea por instancia. Devuelve None si la consulta falla: el llamante NO filtra
+        por conexión (intenta leer todas, comportamiento previo) en vez de ocultar redes.
+        """
+        if cuenta_id in self._conectadas_cache:
+            return self._conectadas_cache[cuenta_id]
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/admin/simpleProfiles",
+                params={"userId": self._params_base(cuenta_id)["userId"]},
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — sin perfiles no filtramos (None)
+            log.warning("metricool: simpleProfiles %s falló: %s", cuenta_id, e)
+            self._conectadas_cache[cuenta_id] = None
+            return None
+        blog_id = str(self._marca(cuenta_id).get("blog_id", ""))
+        perfil = None
+        for p in datos if isinstance(datos, list) else []:
+            if isinstance(p, dict) and str(p.get("id")) == blog_id:
+                perfil = p
+                break
+        if perfil is None:
+            self._conectadas_cache[cuenta_id] = None
+            return None
+        conectadas = {plat for clave, plat in _PERFIL_RED.items() if perfil.get(clave)}
+        self._conectadas_cache[cuenta_id] = conectadas
+        return conectadas
+
+    def _metrica_plataforma_desde_posts(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
     ) -> MetricaPlataforma | None:
-        """Métricas de UNA plataforma (None si la API falla → cobertura la omite)."""
-        try:
-            metricas = _METRICAS_RED[plat]
-            vis = self._agregado(cuenta_id, plat, metricas[_METRICA_VIS], desde, hasta)
-            inter = self._agregado(cuenta_id, plat, metricas[_METRICA_INT], desde, hasta)
-            alcance = None
-            if plat in PLATAFORMAS_CON_ALCANCE and _METRICA_ALC in metricas:
-                alcance = self._agregado(cuenta_id, plat, metricas[_METRICA_ALC], desde, hasta)
-            return MetricaPlataforma(
-                plataforma=plat,
-                visualizaciones=vis,
-                alcance=alcance,
-                interacciones=inter,
-                engagement_pct=engagement_pct(inter, vis),
-            )
-        except Exception as e:  # noqa: BLE001 — degrada sin romper (como AdaptadorBase)
-            log.warning("metricool: métricas %s/%s fallaron: %s", plat.value, cuenta_id, e)
-            return None
+        """Agregado por red SUMANDO los posts del periodo (None si la API de posts falla).
 
-    def _agregado(
-        self, cuenta_id: str, plat: Plataforma, metrica: str, desde: date, hasta: date
-    ) -> int:
-        """Valor agregado del periodo para (red, métrica) vía /v2/analytics/timelines.
-
-        Aislado a propósito (encapsula la llamada HTTP): si la forma exacta del
-        endpoint difiere, se corrige SOLO aquí. Suma los `values` de la serie y, si
-        Metricool trae un `aggregate`, prefiere ese total.
+        Reúsa el MISMO parseo que las piezas (`/v2/analytics/posts/{network}`), que sí
+        funciona en todas las redes, en vez de `/v2/analytics/timelines` (vocabulario de
+        métrica distinto por red; solo daba TikTok). Así el agregado por red es consistente
+        con las piezas que ve el usuario. `alcance` queda None (no se deriva del post de
+        forma uniforme; honesto, no se inventa). Una red conectada sin posts en el rango
+        devuelve 0/0 (la UI lo muestra como "sin métricas", no como error).
         """
-        datos = get_json(
-            self._cli,
-            f"{BASE}/v2/analytics/timelines",
-            params={
-                **self._params_base(cuenta_id),
-                "network": _RED_METRICOOL[plat],
-                "metric": metrica,
-                "from": desde.isoformat() + "T00:00:00",
-                "to": hasta.isoformat() + "T23:59:59",
-            },
-            headers=self._headers(cuenta_id),
+        try:
+            posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
+        except Exception as e:  # noqa: BLE001 — error real de API → None → cobertura lo omite
+            log.warning("metricool: agregado posts %s/%s falló: %s", plat.value, cuenta_id, e)
+            return None
+        piezas = self._parsear_posts(posts, plat, cuenta_id, desde, hasta)
+        vis = sum(p.visualizaciones for p in piezas)
+        inter = sum(p.interacciones for p in piezas)
+        return MetricaPlataforma(
+            plataforma=plat,
+            visualizaciones=vis,
+            alcance=None,
+            interacciones=inter,
+            engagement_pct=engagement_pct(inter, vis),
         )
-        series = datos.get("data") or []
-        total = 0.0
-        for serie in series:
-            agg = serie.get("aggregate")
-            if isinstance(agg, dict) and agg.get("value") is not None:
-                total += float(agg["value"])
-            else:
-                total += sum(float(v.get("value", 0) or 0) for v in serie.get("values", []))
-        return int(total)
 
     def mejores_piezas(self, cuenta_id: str, rango: str, n: int) -> list[Pieza]:
         n = max(n, 0)
@@ -574,35 +629,50 @@ class FuenteMetricol:
         piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return piezas[:n]
 
+    def _fetch_posts(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[dict]:
+        """GET crudo de `/v2/analytics/posts/{network}` (RAISES si la API falla).
+
+        Aislado para compartirlo entre las piezas y el agregado por red, y para que el
+        llamante decida cómo degradar (las piezas → []; el agregado → None/omitida)."""
+        datos = get_json(
+            self._cli,
+            f"{BASE}/v2/analytics/posts/{_RED_METRICOOL[plat]}",
+            params={
+                **self._params_base(cuenta_id),
+                "from": desde.isoformat() + "T00:00:00",
+                "to": hasta.isoformat() + "T23:59:59",
+            },
+            headers=self._headers(cuenta_id),
+        )
+        return [p for p in (datos.get("data") or []) if isinstance(p, dict)]
+
+    def _parsear_posts(
+        self, posts: list[dict], plat: Plataforma, cuenta_id: str, desde: date, hasta: date
+    ) -> list[Pieza]:
+        """Posts crudos -> list[Pieza], filtrando por rango REAL de la pieza.
+
+        Filtro DEFENSIVO por rango: aunque se envíen `from`/`to` a la API, se exige que la
+        fecha REAL de la pieza caiga en [desde, hasta] (Metricool ha devuelto posts fuera de
+        ventana; sin esto se colaban en top/peores/stats/agregados)."""
+        piezas: list[Pieza] = []
+        for post in posts:
+            pieza = self._pieza_desde_post(post, plat, cuenta_id)
+            if pieza is not None and desde <= pieza.publicado <= hasta:
+                piezas.append(pieza)
+        return piezas
+
     def _piezas_plataforma(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date, n: int
     ) -> list[Pieza]:
         """Posts de una plataforma (degrada a [] si la API falla)."""
         try:
-            datos = get_json(
-                self._cli,
-                f"{BASE}/v2/analytics/posts/{_RED_METRICOOL[plat]}",
-                params={
-                    **self._params_base(cuenta_id),
-                    "from": desde.isoformat() + "T00:00:00",
-                    "to": hasta.isoformat() + "T23:59:59",
-                },
-                headers=self._headers(cuenta_id),
-            )
+            posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
         except Exception as e:  # noqa: BLE001
             log.warning("metricool: piezas %s/%s fallaron: %s", plat.value, cuenta_id, e)
             return []
-        piezas: list[Pieza] = []
-        for post in datos.get("data") or []:
-            if not isinstance(post, dict):
-                continue
-            pieza = self._pieza_desde_post(post, plat, cuenta_id)
-            # Filtro DEFENSIVO por rango: aunque se envíen `from`/`to` a la API, se
-            # exige que la fecha REAL de la pieza caiga en [desde, hasta] (Metricool ha
-            # devuelto posts fuera de ventana; sin esto se colaban en top/peores/stats).
-            if pieza is not None and desde <= pieza.publicado <= hasta:
-                piezas.append(pieza)
-        return piezas
+        return self._parsear_posts(posts, plat, cuenta_id, desde, hasta)
 
     @staticmethod
     def _granulares(post: dict) -> dict:
