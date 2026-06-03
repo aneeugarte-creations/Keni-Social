@@ -2,7 +2,7 @@
 
 `servicio` es la fachada estable que consumen los procesos en proceso (la Consola):
 el contrato que no debe romperse al refactorizar los internals (config/reporte/
-reporte_deck/fuentes). Su seccion de metricas es de SOLO LECTURA.
+fuentes). Su seccion de metricas es de SOLO LECTURA.
 """
 
 from . import servicio

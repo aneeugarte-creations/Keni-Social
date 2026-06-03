@@ -1,16 +1,15 @@
 # Woodpecker: tests de la app B · MÉTRICAS (test scoping por ruta, plan §1.5).
 # Espejo del job `tests-app-metricas` de .github/workflows/ci.yml.
 #
-# Cambio en los módulos de B (api/metricas, comercial, reporte_deportes) -> SOLO los
-# tests de B + contrato de fronteras + keni-shared. Cambio en keni-shared -> suite
-# completa (`tests-python`). El MCP de métricas tiene su propio paquete/tests.
+# Cambio en los módulos de B (api/metricas, comercial) -> SOLO los tests de B +
+# contrato de fronteras + keni-shared. Cambio en keni-shared -> suite completa
+# (`tests-python`). El MCP de métricas tiene su propio paquete/tests.
 when:
   - event: [push, pull_request]
     path:
       include:
         - "consola/src/keni_consola/api/metricas.py"
         - "consola/src/keni_consola/api/comercial.py"
-        - "consola/src/keni_consola/api/reporte_deportes.py"
         - "consola/src/keni_consola/comercial.py"
         - "consola/src/keni_consola/apps/metricas.toml"
 

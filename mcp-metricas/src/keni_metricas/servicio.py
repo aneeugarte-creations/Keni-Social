@@ -3,8 +3,8 @@
 `docs/arquitectura.md` declara la frontera "MCP / stdio", pero la Consola corre en
 el mismo proceso y necesita los datos de metricas sin levantar el servidor MCP.
 Este modulo es el CONTRATO ESTABLE que la Consola consume: un refactor interno de
-`config`/`reporte`/`reporte_deck`/`fuentes` no debe romper a la Consola mientras
-esta fachada mantenga su firma.
+`config`/`reporte`/`fuentes` no debe romper a la Consola mientras esta fachada
+mantenga su firma.
 
 REGLA DE ORO — la sección «Lectura de métricas» es de SOLO LECTURA: nunca escribe a
 disco ni muta el config. La sección «Gestión de configuración» es la unica que
@@ -15,7 +15,7 @@ imagen) NO vive aqui: la gestiona `keni_metricas.asistente` directamente desde
 
 Resuelve el hallazgo H1: la Consola deja de importar internals profundos
 (`config.construir_fuente`, `config.FuenteScoped`, `reporte.construir_reporte`,
-`reporte_deck.*`, `schema.RANGOS_DIAS`, ...).
+`schema.RANGOS_DIAS`, ...).
 """
 
 from __future__ import annotations
@@ -30,11 +30,9 @@ from . import asistente
 from . import config as _config
 from . import estadisticas as _estadisticas
 from . import reporte as _reporte
-from . import reporte_deck as _deck
 from .config import FUENTES_VALIDAS, ConfigInvalida
 from .fuentes.base import CuentaNoEncontrada
 from .schema import (
-    RANGO_SEMANA_CERRADA,
     RANGOS_DIAS,
     AnaliticaPiezas,
     CeldaCrosstab,
@@ -63,29 +61,13 @@ from .schema import (
 # no debe importar el schema: este es el contrato.
 RANGOS_VALIDOS: tuple[str, ...] = tuple(RANGOS_DIAS.keys())
 
-# Rango anclado que el reporte del lunes usa por defecto: la ultima semana natural
-# cerrada (lunes->domingo, domingo incluido), independiente del dia (issue #141).
-RANGO_DEPORTES_DEFECTO: str = RANGO_SEMANA_CERRADA
-
-# Rangos que ofrece el deck de deportes: la semana cerrada (por defecto) + los
-# rodantes habituales, por si el equipo quiere una ventana distinta.
-RANGOS_DEPORTES: tuple[str, ...] = (RANGO_SEMANA_CERRADA, *RANGOS_VALIDOS)
-
 # Fuentes validas ("muestra" | "real"). Re-export para la pantalla de configuracion.
 FUENTES_DISPONIBLES: tuple[str, ...] = tuple(sorted(FUENTES_VALIDAS))
-
-# Cuenta principal y hermanas del deck de deportes (Claro Sports).
-CUENTA_DEPORTES_PRINCIPAL: str = _deck.CUENTA_PRINCIPAL
-CUENTAS_DEPORTES_HERMANAS: tuple[str, ...] = tuple(_deck.CUENTAS_HERMANAS)
 
 # Excepciones de dominio que la Consola captura (re-export para no importar internals).
 __all__ = [
     "RANGOS_VALIDOS",
-    "RANGOS_DEPORTES",
-    "RANGO_DEPORTES_DEFECTO",
     "FUENTES_DISPONIBLES",
-    "CUENTA_DEPORTES_PRINCIPAL",
-    "CUENTAS_DEPORTES_HERMANAS",
     "ConfigInvalida",
     "CuentaNoEncontrada",
     "nombre_fuente",
@@ -105,9 +87,6 @@ __all__ = [
     "construir_correlacion_seguidores",
     "construir_metricas_pieza",
     "etiqueta_rango",
-    "construir_reporte_deportes",
-    "render_reporte_deportes_pptx",
-    "render_reporte_deportes_pdf",
     "instantanea_config",
     "guardar_fuente_y_alcance",
 ]
@@ -740,42 +719,6 @@ def _pieza_sin_datos(id_post: str, red: str) -> MetricaPieza:
     return MetricaPieza(
         id_post=str(id_post), plataforma=plat, encontrado=False, fuente=nombre_fuente()
     )
-
-
-def construir_reporte_deportes(
-    *,
-    rango: str = RANGO_DEPORTES_DEFECTO,
-    top: int = 3,
-    agenda: dict | None = None,
-) -> dict:
-    """Deck semanal de Claro Sports como dict JSON-serializable.
-
-    Por defecto cubre la ultima semana natural CERRADA (lunes->domingo, domingo
-    incluido); es el rango del reporte del lunes (#141). Incluye el campo `fuente`.
-    Propaga `CuentaNoEncontrada` (Claro Sports no esta en la fuente) y `ValueError`
-    (rango invalido).
-    """
-    return _deck.construir_reporte_deportes(
-        _fuente(), rango=rango, n_por_plataforma=top, agenda=agenda
-    )
-
-
-def render_reporte_deportes_pptx(rep: dict, ruta: str | Path) -> Path:
-    """Renderiza un reporte de deportes a .pptx en `ruta`. Devuelve la ruta escrita.
-
-    Lanza `RuntimeError` si falta el extra `python-pptx`. (No lee la fuente: opera
-    sobre el dict ya construido, por eso es seguro exponerlo en la fachada.)
-    """
-    return _deck.render_pptx(rep, ruta)
-
-
-def render_reporte_deportes_pdf(rep: dict, ruta: str | Path) -> Path:
-    """Renderiza un reporte de deportes a PDF NATIVO en `ruta` (sin LibreOffice).
-
-    Usa reportlab (Python puro, portable). Lanza `RuntimeError` si falta el extra
-    `reportlab`. (No lee la fuente: opera sobre el dict ya construido.)
-    """
-    return _deck.render_pdf(rep, ruta)
 
 
 # --------------------------------------------------------------------------- #

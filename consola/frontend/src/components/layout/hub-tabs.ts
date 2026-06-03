@@ -6,7 +6,6 @@ import {
   ListTodo,
   Megaphone,
   Newspaper,
-  Presentation,
   Rss,
   ScanSearch,
   ScanText,
@@ -57,7 +56,6 @@ export const TABS_REVISION: ItemTabHub[] = [
 export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
   { ruta: "/datos/analiticas/comercial", etiqueta: "Comercial", icono: Megaphone },
-  { ruta: "/datos/analiticas/reporte-deportes", etiqueta: "Reporte deportes", icono: Presentation },
 ];
 
 export const TABS_PARRILLA: ItemTabHub[] = [

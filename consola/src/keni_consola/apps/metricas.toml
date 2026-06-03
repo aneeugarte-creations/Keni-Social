@@ -18,21 +18,19 @@ permisos = ["editor", "admin"]
 modulos_backend = [
   "metricas",
   "comercial",
-  "reporte_deportes",
 ]
 
 rutas_frontend = [
   "/datos/analiticas",
   "/datos/analiticas/metricas",
   "/datos/analiticas/comercial",
-  "/datos/analiticas/reporte-deportes",
 ]
 
 [[nav]]
 ruta = "/datos/analiticas"
 etiqueta = "Analíticas"
 icono = "BarChart3"
-descripcion = "Rendimiento de las cuentas, seguimiento de comercial y deck deportivo. Pestañas Métricas / Comercial / Reporte deportes."
+descripcion = "Rendimiento de las cuentas y seguimiento de comercial. Pestañas Métricas / Comercial."
 # Bloque "datos": la medición cierra el loop (alimenta de vuelta qué producir); es
 # lectura, no un checkpoint de la operación diaria.
 grupo = "datos"

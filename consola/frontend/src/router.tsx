@@ -33,7 +33,6 @@ const Verificacion = lazy(() => import("@/pages/Verificacion"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
-const ReporteDeportes = lazy(() => import("@/pages/ReporteDeportes"));
 
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
@@ -183,7 +182,6 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="metricas" replace /> },
               { path: "metricas", element: <Metricas /> },
               { path: "comercial", element: <Comercial /> },
-              { path: "reporte-deportes", element: <ReporteDeportes /> },
             ],
           },
           // Actividad IA: feed unificado de generaciones + runs de agentes con métricas.
@@ -233,7 +231,6 @@ export const router = createBrowserRouter([
       { path: "verificacion", element: <Navigate to="/operacion/revision/verificacion" replace /> },
       { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },
       { path: "comercial", element: <Navigate to="/datos/analiticas/comercial" replace /> },
-      { path: "reporte-deportes", element: <Navigate to="/datos/analiticas/reporte-deportes" replace /> },
       { path: "tareas", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
       { path: "rota", element: <Navigate to="/operacion/parrilla/turnos" replace /> },
       // Publicaciones se FUSIONÓ en el tablero (#fase2).

@@ -101,7 +101,6 @@ import type {
   MetricasRun,
   Paginacion,
   Publicacion,
-  RangoMetrica,
   ResultadoEstado,
 } from "./types.gen";
 
@@ -2502,67 +2501,6 @@ export interface ConflictoAplicarParrilla {
 // `CuentaMetrica`, `ReporteMetricas`, `ComparativaMetrica`, `ComparativaPorMarca`,
 // `CompararMetricas`) se GENERAN desde el backend y se re-exportan arriba. Ver #101.
 // NOTA: `fuente` ahora es REQUERIDO (el backend siempre lo emite, cae a "muestra").
-
-// --- Reporte de deportes (deck semanal de Claro Sports) ---
-
-export interface OpcionesReporteDeportes {
-  rangos: RangoMetrica[];
-  cuenta: { id: string; nombre: string };
-  hermanas: { id: string; nombre: string }[];
-}
-
-/** Un evento de la agenda editorial (curaduría manual). */
-export interface EventoAgenda {
-  nombre: string;
-  plan: string;
-}
-
-export interface AgendaReporte {
-  principales: EventoAgenda[];
-  propios: EventoAgenda[];
-}
-
-export interface CuerpoReporteDeportes {
-  rango: string;
-  top?: number;
-  agenda?: AgendaReporte;
-}
-
-export interface PiezaReporte {
-  plataforma: string;
-  titulo: string;
-  visualizaciones: number;
-  interacciones: number;
-  url: string | null;
-  publicado: string;
-}
-
-export interface BloquePlataforma {
-  plataforma: string;
-  piezas: PiezaReporte[];
-}
-
-export interface PromocionHermana {
-  cuenta: string;
-  nombre: string;
-  piezas: PiezaReporte[];
-  /** Procedencia: `"muestra"` (sintéticos), `"real"` o `"sin_datos_reales"`
-   *  (cuenta no conectada todavía: no se inventan cifras, #141). */
-  datos?: "muestra" | "real" | "sin_datos_reales";
-}
-
-export interface ReporteDeportes {
-  tipo: string;
-  rango: string;
-  /** Periodo concreto del reporte (lun→dom de la semana cerrada por defecto). */
-  periodo?: { desde: string; hasta: string };
-  generado: string;
-  fuente: string;
-  cuenta: { id: string; nombre: string };
-  mejores_por_plataforma: BloquePlataforma[];
-  promocion_hermanas: PromocionHermana[];
-  agenda: { principales: EventoAgenda[]; propios: EventoAgenda[]; nota?: string };
-}
 
 // --- Publicaciones ---
 

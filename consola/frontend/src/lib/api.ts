@@ -78,7 +78,6 @@ import type {
   CuerpoGuardarConfig,
   CuerpoGuardarEsfuerzo,
   CuerpoMarcarItemUsado,
-  CuerpoReporteDeportes,
   CuerpoRevisarQaEditorial,
   CuerpoSugerirHashtags,
   CuerpoVerificar,
@@ -87,9 +86,7 @@ import type {
   OpcionesMetricas,
   OpcionesPublicaciones,
   OpcionesQaEditorial,
-  OpcionesReporteDeportes,
   RespuestaLimites,
-  ReporteDeportes,
   ReporteMetricas,
   RespuestaCatalogo,
   RespuestaPerfilesMetricool,
@@ -484,40 +481,6 @@ function queryEventos(params: {
 /** Dispara la descarga de un archivo abriendo su URL (CSV/MD/JSON). */
 function descargar(ruta: string): void {
   window.open(`${BASE_API}${ruta}`, "_blank", "noopener,noreferrer");
-}
-
-/**
- * Descarga un archivo binario devuelto por un POST (envia JSON en el cuerpo).
- * Necesario cuando los parametros no caben en la URL (p. ej. el deck lleva la
- * agenda). Lanza `ApiError` con el mensaje del backend si el status no es OK.
- */
-async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: string): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_API}${ruta}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...cabecerasAuth() },
-      body: JSON.stringify(json),
-    });
-  } catch {
-    throw new ApiError("No se pudo contactar con la consola. ¿Está corriendo el servidor local?", 0);
-  }
-  if (!res.ok) {
-    const info = await infoDeError(res);
-    throw new ApiError(info.mensaje, res.status, info.cuerpo);
-  }
-
-  const blob = await res.blob();
-  const cd = res.headers.get("Content-Disposition") ?? "";
-  const nombre = /filename="?([^"]+)"?/.exec(cd)?.[1] ?? nombrePorDefecto;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nombre;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 // Activo de marca (biblioteca del editor): logo, tipografía, arte, infografía, icono, paleta o
@@ -1791,16 +1754,6 @@ export const api = {
   // analítica de piezas, serializado en csv|md|json. `fmt` viaja como query param.
   exportarPiezas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/piezas-export${query({ fmt: formato, ...params })}`),
-
-  // --- Reporte de deportes (deck semanal de Claro Sports) ---
-  reporteDeportesOpciones: (signal?: AbortSignal) =>
-    peticion<OpcionesReporteDeportes>("/reporte-deportes/opciones", { signal }),
-  reporteDeportesPreview: (cuerpo: CuerpoReporteDeportes, signal?: AbortSignal) =>
-    peticion<ReporteDeportes>("/reporte-deportes/preview", { metodo: "POST", json: cuerpo, signal }),
-  descargarReporteDeportes: (cuerpo: CuerpoReporteDeportes) =>
-    descargarPost("/reporte-deportes/export.pptx", cuerpo, `reporte-deportes-${cuerpo.rango}.pptx`),
-  descargarReporteDeportesPdf: (cuerpo: CuerpoReporteDeportes) =>
-    descargarPost("/reporte-deportes/export.pdf", cuerpo, `reporte-deportes-${cuerpo.rango}.pdf`),
 
   // --- Conexiones (imagen IA + tokens de redes) ---
   // Los secretos son write-only: solo se envían (PUT); del servidor llega

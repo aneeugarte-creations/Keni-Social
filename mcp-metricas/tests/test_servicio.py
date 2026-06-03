@@ -2,8 +2,8 @@
 
 TODO OFFLINE: `KENI_METRICAS_CONFIG` apunta a un archivo inexistente => fuente de
 muestra; nunca toca la red. Cubre lo que la Consola consume: rangos, fuente activa,
-cuentas, reporte (con `fuente`), exports, deck de deportes y la gestion de config
-(leer estado + escribir fuente/alcance sin tocar credenciales).
+cuentas, reporte (con `fuente`), exports y la gestion de config (leer estado +
+escribir fuente/alcance sin tocar credenciales).
 """
 
 from __future__ import annotations
@@ -42,11 +42,6 @@ def test_fuentes_disponibles(muestra):
     # `metricool` (consumidor de la API REST de Metricool, ADR 0005 §B) se suma a
     # las fuentes válidas junto a `muestra` (demo) y `real` (adaptadores propios).
     assert set(servicio.FUENTES_DISPONIBLES) == {"muestra", "metricool", "real"}
-
-
-def test_cuenta_deportes_principal_y_hermanas(muestra):
-    assert servicio.CUENTA_DEPORTES_PRINCIPAL == "claro_sports"
-    assert "claro_sports_tv" in servicio.CUENTAS_DEPORTES_HERMANAS
 
 
 # --- Lectura de metricas ------------------------------------------------------
@@ -90,16 +85,6 @@ def test_reporte_csv_y_markdown_son_texto(muestra):
 
 def test_reporte_json_es_json_valido_con_fuente(muestra):
     rep = json.loads(servicio.reporte_json("mes"))
-    assert rep["fuente"] == "muestra"
-
-
-# --- Deck de deportes ---------------------------------------------------------
-
-
-def test_reporte_deportes_estructura(muestra):
-    rep = servicio.construir_reporte_deportes(rango="semana", top=3)
-    assert rep["tipo"] == "reporte_deportes"
-    assert rep["cuenta"]["id"] == "claro_sports"
     assert rep["fuente"] == "muestra"
 
 
