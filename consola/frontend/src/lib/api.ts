@@ -565,6 +565,23 @@ export interface PlantillaDiseno {
   actualizado: string;
 }
 
+// Bloque: grupo de capas reutilizable (almacén de capas). `capas` es una lista de capas del editor
+// (unknown[] aquí para no acoplar el cliente API a los tipos del editor; el editor lo castea).
+export interface Bloque {
+  id: string;
+  marca: string;
+  nombre: string;
+  capas: unknown[];
+  lineas: string[];
+  miniatura: string;
+  miniatura_url: string;
+  marca_nombre: string;
+  autor_id: string;
+  autor_nombre: string;
+  creado: string;
+  actualizado: string;
+}
+
 export const api = {
   // --- Catálogo de apps (ADR 0005): apps activas + navegación data-driven ---
   // El sidebar se hidrata de aquí en vez de hardcodear las entradas. Filtra por los
@@ -997,6 +1014,18 @@ export const api = {
   }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Almacén de bloques (grupos de capas reutilizables) ---
+  bloques: (filtros: { marca?: string; q?: string } = {}, signal?: AbortSignal) => {
+    const qp = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) if (v) qp.set(k, v);
+    const cola = qp.toString();
+    return peticion<{ bloques: Bloque[] }>(`/bloques${cola ? `?${cola}` : ""}`, { signal });
+  },
+  crearBloque: (cuerpo: { marca?: string; nombre?: string; capas: unknown[]; lineas?: string[]; miniatura?: string }) =>
+    peticion<{ bloque: Bloque }>("/bloques", { metodo: "POST", json: cuerpo }),
+  borrarBloque: (id: string) =>
+    peticion<{ mensaje: string }>(`/bloques/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Plantillas de marca (identidad visual con la que se estampa una imagen) ---
   // Solo lectura del catálogo + edición de la plantilla de una marca (logo, colores,

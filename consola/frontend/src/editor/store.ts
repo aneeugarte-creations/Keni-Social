@@ -23,6 +23,8 @@ export interface EstadoEditor {
   cargar: (doc: Documento) => void;
   seleccionar: (id: string | null) => void;
   agregar: (capa: Capa) => void;
+  // Inserta VARIAS capas (un bloque) en un solo paso de historial, encima de todo, con ids frescos.
+  insertarBloque: (capas: Capa[]) => void;
   actualizar: (id: string, cambios: Partial<Capa>, registrar?: boolean) => void;
   quitar: (id: string) => void;
   duplicar: (id: string) => void;
@@ -80,6 +82,17 @@ export function crearStoreEditor(inicial: Documento) {
 
       agregar: (capa) =>
         aplicar((doc) => conCapas(doc, [...doc.capas, capa])),
+
+      insertarBloque: (capas) =>
+        aplicar((doc) => {
+          let z = doc.capas.reduce((m, c) => Math.max(m, c.z), 0);
+          const frescas = capas.map((c, i) => ({
+            ...clonar(c),
+            id: `${c.tipo}-${Date.now().toString(36)}-${i}`,
+            z: ++z,
+          })) as Capa[];
+          return conCapas(doc, [...doc.capas, ...frescas]);
+        }),
 
       actualizar: (id, cambios, registrar = true) =>
         aplicar(

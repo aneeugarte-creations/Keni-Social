@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { Button } from "@/components/ui/button";
 import { EditorDocumento } from "@/editor/EditorDocumento";
-import { documentoVacio, type Documento } from "@/editor/documento";
+import { documentoVacio, type Capa, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { api } from "@/lib/api";
 
@@ -133,6 +133,41 @@ export default function EditorPro() {
     }
   };
 
+  // Almacén de bloques (capas reutilizables) de la marca activa.
+  const bloquesQ = useQuery({
+    queryKey: ["bloques", pestanaActiva?.marca ?? ""],
+    queryFn: ({ signal }) => api.bloques({ marca: pestanaActiva?.marca || undefined }, signal),
+    enabled: !!pestanaActiva,
+  });
+
+  const guardarBloque = useMutation({
+    mutationFn: () => {
+      if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
+      const st = storeActivo.getState();
+      const capa = st.documento.capas.find((c) => c.id === st.seleccion);
+      if (!capa) throw new Error("Selecciona una capa para guardarla como bloque.");
+      const nombre = window.prompt("Nombre del bloque")?.trim();
+      if (!nombre) throw new Error("__cancelado__");
+      return api.crearBloque({ marca: pestanaActiva.marca, nombre, capas: [capa] });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bloques", pestanaActiva?.marca ?? ""] });
+      toast.success("Bloque guardado.");
+    },
+    onError: (e: unknown) => {
+      if (e instanceof Error && e.message === "__cancelado__") return;
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar el bloque.");
+    },
+  });
+
+  const insertarBloque = (id: string) => {
+    const b = bloquesQ.data?.bloques.find((x) => x.id === id);
+    if (b && storeActivo) {
+      storeActivo.getState().insertarBloque(b.capas as Capa[]);
+      toast.success(`Bloque «${b.nombre}» insertado.`);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       {/* Barra superior: abrir pestaña (marca + formato) + export. */}
@@ -178,6 +213,26 @@ export default function EditorPro() {
                 {plantillasQ.data!.plantillas.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre || "(sin nombre)"}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button variant="outline" size="sm" disabled={guardarBloque.isPending} onClick={() => guardarBloque.mutate()}>
+              Guardar bloque
+            </Button>
+            {(bloquesQ.data?.bloques.length ?? 0) > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) insertarBloque(e.target.value);
+                }}
+                className="rounded border border-input bg-background px-2 py-1.5 text-sm"
+                aria-label="Insertar bloque"
+              >
+                <option value="">Insertar bloque…</option>
+                {bloquesQ.data!.bloques.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.nombre || "(sin nombre)"}
                   </option>
                 ))}
               </select>

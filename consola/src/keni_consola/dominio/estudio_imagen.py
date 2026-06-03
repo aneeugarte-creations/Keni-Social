@@ -616,6 +616,16 @@ def validar_documento(documento: dict[str, Any]) -> dict[str, Any]:
         raise EstudioError(str(exc)) from exc
 
 
+def validar_capas(capas: Any) -> list[dict[str, Any]]:
+    """Valida una LISTA de capas (para bloques reutilizables) -> lista normalizada.
+
+    Reusa el validador del Documento envolviendo las capas en un documento mínimo. Lanza
+    EstudioError si alguna capa no valida.
+    """
+    doc = validar_documento({"formato": {"w": 1, "h": 1}, "capas": capas})
+    return doc["capas"]
+
+
 def documento_desde_plantilla(marca: str, formato: str) -> dict[str, Any]:
     """Documento de capas EDITABLE derivado de la plantilla de marca (punto de partida del editor).
 

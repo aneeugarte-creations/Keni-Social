@@ -1419,6 +1419,52 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Bloques (almacén de capas reutilizables)                                       #
+# --------------------------------------------------------------------------- #
+
+
+def crear_bloque(
+    *,
+    marca: str = "",
+    nombre: str = "",
+    capas: str = "[]",
+    lineas: str = "[]",
+    miniatura: str = "",
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    return db.crear_bloque(
+        marca=marca,
+        nombre=nombre,
+        capas=capas,
+        lineas=lineas,
+        miniatura=miniatura,
+        autor=autor,
+        id=id,
+        creado=creado,
+        actualizado=actualizado,
+    )
+
+
+def listar_bloques(*, marca: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_bloques(marca=marca)
+
+
+def obtener_bloque(bloque_id: str) -> dict[str, Any] | None:
+    return db.obtener_bloque(bloque_id)
+
+
+def actualizar_bloque(bloque_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_bloque(bloque_id, campos)
+
+
+def borrar_bloque(bloque_id: str) -> dict[str, Any] | None:
+    return db.borrar_bloque(bloque_id)
+
+
+# --------------------------------------------------------------------------- #
 # Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
 # --------------------------------------------------------------------------- #
 
