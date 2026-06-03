@@ -27,6 +27,7 @@ import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
+import { TraficoWeb } from "./metricas/TraficoWeb";
 
 /** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
 const ETIQUETA_TODAS = "Todas las marcas";
@@ -107,6 +108,16 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   const marca_ = marcaParam(marca);
 
+  // Drill-down: al clicar una marca en "Por marca", seleccionamos su tab en
+  // "Piezas del periodo" y hacemos scroll a esa sección (lectura: del agregado al
+  // detalle). El tab de PiezasAnalitica pasa a estar controlado por esta página.
+  const [tabPiezas, setTabPiezas] = React.useState<string>("todas");
+  const piezasRef = React.useRef<HTMLDivElement>(null);
+  const verPiezasDeMarca = React.useCallback((marcaId: string) => {
+    setTabPiezas(marcaId);
+    piezasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const reporteQuery = useQuery({
     queryKey: ["metricas", "reporte", rango, marca_ ?? "todas"],
     queryFn: ({ signal }) => api.metricasReporte({ rango, marca: marca_ }, signal),
@@ -162,43 +173,59 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               no por la tabla (principio UX #1: el veredicto primero). */}
           <AnalisisDiario marcaActual={marca} rangoActual={rango} />
           <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
-          <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
-          {/* Dos lecturas del mismo periodo: por marca (cada cuenta) y por red
-              (agregando las plataformas de todas las marcas del reporte). */}
+
+          {/* Por marca: la comparativa visual y la tabla detallada son dos lecturas
+              del MISMO corte (cada cuenta), así que van juntas bajo un solo
+              encabezado. La tabla permite drill-down a las piezas de cada marca. */}
           <div className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">Por marca</h2>
-            <TablaCuentas cuentas={reporteQuery.data.cuentas} />
+            <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
+            <TablaCuentas
+              cuentas={reporteQuery.data.cuentas}
+              onVerPiezas={verPiezasDeMarca}
+            />
           </div>
+          {/* Por red: agrega las plataformas de todas las marcas del reporte. */}
           <div className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">Por red</h2>
             <TablaRedes redes={reporteQuery.data.por_red} />
           </div>
-          <PiezasAnalitica opciones={opciones} rangoActual={rango} />
-          {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
-              BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
-          <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
-          {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
-              (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
-          <PiezasRendimiento opciones={opciones} />
 
-          {/* Estrategia digital: lectura más allá del día a día. Crecimiento de
-              audiencia, de qué se compone el engagement, qué formatos rinden y
-              cómo se relaciona publicar con ganar seguidores. Siguen marca/rango
-              global como el resto del dashboard. */}
+          {/* Estrategia digital: lectura de alto nivel (más allá del día a día),
+              ANTES del detalle granular de piezas. Crecimiento de audiencia, de qué
+              se compone el engagement, qué formatos rinden, horarios, tráfico web y
+              correlación. Siguen marca/rango global como el resto del dashboard. */}
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
               <p className="text-sm text-muted-foreground">
-                Crecimiento de audiencia, composición del engagement y qué formatos
-                rinden mejor en el periodo seleccionado.
+                Crecimiento de audiencia, composición del engagement, qué formatos
+                rinden mejor y qué piezas llevan tráfico fuera de la red.
               </p>
             </div>
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <MejoresHorarios marcaActual={marca} rangoActual={rango} />
+            <TraficoWeb marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </section>
+
+          {/* Detalle granular de piezas: del alto nivel al caso concreto. */}
+          <div ref={piezasRef} className="scroll-mt-6">
+            <PiezasAnalitica
+              opciones={opciones}
+              rangoActual={rango}
+              tab={tabPiezas}
+              onTabChange={setTabPiezas}
+            />
+          </div>
+          {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
+              BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
+          <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
+          {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
+              (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
+          <PiezasRendimiento opciones={opciones} />
 
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>

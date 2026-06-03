@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { RedMetrica } from "@/types";
@@ -27,9 +27,9 @@ describe("TablaRedes", () => {
   it("renderiza una fila por red con el nombre legible y las métricas formateadas", () => {
     render(<TablaRedes redes={REDES} />);
 
-    // Nombres de red traducidos desde su id de plataforma.
-    expect(screen.getByText("Instagram")).toBeInTheDocument();
-    expect(screen.getByText("TikTok")).toBeInTheDocument();
+    // Nombres de red traducidos (aparecen también en el reparto, de ahí getAllByText).
+    expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("TikTok").length).toBeGreaterThan(0);
     // Cabeceras de las columnas pedidas.
     expect(screen.getByText("Red")).toBeInTheDocument();
     expect(screen.getByText("Vistas")).toBeInTheDocument();
@@ -44,9 +44,46 @@ describe("TablaRedes", () => {
     render(<TablaRedes redes={REDES} />);
 
     // tiktok.alcance === null -> "—"; ninguna celda debe pintar "0" para ese alcance.
-    expect(screen.getByText("—")).toBeInTheDocument();
-    // instagram.alcance sí se formatea.
-    expect(screen.getByText("45,000")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    // instagram.alcance sí se formatea (en su fila y, sumado, en la de totales).
+    expect(screen.getAllByText("45,000").length).toBeGreaterThan(0);
+  });
+
+  it("muestra una fila de totales con suma de brutas y engagement global", () => {
+    render(<TablaRedes redes={REDES} />);
+
+    const filaTotal = screen.getByText("Total").closest("tr")!;
+    const celdasTotal = within(filaTotal);
+    // Suma de vistas (120k + 90k) e interacciones (6000 + 4500).
+    expect(celdasTotal.getByText("210,000")).toBeInTheDocument();
+    expect(celdasTotal.getByText("10,500")).toBeInTheDocument();
+    // Engagement global = interacciones/vistas = 10500/210000 = 5.0 %.
+    expect(celdasTotal.getByText("5.0 %")).toBeInTheDocument();
+  });
+
+  it("permite ordenar por una columna numérica al clicar su cabecera", () => {
+    render(<TablaRedes redes={REDES} />);
+
+    // Orden inicial = orden natural (IG primero). Tras ordenar por interacciones asc,
+    // tiktok (4500) debe anteceder a instagram (6000) en el cuerpo de la tabla.
+    const cabecera = screen.getByRole("button", { name: /Interacciones/ });
+    fireEvent.click(cabecera); // 1er clic = desc
+    fireEvent.click(cabecera); // 2º clic = asc
+    const filas = screen.getAllByRole("row");
+    // La primera fila de datos (índice 1, tras el header) ahora es TikTok (menor interac).
+    const primeraDatos = filas.find((f) => within(f).queryByText("TikTok"));
+    expect(primeraDatos).toBeTruthy();
+    // aria-sort refleja la columna activa.
+    const th = cabecera.closest("th")!;
+    expect(th).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("muestra el reparto de vistas por red", () => {
+    render(<TablaRedes redes={REDES} />);
+
+    expect(screen.getByText(/Reparto de vistas por red/i)).toBeInTheDocument();
+    // 120000 / 210000 ≈ 57 %.
+    expect(screen.getByText("57%")).toBeInTheDocument();
   });
 
   it("dice con honestidad cuando no hay redes", () => {

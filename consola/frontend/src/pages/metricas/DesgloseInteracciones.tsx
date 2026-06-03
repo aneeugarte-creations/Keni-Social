@@ -28,7 +28,9 @@ import { api } from "@/lib/api";
 import { nombreMarca, nombreRed, numeroCompacto } from "@/lib/formato";
 import type { CeldaDesglose, MarcaDisponible } from "@/types";
 
+import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { useOrdenTabla } from "./useOrdenTabla";
 
 // Componentes del engagement bruto: orden y color estables en la barra apilada.
 const COMPONENTES: Array<{ clave: keyof CeldaDesglose; etiqueta: string; color: string }> = [
@@ -129,6 +131,8 @@ function GraficaApilada({
   );
 }
 
+type ClaveDesglose = keyof CeldaDesglose;
+
 function TablaDesglose({
   celdas,
   totales,
@@ -138,6 +142,25 @@ function TablaDesglose({
   totales: Record<string, number>;
   marcas: MarcaDisponible[];
 }) {
+  // Cada componente del engagement + nº de piezas es ordenable.
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CeldaDesglose, ClaveDesglose>(
+    celdas,
+    {
+      likes: (c) => c.likes,
+      comentarios: (c) => c.comentarios,
+      compartidos: (c) => c.compartidos,
+      guardados: (c) => c.guardados,
+      video_views: (c) => c.video_views,
+      n_piezas: (c) => c.n_piezas,
+      // El resto de claves de CeldaDesglose no se usan como orden, pero el tipo las exige.
+      marca: (c) => c.marca,
+      red: (c) => c.red,
+      interacciones: (c) => c.interacciones,
+      visualizaciones: (c) => c.visualizaciones,
+      engagement_pct: (c) => c.engagement_pct,
+    } as Record<ClaveDesglose, (c: CeldaDesglose) => number | string | null>,
+  );
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -146,15 +169,28 @@ function TablaDesglose({
             <TableHead>Marca</TableHead>
             <TableHead>Red</TableHead>
             {COMPONENTES.map((c) => (
-              <TableHead key={c.clave} className="text-right">
+              <CabeceraOrdenable
+                key={c.clave as string}
+                activa={estado.clave === c.clave}
+                direccion={estado.direccion}
+                onClick={() => alClicar(c.clave)}
+                alinear="right"
+              >
                 {c.etiqueta}
-              </TableHead>
+              </CabeceraOrdenable>
             ))}
-            <TableHead className="text-right">Piezas</TableHead>
+            <CabeceraOrdenable
+              activa={estado.clave === "n_piezas"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("n_piezas")}
+              alinear="right"
+            >
+              Piezas
+            </CabeceraOrdenable>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {celdas.map((c) => (
+          {filasOrdenadas.map((c) => (
             <TableRow key={`${c.marca}-${c.red}`}>
               <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
               <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>

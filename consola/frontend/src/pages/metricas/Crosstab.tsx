@@ -34,7 +34,9 @@ import {
 } from "@/lib/formato";
 import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
+import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { useOrdenTabla } from "./useOrdenTabla";
 
 /**
  * Color del rendimiento relativo (>1 rinde por encima de la mediana de su grupo, <1
@@ -103,6 +105,8 @@ export function Crosstab({
   );
 }
 
+type ClaveCrosstab = "n_piezas" | "visualizaciones" | "engagement_pct" | "rendimiento";
+
 function TablaCrosstab({
   celdas,
   marcas,
@@ -110,6 +114,18 @@ function TablaCrosstab({
   celdas: CeldaCrosstab[];
   marcas: MarcaDisponible[];
 }) {
+  // Orden por defecto: rendimiento relativo descendente (lo que más rinde, arriba).
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CeldaCrosstab, ClaveCrosstab>(
+    celdas,
+    {
+      n_piezas: (c) => c.n_piezas,
+      visualizaciones: (c) => c.visualizaciones,
+      engagement_pct: (c) => c.engagement_pct,
+      rendimiento: (c) => c.rendimiento_relativo_medio,
+    },
+    { clave: "rendimiento", direccion: "desc" },
+  );
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -118,14 +134,42 @@ function TablaCrosstab({
             <TableHead>Marca</TableHead>
             <TableHead>Red</TableHead>
             <TableHead>Formato</TableHead>
-            <TableHead className="text-right">Piezas</TableHead>
-            <TableHead className="text-right">Vistas</TableHead>
-            <TableHead className="text-right">Eng.</TableHead>
-            <TableHead className="text-right">Rendimiento</TableHead>
+            <CabeceraOrdenable
+              activa={estado.clave === "n_piezas"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("n_piezas")}
+              alinear="right"
+            >
+              Piezas
+            </CabeceraOrdenable>
+            <CabeceraOrdenable
+              activa={estado.clave === "visualizaciones"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("visualizaciones")}
+              alinear="right"
+            >
+              Vistas
+            </CabeceraOrdenable>
+            <CabeceraOrdenable
+              activa={estado.clave === "engagement_pct"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("engagement_pct")}
+              alinear="right"
+            >
+              Eng.
+            </CabeceraOrdenable>
+            <CabeceraOrdenable
+              activa={estado.clave === "rendimiento"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("rendimiento")}
+              alinear="right"
+            >
+              Rendimiento
+            </CabeceraOrdenable>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {celdas.map((c) => (
+          {filasOrdenadas.map((c) => (
             <TableRow key={`${c.marca}-${c.red}-${c.formato ?? "sin"}`}>
               <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
               <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>

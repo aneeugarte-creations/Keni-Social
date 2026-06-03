@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -72,6 +72,30 @@ describe("DesgloseInteracciones", () => {
     expect(screen.getByText("Total")).toBeInTheDocument();
     // valor sin compactar (comentarios = 300) presente en celda y total.
     expect(screen.getAllByText("300").length).toBeGreaterThan(0);
+  });
+
+  it("ordena las celdas al clicar una cabecera de componente", async () => {
+    const dos: DesgloseResp = {
+      ...RESP,
+      celdas: [
+        { ...RESP.celdas[0], red: "instagram", likes: 1000 },
+        { ...RESP.celdas[0], red: "facebook", likes: 9000 },
+      ],
+    };
+    vi.spyOn(api, "metricasDesglose").mockResolvedValue(dos);
+    renderConProviders(
+      <DesgloseInteracciones marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    await screen.findByText("Total");
+    const cabLikes = screen.getByRole("button", { name: /Likes/ });
+    fireEvent.click(cabLikes); // desc -> Facebook (9000) primero
+    const filasDatos = () =>
+      screen
+        .getAllByRole("row")
+        .filter((f) => within(f).queryByText(/Instagram|Facebook/));
+    expect(within(filasDatos()[0]).getByText("Facebook")).toBeInTheDocument();
+    expect(cabLikes.closest("th")).toHaveAttribute("aria-sort", "descending");
   });
 
   it("dice con honestidad cuando no hay celdas", async () => {

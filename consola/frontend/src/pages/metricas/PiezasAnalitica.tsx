@@ -12,7 +12,19 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
-import { BarChart3, ChevronDown, Download, ExternalLink } from "lucide-react";
+import {
+  BarChart3,
+  Bookmark,
+  ChevronDown,
+  Clock,
+  Download,
+  ExternalLink,
+  Heart,
+  Link2,
+  MessageCircle,
+  Share2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import * as React from "react";
 
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
@@ -51,22 +63,56 @@ function pct(v: number | null): string {
 /**
  * Componentes granulares del engagement de una pieza, en orden de lectura.
  * Solo se pintan los que la fuente expone (`!= null`): distinguimos "0" de "sin dato".
+ * Cada uno usa un icono con su nombre como tooltip (más legible que glifos sueltos).
  */
-const GRANULAR: Array<{ clave: keyof PiezaMetrica; etiqueta: string }> = [
-  { clave: "likes", etiqueta: "♥" },
-  { clave: "comentarios", etiqueta: "💬" },
-  { clave: "compartidos", etiqueta: "↗" },
-  { clave: "guardados", etiqueta: "⤓" },
+const GRANULAR: Array<{ clave: keyof PiezaMetrica; nombre: string; icono: LucideIcon }> = [
+  { clave: "likes", nombre: "Likes", icono: Heart },
+  { clave: "comentarios", nombre: "Comentarios", icono: MessageCircle },
+  { clave: "compartidos", nombre: "Compartidos", icono: Share2 },
+  { clave: "guardados", nombre: "Guardados", icono: Bookmark },
 ];
+
+/** Chip icono + número con tooltip de nombre (desglose granular legible de una pieza). */
+function ChipMetrica({
+  icono: Icono,
+  nombre,
+  valor,
+}: {
+  icono: LucideIcon;
+  nombre: string;
+  valor: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5"
+      title={nombre}
+    >
+      <Icono className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+      <span className="sr-only">{nombre}: </span>
+      {valor}
+    </span>
+  );
+}
 
 export function PiezasAnalitica({
   opciones,
   rangoActual,
+  tab: tabControlado,
+  onTabChange,
 }: {
   opciones: OpcionesMetricas;
   rangoActual?: string;
+  /** Tab de marca controlado externamente (drill-down desde las tablas). */
+  tab?: string;
+  onTabChange?: (tab: string) => void;
 }) {
-  const [tab, setTab] = React.useState(TAB_TODAS);
+  const [tabInterno, setTabInterno] = React.useState(TAB_TODAS);
+  // Controlado si el padre pasa `tab`; si no, gestiona su propio estado.
+  const tab = tabControlado ?? tabInterno;
+  const setTab = (v: string) => {
+    setTabInterno(v);
+    onTabChange?.(v);
+  };
 
   return (
     <Card>
@@ -291,9 +337,22 @@ function FilaAnalitica({ pieza, marcas }: { pieza: PiezaMetrica; marcas: MarcaDi
       kebab="hover"
     >
       <TableCell className="max-w-[18rem]">
-        <span className="block truncate" title={pieza.titulo}>
-          {pieza.titulo}
-        </span>
+        {pieza.url ? (
+          <a
+            href={pieza.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex max-w-full items-center gap-1 truncate font-medium text-foreground underline-offset-4 hover:underline"
+            title={pieza.titulo}
+          >
+            <span className="truncate">{pieza.titulo}</span>
+            <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="block truncate" title={pieza.titulo}>
+            {pieza.titulo}
+          </span>
+        )}
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{procedencia}</span>
           {pieza.rendimiento_relativo != null && (
@@ -311,21 +370,30 @@ function FilaAnalitica({ pieza, marcas }: { pieza: PiezaMetrica; marcas: MarcaDi
         {(granular.length > 0 ||
           pieza.clics_enlace != null ||
           pieza.tiempo_medio_vis_s != null) && (
-          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
+          <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
             {granular.map((g) => (
-              <span key={g.clave as string} title={g.clave as string}>
-                {g.etiqueta} {numeroCompacto(pieza[g.clave] as number)}
-              </span>
+              <ChipMetrica
+                key={g.clave as string}
+                icono={g.icono}
+                nombre={g.nombre}
+                valor={numeroCompacto(pieza[g.clave] as number)}
+              />
             ))}
             {/* Clics a enlace: solo si la fuente lo expone (distingue 0 de sin dato). */}
             {pieza.clics_enlace != null && (
-              <span title="Clics al enlace">🔗 {numeroCompacto(pieza.clics_enlace)}</span>
+              <ChipMetrica
+                icono={Link2}
+                nombre="Clics al enlace"
+                valor={numeroCompacto(pieza.clics_enlace)}
+              />
             )}
             {/* Tiempo medio de visualización (vídeo): "Xs" / "Xm Ys". */}
             {pieza.tiempo_medio_vis_s != null && (
-              <span title="Tiempo medio de visualización">
-                ⏱ {tiempoVis(pieza.tiempo_medio_vis_s)}
-              </span>
+              <ChipMetrica
+                icono={Clock}
+                nombre="Tiempo medio de visualización"
+                valor={tiempoVis(pieza.tiempo_medio_vis_s)}
+              />
             )}
             {clicsAltos && (
               <Badge variant="ok" title="Muchos clics al enlace en este periodo">

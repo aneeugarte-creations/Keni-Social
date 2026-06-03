@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -82,6 +82,27 @@ describe("Crosstab (rendimiento por formato)", () => {
     // rendimiento relativo formateado con sufijo "×".
     expect(screen.getByText("1.4×")).toBeInTheDocument();
     expect(screen.getByText("0.6×")).toBeInTheDocument();
+  });
+
+  it("ordena por rendimiento desc por defecto y permite reordenar por otra columna", async () => {
+    vi.spyOn(api, "metricasCrosstab").mockResolvedValue(RESP);
+    renderConProviders(
+      <Crosstab marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    // Orden por defecto = rendimiento desc: la celda de UnoTV (1.4×) va antes que la de
+    // Claro Sports (0.6×).
+    await screen.findByText("UnoTV");
+    const filasDatos = () =>
+      screen.getAllByRole("row").filter((f) => within(f).queryByText(/UnoTV|Claro Sports/));
+    expect(within(filasDatos()[0]).getByText("UnoTV")).toBeInTheDocument();
+
+    // Reordenar por Piezas asc (Claro Sports tiene 5 piezas, UnoTV 12): clic = desc, otro = asc.
+    const cabPiezas = screen.getByRole("button", { name: /Piezas/ });
+    fireEvent.click(cabPiezas); // desc -> UnoTV (12) primero
+    fireEvent.click(cabPiezas); // asc -> Claro Sports (5) primero
+    expect(within(filasDatos()[0]).getByText("Claro Sports")).toBeInTheDocument();
+    expect(cabPiezas.closest("th")).toHaveAttribute("aria-sort", "ascending");
   });
 
   it("muestra un vacío honesto cuando la fuente no expone celdas", async () => {

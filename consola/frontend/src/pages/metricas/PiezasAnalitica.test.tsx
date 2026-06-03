@@ -107,17 +107,19 @@ describe("PiezasAnalitica (enriquecida)", () => {
     expect(screen.queryByText(/unotv · instagram/)).not.toBeInTheDocument();
     // (b) badge de rendimiento relativo cuando no es null.
     expect(screen.getByText(/2\.3× mediana de vistas de su red/)).toBeInTheDocument();
-    // (c) desglose granular compacto (comentarios = 300, sin compactar).
-    expect(
-      screen.getByText((t) => t.includes("💬") && t.includes("300")),
-    ).toBeInTheDocument();
-    // (d) riqueza barata: clics a enlace (🔗) y tiempo de visualización (⏱) cuando != null.
-    expect(
-      screen.getByText((t) => t.includes("🔗") && t.includes("40")),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText((t) => t.includes("⏱") && t.includes("12s")),
-    ).toBeInTheDocument();
+    // (c) desglose granular legible: cada chip lleva el nombre como tooltip (title)
+    //     y el valor. Comentarios = 300, sin compactar.
+    const chipComentarios = document.querySelector('[title="Comentarios"]');
+    expect(chipComentarios?.textContent).toContain("300");
+    // (d) riqueza barata: clics a enlace y tiempo de visualización cuando != null.
+    const chipClics = document.querySelector('[title="Clics al enlace"]');
+    expect(chipClics?.textContent).toContain("40");
+    const chipTiempo = document.querySelector('[title="Tiempo medio de visualización"]');
+    expect(chipTiempo?.textContent).toContain("12s");
+    // (e) el título ENLAZA al post real (nueva pestaña) cuando hay url.
+    const enlace = screen.getByRole("link", { name: /Gol de último minuto/ });
+    expect(enlace).toHaveAttribute("href", "https://example.com/p1");
+    expect(enlace).toHaveAttribute("target", "_blank");
   });
 
   it("no inventa desglose, badge ni riqueza cuando la fuente no los expone (null)", async () => {
@@ -131,8 +133,8 @@ describe("PiezasAnalitica (enriquecida)", () => {
     expect(await screen.findByText("Nota floja")).toBeInTheDocument();
     // sin rendimiento_relativo -> no hay badge "× mediana de vistas".
     expect(screen.queryByText(/mediana de vistas de su red/)).not.toBeInTheDocument();
-    // clics_enlace/tiempo null -> no se pintan (sin 0 falso).
-    expect(screen.queryByText(/🔗/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/⏱/)).not.toBeInTheDocument();
+    // clics_enlace/tiempo null -> no se pintan los chips (sin 0 falso).
+    expect(document.querySelector('[title="Clics al enlace"]')).toBeNull();
+    expect(document.querySelector('[title="Tiempo medio de visualización"]')).toBeNull();
   });
 });

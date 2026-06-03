@@ -153,10 +153,23 @@ function FilaPieza({ pieza }: { pieza: PiezaRendimiento }) {
       kebab="hover"
     >
       <TableCell className="max-w-[20rem]">
-        <span className="block truncate font-medium" title={titulo}>
-          {titulo}
-        </span>
-        <span className="text-xs text-muted-foreground">
+        {pieza.url ? (
+          <a
+            href={pieza.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex max-w-full items-center gap-1 truncate font-medium text-foreground underline-offset-4 hover:underline"
+            title={titulo}
+          >
+            <span className="truncate">{titulo}</span>
+            <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="block truncate font-medium" title={titulo}>
+            {titulo}
+          </span>
+        )}
+        <span className="block text-xs text-muted-foreground">
           {pieza.marca_nombre} · {nombreRed(pieza.red)}
         </span>
       </TableCell>
