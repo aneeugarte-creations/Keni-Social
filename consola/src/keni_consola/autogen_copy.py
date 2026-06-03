@@ -154,8 +154,8 @@ def topics_pendientes(
         marca = item.get("marca") or ""
         if not marca or not marcas.es_marca(marca):
             continue
-        # Toggle por marca: no auto-generamos copy de una marca con el auto-copy apagado.
-        if not config.autogen_activo_para_marca(marca):
+        # Exclusión por marca: no auto-generamos copy de una marca apagada a mano para auto-copy.
+        if config.marca_apagada(config.ENV_AUTOGEN, marca):
             continue
         if not (item.get("titulo") or "").strip():
             continue

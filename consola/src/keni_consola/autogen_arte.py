@@ -148,8 +148,8 @@ def topics_sin_arte(
             continue
         if not (item.get("titulo") or "").strip():
             continue
-        # Toggle por marca: no auto-ilustramos temas de una marca con el auto-arte apagado.
-        if not config.autogen_arte_activo_para_marca(item.get("marca") or ""):
+        # Exclusión por marca: no auto-ilustramos temas de una marca apagada a mano para arte.
+        if config.marca_apagada(config.ENV_AUTOGEN_ARTE, item.get("marca") or ""):
             continue
         item_id = item.get("id")
         if item_id in ya_procesados:

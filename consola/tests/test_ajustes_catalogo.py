@@ -50,7 +50,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
         config.ENV_PIPELINE_LINEAS,
     }
-    assert claves == esperadas
+    # Los toggles por marca (clave `ENV::marca`) se generan en caliente; el resto del catálogo
+    # son exactamente las claves globales esperadas.
+    por_marca = {c for c in claves if config.SEP_MARCA in c}
+    assert claves - por_marca == esperadas
+    assert por_marca, "deben existir toggles de auto-producción por marca"
 
 
 def test_publicar_real_es_peligroso(store):
