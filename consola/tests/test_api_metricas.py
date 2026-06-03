@@ -262,9 +262,9 @@ def test_piezas_export_csv_descarga_y_lleva_grupos(cliente):
     assert r.status_code == 200
     assert "attachment" in r.headers["content-disposition"]
     assert "piezas-mes" in r.headers["content-disposition"]
-    # Cabecera + las dos categorías (Top 5 / Peores 5) presentes en el cuerpo.
+    # Cabecera + las dos categorías (Top / Peores, con su conteo) presentes en el cuerpo.
     assert "Engagement %" in r.text
-    assert "Top 5" in r.text and "Peores 5" in r.text
+    assert "Top" in r.text and "Peores" in r.text
 
 
 def test_piezas_export_json_trae_top_y_peores(cliente):

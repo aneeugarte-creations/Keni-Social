@@ -724,11 +724,15 @@ _COLUMNAS_PIEZA_EXPORT: tuple[tuple[str, str], ...] = (
 def _filas_piezas_export(payload: dict) -> list[dict]:
     """Aplana `top`/`peores` del payload de piezas a filas con su grupo (Top/Peores)."""
     filas: list[dict] = []
-    for grupo, clave in (("Top 5", "top"), ("Peores 5", "peores")):
-        for p in payload.get(clave, []) or []:
+    # La etiqueta del grupo lleva el conteo REAL (Top N / Peores N), derivado de la lista, para
+    # no quedar desfasada si cambia el número de piezas (antes estaba fija en "5").
+    for grupo, clave in (("Top", "top"), ("Peores", "peores")):
+        items = payload.get(clave, []) or []
+        etiqueta = f"{grupo} {len(items)}"
+        for p in items:
             filas.append(
                 {
-                    "grupo": grupo,
+                    "grupo": etiqueta,
                     "titulo": p.get("titulo", ""),
                     "plataforma": p.get("plataforma", ""),
                     "publicado": p.get("publicado", ""),
