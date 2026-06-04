@@ -337,6 +337,15 @@ export function DialogoEditar({
   // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
   const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
   const [vista, setVista] = React.useState<VistaEditor>("editar");
+  // --- Autoguardado --- //
+  // Estado del indicador de guardado (la pieza se guarda sola al editar; el botón es opcional).
+  const [estadoGuardado, setEstadoGuardado] = React.useState<"idle" | "guardando" | "guardado">("idle");
+  const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
+  const guardandoRef = React.useRef(false); // hay un guardado en vuelo
+  const pendienteRef = React.useRef(false); // hubo cambios durante el guardado en vuelo
+  // Firma de los campos que afectan a la IMAGEN: solo se re-hornea si cambian (evita subir un PNG
+  // nuevo en cada tecla del copy/caption, que no toca la placa).
+  const firmaBakeRef = React.useRef("");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -386,6 +395,7 @@ export function DialogoEditar({
   // Cargamos los valores cada vez que se abre con una publicación nueva.
   React.useEffect(() => {
     if (!publicacion) return;
+    cargandoRef.current = true; // no autoguardar por los cambios de estado que provoca esta carga
     setTitulo(publicacion.titulo);
     setContenido(publicacion.contenido);
     setCopyIn(publicacion.copy_in ?? "");
@@ -399,6 +409,21 @@ export function DialogoEditar({
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
     setEncuadre(parsearEncuadre(publicacion.foto_encuadre));
     setVista("editar");
+    setEstadoGuardado("idle");
+    // La imagen cargada ya es la vigente: su firma evita re-hornear si no se toca la placa.
+    firmaBakeRef.current = JSON.stringify({
+      foto: publicacion.foto ?? "",
+      copyIn: publicacion.copy_in ?? "",
+      placaOculta: publicacion.placa_oculta ?? false,
+      plantillaId: publicacion.plantilla_diseno_id ?? "",
+      encuadre: publicacion.foto_encuadre ?? "",
+    });
+    // Reabrimos el autoguardado tras aplicar la carga (en un tick: así el render que dispara esta
+    // carga ve `cargandoRef=true` y no guarda; solo los cambios del usuario posteriores guardan).
+    const t = setTimeout(() => {
+      cargandoRef.current = false;
+    }, 0);
+    return () => clearTimeout(t);
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
@@ -417,41 +442,96 @@ export function DialogoEditar({
     [estados, estado],
   );
 
-  const guardar = useMutation({
-    mutationFn: async () => {
-      if (!publicacion) throw new Error("Sin publicación");
-      // Piezas de marca SIN plantilla del estudio: HORNEAR el canvas de la placa (spec) a un media
-      // id publicable. CON plantilla del estudio la imagen ya es el render del documento (vía
-      // "aplicar plantilla"): NO se hornea el spec encima (lo pisaría). La `foto` cruda se persiste.
-      let imagenFinal = imagen;
-      if (publicacion.marca && !plantillaId && bakeRef.current) {
-        const horneada = await bakeRef.current();
-        if (horneada) imagenFinal = horneada;
+  // Persiste la pieza. Hornea la imagen SOLO si cambió su firma (no re-sube un PNG en cada tecla del
+  // caption). NO cierra el diálogo: lo comparten el autoguardado y el botón.
+  const persistir = React.useCallback(async () => {
+    if (!publicacion) return;
+    const firma = JSON.stringify({
+      foto, copyIn, placaOculta, plantillaId, encuadre: serializarEncuadre(encuadre),
+    });
+    // Piezas de marca SIN plantilla del estudio: hornear el canvas de la placa a un media id. CON
+    // plantilla del estudio la imagen ya es el render del documento (no se hornea encima).
+    let imagenFinal = imagen;
+    if (publicacion.marca && !plantillaId && bakeRef.current && firma !== firmaBakeRef.current) {
+      const horneada = await bakeRef.current();
+      if (horneada) {
+        imagenFinal = horneada;
+        setImagen(horneada);
       }
-      const cuerpo: CuerpoActualizarPublicacion = {
-        titulo: titulo.trim(),
-        contenido,
-        copy_in: copyIn,
-        estado,
-        evergreen,
-        // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
-        fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
-        imagen: imagenFinal,
-        foto,
-        placa_oculta: placaOculta,
-        // Recuerda (o limpia) la plantilla del estudio elegida.
-        plantilla_diseno_id: plantillaId,
-        // Reencuadre manual de la foto ("" si está centrada sin zoom).
-        foto_encuadre: serializarEncuadre(encuadre),
-      };
-      return api.actualizarPublicacion(publicacion.id, cuerpo);
-    },
+    }
+    firmaBakeRef.current = firma;
+    const cuerpo: CuerpoActualizarPublicacion = {
+      titulo: titulo.trim(),
+      contenido,
+      copy_in: copyIn,
+      estado,
+      evergreen,
+      // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
+      fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
+      imagen: imagenFinal,
+      foto,
+      placa_oculta: placaOculta,
+      // Recuerda (o limpia) la plantilla del estudio elegida.
+      plantilla_diseno_id: plantillaId,
+      // Reencuadre manual de la foto ("" si está centrada sin zoom).
+      foto_encuadre: serializarEncuadre(encuadre),
+    };
+    await api.actualizarPublicacion(publicacion.id, cuerpo);
+  }, [publicacion, foto, copyIn, placaOculta, plantillaId, encuadre, imagen, titulo, contenido, estado, evergreen, programado, fechaLocal]);
+
+  // Solo se autoguarda cuando los datos mínimos son válidos (título + contenido; fecha si procede).
+  const datosValidos =
+    !!publicacion && titulo.trim().length > 0 && contenido.trim().length > 0 && !(programado && !fechaLocal);
+
+  // Autoguardado: persiste sin cerrar; coalesciona los cambios ocurridos durante un guardado en vuelo.
+  const autoguardar = React.useCallback(async () => {
+    if (!datosValidos) return;
+    if (guardandoRef.current) {
+      pendienteRef.current = true;
+      return;
+    }
+    guardandoRef.current = true;
+    setEstadoGuardado("guardando");
+    try {
+      await persistir();
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      setEstadoGuardado("guardado");
+    } catch (e) {
+      setEstadoGuardado("idle");
+      toast.error(mensajeError(e));
+    } finally {
+      guardandoRef.current = false;
+      if (pendienteRef.current) {
+        pendienteRef.current = false;
+        void autoguardar();
+      }
+    }
+  }, [datosValidos, persistir, queryClient]);
+
+  const autoguardarRef = React.useRef(autoguardar);
+  autoguardarRef.current = autoguardar;
+
+  // Dispara el autoguardado (debounced 1.2 s) cuando el usuario cambia algo. La `imagen` NO entra
+  // en la firma: es resultado del horneado, no una edición del usuario (evita un bucle de guardado).
+  const firmaAutoguardado = JSON.stringify({
+    titulo, contenido, copyIn, estado, evergreen, fechaLocal, foto, placaOculta, plantillaId,
+    encuadre: serializarEncuadre(encuadre),
+  });
+  React.useEffect(() => {
+    if (cargandoRef.current || !publicacion) return;
+    const t = setTimeout(() => void autoguardarRef.current(), 1200);
+    return () => clearTimeout(t);
+  }, [firmaAutoguardado, publicacion]);
+
+  const guardar = useMutation({
+    mutationFn: persistir,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       // El tablero (feed/lista) lee `/api/contenido`: invalidamos su clave para que
       // refleje el copy/estado/imagen recién guardados desde este editor unificado.
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      toast.success("Publicación actualizada");
+      setEstadoGuardado("guardado");
       onCerrar();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -764,14 +844,30 @@ export function DialogoEditar({
           </TabsContent>
         </Tabs>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={guardar.isPending}>
-            Cancelar
-          </Button>
-          <Button variant="positive" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
-            {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Guardar cambios
-          </Button>
+        <DialogFooter className="items-center gap-2 sm:justify-between">
+          {/* Indicador de autoguardado: la pieza se guarda sola al editar. */}
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+            {estadoGuardado === "guardando" ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
+              </>
+            ) : estadoGuardado === "guardado" ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Guardado
+              </>
+            ) : (
+              "Los cambios se guardan solos"
+            )}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onCerrar} disabled={guardar.isPending}>
+              Cerrar
+            </Button>
+            <Button variant="positive" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar y cerrar
+            </Button>
+          </div>
         </DialogFooter>
 
         <GestionHashtags
