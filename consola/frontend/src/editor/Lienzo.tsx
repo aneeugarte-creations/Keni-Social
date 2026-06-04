@@ -165,11 +165,14 @@ export function Lienzo({
   maxAlto = 760,
   reencuadreId = null,
   onSalirReencuadre,
+  onStage,
 }: {
   maxAncho?: number;
   maxAlto?: number;
   reencuadreId?: string | null;
   onSalirReencuadre?: () => void;
+  // Expone el Stage de Konva + la escala actual al padre (para muestrear píxeles, p.ej. legibilidad).
+  onStage?: (stage: Konva.Stage | null, escala: number) => void;
 }) {
   const store = useStoreEditor();
   const documento = useEditor((s) => s.documento);
@@ -203,6 +206,11 @@ export function Lienzo({
 
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
+  // Publica el Stage + la escala al padre cuando cambian (para muestreo de píxeles externo).
+  useEffect(() => {
+    onStage?.(stageRef.current, escala);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escala, documento, onStage]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Arrastre múltiple: posiciones iniciales de todas las capas seleccionadas al empezar a mover.
   const multiDrag = useRef<{ dragId: string; ini: Map<string, { x: number; y: number }> } | null>(null);

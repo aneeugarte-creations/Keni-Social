@@ -555,6 +555,10 @@ export default function EditorPro() {
             onExportar={() => exportar.mutate()}
             exportando={exportar.isPending}
             onPlantillas={() => setGaleria(true)}
+            // «Adaptar a…»: abre el documento reencuadrado en una PESTAÑA NUEVA (no machaca la actual).
+            onAbrirAdaptado={(docAdaptado, nombre) =>
+              nuevaPestana(pestanaActiva.marca, docAdaptado, { nombre })
+            }
             // Aviso de hueco de foto: solo relevante cuando la pestaña está atada a una plantilla
             // (sin hueco no autoguarda a servidor ni deja Guardar).
             avisaHueco={!!pestanaActiva.plantillaId}

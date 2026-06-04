@@ -12,20 +12,24 @@
 // - Flyout e inspector son UN solo elemento responsive: columna acoplada en `md+`, hoja inferior
 //   en móvil (clases `max-md:`), con backdrop solo en móvil.
 
+import type Konva from "konva";
 import {
   DollarSign,
+  Eye,
   ImageOff,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
   Loader2,
+  Maximize2,
   Redo2,
   Shapes,
   Sparkles,
   Undo2,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 
@@ -35,7 +39,16 @@ import { PanelBiblioteca } from "./PanelBiblioteca";
 import { PanelElementos } from "./PanelElementos";
 import { PanelIA } from "./PanelIA";
 import { Inspector, PanelCapas } from "./Paneles";
+import { adaptarDocumento } from "./adaptar";
 import { ProveedorEditor } from "./contexto";
+import type { Documento } from "./documento";
+import { PRESETS_FORMATO, mismoFormato } from "./formatos";
+import {
+  analizarLegibilidad,
+  correccionPara,
+  muestreadorDeStage,
+  type Correccion,
+} from "./legibilidad";
 import type { StoreEditor } from "./store";
 import { useFuentesMarca } from "./useFuentesMarca";
 
@@ -55,6 +68,7 @@ export function EditorDocumento({
   exportando,
   onPlantillas,
   avisaHueco,
+  onAbrirAdaptado,
 }: {
   store: StoreEditor;
   marca: string;
@@ -63,8 +77,14 @@ export function EditorDocumento({
   onPlantillas?: () => void;
   // Si la pestaña está atada a plantilla, avisa cuando NO hay capa marcada como hueco de foto.
   avisaHueco?: boolean;
+  // «Adaptar a…»: abre el documento reencuadrado en una pestaña nueva (lo cablea EditorPro).
+  onAbrirAdaptado?: (doc: Documento, nombre: string) => void;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
+  // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
+  const stageInfo = useRef<{ stage: Konva.Stage | null; escala: number }>({ stage: null, escala: 1 });
+  // Menú «Adaptar a…» abierto.
+  const [menuAdaptar, setMenuAdaptar] = useState(false);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
   const [ajustes, setAjustes] = useState(false);
@@ -98,6 +118,49 @@ export function EditorDocumento({
       setReemplazarId(sel);
       setTool("biblioteca");
     }
+  };
+
+  // ADAPTAR a otro formato/red: genera el documento reencuadrado y lo abre en pestaña nueva.
+  const adaptarA = (preset: (typeof PRESETS_FORMATO)[number]) => {
+    setMenuAdaptar(false);
+    const doc = store.getState().documento;
+    const adaptado = adaptarDocumento(doc, preset.f);
+    if (!onAbrirAdaptado) {
+      // Sin callback (caso raro): al menos reformatea el documento actual.
+      store.getState().cargar(adaptado);
+      return;
+    }
+    const base = store.getState().documento.marca || marca || "Diseño";
+    onAbrirAdaptado(adaptado, `${base} · ${preset.etiqueta}`);
+    toast.success(`Adaptado a ${preset.nombre}. Revísalo en la pestaña nueva.`);
+  };
+
+  // REVISAR LEGIBILIDAD: muestrea el canvas bajo cada titular y arregla los que no llegan a AA.
+  const revisarLegibilidad = () => {
+    const { stage, escala } = stageInfo.current;
+    const doc = store.getState().documento;
+    if (!stage) {
+      toast.error("El lienzo aún no está listo. Inténtalo de nuevo.");
+      return;
+    }
+    const muestrear = muestreadorDeStage(stage, escala);
+    const malos = analizarLegibilidad(doc, muestrear);
+    if (malos.length === 0) {
+      toast.success("Todos los titulares tienen contraste suficiente (AA).");
+      return;
+    }
+    const arreglar = window.confirm(
+      `${malos.length} ${malos.length === 1 ? "titular es poco legible" : "titulares son poco legibles"} sobre la foto. ¿Arreglar automáticamente (overlay/contorno/sombra)?`,
+    );
+    if (!arreglar) return;
+    const st = store.getState();
+    st.comenzarGesto();
+    const correcciones: Correccion[] = malos.map((d) => correccionPara(doc, d));
+    for (const c of correcciones) {
+      if (c.tipo === "overlay") st.agregar(c.capa);
+      else st.actualizar(c.id, c.cambios, false);
+    }
+    toast.success(`Arreglado${malos.length > 1 ? "s" : ""} ${malos.length}.`);
   };
 
   const panel = (() => {
@@ -163,6 +226,50 @@ export function EditorDocumento({
                   Falta hueco de foto
                 </span>
               )}
+              {/* ADAPTAR A… — reencuadra el diseño a otra red en una pestaña nueva. */}
+              <div className="relative">
+                <button
+                  title="Adaptar el diseño a otra red/formato (abre pestaña nueva)"
+                  onClick={() => setMenuAdaptar((v) => !v)}
+                  className="flex items-center gap-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="hidden text-xs sm:inline">Adaptar</span>
+                </button>
+                {menuAdaptar && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setMenuAdaptar(false)} />
+                    <div className="absolute right-0 top-full z-40 mt-1 w-52 overflow-hidden rounded-md border border-border bg-popover shadow-md">
+                      <div className="border-b border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Adaptar a…
+                      </div>
+                      {PRESETS_FORMATO.map((p) => {
+                        const actual = mismoFormato(p.f, store.getState().documento.formato);
+                        return (
+                          <button
+                            key={p.etiqueta}
+                            onClick={() => adaptarA(p)}
+                            disabled={actual}
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
+                          >
+                            <span>{p.nombre}</span>
+                            {actual && <span className="text-[10px] text-muted-foreground">actual</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* REVISAR LEGIBILIDAD — contraste WCAG de los titulares sobre la foto. */}
+              <button
+                title="Revisar legibilidad de los titulares (contraste WCAG)"
+                onClick={revisarLegibilidad}
+                className="flex items-center gap-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+              >
+                <Eye className="h-4 w-4" />
+                <span className="hidden text-xs sm:inline">Legibilidad</span>
+              </button>
               <button
                 title="Deshacer (⌘Z)"
                 disabled={!puedeDeshacer}
@@ -189,7 +296,11 @@ export function EditorDocumento({
           </div>
 
           <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2 md:p-4">
-            <Lienzo reencuadreId={reencuadreId} onSalirReencuadre={() => setReencuadreId(null)} />
+            <Lienzo
+              reencuadreId={reencuadreId}
+              onSalirReencuadre={() => setReencuadreId(null)}
+              onStage={(stage, escala) => { stageInfo.current = { stage, escala }; }}
+            />
           </div>
         </div>
 

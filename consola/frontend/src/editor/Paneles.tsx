@@ -24,6 +24,7 @@ import { ColorControl } from "./ColorControl";
 
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado, Sombra, TipoMezcla } from "./documento";
 import { CATALOGO_FORMAS, CATALOGO_FUENTES, ETIQUETA_BINDING, ETIQUETA_FORMA, ETIQUETA_MEZCLA } from "./documento";
+import { PRESETS_FORMATO, mismoFormato } from "./formatos";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 // Color totalmente transparente (#RRGGBBAA con alfa 00). Válido en render y validación.
@@ -467,13 +468,8 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   if (!capa) {
     const setFondo = (f: typeof fondo) => store.getState().setFondo(f);
     const setFmt = (f: typeof formato) => store.getState().setFormato(f);
-    const PRESETS: { etiqueta: string; f: typeof formato }[] = [
-      { etiqueta: "9:16", f: { w: 1080, h: 1920, safe_top: 220, safe_bottom: 420 } },
-      { etiqueta: "4:5", f: { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 } },
-      { etiqueta: "1:1", f: { w: 1080, h: 1080, safe_top: 60, safe_bottom: 96 } },
-      { etiqueta: "16:9", f: { w: 1600, h: 900, safe_top: 56, safe_bottom: 72 } },
-    ];
-    const activo = (f: typeof formato) => f.w === formato.w && f.h === formato.h;
+    const PRESETS = PRESETS_FORMATO;
+    const activo = (f: typeof formato) => mismoFormato(f, formato);
     return (
       <div className="flex flex-col gap-3 p-3">
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lienzo</div>
