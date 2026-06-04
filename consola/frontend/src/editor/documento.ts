@@ -55,6 +55,7 @@ export interface CapaImagen extends CapaBase {
   ajuste: Ajuste;
   foco: [number, number];
   zoom: number; // reencuadre dentro del marco (1 = ajuste base)
+  es_foto?: boolean; // ESTA capa es el hueco de foto de la plantilla (única; obligatoria en el estudio)
   filtros: Filtros | null;
 }
 
