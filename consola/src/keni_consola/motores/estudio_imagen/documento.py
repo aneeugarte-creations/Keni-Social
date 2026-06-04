@@ -340,6 +340,17 @@ def capa_foto(doc: dict[str, Any]) -> dict[str, Any] | None:
     return max(grandes, key=lambda c: float(c.get("w", 0)) * float(c.get("h", 0)))
 
 
+def tiene_hueco_explicito(doc: dict[str, Any]) -> bool:
+    """True si el documento tiene una capa imagen marcada `es_foto` (hueco de foto EXPLÍCITO).
+
+    Lo exige el estudio al guardar una plantilla: toda plantilla debe declarar dónde va la foto.
+    """
+    return any(
+        isinstance(c, dict) and c.get("tipo") == "imagen" and c.get("es_foto")
+        for c in (doc.get("capas") or [])
+    )
+
+
 def migrar(doc: dict[str, Any]) -> dict[str, Any]:
     """Gancho de migración entre versiones del esquema. v1: identidad."""
     return doc

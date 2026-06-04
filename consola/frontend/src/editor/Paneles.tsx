@@ -96,7 +96,10 @@ export function PanelCapas() {
 
   // Fila como FUNCIÓN (no componente): se llama inline para no crear un tipo de componente nuevo
   // en cada render (que remontaría las filas y perdería el foco al renombrar).
-  const fila = (capa: Capa) => (
+  const fila = (capa: Capa) => {
+    // El HUECO DE FOTO (`es_foto`) es obligatorio: siempre bloqueado y no se puede borrar.
+    const esFoto = capa.tipo === "imagen" && !!(capa as CapaImagen).es_foto;
+    return (
     <div
       draggable
       onDragStart={() => setArrastrando(capa.id)}
@@ -137,6 +140,14 @@ export function PanelCapas() {
               {(capa as CapaTexto).binding === "copy_in" ? "copy" : "pleca"}
             </span>
           )}
+          {esFoto && (
+            <span
+              className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400"
+              title="Hueco de foto: aquí entra la foto de la pieza"
+            >
+              foto
+            </span>
+          )}
         </span>
       )}
       <button
@@ -147,21 +158,24 @@ export function PanelCapas() {
         {capa.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
       </button>
       <button
-        className="shrink-0 text-muted-foreground hover:text-foreground"
+        className="shrink-0 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={esFoto}
         onClick={(e) => { e.stopPropagation(); store.getState().actualizar(capa.id, { bloqueada: !capa.bloqueada } as Partial<Capa>); }}
-        title={capa.bloqueada ? "Desbloquear" : "Bloquear"}
+        title={esFoto ? "Hueco de foto: siempre bloqueado" : capa.bloqueada ? "Desbloquear" : "Bloquear"}
       >
         {capa.bloqueada ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
       </button>
       <button
-        className="shrink-0 text-muted-foreground hover:text-destructive"
+        className="shrink-0 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={capa.bloqueada}
         onClick={(e) => { e.stopPropagation(); store.getState().quitar(capa.id); }}
-        title="Borrar capa"
+        title={capa.bloqueada ? "Capa bloqueada (no se puede borrar)" : "Borrar capa"}
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -472,6 +486,23 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
 
       {capa.tipo === "imagen" && (
         <div className="flex flex-col gap-2 border-t border-border pt-3">
+          {/* Hueco de foto: la capa donde entra la foto de la pieza. Único y obligatorio por
+              plantilla; al marcar otra, esta se desmarca. Marcarlo lo deja bloqueado. */}
+          <Campo etiqueta="Hueco de foto">
+            {(capa as CapaImagen).es_foto ? (
+              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                Sí · bloqueado
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => store.getState().marcarHuecoFoto(capa.id)}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+              >
+                Marcar como hueco
+              </button>
+            )}
+          </Campo>
           <Campo etiqueta="Ajuste">
             <select
               value={(capa as CapaImagen).ajuste}

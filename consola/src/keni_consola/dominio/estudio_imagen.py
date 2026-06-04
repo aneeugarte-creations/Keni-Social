@@ -726,6 +726,11 @@ def validar_documento(documento: dict[str, Any]) -> dict[str, Any]:
         raise EstudioError(str(exc)) from exc
 
 
+def documento_tiene_hueco(documento: dict[str, Any]) -> bool:
+    """True si el documento declara un hueco de foto explícito (`es_foto`). Frontera API->dominio."""
+    return doc_capas.tiene_hueco_explicito(documento)
+
+
 def validar_capas(capas: Any) -> list[dict[str, Any]]:
     """Valida una LISTA de capas (para bloques reutilizables) -> lista normalizada.
 

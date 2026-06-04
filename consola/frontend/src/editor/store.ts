@@ -38,6 +38,9 @@ export interface EstadoEditor {
   // Inserta VARIAS capas (un bloque) en un solo paso de historial, encima de todo, con ids frescos.
   insertarBloque: (capas: Capa[]) => void;
   actualizar: (id: string, cambios: Partial<Capa>, registrar?: boolean) => void;
+  // Designa la capa imagen `id` como HUECO DE FOTO (único): la marca `es_foto`+bloqueada y
+  // desmarca el resto de imágenes. Toda plantilla tiene exactamente uno.
+  marcarHuecoFoto: (id: string) => void;
   quitar: (id: string) => void;
   duplicar: (id: string) => void;
   reordenar: (id: string, delta: number) => void;
@@ -139,7 +142,21 @@ export function crearStoreEditor(inicial: Documento) {
           registrar,
         ),
 
+      marcarHuecoFoto: (id) =>
+        aplicar((doc) =>
+          conCapas(
+            doc,
+            doc.capas.map((c) => {
+              if (c.tipo !== "imagen") return c;
+              if (c.id === id) return { ...c, es_foto: true, bloqueada: true } as Capa;
+              return { ...c, es_foto: false } as Capa;
+            }),
+          ),
+        ),
+
       quitar: (id) => {
+        // No se borra una capa bloqueada (p. ej. el hueco de foto obligatorio).
+        if (get().documento.capas.find((c) => c.id === id)?.bloqueada) return;
         aplicar((doc) => conCapas(doc, doc.capas.filter((c) => c.id !== id)));
         set((s) => ({
           seleccion: s.seleccion === id ? null : s.seleccion,
@@ -209,7 +226,11 @@ export function crearStoreEditor(inicial: Documento) {
         }),
 
       quitarMulti: () => {
-        const ids = new Set(get().seleccionMulti);
+        // Las capas bloqueadas (hueco de foto) no se borran ni en lote.
+        const bloqueadas = new Set(
+          get().documento.capas.filter((c) => c.bloqueada).map((c) => c.id),
+        );
+        const ids = new Set(get().seleccionMulti.filter((id) => !bloqueadas.has(id)));
         if (ids.size === 0) return;
         aplicar((doc) => conCapas(doc, doc.capas.filter((c) => !ids.has(c.id))));
         set({ seleccion: null, seleccionMulti: [] });

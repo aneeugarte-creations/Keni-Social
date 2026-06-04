@@ -110,6 +110,11 @@ async def crear(request: Request) -> Response:
         doc_ok = estudio_imagen.validar_documento(doc)
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+    if not estudio_imagen.documento_tiene_hueco(doc_ok):
+        return JSONResponse(
+            {"error": "La plantilla necesita un hueco de foto: marca una imagen como «hueco de foto»."},
+            status_code=400,
+        )
 
     marca, err = _validar_marca(datos.get("marca"))
     if err:
@@ -165,6 +170,11 @@ async def actualizar(request: Request) -> Response:
             doc_ok = estudio_imagen.validar_documento(datos["documento"])
         except estudio_imagen.EstudioError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
+        if not estudio_imagen.documento_tiene_hueco(doc_ok):
+            return JSONResponse(
+                {"error": "La plantilla necesita un hueco de foto: marca una imagen como «hueco de foto»."},
+                status_code=400,
+            )
         campos["documento"] = json.dumps(doc_ok, ensure_ascii=False)
 
     plantilla = repos.actualizar_plantilla_diseno(plantilla_id, campos)

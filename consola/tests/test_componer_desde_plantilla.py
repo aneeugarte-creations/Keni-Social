@@ -129,6 +129,19 @@ def test_capa_foto_prefiere_es_foto_y_respalda_en_fondo_grande():
     assert dc.capa_foto(doc3) is None
 
 
+def test_tiene_hueco_explicito():
+    from keni_consola.motores.estudio_imagen import documento as dc
+
+    con = {"capas": [{"tipo": "imagen", "es_foto": True}, {"tipo": "texto"}]}
+    sin = {"capas": [{"tipo": "imagen"}, {"tipo": "texto", "binding": "copy_in"}]}
+    assert dc.tiene_hueco_explicito(con) is True
+    assert dc.tiene_hueco_explicito(sin) is False
+    assert dc.tiene_hueco_explicito({}) is False
+    # Expuesto por el dominio (frontera API->dominio).
+    assert ei.documento_tiene_hueco(con) is True
+    assert ei.documento_tiene_hueco(sin) is False
+
+
 def test_parsear_encuadre():
     # "" o JSON inválido -> sin reencuadre.
     assert ei.parsear_encuadre("") == (None, 0.0)

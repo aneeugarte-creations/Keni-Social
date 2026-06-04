@@ -234,13 +234,26 @@ export function documentoVacio(
   formato: { w: number; h: number; safe_top: number; safe_bottom: number },
   marca = "",
 ): Documento {
+  // Toda plantilla nace con su HUECO DE FOTO obligatorio: una imagen a sangre, marcada `es_foto`
+  // y BLOQUEADA (no se puede borrar). Ahí entra la foto de la pieza al aplicar la plantilla.
+  const hueco = nuevaCapaImagen("", {
+    id: "foto",
+    x: 0,
+    y: 0,
+    w: formato.w,
+    h: formato.h,
+    z: 0,
+    es_foto: true,
+    bloqueada: true,
+    nombre: "Foto",
+  });
   return {
     version: VERSION,
     marca,
     fuentes: { sans: "Barlow", condensada: "Barlow Condensed" },
     formato,
     fondo: { tipo: "color", color: "#111315" },
-    capas: [],
+    capas: [hueco],
   };
 }
 

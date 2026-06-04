@@ -218,6 +218,8 @@ export default function EditorPro() {
         const st = stores.current.get(p.id);
         if (!st) return;
         const doc = st.getState().documento;
+        // Sin hueco de foto explícito el server rechaza; no spameamos 400s (el Guardar manual avisa).
+        if (!doc.capas.some((c) => c.tipo === "imagen" && c.es_foto)) return;
         try {
           // Solo el documento (sin re-render de miniatura, para no cargar el server cada 3 s; la
           // miniatura se refresca al Guardar manual).
@@ -255,6 +257,7 @@ export default function EditorPro() {
       if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
       if (!pestanaActiva.plantillaId) throw new Error("__sin_plantilla__");
       const documento = storeActivo.getState().documento;
+      if (!documento.capas.some((c) => c.tipo === "imagen" && c.es_foto)) throw new Error("__sin_hueco__");
       const miniatura = await miniaturaDe(documento);
       return api.actualizarPlantillaDiseno(pestanaActiva.plantillaId, { documento, miniatura });
     },
@@ -268,6 +271,10 @@ export default function EditorPro() {
         setDialogo({ nombre: pestanaActiva?.nombre ?? "" });
         return;
       }
+      if (e instanceof Error && e.message === "__sin_hueco__") {
+        toast.error("Marca una imagen como «hueco de foto» antes de guardar.");
+        return;
+      }
       toast.error(e instanceof Error ? e.message : "No se pudo guardar.");
     },
   });
@@ -277,6 +284,7 @@ export default function EditorPro() {
     mutationFn: async (nombre: string) => {
       if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
       const documento = storeActivo.getState().documento;
+      if (!documento.capas.some((c) => c.tipo === "imagen" && c.es_foto)) throw new Error("__sin_hueco__");
       const miniatura = await miniaturaDe(documento);
       return api.crearPlantillaDiseno({ marca: pestanaActiva.marca, nombre, categoria: "post", documento, miniatura });
     },
@@ -288,7 +296,13 @@ export default function EditorPro() {
       qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
       toast.success("Plantilla guardada.");
     },
-    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo guardar."),
+    onError: (e: unknown) => {
+      if (e instanceof Error && e.message === "__sin_hueco__") {
+        toast.error("Marca una imagen como «hueco de foto» antes de guardar.");
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar.");
+    },
   });
 
   const confirmarNombre = () => {
