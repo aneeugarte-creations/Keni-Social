@@ -10,7 +10,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 log = logging.getLogger("keni_metricas")
 
 
-def cliente_http(timeout: float = 15.0) -> httpx.Client:
+def cliente_http(timeout: httpx.Timeout | float = 15.0) -> httpx.Client:
     return httpx.Client(timeout=timeout)
 
 

@@ -77,6 +77,13 @@ log = logging.getLogger("keni_metricas")
 BASE = "https://app.metricool.com/api"
 NOMBRE = "metricool"
 
+# Timeout del cliente HTTP de Metricool. El agregado mensual de posts de cuentas
+# muy activas (p.ej. YouTube de Claro Sports: ~10k posts/mes) tarda 25-30s en
+# responder; el default de 15s lo cortaba siempre (los reintentos repetían el
+# mismo timeout, así que nunca cuajaban). `connect` se mantiene corto para fallar
+# rápido si la API no responde; `read` es amplio para tolerar esos agregados.
+_TIMEOUT = httpx.Timeout(connect=10.0, read=90.0, write=15.0, pool=15.0)
+
 # Mapeo Plataforma (keni) -> network (Metricool). Metricool usa "twitter" para X.
 _RED_METRICOOL: dict[Plataforma, str] = {
     Plataforma.facebook: "facebook",
@@ -341,7 +348,7 @@ class FuenteMetricol:
         cliente: httpx.Client | None = None,
     ):
         self._marcas = marcas
-        self._cli = cliente or cliente_http()
+        self._cli = cliente or cliente_http(timeout=_TIMEOUT)
         # cache cuenta_id -> set[Plataforma] conectadas (de simpleProfiles); None si la
         # consulta de perfiles falló (entonces no se filtra por conexión: se intenta todo).
         self._conectadas_cache: dict[str, set[Plataforma] | None] = {}
