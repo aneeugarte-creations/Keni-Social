@@ -177,7 +177,7 @@ function PreviaX({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
           </div>
           <TextoRed contenido={contenido} className="mt-0.5 leading-normal" />
           {(imagen || copyIn?.trim()) && (
-            <div className="relative mt-3 aspect-video w-full overflow-hidden rounded-2xl border border-border">
+            <div className="relative mt-3 aspect-[4/5] w-full overflow-hidden rounded-2xl border border-border">
               {imagen ? (
                 <img src={imagen} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -209,7 +209,7 @@ function PreviaX({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
   );
 }
 
-/** Mockup de Instagram (imagen cuadrada 1:1 + caption). */
+/** Mockup de Instagram (imagen 4:5 vertical + caption). */
 function PreviaInstagram({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
   return (
     <div className="mx-auto max-w-sm overflow-hidden rounded-xl border border-border bg-card text-sm">
@@ -221,7 +221,7 @@ function PreviaInstagram({ marca, contenido, copyIn, imagen, limpia }: MockupPro
         <span className="text-[13px] font-semibold">{handleDe(marca).slice(1)}</span>
         {!limpia && <MoreHorizontal className="ml-auto h-4 w-4 text-muted-foreground" />}
       </div>
-      <div className="relative aspect-square w-full overflow-hidden">
+      <div className="relative aspect-[4/5] w-full overflow-hidden">
         {imagen ? (
           <img src={imagen} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -266,8 +266,8 @@ function PreviaFacebook({ marca, contenido, copyIn, imagen, limpia }: MockupProp
         <TextoRed contenido={contenido} className="leading-normal" />
       </div>
       {imagen ? (
-        <div className="relative w-full overflow-hidden">
-          <img src={imagen} alt="" className="max-h-96 w-full object-cover" />
+        <div className="relative aspect-[4/5] w-full overflow-hidden">
+          <img src={imagen} alt="" className="h-full w-full object-cover" />
           <CapaCopyIn texto={copyIn} />
         </div>
       ) : null}
@@ -288,11 +288,11 @@ function PreviaFacebook({ marca, contenido, copyIn, imagen, limpia }: MockupProp
   );
 }
 
-/** Mockup de TikTok (vertical 9:16 + caption sobreimpreso). */
+/** Mockup de TikTok (imagen 4:5 + caption sobreimpreso). */
 function PreviaTikTok({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
   return (
-    <div className="mx-auto w-full max-w-[17rem]">
-      <div className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-border bg-black">
+    <div className="mx-auto w-full max-w-sm">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-black">
         {imagen ? (
           <img src={imagen} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -332,13 +332,13 @@ function PreviaTikTok({ marca, contenido, copyIn, imagen, limpia }: MockupProps)
   );
 }
 
-/** Mockup de YouTube (thumbnail 16:9 + título 2 líneas + canal). */
+/** Mockup de YouTube (thumbnail 4:5 + título 2 líneas + canal). */
 function PreviaYouTube({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
   // En YouTube el "contenido" hace de título: tomamos la primera línea.
   const titulo = contenido.trim().split("\n")[0] || "Título del video";
   return (
     <div className="mx-auto max-w-md text-sm">
-      <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-muted">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-xl border border-border bg-muted">
         {imagen ? (
           <img src={imagen} alt="" className="h-full w-full object-cover" />
         ) : (
