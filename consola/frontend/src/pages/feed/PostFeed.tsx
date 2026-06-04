@@ -30,8 +30,7 @@ import { api, ApiError } from "@/lib/api";
 import { plural } from "@/lib/formato";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
-import { EtiquetaRed } from "@/pages/publicaciones/insignias";
-import { tamanoRed, tiempoRelativo } from "@/pages/publicaciones/meta";
+import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
 import { elegibilidadOK } from "./aprobacion";
@@ -54,7 +53,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
   const yaAprobada = etapa === "aprobada" || etapa === "programada" || etapa === "publicada";
-  const tam = tamanoRed(publicacion.red);
   // Autogenerada por la IA: sin autor humano (las piezas de la tubería —pipeline/rss/radar— no
   // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
   const generadaPorIA = !publicacion.autor_nombre?.trim();
@@ -155,9 +153,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       aria-label="Abrir para editar"
       className="cursor-pointer rounded-xl border border-border bg-background text-left shadow-sm transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · marca · red (un solo logo) · formato · tiempo.
-          El logo/red y el formato NO se repiten en la previa (va en variante limpia, sin su propia
-          cabecera): aquí están una vez y ya. La etapa baja a la fila de acciones. */}
+      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · marca · tiempo. La RED ya va como label sobre la
+          imagen (VistaPreviaRed limpia) y la etapa baja a la fila de acciones, así que aquí NO se
+          repiten ni la red ni el formato. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         {generadaPorIA ? (
           <span
@@ -172,16 +170,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         )}
         <span>·</span>
         <span>{publicacion.marca_nombre}</span>
-        <span>·</span>
-        <EtiquetaRed red={publicacion.red} nombre={publicacion.red_nombre} className="text-xs" />
-        {tam && (
-          <span
-            className="rounded-full border border-border px-2 py-0.5 tabular-nums"
-            title={`Imagen recomendada para ${publicacion.red_nombre}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
-          >
-            {tam.ratio} · {tam.px} px
-          </span>
-        )}
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}

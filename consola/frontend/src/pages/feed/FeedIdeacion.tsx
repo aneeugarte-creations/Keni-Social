@@ -25,7 +25,7 @@
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, Minus, Plus, RefreshCw } from "lucide-react";
+import { Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -56,16 +56,17 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema. Vuelve a intentarlo.";
 }
 
-// --- Tamaño y columnas del feed (preferencia local del usuario, por dispositivo) --- //
+// --- Posts por fila del feed (preferencia local del usuario, por dispositivo) --- //
+// Un solo control: nº de columnas en PC (1-4). Más columnas = posts más pequeños (es a la vez
+// el tamaño y la densidad). NADA de `zoom` (escalaba mal el título vs la foto en multi-columna).
 const COLUMNAS_MIN = 1;
-const COLUMNAS_MAX = 3;
-const ESCALA_MIN = 0.6;
-const ESCALA_MAX = 1.4;
+const COLUMNAS_MAX = 4;
 // Clases estáticas (Tailwind las detecta) por nº de columnas en pantallas anchas (lg+).
 const GRID_LG: Record<number, string> = {
   1: "lg:grid-cols-1",
   2: "lg:grid-cols-2",
   3: "lg:grid-cols-3",
+  4: "lg:grid-cols-4",
 };
 
 /** Lee una preferencia numérica de localStorage, acotada a [min, max]; `defecto` si falta/ inválida. */
@@ -142,21 +143,15 @@ export default function FeedIdeacion() {
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [linea, setLinea] = React.useState(FILTRO_TODOS);
 
-  // Tamaño (escala) y nº de columnas de los posts en PC. Preferencia local, persistida.
+  // Nº de posts por fila en PC (1-4). Preferencia local, persistida.
   const [columnas, setColumnas] = React.useState(() =>
     leerPref("keni_feed_columnas", 2, COLUMNAS_MIN, COLUMNAS_MAX),
-  );
-  const [escala, setEscala] = React.useState(() =>
-    leerPref("keni_feed_escala", 1, ESCALA_MIN, ESCALA_MAX),
   );
   React.useEffect(() => {
     guardarPref("keni_feed_columnas", columnas);
   }, [columnas]);
-  React.useEffect(() => {
-    guardarPref("keni_feed_escala", escala);
-  }, [escala]);
-  const ajustarEscala = (delta: number) =>
-    setEscala((s) => Math.round(Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, s + delta)) * 100) / 100);
+  const ajustarColumnas = (delta: number) =>
+    setColumnas((c) => Math.min(COLUMNAS_MAX, Math.max(COLUMNAS_MIN, c + delta)));
 
   // Catálogo para los selects (redes + líneas editoriales).
   const opcionesQuery = useQuery({
@@ -286,50 +281,30 @@ export default function FeedIdeacion() {
             </SelectContent>
           </Select>
 
-          {/* Control de TAMAÑO y COLUMNAS de los posts (solo PC): nº por fila + escala. Persiste. */}
+          {/* Posts por fila (solo PC): un +/- de 1 a 4. Más columnas = posts más pequeños. Persiste. */}
           <div
             className="hidden items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1 lg:flex"
             role="group"
-            aria-label="Tamaño y columnas del feed"
+            aria-label="Posts por fila"
           >
-            <LayoutGrid className="mr-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            {Array.from({ length: COLUMNAS_MAX }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setColumnas(n)}
-                aria-pressed={columnas === n}
-                title={`${n} ${n === 1 ? "post por fila" : "posts por fila"}`}
-                className={cn(
-                  "h-6 w-6 rounded text-xs tabular-nums transition-colors",
-                  columnas === n
-                    ? "bg-accent font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-accent/50",
-                )}
-              >
-                {n}
-              </button>
-            ))}
-            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+            <span className="px-1 text-xs text-muted-foreground">Por fila</span>
             <button
               type="button"
-              onClick={() => ajustarEscala(-0.1)}
-              disabled={escala <= ESCALA_MIN}
-              title="Posts más pequeños"
-              aria-label="Reducir tamaño"
+              onClick={() => ajustarColumnas(-1)}
+              disabled={columnas <= COLUMNAS_MIN}
+              title="Menos columnas (posts más grandes)"
+              aria-label="Menos columnas"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
-            <span className="w-9 text-center text-xs tabular-nums text-muted-foreground">
-              {Math.round(escala * 100)}%
-            </span>
+            <span className="w-5 text-center text-xs font-medium tabular-nums">{columnas}</span>
             <button
               type="button"
-              onClick={() => ajustarEscala(0.1)}
-              disabled={escala >= ESCALA_MAX}
-              title="Posts más grandes"
-              aria-label="Aumentar tamaño"
+              onClick={() => ajustarColumnas(1)}
+              disabled={columnas >= COLUMNAS_MAX}
+              title="Más columnas (posts más pequeños)"
+              aria-label="Más columnas"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -338,15 +313,14 @@ export default function FeedIdeacion() {
         </div>
       </div>
 
-      {/* Feed: 1 columna = centrado (lectura cómoda); 2-3 = rejilla a lo ancho. `zoom` escala el
-          tamaño de los posts. Ambas cosas las controla el usuario (arriba) y se persisten. */}
+      {/* Feed: 1 columna = centrado (lectura cómoda); 2-4 = rejilla a lo ancho (posts más pequeños
+          cuantas más columnas). Sin `zoom`: el tamaño lo da el ancho de columna, uniforme. */}
       <div
         className={cn(
           columnas === 1
             ? "mx-auto w-full max-w-2xl space-y-4"
             : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
         )}
-        style={escala !== 1 ? { zoom: escala } : undefined}
       >
         {feedQuery.isLoading ? (
           [0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)
