@@ -1,15 +1,13 @@
 """Fuente UNICA de verdad de los LIMITES DE CARACTERES por plataforma.
 
-Antes los limites estaban duplicados en tres sitios sin enlace (#112 / H7):
+Antes los limites estaban duplicados en dos sitios sin enlace (#112 / H7):
   - `redes.py` (backend, dataclass `Red.limite`),
-  - `consola/frontend/src/pages/publicaciones/meta.ts` (dict semilla),
-  - `skills-copy/contexto-editorial/plataformas.md` (prosa de la skill).
+  - `consola/frontend/src/pages/publicaciones/meta.ts` (dict semilla).
 
 Esto los centraliza aqui, en `keni_shared` (H3/E1; antes vivian en la consola y
 keni_metricas no podia importarlos). `redes.py` consume estos valores (no los
-redefine), el frontend los lee por `GET /api/limites` y el guard estatico de
-skills (`skills-copy/evals/test_limites.py`) verifica que `plataformas.md`
-coincide con esta tabla anclando contra esta fuente unica.
+redefine) y el frontend los lee por `GET /api/limites`, todo anclado contra esta
+fuente unica.
 
 `limite` es el TOPE TECNICO DURO de caracteres de la red, o `None` cuando no hay
 un tope practico (Facebook / YouTube descripcion). No es la recomendacion

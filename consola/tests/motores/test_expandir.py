@@ -2,10 +2,9 @@
 """Tests del outpainting generativo expandir.py (OpenRouter).
 
 Pillow real, SIN red: el proveedor (`_PROVEEDOR_EXPANDIR`) se parchea para no llamar
-a ninguna API. No corre en el CI estático de skills (que no instala Pillow); se
-ejecuta en local:
+a ninguna API. Se ejecuta en local (requiere Pillow):
 
-    pytest skills-copy/.claude/skills/estudio-imagen/test_expandir.py
+    pytest consola/tests/motores/test_expandir.py
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import pytest
 pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
 
-# El motor se relocalizo a `keni_consola/motores/estudio_imagen/` (fuera de skills-copy/).
+# El motor vive en `keni_consola/motores/estudio_imagen/`.
 _MOTOR = (
     Path(__file__).resolve().parents[2]
     / "src" / "keni_consola" / "motores" / "estudio_imagen"

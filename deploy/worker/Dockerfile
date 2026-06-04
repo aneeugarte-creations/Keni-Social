@@ -19,7 +19,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     # Mismo estado que el back: secretos.toml (0600), media, etc. cuelgan de /data.
     XDG_CONFIG_HOME=/data \
-    # Descubrimiento + ejecucion de skills: el repo (con skills-copy/) vive en /app.
+    # Descubrimiento + ejecucion de skills: el repo vive en /app.
     KENI_SKILLS_CWD=/app
 
 # curl: script de nodesource. git: lo usan algunas skills. Node 20 + Claude Code CLI:

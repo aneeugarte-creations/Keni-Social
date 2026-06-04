@@ -28,7 +28,7 @@ generacion ya existe; el termometro es una SKILL nueva + su disparador.
 
 Decision: hacerlo end-to-end reutilizando el motor de Skills que ya corre `claude -p`.
 
-- **Skill `termometro-mundial`** (`skills-copy/`): salida tipo documento. Jerarquiza las
+- **Skill `termometro-mundial`**: salida tipo documento. Jerarquiza las
   notas que se le pasan (relevancia internacional + impacto + frescura + diversidad de
   regiones), elige el top 5-8, reparte por region en slides (portada + N slides) y cierra
   con el copy del posteo tropicalizado a MX + auto-verificacion. No inventa: solo trabaja
@@ -52,6 +52,6 @@ Decision: hacerlo end-to-end reutilizando el motor de Skills que ya corre `claud
 - **Validacion con el piloto**: la skill nace en grupo "experimentales"; pasa a "validadas"
   cuando el equipo confirme criterio (regiones, tono del caption, cuantos slides).
 - **Merge a `main` + push**: pendiente de confirmacion (la rama queda lista, CI en verde).
-  _(ya implementado: la skill `skills-copy/.claude/skills/termometro-mundial/`, la pagina
+  _(ya implementado: la skill `termometro-mundial`, la pagina
   `consola/frontend/src/pages/Termometro.tsx` y el backend `consola/src/keni_consola/api/termometro.py`
   estan en `main`.)_

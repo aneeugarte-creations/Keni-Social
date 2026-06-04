@@ -25,7 +25,7 @@ documento prompt (Biblioteca)        fuente (nota | video | audio | url | área)
    └─ lanzar (dominio/generar)            ├─ video/audio: transcribe en LOCAL (whisper.cpp; no sale de la máquina)
         │                                 └─ ↓
         ├─ compone: cuerpo del prompt + línea editorial adjunta (por marca) + contexto + redes
-        ├─ encola un job `claude -p` con cwd NEUTRO (prompt AUTOCONTENIDO; sin `skills-copy/`)
+        ├─ encola un job `claude -p` con cwd NEUTRO (prompt AUTOCONTENIDO)
         ├─ produce: 1 variante por plataforma (con conteo de caracteres) o un documento
         └─ post-procesa: piezas/publicaciones/QA/hashtags, según el `procesar_spec` del job
              └─ veredicto: LISTO PARA APROBAR / qué revisar; queda en el historial

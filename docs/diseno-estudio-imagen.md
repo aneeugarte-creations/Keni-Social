@@ -1,7 +1,7 @@
 # Estudio de Diseño de Imagen (superficie de primera clase)
 
-- **Fecha origen:** 2026-05-31 · **Estado: EN PRODUCCIÓN.** El sistema de skills ya se retiró
-  (`skills-copy/` está vacío); el Estudio es la superficie de imagen vigente.
+- **Fecha origen:** 2026-05-31 · **Estado: EN PRODUCCIÓN.** El Estudio es la superficie de
+  imagen vigente.
 - **Qué es:** el Estudio es una superficie propia de la Consola para crear/editar el arte de cada
   pieza. Su motor vive en `consola/src/keni_consola/motores/estudio_imagen/`
   (`editar.py`, `expandir.py`, `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`,
@@ -19,10 +19,9 @@
   motor estampa con `render_node/` (renderizador Node). `componer`/`set`/`marca_tiene_plantilla`
   (`dominio/estudio_imagen.py:88`) materializan ese spec sobre la foto.
 - **Reemplazó** al documento histórico `docs/estudio-imagen.md` (ya borrado), que describía la
-  arquitectura "enrutador + 2 motores + revisor" cuando vivía como skill. El motor se relocalizó
-  fuera de `skills-copy/` siguiendo el patrón de `verifica-video` (`keni_consola/motores/verifica_video/`
-  + `api/verificaciones.py`): "una skill se vuelve superficie propia con su motor relocalizado y su
-  API de primera clase".
+  arquitectura "enrutador + 2 motores + revisor". El motor sigue el patrón de `verifica-video`
+  (`keni_consola/motores/verifica_video/` + `api/verificaciones.py`): un motor propio con su
+  API de primera clase.
 
 ---
 
@@ -36,7 +35,7 @@
    "modo avanzado" sobre las mismas piezas.
 2. La generación cruda por API vive en `keni_consola/media.py`; las herramientas del motor
    (`editar.py`, `expandir.py`, `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`) viven
-   en `keni_consola/motores/estudio_imagen/`. Nada depende ya de `skills-copy/` (vacío).
+   en `keni_consola/motores/estudio_imagen/`.
 3. El **modelo de datos**: una publicación (`publicacion`) tiene un campo `imagen` (nombre de objeto en
    el almacén media) + `imagen_url`. El arte "pertenece a la pieza" por ese campo. El Estudio produce un
    objeto media y lo asocia a la pieza por ese mismo seam.
@@ -103,7 +102,7 @@ Estas son las capacidades que el camino directo NO da: recortar a formato, compr
 formulario de skill (imagen subida + petición + formato + peso + ajuste)
   → POST /api/skills/ejecutar-archivo   api/skills_generacion_api.py:347
   → guarda la subida en un temporal      _guardar_subida_segura  api/skills_generacion_api.py:123
-  → encola un job claude (cwd = skills-copy/, --add-dir <temporal>)
+  → encola un job claude (cwd = raíz del repo, --add-dir <temporal>)
         generaciones.encolar_job_claude → worker → lanzar_job_claude  generaciones.py:400 / 444
         _argv_claude: claude -p <prompt> stream-json …               generaciones.py:341
         _entorno_skill: exporta la clave de imagen del almacén al     generaciones.py:375
@@ -146,16 +145,16 @@ Puntos clave de 1.B que el Estudio debe **preservar** como capacidades:
 - `api/biblioteca_media.py` (`/api/biblioteca-media`) — cosecha/catálogo. **Se queda.**
 - `EditorImagen.tsx` — sigue funcionando contra `/api/media/generar`. El Estudio es un "modo avanzado"; el editor inline simple no desaparece.
 
-### Relocalizado fuera de `skills-copy/` → `keni_consola/motores/estudio_imagen/` (hecho)
-Patrón idéntico a `motores/verifica_video/` (un `__init__.py` vacío + los scripts del motor, invocados por subproceso desde una API de primera clase). La tabla documenta la **procedencia** de cada motor (el origen ya no existe; `skills-copy/` está vacío). El motor sumó además `retocar.py` (retoque generativo por instrucción), `spec_plantilla.py` y `render_node/` (composición de plantilla de marca), que no estaban en el origen.
+### Motor en `keni_consola/motores/estudio_imagen/` (hecho)
+Patrón idéntico a `motores/verifica_video/` (un `__init__.py` vacío + los scripts del motor, invocados por subproceso desde una API de primera clase). La tabla documenta la **procedencia** de cada motor (el origen ya no existe). El motor sumó además `retocar.py` (retoque generativo por instrucción), `spec_plantilla.py` y `render_node/` (composición de plantilla de marca), que no estaban en el origen.
 
-| Origen (skill, ya borrada) | Destino | Naturaleza |
+| Origen (ya borrado) | Destino | Naturaleza |
 |---|---|---|
-| `skills-copy/.claude/skills/estudio-imagen/editar.py` | `keni_consola/motores/estudio_imagen/editar.py` | Determinista (Pillow): recortar/redimensionar/comprimir/extender/placa |
-| `skills-copy/.claude/skills/estudio-imagen/expandir.py` | `keni_consola/motores/estudio_imagen/expandir.py` | Generativo (outpainting fiel vía OpenRouter) |
-| `skills-copy/.claude/skills/estudio-imagen/generar.py` | `keni_consola/motores/estudio_imagen/generar.py` | Generativo (ilustración/fondo). **Solapa con `media.py`** — ver nota |
-| `skills-copy/.claude/skills/estudio-imagen/test_editar.py`, `test_expandir.py` | `consola/tests/motores/test_editar.py`, `test_expandir.py` | Tests Pillow (proveedor IA mockeado) |
-| `skills-copy/.claude/skills/breaking-express/componer.py` (+ `marcas.json`, assets) | `keni_consola/motores/estudio_imagen/componer.py` (+ assets) | Determinista: logo + pleca + breaking |
+| `estudio-imagen/editar.py` | `keni_consola/motores/estudio_imagen/editar.py` | Determinista (Pillow): recortar/redimensionar/comprimir/extender/placa |
+| `estudio-imagen/expandir.py` | `keni_consola/motores/estudio_imagen/expandir.py` | Generativo (outpainting fiel vía OpenRouter) |
+| `estudio-imagen/generar.py` | `keni_consola/motores/estudio_imagen/generar.py` | Generativo (ilustración/fondo). **Solapa con `media.py`** — ver nota |
+| `estudio-imagen/test_editar.py`, `test_expandir.py` | `consola/tests/motores/test_editar.py`, `test_expandir.py` | Tests Pillow (proveedor IA mockeado) |
+| `breaking-express/componer.py` (+ `marcas.json`, assets) | `keni_consola/motores/estudio_imagen/componer.py` (+ assets) | Determinista: logo + pleca + breaking |
 
 Nota sobre `generar.py` vs `media.py`: ambos llaman a OpenRouter `chat/completions` con `modalities:["image","text"]`. La operación "generar variante" del Estudio pasa por `media.generar_imagen()` (vía `dominio/estudio_imagen.generar_variante`): fuente única de proveedor/clave/modelo/log/anti-SSRF, un solo punto de red mockeable en tests. La dirección de arte de marca se compone desde la Biblioteca (§3.2/§3.6). El script `generar.py` conserva su propia ruta HTTP (`generar_con_openrouter`) y su `ESTILO_MARCA`/`construir_prompt` como CLI de respaldo (modo sin-key → dirección de arte), pero el camino del Estudio no la usa para producir variantes.
 
@@ -239,7 +238,7 @@ La migración descrita por este documento ya se completó. Resumen del estado ac
 
 - **Motor relocalizado** a `keni_consola/motores/estudio_imagen/` (`editar.py`, `expandir.py`,
   `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`, `marcas.json`), con tests Pillow en
-  el CI del back. El origen en `skills-copy/` ya no existe (el sistema de skills se retiró).
+  el CI del back. El origen ya no existe (el sistema de skills se retiró).
 - **API de primera clase** `api/imagenes.py` con `generar/editar/expandir/retocar/componer/set/revisar`
   + `matriz` (ver §3.4).
 - **UI** `frontend/src/pages/Estudio.tsx` (ruta `/estudio`), abrible desde una pieza con

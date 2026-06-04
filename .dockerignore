@@ -1,5 +1,5 @@
 # Contexto de build de las imagenes de deploy/. El contexto es la RAIZ del repo
-# (las imagenes necesitan keni-shared/ + mcp-metricas/ + consola/ + skills-copy/),
+# (las imagenes necesitan keni-shared/ + mcp-metricas/ + consola/),
 # asi que recortamos lo que no debe viajar a las imagenes.
 **/.venv
 .venv-*

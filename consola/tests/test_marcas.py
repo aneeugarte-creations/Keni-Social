@@ -14,18 +14,7 @@ cambio en keni_shared se ve en consola y en keni_metricas sin tocar espejos.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
-
 from keni_consola import marcas
-
-# Raiz del monorepo: consola/tests/test_marcas.py -> parents[2].
-_REPO = Path(__file__).resolve().parents[2]
-_SKILLS = _REPO / "skills-copy"
-_MARCAS_JSON = _SKILLS / ".claude" / "skills" / "breaking-express" / "marcas.json"
-_FICHAS_DIR = _SKILLS / "contexto-editorial" / "marcas"
 
 
 def test_catalogo_unico_sin_duplicados():
@@ -154,31 +143,3 @@ def test_muestra_de_metricas_usa_los_mismos_id_metricas():
     assert IDS_METRICAS_MARCAS == canonicos
     # Las cuentas hermanas de Claro Sports NO son marcas del catalogo.
     assert not (IDS_CUENTAS_HERMANAS & canonicos)
-
-
-def test_marcas_json_de_skills_usa_ids_canonicos():
-    if not _MARCAS_JSON.is_file():
-        pytest.skip("skills-copy no presente (consola fuera del monorepo)")
-    datos = json.loads(_MARCAS_JSON.read_text(encoding="utf-8"))
-    bloque = datos.get("marcas", {})
-    canonicos = set(marcas.ids())
-    # Las claves de marcas.json son un SUBCONJUNTO de los ids canonicos (slug-guion):
-    # breaking-express solo tiene tokens de diseño para algunas marcas, no inventa ids.
-    assert set(bloque) <= canonicos, f"marcas.json tiene ids fuera del catalogo: {set(bloque) - canonicos}"
-    # Y cada `id_metricas` declarado coincide con el del catalogo canonico.
-    for mid, tokens in bloque.items():
-        assert tokens.get("id_metricas") == marcas.id_metricas_de(mid), (
-            f"marcas.json[{mid}].id_metricas divergente del catalogo"
-        )
-
-
-def test_fichas_editoriales_de_skills_cubren_el_catalogo_canonico():
-    if not _FICHAS_DIR.is_dir():
-        pytest.skip("skills-copy no presente (consola fuera del monorepo)")
-    # Hay EXACTAMENTE una ficha por marca canonica, nombrada por su id canonico.
-    nombres = {p.stem for p in _FICHAS_DIR.glob("*.md")}
-    assert nombres == set(marcas.ids()), (
-        f"fichas editoriales no cuadran con el catalogo: {nombres ^ set(marcas.ids())}"
-    )
-    # El golf NO tiene ficha propia (es un sub-vertical de Claro Sports).
-    assert "claro-sports-golf" not in nombres

@@ -15,7 +15,7 @@
 | `files` | `dxflrs/garage` | Object storage S3 (media) | interno |
 
 > El contexto de build de las imágenes propias es la **raíz del repo** (`..`),
-> porque necesitan `keni-shared/ + mcp-metricas/ + consola/ + skills-copy/`.
+> porque necesitan `keni-shared/ + mcp-metricas/ + consola/`.
 
 ---
 

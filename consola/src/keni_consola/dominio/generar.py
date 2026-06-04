@@ -8,7 +8,7 @@ borradores, etc.) llega como `procesar` + `procesar_spec` (kinds de `jobspec`, f
 `dominio.copy`/`dominio.qa_editorial`/`dominio.hashtags`).
 
 Los prompts son AUTOCONTENIDOS: la línea editorial y la entrada van DENTRO del prompt, así
-que `claude` corre con un cwd NEUTRO (`jobspec.CWD_GENERACION`), sin depender de `skills-copy/`.
+que `claude` corre con un cwd NEUTRO (`jobspec.CWD_GENERACION`).
 """
 
 from __future__ import annotations

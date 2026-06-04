@@ -7,9 +7,9 @@ Funciones bajo prueba (PURAS: no tocan red ni disco):
   - _detectar_idioma_unicode(texto)
 
 Ejecutar con:
-  pytest skills-copy/.claude/skills/verifica-video/test_copyright_pais.py -v
+  pytest consola/src/keni_consola/motores/verifica_video/test_copyright_pais.py -v
   # o directamente:
-  python3 skills-copy/.claude/skills/verifica-video/test_copyright_pais.py
+  python3 consola/src/keni_consola/motores/verifica_video/test_copyright_pais.py
 """
 
 from __future__ import annotations

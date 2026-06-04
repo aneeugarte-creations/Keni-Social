@@ -331,8 +331,8 @@ def cwd(spec: dict[str, Any]) -> Path:
 def cwd_generacion() -> Path:
     """Dir writable desde el que corre `claude` para prompts AUTOCONTENIDOS (sin skills).
 
-    No depende de `skills-copy/`: el corpus editorial viaja DENTRO del prompt. Es un dir
-    estable y escribible bajo la config (se crea si falta).
+    El corpus editorial viaja DENTRO del prompt. Es un dir estable y escribible bajo la
+    config (se crea si falta).
     """
     from .. import rutas
 

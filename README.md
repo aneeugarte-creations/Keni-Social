@@ -17,7 +17,7 @@ Componentes principales:
 | [`mcp-tablero/`](mcp-tablero/) | Servidor **MCP** que crea/mueve/lista contenido del tablero de la Consola desde Claude Code (necesita `KENI_CONSOLA_URL`/`KENI_CONSOLA_TOKEN`). | En uso (beta). |
 | [`keni-shared/`](keni-shared/) | **Capa base** común a la Consola y al MCP de métricas: catálogo de marca, límites de plataforma y utilidades canónicas. | En uso. |
 
-> **Nota.** La generación de copy ya **no** usa el antiguo paquete de skills (`skills-copy/`, retirado): el copy y la imagen viven en la **Consola** (Biblioteca de prompts + Estudio de imagen).
+> **Nota.** La generación de copy y la imagen viven en la **Consola** (Biblioteca de prompts + Estudio de imagen).
 
 ## Consola (interfaz)
 

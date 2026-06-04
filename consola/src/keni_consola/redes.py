@@ -9,8 +9,7 @@ Cada red tiene:
   - `limite`  limite DURO de caracteres de la red, o `None` cuando no hay un tope
               tecnico practico (Facebook/YouTube). NO se redefine aqui: viene de
               la fuente unica `limites_plataforma.LIMITES` (#112), de donde tambien
-              la lee el frontend (`GET /api/limites`) y la verifica el guard de
-              skills. Coincide con `skills-copy/contexto-editorial/plataformas.md`.
+              la lee el frontend (`GET /api/limites`).
 
 Sin estado ni I/O: solo datos y funciones puras. El orden de `REDES` es FIJO y se
 respeta en toda la consola (UI, opciones, generacion por red).

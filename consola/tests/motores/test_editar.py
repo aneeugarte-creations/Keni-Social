@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Tests de las operaciones deterministas de editar.py (comprimir + extender).
 
-Usa Pillow de verdad (sin red, sin IA, sin modelo). NO corre en el CI estatico de
-skills-copy (que solo instala pytest); se ejecuta en local, donde Pillow esta
-disponible:
+Usa Pillow de verdad (sin red, sin IA, sin modelo). Se ejecuta en local, donde
+Pillow esta disponible:
 
-    pytest skills-copy/.claude/skills/estudio-imagen/test_editar.py
+    pytest consola/tests/motores/test_editar.py
 
 `importorskip("PIL")` lo salta limpio si faltara Pillow.
 """
@@ -21,7 +20,7 @@ import pytest
 PIL = pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
 
-# El motor se relocalizo a `keni_consola/motores/estudio_imagen/` (fuera de skills-copy/).
+# El motor vive en `keni_consola/motores/estudio_imagen/`.
 _MOTOR = (
     Path(__file__).resolve().parents[2]
     / "src" / "keni_consola" / "motores" / "estudio_imagen"

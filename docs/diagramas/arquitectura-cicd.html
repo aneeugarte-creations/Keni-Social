@@ -43,7 +43,7 @@
 <body>
 <header>
   <div style="background:#fef9c3;color:#713f12;border:1px solid #fde047;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px">
-    <b>[Diagrama desactualizado]</b> El paso de CI <code>skills-copy-estatico</code> (evals de skills) se retiró junto con el sistema de skills; la generación de copy/imagen vive ahora en la Consola (Biblioteca de prompts + Estudio). El CI corre en <b>Woodpecker self-hosted</b> (<code>.woodpecker/</code>), no en GitHub Actions. El resto del diagrama sigue vigente.
+    <b>[Diagrama desactualizado]</b> El antiguo paso de CI de evals estáticas se retiró; la generación de copy/imagen vive ahora en la Consola (Biblioteca de prompts + Estudio). El CI corre en <b>Woodpecker self-hosted</b> (<code>.woodpecker/</code>), no en GitHub Actions. El resto del diagrama sigue vigente.
   </div>
   <h1>keni-social — despliegue y arquitectura</h1>
   <div class="sub">Stack <b>hosted/equipo</b> sobre Docker Compose (<code style="color:#7dd3fc">deploy/</code>) · ADR 0001 / 0002, Fase C</div>
@@ -110,7 +110,7 @@
 
     <!-- job2 -->
     <rect x="747" y="115" width="190" height="125" rx="9" fill="#fff" stroke="#16a34a" stroke-width="1.5"/>
-    <text x="761" y="136" font-size="12" font-weight="700" fill="#166534">skills-copy-estatico</text>
+    <text x="761" y="136" font-size="12" font-weight="700" fill="#166534">evals-estaticas (retirado)</text>
     <text x="761" y="156" font-size="10.5" fill="#475569">Python 3.11 · sin modelo/red</text>
     <text x="761" y="176" font-size="11.5" fill="#334155">evals estáticos:</text>
     <text x="761" y="194" font-size="11" fill="#334155">static · checks · limites</text>
@@ -127,7 +127,7 @@
     <!-- NOT in CI note -->
     <rect x="300" y="262" width="840" height="44" rx="9" fill="#fff7ed" stroke="#fb923c" stroke-width="1.3"/>
     <text x="316" y="282" font-size="12" font-weight="700" fill="#9a3412">✗ NO en CI (gate de máquina):</text>
-    <text x="316" y="298" font-size="11.5" fill="#7c2d12">skills-copy/evals · run.sh → assert_output.py · requiere claude -p (modelo) + whisper local</text>
+    <text x="316" y="298" font-size="11.5" fill="#7c2d12">evals (retirado) · run.sh → assert_output.py · requiere claude -p (modelo) + whisper local</text>
 
     <!-- DIVIDER -->
     <line x1="40" y1="328" x2="1140" y2="328" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="7 6"/>

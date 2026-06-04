@@ -15,7 +15,7 @@ import json
 
 from . import stream
 
-# Id de la skill que hace el QA (vive en skills-copy/.claude/skills/).
+# Id de la skill que hace el QA editorial.
 SKILL_ID = "qa-editorial"
 
 
