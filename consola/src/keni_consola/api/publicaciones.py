@@ -257,11 +257,17 @@ async def actualizar(request: Request) -> Response:
         campos["estado"] = estado
     if "fecha_programada" in datos:
         fecha = datos.get("fecha_programada")
-        if not isinstance(fecha, str):
+        # `null` = limpiar la fecha (la pieza deja de estar programada). El SPA manda null cuando
+        # el estado no es "programado"; tratarlo como "" en vez de rechazarlo (antes daba 400 al
+        # guardar cualquier pieza no programada).
+        if fecha is None:
+            campos["fecha_programada"] = ""
+        elif isinstance(fecha, str):
+            campos["fecha_programada"] = fecha.strip()
+        else:
             return JSONResponse(
-                {"error": "La fecha programada debe ser texto."}, status_code=400
+                {"error": "La fecha programada debe ser texto o nula."}, status_code=400
             )
-        campos["fecha_programada"] = fecha.strip()
     if "imagen" in datos:
         imagen = datos.get("imagen")
         if not isinstance(imagen, str):

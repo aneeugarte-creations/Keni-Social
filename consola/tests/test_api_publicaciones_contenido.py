@@ -83,6 +83,21 @@ def test_placa_oculta_no_bool_400(cliente):
     assert cliente.put(f"/api/publicaciones/{pid}", json={"placa_oculta": "si"}).status_code == 400
 
 
+def test_fecha_programada_null_limpia(cliente):
+    # El SPA manda fecha_programada=null cuando la pieza NO está programada: debe limpiarse, no
+    # dar 400 (regresión: "La fecha programada debe ser texto" bloqueaba guardar cualquier pieza).
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    assert cliente.put(f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-07-01T10:00"}).status_code == 200
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"fecha_programada": None})
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["fecha_programada"] == ""
+
+
+def test_fecha_programada_no_texto_400(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    assert cliente.put(f"/api/publicaciones/{pid}", json={"fecha_programada": 5}).status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Encolar                                                                     #
 # --------------------------------------------------------------------------- #
