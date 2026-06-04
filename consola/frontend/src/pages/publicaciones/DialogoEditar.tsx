@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   History,
-  LayoutTemplate,
   Link2,
   ListChecks,
   Loader2,
@@ -23,6 +22,7 @@ import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
+import type { Documento } from "@/editor/documento";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -360,37 +360,35 @@ export function DialogoEditar({
 
   // Plantillas del estudio por MARCA: como todo es 4:5 y se postea lo mismo a todas las redes, la
   // plantilla la dicta la marca (no la red). Distintas plantillas cubren los tipos de post
-  // (breaking, infografía con logo, cita textual, logo del mundial, sin nada…). Se cargan al abrir
-  // la galería para no pedirlas si no se usan.
+  // (breaking, infografía con logo, cita textual, logo del mundial, sin nada…). Se cargan siempre
+  // (con marca) porque el editor renderiza la plantilla EN VIVO y necesita su documento.
   const plantillasQuery = useQuery({
     queryKey: ["plantillas-diseno", publicacion?.marca],
     queryFn: ({ signal }) => api.plantillasDiseno({ marca: publicacion?.marca }, signal),
-    enabled: galeriaPlantillas && !!publicacion?.marca,
+    enabled: !!publicacion?.marca,
   });
-  const plantillas = plantillasQuery.data?.plantillas ?? [];
+  const plantillas = React.useMemo(
+    () => plantillasQuery.data?.plantillas ?? [],
+    [plantillasQuery.data],
+  );
+  // Plantilla por defecto de la marca: la "Placa de marca" migrada (o la primera que haya).
+  const idPlacaDeMarca =
+    plantillas.find((p) => p.nombre === "Placa de marca")?.id ?? plantillas[0]?.id ?? "";
+  // Plantilla efectiva = la elegida por la pieza, o la de marca por defecto si no eligió ninguna.
+  const idEfectivo = plantillaId || idPlacaDeMarca;
+  // Documento a renderizar en vivo: null en modo "solo foto" (placaOculta) o si no hay plantilla.
+  const documentoSel = React.useMemo(() => {
+    if (placaOculta) return null;
+    const p = plantillas.find((x) => x.id === idEfectivo);
+    return (p?.documento as Documento | undefined) ?? null;
+  }, [placaOculta, plantillas, idEfectivo]);
 
-  // Aplicar una plantilla del estudio: el servidor RE-RENDERIZA con la foto y el copy-in actuales
-  // (los del editor, aún sin guardar) y persiste. Actualizamos la previa al resultado.
-  const aplicarPlantilla = useMutation({
-    mutationFn: (idPlantilla: string) =>
-      api.aplicarPlantillaPublicacion(publicacion!.id, idPlantilla, {
-        foto,
-        copy_in: copyIn,
-        foto_encuadre: serializarEncuadre(encuadre),
-      }),
-    onSuccess: ({ publicacion: p }) => {
-      setImagen(p.imagen ?? "");
-      setImagenUrl(p.imagen_url ?? "");
-      setFoto(p.foto ?? "");
-      setPlantillaId(p.plantilla_diseno_id ?? "");
-      setEncuadre(parsearEncuadre(p.foto_encuadre));
-      setGaleriaPlantillas(false);
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      toast.success("Plantilla aplicada");
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo aplicar la plantilla."),
-  });
+  // Elegir una plantilla de la galería: previa EN VIVO (sin round-trip); se hornea al guardar.
+  const elegirPlantilla = (idPlantilla: string) => {
+    setPlantillaId(idPlantilla);
+    setPlacaOculta(false);
+    setGaleriaPlantillas(false);
+  };
 
   // Cargamos los valores cada vez que se abre con una publicación nueva.
   React.useEffect(() => {
@@ -449,10 +447,11 @@ export function DialogoEditar({
     const firma = JSON.stringify({
       foto, copyIn, placaOculta, plantillaId, encuadre: serializarEncuadre(encuadre),
     });
-    // Piezas de marca SIN plantilla del estudio: hornear el canvas de la placa a un media id. CON
-    // plantilla del estudio la imagen ya es el render del documento (no se hornea encima).
+    // Piezas de marca: el editor renderiza la plantilla (o la foto cruda) EN VIVO en el canvas;
+    // al guardar se hornea a un media id publicable. Solo se re-hornea si cambió la firma de la
+    // imagen (no en cada tecla del caption).
     let imagenFinal = imagen;
-    if (publicacion.marca && !plantillaId && bakeRef.current && firma !== firmaBakeRef.current) {
+    if (publicacion.marca && bakeRef.current && firma !== firmaBakeRef.current) {
       const horneada = await bakeRef.current();
       if (horneada) {
         imagenFinal = horneada;
@@ -632,78 +631,26 @@ export function DialogoEditar({
 
             {publicacion &&
               (publicacion.marca ? (
-                plantillaId ? (
-                  // MODO PLANTILLA DEL ESTUDIO: la imagen ya es el render del documento elegido
-                  // (con tu foto + copy-in). Muestra el resultado y deja cambiar/quitar plantilla.
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        <LayoutTemplate className="h-4 w-4 text-muted-foreground" />
-                        Imagen <span className="font-normal text-muted-foreground">· plantilla del estudio</span>
-                      </span>
-                      <div className="flex gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1.5 px-2 text-xs"
-                          onClick={() => setGaleriaPlantillas(true)}
-                          disabled={aplicarPlantilla.isPending}
-                        >
-                          {aplicarPlantilla.isPending ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <LayoutTemplate className="h-3.5 w-3.5" />
-                          )}
-                          Cambiar plantilla
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setPlantillaId("")}
-                          title="Volver a la placa de marca por defecto y editar la foto"
-                        >
-                          Quitar
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
-                      {imagenUrl ? (
-                        <img src={imagenUrl} alt="" className="max-h-[22rem] w-auto rounded-md" />
-                      ) : (
-                        <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
-                          Aplicando…
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Renderizada con tu foto y tu copy-in. Cambia de plantilla para comparar; «Quitar»
-                      vuelve al editor de placa por defecto.
-                    </p>
-                  </div>
-                ) : (
-                  // MODO EDITOR (placa de marca por defecto): editor INLINE en vivo. El selector de
-                  // plantilla del estudio (por marca) es nativo, en la cabecera del editor.
-                  <EditorPlacaInline
-                    marca={publicacion.marca}
-                    red={publicacion.red}
-                    copyIn={copyIn}
-                    onCopyInCambio={setCopyIn}
-                    foto={foto}
-                    onCambioFoto={setFoto}
-                    imagenFuente={publicacion.imagen_fuente}
-                    placaOculta={placaOculta}
-                    onPlacaOcultaCambio={setPlacaOculta}
-                    encuadre={encuadre}
-                    onEncuadreCambio={setEncuadre}
-                    onAbrirGaleria={() => setGaleriaPlantillas(true)}
-                    registrarBake={(fn) => {
-                      bakeRef.current = fn;
-                    }}
-                  />
-                )
+                // SISTEMA ÚNICO: la plantilla del estudio se renderiza EN VIVO en el lienzo (con tu
+                // foto + reencuadre + titular in-place). El selector (galería por marca) y "solo foto"
+                // son nativos en la cabecera del editor.
+                <EditorPlacaInline
+                  marca={publicacion.marca}
+                  documento={documentoSel}
+                  copyIn={copyIn}
+                  onCopyInCambio={setCopyIn}
+                  foto={foto}
+                  onCambioFoto={setFoto}
+                  imagenFuente={publicacion.imagen_fuente}
+                  sinPlantilla={placaOculta}
+                  onAlternarSinPlantilla={() => setPlacaOculta((v) => !v)}
+                  encuadre={encuadre}
+                  onEncuadreCambio={setEncuadre}
+                  onAbrirGaleria={() => setGaleriaPlantillas(true)}
+                  registrarBake={(fn) => {
+                    bakeRef.current = fn;
+                  }}
+                />
               ) : (
                 // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.
                 <EditorImagen
@@ -882,12 +829,12 @@ export function DialogoEditar({
           onInsertar={(enlace) => setContenido((prev) => agregarEnlace(prev, enlace))}
         />
 
-        {/* Selector de plantilla del estudio (miniaturas) para ESTA marca+red. Al elegir, el
-            servidor re-renderiza la imagen de la pieza con la plantilla y tu foto+copy-in. */}
+        {/* Selector de plantilla del estudio (miniaturas) por MARCA. Al elegir, la previa se
+            actualiza EN VIVO en el lienzo (sin round-trip); se hornea al guardar. */}
         {galeriaPlantillas && (
           <GaleriaPlantillas
             plantillas={plantillas}
-            onCargar={(p) => aplicarPlantilla.mutate(p.id)}
+            onCargar={(p) => elegirPlantilla(p.id)}
             onCerrar={() => setGaleriaPlantillas(false)}
           />
         )}

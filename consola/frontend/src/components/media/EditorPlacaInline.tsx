@@ -1,28 +1,17 @@
 /**
- * Editor de imagen INLINE (estilo WhatsApp/GIMP): un `<canvas>` que compone la placa de marca
- * EN EL NAVEGADOR con el MISMO motor que el servidor (`dibujar.mjs`), en vivo a medida que se
- * teclea el titular. Sin round-trips de "aplicar/quitar marca": la composición es local.
+ * Editor de imagen INLINE: un `<canvas>` que compone la PLANTILLA DEL ESTUDIO de la pieza EN EL
+ * NAVEGADOR, con el MISMO motor que el servidor (`dibujarDocumento`), en vivo. Sistema ÚNICO de
+ * plantillas (la placa de marca legacy se migró a una plantilla del estudio más).
  *
- *  - El titular (`copyIn`) se dibuja sobre la placa al instante (debounced).
- *  - Toggle "Con plantilla / Sin plantilla" (QUITAR LA PLANTILLA): "Sin plantilla" oculta la placa
- *    y, al guardar, se publica SOLO la foto cruda (sin placa ni titular encima). La plantilla es
- *    parte del copy-in; quitarla = publicar la imagen tal cual.
- *  - Origen de la FOTO de fondo: Subir · Biblioteca · IA · Usar imagen original (cada uno fija
- *    un media id en `foto`; la pieza recuerda la foto cruda para re-editar al reabrir).
- *  - Al guardar, el padre llama al "bake" (registrado via `registrarBake`): hornea el canvas a
- *    PNG, lo sube a media y devuelve su id, que se fija como `imagen` (lo publicable).
+ *  - La plantilla (documento de capas) se renderiza con la foto de la pieza metida en su HUECO DE
+ *    FOTO (`es_foto`), el reencuadre aplicado y el copy-in vinculado al titular.
+ *  - Cabecera: quitar plantilla (publicar solo la foto cruda) · elegir plantilla del estudio.
+ *  - Reencuadre: arrastra la foto + zoom dentro del marco 4:5. Titular: clic para reescribir in place.
+ *  - Origen de la FOTO: Subir · Biblioteca · IA · Usar imagen original.
+ *  - Al guardar, el padre llama al "bake" (registrado vía `registrarBake`): hornea el canvas a PNG.
  */
-import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  Crop,
-  ImagePlus,
-  LayoutTemplate,
-  Library,
-  Loader2,
-  Move,
-  Slash,
-  Upload,
-} from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Crop, ImagePlus, LayoutTemplate, Library, Loader2, Move, Slash, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -30,26 +19,40 @@ import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { CapaTexto, Documento } from "@/editor/documento";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
+import { dibujarDocumento } from "@/lib/placa/dibujar.mjs";
+import { capaFotoDoc, capaTitularDoc, mediaIdsDe, prepararDocumento } from "@/lib/placa/docPieza";
 import { ENCUADRE_DEFECTO, normalizarEncuadre, type EncuadreFoto } from "@/lib/placa/encuadre";
 import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
-import { dibujarPlaca, formatoPorRed } from "@/lib/placa/render";
-import type { CapaTexto, FormatoSpec, PlantillaSpec } from "@/lib/specPlantilla";
+import { familiaRealDe } from "@/lib/placa/render";
 import type { Arte } from "@/types";
+
+/** Lienzo por defecto del post de foto (4:5) cuando no hay plantilla (foto cruda). */
+const LIENZO_4_5 = { w: 1080, h: 1350, safe_top: 0, safe_bottom: 0 };
 
 /**
  * Caja (en px de lienzo) que ocupa la capa del titular, para situar el editor in place encima. La
  * capa de texto NO guarda alto (se ajusta al contenido): lo estimamos por nº de líneas e
- * interlineado. Si la capa está anclada "abajo", `y` es su borde inferior y el bloque crece hacia
- * arriba (espejo de `dibujarTexto`).
+ * interlineado. Anclada "abajo", `y` es el borde inferior y el bloque crece hacia arriba.
  */
 function cajaTitularLienzo(c: CapaTexto): { x: number; y: number; w: number; h: number } {
   const interlineado = c.interlineado || 1.14;
   const maxLineas = Math.max(1, c.auto_ajuste?.max_lineas ?? 2);
   const h = Math.round(c.tamano * interlineado * maxLineas);
-  const ancla = (c as { ancla?: string }).ancla;
-  return { x: c.x, y: ancla === "abajo" ? c.y - h : c.y, w: c.w, h };
+  return { x: c.x, y: c.ancla === "abajo" ? c.y - h : c.y, w: c.w, h };
+}
+
+/** Familias (reales) que usa un documento, para precargar solo esas fuentes. */
+function familiasDeDocumento(doc: Documento): string[] {
+  const fr = familiaRealDe(doc.fuentes);
+  const reales = new Set<string>([doc.fuentes.sans, doc.fuentes.condensada]);
+  for (const c of doc.capas) {
+    if (c.tipo === "texto") reales.add(fr(c.familia));
+    else if (c.tipo === "logo" && c.tipo_logo === "wordmark") reales.add(fr(c.wordmark.familia));
+  }
+  return [...reales].filter(Boolean);
 }
 
 function mensajeError(error: unknown): string {
@@ -69,55 +72,44 @@ function cargarImagen(url: string | null): Promise<HTMLImageElement | null> {
   });
 }
 
-/** Familias (reales) que usa un formato, para precargar solo esas fuentes. */
-function familiasDeFormato(spec: PlantillaSpec, fmt: FormatoSpec): string[] {
-  const reales = new Set<string>([spec.fuentes.sans, spec.fuentes.condensada]);
-  for (const t of fmt.textos) {
-    reales.add(t.familia === "sans" ? spec.fuentes.sans : t.familia === "condensada" ? spec.fuentes.condensada : t.familia);
-  }
-  return [...reales].filter(Boolean);
-}
-
 export interface EditorPlacaInlineProps {
   marca: string;
-  red: string;
+  /** Plantilla del estudio elegida (documento de capas). `null` = sin plantilla = foto cruda. */
+  documento: Documento | null;
   /** Titular en vivo (texto DENTRO de la imagen / copy-in de la pieza). */
   copyIn: string;
-  /** Edita el titular: el copy-in es clicable y reescribible IN PLACE sobre la placa. */
+  /** Edita el titular: el copy-in es clicable y reescribible IN PLACE sobre la plantilla. */
   onCopyInCambio?: (valor: string) => void;
-  /** Media id de la FOTO de fondo cruda ("" = sin foto, se muestra el hueco). */
+  /** Media id de la FOTO de la pieza ("" = sin foto). */
   foto: string;
-  /** Notifica un cambio de foto (nuevo media id + url). */
+  /** Notifica un cambio de foto (nuevo media id). */
   onCambioFoto: (id: string) => void;
   /** URL de la imagen original (RSS de marca propia), si la pieza la trae. */
   imagenFuente?: string;
-  /** Estado INICIAL de "quitar plantilla" (la pieza lo persiste). Default: con plantilla. */
-  placaOculta?: boolean;
-  /** Notifica al padre cuando se quita/pone la plantilla, para persistirlo al guardar. */
-  onPlacaOcultaCambio?: (oculta: boolean) => void;
-  /** Reencuadre manual actual de la foto dentro del marco 4:5 (null = sin reencuadre = por defecto). */
+  /** "Sin plantilla": publicar solo la foto cruda (sin la plantilla encima). */
+  sinPlantilla: boolean;
+  /** Alterna "sin plantilla" (icono de plantilla tachada). */
+  onAlternarSinPlantilla: () => void;
+  /** Reencuadre manual actual de la foto dentro del marco 4:5 (null = sin reencuadre). */
   encuadre?: EncuadreFoto | null;
-  /** Notifica un cambio de reencuadre (arrastre/zoom) para persistirlo al guardar. */
+  /** Notifica un cambio de reencuadre (arrastre/zoom). */
   onEncuadreCambio?: (encuadre: EncuadreFoto) => void;
   /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
   onAbrirGaleria?: () => void;
-  /**
-   * Registra (o limpia con null) la función de "bake": el padre la invoca al guardar para
-   * hornear el canvas actual a un media id publicable. Devuelve null si no hay nada que hornear.
-   */
+  /** Registra (o limpia con null) la función de "bake" que hornea el canvas a un media id. */
   registrarBake: (fn: (() => Promise<string | null>) | null) => void;
 }
 
 export function EditorPlacaInline({
   marca,
-  red,
+  documento,
   copyIn,
   onCopyInCambio,
   foto,
   onCambioFoto,
   imagenFuente,
-  placaOculta = false,
-  onPlacaOcultaCambio,
+  sinPlantilla,
+  onAlternarSinPlantilla,
   encuadre = null,
   onEncuadreCambio,
   onAbrirGaleria,
@@ -125,120 +117,110 @@ export function EditorPlacaInline({
 }: EditorPlacaInlineProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  // "Con plantilla" = mostrar la placa. Arranca desde la elección persistida de la pieza.
-  const [mostrarMarca, setMostrarMarca] = React.useState(!placaOculta);
-  const alternarPlantilla = () => {
-    const nuevoMostrar = !mostrarMarca;
-    setMostrarMarca(nuevoMostrar);
-    onPlacaOcultaCambio?.(!nuevoMostrar);
-  };
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
   const [prompt, setPrompt] = React.useState("");
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
   const [fuentesListas, setFuentesListas] = React.useState(false);
 
-  const specQuery = useQuery({
-    queryKey: ["plantilla-spec", marca],
-    queryFn: ({ signal }) => api.specPlantilla(marca, signal),
-    enabled: !!marca,
-  });
-  const spec = specQuery.data?.spec;
-  const formatoNombre = formatoPorRed(red);
-  const fmt = spec?.formatos[formatoNombre];
+  // ¿Hay plantilla activa? (documento presente y NO en modo "solo foto").
+  const activo = !sinPlantilla && !!documento;
+  const lienzo = activo && documento ? documento.formato : LIENZO_4_5;
 
-  // Reencuadre vigente (foco+zoom). `tieneEncuadre` = el humano lo tocó (hay valor persistido o de
-  // sesión): solo entonces PISAMOS el foco de diseño de la placa; sin tocar, se respeta el del spec.
+  // Reencuadre vigente (foco+zoom). `tieneEncuadre` = el humano lo tocó: solo entonces pisamos el
+  // encuadre de diseño del hueco; sin tocar, se respeta el de la plantilla.
   const tieneEncuadre = !!encuadre;
   const enc = encuadre ?? ENCUADRE_DEFECTO;
-  // Ref con el encuadre vivo para los handlers de arrastre (evita closures obsoletas entre renders).
   const encRef = React.useRef(enc);
   encRef.current = enc;
 
-  // Edición IN PLACE del titular: la capa de texto del copy-in es clicable sobre la placa. Solo con
-  // plantilla de marca (en "sin plantilla" no hay titular) y si el padre permite editarlo.
-  const capaTitular = mostrarMarca ? fmt?.textos?.find((t) => t.binding === "copy_in") : undefined;
+  // Edición IN PLACE del titular: la capa de texto del copy-in (si la plantilla la tiene).
+  const capaTitular = activo && documento ? capaTitularDoc(documento) : null;
   const [editandoTitular, setEditandoTitular] = React.useState(false);
   const [cajaTitular, setCajaTitular] = React.useState<
     { left: number; top: number; width: number; height: number } | null
   >(null);
   const titularEditable = !!capaTitular && !!onCopyInCambio;
 
-  // Precarga de fuentes (una vez por formato): sin ellas el ajuste de líneas no cuadra.
+  // Precarga de fuentes del documento (sin ellas el ajuste de líneas no cuadra). Sin plantilla,
+  // no hay texto que dibujar: listo de inmediato.
   React.useEffect(() => {
-    if (!spec || !fmt) return;
+    if (!activo || !documento) {
+      setFuentesListas(true);
+      return;
+    }
     let vivo = true;
-    void cargarFuentesPlaca(familiasDeFormato(spec, fmt)).then(() => {
+    setFuentesListas(false);
+    void cargarFuentesPlaca(familiasDeDocumento(documento)).then(() => {
       if (vivo) setFuentesListas(true);
     });
     return () => {
       vivo = false;
     };
-  }, [spec, fmt]);
+  }, [activo, documento]);
 
-  // Imágenes (foto/logo/fondo) cargadas como Image. Se recargan al cambiar sus fuentes.
-  const [imgs, setImgs] = React.useState<{
-    foto: HTMLImageElement | null;
-    logo: HTMLImageElement | null;
-    fondo: HTMLImageElement | null;
-  }>({ foto: null, logo: null, fondo: null });
-
-  const logoId = fmt?.logo?.media_id || "";
-  const fondoId = fmt?.fondo?.tipo === "imagen" ? fmt.fondo.imagen?.media_id || "" : "";
-  const fotoUrl = foto ? urlMedia(foto) : imagenFuente || "";
-
+  // Imágenes del documento (logos, fondos, fotos de muestra de otras capas) por media id.
+  const [assets, setAssets] = React.useState<Record<string, HTMLImageElement | null>>({});
   React.useEffect(() => {
+    if (!activo || !documento) {
+      setAssets({});
+      return;
+    }
     let vivo = true;
-    void Promise.all([
-      cargarImagen(fotoUrl || null),
-      cargarImagen(logoId ? urlMedia(logoId) : null),
-      cargarImagen(fondoId ? urlMedia(fondoId) : null),
-    ]).then(([f, l, fo]) => {
-      if (vivo) setImgs({ foto: f, logo: l, fondo: fo });
+    const ids = mediaIdsDe(documento);
+    void Promise.all(
+      ids.map((id) => cargarImagen(urlMedia(id)).then((img) => [id, img] as const)),
+    ).then((pares) => {
+      if (vivo) setAssets(Object.fromEntries(pares));
     });
     return () => {
       vivo = false;
     };
-  }, [fotoUrl, logoId, fondoId]);
+  }, [activo, documento]);
+
+  // Foto de la pieza (o la imagen original como respaldo).
+  const fotoUrl = foto ? urlMedia(foto) : imagenFuente || "";
+  const [fotoImg, setFotoImg] = React.useState<HTMLImageElement | null>(null);
+  React.useEffect(() => {
+    let vivo = true;
+    void cargarImagen(fotoUrl || null).then((img) => {
+      if (vivo) setFotoImg(img);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [fotoUrl]);
 
   // --- Render en vivo (debounced) --- //
   const render = React.useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !spec || !fmt) return;
-    const { w, h } = fmt.lienzo;
+    if (!canvas) return;
+    const { w, h } = lienzo;
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
-    if (mostrarMarca) {
-      // Con plantilla: pisamos el encuadre del hueco de foto SOLO si el humano reencuadró, para no
-      // alterar el encaje de diseño de las piezas que nadie tocó.
-      const formato =
-        tieneEncuadre && fmt.foto_slot
-          ? { ...fmt, foto_slot: { ...fmt.foto_slot, foco: enc.foco, zoom: enc.zoom } }
-          : fmt;
-      dibujarPlaca(ctx, {
-        formato,
-        fuentes: spec.fuentes,
+    if (activo && documento) {
+      const doc = prepararDocumento(documento, { foto, encuadre: tieneEncuadre ? enc : null });
+      dibujarDocumento(ctx, {
+        documento: doc,
+        imgs: { ...assets, [foto]: fotoImg },
         // Mientras se edita el titular in place, el canvas NO lo dibuja: lo muestra el overlay.
         bindings: { copy_in: editandoTitular ? "" : copyIn, etiqueta_default: "" },
-        placeholder: !imgs.foto,
-        imgs,
+        familiaReal: familiaRealDe(documento.fuentes),
       });
     } else {
-      // Capa de marca OCULTA: solo la foto (cover con el reencuadre) o un fondo neutro si no hay foto.
+      // Sin plantilla: solo la foto (cover con el reencuadre) o un fondo neutro si no hay foto.
       ctx.fillStyle = "#111315";
       ctx.fillRect(0, 0, w, h);
-      if (imgs.foto) {
-        const iw = imgs.foto.width;
-        const ih = imgs.foto.height;
-        const esc = Math.max(w / iw, h / ih) * enc.zoom;
-        const dw = iw * esc;
-        const dh = ih * esc;
-        ctx.drawImage(imgs.foto, (w - dw) * enc.foco[0], (h - dh) * enc.foco[1], dw, dh);
+      if (fotoImg) {
+        const esc = Math.max(w / fotoImg.width, h / fotoImg.height) * enc.zoom;
+        const dw = fotoImg.width * esc;
+        const dh = fotoImg.height * esc;
+        ctx.drawImage(fotoImg, (w - dw) * enc.foco[0], (h - dh) * enc.foco[1], dw, dh);
       }
     }
-  }, [spec, fmt, copyIn, imgs, mostrarMarca, tieneEncuadre, enc, editandoTitular]);
+  }, [activo, documento, lienzo, assets, fotoImg, foto, copyIn, editandoTitular, enc, tieneEncuadre]);
 
   React.useEffect(() => {
     if (!fuentesListas) return;
@@ -248,26 +230,21 @@ export function EditorPlacaInline({
 
   // --- Bake: hornea el canvas a un media id (lo llama el padre al guardar) --- //
   React.useEffect(() => {
-    if (!spec || !fmt) {
-      registrarBake(null);
-      return;
-    }
     const bake = async (): Promise<string | null> => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
-      // Asegura un render final con el copy_in vigente antes de hornear.
-      render();
+      render(); // render final con el estado vigente antes de hornear
       const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
       if (!blob) return null;
-      const file = new File([blob], "placa.png", { type: "image/png" });
+      const file = new File([blob], "pieza.png", { type: "image/png" });
       const subida = await api.subirMedia(file);
       return subida.id;
     };
     registrarBake(bake);
     return () => registrarBake(null);
-  }, [spec, fmt, render, registrarBake]);
+  }, [render, registrarBake]);
 
-  // --- Origen de la FOTO de fondo --- //
+  // --- Origen de la FOTO --- //
   const subir = useMutation({
     mutationFn: (archivo: File) => api.subirMedia(archivo),
     onSuccess: (d) => onCambioFoto(d.id),
@@ -315,13 +292,15 @@ export function EditorPlacaInline({
     }
   }, [genIA, onCambioFoto]);
 
-  // --- Reencuadre manual: arrastrar para encuadrar + zoom dentro del marco 4:5 --- //
-  // La caja donde vive la foto: el hueco del spec (con plantilla) o el lienzo entero (sin plantilla).
+  // --- Reencuadre manual: arrastrar para encuadrar + zoom dentro del marco --- //
+  // La caja donde vive la foto: el hueco de la plantilla (con plantilla) o el lienzo (sin plantilla).
   const cajaFoto = React.useCallback((): { w: number; h: number } => {
-    if (mostrarMarca && fmt?.foto_slot) return { w: fmt.foto_slot.w, h: fmt.foto_slot.h };
-    if (fmt) return { w: fmt.lienzo.w, h: fmt.lienzo.h };
-    return { w: 0, h: 0 };
-  }, [mostrarMarca, fmt]);
+    if (activo && documento) {
+      const hueco = capaFotoDoc(documento);
+      if (hueco) return { w: hueco.w, h: hueco.h };
+    }
+    return { w: lienzo.w, h: lienzo.h };
+  }, [activo, documento, lienzo]);
   const arrastre = React.useRef<{ x: number; y: number } | null>(null);
   const inicioPunt = React.useRef<{ x: number; y: number } | null>(null);
   const arrastrado = React.useRef(false); // ¿hubo movimiento real? (distingue arrastre de clic)
@@ -330,7 +309,7 @@ export function EditorPlacaInline({
     if (editandoTitular) return;
     inicioPunt.current = { x: e.clientX, y: e.clientY };
     arrastrado.current = false;
-    if (imgs.foto && onEncuadreCambio) {
+    if (fotoImg && onEncuadreCambio) {
       arrastre.current = { x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
     }
@@ -342,17 +321,15 @@ export function EditorPlacaInline({
     }
     const ancla = arrastre.current;
     const canvas = canvasRef.current;
-    if (!ancla || !imgs.foto || !canvas || !onEncuadreCambio) return;
+    if (!ancla || !fotoImg || !canvas || !onEncuadreCambio) return;
     const caja = cajaFoto();
     if (!caja.w) return;
     const rect = canvas.getBoundingClientRect();
     const escalaCss = rect.width ? canvas.width / rect.width : 1; // px de lienzo por px de pantalla
-    const iw = imgs.foto.width;
-    const ih = imgs.foto.height;
     const actual = encRef.current;
-    const esc = Math.max(caja.w / iw, caja.h / ih) * actual.zoom;
-    const sobranteX = iw * esc - caja.w;
-    const sobranteY = ih * esc - caja.h;
+    const esc = Math.max(caja.w / fotoImg.width, caja.h / fotoImg.height) * actual.zoom;
+    const sobranteX = fotoImg.width * esc - caja.w;
+    const sobranteY = fotoImg.height * esc - caja.h;
     const dxLienzo = (e.clientX - ancla.x) * escalaCss;
     const dyLienzo = (e.clientY - ancla.y) * escalaCss;
     // Arrastrar la foto a la derecha muestra su parte izquierda → el foco DISMINUYE.
@@ -374,12 +351,12 @@ export function EditorPlacaInline({
       /* el puntero pudo soltarse fuera del canvas */
     }
     // Un CLIC (sin arrastre) sobre la caja del titular abre la edición in place del copy-in.
-    if (fueArrastre || !titularEditable || !capaTitular || !fmt) return;
+    if (fueArrastre || !titularEditable || !capaTitular) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const cx = ((e.clientX - rect.left) / rect.width) * fmt.lienzo.w;
-    const cy = ((e.clientY - rect.top) / rect.height) * fmt.lienzo.h;
+    const cx = ((e.clientX - rect.left) / rect.width) * lienzo.w;
+    const cy = ((e.clientY - rect.top) / rect.height) * lienzo.h;
     const box = cajaTitularLienzo(capaTitular);
     if (cx >= box.x && cx <= box.x + box.w && cy >= box.y && cy <= box.y + box.h) {
       setEditandoTitular(true);
@@ -392,20 +369,15 @@ export function EditorPlacaInline({
   // Caja en pantalla (px CSS) de la capa del titular, para posicionar el editor in place encima.
   const recalcularCajaTitular = React.useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !capaTitular || !fmt) {
+    if (!canvas || !capaTitular) {
       setCajaTitular(null);
       return;
     }
-    const sx = canvas.clientWidth / fmt.lienzo.w;
-    const sy = canvas.clientHeight / fmt.lienzo.h;
+    const sx = canvas.clientWidth / lienzo.w;
+    const sy = canvas.clientHeight / lienzo.h;
     const box = cajaTitularLienzo(capaTitular);
-    setCajaTitular({
-      left: box.x * sx,
-      top: box.y * sy,
-      width: box.w * sx,
-      height: box.h * sy,
-    });
-  }, [capaTitular, fmt]);
+    setCajaTitular({ left: box.x * sx, top: box.y * sy, width: box.w * sx, height: box.h * sy });
+  }, [capaTitular, lienzo]);
 
   React.useEffect(() => {
     if (!editandoTitular) return;
@@ -424,16 +396,7 @@ export function EditorPlacaInline({
   }
 
   const ocupado = subir.isPending || generar.isPending || generandoIA || usarOriginal.isPending;
-
-  if (specQuery.isError) {
-    // Marca sin plantilla utilizable: el padre debería usar el editor de foto cruda. Por si acaso,
-    // avisamos en vez de romper.
-    return (
-      <p className="text-sm text-muted-foreground">
-        Esta marca no tiene una placa de imagen configurada.
-      </p>
-    );
-  }
+  const hayFoto = !!fotoImg && !!onEncuadreCambio;
 
   return (
     <div className="space-y-2.5">
@@ -441,22 +404,23 @@ export function EditorPlacaInline({
         <span className="flex items-center gap-1.5 text-sm font-medium">
           <ImagePlus className="h-4 w-4 text-muted-foreground" />
           Imagen
+          {sinPlantilla && <span className="font-normal text-muted-foreground">· solo foto</span>}
         </span>
         {/* Selector nativo de plantilla: quitar plantilla (publicar solo la foto) · elegir plantilla
             del estudio (galería por marca). Todo es 4:5, así que la plantilla la dicta la MARCA. */}
         <div className="flex items-center gap-1">
           <Button
             type="button"
-            variant={mostrarMarca ? "outline" : "secondary"}
+            variant={sinPlantilla ? "secondary" : "outline"}
             size="icon"
             className="h-7 w-7"
-            onClick={alternarPlantilla}
+            onClick={onAlternarSinPlantilla}
             title={
-              mostrarMarca
-                ? "Quitar la plantilla: publicar solo la foto, sin placa ni titular encima"
-                : "Plantilla quitada: se publica solo la foto. Toca para volver a la placa de marca"
+              sinPlantilla
+                ? "Solo foto (sin plantilla). Toca para volver a aplicar la plantilla"
+                : "Quitar la plantilla: publicar solo la foto, sin nada encima"
             }
-            aria-pressed={!mostrarMarca}
+            aria-pressed={sinPlantilla}
           >
             <span className="relative inline-flex">
               <LayoutTemplate className="h-3.5 w-3.5" />
@@ -481,7 +445,7 @@ export function EditorPlacaInline({
       {/* Lienzo en vivo: resolución real, escalado por CSS. Arrastrable para reencuadrar la foto;
           el titular es clicable y reescribible in place. */}
       <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
-        {specQuery.isPending || !fuentesListas ? (
+        {!fuentesListas ? (
           <div className="flex h-56 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
@@ -491,8 +455,8 @@ export function EditorPlacaInline({
               ref={canvasRef}
               className="max-h-[22rem] w-auto rounded-md"
               style={{
-                aspectRatio: fmt ? `${fmt.lienzo.w} / ${fmt.lienzo.h}` : undefined,
-                cursor: imgs.foto && onEncuadreCambio ? "move" : "default",
+                aspectRatio: `${lienzo.w} / ${lienzo.h}`,
+                cursor: hayFoto ? "move" : "default",
                 touchAction: "none",
               }}
               onPointerDown={onPointerDownFoto}
@@ -533,7 +497,7 @@ export function EditorPlacaInline({
       )}
 
       {/* Reencuadre 4:5: arrastra la foto en el lienzo + zoom. Solo si hay foto y se puede persistir. */}
-      {imgs.foto && onEncuadreCambio && (
+      {hayFoto && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Move className="h-3.5 w-3.5" />
@@ -558,7 +522,7 @@ export function EditorPlacaInline({
             size="sm"
             className="h-7 px-2 text-xs"
             disabled={enc.foco[0] === 0.5 && enc.foco[1] === 0.5 && enc.zoom === 1}
-            onClick={() => onEncuadreCambio(ENCUADRE_DEFECTO)}
+            onClick={() => onEncuadreCambio?.(ENCUADRE_DEFECTO)}
           >
             Centrar
           </Button>
@@ -574,7 +538,7 @@ export function EditorPlacaInline({
         aria-label="Adjuntar imagen"
       />
 
-      {/* Origen de la foto de fondo. */}
+      {/* Origen de la foto. */}
       <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
         <div className="flex flex-wrap items-center gap-2">
           {imagenFuente && (
