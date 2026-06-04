@@ -11,13 +11,13 @@ import { DialogoImportarCalendario } from "@/pages/publicaciones/DialogoImportar
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
 
 const CABECERA = {
-  titulo: "Calendario",
+  titulo: "Programación",
   descripcion:
     "Las publicaciones programadas en una rejilla mensual. Respeta la marca activa del workspace.",
 };
 
 /**
- * Pestaña "Calendario" del hub Calendario: la rejilla mensual de publicaciones programadas
+ * Pestaña "Programación" del hub Calendario: la rejilla mensual de publicaciones programadas
  * (`GestionPublicaciones` en modo calendario). Permite importar un calendario externo.
  */
 export default function CalendarioContenido() {

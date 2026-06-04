@@ -68,8 +68,8 @@ export const TABS_FEED: ItemTabHub[] = [
 ];
 
 export const TABS_CALENDARIO: ItemTabHub[] = [
+  { ruta: "/operacion/calendario/calendario", etiqueta: "Programación", icono: CalendarDays },
   { ruta: "/operacion/calendario/turnos", etiqueta: "Turnos", icono: CalendarClock },
-  { ruta: "/operacion/calendario/calendario", etiqueta: "Calendario", icono: CalendarDays },
 ];
 
 // Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las

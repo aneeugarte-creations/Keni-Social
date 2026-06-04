@@ -51,7 +51,7 @@ const CATALOGO = {
       rutas_frontend: ["/operacion/feed", "/operacion/calendario"],
       nav: [
         { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
-        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
+        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarDays", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
       ],
     },
   ],
@@ -63,7 +63,7 @@ const CATALOGO = {
       etiqueta: "Operación",
       items: [
         { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "Feed del equipo" },
-        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarClock", descripcion: "Turnos y calendario" },
+        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarDays", descripcion: "Turnos y calendario" },
         { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
       ],
     },

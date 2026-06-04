@@ -116,13 +116,14 @@ export const router = createBrowserRouter([
               { path: "lista", element: <ListaContenido /> },
             ],
           },
-          // Hub Calendario: turnos de cobertura + calendario de publicaciones.
+          // Hub Calendario: Programación (calendario de publicaciones) + Turnos de cobertura.
+          // La 1ª pestaña es Programación, así que el índice del hub aterriza ahí.
           {
             path: "calendario",
             children: [
-              { index: true, element: <Navigate to="turnos" replace /> },
-              { path: "turnos", element: <Rota /> },
+              { index: true, element: <Navigate to="calendario" replace /> },
               { path: "calendario", element: <CalendarioContenido /> },
+              { path: "turnos", element: <Rota /> },
             ],
           },
           // Compat (#cal-feed): el antiguo hub `/operacion/parrilla/*` se separó en

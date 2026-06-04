@@ -93,7 +93,7 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/operacion/revision"] == "ShieldCheck"
     assert iconos["/datos/analiticas"] == "BarChart3"
     assert iconos["/operacion/feed"] == "LayoutGrid"
-    assert iconos["/operacion/calendario"] == "CalendarClock"
+    assert iconos["/operacion/calendario"] == "CalendarDays"
     assert iconos["/datos/actividad"] == "Activity"
 
 

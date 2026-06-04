@@ -65,8 +65,8 @@ orden = 20
 [[nav]]
 ruta = "/operacion/calendario"
 etiqueta = "Calendario"
-icono = "CalendarClock"
-descripcion = "Turnos de cobertura del equipo y calendario de publicaciones programadas."
+icono = "CalendarDays"
+descripcion = "Programación de publicaciones y turnos de cobertura del equipo."
 grupo = "operacion"
 grupo_orden = 10
 orden = 25
