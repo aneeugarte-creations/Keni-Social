@@ -183,7 +183,7 @@ def listado_piezas_publicadas(
 
     Recibe los items del tablero ya enriquecidos con `id`/`titulo`/`marca`/`marca_nombre`
     y sus `plataformas`. Cada elemento de la salida lleva la metadata para enlazar a la
-    pieza en `/parrilla/pendientes` (`contenido_id`) y su rendimiento aplanado. Ordena de
+    pieza en `/operacion/feed/lista` (`contenido_id`) y su rendimiento aplanado. Ordena de
     mayor a menor engagement (las encontradas primero; las "sin datos" al final).
     Best-effort por pieza: un fallo de una no afecta a las demás.
     """

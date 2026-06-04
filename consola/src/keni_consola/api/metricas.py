@@ -684,7 +684,7 @@ async def piezas_rendimiento(request: Request) -> Response:
     Lista las piezas YA PUBLICADAS (las que tienen `id_post_metricool`) con su
     rendimiento leído de Metricool —la MISMA fuente única que alimenta el dashboard y las
     tarjetas del tablero, sin desfase— para la sección "Piezas" de Analíticas. Cada fila
-    enlaza a la pieza en el tablero (`contenido_id` -> `/parrilla/pendientes`).
+    enlaza a la pieza en el tablero (`contenido_id` -> `/operacion/feed/lista`).
 
     `?marca=` (en forma `id_metricas`, como el resto de Analíticas) acota a una marca;
     sin marca, agrega todas. Degradación honesta: las piezas que Metricool aún no tiene

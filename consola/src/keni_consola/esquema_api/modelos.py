@@ -441,11 +441,11 @@ class PiezaRendimiento(TypedDict):
     A diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la
     lista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó
     desde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza
-    a la pieza en el tablero (`/parrilla/pendientes`). `encontrado=False` => Metricool aún
+    a la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún
     no tiene datos (recién publicada): la UI muestra "sin datos todavía", no ceros falsos.
     """
 
-    # contenido_id: id del item del tablero, para enlazar a la pieza en /parrilla/pendientes.
+    # contenido_id: id del item del tablero, para enlazar a la pieza en /operacion/feed/lista.
     contenido_id: str
     plataforma_id: str
     titulo: str

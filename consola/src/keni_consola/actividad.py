@@ -93,11 +93,11 @@ def _metricas_run(metricas: dict[str, Any] | None) -> dict[str, Any]:
 
 # Ruta del SPA donde aterriza el RESULTADO de cada tipo de generacion COMPLETADA. Los
 # resultados no tienen deep-link por id, asi que enlazamos a la superficie que los
-# muestra (el copy/rss cae como borradores en el tablero; la imagen en el estudio; etc.).
+# muestra (el copy/rss cae como borradores en la Lista del Feed; la imagen en el estudio; etc.).
 # Los tipos sin pagina de resultado propia (hashtags/prompt) y los runs no llevan enlace.
 _URL_RESULTADO_POR_TIPO = {
-    "copy": "/operacion/parrilla/pendientes",
-    "rss": "/operacion/parrilla/pendientes",
+    "copy": "/operacion/feed/lista",
+    "rss": "/operacion/feed/lista",
     "imagen": "/contenido/estudio",
     "verificacion": "/operacion/revision/verificacion",
     "qa-editorial": "/operacion/revision/editorial",
