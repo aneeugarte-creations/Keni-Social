@@ -32,7 +32,9 @@ def _doc(**over):
 def test_validar_documento_minimo_aplica_defaults():
     doc = d.validar(_doc())
     assert doc["version"] == d.VERSION
-    assert doc["formato"] == {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96}
+    assert doc["formato"] == {
+        "w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96, "safe_left": 0, "safe_right": 0,
+    }
     assert doc["fondo"]["tipo"] == "color"
     assert doc["capas"] == []
     assert doc["fuentes"] == {"sans": "Barlow", "condensada": "Barlow Condensed"}
@@ -211,7 +213,9 @@ def _plana(**over):
 def test_desde_spec_produce_documento_de_capas():
     spec = sp.spec_por_defecto("unotv", _plana())
     doc = d.desde_spec(spec, "feed")
-    assert doc["formato"] == {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96}
+    assert doc["formato"] == {
+        "w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96, "safe_left": 0, "safe_right": 0,
+    }
     tipos = [c["tipo"] for c in doc["capas"]]
     # foto (imagen), overlay, pleca+titular (texto), logo.
     assert tipos.count("imagen") == 1
