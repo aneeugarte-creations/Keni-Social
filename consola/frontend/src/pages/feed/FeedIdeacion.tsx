@@ -25,7 +25,7 @@
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { LayoutGrid, Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -43,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { FILTRO_TODOS } from "@/pages/publicaciones/Filtros";
 import type { Publicacion } from "@/types";
@@ -53,6 +54,38 @@ function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "Ocurrió un problema. Vuelve a intentarlo.";
+}
+
+// --- Tamaño y columnas del feed (preferencia local del usuario, por dispositivo) --- //
+const COLUMNAS_MIN = 1;
+const COLUMNAS_MAX = 3;
+const ESCALA_MIN = 0.6;
+const ESCALA_MAX = 1.4;
+// Clases estáticas (Tailwind las detecta) por nº de columnas en pantallas anchas (lg+).
+const GRID_LG: Record<number, string> = {
+  1: "lg:grid-cols-1",
+  2: "lg:grid-cols-2",
+  3: "lg:grid-cols-3",
+};
+
+/** Lee una preferencia numérica de localStorage, acotada a [min, max]; `defecto` si falta/ inválida. */
+function leerPref(clave: string, defecto: number, min: number, max: number): number {
+  try {
+    const v = Number(window.localStorage.getItem(clave));
+    if (!Number.isFinite(v) || v <= 0) return defecto;
+    return Math.min(max, Math.max(min, v));
+  } catch {
+    return defecto; // entornos sin localStorage (SSR/tests): usa el valor por defecto
+  }
+}
+
+/** Guarda una preferencia en localStorage de forma tolerante (ignora entornos sin storage). */
+function guardarPref(clave: string, valor: number): void {
+  try {
+    window.localStorage.setItem(clave, String(valor));
+  } catch {
+    /* sin localStorage: la preferencia simplemente no persiste */
+  }
 }
 
 /**
@@ -108,6 +141,22 @@ export default function FeedIdeacion() {
   // Se aplican en SERVIDOR (van en la query); las pestañas siguen filtrando por estado en memoria.
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [linea, setLinea] = React.useState(FILTRO_TODOS);
+
+  // Tamaño (escala) y nº de columnas de los posts en PC. Preferencia local, persistida.
+  const [columnas, setColumnas] = React.useState(() =>
+    leerPref("keni_feed_columnas", 2, COLUMNAS_MIN, COLUMNAS_MAX),
+  );
+  const [escala, setEscala] = React.useState(() =>
+    leerPref("keni_feed_escala", 1, ESCALA_MIN, ESCALA_MAX),
+  );
+  React.useEffect(() => {
+    guardarPref("keni_feed_columnas", columnas);
+  }, [columnas]);
+  React.useEffect(() => {
+    guardarPref("keni_feed_escala", escala);
+  }, [escala]);
+  const ajustarEscala = (delta: number) =>
+    setEscala((s) => Math.round(Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, s + delta)) * 100) / 100);
 
   // Catálogo para los selects (redes + líneas editoriales).
   const opcionesQuery = useQuery({
@@ -236,19 +285,79 @@ export default function FeedIdeacion() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Control de TAMAÑO y COLUMNAS de los posts (solo PC): nº por fila + escala. Persiste. */}
+          <div
+            className="hidden items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1 lg:flex"
+            role="group"
+            aria-label="Tamaño y columnas del feed"
+          >
+            <LayoutGrid className="mr-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            {Array.from({ length: COLUMNAS_MAX }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setColumnas(n)}
+                aria-pressed={columnas === n}
+                title={`${n} ${n === 1 ? "post por fila" : "posts por fila"}`}
+                className={cn(
+                  "h-6 w-6 rounded text-xs tabular-nums transition-colors",
+                  columnas === n
+                    ? "bg-accent font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50",
+                )}
+              >
+                {n}
+              </button>
+            ))}
+            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => ajustarEscala(-0.1)}
+              disabled={escala <= ESCALA_MIN}
+              title="Posts más pequeños"
+              aria-label="Reducir tamaño"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-9 text-center text-xs tabular-nums text-muted-foreground">
+              {Math.round(escala * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => ajustarEscala(0.1)}
+              disabled={escala >= ESCALA_MAX}
+              title="Posts más grandes"
+              aria-label="Aumentar tamaño"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Columna del feed (centrada, lectura cómoda). */}
-      <div className="mx-auto w-full max-w-2xl space-y-4">
+      {/* Feed: 1 columna = centrado (lectura cómoda); 2-3 = rejilla a lo ancho. `zoom` escala el
+          tamaño de los posts. Ambas cosas las controla el usuario (arriba) y se persisten. */}
+      <div
+        className={cn(
+          columnas === 1
+            ? "mx-auto w-full max-w-2xl space-y-4"
+            : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
+        )}
+        style={escala !== 1 ? { zoom: escala } : undefined}
+      >
         {feedQuery.isLoading ? (
           [0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)
         ) : feedQuery.isError ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive">
+          <div className="col-span-full rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive">
             No se pudo cargar el feed. {mensajeError(feedQuery.error)}
           </div>
         ) : piezasVista.length === 0 ? (
-          <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
+          <div className="col-span-full">
+            <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
+          </div>
         ) : (
           piezasVista.map((p) => <PostFeed key={p.id} publicacion={p} />)
         )}
