@@ -445,6 +445,9 @@ def _validar_formato(f: Any) -> dict[str, int]:
         "h": int(f["h"]),
         "safe_top": int(f.get("safe_top", 0)),
         "safe_bottom": int(f.get("safe_bottom", 0)),
+        # Márgenes laterales (encuadre): aditivos y retrocompatibles. Documentos sin ellos => 0.
+        "safe_left": int(f.get("safe_left", 0)),
+        "safe_right": int(f.get("safe_right", 0)),
     }
 
 

@@ -612,6 +612,23 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
           <Campo etiqueta="Ancho"><Num valor={formato.w} onChange={(v) => setFmt({ ...formato, w: Math.max(16, Math.round(v)) })} /></Campo>
           <Campo etiqueta="Alto"><Num valor={formato.h} onChange={(v) => setFmt({ ...formato, h: Math.max(16, Math.round(v)) })} /></Campo>
         </div>
+        {/* MÁRGENES (encuadre): se dibujan como guías en el lienzo y el imán hace snap a ellos. Cada
+            lado se acota a >=0 y < su dimensión. safe_left/right son aditivos (formatos sin ellos = 0). */}
+        <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Márgenes</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Campo etiqueta="Arriba">
+            <Num valor={formato.safe_top} onChange={(v) => setFmt({ ...formato, safe_top: Math.max(0, Math.min(formato.h - 1, Math.round(v))) })} />
+          </Campo>
+          <Campo etiqueta="Abajo">
+            <Num valor={formato.safe_bottom} onChange={(v) => setFmt({ ...formato, safe_bottom: Math.max(0, Math.min(formato.h - 1, Math.round(v))) })} />
+          </Campo>
+          <Campo etiqueta="Izquierda">
+            <Num valor={formato.safe_left ?? 0} onChange={(v) => setFmt({ ...formato, safe_left: Math.max(0, Math.min(formato.w - 1, Math.round(v))) })} />
+          </Campo>
+          <Campo etiqueta="Derecha">
+            <Num valor={formato.safe_right ?? 0} onChange={(v) => setFmt({ ...formato, safe_right: Math.max(0, Math.min(formato.w - 1, Math.round(v))) })} />
+          </Campo>
+        </div>
         <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
         {/* "Transparente" = un color de alfa 0 (#00000000): el render produce PNG con alfa real y el
             editor muestra el tablero de ajedrez a través del lienzo. */}

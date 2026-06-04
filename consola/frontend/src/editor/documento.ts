@@ -212,7 +212,9 @@ export interface Documento {
   version: number;
   marca: string;
   fuentes: { sans: string; condensada: string };
-  formato: { w: number; h: number; safe_top: number; safe_bottom: number };
+  // `safe_left`/`safe_right` (márgenes laterales) son ADITIVOS y opcionales: documentos antiguos
+  // sin ellos => 0. Espejo de `_validar_formato` en `documento.py`.
+  formato: { w: number; h: number; safe_top: number; safe_bottom: number; safe_left?: number; safe_right?: number };
   fondo: Fondo;
   capas: Capa[];
 }
@@ -317,21 +319,32 @@ export function nuevaCapaOverlay(parcial: Partial<CapaOverlay> = {}): CapaOverla
 }
 
 export function documentoVacio(
-  formato: { w: number; h: number; safe_top: number; safe_bottom: number },
+  formato: { w: number; h: number; safe_top: number; safe_bottom: number; safe_left?: number; safe_right?: number },
   marca = "",
 ): Documento {
-  // Un lienzo nuevo nace LIMPIO, VACÍO y TRANSPARENTE: sin capas y con fondo transparente
-  // (`#00000000`), así se ve el tablero de ajedrez en el editor y el PNG exporta con alfa. El HUECO
-  // DE FOTO ya NO se añade por defecto (antes pintaba un placeholder gris a sangre que tapaba todo y
-  // parecía "prediseñado"); para una plantilla se añade una imagen y se marca como hueco desde el
-  // inspector (el guardado de plantilla lo exige y avisa si falta).
+  // Un lienzo nuevo nace LIMPIO y TRANSPARENTE (fondo `#00000000` => se ve el tablero y exporta con
+  // alfa). Trae su HUECO DE FOTO (obligatorio para guardar plantilla) pero OCULTO: así no pinta el
+  // placeholder gris que tapaba todo y parecía "prediseñado". El usuario lo muestra (ojo en el panel
+  // de capas) cuando quiere colocar la foto.
+  const hueco = nuevaCapaImagen("", {
+    id: "foto",
+    x: 0,
+    y: 0,
+    w: formato.w,
+    h: formato.h,
+    z: 0,
+    es_foto: true,
+    bloqueada: true,
+    visible: false,
+    nombre: "Foto",
+  });
   return {
     version: VERSION,
     marca,
     fuentes: { sans: "Barlow", condensada: "Barlow Condensed" },
     formato,
     fondo: { tipo: "color", color: "#00000000" },
-    capas: [],
+    capas: [hueco],
   };
 }
 

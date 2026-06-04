@@ -17,7 +17,9 @@ import {
   Check,
   Copy,
   Crop as CropIcon,
+  Frame,
   Grid3x3,
+  Magnet,
   Maximize,
   Minus,
   Move,
@@ -52,6 +54,51 @@ const ZOOM_MAX = 4;
 // Portapapeles de capas (módulo, para copiar/pegar incluso entre pestañas del workspace). Guarda
 // TODA la selección múltiple, no solo la capa primaria.
 let _portapapeles: Capa[] = [];
+
+// Tamaños de celda de la rejilla ofrecidos en los controles (px del documento). "Fina" por defecto.
+const CELDAS: { px: number; etiqueta: string }[] = [
+  { px: 8, etiqueta: "8" },
+  { px: 16, etiqueta: "16" },
+  { px: 24, etiqueta: "24" },
+  { px: 32, etiqueta: "32" },
+  { px: 48, etiqueta: "48" },
+];
+
+// Preferencias de los toggles de encuadre (imán/rejilla/tamaño/dentro-del-marco) en localStorage.
+// Tolerante: si no hay localStorage o el valor es inválido, cae al default.
+function prefBool(clave: string, def: boolean): boolean {
+  try {
+    const v = localStorage.getItem(clave);
+    return v === null ? def : v === "1";
+  } catch {
+    return def;
+  }
+}
+function prefNum(clave: string, def: number): number {
+  try {
+    const v = localStorage.getItem(clave);
+    const n = v === null ? NaN : Number(v);
+    return Number.isFinite(n) ? n : def;
+  } catch {
+    return def;
+  }
+}
+function guardarPref(clave: string, valor: boolean | number): void {
+  try {
+    localStorage.setItem(clave, typeof valor === "boolean" ? (valor ? "1" : "0") : String(valor));
+  } catch {
+    /* almacenamiento no disponible: las preferencias no se persisten, sin romper. */
+  }
+}
+
+// Acota una posición de un eje para que la caja [pos, pos+tam] quede dentro de [0, total]. Si la
+// caja es MAYOR que el lienzo (tam > total) no se fuerzan negativos absurdos: se permite el rango
+// [total - tam, 0] (la capa puede sobresalir por igual a ambos lados, centrable a mano).
+function clampMarco(pos: number, tam: number, total: number): number {
+  const min = Math.min(0, total - tam);
+  const max = Math.max(0, total - tam);
+  return Math.max(min, Math.min(max, pos));
+}
 
 function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: number; h: number }) {
   const img = useImagen(fondo.tipo === "imagen" ? fondo.imagen?.media_id : null);
@@ -330,9 +377,29 @@ export function Lienzo({
 
   const [zoom, setZoom] = useState(1);
   const escala = baseFit * zoom;
-  // Cuadrícula + snap (12 columnas del ancho). Toggle desde los controles de zoom.
-  const [grid, setGrid] = useState(false);
-  const paso = Math.max(8, Math.round(w / 12));
+  // ENCUADRE — controles independientes (preferencias persistidas en localStorage):
+  //   · imán: ajuste magnético a objetos + bordes/centro del lienzo + márgenes. Por defecto ON
+  //     (antes estaba siempre activo). Apagado => sin snap a objetos/márgenes.
+  //   · grid: rejilla visual + snap a línea de rejilla POR UMBRAL (no redondeo duro; entre líneas
+  //     el movimiento es libre). El imán tiene PRIORIDAD sobre la rejilla.
+  //   · tamCelda: tamaño de celda de la rejilla en px del documento (fina/media/gruesa).
+  //   · dentroMarco: al mover/transformar, acota la caja para que no se salga del lienzo.
+  const [iman, setIman] = useState(() => prefBool("keni.encuadre.iman", true));
+  const [grid, setGrid] = useState(() => prefBool("keni.encuadre.grid", false));
+  const [tamCelda, setTamCelda] = useState(() => prefNum("keni.encuadre.celda", 16));
+  const [dentroMarco, setDentroMarco] = useState(() => prefBool("keni.encuadre.dentro", false));
+  useEffect(() => guardarPref("keni.encuadre.iman", iman), [iman]);
+  useEffect(() => guardarPref("keni.encuadre.grid", grid), [grid]);
+  useEffect(() => guardarPref("keni.encuadre.celda", tamCelda), [tamCelda]);
+  useEffect(() => guardarPref("keni.encuadre.dentro", dentroMarco), [dentroMarco]);
+  // Paso de la rejilla: tamaño de celda configurable (mín. 4px), no w/12.
+  const paso = Math.max(4, Math.round(tamCelda));
+  // Márgenes (encuadre) del formato: lados con default 0 (retrocompat con formatos sin laterales).
+  const safeTop = documento.formato.safe_top || 0;
+  const safeBottom = documento.formato.safe_bottom || 0;
+  const safeLeft = documento.formato.safe_left || 0;
+  const safeRight = documento.formato.safe_right || 0;
+  const hayMargenes = safeTop > 0 || safeBottom > 0 || safeLeft > 0 || safeRight > 0;
 
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -584,23 +651,46 @@ export function Lienzo({
     const capa = documento.capas.find((c) => c.id === nodo.id());
     if (!capa) return;
     const umbral = 6 / escala;
-    const objX: number[] = [0, w / 2, w];
-    const objY: number[] = [0, h / 2, h];
-    for (const c of documento.capas) {
-      if (c.id === capa.id) continue;
-      objX.push(c.x, c.x + c.w / 2, c.x + c.w);
-      objY.push(c.y, c.y + c.h / 2, c.y + c.h);
-    }
-    const x = nodo.x(), y = nodo.y();
-    const bx = [x, x + capa.w / 2, x + capa.w];
-    const by = [y, y + capa.h / 2, y + capa.h];
     let lx: number | null = null, ly: number | null = null;
-    for (let i = 0; i < 3 && lx === null; i++) for (const t of objX) if (Math.abs(bx[i] - t) <= umbral) { nodo.x(x + (t - bx[i])); lx = t; break; }
-    for (let i = 0; i < 3 && ly === null; i++) for (const t of objY) if (Math.abs(by[i] - t) <= umbral) { nodo.y(y + (t - by[i])); ly = t; break; }
-    // Snap a la cuadrícula en los ejes que NINGÚN objeto haya fijado.
+    // IMÁN (si está activo): snap a objetos + bordes/centro del lienzo + 4 líneas de margen. Tiene
+    // PRIORIDAD sobre la rejilla. Apagado => sin guías ni ajuste magnético.
+    if (iman) {
+      const objX: number[] = [0, w / 2, w];
+      const objY: number[] = [0, h / 2, h];
+      // Líneas de margen como objetivos de snap (x = safe_left y w - safe_right; y análogo).
+      if (safeLeft > 0) objX.push(safeLeft);
+      if (safeRight > 0) objX.push(w - safeRight);
+      if (safeTop > 0) objY.push(safeTop);
+      if (safeBottom > 0) objY.push(h - safeBottom);
+      for (const c of documento.capas) {
+        if (c.id === capa.id) continue;
+        objX.push(c.x, c.x + c.w / 2, c.x + c.w);
+        objY.push(c.y, c.y + c.h / 2, c.y + c.h);
+      }
+      const x = nodo.x(), y = nodo.y();
+      const bx = [x, x + capa.w / 2, x + capa.w];
+      const by = [y, y + capa.h / 2, y + capa.h];
+      for (let i = 0; i < 3 && lx === null; i++) for (const t of objX) if (Math.abs(bx[i] - t) <= umbral) { nodo.x(x + (t - bx[i])); lx = t; break; }
+      for (let i = 0; i < 3 && ly === null; i++) for (const t of objY) if (Math.abs(by[i] - t) <= umbral) { nodo.y(y + (t - by[i])); ly = t; break; }
+    }
+    // Snap a la rejilla POR UMBRAL (no redondeo duro): solo cuando el borde superior-izquierdo está
+    // cerca de una línea de rejilla, y en los ejes que el imán NO haya fijado. Entre líneas el
+    // movimiento es libre y no pelea con el imán.
     if (grid) {
-      if (lx === null) nodo.x(Math.round(nodo.x() / paso) * paso);
-      if (ly === null) nodo.y(Math.round(nodo.y() / paso) * paso);
+      if (lx === null) {
+        const linea = Math.round(nodo.x() / paso) * paso;
+        if (Math.abs(nodo.x() - linea) <= umbral) nodo.x(linea);
+      }
+      if (ly === null) {
+        const linea = Math.round(nodo.y() / paso) * paso;
+        if (Math.abs(nodo.y() - linea) <= umbral) nodo.y(linea);
+      }
+    }
+    // MANTENER DENTRO DEL MARCO: acota la caja al lienzo. Si la capa es mayor que el lienzo en un
+    // eje, no se fuerzan negativos absurdos (se permite el rango [w - cw, 0], que queda invertido).
+    if (dentroMarco) {
+      nodo.x(clampMarco(nodo.x(), capa.w, w));
+      nodo.y(clampMarco(nodo.y(), capa.h, h));
     }
     setGuias({ x: lx, y: ly });
   };
@@ -657,6 +747,19 @@ export function Lienzo({
     }
     const nuevas = st.documento.capas;
     st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
+  };
+
+  // Con "Mantener dentro del marco" activo, acota x/y de un cambio (arrastre/transform end) para que
+  // la caja resultante no salga del lienzo. Usa las dimensiones del propio cambio si las trae (p.ej.
+  // tras redimensionar), si no las de la capa. Sin el toggle, devuelve el cambio tal cual.
+  const acotarCambios = (capa: Capa, cambios: Partial<Capa>): Partial<Capa> => {
+    if (!dentroMarco) return cambios;
+    const cw = (cambios as { w?: number }).w ?? capa.w;
+    const ch = (cambios as { h?: number }).h ?? capa.h;
+    const out = { ...cambios } as Partial<Capa> & { x?: number; y?: number };
+    if (typeof out.x === "number") out.x = clampMarco(out.x, cw, w);
+    if (typeof out.y === "number") out.y = clampMarco(out.y, ch, h);
+    return out;
   };
 
   const multi = seleccionMulti.length > 1;
@@ -743,23 +846,31 @@ export function Lienzo({
                   if (add) st.alternar(capa.id);
                   else if (!st.seleccionMulti.includes(capa.id)) st.seleccionar(capa.id);
                 }}
-                onChange={(cambios) => store.getState().actualizar(capa.id, cambios)}
+                onChange={(cambios) => store.getState().actualizar(capa.id, acotarCambios(capa, cambios))}
                 onGesto={() => store.getState().comenzarGesto()}
               />
             ))}
           </Layer>
           <Layer listening={false}>
+            {/* Rejilla FINA con el `paso` configurable (opacidad suave). */}
             {grid &&
-              Array.from({ length: Math.floor(w / paso) }, (_, i) => (
-                <Line key={`gx${i}`} points={[(i + 1) * paso, 0, (i + 1) * paso, h]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.12} />
+              Array.from({ length: Math.max(0, Math.ceil(w / paso) - 1) }, (_, i) => (
+                <Line key={`gx${i}`} points={[(i + 1) * paso, 0, (i + 1) * paso, h]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.1} />
               ))}
             {grid &&
-              Array.from({ length: Math.floor(h / paso) }, (_, i) => (
-                <Line key={`gy${i}`} points={[0, (i + 1) * paso, w, (i + 1) * paso]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.12} />
+              Array.from({ length: Math.max(0, Math.ceil(h / paso) - 1) }, (_, i) => (
+                <Line key={`gy${i}`} points={[0, (i + 1) * paso, w, (i + 1) * paso]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.1} />
               ))}
-            {/* Guías de zona segura: solo con la cuadrícula activa (antes confundían siempre visibles). */}
-            {grid && documento.formato.safe_top > 0 && <Rect x={0} y={documento.formato.safe_top} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
-            {grid && documento.formato.safe_bottom > 0 && <Rect x={0} y={h - documento.formato.safe_bottom} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
+            {/* MÁRGENES (encuadre): 4 líneas de guía. Se muestran cuando hay márgenes definidos (>0) y
+                el imán está activo (para snap visible), o cuando la rejilla está activa. */}
+            {(iman || grid) && hayMargenes && (
+              <>
+                {safeTop > 0 && <Rect x={0} y={safeTop} width={w} height={1 / escala} fill="#22d3ee" opacity={0.45} />}
+                {safeBottom > 0 && <Rect x={0} y={h - safeBottom} width={w} height={1 / escala} fill="#22d3ee" opacity={0.45} />}
+                {safeLeft > 0 && <Rect x={safeLeft} y={0} width={1 / escala} height={h} fill="#22d3ee" opacity={0.45} />}
+                {safeRight > 0 && <Rect x={w - safeRight} y={0} width={1 / escala} height={h} fill="#22d3ee" opacity={0.45} />}
+              </>
+            )}
             {guias.x !== null && <Line points={[guias.x, 0, guias.x, h]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
             {guias.y !== null && <Line points={[0, guias.y, w, guias.y]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
           </Layer>
@@ -850,14 +961,41 @@ export function Lienzo({
         />
       )}
 
-      {/* Controles de zoom. */}
+      {/* Controles de ENCUADRE + zoom. Imán, rejilla (+ tamaño de celda) y "dentro del marco" son
+          toggles INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
       <div className="absolute bottom-2 right-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 shadow">
         <button
-          title="Cuadrícula y ajuste a rejilla"
+          title="Imán: ajustar a objetos, bordes y márgenes"
+          onClick={() => setIman((v) => !v)}
+          className={`rounded p-1 hover:bg-accent ${iman ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+        >
+          <Magnet className="h-3.5 w-3.5" />
+        </button>
+        <button
+          title="Rejilla y ajuste a rejilla"
           onClick={() => setGrid((g) => !g)}
-          className={`rounded p-1 hover:bg-accent ${grid ? "bg-accent text-foreground" : ""}`}
+          className={`rounded p-1 hover:bg-accent ${grid ? "bg-accent text-foreground" : "text-muted-foreground"}`}
         >
           <Grid3x3 className="h-3.5 w-3.5" />
+        </button>
+        {grid && (
+          <select
+            title="Tamaño de celda de la rejilla (px)"
+            value={tamCelda}
+            onChange={(e) => setTamCelda(Number(e.target.value))}
+            className="rounded bg-transparent px-0.5 text-xs tabular-nums outline-none hover:bg-accent"
+          >
+            {CELDAS.map((c) => (
+              <option key={c.px} value={c.px}>{c.etiqueta}px</option>
+            ))}
+          </select>
+        )}
+        <button
+          title="Mantener las capas dentro del marco"
+          onClick={() => setDentroMarco((v) => !v)}
+          className={`rounded p-1 hover:bg-accent ${dentroMarco ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+        >
+          <Frame className="h-3.5 w-3.5" />
         </button>
         <div className="mx-0.5 h-4 w-px bg-border" />
         <button title="Alejar" onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))} className="rounded p-1 hover:bg-accent">
