@@ -337,7 +337,7 @@ export default function EditorPro() {
   const guardando = guardar.isPending || guardarComo.isPending;
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       {/* Barra superior: marca + acciones (guardar / guardar como / pieza) + estado + export. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
         <h1 className="mr-1 text-base font-semibold">Editor</h1>

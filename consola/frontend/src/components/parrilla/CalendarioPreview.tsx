@@ -482,7 +482,7 @@ export function CalendarioPreview({
       {navegador}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 26rem)" }}>
+          <div className="overflow-auto" style={{ maxHeight: "calc(100dvh - 26rem)" }}>
             <div className="min-w-[56rem]">
               {/* Cabecera de días (sticky). */}
               <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">

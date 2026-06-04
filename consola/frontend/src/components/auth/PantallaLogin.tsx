@@ -49,7 +49,7 @@ export function PantallaLogin() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-background px-4">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1.5 text-center">
           <div className="flex justify-center">

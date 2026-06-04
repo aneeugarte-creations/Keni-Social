@@ -348,15 +348,17 @@ export default function Biblioteca() {
   });
 
   return (
-    <div className="flex h-full min-h-0 gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 md:flex-row">
       {/* ───────── Sidebar ───────── */}
-      <aside className="flex w-64 shrink-0 flex-col gap-3">
+      {/* En móvil el explorador se apila arriba (ancho completo) con su lista
+          acotada; en escritorio es una columna fija a la izquierda. */}
+      <aside className="flex w-full shrink-0 flex-col gap-3 md:w-64">
         <Input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
         <Button size="sm" variant="outline" onClick={() => crearMut.mutate("editorial")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Nuevo documento
         </Button>
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border max-md:max-h-[45vh]">
           {docsQuery.isPending ? (
             <div className="space-y-2 p-2">
               <Skeleton className="h-8 w-full" />
@@ -489,11 +491,11 @@ export default function Biblioteca() {
           <>
             {/* Barra mínima: título + estado + Lanzar (prompt) + historial + borrar. La marca y
                 la organización salen de la CARPETA (explorador del lateral); no hay metadatos. */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 value={borrador.titulo}
                 onChange={(e) => editar({ titulo: e.target.value })}
-                className="flex-1 text-base font-medium"
+                className="min-w-[12rem] flex-1 text-base font-medium"
                 placeholder="Título"
               />
               <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>

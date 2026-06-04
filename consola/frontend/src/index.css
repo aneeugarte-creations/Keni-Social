@@ -81,6 +81,29 @@
   * {
     @apply border-border;
   }
+  /*
+    La app es un cascarón de alto fijo (AppShell) que gestiona su propio scroll
+    interno. Bloqueamos el scroll y el rebote del documento para que en móvil un
+    swipe no "arrastre" toda la app fuera de la pantalla ni dispare el pull-to-refresh
+    o el rubber-band de iOS. El scroll real vive en `<main>` (overflow-y-auto).
+    - height:100% + overflow:hidden → el documento nunca se mueve.
+    - overscroll-behavior:none → el scroll no encadena al body (sin rebote).
+    - overflow-x:hidden de respaldo → ningún hijo ancho puede empujar horizontal.
+    - text-size-adjust → evita que iOS infle el texto al rotar.
+  */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    overflow-x: hidden;
+  }
+  #root {
+    height: 100%;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;

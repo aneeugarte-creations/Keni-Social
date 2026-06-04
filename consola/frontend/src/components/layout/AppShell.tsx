@@ -141,7 +141,7 @@ export function AppShell() {
   // la paleta de comandos (⌘K) una sola vez y registra su listener global.
   return (
     <PaletaProvider>
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-dvh w-full overflow-hidden bg-background">
       {/* Sidebar fijo (escritorio). En rail (colapsado) queda estrecho. */}
       <aside className="hidden md:block">
         <Sidebar colapsado={colapsado} onToggleColapsar={alternarColapsado} />
@@ -221,7 +221,7 @@ export function AppShell() {
 
         <main className={cn("flex-1 overflow-y-auto")}>
           {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
-          <div className="w-full px-6 py-6 lg:px-8">
+          <div className="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
             {/* Frontera de error por ruta: aísla un fallo de página (TypeError,
                 chunk lazy de un deploy nuevo) en vez de tumbar toda la app. La
                 `key` por pathname la remonta al navegar, limpiando el estado. */}

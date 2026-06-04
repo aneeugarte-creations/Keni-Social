@@ -1096,7 +1096,7 @@ function Calendario({
             {/* Rejilla principal: 1 cabecera con días + 1 fila por franja viva.
                 `max-h-[calc(100vh-18rem)]` aprovecha el alto disponible con scroll interno
                 si la semana se sale de pantalla; `min-w-[56rem]` mantiene legibilidad. */}
-            <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 18rem)" }}>
+            <div className="overflow-auto" style={{ maxHeight: "calc(100dvh - 18rem)" }}>
               <div className="min-w-[56rem]">
                 {/* Cabecera de días (sticky para que no se pierda al hacer scroll). */}
                 <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">

@@ -7,7 +7,7 @@ import { useSesion } from "@/hooks/sesion-contexto";
 /** Pantalla de carga a pantalla completa mientras se resuelve el `me` inicial. */
 function CargandoSesion() {
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-background text-muted-foreground">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-background text-muted-foreground">
       <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
     </div>
   );
