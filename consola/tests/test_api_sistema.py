@@ -615,3 +615,114 @@ def test_borrar_fallo_red_502(entorno, monkeypatch):
     c = _cli_como("admin")
     r = c.post("/api/sistema/s3/borrar", json={"key": "a.png"}, headers=_ORIGIN)
     assert r.status_code == 502
+
+
+# --------------------------------------------------------------------------- #
+# Borrado en lote (seleccion multiple del explorador)                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_borrar_lote_token_403(entorno):
+    """El token de mantenimiento (no sesion admin) recibe 403."""
+    c = _cli_token()
+    r = c.post("/api/sistema/s3/borrar-lote", json={"keys": ["a.png"]}, headers=_ORIGIN)
+    assert r.status_code == 403
+
+
+def test_borrar_lote_sin_s3_409(entorno):
+    """Sin S3 cableado: 409, NUNCA 500."""
+    c = _cli_como("admin")
+    r = c.post("/api/sistema/s3/borrar-lote", json={"keys": ["a.png"]}, headers=_ORIGIN)
+    assert r.status_code == 409
+
+
+def test_borrar_lote_sin_keys_validas_400(entorno, monkeypatch):
+    """keys=[] o solo invalidas/'carpetas' -> 400 sin tocar S3."""
+    _s3_env(monkeypatch)
+    from keni_consola.api import sistema as api_sistema
+
+    def boom():
+        raise AssertionError("no debe construirse el cliente sin keys validas")
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    c = _cli_como("admin")
+    for keys in ([], ["../secret", "carpeta/", "/abs", ""]):
+        r = c.post("/api/sistema/s3/borrar-lote", json={"keys": keys}, headers=_ORIGIN)
+        assert r.status_code == 400, keys
+    # keys no es lista -> 400.
+    r = c.post("/api/sistema/s3/borrar-lote", json={"keys": "a.png"}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_borrar_lote_ok(entorno, monkeypatch):
+    """delete_objects con las keys validas/deduplicadas -> 200 {borrados, fallidos}."""
+    _s3_env(monkeypatch)
+    llamadas: dict = {}
+
+    class _ClienteFake:
+        def delete_objects(self, **k):
+            llamadas["bucket"] = k["Bucket"]
+            llamadas["objects"] = [o["Key"] for o in k["Delete"]["Objects"]]
+            return {"Deleted": [{"Key": o["Key"]} for o in k["Delete"]["Objects"]]}
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    # Mezcla validas, una duplicada y una "carpeta" (se descarta).
+    r = c.post(
+        "/api/sistema/s3/borrar-lote",
+        json={"keys": ["a.png", "videos/clip.mp4", "a.png", "carpeta/"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["borrados"] == ["a.png", "videos/clip.mp4"]
+    assert cuerpo["fallidos"] == []
+    # Sin duplicados ni carpetas en la llamada a S3.
+    assert llamadas["objects"] == ["a.png", "videos/clip.mp4"]
+    assert llamadas["bucket"] == "keni-media"
+
+
+def test_borrar_lote_errores_parciales(entorno, monkeypatch):
+    """Errors de delete_objects -> en fallidos; el resto en borrados."""
+    _s3_env(monkeypatch)
+
+    class _ClienteFake:
+        def delete_objects(self, **k):
+            return {
+                "Deleted": [{"Key": "ok.png"}],
+                "Errors": [{"Key": "malo.png", "Message": "AccessDenied"}],
+            }
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.post(
+        "/api/sistema/s3/borrar-lote",
+        json={"keys": ["ok.png", "malo.png"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["borrados"] == ["ok.png"]
+    assert cuerpo["fallidos"] == [{"key": "malo.png", "error": "AccessDenied"}]
+
+
+def test_borrar_lote_fallo_red_502(entorno, monkeypatch):
+    """delete_objects que revienta (no por key) -> 502, sin tumbar la pagina."""
+    _s3_env(monkeypatch)
+
+    class _ClienteFake:
+        def delete_objects(self, **k):
+            raise RuntimeError("garage caido")
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.post(
+        "/api/sistema/s3/borrar-lote", json={"keys": ["a.png"]}, headers=_ORIGIN
+    )
+    assert r.status_code == 502

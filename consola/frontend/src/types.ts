@@ -3952,6 +3952,22 @@ export interface RespuestaBorrarS3 {
   key: string;
 }
 
+/** Un objeto que no se pudo borrar en un borrado en masa. */
+export interface FalloBorradoS3 {
+  /** Key del objeto que falló. */
+  key: string;
+  /** Mensaje de error devuelto por el almacenamiento. */
+  error: string;
+}
+
+/** Respuesta de `POST /api/sistema/s3/borrar-lote`. */
+export interface RespuestaBorrarLoteS3 {
+  /** Keys borradas correctamente. */
+  borrados: string[];
+  /** Keys que fallaron, con su motivo. */
+  fallidos: FalloBorradoS3[];
+}
+
 /** Un grupo (valor de un eje) con su rendimiento agregado. */
 export interface GrupoPorEtiqueta {
   /** Valor del eje (p. ej. "reel", "Mundial 2026", "Sin clasificar"). */

@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronRight,
+  ChevronsUpDown,
   Copy,
   Cpu,
   Database,
@@ -19,12 +22,12 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -336,6 +339,38 @@ function esImagen(key: string): boolean {
   return EXT_IMAGEN.has(ext);
 }
 
+/** Columna por la que se ordena la lista de objetos, con su dirección. */
+type ClaveOrden = "nombre" | "tamano" | "modificado";
+interface OrdenS3 {
+  clave: ClaveOrden;
+  dir: "asc" | "desc";
+}
+
+/**
+ * Devuelve una copia ordenada de `objetos`. Sin orden activo respeta el orden del bucket.
+ * Por tamaño/fecha el default es descendente (lo más grande/reciente primero); por nombre,
+ * ascendente. El nulo de `modificado` se va al final en ambas direcciones.
+ */
+function ordenarObjetos(objetos: ObjetoS3[], orden: OrdenS3 | null): ObjetoS3[] {
+  if (!orden) return objetos;
+  const factor = orden.dir === "asc" ? 1 : -1;
+  return [...objetos].sort((a, b) => {
+    if (orden.clave === "tamano") return (a.tamano - b.tamano) * factor;
+    if (orden.clave === "modificado") {
+      // Sin fecha al final, independientemente de la dirección.
+      if (!a.modificado) return 1;
+      if (!b.modificado) return -1;
+      return a.modificado.localeCompare(b.modificado) * factor;
+    }
+    return a.nombre.localeCompare(b.nombre, "es") * factor;
+  });
+}
+
+/** Dirección por defecto al activar una columna: texto asc, tamaño/fecha desc. */
+function dirPorDefecto(clave: ClaveOrden): "asc" | "desc" {
+  return clave === "nombre" ? "asc" : "desc";
+}
+
 /** Copia un texto al portapapeles, con aviso. */
 async function copiarTexto(texto: string): Promise<void> {
   try {
@@ -496,10 +531,53 @@ function PreviewObjeto({
   );
 }
 
+/** Cabecera de columna clicable que alterna el orden de la tabla. */
+function CabeceraOrden({
+  clave,
+  etiqueta,
+  orden,
+  onOrden,
+  alinearDerecha,
+}: {
+  clave: ClaveOrden;
+  etiqueta: string;
+  orden: OrdenS3 | null;
+  onOrden: (o: OrdenS3) => void;
+  alinearDerecha?: boolean;
+}) {
+  const activa = orden?.clave === clave;
+  const Icono = !activa ? ChevronsUpDown : orden.dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onOrden({
+          clave,
+          // Mismo campo: alterna dirección. Campo nuevo: dirección por defecto.
+          dir: activa ? (orden.dir === "asc" ? "desc" : "asc") : dirPorDefecto(clave),
+        })
+      }
+      className={cn(
+        "inline-flex items-center gap-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        activa ? "text-foreground" : "text-muted-foreground",
+        alinearDerecha && "flex-row-reverse",
+      )}
+      aria-label={`Ordenar por ${etiqueta.toLowerCase()}`}
+    >
+      {etiqueta}
+      <Icono className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  );
+}
+
 /** Explorador de carpetas y objetos de un bucket S3/Garage (solo lectura). */
 function SeccionNavegadorS3() {
   const [prefijo, setPrefijo] = React.useState("");
   const [preview, setPreview] = React.useState<ObjetoS3 | null>(null);
+  // Selección para borrado en masa (keys de objetos del nivel actual).
+  const [seleccion, setSeleccion] = React.useState<Set<string>>(new Set());
+  // Orden de la tabla. null = como lo devuelve el bucket (orden natural por key).
+  const [orden, setOrden] = React.useState<OrdenS3 | null>(null);
 
   const query = useQuery({
     queryKey: ["sistema", "s3-objetos", prefijo],
@@ -508,33 +586,57 @@ function SeccionNavegadorS3() {
     staleTime: 30_000,
   });
 
+  // Al cambiar de carpeta, la selección anterior deja de tener sentido: límpiala.
+  React.useEffect(() => {
+    setSeleccion(new Set());
+  }, [prefijo]);
+
   const queryClient = useQueryClient();
+  function invalidarBucket() {
+    // Refresca el listado del nivel y el conteo/uso del bucket.
+    void queryClient.invalidateQueries({ queryKey: ["sistema", "s3-objetos"] });
+    void queryClient.invalidateQueries({ queryKey: ["sistema", "s3"] });
+  }
+
+  // Borrado de UN objeto. Sin confirmación: pulsar borrar borra (decisión de producto).
   const borrar = useMutation({
     mutationFn: (obj: ObjetoS3) => api.borrarObjetoS3(obj.key),
     onSuccess: (_data, obj) => {
       toast.success(`Objeto "${obj.nombre}" borrado.`);
-      // Si el objeto borrado estaba en preview, cierra el lightbox.
+      // Si el objeto borrado estaba en preview o seleccionado, sácalo.
       setPreview((p) => (p?.key === obj.key ? null : p));
-      // Refresca el listado del nivel y el conteo/uso del bucket.
-      void queryClient.invalidateQueries({ queryKey: ["sistema", "s3-objetos"] });
-      void queryClient.invalidateQueries({ queryKey: ["sistema", "s3"] });
+      setSeleccion((s) => {
+        if (!s.has(obj.key)) return s;
+        const sig = new Set(s);
+        sig.delete(obj.key);
+        return sig;
+      });
+      invalidarBucket();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Confirmación destructiva con el diálogo propio de la app.
-  async function pedirBorrar(obj: ObjetoS3) {
-    if (
-      await confirmar({
-        titulo: "Borrar objeto",
-        mensaje: `¿Borrar "${obj.nombre}" del bucket? Esta acción no se puede deshacer.`,
-        destructivo: true,
-        textoConfirmar: "Borrar",
-      })
-    ) {
-      borrar.mutate(obj);
-    }
-  }
+  // Borrado en MASA de los objetos seleccionados.
+  const borrarLote = useMutation({
+    mutationFn: (keys: string[]) => api.borrarObjetosS3(keys),
+    onSuccess: (r) => {
+      const n = r.borrados.length;
+      if (r.fallidos.length === 0) {
+        toast.success(`${n} objeto${n === 1 ? "" : "s"} borrado${n === 1 ? "" : "s"}.`);
+      } else {
+        toast.warning(
+          `${n} borrado${n === 1 ? "" : "s"}, ${r.fallidos.length} no se pudieron borrar.`,
+        );
+      }
+      const borrados = new Set(r.borrados);
+      setPreview((p) => (p && borrados.has(p.key) ? null : p));
+      setSeleccion(new Set());
+      invalidarBucket();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const borrando = borrar.isPending || borrarLote.isPending;
 
   // Si S3 no está configurado, no mostramos esta sección en absoluto:
   // SeccionS3 ya lo avisa. Esperamos a tener datos para decidir.
@@ -579,6 +681,24 @@ function SeccionNavegadorS3() {
   // parezca roto. NO inventamos carpetas; son objetos en la raíz del bucket.
   const bucketPlano = prefijo === "" && carpetas.length === 0 && objetos.length > 0;
 
+  // Orden y selección se aplican solo sobre los objetos (las carpetas no se borran ni pesan).
+  const objetosOrdenados = ordenarObjetos(objetos, orden);
+  const todosSeleccionados =
+    objetos.length > 0 && objetos.every((o) => seleccion.has(o.key));
+  const nSeleccionados = seleccion.size;
+
+  function alternarUno(key: string) {
+    setSeleccion((s) => {
+      const sig = new Set(s);
+      if (sig.has(key)) sig.delete(key);
+      else sig.add(key);
+      return sig;
+    });
+  }
+  function alternarTodos() {
+    setSeleccion(todosSeleccionados ? new Set() : new Set(objetos.map((o) => o.key)));
+  }
+
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
@@ -619,6 +739,39 @@ function SeccionNavegadorS3() {
           <p className="text-sm text-amber-600 dark:text-amber-400">{datos.error}</p>
         )}
 
+        {/* Barra de acciones en masa: aparece al seleccionar objetos. Borra SIN confirmar. */}
+        {nSeleccionados > 0 && (
+          <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2">
+            <span className="text-sm text-muted-foreground">
+              {nSeleccionados} objeto{nSeleccionados === 1 ? "" : "s"} seleccionado
+              {nSeleccionados === 1 ? "" : "s"}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSeleccion(new Set())}
+                disabled={borrando}
+              >
+                Limpiar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={borrando}
+                onClick={() => borrarLote.mutate([...seleccion])}
+              >
+                {borrarLote.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                )}
+                Borrar {nSeleccionados}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Tabla de carpetas y objetos */}
         {!datos.error && !hayContenido ? (
           <p className="text-sm text-muted-foreground">Esta carpeta está vacía.</p>
@@ -626,10 +779,42 @@ function SeccionNavegadorS3() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  {objetos.length > 0 && (
+                    <Checkbox
+                      checked={todosSeleccionados}
+                      onCheckedChange={alternarTodos}
+                      aria-label="Seleccionar todos los objetos"
+                    />
+                  )}
+                </TableHead>
                 <TableHead className="w-16" />
-                <TableHead>Nombre</TableHead>
-                <TableHead className="text-right">Tamaño</TableHead>
-                <TableHead className="hidden text-right sm:table-cell">Modificado</TableHead>
+                <TableHead>
+                  <CabeceraOrden
+                    clave="nombre"
+                    etiqueta="Nombre"
+                    orden={orden}
+                    onOrden={setOrden}
+                  />
+                </TableHead>
+                <TableHead className="text-right">
+                  <CabeceraOrden
+                    clave="tamano"
+                    etiqueta="Tamaño"
+                    orden={orden}
+                    onOrden={setOrden}
+                    alinearDerecha
+                  />
+                </TableHead>
+                <TableHead className="hidden text-right sm:table-cell">
+                  <CabeceraOrden
+                    clave="modificado"
+                    etiqueta="Modificado"
+                    orden={orden}
+                    onOrden={setOrden}
+                    alinearDerecha
+                  />
+                </TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
@@ -645,6 +830,7 @@ function SeccionNavegadorS3() {
                     setPrefijo(partes.length > 0 ? `${partes.join("/")}/` : "");
                   }}
                 >
+                  <TableCell />
                   <TableCell>
                     <div className="flex h-12 w-12 items-center justify-center">
                       <Folder className="h-5 w-5 text-blue-500" aria-hidden="true" />
@@ -667,6 +853,7 @@ function SeccionNavegadorS3() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => setPrefijo(carpeta)}
                   >
+                    <TableCell />
                     <TableCell>
                       <div className="flex h-12 w-12 items-center justify-center">
                         <Folder className="h-5 w-5 text-blue-500" aria-hidden="true" />
@@ -683,14 +870,23 @@ function SeccionNavegadorS3() {
               })}
 
               {/* Objetos del nivel actual */}
-              {objetos.map((obj) => {
+              {objetosOrdenados.map((obj) => {
                 const fechaCorta = obj.modificado ? formatearFecha(obj.modificado) : "—";
+                const seleccionado = seleccion.has(obj.key);
                 return (
                   <TableRow
                     key={obj.key}
-                    className="cursor-pointer hover:bg-muted/50"
+                    data-state={seleccionado ? "selected" : undefined}
+                    className="cursor-pointer hover:bg-muted/50 data-[state=selected]:bg-muted"
                     onClick={() => setPreview(obj)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={seleccionado}
+                        onCheckedChange={() => alternarUno(obj.key)}
+                        aria-label={`Seleccionar ${obj.nombre}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <ThumbnailObjeto objeto={obj} />
                     </TableCell>
@@ -723,11 +919,11 @@ function SeccionNavegadorS3() {
                           variant="ghost"
                           size="sm"
                           aria-label={`Borrar ${obj.nombre}`}
-                          disabled={borrar.isPending}
+                          disabled={borrando}
                           onClick={(e) => {
-                            // No abrir el preview al pulsar borrar.
+                            // No abrir el preview al pulsar borrar. Sin confirmación: borra directo.
                             e.stopPropagation();
-                            pedirBorrar(obj);
+                            borrar.mutate(obj);
                           }}
                         >
                           {borrar.isPending && borrar.variables?.key === obj.key ? (
@@ -752,7 +948,7 @@ function SeccionNavegadorS3() {
       <PreviewObjeto
         objeto={preview}
         onClose={() => setPreview(null)}
-        onBorrar={pedirBorrar}
+        onBorrar={(obj) => borrar.mutate(obj)}
         borrando={borrar.isPending}
       />
     </Card>

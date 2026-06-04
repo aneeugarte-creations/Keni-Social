@@ -28,12 +28,16 @@ Endpoints (bajo `/api/sistema`, CONTRATO con el frontend):
       real del objeto. Por defecto `inline` (previsualizacion: sirve para `<img src=...>` con la
       cookie de sesion); `?descargar=1` fuerza `attachment`. Valida la key (sin `..`). Cap de
       tamano (_MAX_BYTES_OBJETO). 404 si no existe, 409 si S3 no configurado. SOLO lectura.
-  - POST /api/sistema/s3/borrar {key} -> {borrado, key}. UNICA operacion DESTRUCTIVA del
-      panel: borra UN objeto por su key exacta (la que lista el explorador). Valida la key
-      (anti-traversal, sin `..`) y rechaza keys de "carpeta" (terminadas en "/"). Confirma
-      existencia con head_object para dar un 404 honesto antes de borrar (delete_object de S3
-      es idempotente y no distingue). 400 key invalida, 404 inexistente, 409 sin configurar,
-      502 fallo de almacenamiento. El RESTO del panel sigue siendo solo lectura.
+  - POST /api/sistema/s3/borrar {key} -> {borrado, key}. Operacion DESTRUCTIVA: borra UN
+      objeto por su key exacta (la que lista el explorador). Valida la key (anti-traversal,
+      sin `..`) y rechaza keys de "carpeta" (terminadas en "/"). Confirma existencia con
+      head_object para dar un 404 honesto antes de borrar (delete_object de S3 es idempotente
+      y no distingue). 400 key invalida, 404 inexistente, 409 sin configurar, 502 fallo.
+  - POST /api/sistema/s3/borrar-lote {keys:[...]} -> {borrados:[...], fallidos:[{key,error}]}.
+      Operacion DESTRUCTIVA en MASA (seleccion multiple del explorador). Valida y deduplica las
+      keys, descarta invalidas/"carpetas", y usa delete_objects (batch nativo, hasta 1000 por
+      llamada). NO hace head_object por key (prioriza rapidez): no distingue ausentes. 400 sin
+      keys validas, 409 sin configurar, 502 fallo. El RESTO del panel sigue siendo solo lectura.
 
 Implementacion DEFENSIVA: cualquier fallo de psutil/boto3/red se captura y se degrada a un
 campo de error legible; la pagina nunca se cae por una sonda.
@@ -73,6 +77,10 @@ _MAX_BYTES_OBJETO = 100 * 1024 * 1024
 
 # Tamano de chunk al streamear los bytes del objeto al cliente (256 KiB).
 _CHUNK_STREAM = 256 * 1024
+
+# Tope de keys por borrado en masa. delete_objects de S3 admite 1000 por llamada; lo dejamos
+# en 1000 para resolver el lote en UNA sola peticion al almacenamiento.
+_MAX_BORRADO_LOTE = 1000
 
 
 def _es_admin(request: Request) -> bool:
@@ -580,6 +588,86 @@ async def s3_borrar(request: Request) -> Response:
     return JSONResponse({"borrado": True, "key": key})
 
 
+async def s3_borrar_lote(request: Request) -> Response:
+    """POST /api/sistema/s3/borrar-lote {keys:[...]}: borra VARIOS objetos del bucket. Admin.
+
+    Borrado en MASA del explorador (seleccion multiple / seleccionar todo). Valida cada key
+    (anti-traversal, sin `..`, sin "carpetas" terminadas en "/") y descarta las invalidas. Usa
+    `delete_objects` (batch nativo de S3, hasta 1000 keys por llamada): idempotente, no falla
+    por keys ausentes. NO hace head_object por cada una (seria O(n) llamadas): el borrado en
+    masa prioriza rapidez sobre el 404 honesto del borrado individual.
+
+    Devuelve {borrados:[keys], fallidos:[{key, error}]}. Codigos: 400 sin keys validas, 409 S3
+    no configurado, 502 fallo de almacenamiento. Tope de `_MAX_BORRADO_LOTE` keys por peticion.
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+
+    if not config.s3_configurado():
+        return JSONResponse(
+            {"error": "El almacenamiento S3 no está configurado en este servidor."},
+            status_code=409,
+        )
+
+    try:
+        cuerpo = await request.json()
+    except Exception:  # noqa: BLE001 -- cuerpo ausente o no-JSON: sin keys -> 400
+        cuerpo = {}
+    keys_raw = cuerpo.get("keys") if isinstance(cuerpo, dict) else None
+    if not isinstance(keys_raw, list):
+        return JSONResponse({"error": "Se esperaba una lista de keys."}, status_code=400)
+
+    # Normaliza + deduplica + filtra invalidas/carpetas, conservando el orden de llegada.
+    vistas: set[str] = set()
+    keys: list[str] = []
+    for k in keys_raw:
+        ck = str(k).strip()
+        if ck in vistas or not _key_valida(ck) or ck.endswith("/"):
+            continue
+        vistas.add(ck)
+        keys.append(ck)
+
+    if not keys:
+        return JSONResponse({"error": "Ninguna key válida para borrar."}, status_code=400)
+    if len(keys) > _MAX_BORRADO_LOTE:
+        return JSONResponse(
+            {"error": f"Demasiados objetos: máximo {_MAX_BORRADO_LOTE} por borrado en masa."},
+            status_code=400,
+        )
+
+    bucket = config.s3_bucket()
+    borrados: list[str] = []
+    fallidos: list[dict] = []
+    try:
+        cliente = _cliente_s3()
+        # delete_objects acepta hasta 1000 keys; _MAX_BORRADO_LOTE garantiza una sola llamada.
+        resp = cliente.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": k} for k in keys], "Quiet": False},
+        )
+    except Exception as e:  # noqa: BLE001 -- boto3/red: 502, sin tumbar la pagina
+        _logger.warning("No se pudo borrar en lote de S3 (%d keys): %s", len(keys), e)
+        return JSONResponse(
+            {"error": "No se pudo borrar los objetos del almacenamiento."}, status_code=502
+        )
+
+    # S3 devuelve Deleted (ok) y Errors (por key). Pedimos Quiet:False; lo que no salga en
+    # Errors lo damos por borrado (delete_objects es idempotente con keys ausentes).
+    con_error = {str(err.get("Key", "")) for err in (resp.get("Errors") or [])}
+    for err in resp.get("Errors") or []:
+        fallidos.append(
+            {"key": str(err.get("Key", "")), "error": str(err.get("Message", "error"))}
+        )
+    borrados = [k for k in keys if k not in con_error]
+
+    _logger.info(
+        "Borrado en masa S3 por un administrador: %d borrados, %d fallidos.",
+        len(borrados),
+        len(fallidos),
+    )
+    return JSONResponse({"borrados": borrados, "fallidos": fallidos})
+
+
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),
@@ -587,6 +675,7 @@ RUTAS = [
     # que /s3/probar y /s3 para que Starlette las case correctamente.
     Route("/api/sistema/s3/objetos", s3_objetos, methods=["GET"]),
     Route("/api/sistema/s3/objeto", s3_objeto, methods=["GET"]),
+    Route("/api/sistema/s3/borrar-lote", s3_borrar_lote, methods=["POST"]),
     Route("/api/sistema/s3/borrar", s3_borrar, methods=["POST"]),
     Route("/api/sistema/s3/probar", probar_s3, methods=["POST"]),
 ]

@@ -236,6 +236,7 @@ import type {
   RespuestaProbarS3,
   RespuestaS3Objetos,
   RespuestaBorrarS3,
+  RespuestaBorrarLoteS3,
   UsuarioAdmin,
   FiltrosComercial,
   OpcionesComercial,
@@ -583,6 +584,11 @@ export const api = {
     peticion<RespuestaBorrarS3>("/sistema/s3/borrar", {
       metodo: "POST",
       json: { key },
+    }),
+  borrarObjetosS3: (keys: string[]) =>
+    peticion<RespuestaBorrarLoteS3>("/sistema/s3/borrar-lote", {
+      metodo: "POST",
+      json: { keys },
     }),
 
   // --- Config ---
