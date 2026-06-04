@@ -1259,9 +1259,6 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
   const grupos = (data?.grupos ?? []).filter((g) =>
     avanzada ? GRUPOS_AVANZADOS.has(g.id) : !GRUPOS_AVANZADOS.has(g.id),
   );
-  // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
-  if (!isPending && !isError && grupos.length === 0) return null;
-
   const guardar = useMutation({
     mutationFn: (cuerpo: { clave: string; valor?: boolean | number | string }) =>
       api.guardarAjuste(cuerpo),
@@ -1281,6 +1278,10 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
+  // Va DESPUÉS de los hooks (useQuery/useMutation) para no llamarlos condicionalmente.
+  if (!isPending && !isError && grupos.length === 0) return null;
 
   return (
     <TarjetaColapsable
