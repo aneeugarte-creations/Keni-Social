@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import type { ItemRss, RespuestaTermometro } from "@/types";
@@ -239,7 +240,14 @@ function PasosTermometro({ generando, completado }: { generando: boolean; comple
 
 function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   const queryClient = useQueryClient();
-  const marcaInicial = datos.config.marca || datos.marcas[0]?.id || "";
+  // Por defecto la marca activa global (si la cubre el catálogo); si no, la marca
+  // por defecto guardada del termómetro y, en último término, la primera disponible.
+  const { marcaActiva } = useMarcaActiva();
+  const marcaInicial =
+    (marcaActiva && datos.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "") ||
+    datos.config.marca ||
+    datos.marcas[0]?.id ||
+    "";
   const [marca, setMarca] = React.useState(marcaInicial);
   const [numero, setNumero] = React.useState(String(datos.config.numero));
   const [regiones] = React.useState(datos.config.regiones);

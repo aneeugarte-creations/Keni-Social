@@ -15,7 +15,6 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -200,17 +200,19 @@ function Informe({ informe }: { informe: InformeQaEditorial }) {
 }
 
 export default function RevisionEditorial() {
-  const [marca, setMarca] = React.useState("");
+  // La marca la fija el switch global de la barra superior; no hay selector local.
+  // El backend exige `marca` como string, así que "Todas"/sin marca activa va como "".
+  const { marcaActiva } = useMarcaActiva();
+  const marca = marcaActiva ?? "";
   const [plataforma, setPlataforma] = React.useState(SIN_PLATAFORMA);
   const [texto, setTexto] = React.useState("");
   const [contexto, setContexto] = React.useState("");
 
-  // Catálogo para el formulario (marcas, plataformas, si la skill está instalada).
+  // Catálogo para el formulario (plataformas, si la skill está instalada).
   const opcionesQuery = useQuery({
     queryKey: ["qa-editorial", "opciones"],
     queryFn: ({ signal }) => api.qaEditorialOpciones(signal),
   });
-  const marcas = opcionesQuery.data?.marcas ?? [];
   const plataformas = opcionesQuery.data?.plataformas ?? [];
   const skillDisponible = opcionesQuery.data?.skill_disponible ?? true;
 
@@ -264,35 +266,21 @@ export default function RevisionEditorial() {
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="qa-marca">Marca</Label>
-                <SelectorMarca
-                  id="qa-marca"
-                  marcas={marcas}
-                  valor={marca}
-                  onCambio={setMarca}
-                  incluirTodas={false}
-                  placeholder="Elige la marca"
-                  ariaLabel="Marca del copy a revisar"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="qa-plataforma">Plataforma (opcional)</Label>
-                <Select value={plataforma} onValueChange={setPlataforma}>
-                  <SelectTrigger id="qa-plataforma" aria-label="Plataforma del copy">
-                    <SelectValue placeholder="Sin plataforma" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SIN_PLATAFORMA}>Sin plataforma</SelectItem>
-                    {plataformas.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="qa-plataforma">Plataforma (opcional)</Label>
+              <Select value={plataforma} onValueChange={setPlataforma}>
+                <SelectTrigger id="qa-plataforma" aria-label="Plataforma del copy">
+                  <SelectValue placeholder="Sin plataforma" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_PLATAFORMA}>Sin plataforma</SelectItem>
+                  {plataformas.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">

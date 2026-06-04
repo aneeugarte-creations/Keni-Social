@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { appDeRuta, gruposDeApp, hojasDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
+import {
+  MarcaActivaContexto,
+  type ValorMarcaActiva,
+} from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { AppCatalogo, RolUsuario } from "@/types";
 
@@ -145,26 +149,45 @@ function PathActual() {
   return <div data-testid="path">{useLocation().pathname}</div>;
 }
 
+/** Valor mínimo del contexto de marca activa (el Sidebar solo lee `marcaActiva`). */
+function valorMarcaActiva(marcaActiva: string | null): ValorMarcaActiva {
+  return {
+    marcaActiva,
+    marcaPrimaria: marcaActiva,
+    enMarcaPrimaria: true,
+    esMultiMarca: true,
+    puedeTodas: true,
+    marcasParaSwitch: [],
+    nombreActiva: null,
+    cambiarMarca: () => {},
+    volverAPrimaria: () => {},
+  };
+}
+
 /**
  * Render del sidebar con sesión simulada y en una ruta dada. El Sidebar es
  * data-driven (hidrata de `/api/catalogo`) y agrupa la nav por bloques de flujo.
+ * `marcaActiva` (default `null` = "Todas") alimenta el gating por marca del nav.
  */
 function renderSidebar(
   rol: RolUsuario,
   ruta = "/operacion/feed",
   props: { colapsado?: boolean; onToggleColapsar?: () => void } = {},
+  marcaActiva: string | null = null,
 ) {
   stubCatalogo();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <SesionContexto.Provider value={valorSesion(rol)}>
-        <MemoryRouter initialEntries={[ruta]}>
-          <Routes>
-            <Route path="*" element={<Sidebar {...props} />} />
-          </Routes>
-          <PathActual />
-        </MemoryRouter>
+        <MarcaActivaContexto.Provider value={valorMarcaActiva(marcaActiva)}>
+          <MemoryRouter initialEntries={[ruta]}>
+            <Routes>
+              <Route path="*" element={<Sidebar {...props} />} />
+            </Routes>
+            <PathActual />
+          </MemoryRouter>
+        </MarcaActivaContexto.Provider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
@@ -187,6 +210,17 @@ describe("Sidebar · bloques de flujo", () => {
     expect(await screen.findByText("Operación")).toBeInTheDocument();
     expect(screen.getByText("Contenido")).toBeInTheDocument();
     expect(screen.getByText("Datos")).toBeInTheDocument();
+  });
+
+  it("gating por marca: Calendario solo se ve en Claro Sports (y en 'Todas')", async () => {
+    // Otra marca concreta (UnoTV): el hub Calendario NO aparece (separación de contextos).
+    const { unmount } = renderSidebar("editor", "/operacion/feed", {}, "unotv");
+    expect(await screen.findByRole("link", { name: /feed/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /calendario/i })).not.toBeInTheDocument();
+    unmount();
+    // Claro Sports: sí aparece.
+    renderSidebar("editor", "/operacion/feed", {}, "claro-sports");
+    expect(await screen.findByRole("link", { name: /calendario/i })).toBeInTheDocument();
   });
 
   it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {

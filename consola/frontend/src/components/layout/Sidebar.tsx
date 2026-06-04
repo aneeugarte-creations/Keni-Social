@@ -3,8 +3,10 @@ import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
+import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { iconoDe } from "@/components/layout/navegacion";
 import { usePaletaComandos } from "@/hooks/paleta-contexto";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -86,7 +88,16 @@ export function Sidebar({
     staleTime: Infinity,
   });
 
-  const bloques = catalogoQuery.data?.navegacion ?? [];
+  // Gating por marca (multitenant): algunas entradas (p. ej. Calendario, solo Claro Sports)
+  // se ocultan cuando la marca activa del switch global es otra. Se filtran los ítems y se
+  // descartan los bloques que queden vacíos. "Todas" (marcaActiva null, admin) ve todo.
+  const { marcaActiva } = useMarcaActiva();
+  const bloques = (catalogoQuery.data?.navegacion ?? [])
+    .map((bloque) => ({
+      ...bloque,
+      items: bloque.items.filter((item) => rutaVisibleParaMarca(item.ruta, marcaActiva)),
+    }))
+    .filter((bloque) => bloque.items.length > 0);
 
   // ---------- Rail (barra colapsada a solo iconos) ----------
   if (colapsado) {

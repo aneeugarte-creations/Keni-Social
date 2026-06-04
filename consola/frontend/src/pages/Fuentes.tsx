@@ -404,8 +404,13 @@ function AportarManual({
   const ui = APORTAR_UI[tipo];
   const Icono = ui.icono;
 
+  // Por defecto la marca activa global (si la cubre el catálogo); si no hay marca
+  // activa ("Todas"), queda sin preseleccionar. El usuario puede cambiarla.
+  const { marcaActiva } = useMarcaActiva();
   const [texto, setTexto] = React.useState("");
-  const [marca, setMarca] = React.useState("");
+  const [marca, setMarca] = React.useState(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
+  );
   const [generar, setGenerar] = React.useState(true);
   const [redesDef, setRedesDef] = React.useState<Set<string>>(() => new Set());
 
@@ -1310,13 +1315,15 @@ function DialogoGenerar({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { marcaActiva } = useMarcaActiva();
 
-  // Predefine la marca del feed (si la hay y existe en el catálogo) y la
-  // primera marca disponible como respaldo.
+  // Predefine la marca del feed (si la hay y existe en el catálogo); si no, la
+  // marca activa global; y la primera marca disponible como respaldo.
   const marcaInicial = React.useMemo(() => {
     if (marcaDefecto && marcas.some((m) => m.id === marcaDefecto)) return marcaDefecto;
+    if (marcaActiva && marcas.some((m) => m.id === marcaActiva)) return marcaActiva;
     return marcas[0]?.id ?? "";
-  }, [marcaDefecto, marcas]);
+  }, [marcaDefecto, marcaActiva, marcas]);
 
   const [marca, setMarca] = React.useState(marcaInicial);
   const [seleccionadas, setSeleccionadas] = React.useState<Set<string>>(

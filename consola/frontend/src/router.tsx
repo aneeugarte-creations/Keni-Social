@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
+import { GuardCalendario } from "@/components/layout/GuardCalendario";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
 import { Loader2 } from "lucide-react";
 
@@ -117,9 +118,11 @@ export const router = createBrowserRouter([
             ],
           },
           // Hub Calendario: Programación (calendario de publicaciones) + Turnos de cobertura.
-          // La 1ª pestaña es Programación, así que el índice del hub aterriza ahí.
+          // La 1ª pestaña es Programación, así que el índice del hub aterriza ahí. SOLO Claro
+          // Sports (separación de contextos multitenant): el guard redirige al Feed para otra marca.
           {
             path: "calendario",
+            element: <GuardCalendario />,
             children: [
               { index: true, element: <Navigate to="calendario" replace /> },
               { path: "calendario", element: <CalendarioContenido /> },

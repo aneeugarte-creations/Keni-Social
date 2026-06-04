@@ -4,7 +4,29 @@ import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
+import type { UsuarioSesion } from "@/types";
+
 import Termometro from "./Termometro";
+
+/** Sesión mínima para montar el provider de marca activa (editor sin marca → "Todas"). */
+function sesionValor(): ValorSesion {
+  const usuario: UsuarioSesion = {
+    id: "u1",
+    usuario: "ana",
+    rol: "admin",
+    debe_cambiar_password: false,
+    marcas: [],
+  };
+  return {
+    usuario,
+    cargando: false,
+    iniciarSesion: vi.fn(),
+    cerrarSesion: vi.fn(),
+    refrescar: vi.fn(),
+  };
+}
 
 const PAYLOAD_BASE = {
   config: { numero: 8, regiones: "", hora: "07:00", marca: "" },
@@ -45,7 +67,11 @@ function renderConProviders(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <SesionContexto.Provider value={sesionValor()}>
+        <MarcaActivaProvider>
+          <MemoryRouter>{ui}</MemoryRouter>
+        </MarcaActivaProvider>
+      </SesionContexto.Provider>
     </QueryClientProvider>,
   );
 }
