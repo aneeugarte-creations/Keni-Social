@@ -243,6 +243,33 @@ def test_integrar_foto_404(cliente):
     assert r.status_code == 404
 
 
+def test_aplicar_plantilla_persiste_receta_no_hornea(cliente, monkeypatch):
+    """aplicar-plantilla guarda la RECETA (plantilla+foto+encuadre) y deja `imagen` vacío:
+    la composición se renderiza on-demand (`imagen_url` -> /compuesta), no se hornea."""
+    from keni_consola import repos
+    from keni_consola.dominio import estudio_imagen
+
+    # Render de validación mockeado (no Node); su id NO debe persistirse.
+    monkeypatch.setattr(
+        estudio_imagen, "componer_desde_plantilla",
+        lambda *a, **k: {"id": "validacion.png", "url": "/api/media/validacion.png"},
+    )
+    plantilla = repos.crear_plantilla_diseno(
+        marca="unotv", nombre="P", categoria="post", documento="{}", miniatura="",
+    )
+    pid = _crear(cliente, marca="unotv").json()["publicacion"]["id"]
+    r = cliente.post(
+        f"/api/publicaciones/{pid}/aplicar-plantilla",
+        json={"plantilla_id": plantilla["id"], "foto": "f.jpg", "copy_in": "Y"},
+    )
+    assert r.status_code == 200, r.text
+    pub = r.json()["publicacion"]
+    assert pub["imagen"] == ""  # NO se hornea
+    assert pub["plantilla_diseno_id"] == plantilla["id"]
+    assert pub["foto"] == "f.jpg"
+    assert pub["imagen_url"] == f"/api/publicaciones/{pid}/compuesta"
+
+
 def test_actualizar_estado_invalido_400(cliente):
     pid = _crear(cliente).json()["publicacion"]["id"]
     r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "archivado"})

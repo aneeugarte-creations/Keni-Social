@@ -184,7 +184,21 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
         return None
 
     texto = (pub.get("contenido") or "").strip()
-    nombre_imagen = pub.get("imagen") or ""
+    # Imagen publicable: si está horneada (`imagen`) se usa; si no, se RENDERIZA on-demand
+    # desde la receta (placa de marca / plantilla del estudio) y se MATERIALIZA en este momento
+    # (content-addressed, una sola vez) para que Metricool la ingiera por una URL estable
+    # `/api/media/{id}`. Tolerante: si el render falla, se publica sin media (warning), igual
+    # que cuando no hay imagen.
+    from .dominio import estudio_imagen, render_pieza
+
+    try:
+        nombre_imagen = render_pieza.imagen_compuesta_id(pub)
+    except estudio_imagen.EstudioError as exc:
+        _log.warning(
+            "Pieza %r: no se pudo componer la imagen para publicar (%s); se publica sin media.",
+            pub.get("id"), exc,
+        )
+        nombre_imagen = ""
     media: list[MediaRef] = []
 
     url_img = _url_media_publica(nombre_imagen)

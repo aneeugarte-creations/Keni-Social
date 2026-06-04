@@ -75,31 +75,6 @@ def cosechar_imagenes(salida: str) -> list[dict[str, str]]:
 # --------------------------------------------------------------------------- #
 
 
-def _componer_placa_placeholder(marca: str, red: str, copy_in: str) -> str:
-    """Compone la imagen-plantilla (logo + copy_in + pleca, hueco de foto vacío) y devuelve su id.
-
-    Solo para marcas con identidad visual (`unotv`/`claro-sports`); devuelve "" para el resto o
-    si la composición falla. TOLERANTE: cualquier error se traga (la previsualización de la placa
-    es un extra y NUNCA debe romper la creación del borrador). Determinista (Pillow, ~<1s).
-    """
-    from . import estudio_imagen
-
-    if not estudio_imagen.marca_tiene_plantilla(marca):
-        return ""
-    try:
-        resultado = estudio_imagen.componer(
-            "",  # sin foto: placeholder gris "Sube una foto"
-            marca=marca,
-            formato=estudio_imagen.formato_por_red(red),
-            titular=copy_in,
-            etiqueta=None,  # usa la etiqueta_default de la marca
-        )
-    except Exception:  # noqa: BLE001 -- la placa es un extra; nunca rompe la generación de copy
-        return ""
-    nombre = resultado.get("id")
-    return nombre if isinstance(nombre, str) else ""
-
-
 def crear_publicaciones_desde_piezas(
     piezas: list[dict[str, object]],
     *,
@@ -159,8 +134,10 @@ def crear_publicaciones_desde_piezas(
                 copy_in = ""
             # Con imagen ORIGINAL de fuente usamos la descargada a media (asset propio
             # publicable); si la descarga falló, "" y la pieza cae a la URL original. Sin
-            # fuente, auto-compone la placa de marca (logo + copy_in, hueco vacío); "" si no hay.
-            imagen = imagen_descargada if imagen_fuente else _componer_placa_placeholder(marca, red, copy_in)
+            # fuente, NO se hornea placa al crear: la placa de marca se RENDERIZA ON-DEMAND
+            # desde la receta (marca + copy_in) cuando se muestra/publica (ver `render_pieza`).
+            # Así no se duplica un PNG por cada pieza con el mismo logo/pleca y solo cambia el texto.
+            imagen = imagen_descargada if imagen_fuente else ""
             creada: dict[str, object] | None = None
             if contenido_id:
                 # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si

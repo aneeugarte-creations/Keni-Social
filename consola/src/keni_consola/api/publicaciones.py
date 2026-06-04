@@ -577,8 +577,11 @@ async def aplicar_plantilla(request: Request) -> Response:
     foto_encuadre = enc_req if isinstance(enc_req, str) else (pub.get("foto_encuadre") or "")
     foco, zoom = estudio_imagen.parsear_encuadre(foto_encuadre)
 
+    # Render de VALIDACIÓN (síncrono): confirma que la plantilla compone con esta foto/copy_in
+    # antes de fijarla, y de paso calienta la caché content-addressed. NO se persiste su id: la
+    # imagen se RENDERIZA on-demand desde la receta (`/compuesta`), no se hornea en `imagen`.
     try:
-        resultado = estudio_imagen.componer_desde_plantilla(
+        estudio_imagen.componer_desde_plantilla(
             plantilla.get("documento") or "{}",
             copy_in=copy_in,
             foto=foto,
@@ -591,7 +594,8 @@ async def aplicar_plantilla(request: Request) -> Response:
     actualizada = repos.actualizar_publicacion(
         publicacion_id,
         {
-            "imagen": resultado["id"],
+            # `imagen` vacío: la composición se deriva de la receta y se sirve por `/compuesta`.
+            "imagen": "",
             "plantilla_diseno_id": plantilla_id,
             "foto": foto,
             "foto_encuadre": foto_encuadre,

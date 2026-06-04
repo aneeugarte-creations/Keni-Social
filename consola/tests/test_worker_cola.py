@@ -37,18 +37,9 @@ _LANZAR_CLAUDE_REAL = generaciones.lanzar_job_claude
 _ENCOLAR_REAL = generaciones.encolar_job_claude
 
 
-@pytest.fixture(autouse=True)
-def _placa_stub(monkeypatch):
-    """Por defecto, el compositor de placa devuelve un id fake: el post-procesado de copy NO
-    lanza Pillow/subprocess real en estos tests (determinismo/velocidad). Los tests que
-    verifican la composición lo re-mockean en su cuerpo (monkeypatch posterior gana)."""
-    from keni_consola.dominio import estudio_imagen
-
-    monkeypatch.setattr(
-        estudio_imagen,
-        "componer",
-        lambda imagen, **k: {"id": "placa-stub.png", "url": "/api/media/placa-stub.png"},
-    )
+# NOTA: el post-procesado de copy YA NO compone una placa al crear (render on-demand): la
+# imagen se deriva de la receta y se sirve por `/compuesta`. Por eso no hace falta stubear el
+# compositor en la creación; los tests que sí componen (Estudio) lo mockean en su cuerpo.
 
 
 # --------------------------------------------------------------------------- #
@@ -244,19 +235,17 @@ def test_reconstruir_procesar_galeria_registra_piezas_sin_publicaciones(entorno)
     assert repos.listar_publicaciones(marca=_MARCA) == []
 
 
-def test_auto_compone_placa_para_marca_visual(entorno, monkeypatch):
-    # Marca con plantilla (unotv): al crear el borrador se auto-compone la imagen-plantilla
-    # (logo + copy_in, hueco de foto vacío) y se adjunta como `imagen`. Mockeamos el compositor
-    # para no depender de Pillow/subprocess y comprobar que recibe el copy_in como titular.
+def test_no_hornea_placa_al_crear_marca_visual(entorno, monkeypatch):
+    # Render ON-DEMAND: al crear el borrador NO se hornea ninguna placa (no se llama al
+    # compositor). La pieza nace con `imagen` vacío y su `imagen_url` apunta al render
+    # on-demand `/compuesta`, derivado de la receta (marca + copy_in). Así no se duplica un
+    # PNG por cada pieza con el mismo logo/pleca y solo cambia el texto.
     from keni_consola.dominio import estudio_imagen
 
-    llamadas = []
+    def _no_debe_componer(*a, **k):
+        raise AssertionError("crear el borrador NO debe hornear la placa (render on-demand)")
 
-    def _fake_componer(imagen, *, marca, formato, titular, etiqueta=None, autor=None):
-        llamadas.append({"imagen": imagen, "marca": marca, "formato": formato, "titular": titular})
-        return {"id": "placa-xyz.png", "url": "/api/media/placa-xyz.png"}
-
-    monkeypatch.setattr(estudio_imagen, "componer", _fake_componer)
+    monkeypatch.setattr(estudio_imagen, "componer", _no_debe_componer)
 
     spec = jobspec.construir(
         prompt="p",
@@ -270,13 +259,14 @@ def test_auto_compone_placa_para_marca_visual(entorno, monkeypatch):
     resultado = procesar(salida, None)
 
     pub = resultado["publicaciones"][0]
-    assert pub["imagen"] == "placa-xyz.png"  # placa auto-compuesta adjunta
-    # Se compuso SIN foto (placeholder) usando el copy_in como titular.
-    assert llamadas == [{"imagen": "", "marca": _MARCA, "formato": "feed", "titular": "DATO CLAVE"}]
+    assert pub["imagen"] == ""  # nada horneado al crear
+    # La marca visual (unotv) tiene placa: la URL apunta al render on-demand.
+    assert pub["imagen_url"] == f"/api/publicaciones/{pub['id']}/compuesta"
 
 
-def test_auto_compone_placa_omitida_para_marca_sin_plantilla(entorno):
-    # Marca sin identidad visual (piso-15): no se compone nada; el borrador nace sin imagen.
+def test_crear_marca_sin_plantilla_sin_imagen(entorno):
+    # Marca sin identidad visual (piso-15): sin receta de placa; el borrador nace sin imagen
+    # y, sin foto ni fuente, su `imagen_url` queda vacío (no apunta a /compuesta).
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
@@ -287,29 +277,8 @@ def test_auto_compone_placa_omitida_para_marca_sin_plantilla(entorno):
     procesar = jobspec.reconstruir_procesar(spec)
     salida = '```json\n{"piezas": [{"red": "x", "texto": "Hola", "copy_in": "X"}]}\n```'
     resultado = procesar(salida, None)
-    assert resultado["publicaciones"][0]["imagen"] == ""
-
-
-def test_auto_compone_placa_tolerante_a_fallos(entorno, monkeypatch):
-    # Si el compositor falla, el borrador se crea igual (sin imagen): la placa es un extra.
-    from keni_consola.dominio import estudio_imagen
-
-    def _boom(*a, **k):
-        raise estudio_imagen.EstudioError("fallo de prueba")
-
-    monkeypatch.setattr(estudio_imagen, "componer", _boom)
-    spec = jobspec.construir(
-        prompt="p",
-        procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
-            texto_base="nota",
-        ),
-    )
-    procesar = jobspec.reconstruir_procesar(spec)
-    salida = '```json\n{"piezas": [{"red": "x", "texto": "Hola", "copy_in": "X"}]}\n```'
-    resultado = procesar(salida, None)
-    assert len(resultado["publicaciones"]) == 1
-    assert resultado["publicaciones"][0]["imagen"] == ""
+    pub = resultado["publicaciones"][0]
+    assert pub["imagen"] == "" and pub["imagen_url"] == ""
 
 
 def test_reconstruir_procesar_copy_nida_bajo_el_tema(entorno):
