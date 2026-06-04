@@ -8,6 +8,18 @@
 const GRIS_PLACEHOLDER = "#3f4246"; // == (63,66,70) de lienzo_placeholder (Pillow)
 const BORDE_PLACEHOLDER = "#969a9e"; // == (150,154,158)
 
+// Modo de fusión por capa (etiqueta interna en español -> `globalCompositeOperation` del canvas).
+// "normal" / ausente => "source-over" (idéntico al render legado, retrocompatible). Compartido por
+// el editor (Konva) y este render para que la previa y el export coincidan.
+export const MAPA_MEZCLA = {
+  normal: "source-over",
+  multiplicar: "multiply",
+  trama: "screen",
+  superponer: "overlay",
+  aclarar: "lighten",
+  oscurecer: "darken",
+};
+
 function hexRGBA(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -487,6 +499,9 @@ function dibujarCapa(ctx, capa, env) {
   ctx.save();
   const op = capa.opacidad ?? 1;
   if (op < 1) ctx.globalAlpha = op;
+  // Modo de fusión de la capa: sin `mezcla` (o "normal") => "source-over" (idéntico al legado).
+  const gco = MAPA_MEZCLA[capa.mezcla] || "source-over";
+  if (gco !== "source-over") ctx.globalCompositeOperation = gco;
   const rot = capa.rotacion || 0;
   if (rot) {
     const cx = capa.x + capa.w / 2, cy = capa.y + capa.h / 2;

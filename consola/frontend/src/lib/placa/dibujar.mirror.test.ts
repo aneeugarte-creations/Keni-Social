@@ -24,6 +24,8 @@ describe("espejo del render de placa", () => {
   });
 });
 
+import { MAPA_MEZCLA } from "./dibujar.mjs";
+
 // Stub mínimo de un contexto canvas-2D que registra las llamadas a `fillText` (y mide texto de
 // forma determinista: ancho ∝ nº de caracteres × tamaño). Suficiente para verificar el
 // posicionamiento vertical del bloque de texto y el auto-encogido por la CAJA.
@@ -35,17 +37,21 @@ function ctxFalso() {
   // Log ORDENADO de trazos de texto (stroke/fill) con el estado de sombra/estilo en ese instante.
   // Permite verificar el ORDEN (contorno DEBAJO del relleno) y que la sombra se resetee a tiempo.
   const ops: { op: "stroke" | "fill"; texto: string; blur: number; sombra: string; estilo: string }[] = [];
+  // `globalCompositeOperation` activo en cada `fill()` (para verificar el modo de fusión por capa).
+  const gcos: string[] = [];
   let tamActual = 64;
   const ctx = {
     fills,
     gradientes,
     paths,
     ops,
+    gcos,
     canvas: { width: 1080, height: 1080 },
     shadowColor: "transparent",
     shadowBlur: 0,
     shadowOffsetX: 0,
     shadowOffsetY: 0,
+    globalCompositeOperation: "source-over",
     set font(v: string) {
       const m = /(\d+)px/.exec(v);
       tamActual = m ? Number(m[1]) : tamActual;
@@ -83,7 +89,7 @@ function ctxFalso() {
     ellipse: (...args: number[]) => paths.push({ tipo: "ellipse", args }),
     rect: (...args: number[]) => paths.push({ tipo: "rect", args }),
     clip: () => {},
-    fill: () => {},
+    fill: () => { gcos.push(String(ctx.globalCompositeOperation)); },
     stroke: () => {},
     fillRect: () => {},
     strokeRect: () => {},
@@ -431,5 +437,38 @@ describe("marco: degradado de relleno y ángulo de fondo", () => {
     expect(g.y0).toBeCloseTo(g.y1, 5);
     expect(g.x0).toBeCloseTo(0, 5);
     expect(g.x1).toBeCloseTo(1080, 5);
+  });
+});
+
+describe("modo de fusión (mezcla) por capa", () => {
+  it("el mapa etiqueta->GCO cubre los modos y traduce 'normal' a source-over", () => {
+    expect(MAPA_MEZCLA).toMatchObject({
+      normal: "source-over",
+      multiplicar: "multiply",
+      trama: "screen",
+      superponer: "overlay",
+      aclarar: "lighten",
+      oscurecer: "darken",
+    });
+  });
+
+  it("RETROCOMPAT: capa SIN mezcla pinta con source-over (no cambia el render)", () => {
+    const ctx = ctxFalso();
+    // Marco con relleno sólido => un fill(); la capa no trae `mezcla`.
+    dibujarDocumento(ctx as never, { documento: docConMarco({}), imgs: {}, bindings: {} } as never);
+    expect(ctx.gcos.length).toBeGreaterThan(0);
+    expect(ctx.gcos.every((g) => g === "source-over")).toBe(true);
+  });
+
+  it("capa con mezcla 'multiplicar' fija el globalCompositeOperation a 'multiply' al pintarla", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConMarco({ mezcla: "multiplicar" }), imgs: {}, bindings: {} } as never);
+    expect(ctx.gcos).toContain("multiply");
+  });
+
+  it("capa con mezcla 'normal' explícita sigue siendo source-over (no la activa)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConMarco({ mezcla: "normal" }), imgs: {}, bindings: {} } as never);
+    expect(ctx.gcos.every((g) => g === "source-over")).toBe(true);
   });
 });

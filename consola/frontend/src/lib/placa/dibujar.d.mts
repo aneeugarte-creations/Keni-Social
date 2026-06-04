@@ -30,3 +30,7 @@ export interface DibujarDocumentoArgs {
 }
 
 export function dibujarDocumento(ctx: CanvasRenderingContext2D, args: DibujarDocumentoArgs): void;
+
+// Mapa etiqueta de modo de fusión -> `globalCompositeOperation`. Compartido con el editor (Konva)
+// para que la previa y el export usen el mismo modo. "normal" => "source-over".
+export const MAPA_MEZCLA: Record<import("../../editor/documento").TipoMezcla, string>;

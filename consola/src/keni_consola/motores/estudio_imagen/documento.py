@@ -48,6 +48,9 @@ VERSION = 1
 TIPOS_CAPA = ("imagen", "texto", "logo", "marco", "overlay", "grupo")
 _FORMAS_MARCO = ("rect", "elipse", "linea")
 _FORMAS_IMAGEN = ("rect", "elipse")
+# Modos de fusión por capa (espejo de `MAPA_MEZCLA` en `render_node/dibujar.mjs`). "normal" =
+# source-over (default); solo se persiste si se aparta de "normal" para no ensuciar el JSON.
+_MEZCLAS = ("normal", "multiplicar", "trama", "superponer", "aclarar", "oscurecer")
 
 # Reutilizamos los predicados y constantes del spec (única fuente de verdad de validación
 # elemental): hex, número, alineaciones, ajustes, fondo, chip/pad por defecto.
@@ -104,6 +107,11 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
     # para no ensuciar los documentos antiguos. El render lo ignora.
     if isinstance(nombre, str) and nombre.strip():
         base["nombre"] = nombre.strip()
+    # `mezcla` (modo de fusión): solo se persiste si se aparta de "normal" (source-over), para que
+    # los documentos sin él validen y rindan idénticos a antes.
+    mezcla = c.get("mezcla")
+    if mezcla in _MEZCLAS and mezcla != "normal":
+        base["mezcla"] = mezcla
     return base
 
 

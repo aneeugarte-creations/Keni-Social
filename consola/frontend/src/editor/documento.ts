@@ -13,6 +13,20 @@ export type Alineacion = "izquierda" | "centro" | "derecha" | "justificado";
 export type FormaMarco = "rect" | "elipse" | "linea";
 export type BindingTexto = "copy_in" | "etiqueta_default" | null;
 
+// Modo de fusión de una capa (espejo del `MAPA_MEZCLA` de `dibujar.mjs`). La etiqueta interna es
+// en español; el render la traduce a `globalCompositeOperation`. "normal" = source-over (default).
+export type TipoMezcla = "normal" | "multiplicar" | "trama" | "superponer" | "aclarar" | "oscurecer";
+
+// Etiquetas legibles de cada modo de fusión para la UI (orden del select del inspector).
+export const ETIQUETA_MEZCLA: Record<TipoMezcla, string> = {
+  normal: "Normal",
+  multiplicar: "Multiplicar",
+  trama: "Trama",
+  superponer: "Superponer",
+  aclarar: "Aclarar",
+  oscurecer: "Oscurecer",
+};
+
 // Rol de un texto en la plantilla: qué dato de la pieza lo rellena al aplicarla. `null` = texto fijo.
 export const ETIQUETA_BINDING: Record<"fijo" | "copy_in" | "etiqueta_default", string> = {
   fijo: "Texto fijo",
@@ -37,6 +51,7 @@ export interface CapaBase {
   h: number;
   rotacion: number;
   opacidad: number; // 0..1
+  mezcla?: TipoMezcla; // modo de fusión (def "normal" = source-over). Solo se persiste si != "normal".
   z: number;
   visible: boolean;
   bloqueada: boolean;

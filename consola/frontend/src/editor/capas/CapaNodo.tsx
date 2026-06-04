@@ -6,6 +6,7 @@ import Konva from "konva";
 import { useEffect, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
 
+import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
 import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "../documento";
 import { useImagen } from "../useImagen";
 
@@ -173,6 +174,9 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
     y: capa.y,
     rotation: capa.rotacion,
     opacity: capa.opacidad,
+    // Modo de fusión (espejo de `dibujarCapa`): sin `mezcla` => "source-over" (idéntico al legado).
+    globalCompositeOperation: (MAPA_MEZCLA[capa.mezcla ?? "normal"] ??
+      "source-over") as GlobalCompositeOperation,
     draggable: interactivo && !capa.bloqueada,
     onMouseDown: onSelect,
     onTap: onSelect,
@@ -499,6 +503,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           x={0}
           y={0}
           opacity={c.opacidad}
+          globalCompositeOperation={(MAPA_MEZCLA[c.mezcla ?? "normal"] ?? "source-over") as GlobalCompositeOperation}
           draggable={!c.bloqueada}
           onMouseDown={onSelect}
           onTap={onSelect}

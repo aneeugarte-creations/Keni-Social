@@ -10,8 +10,12 @@
 // El popover se renderiza en un PORTAL a `body` con posición fija: así NO lo recorta el
 // `overflow` del panel inspector (antes quedaba oculto tras el lienzo).
 
+import { useQuery } from "@tanstack/react-query";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { api } from "@/lib/api";
 
 import type { CapaMarco, CapaOverlay, CapaTexto } from "./documento";
 import { useEditor } from "./usarEditor";
@@ -69,6 +73,31 @@ function coloresDelDocumento(
   return [...set];
 }
 
+// Colores de la MARCA ACTIVA (identidad de `plantillaMarca`: rojo/tinta/blanco), como lista de hex
+// para ofrecerlos en el ColorControl con un clic. Obtiene la marca por su cuenta (`useMarcaActiva`),
+// así el control se usa igual en todos los call-sites; si no hay marca activa => lista vacía.
+function useColoresMarca(): string[] {
+  const { marcaActiva } = useMarcaActiva();
+  const { data } = useQuery({
+    queryKey: ["plantilla-marca", marcaActiva],
+    queryFn: ({ signal }) => api.plantillaMarca(marcaActiva!, signal),
+    enabled: !!marcaActiva,
+    staleTime: 5 * 60_000,
+  });
+  const p = data?.plantilla;
+  if (!p) return [];
+  // Dedup preservando orden (rojo, tinta, blanco), filtrando hex válidos.
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  for (const c of [p.rojo, p.tinta, p.blanco]) {
+    if (c && RE_HEX.test(c)) {
+      const up = c.toUpperCase();
+      if (!vistos.has(up)) { vistos.add(up); out.push(up); }
+    }
+  }
+  return out;
+}
+
 function Muestras({ colores, valor, onPick }: { colores: string[]; valor: string; onPick: (c: string) => void }) {
   if (colores.length === 0) return null;
   return (
@@ -95,6 +124,7 @@ export function ColorControl({ valor, onChange }: { valor: string; onChange: (c:
   const capas = useEditor((s) => s.documento.capas);
   const fondo = useEditor((s) => s.documento.fondo);
   const delDoc = coloresDelDocumento(capas, fondo);
+  const deMarca = useColoresMarca();
   const { rgb, alfa } = partes(valor);
 
   useEffect(() => {
@@ -162,9 +192,15 @@ export function ColorControl({ valor, onChange }: { valor: string; onChange: (c:
             >
               <span className="rounded bg-background/70 px-1">Transparente</span>
             </button>
+            {deMarca.length > 0 && (
+              <>
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Marca</div>
+                <Muestras colores={deMarca} valor={valor} onPick={elegir} />
+              </>
+            )}
             {delDoc.length > 0 && (
               <>
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">En el diseño</div>
+                <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">En el diseño</div>
                 <Muestras colores={delDoc} valor={valor} onPick={elegir} />
               </>
             )}

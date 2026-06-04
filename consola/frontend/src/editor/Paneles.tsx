@@ -22,8 +22,8 @@ import { urlMedia } from "@/lib/api";
 
 import { ColorControl } from "./ColorControl";
 
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Sombra } from "./documento";
-import { CATALOGO_FUENTES, ETIQUETA_BINDING } from "./documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Sombra, TipoMezcla } from "./documento";
+import { CATALOGO_FUENTES, ETIQUETA_BINDING, ETIQUETA_MEZCLA } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ETIQUETA_TIPO: Record<Capa["tipo"], string> = {
@@ -436,6 +436,19 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             className="w-20"
           />
         </Campo>
+        <Campo etiqueta="Mezcla">
+          <select
+            value={capa.mezcla ?? "normal"}
+            onChange={(e) => set({ mezcla: e.target.value as TipoMezcla } as Partial<Capa>)}
+            className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+          >
+            {(Object.keys(ETIQUETA_MEZCLA) as TipoMezcla[]).map((m) => (
+              <option key={m} value={m}>
+                {ETIQUETA_MEZCLA[m]}
+              </option>
+            ))}
+          </select>
+        </Campo>
       </div>
 
       {capa.tipo === "texto" && (
@@ -538,6 +551,30 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Interletra">
             <Num valor={(capa as CapaTexto).interletra ?? 0} paso={0.5} onChange={(v) => set({ interletra: v } as Partial<Capa>)} />
           </Campo>
+          {/* Presets rápidos de efecto de texto: rellenan sombra/contorno de un clic (reusan los
+              campos existentes, sin esquema nuevo). El "Glow" toma el color del texto. */}
+          <div className="flex flex-wrap gap-1">
+            {(() => {
+              const colorTexto = (capa as CapaTexto).color || "#FFFFFF";
+              const presets: { etiqueta: string; cambios: Partial<CapaTexto> }[] = [
+                { etiqueta: "Glow", cambios: { sombra: { dx: 0, dy: 0, color: colorTexto, desenfoque: 24, opacidad: 0.9 } } },
+                { etiqueta: "Neón", cambios: { sombra: { dx: 0, dy: 0, color: "#22D3EE", desenfoque: 28, opacidad: 0.95 }, contorno: { color: "#22D3EE", grosor: 2 } } },
+                { etiqueta: "Contorno", cambios: { contorno: { color: "#000000", grosor: 8 } } },
+                { etiqueta: "Sombra suave", cambios: { sombra: { dx: 0, dy: 8, color: "#000000", desenfoque: 16, opacidad: 0.5 } } },
+                { etiqueta: "Quitar efectos", cambios: { sombra: null, contorno: null } },
+              ];
+              return presets.map((p) => (
+                <button
+                  key={p.etiqueta}
+                  type="button"
+                  onClick={() => set(p.cambios as Partial<Capa>)}
+                  className="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] hover:bg-accent"
+                >
+                  {p.etiqueta}
+                </button>
+              ));
+            })()}
+          </div>
           <Campo etiqueta="Contorno">
             <input
               type="checkbox"
