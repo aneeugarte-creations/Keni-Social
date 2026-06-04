@@ -1234,13 +1234,31 @@ function AjustesPorMarca({
 }
 
 
-/** Sección admin: toggles + ajustes finos de funcionalidad (aplican en caliente). */
-function SeccionFuncionalidad() {
+/** Grupos de ajustes que viven en la pestaña «Avanzada»: la granularidad fina (intervalos,
+ *  máximos por barrido, umbrales, jobs simultáneos…) que rara vez se toca y funciona en sus
+ *  valores por defecto. El resto de grupos (toggles on/off, por-marca, Publicación real) son
+ *  los controles clave y van en «Básica». Coincide con la `id` de grupo del backend. */
+const GRUPOS_AVANZADOS = new Set(["tuning"]);
+
+/** Sección admin: toggles + ajustes finos de funcionalidad (aplican en caliente).
+ *
+ * `nivel` decide qué grupos pinta: «basica» muestra los toggles clave (todo grupo que NO esté
+ * en `GRUPOS_AVANZADOS`); «avanzada» muestra solo la granularidad fina. Si tras filtrar no queda
+ * ningún grupo, la tarjeta no se renderiza (no deja un hueco vacío en la pestaña). */
+function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
   const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_AJUSTES,
     queryFn: ({ signal }) => api.ajustes(signal),
   });
+
+  const avanzada = nivel === "avanzada";
+  // Grupos que tocan a esta pestaña (basica: los no-avanzados; avanzada: los avanzados).
+  const grupos = (data?.grupos ?? []).filter((g) =>
+    avanzada ? GRUPOS_AVANZADOS.has(g.id) : !GRUPOS_AVANZADOS.has(g.id),
+  );
+  // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
+  if (!isPending && !isError && grupos.length === 0) return null;
 
   const guardar = useMutation({
     mutationFn: (cuerpo: { clave: string; valor?: boolean | number | string }) =>
@@ -1264,15 +1282,22 @@ function SeccionFuncionalidad() {
 
   return (
     <TarjetaColapsable
-      titulo="Funcionalidad"
+      titulo={avanzada ? "Ajustes finos" : "Funcionalidad"}
       abiertaInicial
       contentClassName="space-y-6 pt-0"
       descripcion={
-        <>
-          Activa o desactiva la automatización y ajusta sus parámetros. Los cambios aplican{" "}
-          <strong>en caliente</strong> (sin reiniciar; tardan hasta ~1 minuto). El humano sigue
-          aprobando antes de publicar.
-        </>
+        avanzada ? (
+          <>
+            Granularidad de la automatización (intervalos, máximos por barrido, umbrales, jobs…).
+            Funcionan bien en sus <strong>valores por defecto</strong>; tócalos solo para afinar.
+            Los cambios aplican <strong>en caliente</strong> (hasta ~1 minuto).
+          </>
+        ) : (
+          <>
+            Activa o desactiva la automatización. Los cambios aplican <strong>en caliente</strong>{" "}
+            (sin reiniciar; tardan hasta ~1 minuto). El humano sigue aprobando antes de publicar.
+          </>
+        )
       }
     >
         {isPending ? (
@@ -1289,7 +1314,7 @@ function SeccionFuncionalidad() {
             cargando={isFetching}
           />
         ) : (
-          data.grupos.map((grupo) => (
+          grupos.map((grupo) => (
             <div key={grupo.id} className="space-y-1">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {grupo.titulo}
@@ -1360,18 +1385,34 @@ export default function Configuracion() {
         acciones={acciones}
       />
 
-      {/* Tarjetas ordenadas por importancia (las más usadas arriba) y colapsables para no
-          saturar: Funcionalidad y Alcance abren por defecto; el resto arranca plegado. */}
-      <div className="space-y-4">
-        {/* Funcionalidad (automatización + toggles por marca): el control operativo del día. */}
-        {puedeVerConexiones && <SeccionFuncionalidad />}
-        <SeccionDatos />
-        {/* Metricool e Imagen IA: solo admin (secretos globales, #153). */}
-        {puedeVerConexiones && <SeccionMetricool />}
-        {puedeVerConexiones && <SeccionImagen />}
-        <SeccionEsfuerzo />
-        <SeccionApariencia />
-      </div>
+      {/* Dos pestañas para domar una página muy llena: «Básica» reúne los controles clave
+          (toggles on/off, alcance, conexiones, apariencia); «Avanzada» concentra la granularidad
+          fina que funciona en sus valores por defecto (ajustes finos + esfuerzo de generación).
+          Dentro de cada pestaña las tarjetas siguen siendo colapsables. */}
+      <Tabs defaultValue="basica" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="basica">Básica</TabsTrigger>
+          <TabsTrigger value="avanzada">Avanzada</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="basica" className="space-y-4">
+          {/* Funcionalidad (toggles de automatización + por marca + publicación): el control
+              operativo del día. */}
+          {puedeVerConexiones && <SeccionFuncionalidad nivel="basica" />}
+          <SeccionDatos />
+          {/* Metricool e Imagen IA: solo admin (secretos globales, #153). */}
+          {puedeVerConexiones && <SeccionMetricool />}
+          {puedeVerConexiones && <SeccionImagen />}
+          <SeccionApariencia />
+        </TabsContent>
+
+        <TabsContent value="avanzada" className="space-y-4">
+          {/* Ajustes finos (intervalos, máximos, umbrales, jobs…) + esfuerzo de generación:
+              granularidad que rara vez se toca. */}
+          {puedeVerConexiones && <SeccionFuncionalidad nivel="avanzada" />}
+          <SeccionEsfuerzo />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
