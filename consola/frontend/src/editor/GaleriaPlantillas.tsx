@@ -1,7 +1,8 @@
 // Galería visual de plantillas de diseño: rejilla de miniaturas para elegir una de un vistazo
 // (mucho mejor que un desplegable). Filtra por la marca de la pestaña activa (el llamante).
 
-import { Copy, Trash2, X } from "lucide-react";
+import { Copy, Pencil, Trash2, X } from "lucide-react";
+import { useState } from "react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 
@@ -10,6 +11,7 @@ export function GaleriaPlantillas({
   onCargar,
   onBorrar,
   onDuplicar,
+  onRenombrar,
   onCerrar,
 }: {
   plantillas: PlantillaDiseno[];
@@ -18,8 +20,17 @@ export function GaleriaPlantillas({
   onBorrar?: (p: PlantillaDiseno) => void;
   /** Si se omite, no se ofrece duplicar (modo SELECTOR). */
   onDuplicar?: (p: PlantillaDiseno) => void;
+  /** Si se omite, no se ofrece renombrar (modo SELECTOR). */
+  onRenombrar?: (p: PlantillaDiseno, nombre: string) => void;
   onCerrar: () => void;
 }) {
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const commit = (p: PlantillaDiseno) => {
+    const n = editVal.trim();
+    if (n && n !== p.nombre) onRenombrar?.(p, n);
+    setEditId(null);
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCerrar}>
       <div
@@ -57,6 +68,28 @@ export function GaleriaPlantillas({
                     </div>
                     <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
                   </button>
+                  {onRenombrar && editId === p.id && (
+                    <input
+                      autoFocus
+                      value={editVal}
+                      onChange={(e) => setEditVal(e.target.value)}
+                      onBlur={() => commit(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commit(p);
+                        else if (e.key === "Escape") setEditId(null);
+                      }}
+                      className="absolute inset-x-0 bottom-0 rounded-b border border-primary bg-background px-1.5 py-1 text-xs"
+                    />
+                  )}
+                  {onRenombrar && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
+                      title="Renombrar plantilla"
+                      className="absolute left-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {onDuplicar && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}

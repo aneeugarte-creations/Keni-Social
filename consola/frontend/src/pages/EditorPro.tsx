@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileUp, Loader2, Plus, Save, SaveAll, X } from "lucide-react";
+import { Check, Copy, FileUp, Loader2, Pencil, Plus, Save, SaveAll, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -78,6 +78,8 @@ export default function EditorPro() {
   const [galeria, setGaleria] = useState(false);
   // Diálogo de «Guardar como» (nombre de plantilla nueva), in-app.
   const [dialogo, setDialogo] = useState<{ nombre: string } | null>(null);
+  // Edición inline del nombre de una pestaña (doble-clic en su título).
+  const [editTab, setEditTab] = useState<{ id: string; valor: string } | null>(null);
   // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
 
@@ -356,6 +358,32 @@ export default function EditorPro() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo duplicar."),
   });
 
+  // RENOMBRAR una plantilla ya guardada (desde la galería). Persiste y refleja el nombre en
+  // cualquier pestaña atada a ella.
+  const renombrarPlantilla = useMutation({
+    mutationFn: ({ id, nombre }: { id: string; nombre: string }) =>
+      api.actualizarPlantillaDiseno(id, { nombre }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+      setPestanas((p) => p.map((t) => (t.plantillaId === res.plantilla.id ? { ...t, nombre: res.plantilla.nombre } : t)));
+      toast.success("Nombre actualizado.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo renombrar."),
+  });
+
+  // Confirma la edición inline del nombre de una pestaña: actualiza el título local y, si la
+  // pestaña está atada a una plantilla, persiste el nuevo nombre en la galería.
+  const confirmarRenombrarTab = () => {
+    if (!editTab) return;
+    const nombre = editTab.valor.trim();
+    const t = pestanas.find((x) => x.id === editTab.id);
+    if (nombre && t) {
+      setPestanas((p) => p.map((x) => (x.id === editTab.id ? { ...x, nombre } : x)));
+      if (t.plantillaId) renombrarPlantilla.mutate({ id: t.plantillaId, nombre });
+    }
+    setEditTab(null);
+  };
+
   // Guarda el documento en la PUBLICACIÓN anclada (render + versión + fija su imagen).
   const guardarEnPieza = useMutation({
     mutationFn: () => {
@@ -437,10 +465,29 @@ export default function EditorPro() {
                   t.id === activa ? "border-primary font-medium" : "border-transparent text-muted-foreground"
                 }`}
               >
-                <button onClick={() => setActiva(t.id)} className="max-w-[200px] truncate">
-                  {t.nombre || marca}
-                  {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
-                </button>
+                {editTab?.id === t.id ? (
+                  <input
+                    autoFocus
+                    value={editTab.valor}
+                    onChange={(e) => setEditTab({ id: t.id, valor: e.target.value })}
+                    onBlur={confirmarRenombrarTab}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") confirmarRenombrarTab();
+                      else if (e.key === "Escape") setEditTab(null);
+                    }}
+                    className="max-w-[200px] rounded border border-input bg-background px-1 py-0.5 text-sm"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setActiva(t.id)}
+                    onDoubleClick={() => setEditTab({ id: t.id, valor: t.nombre || "" })}
+                    title="Doble-clic para renombrar"
+                    className="max-w-[200px] truncate"
+                  >
+                    {t.nombre || marca}
+                    {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
+                  </button>
+                )}
                 <button onClick={() => cerrarPestana(t.id)} className="opacity-60 hover:opacity-100" title="Cerrar">
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -475,6 +522,7 @@ export default function EditorPro() {
             onAbrir={abrirPlantilla}
             onBorrar={(p) => borrarPlantilla.mutate(p.id)}
             onDuplicar={(p) => duplicarPlantilla.mutate(p)}
+            onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
             onBlanco={() => abrirPestana()}
           />
         )}
@@ -487,6 +535,7 @@ export default function EditorPro() {
           onCargar={(p) => { cargarPlantillaEnActiva(p); setGaleria(false); }}
           onBorrar={(p) => borrarPlantilla.mutate(p.id)}
           onDuplicar={(p) => duplicarPlantilla.mutate(p)}
+          onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
           onCerrar={() => setGaleria(false)}
         />
       )}
@@ -522,6 +571,7 @@ function GaleriaInline({
   onAbrir,
   onBorrar,
   onDuplicar,
+  onRenombrar,
   onBlanco,
 }: {
   marca: string;
@@ -530,8 +580,16 @@ function GaleriaInline({
   onAbrir: (p: PlantillaDiseno) => void;
   onBorrar: (p: PlantillaDiseno) => void;
   onDuplicar: (p: PlantillaDiseno) => void;
+  onRenombrar: (p: PlantillaDiseno, nombre: string) => void;
   onBlanco: () => void;
 }) {
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const commit = (p: PlantillaDiseno) => {
+    const n = editVal.trim();
+    if (n && n !== p.nombre) onRenombrar(p, n);
+    setEditId(null);
+  };
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <h2 className="mb-3 text-sm font-semibold">Plantillas{marca ? ` · ${marca}` : ""}</h2>
@@ -561,6 +619,26 @@ function GaleriaInline({
                   )}
                 </div>
                 <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
+              </button>
+              {editId === p.id && (
+                <input
+                  autoFocus
+                  value={editVal}
+                  onChange={(e) => setEditVal(e.target.value)}
+                  onBlur={() => commit(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commit(p);
+                    else if (e.key === "Escape") setEditId(null);
+                  }}
+                  className="absolute inset-x-0 bottom-0 rounded-b border border-primary bg-background px-1.5 py-1 text-xs"
+                />
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
+                title="Renombrar plantilla"
+                className="absolute left-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+              >
+                <Pencil className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
