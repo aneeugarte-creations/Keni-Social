@@ -982,7 +982,9 @@ function SeccionImagen() {
 /* Sección: Apariencia (tema claro/oscuro)                            */
 /* ------------------------------------------------------------------ */
 
-/** Selector de tema claro/oscuro. El tema se guarda en este equipo. */
+/** Selector de tema claro/oscuro. Preferencia personal e instantánea: vive ARRIBA DEL TODO y
+ *  SIEMPRE visible (tarjeta compacta no colapsable, fuera de las pestañas), no enterrada entre
+ *  la configuración del producto. El tema se guarda en este equipo. */
 function SeccionApariencia() {
   const { esOscuro, fijar } = useTema();
 
@@ -992,16 +994,15 @@ function SeccionApariencia() {
   ];
 
   return (
-    <TarjetaColapsable
-      titulo="Apariencia"
-      descripcion={
-        <>
-          Elige el tema de la consola. La preferencia se guarda{" "}
-          <strong>solo en este equipo</strong>.
-        </>
-      }
-    >
-        <div role="radiogroup" aria-label="Tema" className="flex flex-wrap gap-2">
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Apariencia</p>
+          <p className="text-xs text-muted-foreground">
+            Tema de la consola. Se guarda <strong>solo en este equipo</strong>.
+          </p>
+        </div>
+        <div role="radiogroup" aria-label="Tema" className="flex shrink-0 flex-wrap gap-2">
           {opciones.map((opcion) => {
             const Icono = opcion.icono;
             const activa = opcion.id === "oscuro" ? esOscuro : !esOscuro;
@@ -1020,7 +1021,8 @@ function SeccionApariencia() {
             );
           })}
         </div>
-    </TarjetaColapsable>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1385,34 +1387,37 @@ export default function Configuracion() {
         acciones={acciones}
       />
 
-      {/* Dos pestañas para domar una página muy llena: «Básica» reúne los controles clave
-          (toggles on/off, alcance, conexiones, apariencia); «Avanzada» concentra la granularidad
-          fina que funciona en sus valores por defecto (ajustes finos + esfuerzo de generación).
-          Dentro de cada pestaña las tarjetas siguen siendo colapsables. */}
-      <Tabs defaultValue="basica" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="basica">Básica</TabsTrigger>
-          <TabsTrigger value="avanzada">Avanzada</TabsTrigger>
-        </TabsList>
+      {/* Orden por frecuencia/criticidad, no por tema. Arriba del todo y SIEMPRE visible: el
+          tema (preferencia personal, instantánea). Debajo, dos pestañas que doman una página
+          muy llena. */}
+      <div className="space-y-4">
+        <SeccionApariencia />
 
-        <TabsContent value="basica" className="space-y-4">
-          {/* Funcionalidad (toggles de automatización + por marca + publicación): el control
-              operativo del día. */}
-          {puedeVerConexiones && <SeccionFuncionalidad nivel="basica" />}
-          <SeccionDatos />
-          {/* Metricool e Imagen IA: solo admin (secretos globales, #153). */}
-          {puedeVerConexiones && <SeccionMetricool />}
-          {puedeVerConexiones && <SeccionImagen />}
-          <SeccionApariencia />
-        </TabsContent>
+        <Tabs defaultValue="basica" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="basica">Básica</TabsTrigger>
+            <TabsTrigger value="avanzada">Avanzada</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="avanzada" className="space-y-4">
-          {/* Ajustes finos (intervalos, máximos, umbrales, jobs…) + esfuerzo de generación:
-              granularidad que rara vez se toca. */}
-          {puedeVerConexiones && <SeccionFuncionalidad nivel="avanzada" />}
-          <SeccionEsfuerzo />
-        </TabsContent>
-      </Tabs>
+          {/* Básica: controles clave de arriba (lo que más se toca) a abajo (setup-once).
+              Funcionalidad (toggles del día) y Alcance arrancan abiertos; las Conexiones
+              (Imagen IA + Metricool) van AL FINAL y colapsadas: se configuran una vez y casi
+              nunca se vuelven a abrir. Metricool, lo último. Todas: solo admin (#153). */}
+          <TabsContent value="basica" className="space-y-4">
+            {puedeVerConexiones && <SeccionFuncionalidad nivel="basica" />}
+            <SeccionDatos />
+            {puedeVerConexiones && <SeccionImagen />}
+            {puedeVerConexiones && <SeccionMetricool />}
+          </TabsContent>
+
+          {/* Avanzada: la granularidad que funciona en sus valores por defecto (ajustes finos
+              + esfuerzo de generación); rara vez se toca. */}
+          <TabsContent value="avanzada" className="space-y-4">
+            {puedeVerConexiones && <SeccionFuncionalidad nivel="avanzada" />}
+            <SeccionEsfuerzo />
+          </TabsContent>
+        </Tabs>
+      </div>
     </>
   );
 }
