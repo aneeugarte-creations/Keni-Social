@@ -77,7 +77,9 @@ class SpecError(ValueError):
 
 
 def _es_hex(v: Any) -> bool:
-    return isinstance(v, str) and len(v) == 7 and v[0] == "#" and all(
+    # Acepta #RRGGBB (opaco) y #RRGGBBAA (con canal alfa, para transparencias y degradados a
+    # transparente). El canvas (navegador y @napi-rs/canvas) entiende ambos como fillStyle.
+    return isinstance(v, str) and len(v) in (7, 9) and v[0] == "#" and all(
         c in "0123456789abcdefABCDEF" for c in v[1:]
     )
 

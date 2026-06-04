@@ -496,7 +496,20 @@ export function Lienzo({
         }}
         onDrop={onDrop}
       >
-       <div className="relative" style={{ width: w * escala, height: h * escala }}>
+       <div
+         className="relative"
+         style={{
+           width: w * escala,
+           height: h * escala,
+           // Tablero de ajedrez (GIMP/Adobe) DETRÁS del Stage: donde el documento es transparente
+           // (alfa < 1) se ve a través del canvas Konva. Solo editor; el PNG exportado es transparente.
+           backgroundImage:
+             "linear-gradient(45deg,#c8c8c8 25%,transparent 25%),linear-gradient(-45deg,#c8c8c8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8c8 75%),linear-gradient(-45deg,transparent 75%,#c8c8c8 75%)",
+           backgroundSize: "16px 16px",
+           backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
+           backgroundColor: "#fff",
+         }}
+       >
         <Stage
           ref={stageRef}
           width={w * escala}
