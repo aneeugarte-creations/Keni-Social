@@ -1137,9 +1137,14 @@ def test_publicacion_a_dict_expone_tipo_e_imagen_fuente():
 
 
 def test_publicacion_a_dict_imagen_url_cae_a_imagen_fuente():
-    """Sin archivo subido (imagen=''), imagen_url usa la URL de la fuente."""
+    """Sin receta (placa oculta) ni archivo subido, imagen_url cae a la URL de la fuente.
+
+    (Con receta de marca, `imagen_url` apunta al render on-demand `/compuesta`; eso lo cubre
+    `test_render_pieza`. Aquí probamos el respaldo a `imagen_fuente` cuando NO hay composición.)
+    """
     d = publicacion_a_dict(
-        {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg"}
+        {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg",
+         "placa_oculta": True}
     )
     assert d["imagen"] == ""
     assert d["imagen_url"] == "https://e.com/orig.jpg"
@@ -1155,8 +1160,8 @@ def test_publicacion_a_dict_archivo_subido_gana_a_imagen_fuente():
 
 
 def test_publicacion_a_dict_defaults_sin_imagen_de_fuente():
-    """Sin tipo/imagen_fuente: tipo_contenido cae a 'ia' e imagen_fuente/imagen_url vacios."""
-    d = publicacion_a_dict(_PUB_BASE)
+    """Sin receta, tipo ni imagen_fuente: tipo_contenido cae a 'ia' e imagen_fuente/imagen_url vacios."""
+    d = publicacion_a_dict({**_PUB_BASE, "placa_oculta": True})
     assert d["tipo_contenido"] == "ia"
     assert d["imagen_fuente"] == ""
     assert d["imagen_url"] == ""
