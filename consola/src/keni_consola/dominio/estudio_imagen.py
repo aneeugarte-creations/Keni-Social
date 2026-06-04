@@ -393,15 +393,15 @@ def _correr_render_node(payload: dict[str, Any], out: Path) -> None:
         raise EstudioError("El renderer de plantilla no produjo un resultado. " + detalle)
 
 
-def _componer_node(
+def _componer_node_bytes(
     imagen: str, *, marca: str, fmt: str, titular: str, etiqueta: str | None,
     logo_path: str | None = None,
-) -> dict[str, Any]:
-    """Render por SPEC con el motor Node (lo que se diseña en el editor = lo que sale).
+) -> tuple[bytes, bool]:
+    """Render por SPEC con el motor Node y devuelve `(png_bytes, placeholder)` SIN persistir.
 
-    `logo_path`: ruta de disco a un logo (asset de marca, mock u oficial) que SUSTITUYE al
-    logo del spec. Lo usa el flujo de arte multi-formato para estampar el asset de la casa
-    sin pasar por un `media_id`; `None` mantiene el comportamiento normal (logo del spec).
+    Render PURO a memoria: materializa los assets en un temporal, corre Node y devuelve los
+    bytes del PNG. NO escribe en el almacén de media (lo usa el render ON-DEMAND, que sirve los
+    bytes por HTTP sin generar objetos). `logo_path` sustituye al logo del spec (flujo de arte).
     """
     plana = plantillas_marca.obtener(marca)
     spec = plantillas_marca.obtener_spec(marca)
@@ -432,16 +432,52 @@ def _componer_node(
             "bindings": {"copy_in": titular or "", "etiqueta_default": etiqueta_efectiva or ""},
         }
         _correr_render_node(payload, out)
-        try:
-            nombre = media.importar_imagen(str(out))
-        except media.MediaError as e:
-            raise EstudioError(str(e)) from e
-        return {
-            "id": nombre, "url": f"/api/media/{nombre}",
-            "imagenes": [{"id": nombre, "url": f"/api/media/{nombre}"}],
-            "info": {"op": "componer", "marca": marca, "formato": fmt,
-                     "placeholder": placeholder, "motor": "node"},
-        }
+        return out.read_bytes(), placeholder
+
+
+def _componer_node(
+    imagen: str, *, marca: str, fmt: str, titular: str, etiqueta: str | None,
+    logo_path: str | None = None,
+) -> dict[str, Any]:
+    """Render por SPEC que PERSISTE el PNG (content-addressed) y devuelve `{id,url,imagenes,info}`.
+
+    Lo usan los flujos que necesitan un asset DURABLE referenciado (bake del editor pro, arte
+    multi-formato, materialización al PUBLICAR). El render on-demand usa `_componer_node_bytes`
+    (sin persistir). `logo_path` sustituye al logo del spec.
+    """
+    datos, placeholder = _componer_node_bytes(
+        imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta, logo_path=logo_path
+    )
+    try:
+        nombre = media.guardar_bytes_contenido(datos, ext="png")
+    except media.MediaError as e:
+        raise EstudioError(str(e)) from e
+    return {
+        "id": nombre, "url": f"/api/media/{nombre}",
+        "imagenes": [{"id": nombre, "url": f"/api/media/{nombre}"}],
+        "info": {"op": "componer", "marca": marca, "formato": fmt,
+                 "placeholder": placeholder, "motor": "node"},
+    }
+
+
+def componer_bytes(
+    imagen: str, *, marca: str, formato: str = "feed", titular: str = "",
+    etiqueta: str | None = None, logo_path: str | None = None,
+) -> bytes:
+    """Compone la placa de marca y devuelve los BYTES del PNG SIN persistir (render on-demand).
+
+    Misma firma que `componer` pero efímero: no escribe en el almacén. Valida marca y formato.
+    """
+    if not marcas.es_marca(marca):
+        raise EstudioError("Marca desconocida.")
+    if formato not in _FORMATOS_COMPONER:
+        raise EstudioError(
+            "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
+        )
+    datos, _ = _componer_node_bytes(
+        imagen, marca=marca, fmt=formato, titular=titular, etiqueta=etiqueta, logo_path=logo_path
+    )
+    return datos
 
 
 def previsualizar_spec(
@@ -595,14 +631,13 @@ def _fuentes_extra_de_marca(marca: str, carpeta: Path) -> dict[str, str]:
     return extra
 
 
-def renderizar_documento(
+def renderizar_documento_bytes(
     documento: dict[str, Any], *, bindings: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Valida y renderiza un DOCUMENTO de capas a PNG (motor Node) -> `{id, url}`.
+) -> bytes:
+    """Valida y renderiza un DOCUMENTO de capas a los BYTES del PNG (motor Node), SIN persistir.
 
-    Materializa cada imagen referenciada (capas imagen/logo y fondo imagen) a un PNG temporal y se
-    las pasa al renderer por ruta (igual que `componer`, compatible con el almacén S3). Lanza
-    `EstudioError` (español) si el documento no valida o el render falla.
+    Materializa cada imagen referenciada a un temporal y corre Node; devuelve los bytes. Lo usa el
+    render ON-DEMAND (sirve por HTTP sin generar objetos). Lanza `EstudioError` si no valida/falla.
     """
     try:
         doc = doc_capas.validar(documento)
@@ -634,11 +669,52 @@ def renderizar_documento(
             "bindings": bindings or {},
         }
         _correr_render_documento(payload, out)
+        return out.read_bytes()
+
+
+def renderizar_documento(
+    documento: dict[str, Any], *, bindings: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Renderiza un DOCUMENTO de capas y PERSISTE el PNG (content-addressed) -> `{id, url}`.
+
+    Para flujos con asset DURABLE referenciado (bake del editor pro). El render on-demand usa
+    `renderizar_documento_bytes` (sin persistir).
+    """
+    datos = renderizar_documento_bytes(documento, bindings=bindings)
+    try:
+        nombre = media.guardar_bytes_contenido(datos, ext="png")
+    except media.MediaError as e:
+        raise EstudioError(str(e)) from e
+    return {"id": nombre, "url": f"/api/media/{nombre}"}
+
+
+def _doc_plantilla_con_foto(
+    documento: dict[str, Any] | str,
+    *,
+    foto: str,
+    foco: tuple[float, float] | list[float] | None,
+    zoom: float,
+) -> dict[str, Any]:
+    """Inyecta la FOTO (+ reencuadre) de la pieza en el HUECO de un documento de plantilla.
+
+    Devuelve una COPIA del documento lista para renderizar. `documento` puede ser dict o JSON
+    string (lo que guarda `PlantillaDiseno`). El hueco (`es_foto`) es la ÚNICA capa donde entra
+    la foto; las plantillas de solo texto/gráfica no tienen hueco y la foto no entra.
+    """
+    if isinstance(documento, str):
         try:
-            nombre = media.importar_imagen(str(out))
-        except media.MediaError as e:
-            raise EstudioError(str(e)) from e
-        return {"id": nombre, "url": f"/api/media/{nombre}"}
+            documento = json.loads(documento or "{}")
+        except (ValueError, TypeError) as exc:
+            raise EstudioError("La plantilla no tiene un documento válido.") from exc
+    doc = copy.deepcopy(documento)
+    hueco = doc_capas.capa_foto(doc)
+    if hueco is not None:
+        hueco["objeto"] = foto or ""
+        if foco is not None and len(foco) == 2:
+            hueco["foco"] = [float(foco[0]), float(foco[1])]
+        if zoom and zoom > 0:
+            hueco["zoom"] = float(zoom)
+    return doc
 
 
 def componer_desde_plantilla(
@@ -649,36 +725,26 @@ def componer_desde_plantilla(
     foco: tuple[float, float] | list[float] | None = None,
     zoom: float = 0.0,
 ) -> dict[str, Any]:
-    """Renderiza el DOCUMENTO de una plantilla del estudio con la FOTO y el COPY-IN de una pieza.
+    """Renderiza la plantilla con la foto+copy_in de la pieza y PERSISTE el PNG -> `{id, url}`.
 
-    El documento es la plantilla diseñada en el estudio (`PlantillaDiseno.documento`): trae un
-    layout de capas y, en la de imagen de fondo (la de MENOR `z`), una foto de muestra. Para
-    aplicarla a una pieza sustituimos esa foto de fondo por la `foto` real de la pieza (o "" para
-    dejar el hueco si aún no hay) y pasamos el `copy_in` como binding del titular. Devuelve
-    `{id, url}` del PNG resultante (lo publicable). Reusa `renderizar_documento` (motor Node).
-    `documento` puede venir como dict o como JSON string (lo que guarda `PlantillaDiseno`).
-
-    `foco`/`zoom` = reencuadre manual de la pieza (foco en [0,1]², zoom ≥ 1). Si se pasan, pisan
-    el encuadre de la capa de fondo para que el recorte 4:5 coincida con el del editor en vivo.
+    Inyecta la foto en el hueco (`es_foto`) y el `copy_in` como binding del titular. Para flujos
+    con asset durable (materialización al publicar). El render on-demand usa la variante `_bytes`.
     """
-    if isinstance(documento, str):
-        try:
-            documento = json.loads(documento or "{}")
-        except (ValueError, TypeError) as exc:
-            raise EstudioError("La plantilla no tiene un documento válido.") from exc
-    doc = copy.deepcopy(documento)
-    # HUECO DE FOTO designado (`es_foto`): la ÚNICA capa donde entra la foto de la pieza. Las
-    # plantillas de solo texto/gráfica (cita, infografía…) no tienen hueco -> la foto no entra y no
-    # se pisa ningún logo. (Antes se metía en la imagen de menor z, que podía ser un logo pequeño.)
-    hueco = doc_capas.capa_foto(doc)
-    if hueco is not None:
-        hueco["objeto"] = foto or ""
-        # Reencuadre manual de la pieza: pisa el encuadre de muestra de la plantilla.
-        if foco is not None and len(foco) == 2:
-            hueco["foco"] = [float(foco[0]), float(foco[1])]
-        if zoom and zoom > 0:
-            hueco["zoom"] = float(zoom)
+    doc = _doc_plantilla_con_foto(documento, foto=foto, foco=foco, zoom=zoom)
     return renderizar_documento(doc, bindings={"copy_in": copy_in})
+
+
+def componer_desde_plantilla_bytes(
+    documento: dict[str, Any] | str,
+    *,
+    copy_in: str = "",
+    foto: str = "",
+    foco: tuple[float, float] | list[float] | None = None,
+    zoom: float = 0.0,
+) -> bytes:
+    """Como `componer_desde_plantilla` pero devuelve los BYTES del PNG SIN persistir (on-demand)."""
+    doc = _doc_plantilla_con_foto(documento, foto=foto, foco=foco, zoom=zoom)
+    return renderizar_documento_bytes(doc, bindings={"copy_in": copy_in})
 
 
 def parsear_encuadre(encuadre: str) -> tuple[list[float] | None, float]:

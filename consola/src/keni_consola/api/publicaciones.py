@@ -590,11 +590,11 @@ async def aplicar_plantilla(request: Request) -> Response:
     foto_encuadre = enc_req if isinstance(enc_req, str) else (pub.get("foto_encuadre") or "")
     foco, zoom = estudio_imagen.parsear_encuadre(foto_encuadre)
 
-    # Render de VALIDACIÓN (síncrono): confirma que la plantilla compone con esta foto/copy_in
-    # antes de fijarla, y de paso calienta la caché content-addressed. NO se persiste su id: la
-    # imagen se RENDERIZA on-demand desde la receta (`/compuesta`), no se hornea en `imagen`.
+    # Render de VALIDACIÓN (síncrono) a BYTES: confirma que la plantilla compone con esta
+    # foto/copy_in antes de fijarla, SIN persistir nada (no genera huérfanos). La imagen se
+    # renderiza on-demand y efímera desde la receta (`/compuesta`); no se hornea en `imagen`.
     try:
-        estudio_imagen.componer_desde_plantilla(
+        estudio_imagen.componer_desde_plantilla_bytes(
             plantilla.get("documento") or "{}",
             copy_in=copy_in,
             foto=foto,
@@ -620,36 +620,42 @@ async def aplicar_plantilla(request: Request) -> Response:
 
 
 async def compuesta(request: Request) -> Response:
-    """Sirve la imagen COMPUESTA de la pieza, renderizada ON-DEMAND desde su receta.
+    """Sirve la imagen COMPUESTA de la pieza, renderizada ON-DEMAND y EFÍMERA (sin persistir).
 
     `GET /api/publicaciones/{id}/compuesta`: deriva la imagen publicable (placa de marca o
-    plantilla del estudio aplicada a la foto + copy_in + encuadre) y devuelve los bytes, igual
-    que `/api/media`. El render es content-addressed (caché natural: misma receta => mismo
-    objeto). Es la URL estable que usan los `<img>` del SPA, los MCP y, al publicar, Metricool.
+    plantilla del estudio aplicada a la foto + copy_in + encuadre) y devuelve los bytes SIN
+    escribir nada en el almacén — el composite es función pura de la receta, no un objeto que
+    almacenar. La caché vive en la capa HTTP: `ETag = hash(receta)` + `Cache-Control`; si el
+    cliente reenvía `If-None-Match` y la receta no cambió, respondemos 304 SIN recomponer (el
+    ETag se calcula de la receta, barato; no corre Node). Así no se generan huérfanos.
 
-    404 si la pieza no existe o no tiene imagen derivable; 422 si el render falla (motivo en
-    español). `Cache-Control` breve para no recomputar en cada scroll del feed.
+    404 si la pieza no existe o no tiene imagen servible; 422 si el render falla (motivo en
+    español).
     """
-    from .. import media
     from ..dominio import estudio_imagen, render_pieza
 
     publicacion_id = request.path_params["publicacion_id"]
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    etag = f'"{render_pieza.firma_receta(pub)}"'
+    cache = "private, max-age=300"
+    # 304 sin renderizar si el cliente ya tiene esta versión de la receta.
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
+
     try:
-        nombre = render_pieza.imagen_compuesta_id(pub)
+        resultado = render_pieza.render_bytes(pub)
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=422)
-    if not nombre:
+    if resultado is None:
         return JSONResponse({"error": "La pieza aún no tiene imagen."}, status_code=404)
-    datos = media.leer_media(nombre)
-    if datos is None:
-        return JSONResponse({"error": "No se pudo leer la imagen compuesta."}, status_code=404)
+    datos, mime = resultado
     return Response(
         datos,
-        media_type=media.mime_de(nombre),
-        headers={"Cache-Control": "private, max-age=60"},
+        media_type=mime,
+        headers={"ETag": etag, "Cache-Control": cache},
     )
 
 

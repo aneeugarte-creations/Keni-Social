@@ -185,7 +185,7 @@ def _fake_render_node(monkeypatch):
 def test_componer_placeholder_node(entorno, monkeypatch):
     # imagen="" => placeholder; el motor por defecto (Node) recibe el spec y el copy_in.
     cap = _fake_render_node(monkeypatch)
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "placa.png")
+    monkeypatch.setattr(media, "guardar_bytes_contenido", lambda datos, ext="png": "placa.png")
 
     res = e.componer("", marca="unotv", formato="feed", titular="DATO CLAVE")
 
@@ -200,7 +200,7 @@ def test_componer_placeholder_node(entorno, monkeypatch):
 def test_componer_con_foto_node(entorno, monkeypatch):
     cap = _fake_render_node(monkeypatch)
     monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-foto")
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "final.png")
+    monkeypatch.setattr(media, "guardar_bytes_contenido", lambda datos, ext="png": "final.png")
 
     res = e.componer("foto.jpg", marca="unotv", formato="feed", titular="X")
 
@@ -212,7 +212,7 @@ def test_componer_con_foto_node(entorno, monkeypatch):
 def test_componer_etiqueta_resuelta_en_binding(entorno, monkeypatch):
     # etiqueta="" => pleca omitida: el binding etiqueta_default viaja vacío.
     cap = _fake_render_node(monkeypatch)
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "x.png")
+    monkeypatch.setattr(media, "guardar_bytes_contenido", lambda datos, ext="png": "x.png")
     e.componer("", marca="unotv", formato="feed", titular="T", etiqueta="")
     assert cap["payload"]["bindings"]["etiqueta_default"] == ""
 
@@ -230,9 +230,22 @@ def test_componer_node_unico_motor_propaga_error(entorno, monkeypatch):
 def test_componer_logo_path_override_va_a_los_assets(entorno, monkeypatch):
     # `logo_path` (asset de marca mock/oficial) SUSTITUYE al logo del spec en el payload Node.
     cap = _fake_render_node(monkeypatch)
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "x.png")
+    monkeypatch.setattr(media, "guardar_bytes_contenido", lambda datos, ext="png": "x.png")
     e.componer("", marca="unotv", formato="feed", titular="T", logo_path="/tmp/logo-unotv.png")
     assert cap["payload"]["assets"]["logo"] == "/tmp/logo-unotv.png"
+
+
+def test_componer_bytes_no_persiste(entorno, monkeypatch):
+    # Render EFÍMERO: devuelve los bytes del PNG y NO escribe en el almacén (no llama a guardar).
+    _fake_render_node(monkeypatch)  # _correr_render_node escribe b"png" en el temporal
+
+    def _no_persiste(*a, **k):
+        raise AssertionError("componer_bytes NO debe persistir en el almacén")
+
+    monkeypatch.setattr(media, "guardar_bytes_contenido", _no_persiste)
+    monkeypatch.setattr(media, "importar_imagen", _no_persiste)
+    datos = e.componer_bytes("", marca="unotv", formato="feed", titular="DATO")
+    assert datos == b"png"
 
 
 # --------------------------------------------------------------------------- #

@@ -31,6 +31,8 @@ CUÁNDO SE DERIVA Y CUÁNDO NO
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 
@@ -126,3 +128,92 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     if foto:
         return f"/api/media/{foto}"
     return pub.get("imagen_fuente") or ""
+
+
+def render_bytes(pub: dict[str, Any]) -> tuple[bytes, str] | None:
+    """Bytes de la imagen publicable + su mime, renderizando ON-DEMAND y SIN persistir.
+
+    Es el camino EFÍMERO del endpoint `/compuesta`: el composite (placa/plantilla) se renderiza
+    en memoria y NO se escribe en el almacén — no genera huérfanos. Para `imagen` ya horneada
+    (bespoke / publicada) o la `foto` cruda, se sirven sus bytes tal cual (assets reales, sin
+    crear nada nuevo). Devuelve `None` si la pieza no tiene imagen servible. Lanza
+    `estudio_imagen.EstudioError` si el render falla.
+    """
+    from .. import media
+
+    imagen = (pub.get("imagen") or "").strip()
+    if imagen:
+        datos = media.leer_media(imagen)
+        return (datos, media.mime_de(imagen)) if datos is not None else None
+    if not tiene_receta(pub):
+        foto = (pub.get("foto") or "").strip()
+        if not foto:
+            return None
+        datos = media.leer_media(foto)
+        return (datos, media.mime_de(foto)) if datos is not None else None
+
+    from . import estudio_imagen
+
+    foto = (pub.get("foto") or "").strip()
+    copy_in = pub.get("copy_in") or ""
+    plantilla_id = (pub.get("plantilla_diseno_id") or "").strip()
+
+    if plantilla_id:
+        from .. import repos
+
+        plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+        if plantilla is not None:
+            foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
+            datos = estudio_imagen.componer_desde_plantilla_bytes(
+                plantilla.get("documento") or "{}",
+                copy_in=copy_in, foto=foto, foco=foco, zoom=zoom,
+            )
+            return datos, "image/png"
+        # Plantilla borrada: cae a la placa de marca.
+
+    datos = estudio_imagen.componer_bytes(
+        foto,
+        marca=pub.get("marca") or "",
+        formato=estudio_imagen.formato_por_red(pub.get("red") or ""),
+        titular=copy_in,
+        etiqueta=None,
+    )
+    return datos, "image/png"
+
+
+def firma_receta(pub: dict[str, Any]) -> str:
+    """Hash ESTABLE de la receta -> ETag del render on-demand (cambia sii cambia la salida).
+
+    Cubre todo lo que altera los bytes compuestos: campos de la pieza (marca/red/foto/copy_in/
+    encuadre/placa_oculta/plantilla/imagen) MÁS el contenido del que depende el layout —el
+    DOCUMENTO de la plantilla si hay una, o el SPEC de la marca si es placa— para que una edición
+    de la plantilla/spec invalide la caché HTTP. Incluye `fecha_actualizacion` como respaldo si
+    no se pudiera leer el spec/doc. Es BARATO (no corre Node): permite responder 304 sin componer.
+    """
+    base: dict[str, Any] = {
+        "marca": pub.get("marca") or "",
+        "red": pub.get("red") or "",
+        "foto": pub.get("foto") or "",
+        "copy_in": pub.get("copy_in") or "",
+        "foto_encuadre": pub.get("foto_encuadre") or "",
+        "placa_oculta": bool(pub.get("placa_oculta")),
+        "plantilla_diseno_id": (pub.get("plantilla_diseno_id") or "").strip(),
+        "imagen": (pub.get("imagen") or "").strip(),
+        "actualizado": pub.get("fecha_actualizacion") or "",
+    }
+    plantilla_id = base["plantilla_diseno_id"]
+    try:
+        if plantilla_id:
+            from .. import repos
+
+            plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+            if plantilla is not None:
+                base["doc"] = plantilla.get("documento") or ""
+        elif not pub.get("placa_oculta") and (pub.get("marca") or ""):
+            from .. import plantillas_marca
+
+            base["spec"] = plantillas_marca.obtener_spec(pub["marca"])
+    except Exception:  # noqa: BLE001 -- el respaldo (actualizado) basta si falla el spec/doc
+        pass
+    crudo = json.dumps(base, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(crudo.encode("utf-8")).hexdigest()[:32]

@@ -8,7 +8,7 @@ URL servible que decide la serialización.
 
 from __future__ import annotations
 
-from keni_consola import repos
+from keni_consola import media, plantillas_marca, repos
 from keni_consola.dominio import estudio_imagen, render_pieza
 
 
@@ -138,3 +138,76 @@ def test_url_fuente_externa(monkeypatch):
     pub = {"id": "p1", "imagen": "", "marca": "piso-15", "foto": "",
            "imagen_fuente": "https://x/foto.jpg"}
     assert render_pieza.imagen_url_de(pub) == "https://x/foto.jpg"
+
+
+# --------------------------------------------------------------------------- #
+# render_bytes (efímero, sin persistir) — el camino de /compuesta              #
+# --------------------------------------------------------------------------- #
+
+
+def test_render_bytes_placa_compone_sin_persistir(monkeypatch):
+    _sin_plantilla_de_marca(monkeypatch, True)
+
+    def _no_persiste(*a, **k):
+        raise AssertionError("render_bytes NO debe persistir")
+
+    monkeypatch.setattr(estudio_imagen, "componer_bytes", lambda *a, **k: b"PNG")
+    monkeypatch.setattr(media, "guardar_bytes_contenido", _no_persiste)
+    pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "copy_in": "T", "foto": "f.jpg"}
+    assert render_pieza.render_bytes(pub) == (b"PNG", "image/png")
+
+
+def test_render_bytes_plantilla(monkeypatch):
+    monkeypatch.setattr(repos, "obtener_plantilla_diseno", lambda pid: {"documento": "{}"})
+    monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla_bytes", lambda *a, **k: b"DOC")
+    pub = {"id": "p1", "imagen": "", "plantilla_diseno_id": "pl-1", "foto": "f.jpg",
+           "copy_in": "X", "marca": "unotv", "foto_encuadre": ""}
+    assert render_pieza.render_bytes(pub) == (b"DOC", "image/png")
+
+
+def test_render_bytes_imagen_bespoke_passthrough(monkeypatch):
+    # `imagen` ya horneada: se sirven sus bytes tal cual, sin recomponer ni persistir.
+    monkeypatch.setattr(media, "leer_media", lambda n: b"BYTES" if n == "h.png" else None)
+    monkeypatch.setattr(media, "mime_de", lambda n: "image/png")
+    assert render_pieza.render_bytes({"id": "p1", "imagen": "h.png"}) == (b"BYTES", "image/png")
+
+
+def test_render_bytes_solo_foto(monkeypatch):
+    _sin_plantilla_de_marca(monkeypatch, False)
+    monkeypatch.setattr(media, "leer_media", lambda n: b"FOTO" if n == "f.jpg" else None)
+    monkeypatch.setattr(media, "mime_de", lambda n: "image/jpeg")
+    pub = {"id": "p1", "imagen": "", "marca": "piso-15", "foto": "f.jpg"}
+    assert render_pieza.render_bytes(pub) == (b"FOTO", "image/jpeg")
+
+
+def test_render_bytes_none_sin_imagen(monkeypatch):
+    _sin_plantilla_de_marca(monkeypatch, False)
+    pub = {"id": "p1", "imagen": "", "marca": "piso-15", "foto": ""}
+    assert render_pieza.render_bytes(pub) is None
+
+
+# --------------------------------------------------------------------------- #
+# firma_receta (ETag): cambia sii cambia la salida                             #
+# --------------------------------------------------------------------------- #
+
+
+def test_firma_estable_y_sensible(monkeypatch):
+    # Spec fijo (sin IO): la firma depende de los campos de la receta.
+    monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 1})
+    base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
+            "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
+    f1 = render_pieza.firma_receta(dict(base))
+    f2 = render_pieza.firma_receta(dict(base))
+    f3 = render_pieza.firma_receta({**base, "copy_in": "B"})
+    assert f1 == f2 and f1 != f3
+
+
+def test_firma_cambia_si_cambia_el_spec(monkeypatch):
+    # Editar el spec de la marca (mismo copy_in) invalida la caché HTTP.
+    base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
+            "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
+    monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 1})
+    f1 = render_pieza.firma_receta(dict(base))
+    monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 2})
+    f2 = render_pieza.firma_receta(dict(base))
+    assert f1 != f2

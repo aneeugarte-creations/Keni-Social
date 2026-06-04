@@ -276,10 +276,9 @@ def test_aplicar_plantilla_persiste_receta_no_hornea(cliente, monkeypatch):
     from keni_consola import repos
     from keni_consola.dominio import estudio_imagen
 
-    # Render de validación mockeado (no Node); su id NO debe persistirse.
+    # Render de validación a BYTES mockeado (no Node, no persiste).
     monkeypatch.setattr(
-        estudio_imagen, "componer_desde_plantilla",
-        lambda *a, **k: {"id": "validacion.png", "url": "/api/media/validacion.png"},
+        estudio_imagen, "componer_desde_plantilla_bytes", lambda *a, **k: b"png",
     )
     plantilla = repos.crear_plantilla_diseno(
         marca="unotv", nombre="P", categoria="post", documento="{}", miniatura="",
@@ -344,24 +343,43 @@ def test_compuesta_404_si_no_existe(cliente):
     assert cliente.get("/api/publicaciones/noexiste/compuesta").status_code == 404
 
 
-def test_compuesta_sirve_los_bytes_del_render(cliente, monkeypatch):
-    """El endpoint resuelve el media id (render on-demand) y sirve sus bytes con su mime."""
-    from keni_consola import media
+def test_compuesta_sirve_bytes_efimeros_con_etag(cliente, monkeypatch):
+    """El endpoint renderiza ON-DEMAND, sirve los bytes con su mime y un ETag (sin persistir)."""
     from keni_consola.dominio import render_pieza
 
     pid = _crear(cliente).json()["publicacion"]["id"]
-    nombre = media.guardar_bytes(b"PNG-BYTES", ext="png")
-    monkeypatch.setattr(render_pieza, "imagen_compuesta_id", lambda pub: nombre)
+    monkeypatch.setattr(render_pieza, "render_bytes", lambda pub: (b"PNG-BYTES", "image/png"))
 
     r = cliente.get(f"/api/publicaciones/{pid}/compuesta")
     assert r.status_code == 200
     assert r.content == b"PNG-BYTES"
     assert r.headers["content-type"].startswith("image/png")
+    assert r.headers.get("etag")  # ETag presente para la caché HTTP
+
+
+def test_compuesta_304_si_etag_coincide(cliente, monkeypatch):
+    """Con If-None-Match igual al ETag (receta sin cambios) -> 304 SIN recomponer."""
+    from keni_consola.dominio import render_pieza
+
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    llamadas = {"n": 0}
+
+    def _render(pub):
+        llamadas["n"] += 1
+        return (b"PNG-BYTES", "image/png")
+
+    monkeypatch.setattr(render_pieza, "render_bytes", _render)
+
+    r1 = cliente.get(f"/api/publicaciones/{pid}/compuesta")
+    etag = r1.headers["etag"]
+    r2 = cliente.get(f"/api/publicaciones/{pid}/compuesta", headers={"If-None-Match": etag})
+    assert r2.status_code == 304
+    assert llamadas["n"] == 1  # el 304 NO recompuso (render solo en la 1ª)
 
 
 def test_compuesta_404_si_no_hay_imagen_derivable(cliente, monkeypatch):
     from keni_consola.dominio import render_pieza
 
     pid = _crear(cliente).json()["publicacion"]["id"]
-    monkeypatch.setattr(render_pieza, "imagen_compuesta_id", lambda pub: "")
+    monkeypatch.setattr(render_pieza, "render_bytes", lambda pub: None)
     assert cliente.get(f"/api/publicaciones/{pid}/compuesta").status_code == 404

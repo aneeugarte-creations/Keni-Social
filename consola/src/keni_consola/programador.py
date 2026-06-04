@@ -189,8 +189,10 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     # (content-addressed, una sola vez) para que Metricool la ingiera por una URL estable
     # `/api/media/{id}`. Tolerante: si el render falla, se publica sin media (warning), igual
     # que cuando no hay imagen.
+    from . import repos
     from .dominio import estudio_imagen, render_pieza
 
+    imagen_previa = (pub.get("imagen") or "").strip()
     try:
         nombre_imagen = render_pieza.imagen_compuesta_id(pub)
     except estudio_imagen.EstudioError as exc:
@@ -199,6 +201,15 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
             pub.get("id"), exc,
         )
         nombre_imagen = ""
+    # CONGELAR el registro de lo publicado: si la imagen se DERIVÓ de la receta (no estaba
+    # horneada), la materializamos y la REFERENCIAMOS en la pieza (`imagen`). Así el composite
+    # publicado es un asset VIVO (no un huérfano) y la pieza queda con el PNG exacto que se posteó
+    # —no un re-render que podría diferir si luego se edita la receta—.
+    if nombre_imagen and nombre_imagen != imagen_previa and render_pieza.tiene_receta(pub):
+        try:
+            repos.actualizar_publicacion(pub["id"], {"imagen": nombre_imagen})
+        except Exception:  # noqa: BLE001 -- referenciar es best-effort; no debe abortar el posteo
+            _log.warning("Pieza %r: no se pudo fijar la imagen publicada.", pub.get("id"))
     media: list[MediaRef] = []
 
     url_img = _url_media_publica(nombre_imagen)
