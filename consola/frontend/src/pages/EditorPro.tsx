@@ -111,14 +111,14 @@ export default function EditorPro() {
     return { id, store };
   };
 
-  // Lienzo EN BLANCO de verdad (documento vacío). Solo restaura un autoguardado previo si existe.
+  // Lienzo EN BLANCO de verdad: SIEMPRE limpio y vacío. No restaura borradores previos de la marca
+  // (antes reaparecían "elementos de otros diseños"); los borradores de plantilla/pieza sí se
+  // recuperan en sus propios flujos (abrirPlantilla / abrirPiezaTab).
   const abrirPestana = (marcaArg?: string) => {
     // Un lienzo nuevo necesita una marca CONCRETA: si el global está en «Todas», cae a `marcaInicial`.
     const marca = marcaArg || marcaEfectiva || marcaInicial;
     if (!marca) return;
-    const { store } = nuevaPestana(marca);
-    const guardado = leerAuto(claveAuto({ id: "", marca }));
-    if (guardado) store.getState().cargar(guardado);
+    nuevaPestana(marca);
   };
 
   // Abre una plantilla guardada EN UNA PESTAÑA NUEVA, atada a esa plantilla.

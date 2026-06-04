@@ -320,26 +320,18 @@ export function documentoVacio(
   formato: { w: number; h: number; safe_top: number; safe_bottom: number },
   marca = "",
 ): Documento {
-  // Toda plantilla nace con su HUECO DE FOTO obligatorio: una imagen a sangre, marcada `es_foto`
-  // y BLOQUEADA (no se puede borrar). Ahí entra la foto de la pieza al aplicar la plantilla.
-  const hueco = nuevaCapaImagen("", {
-    id: "foto",
-    x: 0,
-    y: 0,
-    w: formato.w,
-    h: formato.h,
-    z: 0,
-    es_foto: true,
-    bloqueada: true,
-    nombre: "Foto",
-  });
+  // Un lienzo nuevo nace LIMPIO, VACÍO y TRANSPARENTE: sin capas y con fondo transparente
+  // (`#00000000`), así se ve el tablero de ajedrez en el editor y el PNG exporta con alfa. El HUECO
+  // DE FOTO ya NO se añade por defecto (antes pintaba un placeholder gris a sangre que tapaba todo y
+  // parecía "prediseñado"); para una plantilla se añade una imagen y se marca como hueco desde el
+  // inspector (el guardado de plantilla lo exige y avisa si falta).
   return {
     version: VERSION,
     marca,
     fuentes: { sans: "Barlow", condensada: "Barlow Condensed" },
     formato,
-    fondo: { tipo: "color", color: "#111315" },
-    capas: [hueco],
+    fondo: { tipo: "color", color: "#00000000" },
+    capas: [],
   };
 }
 
