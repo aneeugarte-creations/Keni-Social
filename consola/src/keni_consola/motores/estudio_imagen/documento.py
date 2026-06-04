@@ -139,34 +139,101 @@ def _sombra(s: Any) -> dict[str, Any] | None:
     return out
 
 
+def _stops(g: Any) -> list[dict[str, Any]] | None:
+    """Normaliza las paradas multi-stop {pos,color} de un degradado. Devuelve la lista (≥2 paradas
+    con color hex válido) o None si no hay multi-stop válido (se usa desde/hasta)."""
+    raw = g.get("stops") if isinstance(g, dict) else None
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for s in raw:
+        if isinstance(s, dict) and _es_hex(s.get("color")):
+            pos = s.get("pos", 0)
+            out.append({"pos": min(1.0, max(0.0, float(pos) if _num(pos) else 0.0)), "color": s["color"]})
+    if len(out) < 2:
+        return None
+    out.sort(key=lambda s: s["pos"])
+    return out
+
+
 def _relleno_degradado(g: Any) -> dict[str, Any] | None:
-    """Normaliza un relleno por degradado {desde,hasta,angulo?} (hex validados). Solo se persiste si
-    trae `desde` y `hasta` válidos; si no, None (relleno sólido como hasta ahora)."""
+    """Normaliza un degradado {desde,hasta,angulo?,tipo?,stops?} (texto/marco). Solo se persiste si
+    trae `desde` y `hasta` válidos; si no, None (relleno sólido como hasta ahora). `tipo` (lineal/
+    radial) y `stops` (multi-parada) son aditivos y retrocompatibles."""
     if not isinstance(g, dict):
         return None
     if not (_es_hex(g.get("desde")) and _es_hex(g.get("hasta"))):
         return None
-    return {
+    out: dict[str, Any] = {
         "desde": g["desde"],
         "hasta": g["hasta"],
         "angulo": float(g.get("angulo", 180)),
     }
+    # `tipo` solo se persiste si es "radial" (lineal es el default; no ensucia documentos viejos).
+    if g.get("tipo") == "radial":
+        out["tipo"] = "radial"
+    stops = _stops(g)
+    if stops is not None:
+        out["stops"] = stops
+    return out
 
 
-def _filtros(f: Any) -> dict[str, float] | None:
+def _duotono(d: Any) -> dict[str, str] | None:
+    """Normaliza un tinte duotono {sombra,luz} (hex validados). None si falta o es inválido."""
+    if not isinstance(d, dict):
+        return None
+    if not (_es_hex(d.get("sombra")) and _es_hex(d.get("luz"))):
+        return None
+    return {"sombra": d["sombra"], "luz": d["luz"]}
+
+
+def _filtros(f: Any) -> dict[str, Any] | None:
     if not isinstance(f, dict):
         return None
-    out: dict[str, float] = {}
+    out: dict[str, Any] = {}
     for k, defecto in (("brillo", 1.0), ("contraste", 1.0), ("saturacion", 1.0), ("desenfoque", 0.0)):
         v = f.get(k)
         if _num(v):
             out[k] = float(v)
         else:
             out[k] = defecto
-    # Solo persistir si algo se aparta del neutro (evita ruido en el JSON).
-    if out["brillo"] == 1 and out["contraste"] == 1 and out["saturacion"] == 1 and out["desenfoque"] == 0:
+    duotono = _duotono(f.get("duotono"))
+    # Solo persistir si algo se aparta del neutro (evita ruido en el JSON). El duotono cuenta como
+    # "no neutro" aunque brillo/contraste sigan a 1.
+    neutro = out["brillo"] == 1 and out["contraste"] == 1 and out["saturacion"] == 1 and out["desenfoque"] == 0
+    if neutro and duotono is None:
         return None
+    if duotono is not None:
+        out["duotono"] = duotono
     return out
+
+
+def _crop(c: Any) -> dict[str, float] | None:
+    """Normaliza un recorte no destructivo {cx,cy,cw,ch} en fracciones 0..1 de la fuente. None si no
+    viene o es el recorte completo (toda la imagen), para no ensuciar documentos viejos."""
+    if not isinstance(c, dict):
+        return None
+    cx = min(1.0, max(0.0, float(c["cx"]))) if _num(c.get("cx")) else 0.0
+    cy = min(1.0, max(0.0, float(c["cy"]))) if _num(c.get("cy")) else 0.0
+    cw = min(1.0 - cx, max(0.0, float(c["cw"]))) if _num(c.get("cw")) else 1.0 - cx
+    ch = min(1.0 - cy, max(0.0, float(c["ch"]))) if _num(c.get("ch")) else 1.0 - cy
+    # Recorte completo (toda la imagen) => None: render idéntico al legado.
+    if cx == 0.0 and cy == 0.0 and cw >= 1.0 and ch >= 1.0:
+        return None
+    if cw <= 0.0 or ch <= 0.0:
+        return None
+    return {"cx": cx, "cy": cy, "cw": cw, "ch": ch}
+
+
+def _radios(r: Any) -> list[float] | None:
+    """Normaliza un radio por esquina [tl,tr,br,bl] (px ≥ 0). None si no es una lista de 4 o si todos
+    son 0 (entonces manda el `radio` uniforme). Si está, manda sobre `radio` en el render."""
+    if not isinstance(r, (list, tuple)) or len(r) != 4:
+        return None
+    vals = [max(0.0, float(v)) if _num(v) else 0.0 for v in r]
+    if all(v == 0.0 for v in vals):
+        return None
+    return vals
 
 
 def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
@@ -177,7 +244,9 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
     )
     zoom = c.get("zoom", 1)
     radio = c.get("radio", 0)
-    return {
+    radios = _radios(c.get("radios"))
+    crop = _crop(c.get("crop"))
+    img = {
         **_base(c),
         "tipo": "imagen",
         "objeto": str(c.get("objeto", "") or ""),
@@ -198,6 +267,13 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         # Sombra del rectángulo de la imagen (opcional): solo se persiste si viene.
         "sombra": _sombra(c.get("sombra")),
     }
+    # Aditivos y retrocompatibles: solo se persisten si vienen (no ensucian documentos viejos).
+    #   `radios` (esquina por esquina) manda sobre `radio`; `crop` recorta la fuente (no destructivo).
+    if radios is not None:
+        img["radios"] = radios
+    if crop is not None:
+        img["crop"] = crop
+    return img
 
 
 def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
@@ -286,7 +362,8 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
             "color": borde["color"] if _es_hex(borde.get("color")) else "#000000",
             "grosor": float(borde["grosor"]),
         }
-    return {
+    radios = _radios(c.get("radios"))
+    marco = {
         **_base(c),
         "tipo": "marco",
         "forma": forma,
@@ -298,6 +375,10 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
         # Sombra de la forma del marco (opcional): solo se persiste si viene.
         "sombra": _sombra(c.get("sombra")),
     }
+    # `radios` (radio por esquina) manda sobre `radio`; aditivo, solo se persiste si viene.
+    if radios is not None:
+        marco["radios"] = radios
+    return marco
 
 
 def _capa_overlay(c: dict[str, Any]) -> dict[str, Any]:

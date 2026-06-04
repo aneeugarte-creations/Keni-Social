@@ -105,10 +105,27 @@ def _validar_fondo(fondo: Any) -> dict[str, Any]:
         g = fondo.get("degradado") or {}
         _exige(_es_hex(g.get("desde")) and _es_hex(g.get("hasta")),
                "El degradado de fondo necesita colores 'desde' y 'hasta' hex.")
-        limpio["degradado"] = {
+        deg = {
             "desde": g["desde"], "hasta": g["hasta"],
             "angulo": float(g.get("angulo", 180)),
         }
+        # `tipo` (lineal/radial) y `stops` (multi-parada) son aditivos y retrocompatibles: solo se
+        # persisten si se apartan del default lineal 2-stop, para no ensuciar specs viejos.
+        if g.get("tipo") == "radial":
+            deg["tipo"] = "radial"
+        raw_stops = g.get("stops")
+        if isinstance(raw_stops, list):
+            stops = []
+            for s in raw_stops:
+                if isinstance(s, dict) and _es_hex(s.get("color")):
+                    pos = s.get("pos", 0)
+                    stops.append({
+                        "pos": min(1.0, max(0.0, float(pos) if _num(pos) else 0.0)),
+                        "color": s["color"],
+                    })
+            if len(stops) >= 2:
+                deg["stops"] = sorted(stops, key=lambda s: s["pos"])
+        limpio["degradado"] = deg
     else:  # imagen
         img = fondo.get("imagen") or {}
         limpio["imagen"] = {

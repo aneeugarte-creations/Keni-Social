@@ -31,7 +31,9 @@ import { MAPA_MEZCLA } from "./dibujar.mjs";
 // posicionamiento vertical del bloque de texto y el auto-encogido por la CAJA.
 function ctxFalso() {
   const fills: { texto: string; x: number; y: number; tam: number; blur: number; sombra: string }[] = [];
-  const gradientes: { x0: number; y0: number; x1: number; y1: number; stops: [number, string][] }[] = [];
+  const gradientes: { x0: number; y0: number; x1: number; y1: number; r1?: number; tipo: string; stops: [number, string][] }[] = [];
+  // Llamadas a drawImage: registramos los argumentos (5 args legado, o 9 con recorte de fuente).
+  const drawImages: number[][] = [];
   // Registra las primitivas de path usadas para construir recortes (clip) de imagen.
   const paths: { tipo: "ellipse" | "rect" | "arcTo" | "moveTo" | "lineTo"; args: number[] }[] = [];
   // Rellenos de rectángulo (fondo): registramos el fillStyle activo en cada fillRect.
@@ -45,6 +47,7 @@ function ctxFalso() {
   const ctx = {
     fills,
     gradientes,
+    drawImages,
     paths,
     fillRects,
     ops,
@@ -96,11 +99,19 @@ function ctxFalso() {
     stroke: () => {},
     fillRect: (...args: number[]) => fillRects.push({ estilo: String(ctx.fillStyle), args }),
     strokeRect: () => {},
-    drawImage: () => {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    drawImage: (_img: unknown, ...args: number[]) => { drawImages.push(args); },
     setLineDash: () => {},
     createLinearGradient: (x0: number, y0: number, x1: number, y1: number) => {
       const stops: [number, string][] = [];
-      gradientes.push({ x0, y0, x1, y1, stops });
+      gradientes.push({ x0, y0, x1, y1, stops, tipo: "lineal" });
+      return { addColorStop: (o: number, c: string) => stops.push([o, c]) };
+    },
+    // Gradiente RADIAL: registra el centro/radio externo y sus paradas (mismo shape que el lineal,
+    // con `tipo: "radial"`), para verificar lineal-vs-radial en el render.
+    createRadialGradient: (x0: number, y0: number, _r0: number, x1: number, y1: number, r1: number) => {
+      const stops: [number, string][] = [];
+      gradientes.push({ x0, y0, x1, y1, r1, stops, tipo: "radial" });
       return { addColorStop: (o: number, c: string) => stops.push([o, c]) };
     },
   };
@@ -483,6 +494,113 @@ describe("marco: degradado de relleno y ángulo de fondo", () => {
     expect(g.y0).toBeCloseTo(g.y1, 5);
     expect(g.x0).toBeCloseTo(0, 5);
     expect(g.x1).toBeCloseTo(1080, 5);
+  });
+});
+
+describe("recorte (crop) no destructivo de la fuente", () => {
+  const img = { width: 800, height: 600 } as never;
+
+  it("RETROCOMPAT: sin crop el drawImage usa 5 args (toda la fuente) — idéntico al legado", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConImagen({}), imgs: { "foto.png": img }, bindings: {} } as never);
+    expect(ctx.drawImages.length).toBe(1);
+    // 9 args: sx,sy,sw,sh = fuente completa (0,0,800,600).
+    expect(ctx.drawImages[0].slice(0, 4)).toEqual([0, 0, 800, 600]);
+  });
+
+  it("con crop recorta la FUENTE: el sub-rect [sx,sy,sw,sh] sale de las fracciones × dims de la imagen", () => {
+    const ctx = ctxFalso();
+    // crop centrado: cx=0.25, cy=0.1, cw=0.5, ch=0.5 sobre 800×600 => sx=200, sy=60, sw=400, sh=300.
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConImagen({ crop: { cx: 0.25, cy: 0.1, cw: 0.5, ch: 0.5 } }), imgs: { "foto.png": img }, bindings: {} } as never,
+    );
+    expect(ctx.drawImages.length).toBe(1);
+    expect(ctx.drawImages[0].slice(0, 4)).toEqual([200, 60, 400, 300]);
+  });
+});
+
+describe("degradado radial vs lineal y multi-stop", () => {
+  it("fondo degradado LINEAL (default) usa createLinearGradient (no radial)", () => {
+    const ctx = ctxFalso();
+    const doc = {
+      version: 1,
+      formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+      fondo: { tipo: "degradado", degradado: { desde: "#000000", hasta: "#FFFFFF" } },
+      capas: [],
+    };
+    dibujarDocumento(ctx as never, { documento: doc as never, imgs: {}, bindings: {} } as never);
+    expect(ctx.gradientes[0].tipo).toBe("lineal");
+  });
+
+  it("fondo degradado RADIAL usa createRadialGradient centrado en la caja", () => {
+    const ctx = ctxFalso();
+    const doc = {
+      version: 1,
+      formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+      fondo: { tipo: "degradado", degradado: { desde: "#000000", hasta: "#FFFFFF", tipo: "radial" } },
+      capas: [],
+    };
+    dibujarDocumento(ctx as never, { documento: doc as never, imgs: {}, bindings: {} } as never);
+    const g = ctx.gradientes[0];
+    expect(g.tipo).toBe("radial");
+    expect(g.x1).toBeCloseTo(540, 5);
+    expect(g.y1).toBeCloseTo(540, 5);
+  });
+
+  it("degradado multi-stop emite TODAS las paradas (no solo desde/hasta)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      {
+        documento: docConMarco({
+          relleno_degradado: {
+            desde: "#000000",
+            hasta: "#FFFFFF",
+            stops: [
+              { pos: 0, color: "#FF0000" },
+              { pos: 0.5, color: "#00FF00" },
+              { pos: 1, color: "#0000FF" },
+            ],
+          },
+        }),
+        imgs: {},
+        bindings: {},
+      } as never,
+    );
+    expect(ctx.gradientes.length).toBe(1);
+    expect(ctx.gradientes[0].stops).toEqual([
+      [0, "#FF0000"],
+      [0.5, "#00FF00"],
+      [1, "#0000FF"],
+    ]);
+  });
+});
+
+describe("filtro duotono", () => {
+  const img = { width: 800, height: 600 } as never;
+
+  it("RETROCOMPAT: sin duotono NO añade fills de tinte (multiply/lighten) sobre la imagen", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConImagen({}), imgs: { "foto.png": img }, bindings: {} } as never);
+    // El globalCompositeOperation nunca pasa por "multiply"/"lighten" del tinte.
+    expect(ctx.gcos.includes("multiply")).toBe(false);
+    expect(ctx.gcos.includes("lighten")).toBe(false);
+  });
+
+  it("con duotono aplica DOS tintes: multiply (luz) y lighten (sombra) tras la imagen", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      {
+        documento: docConImagen({ filtros: { duotono: { sombra: "#111315", luz: "#E30613" } } }),
+        imgs: { "foto.png": img },
+        bindings: {},
+      } as never,
+    );
+    // Dos fill() del tinte: uno en multiply, otro en lighten.
+    expect(ctx.gcos.includes("multiply")).toBe(true);
+    expect(ctx.gcos.includes("lighten")).toBe(true);
   });
 });
 

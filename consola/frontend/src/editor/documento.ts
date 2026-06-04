@@ -51,10 +51,25 @@ export const ETIQUETA_BINDING: Record<"fijo" | "copy_in" | "etiqueta_default", s
   etiqueta_default: "Pleca / etiqueta",
 };
 
+// Una parada de un degradado multi-stop: posición 0..1 + color.
+export interface ParadaDegradado {
+  pos: number;
+  color: string;
+}
+// Degradado reutilizable (fondo/texto/marco): lineal (def) o radial; multi-stop opcional.
+// Retrocompat: `desde`/`hasta`/`angulo` siguen mandando si no hay `stops`; `tipo` ausente = lineal.
+export interface Degradado {
+  desde: string;
+  hasta: string;
+  angulo?: number; // grados (def 180 = vertical ↓). Solo lineal.
+  tipo?: "lineal" | "radial"; // def "lineal"
+  stops?: ParadaDegradado[]; // multi-parada; si está, manda sobre desde/hasta
+}
+
 export interface Fondo {
   tipo: "color" | "degradado" | "imagen";
   color?: string;
-  degradado?: { desde: string; hasta: string; angulo?: number };
+  degradado?: Degradado;
   imagen?: { media_id: string; ajuste?: Ajuste };
 }
 
@@ -74,11 +89,27 @@ export interface CapaBase {
   bloqueada: boolean;
 }
 
+// Tinte DUOTONO de marca: mapea la luminancia de la foto entre `sombra` (oscuros) y `luz` (claros).
+export interface Duotono {
+  sombra: string;
+  luz: string;
+}
+
 export interface Filtros {
   brillo?: number; // 1 = neutro
   contraste?: number;
   saturacion?: number;
   desenfoque?: number; // px
+  duotono?: Duotono | null; // tinte duotono sobre la foto (def null = sin duotono)
+}
+
+// Recorte (crop) NO destructivo de una imagen: sub-rect de la FUENTE en fracciones 0..1.
+// Default (sin crop) = toda la imagen.
+export interface Crop {
+  cx: number;
+  cy: number;
+  cw: number;
+  ch: number;
 }
 
 export interface CapaImagen extends CapaBase {
@@ -90,6 +121,8 @@ export interface CapaImagen extends CapaBase {
   es_foto?: boolean; // ESTA capa es el hueco de foto de la plantilla (única; obligatoria en el estudio)
   forma?: Forma; // recorte de la imagen: catálogo de formas (rect def, elipse/círculo, polígonos…)
   radio?: number; // radio de esquinas redondeadas para rect, en px (def 0; ignorado si forma!=rect)
+  radios?: [number, number, number, number]; // radio por esquina [tl,tr,br,bl]; si está, manda sobre `radio`
+  crop?: Crop; // recorte no destructivo de la fuente (def: sin crop = toda la imagen)
   filtros: Filtros | null;
   sombra?: Sombra | null; // sombra del rectángulo de la imagen (opcional)
 }
@@ -101,12 +134,9 @@ export interface Sombra {
   desenfoque?: number; // blur px (def 0). >0 activa la sombra real del canvas.
   opacidad?: number; // 0..1 (def 1). <1 activa la sombra real del canvas.
 }
-// Relleno por degradado lineal (texto/marco). Sustituye al color sólido cuando está presente.
-export interface RellenoDegradado {
-  desde: string;
-  hasta: string;
-  angulo?: number; // grados (def 180 = vertical ↓). Misma convención que el fondo.
-}
+// Relleno por degradado (texto/marco). Sustituye al color sólido cuando está presente. Soporta
+// lineal/radial y multi-stop (mismo contrato que el degradado de fondo).
+export type RellenoDegradado = Degradado;
 export interface Chip {
   color: string;
   pad_x: number;
@@ -156,6 +186,7 @@ export interface CapaMarco extends CapaBase {
   relleno_degradado?: RellenoDegradado | null; // degradado del relleno (sustituye a `relleno`)
   borde: { color: string; grosor: number } | null;
   radio: number;
+  radios?: [number, number, number, number]; // radio por esquina [tl,tr,br,bl]; si está, manda sobre `radio`
   sombra?: Sombra | null; // sombra de la forma del marco (opcional)
 }
 

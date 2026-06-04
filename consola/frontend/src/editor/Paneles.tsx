@@ -22,7 +22,7 @@ import { urlMedia } from "@/lib/api";
 
 import { ColorControl } from "./ColorControl";
 
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, Sombra, TipoMezcla } from "./documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado, Sombra, TipoMezcla } from "./documento";
 import { CATALOGO_FORMAS, CATALOGO_FUENTES, ETIQUETA_BINDING, ETIQUETA_FORMA, ETIQUETA_MEZCLA } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
@@ -304,6 +304,157 @@ function CamposSombra({ sombra, onChange }: { sombra: Sombra; onChange: (s: Somb
   );
 }
 
+// Control de esquinas de un rect: radio uniforme o independiente por esquina ([tl,tr,br,bl]).
+// Al activar "Esquinas independientes" siembra los 4 con el radio uniforme actual; al desactivar,
+// vuelve al radio uniforme (toma la esquina superior izquierda). `onChange` emite {radio} y/o {radios}.
+function RadioEsquinas({
+  radio,
+  radios,
+  onChange,
+}: {
+  radio: number;
+  radios?: [number, number, number, number];
+  onChange: (cambios: { radio?: number; radios?: [number, number, number, number] }) => void;
+}) {
+  const indep = radios != null;
+  return (
+    <>
+      <Campo etiqueta="Esquinas independientes">
+        <input
+          type="checkbox"
+          checked={indep}
+          onChange={(e) =>
+            onChange(
+              e.target.checked
+                ? { radios: [radio || 0, radio || 0, radio || 0, radio || 0] }
+                : { radio: radios ? radios[0] : radio, radios: undefined },
+            )
+          }
+        />
+      </Campo>
+      {indep ? (
+        <div className="grid grid-cols-2 gap-2">
+          {(["Sup. izq.", "Sup. der.", "Inf. der.", "Inf. izq."] as const).map((etq, i) => (
+            <Campo key={etq} etiqueta={etq}>
+              <Num
+                valor={radios![i]}
+                onChange={(v) => {
+                  const next = [...radios!] as [number, number, number, number];
+                  next[i] = Math.max(0, v);
+                  onChange({ radios: next });
+                }}
+              />
+            </Campo>
+          ))}
+        </div>
+      ) : (
+        <Campo etiqueta="Radio">
+          <Num valor={radio} onChange={(v) => onChange({ radio: Math.max(0, v) })} />
+        </Campo>
+      )}
+    </>
+  );
+}
+
+// Controles de un degradado (texto/marco/fondo): tipo (Lineal/Radial), colores Desde/Hasta y, en
+// lineal, el Ángulo. El multi-stop avanzado se ofrece como editor de paradas (añadir/editar/quitar).
+// `onChange` recibe el degradado completo actualizado.
+function CamposDegradado({ deg, onChange }: { deg: RellenoDegradado; onChange: (d: RellenoDegradado) => void }) {
+  const stops = deg.stops ?? null;
+  return (
+    <>
+      <Campo etiqueta="Tipo">
+        <select
+          value={deg.tipo ?? "lineal"}
+          onChange={(e) => onChange({ ...deg, tipo: e.target.value === "radial" ? "radial" : "lineal" })}
+          className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+        >
+          <option value="lineal">Lineal</option>
+          <option value="radial">Radial</option>
+        </select>
+      </Campo>
+      {!stops && (
+        <>
+          <Campo etiqueta="Desde">
+            <ColorControl valor={deg.desde} onChange={(c) => onChange({ ...deg, desde: c })} />
+          </Campo>
+          <Campo etiqueta="Hasta">
+            <ColorControl valor={deg.hasta} onChange={(c) => onChange({ ...deg, hasta: c })} />
+          </Campo>
+          {(deg.tipo ?? "lineal") === "lineal" && (
+            <Campo etiqueta="Ángulo">
+              <Num valor={deg.angulo ?? 180} onChange={(v) => onChange({ ...deg, angulo: v })} />
+            </Campo>
+          )}
+        </>
+      )}
+      {(deg.tipo ?? "lineal") === "lineal" && stops && (
+        <Campo etiqueta="Ángulo">
+          <Num valor={deg.angulo ?? 180} onChange={(v) => onChange({ ...deg, angulo: v })} />
+        </Campo>
+      )}
+      {/* Multi-stop AVANZADO: editor de paradas. Al activarlo se siembran desde/hasta como 2 paradas. */}
+      {stops ? (
+        <div className="flex flex-col gap-1.5 rounded border border-border/60 p-1.5">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Paradas</span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => onChange({ ...deg, stops: [...stops, { pos: 1, color: deg.hasta }] })}
+                className="rounded border border-input bg-background px-1.5 py-0.5 hover:bg-accent"
+              >
+                + Parada
+              </button>
+              <button
+                type="button"
+                onClick={() => { const { stops: _omit, ...resto } = deg; void _omit; onChange(resto); }}
+                className="rounded border border-input bg-background px-1.5 py-0.5 hover:bg-accent"
+              >
+                Simple
+              </button>
+            </div>
+          </div>
+          {stops.map((s, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <Num
+                valor={s.pos}
+                paso={0.05}
+                onChange={(v) => {
+                  const next = stops.map((x, j) => (j === i ? { ...x, pos: Math.max(0, Math.min(1, v)) } : x));
+                  onChange({ ...deg, stops: next });
+                }}
+              />
+              <ColorControl
+                valor={s.color}
+                onChange={(c) => onChange({ ...deg, stops: stops.map((x, j) => (j === i ? { ...x, color: c } : x)) })}
+              />
+              {stops.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...deg, stops: stops.filter((_, j) => j !== i) })}
+                  className="text-muted-foreground hover:text-destructive"
+                  title="Quitar parada"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onChange({ ...deg, stops: [{ pos: 0, color: deg.desde }, { pos: 1, color: deg.hasta }] })}
+          className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-[11px] hover:bg-accent"
+        >
+          Multi-parada (avanzado)
+        </button>
+      )}
+    </>
+  );
+}
+
 export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   const store = useStoreEditor();
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
@@ -393,20 +544,10 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           );
         })()}
         {fondo.tipo === "degradado" && fondo.degradado && (
-          <>
-            <Campo etiqueta="Desde">
-              <ColorControl valor={fondo.degradado.desde} onChange={(c) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, desde: c } })} />
-            </Campo>
-            <Campo etiqueta="Hasta">
-              <ColorControl valor={fondo.degradado.hasta} onChange={(c) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, hasta: c } })} />
-            </Campo>
-            <Campo etiqueta="Ángulo">
-              <Num
-                valor={fondo.degradado.angulo ?? 180}
-                onChange={(v) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, angulo: v } })}
-              />
-            </Campo>
-          </>
+          <CamposDegradado
+            deg={fondo.degradado}
+            onChange={(d) => setFondo({ tipo: "degradado", degradado: d })}
+          />
         )}
         {fondo.tipo === "imagen" && (
           <>
@@ -445,7 +586,9 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   const setFiltro = (k: "brillo" | "contraste" | "saturacion" | "desenfoque", v: number) => {
     const next = { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0, ...(capa as CapaImagen).filtros, [k]: v };
     const neutro = next.brillo === 1 && next.contraste === 1 && next.saturacion === 1 && next.desenfoque === 0;
-    set({ filtros: neutro ? null : next } as Partial<Capa>);
+    // Si hay duotono no colapsamos a null aunque brillo/contraste sean neutros (el duotono es un
+    // filtro más). El back hace lo mismo (`_filtros` cuenta el duotono como no-neutro).
+    set({ filtros: neutro && !next.duotono ? null : next } as Partial<Capa>);
   };
   const fil = (capa as CapaImagen).filtros ?? { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0 };
 
@@ -652,26 +795,10 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             </select>
           </Campo>
           {(capa as CapaTexto).relleno_degradado && (
-            <>
-              <Campo etiqueta="Desde">
-                <ColorControl
-                  valor={(capa as CapaTexto).relleno_degradado!.desde}
-                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaTexto).relleno_degradado!, desde: c } } as Partial<Capa>)}
-                />
-              </Campo>
-              <Campo etiqueta="Hasta">
-                <ColorControl
-                  valor={(capa as CapaTexto).relleno_degradado!.hasta}
-                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaTexto).relleno_degradado!, hasta: c } } as Partial<Capa>)}
-                />
-              </Campo>
-              <Campo etiqueta="Ángulo">
-                <Num
-                  valor={(capa as CapaTexto).relleno_degradado!.angulo ?? 180}
-                  onChange={(v) => set({ relleno_degradado: { ...(capa as CapaTexto).relleno_degradado!, angulo: v } } as Partial<Capa>)}
-                />
-              </Campo>
-            </>
+            <CamposDegradado
+              deg={(capa as CapaTexto).relleno_degradado!}
+              onChange={(d) => set({ relleno_degradado: d } as Partial<Capa>)}
+            />
           )}
           <Campo etiqueta="Sombra">
             <input
@@ -760,14 +887,13 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               ))}
             </select>
           </Campo>
-          {/* "Esquinas" (radio) solo aplica al rectángulo. */}
+          {/* "Esquinas" (radio uniforme o por esquina) solo aplica al rectángulo. */}
           {((capa as CapaImagen).forma ?? "rect") === "rect" && (
-            <Campo etiqueta="Esquinas">
-              <Num
-                valor={(capa as CapaImagen).radio ?? 0}
-                onChange={(v) => set({ radio: Math.max(0, v) } as Partial<Capa>)}
-              />
-            </Campo>
+            <RadioEsquinas
+              radio={(capa as CapaImagen).radio ?? 0}
+              radios={(capa as CapaImagen).radios}
+              onChange={(cambios) => set(cambios as Partial<Capa>)}
+            />
           )}
           {/* Convertir la foto en una FORMA (marco) vacía, conservando su silueta. */}
           {!(capa as CapaImagen).es_foto && (
@@ -816,6 +942,72 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <button onClick={() => set({ filtros: null } as Partial<Capa>)} className="self-start text-xs text-muted-foreground underline">
             Quitar filtros
           </button>
+          {/* DUOTONO: tinte de marca por luminancia (sombras->color1, luces->color2). */}
+          <Campo etiqueta="Duotono">
+            <input
+              type="checkbox"
+              checked={!!fil.duotono}
+              onChange={(e) =>
+                set({
+                  filtros: {
+                    brillo: fil.brillo ?? 1,
+                    contraste: fil.contraste ?? 1,
+                    saturacion: fil.saturacion ?? 1,
+                    desenfoque: fil.desenfoque ?? 0,
+                    duotono: e.target.checked ? { sombra: "#111315", luz: "#E30613" } : null,
+                  },
+                } as Partial<Capa>)
+              }
+            />
+          </Campo>
+          {fil.duotono && (
+            <div className="grid grid-cols-2 gap-2 pl-2">
+              <Campo etiqueta="Sombra">
+                <ColorControl
+                  valor={fil.duotono.sombra}
+                  onChange={(c) => set({ filtros: { ...fil, duotono: { ...fil.duotono!, sombra: c } } } as Partial<Capa>)}
+                />
+              </Campo>
+              <Campo etiqueta="Luz">
+                <ColorControl
+                  valor={fil.duotono.luz}
+                  onChange={(c) => set({ filtros: { ...fil, duotono: { ...fil.duotono!, luz: c } } } as Partial<Capa>)}
+                />
+              </Campo>
+            </div>
+          )}
+          {/* RECORTE (crop) no destructivo de la fuente: 4 campos en % (Izq/Arriba/Ancho/Alto). No hay
+              editor visual interactivo (anotado como pendiente); los campos numéricos bastan. */}
+          {(() => {
+            const cap = capa as CapaImagen;
+            const crop = cap.crop;
+            const pct = (v: number) => Math.round(v * 1000) / 10;
+            const setCrop = (k: "cx" | "cy" | "cw" | "ch", v: number) => {
+              const actual = crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 };
+              const f = Math.max(0, Math.min(1, v / 100));
+              set({ crop: { ...actual, [k]: f } } as Partial<Capa>);
+            };
+            return (
+              <>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Recorte</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Campo etiqueta="Izq. %"><Num valor={pct(crop?.cx ?? 0)} onChange={(v) => setCrop("cx", v)} /></Campo>
+                  <Campo etiqueta="Arriba %"><Num valor={pct(crop?.cy ?? 0)} onChange={(v) => setCrop("cy", v)} /></Campo>
+                  <Campo etiqueta="Ancho %"><Num valor={pct(crop?.cw ?? 1)} onChange={(v) => setCrop("cw", v)} /></Campo>
+                  <Campo etiqueta="Alto %"><Num valor={pct(crop?.ch ?? 1)} onChange={(v) => setCrop("ch", v)} /></Campo>
+                </div>
+                {crop && (
+                  <button
+                    type="button"
+                    onClick={() => set({ crop: undefined } as Partial<Capa>)}
+                    className="self-start text-xs text-muted-foreground underline"
+                  >
+                    Quitar recorte
+                  </button>
+                )}
+              </>
+            );
+          })()}
           <Campo etiqueta="Sombra">
             <input
               type="checkbox"
@@ -869,26 +1061,10 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             </select>
           </Campo>
           {(capa as CapaMarco).relleno_degradado ? (
-            <>
-              <Campo etiqueta="Desde">
-                <ColorControl
-                  valor={(capa as CapaMarco).relleno_degradado!.desde}
-                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaMarco).relleno_degradado!, desde: c } } as Partial<Capa>)}
-                />
-              </Campo>
-              <Campo etiqueta="Hasta">
-                <ColorControl
-                  valor={(capa as CapaMarco).relleno_degradado!.hasta}
-                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaMarco).relleno_degradado!, hasta: c } } as Partial<Capa>)}
-                />
-              </Campo>
-              <Campo etiqueta="Ángulo">
-                <Num
-                  valor={(capa as CapaMarco).relleno_degradado!.angulo ?? 180}
-                  onChange={(v) => set({ relleno_degradado: { ...(capa as CapaMarco).relleno_degradado!, angulo: v } } as Partial<Capa>)}
-                />
-              </Campo>
-            </>
+            <CamposDegradado
+              deg={(capa as CapaMarco).relleno_degradado!}
+              onChange={(d) => set({ relleno_degradado: d } as Partial<Capa>)}
+            />
           ) : (
             <Campo etiqueta="Color de relleno">
               <ColorControl valor={(capa as CapaMarco).relleno ?? "#000000"} onChange={(c) => set({ relleno: c } as Partial<Capa>)} />
@@ -911,7 +1087,14 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               }
             />
           </Campo>
-          <Campo etiqueta="Radio"><Num valor={(capa as CapaMarco).radio} onChange={(v) => set({ radio: v } as Partial<Capa>)} /></Campo>
+          {/* Esquinas: radio uniforme o independiente por esquina (solo rect). */}
+          {(capa as CapaMarco).forma === "rect" && (
+            <RadioEsquinas
+              radio={(capa as CapaMarco).radio}
+              radios={(capa as CapaMarco).radios}
+              onChange={(cambios) => set(cambios as Partial<Capa>)}
+            />
+          )}
           <Campo etiqueta="Sombra">
             <input
               type="checkbox"

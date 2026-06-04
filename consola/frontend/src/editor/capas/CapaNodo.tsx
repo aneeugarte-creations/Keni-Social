@@ -7,13 +7,20 @@ import { useEffect, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text } from "react-konva";
 
 import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
-import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma } from "../documento";
+import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado } from "../documento";
 import { useImagen } from "../useImagen";
 
 // Traza, en COORDS LOCALES (0..w, 0..h), la silueta de `forma` — espejo EXACTO de `pathForma`
 // (dibujar.mjs) con origen en (0,0). Lo usan el clip de la imagen y el dibujo del marco en Konva,
 // para que la previa coincida con el export del servidor. "rect" sin radio == rectángulo simple.
-function pathFormaLocal(ctx: Konva.Context, forma: Forma | "linea" | undefined, w: number, h: number, radio = 0) {
+function pathFormaLocal(
+  ctx: Konva.Context,
+  forma: Forma | "linea" | undefined,
+  w: number,
+  h: number,
+  radio = 0,
+  radios?: [number, number, number, number],
+) {
   const cx = w / 2, cy = h / 2;
   const poligono = (n: number, rot = -Math.PI / 2) => {
     for (let i = 0; i < n; i++) {
@@ -75,13 +82,19 @@ function pathFormaLocal(ctx: Konva.Context, forma: Forma | "linea" | undefined, 
       return;
     }
     default: {
-      if (radio > 0) {
-        const rr = Math.min(radio, w / 2, h / 2);
-        ctx.moveTo(rr, 0);
-        ctx.arcTo(w, 0, w, h, rr);
-        ctx.arcTo(w, h, 0, h, rr);
-        ctx.arcTo(0, h, 0, 0, rr);
-        ctx.arcTo(0, 0, w, 0, rr);
+      // Esquinas: `radios` (cuádruple [tl,tr,br,bl]) manda sobre el `radio` uniforme. Espejo de
+      // `rutaRect`/`radiosEsquina` de dibujar.mjs.
+      const lim = Math.min(w / 2, h / 2);
+      const r4 = (radios && radios.length === 4 ? radios : [radio, radio, radio, radio]).map((r) =>
+        Math.max(0, Math.min(r || 0, lim)),
+      );
+      const [tl, tr, br, bl] = r4;
+      if (tl || tr || br || bl) {
+        ctx.moveTo(tl, 0);
+        ctx.arcTo(w, 0, w, h, tr);
+        ctx.arcTo(w, h, 0, h, br);
+        ctx.arcTo(0, h, 0, 0, bl);
+        ctx.arcTo(0, 0, w, 0, tl);
         ctx.closePath();
       } else {
         ctx.rect(0, 0, w, h);
@@ -91,8 +104,8 @@ function pathFormaLocal(ctx: Konva.Context, forma: Forma | "linea" | undefined, 
 }
 
 // ¿Es una forma "redonda"/no-rectangular cuyo realce de selección debe seguir su silueta?
-function formaNoRect(forma: Forma | undefined, radio = 0): boolean {
-  return (forma != null && forma !== "rect") || radio > 0;
+function formaNoRect(forma: Forma | undefined, radio = 0, radios?: [number, number, number, number]): boolean {
+  return (forma != null && forma !== "rect") || radio > 0 || (radios != null && radios.some((r) => r > 0));
 }
 
 export interface CapaNodoProps {
@@ -126,6 +139,41 @@ export function puntosGradiente(w: number, h: number, angulo = 180) {
   };
 }
 
+// Paradas [pos, color, pos, color, …] de un degradado para Konva (`fill*GradientColorStops`).
+// Usa `stops` (multi-parada) si viene, si no desde/hasta (espejo de `paradasDegradado` del render).
+function colorStopsKonva(deg: RellenoDegradado): (number | string)[] {
+  if (deg.stops && deg.stops.length >= 2) {
+    return [...deg.stops]
+      .map((s) => ({ pos: Math.max(0, Math.min(1, s.pos || 0)), color: s.color }))
+      .sort((a, b) => a.pos - b.pos)
+      .flatMap((s) => [s.pos, s.color]);
+  }
+  return [0, deg.desde, 1, deg.hasta];
+}
+
+// Props de relleno Konva para un degradado (lineal o radial, multi-stop). Espejo de
+// `construirDegradado`: radial centrado en la caja, radio = mitad de la diagonal. Coords locales.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rellenoDegradadoKonva(deg: RellenoDegradado, w: number, h: number): Record<string, any> {
+  const stops = colorStopsKonva(deg);
+  if (deg.tipo === "radial") {
+    const r = Math.sqrt(w * w + h * h) / 2;
+    return {
+      fillRadialGradientStartPoint: { x: w / 2, y: h / 2 },
+      fillRadialGradientEndPoint: { x: w / 2, y: h / 2 },
+      fillRadialGradientStartRadius: 0,
+      fillRadialGradientEndRadius: r,
+      fillRadialGradientColorStops: stops,
+    };
+  }
+  const g = puntosGradiente(w, h, deg.angulo);
+  return {
+    fillLinearGradientStartPoint: g.start,
+    fillLinearGradientEndPoint: g.end,
+    fillLinearGradientColorStops: stops,
+  };
+}
+
 // Resuelve las familias LÓGICAS del documento ("sans"/"condensada") a fuentes reales, para que
 // el editor (Konva) pinte con la MISMA tipografía que el export del servidor (Barlow / Barlow
 // Condensed por defecto). Cualquier otra familia (nombre real) se pasa tal cual.
@@ -151,6 +199,8 @@ function NodoImagenAjustada({
   filtros,
   forma,
   radio,
+  radios,
+  crop,
   props,
 }: {
   img: HTMLImageElement;
@@ -162,23 +212,40 @@ function NodoImagenAjustada({
   filtros: Filtros;
   forma?: Forma;
   radio?: number;
+  radios?: [number, number, number, number];
+  crop?: CapaImagen["crop"];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any;
 }) {
   const ref = useRef<Konva.Image | null>(null);
-  const iw = img.width || 1;
-  const ih = img.height || 1;
+  // Imagen EFECTIVA = sub-rect fuente recortado (crop, fracciones 0..1 -> px). El cover/contain y el
+  // `crop` de Konva (px de la imagen) se calculan sobre ese sub-rect. Espejo de `rectFuente`.
+  const iwTotal = img.width || 1;
+  const ihTotal = img.height || 1;
+  const cx = crop ? Math.max(0, Math.min(1, crop.cx)) : 0;
+  const cy = crop ? Math.max(0, Math.min(1, crop.cy)) : 0;
+  const cw = crop ? Math.max(0, Math.min(1 - cx, crop.cw)) : 1;
+  const ch = crop ? Math.max(0, Math.min(1 - cy, crop.ch)) : 1;
+  const usaCrop = crop != null && cw > 0 && ch > 0 && (cx > 0 || cy > 0 || cw < 1 || ch < 1);
+  const iw = usaCrop ? cw * iwTotal : iwTotal;
+  const ih = usaCrop ? ch * ihTotal : ihTotal;
   const base = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
   const escala = base * (zoom > 0 ? zoom : 1);
   const dw = iw * escala;
   const dh = ih * escala;
   const ix = (w - dw) * (foco[0] ?? 0.5);
   const iy = (h - dh) * (foco[1] ?? 0.5);
+  const cropPx = usaCrop
+    ? { crop: { x: cx * iwTotal, y: cy * ihTotal, width: cw * iwTotal, height: ch * ihTotal } }
+    : {};
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    if (!filtros) {
+    // El duotono no es un filtro CSS nativo de Konva; lo aproximamos con un tinte (capa de color
+    // encima, ver más abajo). Aquí solo cuentan brillo/contraste/saturación/desenfoque.
+    const duotono = filtros?.duotono ?? null;
+    if (!filtros || (filtros.brillo === 1 && filtros.contraste === 1 && filtros.saturacion === 1 && !filtros.desenfoque && !duotono)) {
       node.filters([]);
       node.clearCache();
       node.getLayer()?.batchDraw();
@@ -189,6 +256,9 @@ function NodoImagenAjustada({
     if (filtros.contraste != null && filtros.contraste !== 1) lista.push(Konva.Filters.Contrast);
     if (filtros.saturacion != null && filtros.saturacion !== 1) lista.push(Konva.Filters.HSL);
     if (filtros.desenfoque) lista.push(Konva.Filters.Blur);
+    // Duotono: pasamos la foto a gris (Grayscale) para que el tinte superior la mapee por luminancia
+    // (aproximación; el export del servidor manda en la pieza final).
+    if (duotono) lista.push(Konva.Filters.Grayscale);
     node.filters(lista);
     node.brightness((filtros.brillo ?? 1) - 1);
     node.contrast(((filtros.contraste ?? 1) - 1) * 100);
@@ -207,21 +277,31 @@ function NodoImagenAjustada({
   // radio usamos clipX/Y/W/H (camino rápido idéntico al de antes).
   const r = radio ?? 0;
   const recorte =
-    formaNoRect(forma, r)
+    formaNoRect(forma, r, radios)
       ? {
           clipFunc: (ctx: Konva.Context) => {
             ctx.beginPath();
-            pathFormaLocal(ctx, forma, w, h, r);
+            pathFormaLocal(ctx, forma, w, h, r, radios);
           },
         }
       : { clipX: 0, clipY: 0, clipWidth: w, clipHeight: h };
+  // Tinte DUOTONO (aproximación Konva): dos Rects con la forma de la caja, "multiply" con `luz` y
+  // "lighten" con `sombra`, sobre la foto en gris. El export del servidor (dibujar.mjs) es la
+  // verdad; aquí basta una previa razonable. Recortado por el clip del Group (mismo path).
+  const duo = filtros?.duotono ?? null;
   return (
     <Group {...props} {...recorte}>
       {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
           así que sin este Rect el Group no recibiría clic/arrastre (no se podían mover las fotos).
           opacity 0 = invisible en escena pero presente en el hit graph de Konva. */}
       <Rect x={0} y={0} width={w} height={h} fill="#000000" opacity={0} />
-      <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} />
+      <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} {...cropPx} />
+      {duo && (
+        <>
+          <Rect x={0} y={0} width={w} height={h} fill={duo.luz} globalCompositeOperation="multiply" listening={false} />
+          <Rect x={0} y={0} width={w} height={h} fill={duo.sombra} globalCompositeOperation="lighten" listening={false} />
+        </>
+      )}
     </Group>
   );
 }
@@ -302,12 +382,12 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       if (!img) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} props={props} />;
+      const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} radios={c.radios} crop={c.crop} props={props} />;
       // Realce de selección que SIGUE LA FORMA: el Transformer de Konva usa su bbox rect (sus
       // tiradores definen la caja), pero cuando la imagen NO es un rect simple el contorno azul
       // punteado debe cuadrar con su silueta. Solo visual (listening=false). Trazamos el mismo path
       // del catálogo (coords locales) con un Shape, posicionado/rotado como la capa.
-      const formaRedonda = formaNoRect(c.forma, c.radio ?? 0);
+      const formaRedonda = formaNoRect(c.forma, c.radio ?? 0, c.radios);
       const realceSel =
         seleccionada && interactivo && formaRedonda ? (
           <Shape
@@ -320,7 +400,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
             listening={false}
             sceneFunc={(ctx, shape) => {
               ctx.beginPath();
-              pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0);
+              pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0, c.radios);
               ctx.strokeShape(shape);
             }}
           />
@@ -346,7 +426,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
               shadowEnabled
               sceneFunc={(ctx, shape) => {
                 ctx.beginPath();
-                pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0);
+                pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0, c.radios);
                 ctx.fillShape(shape);
               }}
             />
@@ -394,9 +474,10 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       // auto-encogido de fuente NO se replica en Konva (la "vista real" la rinde el servidor con
       // dibujar.mjs); aquí basta con honrar caja + valign.
       const enCaja = c.h > 0;
-      // Relleno: degradado lineal (mismos puntos que el render) o color sólido.
-      const grad = c.relleno_degradado
-        ? puntosGradiente(c.w, enCaja ? c.h : c.tamano * c.interlineado, c.relleno_degradado.angulo)
+      // Relleno: degradado (lineal o radial, multi-stop) o color sólido. Mismos puntos/paradas que
+      // el render del servidor (`construirDegradado`).
+      const gradTexto = c.relleno_degradado
+        ? rellenoDegradadoKonva(c.relleno_degradado, c.w, enCaja ? c.h : c.tamano * c.interlineado)
         : null;
       const nodoTexto = (
         <Text
@@ -408,12 +489,8 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           fontFamily={familiaReal(c.familia)}
           fontSize={c.tamano}
           fontStyle={c.peso >= 600 ? "bold" : "normal"}
-          fill={grad ? undefined : c.color}
-          fillLinearGradientStartPoint={grad ? grad.start : undefined}
-          fillLinearGradientEndPoint={grad ? grad.end : undefined}
-          fillLinearGradientColorStops={
-            grad && c.relleno_degradado ? [0, c.relleno_degradado.desde, 1, c.relleno_degradado.hasta] : undefined
-          }
+          fill={gradTexto ? undefined : c.color}
+          {...(gradTexto ?? {})}
           align={ALIN[c.alineacion] ?? "left"}
           lineHeight={c.interlineado}
           letterSpacing={c.interletra || 0}
@@ -464,15 +541,10 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           />
         );
       }
-      // Relleno: degradado lineal (mismos puntos que el render) o color sólido. La sombra de la
-      // forma usa los shadow* de Konva según `c.sombra`.
-      const gradM = c.relleno_degradado ? puntosGradiente(c.w, c.h, c.relleno_degradado.angulo) : null;
-      const rellenoMarco = gradM
-        ? {
-            fillLinearGradientStartPoint: gradM.start,
-            fillLinearGradientEndPoint: gradM.end,
-            fillLinearGradientColorStops: [0, c.relleno_degradado!.desde, 1, c.relleno_degradado!.hasta],
-          }
+      // Relleno: degradado (lineal o radial, multi-stop) o color sólido. La sombra de la forma usa
+      // los shadow* de Konva según `c.sombra`. Mismos puntos/paradas que `construirDegradado`.
+      const rellenoMarco = c.relleno_degradado
+        ? rellenoDegradadoKonva(c.relleno_degradado, c.w, c.h)
         : { fill: c.relleno ?? undefined };
       const sombraMarco = c.sombra
         ? {
@@ -513,7 +585,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
             strokeWidth={c.borde?.grosor}
             sceneFunc={(ctx, shape) => {
               ctx.beginPath();
-              pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0);
+              pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0, c.radios);
               ctx.fillStrokeShape(shape);
             }}
           />
@@ -524,7 +596,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           {...props}
           width={c.w}
           height={c.h}
-          cornerRadius={c.radio}
+          cornerRadius={c.radios ?? c.radio}
           {...rellenoMarco}
           {...sombraMarco}
           stroke={c.borde?.color}

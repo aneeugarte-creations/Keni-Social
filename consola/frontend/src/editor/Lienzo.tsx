@@ -53,15 +53,36 @@ function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: number; h: n
   const img = useImagen(fondo.tipo === "imagen" ? fondo.imagen?.media_id : null);
   if (fondo.tipo === "color") return <Rect x={0} y={0} width={w} height={h} fill={fondo.color} listening={false} />;
   if (fondo.tipo === "degradado" && fondo.degradado) {
-    // Respeta el ÁNGULO del degradado (mismo helper/convención que el render y las capas):
-    // default 180 = vertical (↓), sin cambio visual respecto al comportamiento previo.
-    const g = puntosGradiente(w, h, fondo.degradado.angulo);
+    // Soporta lineal/radial y multi-stop (mismo helper/convención que el render y las capas):
+    // default lineal 180 = vertical (↓), sin cambio visual respecto al comportamiento previo.
+    const deg = fondo.degradado;
+    const stops: (number | string)[] =
+      deg.stops && deg.stops.length >= 2
+        ? [...deg.stops]
+            .map((s) => ({ pos: Math.max(0, Math.min(1, s.pos || 0)), color: s.color }))
+            .sort((a, b) => a.pos - b.pos)
+            .flatMap((s) => [s.pos, s.color])
+        : [0, deg.desde, 1, deg.hasta];
+    if (deg.tipo === "radial") {
+      const r = Math.sqrt(w * w + h * h) / 2;
+      return (
+        <Rect
+          x={0} y={0} width={w} height={h} listening={false}
+          fillRadialGradientStartPoint={{ x: w / 2, y: h / 2 }}
+          fillRadialGradientEndPoint={{ x: w / 2, y: h / 2 }}
+          fillRadialGradientStartRadius={0}
+          fillRadialGradientEndRadius={r}
+          fillRadialGradientColorStops={stops}
+        />
+      );
+    }
+    const g = puntosGradiente(w, h, deg.angulo);
     return (
       <Rect
         x={0} y={0} width={w} height={h} listening={false}
         fillLinearGradientStartPoint={g.start}
         fillLinearGradientEndPoint={g.end}
-        fillLinearGradientColorStops={[0, fondo.degradado.desde, 1, fondo.degradado.hasta]}
+        fillLinearGradientColorStops={stops}
       />
     );
   }

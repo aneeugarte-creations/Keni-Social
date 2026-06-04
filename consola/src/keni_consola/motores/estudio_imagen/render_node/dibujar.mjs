@@ -48,6 +48,41 @@ function gradienteLineal(ctx, x, y, w, h, desde, hasta, angulo) {
   return g;
 }
 
+// Lista de paradas [pos,color] de un degradado `deg`: usa `stops` (multi-parada) si viene válido,
+// si no cae a `desde`/`hasta` (2 paradas 0/1). Retrocompat: sin `stops` == comportamiento legado.
+function paradasDegradado(deg) {
+  const stops = Array.isArray(deg.stops) ? deg.stops.filter((s) => s && typeof s.color === "string") : null;
+  if (stops && stops.length >= 2) {
+    return stops
+      .map((s) => [Math.max(0, Math.min(1, Number(s.pos) || 0)), s.color])
+      .sort((a, b) => a[0] - b[0]);
+  }
+  return [[0, deg.desde], [1, deg.hasta]];
+}
+
+// Construye un gradiente canvas (lineal o radial) que abarca la caja (x,y,w,h) a partir de un
+// objeto degradado `deg` = {tipo?, desde, hasta, angulo?, stops?}. ÚNICA fuente de verdad de los
+// degradados de texto/marco/fondo. Lineal: misma convención/eje que `gradienteLineal`. Radial:
+// centrado en la caja, radio = mitad de la diagonal (cubre las esquinas). Las paradas salen de
+// `paradasDegradado` (multi-stop si viene, si no desde/hasta). Retrocompat: tipo ausente => lineal.
+function construirDegradado(ctx, x, y, w, h, deg) {
+  const paradas = paradasDegradado(deg);
+  let g;
+  if (deg.tipo === "radial") {
+    const cx = x + w / 2, cy = y + h / 2;
+    const r = Math.sqrt(w * w + h * h) / 2;
+    g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  } else {
+    const a = ((deg.angulo ?? 180) * Math.PI) / 180;
+    const ux = Math.sin(a), uy = -Math.cos(a);
+    const cx = x + w / 2, cy = y + h / 2;
+    const semi = (Math.abs(w * ux) + Math.abs(h * uy)) / 2;
+    g = ctx.createLinearGradient(cx - ux * semi, cy - uy * semi, cx + ux * semi, cy + uy * semi);
+  }
+  for (const [pos, color] of paradas) g.addColorStop(pos, color);
+  return g;
+}
+
 // Reparte un texto en líneas que caben en `maxAncho` (greedy por palabras).
 function envolver(ctx, texto, maxAncho) {
   const out = [];
@@ -84,9 +119,10 @@ function ajustar(ctx, texto, maxAncho, maxAlto, fontFor, tamMax, tamMin, maxLine
 // Catálogo de FORMAS compartido (marcos e imágenes). Traza en el path ACTUAL de `ctx` la silueta
 // de `forma` inscrita en la caja (x,y,w,h). Es la ÚNICA fuente de verdad de las formas: lo usan el
 // clip de la imagen (`dibujarImagenEnCaja`) y el relleno/borde del marco (`dibujarMarco`), y el
-// editor (Konva) replica el mismo trazado en coords locales. `radio` solo afecta a "rect".
+// editor (Konva) replica el mismo trazado en coords locales. `radio`/`radios` solo afectan a "rect"
+// (radio uniforme o cuádruple [tl,tr,br,bl] por esquina; `radios` manda sobre `radio`).
 // Retrocompat: "rect" sin radio == ctx.rect; "elipse" == ctx.ellipse de siempre.
-function pathForma(ctx, forma, x, y, w, h, radio) {
+function pathForma(ctx, forma, x, y, w, h, radio, radios) {
   const cx = x + w / 2, cy = y + h / 2;
   // Polígono regular de `n` lados inscrito en la caja (radio = w/2,h/2), con el primer vértice
   // ARRIBA (ángulo -90°). Cierra el path.
@@ -151,19 +187,37 @@ function pathForma(ctx, forma, x, y, w, h, radio) {
       ctx.closePath();
       return;
     }
-    default:
-      // "rect" (y cualquier desconocida): rectángulo, redondeado si `radio>0`.
-      if (radio > 0) rutaRect(ctx, x, y, w, h, radio);
+    default: {
+      // "rect" (y cualquier desconocida): rectángulo, redondeado si `radio>0` o si hay `radios`.
+      const hayRadios = Array.isArray(radios) && radios.some((r) => r > 0);
+      if (radio > 0 || hayRadios) rutaRect(ctx, x, y, w, h, radio, radios);
       else ctx.rect(x, y, w, h);
+    }
   }
 }
 
-// `forma`/`radio` (opcionales) definen el RECORTE de la imagen: el catálogo de formas (rect con
-// `radio`, elipse, triángulo, rombo, polígonos, estrella, flecha). Sin forma => rectángulo de
-// siempre (llamadores existentes => idéntico).
-function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom, forma, radio) {
-  if (!img) return;
+// Normaliza un recorte (crop) no destructivo a píxeles de la imagen FUENTE. `crop` = {cx,cy,cw,ch}
+// en fracciones 0..1 del rectángulo fuente. Sin crop (o inválido) => toda la imagen (retrocompat).
+function rectFuente(img, crop) {
   const iw = img.width, ih = img.height;
+  if (!crop) return { sx: 0, sy: 0, sw: iw, sh: ih };
+  const cx = Math.max(0, Math.min(1, Number(crop.cx) || 0));
+  const cy = Math.max(0, Math.min(1, Number(crop.cy) || 0));
+  const cw = Math.max(0, Math.min(1 - cx, crop.cw == null ? 1 : Number(crop.cw)));
+  const ch = Math.max(0, Math.min(1 - cy, crop.ch == null ? 1 : Number(crop.ch)));
+  if (cw <= 0 || ch <= 0) return { sx: 0, sy: 0, sw: iw, sh: ih };
+  return { sx: cx * iw, sy: cy * ih, sw: cw * iw, sh: ch * ih };
+}
+
+// `forma`/`radio`/`radios` (opcionales) definen el RECORTE-FORMA de la imagen: el catálogo de formas
+// (rect con esquinas, elipse, triángulo, rombo, polígonos, estrella, flecha). `crop` recorta la
+// FUENTE (sub-rect, no destructivo). `duotono` mapea la luminancia entre dos colores tras pintar.
+// Sin forma/crop/duotono => rectángulo de siempre (llamadores existentes => idéntico).
+function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom, forma, radio, radios, crop, duotono) {
+  if (!img) return;
+  // Imagen EFECTIVA = sub-rect fuente recortado (crop). El cover/contain se calcula sobre sus dims.
+  const { sx, sy, sw, sh } = rectFuente(img, crop);
+  const iw = sw, ih = sh;
   const z = zoom && zoom > 0 ? zoom : 1; // reencuadre: factor de acercamiento dentro del marco
   const base = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
   const escala = base * z;
@@ -171,11 +225,38 @@ function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom, forma, ra
   const fx = foco ? foco[0] : 0.5, fy = foco ? foco[1] : 0.45;
   const dx = x + (w - dw) * fx;
   const dy = y + (h - dh) * fy;
+  const duo = duotono && duotono.luz && duotono.sombra ? duotono : null;
   ctx.save();
   ctx.beginPath();
-  pathForma(ctx, forma, x, y, w, h, radio);
+  pathForma(ctx, forma, x, y, w, h, radio, radios);
   ctx.clip();
-  ctx.drawImage(img, dx, dy, dw, dh);
+  // DUOTONO: la foto se pinta en GRIS (grayscale) para mapear su LUMINANCIA; luego dos capas de
+  // color la tiñen entre `sombra` (luminancia baja) y `luz` (alta). Anteponemos grayscale(1) al
+  // filtro CSS ya activo (brillo/contraste…). Sin duotono el filtro queda como lo dejó el llamador.
+  const filtroPrevio = duo ? ctx.filter : null;
+  if (duo) ctx.filter = `grayscale(1)${ctx.filter && ctx.filter !== "none" ? " " + ctx.filter : ""}`;
+  // 9 args: recorta la fuente [sx,sy,sw,sh] y la pinta en el destino [dx,dy,dw,dh].
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  if (duo) ctx.filter = filtroPrevio;
+  // Tinte de marca sobre la foto en gris, RECORTADO a la forma (seguimos dentro del clip):
+  //   1) "multiply" con `luz`  -> oscurece hacia el color de luz manteniendo la estructura,
+  //   2) "lighten" con `sombra`-> levanta las sombras al color de sombra.
+  // Aproxima un duotono real (suficiente para un tinte de marca sobre foto).
+  if (duo) {
+    const duotono = duo;
+    const prev = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = duotono.luz;
+    ctx.beginPath();
+    pathForma(ctx, forma, x, y, w, h, radio, radios);
+    ctx.fill();
+    ctx.globalCompositeOperation = "lighten";
+    ctx.fillStyle = duotono.sombra;
+    ctx.beginPath();
+    pathForma(ctx, forma, x, y, w, h, radio, radios);
+    ctx.fill();
+    ctx.globalCompositeOperation = prev;
+  }
   ctx.restore();
 }
 
@@ -203,9 +284,9 @@ function dibujarFondo(ctx, fondo, w, h, fondoImg) {
     ctx.fillStyle = fondo.color;
     ctx.fillRect(0, 0, w, h);
   } else if (fondo.tipo === "degradado") {
-    // Default vertical (ángulo 180 = ↓): equivalente al render legado top->bottom.
-    const g = gradienteLineal(ctx, 0, 0, w, h, fondo.degradado.desde, fondo.degradado.hasta, fondo.degradado.angulo);
-    ctx.fillStyle = g;
+    // Default vertical (ángulo 180 = ↓): equivalente al render legado top->bottom. Soporta tipo
+    // lineal/radial y multi-stop vía `construirDegradado`.
+    ctx.fillStyle = construirDegradado(ctx, 0, 0, w, h, fondo.degradado);
     ctx.fillRect(0, 0, w, h);
   } else if (fondo.tipo === "imagen" && fondoImg) {
     dibujarImagenEnCaja(ctx, fondoImg, 0, 0, w, h, fondo.imagen.ajuste || "cover", [0.5, 0.5]);
@@ -273,7 +354,7 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   // sustituye al color sólido cuando `relleno_degradado` está presente (aditivo y retrocompatible).
   const rd = t.relleno_degradado || null;
   const relleno = rd
-    ? gradienteLineal(ctx, t.x, top, t.w, blockH, rd.desde, rd.hasta, rd.angulo)
+    ? construirDegradado(ctx, t.x, top, t.w, blockH, rd)
     : t.color;
   // SOMBRA REAL del canvas (blur/opacidad): solo cuando hay desenfoque>0 u opacidad<1. Si no, se
   // mantiene el camino legado (fillText manual desplazado) para que las placas existentes queden
@@ -491,15 +572,26 @@ export function dibujarSpec(ctx, { formato, fuentes, bindings, placeholder, imgs
 // TODOS los dibujantes de arriba: única fuente de verdad cliente/servidor.
 // ===========================================================================
 
-// Traza un rectángulo (redondeado si r>0) en el path actual.
-function rutaRect(ctx, x, y, w, h, r) {
-  if (!r) { ctx.rect(x, y, w, h); return; }
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
+// Normaliza el radio de esquinas a un cuádruple [tl,tr,br,bl]. `radios` (si viene como array de 4)
+// manda sobre el `radio` uniforme. Cada esquina se acota a la mitad del lado menor de la caja.
+function radiosEsquina(radio, radios, w, h) {
+  const lim = Math.min(w / 2, h / 2);
+  const r4 = Array.isArray(radios) && radios.length === 4
+    ? radios
+    : [radio || 0, radio || 0, radio || 0, radio || 0];
+  return r4.map((r) => Math.max(0, Math.min(Number(r) || 0, lim)));
+}
+
+// Traza un rectángulo en el path actual. `r` puede ser un número (radio uniforme) o un cuádruple
+// [tl,tr,br,bl] (radio por esquina). Sin radio (0 o todos 0) traza un rect plano (retrocompat).
+function rutaRect(ctx, x, y, w, h, r, radios) {
+  const [tl, tr, br, bl] = radiosEsquina(r, radios, w, h);
+  if (!tl && !tr && !br && !bl) { ctx.rect(x, y, w, h); return; }
+  ctx.moveTo(x + tl, y);
+  ctx.arcTo(x + w, y, x + w, y + h, tr);
+  ctx.arcTo(x + w, y + h, x, y + h, br);
+  ctx.arcTo(x, y + h, x, y, bl);
+  ctx.arcTo(x, y, x + w, y, tl);
   ctx.closePath();
 }
 
@@ -550,12 +642,12 @@ function dibujarMarco(ctx, m) {
   }
   ctx.beginPath();
   // Catálogo de formas compartido (rect/redondeado, elipse, triángulo, rombo, polígonos, estrella,
-  // flecha). "linea" se trata arriba; aquí van las formas con relleno/borde.
-  pathForma(ctx, m.forma, x, y, w, h, m.radio || 0);
-  // Relleno: degradado lineal (abarcando la caja) si `relleno_degradado`, si no el color sólido.
+  // flecha). "linea" se trata arriba; aquí van las formas con relleno/borde. `radios` (por esquina)
+  // manda sobre `radio` en el rect.
+  pathForma(ctx, m.forma, x, y, w, h, m.radio || 0, m.radios);
+  // Relleno: degradado (lineal o radial, multi-stop) si `relleno_degradado`, si no el color sólido.
   if (m.relleno_degradado) {
-    const rd = m.relleno_degradado;
-    ctx.fillStyle = gradienteLineal(ctx, x, y, w, h, rd.desde, rd.hasta, rd.angulo);
+    ctx.fillStyle = construirDegradado(ctx, x, y, w, h, m.relleno_degradado);
     ctx.fill();
   } else if (m.relleno) {
     ctx.fillStyle = m.relleno;
@@ -599,11 +691,11 @@ function dibujarCapa(ctx, capa, env) {
         ctx.fillStyle = "#000000";
         ctx.beginPath();
         // La silueta de la sombra sigue la FORMA de la imagen (mismo catálogo que su recorte).
-        pathForma(ctx, capa.forma, capa.x, capa.y, capa.w, capa.h, capa.radio);
+        pathForma(ctx, capa.forma, capa.x, capa.y, capa.w, capa.h, capa.radio, capa.radios);
         ctx.fill();
         resetSombraCanvas(ctx);
       }
-      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom, capa.forma, capa.radio);
+      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom, capa.forma, capa.radio, capa.radios, capa.crop, capa.filtros ? capa.filtros.duotono : null);
       if (filtro) ctx.filter = "none";
       break;
     }
