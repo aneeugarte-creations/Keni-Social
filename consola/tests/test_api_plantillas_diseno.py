@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-_DOC = {"formato": {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96}, "capas": []}
+# Toda plantilla necesita un HUECO DE FOTO explícito (`es_foto`): el doc base lo incluye.
+_DOC = {
+    "formato": {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96},
+    "capas": [
+        {"tipo": "imagen", "objeto": "", "x": 0, "y": 0, "w": 1080, "h": 1350, "z": 0, "es_foto": True},
+    ],
+}
 
 
 def test_listar_vacio(cliente):
@@ -39,6 +45,14 @@ def test_crear_documento_invalido_400(cliente):
 def test_crear_sin_documento_400(cliente):
     r = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "nombre": "x"})
     assert r.status_code == 400
+
+
+def test_crear_sin_hueco_de_foto_400(cliente):
+    # Sin una capa imagen marcada `es_foto`, la plantilla no declara dónde va la foto -> 400.
+    sin_hueco = {"formato": {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96}, "capas": []}
+    r = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": sin_hueco})
+    assert r.status_code == 400
+    assert "hueco de foto" in r.json()["error"].lower()
 
 
 def test_crear_marca_invalida_400(cliente):
