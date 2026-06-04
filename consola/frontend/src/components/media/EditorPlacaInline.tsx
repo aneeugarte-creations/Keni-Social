@@ -8,7 +8,9 @@
  *  - Cabecera: quitar plantilla (publicar solo la foto cruda) · elegir plantilla del estudio.
  *  - Reencuadre: arrastra la foto + zoom dentro del marco 4:5. Titular: clic para reescribir in place.
  *  - Origen de la FOTO: Subir · Biblioteca · IA · Usar imagen original.
- *  - Al guardar, el padre llama al "bake" (registrado vía `registrarBake`): hornea el canvas a PNG.
+ *  - El canvas es SOLO previa en vivo: al guardar NO se hornea ningún PNG. La pieza guarda su
+ *    RECETA (foto + copy_in + plantilla + encuadre) y la imagen publicable se renderiza
+ *    on-demand en el servidor (`/api/publicaciones/{id}/compuesta`).
  */
 import { useMutation } from "@tanstack/react-query";
 import { Crop, ImagePlus, LayoutTemplate, Library, Loader2, Move, Slash, Upload } from "lucide-react";
@@ -96,8 +98,6 @@ export interface EditorPlacaInlineProps {
   onEncuadreCambio?: (encuadre: EncuadreFoto) => void;
   /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
   onAbrirGaleria?: () => void;
-  /** Registra (o limpia con null) la función de "bake" que hornea el canvas a un media id. */
-  registrarBake: (fn: (() => Promise<string | null>) | null) => void;
 }
 
 export function EditorPlacaInline({
@@ -113,7 +113,6 @@ export function EditorPlacaInline({
   encuadre = null,
   onEncuadreCambio,
   onAbrirGaleria,
-  registrarBake,
 }: EditorPlacaInlineProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -227,22 +226,6 @@ export function EditorPlacaInline({
     const t = setTimeout(render, 120);
     return () => clearTimeout(t);
   }, [render, fuentesListas]);
-
-  // --- Bake: hornea el canvas a un media id (lo llama el padre al guardar) --- //
-  React.useEffect(() => {
-    const bake = async (): Promise<string | null> => {
-      const canvas = canvasRef.current;
-      if (!canvas) return null;
-      render(); // render final con el estado vigente antes de hornear
-      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
-      if (!blob) return null;
-      const file = new File([blob], "pieza.png", { type: "image/png" });
-      const subida = await api.subirMedia(file);
-      return subida.id;
-    };
-    registrarBake(bake);
-    return () => registrarBake(null);
-  }, [render, registrarBake]);
 
   // --- Origen de la FOTO --- //
   const subir = useMutation({

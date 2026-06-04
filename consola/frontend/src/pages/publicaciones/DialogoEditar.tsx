@@ -334,8 +334,6 @@ export function DialogoEditar({
   // Reencuadre manual de la foto dentro del marco 4:5 (null = sin reencuadre). La pieza lo persiste.
   const [encuadre, setEncuadre] = React.useState<EncuadreFoto | null>(null);
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
-  // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
-  const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
   const [vista, setVista] = React.useState<VistaEditor>("editar");
   // --- Autoguardado --- //
   // Estado del indicador de guardado (la pieza se guarda sola al editar; el botón es opcional).
@@ -343,9 +341,6 @@ export function DialogoEditar({
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
   const guardandoRef = React.useRef(false); // hay un guardado en vuelo
   const pendienteRef = React.useRef(false); // hubo cambios durante el guardado en vuelo
-  // Firma de los campos que afectan a la IMAGEN: solo se re-hornea si cambian (evita subir un PNG
-  // nuevo en cada tecla del copy/caption, que no toca la placa).
-  const firmaBakeRef = React.useRef("");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -408,14 +403,6 @@ export function DialogoEditar({
     setEncuadre(parsearEncuadre(publicacion.foto_encuadre));
     setVista("editar");
     setEstadoGuardado("idle");
-    // La imagen cargada ya es la vigente: su firma evita re-hornear si no se toca la placa.
-    firmaBakeRef.current = JSON.stringify({
-      foto: publicacion.foto ?? "",
-      copyIn: publicacion.copy_in ?? "",
-      placaOculta: publicacion.placa_oculta ?? false,
-      plantillaId: publicacion.plantilla_diseno_id ?? "",
-      encuadre: publicacion.foto_encuadre ?? "",
-    });
     // Reabrimos el autoguardado tras aplicar la carga (en un tick: así el render que dispara esta
     // carga ve `cargandoRef=true` y no guarda; solo los cambios del usuario posteriores guardan).
     const t = setTimeout(() => {
@@ -440,25 +427,15 @@ export function DialogoEditar({
     [estados, estado],
   );
 
-  // Persiste la pieza. Hornea la imagen SOLO si cambió su firma (no re-sube un PNG en cada tecla del
-  // caption). NO cierra el diálogo: lo comparten el autoguardado y el botón.
+  // Persiste la pieza. NO cierra el diálogo: lo comparten el autoguardado y el botón.
   const persistir = React.useCallback(async () => {
     if (!publicacion) return;
-    const firma = JSON.stringify({
-      foto, copyIn, placaOculta, plantillaId, encuadre: serializarEncuadre(encuadre),
-    });
-    // Piezas de marca: el editor renderiza la plantilla (o la foto cruda) EN VIVO en el canvas;
-    // al guardar se hornea a un media id publicable. Solo se re-hornea si cambió la firma de la
-    // imagen (no en cada tecla del caption).
-    let imagenFinal = imagen;
-    if (publicacion.marca && bakeRef.current && firma !== firmaBakeRef.current) {
-      const horneada = await bakeRef.current();
-      if (horneada) {
-        imagenFinal = horneada;
-        setImagen(horneada);
-      }
-    }
-    firmaBakeRef.current = firma;
+    // RENDER ON-DEMAND: las piezas de MARCA ya no hornean un PNG al guardar. Persistimos su
+    // RECETA (foto + copy_in + placa_oculta + plantilla + encuadre) y dejamos `imagen` vacío; la
+    // imagen publicable se renderiza on-demand en el servidor (/api/publicaciones/{id}/compuesta).
+    // Así no se duplica un PNG por cada edición de texto. Las piezas SIN marca conservan su
+    // `imagen` (imagen subida/generada, sin receta de placa).
+    const imagenFinal = publicacion.marca ? "" : imagen;
     const cuerpo: CuerpoActualizarPublicacion = {
       titulo: titulo.trim(),
       contenido,
@@ -647,9 +624,6 @@ export function DialogoEditar({
                   encuadre={encuadre}
                   onEncuadreCambio={setEncuadre}
                   onAbrirGaleria={() => setGaleriaPlantillas(true)}
-                  registrarBake={(fn) => {
-                    bakeRef.current = fn;
-                  }}
                 />
               ) : (
                 // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.
