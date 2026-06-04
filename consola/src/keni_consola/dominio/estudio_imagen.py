@@ -61,13 +61,14 @@ PROMPT_IMAGEN_DEFECTO = "prompt/imagen/ilustracion-fondo"
 # placa`, Pillow). NO limita la PLANTILLA por SPEC: esa funciona para toda marca del catalogo
 # (el spec se deriva de los campos planos, que existen para cualquier marca; ver
 # `marca_tiene_plantilla`).
-_MARCAS_VISUALES = ("unotv", "claro-sports")
+_MARCAS_VISUALES = ("unotv", "claro-sports", "fundacion")
 
 # Nota de estilo por marca para el prompt generativo (referencia corta; la guia completa
 # vive como documento editorial en la Biblioteca). Replica `motores/.../generar.ESTILO_MARCA`.
 _ESTILO_MARCA = {
     "unotv": "Estilo UnoTV: noticias, sobrio, creible, alto contraste, rojo #E30613 como acento puntual.",
     "claro-sports": "Estilo Claro Sports: deportivo, energia, alto contraste, rojo #CF2E2E de marca.",
+    "fundacion": "Estilo Fundación: social y humano, calido y cercano, esperanzador; tono sensible y respetuoso, acento ambar #D97706.",
 }
 
 # Wall-timeouts: editar es determinista (rapido); expandir/retocar llaman al proveedor (lento).
@@ -94,9 +95,9 @@ def marca_tiene_plantilla(marca: str) -> bool:
     Cualquier marca del catalogo PUEDE tener plantilla (el editor visual diseña y guarda su
     SPEC de capas), pero solo se auto-compone cuando hay un diseño concreto, no por el mero
     hecho de existir en el catalogo. Dos casos cuentan como "configurada":
-      - tokens de diseño PRECARGADOS (`_MARCAS_VISUALES`: unotv / claro-sports), o
+      - tokens de diseño PRECARGADOS (`_MARCAS_VISUALES`: unotv / claro-sports / fundacion), o
       - un SPEC guardado en el editor visual (`plantillas_marca.tiene_spec_guardado`).
-    Una marca del catalogo SIN ninguno de los dos (p. ej. piso-15, o Fundacion hasta que se
+    Una marca del catalogo SIN ninguno de los dos (p. ej. piso-15 o nacion-gamer hasta que se
     le diseñe spec) NO compone: el integrar-foto devuelve la foto tal cual y la auto-gen omite
     la placa. Asi evitamos componer una placa generica para toda marca por defecto.
     """

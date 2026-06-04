@@ -51,12 +51,13 @@ FORMATOS = {
     "horizontal": (1920, 1080),
 }
 
-# Nota de estilo por marca (referencia; guía completa en
-# skills-copy/.claude/skills/diseno-<marca>/guia-diseno.md).
+# Nota de estilo por marca (referencia corta; la guía completa de cada marca vive como
+# documento editorial en la Biblioteca de la Consola).
 ESTILO_MARCA = {
     "unotv": "Estilo UnoTV: noticias, sobrio, creíble, alto contraste.",
     "claro-sports": "Estilo Claro Sports: deportivo, energía, alto contraste.",
     "claro": "Estilo Claro Sports: deportivo, energía, alto contraste.",
+    "fundacion": "Estilo Fundación: social y humano, cálido y cercano, esperanzador; tono sensible y respetuoso.",
 }
 
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"

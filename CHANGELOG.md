@@ -7,6 +7,19 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Marcas: Fundación pasa a ser una marca visual de primer nivel
+
+- **Fundación** se integra como **marca con identidad visual** a la par de UnoTV y Claro
+  Sports: gana tokens de diseño en `motores/estudio_imagen/marcas.json` (acento ámbar
+  **#D97706**, tomado del color de zona ya usado en el organigrama del frontend), entra en
+  `_MARCAS_VISUALES` y, por tanto, habilita la **placa de texto** y la composición de
+  imagen por defecto.
+- Se añade su **nota de estilo** en los motores de generación/expansión y su color en los
+  **mocks de assets** (`marca_assets`). Antes caía a genéricos como Nación Gamer y Piso 15.
+- Los tokens van marcados **[VERIFICAR]**: color, etiqueta ("COMUNIDAD") y tipografía son
+  defaults razonados para una marca social/sensible, pendientes de confirmar contra el
+  manual oficial de Fundación TELMEX/AMX.
+
 ### Tablero: menú contextual unificado en lista y feed
 
 - Las vistas **lista** y **feed** del tablero ahora comparten **exactamente las mismas

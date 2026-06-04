@@ -1,6 +1,6 @@
 {
-  "_nota": "Tokens de diseño para el ensamblado de breaking. Los valores de marca vienen del sistema de diseño en skills-copy/.claude/skills/diseno-unotv y diseno-clarosports (guia-diseno.md) y están marcados [VERIFICAR] hasta confirmarlos contra el manual oficial de AMX. Sustituye 'logo' por la ruta real del PNG del logo cuando el cliente lo aporte. Para usar los artes de la casa precargados, pon en 'marca_agua' y 'overlay_breaking' la ruta del PNG transparente correspondiente: se superponen a tamaño completo y, cuando existen, el compositor NO dibuja su propia pleca/logo.",
-  "_identidad": "Las CLAVES de 'marcas' son el id CANONICO de marca (slug-guion), la MISMA identidad unica que define `consola/src/keni_consola/marcas.py` (catalogo unico, #82/#102). Solo aparecen aqui las marcas con sistema de diseño de breaking (unotv, claro-sports); las demas del catalogo (nacion-gamer, piso-15, fundacion) no tienen tokens propios todavia. El campo 'id_metricas' (guion_bajo) es la forma que espera keni_metricas; debe coincidir con `marcas.py`. NO inventes ids nuevos: usa los del catalogo canonico.",
+  "_nota": "Tokens de diseño para el ensamblado de breaking. ESTE fichero es la fuente de verdad de los tokens de marca en la Consola; los valores están marcados [VERIFICAR] hasta confirmarlos contra el manual oficial de AMX. Sustituye 'logo' por la ruta real del PNG del logo cuando el cliente lo aporte. Para usar los artes de la casa precargados, pon en 'marca_agua' y 'overlay_breaking' la ruta del PNG transparente correspondiente: se superponen a tamaño completo y, cuando existen, el compositor NO dibuja su propia pleca/logo.",
+  "_identidad": "Las CLAVES de 'marcas' son el id CANONICO de marca (slug-guion), la MISMA identidad unica que define `consola/src/keni_consola/marcas.py` (catalogo unico, #82/#102). Solo aparecen aqui las marcas con sistema de diseño de breaking (unotv, claro-sports, fundacion); las demas del catalogo (nacion-gamer, piso-15) no tienen tokens propios todavia. El campo 'id_metricas' (guion_bajo) es la forma que espera keni_metricas; debe coincidir con `marcas.py`. NO inventes ids nuevos: usa los del catalogo canonico.",
   "formatos": {
     "vertical": { "w": 1080, "h": 1920, "safe_top": 220, "safe_bottom": 420, "_uso": "Reels / TikTok / Shorts 9:16" },
     "feed": { "w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96, "_uso": "Post IG / Facebook 4:5" },
@@ -38,6 +38,22 @@
       "logo_posicion": "superior-izquierda",
       "wordmark": "Claro Sports",
       "verificar": "Rojo #CF2E2E extraído de assets públicos (no del manual); tipografía condensada es referencia de estilo. Confirmar contra el manual de Claro Sports/AMX."
+    },
+    "fundacion": {
+      "nombre": "Fundación",
+      "id_metricas": "fundacion",
+      "rojo": "#D97706",
+      "tinta": "#1A1A1A",
+      "blanco": "#FFFFFF",
+      "etiqueta_default": "COMUNIDAD",
+      "titular_mayusculas": false,
+      "titular_condensada": false,
+      "logo": "",
+      "marca_agua": "",
+      "overlay_breaking": "",
+      "logo_posicion": "superior-izquierda",
+      "wordmark": "Fundación",
+      "verificar": "Acento #D97706 tomado del color de zona de la marca en la consola (frontend/src/lib/organigrama.ts); etiqueta 'COMUNIDAD' y tipografía son defaults razonados para una marca social/sensible, NO del manual. Confirmar contra el manual oficial de Fundación TELMEX/AMX."
     }
   }
 }

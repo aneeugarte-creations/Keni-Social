@@ -67,6 +67,6 @@ def test_no_fabricar_mock_devuelve_vacio_si_no_hay_oficial(store):
 
 
 def test_marca_sin_identidad_visual_usa_color_generico(store):
-    """Una marca del catalogo sin rojo propio (p.ej. fundacion) genera mock igualmente."""
-    ruta = marca_assets.ruta_asset("fundacion", marca_assets.TIPO_LOGO)
+    """Una marca del catalogo sin rojo propio (p.ej. nacion-gamer) genera mock igualmente."""
+    ruta = marca_assets.ruta_asset("nacion-gamer", marca_assets.TIPO_LOGO)
     assert Path(ruta).is_file()

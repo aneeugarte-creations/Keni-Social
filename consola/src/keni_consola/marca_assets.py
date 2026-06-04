@@ -41,6 +41,7 @@ _SUBDIR = "marca_assets"
 _ROJO_POR_MARCA = {
     "unotv": (227, 6, 19),        # #E30613
     "claro-sports": (207, 46, 46),  # #CF2E2E
+    "fundacion": (217, 119, 6),   # #D97706 (ambar; color de zona de la marca en la consola)
 }
 _ROJO_GENERICO = (227, 6, 19)
 _BLANCO = (255, 255, 255)

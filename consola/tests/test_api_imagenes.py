@@ -83,7 +83,7 @@ def test_editar_placa_marca_invalida_400(cliente):
         "/api/imagenes/editar",
         json={"op": "placa", "texto": "Gol", "marca": "piso-15", "formato": "feed"},
     )
-    assert r.status_code == 400  # placa solo unotv/claro-sports
+    assert r.status_code == 400  # placa solo marcas visuales (unotv/claro-sports/fundacion); piso-15 no
 
 
 def test_editar_recortar_ok(entorno, monkeypatch):

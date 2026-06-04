@@ -136,9 +136,9 @@ def _solo_editables(cfg: dict[str, Any]) -> dict[str, Any]:
 def DEFECTOS(marca: str) -> dict[str, Any]:  # noqa: N802 -- nombre publico pedido por el contrato
     """Plantilla por DEFECTO de una marca (sin override): defaults editables.
 
-    Para `unotv`/`claro-sports` toma los valores del catalogo estatico
+    Para `unotv`/`claro-sports`/`fundacion` toma los valores del catalogo estatico
     `motores/estudio_imagen/marcas.json`. Para las demas marcas del catalogo
-    (`nacion-gamer`, `piso-15`, `fundacion`) usa genericos, con `wordmark` = etiqueta humana.
+    (`nacion-gamer`, `piso-15`) usa genericos, con `wordmark` = etiqueta humana.
     """
     visuales = _marcas_json().get("marcas", {})
     if marca in visuales:
