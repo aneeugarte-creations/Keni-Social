@@ -1,6 +1,7 @@
 # Frontend (SPA React/Vite). El codigo fuente SI se versiona; las dependencias
-# instaladas y la salida intermedia de dev (dist/) NO.
-frontend/node_modules/
+# instaladas y la salida intermedia de dev (dist/) NO. Sin barra final: ignora tanto el
+# directorio como un symlink `node_modules` (p. ej. al instalar en un worktree compartido).
+frontend/node_modules
 frontend/dist/
 frontend/*.tsbuildinfo
 
