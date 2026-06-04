@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileUp, Loader2, Plus, Save, SaveAll, X } from "lucide-react";
+import { Check, Copy, FileUp, Loader2, Plus, Save, SaveAll, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -331,6 +331,25 @@ export default function EditorPro() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo borrar."),
   });
 
+  // DUPLICAR: crea una copia de la plantilla ya guardada en la galería (para «remixes» sin empezar
+  // de cero). Aparece al instante al invalidar la query.
+  const duplicarPlantilla = useMutation({
+    mutationFn: (p: PlantillaDiseno) =>
+      api.crearPlantillaDiseno({
+        marca: p.marca,
+        nombre: `Copia de ${p.nombre || "plantilla"}`,
+        categoria: p.categoria || "post",
+        documento: p.documento,
+        miniatura: p.miniatura || undefined,
+        lineas: p.lineas,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+      toast.success("Plantilla duplicada.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo duplicar."),
+  });
+
   // Guarda el documento en la PUBLICACIÓN anclada (render + versión + fija su imagen).
   const guardarEnPieza = useMutation({
     mutationFn: () => {
@@ -446,6 +465,7 @@ export default function EditorPro() {
             cargando={plantillasQ.isLoading}
             onAbrir={abrirPlantilla}
             onBorrar={(p) => borrarPlantilla.mutate(p.id)}
+            onDuplicar={(p) => duplicarPlantilla.mutate(p)}
             onBlanco={() => abrirPestana()}
           />
         )}
@@ -457,6 +477,7 @@ export default function EditorPro() {
           plantillas={plantillas}
           onCargar={(p) => { cargarPlantillaEnActiva(p); setGaleria(false); }}
           onBorrar={(p) => borrarPlantilla.mutate(p.id)}
+          onDuplicar={(p) => duplicarPlantilla.mutate(p)}
           onCerrar={() => setGaleria(false)}
         />
       )}
@@ -491,6 +512,7 @@ function GaleriaInline({
   cargando,
   onAbrir,
   onBorrar,
+  onDuplicar,
   onBlanco,
 }: {
   marca: string;
@@ -498,6 +520,7 @@ function GaleriaInline({
   cargando: boolean;
   onAbrir: (p: PlantillaDiseno) => void;
   onBorrar: (p: PlantillaDiseno) => void;
+  onDuplicar: (p: PlantillaDiseno) => void;
   onBlanco: () => void;
 }) {
   return (
@@ -531,7 +554,14 @@ function GaleriaInline({
                 <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
               </button>
               <button
-                onClick={() => onBorrar(p)}
+                onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
+                title="Duplicar plantilla"
+                className="absolute right-8 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onBorrar(p); }}
                 title="Borrar plantilla"
                 className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
               >

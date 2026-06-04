@@ -62,6 +62,25 @@ def test_validar_capa_texto_exige_color_hex():
                                "texto": "hola", "color": "rojo"}]))
 
 
+def test_validar_capa_texto_valign_se_valida_y_persiste():
+    doc = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 200,
+                                 "texto": "hola", "color": "#FFFFFF", "valign": "centro"}]))
+    t = doc["capas"][0]
+    assert t["valign"] == "centro"
+    # `ancla` se sigue aceptando (compatibilidad) y conserva su default.
+    assert t["ancla"] == "arriba"
+
+
+def test_validar_capa_texto_valign_invalido_deriva_de_ancla():
+    # valign ausente/ inválido => deriva de `ancla` ("abajo" -> "abajo", si no "arriba").
+    doc = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                 "texto": "hola", "color": "#FFFFFF", "ancla": "abajo",
+                                 "valign": "diagonal"}]))
+    t = doc["capas"][0]
+    assert t["valign"] == "abajo"
+    assert t["ancla"] == "abajo"
+
+
 def test_validar_marco_y_overlay_y_grupo():
     doc = d.validar(_doc(capas=[
         {"tipo": "marco", "x": 0, "y": 0, "w": 100, "h": 100, "forma": "rect",
@@ -111,6 +130,8 @@ def test_desde_spec_produce_documento_de_capas():
     assert foto["id"] == "foto" and foto["z"] == 0
     titular = next(c for c in doc["capas"] if c["tipo"] == "texto" and c.get("binding") == "copy_in")
     assert titular["ancla"] == "abajo"
+    # `valign` deriva de `ancla` por defecto (las plantillas del spec solo traen `ancla`).
+    assert titular["valign"] == "abajo"
 
 
 def test_desde_spec_formato_inexistente():

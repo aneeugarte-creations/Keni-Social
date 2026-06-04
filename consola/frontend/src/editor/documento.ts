@@ -92,6 +92,10 @@ export interface CapaTexto extends CapaBase {
   contorno: Contorno | null;
   chip: Chip | null;
   ancla: "arriba" | "abajo";
+  // Alineación VERTICAL del texto dentro de la CAJA (cuando `h>0`). La caja es de alto fijo e
+  // inamovible: el texto se auto-encoge para caber y se posiciona arriba/centro/abajo dentro de
+  // ella. `ancla` se mantiene por compatibilidad (camino legado h<=0).
+  valign: "arriba" | "centro" | "abajo";
 }
 
 export interface CapaLogo extends CapaBase {
@@ -179,6 +183,7 @@ export function nuevaCapaTexto(parcial: Partial<CapaTexto> = {}): CapaTexto {
     contorno: null,
     chip: null,
     ancla: "arriba",
+    valign: "centro",
     ...parcial,
   };
 }

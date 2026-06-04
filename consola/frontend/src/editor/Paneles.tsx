@@ -428,6 +428,46 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               <option value="justificado">Justificado</option>
             </select>
           </Campo>
+          <Campo etiqueta="Alineación vertical">
+            <div className="flex gap-1">
+              {(["arriba", "centro", "abajo"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => set({ valign: v } as Partial<Capa>)}
+                  className={`rounded border px-1.5 py-0.5 text-xs capitalize ${
+                    ((capa as CapaTexto).valign ?? "centro") === v
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </Campo>
+          <p className="-mt-1 text-[11px] text-muted-foreground">
+            La caja es de alto fijo: el texto se encoge para caber dentro (en ancho y alto). Ajusta el alto con el campo
+            «Alto» o arrastrando los tiradores de la caja en el lienzo.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Campo etiqueta="Máx. líneas">
+              <Num
+                valor={(capa as CapaTexto).auto_ajuste?.max_lineas ?? 4}
+                onChange={(v) =>
+                  set({ auto_ajuste: { ...(capa as CapaTexto).auto_ajuste, max_lineas: Math.max(1, v) } } as Partial<Capa>)
+                }
+              />
+            </Campo>
+            <Campo etiqueta="Tamaño mínimo">
+              <Num
+                valor={(capa as CapaTexto).auto_ajuste?.tam_min ?? 40}
+                onChange={(v) =>
+                  set({ auto_ajuste: { ...(capa as CapaTexto).auto_ajuste, tam_min: Math.max(1, v) } } as Partial<Capa>)
+                }
+              />
+            </Campo>
+          </div>
           <Campo etiqueta="Interlineado">
             <Num valor={(capa as CapaTexto).interlineado} paso={0.05} onChange={(v) => set({ interlineado: v } as Partial<Capa>)} />
           </Campo>

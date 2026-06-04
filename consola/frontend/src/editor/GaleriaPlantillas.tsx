@@ -1,7 +1,7 @@
 // Galería visual de plantillas de diseño: rejilla de miniaturas para elegir una de un vistazo
 // (mucho mejor que un desplegable). Filtra por la marca de la pestaña activa (el llamante).
 
-import { Trash2, X } from "lucide-react";
+import { Copy, Trash2, X } from "lucide-react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 
@@ -9,12 +9,15 @@ export function GaleriaPlantillas({
   plantillas,
   onCargar,
   onBorrar,
+  onDuplicar,
   onCerrar,
 }: {
   plantillas: PlantillaDiseno[];
   onCargar: (p: PlantillaDiseno) => void;
   /** Si se omite, no se ofrece borrar (modo SELECTOR, p. ej. elegir plantilla para una pieza). */
   onBorrar?: (p: PlantillaDiseno) => void;
+  /** Si se omite, no se ofrece duplicar (modo SELECTOR). */
+  onDuplicar?: (p: PlantillaDiseno) => void;
   onCerrar: () => void;
 }) {
   return (
@@ -54,9 +57,18 @@ export function GaleriaPlantillas({
                     </div>
                     <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
                   </button>
+                  {onDuplicar && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
+                      title="Duplicar plantilla"
+                      className="absolute right-8 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {onBorrar && (
                     <button
-                      onClick={() => onBorrar(p)}
+                      onClick={(e) => { e.stopPropagation(); onBorrar(p); }}
                       title="Borrar plantilla"
                       className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
                     >

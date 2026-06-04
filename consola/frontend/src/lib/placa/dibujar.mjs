@@ -124,8 +124,12 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   // tanto el canvas del navegador como @napi-rs/canvas (Skia). Se restablece al final.
   const interletra = t.interletra || 0;
   if (interletra) ctx.letterSpacing = `${interletra}px`;
+  // CAJA de alto fijo (modo nuevo): si la capa trae `h>0`, el texto se auto-encoge para caber en
+  // ancho Y alto (pasamos `maxAlto = boxH`). Si `h<=0` (plantillas legadas), seguimos como antes:
+  // el texto solo se limita por ancho y nº de líneas, y el bloque se ancla por `ancla`.
+  const boxH = t.h > 0 ? t.h : null;
   const { lineas, altoLinea } = ajustar(
-    ctx, texto, t.w, 0, fontFor, t.tamano, aj.tam_min, aj.max_lineas, t.interlineado || 1.14,
+    ctx, texto, t.w, boxH || 0, fontFor, t.tamano, aj.tam_min, aj.max_lineas, t.interlineado || 1.14,
   );
   // Contorno del texto (legibilidad sobre fotos): se traza DEBAJO del relleno.
   const contorno = t.contorno && t.contorno.grosor > 0 ? t.contorno : null;
@@ -136,10 +140,22 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   // Alto total del bloque (con el padding del chip arriba y abajo si hay chip).
   const py = t.chip ? (t.chip.pad_y ?? 14) : 0;
   const blockH = lineas.length * altoLinea + (t.chip ? py * 2 : 0);
-  // ANCLA: por defecto el bloque crece hacia ABAJO desde `t.y` (su borde superior). Con
-  // `ancla: "abajo"`, `t.y` es el borde INFERIOR y el bloque crece hacia ARRIBA: así un
-  // titular de 1 o de 4 líneas queda siempre pegado al borde inferior seguro, sin desbordarse.
-  const top = t.ancla === "abajo" ? t.y - blockH : t.y;
+  let top;
+  if (boxH) {
+    // CAJA inamovible [t.y, t.y+boxH]: posicionamos el bloque dentro según `valign` (con respaldo
+    // a `ancla` si falta: "abajo"->"abajo", si no "arriba"). El texto ya cabe (se encogió).
+    const valign = (t.valign === "arriba" || t.valign === "centro" || t.valign === "abajo")
+      ? t.valign
+      : (t.ancla === "abajo" ? "abajo" : "arriba");
+    top = valign === "centro" ? t.y + (boxH - blockH) / 2
+      : valign === "abajo" ? t.y + boxH - blockH
+      : t.y;
+  } else {
+    // LEGADO (h<=0, sin caja): por defecto el bloque crece hacia ABAJO desde `t.y` (su borde
+    // superior). Con `ancla: "abajo"`, `t.y` es el borde INFERIOR y el bloque crece hacia ARRIBA:
+    // así un titular de 1 o de 4 líneas queda siempre pegado al borde inferior seguro.
+    top = t.ancla === "abajo" ? t.y - blockH : t.y;
+  }
 
   let y = top + py;
   const justif = t.alineacion === "justificado";

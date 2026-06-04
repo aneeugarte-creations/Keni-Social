@@ -147,10 +147,14 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
       rotacion: nodo.rotation(),
     } as Partial<Capa>;
     if (capa.tipo === "texto") {
+      // "La caja es inamovible, que encoja el texto": al redimensionar una capa de texto
+      // dibujamos la CAJA (ancho Y alto). El texto se auto-encoge en el render para caber; NO
+      // crecemos el tamaño de fuente con la escala vertical. Persistimos `h` (no solo `w`), lo que
+      // activa el modo caja (h>0) para esta capa.
       onChange({
         ...base,
         w: Math.max(16, capa.w * sx),
-        tamano: Math.max(8, Math.round((capa as CapaTexto).tamano * sy)),
+        h: Math.max(16, capa.h > 0 ? capa.h * sy : (capa as CapaTexto).tamano * (capa as CapaTexto).interlineado * sy),
       } as Partial<Capa>);
     } else {
       onChange({
@@ -196,11 +200,17 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
     }
     case "texto": {
       const c = capa as CapaTexto;
+      // En modo CAJA (h>0) respetamos el alto y la alineación vertical dentro de ella. El
+      // auto-encogido de fuente NO se replica en Konva (la "vista real" la rinde el servidor con
+      // dibujar.mjs); aquí basta con honrar caja + valign.
+      const enCaja = c.h > 0;
       return (
         <Text
           {...props}
           text={textoMuestra(c)}
           width={c.w}
+          height={enCaja ? c.h : undefined}
+          verticalAlign={enCaja ? (c.valign === "centro" ? "middle" : c.valign === "abajo" ? "bottom" : "top") : undefined}
           fontFamily={c.familia}
           fontSize={c.tamano}
           fontStyle={c.peso >= 600 ? "bold" : "normal"}

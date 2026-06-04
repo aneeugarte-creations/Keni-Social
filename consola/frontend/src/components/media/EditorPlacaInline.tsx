@@ -35,11 +35,13 @@ import type { Arte } from "@/types";
 const LIENZO_4_5 = { w: 1080, h: 1350, safe_top: 0, safe_bottom: 0 };
 
 /**
- * Caja (en px de lienzo) que ocupa la capa del titular, para situar el editor in place encima. La
- * capa de texto NO guarda alto (se ajusta al contenido): lo estimamos por nº de líneas e
- * interlineado. Anclada "abajo", `y` es el borde inferior y el bloque crece hacia arriba.
+ * Caja (en px de lienzo) que ocupa la capa del titular, para situar el editor in place encima.
+ * Modo CAJA (la capa trae `h>0`): la caja es ESA, fija e inamovible (`[y, y+h]`); el render
+ * encoge el texto para caber. Modo LEGADO (`h<=0`, plantillas antiguas sin alto): se estima por
+ * nº de líneas × interlineado, y con `ancla:"abajo"` el bloque crece hacia arriba desde `y`.
  */
 function cajaTitularLienzo(c: CapaTexto): { x: number; y: number; w: number; h: number } {
+  if (c.h > 0) return { x: c.x, y: c.y, w: c.w, h: c.h };
   const interlineado = c.interlineado || 1.14;
   const maxLineas = Math.max(1, c.auto_ajuste?.max_lineas ?? 2);
   const h = Math.round(c.tamano * interlineado * maxLineas);

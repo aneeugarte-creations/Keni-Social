@@ -16,7 +16,11 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
       imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], filtros:{brillo,contraste,saturacion,desenfoque} }
       texto   -> { texto, binding:copy_in|etiqueta_default|null, familia, tamano, peso, color,
                    alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
-                   sombra:{dx,dy,color}|null, chip:{color,pad_x,pad_y,radio}|null, ancla:arriba|abajo }
+                   sombra:{dx,dy,color}|null, chip:{color,pad_x,pad_y,radio}|null,
+                   ancla:arriba|abajo, valign:arriba|centro|abajo }
+                   # valign: alineación VERTICAL del texto dentro de la CAJA (cuando h>0). La caja
+                   # es de alto fijo: el texto se auto-encoge para caber. `ancla` queda por
+                   # compatibilidad (camino legado h<=0, sin caja).
       logo    -> { tipo_logo:imagen|wordmark, media_id, wordmark:{texto,color,fondo,familia,peso} }
       marco   -> { forma:rect|elipse|linea, relleno|null, borde:{color,grosor}|null, radio }
       overlay -> { color, alto_frac, alpha }            # degradado de legibilidad (banda inferior)
@@ -189,6 +193,13 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
         "contorno": contorno_limpio,
         "chip": chip_limpio,
         "ancla": c.get("ancla") if c.get("ancla") in ("arriba", "abajo") else "arriba",
+        # `valign` (alineación vertical en la caja) deriva de `ancla` si falta, para que las
+        # plantillas antiguas (que solo traían `ancla`) sigan validando sin cambios.
+        "valign": (
+            c.get("valign")
+            if c.get("valign") in ("arriba", "centro", "abajo")
+            else ("abajo" if c.get("ancla") == "abajo" else "arriba")
+        ),
     }
 
 
@@ -403,6 +414,8 @@ def desde_spec(spec: dict[str, Any], formato: str) -> dict[str, Any]:
             "alineacion": t.get("alineacion", "izquierda"), "mayusculas": t.get("mayusculas", False),
             "interlineado": t.get("interlineado", 1.14), "auto_ajuste": t.get("auto_ajuste"),
             "sombra": t.get("sombra"), "chip": t.get("chip"), "ancla": t.get("ancla", "arriba"),
+            # valign deriva de ancla por defecto (las plantillas del spec solo traen `ancla`).
+            "valign": t.get("valign", "abajo" if t.get("ancla") == "abajo" else "arriba"),
             "z": int(t.get("z", 20)),
         })
 
