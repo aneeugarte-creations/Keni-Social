@@ -56,6 +56,8 @@ export interface CapaImagen extends CapaBase {
   foco: [number, number];
   zoom: number; // reencuadre dentro del marco (1 = ajuste base)
   es_foto?: boolean; // ESTA capa es el hueco de foto de la plantilla (única; obligatoria en el estudio)
+  forma?: "rect" | "elipse"; // recorte de la imagen: rectángulo (def) o elipse/círculo
+  radio?: number; // radio de esquinas redondeadas para rect, en px (def 0; ignorado si forma=elipse)
   filtros: Filtros | null;
   sombra?: Sombra | null; // sombra del rectángulo de la imagen (opcional)
 }

@@ -13,7 +13,8 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
     }
 
     Capa base = { id, tipo, x, y, w, h, rotacion, opacidad, z, visible, bloqueada }
-      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], filtros:{brillo,contraste,saturacion,desenfoque},
+      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], forma:rect|elipse, radio,
+                   filtros:{brillo,contraste,saturacion,desenfoque},
                    sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
       texto   -> { texto, binding:copy_in|etiqueta_default|null, familia, tamano, peso, color,
                    alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
@@ -46,6 +47,7 @@ VERSION = 1
 
 TIPOS_CAPA = ("imagen", "texto", "logo", "marco", "overlay", "grupo")
 _FORMAS_MARCO = ("rect", "elipse", "linea")
+_FORMAS_IMAGEN = ("rect", "elipse")
 
 # Reutilizamos los predicados y constantes del spec (única fuente de verdad de validación
 # elemental): hex, número, alineaciones, ajustes, fondo, chip/pad por defecto.
@@ -162,12 +164,18 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         "El foco de la imagen debe ser [x,y] entre 0 y 1.",
     )
     zoom = c.get("zoom", 1)
+    radio = c.get("radio", 0)
     return {
         **_base(c),
         "tipo": "imagen",
         "objeto": str(c.get("objeto", "") or ""),
         "ajuste": c.get("ajuste") if c.get("ajuste") in _AJUSTES else "cover",
         "foco": [float(foco[0]), float(foco[1])],
+        # Forma del recorte de la imagen: "rect" (def) o "elipse" (círculo si la caja es cuadrada).
+        # `radio` redondea las esquinas del rect (px ≥ 0); se ignora con forma "elipse". Se persisten
+        # siempre con su default para que el contrato sea estable; documentos viejos validan igual.
+        "forma": c.get("forma") if c.get("forma") in _FORMAS_IMAGEN else "rect",
+        "radio": max(0, int(radio)) if _num(radio) else 0,
         # Reencuadre dentro del marco: factor de acercamiento (1 = ajuste base). Acotado a [1, 6].
         "zoom": min(6.0, max(1.0, float(zoom))) if _num(zoom) else 1.0,
         # `es_foto`: ESTA capa es el HUECO DE FOTO de la plantilla — la única donde entra la foto de

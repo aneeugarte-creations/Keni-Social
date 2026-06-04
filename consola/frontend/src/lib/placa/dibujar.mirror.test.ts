@@ -30,10 +30,13 @@ describe("espejo del render de placa", () => {
 function ctxFalso() {
   const fills: { texto: string; x: number; y: number; tam: number; blur: number; sombra: string }[] = [];
   const gradientes: { x0: number; y0: number; x1: number; y1: number; stops: [number, string][] }[] = [];
+  // Registra las primitivas de path usadas para construir recortes (clip) de imagen.
+  const paths: { tipo: "ellipse" | "rect" | "arcTo"; args: number[] }[] = [];
   let tamActual = 64;
   const ctx = {
     fills,
     gradientes,
+    paths,
     canvas: { width: 1080, height: 1080 },
     shadowColor: "transparent",
     shadowBlur: 0,
@@ -68,9 +71,9 @@ function ctxFalso() {
     closePath: () => {},
     moveTo: () => {},
     lineTo: () => {},
-    arcTo: () => {},
-    ellipse: () => {},
-    rect: () => {},
+    arcTo: (...args: number[]) => paths.push({ tipo: "arcTo", args }),
+    ellipse: (...args: number[]) => paths.push({ tipo: "ellipse", args }),
+    rect: (...args: number[]) => paths.push({ tipo: "rect", args }),
     clip: () => {},
     fill: () => {},
     stroke: () => {},
@@ -223,6 +226,59 @@ describe("relleno por degradado en texto", () => {
       [0, "#FF0000"],
       [1, "#0000FF"],
     ]);
+  });
+});
+
+// Documento mínimo con UNA capa imagen (tipado laxo). `img` se inyecta luego en `imgs[objeto]`.
+function docConImagen(extra: Record<string, unknown>): never {
+  return {
+    version: 1,
+    formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+    fondo: { tipo: "color", color: "#000000" },
+    capas: [
+      {
+        id: "i1", tipo: "imagen", x: 100, y: 100, w: 400, h: 400, z: 5,
+        rotacion: 0, opacidad: 1, visible: true,
+        objeto: "foto.png", ajuste: "cover", foco: [0.5, 0.5], zoom: 1, filtros: null,
+        ...extra,
+      },
+    ],
+  } as never;
+}
+
+describe("forma de la imagen: recorte rect (default) vs elipse", () => {
+  const img = { width: 800, height: 600 } as never;
+
+  it("RETROCOMPAT: imagen sin forma recorta con rect (mismo clip de siempre), sin ellipse", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConImagen({}), imgs: { "foto.png": img }, bindings: {} } as never);
+    // Recorte rectangular en la caja (100,100,400,400) y NINGUNA elipse.
+    expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "ellipse")).toBe(false);
+  });
+
+  it("forma 'elipse' recorta con una elipse centrada en la caja (no rect)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConImagen({ forma: "elipse" }), imgs: { "foto.png": img }, bindings: {} } as never,
+    );
+    // Elipse inscrita: centro (300,300), radios (200,200).
+    const el = ctx.paths.find((p) => p.tipo === "ellipse");
+    expect(el).toBeTruthy();
+    expect(el!.args.slice(0, 4)).toEqual([300, 300, 200, 200]);
+    // Con elipse NO se usa el rect de recorte de la caja.
+    expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(false);
+  });
+
+  it("forma rect con radio>0 redondea las esquinas (arcTo) en vez de rect plano", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConImagen({ radio: 40 }), imgs: { "foto.png": img }, bindings: {} } as never,
+    );
+    expect(ctx.paths.some((p) => p.tipo === "arcTo")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(false);
   });
 });
 

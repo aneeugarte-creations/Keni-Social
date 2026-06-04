@@ -614,9 +614,20 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               plantilla; al marcar otra, esta se desmarca. Marcarlo lo deja bloqueado. */}
           <Campo etiqueta="Hueco de foto">
             {(capa as CapaImagen).es_foto ? (
-              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                Sí · bloqueado
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  Sí · bloqueado
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    store.getState().actualizar(capa.id, { es_foto: false, bloqueada: false } as Partial<Capa>)
+                  }
+                  className="rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+                >
+                  Quitar
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -627,6 +638,29 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               </button>
             )}
           </Campo>
+          {(capa as CapaImagen).es_foto && (
+            <p className="text-[11px] text-muted-foreground">
+              Al guardar, la plantilla necesita una imagen marcada como hueco de foto.
+            </p>
+          )}
+          <Campo etiqueta="Forma">
+            <select
+              value={(capa as CapaImagen).forma ?? "rect"}
+              onChange={(e) => set({ forma: e.target.value as CapaImagen["forma"] } as Partial<Capa>)}
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              <option value="rect">Rectángulo</option>
+              <option value="elipse">Círculo</option>
+            </select>
+          </Campo>
+          {(capa as CapaImagen).forma !== "elipse" && (
+            <Campo etiqueta="Esquinas">
+              <Num
+                valor={(capa as CapaImagen).radio ?? 0}
+                onChange={(v) => set({ radio: Math.max(0, v) } as Partial<Capa>)}
+              />
+            </Campo>
+          )}
           <Campo etiqueta="Ajuste">
             <select
               value={(capa as CapaImagen).ajuste}

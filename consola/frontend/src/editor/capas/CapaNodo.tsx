@@ -54,6 +54,8 @@ function NodoImagenAjustada({
   foco,
   zoom = 1,
   filtros,
+  forma,
+  radio,
   props,
 }: {
   img: HTMLImageElement;
@@ -63,6 +65,8 @@ function NodoImagenAjustada({
   foco: [number, number];
   zoom?: number;
   filtros: Filtros;
+  forma?: "rect" | "elipse";
+  radio?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any;
 }) {
@@ -103,8 +107,34 @@ function NodoImagenAjustada({
     node.getLayer()?.batchDraw();
   }, [filtros, dw, dh, img]);
 
+  // Recorte de la caja según la forma (espejo del clip de `dibujarImagenEnCaja`): elipse/círculo,
+  // rect de esquinas redondeadas (radio>0), o rect simple (default => clipX/Y/W/H como antes).
+  const r = radio ?? 0;
+  const recorte =
+    forma === "elipse"
+      ? {
+          clipFunc: (ctx: Konva.Context) => {
+            ctx.beginPath();
+            ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+            ctx.closePath();
+          },
+        }
+      : r > 0
+        ? {
+            clipFunc: (ctx: Konva.Context) => {
+              const rr = Math.min(r, w / 2, h / 2);
+              ctx.beginPath();
+              ctx.moveTo(rr, 0);
+              ctx.arcTo(w, 0, w, h, rr);
+              ctx.arcTo(w, h, 0, h, rr);
+              ctx.arcTo(0, h, 0, 0, rr);
+              ctx.arcTo(0, 0, w, 0, rr);
+              ctx.closePath();
+            },
+          }
+        : { clipX: 0, clipY: 0, clipWidth: w, clipHeight: h };
   return (
-    <Group {...props} clipX={0} clipY={0} clipWidth={w} clipHeight={h}>
+    <Group {...props} {...recorte}>
       {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
           así que sin este Rect el Group no recibiría clic/arrastre (no se podían mover las fotos).
           opacity 0 = invisible en escena pero presente en el hit graph de Konva. */}
@@ -187,7 +217,9 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
       if (!img) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} props={props} />;
+      const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} props={props} />;
+      // cornerRadius de la silueta de sombra, aproximando la forma: círculo (elipse) o esquinas.
+      const sombraRadio = c.forma === "elipse" ? Math.min(c.w, c.h) / 2 : c.radio && c.radio > 0 ? c.radio : 0;
       // Sombra de la imagen: el Group de la imagen se recorta a su caja (la sombra no escaparía del
       // clip), así que la proyecta una silueta SIN listening dibujada detrás (igual que el render).
       if (c.sombra) {
@@ -198,6 +230,7 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
               y={c.y}
               width={c.w}
               height={c.h}
+              cornerRadius={sombraRadio}
               rotation={c.rotacion}
               opacity={c.opacidad}
               fill="#000000"

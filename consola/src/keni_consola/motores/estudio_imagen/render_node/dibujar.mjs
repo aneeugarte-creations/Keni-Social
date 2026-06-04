@@ -67,7 +67,10 @@ function ajustar(ctx, texto, maxAncho, maxAlto, fontFor, tamMax, tamMin, maxLine
   return { tam: tamMin, lineas, altoLinea: Math.round(tamMin * interlineado) };
 }
 
-function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom) {
+// `forma`/`radio` (opcionales) definen el RECORTE de la imagen: "elipse" la recorta a la elipse
+// inscrita en la caja (círculo si es cuadrada); con "rect" y `radio>0` redondea las esquinas; en
+// otro caso el recorte es el rectángulo de siempre (llamadores existentes => idéntico).
+function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom, forma, radio) {
   if (!img) return;
   const iw = img.width, ih = img.height;
   const z = zoom && zoom > 0 ? zoom : 1; // reencuadre: factor de acercamiento dentro del marco
@@ -79,7 +82,9 @@ function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom) {
   const dy = y + (h - dh) * fy;
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x, y, w, h);
+  if (forma === "elipse") ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else if (radio > 0) rutaRect(ctx, x, y, w, h, radio);
+  else ctx.rect(x, y, w, h);
   ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();
@@ -467,16 +472,21 @@ function dibujarCapa(ctx, capa, env) {
       const img = env.I[capa.objeto];
       const filtro = cssFiltro(capa.filtros);
       if (filtro) ctx.filter = filtro;
-      // Sombra de la capa imagen: cae sobre el RECTÁNGULO de la imagen. Como la imagen se recorta a
-      // su caja (la sombra del drawImage quedaría dentro del clip y no se vería), pintamos primero la
-      // silueta del rectángulo con la sombra activa, y luego la imagen recortada SIN sombra encima.
+      // Sombra de la capa imagen: cae sobre la SILUETA de la imagen (su forma). Como la imagen se
+      // recorta a su caja (la sombra del drawImage quedaría dentro del clip y no se vería), pintamos
+      // primero la silueta con la sombra activa, y luego la imagen recortada SIN sombra encima. La
+      // silueta sigue la forma (elipse/redondeado/rect) para que la sombra cuadre con la foto.
       if (capa.sombra && img) {
         aplicarSombraCanvas(ctx, capa.sombra);
         ctx.fillStyle = "#000000";
-        ctx.fillRect(capa.x, capa.y, capa.w, capa.h);
+        ctx.beginPath();
+        if (capa.forma === "elipse") ctx.ellipse(capa.x + capa.w / 2, capa.y + capa.h / 2, capa.w / 2, capa.h / 2, 0, 0, Math.PI * 2);
+        else if (capa.radio > 0) rutaRect(ctx, capa.x, capa.y, capa.w, capa.h, capa.radio);
+        else ctx.rect(capa.x, capa.y, capa.w, capa.h);
+        ctx.fill();
         resetSombraCanvas(ctx);
       }
-      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom);
+      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom, capa.forma, capa.radio);
       if (filtro) ctx.filter = "none";
       break;
     }

@@ -47,6 +47,24 @@ def test_validar_capa_imagen_normaliza_y_genera_id():
     assert capa["opacidad"] == 1.0 and capa["visible"] is True
 
 
+def test_validar_capa_imagen_forma_y_radio_defaults_retrocompat():
+    # Documento viejo (sin forma/radio): valida con los defaults limpios (rect, 0).
+    doc = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 100, "h": 100}]))
+    capa = doc["capas"][0]
+    assert capa["forma"] == "rect" and capa["radio"] == 0
+
+
+def test_validar_capa_imagen_forma_elipse_y_radio():
+    doc = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 100, "h": 100,
+                                 "forma": "elipse", "radio": 24}]))
+    capa = doc["capas"][0]
+    assert capa["forma"] == "elipse" and capa["radio"] == 24
+    # Forma inválida => "rect"; radio negativo => 0 (acotado).
+    malo = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
+                                  "forma": "triangulo", "radio": -5}]))
+    assert malo["capas"][0]["forma"] == "rect" and malo["capas"][0]["radio"] == 0
+
+
 def test_validar_filtros_solo_si_no_neutro():
     sin = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
                                   "filtros": {"brillo": 1, "contraste": 1, "saturacion": 1, "desenfoque": 0}}]))
