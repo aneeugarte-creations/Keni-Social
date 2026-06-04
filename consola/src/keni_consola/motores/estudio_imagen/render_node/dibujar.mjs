@@ -307,6 +307,88 @@ function dibujarOverlayInferior(ctx, ov, w, h) {
   ctx.fillRect(0, h - band, w, band);
 }
 
+// Dibuja UNA línea de texto a lo largo de un ARCO (texto curvo). El texto se trata como una sola
+// línea (se ignoran wrap/justificado en este modo). `radio` en px: positivo = arco hacia arriba
+// (sonrisa, centro del círculo DEBAJO del ancla), negativo = hacia abajo (ceño, centro ENCIMA).
+// Cada glyph se mide con `ctx.measureText` para avanzar el ángulo (longitud de arco = ancho del
+// glyph) y se rota tangente al arco. Respeta alineación horizontal (centrado del texto en el arco),
+// color/relleno (sólido o degradado), contorno y sombra (real si blur/opacidad). Mantiene la
+// interletra ya fijada por el llamador. El punto de anclaje es el `tx` del camino normal.
+function dibujarTextoCurvo(ctx, t, texto, radio, fontFor, relleno, sombra, contorno) {
+  ctx.font = fontFor(t.tamano);
+  const ax = t.alineacion === "centro" ? t.x + t.w / 2 : t.alineacion === "derecha" ? t.x + t.w : t.x;
+  // Ancla vertical: en el camino normal el texto crece desde `t.y` (baseline "top"). Mantenemos el
+  // arco tangente a esa línea en el punto de anclaje.
+  const ay = t.y;
+  // Glyphs y sus anchos (incluida la interletra ya activa en el ctx vía measureText).
+  const glyphs = Array.from(texto);
+  const anchos = glyphs.map((g) => ctx.measureText(g).width);
+  const total = anchos.reduce((s, w) => s + w, 0);
+  const r = Math.abs(radio);
+  const arriba = radio > 0; // arco "sonrisa" (centro debajo) vs "ceño" (centro encima)
+  // Centro del círculo, perpendicular al ancla. Arriba: centro debajo del ancla; abajo: encima.
+  const cx = ax;
+  const cy = arriba ? ay + r : ay - r;
+  // Ángulo total que ocupa el texto (long. de arco / radio). Lo centramos en la vertical del ancla.
+  const angTotal = total / r;
+  // Punto medio del texto sobre el arco, según alineación horizontal: centro = vertical del ancla;
+  // izquierda = el texto empieza en la vertical; derecha = termina en ella.
+  const angMedio = -Math.PI / 2; // arriba del centro = vertical del ancla (en coords del círculo)
+  let ang;
+  if (t.alineacion === "centro") ang = angMedio - (arriba ? angTotal / 2 : -angTotal / 2);
+  else if (t.alineacion === "derecha") ang = angMedio - (arriba ? angTotal : -angTotal);
+  else ang = angMedio;
+  const sombraReal = sombra && ((sombra.desenfoque ?? 0) > 0 || (sombra.opacidad ?? 1) < 1);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // Dirección de avance del ángulo: arco arriba avanza en sentido horario (+), abajo antihorario (-).
+  const dir = arriba ? 1 : -1;
+  for (let i = 0; i < glyphs.length; i++) {
+    const wg = anchos[i];
+    // Centro del glyph: medio paso de su propio ancho desde el cursor.
+    const aMid = ang + dir * (wg / 2) / r;
+    const gx = cx + r * Math.cos(aMid);
+    const gy = cy + r * Math.sin(aMid);
+    // Tangente al arco: arriba el texto mira "hacia afuera" (rotación = aMid + 90°); abajo se
+    // invierte para que el texto no quede boca abajo.
+    const rot = arriba ? aMid + Math.PI / 2 : aMid - Math.PI / 2;
+    ctx.save();
+    ctx.translate(gx, gy);
+    ctx.rotate(rot);
+    if (sombraReal) {
+      ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
+      ctx.shadowBlur = sombra.desenfoque ?? 0;
+      ctx.shadowOffsetX = sombra.dx ?? 0;
+      ctx.shadowOffsetY = sombra.dy ?? 0;
+      if (contorno) {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = contorno.grosor;
+        ctx.strokeStyle = contorno.color || "#000000";
+        ctx.strokeText(glyphs[i], 0, 0);
+        resetSombraCanvas(ctx);
+      }
+      ctx.fillStyle = relleno;
+      ctx.fillText(glyphs[i], 0, 0);
+      resetSombraCanvas(ctx);
+    } else {
+      if (sombra) {
+        ctx.fillStyle = sombra.color || "#000000";
+        ctx.fillText(glyphs[i], (sombra.dx ?? 2), (sombra.dy ?? 2));
+      }
+      if (contorno) {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = contorno.grosor;
+        ctx.strokeStyle = contorno.color || "#000000";
+        ctx.strokeText(glyphs[i], 0, 0);
+      }
+      ctx.fillStyle = relleno;
+      ctx.fillText(glyphs[i], 0, 0);
+    }
+    ctx.restore();
+    ang += dir * wg / r;
+  }
+}
+
 function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   const texto = (t.mayusculas ? String(valor).toUpperCase() : String(valor)).trim();
   if (!texto) return; // binding vacío (p. ej. pleca "" ) => se omite la capa
@@ -317,6 +399,17 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   // tanto el canvas del navegador como @napi-rs/canvas (Skia). Se restablece al final.
   const interletra = t.interletra || 0;
   if (interletra) ctx.letterSpacing = `${interletra}px`;
+  // TEXTO CURVO (texto en arco): si la capa trae `curva.radio != 0`, dibujamos una sola línea sobre
+  // un arco (sin wrap ni justificado) y salimos. El relleno (sólido o degradado), contorno y sombra
+  // se calculan igual que el camino normal, sobre el bbox de la caja. Sin `curva` => camino legado.
+  if (t.curva && t.curva.radio) {
+    const rdC = t.relleno_degradado || null;
+    const rellenoC = rdC ? construirDegradado(ctx, t.x, t.y, t.w, t.tamano, rdC) : t.color;
+    const contornoC = t.contorno && t.contorno.grosor > 0 ? t.contorno : null;
+    dibujarTextoCurvo(ctx, t, texto, t.curva.radio, fontFor, rellenoC, t.sombra || null, contornoC);
+    if (interletra) ctx.letterSpacing = "0px";
+    return;
+  }
   // CAJA de alto fijo (modo nuevo): si la capa trae `h>0`, el texto se auto-encoge para caber en
   // ancho Y alto (pasamos `maxAlto = boxH`). Si `h<=0` (plantillas legadas), seguimos como antes:
   // el texto solo se limita por ancho y nº de líneas, y el bloque se ancla por `ancla`.

@@ -20,7 +20,8 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
                    alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
                    sombra:{dx,dy,color,desenfoque?,opacidad?}|null,
                    relleno_degradado:{desde,hasta,angulo?}|null, chip:{color,pad_x,pad_y,radio}|null,
-                   ancla:arriba|abajo, valign:arriba|centro|abajo }
+                   curva:{radio}|null, ancla:arriba|abajo, valign:arriba|centro|abajo }
+                   # curva: texto en ARCO (radio px; +=arriba/sonrisa, -=abajo/ceño). Sólo si radio!=0.
                    # valign: alineación VERTICAL del texto dentro de la CAJA (cuando h>0). La caja
                    # es de alto fijo: el texto se auto-encoge para caber. `ancla` queda por
                    # compatibilidad (camino legado h<=0, sin caja).
@@ -137,6 +138,18 @@ def _sombra(s: Any) -> dict[str, Any] | None:
     if _num(opacidad) and 0 <= float(opacidad) < 1:
         out["opacidad"] = float(opacidad)
     return out
+
+
+def _curva(c: Any) -> dict[str, Any] | None:
+    """Normaliza el texto curvo {radio}. `radio` en px (positivo = arco hacia arriba, negativo =
+    hacia abajo). Solo se persiste si es un número != 0 — así un texto recto no ensucia el JSON ni
+    cambia el render legado. Devuelve None si no viene curva o `radio` es 0/ inválido."""
+    if not isinstance(c, dict):
+        return None
+    radio = c.get("radio")
+    if not _num(radio) or float(radio) == 0:
+        return None
+    return {"radio": float(radio)}
 
 
 def _stops(g: Any) -> list[dict[str, Any]] | None:
@@ -300,7 +313,7 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
         }
     aj = c.get("auto_ajuste") or {}
     familia = c["familia"] if isinstance(c.get("familia"), str) and c.get("familia") else "sans"
-    return {
+    out: dict[str, Any] = {
         **_base(c),
         "tipo": "texto",
         "texto": str(c.get("texto", "")),
@@ -331,6 +344,12 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
             else ("abajo" if c.get("ancla") == "abajo" else "arriba")
         ),
     }
+    # Texto curvo (texto en arco): solo se persiste si trae un radio != 0, para no ensuciar los
+    # documentos antiguos ni alterar el render legado (sin `curva` => texto recto idéntico).
+    curva = _curva(c.get("curva"))
+    if curva is not None:
+        out["curva"] = curva
+    return out
 
 
 def _capa_logo(c: dict[str, Any]) -> dict[str, Any]:

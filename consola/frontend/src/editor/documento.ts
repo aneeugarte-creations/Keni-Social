@@ -163,6 +163,10 @@ export interface CapaTexto extends CapaBase {
   auto_ajuste: { max_lineas: number; tam_min: number };
   sombra: Sombra | null;
   relleno_degradado?: RellenoDegradado | null; // degradado del relleno (sustituye a `color`)
+  // Texto curvo (texto en arco): si está presente y `radio != 0`, el texto se dibuja a lo largo de
+  // un ARCO (una sola línea; ignora wrap/justificado). `radio` en px: positivo = arco hacia arriba
+  // (sonrisa), negativo = hacia abajo (ceño); |radio| grande = casi recto. Ausente/null = recto.
+  curva?: { radio: number } | null;
   contorno: Contorno | null;
   chip: Chip | null;
   ancla: "arriba" | "abajo";

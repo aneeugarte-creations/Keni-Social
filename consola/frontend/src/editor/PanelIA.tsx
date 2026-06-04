@@ -2,7 +2,7 @@
 // un prompt y traerla al lienzo como capa, o expandir/retocar la capa-imagen seleccionada. Reusa
 // los jobs de IA existentes (`/api/imagenes/*`) y el sondeo `useGeneracion`.
 
-import { Loader2, Maximize2, Sparkles, Wand2, X } from "lucide-react";
+import { Loader2, Maximize2, Scissors, Sparkles, Wand2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,7 +16,12 @@ import type { Capa, CapaImagen } from "./documento";
 import { nuevaCapaImagen } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
-type TipoTrabajo = "generar" | "expandir" | "retocar" | "revisar";
+type TipoTrabajo = "generar" | "expandir" | "retocar" | "quitar-fondo" | "revisar";
+
+// Instrucción fija del retoque "quitar fondo": recorta el sujeto y deja transparencia (PNG alfa).
+const INSTRUCCION_QUITAR_FONDO =
+  "Elimina por completo el fondo y deja ÚNICAMENTE el sujeto principal recortado sobre un fondo " +
+  "transparente (PNG con canal alfa). No agregues ningún fondo, color ni relleno.";
 
 // Deriva el FormatoImagen de la IA de las DIMENSIONES reales del lienzo (no de la red), para que
 // la imagen generada cuadre con el documento aunque se haya ajustado el tamaño.
@@ -62,9 +67,18 @@ export function PanelIA({ marca }: { marca: string }) {
       st.agregar(nuevaCapaImagen(objeto, { x: 0, y: 0, w: f.w, h: f.h, z: 0 }));
       st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);
       toast.success("Imagen generada e insertada como capa.");
-    } else if ((trabajo?.tipo === "expandir" || trabajo?.tipo === "retocar") && objeto && trabajo.capaId) {
+    } else if (
+      (trabajo?.tipo === "expandir" || trabajo?.tipo === "retocar" || trabajo?.tipo === "quitar-fondo") &&
+      objeto &&
+      trabajo.capaId
+    ) {
+      // "quitar-fondo" reusa el flujo de "retocar": sustituye el `objeto` de la capa por el recortado.
       st.actualizar(trabajo.capaId, { objeto } as Partial<Capa>);
-      toast.success(trabajo.tipo === "expandir" ? "Imagen expandida." : "Imagen retocada.");
+      toast.success(
+        trabajo.tipo === "expandir" ? "Imagen expandida."
+          : trabajo.tipo === "quitar-fondo" ? "Fondo quitado."
+          : "Imagen retocada.",
+      );
     } else if (trabajo?.tipo === "revisar") {
       // El checklist se muestra en vivo desde `gen.generacion.salida`; no hay nada que aplicar.
     }
@@ -90,6 +104,12 @@ export function PanelIA({ marca }: { marca: string }) {
       } else if (tipo === "retocar" && imagenSel?.objeto) {
         if (!instruccion.trim()) return;
         const r = await api.imagenesRetocar({ imagen: imagenSel.objeto, instruccion: instruccion.trim() });
+        setTrabajo({ tipo, capaId: imagenSel.id });
+        gen.iniciar(r.generacion);
+      } else if (tipo === "quitar-fondo" && imagenSel?.objeto) {
+        // Bajo riesgo: es un retoque con instrucción fija (sin endpoint nuevo). Reusa el flujo de
+        // "retocar" y, al terminar, sustituye el objeto de la capa por el sujeto recortado (alfa).
+        const r = await api.imagenesRetocar({ imagen: imagenSel.objeto, instruccion: INSTRUCCION_QUITAR_FONDO });
         setTrabajo({ tipo, capaId: imagenSel.id });
         gen.iniciar(r.generacion);
       } else if (tipo === "revisar" && imagenSel?.objeto) {
@@ -129,6 +149,11 @@ export function PanelIA({ marca }: { marca: string }) {
         <>
           <Button variant="outline" size="sm" disabled={ocupado} onClick={() => lanzar("expandir")}>
             <Maximize2 className="mr-1 h-4 w-4" /> Expandir (outpainting)
+          </Button>
+          <Button variant="outline" size="sm" disabled={ocupado} onClick={() => lanzar("quitar-fondo")}>
+            {ocupado && trabajo?.tipo === "quitar-fondo"
+              ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              : <Scissors className="mr-1 h-4 w-4" />} Quitar fondo
           </Button>
           <textarea
             value={instruccion}

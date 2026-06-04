@@ -726,6 +726,31 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Interletra">
             <Num valor={(capa as CapaTexto).interletra ?? 0} paso={0.5} onChange={(v) => set({ interletra: v } as Partial<Capa>)} />
           </Campo>
+          {/* Texto curvo (en arco): el toggle activa una curva con radio por defecto; el slider lo
+              ajusta (+ = sonrisa, - = ceño). Sin curva el texto es recto (camino legado). */}
+          <Campo etiqueta="Curvar">
+            <input
+              type="checkbox"
+              checked={!!(capa as CapaTexto).curva?.radio}
+              onChange={(e) => set({ curva: e.target.checked ? { radio: 600 } : null } as Partial<Capa>)}
+            />
+          </Campo>
+          {!!(capa as CapaTexto).curva?.radio && (
+            <Campo etiqueta="Radio">
+              <input
+                type="range"
+                min={-2000}
+                max={2000}
+                step={20}
+                value={(capa as CapaTexto).curva?.radio ?? 600}
+                onChange={(e) => {
+                  const r = Number(e.target.value);
+                  set({ curva: r === 0 ? null : { radio: r } } as Partial<Capa>);
+                }}
+                className="w-full"
+              />
+            </Campo>
+          )}
           {/* Presets rápidos de efecto de texto: rellenan sombra/contorno de un clic (reusan los
               campos existentes, sin esquema nuevo). El "Glow" toma el color del texto. */}
           <div className="flex flex-wrap gap-1">

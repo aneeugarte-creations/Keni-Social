@@ -4,7 +4,7 @@
 
 import Konva from "konva";
 import { useEffect, useRef } from "react";
-import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text } from "react-konva";
+import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text, TextPath } from "react-konva";
 
 import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
 import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado } from "../documento";
@@ -152,6 +152,36 @@ function colorStopsKonva(deg: RellenoDegradado): (number | string)[] {
 }
 
 // Props de relleno Konva para un degradado (lineal o radial, multi-stop). Espejo de
+// Path SVG de un ARCO para el texto curvo de Konva (`TextPath`), en coords LOCALES de la capa. Es
+// una APROXIMACIÓN de la previa: el export del servidor (`dibujarTextoCurvo`) manda en la pieza
+// final. `radio` px (+ = arco hacia arriba/sonrisa, - = hacia abajo). El ancla horizontal queda en
+// la vertical de la caja según `align`; el arco abarca el ancho de la caja `w`.
+function pathArco(radio: number, w: number, ancla: "left" | "center" | "right"): string {
+  const r = Math.abs(radio);
+  const arriba = radio > 0;
+  // Centro del círculo: en la vertical del ancla horizontal (izq/centro/der de la caja). En y, por
+  // debajo del borde superior (y=0) si el arco va hacia arriba; por encima si va hacia abajo.
+  const cx = ancla === "center" ? w / 2 : ancla === "right" ? w : 0;
+  const cy = arriba ? r : -r;
+  // Mitad del ángulo barrido (cuerda ≈ ancho de la caja). Acotado a casi medio círculo.
+  const half = Math.min(Math.PI * 0.95, (w / 2) / r);
+  // Eje vertical del centro (parte superior del círculo si "arriba", inferior si no).
+  const base = arriba ? -Math.PI / 2 : Math.PI / 2;
+  let start: number;
+  let end: number;
+  if (ancla === "center") { start = base - half; end = base + half; }
+  else if (ancla === "right") { start = base - 2 * half; end = base; }
+  else { start = base; end = base + 2 * half; }
+  // En "arriba" recorremos de izquierda a derecha (ángulo creciente); en "abajo" también, pero el
+  // sentido del barrido del arco SVG (`sweep`) cambia para que el texto no quede invertido.
+  const px = (a: number) => cx + r * Math.cos(a);
+  const py = (a: number) => cy + r * Math.sin(a);
+  const x0 = px(start), y0 = py(start);
+  const x1 = px(end), y1 = py(end);
+  const sweep = arriba ? 1 : 0;
+  return `M ${x0} ${y0} A ${r} ${r} 0 0 ${sweep} ${x1} ${y1}`;
+}
+
 // `construirDegradado`: radial centrado en la caja, radio = mitad de la diagonal. Coords locales.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rellenoDegradadoKonva(deg: RellenoDegradado, w: number, h: number): Record<string, any> {
@@ -470,6 +500,33 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
     }
     case "texto": {
       const c = capa as CapaTexto;
+      // TEXTO CURVO (texto en arco): si la capa trae `curva.radio != 0`, lo aproximamos con un
+      // `TextPath` de Konva sobre un arco SVG. El export del servidor (`dibujarTextoCurvo`) manda en
+      // la pieza final; aquí solo damos una previa razonable (sin caja/valign/wrap en este modo).
+      if (c.curva && c.curva.radio) {
+        const ancla = c.alineacion === "centro" ? "center" : c.alineacion === "derecha" ? "right" : "left";
+        return (
+          <TextPath
+            {...props}
+            data={pathArco(c.curva.radio, c.w, ancla)}
+            text={textoMuestra(c)}
+            fontFamily={familiaReal(c.familia)}
+            fontSize={c.tamano}
+            fontStyle={c.peso >= 600 ? "bold" : "normal"}
+            fill={c.color}
+            letterSpacing={c.interletra || 0}
+            stroke={c.contorno?.color}
+            strokeWidth={c.contorno?.grosor ?? 0}
+            fillAfterStrokeEnabled
+            shadowColor={c.sombra?.color}
+            shadowOffsetX={c.sombra?.dx}
+            shadowOffsetY={c.sombra?.dy}
+            shadowBlur={c.sombra?.desenfoque ?? 0}
+            shadowOpacity={c.sombra?.opacidad ?? 1}
+            shadowEnabled={!!c.sombra}
+          />
+        );
+      }
       // En modo CAJA (h>0) respetamos el alto y la alineación vertical dentro de ella. El
       // auto-encogido de fuente NO se replica en Konva (la "vista real" la rinde el servidor con
       // dibujar.mjs); aquí basta con honrar caja + valign.

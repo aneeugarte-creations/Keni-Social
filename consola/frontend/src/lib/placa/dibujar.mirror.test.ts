@@ -317,6 +317,37 @@ describe("hexRGBA respeta el alfa de 8 dígitos (#RRGGBBAA)", () => {
   });
 });
 
+describe("texto curvo (texto en arco)", () => {
+  it("RETROCOMPAT: sin `curva` el texto se dibuja recto (un solo fillText con la palabra entera)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({}), imgs: {}, bindings: {} } as never);
+    // Camino legado: la línea completa "HOLA" se pinta de una sola vez.
+    const fills = ctx.fills.filter((f) => f.texto === "HOLA");
+    expect(fills.length).toBe(1);
+  });
+
+  it("con `curva` el texto se dibuja GLYPH a GLYPH sobre el arco (un fillText por carácter)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ curva: { radio: 600 } }), imgs: {}, bindings: {} } as never,
+    );
+    // Una llamada por carácter de "HOLA" (4), no la línea entera.
+    const porGlyph = ctx.fills.filter((f) => ["H", "O", "L", "A"].includes(f.texto));
+    expect(porGlyph.length).toBe(4);
+    expect(ctx.fills.some((f) => f.texto === "HOLA")).toBe(false);
+  });
+
+  it("`curva.radio` 0 (o ausente) NO activa el arco: sigue el camino recto", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ curva: { radio: 0 } }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.fills.filter((f) => f.texto === "HOLA").length).toBe(1);
+  });
+});
+
 describe("relleno por degradado en texto", () => {
   it("RETROCOMPAT: sin relleno_degradado NO crea ningún gradiente lineal", () => {
     const ctx = ctxFalso();
