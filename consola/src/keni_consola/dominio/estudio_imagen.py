@@ -480,14 +480,14 @@ def componer_bytes(
     return datos
 
 
-def previsualizar_spec(
+def previsualizar_spec_bytes(
     spec: dict[str, Any], formato: str, *, titular: str = "", etiqueta_default: str = "",
-) -> dict[str, Any]:
-    """Renderiza un SPEC en EDICIÓN (sin guardar) en modo placeholder -> `{id, url}`.
+) -> bytes:
+    """Renderiza un SPEC en EDICIÓN (sin guardar) en placeholder y devuelve los BYTES, SIN persistir.
 
-    Lo usa el editor visual para mostrar "lo que sale" mientras se diseña. Valida el spec, lo
-    renderiza con el motor Node (placeholder, sin foto) usando un titular/pleca de muestra, e
-    importa el PNG a media. Fuerza Node (sin fallback Pillow: el editor previsualiza el spec real).
+    Lo usa el editor visual del diseñador para ver "lo que sale" mientras se diseña. La previa es
+    función pura del spec en edición: NO se almacena (se sirve por HTTP, efímera). Valida el spec,
+    renderiza con Node (placeholder, sin foto) con un titular/pleca de muestra y devuelve el PNG.
     """
     fmt = formato
     if fmt not in _FORMATOS_COMPONER:
@@ -515,11 +515,7 @@ def previsualizar_spec(
                          "etiqueta_default": etiqueta_default or ""},
         }
         _correr_render_node(payload, out)
-        try:
-            nombre = media.importar_imagen(str(out))
-        except media.MediaError as exc:
-            raise EstudioError(str(exc)) from exc
-        return {"id": nombre, "url": f"/api/media/{nombre}"}
+        return out.read_bytes()
 
 
 def componer(

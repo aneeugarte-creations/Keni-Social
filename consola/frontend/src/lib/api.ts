@@ -1028,11 +1028,33 @@ export const api = {
       metodo: "PUT",
       json: { spec },
     }),
-  previewPlantilla: (marca: string, spec: PlantillaSpec, formato: string, titular?: string) =>
-    peticion<{ id: string; url: string }>(
-      `/plantillas-marca/${encodeURIComponent(marca)}/preview`,
-      { metodo: "POST", json: { spec, formato, titular: titular ?? "" } },
-    ),
+  // La previa del diseñador es EFÍMERA: el back devuelve los BYTES del PNG (no persiste nada) y
+  // aquí construimos un object URL para el <img>. El llamante debe revocar el URL anterior.
+  previewPlantilla: async (
+    marca: string, spec: PlantillaSpec, formato: string, titular?: string,
+  ): Promise<string> => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_API}/plantillas-marca/${encodeURIComponent(marca)}/preview`, {
+        method: "POST",
+        headers: { ...cabecerasAuth(), "Content-Type": "application/json" },
+        body: JSON.stringify({ spec, formato, titular: titular ?? "" }),
+      });
+    } catch {
+      throw new ApiError("No se pudo contactar con la consola.", 0);
+    }
+    if (!res.ok) {
+      let mensaje = "No se pudo previsualizar la plantilla.";
+      try {
+        const j = await res.json();
+        if (j?.error) mensaje = j.error;
+      } catch {
+        /* cuerpo no-JSON: mensaje por defecto */
+      }
+      throw new ApiError(mensaje, res.status);
+    }
+    return URL.createObjectURL(await res.blob());
+  },
 
   // --- Verificación de video (workflow propio, independiente de Generar copy) ---
   // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier

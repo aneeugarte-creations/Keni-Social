@@ -111,3 +111,47 @@ def test_put_spec_invalido_400(cli):
 def test_get_spec_marca_desconocida_404(cli):
     r = cli.get("/api/plantillas-marca/inexistente/spec")
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# POST /preview: previa EFÍMERA del diseñador (bytes + ETag, sin persistir)     #
+# --------------------------------------------------------------------------- #
+
+
+def test_preview_sirve_png_efimero_con_etag(cli, monkeypatch):
+    from keni_consola.dominio import estudio_imagen
+
+    # Render mockeado (no Node) que NO persiste: devuelve bytes.
+    monkeypatch.setattr(estudio_imagen, "previsualizar_spec_bytes", lambda *a, **k: b"PNG")
+    spec = cli.get("/api/plantillas-marca/unotv/spec").json()["spec"]
+    r = cli.post("/api/plantillas-marca/unotv/preview", json={"spec": spec, "formato": "feed"})
+    assert r.status_code == 200
+    assert r.content == b"PNG"
+    assert r.headers["content-type"].startswith("image/png")
+    assert r.headers.get("etag")
+
+
+def test_preview_304_si_etag_coincide(cli, monkeypatch):
+    from keni_consola.dominio import estudio_imagen
+
+    llamadas = {"n": 0}
+
+    def _render(*a, **k):
+        llamadas["n"] += 1
+        return b"PNG"
+
+    monkeypatch.setattr(estudio_imagen, "previsualizar_spec_bytes", _render)
+    spec = cli.get("/api/plantillas-marca/unotv/spec").json()["spec"]
+    cuerpo = {"spec": spec, "formato": "feed"}
+    r1 = cli.post("/api/plantillas-marca/unotv/preview", json=cuerpo)
+    etag = r1.headers["etag"]
+    r2 = cli.post(
+        "/api/plantillas-marca/unotv/preview", json=cuerpo, headers={"If-None-Match": etag}
+    )
+    assert r2.status_code == 304
+    assert llamadas["n"] == 1  # el 304 NO recompuso
+
+
+def test_preview_sin_spec_400(cli):
+    r = cli.post("/api/plantillas-marca/unotv/preview", json={"formato": "feed"})
+    assert r.status_code == 400

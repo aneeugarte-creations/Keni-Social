@@ -20,6 +20,8 @@ errores en espanol sin tracebacks.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from starlette.requests import Request
@@ -94,10 +96,12 @@ async def guardar_spec(request: Request) -> Response:
 
 
 async def previsualizar(request: Request) -> Response:
-    """Renderiza el SPEC EN EDICIÓN (sin guardar) para la vista previa del editor.
+    """Renderiza el SPEC EN EDICIÓN (sin guardar) y devuelve los BYTES del PNG, EFÍMERO.
 
-    `POST /api/plantillas-marca/{marca}/preview {spec, formato, titular?}` -> `{id, url}`.
-    Render determinista (placeholder) del spec recibido; 400 si el spec o el formato no valen.
+    `POST /api/plantillas-marca/{marca}/preview {spec, formato, titular?}` -> image/png. La previa
+    es función pura del spec en edición: NO se persiste (no genera objetos que limpiar); se sirve
+    por HTTP con `ETag = hash(spec+formato+titular+pleca)` para que el navegador la cachee y
+    revalide (304 sin recomponer). 400 si el spec/formato no valen; 422 si el render falla.
     """
     datos = await leer_json(request)
     spec = datos.get("spec") if isinstance(datos, dict) else None
@@ -106,11 +110,23 @@ async def previsualizar(request: Request) -> Response:
         return JSONResponse({"error": "Faltan 'spec' y 'formato'."}, status_code=400)
     titular = datos.get("titular") if isinstance(datos.get("titular"), str) else ""
     etiqueta = datos.get("etiqueta") if isinstance(datos.get("etiqueta"), str) else ""
+
+    firma = hashlib.sha256(
+        json.dumps([spec, formato, titular, etiqueta], sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:32]
+    etag = f'"{firma}"'
+    cache = "private, max-age=300"
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
+
     try:
-        res = estudio_imagen.previsualizar_spec(spec, formato, titular=titular, etiqueta_default=etiqueta)
+        png = estudio_imagen.previsualizar_spec_bytes(
+            spec, formato, titular=titular, etiqueta_default=etiqueta
+        )
     except estudio_imagen.EstudioError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse(res)
+        codigo = 422 if "renderer" in str(e).lower() else 400
+        return JSONResponse({"error": str(e)}, status_code=codigo)
+    return Response(png, media_type="image/png", headers={"ETag": etag, "Cache-Control": cache})
 
 
 RUTAS = [

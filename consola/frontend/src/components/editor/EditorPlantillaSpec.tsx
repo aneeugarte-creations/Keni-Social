@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LienzoEditable } from "@/components/editor/LienzoEditable";
-import { api, ApiError, urlMedia } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import {
   ALINEACIONES,
   CATALOGO_FUENTES,
@@ -89,6 +89,22 @@ export function EditorPlantillaSpec({
   const logoInputRef = React.useRef<HTMLInputElement>(null);
   const fondoInputRef = React.useRef<HTMLInputElement>(null);
   const debounceRef = React.useRef<number | undefined>(undefined);
+  // La previa es un object URL (blob) efímero: guardamos el vigente para revocarlo al
+  // reemplazarlo o al desmontar (evita fugas de memoria de blobs sueltos).
+  const previewUrlRef = React.useRef("");
+  const fijarPreview = React.useCallback((url: string) => {
+    if (previewUrlRef.current && previewUrlRef.current.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+    previewUrlRef.current = url;
+    setPreviewUrl(url);
+  }, []);
+  React.useEffect(
+    () => () => {
+      if (previewUrlRef.current.startsWith("blob:")) URL.revokeObjectURL(previewUrlRef.current);
+    },
+    [],
+  );
 
   const specQuery = useQuery({
     queryKey: ["plantilla-spec", marca],
@@ -106,7 +122,7 @@ export function EditorPlantillaSpec({
       if (!spec) throw new Error("Sin spec");
       return api.previewPlantilla(marca, spec, formato, "Titular de ejemplo");
     },
-    onSuccess: (d) => setPreviewUrl(urlMedia(d.url)),
+    onSuccess: (url) => fijarPreview(url),
     onError: (e) => toast.error(msg(e)),
   });
   React.useEffect(() => {
