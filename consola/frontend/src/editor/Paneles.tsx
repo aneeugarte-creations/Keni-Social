@@ -341,11 +341,14 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               if (tipo === "color") setFondo({ tipo: "color", color: fondo.color || "#111315" });
               else if (tipo === "degradado")
                 setFondo({ tipo: "degradado", degradado: fondo.degradado || { desde: "#0a3d62", hasta: "#111315", angulo: 180 } });
+              else if (tipo === "imagen")
+                setFondo({ tipo: "imagen", imagen: fondo.imagen || { media_id: "", ajuste: "cover" } });
             }}
             className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
           >
             <option value="color">Color</option>
             <option value="degradado">Degradado</option>
+            <option value="imagen">Imagen</option>
           </select>
         </Campo>
         {fondo.tipo === "color" && (
@@ -369,17 +372,45 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             </Campo>
           </>
         )}
-        <p className="text-xs text-muted-foreground">Selecciona una capa para editar sus propiedades, o arrastra un activo al lienzo.</p>
+        {fondo.tipo === "imagen" && (
+          <>
+            <Campo etiqueta="Media ID">
+              <input
+                type="text"
+                value={fondo.imagen?.media_id ?? ""}
+                placeholder="id de media"
+                onChange={(e) =>
+                  setFondo({ tipo: "imagen", imagen: { media_id: e.target.value.trim(), ajuste: fondo.imagen?.ajuste ?? "cover" } })
+                }
+                className="w-40 rounded border border-input bg-background px-1.5 py-0.5 text-right text-xs"
+              />
+            </Campo>
+            <Campo etiqueta="Ajuste">
+              <select
+                value={fondo.imagen?.ajuste ?? "cover"}
+                onChange={(e) =>
+                  setFondo({ tipo: "imagen", imagen: { media_id: fondo.imagen?.media_id ?? "", ajuste: e.target.value as "cover" | "contain" } })
+                }
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                <option value="cover">Cubrir</option>
+                <option value="contain">Contener</option>
+              </select>
+            </Campo>
+          </>
+        )}
       </div>
     );
   }
 
   const set = (cambios: Partial<Capa>) => store.getState().actualizar(capa.id, cambios);
-  // Edita un filtro de imagen fusionando con el resto (neutros por defecto).
-  const setFiltro = (k: "brillo" | "contraste" | "saturacion" | "desenfoque", v: number) =>
-    set({
-      filtros: { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0, ...(capa as CapaImagen).filtros, [k]: v },
-    } as Partial<Capa>);
+  // Edita un filtro de imagen fusionando con el resto (neutros por defecto). Si el resultado es
+  // neutro (brillo=contraste=saturacion=1, desenfoque=0) colapsa a `null`, igual que el back.
+  const setFiltro = (k: "brillo" | "contraste" | "saturacion" | "desenfoque", v: number) => {
+    const next = { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0, ...(capa as CapaImagen).filtros, [k]: v };
+    const neutro = next.brillo === 1 && next.contraste === 1 && next.saturacion === 1 && next.desenfoque === 0;
+    set({ filtros: neutro ? null : next } as Partial<Capa>);
+  };
   const fil = (capa as CapaImagen).filtros ?? { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0 };
 
   return (
@@ -420,11 +451,6 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               <option value="etiqueta_default">{ETIQUETA_BINDING.etiqueta_default}</option>
             </select>
           </Campo>
-          {(capa as CapaTexto).binding && (
-            <p className="-mt-1 text-[11px] text-muted-foreground">
-              Se rellena con {(capa as CapaTexto).binding === "copy_in" ? "el titular" : "la pleca"} de la pieza al aplicar la plantilla.
-            </p>
-          )}
           <textarea
             value={(capa as CapaTexto).texto}
             onChange={(e) => set({ texto: e.target.value } as Partial<Capa>)}
@@ -488,10 +514,6 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               ))}
             </div>
           </Campo>
-          <p className="-mt-1 text-[11px] text-muted-foreground">
-            La caja es de alto fijo: el texto se encoge para caber dentro (en ancho y alto). Ajusta el alto con el campo
-            «Alto» o arrastrando los tiradores de la caja en el lienzo.
-          </p>
           <div className="grid grid-cols-2 gap-2">
             <Campo etiqueta="Máx. líneas">
               <Num
@@ -598,12 +620,25 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             />
           </Campo>
           {(capa as CapaTexto).chip && (
-            <Campo etiqueta="Color del chip">
-              <ColorControl
-                valor={(capa as CapaTexto).chip!.color}
-                onChange={(c) => set({ chip: { ...(capa as CapaTexto).chip!, color: c } } as Partial<Capa>)}
-              />
-            </Campo>
+            <>
+              <Campo etiqueta="Color del chip">
+                <ColorControl
+                  valor={(capa as CapaTexto).chip!.color}
+                  onChange={(c) => set({ chip: { ...(capa as CapaTexto).chip!, color: c } } as Partial<Capa>)}
+                />
+              </Campo>
+              <div className="grid grid-cols-2 gap-2">
+                <Campo etiqueta="Margen X">
+                  <Num valor={(capa as CapaTexto).chip!.pad_x} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, pad_x: Math.max(0, v) } } as Partial<Capa>)} />
+                </Campo>
+                <Campo etiqueta="Margen Y">
+                  <Num valor={(capa as CapaTexto).chip!.pad_y} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, pad_y: Math.max(0, v) } } as Partial<Capa>)} />
+                </Campo>
+              </div>
+              <Campo etiqueta="Redondeo">
+                <Num valor={(capa as CapaTexto).chip!.radio} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, radio: Math.max(0, v) } } as Partial<Capa>)} />
+              </Campo>
+            </>
           )}
         </div>
       )}
@@ -639,9 +674,7 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             )}
           </Campo>
           {(capa as CapaImagen).es_foto && (
-            <p className="text-[11px] text-muted-foreground">
-              Al guardar, la plantilla necesita una imagen marcada como hueco de foto.
-            </p>
+            <p className="text-[11px] text-muted-foreground">La plantilla requiere un hueco de foto.</p>
           )}
           <Campo etiqueta="Forma">
             <select
@@ -776,7 +809,12 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Grosor">
             <Num
               valor={(capa as CapaMarco).borde?.grosor ?? 0}
-              onChange={(v) => set({ borde: { color: (capa as CapaMarco).borde?.color ?? "#FFFFFF", grosor: v } } as Partial<Capa>)}
+              onChange={(v) =>
+                set({
+                  // Grosor <= 0: el back descarta el borde (borde:null); el front hace lo mismo.
+                  borde: v > 0 ? { color: (capa as CapaMarco).borde?.color ?? "#FFFFFF", grosor: v } : null,
+                } as Partial<Capa>)
+              }
             />
           </Campo>
           <Campo etiqueta="Radio"><Num valor={(capa as CapaMarco).radio} onChange={(v) => set({ radio: v } as Partial<Capa>)} /></Campo>
@@ -804,6 +842,69 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Opacidad (0-255)">
             <Num valor={(capa as CapaOverlay).alpha} onChange={(v) => set({ alpha: v } as Partial<Capa>)} />
           </Campo>
+        </div>
+      )}
+
+      {capa.tipo === "logo" && (
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <Campo etiqueta="Tipo">
+            <select
+              value={(capa as CapaLogo).tipo_logo}
+              onChange={(e) => set({ tipo_logo: e.target.value as CapaLogo["tipo_logo"] } as Partial<Capa>)}
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              <option value="imagen">Imagen</option>
+              <option value="wordmark">Wordmark</option>
+            </select>
+          </Campo>
+          {(capa as CapaLogo).tipo_logo === "imagen" && (
+            <Campo etiqueta="Media ID">
+              <input
+                type="text"
+                value={(capa as CapaLogo).media_id}
+                placeholder="id de media"
+                onChange={(e) => set({ media_id: e.target.value.trim() } as Partial<Capa>)}
+                className="w-40 rounded border border-input bg-background px-1.5 py-0.5 text-right text-xs"
+              />
+            </Campo>
+          )}
+          {(capa as CapaLogo).tipo_logo === "wordmark" && (
+            <>
+              <textarea
+                value={(capa as CapaLogo).wordmark.texto}
+                onChange={(e) => set({ wordmark: { ...(capa as CapaLogo).wordmark, texto: e.target.value } } as Partial<Capa>)}
+                placeholder="Texto del wordmark…"
+                className="min-h-[44px] rounded border border-input bg-background p-1.5 text-sm"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Campo etiqueta="Color">
+                  <ColorControl valor={(capa as CapaLogo).wordmark.color} onChange={(c) => set({ wordmark: { ...(capa as CapaLogo).wordmark, color: c } } as Partial<Capa>)} />
+                </Campo>
+                <Campo etiqueta="Fondo">
+                  <ColorControl valor={(capa as CapaLogo).wordmark.fondo} onChange={(c) => set({ wordmark: { ...(capa as CapaLogo).wordmark, fondo: c } } as Partial<Capa>)} />
+                </Campo>
+              </div>
+              <Campo etiqueta="Fuente">
+                <select
+                  value={(capa as CapaLogo).wordmark.familia}
+                  onChange={(e) => set({ wordmark: { ...(capa as CapaLogo).wordmark, familia: e.target.value } } as Partial<Capa>)}
+                  className="max-w-[140px] rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+                >
+                  {familias.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                  {!familias.includes((capa as CapaLogo).wordmark.familia) && (
+                    <option value={(capa as CapaLogo).wordmark.familia}>{(capa as CapaLogo).wordmark.familia}</option>
+                  )}
+                </select>
+              </Campo>
+              <Campo etiqueta="Peso">
+                <Num valor={(capa as CapaLogo).wordmark.peso} paso={100} onChange={(v) => set({ wordmark: { ...(capa as CapaLogo).wordmark, peso: v } } as Partial<Capa>)} />
+              </Campo>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -29,7 +29,7 @@ const ALIN: Record<string, string> = {
 // Puntos inicial/final de un degradado lineal sobre una caja w×h según `angulo` (grados), con la
 // MISMA convención que `gradienteLineal` de dibujar.mjs: 0°=↑, 90°=→, 180°=↓ (vertical), 270°=←.
 // Konva usa puntos relativos al nodo (origen 0,0), así que el centro de la caja es (w/2,h/2).
-function puntosGradiente(w: number, h: number, angulo = 180) {
+export function puntosGradiente(w: number, h: number, angulo = 180) {
   const a = (angulo * Math.PI) / 180;
   const ux = Math.sin(a), uy = -Math.cos(a);
   const cx = w / 2, cy = h / 2;
@@ -38,6 +38,15 @@ function puntosGradiente(w: number, h: number, angulo = 180) {
     start: { x: cx - ux * semi, y: cy - uy * semi },
     end: { x: cx + ux * semi, y: cy + uy * semi },
   };
+}
+
+// Resuelve las familias LÓGICAS del documento ("sans"/"condensada") a fuentes reales, para que
+// el editor (Konva) pinte con la MISMA tipografía que el export del servidor (Barlow / Barlow
+// Condensed por defecto). Cualquier otra familia (nombre real) se pasa tal cual.
+function familiaReal(familia: string | undefined): string {
+  if (familia === "sans") return "Barlow";
+  if (familia === "condensada") return "Barlow Condensed";
+  return familia || "Barlow";
 }
 
 type Filtros = CapaImagen["filtros"];
@@ -153,7 +162,7 @@ function textoMuestra(c: CapaTexto): string {
   return c.mayusculas ? base.toUpperCase() : base;
 }
 
-export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true }: CapaNodoProps) {
+export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true }: CapaNodoProps) {
   // Hook SIEMPRE llamado (regla de hooks); null para capas sin imagen.
   const objetoImg = capa.tipo === "imagen" ? capa.objeto : capa.tipo === "logo" ? capa.media_id : null;
   const img = useImagen(objetoImg);
@@ -220,6 +229,39 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
       const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} props={props} />;
       // cornerRadius de la silueta de sombra, aproximando la forma: círculo (elipse) o esquinas.
       const sombraRadio = c.forma === "elipse" ? Math.min(c.w, c.h) / 2 : c.radio && c.radio > 0 ? c.radio : 0;
+      // Realce de selección que SIGUE LA FORMA: el Transformer de Konva usa su bbox rect (sus
+      // tiradores definen la caja), pero cuando la imagen es elipse o tiene esquinas redondeadas el
+      // contorno azul punteado debe cuadrar con la forma redonda. Solo visual (listening=false).
+      const formaRedonda = c.forma === "elipse" || (c.radio ?? 0) > 0;
+      const realceSel =
+        seleccionada && interactivo && formaRedonda ? (
+          c.forma === "elipse" ? (
+            <Ellipse
+              x={c.x + c.w / 2}
+              y={c.y + c.h / 2}
+              radiusX={c.w / 2}
+              radiusY={c.h / 2}
+              rotation={c.rotacion}
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dash={[6, 4]}
+              listening={false}
+            />
+          ) : (
+            <Rect
+              x={c.x}
+              y={c.y}
+              width={c.w}
+              height={c.h}
+              cornerRadius={c.radio}
+              rotation={c.rotacion}
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dash={[6, 4]}
+              listening={false}
+            />
+          )
+        ) : null;
       // Sombra de la imagen: el Group de la imagen se recorta a su caja (la sombra no escaparía del
       // clip), así que la proyecta una silueta SIN listening dibujada detrás (igual que el render).
       if (c.sombra) {
@@ -243,6 +285,15 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
               shadowEnabled
             />
             {nodoImg}
+            {realceSel}
+          </>
+        );
+      }
+      if (realceSel) {
+        return (
+          <>
+            {nodoImg}
+            {realceSel}
           </>
         );
       }
@@ -263,7 +314,7 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
             height={c.h}
             align="center"
             verticalAlign="middle"
-            fontFamily={c.wordmark.familia}
+            fontFamily={familiaReal(c.wordmark.familia)}
             fontSize={Math.round(c.h * 0.42)}
             fontStyle={c.wordmark.peso >= 600 ? "bold" : "normal"}
             fill={c.wordmark.color}
@@ -281,14 +332,14 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
       const grad = c.relleno_degradado
         ? puntosGradiente(c.w, enCaja ? c.h : c.tamano * c.interlineado, c.relleno_degradado.angulo)
         : null;
-      return (
+      const nodoTexto = (
         <Text
-          {...props}
+          {...(c.chip ? {} : props)}
           text={textoMuestra(c)}
           width={c.w}
           height={enCaja ? c.h : undefined}
           verticalAlign={enCaja ? (c.valign === "centro" ? "middle" : c.valign === "abajo" ? "bottom" : "top") : undefined}
-          fontFamily={c.familia}
+          fontFamily={familiaReal(c.familia)}
           fontSize={c.tamano}
           fontStyle={c.peso >= 600 ? "bold" : "normal"}
           fill={grad ? undefined : c.color}
@@ -310,6 +361,29 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
           shadowOpacity={c.sombra?.opacidad ?? 1}
           shadowEnabled={!!c.sombra}
         />
+      );
+      if (!c.chip) return nodoTexto;
+      // CHIP/pleca: el servidor pinta un fondo por línea detrás del texto (`dibujarChipLinea`).
+      // Aquí lo aproximamos a nivel de CAJA: un Rect detrás del texto con el padding (pad_x/pad_y)
+      // y el radio del chip. Aproximación; el export del servidor manda en la pieza final.
+      const padX = c.chip.pad_x ?? 24;
+      const padY = c.chip.pad_y ?? 14;
+      const altoTexto = enCaja ? c.h : c.tamano * c.interlineado;
+      // Posición del chip dentro del Group (coordenadas relativas a la capa). Aproxima el ancho con
+      // la caja de texto; el render real lo ajusta al ancho de cada línea.
+      return (
+        <Group {...props}>
+          <Rect
+            x={-padX}
+            y={-padY}
+            width={c.w + padX * 2}
+            height={altoTexto + padY * 2}
+            fill={c.chip.color}
+            cornerRadius={c.chip.radio || 0}
+            listening={false}
+          />
+          {nodoTexto}
+        </Group>
       );
     }
     case "marco": {
@@ -375,6 +449,21 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
     case "overlay": {
       const c = capa as CapaOverlay;
       const band = Math.max(1, c.h * c.alto_frac);
+      // Rampa de legibilidad FIEL al servidor (`dibujarOverlayInferior`): ~11 paradas con la curva
+      // t^1.5 sobre el alfa máximo (def 238/255). Separamos el RGB del posible alfa de 8 dígitos de
+      // `c.color` (un `${c.color}00` lo corrompería) para componer cada parada como rgba(...).
+      const m = /^#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/.exec(c.color || "#111315");
+      const rgb = m ? m[1] : "111315";
+      const aHex = m && m[2] ? parseInt(m[2], 16) / 255 : 1;
+      const r = parseInt(rgb.slice(0, 2), 16);
+      const g = parseInt(rgb.slice(2, 4), 16);
+      const b = parseInt(rgb.slice(4, 6), 16);
+      const aMax = ((c.alpha ?? 238) / 255) * aHex;
+      const stops: (number | string)[] = [];
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10;
+        stops.push(t, `rgba(${r},${g},${b},${aMax * Math.pow(t, 1.5)})`);
+      }
       return (
         <Rect
           {...props}
@@ -384,7 +473,7 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
           listening={!capa.bloqueada}
           fillLinearGradientStartPoint={{ x: 0, y: 0 }}
           fillLinearGradientEndPoint={{ x: 0, y: band }}
-          fillLinearGradientColorStops={[0, `${c.color}00`, 1, c.color]}
+          fillLinearGradientColorStops={stops}
         />
       );
     }

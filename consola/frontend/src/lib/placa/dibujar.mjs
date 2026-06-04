@@ -12,6 +12,8 @@ function hexRGBA(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
+  // Hex de 8 dígitos (#RRGGBBAA): el par alfa multiplica el `alpha` recibido.
+  if (hex.length >= 9) alpha *= parseInt(hex.slice(7, 9), 16) / 255;
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
@@ -207,30 +209,43 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
     } else {
       const lx = justif ? t.x : tx;
       if (sombraReal) {
-        // Sombra real aplicada al relleno principal: blur, offset y opacidad nativos del canvas.
+        // Sombra real: blur, offset y opacidad nativos del canvas. Orden = contorno DEBAJO del
+        // relleno (como el camino legado y el `fillAfterStrokeEnabled` de Konva). La sombra la
+        // proyecta el PRIMER trazo pintado y se resetea antes del relleno para no duplicarla.
         ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
         ctx.shadowBlur = sombra.desenfoque ?? 0;
         ctx.shadowOffsetX = sombra.dx ?? 0;
         ctx.shadowOffsetY = sombra.dy ?? 0;
+        if (contorno) {
+          ctx.lineJoin = "round";
+          ctx.lineWidth = contorno.grosor;
+          ctx.strokeStyle = contorno.color || "#000000";
+          ctx.strokeText(ln, lx, y);
+          // Reset SOLO si ya hubo sombra (la pintó el contorno); el relleno va limpio encima.
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+        // Sin contorno la sombra sigue activa y la proyecta el relleno (glow sobre el texto).
         ctx.fillStyle = relleno;
         ctx.fillText(ln, lx, y);
-        // Reset antes del contorno/justificado para NO duplicar la sombra.
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
-      } else if (sombra) {
-        ctx.fillStyle = sombra.color || "#000000";
-        ctx.fillText(ln, lx + (sombra.dx ?? 2), y + (sombra.dy ?? 2));
-      }
-      if (contorno) {
-        ctx.lineJoin = "round";
-        ctx.lineWidth = contorno.grosor;
-        ctx.strokeStyle = contorno.color || "#000000";
-        ctx.strokeText(ln, lx, y);
-      }
-      if (!sombraReal) {
-        // Camino legado: el relleno se pinta aquí (sin sombra ya aplicada arriba).
+      } else {
+        if (sombra) {
+          ctx.fillStyle = sombra.color || "#000000";
+          ctx.fillText(ln, lx + (sombra.dx ?? 2), y + (sombra.dy ?? 2));
+        }
+        if (contorno) {
+          ctx.lineJoin = "round";
+          ctx.lineWidth = contorno.grosor;
+          ctx.strokeStyle = contorno.color || "#000000";
+          ctx.strokeText(ln, lx, y);
+        }
+        // Camino legado: el relleno se pinta encima del contorno.
         ctx.fillStyle = relleno;
         ctx.fillText(ln, lx, y);
       }
@@ -273,27 +288,39 @@ function dibujarLineaJustificada(ctx, linea, x, y, ancho, relleno, sombra, conto
   const sombraReal = sombra && ((sombra.desenfoque ?? 0) > 0 || (sombra.opacidad ?? 1) < 1);
   const pinta = (txt, px) => {
     if (sombraReal) {
+      // Sombra real: contorno DEBAJO del relleno; la sombra la proyecta el primer trazo y se
+      // resetea antes del relleno (paridad con `dibujarTexto` y `fillAfterStrokeEnabled` de Konva).
       ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
       ctx.shadowBlur = sombra.desenfoque ?? 0;
       ctx.shadowOffsetX = sombra.dx ?? 0;
       ctx.shadowOffsetY = sombra.dy ?? 0;
+      if (contorno) {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = contorno.grosor;
+        ctx.strokeStyle = contorno.color || "#000000";
+        ctx.strokeText(txt, px, y);
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      }
       ctx.fillStyle = relleno;
       ctx.fillText(txt, px, y);
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
-    } else if (sombra) {
-      ctx.fillStyle = sombra.color || "#000000";
-      ctx.fillText(txt, px + (sombra.dx ?? 2), y + (sombra.dy ?? 2));
-    }
-    if (contorno) {
-      ctx.lineJoin = "round";
-      ctx.lineWidth = contorno.grosor;
-      ctx.strokeStyle = contorno.color || "#000000";
-      ctx.strokeText(txt, px, y);
-    }
-    if (!sombraReal) {
+    } else {
+      if (sombra) {
+        ctx.fillStyle = sombra.color || "#000000";
+        ctx.fillText(txt, px + (sombra.dx ?? 2), y + (sombra.dy ?? 2));
+      }
+      if (contorno) {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = contorno.grosor;
+        ctx.strokeStyle = contorno.color || "#000000";
+        ctx.strokeText(txt, px, y);
+      }
       ctx.fillStyle = relleno;
       ctx.fillText(txt, px, y);
     }

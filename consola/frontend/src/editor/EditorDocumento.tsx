@@ -14,9 +14,11 @@
 
 import {
   DollarSign,
+  ImageOff,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
+  Loader2,
   Redo2,
   Shapes,
   Sparkles,
@@ -50,12 +52,17 @@ export function EditorDocumento({
   store,
   marca,
   onExportar,
+  exportando,
   onPlantillas,
+  avisaHueco,
 }: {
   store: StoreEditor;
   marca: string;
   onExportar?: () => void;
+  exportando?: boolean;
   onPlantillas?: () => void;
+  // Si la pestaña está atada a plantilla, avisa cuando NO hay capa marcada como hueco de foto.
+  avisaHueco?: boolean;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
@@ -70,6 +77,10 @@ export function EditorDocumento({
   useEffect(() => store.subscribe(() => force((n) => n + 1)), [store]);
 
   const seleccion = store.getState().seleccion;
+  // Hueco de foto ausente: el componente se re-renderiza con cada cambio del store (suscripción
+  // arriba), así el aviso aparece/desaparece al marcar una imagen como hueco.
+  const faltaHueco =
+    !!avisaHueco && !store.getState().documento.capas.some((c) => c.tipo === "imagen" && c.es_foto);
 
   const abrirTool = (t: Herramienta) => setTool((prev) => (prev === t ? null : t));
 
@@ -143,6 +154,15 @@ export function EditorDocumento({
               />
             </div>
             <div className="flex shrink-0 items-center gap-1 border-l border-border bg-background px-2">
+              {faltaHueco && (
+                <span
+                  title="Marca una imagen como «hueco de foto» para que el equipo coloque la foto real."
+                  className="mr-1 hidden items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 sm:inline-flex dark:bg-amber-950 dark:text-amber-400"
+                >
+                  <ImageOff className="h-3 w-3" />
+                  Falta hueco de foto
+                </span>
+              )}
               <button
                 title="Deshacer (⌘Z)"
                 disabled={!puedeDeshacer}
@@ -160,7 +180,8 @@ export function EditorDocumento({
                 <Redo2 className="h-4 w-4" />
               </button>
               {onExportar && (
-                <Button size="sm" className="ml-1" onClick={onExportar}>
+                <Button size="sm" className="ml-1" onClick={onExportar} disabled={exportando}>
+                  {exportando && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
                   Exportar
                 </Button>
               )}

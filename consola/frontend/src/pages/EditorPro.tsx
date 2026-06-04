@@ -35,6 +35,9 @@ interface Pestana {
   // Si la pestaña está anclada a una publicación (historial/versionado).
   contenido?: string;
   plataforma?: string;
+  // Bindings reales de la pieza (titular/pleca): se inyectan al renderizar/guardar para que las
+  // capas con `binding` muestren el copy REAL, no el texto de muestra. Solo en pestañas de pieza.
+  bindings?: Record<string, string>;
 }
 
 let _seq = 0;
@@ -125,16 +128,22 @@ export default function EditorPro() {
     toast.success(`Plantilla «${p.nombre}» abierta.`);
   };
 
+  // Fija los bindings (titular/pleca real) de una pestaña ya abierta.
+  const setBindings = (id: string, bindings: Record<string, string>) =>
+    setPestanas((p) => p.map((t) => (t.id === id ? { ...t, bindings } : t)));
+
   // Abre una pestaña ANCLADA a una publicación.
   const abrirPiezaTab = async (cid: string, pid: string, marca: string) => {
-    const { store } = nuevaPestana(marca, undefined, { contenido: cid, plataforma: pid });
+    const { id, store } = nuevaPestana(marca, undefined, { contenido: cid, plataforma: pid });
+    // Aunque restauremos un borrador local, pedimos los bindings reales (copy/pleca) para el render.
     const guardado = leerAuto(claveAuto({ id: "", marca, contenido: cid, plataforma: pid }));
-    if (guardado) {
-      store.getState().cargar(guardado);
-      return;
-    }
     try {
       const pieza = await api.editorPieza(cid, pid);
+      setBindings(id, pieza.bindings ?? {});
+      if (guardado) {
+        store.getState().cargar(guardado);
+        return;
+      }
       if (pieza.documento) {
         store.getState().cargar(pieza.documento as Documento);
       } else {
@@ -142,6 +151,10 @@ export default function EditorPro() {
         store.getState().cargar(res.documento as Documento);
       }
     } catch (e) {
+      if (guardado) {
+        store.getState().cargar(guardado);
+        return;
+      }
       toast.error(e instanceof Error ? e.message : "No se pudo abrir la pieza.");
     }
   };
@@ -176,9 +189,23 @@ export default function EditorPro() {
   }, [searchParams, marcas, plantillasQ.isSuccess, plantillasQ.data]);
 
   const cerrarPestana = (id: string) => {
+    // Si hay cambios sin guardar, confirmar. Las piezas/plantillas atadas autoguardan a servidor,
+    // pero un lienzo suelto (sin plantilla ni pieza) solo tiene el borrador local: avisamos siempre.
+    const t = pestanas.find((x) => x.id === id);
+    const sinDestino = t && !t.plantillaId && !t.contenido;
+    if (dirty[id]) {
+      const msg = sinDestino
+        ? "Esta pestaña tiene cambios sin guardar y no está atada a ninguna plantilla. ¿Cerrar y perder el trabajo?"
+        : "Esta pestaña tiene cambios sin guardar. ¿Cerrar de todos modos?";
+      if (!window.confirm(msg)) return;
+    }
     stores.current.delete(id);
+    setDirty((d) => {
+      const { [id]: _omit, ...resto } = d;
+      return resto;
+    });
     setPestanas((p) => {
-      const resto = p.filter((t) => t.id !== id);
+      const resto = p.filter((x) => x.id !== id);
       if (activa === id) setActiva(resto.length ? resto[resto.length - 1].id : null);
       return resto;
     });
@@ -188,10 +215,15 @@ export default function EditorPro() {
     mutationFn: () => {
       const store = activa ? stores.current.get(activa) : null;
       if (!store) throw new Error("No hay pestaña activa.");
-      return api.editorRender(store.getState().documento);
+      // Pieza: inyecta el titular/pleca REAL (binding). Plantilla suelta: sin bindings → texto de muestra.
+      const bindings = pestanaActiva?.contenido ? pestanaActiva.bindings : undefined;
+      return api.editorRender(store.getState().documento, bindings);
     },
     onSuccess: (res) => {
-      setExportUrl(`/api/media/${res.id}`);
+      const url = `/api/media/${res.id}`;
+      setExportUrl(url);
+      // Abre el PNG en una pestaña nueva (lo más simple/robusto): el usuario ve el resultado ya.
+      window.open(url, "_blank", "noopener,noreferrer");
       toast.success("PNG generado.");
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo exportar."),
@@ -320,9 +352,13 @@ export default function EditorPro() {
     setDialogo(null);
   };
 
-  // Carga una plantilla en la pestaña ACTIVA (la ata a ella).
+  // Carga una plantilla en la pestaña ACTIVA (la ata a ella). REEMPLAZA el documento y resetea el
+  // historial: si hay cambios sin guardar, confirmar antes para no perder el trabajo.
   const cargarPlantillaEnActiva = (p: PlantillaDiseno) => {
     if (storeActivo && activa) {
+      if (dirty[activa] && !window.confirm(`Esto reemplaza el contenido actual (con cambios sin guardar) por «${p.nombre}». ¿Continuar?`)) {
+        return;
+      }
       storeActivo.getState().cargar(p.documento as Documento);
       bindPlantilla(activa, p.id, p.nombre);
       marcarLimpia(activa);
@@ -390,7 +426,12 @@ export default function EditorPro() {
       if (!storeActivo || !pestanaActiva?.contenido || !pestanaActiva?.plataforma) {
         throw new Error("Esta pestaña no está anclada a una publicación.");
       }
-      return api.editorPiezaGuardar(pestanaActiva.contenido, pestanaActiva.plataforma, storeActivo.getState().documento);
+      return api.editorPiezaGuardar(
+        pestanaActiva.contenido,
+        pestanaActiva.plataforma,
+        storeActivo.getState().documento,
+        pestanaActiva.bindings,
+      );
     },
     onSuccess: (res) => {
       if (activa) marcarLimpia(activa);
@@ -512,7 +553,11 @@ export default function EditorPro() {
             store={storeActivo}
             marca={pestanaActiva.marca}
             onExportar={() => exportar.mutate()}
+            exportando={exportar.isPending}
             onPlantillas={() => setGaleria(true)}
+            // Aviso de hueco de foto: solo relevante cuando la pestaña está atada a una plantilla
+            // (sin hueco no autoguarda a servidor ni deja Guardar).
+            avisaHueco={!!pestanaActiva.plantillaId}
           />
         ) : (
           <GaleriaInline

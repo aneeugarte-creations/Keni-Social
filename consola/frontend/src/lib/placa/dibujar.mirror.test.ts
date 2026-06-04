@@ -32,11 +32,15 @@ function ctxFalso() {
   const gradientes: { x0: number; y0: number; x1: number; y1: number; stops: [number, string][] }[] = [];
   // Registra las primitivas de path usadas para construir recortes (clip) de imagen.
   const paths: { tipo: "ellipse" | "rect" | "arcTo"; args: number[] }[] = [];
+  // Log ORDENADO de trazos de texto (stroke/fill) con el estado de sombra/estilo en ese instante.
+  // Permite verificar el ORDEN (contorno DEBAJO del relleno) y que la sombra se resetee a tiempo.
+  const ops: { op: "stroke" | "fill"; texto: string; blur: number; sombra: string; estilo: string }[] = [];
   let tamActual = 64;
   const ctx = {
     fills,
     gradientes,
     paths,
+    ops,
     canvas: { width: 1080, height: 1080 },
     shadowColor: "transparent",
     shadowBlur: 0,
@@ -59,9 +63,13 @@ function ctxFalso() {
     textBaseline: "top",
     textAlign: "left",
     measureText: (t: string) => ({ width: t.length * tamActual * 0.5 }),
-    fillText: (t: string, x: number, y: number) =>
-      fills.push({ texto: t, x, y, tam: tamActual, blur: ctx.shadowBlur, sombra: ctx.shadowColor }),
-    strokeText: () => {},
+    fillText: (t: string, x: number, y: number) => {
+      fills.push({ texto: t, x, y, tam: tamActual, blur: ctx.shadowBlur, sombra: ctx.shadowColor });
+      ops.push({ op: "fill", texto: t, blur: ctx.shadowBlur, sombra: ctx.shadowColor, estilo: String(ctx.fillStyle) });
+    },
+    strokeText: (t: string) => {
+      ops.push({ op: "stroke", texto: t, blur: ctx.shadowBlur, sombra: ctx.shadowColor, estilo: String(ctx.strokeStyle) });
+    },
     save: () => {},
     restore: () => {},
     translate: () => {},
@@ -205,6 +213,87 @@ describe("sombra de texto: legado vs sombra real (blur/opacidad)", () => {
     );
     const fills = ctx.fills.filter((f) => f.texto === "HOLA");
     expect(fills.length).toBe(1); // un solo fillText (relleno con sombra real), no el doble legado
+  });
+});
+
+describe("orden sombra + contorno en texto (sombra real)", () => {
+  it("con sombra real Y contorno: contorno DEBAJO del relleno, con la sombra solo en el contorno", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      {
+        documento: docConTexto({
+          sombra: { dx: 0, dy: 0, color: "#000000", desenfoque: 20 },
+          contorno: { grosor: 6, color: "#00FF00" },
+        }),
+        imgs: {},
+        bindings: {},
+      } as never,
+    );
+    const ops = ctx.ops.filter((o) => o.texto === "HOLA");
+    // Exactamente: 1 stroke (contorno) y luego 1 fill (relleno).
+    expect(ops.map((o) => o.op)).toEqual(["stroke", "fill"]);
+    // La sombra la proyecta el contorno (blur activo); el relleno va SIN sombra (reseteada).
+    expect(ops[0].blur).toBe(20);
+    expect(ops[1].blur).toBe(0);
+    expect(ops[1].sombra).toBe("transparent");
+  });
+
+  it("con sombra real SIN contorno: un único relleno con la sombra (glow) y reset posterior", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ sombra: { dx: 0, dy: 0, color: "#000000", desenfoque: 20 } }), imgs: {}, bindings: {} } as never,
+    );
+    const ops = ctx.ops.filter((o) => o.texto === "HOLA");
+    expect(ops.map((o) => o.op)).toEqual(["fill"]);
+    expect(ops[0].blur).toBe(20);
+    expect(ctx.shadowBlur).toBe(0);
+  });
+
+  it("camino LEGADO con contorno: contorno DEBAJO del relleno (stroke antes que el fill final)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ contorno: { grosor: 6, color: "#00FF00" } }), imgs: {}, bindings: {} } as never,
+    );
+    const ops = ctx.ops.filter((o) => o.texto === "HOLA");
+    expect(ops.map((o) => o.op)).toEqual(["stroke", "fill"]);
+  });
+});
+
+describe("hexRGBA respeta el alfa de 8 dígitos (#RRGGBBAA)", () => {
+  it("sombra real con color de 8 dígitos: el par alfa multiplica la opacidad", () => {
+    const ctx = ctxFalso();
+    // #00000080 => alfa 0x80/255 ≈ 0.5; opacidad 0.5 => rgba final con alfa ≈ 0.25.
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ sombra: { dx: 0, dy: 0, color: "#00000080", opacidad: 0.5 } }), imgs: {}, bindings: {} } as never,
+    );
+    const op = ctx.ops.find((o) => o.texto === "HOLA");
+    expect(op).toBeTruthy();
+    // El shadowColor (registrado como `sombra`) debe llevar el alfa combinado (~0.25), no 0.5.
+    const m = /rgba\(0,0,0,([0-9.]+)\)/.exec(op!.sombra);
+    expect(m).toBeTruthy();
+    expect(Number(m![1])).toBeCloseTo(0.25, 2);
+  });
+
+  it("overlay inferior con color de 8 dígitos atenúa el alfa máximo de la rampa", () => {
+    const ctx = ctxFalso();
+    const doc = {
+      version: 1,
+      formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+      fondo: { tipo: "color", color: "#000000" },
+      capas: [
+        { id: "ov", tipo: "overlay", x: 0, y: 0, w: 1080, h: 1080, z: 1, rotacion: 0, opacidad: 1, visible: true, color: "#11131580", alto_frac: 0.5, alpha: 255 },
+      ],
+    };
+    dibujarDocumento(ctx as never, { documento: doc as never, imgs: {}, bindings: {} } as never);
+    const g = ctx.gradientes[ctx.gradientes.length - 1];
+    // Última parada (t=1): alfa = (255/255) * (0x80/255) ≈ 0.502, no 1.
+    const ultima = g.stops[g.stops.length - 1][1];
+    const m = /rgba\(\d+,\d+,\d+,([0-9.]+)\)/.exec(ultima);
+    expect(Number(m![1])).toBeCloseTo(0.502, 2);
   });
 });
 

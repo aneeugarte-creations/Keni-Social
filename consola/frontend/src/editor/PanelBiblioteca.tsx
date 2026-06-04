@@ -103,8 +103,34 @@ export function PanelBiblioteca({
           y: Math.round((doc.formato.h - h) / 2),
         }),
       );
+    } else if (a.tipo === "tipografia") {
+      // Aplica la familia a la capa de TEXTO seleccionada; si no hay, informa cómo usarla.
+      const sel = st.seleccion;
+      const capaSel = sel ? doc.capas.find((c) => c.id === sel) : null;
+      const familia = ((a.metadatos?.familia as string) || a.nombre || "").trim();
+      if (capaSel?.tipo === "texto" && familia) {
+        st.actualizar(sel!, { familia } as Partial<Capa>);
+        toast.success(`Fuente «${familia}» aplicada al texto.`);
+      } else {
+        toast.info("Selecciona una capa de texto para aplicarle esta tipografía.");
+      }
+      return;
+    } else if (a.tipo === "paleta") {
+      // Aplica el primer color de la paleta al color de la capa de texto seleccionada.
+      const sel = st.seleccion;
+      const capaSel = sel ? doc.capas.find((c) => c.id === sel) : null;
+      const colores = (a.metadatos?.colores as string[] | undefined) ?? [];
+      const color = colores[0];
+      if (capaSel?.tipo === "texto" && color) {
+        st.actualizar(sel!, { color } as Partial<Capa>);
+        toast.success(`Color «${color}» aplicado al texto.`);
+      } else if (color) {
+        toast.info("Selecciona una capa de texto para aplicar un color de la paleta.");
+      } else {
+        toast.info("Paleta sin colores definidos.");
+      }
+      return;
     } else {
-      toast.info(a.tipo === "tipografia" ? "Las tipografías se aplican desde el inspector de texto." : "Las paletas se usan como referencia de color.");
       return;
     }
     st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);

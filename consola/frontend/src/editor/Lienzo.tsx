@@ -34,7 +34,7 @@ import {
 } from "react";
 import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
 
-import { CapaNodo } from "./capas/CapaNodo";
+import { CapaNodo, puntosGradiente } from "./capas/CapaNodo";
 import type { Capa, CapaImagen, CapaTexto, Documento } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo } from "./documento";
 import type { StoreEditor } from "./store";
@@ -45,18 +45,22 @@ const RATIO_FIJO = new Set<Capa["tipo"]>(["imagen", "logo"]);
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 4;
 
-// Portapapeles de capa (módulo, para copiar/pegar incluso entre pestañas del workspace).
-let _portapapeles: Capa | null = null;
+// Portapapeles de capas (módulo, para copiar/pegar incluso entre pestañas del workspace). Guarda
+// TODA la selección múltiple, no solo la capa primaria.
+let _portapapeles: Capa[] = [];
 
 function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: number; h: number }) {
   const img = useImagen(fondo.tipo === "imagen" ? fondo.imagen?.media_id : null);
   if (fondo.tipo === "color") return <Rect x={0} y={0} width={w} height={h} fill={fondo.color} listening={false} />;
   if (fondo.tipo === "degradado" && fondo.degradado) {
+    // Respeta el ÁNGULO del degradado (mismo helper/convención que el render y las capas):
+    // default 180 = vertical (↓), sin cambio visual respecto al comportamiento previo.
+    const g = puntosGradiente(w, h, fondo.degradado.angulo);
     return (
       <Rect
         x={0} y={0} width={w} height={h} listening={false}
-        fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-        fillLinearGradientEndPoint={{ x: 0, y: h }}
+        fillLinearGradientStartPoint={g.start}
+        fillLinearGradientEndPoint={g.end}
         fillLinearGradientColorStops={[0, fondo.degradado.desde, 1, fondo.degradado.hasta]}
       />
     );
@@ -247,7 +251,9 @@ export function Lienzo({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      // No dispares atajos si el foco está en un campo editable o un <select> (con un select
+      // enfocado, las flechas cambian la opción y Backspace no debe borrar la capa).
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable || t.closest("[contenteditable]"))) return;
       const st = store.getState();
       const sel = st.seleccion;
       const meta = e.metaKey || e.ctrlKey;
@@ -256,6 +262,16 @@ export function Lienzo({
         if (e.shiftKey) st.rehacer();
         else st.deshacer();
         return;
+      }
+      // Zoom: ⌘0 ajusta a pantalla (escala = baseFit => zoom 1), ⌘+ acerca, ⌘− aleja.
+      if (meta && e.key === "0") { e.preventDefault(); return setZoom(1); }
+      if (meta && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        return setZoom((z) => Math.min(ZOOM_MAX, z * 1.1));
+      }
+      if (meta && (e.key === "-" || e.key === "_")) {
+        e.preventDefault();
+        return setZoom((z) => Math.max(ZOOM_MIN, z * 0.9));
       }
       if (e.key === "Escape") {
         if (reencuadreId) return onSalirReencuadre?.();
@@ -279,23 +295,26 @@ export function Lienzo({
       const capa = st.documento.capas.find((c) => c.id === sel);
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); return st.quitarMulti(); }
       if (meta && (e.key === "c" || e.key === "C")) {
-        const capa = st.documento.capas.find((c) => c.id === sel);
-        if (capa) _portapapeles = structuredClone(capa);
+        // Copia TODA la selección múltiple (alineado con ⌘D duplicarMulti), no solo la primaria.
+        const ids = st.seleccionMulti.length ? st.seleccionMulti : sel ? [sel] : [];
+        const capas = st.documento.capas.filter((c) => ids.includes(c.id));
+        if (capas.length) _portapapeles = capas.map((c) => structuredClone(c));
         return;
       }
       if (meta && (e.key === "v" || e.key === "V")) {
-        if (!_portapapeles) return;
+        if (!_portapapeles.length) return;
         e.preventDefault();
-        const z = Math.max(0, ...st.documento.capas.map((c) => c.z)) + 1;
-        const copia = {
-          ...structuredClone(_portapapeles),
-          id: `${_portapapeles.tipo}-${Date.now().toString(36)}-${Math.floor(performance.now())}`,
-          x: _portapapeles.x + 24,
-          y: _portapapeles.y + 24,
-          z,
-        } as Capa;
-        st.agregar(copia);
-        st.seleccionar(copia.id);
+        let z = Math.max(0, ...st.documento.capas.map((c) => c.z));
+        const t0 = Date.now().toString(36);
+        const copias = _portapapeles.map((c, i) => ({
+          ...structuredClone(c),
+          id: `${c.tipo}-${t0}-${i}-${Math.floor(performance.now())}`,
+          x: c.x + 24,
+          y: c.y + 24,
+          z: ++z,
+        })) as Capa[];
+        for (const copia of copias) st.agregar(copia);
+        st.seleccionarMuchas(copias.map((c) => c.id));
         return;
       }
       if (meta && (e.key === "d" || e.key === "D")) { e.preventDefault(); return st.duplicarMulti(); }
@@ -422,7 +441,12 @@ export function Lienzo({
     setEditando(null);
   };
 
-  const ajustarZoom = () => setZoom(1);
+  // "Ajustar a pantalla" = el lienzo entero cabe en el espacio disponible. Como `escala = baseFit *
+  // zoom` y `baseFit` ya encaja el documento, ajustar a pantalla equivale a zoom=1.
+  const ajustarPantalla = () => setZoom(1);
+  // "100%" = un píxel del documento ocupa un píxel de pantalla, i.e. escala efectiva 1 => zoom =
+  // 1/baseFit (acotado al rango permitido).
+  const zoomReal = () => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, 1 / baseFit)));
 
   // Soltar un activo arrastrado desde la Biblioteca: lo inserta como capa DONDE se suelta.
   const onDrop = (e: DragEventReact<HTMLDivElement>) => {
@@ -636,13 +660,13 @@ export function Lienzo({
         <button title="Alejar" onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))} className="rounded p-1 hover:bg-accent">
           <Minus className="h-3.5 w-3.5" />
         </button>
-        <button title="Ajustar" onClick={ajustarZoom} className="rounded px-1 text-xs tabular-nums hover:bg-accent">
-          {Math.round(zoom * 100)}%
+        <button title="100% (tamaño real, ⌘0 ajusta a pantalla)" onClick={zoomReal} className="rounded px-1 text-xs tabular-nums hover:bg-accent">
+          {Math.round(escala * 100)}%
         </button>
-        <button title="Acercar" onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))} className="rounded p-1 hover:bg-accent">
+        <button title="Acercar (⌘+)" onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))} className="rounded p-1 hover:bg-accent">
           <Plus className="h-3.5 w-3.5" />
         </button>
-        <button title="Ajustar a la pantalla" onClick={ajustarZoom} className="rounded p-1 hover:bg-accent">
+        <button title="Ajustar a la pantalla (⌘0)" onClick={ajustarPantalla} className="rounded p-1 hover:bg-accent">
           <Maximize className="h-3.5 w-3.5" />
         </button>
       </div>

@@ -9,6 +9,11 @@ Endpoints:
   - `POST /api/editor/render`                      {documento, bindings?} -> {id, url}
   - `GET  /api/editor/plantilla/{marca}/{formato}`                        -> {documento}
 
+Bindings (titular/pleca): las capas de texto con `binding:"copy_in"`/`"etiqueta_default"` se
+renderizan con el TEXTO REAL de la publicación, no con el texto de muestra, cuando el cliente pasa
+`bindings={"copy_in":..., "etiqueta_default":...}`. El GET de la pieza precarga esos valores
+(copy_in de la fila + etiqueta_default de la marca) para que el editor los inyecte al render/guardar.
+
 SEGURIDAD: el documento se valida en el dominio (`documento.validar`); los errores salen como
 400 en español, sin tracebacks. El nombre del PNG lo genera el servidor (media).
 """
@@ -22,10 +27,29 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import repos
+from .. import plantillas_marca, repos
 from .._http_json import leer_json
 from ..dominio import estudio_imagen
 from ..seguridad import autor_de_peticion
+
+
+def _bindings_de_pieza(cid: str, pid: str) -> dict[str, str]:
+    """Bindings reales de una pieza: `copy_in` (titular) de la fila + `etiqueta_default` (pleca) de la marca.
+
+    Tolerante: si la pieza/contenido/marca no existen devuelve lo que pueda (vacío). Lo usa el
+    GET de la pieza (precarga) y el guardar (render con el texto real, no el de muestra).
+    """
+    plataforma = repos.obtener_contenido_plataforma(pid) or {}
+    copy_in = str(plataforma.get("copy_in") or "")
+    etiqueta = ""
+    contenido = repos.obtener_contenido(cid) or {}
+    marca = str(contenido.get("marca") or "")
+    if marca:
+        try:
+            etiqueta = str(plantillas_marca.obtener(marca).get("etiqueta_default") or "")
+        except plantillas_marca.PlantillaMarcaError:
+            etiqueta = ""
+    return {"copy_in": copy_in, "etiqueta_default": etiqueta}
 
 
 async def render(request: Request) -> Response:
@@ -75,7 +99,15 @@ async def pieza_documento(request: Request) -> Response:
     pid = request.path_params["plataforma_id"]
     versiones = repos.listar_documento_versiones(cid, pid)
     ultima = versiones[0] if versiones else None
-    return JSONResponse({"documento": _doc_de_version(ultima), "versiones": len(versiones)})
+    return JSONResponse(
+        {
+            "documento": _doc_de_version(ultima),
+            "versiones": len(versiones),
+            # Bindings reales para que el editor renderice el titular/pleca de la publicación
+            # (no el texto de muestra de las capas con `binding`).
+            "bindings": _bindings_de_pieza(cid, pid),
+        }
+    )
 
 
 async def pieza_guardar(request: Request) -> Response:
@@ -90,9 +122,15 @@ async def pieza_guardar(request: Request) -> Response:
     doc = datos.get("documento") if isinstance(datos, dict) else None
     if not isinstance(doc, dict):
         return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
+    # Bindings: el cliente puede enviarlos (valores VIGENTES del editor, aún sin persistir); si no,
+    # se usan los reales de la pieza (copy_in de la fila + pleca de la marca). Así el PNG guardado
+    # muestra el titular/pleca REAL en las capas con `binding`, no el texto de muestra.
+    bindings = datos.get("bindings") if isinstance(datos, dict) else None
+    if not isinstance(bindings, dict):
+        bindings = _bindings_de_pieza(cid, pid)
     try:
         doc_ok = estudio_imagen.validar_documento(doc)
-        render = estudio_imagen.renderizar_documento(doc_ok)
+        render = estudio_imagen.renderizar_documento(doc_ok, bindings=bindings)
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
