@@ -212,14 +212,10 @@ describe("Sidebar · bloques de flujo", () => {
     expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
-  it("gating por marca: Calendario solo se ve en Claro Sports (y en 'Todas')", async () => {
-    // Otra marca concreta (UnoTV): el hub Calendario NO aparece (separación de contextos).
-    const { unmount } = renderSidebar("editor", "/operacion/feed", {}, "unotv");
-    expect(await screen.findByRole("link", { name: /feed/i })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /calendario/i })).not.toBeInTheDocument();
-    unmount();
-    // Claro Sports: sí aparece.
-    renderSidebar("editor", "/operacion/feed", {}, "claro-sports");
+  it("el hub Calendario se ve en cualquier marca (su gating es por pestaña, no por hub)", async () => {
+    // La Programación (calendario de publicaciones) es para todas las marcas; lo único de
+    // Claro Sports es la pestaña Turnos, que se filtra dentro del hub (ver SubnavHub), no aquí.
+    renderSidebar("editor", "/operacion/feed", {}, "unotv");
     expect(await screen.findByRole("link", { name: /calendario/i })).toBeInTheDocument();
   });
 

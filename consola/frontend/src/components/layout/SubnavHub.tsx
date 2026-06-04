@@ -1,6 +1,8 @@
 import { NavLink, useLocation } from "react-router-dom";
 
+import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { pestanasDeRuta } from "@/components/layout/hub-tabs";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,11 +13,18 @@ import { cn } from "@/lib/utils";
  * sobre el contenido. Se pinta sola cuando la ruta actual cae en un hub con 2+
  * pestañas; fuera de un hub (o en un hub de una sola hoja, p. ej. Activos) no
  * renderiza nada. Vive en el AppShell, encima del `<Outlet/>`.
+ *
+ * Gating por marca (multitenant): pestañas restringidas a una marca (p. ej. Turnos, solo
+ * Claro Sports) se ocultan cuando la marca activa es otra. Si tras filtrar queda una sola
+ * pestaña, la barra no se pinta (no hay nada que conmutar).
  */
 export function SubnavHub() {
   const { pathname } = useLocation();
-  const pestanas = pestanasDeRuta(pathname);
-  // Sin hub, o hub de una sola hoja: no hay nada que conmutar.
+  const { marcaActiva } = useMarcaActiva();
+  const pestanas = pestanasDeRuta(pathname)?.filter((p) =>
+    rutaVisibleParaMarca(p.ruta, marcaActiva),
+  );
+  // Sin hub, o hub de una sola hoja (tras el gating): no hay nada que conmutar.
   if (!pestanas || pestanas.length < 2) return null;
 
   return (

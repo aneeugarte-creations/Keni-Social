@@ -3,7 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
-import { GuardCalendario } from "@/components/layout/GuardCalendario";
+import { GuardTurnos } from "@/components/layout/GuardTurnos";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
 import { Loader2 } from "lucide-react";
 
@@ -117,16 +117,23 @@ export const router = createBrowserRouter([
               { path: "lista", element: <ListaContenido /> },
             ],
           },
-          // Hub Calendario: Programación (calendario de publicaciones) + Turnos de cobertura.
-          // La 1ª pestaña es Programación, así que el índice del hub aterriza ahí. SOLO Claro
-          // Sports (separación de contextos multitenant): el guard redirige al Feed para otra marca.
+          // Hub Calendario: Programación (calendario de publicaciones, para TODAS las marcas)
+          // + Turnos de cobertura (rota). La 1ª pestaña es Programación, así que el índice del
+          // hub aterriza ahí. TURNOS es solo de Claro Sports: su guard redirige a Programación
+          // para otra marca (el resto del hub es válido para todas).
           {
             path: "calendario",
-            element: <GuardCalendario />,
             children: [
               { index: true, element: <Navigate to="calendario" replace /> },
               { path: "calendario", element: <CalendarioContenido /> },
-              { path: "turnos", element: <Rota /> },
+              {
+                path: "turnos",
+                element: (
+                  <GuardTurnos>
+                    <Rota />
+                  </GuardTurnos>
+                ),
+              },
             ],
           },
           // Compat (#cal-feed): el antiguo hub `/operacion/parrilla/*` se separó en

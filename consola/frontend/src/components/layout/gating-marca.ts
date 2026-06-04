@@ -6,17 +6,21 @@
  * para una marca concreta y se ocultan del nav (y se bloquea su ruta) cuando la marca
  * activa es otra. La marca activa la fija el selector global de la barra superior
  * (`useMarcaActiva`): es el id canónico, o `null` para la vista agregada "Todas" (admin).
+ *
+ * Hoy lo único restringido es la pestaña TURNOS (rota de cobertura) del hub Calendario:
+ * es cosa de Claro Sports. El resto del hub —la Programación (calendario de publicaciones)—
+ * es relevante para TODAS las marcas y se ve siempre.
  */
 
 /** Id canónico de Claro Sports (catálogo de marcas del backend). */
 export const MARCA_CLARO_SPORTS = "claro-sports";
 
 /**
- * Prefijos de ruta (hubs) que SOLO aplican a Claro Sports. Para cualquier otra marca
- * específica se ocultan del sidebar y su ruta redirige; en "Todas" (`marcaActiva === null`,
- * vista agregada de admin) sí se permiten, porque incluye a Claro Sports.
+ * Rutas que SOLO aplican a Claro Sports. Para cualquier otra marca concreta se ocultan
+ * (del nav / de su pestaña) y su ruta redirige; en "Todas" (`marcaActiva === null`, vista
+ * agregada de admin) sí se permiten, porque incluye a Claro Sports.
  */
-const RUTAS_SOLO_CLARO_SPORTS = ["/operacion/calendario"];
+const RUTAS_SOLO_CLARO_SPORTS = ["/operacion/calendario/turnos"];
 
 /**
  * ¿Es `ruta` visible para la `marcaActiva`? `true` salvo que la ruta esté restringida a
