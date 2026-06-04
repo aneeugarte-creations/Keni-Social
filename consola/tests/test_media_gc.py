@@ -25,6 +25,17 @@ def _store_aislado(monkeypatch, tmp_path):
     ajustes._CACHE_MTIME = -1.0
     ajustes._CACHE_DATOS = {}
 
+
+@pytest.fixture(autouse=True)
+def _recursos_marca_vacios(monkeypatch):
+    """Por defecto, sin plantillas del estudio ni activos de marca (referencias de render).
+
+    `referencias_vivas` consulta estas fuentes para proteger los ORIGINALES del render
+    on-demand; sin mock irían a la BD. Las pruebas que verifican esa protección los
+    sobrescriben. Así el resto sigue siendo determinista (no aportan referencias)."""
+    monkeypatch.setattr(media_gc.repos, "listar_plantillas_diseno", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_marca_activos", lambda *a, **k: [])
+
 # Antiguedades sinteticas (epoch): "viejo" = hace 48h, "nuevo" = hace 1h.
 _AHORA = time.time()
 _VIEJO = _AHORA - 48 * 3600.0
@@ -101,6 +112,45 @@ def test_gc_no_falla_si_biblioteca_media_no_existe(monkeypatch):
     borrados = _captura_borrados(monkeypatch)
     res = media_gc.limpiar(antiguedad_horas=24)
     assert borrados == ["huerfano.png"] and res["borrados"] == 1
+
+
+def test_protege_foto_cruda_de_publicacion(monkeypatch):
+    # Con render on-demand la foto cruda NO está horneada en `imagen`: debe ser referencia viva.
+    monkeypatch.setattr(
+        media_gc.repos, "listar_publicaciones",
+        lambda *a, **k: [{"imagen": "", "foto": "foto-cruda.jpg"}],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    assert "foto-cruda.jpg" in media_gc.referencias_vivas()
+    # Y un GC viejo NO la borra aunque `imagen` esté vacío.
+    _objetos(monkeypatch, [("foto-cruda.jpg", _VIEJO)])
+    borrados = _captura_borrados(monkeypatch)
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == [] and res["conservados"] == 1
+
+
+def test_protege_recursos_de_marca_y_plantillas(monkeypatch):
+    # Logos/tipografías (activos de marca) y media_id de plantillas del estudio son originales
+    # del render: no se borran.
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    monkeypatch.setattr(
+        media_gc.repos, "listar_marca_activos",
+        lambda *a, **k: [{"objeto": "logo-oficial.png"}, {"objeto": ""}],
+    )
+    doc = (
+        '{"fondo":{"tipo":"imagen","imagen":{"media_id":"fondo.jpg"}},'
+        '"capas":[{"tipo":"logo","tipo_logo":"imagen","media_id":"logo-spec.png"},'
+        '{"tipo":"grupo","capas":[{"tipo":"imagen","objeto":"muestra.jpg"}]}]}'
+    )
+    monkeypatch.setattr(
+        media_gc.repos, "listar_plantillas_diseno",
+        lambda *a, **k: [{"miniatura": "mini.png", "documento": doc}],
+    )
+    vivas = media_gc.referencias_vivas()
+    assert {"logo-oficial.png", "mini.png", "fondo.jpg", "logo-spec.png", "muestra.jpg"} <= vivas
 
 
 # --------------------------------------------------------------------------- #

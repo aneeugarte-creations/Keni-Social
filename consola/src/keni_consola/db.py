@@ -4476,7 +4476,22 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
     fuente = plat.get("imagen_fuente") or ""
     plat["imagen"] = imagen
     plat["imagen_fuente"] = fuente
-    plat["imagen_url"] = f"/api/media/{imagen}" if imagen else fuente
+    # `imagen_url`: si hay `imagen` horneada, esa. Si NO, pero la pieza se DERIVA de una receta
+    # (plantilla del estudio, o placa de marca: copy_in con la placa visible), apunta al render
+    # on-demand `/compuesta` (el endpoint re-obtiene la pieza con su marca y compone). Si solo
+    # hay foto/fuente, esas. La señal aquí es local (esta tabla no guarda `marca`): si la marca
+    # no tuviera plantilla, `/compuesta` resuelve a la foto igualmente, sin romper.
+    derivable = bool((plat.get("plantilla_diseno_id") or "").strip()) or (
+        not plat.get("placa_oculta") and bool((plat.get("copy_in") or "").strip())
+    )
+    if imagen:
+        plat["imagen_url"] = f"/api/media/{imagen}"
+    elif derivable:
+        plat["imagen_url"] = f"/api/publicaciones/{plat['id']}/compuesta"
+    elif plat.get("foto"):
+        plat["imagen_url"] = f"/api/media/{plat['foto']}"
+    else:
+        plat["imagen_url"] = fuente
     return plat
 
 

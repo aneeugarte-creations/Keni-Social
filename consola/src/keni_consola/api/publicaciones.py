@@ -602,8 +602,43 @@ async def aplicar_plantilla(request: Request) -> Response:
     return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
 
 
+async def compuesta(request: Request) -> Response:
+    """Sirve la imagen COMPUESTA de la pieza, renderizada ON-DEMAND desde su receta.
+
+    `GET /api/publicaciones/{id}/compuesta`: deriva la imagen publicable (placa de marca o
+    plantilla del estudio aplicada a la foto + copy_in + encuadre) y devuelve los bytes, igual
+    que `/api/media`. El render es content-addressed (caché natural: misma receta => mismo
+    objeto). Es la URL estable que usan los `<img>` del SPA, los MCP y, al publicar, Metricool.
+
+    404 si la pieza no existe o no tiene imagen derivable; 422 si el render falla (motivo en
+    español). `Cache-Control` breve para no recomputar en cada scroll del feed.
+    """
+    from .. import media
+    from ..dominio import estudio_imagen, render_pieza
+
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    try:
+        nombre = render_pieza.imagen_compuesta_id(pub)
+    except estudio_imagen.EstudioError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+    if not nombre:
+        return JSONResponse({"error": "La pieza aún no tiene imagen."}, status_code=404)
+    datos = media.leer_media(nombre)
+    if datos is None:
+        return JSONResponse({"error": "No se pudo leer la imagen compuesta."}, status_code=404)
+    return Response(
+        datos,
+        media_type=media.mime_de(nombre),
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
+    Route("/api/publicaciones/{publicacion_id}/compuesta", compuesta, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
     Route("/api/publicaciones", crear, methods=["POST"]),
     Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),

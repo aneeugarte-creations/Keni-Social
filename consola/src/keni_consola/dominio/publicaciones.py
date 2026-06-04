@@ -31,11 +31,23 @@ from .. import marcas, pipeline_estado, redes, repos
 from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 
 
+def _imagen_url_de(pub: dict[str, Any]) -> str:
+    """URL servible de la imagen de la pieza (delega en `render_pieza`, sin componer).
+
+    Import DIFERIDO: `render_pieza` importa el Estudio (motores), que no debe cargarse al
+    importar el contrato de C. La decisión es barata (no llama a Node): solo elige la URL.
+    """
+    from . import render_pieza
+
+    return render_pieza.imagen_url_de(pub)
+
+
 def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     """Serializa una publicacion resolviendo nombres legibles de marca y red.
 
-    Anade `imagen` (nombre de archivo en el dir de media, o "") y `imagen_url`
-    (`/api/media/{imagen}` o "" si no hay imagen) para que la UI la pueda mostrar.
+    Anade `imagen` (nombre de archivo en el dir de media, o "") y `imagen_url` (URL servible:
+    `/api/media/{imagen}` si está horneada, `/api/publicaciones/{id}/compuesta` si se deriva de
+    la receta, la foto/fuente si solo hay eso, o "") para que la UI la pueda mostrar.
     """
     imagen = pub.get("imagen") or ""
     imagen_fuente = pub.get("imagen_fuente") or ""
@@ -132,9 +144,11 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "fecha_fuente": pub.get("fecha_fuente") or "",
         "origen": pub["origen"],
         "imagen": imagen,
-        # Si no hay archivo subido pero hay imagen de fuente (URL externa), se sirve ESA
-        # (ya es navegable), igual que en `_fila_a_contenido_plataforma`.
-        "imagen_url": f"/api/media/{imagen}" if imagen else imagen_fuente,
+        # `imagen_url`: la URL SERVIBLE de la imagen de la pieza. Si hay `imagen` horneada
+        # (editor pro / legacy) se sirve esa; si la imagen se DERIVA de la receta (placa de
+        # marca o plantilla del estudio), apunta al render on-demand `/compuesta` en vez de a
+        # un PNG horneado; si solo hay foto/fuente, esas. `render_pieza` decide sin componer.
+        "imagen_url": _imagen_url_de(pub),
         "evergreen": bool(pub.get("evergreen")),
     }
 

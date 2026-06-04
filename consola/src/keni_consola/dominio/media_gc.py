@@ -9,10 +9,17 @@ limite. Aqui un barrido CONSERVADOR localiza y borra los objetos HUERFANOS.
 DEFINICION DE HUERFANO (conservadora; ante la duda, NO se borra)
 ================================================================
 Un objeto del almacen es huerfano si y SOLO si cumple las DOS condiciones:
-  1. NO esta referenciado por el campo `imagen` de ninguna publicacion (normales — en TODOS
-     los estados y marcas — ni comerciales si estas tuvieran `imagen`), Y
+  1. NO es una REFERENCIA VIVA: ni el `imagen` (composite horneado) ni la `foto` cruda de
+     ninguna publicacion (normales — TODOS los estados/marcas — ni comerciales), ni un recurso
+     que alimente el render on-demand (miniatura/media_id de plantillas del estudio, activos de
+     marca: logos, tipografías), ni un arte catalogado en la biblioteca, Y
   2. es mas VIEJO que `antiguedad_horas` (def 24h): asi NO se borran las variantes recien
      generadas por el Estudio que el usuario aun esta revisando.
+
+Con el render ON-DEMAND la imagen publicable se DERIVA de la receta (foto + copy_in +
+plantilla/marca) y NO se persiste un composite por edicion; esos renders sin referencia son
+huerfanos RECICLABLES (caché reconstruible). Por eso protegemos los ORIGINALES (foto, logos,
+tipografías, plantillas), no los composites.
 
 Las referencias vivas se calculan SIEMPRE sobre el catalogo completo (sin filtros de
 estado/marca): un objeto referenciado por CUALQUIER pieza, en cualquier estado, se conserva.
@@ -58,6 +65,89 @@ def _imagenes_de(filas: list[dict[str, Any]]) -> set[str]:
     return nombres
 
 
+def _fotos_de(filas: list[dict[str, Any]]) -> set[str]:
+    """Nombres de objeto en el campo `foto` (foto cruda) de una lista de filas.
+
+    CRÍTICO con el render on-demand: la imagen publicable se DERIVA de la receta y la `foto`
+    cruda ya NO está horneada dentro de `imagen`. Si el GC borrara la `foto`, el render
+    on-demand se quedaría sin original. Por eso la `foto` de toda pieza es referencia viva.
+    """
+    nombres: set[str] = set()
+    for fila in filas:
+        nombre = (fila.get("foto") or "").strip()
+        if nombre:
+            nombres.add(nombre)
+    return nombres
+
+
+def _refs_documento(doc: Any, acc: set[str]) -> None:
+    """Acumula en `acc` los media_id referenciados por un documento de capas (recursivo)."""
+    if not isinstance(doc, dict):
+        return
+    fondo = doc.get("fondo")
+    if isinstance(fondo, dict) and fondo.get("tipo") == "imagen":
+        mid = ((fondo.get("imagen") or {}) if isinstance(fondo.get("imagen"), dict) else {}).get("media_id")
+        if isinstance(mid, str) and mid.strip():
+            acc.add(mid.strip())
+
+    def _capas(capas: Any) -> None:
+        if not isinstance(capas, list):
+            return
+        for c in capas:
+            if not isinstance(c, dict):
+                continue
+            tipo = c.get("tipo")
+            if tipo == "imagen" and isinstance(c.get("objeto"), str) and c["objeto"].strip():
+                acc.add(c["objeto"].strip())
+            elif tipo == "logo" and c.get("tipo_logo") == "imagen" and isinstance(c.get("media_id"), str) and c["media_id"].strip():
+                acc.add(c["media_id"].strip())
+            elif tipo == "grupo":
+                _capas(c.get("capas"))
+
+    _capas(doc.get("capas"))
+
+
+def _objetos_recursos_marca() -> set[str]:
+    """Originales que alimentan el render on-demand: plantillas del estudio y activos de marca.
+
+    DEFENSIVO y OPCIONAL (igual patrón que la biblioteca de artes): si alguna fuente no existe
+    en runtime, se omite sin fallar. Protege de borrado:
+      - las MINIATURAS y los media_id (logo/fondo/foto de muestra) de las plantillas del estudio,
+      - los `objeto` de los activos de marca (logos oficiales, tipografías).
+    Los specs de marca guardan sus logos/fondos como activos de marca o en sus media_id; se
+    cubren vía los activos. Sin esto, un GC activo podría borrar el logo/tipografía que el
+    render necesita componer.
+    """
+    import json
+
+    refs: set[str] = set()
+    listar_plantillas = getattr(repos, "listar_plantillas_diseno", None)
+    if listar_plantillas is not None:
+        try:
+            for p in listar_plantillas():
+                mini = (p.get("miniatura") or "").strip()
+                if mini:
+                    refs.add(mini)
+                doc_raw = p.get("documento") or ""
+                if doc_raw:
+                    try:
+                        _refs_documento(json.loads(doc_raw), refs)
+                    except (ValueError, TypeError):
+                        pass
+        except Exception:  # noqa: BLE001 -- fuente opcional: nunca tumba el GC
+            pass
+    listar_activos = getattr(repos, "listar_marca_activos", None)
+    if listar_activos is not None:
+        try:
+            for a in listar_activos():
+                objeto = (a.get("objeto") or "").strip()
+                if objeto:
+                    refs.add(objeto)
+        except Exception:  # noqa: BLE001 -- fuente opcional: nunca tumba el GC
+            pass
+    return refs
+
+
 def _objetos_biblioteca_media() -> set[str]:
     """Objetos catalogados en la biblioteca de artes, SI ese repo existe (comprobacion OPCIONAL).
 
@@ -90,8 +180,17 @@ def referencias_vivas() -> set[str]:
     los objetos que el equipo decidio conservar para reutilizar.
     """
     vivas: set[str] = set()
-    vivas |= _imagenes_de(repos.listar_publicaciones())
-    vivas |= _imagenes_de(repos.listar_publicaciones_comerciales())
+    publicaciones = repos.listar_publicaciones()
+    comerciales = repos.listar_publicaciones_comerciales()
+    vivas |= _imagenes_de(publicaciones)
+    vivas |= _imagenes_de(comerciales)
+    # Con render on-demand la FOTO cruda ya no está horneada en `imagen`: protégela también, o
+    # el GC borraría el original del que el render compone.
+    vivas |= _fotos_de(publicaciones)
+    vivas |= _fotos_de(comerciales)
+    # Originales que alimentan el render: plantillas del estudio (miniatura + media_id) y
+    # activos de marca (logos, tipografías). Defensivo y opcional.
+    vivas |= _objetos_recursos_marca()
     vivas |= _objetos_biblioteca_media()
     return vivas
 
