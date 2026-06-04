@@ -22,7 +22,7 @@ import { urlMedia } from "@/lib/api";
 
 import { ColorControl } from "./ColorControl";
 
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Sombra } from "./documento";
 import { CATALOGO_FUENTES, ETIQUETA_BINDING } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
@@ -259,6 +259,42 @@ function Num({
   );
 }
 
+// Campos comunes de una Sombra (dx, dy, desenfoque, opacidad, color). Reutilizado por texto,
+// imagen y marco. `onChange` recibe la sombra completa actualizada.
+function CamposSombra({ sombra, onChange }: { sombra: Sombra; onChange: (s: Sombra) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 pl-2">
+      <Campo etiqueta="Desp. X"><Num valor={sombra.dx} onChange={(v) => onChange({ ...sombra, dx: v })} /></Campo>
+      <Campo etiqueta="Desp. Y"><Num valor={sombra.dy} onChange={(v) => onChange({ ...sombra, dy: v })} /></Campo>
+      <Campo etiqueta="Desenfoque">
+        <input
+          type="range"
+          min={0}
+          max={60}
+          step={1}
+          value={sombra.desenfoque ?? 0}
+          onChange={(e) => onChange({ ...sombra, desenfoque: Number(e.target.value) })}
+          className="w-20"
+        />
+      </Campo>
+      <Campo etiqueta="Opacidad">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={sombra.opacidad ?? 1}
+          onChange={(e) => onChange({ ...sombra, opacidad: Number(e.target.value) })}
+          className="w-20"
+        />
+      </Campo>
+      <Campo etiqueta="Color">
+        <ColorControl valor={sombra.color} onChange={(c) => onChange({ ...sombra, color: c })} />
+      </Campo>
+    </div>
+  );
+}
+
 export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   const store = useStoreEditor();
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
@@ -324,6 +360,12 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             </Campo>
             <Campo etiqueta="Hasta">
               <ColorControl valor={fondo.degradado.hasta} onChange={(c) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, hasta: c } })} />
+            </Campo>
+            <Campo etiqueta="Ángulo">
+              <Num
+                valor={fondo.degradado.angulo ?? 180}
+                onChange={(v) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, angulo: v } })}
+              />
             </Campo>
           </>
         )}
@@ -497,6 +539,45 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               </Campo>
             </>
           )}
+          <Campo etiqueta="Relleno">
+            <select
+              value={(capa as CapaTexto).relleno_degradado ? "degradado" : "solido"}
+              onChange={(e) =>
+                set({
+                  relleno_degradado:
+                    e.target.value === "degradado"
+                      ? { desde: (capa as CapaTexto).color, hasta: "#111315", angulo: 180 }
+                      : null,
+                } as Partial<Capa>)
+              }
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              <option value="solido">Sólido</option>
+              <option value="degradado">Degradado</option>
+            </select>
+          </Campo>
+          {(capa as CapaTexto).relleno_degradado && (
+            <>
+              <Campo etiqueta="Desde">
+                <ColorControl
+                  valor={(capa as CapaTexto).relleno_degradado!.desde}
+                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaTexto).relleno_degradado!, desde: c } } as Partial<Capa>)}
+                />
+              </Campo>
+              <Campo etiqueta="Hasta">
+                <ColorControl
+                  valor={(capa as CapaTexto).relleno_degradado!.hasta}
+                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaTexto).relleno_degradado!, hasta: c } } as Partial<Capa>)}
+                />
+              </Campo>
+              <Campo etiqueta="Ángulo">
+                <Num
+                  valor={(capa as CapaTexto).relleno_degradado!.angulo ?? 180}
+                  onChange={(v) => set({ relleno_degradado: { ...(capa as CapaTexto).relleno_degradado!, angulo: v } } as Partial<Capa>)}
+                />
+              </Campo>
+            </>
+          )}
           <Campo etiqueta="Sombra">
             <input
               type="checkbox"
@@ -504,6 +585,9 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               onChange={(e) => set({ sombra: e.target.checked ? { dx: 2, dy: 2, color: "#000000" } : null } as Partial<Capa>)}
             />
           </Campo>
+          {(capa as CapaTexto).sombra && (
+            <CamposSombra sombra={(capa as CapaTexto).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
+          )}
           <Campo etiqueta="Fondo (chip)">
             <input
               type="checkbox"
@@ -580,6 +664,16 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <button onClick={() => set({ filtros: null } as Partial<Capa>)} className="self-start text-xs text-muted-foreground underline">
             Quitar filtros
           </button>
+          <Campo etiqueta="Sombra">
+            <input
+              type="checkbox"
+              checked={!!(capa as CapaImagen).sombra}
+              onChange={(e) => set({ sombra: e.target.checked ? { dx: 0, dy: 12, color: "#000000", desenfoque: 24, opacidad: 0.5 } : null } as Partial<Capa>)}
+            />
+          </Campo>
+          {(capa as CapaImagen).sombra && (
+            <CamposSombra sombra={(capa as CapaImagen).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
+          )}
         </div>
       )}
 
@@ -597,8 +691,48 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             </select>
           </Campo>
           <Campo etiqueta="Relleno">
-            <ColorControl valor={(capa as CapaMarco).relleno ?? "#000000"} onChange={(c) => set({ relleno: c } as Partial<Capa>)} />
+            <select
+              value={(capa as CapaMarco).relleno_degradado ? "degradado" : "solido"}
+              onChange={(e) =>
+                set({
+                  relleno_degradado:
+                    e.target.value === "degradado"
+                      ? { desde: (capa as CapaMarco).relleno ?? "#E30613", hasta: "#111315", angulo: 180 }
+                      : null,
+                } as Partial<Capa>)
+              }
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              <option value="solido">Sólido</option>
+              <option value="degradado">Degradado</option>
+            </select>
           </Campo>
+          {(capa as CapaMarco).relleno_degradado ? (
+            <>
+              <Campo etiqueta="Desde">
+                <ColorControl
+                  valor={(capa as CapaMarco).relleno_degradado!.desde}
+                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaMarco).relleno_degradado!, desde: c } } as Partial<Capa>)}
+                />
+              </Campo>
+              <Campo etiqueta="Hasta">
+                <ColorControl
+                  valor={(capa as CapaMarco).relleno_degradado!.hasta}
+                  onChange={(c) => set({ relleno_degradado: { ...(capa as CapaMarco).relleno_degradado!, hasta: c } } as Partial<Capa>)}
+                />
+              </Campo>
+              <Campo etiqueta="Ángulo">
+                <Num
+                  valor={(capa as CapaMarco).relleno_degradado!.angulo ?? 180}
+                  onChange={(v) => set({ relleno_degradado: { ...(capa as CapaMarco).relleno_degradado!, angulo: v } } as Partial<Capa>)}
+                />
+              </Campo>
+            </>
+          ) : (
+            <Campo etiqueta="Color de relleno">
+              <ColorControl valor={(capa as CapaMarco).relleno ?? "#000000"} onChange={(c) => set({ relleno: c } as Partial<Capa>)} />
+            </Campo>
+          )}
           <Campo etiqueta="Borde">
             <ColorControl
               valor={(capa as CapaMarco).borde?.color ?? "#FFFFFF"}
@@ -612,6 +746,16 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             />
           </Campo>
           <Campo etiqueta="Radio"><Num valor={(capa as CapaMarco).radio} onChange={(v) => set({ radio: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Sombra">
+            <input
+              type="checkbox"
+              checked={!!(capa as CapaMarco).sombra}
+              onChange={(e) => set({ sombra: e.target.checked ? { dx: 0, dy: 12, color: "#000000", desenfoque: 24, opacidad: 0.5 } : null } as Partial<Capa>)}
+            />
+          </Campo>
+          {(capa as CapaMarco).sombra && (
+            <CamposSombra sombra={(capa as CapaMarco).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
+          )}
         </div>
       )}
 

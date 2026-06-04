@@ -56,6 +56,78 @@ def test_validar_filtros_solo_si_no_neutro():
     assert con["capas"][0]["filtros"]["brillo"] == 1.2
 
 
+def test_validar_sombra_texto_ausente_es_null_y_no_ensucia():
+    doc = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                 "texto": "hola", "color": "#FFFFFF"}]))
+    assert doc["capas"][0]["sombra"] is None
+
+
+def test_validar_sombra_texto_plana_no_persiste_blur_ni_opacidad():
+    # Sombra clásica (dx,dy,color) sin blur ni opacidad: no se añaden esos campos => render legado.
+    doc = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                 "texto": "hola", "color": "#FFFFFF",
+                                 "sombra": {"dx": 3, "dy": 4, "color": "#000000"}}]))
+    s = doc["capas"][0]["sombra"]
+    assert s == {"dx": 3, "dy": 4, "color": "#000000"}
+    assert "desenfoque" not in s and "opacidad" not in s
+
+
+def test_validar_sombra_texto_con_blur_y_opacidad_persisten():
+    doc = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                 "texto": "hola", "color": "#FFFFFF",
+                                 "sombra": {"dx": 0, "dy": 0, "color": "#000000",
+                                            "desenfoque": 20, "opacidad": 0.5}}]))
+    s = doc["capas"][0]["sombra"]
+    assert s["desenfoque"] == 20.0 and s["opacidad"] == 0.5
+    # opacidad==1 NO se persiste (es el default): no debe ensuciar el JSON.
+    doc2 = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                  "texto": "hola", "color": "#FFFFFF",
+                                  "sombra": {"dx": 1, "dy": 1, "color": "#000000",
+                                             "desenfoque": 0, "opacidad": 1}}]))
+    assert "desenfoque" not in doc2["capas"][0]["sombra"]
+    assert "opacidad" not in doc2["capas"][0]["sombra"]
+
+
+def test_validar_relleno_degradado_texto():
+    # Ausente => None (no ensucia). Presente y válido => persiste con ángulo default 180.
+    sin = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                 "texto": "hola", "color": "#FFFFFF"}]))
+    assert sin["capas"][0]["relleno_degradado"] is None
+    con = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                 "texto": "hola", "color": "#FFFFFF",
+                                 "relleno_degradado": {"desde": "#FF0000", "hasta": "#0000FF"}}]))
+    rd = con["capas"][0]["relleno_degradado"]
+    assert rd == {"desde": "#FF0000", "hasta": "#0000FF", "angulo": 180.0}
+    # Hex inválido => se descarta (None), no rompe.
+    malo = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                                  "texto": "hola", "color": "#FFFFFF",
+                                  "relleno_degradado": {"desde": "rojo", "hasta": "#0000FF"}}]))
+    assert malo["capas"][0]["relleno_degradado"] is None
+
+
+def test_validar_sombra_imagen_opcional():
+    sin = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10}]))
+    assert sin["capas"][0]["sombra"] is None
+    con = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
+                                 "sombra": {"dx": 0, "dy": 8, "color": "#000000", "desenfoque": 16, "opacidad": 0.4}}]))
+    s = con["capas"][0]["sombra"]
+    assert s["dy"] == 8 and s["desenfoque"] == 16.0 and s["opacidad"] == 0.4
+
+
+def test_validar_marco_sombra_y_relleno_degradado():
+    sin = d.validar(_doc(capas=[{"tipo": "marco", "x": 0, "y": 0, "w": 100, "h": 100,
+                                 "forma": "rect", "relleno": "#FF0000"}]))
+    assert sin["capas"][0]["sombra"] is None
+    assert sin["capas"][0]["relleno_degradado"] is None
+    con = d.validar(_doc(capas=[{"tipo": "marco", "x": 0, "y": 0, "w": 100, "h": 100,
+                                 "forma": "rect",
+                                 "relleno_degradado": {"desde": "#111111", "hasta": "#222222", "angulo": 45},
+                                 "sombra": {"dx": 0, "dy": 12, "color": "#000000", "desenfoque": 24, "opacidad": 0.5}}]))
+    m = con["capas"][0]
+    assert m["relleno_degradado"] == {"desde": "#111111", "hasta": "#222222", "angulo": 45.0}
+    assert m["sombra"]["desenfoque"] == 24.0 and m["sombra"]["opacidad"] == 0.5
+
+
 def test_validar_capa_texto_exige_color_hex():
     with pytest.raises(d.DocumentoError):
         d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,

@@ -26,6 +26,20 @@ const ALIN: Record<string, string> = {
   justificado: "justify",
 };
 
+// Puntos inicial/final de un degradado lineal sobre una caja w×h según `angulo` (grados), con la
+// MISMA convención que `gradienteLineal` de dibujar.mjs: 0°=↑, 90°=→, 180°=↓ (vertical), 270°=←.
+// Konva usa puntos relativos al nodo (origen 0,0), así que el centro de la caja es (w/2,h/2).
+function puntosGradiente(w: number, h: number, angulo = 180) {
+  const a = (angulo * Math.PI) / 180;
+  const ux = Math.sin(a), uy = -Math.cos(a);
+  const cx = w / 2, cy = h / 2;
+  const semi = (Math.abs(w * ux) + Math.abs(h * uy)) / 2;
+  return {
+    start: { x: cx - ux * semi, y: cy - uy * semi },
+    end: { x: cx + ux * semi, y: cy + uy * semi },
+  };
+}
+
 type Filtros = CapaImagen["filtros"];
 
 // Imagen AJUSTADA a una caja SIN deformar: la caja (`Group`) recorta y la imagen se escala
@@ -173,7 +187,33 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
       if (!img) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} props={props} />;
+      const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} props={props} />;
+      // Sombra de la imagen: el Group de la imagen se recorta a su caja (la sombra no escaparía del
+      // clip), así que la proyecta una silueta SIN listening dibujada detrás (igual que el render).
+      if (c.sombra) {
+        return (
+          <>
+            <Rect
+              x={c.x}
+              y={c.y}
+              width={c.w}
+              height={c.h}
+              rotation={c.rotacion}
+              opacity={c.opacidad}
+              fill="#000000"
+              listening={false}
+              shadowColor={c.sombra.color}
+              shadowOffsetX={c.sombra.dx}
+              shadowOffsetY={c.sombra.dy}
+              shadowBlur={c.sombra.desenfoque ?? 0}
+              shadowOpacity={c.sombra.opacidad ?? 1}
+              shadowEnabled
+            />
+            {nodoImg}
+          </>
+        );
+      }
+      return nodoImg;
     }
     case "logo": {
       const c = capa as CapaLogo;
@@ -204,6 +244,10 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
       // auto-encogido de fuente NO se replica en Konva (la "vista real" la rinde el servidor con
       // dibujar.mjs); aquí basta con honrar caja + valign.
       const enCaja = c.h > 0;
+      // Relleno: degradado lineal (mismos puntos que el render) o color sólido.
+      const grad = c.relleno_degradado
+        ? puntosGradiente(c.w, enCaja ? c.h : c.tamano * c.interlineado, c.relleno_degradado.angulo)
+        : null;
       return (
         <Text
           {...props}
@@ -214,7 +258,12 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
           fontFamily={c.familia}
           fontSize={c.tamano}
           fontStyle={c.peso >= 600 ? "bold" : "normal"}
-          fill={c.color}
+          fill={grad ? undefined : c.color}
+          fillLinearGradientStartPoint={grad ? grad.start : undefined}
+          fillLinearGradientEndPoint={grad ? grad.end : undefined}
+          fillLinearGradientColorStops={
+            grad && c.relleno_degradado ? [0, c.relleno_degradado.desde, 1, c.relleno_degradado.hasta] : undefined
+          }
           align={ALIN[c.alineacion] ?? "left"}
           lineHeight={c.interlineado}
           letterSpacing={c.interletra || 0}
@@ -224,6 +273,8 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
           shadowColor={c.sombra?.color}
           shadowOffsetX={c.sombra?.dx}
           shadowOffsetY={c.sombra?.dy}
+          shadowBlur={c.sombra?.desenfoque ?? 0}
+          shadowOpacity={c.sombra?.opacidad ?? 1}
           shadowEnabled={!!c.sombra}
         />
       );
@@ -240,6 +291,26 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
           />
         );
       }
+      // Relleno: degradado lineal (mismos puntos que el render) o color sólido. La sombra de la
+      // forma usa los shadow* de Konva según `c.sombra`.
+      const gradM = c.relleno_degradado ? puntosGradiente(c.w, c.h, c.relleno_degradado.angulo) : null;
+      const rellenoMarco = gradM
+        ? {
+            fillLinearGradientStartPoint: gradM.start,
+            fillLinearGradientEndPoint: gradM.end,
+            fillLinearGradientColorStops: [0, c.relleno_degradado!.desde, 1, c.relleno_degradado!.hasta],
+          }
+        : { fill: c.relleno ?? undefined };
+      const sombraMarco = c.sombra
+        ? {
+            shadowColor: c.sombra.color,
+            shadowOffsetX: c.sombra.dx,
+            shadowOffsetY: c.sombra.dy,
+            shadowBlur: c.sombra.desenfoque ?? 0,
+            shadowOpacity: c.sombra.opacidad ?? 1,
+            shadowEnabled: true,
+          }
+        : {};
       if (c.forma === "elipse") {
         return (
           <Ellipse
@@ -248,7 +319,8 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
             y={c.y + c.h / 2}
             radiusX={c.w / 2}
             radiusY={c.h / 2}
-            fill={c.relleno ?? undefined}
+            {...rellenoMarco}
+            {...sombraMarco}
             stroke={c.borde?.color}
             strokeWidth={c.borde?.grosor}
           />
@@ -260,7 +332,8 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true
           width={c.w}
           height={c.h}
           cornerRadius={c.radio}
-          fill={c.relleno ?? undefined}
+          {...rellenoMarco}
+          {...sombraMarco}
           stroke={c.borde?.color}
           strokeWidth={c.borde?.grosor}
         />

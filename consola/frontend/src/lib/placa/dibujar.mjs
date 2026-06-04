@@ -15,6 +15,25 @@ function hexRGBA(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// Crea un degradado LINEAL `desde -> hasta` que abarca la caja (x,y,w,h) según `angulo` (grados).
+// CONVENCIÓN (igual que CSS linear-gradient): ángulo medido en sentido horario desde ARRIBA.
+//   0° = ↑ (de abajo hacia arriba)   90° = → (izquierda a derecha)
+//   180° = ↓ (arriba hacia abajo, VERTICAL — el default histórico del fondo)   270° = ← (derecha a izquierda)
+// El eje del degradado pasa por el centro de la caja; los extremos se proyectan sobre ese eje de
+// modo que el degradado cubra toda la caja. La misma convención la usan el fondo, el texto y el marco.
+function gradienteLineal(ctx, x, y, w, h, desde, hasta, angulo) {
+  const a = ((angulo ?? 180) * Math.PI) / 180;
+  // Vector unitario de la dirección del degradado (0°=arriba, horario).
+  const ux = Math.sin(a), uy = -Math.cos(a);
+  const cx = x + w / 2, cy = y + h / 2;
+  // Mitad de la proyección de la caja sobre el eje (cubre las 4 esquinas).
+  const semi = (Math.abs(w * ux) + Math.abs(h * uy)) / 2;
+  const g = ctx.createLinearGradient(cx - ux * semi, cy - uy * semi, cx + ux * semi, cy + uy * semi);
+  g.addColorStop(0, desde);
+  g.addColorStop(1, hasta);
+  return g;
+}
+
 // Reparte un texto en líneas que caben en `maxAncho` (greedy por palabras).
 function envolver(ctx, texto, maxAncho) {
   const out = [];
@@ -90,9 +109,8 @@ function dibujarFondo(ctx, fondo, w, h, fondoImg) {
     ctx.fillStyle = fondo.color;
     ctx.fillRect(0, 0, w, h);
   } else if (fondo.tipo === "degradado") {
-    const g = ctx.createLinearGradient(0, 0, 0, h); // vertical (ángulo 180 por defecto)
-    g.addColorStop(0, fondo.degradado.desde);
-    g.addColorStop(1, fondo.degradado.hasta);
+    // Default vertical (ángulo 180 = ↓): equivalente al render legado top->bottom.
+    const g = gradienteLineal(ctx, 0, 0, w, h, fondo.degradado.desde, fondo.degradado.hasta, fondo.degradado.angulo);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   } else if (fondo.tipo === "imagen" && fondoImg) {
@@ -157,6 +175,18 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
     top = t.ancla === "abajo" ? t.y - blockH : t.y;
   }
 
+  // Relleno del texto: color sólido o degradado lineal (abarcando el bbox del bloque). El degradado
+  // sustituye al color sólido cuando `relleno_degradado` está presente (aditivo y retrocompatible).
+  const rd = t.relleno_degradado || null;
+  const relleno = rd
+    ? gradienteLineal(ctx, t.x, top, t.w, blockH, rd.desde, rd.hasta, rd.angulo)
+    : t.color;
+  // SOMBRA REAL del canvas (blur/opacidad): solo cuando hay desenfoque>0 u opacidad<1. Si no, se
+  // mantiene el camino legado (fillText manual desplazado) para que las placas existentes queden
+  // pixel-idénticas. Un "glow" = sombra con dx=dy=0 y desenfoque alto (no necesita tipo aparte).
+  const sombra = t.sombra || null;
+  const sombraReal = sombra && ((sombra.desenfoque ?? 0) > 0 || (sombra.opacidad ?? 1) < 1);
+
   let y = top + py;
   const justif = t.alineacion === "justificado";
   for (let i = 0; i < lineas.length; i++) {
@@ -168,12 +198,25 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
       dibujarChipLinea(ctx, t, ctx.measureText(ln).width, y, altoLinea, tx);
     }
     if (justif && !ultima) {
-      dibujarLineaJustificada(ctx, ln, t.x, y, t.w, t.color, t.sombra, contorno);
+      dibujarLineaJustificada(ctx, ln, t.x, y, t.w, relleno, sombra, contorno);
     } else {
       const lx = justif ? t.x : tx;
-      if (t.sombra) {
-        ctx.fillStyle = t.sombra.color || "#000000";
-        ctx.fillText(ln, lx + (t.sombra.dx ?? 2), y + (t.sombra.dy ?? 2));
+      if (sombraReal) {
+        // Sombra real aplicada al relleno principal: blur, offset y opacidad nativos del canvas.
+        ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
+        ctx.shadowBlur = sombra.desenfoque ?? 0;
+        ctx.shadowOffsetX = sombra.dx ?? 0;
+        ctx.shadowOffsetY = sombra.dy ?? 0;
+        ctx.fillStyle = relleno;
+        ctx.fillText(ln, lx, y);
+        // Reset antes del contorno/justificado para NO duplicar la sombra.
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      } else if (sombra) {
+        ctx.fillStyle = sombra.color || "#000000";
+        ctx.fillText(ln, lx + (sombra.dx ?? 2), y + (sombra.dy ?? 2));
       }
       if (contorno) {
         ctx.lineJoin = "round";
@@ -181,8 +224,11 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
         ctx.strokeStyle = contorno.color || "#000000";
         ctx.strokeText(ln, lx, y);
       }
-      ctx.fillStyle = t.color;
-      ctx.fillText(ln, lx, y);
+      if (!sombraReal) {
+        // Camino legado: el relleno se pinta aquí (sin sombra ya aplicada arriba).
+        ctx.fillStyle = relleno;
+        ctx.fillText(ln, lx, y);
+      }
     }
     y += altoLinea;
   }
@@ -216,19 +262,36 @@ function dibujarChipLinea(ctx, t, lineWidth, lineTop, altoLinea, tx) {
 
 // Dibuja una línea con las palabras repartidas para llenar `ancho` (justificado). Una palabra
 // suelta cae a la izquierda. textAlign se fuerza a "left" (posicionamos cada palabra a mano).
-function dibujarLineaJustificada(ctx, linea, x, y, ancho, color, sombra, contorno) {
+function dibujarLineaJustificada(ctx, linea, x, y, ancho, relleno, sombra, contorno) {
   const palabras = linea.split(/\s+/).filter(Boolean);
   ctx.textAlign = "left";
+  const sombraReal = sombra && ((sombra.desenfoque ?? 0) > 0 || (sombra.opacidad ?? 1) < 1);
   const pinta = (txt, px) => {
-    if (sombra) { ctx.fillStyle = sombra.color || "#000000"; ctx.fillText(txt, px + (sombra.dx ?? 2), y + (sombra.dy ?? 2)); }
+    if (sombraReal) {
+      ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
+      ctx.shadowBlur = sombra.desenfoque ?? 0;
+      ctx.shadowOffsetX = sombra.dx ?? 0;
+      ctx.shadowOffsetY = sombra.dy ?? 0;
+      ctx.fillStyle = relleno;
+      ctx.fillText(txt, px, y);
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    } else if (sombra) {
+      ctx.fillStyle = sombra.color || "#000000";
+      ctx.fillText(txt, px + (sombra.dx ?? 2), y + (sombra.dy ?? 2));
+    }
     if (contorno) {
       ctx.lineJoin = "round";
       ctx.lineWidth = contorno.grosor;
       ctx.strokeStyle = contorno.color || "#000000";
       ctx.strokeText(txt, px, y);
     }
-    ctx.fillStyle = color;
-    ctx.fillText(txt, px, y);
+    if (!sombraReal) {
+      ctx.fillStyle = relleno;
+      ctx.fillText(txt, px, y);
+    }
   };
   if (palabras.length <= 1) {
     pinta(linea, x);
@@ -333,8 +396,27 @@ function cssFiltro(f) {
   return partes.join(" ");
 }
 
+// Aplica la sombra REAL del canvas a partir de una capa `sombra` (envuelve un dibujo) y devuelve
+// true si quedó activa (para resetearla después). Si no hay sombra, no toca nada.
+function aplicarSombraCanvas(ctx, sombra) {
+  if (!sombra) return false;
+  ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
+  ctx.shadowBlur = sombra.desenfoque ?? 0;
+  ctx.shadowOffsetX = sombra.dx ?? 0;
+  ctx.shadowOffsetY = sombra.dy ?? 0;
+  return true;
+}
+
+function resetSombraCanvas(ctx) {
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
 function dibujarMarco(ctx, m) {
   const { x, y, w, h } = m;
+  const conSombra = aplicarSombraCanvas(ctx, m.sombra);
   if (m.forma === "linea") {
     if (m.borde && m.borde.grosor > 0) {
       ctx.beginPath();
@@ -344,17 +426,27 @@ function dibujarMarco(ctx, m) {
       ctx.strokeStyle = m.borde.color || "#000000";
       ctx.stroke();
     }
+    if (conSombra) resetSombraCanvas(ctx);
     return;
   }
   ctx.beginPath();
   if (m.forma === "elipse") ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
   else rutaRect(ctx, x, y, w, h, m.radio || 0);
-  if (m.relleno) { ctx.fillStyle = m.relleno; ctx.fill(); }
+  // Relleno: degradado lineal (abarcando la caja) si `relleno_degradado`, si no el color sólido.
+  if (m.relleno_degradado) {
+    const rd = m.relleno_degradado;
+    ctx.fillStyle = gradienteLineal(ctx, x, y, w, h, rd.desde, rd.hasta, rd.angulo);
+    ctx.fill();
+  } else if (m.relleno) {
+    ctx.fillStyle = m.relleno;
+    ctx.fill();
+  }
   if (m.borde && m.borde.grosor > 0) {
     ctx.lineWidth = m.borde.grosor;
     ctx.strokeStyle = m.borde.color || "#000000";
     ctx.stroke();
   }
+  if (conSombra) resetSombraCanvas(ctx);
 }
 
 // Dibuja UNA capa (con su opacidad/rotación). `env` = {I: imágenes por objeto/media_id, B: bindings, F: familiaReal}.
@@ -375,6 +467,15 @@ function dibujarCapa(ctx, capa, env) {
       const img = env.I[capa.objeto];
       const filtro = cssFiltro(capa.filtros);
       if (filtro) ctx.filter = filtro;
+      // Sombra de la capa imagen: cae sobre el RECTÁNGULO de la imagen. Como la imagen se recorta a
+      // su caja (la sombra del drawImage quedaría dentro del clip y no se vería), pintamos primero la
+      // silueta del rectángulo con la sombra activa, y luego la imagen recortada SIN sombra encima.
+      if (capa.sombra && img) {
+        aplicarSombraCanvas(ctx, capa.sombra);
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(capa.x, capa.y, capa.w, capa.h);
+        resetSombraCanvas(ctx);
+      }
       dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom);
       if (filtro) ctx.filter = "none";
       break;

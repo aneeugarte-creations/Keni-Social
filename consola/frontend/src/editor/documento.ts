@@ -57,12 +57,21 @@ export interface CapaImagen extends CapaBase {
   zoom: number; // reencuadre dentro del marco (1 = ajuste base)
   es_foto?: boolean; // ESTA capa es el hueco de foto de la plantilla (única; obligatoria en el estudio)
   filtros: Filtros | null;
+  sombra?: Sombra | null; // sombra del rectángulo de la imagen (opcional)
 }
 
 export interface Sombra {
   dx: number;
   dy: number;
   color: string;
+  desenfoque?: number; // blur px (def 0). >0 activa la sombra real del canvas.
+  opacidad?: number; // 0..1 (def 1). <1 activa la sombra real del canvas.
+}
+// Relleno por degradado lineal (texto/marco). Sustituye al color sólido cuando está presente.
+export interface RellenoDegradado {
+  desde: string;
+  hasta: string;
+  angulo?: number; // grados (def 180 = vertical ↓). Misma convención que el fondo.
 }
 export interface Chip {
   color: string;
@@ -89,6 +98,7 @@ export interface CapaTexto extends CapaBase {
   interletra: number; // letter-spacing en px
   auto_ajuste: { max_lineas: number; tam_min: number };
   sombra: Sombra | null;
+  relleno_degradado?: RellenoDegradado | null; // degradado del relleno (sustituye a `color`)
   contorno: Contorno | null;
   chip: Chip | null;
   ancla: "arriba" | "abajo";
@@ -109,8 +119,10 @@ export interface CapaMarco extends CapaBase {
   tipo: "marco";
   forma: FormaMarco;
   relleno: string | null;
+  relleno_degradado?: RellenoDegradado | null; // degradado del relleno (sustituye a `relleno`)
   borde: { color: string; grosor: number } | null;
   radio: number;
+  sombra?: Sombra | null; // sombra de la forma del marco (opcional)
 }
 
 export interface CapaOverlay extends CapaBase {

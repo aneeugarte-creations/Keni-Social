@@ -13,16 +13,19 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
     }
 
     Capa base = { id, tipo, x, y, w, h, rotacion, opacidad, z, visible, bloqueada }
-      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], filtros:{brillo,contraste,saturacion,desenfoque} }
+      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], filtros:{brillo,contraste,saturacion,desenfoque},
+                   sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
       texto   -> { texto, binding:copy_in|etiqueta_default|null, familia, tamano, peso, color,
                    alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
-                   sombra:{dx,dy,color}|null, chip:{color,pad_x,pad_y,radio}|null,
+                   sombra:{dx,dy,color,desenfoque?,opacidad?}|null,
+                   relleno_degradado:{desde,hasta,angulo?}|null, chip:{color,pad_x,pad_y,radio}|null,
                    ancla:arriba|abajo, valign:arriba|centro|abajo }
                    # valign: alineación VERTICAL del texto dentro de la CAJA (cuando h>0). La caja
                    # es de alto fijo: el texto se auto-encoge para caber. `ancla` queda por
                    # compatibilidad (camino legado h<=0, sin caja).
       logo    -> { tipo_logo:imagen|wordmark, media_id, wordmark:{texto,color,fondo,familia,peso} }
-      marco   -> { forma:rect|elipse|linea, relleno|null, borde:{color,grosor}|null, radio }
+      marco   -> { forma:rect|elipse|linea, relleno|null, relleno_degradado:{desde,hasta,angulo?}|null,
+                   borde:{color,grosor}|null, radio, sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
       overlay -> { color, alto_frac, alpha }            # degradado de legibilidad (banda inferior)
       grupo   -> { capas:[ Capa, ... ] }                # bloque reutilizable (almacén de capas)
 
@@ -102,6 +105,40 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _sombra(s: Any) -> dict[str, Any] | None:
+    """Normaliza una sombra {dx,dy,color,desenfoque?,opacidad?}. `desenfoque`/`opacidad` solo se
+    persisten si se apartan del default (0 / 1) — así una sombra plana no ensucia el JSON ni cambia
+    el render legado. Devuelve None si no viene sombra."""
+    if not isinstance(s, dict):
+        return None
+    out: dict[str, Any] = {
+        "dx": int(s.get("dx", 2)),
+        "dy": int(s.get("dy", 2)),
+        "color": s["color"] if _es_hex(s.get("color")) else "#000000",
+    }
+    desenfoque = s.get("desenfoque")
+    if _num(desenfoque) and float(desenfoque) > 0:
+        out["desenfoque"] = float(desenfoque)
+    opacidad = s.get("opacidad")
+    if _num(opacidad) and 0 <= float(opacidad) < 1:
+        out["opacidad"] = float(opacidad)
+    return out
+
+
+def _relleno_degradado(g: Any) -> dict[str, Any] | None:
+    """Normaliza un relleno por degradado {desde,hasta,angulo?} (hex validados). Solo se persiste si
+    trae `desde` y `hasta` válidos; si no, None (relleno sólido como hasta ahora)."""
+    if not isinstance(g, dict):
+        return None
+    if not (_es_hex(g.get("desde")) and _es_hex(g.get("hasta"))):
+        return None
+    return {
+        "desde": g["desde"],
+        "hasta": g["hasta"],
+        "angulo": float(g.get("angulo", 180)),
+    }
+
+
 def _filtros(f: Any) -> dict[str, float] | None:
     if not isinstance(f, dict):
         return None
@@ -138,6 +175,8 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         # bloqueada en el editor). `objeto` guarda una foto de muestra para la miniatura.
         "es_foto": bool(c.get("es_foto", False)),
         "filtros": _filtros(c.get("filtros")),
+        # Sombra del rectángulo de la imagen (opcional): solo se persiste si viene.
+        "sombra": _sombra(c.get("sombra")),
     }
 
 
@@ -154,14 +193,7 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
             "pad_y": int(chip.get("pad_y", _CHIP_PAD_Y)),
             "radio": int(chip.get("radio", 0)),
         }
-    sombra = c.get("sombra")
-    sombra_limpia = None
-    if isinstance(sombra, dict):
-        sombra_limpia = {
-            "dx": int(sombra.get("dx", 2)),
-            "dy": int(sombra.get("dy", 2)),
-            "color": sombra["color"] if _es_hex(sombra.get("color")) else "#000000",
-        }
+    sombra_limpia = _sombra(c.get("sombra"))
     # Contorno del texto (legibilidad sobre fotos): solo si trae grosor > 0.
     contorno = c.get("contorno")
     contorno_limpio = None
@@ -190,6 +222,8 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
             "tam_min": int(aj.get("tam_min", 40)),
         },
         "sombra": sombra_limpia,
+        # Degradado del relleno (sustituye al color sólido cuando viene). Solo se persiste si es válido.
+        "relleno_degradado": _relleno_degradado(c.get("relleno_degradado")),
         "contorno": contorno_limpio,
         "chip": chip_limpio,
         "ancla": c.get("ancla") if c.get("ancla") in ("arriba", "abajo") else "arriba",
@@ -237,8 +271,12 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
         "tipo": "marco",
         "forma": forma,
         "relleno": relleno if _es_hex(relleno) else None,
+        # Degradado del relleno (sustituye a `relleno` cuando viene). Solo se persiste si es válido.
+        "relleno_degradado": _relleno_degradado(c.get("relleno_degradado")),
         "borde": borde_limpio,
         "radio": int(c.get("radio", 0)),
+        # Sombra de la forma del marco (opcional): solo se persiste si viene.
+        "sombra": _sombra(c.get("sombra")),
     }
 
 
