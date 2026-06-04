@@ -17,7 +17,7 @@
  * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Loader2, MessageSquare, Pencil, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -32,7 +32,7 @@ import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
 import { tamanoRed, tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { EstadoOpcion, Publicacion } from "@/types";
+import type { Publicacion } from "@/types";
 
 import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
@@ -50,14 +50,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
-
-  // Estados para el select del editor. Misma queryKey que el resto: React Query la comparte
-  // (cacheada), así que abrir "Editar" no dispara otra llamada.
-  const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
-    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
-  });
-  const estados: EstadoOpcion[] = opcionesQuery.data?.estados ?? [];
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
@@ -117,21 +109,29 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         ? motivo || "Esperando turno para tu OK"
         : "La IA aún prepara esta pieza; podrás darle tu OK cuando esté lista.";
 
-  // Aviso VISIBLE de por qué el "me gusta" está bloqueado (no solo el tooltip): qué falta. Vacío
-  // cuando puedes dar OK o cuando ya está aprobada (no hay nada que avisar). En revisión explica
-  // el gate (tu pieza / ya diste OK / espera a la IA); antes, qué le falta a la pieza.
-  const avisoBloqueo =
-    puedeDar || yaAprobada
-      ? ""
-      : enRevision
-        ? motivo || "Esperando el turno para tu OK."
-        : etapa === "generando_copy"
-          ? "Falta el copy: la IA aún lo está redactando."
-          : etapa === "generando_arte"
-            ? // La IA solo hace la plantilla; la FOTO la sube una persona en «Editar».
-              "Falta la imagen: súbela en «Editar» (se le aplicará la plantilla)."
-            : // de solo texto, o copy + foto reales: lista, falta entrar a revisión.
-              "Pieza lista; pendiente de entrar a revisión para que puedas darle tu OK.";
+  // Por qué el "me gusta" está bloqueado (qué falta). Ya NO es un texto fijo en la tarjeta: se
+  // muestra como TOAST al intentar darle like cuando no toca. Explica el gate (en revisión: tu
+  // pieza / ya diste OK / espera turno) o, antes, qué le falta a la pieza.
+  const motivoBloqueo = yaAprobada
+    ? publicacion.revisor_nombre
+      ? `Ya aprobada · último OK: ${publicacion.revisor_nombre}`
+      : "Esta pieza ya está aprobada."
+    : enRevision
+      ? motivo || "Espera tu turno para dar el OK."
+      : etapa === "generando_copy"
+        ? "Falta el copy: la IA aún lo está redactando."
+        : etapa === "generando_arte"
+          ? "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
+          : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
+
+  // "Me gusta": si te toca, da el OK; si no, explica por qué con un toast (no bloquea en silencio).
+  const onLike = () => {
+    if (puedeDar) {
+      aprobar.mutate();
+      return;
+    }
+    toast(motivoBloqueo);
+  };
 
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
   // el material original como marcador para que el post no quede vacío en "generando copy".
@@ -139,10 +139,25 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const imagen = publicacion.imagen_url || publicacion.imagen || publicacion.imagen_fuente;
 
   return (
-    <article className="rounded-xl border border-border bg-background shadow-sm">
-      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · marca · red (un solo logo) · formato · etapa.
+    // Toda la tarjeta abre el editor al hacer clic (cabecera + previa + panel de estado); la zona
+    // de botones y el hilo de comentarios NO (paran la propagación). Teclado: Enter/Espacio.
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setEditando(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setEditando(true);
+        }
+      }}
+      title="Abrir para editar"
+      aria-label="Abrir para editar"
+      className="cursor-pointer rounded-xl border border-border bg-background text-left shadow-sm transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · marca · red (un solo logo) · formato · tiempo.
           El logo/red y el formato NO se repiten en la previa (va en variante limpia, sin su propia
-          cabecera): aquí están una vez y ya. */}
+          cabecera): aquí están una vez y ya. La etapa baja a la fila de acciones. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         {generadaPorIA ? (
           <span
@@ -170,7 +185,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}
-        <BadgeEtapa etapa={etapa} className={publicacion.enviado_a_revision_en ? "" : "ml-auto"} />
       </header>
 
       {/* El post tal como se verá en la red: variante LIMPIA = tarjeta uniforme (imagen 4:5 a
@@ -186,87 +200,69 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         variante="limpia"
       />
 
-      {/* Acciones en línea, IGUAL en TODAS las piezas (como un post de red social): "Me gusta"
-          (el OK humano) y "Comentar". El "me gusta" se habilita solo cuando te toca dar el OK
-          (pieza en revisión y eres elegible); en los demás estados se ve igual pero deshabilitado,
-          con un tooltip que explica por qué (la IA aún la prepara, ya está aprobada, ya diste tu
-          OK…). "Rechazar" aparece solo cuando puedes decidir. */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        <Button
-          variant={puedeDar ? "positive" : "ghost"}
-          size="sm"
-          onClick={() => aprobar.mutate()}
-          disabled={!puedeDar || ocupado}
-          title={tituloLike}
-        >
-          {aprobar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : yaAprobada ? (
-            <Check className="h-4 w-4" />
-          ) : (
-            <ThumbsUp className="h-4 w-4" />
-          )}
-          Me gusta
-        </Button>
-        {puedeDar && (
-          <Button variant="outline" size="sm" onClick={() => rechazar.mutate()} disabled={ocupado}>
-            {rechazar.isPending ? (
+      {/* Acciones: badge de ETAPA (izq) + iconos me gusta / rechazar / comentar (der). Esta zona
+          NO abre el editor (para la propagación). El "me gusta" da el OK si te toca; si no, un toast
+          explica por qué. "Rechazar" solo cuando puedes decidir. */}
+      <div
+        className="flex items-center gap-2 px-4 py-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <BadgeEtapa etapa={etapa} />
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant={puedeDar ? "positive" : "ghost"}
+            size="icon"
+            className="h-8 w-8"
+            onClick={onLike}
+            disabled={ocupado}
+            title={tituloLike}
+            aria-label="Me gusta"
+          >
+            {aprobar.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : yaAprobada ? (
+              <Check className="h-4 w-4" />
             ) : (
-              <XCircle className="h-4 w-4" />
+              <ThumbsUp className="h-4 w-4" />
             )}
-            Rechazar
           </Button>
-        )}
-        {/* Editar: copy, copy-in y la imagen (subir foto -> se aplica la plantilla) en el editor
-            rico. Tercer botón fijo del post, junto a "Me gusta" y "Comentar". */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={() => setEditando(true)}
-          title="Editar copy, copy-in e imagen"
-        >
-          <Pencil className="h-4 w-4" />
-          Editar
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setComentariosAbierto((v) => !v)}
-          aria-expanded={comentariosAbierto}
-        >
-          <MessageSquare className="h-4 w-4" />
-          {comentariosAbierto ? "Ocultar comentarios" : "Comentar"}
-        </Button>
+          {puedeDar && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => rechazar.mutate()}
+              disabled={ocupado}
+              title="Rechazar"
+              aria-label="Rechazar"
+            >
+              {rechazar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setComentariosAbierto((v) => !v)}
+            aria-expanded={comentariosAbierto}
+            title={comentariosAbierto ? "Ocultar comentarios" : "Comentar"}
+            aria-label="Comentar"
+          >
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Editor rico (reusa el de Publicaciones): copy, copy-in, foto + plantilla, estado. Se MONTA
-          solo al editar (el feed tiene muchos posts; no queremos un diálogo por cada uno). */}
-      {editando && (
-        <DialogoEditar
-          publicacion={publicacion}
-          estados={estados}
-          onCerrar={() => setEditando(false)}
-        />
-      )}
-
-      {/* Aviso VISIBLE de por qué el "me gusta" está bloqueado (qué falta). Ámbar cuando hay un
-          gate que resolver (en revisión: tu pieza / ya diste OK / espera a la IA); gris cuando
-          solo es que la IA aún la prepara. */}
-      {avisoBloqueo && (
-        <div
-          className={
-            "px-4 pb-3 text-xs " +
-            (enRevision ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")
-          }
-        >
-          {avisoBloqueo}
-        </div>
-      )}
+      {/* Editor rico (reusa el de Publicaciones): copy + imagen (placa con titular inline). Se MONTA
+          solo al editar. Es un modal (portal): los clics dentro no abren otra vez la tarjeta. */}
+      {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
-          (cuántos y de quién) + lo que falta. La acción vive arriba, en la fila. */}
+          (cuántos y de quién) + lo que falta. */}
       {enRevision && tieneCadena && cadena && (
         <CadenaAprobacion cadena={cadena} veredictoIA={publicacion.veredicto} />
       )}
@@ -278,12 +274,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         </div>
       )}
 
-      {/* Hilo de comentarios del equipo (reusa el componente existente). */}
+      {/* Hilo de comentarios del equipo. No abre el editor (para la propagación: tiene inputs). */}
       {comentariosAbierto && publicacion.contenido_id && (
-        <div className="border-t border-border px-4 py-3">
+        <div
+          className="border-t border-border px-4 py-3"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Comentarios contenidoId={publicacion.contenido_id} />
         </div>
       )}
-    </article>
+    </div>
   );
 }

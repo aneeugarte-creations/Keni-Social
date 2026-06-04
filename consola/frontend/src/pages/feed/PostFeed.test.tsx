@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { toast } from "sonner";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { Publicacion, UsuarioSesion } from "@/types";
 
 import { PostFeed } from "./PostFeed";
+
+// Los avisos de bloqueo del "me gusta" son toasts (no texto fijo): mockeamos sonner para asertarlos.
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
 /** Una `Publicacion` completa con valores por defecto (sobreescribibles). */
 function pub(over: Partial<Publicacion> = {}): Publicacion {
@@ -68,6 +72,10 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
 }
 
 describe("PostFeed · firma IA y aviso de bloqueo", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("pieza autogenerada (sin autor) firma como «IA», no «desconocido»", () => {
     renderPost(pub({ autor_nombre: "" }));
     expect(screen.getByText("IA")).toBeInTheDocument();
@@ -80,23 +88,26 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByText(/^IA$/)).not.toBeInTheDocument();
   });
 
-  it("toda pieza ofrece los 3 botones: Me gusta, Editar y Comentar", () => {
+  it("ofrece me gusta y comentar (iconos), NO un botón Editar; la tarjeta abre el editor", () => {
     renderPost(pub());
-    expect(screen.getByRole("button", { name: /me gusta/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /editar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /comentar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Me gusta" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^editar/i })).not.toBeInTheDocument();
+    // La tarjeta completa es clicable (abre el editor).
+    expect(screen.getByRole("button", { name: /abrir para editar/i })).toBeInTheDocument();
   });
 
-  it("el «Me gusta» está deshabilitado y avisa que falta la imagen (subir en Editar)", () => {
+  it("«Me gusta» cuando NO toca no aprueba: avisa con un toast (falta la imagen)", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
-    expect(screen.getByRole("button", { name: /me gusta/i })).toBeDisabled();
-    // Aviso VISIBLE (no solo tooltip): falta la FOTO, súbela en Editar (la IA solo hace plantilla).
-    expect(screen.getByText(/Falta la imagen/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Falta la imagen/i));
   });
 
-  it("pieza con copy e imagen pero aún en pendiente: avisa que está lista, NO «falta copy»", () => {
-    renderPost(pub({ etapa_ia: "lista_para_revisar", falta_copy: false, falta_imagen: false }));
+  it("pieza lista pero aún en borrador: el badge dice 'Lista para revisar' y like avisa que entra sola", () => {
+    renderPost(pub({ etapa_ia: "lista_para_revisar" }));
+    expect(screen.getByText(/Lista para revisar/i)).toBeInTheDocument();
     expect(screen.queryByText(/Falta el copy/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Pieza lista/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/no está en revisión|entra sola/i));
   });
 });

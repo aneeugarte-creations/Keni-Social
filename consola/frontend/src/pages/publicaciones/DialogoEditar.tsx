@@ -1,17 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  History,
-  Link2,
-  ListChecks,
-  Loader2,
-  MessageSquare,
-  Pencil,
-  Send,
-  ShieldCheck,
-  Sprout,
-  XCircle,
-} from "lucide-react";
+import { Check, History, Link2, Loader2, MessageSquare, Pencil } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -27,7 +15,6 @@ import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,13 +25,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -52,20 +32,14 @@ import {
   serializarEncuadre,
   type EncuadreFoto,
 } from "@/lib/placa/encuadre";
-import { plural } from "@/lib/formato";
-import type {
-  CuerpoActualizarPlataforma,
-  CuerpoActualizarPublicacion,
-  EstadoOpcion,
-  EstadoPublicacion,
-  Publicacion,
-} from "@/types";
+import type { CuerpoActualizarPublicacion, Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
 import { GestionHashtags } from "./GestionHashtags";
 import { EtiquetaRed } from "./insignias";
-import { datetimeLocalAIso, formatearFechaHora, isoADatetimeLocal, metaRed } from "./meta";
+import { metaRed } from "./meta";
 import { agregarEnlace } from "./plantillas";
+import { etapaDePublicacion } from "@/pages/feed/etapa";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -73,244 +47,16 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-/**
- * Estados que el equipo elige A MANO en el desplegable de edición. La APROBACIÓN
- * (`en_revision` → `aprobado`) NO se elige aquí: se decide por la CADENA de aprobación
- * (botones Enviar a revisión / Aprobar / Rechazar), única vía de aprobación. Así nadie
- * salta la revisión poniendo el estado a mano. `programado`/`publicado` siguen disponibles.
- */
-const ESTADOS_DECISION_CADENA = new Set(["en_revision", "aprobado"]);
-
-/**
- * Panel de APROBACIÓN de una publicación: la cadena multinivel expresada para una pieza
- * suelta (cadena simple). Mantiene la aprobación ACCESIBLE desde la UI de Publicaciones:
- *  - `borrador`     → botón "Enviar a revisión" (crea la cadena y deja la pieza en revisión).
- *  - `en_revision`  → botones "Aprobar" / "Rechazar" (deciden el nivel actual; revisor != autor).
- *  - `aprobado`     → aviso de que ya está aprobada (lista para programar con su fecha).
- * Reusa los endpoints `/api/aprobacion/*`, que forwardean a la cadena.
- */
-/** Checklist de producción por red (Copy/Imagen/Revisión/Publicar). Vive aquí, en el editor
- *  unificado (#fusion), desde que el tablero dejó de tener su lista propia. Marca = hecho
- *  (`!falta_X`); cada toque hace un PATCH a la fila por plataforma e invalida ambas superficies. */
-const CHECKS_PRODUCCION = [
-  { campo: "falta_copy", etiqueta: "Copy" },
-  { campo: "falta_imagen", etiqueta: "Imagen" },
-  { campo: "falta_revision", etiqueta: "Revisión" },
-  { campo: "falta_publicar", etiqueta: "Publicar" },
-] as const;
-
-function ChecklistProduccion({ publicacion }: { publicacion: Publicacion }) {
-  const queryClient = useQueryClient();
-  const actualizar = useMutation({
-    mutationFn: (cuerpo: CuerpoActualizarPlataforma) =>
-      api.actualizarPlataforma(publicacion.contenido_id, publicacion.id, cuerpo),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["publicacion", publicacion.id] });
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-  // Sin tema padre (piezas legadas) no hay fila de tablero que togglear.
-  if (!publicacion.contenido_id) return null;
-  return (
-    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <ListChecks className="h-4 w-4 text-muted-foreground" />
-        Checklist de producción
-      </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
-        {CHECKS_PRODUCCION.map(({ campo, etiqueta }) => (
-          <label key={campo} className="flex cursor-pointer items-center gap-2 text-sm">
-            <Checkbox
-              checked={!publicacion[campo]}
-              disabled={actualizar.isPending}
-              onCheckedChange={(v) =>
-                actualizar.mutate({ [campo]: !v } as CuerpoActualizarPlataforma)
-              }
-              aria-label={etiqueta}
-            />
-            {etiqueta}
-          </label>
-        ))}
-      </div>
-      {/* Exención de copy-in: el auto-avance exige copy-in salvo que se marque aquí (imágenes
-          dramáticas/autoexplicativas a las que el texto dentro de la imagen solo estorba). */}
-      <label className="flex cursor-pointer items-center gap-2 border-t border-border/60 pt-2 text-sm">
-        <Checkbox
-          checked={!!publicacion.copy_in_exento}
-          disabled={actualizar.isPending}
-          onCheckedChange={(v) => actualizar.mutate({ copy_in_exento: !!v })}
-          aria-label="No necesita copy-in"
-        />
-        Esta imagen no necesita copy-in
-      </label>
-    </div>
-  );
-}
-
-function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
-  const queryClient = useQueryClient();
-
-  // La publicación ES una fila por plataforma: su id es el `plataforma_id` de la cadena.
-  // Leemos la cadena para mostrar los GATES de gobernanza (item A: mínimo de aprobaciones;
-  // item B: comentarios sin resolver) y avisar antes de programar.
-  const cadenaQuery = useQuery({
-    queryKey: ["cadena-aprobacion", publicacion.id],
-    queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
-  });
-  const cadena = cadenaQuery.data;
-  const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
-  const minimo = cadena?.minimo_aprobaciones ?? 0;
-  const aprobados = cadena?.aprobados ?? 0;
-  const faltanFirmas = minimo > 0 && aprobados < minimo;
-
-  // QA editorial como APROBADOR AUTOMATICO (item E): si el primer nivel es "QA Editorial" y lo
-  // decidió la máquina (decisor "auto"), reflejamos el veredicto automático. 🟡 (pendiente) deja
-  // el nivel abierto a un humano y no se sella decisor: se muestra como "requiere revisión".
-  const nivelQa = (cadena?.niveles ?? []).find(
-    (n) => n.etiqueta.trim().toLowerCase() === "qa editorial",
-  );
-  const qaAutoResuelto = nivelQa?.decisor_id === "auto" && nivelQa.decision !== "pendiente";
-
-  const tras = (mensaje: string) => () => {
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-    void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
-    toast.success(mensaje);
-  };
-  const onError = (e: unknown) => toast.error(mensajeError(e));
-
-  const enviar = useMutation({
-    mutationFn: () => api.enviarARevision(publicacion.id),
-    onSuccess: tras("Enviada a revisión."),
-    onError,
-  });
-  const aprobar = useMutation({
-    mutationFn: () => api.aprobarPublicacion(publicacion.id),
-    onSuccess: tras("Publicación aprobada."),
-    onError,
-  });
-  const rechazar = useMutation({
-    mutationFn: () => api.rechazarPublicacion(publicacion.id),
-    onSuccess: tras("Devuelta a borrador."),
-    onError,
-  });
-  const ocupado = enviar.isPending || aprobar.isPending || rechazar.isPending;
-
-  return (
-    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-        Aprobación
-      </div>
-      {nivelQa && (
-        <p
-          className={
-            qaAutoResuelto && nivelQa.decision === "rechazado"
-              ? "text-xs text-red-600 dark:text-red-400"
-              : qaAutoResuelto
-                ? "text-xs text-emerald-600 dark:text-emerald-400"
-                : "text-xs text-muted-foreground"
-          }
-        >
-          {qaAutoResuelto && nivelQa.decision === "aprobado"
-            ? "🟢 QA editorial: aprobado automáticamente. La decisión final es humana."
-            : qaAutoResuelto && nivelQa.decision === "rechazado"
-              ? "🔴 QA editorial: rechazado automáticamente. Corrige el copy y vuelve a revisar."
-              : "🟡 QA editorial: requiere revisión humana (sin veredicto automático que aplicar)."}
-        </p>
-      )}
-      {publicacion.estado === "borrador" && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            Envíala a revisión para que otra persona la apruebe antes de programarla.
-          </p>
-          <Button size="sm" onClick={() => enviar.mutate()} disabled={ocupado}>
-            {enviar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Enviar a revisión
-          </Button>
-        </>
-      )}
-      {sinResolver > 0 && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">
-          {plural(sinResolver, "comentario")} sin resolver. Resuélvelos antes de programar.
-        </p>
-      )}
-      {publicacion.estado === "en_revision" && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            En revisión. Quien aprueba no puede ser el autor (salvo admin).
-          </p>
-          <div className="flex gap-2">
-            <Button variant="positive" size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
-              {aprobar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              Aprobar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => rechazar.mutate()}
-              disabled={ocupado}
-            >
-              {rechazar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <XCircle className="h-4 w-4" />
-              )}
-              Rechazar
-            </Button>
-          </div>
-        </>
-      )}
-      {(publicacion.estado === "aprobado" ||
-        publicacion.estado === "programado" ||
-        publicacion.estado === "publicado") && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            {publicacion.revisor_nombre
-              ? `Aprobada por ${publicacion.revisor_nombre}.`
-              : "Aprobada."}{" "}
-            {faltanFirmas || sinResolver > 0
-              ? "Aún no se puede programar (revisa los avisos)."
-              : "Ya puedes programarla eligiendo el estado “Programado” y su fecha."}
-          </p>
-          {minimo > 0 && (
-            <p
-              className={
-                faltanFirmas
-                  ? "text-xs text-amber-600 dark:text-amber-400"
-                  : "text-xs text-muted-foreground"
-              }
-            >
-              Aprobaciones: {aprobados} de {minimo}.
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 /** Pestañas del editor: previsualización, edición, colaboración (comentarios) e historial. */
 type VistaEditor = "editar" | "comentarios" | "versiones";
 
-/** Diálogo de edición de una publicación: título, contenido, estado y fecha. */
+/** Diálogo de edición de una publicación: título, contenido e imagen (placa con titular inline).
+ *  El estado, la programación y la aprobación los gestiona el flujo (no se editan aquí). */
 export function DialogoEditar({
   publicacion,
-  estados,
   onCerrar,
 }: {
   publicacion: Publicacion | null;
-  estados: EstadoOpcion[];
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -318,9 +64,6 @@ export function DialogoEditar({
   const [contenido, setContenido] = React.useState("");
   // Texto que va DENTRO de la imagen (copy-in), distinto del contenido que la acompaña.
   const [copyIn, setCopyIn] = React.useState("");
-  const [estado, setEstado] = React.useState<EstadoPublicacion>("borrador");
-  const [evergreen, setEvergreen] = React.useState(false);
-  const [fechaLocal, setFechaLocal] = React.useState("");
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
@@ -392,9 +135,6 @@ export function DialogoEditar({
     setTitulo(publicacion.titulo);
     setContenido(publicacion.contenido);
     setCopyIn(publicacion.copy_in ?? "");
-    setEstado(publicacion.estado);
-    setEvergreen(publicacion.evergreen ?? false);
-    setFechaLocal(isoADatetimeLocal(publicacion.fecha_programada));
     setImagen(publicacion.imagen ?? "");
     setImagenUrl(publicacion.imagen_url ?? "");
     setFoto(publicacion.foto ?? "");
@@ -412,20 +152,6 @@ export function DialogoEditar({
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
-  const programado = estado === "programado";
-  // El editor de placa en vivo está activo (marca con placa, sin plantilla del estudio): el titular
-  // se edita IN PLACE sobre la imagen, así que el campo "Texto en imagen" separado sobra. Para
-  // plantilla del estudio o piezas sin marca, sí se muestra el campo.
-  const editorPlacaActivo = !!publicacion?.marca && !plantillaId;
-
-  // El desplegable de estado NO ofrece los estados de la cadena de aprobación
-  // (`en_revision`/`aprobado`): esos se alcanzan SOLO por los botones del panel de
-  // aprobación. Si la pieza YA está en uno de ellos, lo dejamos visible (deshabilitado de
-  // hecho por no estar en la lista de cambios) para no romper el Select controlado.
-  const estadosElegibles = React.useMemo(
-    () => estados.filter((e) => !ESTADOS_DECISION_CADENA.has(e.id) || e.id === estado),
-    [estados, estado],
-  );
 
   // Persiste la pieza. NO cierra el diálogo: lo comparten el autoguardado y el botón.
   const persistir = React.useCallback(async () => {
@@ -440,10 +166,6 @@ export function DialogoEditar({
       titulo: titulo.trim(),
       contenido,
       copy_in: copyIn,
-      estado,
-      evergreen,
-      // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
-      fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
       imagen: imagenFinal,
       foto,
       placa_oculta: placaOculta,
@@ -452,12 +174,23 @@ export function DialogoEditar({
       // Reencuadre manual de la foto ("" si está centrada sin zoom).
       foto_encuadre: serializarEncuadre(encuadre),
     };
-    await api.actualizarPublicacion(publicacion.id, cuerpo);
-  }, [publicacion, foto, copyIn, placaOculta, plantillaId, encuadre, imagen, titulo, contenido, estado, evergreen, programado, fechaLocal]);
+    // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → QA →
+    // me gusta → auto-programar). PATCH parcial: lo no enviado queda intacto.
+    const { publicacion: actualizada } = await api.actualizarPublicacion(publicacion.id, cuerpo);
+    // AUTO-AVANCE: una pieza autogenerada/editada que YA tiene todo el contenido entra sola a
+    // revisión (abre los "me gusta" del equipo). Sustituye al botón manual "Enviar a revisión".
+    if (actualizada.estado === "borrador" && etapaDePublicacion(actualizada) === "lista_para_revisar") {
+      try {
+        await api.enviarARevision(publicacion.id);
+      } catch {
+        /* carrera / ya en revisión: lo ignoramos (el feed reflejará el estado real) */
+      }
+    }
+  }, [publicacion, foto, copyIn, placaOculta, plantillaId, encuadre, imagen, titulo, contenido]);
 
-  // Solo se autoguarda cuando los datos mínimos son válidos (título + contenido; fecha si procede).
+  // Solo se autoguarda cuando los datos mínimos son válidos (título + contenido).
   const datosValidos =
-    !!publicacion && titulo.trim().length > 0 && contenido.trim().length > 0 && !(programado && !fechaLocal);
+    !!publicacion && titulo.trim().length > 0 && contenido.trim().length > 0;
 
   // Autoguardado: persiste sin cerrar; coalesciona los cambios ocurridos durante un guardado en vuelo.
   const autoguardar = React.useCallback(async () => {
@@ -491,7 +224,7 @@ export function DialogoEditar({
   // Dispara el autoguardado (debounced 1.2 s) cuando el usuario cambia algo. La `imagen` NO entra
   // en la firma: es resultado del horneado, no una edición del usuario (evita un bucle de guardado).
   const firmaAutoguardado = JSON.stringify({
-    titulo, contenido, copyIn, estado, evergreen, fechaLocal, foto, placaOculta, plantillaId,
+    titulo, contenido, copyIn, foto, placaOculta, plantillaId,
     encuadre: serializarEncuadre(encuadre),
   });
   React.useEffect(() => {
@@ -513,9 +246,8 @@ export function DialogoEditar({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const faltaFecha = programado && !fechaLocal;
   const puedeGuardar =
-    !!publicacion && titulo.trim().length > 0 && contenido.trim().length > 0 && !faltaFecha && !guardar.isPending;
+    !!publicacion && titulo.trim().length > 0 && contenido.trim().length > 0 && !guardar.isPending;
 
   return (
     <Dialog open={publicacion !== null} onOpenChange={(o) => !o && onCerrar()}>
@@ -643,111 +375,6 @@ export function DialogoEditar({
                 />
               ))}
 
-            {/* "Texto en imagen" separado: solo cuando el titular NO se edita in place (plantilla del
-                estudio o pieza sin marca). En el editor de placa en vivo se reescribe sobre la imagen. */}
-            {!editorPlacaActivo && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="editar-copy-in">Texto en imagen</Label>
-                  <span className="text-xs text-muted-foreground">{copyIn.length} car.</span>
-                </div>
-                <AutoTextarea
-                  id="editar-copy-in"
-                  value={copyIn}
-                  onChange={(e) => setCopyIn(e.target.value)}
-                  maxHeight={200}
-                  className="min-h-[4rem] font-mono text-sm"
-                  placeholder="Titular o frase que va DENTRO de la imagen (placa)."
-                />
-                <p className="text-xs text-muted-foreground">
-                  El texto sobre la imagen, distinto del contenido que la acompaña. Sigue las
-                  reglas de texto-en-imagen de la marca.
-                </p>
-              </div>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="editar-estado">Estado</Label>
-                <Select value={estado} onValueChange={(v) => setEstado(v as EstadoPublicacion)}>
-                  <SelectTrigger id="editar-estado">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {estadosElegibles.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {programado && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="editar-fecha">Fecha y hora programada</Label>
-                  <Input
-                    id="editar-fecha"
-                    type="datetime-local"
-                    value={fechaLocal}
-                    onChange={(e) => setFechaLocal(e.target.value)}
-                  />
-                  {faltaFecha && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Elige una fecha para programar la publicación.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {publicacion && (publicacion.fecha_creacion || publicacion.fecha_fuente) && (
-              // Trazabilidad de la pieza (sobre todo las que nacen del pipeline automático):
-              // cuándo la generó el sistema y de qué fecha es la nota/fuente de origen. Ambas
-              // en hora CDMX (los instantes del backend son UTC). "Fuente" se omite si la
-              // fuente no traía fecha o si la pieza es de alta manual.
-              <dl className="flex flex-wrap gap-x-6 gap-y-1 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-                {publicacion.fecha_creacion && (
-                  <div className="flex gap-1.5">
-                    <dt className="font-medium text-foreground">Generado</dt>
-                    <dd>{formatearFechaHora(publicacion.fecha_creacion)}</dd>
-                  </div>
-                )}
-                {publicacion.fecha_fuente && (
-                  <div className="flex gap-1.5">
-                    <dt className="font-medium text-foreground">Fuente</dt>
-                    <dd>{formatearFechaHora(publicacion.fecha_fuente)}</dd>
-                  </div>
-                )}
-              </dl>
-            )}
-
-            {publicacion && <ChecklistProduccion publicacion={publicacion} />}
-
-            {publicacion && <PanelAprobacion publicacion={publicacion} />}
-
-            <div className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
-              <Checkbox
-                id="editar-evergreen"
-                checked={evergreen}
-                onCheckedChange={setEvergreen}
-                aria-label="Marcar como perenne"
-                className="mt-0.5"
-              />
-              <div className="space-y-0.5">
-                <Label
-                  htmlFor="editar-evergreen"
-                  className="flex cursor-pointer items-center gap-1.5 font-normal"
-                >
-                  <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Contenido perenne
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Marca esta publicación como reutilizable para reciclarla y volver a publicarla
-                  más adelante.
-                </p>
-              </div>
-            </div>
           </TabsContent>
 
           <TabsContent value="comentarios">

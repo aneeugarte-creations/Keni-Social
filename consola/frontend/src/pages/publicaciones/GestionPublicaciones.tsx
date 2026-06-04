@@ -233,7 +233,6 @@ function Cuerpo({
 
       <DialogoEditar
         publicacion={editando}
-        estados={opciones.estados}
         onCerrar={() => setEditando(null)}
       />
       <DialogoDuplicar

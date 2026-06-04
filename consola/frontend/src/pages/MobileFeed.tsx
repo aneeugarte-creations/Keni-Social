@@ -49,12 +49,7 @@ import { api, ApiError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
-import type {
-  CuerpoCrearContenido,
-  EstadoOpcion,
-  MarcaDisponible,
-  Publicacion,
-} from "@/types";
+import type { CuerpoCrearContenido, MarcaDisponible, Publicacion } from "@/types";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -307,7 +302,6 @@ export default function MobileFeed() {
     queryKey: ["publicaciones", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
-  const estados: EstadoOpcion[] = opcionesQuery.data?.estados ?? [];
   const catalogoMarcas = opcionesQuery.data?.marcas ?? [];
   // Acota el selector a las marcas del usuario (si las tiene); admin/sin asignar ve todas.
   const marcas =
@@ -428,7 +422,6 @@ export default function MobileFeed() {
       {/* Editor rico (a pantalla completa en móvil) para comentar/editar. */}
       <DialogoEditar
         publicacion={editando}
-        estados={estados}
         onCerrar={() => setEditando(null)}
       />
 
