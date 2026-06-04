@@ -155,14 +155,24 @@ def test_decidir_misma_persona_no_da_los_dos_ok():
     assert error is not None and "otra persona" in error.lower()
 
 
-def test_decidir_admin_ignora_la_regla_de_otra_persona():
-    """El admin desatasca: puede dar el segundo OK aunque ya diera el primero."""
+def test_decidir_admin_no_puede_dar_los_dos_ok_el_mismo():
+    """Ni el admin firma los DOS OK: el segundo par de ojos no vale si es la misma persona."""
     cadena = [
         _nivel("n1", 1, "aprobado") | {"decisor_id": "u2"},
         _nivel("n2", 2, "pendiente"),
     ]
     campos, error = colaboracion.decidir(
         cadena[1], cadena, "aprobado", {"id": "u2", "usuario": "jefa"}, rol="admin",
+        autor_pieza_id="u1",
+    )
+    assert campos is None and error is not None and "otra persona" in error.lower()
+
+
+def test_decidir_admin_da_un_ok_de_pieza_propia():
+    """El admin SÍ desatasca aprobar su PROPIA pieza (un OK), sin haber decidido otro nivel."""
+    cadena = [_nivel("n1", 1, "pendiente"), _nivel("n2", 2, "pendiente")]
+    campos, error = colaboracion.decidir(
+        cadena[0], cadena, "aprobado", {"id": "u1", "usuario": "jefa"}, rol="admin",
         autor_pieza_id="u1",
     )
     assert error is None and campos is not None

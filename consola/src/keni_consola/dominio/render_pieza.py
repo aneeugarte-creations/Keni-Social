@@ -76,6 +76,36 @@ def _receta_manda(pub: dict[str, Any]) -> bool:
     return bool((pub.get("foto") or "").strip())
 
 
+def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
+    """Plantilla de ESTUDIO con la que se compone la pieza (la MISMA que muestra el editor).
+
+    - Si la pieza fija una `plantilla_diseno_id` explícita -> esa.
+    - Si no -> la plantilla de estudio POR DEFECTO de la marca, idéntica a la del editor
+      (`plantilla_diseno_id || idPlacaDeMarca`): la llamada "Placa de marca" si existe, o la
+      PRIMERA (más reciente, `creado DESC`, igual que la lista que ve el editor).
+
+    Así el feed compone EXACTAMENTE la plantilla que enseña el editor, en vez de caer a la placa
+    de marca por SPEC (legada), que era un diseño distinto (de ahí "plantilla vieja en el feed").
+    Devuelve None si la pieza no tiene plantilla explícita y la marca no tiene NINGUNA plantilla de
+    estudio: ahí el llamante cae a `componer` (placa de marca por SPEC).
+    """
+    from .. import repos
+
+    pid = (pub.get("plantilla_diseno_id") or "").strip()
+    if pid:
+        return repos.obtener_plantilla_diseno(pid)
+    marca = (pub.get("marca") or "").strip()
+    if not marca:
+        return None
+    plantillas = repos.listar_plantillas_diseno(marca=marca)
+    if not plantillas:
+        return None
+    for p in plantillas:
+        if (p.get("nombre") or "").strip() == "Placa de marca":
+            return p
+    return plantillas[0]
+
+
 def imagen_compuesta_id(pub: dict[str, Any]) -> str:
     """Media id de la imagen PUBLICABLE de la pieza, renderizando on-demand si hace falta.
 
@@ -102,24 +132,20 @@ def imagen_compuesta_id(pub: dict[str, Any]) -> str:
 
     foto = (pub.get("foto") or "").strip()
     copy_in = pub.get("copy_in") or ""
-    plantilla_id = (pub.get("plantilla_diseno_id") or "").strip()
 
-    if plantilla_id:
-        from .. import repos
-
-        plantilla = repos.obtener_plantilla_diseno(plantilla_id)
-        if plantilla is not None:
-            foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
-            resultado = estudio_imagen.componer_desde_plantilla(
-                plantilla.get("documento") or "{}",
-                copy_in=copy_in,
-                foto=foto,
-                foco=foco,
-                zoom=zoom,
-            )
-            return resultado["id"]
-        # Plantilla borrada: caemos a la placa de marca (no dejamos la pieza sin imagen).
-
+    # Plantilla de estudio EFECTIVA (explícita o la por defecto de la marca, como el editor).
+    plantilla = _plantilla_efectiva(pub)
+    if plantilla is not None:
+        foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
+        resultado = estudio_imagen.componer_desde_plantilla(
+            plantilla.get("documento") or "{}",
+            copy_in=copy_in,
+            foto=foto,
+            foco=foco,
+            zoom=zoom,
+        )
+        return resultado["id"]
+    # Marca sin plantillas de estudio: placa de marca por SPEC (legado).
     resultado = estudio_imagen.componer(
         foto,
         marca=pub.get("marca") or "",
@@ -181,21 +207,17 @@ def render_bytes(pub: dict[str, Any]) -> tuple[bytes, str] | None:
 
     foto = (pub.get("foto") or "").strip()
     copy_in = pub.get("copy_in") or ""
-    plantilla_id = (pub.get("plantilla_diseno_id") or "").strip()
 
-    if plantilla_id:
-        from .. import repos
-
-        plantilla = repos.obtener_plantilla_diseno(plantilla_id)
-        if plantilla is not None:
-            foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
-            datos = estudio_imagen.componer_desde_plantilla_bytes(
-                plantilla.get("documento") or "{}",
-                copy_in=copy_in, foto=foto, foco=foco, zoom=zoom,
-            )
-            return datos, "image/png"
-        # Plantilla borrada: cae a la placa de marca.
-
+    # Plantilla de estudio EFECTIVA (explícita o la por defecto de la marca, como el editor).
+    plantilla = _plantilla_efectiva(pub)
+    if plantilla is not None:
+        foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
+        datos = estudio_imagen.componer_desde_plantilla_bytes(
+            plantilla.get("documento") or "{}",
+            copy_in=copy_in, foto=foto, foco=foco, zoom=zoom,
+        )
+        return datos, "image/png"
+    # Marca sin plantillas de estudio: placa de marca por SPEC (legado).
     datos = estudio_imagen.componer_bytes(
         foto,
         marca=pub.get("marca") or "",
@@ -226,18 +248,19 @@ def firma_receta(pub: dict[str, Any]) -> str:
         "imagen": (pub.get("imagen") or "").strip(),
         "actualizado": pub.get("fecha_actualizacion") or "",
     }
-    plantilla_id = base["plantilla_diseno_id"]
     try:
-        if plantilla_id:
-            from .. import repos
-
-            plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+        if not pub.get("placa_oculta"):
+            # La plantilla EFECTIVA (explícita o la por defecto de la marca): su documento entra en
+            # la firma para que editar la plantilla invalide la caché HTTP. Si la marca no tiene
+            # plantillas de estudio, cae al SPEC (placa de marca legada).
+            plantilla = _plantilla_efectiva(pub)
             if plantilla is not None:
                 base["doc"] = plantilla.get("documento") or ""
-        elif not pub.get("placa_oculta") and (pub.get("marca") or ""):
-            from .. import plantillas_marca
+                base["doc_id"] = plantilla.get("id") or ""
+            elif pub.get("marca") or "":
+                from .. import plantillas_marca
 
-            base["spec"] = plantillas_marca.obtener_spec(pub["marca"])
+                base["spec"] = plantillas_marca.obtener_spec(pub["marca"])
     except Exception:  # noqa: BLE001 -- el respaldo (actualizado) basta si falla el spec/doc
         pass
     crudo = json.dumps(base, sort_keys=True, ensure_ascii=False, default=str)

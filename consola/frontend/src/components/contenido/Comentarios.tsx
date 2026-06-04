@@ -91,9 +91,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
         </div>
       </div>
 
-      {comentarios.length === 0 ? (
-        <EstadoVacio titulo="Sin comentarios" texto="Arranca la conversación del equipo." />
-      ) : (
+      {comentarios.length === 0 ? null : (
         <ul className="space-y-2">
           {comentarios.map((c) => {
             const acciones: EntradaMenuContextual[] = [

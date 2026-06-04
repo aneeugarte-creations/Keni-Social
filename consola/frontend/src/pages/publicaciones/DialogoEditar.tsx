@@ -205,6 +205,11 @@ export function DialogoEditar({
       await persistir();
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      // Editar puede RESETEAR las aprobaciones (vuelve a borrador): refresca la cadena para que la
+      // tarjeta no siga mostrando los OK viejos.
+      if (publicacion) {
+        void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
+      }
       setEstadoGuardado("guardado");
     } catch (e) {
       setEstadoGuardado("idle");
@@ -216,7 +221,7 @@ export function DialogoEditar({
         void autoguardar();
       }
     }
-  }, [datosValidos, persistir, queryClient]);
+  }, [datosValidos, persistir, queryClient, publicacion]);
 
   const autoguardarRef = React.useRef(autoguardar);
   autoguardarRef.current = autoguardar;
@@ -240,6 +245,10 @@ export function DialogoEditar({
       // El tablero (feed/lista) lee `/api/contenido`: invalidamos su clave para que
       // refleje el copy/estado/imagen recién guardados desde este editor unificado.
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      // Editar puede RESETEAR las aprobaciones: refresca la cadena (los OK viejos desaparecen).
+      if (publicacion) {
+        void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
+      }
       setEstadoGuardado("guardado");
       onCerrar();
     },

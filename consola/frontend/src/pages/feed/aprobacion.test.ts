@@ -73,6 +73,18 @@ describe("elegibilidadOK · quién puede dar el OK (me gusta)", () => {
     expect(elegibilidadOK(cadenaOK(), { id: "u1", rol: "admin" }, "u1").puedeDar).toBe(true);
   });
 
+  it("un admin que YA dio un OK TAMPOCO puede dar el otro (segundo par de ojos)", () => {
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "u1", decisor_nombre: "Yo" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
+      ],
+    });
+    const e = elegibilidadOK(c, { id: "u1", rol: "admin" }, "autorX");
+    expect(e.puedeDar).toBe(false);
+    expect(e.motivo).toMatch(/ya diste tu ok/i);
+  });
+
   it("si el nivel que toca es el de IA (QA), el OK humano espera", () => {
     const c = cadenaOK({
       niveles: [

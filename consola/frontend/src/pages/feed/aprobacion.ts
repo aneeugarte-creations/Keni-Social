@@ -40,13 +40,15 @@ export function elegibilidadOK(
   const yaDioOK = !!usuario?.id && humanos.some((n) => n.decisor_id === usuario.id);
   const tocaHumano = !!nivelActual && !esNivelIA(nivelActual);
 
+  // "Ya diste tu OK" bloquea a TODOS, incluido el admin: el segundo par de ojos no vale si es la
+  // misma persona (espeja la regla del backend). El admin solo desatasca aprobar SU propia pieza.
+  if (yaDioOK)
+    return { puedeDar: false, motivo: "Ya diste tu OK; falta el de otra persona." };
   if (!esAdmin && esAutor)
     return { puedeDar: false, motivo: "No puedes dar OK a tu propia pieza; el OK lo da otra persona." };
-  if (!esAdmin && yaDioOK)
-    return { puedeDar: false, motivo: "Ya diste tu OK; falta el de otra persona." };
   if (nivelActual && !tocaHumano)
     return { puedeDar: false, motivo: "Esperando la verificación de la IA antes del OK del equipo." };
 
-  const puedeDar = !!nivelActual && tocaHumano && (esAdmin || (!esAutor && !yaDioOK));
+  const puedeDar = !!nivelActual && tocaHumano && !yaDioOK && (esAdmin || !esAutor);
   return { puedeDar, motivo: "" };
 }

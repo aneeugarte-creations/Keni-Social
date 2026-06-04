@@ -181,21 +181,20 @@ def decidir(
     actual = nivel_actual(cadena)
     if actual is None or actual.get("id") != nivel.get("id"):
         return None, "Aún no toca decidir este nivel; faltan niveles anteriores."
+    decisor_id = (decisor or {}).get("id", "")
+    # Dos OK = dos PERSONAS distintas: quien ya decidio un nivel de ESTA cadena no puede dar
+    # tambien el otro OK (el "segundo par de ojos" no vale si es la misma persona). Esta regla se
+    # aplica SIEMPRE, incluso al ADMIN: desatasca otras cosas (aprobar pieza propia, cargo), pero
+    # NO puede dar los dos OK el mismo. Los decisores automaticos (id reservado "auto") y el acceso
+    # por token (sin identidad, decisor_id="") no entran (no hay persona que deduplicar).
+    if decisor_id != DECISOR_AUTO_ID and decisor_id and any(
+        n.get("id") != nivel.get("id") and n.get("decisor_id") == decisor_id
+        for n in cadena
+    ):
+        return None, "Ya diste tu OK en esta pieza; el otro OK lo da otra persona."
     if not _es_admin(rol, decisor):
-        decisor_id = (decisor or {}).get("id", "")
         if decisor_id and autor_pieza_id and decisor_id == autor_pieza_id:
             return None, "No puedes aprobar tu propia pieza; debe revisarla otra persona."
-        # Dos OK = dos PERSONAS distintas: quien ya decidio un nivel de ESTA cadena no puede
-        # dar tambien el otro OK (el "segundo par de ojos" no vale si es la misma persona). Los
-        # decisores automaticos (QA / pre-aprobacion, id reservado "auto") no cuentan como
-        # persona; el admin desatasca (no entra en esta rama).
-        if decisor_id and any(
-            n.get("id") != nivel.get("id")
-            and n.get("decisor_id") == decisor_id
-            and decisor_id != DECISOR_AUTO_ID
-            for n in cadena
-        ):
-            return None, "Ya diste tu OK en esta pieza; el otro OK lo da otra persona."
         cargo_req = (nivel.get("cargo_requerido") or "").strip()
         if cargo_req and not cargo_satisface(cargo_req, cargo_decisor):
             return None, (

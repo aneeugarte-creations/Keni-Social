@@ -174,16 +174,27 @@ def test_autor_no_puede_aprobar_su_propia_pieza_409(entorno):
     assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
 
 
-def test_admin_puede_dar_los_dos_ok_de_su_propia_pieza(entorno):
-    """Un admin SI puede desatascar: da los dos OK de su propia pieza (salta las reglas)."""
+def test_admin_no_puede_dar_los_dos_ok_el_mismo(entorno):
+    """Ni el admin da los DOS OK: el segundo par de ojos no vale si es la misma persona.
+
+    El admin desatasca otras reglas (aprobar pieza propia, cargo), pero NO puede firmar ambos OK:
+    el 1er OK pasa; el 2o (mismo admin) lo bloquea (409). El 2o lo da OTRA persona.
+    """
     admin = _cli_usuario("jefa", rol="admin")
     pub = _crear_borrador(admin)
     admin.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    # 1er OK: aún en revisión; 2o OK: completa la cadena -> aprobado.
+    # 1er OK (admin sobre su propia pieza): desatasca, sigue en revisión.
     assert admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    # 2o OK (mismo admin): bloqueado, hace falta otra persona.
     r = admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
-    assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "aprobado"
+    assert r.status_code == 409
+    assert "otra persona" in r.json()["error"].lower()
+    assert admin.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
+    # Otra persona (otro admin distinto) sí cierra la cadena.
+    jefe2 = _cli_usuario("jefe2", rol="admin")
+    r2 = jefe2.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["publicacion"]["estado"] == "aprobado"
 
 
 def test_token_de_mantenimiento_puede_aprobar(entorno):

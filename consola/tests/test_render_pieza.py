@@ -16,6 +16,11 @@ def _sin_plantilla_de_marca(monkeypatch, valor=False):
     monkeypatch.setattr(estudio_imagen, "marca_tiene_plantilla", lambda marca: valor)
 
 
+def _sin_plantillas_estudio(monkeypatch):
+    """La marca no tiene plantillas de estudio: el render cae a la placa de marca por SPEC."""
+    monkeypatch.setattr(repos, "listar_plantillas_diseno", lambda **k: [])
+
+
 # --------------------------------------------------------------------------- #
 # tiene_receta                                                                 #
 # --------------------------------------------------------------------------- #
@@ -62,6 +67,7 @@ def test_receta_viva_gana_a_imagen_vieja(monkeypatch):
     # Pieza NO publicada con receta (marca con plantilla) + un PNG viejo horneado: la RECETA manda,
     # se RECOMPONE (el feed refleja la plantilla actual, no la placa vieja). Es el bug del feed.
     _sin_plantilla_de_marca(monkeypatch, True)
+    _sin_plantillas_estudio(monkeypatch)  # cae a la placa de marca por SPEC
     monkeypatch.setattr(
         estudio_imagen, "componer",
         lambda *a, **k: {"id": "fresca.png", "url": "/api/media/fresca.png"},
@@ -100,7 +106,9 @@ def test_sin_receta_devuelve_foto(monkeypatch):
 
 
 def test_placa_de_marca_compone(monkeypatch):
+    # Marca SIN plantillas de estudio: cae a la placa de marca por SPEC (legado).
     _sin_plantilla_de_marca(monkeypatch, True)
+    _sin_plantillas_estudio(monkeypatch)
     capt = {}
 
     def _componer(imagen, *, marca, formato, titular, etiqueta=None, **k):
@@ -113,6 +121,52 @@ def test_placa_de_marca_compone(monkeypatch):
     assert render_pieza.imagen_compuesta_id(pub) == "compuesta.png"
     assert capt["imagen"] == "foto.jpg" and capt["marca"] == "unotv"
     assert capt["titular"] == "TITULAR" and capt["formato"] == "feed"
+
+
+def test_sin_plantilla_explicita_usa_la_por_defecto_de_la_marca(monkeypatch):
+    # Sin `plantilla_diseno_id`, el render usa la plantilla de estudio POR DEFECTO de la marca
+    # (la MISMA que el editor: la primera del listado), NO la placa por SPEC. Así feed == editor.
+    _sin_plantilla_de_marca(monkeypatch, True)
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [{"id": "verde", "nombre": "UnoTV - Verde", "documento": "{\"v\":1}"}],
+    )
+
+    def _no_spec(*a, **k):
+        raise AssertionError("no debe usar la placa por SPEC si hay plantilla de estudio")
+
+    monkeypatch.setattr(estudio_imagen, "componer", _no_spec)
+    capt = {}
+
+    def _desde(documento, *, copy_in, foto, foco=None, zoom=0.0):
+        capt.update(documento=documento, copy_in=copy_in, foto=foto)
+        return {"id": "verde.png", "url": "/api/media/verde.png"}
+
+    monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla", _desde)
+    pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "instagram",
+           "copy_in": "T", "foto": "f.jpg", "foto_encuadre": "", "estado": "en_revision"}
+    assert render_pieza.imagen_compuesta_id(pub) == "verde.png"
+    assert capt["documento"] == "{\"v\":1}" and capt["foto"] == "f.jpg" and capt["copy_in"] == "T"
+
+
+def test_prefiere_plantilla_llamada_placa_de_marca(monkeypatch):
+    # Si existe una plantilla "Placa de marca", se prefiere sobre la primera (igual que el editor).
+    _sin_plantilla_de_marca(monkeypatch, True)
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [
+            {"id": "verde", "nombre": "UnoTV - Verde", "documento": "{\"v\":1}"},
+            {"id": "placa", "nombre": "Placa de marca", "documento": "{\"v\":2}"},
+        ],
+    )
+    capt = {}
+    monkeypatch.setattr(
+        estudio_imagen, "componer_desde_plantilla",
+        lambda documento, **k: capt.update(documento=documento) or {"id": "x.png", "url": "/x"},
+    )
+    pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "copy_in": "", "foto": "f.jpg"}
+    render_pieza.imagen_compuesta_id(pub)
+    assert capt["documento"] == "{\"v\":2}"  # la "Placa de marca", no la primera
 
 
 def test_plantilla_del_estudio_compone_desde_plantilla(monkeypatch):
@@ -179,6 +233,7 @@ def test_url_fuente_externa(monkeypatch):
 
 def test_render_bytes_placa_compone_sin_persistir(monkeypatch):
     _sin_plantilla_de_marca(monkeypatch, True)
+    _sin_plantillas_estudio(monkeypatch)
 
     def _no_persiste(*a, **k):
         raise AssertionError("render_bytes NO debe persistir")
@@ -226,6 +281,7 @@ def test_render_bytes_none_sin_imagen(monkeypatch):
 
 def test_firma_estable_y_sensible(monkeypatch):
     # Spec fijo (sin IO): la firma depende de los campos de la receta.
+    _sin_plantillas_estudio(monkeypatch)  # cae al SPEC para la firma
     monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 1})
     base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
             "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
@@ -237,10 +293,28 @@ def test_firma_estable_y_sensible(monkeypatch):
 
 def test_firma_cambia_si_cambia_el_spec(monkeypatch):
     # Editar el spec de la marca (mismo copy_in) invalida la caché HTTP.
+    _sin_plantillas_estudio(monkeypatch)
     base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
             "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
     monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 1})
     f1 = render_pieza.firma_receta(dict(base))
     monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 2})
+    f2 = render_pieza.firma_receta(dict(base))
+    assert f1 != f2
+
+
+def test_firma_cambia_si_cambia_la_plantilla_por_defecto(monkeypatch):
+    # Editar el documento de la plantilla de estudio POR DEFECTO invalida la caché HTTP.
+    base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
+            "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [{"id": "verde", "nombre": "UnoTV - Verde", "documento": "{\"v\":1}"}],
+    )
+    f1 = render_pieza.firma_receta(dict(base))
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [{"id": "verde", "nombre": "UnoTV - Verde", "documento": "{\"v\":2}"}],
+    )
     f2 = render_pieza.firma_receta(dict(base))
     assert f1 != f2
