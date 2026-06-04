@@ -48,10 +48,12 @@ def test_crear_con_imagen_incluye_url(cliente):
     assert pub["imagen_url"] == "/api/media/foto.png"
 
 
-def test_crear_sin_imagen_url_vacia(cliente):
+def test_crear_sin_imagen_horneada_usa_compuesta(cliente):
+    # Sin imagen horneada pero CON receta de marca (unotv tiene placa), la url apunta al render
+    # on-demand `/compuesta` (no a "" ni a un media): la placa se compone al pedirla.
     pub = _crear(cliente).json()["publicacion"]
     assert pub["imagen"] == ""
-    assert pub["imagen_url"] == ""
+    assert pub["imagen_url"] == f"/api/publicaciones/{pub['id']}/compuesta"
 
 
 def test_actualizar_imagen(cliente):

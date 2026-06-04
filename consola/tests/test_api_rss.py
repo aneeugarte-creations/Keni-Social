@@ -1032,9 +1032,12 @@ def test_generar_fuente_propia_descarga_falla_degrada_a_url(entorno, monkeypatch
     p = cli.get("/api/publicaciones").json()["publicaciones"][0]
     assert p["tipo_contenido"] == "fuente"
     assert p["imagen_fuente"] == _IMG_FUENTE
-    # Degradacion: sin asset hosteado, la imagen mostrada cae a la URL original.
+    # Sin asset hosteado, `imagen` queda vacía y la `imagen_fuente` (URL original) se conserva.
+    # Con receta de marca (unotv), la url servible es el render on-demand `/compuesta`, que ya
+    # decide internamente el respaldo a la fuente; lo que importa aquí es que NO se pierde la
+    # imagen_fuente y que no hay PNG horneado.
     assert p["imagen"] == ""
-    assert p["imagen_url"] == _IMG_FUENTE
+    assert p["imagen_url"] == f"/api/publicaciones/{p['id']}/compuesta"
 
 
 def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):
