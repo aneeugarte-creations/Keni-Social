@@ -231,7 +231,8 @@ def _fake_render_doc(monkeypatch):
 def test_renderizar_documento_materializa_assets(entorno, monkeypatch):
     cap = _fake_render_doc(monkeypatch)
     monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes")
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "render.png")
+    # El render persiste el PNG con NOMBRE POR CONTENIDO (hash); mockeamos esa función.
+    monkeypatch.setattr(media, "guardar_bytes_contenido", lambda datos, ext="png": "render.png")
 
     doc = _doc(capas=[
         {"tipo": "imagen", "objeto": "foto-1.png", "x": 0, "y": 0, "w": 1080, "h": 1350},
