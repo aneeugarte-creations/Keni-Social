@@ -16,6 +16,7 @@ import {
   BringToFront,
   Check,
   Copy,
+  Crop as CropIcon,
   Grid3x3,
   Maximize,
   Minus,
@@ -35,8 +36,11 @@ import {
 import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
 
 import { CapaNodo, puntosGradiente } from "./capas/CapaNodo";
-import type { Capa, CapaImagen, CapaTexto, Documento } from "./documento";
+import type { Capa, CapaImagen, CapaTexto, Crop, Documento } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo } from "./documento";
+import { aplicarEstilo } from "./estilo";
+import { copiarEstiloPortapapeles, estiloPortapapeles } from "./estilos-guardados";
+import { type AsaRecorte, moverAsa } from "./recorte";
 import type { StoreEditor } from "./store";
 import { useEditor, useStoreEditor } from "./usarEditor";
 import { useImagen } from "./useImagen";
@@ -160,17 +164,139 @@ function ReframeOverlay({
   );
 }
 
+// Capa HTML sobre la imagen en MODO RECORTE (crop visual). Muestra la imagen COMPLETA dentro de la
+// caja (object-contain), atenúa lo que queda FUERA del recorte y dibuja un rectángulo con 8
+// tiradores (4 esquinas + 4 lados) + área central para mover. Arrastrar actualiza `capa.crop` en
+// fracciones 0..1 de la FUENTE (= fracciones de la imagen mostrada, que se ve entera). Todo el
+// gesto cuenta como UN paso de deshacer (como el reencuadre).
+function CropOverlay({
+  capa,
+  escala,
+  store,
+}: {
+  capa: CapaImagen;
+  escala: number;
+  store: StoreEditor;
+}) {
+  const img = useImagen(capa.objeto || null);
+  const drag = useRef<{ asa: AsaRecorte; crop: Crop; px: number; py: number } | null>(null);
+  const gestoActivo = useRef(false);
+
+  const W = capa.w * escala;
+  const H = capa.h * escala;
+  // La imagen completa se muestra con `contain` dentro de la caja: rect mostrado (letterbox) en px.
+  let imgW = W, imgH = H, imgL = 0, imgT = 0;
+  if (img && img.width > 0 && img.height > 0) {
+    const k = Math.min(W / img.width, H / img.height);
+    imgW = img.width * k;
+    imgH = img.height * k;
+    imgL = (W - imgW) / 2;
+    imgT = (H - imgH) / 2;
+  }
+  const crop: Crop = capa.crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 };
+  // Rectángulo de recorte en px DENTRO de la imagen mostrada.
+  const rx = imgL + crop.cx * imgW;
+  const ry = imgT + crop.cy * imgH;
+  const rw = crop.cw * imgW;
+  const rh = crop.ch * imgH;
+
+  const comenzar = () => {
+    if (!gestoActivo.current) {
+      store.getState().comenzarGesto();
+      gestoActivo.current = true;
+    }
+  };
+  const actual = () => store.getState().documento.capas.find((c) => c.id === capa.id) as CapaImagen | undefined;
+
+  const onDown = (asa: AsaRecorte) => (e: PointerEventReact) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    comenzar();
+    const c = actual();
+    if (!c) return;
+    drag.current = { asa, crop: c.crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 }, px: e.clientX, py: e.clientY };
+  };
+  const onMove = (e: PointerEventReact) => {
+    if (!drag.current || imgW <= 0 || imgH <= 0) return;
+    const dfx = (e.clientX - drag.current.px) / imgW;
+    const dfy = (e.clientY - drag.current.py) / imgH;
+    const next = moverAsa(drag.current.crop, drag.current.asa, dfx, dfy);
+    store.getState().actualizar(capa.id, { crop: next } as Partial<Capa>, false);
+  };
+  const onUp = () => {
+    drag.current = null;
+    gestoActivo.current = false;
+  };
+
+  // Definición de los 8 tiradores: posición (en px relativos a la caja) y cursor.
+  const asas: { asa: AsaRecorte; x: number; y: number; cursor: string }[] = [
+    { asa: "nw", x: rx, y: ry, cursor: "nwse-resize" },
+    { asa: "n", x: rx + rw / 2, y: ry, cursor: "ns-resize" },
+    { asa: "ne", x: rx + rw, y: ry, cursor: "nesw-resize" },
+    { asa: "e", x: rx + rw, y: ry + rh / 2, cursor: "ew-resize" },
+    { asa: "se", x: rx + rw, y: ry + rh, cursor: "nwse-resize" },
+    { asa: "s", x: rx + rw / 2, y: ry + rh, cursor: "ns-resize" },
+    { asa: "sw", x: rx, y: ry + rh, cursor: "nesw-resize" },
+    { asa: "w", x: rx, y: ry + rh / 2, cursor: "ew-resize" },
+  ];
+
+  return (
+    <div
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      className="absolute touch-none"
+      style={{ left: capa.x * escala, top: capa.y * escala, width: W, height: H }}
+    >
+      {/* Imagen COMPLETA (sin recortar) de referencia. */}
+      {img && (
+        <img
+          src={img.src}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute select-none"
+          style={{ left: imgL, top: imgT, width: imgW, height: imgH }}
+        />
+      )}
+      {/* Atenuación del exterior del recorte: 4 bandas translúcidas (arriba/abajo/izq/der). */}
+      <div className="pointer-events-none absolute bg-black/55" style={{ left: 0, top: 0, width: W, height: Math.max(0, ry) }} />
+      <div className="pointer-events-none absolute bg-black/55" style={{ left: 0, top: ry + rh, width: W, height: Math.max(0, H - (ry + rh)) }} />
+      <div className="pointer-events-none absolute bg-black/55" style={{ left: 0, top: ry, width: Math.max(0, rx), height: rh }} />
+      <div className="pointer-events-none absolute bg-black/55" style={{ left: rx + rw, top: ry, width: Math.max(0, W - (rx + rw)), height: rh }} />
+      {/* Rectángulo de recorte: marco + área de arrastre (mover todo). */}
+      <div
+        onPointerDown={onDown("mover")}
+        className="absolute cursor-move ring-2 ring-primary"
+        style={{ left: rx, top: ry, width: rw, height: rh }}
+      />
+      {/* Tiradores. */}
+      {asas.map((a) => (
+        <div
+          key={a.asa}
+          onPointerDown={onDown(a.asa)}
+          className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-primary bg-background shadow"
+          style={{ left: a.x, top: a.y, cursor: a.cursor }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Lienzo({
   maxAncho = 620,
   maxAlto = 760,
   reencuadreId = null,
   onSalirReencuadre,
+  recorteId = null,
+  onSalirRecorte,
   onStage,
 }: {
   maxAncho?: number;
   maxAlto?: number;
   reencuadreId?: string | null;
   onSalirReencuadre?: () => void;
+  // Capa imagen en MODO RECORTE visual (crop con tiradores). Mutuamente excluyente con reencuadre.
+  recorteId?: string | null;
+  onSalirRecorte?: () => void;
   // Expone el Stage de Konva + la escala actual al padre (para muestrear píxeles, p.ej. legibilidad).
   onStage?: (stage: Konva.Stage | null, escala: number) => void;
 }) {
@@ -181,6 +307,10 @@ export function Lienzo({
   const { w, h } = documento.formato;
   // Capa en modo reencuadre (solo imágenes): arrastrar mueve el FOCO, la rueda hace ZOOM.
   const capaReencuadre = reencuadreId ? documento.capas.find((c) => c.id === reencuadreId && c.tipo === "imagen") ?? null : null;
+  // Capa en modo RECORTE visual (solo imágenes): tiradores que editan `crop`. Excluyente con reencuadre.
+  const capaRecorte = recorteId ? documento.capas.find((c) => c.id === recorteId && c.tipo === "imagen") ?? null : null;
+  // Cualquier modo de edición de imagen oculta los tiradores normales del Transformer.
+  const modoImagen = capaReencuadre ?? capaRecorte;
 
   // Mide el espacio disponible para AJUSTAR el lienzo (responsive: llena el ancho en móvil y el
   // centro en escritorio). Cae a las props si aún no se ha medido.
@@ -242,15 +372,15 @@ export function Lienzo({
     const tr = trRef.current;
     const stage = stageRef.current;
     if (!tr || !stage) return;
-    // En reencuadre se ocultan los tiradores (la interacción es mover el foco / zoom).
-    const nodos = capaReencuadre
+    // En reencuadre/recorte se ocultan los tiradores (la interacción es propia del modo).
+    const nodos = modoImagen
       ? []
       : seleccionMulti
           .map((id) => stage.findOne<Konva.Node>(`#${id}`))
           .filter((n): n is Konva.Node => !!n);
     tr.nodes(nodos);
     tr.getLayer()?.batchDraw();
-  }, [seleccionMulti, documento, zoom, capaReencuadre]);
+  }, [seleccionMulti, documento, zoom, modoImagen]);
 
   // Rect en pantalla que ENVUELVE la selección (para la barra flotante). Unión de las capas
   // seleccionadas; recalcula al cambiar selección/documento/zoom.
@@ -303,8 +433,31 @@ export function Lienzo({
         return setZoom((z) => Math.max(ZOOM_MIN, z * 0.9));
       }
       if (e.key === "Escape") {
+        if (recorteId) return onSalirRecorte?.();
         if (reencuadreId) return onSalirReencuadre?.();
         return st.seleccionar(null);
+      }
+      // Copiar/pegar ESTILO (⌘⌥C / ⌘⌥V): subconjunto de estilo de la capa, no la capa entera.
+      // Va ANTES de ⌘C/⌘V (que copian capas) porque añade Alt.
+      if (meta && e.altKey && (e.key === "c" || e.key === "C" || e.code === "KeyC")) {
+        e.preventDefault();
+        const capa = st.documento.capas.find((c) => c.id === st.seleccion);
+        if (capa) copiarEstiloPortapapeles(capa);
+        return;
+      }
+      if (meta && e.altKey && (e.key === "v" || e.key === "V" || e.code === "KeyV")) {
+        e.preventDefault();
+        const estilo = estiloPortapapeles();
+        if (!estilo) return;
+        const ids = st.seleccionMulti.length ? st.seleccionMulti : st.seleccion ? [st.seleccion] : [];
+        const objetivos = st.documento.capas.filter((c) => ids.includes(c.id));
+        if (!objetivos.length) return;
+        st.comenzarGesto();
+        for (const c of objetivos) {
+          const cambios = aplicarEstilo(c, estilo);
+          if (Object.keys(cambios).length) st.actualizar(c.id, cambios, false);
+        }
+        return;
       }
       if (meta && (e.key === "a" || e.key === "A")) {
         e.preventDefault();
@@ -365,7 +518,7 @@ export function Lienzo({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, reencuadreId, onSalirReencuadre]);
+  }, [store, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte]);
 
   // Zoom con ctrl/cmd + rueda (centrado en el cursor no es crítico aquí: ajustamos el factor).
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -629,6 +782,13 @@ export function Lienzo({
             store={store}
           />
         )}
+        {capaRecorte && (
+          <CropOverlay
+            capa={capaRecorte as CapaImagen}
+            escala={escala}
+            store={store}
+          />
+        )}
        </div>
       </div>
 
@@ -646,8 +806,22 @@ export function Lienzo({
         </div>
       )}
 
+      {/* Banner de recorte (crop visual). */}
+      {capaRecorte && (
+        <div className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
+          <CropIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>Arrastra los tiradores para recortar</span>
+          <button
+            onClick={() => onSalirRecorte?.()}
+            className="ml-1 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-primary-foreground"
+          >
+            <Check className="h-3.5 w-3.5" /> Listo
+          </button>
+        </div>
+      )}
+
       {/* Barra de acciones flotante sobre la capa seleccionada. */}
-      {rectSel && !arrastrando && !editando && !capaReencuadre && (
+      {rectSel && !arrastrando && !editando && !modoImagen && (
         <div
           className="absolute z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover p-1 shadow-md"
           style={{ left: Math.max(0, rectSel.x), top: Math.max(0, rectSel.y - 38) }}

@@ -88,8 +88,9 @@ export function EditorDocumento({
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
   const [ajustes, setAjustes] = useState(false);
-  // Capa de imagen a REENCUADRAR (B5) y a REEMPLAZAR (clic en activo de la biblioteca).
+  // Capa de imagen a REENCUADRAR (B5), a RECORTAR (crop visual) y a REEMPLAZAR (clic en activo).
   const [reencuadreId, setReencuadreId] = useState<string | null>(null);
+  const [recorteId, setRecorteId] = useState<string | null>(null);
   const [reemplazarId, setReemplazarId] = useState<string | null>(null);
 
   const puedeDeshacer = store.getState().pasado.length > 0; // se refresca abajo con suscripción
@@ -108,8 +109,17 @@ export function EditorDocumento({
     const sel = store.getState().seleccion;
     if (sel) {
       setReencuadreId(sel);
+      setRecorteId(null);
       setAjustes(false);
       setTool(null);
+    }
+  };
+  // RECORTAR (crop visual con tiradores): entra al modo recorte sobre la capa imagen seleccionada.
+  const abrirRecorte = () => {
+    const sel = store.getState().seleccion;
+    if (sel) {
+      setRecorteId(sel);
+      setReencuadreId(null);
     }
   };
   const abrirReemplazo = () => {
@@ -299,6 +309,8 @@ export function EditorDocumento({
             <Lienzo
               reencuadreId={reencuadreId}
               onSalirReencuadre={() => setReencuadreId(null)}
+              recorteId={recorteId}
+              onSalirRecorte={() => setRecorteId(null)}
               onStage={(stage, escala) => { stageInfo.current = { stage, escala }; }}
             />
           </div>
@@ -317,7 +329,7 @@ export function EditorDocumento({
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
-                <Inspector fuentesExtra={fuentesExtra} />
+                <Inspector fuentesExtra={fuentesExtra} onRecortar={abrirRecorte} />
               </div>
             </aside>
           </>
