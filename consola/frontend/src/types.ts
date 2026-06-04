@@ -2517,10 +2517,20 @@ export interface EstadoOpcion {
   nombre: string;
 }
 
+/** Una línea editorial = etiqueta de clase `vertical` (la LÍNEA de contenido de una marca). */
+export interface LineaEditorialOpcion {
+  id: string;
+  nombre: string;
+  /** Marca dueña; "" = línea global (visible en todas las marcas). */
+  marca: string;
+}
+
 export interface OpcionesPublicaciones {
   redes: RedPublicacion[];
   estados: EstadoOpcion[];
   marcas: MarcaDisponible[];
+  /** Líneas editoriales (etiquetas verticales) para el filtro de Lista/Calendario/Feed. */
+  lineas: LineaEditorialOpcion[];
 }
 
 // `LimiteRed` y `RespuestaLimites` (`GET /api/limites`, fuente única de los topes
@@ -3044,6 +3054,8 @@ export interface FiltrosPublicaciones {
   marca?: string;
   red?: string;
   estado?: string;
+  /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
+  linea?: string;
   /** "1" para mostrar solo publicaciones perennes. */
   evergreen?: string;
   /** Paginacion offset-based (#121): tamaño de pagina; ausente = conjunto completo. */

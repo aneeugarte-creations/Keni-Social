@@ -33,10 +33,13 @@ const Verificacion = lazy(() => import("@/pages/Verificacion"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
 
-const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
+// Lista de contenido (pestaña "Lista" del hub Feed) y calendario de publicaciones
+// (pestaña "Calendario" del hub Calendario): las dos mitades del antiguo tablero (#cal-feed).
+const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
+const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
 const Actividad = lazy(() => import("@/pages/Actividad"));
 const Pipelines = lazy(() => import("@/pages/Pipelines"));
@@ -59,7 +62,7 @@ const Sistema = lazy(() => import("@/pages/Sistema"));
  * cuelgan de el. La navegación se agrupa por MOMENTO DEL FLUJO y ese bloque vive
  * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
  * (herramientas de creación) y `/datos/*` (entradas y señales). La home es el
- * tablero del equipo (`/operacion/parrilla/pendientes`). Cada hub (Parrilla,
+ * feed del equipo (`/operacion/feed`). Cada hub (Feed, Calendario,
  * Revisión, Investigación, Analíticas, Biblioteca) es una ruta-layout sin
  * componente: react-router renderiza `<Outlet/>` y la subnav entre sub-rutas vive
  * in-page (SubnavHub, via HUB_TABS).
@@ -90,26 +93,50 @@ export const router = createBrowserRouter([
     path: "/",
     element: <AppShell />,
     children: [
-      // Home: el tablero del equipo (primer checkpoint del día). Ya no hay Panel.
-      { index: true, element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
-      // Compatibilidad: enlaces/markers antiguos a /panel caen en el tablero.
-      { path: "panel", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      // Home: el feed del equipo (primer checkpoint del día). Ya no hay Panel.
+      { index: true, element: <Navigate to="/operacion/feed" replace /> },
+      // Compatibilidad: enlaces/markers antiguos a /panel caen en el feed.
+      { path: "panel", element: <Navigate to="/operacion/feed" replace /> },
 
       // ===== Bloque OPERACIÓN (checkpoints diarios) =====
       {
         path: "operacion",
         children: [
-          { index: true, element: <Navigate to="/operacion/parrilla" replace /> },
-          // Hub Parrilla (tablero del equipo): pendientes · feed · turnos.
+          { index: true, element: <Navigate to="/operacion/feed" replace /> },
+          // El antiguo hub "Parrilla" se separó en DOS (#cal-feed):
+          // Hub Feed: feed de ideación (formato red social) + Lista de contenido.
           {
-            path: "parrilla",
+            path: "feed",
             children: [
-              { index: true, element: <Navigate to="pendientes" replace /> },
-              { path: "pendientes", element: <Tareas /> },
+              { index: true, element: <Navigate to="feed" replace /> },
               // Feed de ideación: la pieza vista como post (material → copy IA → arte) con
               // estado de la cadena IA en vivo y aprobación en línea (Flujo D, Fase 4).
               { path: "feed", element: <FeedIdeacion /> },
+              // Lista de contenido (header de acciones: aportar/crear/gestionar).
+              { path: "lista", element: <ListaContenido /> },
+            ],
+          },
+          // Hub Calendario: turnos de cobertura + calendario de publicaciones.
+          {
+            path: "calendario",
+            children: [
+              { index: true, element: <Navigate to="turnos" replace /> },
               { path: "turnos", element: <Rota /> },
+              { path: "calendario", element: <CalendarioContenido /> },
+            ],
+          },
+          // Compat (#cal-feed): el antiguo hub `/operacion/parrilla/*` se separó en
+          // `/operacion/feed/*` y `/operacion/calendario/*`. Redirigimos sus sub-rutas.
+          {
+            path: "parrilla",
+            children: [
+              { index: true, element: <Navigate to="/operacion/feed" replace /> },
+              { path: "pendientes", element: <Navigate to="/operacion/feed/lista" replace /> },
+              { path: "piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
+              { path: "feed", element: <Navigate to="/operacion/feed/feed" replace /> },
+              { path: "turnos", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+              { path: "calendario", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+              { path: "*", element: <Navigate to="/operacion/feed" replace /> },
             ],
           },
           // Hub Revisión: cola de aprobación (editorial) + verificación de media.
@@ -214,10 +241,14 @@ export const router = createBrowserRouter([
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
       { path: "revision/*", element: <RedirigirPrefijo a="/operacion/revision" /> },
       { path: "analiticas/*", element: <RedirigirPrefijo a="/datos/analiticas" /> },
-      // Parrilla: la pestaña "calendario" se renombró a "turnos"; el resto preserva.
-      { path: "parrilla/calendario", element: <Navigate to="/operacion/parrilla/turnos" replace /> },
-      { path: "parrilla/piezas", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
-      { path: "parrilla/*", element: <RedirigirPrefijo a="/operacion/parrilla" /> },
+      // El hub "Parrilla" se separó en "Feed" y "Calendario" (#cal-feed). Sus rutas
+      // antiguas se redirigen a la pestaña equivalente del nuevo hub.
+      { path: "parrilla/calendario", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+      { path: "parrilla/turnos", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+      { path: "parrilla/feed", element: <Navigate to="/operacion/feed/feed" replace /> },
+      { path: "parrilla/pendientes", element: <Navigate to="/operacion/feed/lista" replace /> },
+      { path: "parrilla/piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
+      { path: "parrilla/*", element: <Navigate to="/operacion/feed" replace /> },
       { path: "actividad", element: <Navigate to="/datos/actividad" replace /> },
       // "Activos" se fusionó como pestaña "Plantillas" dentro de la Biblioteca.
       { path: "activos", element: <Navigate to="/contenido/biblioteca/plantillas" replace /> },
@@ -230,10 +261,10 @@ export const router = createBrowserRouter([
       { path: "verificacion", element: <Navigate to="/operacion/revision/verificacion" replace /> },
       { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },
       { path: "comercial", element: <Navigate to="/datos/analiticas/comercial" replace /> },
-      { path: "tareas", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
-      { path: "rota", element: <Navigate to="/operacion/parrilla/turnos" replace /> },
-      // Publicaciones se FUSIONÓ en el tablero (#fase2).
-      { path: "publicaciones", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      { path: "tareas", element: <Navigate to="/operacion/feed/lista" replace /> },
+      { path: "rota", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+      // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
+      { path: "publicaciones", element: <Navigate to="/operacion/feed/lista" replace /> },
       // El hub Agentes se retiró: su Actividad IA vive ahora en /datos/actividad.
       { path: "monitor", element: <Navigate to="/datos/actividad" replace /> },
       { path: "agentes", element: <Navigate to="/datos/actividad" replace /> },
@@ -248,8 +279,8 @@ export const router = createBrowserRouter([
       { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },
       { path: "carpetas", element: <Navigate to="/datos/actividad" replace /> },
 
-      // Cualquier otra ruta: de vuelta a la home (el tablero del equipo).
-      { path: "*", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      // Cualquier otra ruta: de vuelta a la home (el feed del equipo).
+      { path: "*", element: <Navigate to="/operacion/feed" replace /> },
     ],
   },
 ]);

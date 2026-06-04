@@ -7830,7 +7830,11 @@ def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _filtros_publicacion(
-    marca: str | None, red: str | None, estado: str | None, evergreen: bool | None
+    marca: str | None,
+    red: str | None,
+    estado: str | None,
+    evergreen: bool | None,
+    linea: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros."""
     clausulas: list[str] = []
@@ -7841,6 +7845,14 @@ def _filtros_publicacion(
     if red:
         clausulas.append("cp.red = ?")
         params.append(red)
+    # Línea editorial = etiqueta de clase `vertical` asignada al `contenido` padre. Se filtra
+    # con un EXISTS sobre la tabla puente (no JOIN, para no duplicar filas si hubiera varias).
+    if linea:
+        clausulas.append(
+            "EXISTS (SELECT 1 FROM contenido_etiquetas ce "
+            "WHERE ce.contenido_id = c.id AND ce.etiqueta_id = ?)"
+        )
+        params.append(linea)
     if estado:
         # `borrador` casa los estados "en progreso" del tablero (pendiente/en_curso).
         if estado == "borrador":
@@ -7859,12 +7871,13 @@ def listar_publicaciones(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
+    linea: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
     """Publicaciones (más recientes primero) con filtros y paginación opcionales."""
-    extra, params = _filtros_publicacion(marca, red, estado, evergreen)
+    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea)
     sql = f"{_SELECT_PUBLICACION}{extra} ORDER BY c.creado DESC, cp.id DESC"
     if limite is not None:
         sql += " LIMIT ? OFFSET ?"
@@ -7882,9 +7895,10 @@ def contar_publicaciones(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
+    linea: str | None = None,
 ) -> int:
     """Total de publicaciones que casan los filtros (para el `total` de paginación)."""
-    extra, params = _filtros_publicacion(marca, red, estado, evergreen)
+    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea)
     sql = (
         "SELECT COUNT(*) AS n FROM contenido_plataforma cp "
         "JOIN contenido c ON cp.contenido_id = c.id WHERE c.clase = 'contenido'" + extra

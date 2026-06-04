@@ -29,12 +29,22 @@ import { RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
+import { FILTRO_TODOS } from "@/pages/publicaciones/Filtros";
 import type { Publicacion } from "@/types";
 
 import { PostFeed } from "./PostFeed";
@@ -94,12 +104,51 @@ export default function FeedIdeacion() {
   const { marcaActiva } = useMarcaActiva();
 
   const [vista, setVista] = React.useState<Vista>("todo");
+  // Filtros propios del feed: Red + Línea editorial (la marca la fija el switch global).
+  // Se aplican en SERVIDOR (van en la query); las pestañas siguen filtrando por estado en memoria.
+  const [red, setRed] = React.useState(FILTRO_TODOS);
+  const [linea, setLinea] = React.useState(FILTRO_TODOS);
 
-  // UN solo fetch: TODAS las etapas mezcladas y ordenadas por fecha (el backend devuelve
-  // `creado DESC` cuando no se filtra estado). Las pestañas filtran este listado en memoria.
+  // Catálogo para los selects (redes + líneas editoriales).
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+  });
+  // Líneas elegibles: las de la marca activa + las globales (marca === ""). Sin marca (todas)
+  // se muestran todas. Si la línea filtrada deja de pertenecer a la marca activa, se resetea.
+  const lineasElegibles = React.useMemo(
+    () =>
+      (opcionesQuery.data?.lineas ?? []).filter(
+        (l) => l.marca === "" || marcaActiva == null || l.marca === marcaActiva,
+      ),
+    [opcionesQuery.data, marcaActiva],
+  );
+  React.useEffect(() => {
+    if (linea !== FILTRO_TODOS && !lineasElegibles.some((l) => l.id === linea)) {
+      setLinea(FILTRO_TODOS);
+    }
+  }, [lineasElegibles, linea]);
+
+  // UN solo fetch por (marca, red, línea): TODAS las etapas mezcladas y ordenadas por fecha
+  // (el backend devuelve `creado DESC` cuando no se filtra estado). Las pestañas filtran ese
+  // listado en memoria (por estado), sin más llamadas.
   const feedQuery = useQuery({
-    queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion", marcaActiva ?? MARCA_ACTIVA_TODAS],
-    queryFn: ({ signal }) => api.publicaciones({ marca: marcaActiva ?? undefined }, signal),
+    queryKey: [
+      ...CLAVE_PUBLICACIONES,
+      "feed-ideacion",
+      marcaActiva ?? MARCA_ACTIVA_TODAS,
+      red,
+      linea,
+    ],
+    queryFn: ({ signal }) =>
+      api.publicaciones(
+        {
+          marca: marcaActiva ?? undefined,
+          red: red === FILTRO_TODOS ? undefined : red,
+          linea: linea === FILTRO_TODOS ? undefined : linea,
+        },
+        signal,
+      ),
   });
 
   // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).
@@ -143,35 +192,50 @@ export default function FeedIdeacion() {
         }
       />
 
-      {/* Pestañas: vistas del MISMO feed (la marca la fija el switch global de la
-          topbar). Las pestañas no hacen otra llamada: filtran en cliente lo ya cargado. */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex gap-1" role="tablist" aria-label="Vista del feed">
-          {VISTAS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              role="tab"
-              aria-selected={vista === v.id}
-              onClick={() => setVista(v.id)}
-              className={
-                vista === v.id
-                  ? "inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground"
-                  : "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted"
-              }
+      {/* Pestañas (formato tab, no bubble) + filtros. Las pestañas son VISTAS del MISMO feed
+          (filtran por estado en cliente); Red y Línea filtran en servidor. La marca la fija el
+          switch global de la topbar. En móvil las pestañas hacen wrap y los filtros se apilan. */}
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
+          <TabsList
+            className="flex h-auto w-full flex-wrap justify-start gap-1 lg:w-auto"
+            aria-label="Vista del feed"
+          >
+            {VISTAS.map((v) => (
+              <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
+                {v.etiqueta}
+                <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">
+                  {conteos[v.id]}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <SelectorRed
+            redes={opcionesQuery.data?.redes ?? []}
+            valor={red}
+            onCambio={setRed}
+            ariaLabel="Filtrar por red"
+            className="w-full sm:w-[160px]"
+          />
+          <Select value={linea} onValueChange={setLinea}>
+            <SelectTrigger
+              className="w-full sm:w-[200px]"
+              aria-label="Filtrar por línea editorial"
             >
-              {v.etiqueta}
-              <span
-                className={
-                  vista === v.id
-                    ? "rounded-full bg-primary-foreground/20 px-1.5 text-xs tabular-nums"
-                    : "rounded-full bg-muted px-1.5 text-xs tabular-nums"
-                }
-              >
-                {conteos[v.id]}
-              </span>
-            </button>
-          ))}
+              <SelectValue placeholder="Línea editorial" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTRO_TODOS}>Todas las líneas</SelectItem>
+              {lineasElegibles.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

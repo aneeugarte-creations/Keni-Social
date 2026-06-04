@@ -2,6 +2,7 @@ import {
   BarChart3,
   BookText,
   CalendarClock,
+  CalendarDays,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -30,7 +31,7 @@ export interface ItemTabHub {
 /**
  * Registro COMPARTIDO de las sub-pestañas de cada hub de la consola.
  *
- * Cada hub (Investigación, Revisión, Analíticas, Parrilla, Biblioteca) declara
+ * Cada hub (Investigación, Revisión, Analíticas, Feed, Calendario, Biblioteca) declara
  * aquí sus pestañas, una sola vez, para que las consuman tanto la página del hub
  * como la barra de pestañas in-page (`SubnavHub`). El mapa de abajo las indexa por
  * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
@@ -58,10 +59,17 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/comercial", etiqueta: "Comercial", icono: Megaphone },
 ];
 
-export const TABS_PARRILLA: ItemTabHub[] = [
-  { ruta: "/operacion/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
-  { ruta: "/operacion/parrilla/feed", etiqueta: "Feed", icono: LayoutGrid },
-  { ruta: "/operacion/parrilla/turnos", etiqueta: "Turnos", icono: CalendarClock },
+// El antiguo hub "Parrilla" se separó en DOS hubs (#cal-feed): "Feed" agrupa el feed de
+// ideación (formato red social) y la Lista de contenido; "Calendario" agrupa los Turnos de
+// cobertura y el Calendario de publicaciones. La marca la fija el switch global de la topbar.
+export const TABS_FEED: ItemTabHub[] = [
+  { ruta: "/operacion/feed/feed", etiqueta: "Feed", icono: LayoutGrid },
+  { ruta: "/operacion/feed/lista", etiqueta: "Lista", icono: ListTodo },
+];
+
+export const TABS_CALENDARIO: ItemTabHub[] = [
+  { ruta: "/operacion/calendario/turnos", etiqueta: "Turnos", icono: CalendarClock },
+  { ruta: "/operacion/calendario/calendario", etiqueta: "Calendario", icono: CalendarDays },
 ];
 
 // Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las
@@ -84,7 +92,8 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/investigacion": TABS_INVESTIGACION,
   "/operacion/revision": TABS_REVISION,
   "/datos/analiticas": TABS_ANALITICAS,
-  "/operacion/parrilla": TABS_PARRILLA,
+  "/operacion/feed": TABS_FEED,
+  "/operacion/calendario": TABS_CALENDARIO,
   "/contenido/biblioteca": TABS_BIBLIOTECA,
 };
 

@@ -17,7 +17,7 @@ const LISTA = {
       estado: "completado",
       fecha: "2026-05-28T10:00:00",
       metricas: { tokens: 12345, coste_usd: 0.038, duration_ms: 4200, num_turns: 3 },
-      resultado_url: "/operacion/parrilla/pendientes",
+      resultado_url: "/operacion/feed/lista",
     },
   ],
   total: 1,

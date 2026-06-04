@@ -31,7 +31,7 @@ function mensajeError(error: unknown): string {
 /** Enlace de éxito al tablero (modo Publicaciones) que se muestra en el toast. */
 function EnlacePublicaciones() {
   return (
-    <Link to="/operacion/parrilla/pendientes" className="inline-flex items-center gap-1 underline">
+    <Link to="/operacion/feed/lista" className="inline-flex items-center gap-1 underline">
       Ver en el tablero
       <ExternalLink className="h-3 w-3" />
     </Link>

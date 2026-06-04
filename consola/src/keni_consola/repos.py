@@ -215,6 +215,7 @@ def listar_publicaciones(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
+    linea: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -224,6 +225,7 @@ def listar_publicaciones(
         red=red,
         estado=estado,
         evergreen=evergreen,
+        linea=linea,
         limite=limite,
         desplazamiento=desplazamiento,
     )
@@ -234,8 +236,11 @@ def contar_publicaciones(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
+    linea: str | None = None,
 ) -> int:
-    return db.contar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    return db.contar_publicaciones(
+        marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea
+    )
 
 
 def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:

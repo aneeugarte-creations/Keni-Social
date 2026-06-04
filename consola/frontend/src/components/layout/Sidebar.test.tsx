@@ -48,20 +48,22 @@ const CATALOGO = {
       icono: "Send",
       descripcion: "Rota, parrilla y publicación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/operacion/parrilla"],
+      rutas_frontend: ["/operacion/feed", "/operacion/calendario"],
       nav: [
-        { ruta: "/operacion/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
+        { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
+        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
       ],
     },
   ],
   // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
-  // Parrilla (tablero) encabeza "Operación"; los hubs van como UNA entrada (su sub-nav
-  // es in-page, no en el sidebar). El bloque vive también en el path (/operacion, /contenido, /datos).
+  // Feed (red social interna) encabeza "Operación", seguido de Calendario y Revisión; los
+  // hubs van como UNA entrada (su sub-nav es in-page). El bloque vive también en el path.
   navegacion: [
     {
       etiqueta: "Operación",
       items: [
-        { ruta: "/operacion/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "Tablero del equipo" },
+        { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "Feed del equipo" },
+        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarClock", descripcion: "Turnos y calendario" },
         { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
       ],
     },
@@ -149,7 +151,7 @@ function PathActual() {
  */
 function renderSidebar(
   rol: RolUsuario,
-  ruta = "/operacion/parrilla",
+  ruta = "/operacion/feed",
   props: { colapsado?: boolean; onToggleColapsar?: () => void } = {},
 ) {
   stubCatalogo();
@@ -181,16 +183,16 @@ function renderAvatarMenu(rol: RolUsuario) {
 
 describe("Sidebar · bloques de flujo", () => {
   it("pinta los 3 bloques de flujo con su encabezado", async () => {
-    renderSidebar("editor", "/operacion/parrilla");
+    renderSidebar("editor", "/operacion/feed");
     expect(await screen.findByText("Operación")).toBeInTheDocument();
     expect(screen.getByText("Contenido")).toBeInTheDocument();
     expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
   it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {
-    renderSidebar("editor", "/operacion/parrilla");
+    renderSidebar("editor", "/operacion/feed");
     // Bloque "Operación": tablero + revisión, los checkpoints diarios.
-    expect(await screen.findByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
+    expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
     expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/operacion/revision");
     // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/contenido/estudio");
@@ -215,13 +217,13 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("las entradas llevan icono (no son texto plano)", async () => {
-    renderSidebar("editor", "/operacion/parrilla");
-    const parrilla = await screen.findByRole("link", { name: /parrilla/i });
-    expect(parrilla.querySelector("svg")).not.toBeNull();
+    renderSidebar("editor", "/operacion/feed");
+    const feed = await screen.findByRole("link", { name: /feed/i });
+    expect(feed.querySelector("svg")).not.toBeNull();
   });
 
   it("muestra un trigger de paleta (Buscar… + ⌘K) en vez del input falso 'F'", async () => {
-    renderSidebar("editor", "/operacion/parrilla");
+    renderSidebar("editor", "/operacion/feed");
     const trigger = await screen.findByRole("button", { name: /buscar páginas/i });
     expect(trigger).toBeInTheDocument();
     expect(trigger).toHaveTextContent("⌘K");
@@ -229,8 +231,8 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("no muestra los ajustes en el sidebar (cuelgan del avatar)", async () => {
-    renderSidebar("admin", "/operacion/parrilla");
-    await screen.findByRole("link", { name: /parrilla/i });
+    renderSidebar("admin", "/operacion/feed");
+    await screen.findByRole("link", { name: /feed/i });
     expect(screen.queryByRole("link", { name: /^configuración$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^usuarios$/i })).not.toBeInTheDocument();
   });
@@ -238,9 +240,9 @@ describe("Sidebar · bloques de flujo", () => {
 
 describe("Sidebar · rail colapsable", () => {
   it("colapsado muestra solo iconos (enlaces por entrada) y un botón para expandir", async () => {
-    renderSidebar("editor", "/operacion/parrilla", { colapsado: true, onToggleColapsar: () => {} });
+    renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: () => {} });
     // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
-    expect(await screen.findByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
+    expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
@@ -250,22 +252,22 @@ describe("Sidebar · rail colapsable", () => {
 
   it("el toggle (colapsar / expandir) invoca onToggleColapsar", async () => {
     const onToggle = vi.fn();
-    const { unmount } = renderSidebar("editor", "/operacion/parrilla", {
+    const { unmount } = renderSidebar("editor", "/operacion/feed", {
       colapsado: false,
       onToggleColapsar: onToggle,
     });
     fireEvent.click(await screen.findByRole("button", { name: /colapsar/i }));
     expect(onToggle).toHaveBeenCalledTimes(1);
     unmount();
-    renderSidebar("editor", "/operacion/parrilla", { colapsado: true, onToggleColapsar: onToggle });
+    renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: onToggle });
     fireEvent.click(await screen.findByRole("button", { name: /expandir barra/i }));
     expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
   it("click en el icono de una entrada (en rail) navega a su ruta", async () => {
-    renderSidebar("editor", "/operacion/parrilla", { colapsado: true, onToggleColapsar: () => {} });
-    fireEvent.click(await screen.findByRole("link", { name: /parrilla/i }));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/operacion/parrilla"));
+    renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: () => {} });
+    fireEvent.click(await screen.findByRole("link", { name: /feed/i }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/operacion/feed"));
   });
 });
 
@@ -277,8 +279,8 @@ describe("apps-scope · helpers", () => {
     expect(rutaPrimaria(apps[0])).toBe("/contenido/estudio");
     // Métricas: 1ª entrada /datos/analiticas ES hub → resuelve a su 1ª sub-pestaña.
     expect(rutaPrimaria(apps[1])).toBe("/datos/analiticas/metricas");
-    // Operación: 1ª entrada /operacion/parrilla ES hub → resuelve a su 1ª sub-pestaña.
-    expect(rutaPrimaria(apps[2])).toBe("/operacion/parrilla/pendientes");
+    // Operación: 1ª entrada /operacion/feed ES hub → resuelve a su 1ª sub-pestaña.
+    expect(rutaPrimaria(apps[2])).toBe("/operacion/feed/feed");
   });
 
   it("hojasDeApp aplana hubs a sub-pestañas y conserva las no-hub", () => {
@@ -302,7 +304,7 @@ describe("apps-scope · helpers", () => {
 
   it("appDeRuta resuelve por prefijo más largo", () => {
     expect(appDeRuta(apps, "/contenido/estudio")?.id).toBe("produccion");
-    expect(appDeRuta(apps, "/operacion/parrilla/turnos")?.id).toBe("operacion");
+    expect(appDeRuta(apps, "/operacion/calendario/turnos")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
     expect(appDeRuta(apps, "/configuracion")).toBeUndefined();

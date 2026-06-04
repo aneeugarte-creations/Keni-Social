@@ -114,12 +114,20 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
 
 
 async def opciones(request: Request) -> Response:
-    """Catalogos para los selects del SPA: redes, estados y marcas."""
+    """Catalogos para los selects del SPA: redes, estados, marcas y lineas editoriales."""
+    # Lineas editoriales = etiquetas de clase `vertical` (la LÍNEA de contenido). Pueblan el
+    # selector de "Línea editorial" de las superficies Lista/Calendario/Feed. Se devuelven
+    # TODAS las activas con su marca; el SPA acota por la marca activa del switch global.
+    lineas = [
+        {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", "")}
+        for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
+    ]
     return JSONResponse(
         {
             "redes": redes.opciones(),
             "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in repos.ESTADOS_PUBLICACION],
             "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in _MARCAS],
+            "lineas": lineas,
         }
     )
 
@@ -157,13 +165,18 @@ async def listar(request: Request) -> Response:
         return rechazo
     red = qp.get("red") or None
     estado = qp.get("estado") or None
+    # `linea` = id de una etiqueta editorial de clase `vertical` (la LÍNEA de contenido):
+    # filtra las piezas cuyo `contenido` padre la tiene asignada (ver `opciones`).
+    linea = qp.get("linea") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
     pubs = repos.listar_publicaciones(
-        marca=marca, red=red, estado=estado, evergreen=evergreen,
+        marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea,
         limite=limite, desplazamiento=desplazamiento,
     )
-    total = repos.contar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    total = repos.contar_publicaciones(
+        marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea
+    )
     return JSONResponse(
         {
             "publicaciones": [_publicacion_a_dict(p) for p in pubs],

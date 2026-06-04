@@ -19,9 +19,9 @@ from keni_consola.apps import registro
 # Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
-    # "Operación": los checkpoints que el equipo toca cada día — la columna vertebral
-    # (Parrilla/tablero) y la cola de aprobación (Revisión).
-    ["Parrilla", "Revisión"],
+    # "Operación": los checkpoints que el equipo toca cada día — el Feed (red social interna
+    # + lista de contenido), el Calendario (turnos + publicaciones) y la cola de Revisión.
+    ["Feed", "Calendario", "Revisión"],
     # "Contenido": herramientas para crear/editar a mano una pieza (consumidas por el
     # pipeline cuando es automático). Estudio (editor de imagen por capas + IA; el antiguo
     # "Estudio" y el "Editor" se fusionaron en uno) y Biblioteca (prompts + plantillas).
@@ -73,7 +73,8 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # arriba en el sidebar — Revisión (bloque "operacion"), no Estudio (bloque "contenido").
     assert porid["produccion"]["nav"][0]["ruta"] == "/operacion/revision"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/parrilla"
+    # La app "operacion" aporta dos entradas (Feed, Calendario); la 1ª por orden es Feed.
+    assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
 
 
 def test_catalogo_agrupa_la_nav_por_flujo():
@@ -91,7 +92,8 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/operacion/revision"] == "ShieldCheck"
     assert iconos["/datos/analiticas"] == "BarChart3"
-    assert iconos["/operacion/parrilla"] == "CalendarClock"
+    assert iconos["/operacion/feed"] == "LayoutGrid"
+    assert iconos["/operacion/calendario"] == "CalendarClock"
     assert iconos["/datos/actividad"] == "Activity"
 
 
@@ -104,7 +106,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/datos/analiticas" not in rutas
     # Las demás siguen.
-    assert "/contenido/editor" in rutas and "/operacion/parrilla" in rutas
+    assert "/contenido/editor" in rutas and "/operacion/feed" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():
@@ -119,11 +121,11 @@ def test_flag_acepta_varias_formas_de_off():
 
 def test_shell_no_es_app_ni_aporta_nav():
     # El shell no es app de catálogo y (tras retirar el Panel) ya no aporta nav: el
-    # sidebar lo encabeza el tablero (Parrilla), no una entrada del shell.
+    # sidebar lo encabeza el Feed del equipo, no una entrada del shell.
     cat = registro.catalogo(_entorno())
     assert "shell" not in [a["id"] for a in cat["apps"]]
     primer_bloque = cat["navegacion"][0]["items"]
-    assert primer_bloque[0]["ruta"] == "/operacion/parrilla"
+    assert primer_bloque[0]["ruta"] == "/operacion/feed"
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/panel" not in rutas
 

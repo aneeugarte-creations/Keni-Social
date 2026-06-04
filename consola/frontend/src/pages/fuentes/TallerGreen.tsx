@@ -363,7 +363,7 @@ function FilaIdea({
       toast.success("Pieza evergreen generada.", {
         action: {
           label: "Ver en el tablero",
-          onClick: () => navigate("/operacion/parrilla/pendientes"),
+          onClick: () => navigate("/operacion/feed/lista"),
         },
       });
     } else if (generacion.estado === "error") {

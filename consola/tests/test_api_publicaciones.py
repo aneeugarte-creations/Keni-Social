@@ -114,6 +114,33 @@ def test_filtros(cliente):
     )
 
 
+def test_opciones_incluye_lineas(cliente):
+    """`opciones.lineas` expone las etiquetas verticales (líneas editoriales) activas."""
+    from keni_consola import repos
+
+    repos.crear_etiqueta(nombre="Deportes", clase="vertical", marca="unotv")
+    # Una etiqueta de OTRA clase no debe colarse como línea editorial.
+    repos.crear_etiqueta(nombre="Mundial", clase="campania", marca="unotv")
+    lineas = cliente.get("/api/publicaciones/opciones").json()["lineas"]
+    nombres = {l["nombre"] for l in lineas}
+    assert "Deportes" in nombres
+    assert "Mundial" not in nombres
+
+
+def test_filtro_linea(cliente):
+    """`?linea=<id>` deja solo las piezas cuyo contenido padre tiene esa etiqueta vertical."""
+    from keni_consola import repos
+
+    etiqueta = repos.crear_etiqueta(nombre="Política", clase="vertical", marca="unotv")
+    con_linea = _crear(cliente, titulo="Con línea").json()["publicacion"]
+    _crear(cliente, titulo="Sin línea")
+    repos.asignar_etiqueta(con_linea["contenido_id"], etiqueta["id"])
+
+    filtrado = cliente.get(f"/api/publicaciones?linea={etiqueta['id']}").json()
+    assert [p["titulo"] for p in filtrado["publicaciones"]] == ["Con línea"]
+    assert filtrado["paginacion"]["total"] == 1
+
+
 # --------------------------------------------------------------------------- #
 # Lote                                                                        #
 # --------------------------------------------------------------------------- #

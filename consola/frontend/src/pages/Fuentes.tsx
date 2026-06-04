@@ -443,7 +443,7 @@ function AportarManual({
         {
           action: {
             label: "Ver en el tablero",
-            onClick: () => navigate("/operacion/parrilla/pendientes"),
+            onClick: () => navigate("/operacion/feed/lista"),
           },
         },
       );
@@ -1378,7 +1378,7 @@ function DialogoGenerar({
         n > 0
           ? `Generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
           : "Copy generado",
-        { action: { label: "Ver en el tablero", onClick: () => navigate("/operacion/parrilla/pendientes") } },
+        { action: { label: "Ver en el tablero", onClick: () => navigate("/operacion/feed/lista") } },
       );
       void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
@@ -1449,7 +1449,7 @@ function DialogoGenerar({
           )}
           <p className="text-xs text-muted-foreground">
             Se crea un borrador por red en el{" "}
-            <Link to="/operacion/parrilla/pendientes" className="underline hover:text-foreground">
+            <Link to="/operacion/feed/lista" className="underline hover:text-foreground">
               tablero
             </Link>{" "}
             y la noticia queda marcada como usada.
