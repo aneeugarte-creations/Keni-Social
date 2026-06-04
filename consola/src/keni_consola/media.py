@@ -31,6 +31,7 @@ GENERACION POR IA (inyectable / mockeable):
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 import os
 import re
@@ -346,7 +347,12 @@ async def guardar_documento_subido(
 
 
 def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
-    """Guarda `datos` (una imagen ya generada) en el almacen de media y devuelve su nombre."""
+    """Guarda `datos` (una imagen ya generada) en el almacen de media y devuelve su nombre.
+
+    NOMBRE por UUID (objeto ÚNICO por llamada): para la generación por IA (`generar_variante`),
+    donde cada variante debe ser un objeto distinto aunque el contenido coincida. Las
+    composiciones de plantilla NO pasan por aquí: usan `importar_imagen` (content-addressed).
+    """
     ext = ext.lower().lstrip(".")
     if ext == "jpeg":
         ext = "jpg"
@@ -359,17 +365,42 @@ def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
     return nombre
 
 
+def guardar_bytes_contenido(datos: bytes, *, ext: str = "png") -> str:
+    """Guarda `datos` bajo una key CONTENT-ADDRESSED (`<sha256>.<ext>`) y devuelve el nombre.
+
+    Mismo contenido -> misma key -> UN solo objeto en el almacén. Es la pieza que evita los
+    duplicados de plantilla: dos piezas con el mismo logo+pleca+titular(+foto) comparten la
+    imagen compuesta en vez de hornear un PNG idéntico por cada una. Si la key ya existe, NO
+    re-sube los bytes (el contenido es, por definición, idéntico). La key sigue siendo un
+    nombre PLANO `<hex>.<ext>` (sin separadores), válido para disco y para S3/Garage.
+    """
+    ext = ext.lower().lstrip(".")
+    if ext == "jpeg":
+        ext = "jpg"
+    if not (_RE_EXT.match(ext) and ext in _EXT_A_MIME):
+        ext = "png"
+    if len(datos) > LIMITE_IMAGEN:
+        raise MediaError("La imagen generada es demasiado grande.")
+    digest = hashlib.sha256(datos).hexdigest()
+    nombre = f"{digest}.{ext}"
+    # Idempotente: si ya está ese contenido, no re-subimos bytes idénticos.
+    if not almacen_media.objeto_existe(nombre):
+        almacen_media.guardar_objeto(nombre, datos, content_type=_EXT_A_MIME[ext])
+    return nombre
+
+
 def importar_imagen(ruta) -> str:  # noqa: ANN001 -- acepta str | Path
     """COPIA una imagen que ya está en disco (ruta absoluta) al almacén de media.
 
-    Pensado para la salida de las skills de imagen (estudio-imagen): las
-    herramientas deterministas/generativas escriben los .png en disco y aquí los
-    importamos al almacén de media para poder PREVISUALIZARLOS por `/api/media/...`.
-    El NOMBRE en disco lo generamos (uuid), nunca el de origen. Valida que sea un
-    archivo de imagen real (extensión conocida) y respeta el límite de tamaño.
+    Pensado para la salida de los motores de imagen (estudio-imagen): las herramientas
+    deterministas/generativas escriben los .png en disco y aquí los importamos al almacén para
+    poder servirlos por `/api/media/...`. El NOMBRE lo generamos nosotros (NUNCA el de origen):
+    es CONTENT-ADDRESSED (`<sha256>.<ext>`), de modo que dos salidas idénticas (la misma placa
+    de marca, la misma composición de plantilla) comparten UN solo objeto y no se duplican.
+    Valida que sea un archivo de imagen real (extensión conocida) y respeta el límite de tamaño.
 
-    Devuelve el NOMBRE de archivo del media importado. Lanza `MediaError` (en
-    español) si la ruta no existe, no es imagen o es demasiado grande.
+    Devuelve el NOMBRE de archivo del media importado. Lanza `MediaError` (en español) si la
+    ruta no existe, no es imagen o es demasiado grande.
     """
     origen = Path(ruta)
     ext = _ext_desde_nombre(origen.name)
@@ -385,7 +416,7 @@ def importar_imagen(ruta) -> str:  # noqa: ANN001 -- acepta str | Path
         raise MediaError("No se pudo leer la imagen generada.") from e
     if not datos:
         raise MediaError("La imagen generada está vacía.")
-    return guardar_bytes(datos, ext=ext)
+    return guardar_bytes_contenido(datos, ext=ext)
 
 
 # --------------------------------------------------------------------------- #

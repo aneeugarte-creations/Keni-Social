@@ -190,6 +190,27 @@ def leer_objeto(nombre: str) -> bytes | None:
         return None
 
 
+def objeto_existe(nombre: str) -> bool:
+    """True si el objeto `nombre` ya existe en el backend activo (sin leer sus bytes).
+
+    Lo usa el guardado CONTENT-ADDRESSED (`media.importar_imagen`): si la key derivada del
+    hash del contenido ya está, no hace falta re-subir bytes idénticos. En S3 es un
+    `head_object` (barato); en disco, un `is_file`. Nombre inválido -> False.
+    """
+    if s3_activo():
+        try:
+            nombre_seguro = _nombre_objeto_seguro(nombre)
+        except ValueError:
+            return False
+        try:
+            _s3().head_object(Bucket=config.s3_bucket(), Key=nombre_seguro)
+        except Exception:  # noqa: BLE001 -- NoSuchKey u otro -> tratamos como ausente
+            return False
+        return True
+    destino = resolver_media(nombre)
+    return destino is not None and destino.is_file()
+
+
 def listar_objetos() -> list[tuple[str, float]]:
     """Lista los objetos del backend activo como `(nombre, mtime_epoch)` (neutral disco/S3).
 

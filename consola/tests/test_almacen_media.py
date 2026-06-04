@@ -60,6 +60,39 @@ def test_disco_borrar(disco):
     assert almacen_media.leer_objeto("x.png") is None
 
 
+def test_disco_objeto_existe(disco):
+    assert almacen_media.objeto_existe("y.png") is False
+    almacen_media.guardar_objeto("y.png", b"y", content_type="image/png")
+    assert almacen_media.objeto_existe("y.png") is True
+    # Nombre inválido (separadores) -> False, sin reventar.
+    assert almacen_media.objeto_existe("../x") is False
+
+
+def test_disco_content_addressed_dedup(disco):
+    """Mismo contenido -> misma key -> UN objeto; contenido distinto -> key distinta."""
+    from keni_consola import media
+
+    n1 = media.guardar_bytes_contenido(b"placa-identica", ext="png")
+    n2 = media.guardar_bytes_contenido(b"placa-identica", ext="png")
+    n3 = media.guardar_bytes_contenido(b"otra-placa", ext="png")
+    assert n1 == n2  # mismo hash -> mismo nombre
+    assert n1 != n3
+    # Solo dos objetos físicos en el almacén (no tres).
+    nombres = {nombre for (nombre, _mtime) in almacen_media.listar_objetos()}
+    assert {n1, n3} <= nombres and len(nombres) == 2
+
+
+def test_importar_imagen_es_content_addressed(disco, tmp_path):
+    """`importar_imagen` de dos ficheros con el MISMO contenido devuelve la misma key."""
+    from keni_consola import media
+
+    a = tmp_path / "a.png"
+    b = tmp_path / "b.png"
+    a.write_bytes(b"composicion-identica")
+    b.write_bytes(b"composicion-identica")
+    assert media.importar_imagen(str(a)) == media.importar_imagen(str(b))
+
+
 # --------------------------------------------------------------------------- #
 # Backend S3 (S3 simulado con moto)                                           #
 # --------------------------------------------------------------------------- #
@@ -127,3 +160,10 @@ def test_s3_borrar(s3):
     assert almacen_media.leer_objeto("y.png") == b"y"
     almacen_media.borrar_objeto("y.png")
     assert almacen_media.leer_objeto("y.png") is None
+
+
+def test_s3_objeto_existe(s3):
+    assert almacen_media.objeto_existe("z.png") is False
+    almacen_media.guardar_objeto("z.png", b"z", content_type="image/png")
+    assert almacen_media.objeto_existe("z.png") is True
+    assert almacen_media.objeto_existe("a/b.png") is False
