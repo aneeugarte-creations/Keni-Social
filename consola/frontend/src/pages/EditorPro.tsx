@@ -14,7 +14,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -63,12 +62,14 @@ export default function EditorPro() {
   });
   const marcas = opciones.data?.marcas ?? [];
 
+  // La marca la manda el SELECTOR GLOBAL del workspace (topbar, `useMarcaActiva`); el editor ya no
+  // tiene selector propio. `marcaActiva` = null cuando el selector está en «Todas» (solo admin).
   const { marcaActiva } = useMarcaActiva();
+  // Marca CONCRETA de respaldo para crear lienzos/abrir piezas (siempre una marca real): la global
+  // si es válida, si no la primera del catálogo.
   const marcaInicial = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : marcas[0]?.id;
 
   const [searchParams] = useSearchParams();
-
-  const [marcaNueva, setMarcaNueva] = useState("");
 
   const [pestanas, setPestanas] = useState<Pestana[]>([]);
   const [activa, setActiva] = useState<string | null>(null);
@@ -80,10 +81,13 @@ export default function EditorPro() {
   // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
 
-  const marcaEfectiva = marcaNueva || marcaInicial || "";
+  // Marca que filtra la GALERÍA y la BIBLIOTECA del estado vacío: la del selector global. «Todas»
+  // (marcaActiva null) => "" => se muestra TODO (plantillas/logos de todas las marcas).
+  const marcaEfectiva = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "";
 
   const pestanaActiva = pestanas.find((t) => t.id === activa) ?? null;
   const storeActivo = activa ? stores.current.get(activa) ?? null : null;
+  // Con una pestaña abierta manda su marca (fija por pestaña); sin pestaña, la del selector global.
   const marcaPanel = pestanaActiva?.marca || marcaEfectiva;
   const sucia = activa ? dirty[activa] : false;
 
@@ -104,7 +108,8 @@ export default function EditorPro() {
 
   // Lienzo EN BLANCO de verdad (documento vacío). Solo restaura un autoguardado previo si existe.
   const abrirPestana = (marcaArg?: string) => {
-    const marca = marcaArg || marcaEfectiva;
+    // Un lienzo nuevo necesita una marca CONCRETA: si el global está en «Todas», cae a `marcaInicial`.
+    const marca = marcaArg || marcaEfectiva || marcaInicial;
     if (!marca) return;
     const { store } = nuevaPestana(marca);
     const guardado = leerAuto(claveAuto({ id: "", marca }));
@@ -144,7 +149,8 @@ export default function EditorPro() {
   const plantillasQ = useQuery({
     queryKey: ["plantillas-diseno", marcaPanel],
     queryFn: ({ signal }) => api.plantillasDiseno({ marca: marcaPanel || undefined }, signal),
-    enabled: !!marcaPanel,
+    // En «Todas» (marcaPanel vacío) se listan las plantillas de todas las marcas.
+    enabled: marcas.length > 0,
   });
 
   // Apertura inicial (una vez): pieza por URL → ancla; si no, con plantillas deja la GALERÍA; sin
@@ -371,10 +377,13 @@ export default function EditorPro() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
-      {/* Barra superior: marca + acciones (guardar / guardar como / pieza) + estado + export. */}
+      {/* Barra superior: acciones (guardar / guardar como / pieza) + estado + export. La MARCA la
+          manda el selector global del workspace; aquí solo se muestra cuál está activa. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
         <h1 className="mr-1 text-base font-semibold">Editor</h1>
-        <SelectorMarca marcas={marcas} valor={marcaEfectiva} onCambio={setMarcaNueva} incluirTodas={false} />
+        <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="La marca la define el selector global del workspace">
+          {marcas.find((m) => m.id === marcaPanel)?.nombre ?? "Todas las marcas"}
+        </span>
         {pestanaActiva && (
           <>
             <div className="mx-1 h-5 w-px bg-border" />
@@ -440,7 +449,7 @@ export default function EditorPro() {
           })}
           <button
             onClick={() => abrirPestana()}
-            disabled={!marcaEfectiva}
+            disabled={!marcaInicial}
             title="Nuevo lienzo en blanco"
             className="ml-1 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
           >
