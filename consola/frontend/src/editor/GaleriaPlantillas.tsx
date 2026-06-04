@@ -1,7 +1,7 @@
 // Galería visual de plantillas de diseño: rejilla de miniaturas para elegir una de un vistazo
 // (mucho mejor que un desplegable). Filtra por la marca de la pestaña activa (el llamante).
 
-import { Copy, Pencil, Trash2, X } from "lucide-react";
+import { Copy, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
@@ -66,9 +66,9 @@ export function GaleriaPlantillas({
                         </div>
                       )}
                     </div>
-                    <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
                   </button>
-                  {onRenombrar && editId === p.id && (
+                  {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
+                  {onRenombrar && editId === p.id ? (
                     <input
                       autoFocus
                       value={editVal}
@@ -78,17 +78,18 @@ export function GaleriaPlantillas({
                         if (e.key === "Enter") commit(p);
                         else if (e.key === "Escape") setEditId(null);
                       }}
-                      className="absolute inset-x-0 bottom-0 rounded-b border border-primary bg-background px-1.5 py-1 text-xs"
+                      className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
                     />
-                  )}
-                  {onRenombrar && (
+                  ) : onRenombrar ? (
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
-                      title="Renombrar plantilla"
-                      className="absolute left-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+                      title="Clic para renombrar"
+                      className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      {p.nombre || "(sin nombre)"}
                     </button>
+                  ) : (
+                    <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
                   )}
                   {onDuplicar && (
                     <button

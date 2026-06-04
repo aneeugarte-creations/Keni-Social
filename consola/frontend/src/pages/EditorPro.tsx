@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileUp, Loader2, Pencil, Plus, Save, SaveAll, X } from "lucide-react";
+import { Check, Copy, FileUp, Loader2, Plus, Save, SaveAll, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -618,9 +618,9 @@ function GaleriaInline({
                     <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">Sin vista previa</div>
                   )}
                 </div>
-                <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
               </button>
-              {editId === p.id && (
+              {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
+              {editId === p.id ? (
                 <input
                   autoFocus
                   value={editVal}
@@ -630,16 +630,17 @@ function GaleriaInline({
                     if (e.key === "Enter") commit(p);
                     else if (e.key === "Escape") setEditId(null);
                   }}
-                  className="absolute inset-x-0 bottom-0 rounded-b border border-primary bg-background px-1.5 py-1 text-xs"
+                  className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
                 />
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
+                  title="Clic para renombrar"
+                  className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {p.nombre || "(sin nombre)"}
+                </button>
               )}
-              <button
-                onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
-                title="Renombrar plantilla"
-                className="absolute left-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
                 title="Duplicar plantilla"
