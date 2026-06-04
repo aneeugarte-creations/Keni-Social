@@ -98,10 +98,13 @@ export default function Termometro() {
 
 function PanelConfig({ datos }: { datos: RespuestaTermometro }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
   const [numero, setNumero] = React.useState(String(datos.config.numero));
   const [regiones, setRegiones] = React.useState(datos.config.regiones);
   const [hora, setHora] = React.useState(datos.config.hora);
-  const [marca, setMarca] = React.useState(datos.config.marca);
+  const [marca, setMarca] = React.useState(
+    marcaActiva && datos.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : datos.config.marca,
+  );
 
   const guardar = useMutation({
     mutationFn: () =>

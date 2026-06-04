@@ -15,6 +15,7 @@ import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,8 +52,14 @@ function FormularioGrupo({
   onListo: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
+  // Al CREAR (sin grupo) arrancamos en la marca activa si es una opción válida;
+  // al editar conservamos la marca del grupo.
+  const marcaInicial =
+    grupo?.marca ??
+    (marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined);
   const [nombre, setNombre] = React.useState(grupo?.nombre ?? "");
-  const [marca, setMarca] = React.useState(desdeMarca(grupo?.marca));
+  const [marca, setMarca] = React.useState(desdeMarca(marcaInicial));
   const [texto, setTexto] = React.useState((grupo?.hashtags ?? []).join(" "));
 
   const hashtags = React.useMemo(() => parsearHashtags(texto), [texto]);

@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import { numeroCompacto } from "@/lib/formato";
 import type {
@@ -66,7 +67,10 @@ export function DialogoNueva({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [marca, setMarca] = React.useState(NINGUNA);
+  const { marcaActiva } = useMarcaActiva();
+  const marcaPorDefecto =
+    marcaActiva && opciones.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : NINGUNA;
+  const [marca, setMarca] = React.useState(marcaPorDefecto);
   const [red, setRed] = React.useState(NINGUNA);
   const [idPost, setIdPost] = React.useState("");
   const [titulo, setTitulo] = React.useState("");
@@ -79,7 +83,7 @@ export function DialogoNueva({
   // Reseteamos el formulario cada vez que se abre.
   React.useEffect(() => {
     if (!abierto) return;
-    setMarca(NINGUNA);
+    setMarca(marcaPorDefecto);
     setRed(NINGUNA);
     setIdPost("");
     setTitulo("");

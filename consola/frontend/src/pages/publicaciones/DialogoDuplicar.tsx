@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { MarcaDisponible, Publicacion, RedPublicacion } from "@/types";
 
@@ -44,15 +45,19 @@ export function DialogoDuplicar({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
+  const marcaValida = Boolean(marcaActiva && marcas.some((m) => m.id === marcaActiva));
   const [red, setRed] = React.useState("");
-  const [marca, setMarca] = React.useState("");
+  const [marca, setMarca] = React.useState(marcaValida ? (marcaActiva as string) : "");
   const [titulo, setTitulo] = React.useState("");
 
   React.useEffect(() => {
     if (!publicacion) return;
     setRed(publicacion.red);
-    setMarca(publicacion.marca);
+    // Por defecto la marca activa del switch global (si es válida); si no, la de origen.
+    setMarca(marcaValida ? (marcaActiva as string) : publicacion.marca);
     setTitulo(`${publicacion.titulo} (copia)`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicacion]);
 
   const duplicar = useMutation({

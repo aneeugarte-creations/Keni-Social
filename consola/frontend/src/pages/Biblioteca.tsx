@@ -718,7 +718,10 @@ function PanelLanzar({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const [marca, setMarca] = React.useState("");
+  const { marcaActiva } = useMarcaActiva();
+  const [marca, setMarca] = React.useState(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
+  );
   const [adjuntos, setAdjuntos] = React.useState<Set<string>>(new Set());
   const [tipoTarget, setTipoTarget] = React.useState<TipoTarget>("contenido");
   const [valorTarget, setValorTarget] = React.useState("");

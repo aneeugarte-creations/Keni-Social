@@ -17,6 +17,7 @@ import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual"
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { MARCA_TODAS, marcaParam, RED_TODAS, redParam } from "@/components/comunes/selectores";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,9 +57,12 @@ function FormularioFranja({
   redes: RedPublicacion[];
 }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
   const [dia, setDia] = React.useState("0");
   const [hora, setHora] = React.useState("09:00");
-  const [marca, setMarca] = React.useState(MARCA_TODAS);
+  const [marca, setMarca] = React.useState(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : MARCA_TODAS,
+  );
   const [red, setRed] = React.useState(RED_TODAS);
 
   const crear = useMutation({

@@ -54,6 +54,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { useTema } from "@/hooks/tema-contexto";
 import { ApiError, api } from "@/lib/api";
@@ -1199,10 +1200,17 @@ function AjustesPorMarca({
     return orden.map((id) => ({ id, ...mapa.get(id)! }));
   }, [ajustes]);
 
-  const [activa, setActiva] = React.useState(porMarca[0]?.id ?? "");
+  const { marcaActiva } = useMarcaActiva();
+  const [activa, setActiva] = React.useState(
+    (marcaActiva && porMarca.some((m) => m.id === marcaActiva) ? marcaActiva : porMarca[0]?.id) ?? "",
+  );
   React.useEffect(() => {
-    if (porMarca.length && !porMarca.some((m) => m.id === activa)) setActiva(porMarca[0].id);
-  }, [porMarca, activa]);
+    if (porMarca.length && !porMarca.some((m) => m.id === activa)) {
+      setActiva(
+        marcaActiva && porMarca.some((m) => m.id === marcaActiva) ? marcaActiva : porMarca[0].id,
+      );
+    }
+  }, [porMarca, activa, marcaActiva]);
 
   if (!porMarca.length) return null;
   return (

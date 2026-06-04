@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -153,7 +154,10 @@ export function TallerGreen({
 /** Panel izquierdo: proponer ideas con IA (o crear una a mano). */
 function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   const queryClient = useQueryClient();
-  const [marca, setMarca] = React.useState("");
+  const { marcaActiva } = useMarcaActiva();
+  const [marca, setMarca] = React.useState(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
+  );
   const [contexto, setContexto] = React.useState("");
 
   // Alta manual de una idea.

@@ -11,6 +11,7 @@ import * as React from "react";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { NINGUNA, ningunaParam } from "@/components/comunes/selectores";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,8 +48,11 @@ export function DialogoImportarCalendario({
   /** Se llama tras importar con éxito (con el nº de contenidos creados). */
   onImportado: (creados: number) => void;
 }) {
+  const { marcaActiva } = useMarcaActiva();
+  const marcaPorDefecto =
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : NINGUNA;
   const [archivo, setArchivo] = React.useState<File | null>(null);
-  const [marca, setMarca] = React.useState<string>(NINGUNA);
+  const [marca, setMarca] = React.useState<string>(marcaPorDefecto);
   const [preview, setPreview] = React.useState<RespuestaImportPreview | null>(null);
   const [error, setError] = React.useState<string>("");
 
@@ -56,7 +60,7 @@ export function DialogoImportarCalendario({
 
   function limpiar() {
     setArchivo(null);
-    setMarca(NINGUNA);
+    setMarca(marcaPorDefecto);
     setPreview(null);
     setError("");
   }

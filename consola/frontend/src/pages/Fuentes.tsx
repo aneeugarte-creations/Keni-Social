@@ -839,7 +839,11 @@ function FormularioFuente({
   const [nombre, setNombre] = React.useState(fuente?.nombre ?? "");
   const [url, setUrl] = React.useState(fuente?.url ?? "");
   const [marca, setMarca] = React.useState(
-    fuente ? desdeMarca(fuente.marca) : desdeMarca(marcaActiva),
+    fuente
+      ? desdeMarca(fuente.marca)
+      : desdeMarca(
+          marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined,
+        ),
   );
   const [incluir, setIncluir] = React.useState(fuente?.incluir ?? "");
   const [excluir, setExcluir] = React.useState(fuente?.excluir ?? "");

@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import type { MarcaDisponible } from "@/types";
 
 export function EditorPlantillaMarca({
@@ -33,10 +34,15 @@ export function EditorPlantillaMarca({
   /** Marca a preseleccionar al abrir (la del contexto de la pieza, si la hay). */
   marcaInicial?: string;
 }) {
-  const [marca, setMarca] = React.useState(marcaInicial || marcas[0]?.id || "");
+  const { marcaActiva } = useMarcaActiva();
+  const porDefecto =
+    marcaInicial ||
+    (marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : marcas[0]?.id) ||
+    "";
+  const [marca, setMarca] = React.useState(porDefecto);
 
   React.useEffect(() => {
-    if (abierto && !marca) setMarca(marcaInicial || marcas[0]?.id || "");
+    if (abierto && !marca) setMarca(porDefecto);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto]);
 

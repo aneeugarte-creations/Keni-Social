@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { Etiqueta } from "@/types";
 
@@ -84,8 +85,11 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
   );
   const marcas = query.data?.marcas ?? [];
 
+  const { marcaActiva } = useMarcaActiva();
   const [creando, setCreando] = React.useState(false);
-  const [filtroMarca, setFiltroMarca] = React.useState<string>("todas");
+  const [filtroMarca, setFiltroMarca] = React.useState<string>(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "todas",
+  );
 
   const visibles = React.useMemo(
     () =>
@@ -202,8 +206,11 @@ function FormularioLinea({
   onListo: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
   const [nombre, setNombre] = React.useState("");
-  const [marca, setMarca] = React.useState(GLOBAL);
+  const [marca, setMarca] = React.useState(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : GLOBAL,
+  );
   const [keywords, setKeywords] = React.useState("");
 
   const crear = useMutation({
