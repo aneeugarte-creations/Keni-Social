@@ -6,7 +6,7 @@
 
 import { createStore } from "zustand/vanilla";
 
-import type { Capa, Documento } from "./documento";
+import type { Capa, CapaImagen, CapaMarco, Documento, Forma } from "./documento";
 
 const LIMITE_HISTORIAL = 50;
 
@@ -41,6 +41,10 @@ export interface EstadoEditor {
   // Designa la capa imagen `id` como HUECO DE FOTO (único): la marca `es_foto`+bloqueada y
   // desmarca el resto de imágenes. Toda plantilla tiene exactamente uno.
   marcarHuecoFoto: (id: string) => void;
+  // Convierte un MARCO en una capa IMAGEN (hueco para foto), conservando geometría/forma. Y al
+  // revés: una IMAGEN en MARCO (forma rellena). El usuario alterna entre forma vacía y foto.
+  convertirEnImagen: (id: string) => void;
+  convertirEnMarco: (id: string) => void;
   quitar: (id: string) => void;
   duplicar: (id: string) => void;
   reordenar: (id: string, delta: number) => void;
@@ -150,6 +154,61 @@ export function crearStoreEditor(inicial: Documento) {
               if (c.tipo !== "imagen") return c;
               if (c.id === id) return { ...c, es_foto: true, bloqueada: true } as Capa;
               return { ...c, es_foto: false } as Capa;
+            }),
+          ),
+        ),
+
+      convertirEnImagen: (id) =>
+        aplicar((doc) =>
+          conCapas(
+            doc,
+            doc.capas.map((c) => {
+              if (c.id !== id || c.tipo !== "marco") return c;
+              const m = c as CapaMarco;
+              // "linea" no tiene equivalente como recorte de imagen: cae a "rect".
+              const forma: Forma = m.forma === "linea" ? "rect" : (m.forma as Forma);
+              const img: CapaImagen = {
+                id: m.id,
+                tipo: "imagen",
+                nombre: m.nombre,
+                x: m.x, y: m.y, w: m.w, h: m.h,
+                rotacion: m.rotacion, opacidad: m.opacidad, mezcla: m.mezcla, z: m.z,
+                visible: m.visible, bloqueada: m.bloqueada,
+                objeto: "", // hueco: el usuario asigna la foto
+                ajuste: "cover",
+                foco: [0.5, 0.5],
+                zoom: 1,
+                forma,
+                radio: m.radio ?? 0,
+                filtros: null,
+                sombra: m.sombra ?? null,
+              };
+              return img;
+            }),
+          ),
+        ),
+
+      convertirEnMarco: (id) =>
+        aplicar((doc) =>
+          conCapas(
+            doc,
+            doc.capas.map((c) => {
+              if (c.id !== id || c.tipo !== "imagen") return c;
+              const im = c as CapaImagen;
+              const marco: CapaMarco = {
+                id: im.id,
+                tipo: "marco",
+                nombre: im.nombre,
+                x: im.x, y: im.y, w: im.w, h: im.h,
+                rotacion: im.rotacion, opacidad: im.opacidad, mezcla: im.mezcla, z: im.z,
+                visible: im.visible, bloqueada: im.bloqueada,
+                forma: (im.forma ?? "rect") as CapaMarco["forma"],
+                relleno: "#888888", // relleno gris por defecto al vaciar la foto
+                borde: null,
+                radio: im.radio ?? 0,
+                sombra: im.sombra ?? null,
+              };
+              return marco;
             }),
           ),
         ),

@@ -81,9 +81,86 @@ function ajustar(ctx, texto, maxAncho, maxAlto, fontFor, tamMax, tamMin, maxLine
   return { tam: tamMin, lineas, altoLinea: Math.round(tamMin * interlineado) };
 }
 
-// `forma`/`radio` (opcionales) definen el RECORTE de la imagen: "elipse" la recorta a la elipse
-// inscrita en la caja (círculo si es cuadrada); con "rect" y `radio>0` redondea las esquinas; en
-// otro caso el recorte es el rectángulo de siempre (llamadores existentes => idéntico).
+// Catálogo de FORMAS compartido (marcos e imágenes). Traza en el path ACTUAL de `ctx` la silueta
+// de `forma` inscrita en la caja (x,y,w,h). Es la ÚNICA fuente de verdad de las formas: lo usan el
+// clip de la imagen (`dibujarImagenEnCaja`) y el relleno/borde del marco (`dibujarMarco`), y el
+// editor (Konva) replica el mismo trazado en coords locales. `radio` solo afecta a "rect".
+// Retrocompat: "rect" sin radio == ctx.rect; "elipse" == ctx.ellipse de siempre.
+function pathForma(ctx, forma, x, y, w, h, radio) {
+  const cx = x + w / 2, cy = y + h / 2;
+  // Polígono regular de `n` lados inscrito en la caja (radio = w/2,h/2), con el primer vértice
+  // ARRIBA (ángulo -90°). Cierra el path.
+  const poligono = (n, rot = -Math.PI / 2) => {
+    for (let i = 0; i < n; i++) {
+      const a = rot + (i * 2 * Math.PI) / n;
+      const px = cx + (w / 2) * Math.cos(a);
+      const py = cy + (h / 2) * Math.sin(a);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  };
+  switch (forma) {
+    case "elipse":
+      ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+      return;
+    case "triangulo":
+      ctx.moveTo(cx, y);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h);
+      ctx.closePath();
+      return;
+    case "rombo":
+      ctx.moveTo(cx, y);
+      ctx.lineTo(x + w, cy);
+      ctx.lineTo(cx, y + h);
+      ctx.lineTo(x, cy);
+      ctx.closePath();
+      return;
+    case "pentagono":
+      poligono(5);
+      return;
+    case "hexagono":
+      poligono(6);
+      return;
+    case "estrella": {
+      // Estrella de 5 puntas: alterna radio externo (1) e interno (0.5) sobre la caja.
+      const puntas = 5;
+      for (let i = 0; i < puntas * 2; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / puntas;
+        const rf = i % 2 === 0 ? 1 : 0.5;
+        const px = cx + (w / 2) * rf * Math.cos(a);
+        const py = cy + (h / 2) * rf * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      return;
+    }
+    case "flecha": {
+      // Flecha hacia la derecha: cuerpo (40% del alto) + cabeza triangular (último 40% del ancho).
+      const yTop = y + h * 0.3, yBot = y + h * 0.7;
+      const xCabeza = x + w * 0.6;
+      ctx.moveTo(x, yTop);
+      ctx.lineTo(xCabeza, yTop);
+      ctx.lineTo(xCabeza, y);
+      ctx.lineTo(x + w, cy);
+      ctx.lineTo(xCabeza, y + h);
+      ctx.lineTo(xCabeza, yBot);
+      ctx.lineTo(x, yBot);
+      ctx.closePath();
+      return;
+    }
+    default:
+      // "rect" (y cualquier desconocida): rectángulo, redondeado si `radio>0`.
+      if (radio > 0) rutaRect(ctx, x, y, w, h, radio);
+      else ctx.rect(x, y, w, h);
+  }
+}
+
+// `forma`/`radio` (opcionales) definen el RECORTE de la imagen: el catálogo de formas (rect con
+// `radio`, elipse, triángulo, rombo, polígonos, estrella, flecha). Sin forma => rectángulo de
+// siempre (llamadores existentes => idéntico).
 function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom, forma, radio) {
   if (!img) return;
   const iw = img.width, ih = img.height;
@@ -96,9 +173,7 @@ function dibujarImagenEnCaja(ctx, img, x, y, w, h, ajuste, foco, zoom, forma, ra
   const dy = y + (h - dh) * fy;
   ctx.save();
   ctx.beginPath();
-  if (forma === "elipse") ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-  else if (radio > 0) rutaRect(ctx, x, y, w, h, radio);
-  else ctx.rect(x, y, w, h);
+  pathForma(ctx, forma, x, y, w, h, radio);
   ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();
@@ -474,8 +549,9 @@ function dibujarMarco(ctx, m) {
     return;
   }
   ctx.beginPath();
-  if (m.forma === "elipse") ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-  else rutaRect(ctx, x, y, w, h, m.radio || 0);
+  // Catálogo de formas compartido (rect/redondeado, elipse, triángulo, rombo, polígonos, estrella,
+  // flecha). "linea" se trata arriba; aquí van las formas con relleno/borde.
+  pathForma(ctx, m.forma, x, y, w, h, m.radio || 0);
   // Relleno: degradado lineal (abarcando la caja) si `relleno_degradado`, si no el color sólido.
   if (m.relleno_degradado) {
     const rd = m.relleno_degradado;
@@ -522,9 +598,8 @@ function dibujarCapa(ctx, capa, env) {
         aplicarSombraCanvas(ctx, capa.sombra);
         ctx.fillStyle = "#000000";
         ctx.beginPath();
-        if (capa.forma === "elipse") ctx.ellipse(capa.x + capa.w / 2, capa.y + capa.h / 2, capa.w / 2, capa.h / 2, 0, 0, Math.PI * 2);
-        else if (capa.radio > 0) rutaRect(ctx, capa.x, capa.y, capa.w, capa.h, capa.radio);
-        else ctx.rect(capa.x, capa.y, capa.w, capa.h);
+        // La silueta de la sombra sigue la FORMA de la imagen (mismo catálogo que su recorte).
+        pathForma(ctx, capa.forma, capa.x, capa.y, capa.w, capa.h, capa.radio);
         ctx.fill();
         resetSombraCanvas(ctx);
       }

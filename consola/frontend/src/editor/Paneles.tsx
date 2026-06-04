@@ -22,9 +22,18 @@ import { urlMedia } from "@/lib/api";
 
 import { ColorControl } from "./ColorControl";
 
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Sombra, TipoMezcla } from "./documento";
-import { CATALOGO_FUENTES, ETIQUETA_BINDING, ETIQUETA_MEZCLA } from "./documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, Sombra, TipoMezcla } from "./documento";
+import { CATALOGO_FORMAS, CATALOGO_FUENTES, ETIQUETA_BINDING, ETIQUETA_FORMA, ETIQUETA_MEZCLA } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
+
+// Color totalmente transparente (#RRGGBBAA con alfa 00). Válido en render y validación.
+const COLOR_TRANSPARENTE = "#00000000";
+// Alfa (0..1) de un color hex #RRGGBB (opaco) o #RRGGBBAA. Sirve para detectar "transparente".
+function alfaHex(color: string | undefined): number {
+  if (!color || color.length < 9) return 1;
+  const v = parseInt(color.slice(7, 9), 16);
+  return Number.isNaN(v) ? 1 : v / 255;
+}
 
 const ETIQUETA_TIPO: Record<Capa["tipo"], string> = {
   imagen: "Imagen",
@@ -333,29 +342,56 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Alto"><Num valor={formato.h} onChange={(v) => setFmt({ ...formato, h: Math.max(16, Math.round(v)) })} /></Campo>
         </div>
         <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
-        <Campo etiqueta="Tipo">
-          <select
-            value={fondo.tipo}
-            onChange={(e) => {
-              const tipo = e.target.value as typeof fondo.tipo;
-              if (tipo === "color") setFondo({ tipo: "color", color: fondo.color || "#111315" });
-              else if (tipo === "degradado")
-                setFondo({ tipo: "degradado", degradado: fondo.degradado || { desde: "#0a3d62", hasta: "#111315", angulo: 180 } });
-              else if (tipo === "imagen")
-                setFondo({ tipo: "imagen", imagen: fondo.imagen || { media_id: "", ajuste: "cover" } });
-            }}
-            className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-          >
-            <option value="color">Color</option>
-            <option value="degradado">Degradado</option>
-            <option value="imagen">Imagen</option>
-          </select>
-        </Campo>
-        {fondo.tipo === "color" && (
-          <Campo etiqueta="Color">
-            <ColorControl valor={fondo.color || "#111315"} onChange={(c) => setFondo({ tipo: "color", color: c })} />
-          </Campo>
-        )}
+        {/* "Transparente" = un color de alfa 0 (#00000000): el render produce PNG con alfa real y el
+            editor muestra el tablero de ajedrez a través del lienzo. */}
+        {(() => {
+          const esTransparente = fondo.tipo === "color" && alfaHex(fondo.color) === 0;
+          const tipoUI = esTransparente ? "transparente" : fondo.tipo;
+          return (
+            <>
+              <Campo etiqueta="Tipo">
+                <select
+                  value={tipoUI}
+                  onChange={(e) => {
+                    const tipo = e.target.value;
+                    if (tipo === "transparente") setFondo({ tipo: "color", color: COLOR_TRANSPARENTE });
+                    else if (tipo === "color")
+                      setFondo({ tipo: "color", color: esTransparente ? "#111315" : fondo.color || "#111315" });
+                    else if (tipo === "degradado")
+                      setFondo({ tipo: "degradado", degradado: fondo.degradado || { desde: "#0a3d62", hasta: "#111315", angulo: 180 } });
+                    else if (tipo === "imagen")
+                      setFondo({ tipo: "imagen", imagen: fondo.imagen || { media_id: "", ajuste: "cover" } });
+                  }}
+                  className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+                >
+                  <option value="color">Color</option>
+                  <option value="degradado">Degradado</option>
+                  <option value="imagen">Imagen</option>
+                  <option value="transparente">Transparente</option>
+                </select>
+              </Campo>
+              {esTransparente && (
+                <p className="text-[11px] text-muted-foreground">
+                  Fondo transparente: la pieza exportada llevará canal alfa (sin fondo).
+                </p>
+              )}
+              {fondo.tipo === "color" && !esTransparente && (
+                <>
+                  <Campo etiqueta="Color">
+                    <ColorControl valor={fondo.color || "#111315"} onChange={(c) => setFondo({ tipo: "color", color: c })} />
+                  </Campo>
+                  <button
+                    type="button"
+                    onClick={() => setFondo({ tipo: "color", color: COLOR_TRANSPARENTE })}
+                    className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+                  >
+                    Fondo transparente
+                  </button>
+                </>
+              )}
+            </>
+          );
+        })()}
         {fondo.tipo === "degradado" && fondo.degradado && (
           <>
             <Campo etiqueta="Desde">
@@ -716,20 +752,32 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Forma">
             <select
               value={(capa as CapaImagen).forma ?? "rect"}
-              onChange={(e) => set({ forma: e.target.value as CapaImagen["forma"] } as Partial<Capa>)}
+              onChange={(e) => set({ forma: e.target.value as Forma } as Partial<Capa>)}
               className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
             >
-              <option value="rect">Rectángulo</option>
-              <option value="elipse">Círculo</option>
+              {CATALOGO_FORMAS.map((f) => (
+                <option key={f} value={f}>{ETIQUETA_FORMA[f]}</option>
+              ))}
             </select>
           </Campo>
-          {(capa as CapaImagen).forma !== "elipse" && (
+          {/* "Esquinas" (radio) solo aplica al rectángulo. */}
+          {((capa as CapaImagen).forma ?? "rect") === "rect" && (
             <Campo etiqueta="Esquinas">
               <Num
                 valor={(capa as CapaImagen).radio ?? 0}
                 onChange={(v) => set({ radio: Math.max(0, v) } as Partial<Capa>)}
               />
             </Campo>
+          )}
+          {/* Convertir la foto en una FORMA (marco) vacía, conservando su silueta. */}
+          {!(capa as CapaImagen).es_foto && (
+            <button
+              type="button"
+              onClick={() => store.getState().convertirEnMarco(capa.id)}
+              className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+            >
+              Convertir en forma
+            </button>
           )}
           <Campo etiqueta="Ajuste">
             <select
@@ -789,11 +837,20 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               onChange={(e) => set({ forma: e.target.value as CapaMarco["forma"] } as Partial<Capa>)}
               className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
             >
-              <option value="rect">Rectángulo</option>
-              <option value="elipse">Elipse</option>
+              {CATALOGO_FORMAS.map((f) => (
+                <option key={f} value={f}>{ETIQUETA_FORMA[f]}</option>
+              ))}
               <option value="linea">Línea</option>
             </select>
           </Campo>
+          {/* Convertir la forma en un hueco de FOTO (capa imagen), conservando su silueta. */}
+          <button
+            type="button"
+            onClick={() => store.getState().convertirEnImagen(capa.id)}
+            className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+          >
+            Convertir en foto
+          </button>
           <Campo etiqueta="Relleno">
             <select
               value={(capa as CapaMarco).relleno_degradado ? "degradado" : "solido"}

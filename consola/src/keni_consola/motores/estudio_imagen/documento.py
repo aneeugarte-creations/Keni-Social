@@ -13,7 +13,7 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
     }
 
     Capa base = { id, tipo, x, y, w, h, rotacion, opacidad, z, visible, bloqueada }
-      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], forma:rect|elipse, radio,
+      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], forma (catálogo de formas), radio,
                    filtros:{brillo,contraste,saturacion,desenfoque},
                    sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
       texto   -> { texto, binding:copy_in|etiqueta_default|null, familia, tamano, peso, color,
@@ -25,7 +25,7 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
                    # es de alto fijo: el texto se auto-encoge para caber. `ancla` queda por
                    # compatibilidad (camino legado h<=0, sin caja).
       logo    -> { tipo_logo:imagen|wordmark, media_id, wordmark:{texto,color,fondo,familia,peso} }
-      marco   -> { forma:rect|elipse|linea, relleno|null, relleno_degradado:{desde,hasta,angulo?}|null,
+      marco   -> { forma (catálogo de formas | linea), relleno|null, relleno_degradado:{desde,hasta,angulo?}|null,
                    borde:{color,grosor}|null, radio, sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
       overlay -> { color, alto_frac, alpha }            # degradado de legibilidad (banda inferior)
       grupo   -> { capas:[ Capa, ... ] }                # bloque reutilizable (almacén de capas)
@@ -46,8 +46,12 @@ from . import spec_plantilla as _spec
 VERSION = 1
 
 TIPOS_CAPA = ("imagen", "texto", "logo", "marco", "overlay", "grupo")
-_FORMAS_MARCO = ("rect", "elipse", "linea")
-_FORMAS_IMAGEN = ("rect", "elipse")
+# Catálogo de FORMAS compartido (espejo de `pathForma` en `render_node/dibujar.mjs` y de
+# `CATALOGO_FORMAS` en `documento.ts`). Retrocompat: "rect"/"elipse" eran las únicas; las nuevas
+# se añaden con default seguro "rect". El marco además admite "linea" (trazo recto, no rellenable).
+_FORMAS = ("rect", "elipse", "triangulo", "rombo", "pentagono", "hexagono", "estrella", "flecha")
+_FORMAS_MARCO = (*_FORMAS, "linea")
+_FORMAS_IMAGEN = _FORMAS
 # Modos de fusión por capa (espejo de `MAPA_MEZCLA` en `render_node/dibujar.mjs`). "normal" =
 # source-over (default); solo se persiste si se aparta de "normal" para no ensuciar el JSON.
 _MEZCLAS = ("normal", "multiplicar", "trama", "superponer", "aclarar", "oscurecer")

@@ -4,11 +4,96 @@
 
 import Konva from "konva";
 import { useEffect, useRef } from "react";
-import { Ellipse, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
+import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text } from "react-konva";
 
 import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
-import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "../documento";
+import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma } from "../documento";
 import { useImagen } from "../useImagen";
+
+// Traza, en COORDS LOCALES (0..w, 0..h), la silueta de `forma` — espejo EXACTO de `pathForma`
+// (dibujar.mjs) con origen en (0,0). Lo usan el clip de la imagen y el dibujo del marco en Konva,
+// para que la previa coincida con el export del servidor. "rect" sin radio == rectángulo simple.
+function pathFormaLocal(ctx: Konva.Context, forma: Forma | "linea" | undefined, w: number, h: number, radio = 0) {
+  const cx = w / 2, cy = h / 2;
+  const poligono = (n: number, rot = -Math.PI / 2) => {
+    for (let i = 0; i < n; i++) {
+      const a = rot + (i * 2 * Math.PI) / n;
+      const px = cx + (w / 2) * Math.cos(a);
+      const py = cy + (h / 2) * Math.sin(a);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  };
+  switch (forma) {
+    case "elipse":
+      ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+      return;
+    case "triangulo":
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      return;
+    case "rombo":
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(w, cy);
+      ctx.lineTo(cx, h);
+      ctx.lineTo(0, cy);
+      ctx.closePath();
+      return;
+    case "pentagono":
+      poligono(5);
+      return;
+    case "hexagono":
+      poligono(6);
+      return;
+    case "estrella": {
+      const puntas = 5;
+      for (let i = 0; i < puntas * 2; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / puntas;
+        const rf = i % 2 === 0 ? 1 : 0.5;
+        const px = cx + (w / 2) * rf * Math.cos(a);
+        const py = cy + (h / 2) * rf * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      return;
+    }
+    case "flecha": {
+      const yTop = h * 0.3, yBot = h * 0.7;
+      const xCabeza = w * 0.6;
+      ctx.moveTo(0, yTop);
+      ctx.lineTo(xCabeza, yTop);
+      ctx.lineTo(xCabeza, 0);
+      ctx.lineTo(w, cy);
+      ctx.lineTo(xCabeza, h);
+      ctx.lineTo(xCabeza, yBot);
+      ctx.lineTo(0, yBot);
+      ctx.closePath();
+      return;
+    }
+    default: {
+      if (radio > 0) {
+        const rr = Math.min(radio, w / 2, h / 2);
+        ctx.moveTo(rr, 0);
+        ctx.arcTo(w, 0, w, h, rr);
+        ctx.arcTo(w, h, 0, h, rr);
+        ctx.arcTo(0, h, 0, 0, rr);
+        ctx.arcTo(0, 0, w, 0, rr);
+        ctx.closePath();
+      } else {
+        ctx.rect(0, 0, w, h);
+      }
+    }
+  }
+}
+
+// ¿Es una forma "redonda"/no-rectangular cuyo realce de selección debe seguir su silueta?
+function formaNoRect(forma: Forma | undefined, radio = 0): boolean {
+  return (forma != null && forma !== "rect") || radio > 0;
+}
 
 export interface CapaNodoProps {
   capa: Capa;
@@ -75,7 +160,7 @@ function NodoImagenAjustada({
   foco: [number, number];
   zoom?: number;
   filtros: Filtros;
-  forma?: "rect" | "elipse";
+  forma?: Forma;
   radio?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any;
@@ -117,32 +202,19 @@ function NodoImagenAjustada({
     node.getLayer()?.batchDraw();
   }, [filtros, dw, dh, img]);
 
-  // Recorte de la caja según la forma (espejo del clip de `dibujarImagenEnCaja`): elipse/círculo,
-  // rect de esquinas redondeadas (radio>0), o rect simple (default => clipX/Y/W/H como antes).
+  // Recorte de la caja según la forma (espejo del clip de `dibujarImagenEnCaja`): catálogo completo
+  // de formas (elipse, polígonos, estrella, flecha…) o rect simple/redondeado. Para "rect" sin
+  // radio usamos clipX/Y/W/H (camino rápido idéntico al de antes).
   const r = radio ?? 0;
   const recorte =
-    forma === "elipse"
+    formaNoRect(forma, r)
       ? {
           clipFunc: (ctx: Konva.Context) => {
             ctx.beginPath();
-            ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-            ctx.closePath();
+            pathFormaLocal(ctx, forma, w, h, r);
           },
         }
-      : r > 0
-        ? {
-            clipFunc: (ctx: Konva.Context) => {
-              const rr = Math.min(r, w / 2, h / 2);
-              ctx.beginPath();
-              ctx.moveTo(rr, 0);
-              ctx.arcTo(w, 0, w, h, rr);
-              ctx.arcTo(w, h, 0, h, rr);
-              ctx.arcTo(0, h, 0, 0, rr);
-              ctx.arcTo(0, 0, w, 0, rr);
-              ctx.closePath();
-            },
-          }
-        : { clipX: 0, clipY: 0, clipWidth: w, clipHeight: h };
+      : { clipX: 0, clipY: 0, clipWidth: w, clipHeight: h };
   return (
     <Group {...props} {...recorte}>
       {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
@@ -231,52 +303,37 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
       const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} props={props} />;
-      // cornerRadius de la silueta de sombra, aproximando la forma: círculo (elipse) o esquinas.
-      const sombraRadio = c.forma === "elipse" ? Math.min(c.w, c.h) / 2 : c.radio && c.radio > 0 ? c.radio : 0;
       // Realce de selección que SIGUE LA FORMA: el Transformer de Konva usa su bbox rect (sus
-      // tiradores definen la caja), pero cuando la imagen es elipse o tiene esquinas redondeadas el
-      // contorno azul punteado debe cuadrar con la forma redonda. Solo visual (listening=false).
-      const formaRedonda = c.forma === "elipse" || (c.radio ?? 0) > 0;
+      // tiradores definen la caja), pero cuando la imagen NO es un rect simple el contorno azul
+      // punteado debe cuadrar con su silueta. Solo visual (listening=false). Trazamos el mismo path
+      // del catálogo (coords locales) con un Shape, posicionado/rotado como la capa.
+      const formaRedonda = formaNoRect(c.forma, c.radio ?? 0);
       const realceSel =
         seleccionada && interactivo && formaRedonda ? (
-          c.forma === "elipse" ? (
-            <Ellipse
-              x={c.x + c.w / 2}
-              y={c.y + c.h / 2}
-              radiusX={c.w / 2}
-              radiusY={c.h / 2}
-              rotation={c.rotacion}
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dash={[6, 4]}
-              listening={false}
-            />
-          ) : (
-            <Rect
-              x={c.x}
-              y={c.y}
-              width={c.w}
-              height={c.h}
-              cornerRadius={c.radio}
-              rotation={c.rotacion}
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dash={[6, 4]}
-              listening={false}
-            />
-          )
+          <Shape
+            x={c.x}
+            y={c.y}
+            rotation={c.rotacion}
+            stroke="#3b82f6"
+            strokeWidth={2}
+            dash={[6, 4]}
+            listening={false}
+            sceneFunc={(ctx, shape) => {
+              ctx.beginPath();
+              pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0);
+              ctx.strokeShape(shape);
+            }}
+          />
         ) : null;
       // Sombra de la imagen: el Group de la imagen se recorta a su caja (la sombra no escaparía del
       // clip), así que la proyecta una silueta SIN listening dibujada detrás (igual que el render).
+      // La silueta sigue la FORMA (mismo path del catálogo) para que la sombra cuadre con la foto.
       if (c.sombra) {
         return (
           <>
-            <Rect
+            <Shape
               x={c.x}
               y={c.y}
-              width={c.w}
-              height={c.h}
-              cornerRadius={sombraRadio}
               rotation={c.rotacion}
               opacity={c.opacidad}
               fill="#000000"
@@ -287,6 +344,11 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
               shadowBlur={c.sombra.desenfoque ?? 0}
               shadowOpacity={c.sombra.opacidad ?? 1}
               shadowEnabled
+              sceneFunc={(ctx, shape) => {
+                ctx.beginPath();
+                pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0);
+                ctx.fillShape(shape);
+              }}
             />
             {nodoImg}
             {realceSel}
@@ -434,6 +496,26 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
             {...sombraMarco}
             stroke={c.borde?.color}
             strokeWidth={c.borde?.grosor}
+          />
+        );
+      }
+      // Formas del catálogo (triángulo, rombo, polígonos, estrella, flecha): un Shape con sceneFunc
+      // que traza el MISMO path que el render (coords locales). El degradado/sombra/borde se aplican
+      // vía los props de Konva (fillLinearGradient*, shadow*, stroke*). El relleno/borde lo ejecuta
+      // `fillStrokeShape`. Rect simple/redondeado mantiene el Rect nativo (cornerRadius).
+      if (c.forma !== "rect") {
+        return (
+          <Shape
+            {...props}
+            {...rellenoMarco}
+            {...sombraMarco}
+            stroke={c.borde?.color}
+            strokeWidth={c.borde?.grosor}
+            sceneFunc={(ctx, shape) => {
+              ctx.beginPath();
+              pathFormaLocal(ctx, c.forma, c.w, c.h, c.radio ?? 0);
+              ctx.fillStrokeShape(shape);
+            }}
           />
         );
       }

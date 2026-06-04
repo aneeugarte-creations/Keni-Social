@@ -10,7 +10,24 @@ export const VERSION = 1;
 export type TipoCapa = "imagen" | "texto" | "logo" | "marco" | "overlay" | "grupo";
 export type Ajuste = "cover" | "contain";
 export type Alineacion = "izquierda" | "centro" | "derecha" | "justificado";
-export type FormaMarco = "rect" | "elipse" | "linea";
+// Catálogo de FORMAS compartido (marcos e imágenes). Espejo de `pathForma` en `dibujar.mjs` y de
+// `_FORMAS` en `documento.py`. "rect"/"elipse" son retrocompatibles con documentos antiguos.
+export type Forma = "rect" | "elipse" | "triangulo" | "rombo" | "pentagono" | "hexagono" | "estrella" | "flecha";
+export const CATALOGO_FORMAS: Forma[] = [
+  "rect", "elipse", "triangulo", "rombo", "pentagono", "hexagono", "estrella", "flecha",
+];
+export const ETIQUETA_FORMA: Record<Forma, string> = {
+  rect: "Rectángulo",
+  elipse: "Círculo",
+  triangulo: "Triángulo",
+  rombo: "Rombo",
+  pentagono: "Pentágono",
+  hexagono: "Hexágono",
+  estrella: "Estrella",
+  flecha: "Flecha",
+};
+// El marco además admite "linea" (un trazo recto), que no es una forma rellenable.
+export type FormaMarco = Forma | "linea";
 export type BindingTexto = "copy_in" | "etiqueta_default" | null;
 
 // Modo de fusión de una capa (espejo del `MAPA_MEZCLA` de `dibujar.mjs`). La etiqueta interna es
@@ -71,8 +88,8 @@ export interface CapaImagen extends CapaBase {
   foco: [number, number];
   zoom: number; // reencuadre dentro del marco (1 = ajuste base)
   es_foto?: boolean; // ESTA capa es el hueco de foto de la plantilla (única; obligatoria en el estudio)
-  forma?: "rect" | "elipse"; // recorte de la imagen: rectángulo (def) o elipse/círculo
-  radio?: number; // radio de esquinas redondeadas para rect, en px (def 0; ignorado si forma=elipse)
+  forma?: Forma; // recorte de la imagen: catálogo de formas (rect def, elipse/círculo, polígonos…)
+  radio?: number; // radio de esquinas redondeadas para rect, en px (def 0; ignorado si forma!=rect)
   filtros: Filtros | null;
   sombra?: Sombra | null; // sombra del rectángulo de la imagen (opcional)
 }

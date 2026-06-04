@@ -33,7 +33,9 @@ function ctxFalso() {
   const fills: { texto: string; x: number; y: number; tam: number; blur: number; sombra: string }[] = [];
   const gradientes: { x0: number; y0: number; x1: number; y1: number; stops: [number, string][] }[] = [];
   // Registra las primitivas de path usadas para construir recortes (clip) de imagen.
-  const paths: { tipo: "ellipse" | "rect" | "arcTo"; args: number[] }[] = [];
+  const paths: { tipo: "ellipse" | "rect" | "arcTo" | "moveTo" | "lineTo"; args: number[] }[] = [];
+  // Rellenos de rectángulo (fondo): registramos el fillStyle activo en cada fillRect.
+  const fillRects: { estilo: string; args: number[] }[] = [];
   // Log ORDENADO de trazos de texto (stroke/fill) con el estado de sombra/estilo en ese instante.
   // Permite verificar el ORDEN (contorno DEBAJO del relleno) y que la sombra se resetee a tiempo.
   const ops: { op: "stroke" | "fill"; texto: string; blur: number; sombra: string; estilo: string }[] = [];
@@ -44,6 +46,7 @@ function ctxFalso() {
     fills,
     gradientes,
     paths,
+    fillRects,
     ops,
     gcos,
     canvas: { width: 1080, height: 1080 },
@@ -83,15 +86,15 @@ function ctxFalso() {
     scale: () => {},
     beginPath: () => {},
     closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
+    moveTo: (...args: number[]) => paths.push({ tipo: "moveTo", args }),
+    lineTo: (...args: number[]) => paths.push({ tipo: "lineTo", args }),
     arcTo: (...args: number[]) => paths.push({ tipo: "arcTo", args }),
     ellipse: (...args: number[]) => paths.push({ tipo: "ellipse", args }),
     rect: (...args: number[]) => paths.push({ tipo: "rect", args }),
     clip: () => {},
     fill: () => { gcos.push(String(ctx.globalCompositeOperation)); },
     stroke: () => {},
-    fillRect: () => {},
+    fillRect: (...args: number[]) => fillRects.push({ estilo: String(ctx.fillStyle), args }),
     strokeRect: () => {},
     drawImage: () => {},
     setLineDash: () => {},
@@ -374,6 +377,49 @@ describe("forma de la imagen: recorte rect (default) vs elipse", () => {
     );
     expect(ctx.paths.some((p) => p.tipo === "arcTo")).toBe(true);
     expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(false);
+  });
+
+  it("forma 'triangulo' recorta con un polígono (moveTo + 2 lineTo en la caja), sin rect ni elipse", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConImagen({ forma: "triangulo" }), imgs: { "foto.png": img }, bindings: {} } as never,
+    );
+    // Vértices del triángulo en la caja (100,100,400,400): cima (300,100), base-der (500,500), base-izq (100,500).
+    const mv = ctx.paths.find((p) => p.tipo === "moveTo");
+    expect(mv!.args).toEqual([300, 100]);
+    const lineas = ctx.paths.filter((p) => p.tipo === "lineTo");
+    expect(lineas.some((p) => p.args.join(",") === "500,500")).toBe(true);
+    expect(lineas.some((p) => p.args.join(",") === "100,500")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(false);
+    expect(ctx.paths.some((p) => p.tipo === "ellipse")).toBe(false);
+  });
+
+  it("forma 'estrella' recorta con 10 vértices (5 puntas) y nada de rect/elipse", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConImagen({ forma: "estrella" }), imgs: { "foto.png": img }, bindings: {} } as never,
+    );
+    const verts = ctx.paths.filter((p) => p.tipo === "moveTo" || p.tipo === "lineTo");
+    expect(verts.length).toBe(10);
+    expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(false);
+  });
+});
+
+describe("fondo transparente (#RRGGBBAA con alfa 00)", () => {
+  it("un fondo color transparente NO pinta color opaco: el fillRect del fondo va con alfa 00", () => {
+    const ctx = ctxFalso();
+    const doc = {
+      version: 1,
+      formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+      fondo: { tipo: "color", color: "#00000000" },
+      capas: [],
+    };
+    dibujarDocumento(ctx as never, { documento: doc as never, imgs: {}, bindings: {} } as never);
+    // El único fillRect (el del fondo) usa el color transparente como fillStyle (no un opaco).
+    expect(ctx.fillRects.length).toBe(1);
+    expect(ctx.fillRects[0].estilo).toBe("#00000000");
   });
 });
 
