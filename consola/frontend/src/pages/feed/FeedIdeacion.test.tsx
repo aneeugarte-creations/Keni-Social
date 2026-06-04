@@ -165,8 +165,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     renderFeed();
     // La única pieza (en_revision) se ve en 'Todo'.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Al cambiar a 'Publicado y programado' desaparece (no está publicada ni programada).
-    fireEvent.click(screen.getByRole("tab", { name: /Publicado y programado/ }));
+    // Al cambiar a 'Publicado y programado' desaparece (no está publicada ni programada). Las
+    // pestañas son Radix Tabs: se activan con mouseDown (no con un click sintético en jsdom).
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Publicado y programado/ }), { button: 0 });
     await waitFor(() =>
       expect(screen.queryByText("¡Increíble remontada!")).not.toBeInTheDocument(),
     );
