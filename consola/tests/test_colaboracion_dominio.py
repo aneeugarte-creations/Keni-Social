@@ -200,6 +200,24 @@ def test_contar_aprobados_cuenta_solo_los_aprobados():
     assert colaboracion.contar_aprobados(cadena) == 2
 
 
+def test_contar_aprobaciones_humanas_excluye_auto_y_pendientes():
+    # Solo cuentan los OK con decisor HUMANO (id propio): ni el QA/pre-aprobación "auto" ni vacíos
+    # ni los pendientes. Es la métrica de "aprobaciones reales que se pierden al editar".
+    cadena = [
+        {"id": "qa", "nivel": 1, "decision": "aprobado", "etiqueta": "QA Editorial", "decisor_id": "auto"},
+        {"id": "ed", "nivel": 2, "decision": "aprobado", "etiqueta": "Edición", "decisor_id": "u7"},
+        {"id": "co", "nivel": 3, "decision": "pendiente", "etiqueta": "Coordinación", "decisor_id": ""},
+    ]
+    assert colaboracion.contar_aprobaciones_humanas(cadena) == 1
+
+
+def test_contar_aprobaciones_humanas_cero_si_solo_auto():
+    cadena = [
+        {"id": "qa", "nivel": 1, "decision": "aprobado", "etiqueta": "QA Editorial", "decisor_id": "auto"},
+    ]
+    assert colaboracion.contar_aprobaciones_humanas(cadena) == 0
+
+
 def test_cumple_minimo_aprobaciones_no_cumple_devuelve_conteo():
     cadena = [_nivel("a", 1, "aprobado")]
     cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, 2)

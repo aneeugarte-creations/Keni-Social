@@ -54,14 +54,38 @@ def tiene_receta(pub: dict[str, Any]) -> bool:
     return estudio_imagen.marca_tiene_plantilla(pub.get("marca") or "")
 
 
+def _receta_manda(pub: dict[str, Any]) -> bool:
+    """La RECETA prevalece sobre un `imagen` horneado obsoleto. Solo cuando todo esto se cumple:
+
+      - la pieza NO está PUBLICADA (las publicadas congelan su `imagen` como registro exacto), y
+      - tiene receta viva (placa de marca / plantilla del estudio), y
+      - hay ALGO de lo que recomponer: una plantilla del estudio elegida (`plantilla_diseno_id`,
+        que puede no llevar foto), o una `foto` cruda (la placa de marca se compone sobre ella).
+
+    Sin esto, el editor mostraba la plantilla correcta (render en vivo) pero el feed seguía
+    sirviendo la placa VIEJA horneada en `imagen` (de un publish anterior o de antes de
+    render-on-demand). Y al revés: si solo hay `imagen` (ni plantilla ni foto), ese `imagen` es un
+    asset SUBIDO/IMPORTADO bespoke —no una placa derivada— y se RESPETA tal cual.
+    """
+    if (pub.get("estado") or "") == "publicado":
+        return False
+    if not tiene_receta(pub):
+        return False
+    if (pub.get("plantilla_diseno_id") or "").strip():
+        return True
+    return bool((pub.get("foto") or "").strip())
+
+
 def imagen_compuesta_id(pub: dict[str, Any]) -> str:
     """Media id de la imagen PUBLICABLE de la pieza, renderizando on-demand si hace falta.
 
     Resuelve la receta en este orden:
-      1. `imagen` bespoke ya horneada (editor pro / legacy): se respeta sin recomponer.
-      2. sin receta (placa oculta / marca sin plantilla): devuelve la `foto` cruda (o "").
-      3. plantilla del estudio: `componer_desde_plantilla(doc, copy_in, foto, encuadre)`.
-      4. placa de marca: `componer(foto, marca, formato_por_red(red), titular=copy_in)`.
+      1. RECETA viva (placa/plantilla) en pieza NO publicada: deriva de la receta ACTUAL aunque
+         quede un `imagen` viejo horneado (así el feed == editor sin re-guardar).
+      2. `imagen` bespoke ya horneada (editor pro / legacy / publicada): se respeta sin recomponer.
+      3. sin receta (placa oculta / marca sin plantilla): devuelve la `foto` cruda (o "").
+      4. plantilla del estudio: `componer_desde_plantilla(doc, copy_in, foto, encuadre)`.
+      5. placa de marca: `componer(foto, marca, formato_por_red(red), titular=copy_in)`.
 
     El render es content-addressed: idéntica receta => idéntico id (cacheado, sin duplicar).
     Devuelve "" si no hay imagen derivable (el llamante decide el fallback a `imagen_fuente`).
@@ -69,7 +93,7 @@ def imagen_compuesta_id(pub: dict[str, Any]) -> str:
     lo captura y publica sin media).
     """
     imagen = (pub.get("imagen") or "").strip()
-    if imagen:
+    if imagen and not _receta_manda(pub):
         return imagen
     if not tiene_receta(pub):
         return (pub.get("foto") or "").strip()
@@ -110,7 +134,8 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     """URL servible de la imagen de la pieza para la UI/MCP (sin renderizar nada aquí).
 
     Precedencia (barata, sin componer):
-      - `imagen` horneada (bespoke/legacy) -> `/api/media/{imagen}`.
+      - receta viva en pieza NO publicada   -> `/api/publicaciones/{id}/compuesta` (gana al PNG viejo).
+      - `imagen` horneada (bespoke/legacy/publicada) -> `/api/media/{imagen}`.
       - receta derivable                   -> `/api/publicaciones/{id}/compuesta` (on-demand).
       - foto cruda                          -> `/api/media/{foto}`.
       - imagen de fuente (URL externa)      -> esa URL.
@@ -120,7 +145,7 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     navegador/Metricool pide `/compuesta`. Así la serialización de listas sigue siendo barata.
     """
     imagen = (pub.get("imagen") or "").strip()
-    if imagen:
+    if imagen and not _receta_manda(pub):
         return f"/api/media/{imagen}"
     if tiene_receta(pub):
         return f"/api/publicaciones/{pub['id']}/compuesta"
@@ -142,7 +167,7 @@ def render_bytes(pub: dict[str, Any]) -> tuple[bytes, str] | None:
     from .. import media
 
     imagen = (pub.get("imagen") or "").strip()
-    if imagen:
+    if imagen and not _receta_manda(pub):
         datos = media.leer_media(imagen)
         return (datos, media.mime_de(imagen)) if datos is not None else None
     if not tiene_receta(pub):

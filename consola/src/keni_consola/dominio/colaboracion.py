@@ -103,6 +103,22 @@ def contar_aprobados(cadena: list[dict[str, Any]]) -> int:
     return sum(1 for n in cadena if n.get("decision") == DECISION_APROBADO)
 
 
+def contar_aprobaciones_humanas(cadena: list[dict[str, Any]]) -> int:
+    """Cuenta los niveles aprobados por una PERSONA (excluye QA / pre-aprobacion automatica).
+
+    Es la metrica de "aprobaciones reales que se perderian" al editar el contenido de una pieza:
+    solo cuentan los OK HUMANOS (decisor con id propio, no el reservado AUTO ni vacio). La usa el
+    RESET de aprobaciones-al-editar para resetear solo cuando hay un OK humano que perder, sin
+    churnar piezas que apenas llevan el QA automatico.
+    """
+    return sum(
+        1
+        for n in cadena
+        if n.get("decision") == DECISION_APROBADO
+        and (n.get("decisor_id") or "") not in ("", DECISOR_AUTO_ID)
+    )
+
+
 def cumple_minimo_aprobaciones(
     cadena: list[dict[str, Any]], minimo: int
 ) -> tuple[bool, int]:

@@ -48,12 +48,43 @@ def test_tiene_receta_marca_sin_plantilla(monkeypatch):
 
 
 def test_imagen_bespoke_se_respeta(monkeypatch):
-    # Si hay `imagen` horneada (editor pro / legacy), se devuelve tal cual sin recomponer.
+    # `imagen` horneada SIN receta viva (editor pro / legacy): se devuelve tal cual sin recomponer.
+    _sin_plantilla_de_marca(monkeypatch, False)
+
     def _boom(*a, **k):
         raise AssertionError("no debe componer si ya hay imagen")
 
     monkeypatch.setattr(estudio_imagen, "componer", _boom)
     assert render_pieza.imagen_compuesta_id({"imagen": "horneada.png"}) == "horneada.png"
+
+
+def test_receta_viva_gana_a_imagen_vieja(monkeypatch):
+    # Pieza NO publicada con receta (marca con plantilla) + un PNG viejo horneado: la RECETA manda,
+    # se RECOMPONE (el feed refleja la plantilla actual, no la placa vieja). Es el bug del feed.
+    _sin_plantilla_de_marca(monkeypatch, True)
+    monkeypatch.setattr(
+        estudio_imagen, "componer",
+        lambda *a, **k: {"id": "fresca.png", "url": "/api/media/fresca.png"},
+    )
+    pub = {"id": "p1", "imagen": "vieja.png", "marca": "unotv", "red": "x",
+           "copy_in": "T", "foto": "f.jpg", "estado": "en_revision"}
+    assert render_pieza.imagen_compuesta_id(pub) == "fresca.png"
+    assert render_pieza.imagen_url_de(pub) == "/api/publicaciones/p1/compuesta"
+
+
+def test_publicada_conserva_imagen_congelada(monkeypatch):
+    # Una pieza PUBLICADA conserva su `imagen` CONGELADA (registro exacto de lo posteado), aunque
+    # tenga receta: NO se recompone.
+    _sin_plantilla_de_marca(monkeypatch, True)
+
+    def _boom(*a, **k):
+        raise AssertionError("una pieza publicada no debe recomponer")
+
+    monkeypatch.setattr(estudio_imagen, "componer", _boom)
+    pub = {"id": "p1", "imagen": "posteada.png", "marca": "unotv", "red": "x",
+           "copy_in": "T", "foto": "f.jpg", "estado": "publicado"}
+    assert render_pieza.imagen_compuesta_id(pub) == "posteada.png"
+    assert render_pieza.imagen_url_de(pub) == "/api/media/posteada.png"
 
 
 def test_placa_oculta_devuelve_foto(monkeypatch):
@@ -117,7 +148,8 @@ def test_plantilla_borrada_cae_a_placa_de_marca(monkeypatch):
 
 
 def test_url_imagen_horneada(monkeypatch):
-    _sin_plantilla_de_marca(monkeypatch, True)
+    # Imagen horneada SIN receta viva (bespoke/legacy): se sirve desde media.
+    _sin_plantilla_de_marca(monkeypatch, False)
     assert render_pieza.imagen_url_de({"id": "p1", "imagen": "h.png"}) == "/api/media/h.png"
 
 
@@ -166,7 +198,8 @@ def test_render_bytes_plantilla(monkeypatch):
 
 
 def test_render_bytes_imagen_bespoke_passthrough(monkeypatch):
-    # `imagen` ya horneada: se sirven sus bytes tal cual, sin recomponer ni persistir.
+    # `imagen` ya horneada SIN receta viva: se sirven sus bytes tal cual, sin recomponer ni persistir.
+    _sin_plantilla_de_marca(monkeypatch, False)
     monkeypatch.setattr(media, "leer_media", lambda n: b"BYTES" if n == "h.png" else None)
     monkeypatch.setattr(media, "mime_de", lambda n: "image/png")
     assert render_pieza.render_bytes({"id": "p1", "imagen": "h.png"}) == (b"BYTES", "image/png")

@@ -122,6 +122,42 @@ def test_misma_persona_no_puede_dar_los_dos_ok(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Reset de aprobaciones al EDITAR el contenido (como reescribir un PR aprobado) #
+# --------------------------------------------------------------------------- #
+
+
+def test_editar_contenido_con_ok_humano_resetea_a_borrador_y_limpia_cadena(entorno):
+    """Editar el CONTENIDO de una pieza con un OK humano la devuelve a borrador y borra la cadena."""
+    from keni_consola import repos
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    assert beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    # Hay un OK humano (Edición de beto); editar el contenido lo invalida -> vuelve a borrador.
+    r = autora.put(
+        f"/api/publicaciones/{pub['id']}", json={"contenido": "Cuerpo reescrito"}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "borrador"
+    # La cadena queda LIMPIA: las aprobaciones previas dejan de existir.
+    assert repos.listar_aprobaciones(pub["id"]) == []
+
+
+def test_editar_en_revision_sin_ok_humano_no_resetea(entorno):
+    """Sin OK humano que perder, editar NO churnea: la pieza sigue en revisión."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    r = autora.put(
+        f"/api/publicaciones/{pub['id']}", json={"contenido": "Solo retoque"}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "en_revision"
+
+
+# --------------------------------------------------------------------------- #
 # Regla de equipo: no auto-aprobar (otro par de ojos)                         #
 # --------------------------------------------------------------------------- #
 

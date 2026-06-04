@@ -197,4 +197,50 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       expect(screen.getByPlaceholderText(/comentario para el equipo/i)).toBeInTheDocument(),
     );
   });
+
+  it("matriz por idea: con varias redes, la idea muestra el post de la red generada y huecos 'No generado' en las que faltan", async () => {
+    // Catálogo de 3 redes pero la idea solo tiene pieza en X: las otras 2 salen como hueco.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(
+            JSON.stringify({
+              ...OPCIONES,
+              redes: [
+                { id: "x", nombre: "X" },
+                { id: "instagram", nombre: "Instagram" },
+                { id: "tiktok", nombre: "TikTok" },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          return new Response(
+            JSON.stringify({ publicaciones: [PUBLICACION], paginacion: { total: 1, limite: 50, desplazamiento: 0 } }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderFeed();
+    // El post de la red generada (X).
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Las 2 redes que faltan → 2 huecos "No generado".
+    expect(screen.getAllByText("No generado")).toHaveLength(2);
+    // Cabecera de la idea: 1 de 3 redes generadas.
+    expect(screen.getByText("1/3 redes")).toBeInTheDocument();
+  });
 });

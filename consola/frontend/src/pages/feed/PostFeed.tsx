@@ -17,11 +17,12 @@
  * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Inbox, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
+  // La tarjeta es clicable, pero el editor (`DialogoEditar`) se monta como HIJO React de ella.
+  // Aunque Radix lo portalea a `body`, los eventos sintéticos de React BURBUJEAN por el árbol de
+  // componentes, no por el DOM: un clic en "Cerrar"/"X" del diálogo llegaría al `onClick` de la
+  // tarjeta y la reabriría; una tecla (espacio) escrita en un comentario dispararía el editor. Por
+  // eso delimitamos el área activa al DOM real de la tarjeta (`cardRef.contains`) y, en teclado,
+  // solo cuando la tarjeta EN SÍ tiene el foco (`target === currentTarget`).
+  const cardRef = React.useRef<HTMLDivElement>(null);
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
@@ -61,13 +69,24 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // orden) como los avisos de gobernanza (firmas / comentarios sin resolver). Se carga
   // perezosamente cuando la pieza está en revisión (es cuando importa el gate). Si NO hay
   // cadena, el motor simple `aprobar`/`rechazar` forwardea a la cadena multinivel.
+  // Se carga en revisión (cuando importa el OK) y también en piezas aprobadas pendientes de salir
+  // (ahí el gate de comentarios sin resolver bloquea PROGRAMAR/publicar, como el "merge" de un PR).
   const cadenaQuery = useQuery({
     queryKey: ["cadena-aprobacion", publicacion.id],
     queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
-    enabled: enRevision,
+    enabled: enRevision || etapa === "aprobada",
   });
   const cadena = cadenaQuery.data;
+  // Comentarios SIN RESOLVER: como en GitHub, bloquean publicar hasta marcarse resueltos. La cifra
+  // viene de la cadena (cuenta los hilos abiertos del tema). Mientras carga es 0 (no bloquea de más).
   const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
+  // OK HUMANOS ya dados (decisor con id propio, no el reservado "auto" del QA/pre-aprobación). Si
+  // los hay, editar el contenido los PERDERÁ (el backend resetea a borrador), así que avisamos.
+  const aprobacionesHumanas = (cadena?.niveles ?? []).filter(
+    (n) => n.decision === "aprobado" && n.decisor_id !== "" && n.decisor_id !== "auto",
+  ).length;
+  const tieneAprobaciones =
+    etapa === "aprobada" || etapa === "programada" || aprobacionesHumanas > 0;
   // Hay cadena configurada => pintamos el panel "dale el OK"; si no, camino simple (legado).
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
 
@@ -123,12 +142,34 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
 
   // "Me gusta": si te toca, da el OK; si no, explica por qué con un toast (no bloquea en silencio).
+  // Los comentarios sin resolver son un gate previo (como en un PR): resuélvelos antes de dar el OK.
   const onLike = () => {
+    if (sinResolver > 0) {
+      toast(`Resuelve ${plural(sinResolver, "comentario")} antes de aprobar y publicar.`);
+      setComentariosAbierto(true);
+      return;
+    }
     if (puedeDar) {
       aprobar.mutate();
       return;
     }
     toast(motivoBloqueo);
+  };
+
+  // Abre el editor. Si la pieza ya tiene aprobaciones, AVISA primero: editarla las pierde (vuelve a
+  // borrador y habrá que aprobarla de nuevo). Igual que reescribir un PR ya aprobado.
+  const abrirEditor = async () => {
+    if (tieneAprobaciones) {
+      const ok = await confirmar({
+        titulo: "Se perderán las aprobaciones",
+        mensaje:
+          "Esta pieza ya tiene el visto bueno del equipo. Si la editas, volverá a borrador y tendrá que aprobarse otra vez desde cero. ¿Quieres continuar?",
+        textoConfirmar: "Editar de todas formas",
+        textoCancelar: "Dejar como está",
+      });
+      if (!ok) return;
+    }
+    setEditando(true);
   };
 
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
@@ -140,13 +181,22 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     // Toda la tarjeta abre el editor al hacer clic (cabecera + previa + panel de estado); la zona
     // de botones y el hilo de comentarios NO (paran la propagación). Teclado: Enter/Espacio.
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
-      onClick={() => setEditando(true)}
+      onClick={(e) => {
+        // Ignora clics que NO nacen del DOM real de la tarjeta (p. ej. el diálogo de edición, que
+        // se portalea a `body` pero burbujea por el árbol React). Así "Cerrar"/"X" no reabren.
+        if (!cardRef.current?.contains(e.target as Node)) return;
+        void abrirEditor();
+      }}
       onKeyDown={(e) => {
+        // Solo activa cuando la TARJETA en sí tiene el foco (no un input/comentario/diálogo hijo):
+        // escribir un espacio en un comentario ya no abre el editor.
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          setEditando(true);
+          void abrirEditor();
         }
       }}
       title="Abrir para editar"
@@ -198,12 +248,12 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <BadgeEtapa etapa={etapa} />
         <div className="ml-auto flex items-center gap-1">
           <Button
-            variant={puedeDar ? "positive" : "ghost"}
+            variant={puedeDar && sinResolver === 0 ? "positive" : "ghost"}
             size="icon"
             className="h-8 w-8"
             onClick={onLike}
             disabled={ocupado}
-            title={tituloLike}
+            title={sinResolver > 0 ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar` : tituloLike}
             aria-label="Me gusta"
           >
             {aprobar.isPending ? (
@@ -231,16 +281,33 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               )}
             </Button>
           )}
+          {/* Comentar. Con hilos SIN RESOLVER muestra una bandeja (Inbox) con el conteo y en ámbar:
+              avisa de que hay conversación pendiente que bloquea publicar (como en un PR). */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className={
+              sinResolver > 0
+                ? "relative h-8 w-8 text-amber-600 dark:text-amber-400"
+                : "relative h-8 w-8"
+            }
             onClick={() => setComentariosAbierto((v) => !v)}
             aria-expanded={comentariosAbierto}
-            title={comentariosAbierto ? "Ocultar comentarios" : "Comentar"}
-            aria-label="Comentar"
+            title={
+              sinResolver > 0
+                ? `${plural(sinResolver, "comentario")} sin resolver`
+                : comentariosAbierto
+                  ? "Ocultar comentarios"
+                  : "Comentar"
+            }
+            aria-label={sinResolver > 0 ? `${plural(sinResolver, "comentario")} sin resolver` : "Comentar"}
           >
-            <MessageSquare className="h-4 w-4" />
+            {sinResolver > 0 ? <Inbox className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+            {sinResolver > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
+                {sinResolver}
+              </span>
+            )}
           </Button>
         </div>
       </div>
@@ -255,11 +322,19 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <CadenaAprobacion cadena={cadena} veredictoIA={publicacion.veredicto} />
       )}
 
-      {/* Aviso de comentarios sin resolver (bloquean programar). */}
-      {enRevision && sinResolver > 0 && (
-        <div className="border-t border-border px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
-          {plural(sinResolver, "comentario")} sin resolver antes de programar.
-        </div>
+      {/* Aviso de comentarios sin resolver: bloquean aprobar/programar hasta marcarse resueltos. */}
+      {sinResolver > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setComentariosAbierto(true);
+          }}
+          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-amber-600 hover:bg-amber-500/5 dark:text-amber-400"
+        >
+          <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
+          {plural(sinResolver, "comentario")} sin resolver antes de publicar.
+        </button>
       )}
 
       {/* Hilo de comentarios del equipo. No abre el editor (para la propagación: tiene inputs). */}

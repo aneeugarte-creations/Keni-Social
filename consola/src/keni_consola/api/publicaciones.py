@@ -27,7 +27,9 @@ from starlette.routing import Route
 
 from .. import marcas, permisos, redes, repos
 from .._http_json import envoltura_paginacion, leer_json, paginacion_query
+from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
+from ..estados import ESTADO_APROBADO, ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 from ..seguridad import autor_de_peticion
 from . import franjas as api_franjas
 
@@ -327,9 +329,51 @@ async def actualizar(request: Request) -> Response:
             status_code=400,
         )
 
+    # RESET DE APROBACIONES AL EDITAR: editar el CONTENIDO de una pieza que ya acumula
+    # aprobaciones las invalida (como reescribir un PR aprobado). La pieza vuelve a `borrador` con
+    # la cadena LIMPIA; reentrará sola a revisión cuando el editor la reenvíe, exigiendo OK nuevos.
+    # El front avisa con un popup antes de tocar nada. Solo cuando hay aprobaciones REALES que
+    # perder (aprobada/programada, o en revisión con un OK humano), para no churnar lo demás. No
+    # aplica si la propia petición fija `estado` (el flujo lo está moviendo a propósito).
+    actual = repos.obtener_publicacion(publicacion_id)
+    if actual is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    cambia_contenido = any(
+        clave in campos and campos[clave] != actual.get(clave)
+        for clave in (
+            "titulo", "contenido", "copy_in", "imagen", "foto",
+            "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
+        )
+    )
+    estado_actual = actual.get("estado") or ""
+    resetear = False
+    if cambia_contenido and "estado" not in campos:
+        if estado_actual in (ESTADO_APROBADO, ESTADO_PROGRAMADO):
+            resetear = True
+        elif estado_actual == ESTADO_EN_REVISION:
+            cadena = repos.listar_aprobaciones(publicacion_id)
+            resetear = colaboracion.contar_aprobaciones_humanas(cadena) > 0
+    if resetear:
+        campos.update(
+            estado="borrador",
+            revisor_id="",
+            revisor_nombre="",
+            revisado_en="",
+            enviado_a_revision_en="",
+            fecha_programada="",
+        )
+
     pub = repos.actualizar_publicacion(publicacion_id, campos)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    if resetear:
+        # Limpia la cadena (borra todos los niveles): las aprobaciones previas dejan de existir.
+        plat = repos.obtener_contenido_plataforma(publicacion_id)
+        repos.crear_cadena_aprobacion(
+            plataforma_id=publicacion_id,
+            contenido_id=(plat or {}).get("contenido_id", "") or "",
+            etiquetas=[],
+        )
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
 

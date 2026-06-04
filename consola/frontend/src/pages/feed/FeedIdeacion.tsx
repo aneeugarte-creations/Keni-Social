@@ -48,6 +48,7 @@ import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { FILTRO_TODOS } from "@/pages/publicaciones/Filtros";
 import type { Publicacion } from "@/types";
 
+import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PostFeed } from "./PostFeed";
 
 function mensajeError(error: unknown): string {
@@ -201,19 +202,46 @@ export default function FeedIdeacion() {
     [feedQuery.data],
   );
 
-  // Conteo por pestaña (sobre el listado ya acotado por marca) para el badge de cada tab.
+  // Redes del catálogo: el feed enseña CADA idea en TODAS las redes; las que aún no tienen pieza
+  // salen como hueco "No generado" (queremos todo el contenido en todas las redes). Si se filtra
+  // por una red concreta, el feed es PLANO (solo esa red); si no, es una MATRIZ por idea.
+  const catalogoRedes = React.useMemo(
+    () => (opcionesQuery.data?.redes ?? []).map((r) => r.id),
+    [opcionesQuery.data],
+  );
+  const redesAMostrar = red === FILTRO_TODOS ? catalogoRedes : [red];
+  const agrupar = redesAMostrar.length > 1;
+
+  // Agrupa TODAS las piezas por IDEA (`contenido_id`), preservando el orden de aparición
+  // (`creado DESC`). Cada idea es un bloque; así NUNCA se mezclan posts de ideas distintas en una
+  // misma fila. Cada idea conoce qué redes tiene generadas y cuáles faltan.
+  const grupos = React.useMemo(() => {
+    const mapa = new Map<string, GrupoDeIdea>();
+    for (const p of piezas) {
+      const clave = p.contenido_id || p.id;
+      let g = mapa.get(clave);
+      if (!g) {
+        g = { id: clave, titulo: p.titulo, marca_nombre: p.marca_nombre, piezas: [] };
+        mapa.set(clave, g);
+      }
+      g.piezas.push(p);
+    }
+    return [...mapa.values()];
+  }, [piezas]);
+
+  // Las pestañas filtran por estado a nivel de IDEA: una idea aparece si ALGUNA de sus piezas
+  // cumple la vista. El badge de cada pestaña cuenta IDEAS (no piezas sueltas).
   const conteos = React.useMemo(
     () =>
-      Object.fromEntries(VISTAS.map((v) => [v.id, piezas.filter(v.filtra).length])) as Record<
-        Vista,
-        number
-      >,
-    [piezas],
+      Object.fromEntries(
+        VISTAS.map((v) => [v.id, grupos.filter((g) => g.piezas.some(v.filtra)).length]),
+      ) as Record<Vista, number>,
+    [grupos],
   );
   const vistaActual = VISTAS.find((v) => v.id === vista) ?? VISTAS[0];
-  const piezasVista = React.useMemo(
-    () => piezas.filter(vistaActual.filtra),
-    [piezas, vistaActual],
+  const gruposVista = React.useMemo(
+    () => grupos.filter((g) => g.piezas.some(vistaActual.filtra)),
+    [grupos, vistaActual],
   );
 
   const refrescar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -313,29 +341,44 @@ export default function FeedIdeacion() {
         </div>
       </div>
 
-      {/* Feed: 1 columna = centrado (lectura cómoda); 2-4 = rejilla a lo ancho (posts más pequeños
-          cuantas más columnas). Sin `zoom`: el tamaño lo da el ancho de columna, uniforme. */}
-      <div
-        className={cn(
-          columnas === 1
-            ? "mx-auto w-full max-w-2xl space-y-4"
-            : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
-        )}
-      >
-        {feedQuery.isLoading ? (
-          [0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)
-        ) : feedQuery.isError ? (
-          <div className="col-span-full rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive">
-            No se pudo cargar el feed. {mensajeError(feedQuery.error)}
-          </div>
-        ) : piezasVista.length === 0 ? (
-          <div className="col-span-full">
-            <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
-          </div>
-        ) : (
-          piezasVista.map((p) => <PostFeed key={p.id} publicacion={p} />)
-        )}
-      </div>
+      {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla con
+          todas las redes y huecos "No generado" en las que falten) — así no se mezclan ideas en una
+          fila. Filtrado a UNA red: rejilla PLANA (1 col = centrado; 2-4 = a lo ancho). `columnas`
+          fija cuántas por fila. Sin `zoom`: el tamaño lo da el ancho de columna, uniforme. */}
+      {feedQuery.isLoading ? (
+        <div className={cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas])}>
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
+        </div>
+      ) : feedQuery.isError ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive">
+          No se pudo cargar el feed. {mensajeError(feedQuery.error)}
+        </div>
+      ) : gruposVista.length === 0 ? (
+        <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
+      ) : agrupar ? (
+        <div className="space-y-5">
+          {gruposVista.map((g) => (
+            <GrupoIdea key={g.id} grupo={g} redes={redesAMostrar} columnas={columnas} />
+          ))}
+        </div>
+      ) : (
+        <div
+          className={cn(
+            columnas === 1
+              ? "mx-auto w-full max-w-2xl space-y-4"
+              : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
+          )}
+        >
+          {gruposVista.map((g) => {
+            const p = g.piezas.find((x) => x.red === redesAMostrar[0]);
+            return p ? (
+              <PostFeed key={g.id} publicacion={p} />
+            ) : (
+              <PlaceholderRed key={g.id} red={redesAMostrar[0]} titulo={g.titulo} />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
