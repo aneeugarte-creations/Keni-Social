@@ -31,7 +31,13 @@ def test_pieza_documento_vacio(cliente, entorno):
     _cid, pid = _pieza(entorno)
     r = cliente.get(f"/api/editor/pieza/c1/{pid}")
     assert r.status_code == 200
-    assert r.json() == {"documento": None, "versiones": 0}
+    # Pieza sin editar: sin documento ni versiones. Incluye los `bindings` reales (titular/pleca):
+    # vacíos aquí porque la fila no tiene copy_in y la marca de prueba no fija etiqueta_default.
+    assert r.json() == {
+        "documento": None,
+        "versiones": 0,
+        "bindings": {"copy_in": "", "etiqueta_default": ""},
+    }
 
 
 def test_guardar_versiona_y_fija_imagen(cliente, entorno, _render_mock):

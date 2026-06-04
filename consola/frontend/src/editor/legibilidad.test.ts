@@ -53,7 +53,7 @@ describe("analizarLegibilidad", () => {
     doc.capas.push(nuevaCapaTexto({ id: "oculto", visible: false, color: "#FFFFFF" }));
     doc.capas.push(nuevaCapaTexto({ id: "vacio", texto: "  ", color: "#FFFFFF" }));
     doc.capas.push(nuevaCapaTexto({ id: "sinmuestra", color: "#FFFFFF" }));
-    const muestrear: Muestreador = (caja) => (caja.x >= 0 && false ? 0.9 : null);
+    const muestrear: Muestreador = () => null; // sin muestra para ninguna caja
     expect(analizarLegibilidad(doc, muestrear)).toHaveLength(0);
   });
 });
