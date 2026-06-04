@@ -390,33 +390,58 @@ export function VistaPreviaRed({
   variante = "completa",
 }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
+  const Icono = iconoRed(red);
+
+  // FEED (variante limpia): tarjeta UNIFORME para TODAS las redes — misma caja, imagen a
+  // 4:5 a ancho completo y un distintivo de plataforma (icono + nombre) sobre la imagen.
+  // Así el feed se lee como un scroll multiplataforma consistente (no maquetas de ancho
+  // variable por red) y siempre queda claro de qué plataforma es cada pieza.
+  if (variante === "limpia") {
+    return (
+      <div>
+        <div className="relative aspect-[4/5] w-full overflow-hidden bg-muted">
+          {imagen ? (
+            <img src={imagen} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <PlaceholderImagen className="h-full w-full" />
+          )}
+          {/* El copy-in solo cuando NO hay imagen: si hay placa compuesta, el texto va horneado. */}
+          <CapaCopyIn texto={imagen ? "" : copy_in} />
+          {/* Distintivo de plataforma, siempre visible sobre la imagen (feed multiplataforma). */}
+          <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+            <Icono className="h-3.5 w-3.5" aria-hidden="true" />
+            {nombreRed(red)}
+          </span>
+        </div>
+        {/* Copy (caption) bajo la imagen, idéntico para toda red. */}
+        <div className="px-4 py-3">
+          <TextoRed contenido={contenido} className="text-sm leading-normal" />
+        </div>
+      </div>
+    );
+  }
+
+  // PREVIA COMPLETA: mockup FIEL por red con su chrome (p. ej. "Generar copy" o el editor).
   const nombreMarca = marca.trim() || "Marca";
   const Mockup = PREVIAS[red] ?? PreviaFacebook;
-  const Icono = iconoRed(red);
   const tam = tamanoRed(red);
-  const limpia = variante === "limpia";
 
   return (
     <div className="space-y-3">
-      {/* Cabecera de la previa (logo de red + "Vista previa en …" + formato). En variante LIMPIA
-          NO se pinta: el contenedor (p. ej. el post del feed) ya enseña red y formato una vez, y
-          repetirlos aquí duplicaba el logo y la etiqueta. */}
-      {!limpia && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Icono className="h-4 w-4" aria-hidden="true" />
-          <span>
-            Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Icono className="h-4 w-4" aria-hidden="true" />
+        <span>
+          Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
+        </span>
+        {tam && (
+          <span
+            className="ml-auto rounded-full border border-border px-2 py-0.5 tabular-nums"
+            title={`Imagen recomendada para ${nombreRed(red)}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
+          >
+            {tam.ratio} · {tam.px} px
           </span>
-          {tam && (
-            <span
-              className="ml-auto rounded-full border border-border px-2 py-0.5 tabular-nums"
-              title={`Imagen recomendada para ${nombreRed(red)}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
-            >
-              {tam.ratio} · {tam.px} px
-            </span>
-          )}
-        </div>
-      )}
+        )}
+      </div>
       {/* El overlay de simulación del copy-in solo cuando NO hay imagen: si ya hay una placa
           compuesta, el texto va horneado en la imagen y duplicarlo se vería doble. */}
       <Mockup
@@ -424,14 +449,12 @@ export function VistaPreviaRed({
         contenido={contenido}
         copyIn={imagen ? "" : copy_in}
         imagen={imagen}
-        limpia={limpia}
+        limpia={false}
       />
-      {!limpia && (
-        <p className="text-[11px] text-muted-foreground">
-          Mockup aproximado. El render real puede variar según la red. Las redes no aplican formato
-          Markdown.
-        </p>
-      )}
+      <p className="text-[11px] text-muted-foreground">
+        Mockup aproximado. El render real puede variar según la red. Las redes no aplican formato
+        Markdown.
+      </p>
     </div>
   );
 }

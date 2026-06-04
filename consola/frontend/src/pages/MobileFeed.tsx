@@ -219,15 +219,16 @@ function TarjetaFeed({
         )}
       </header>
 
-      <div className="px-4">
-        <VistaPreviaRed
-          red={publicacion.red}
-          marca={publicacion.marca_nombre}
-          contenido={publicacion.contenido}
-          copy_in={publicacion.copy_in}
-          imagen_url={publicacion.imagen_url || publicacion.imagen}
-        />
-      </div>
+      {/* Tarjeta uniforme (imagen 4:5 a sangre + distintivo de plataforma + copy), igual que el
+          feed de escritorio: scroll multiplataforma consistente. */}
+      <VistaPreviaRed
+        red={publicacion.red}
+        marca={publicacion.marca_nombre}
+        contenido={publicacion.contenido}
+        copy_in={publicacion.copy_in}
+        imagen_url={publicacion.imagen_url || publicacion.imagen}
+        variante="limpia"
+      />
 
       {/* Acciones por tarjeta (alcanzables al hacer scroll). La barra inferior fija
           aloja el alta global. Solo se aprueba/rechaza lo que está en revisión. */}

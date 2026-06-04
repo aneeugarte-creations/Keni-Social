@@ -173,20 +173,18 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <BadgeEtapa etapa={etapa} className={publicacion.enviado_a_revision_en ? "" : "ml-auto"} />
       </header>
 
-      {/* El post tal como se verá en la red: copy IA + arte/formato. Variante LIMPIA: sin el
-          chrome social simulado ni el pie "Mockup aproximado" — el feed enseña la pieza real,
-          no una maqueta de Facebook. (El título del material original NO se pinta: es el tema
-          que "posteó" el equipo, no el copy publicable, y solo confundía.) */}
-      <div className="px-4">
-        <VistaPreviaRed
-          red={publicacion.red}
-          marca={publicacion.marca_nombre}
-          contenido={cuerpo}
-          copy_in={publicacion.copy_in}
-          imagen_url={imagen || undefined}
-          variante="limpia"
-        />
-      </div>
+      {/* El post tal como se verá en la red: variante LIMPIA = tarjeta uniforme (imagen 4:5 a
+          ancho completo con distintivo de plataforma + copy debajo), igual para toda red. La
+          imagen va a sangre (sin gutter); el copy ya trae su propio padding interno. (El título
+          del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.) */}
+      <VistaPreviaRed
+        red={publicacion.red}
+        marca={publicacion.marca_nombre}
+        contenido={cuerpo}
+        copy_in={publicacion.copy_in}
+        imagen_url={imagen || undefined}
+        variante="limpia"
+      />
 
       {/* Acciones en línea, IGUAL en TODAS las piezas (como un post de red social): "Me gusta"
           (el OK humano) y "Comentar". El "me gusta" se habilita solo cuando te toca dar el OK
