@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { adaptarDocumento } from "./adaptar";
-import { documentoVacio, nuevaCapaTexto, type CapaImagen, type CapaTexto } from "./documento";
+import {
+  documentoVacio,
+  nuevaCapaImagen,
+  nuevaCapaTexto,
+  type CapaImagen,
+  type CapaTexto,
+} from "./documento";
 import { PRESETS_FORMATO } from "./formatos";
 
 const F45 = PRESETS_FORMATO.find((p) => p.etiqueta === "4:5")!.f;
@@ -20,6 +26,9 @@ describe("adaptarDocumento", () => {
 
   it("re-extiende el hueco de foto a sangre del nuevo lienzo", () => {
     const doc = documentoVacio(F45, "uno");
+    // Un lienzo nuevo ya nace VACÍO (sin hueco de foto por defecto): lo sembramos a sangre del
+    // formato origen para comprobar que `adaptarDocumento` lo re-extiende a sangre del destino.
+    doc.capas.push(nuevaCapaImagen("foto", { x: 0, y: 0, w: F45.w, h: F45.h, es_foto: true }));
     const out = adaptarDocumento(doc, F916);
     const foto = out.capas.find((c) => c.tipo === "imagen" && (c as CapaImagen).es_foto) as CapaImagen;
     expect(foto.x).toBe(0);
