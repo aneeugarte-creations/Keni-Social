@@ -275,6 +275,19 @@ def _arrancar_capturando(monkeypatch, capsys):
     monkeypatch.setattr(comercial, "iniciar_captura_programada", lambda: None)
     monkeypatch.setattr(programador, "iniciar_programador", lambda: None)
     monkeypatch.setattr(worker, "iniciar_worker_inproceso", lambda: None)
+    # `entry.main()` arranca ~19 daemons de fondo. Si sus BUCLES barren la BD compartida, los
+    # hilos se filtran de este test al resto de la suite y contaminan ~40 tests (y agotan el
+    # pool). Stubear cada `iniciar_*` ROTA cada vez que añaden uno (ya pasó: scanner, noticias…).
+    # En vez de eso neutralizamos el bucle común de los daemons gateados (`daemon_util.bucle_gateado`,
+    # 15 de ellos) + los 2 de refresco de métricas que NO lo usan: los hilos arrancan pero su
+    # bucle es un no-op (no barren, no contaminan). Rot-proof y sin tocar `threading`.
+    import keni_consola.daemon_util as daemon_util
+    import keni_consola.metricas_piezas_refresco as metricas_piezas_refresco
+    import keni_consola.metricas_refresco as metricas_refresco
+
+    monkeypatch.setattr(daemon_util, "bucle_gateado", lambda *a, **k: None)
+    monkeypatch.setattr(metricas_refresco, "iniciar_refresco_metricas", lambda: None)
+    monkeypatch.setattr(metricas_piezas_refresco, "iniciar_refresco_piezas", lambda: None)
     # No construimos la app real (toca disco/BD): un stub basta para este test.
     monkeypatch.setattr(entry, "crear_app", lambda token=None: object())
 

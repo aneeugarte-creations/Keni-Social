@@ -28,11 +28,22 @@ Nada de red, nada de tokens reales, nunca se llama a `claude` (el runner se mock
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from starlette.testclient import TestClient
 
-from keni_consola import app as app_modulo
-from keni_consola import db as db_modulo
+# Pool de conexiones Postgres OFF en la suite (fallback documentado `KENI_DB_POOL=0`). El
+# pool (perf de PROD, URL única estable) NO encaja con el patrón de tests: xdist (N procesos)
+# + muchos tests cortos + hilos de fondo agotan las conexiones y la suite se CUELGA
+# (`PoolTimeout: couldn't get a connection`, de ~4 min a 20+). El camino sin pool (una
+# conexión por operación + memo de esquema) es el que la suite tenía verde antes del pool.
+# DEBE ir antes de importar `db`/`app` (que abren el pool de forma perezosa). `setdefault`
+# respeta un override manual (`KENI_DB_POOL=1`).
+os.environ.setdefault("KENI_DB_POOL", "0")
+
+from keni_consola import app as app_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL
+from keni_consola import db as db_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL
 
 # Plugin con la fixture/ayuda del backend POSTGRES (skip si no hay Postgres). Registrarlo
 # aqui hace que la fixture `pg` se AUTODESCUBRA por nombre en los tests (sin importarla, lo

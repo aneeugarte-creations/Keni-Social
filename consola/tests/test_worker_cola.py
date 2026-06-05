@@ -541,6 +541,7 @@ def test_worker_inproceso_procesa_un_job(entorno, monkeypatch):
         assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
     finally:
         hilo._parar.set()  # type: ignore[attr-defined]
+        hilo.join(timeout=10)  # no dejar el hilo daemon vivo: reclamaría jobs de otros tests
     g = generaciones.obtener(gen["id"])
     assert g["resultado"] == {"hashtags": ["#uno", "#dos"]}
 
