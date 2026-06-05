@@ -1033,12 +1033,11 @@ def test_generar_fuente_propia_descarga_falla_degrada_a_url(entorno, monkeypatch
     assert p["tipo_contenido"] == "fuente"
     assert p["imagen_fuente"] == _IMG_FUENTE
     # Sin asset hosteado, `imagen` queda vacía y la `imagen_fuente` (URL original) se conserva.
-    # Con receta de marca (unotv), la url servible es el render on-demand `/compuesta`, que ya
-    # decide internamente el respaldo a la fuente; lo que importa aquí es que NO se pierde la
-    # imagen_fuente y que no hay PNG horneado.
+    # Sin PNG horneado y SIN plantilla de estudio (el test no siembra ninguna), la url servible cae
+    # a la imagen de la FUENTE: lo que importa aquí es que NO se pierde la imagen_fuente. (La placa
+    # de marca por SPEC se retiró; el /compuesta con plantilla lo cubre `test_render_pieza`.)
     assert p["imagen"] == ""
-    # La URL puede llevar sufijo `?v=` (cache-bust por `actualizado`); comparamos solo la ruta.
-    assert p["imagen_url"].split("?")[0] == f"/api/publicaciones/{p['id']}/compuesta"
+    assert p["imagen_url"] == _IMG_FUENTE
 
 
 def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):
