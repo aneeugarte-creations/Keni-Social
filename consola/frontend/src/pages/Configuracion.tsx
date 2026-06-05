@@ -9,7 +9,7 @@
  * Imagen vivía antes en la página "Conexiones", fusionada aquí (issue #87). Los
  * secretos son write-only: nunca se muestran; del servidor solo llega el estado/pista.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsFetching, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
@@ -61,7 +61,6 @@ import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AjusteAdmin, MarcaMetricool, PerfilMetricool, RespuestaAjustes } from "@/types";
 
-const CLAVE_CONFIG = ["config"];
 const CLAVE_ESFUERZO = ["config", "esfuerzo"];
 const CLAVE_IMAGEN = ["conexiones", "imagen"];
 const CLAVE_METRICOOL = ["conexiones", "metricool"];
@@ -87,29 +86,6 @@ function limpiarMensaje(texto: string): string {
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return limpiarMensaje(error.message);
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
-}
-
-/* ------------------------------------------------------------------ */
-/* Sección: Alcance de marcas                                         */
-/* ------------------------------------------------------------------ */
-
-/** Esqueleto de carga de la sección de datos/marcas. */
-function EsqueletoConfig() {
-  return (
-    <div className="space-y-6">
-      {Array.from({ length: 2 }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader className="pb-3">
-            <Skeleton className="h-5 w-44" />
-          </CardHeader>
-          <CardContent className="space-y-3 pt-0">
-            <Skeleton className="h-5 w-64" />
-            <Skeleton className="h-5 w-52" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
 }
 
 /** Tarjeta COLAPSABLE de configuración: cabecera clicable (título + descripción + chevron) que
@@ -164,111 +140,6 @@ function TarjetaColapsable({
   );
 }
 
-
-/** Fuente de datos y alcance por marcas (con su botón de guardar). */
-function SeccionDatos() {
-  const queryClient = useQueryClient();
-  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: CLAVE_CONFIG,
-    queryFn: ({ signal }) => api.config(signal),
-  });
-
-  const [fuente, setFuente] = React.useState("");
-  const [marcas, setMarcas] = React.useState<string[]>([]);
-
-  // Sincroniza el estado local con la configuración cargada del servidor.
-  React.useEffect(() => {
-    if (data) {
-      setFuente(data.fuente);
-      setMarcas(data.marcas);
-    }
-  }, [data]);
-
-  const guardar = useMutation({
-    mutationFn: () => api.guardarConfig({ fuente, marcas }),
-    onSuccess: (res) => {
-      toast.success(res.mensaje ? limpiarMensaje(res.mensaje) : "Configuración guardada.");
-      void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG });
-    },
-    onError: (errorGuardar) => toast.error(mensajeError(errorGuardar)),
-  });
-
-  function alternarMarca(id: string) {
-    setMarcas((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
-  }
-
-  // ¿Hay cambios respecto a lo guardado? (solo el alcance de marcas es editable; la
-  // `fuente` es Metricool y ya no se elige desde la UI, viaja como passthrough.)
-  const hayCambios =
-    data !== undefined &&
-    (marcas.length !== data.marcas.length ||
-      marcas.some((m) => !data.marcas.includes(m)));
-
-  if (isPending) return <EsqueletoConfig />;
-
-  if (isError) {
-    return (
-      <BloqueError
-        titulo="No se pudo cargar la configuración"
-        mensaje={mensajeError(error)}
-        onReintentar={() => void refetch()}
-        cargando={isFetching}
-      />
-    );
-  }
-
-  return (
-    <TarjetaColapsable titulo="Alcance (marcas)" abiertaInicial>
-          <p className="mb-3 text-sm text-muted-foreground">
-            Elige las marcas con las que trabajar. Sin selección, se incluyen todas.
-          </p>
-          {data.marcas_disponibles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay marcas disponibles.</p>
-          ) : (
-            <div className="space-y-2">
-              {data.marcas_disponibles.map((marca) => {
-                const marcada = marcas.includes(marca.id);
-                return (
-                  <label
-                    key={marca.id}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors",
-                      marcada ? "border-primary bg-primary/5" : "border-border hover:bg-accent",
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={marcada}
-                      onChange={() => alternarMarca(marca.id)}
-                      disabled={guardar.isPending}
-                      className="h-4 w-4 shrink-0 accent-primary"
-                    />
-                    <span className="text-sm font-medium">{marca.nombre}</span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-          {marcas.length === 0 && data.marcas_disponibles.length > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Sin marcas seleccionadas: se incluirán todas.
-            </p>
-          )}
-      <div className="mt-4 flex items-center gap-3">
-        <Button
-          onClick={() => guardar.mutate()}
-          disabled={guardar.isPending || !hayCambios}
-        >
-          <Save className={cn("h-4 w-4", guardar.isPending && "animate-pulse")} />
-          {guardar.isPending ? "Guardando…" : "Guardar cambios"}
-        </Button>
-        {!hayCambios && !guardar.isPending && (
-          <span className="text-xs text-muted-foreground">No hay cambios sin guardar.</span>
-        )}
-      </div>
-    </TarjetaColapsable>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /* Sección: Esfuerzo de generación (claude --effort)                  */
@@ -1356,19 +1227,16 @@ export default function Configuracion() {
   // editor para no mostrarle un error 403. Sin usuario de sesión (acceso por token
   // interino / modo local mono-usuario) cuenta como plenos permisos, así que se muestran.
   const puedeVerConexiones = usuario === null || usuario.rol === "admin";
-  // ¿Hay alguna query de esta página en vuelo? (para el spinner del botón).
-  const refrescando = useQuery({
-    queryKey: CLAVE_CONFIG,
-    queryFn: ({ signal }) => api.config(signal),
-  }).isFetching;
+  // ¿Hay alguna query (de cualquier sección) en vuelo? (para el spinner del botón).
+  const refrescando = useIsFetching() > 0;
 
   const acciones = (
     <Button
       variant="outline"
       onClick={() => {
-        void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG });
         void queryClient.invalidateQueries({ queryKey: CLAVE_ESFUERZO });
         if (puedeVerConexiones) {
+          void queryClient.invalidateQueries({ queryKey: CLAVE_AJUSTES });
           void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
           void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
         }
@@ -1384,7 +1252,7 @@ export default function Configuracion() {
     <>
       <PageHeader
         titulo="Configuración"
-        descripcion="Marcas, Metricool y clave de imagen IA. Los secretos se guardan solo en esta máquina."
+        descripcion="Automatización, Metricool y clave de imagen IA. Los secretos se guardan solo en esta máquina."
         acciones={acciones}
       />
 
@@ -1401,12 +1269,11 @@ export default function Configuracion() {
           </TabsList>
 
           {/* Básica: controles clave de arriba (lo que más se toca) a abajo (setup-once).
-              Funcionalidad (toggles del día) y Alcance arrancan abiertos; las Conexiones
-              (Imagen IA + Metricool) van AL FINAL y colapsadas: se configuran una vez y casi
-              nunca se vuelven a abrir. Metricool, lo último. Todas: solo admin (#153). */}
+              Funcionalidad (toggles del día) arranca abierta; las Conexiones (Imagen IA +
+              Metricool) van AL FINAL y colapsadas: se configuran una vez y casi nunca se
+              vuelven a abrir. Metricool, lo último. Todas: solo admin (#153). */}
           <TabsContent value="basica" className="space-y-4">
             {puedeVerConexiones && <SeccionFuncionalidad nivel="basica" />}
-            <SeccionDatos />
             {puedeVerConexiones && <SeccionImagen />}
             {puedeVerConexiones && <SeccionMetricool />}
           </TabsContent>
