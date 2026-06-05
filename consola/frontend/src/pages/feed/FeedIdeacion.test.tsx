@@ -180,10 +180,11 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Etapa IA en vivo: en revisión → lista para revisar.
     expect(screen.getByText("Lista para revisar")).toBeInTheDocument();
-    // El OK en línea ("me gusta") está habilitado para el revisor elegible, con Rechazar al lado.
-    const like = await screen.findByRole("button", { name: /me gusta/i });
+    // El OK en línea ("me gusta") está habilitado para el revisor elegible, con "No me gusta"
+    // (dislike) al lado. Nombre EXACTO: /me gusta/i casaría también con "No me gusta".
+    const like = await screen.findByRole("button", { name: "Me gusta" });
     expect(like).toBeEnabled();
-    expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "No me gusta" })).toBeInTheDocument();
     // Panel de estado de la cadena (solo lectura): el recuento de OK.
     expect(screen.getByText("OK 0/1")).toBeInTheDocument();
   });
