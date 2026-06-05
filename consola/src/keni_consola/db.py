@@ -1175,6 +1175,24 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_franjas_editoriales_marca ON franjas_editoriales (marca)",
+    # CADENCIA por (marca?, red?): scheduling por MARGEN entre posts (sustituye a las
+    # franjas-caja para alto volumen). margen_min = minutos entre posts; hora_inicio/fin =
+    # ventana activa 24h; dias = CSV "0..6" (0=lunes). UNIQUE(marca, red): una cadencia por
+    # par. `marca=''`/`red=''` = comodín (aplica a todas). Ver `dominio/cadencia.py`.
+    """
+    CREATE TABLE IF NOT EXISTS cadencias (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        red          TEXT NOT NULL DEFAULT '',
+        margen_min   INTEGER NOT NULL DEFAULT 60,
+        hora_inicio  TEXT NOT NULL DEFAULT '08:00',
+        hora_fin     TEXT NOT NULL DEFAULT '22:00',
+        dias         TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (marca, red)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_cadencias_marca ON cadencias (marca)",
     # Fuentes de INTELIGENCIA DE PLATAFORMA (blogs oficiales + agregadores) que cubren
     # cambios de algoritmo y tendencias por red. DISTINTAS de `fuentes_rss` (contenido de
     # marca para generar copy): estas alimentan la pagina Algoritmos y el panel, y proponen
@@ -6795,6 +6813,93 @@ def borrar_franja(franja_id: str) -> bool:
     con = _conectar()
     try:
         cur = con.execute("DELETE FROM franjas_editoriales WHERE id = ?", (franja_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Cadencias por (marca?, red?): scheduling por MARGEN entre posts               #
+# --------------------------------------------------------------------------- #
+
+_COLS_CADENCIA = ("id", "marca", "red", "margen_min", "hora_inicio", "hora_fin", "dias", "activo")
+_SELECT_CADENCIA = f"SELECT {', '.join(_COLS_CADENCIA)} FROM cadencias"
+
+
+def _fila_a_cadencia(fila: Any) -> dict[str, Any]:
+    """Fila de `cadencias` -> dict publico (`dias` como lista de int, `activo` bool)."""
+    crudo = fila["dias"] or ""
+    dias = [int(p) for p in crudo.split(",") if p.strip() != ""]
+    return {
+        "id": fila["id"],
+        "marca": fila["marca"] or "",
+        "red": fila["red"] or "",
+        "margen_min": int(fila["margen_min"] or 0),
+        "hora_inicio": fila["hora_inicio"] or "",
+        "hora_fin": fila["hora_fin"] or "",
+        "dias": dias,
+        "activo": bool(fila["activo"]),
+    }
+
+
+def listar_cadencias() -> list[dict[str, Any]]:
+    """Todas las cadencias, ordenadas por marca/red/id (determinista)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_CADENCIA} ORDER BY marca ASC, red ASC, id ASC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_cadencia(f) for f in filas]
+
+
+def guardar_cadencia(
+    *,
+    marca: str,
+    red: str,
+    margen_min: int,
+    hora_inicio: str,
+    hora_fin: str,
+    dias: list[int],
+    activo: bool,
+) -> dict[str, Any]:
+    """UPSERT de la cadencia de (marca, red) (UNIQUE). Devuelve la fila resultante."""
+    dias_csv = ",".join(str(int(d)) for d in dias)
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO cadencias (id, marca, red, margen_min, hora_inicio, hora_fin, dias, activo) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (marca, red) DO UPDATE SET "
+            "margen_min=excluded.margen_min, hora_inicio=excluded.hora_inicio, "
+            "hora_fin=excluded.hora_fin, dias=excluded.dias, activo=excluded.activo",
+            (
+                uuid.uuid4().hex[:12],
+                marca or "",
+                red or "",
+                int(margen_min),
+                hora_inicio,
+                hora_fin,
+                dias_csv,
+                1 if activo else 0,
+            ),
+        )
+        con.commit()
+        fila = con.execute(
+            f"{_SELECT_CADENCIA} WHERE marca = ? AND red = ?", (marca or "", red or "")
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_cadencia(fila)
+
+
+def borrar_cadencia(cadencia_id: str) -> bool:
+    """Borra una cadencia; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM cadencias WHERE id = ?", (cadencia_id,))
         con.commit()
         return cur.rowcount > 0
     finally:

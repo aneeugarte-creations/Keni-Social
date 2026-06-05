@@ -18,6 +18,9 @@ modulos_backend = [
   "publicaciones",
   "aprobacion",
   "franjas",
+  # Cadencia por (marca?, red?): scheduling por margen entre posts (sustituye franjas-caja
+  # a volumen). La consume `calcular_hueco_para` (encolar/auto-programar).
+  "cadencias",
   # Auto-planificación (Fase 3): sugerir la mejor hora para publicar combinando las FRANJAS
   # (operacional) con el histórico de engagement; SOLO lectura, lo consume el botón del tablero.
   "sugerencias_hora",

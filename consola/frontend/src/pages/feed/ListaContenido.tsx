@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   FileText,
+  Gauge,
   Hash,
   Loader2,
   Pencil,
@@ -43,6 +44,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
+import { GestionCadencia } from "@/pages/publicaciones/GestionCadencia";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
@@ -94,6 +96,7 @@ export default function ListaContenido() {
   const [importarAbierto, setImportarAbierto] = React.useState(false);
   const [gestionEtiquetas, setGestionEtiquetas] = React.useState(false);
   const [gestionFranjas, setGestionFranjas] = React.useState(false);
+  const [gestionCadencia, setGestionCadencia] = React.useState(false);
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
 
   const navigate = useNavigate();
@@ -128,6 +131,11 @@ export default function ListaContenido() {
                   etiqueta: "Franjas",
                   icono: CalendarClock,
                   onClick: () => setGestionFranjas(true),
+                },
+                {
+                  etiqueta: "Cadencia",
+                  icono: Gauge,
+                  onClick: () => setGestionCadencia(true),
                 },
                 {
                   etiqueta: "Etiquetas",
@@ -190,6 +198,12 @@ export default function ListaContenido() {
       <GestionFranjas
         abierto={gestionFranjas}
         onCerrar={() => setGestionFranjas(false)}
+        marcas={catalogos?.marcas ?? []}
+        redes={catalogos?.redes ?? []}
+      />
+      <GestionCadencia
+        abierto={gestionCadencia}
+        onCerrar={() => setGestionCadencia(false)}
         marcas={catalogos?.marcas ?? []}
         redes={catalogos?.redes ?? []}
       />

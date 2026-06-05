@@ -99,6 +99,9 @@ import type {
   RespuestaEstado,
   RespuestaFranja,
   RespuestaFranjas,
+  RespuestaCadencia,
+  RespuestaCadencias,
+  CuerpoGuardarCadencia,
   RespuestaFuenteRss,
   RespuestaFuentesRss,
   RespuestaFuentesHub,
@@ -1224,6 +1227,14 @@ export const api = {
     peticion<RespuestaFranja>("/franjas", { metodo: "POST", json: cuerpo }),
   eliminarFranja: (id: string) =>
     peticion<RespuestaMensaje>(`/franjas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Cadencia por red (margen entre posts) ---
+  cadencias: (signal?: AbortSignal) =>
+    peticion<RespuestaCadencias>("/cadencias", { signal }),
+  guardarCadencia: (cuerpo: CuerpoGuardarCadencia) =>
+    peticion<RespuestaCadencia>("/cadencias", { metodo: "PUT", json: cuerpo }),
+  eliminarCadencia: (id: string) =>
+    peticion<RespuestaMensaje>(`/cadencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Tablero de contenido unificado (herramienta de community manager) ---
   contenido: (

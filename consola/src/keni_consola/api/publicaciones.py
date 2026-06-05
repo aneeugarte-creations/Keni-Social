@@ -27,6 +27,7 @@ from starlette.routing import Route
 
 from .. import marcas, permisos, redes, repos
 from .._http_json import envoltura_paginacion, leer_json, paginacion_query
+from ..dominio import cadencia as dom_cadencia
 from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
 from ..estados import ESTADO_APROBADO, ESTADO_EN_REVISION, ESTADO_PROGRAMADO
@@ -396,13 +397,28 @@ def calcular_hueco_para(
     """
     if ahora is None:
         ahora = datetime.now()
-    franjas = repos.listar_franjas()
-    aplican = api_franjas.franjas_aplicables(franjas, pub["marca"], pub["red"])
+    programadas = repos.listar_publicaciones(estado="programado")
+    # 1) CADENCIA por margen (preferente): si hay una cadencia ACTIVA que aplique a la
+    # (marca, red), reparte por margen dentro de su ventana. El espaciado es POR (marca, red):
+    # solo cuentan como ocupadas las piezas de la MISMA marca y red.
+    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
+    if cad is not None:
+        ocupados_mr = {
+            otra["fecha_programada"]
+            for otra in programadas
+            if otra["id"] != pub["id"]
+            and otra["fecha_programada"]
+            and otra["marca"] == pub["marca"]
+            and otra["red"] == pub["red"]
+        }
+        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
+    # 2) Fallback: franjas-caja (modelo previo) si no hay cadencia para esta marca/red.
+    aplican = api_franjas.franjas_aplicables(repos.listar_franjas(), pub["marca"], pub["red"])
     if not aplican:
         return None
     ocupados = {
         otra["fecha_programada"]
-        for otra in repos.listar_publicaciones(estado="programado")
+        for otra in programadas
         if otra["id"] != pub["id"] and otra["fecha_programada"]
     }
     return api_franjas.proximo_hueco(aplican, ahora, ocupados)
@@ -422,7 +438,8 @@ async def encolar(request: Request) -> Response:
     hueco = calcular_hueco_para(pub)
     if hueco is None:
         return JSONResponse(
-            {"error": "No hay franjas configuradas para esta marca/red."}, status_code=400
+            {"error": "No hay cadencia ni franjas configuradas para esta marca/red."},
+            status_code=400,
         )
     actualizada = repos.actualizar_publicacion(
         publicacion_id, {"estado": "programado", "fecha_programada": hueco}

@@ -318,6 +318,35 @@ def borrar_franja(franja_id: str) -> bool:
     return db.borrar_franja(franja_id)
 
 
+def listar_cadencias() -> list[dict[str, Any]]:
+    return db.listar_cadencias()
+
+
+def guardar_cadencia(
+    *,
+    marca: str,
+    red: str,
+    margen_min: int,
+    hora_inicio: str,
+    hora_fin: str,
+    dias: list[int],
+    activo: bool,
+) -> dict[str, Any]:
+    return db.guardar_cadencia(
+        marca=marca,
+        red=red,
+        margen_min=margen_min,
+        hora_inicio=hora_inicio,
+        hora_fin=hora_fin,
+        dias=dias,
+        activo=activo,
+    )
+
+
+def borrar_cadencia(cadencia_id: str) -> bool:
+    return db.borrar_cadencia(cadencia_id)
+
+
 # --------------------------------------------------------------------------- #
 # Fuentes RSS + items vistos + salud (OPERACIONAL: Postgres via db.py; ADR 0006) #
 # --------------------------------------------------------------------------- #
