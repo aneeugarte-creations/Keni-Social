@@ -915,15 +915,23 @@ function FuenteAjuste({ fuente }: { fuente: AjusteAdmin["fuente"] }) {
   );
 }
 
-/** Una fila de ajuste: toggle (bool), número (int/float) o selector (select). */
+/** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
+ *
+ * `bloqueado` (solo bool): la fila se muestra APAGADA y deshabilitada porque otro control la
+ * gobierna (p. ej. una excepción por marca cuyo maestro de etapa está OFF). `notaBloqueo` es la
+ * etiqueta corta que explica por qué. No cambia el valor guardado: solo refleja que no aplica. */
 function FilaAjuste({
   ajuste,
   onGuardar,
   guardando,
+  bloqueado = false,
+  notaBloqueo,
 }: {
   ajuste: AjusteAdmin;
   onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
   guardando: boolean;
+  bloqueado?: boolean;
+  notaBloqueo?: string;
 }) {
   const [confirmar, setConfirmar] = React.useState(false);
   const [num, setNum] = React.useState(String(ajuste.valor));
@@ -940,14 +948,20 @@ function FilaAjuste({
             Publica de verdad
           </Badge>
         )}
-        <FuenteAjuste fuente={ajuste.fuente} />
+        {bloqueado && notaBloqueo && (
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            · {notaBloqueo}
+          </span>
+        )}
+        {!bloqueado && <FuenteAjuste fuente={ajuste.fuente} />}
       </div>
       <p className="text-xs text-muted-foreground">{ajuste.ayuda}</p>
     </div>
   );
 
   if (ajuste.tipo === "bool") {
-    const activo = Boolean(ajuste.valor);
+    // Si está bloqueado por su maestro, se ve apagado pase lo que pase (el daemon no corre).
+    const activo = bloqueado ? false : Boolean(ajuste.valor);
     const onToggle = (valor: boolean) => {
       // Encender un flag PELIGROSO (publicación real) pide confirmación explícita.
       if (valor && ajuste.peligroso) {
@@ -957,9 +971,19 @@ function FilaAjuste({
       onGuardar({ clave: ajuste.clave, valor });
     };
     return (
-      <div className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0",
+          bloqueado && "opacity-50",
+        )}
+      >
         {cabecera}
-        <Switch checked={activo} onCheckedChange={onToggle} disabled={guardando} aria-label={ajuste.etiqueta} />
+        <Switch
+          checked={activo}
+          onCheckedChange={onToggle}
+          disabled={guardando || bloqueado}
+          aria-label={ajuste.etiqueta}
+        />
         <Dialog open={confirmar} onOpenChange={setConfirmar}>
           <DialogContent>
             <DialogHeader>
@@ -1052,10 +1076,14 @@ function AjustesPorMarca({
   ajustes,
   onGuardar,
   guardando,
+  maestros,
 }: {
   ajustes: AjusteAdmin[];
   onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
   guardando: boolean;
+  /** Valor de cada maestro de etapa por su clave ENV (p. ej. `KENI_AUTOGEN`). Si el maestro de
+   *  la etapa está OFF, su excepción por marca se muestra apagada y deshabilitada. */
+  maestros: Record<string, boolean>;
 }) {
   const porMarca = React.useMemo(() => {
     const orden: string[] = [];
@@ -1097,9 +1125,21 @@ function AjustesPorMarca({
       </TabsList>
       {porMarca.map((m) => (
         <TabsContent key={m.id} value={m.id}>
-          {m.ajustes.map((a) => (
-            <FilaAjuste key={a.clave} ajuste={a} onGuardar={onGuardar} guardando={guardando} />
-          ))}
+          {m.ajustes.map((a) => {
+            // Etapa = clave ENV antes de "::". Si su maestro está OFF, la excepción no aplica.
+            const etapaEnv = a.clave.split("::")[0];
+            const maestroOff = maestros[etapaEnv] === false;
+            return (
+              <FilaAjuste
+                key={a.clave}
+                ajuste={a}
+                onGuardar={onGuardar}
+                guardando={guardando}
+                bloqueado={maestroOff}
+                notaBloqueo="maestro apagado"
+              />
+            );
+          })}
         </TabsContent>
       ))}
     </Tabs>
@@ -1150,6 +1190,24 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Confirmación del botón «Apagar toda la generación» (maestros de etapa a OFF de golpe).
+  const [confirmarApagarTodo, setConfirmarApagarTodo] = React.useState(false);
+
+  // Maestros de etapa por su clave ENV (p. ej. `KENI_AUTOGEN` -> bool). Se usa para atenuar las
+  // excepciones por marca cuyo maestro está OFF, y para el botón de apagar todo.
+  const ajustesMaestros = grupos.find((g) => g.id === "maestros_etapa")?.ajustes ?? [];
+  const maestros: Record<string, boolean> = {};
+  for (const m of ajustesMaestros) maestros[m.clave] = Boolean(m.valor);
+
+  // Apaga TODOS los maestros de etapa (Auto-producción, Auto-copy, Auto-arte, Auto-avance) de una
+  // vez: ninguna marca producirá nada hasta reactivarlos. Las excepciones por marca se conservan.
+  const apagarTodaGeneracion = () => {
+    for (const m of ajustesMaestros) {
+      if (m.valor) guardar.mutate({ clave: m.clave, valor: false });
+    }
+    setConfirmarApagarTodo(false);
+  };
+
   // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
   // Va DESPUÉS de los hooks (useQuery/useMutation) para no llamarlos condicionalmente.
   if (!isPending && !isError && grupos.length === 0) return null;
@@ -1188,33 +1246,113 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
             cargando={isFetching}
           />
         ) : (
-          grupos.map((grupo) => (
-            <div key={grupo.id} className="space-y-1">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {grupo.titulo}
-              </h4>
-              {grupo.id === "automatizacion_marca" ? (
-                // Muchos toggles (marca × etapa): en vez de una lista plana, una pestaña por marca.
-                <AjustesPorMarca
-                  ajustes={grupo.ajustes}
-                  onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-                  guardando={guardar.isPending}
-                />
-              ) : (
-                <div>
-                  {grupo.ajustes.map((ajuste) => (
-                    <FilaAjuste
-                      key={ajuste.clave}
-                      ajuste={ajuste}
-                      onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-                      guardando={guardar.isPending}
-                    />
-                  ))}
+          grupos.map((grupo) => {
+            const onGuardar = (cuerpo: { clave: string; valor?: boolean | number | string }) =>
+              guardar.mutate(cuerpo);
+            const filas = grupo.ajustes.map((ajuste) => (
+              <FilaAjuste
+                key={ajuste.clave}
+                ajuste={ajuste}
+                onGuardar={onGuardar}
+                guardando={guardar.isPending}
+              />
+            ));
+
+            // Maestros de etapa: cabecera con el botón «Apagar toda la generación» + filas.
+            if (grupo.id === "maestros_etapa") {
+              return (
+                <div key={grupo.id} className="space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {grupo.titulo}
+                    </h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setConfirmarApagarTodo(true)}
+                      disabled={guardar.isPending || ajustesMaestros.every((m) => !m.valor)}
+                    >
+                      Apagar toda la generación
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Cada maestro enciende/apaga su etapa para <strong>todas las marcas</strong>. Con
+                    el maestro apagado, su excepción por marca queda inactiva.
+                  </p>
+                  <div>{filas}</div>
                 </div>
-              )}
-            </div>
-          ))
+              );
+            }
+
+            // Excepciones por marca: una pestaña por marca; atenuadas si su maestro está OFF.
+            if (grupo.id === "automatizacion_marca") {
+              return (
+                <div key={grupo.id} className="space-y-1">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {grupo.titulo}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Apaga marcas concretas de una etapa. Atenuada = su maestro está apagado (no
+                    aplica).
+                  </p>
+                  <AjustesPorMarca
+                    ajustes={grupo.ajustes}
+                    onGuardar={onGuardar}
+                    guardando={guardar.isPending}
+                    maestros={maestros}
+                  />
+                </div>
+              );
+            }
+
+            // Automatismos generales: barridos del sistema; van en un colapsible para no confundir
+            // con los controles de auto-producción de arriba.
+            if (grupo.id === "automatismos_generales") {
+              return (
+                <TarjetaColapsable
+                  key={grupo.id}
+                  titulo={grupo.titulo}
+                  descripcion="Barridos del sistema sin dimensión por marca (radar, alertas, vencimientos, limpieza…)."
+                >
+                  <div>{filas}</div>
+                </TarjetaColapsable>
+              );
+            }
+
+            // Resto (Publicación, Ajustes finos): título + lista plana.
+            return (
+              <div key={grupo.id} className="space-y-1">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {grupo.titulo}
+                </h4>
+                <div>{filas}</div>
+              </div>
+            );
+          })
         )}
+
+      <Dialog open={confirmarApagarTodo} onOpenChange={setConfirmarApagarTodo}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apagar toda la generación</DialogTitle>
+            <DialogDescription>
+              Apaga los maestros de <strong>todas las etapas</strong> (Auto-producción, Auto-copy,
+              Auto-arte y Auto-avance) para <strong>todas las marcas</strong>: el sistema dejará de
+              producir nada automáticamente hasta que los reactives. Las excepciones por marca se
+              conservan. ¿Continuar?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmarApagarTodo(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={apagarTodaGeneracion}>
+              Sí, apagar todo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TarjetaColapsable>
   );
 }

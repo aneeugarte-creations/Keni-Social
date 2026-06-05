@@ -37,7 +37,9 @@ def _ajuste(clave):
 def test_catalogo_tiene_las_claves_esperadas(store):
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
     esperadas = {
-        config.ENV_AUTOGEN, config.ENV_AUTOGEN_ARTE, config.ENV_RADAR_AUTO,
+        # Maestros de etapa (uno por etapa de auto-producción).
+        config.ENV_PIPELINE, config.ENV_AUTOGEN, config.ENV_AUTOGEN_ARTE, config.ENV_AUTO_AVANCE,
+        config.ENV_RADAR_AUTO,
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_PUBLICAR_REAL,
         config.ENV_AUTOGEN_INTERVALO_HORAS, config.ENV_AUTOGEN_MAX,

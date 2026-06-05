@@ -26,23 +26,47 @@ from . import ajustes, config, marcas
 _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
 _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
-# Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes).
+# Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
+# el de aparición en la UI: primero los maestros de etapa, luego las excepciones por marca,
+# después Publicación, y los automatismos generales (barridos del sistema) al final.
 GRUPOS: tuple[tuple[str, str], ...] = (
-    ("automatizacion", "Automatización"),
-    ("automatizacion_marca", "Automatización por marca"),
-    ("tuning", "Ajustes finos"),
+    ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
+    ("automatizacion_marca", "Excepciones por marca"),
     ("publicacion", "Publicación"),
+    ("automatismos_generales", "Automatismos generales"),
+    ("tuning", "Ajustes finos"),
 )
 
-# Etapas de auto-producción que se encienden/apagan POR MARCA (clave `ENV::marca`). El defecto
-# de cada toggle es el valor GLOBAL actual de su etapa: si no se toca, la marca sigue al global;
-# tocarlo es una excepción explícita (p.ej. claro-sports ON, nacion-gamer OFF).
+# Etapas de auto-producción. Cada etapa tiene DOS controles que comparten NOMBRE (match 1:1):
+#   - un MAESTRO global (clave `ENV`), grupo `maestros_etapa`: apagarlo deja la etapa EN ESPERA
+#     para TODAS las marcas (el daemon no barre);
+#   - una EXCEPCIÓN por marca (clave `ENV::marca`), grupo `automatizacion_marca`: solo puede APAGAR
+#     marcas sueltas con el maestro encendido (sin override, la marca sigue al maestro).
+# La tupla es (env, etiqueta, descripción genérica) y alimenta AMBOS controles.
 _ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = (
-    (config.ENV_PIPELINE, "Auto-producción", "Ingesta de fuentes + QA + copy automático de esta marca."),
-    (config.ENV_AUTOGEN, "Auto-copy", "Genera copy automático de los temas de esta marca que aún no lo tienen."),
-    (config.ENV_AUTOGEN_ARTE, "Auto-arte", "Genera imagen por IA para los temas de esta marca con copy y sin imagen."),
-    (config.ENV_AUTO_AVANCE, "Auto-avance", "Lleva solas a revisión las piezas listas de esta marca."),
+    (config.ENV_PIPELINE, "Auto-producción", "ingiere fuentes, hace QA y genera copy automático"),
+    (config.ENV_AUTOGEN, "Auto-copy", "genera copy automático de los temas que aún no lo tienen"),
+    (config.ENV_AUTOGEN_ARTE, "Auto-arte", "genera imagen por IA para los temas con copy y sin imagen"),
+    (config.ENV_AUTO_AVANCE, "Auto-avance", "lleva solas a revisión las piezas listas"),
 )
+
+
+def _maestros_etapa() -> list[Ajuste]:
+    """Maestro GLOBAL de cada etapa (uno por entrada de `_ETAPAS_MARCA`). Mismo NOMBRE que su
+    excepción por marca (match 1:1). Apagar el maestro deja la etapa en espera para TODAS las
+    marcas; las excepciones por marca solo restan (apagan marcas sueltas) con el maestro encendido."""
+    return [
+        Ajuste(
+            clave=env_flag,
+            tipo="bool",
+            etiqueta=etiqueta,
+            ayuda=f"Maestro de TODAS las marcas: {desc}. Si lo apagas, ninguna marca corre esta "
+            "etapa; las excepciones por marca solo pueden apagar marcas concretas.",
+            grupo="maestros_etapa",
+            defecto=False,
+        )
+        for env_flag, etiqueta, desc in _ETAPAS_MARCA
+    ]
 
 
 def _global_de_etapa(env_flag: str) -> bool:
@@ -60,13 +84,14 @@ def _ajustes_por_marca() -> list[Ajuste]:
     desde el catálogo de marcas, así que añadir una marca añade sus toggles sin tocar código."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
-        for env_flag, etiqueta_etapa, ayuda in _ETAPAS_MARCA:
+        for env_flag, etiqueta_etapa, desc in _ETAPAS_MARCA:
             salida.append(
                 Ajuste(
                     clave=config.clave_por_marca(env_flag, mid),
                     tipo="bool",
                     etiqueta=f"{nombre} · {etiqueta_etapa}",
-                    ayuda=f"{ayuda} Si no se toca, sigue el valor global de la etapa.",
+                    ayuda=f"Excepción de «{etiqueta_etapa}» para esta marca ({desc}). Apágala para "
+                    "excluir solo a esta marca; sin tocarla, sigue al maestro de la etapa.",
                     grupo="automatizacion_marca",
                     defecto=_global_de_etapa(env_flag),
                 )
@@ -82,7 +107,7 @@ class Ajuste:
     tipo: str  # 'bool' | 'int' | 'float' | 'select'
     etiqueta: str
     ayuda: str
-    grupo: str  # 'automatizacion' | 'tuning' | 'publicacion'
+    grupo: str  # 'maestros_etapa' | 'automatizacion_marca' | 'automatismos_generales' | 'publicacion' | 'tuning'
     defecto: Any
     peligroso: bool = False
     opciones: tuple[dict[str, str], ...] = ()  # solo 'select': [{id, etiqueta}, ...]
@@ -111,32 +136,16 @@ def _construir_catalogo() -> list[Ajuste]:
     """Construye la lista de ajustes editables. Se llama en cada `catalogo()` (las opciones
     de marca dependen del catalogo de marcas, que es estable pero se resuelve en caliente)."""
     return [
-        # --- Automatizacion (flags) ------------------------------------------------ #
-        Ajuste(
-            clave=config.ENV_AUTOGEN,
-            tipo="bool",
-            etiqueta="Auto-generar copy",
-            ayuda="Genera copy automáticamente para los temas del tablero alimentados por "
-            "fuentes que aún no tienen copy.",
-            grupo="automatizacion",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_AUTOGEN_ARTE,
-            tipo="bool",
-            etiqueta="Auto-generar arte",
-            ayuda="Genera imagen por IA para los temas con copy pero sin imagen y la adjunta. "
-            "Requiere proveedor de imagen configurado.",
-            grupo="automatizacion",
-            defecto=False,
-        ),
+        # --- Automatismos generales (barridos del sistema, sin dimensión por marca) ----- #
+        # Las etapas de auto-producción (Auto-copy, Auto-arte, Auto-producción, Auto-avance) NO
+        # están aquí: su maestro vive en `_maestros_etapa()` y sus excepciones en `_ajustes_por_marca()`.
         Ajuste(
             clave=config.ENV_RADAR_AUTO,
             tipo="bool",
             etiqueta="Radar automático",
             ayuda="Promueve periódicamente los temas del Radar que superan el umbral de señal "
             "a 'lo importante del día'.",
-            grupo="automatizacion",
+            grupo="automatismos_generales",
             defecto=False,
         ),
         Ajuste(
@@ -146,7 +155,7 @@ def _construir_catalogo() -> list[Ajuste]:
             ayuda="Al ingerir, clasifica cada pieza en su línea (vertical) y su origen "
             "(interno / petición externa) por palabras clave. Sin línea queda con un aviso; "
             "nunca se descarta.",
-            grupo="automatizacion",
+            grupo="automatismos_generales",
             defecto=False,
         ),
         Ajuste(
@@ -154,7 +163,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Alertas de rendimiento",
             ayuda="Barrido que emite alertas cuando una pieza publicada rinde por debajo del umbral de engagement.",
-            grupo="automatizacion",
+            grupo="automatismos_generales",
             defecto=True,
         ),
         Ajuste(
@@ -163,7 +172,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Eventos de vencimientos",
             ayuda="Barrido que detecta contenido vencido en el tablero y dispara los eventos "
             "internos correspondientes.",
-            grupo="automatizacion",
+            grupo="automatismos_generales",
             defecto=True,
         ),
         Ajuste(
@@ -172,7 +181,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Pre-aprobación de bajo riesgo",
             ayuda="Auto-aprueba los niveles inferiores de la cadena de aprobación para piezas "
             "de bajo riesgo (el último nivel siempre queda a un humano).",
-            grupo="automatizacion",
+            grupo="automatismos_generales",
             defecto=False,
         ),
         Ajuste(
@@ -181,7 +190,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Limpieza de media huérfana",
             ayuda="Borra periódicamente los objetos de imagen del Estudio que ninguna "
             "publicación usa y son más viejos que el umbral de antigüedad.",
-            grupo="automatizacion",
+            grupo="automatismos_generales",
             defecto=False,
         ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
@@ -328,8 +337,9 @@ def _construir_catalogo() -> list[Ajuste]:
 
 
 def catalogo() -> list[Ajuste]:
-    """Lista completa de ajustes editables (la fuente de verdad)."""
-    return _construir_catalogo() + _ajustes_por_marca()
+    """Lista completa de ajustes editables (la fuente de verdad): maestros de etapa, automatismos
+    generales + publicación + tuning, y las excepciones por marca."""
+    return _maestros_etapa() + _construir_catalogo() + _ajustes_por_marca()
 
 
 def por_clave(clave: str) -> Ajuste | None:
