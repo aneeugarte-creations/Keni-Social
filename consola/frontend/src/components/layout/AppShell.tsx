@@ -163,7 +163,14 @@ export function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:px-6">
+        {/* `relative z-30`: el topbar y todo su subárbol (incluido el cajón de
+            notificaciones, que se despliega hacia el contenido) deben pintar SOBRE el
+            `<main>`. El `backdrop-blur` del header ya crea un contexto de apilamiento
+            propio; sin un z-index explícito ese contexto vale `auto` y, al ir el header
+            ANTES que `<main>` en el DOM, el feed lo tapa. z-30 lo eleva sobre el
+            contenido pero queda por debajo de overlays en portal (menú móvil z-40,
+            diálogos z-50, toasts z-[100]). */}
+        <header className="relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:px-6">
           <Button
             variant="ghost"
             size="icon"

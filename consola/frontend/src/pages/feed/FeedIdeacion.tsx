@@ -27,6 +27,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -70,6 +71,14 @@ const GRID_COLS: Record<number, string> = {
   3: "grid-cols-3",
   4: "grid-cols-4",
 };
+
+/**
+ * Id del ancla DOM de una idea en el feed (deep-link desde las notificaciones). El cajón
+ * de la campana navega a `?pieza=<contenido_id>` y aquí hacemos scroll a `#<este id>`.
+ */
+function anclaFeed(ideaId: string): string {
+  return `feed-pieza-${ideaId}`;
+}
 
 /** Lee una preferencia numérica de localStorage, acotada a [min, max]; `defecto` si falta/ inválida. */
 function leerPref(clave: string, defecto: number, min: number, max: number): number {
@@ -283,6 +292,38 @@ export default function FeedIdeacion() {
     return [...mapa.values()];
   }, [piezas]);
 
+  // DEEP-LINK desde las notificaciones (`?pieza=<contenido_id>`): al entrar, salta a esa idea
+  // y la resalta un instante. Forzamos la vista "todo" (que siempre la muestra, esté en el
+  // estado que esté) y limpiamos el parámetro para no re-disparar en refetch/re-render. Si la
+  // idea no está en el feed de la marca activa (otra marca, ya archivada…), solo limpiamos.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const piezaParam = searchParams.get("pieza");
+  const [piezaDestacada, setPiezaDestacada] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!piezaParam || feedQuery.isLoading) return;
+    const existe = grupos.some((g) => g.id === piezaParam);
+    setSearchParams(
+      (prev) => {
+        prev.delete("pieza");
+        return prev;
+      },
+      { replace: true },
+    );
+    if (!existe) return;
+    setVista("todo");
+    setPiezaDestacada(piezaParam);
+    // Espera a que la idea esté pintada (cambio de vista) y haz scroll centrándola.
+    const idAncla = anclaFeed(piezaParam);
+    const tScroll = window.setTimeout(() => {
+      document.getElementById(idAncla)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    const tResalte = window.setTimeout(() => setPiezaDestacada(null), 2500);
+    return () => {
+      window.clearTimeout(tScroll);
+      window.clearTimeout(tResalte);
+    };
+  }, [piezaParam, feedQuery.isLoading, grupos, setSearchParams]);
+
   // Las pestañas filtran por estado a nivel de IDEA: una idea aparece si ALGUNA de sus piezas
   // cumple la vista. El badge de cada pestaña cuenta IDEAS (no piezas sueltas).
   const conteos = React.useMemo(
@@ -448,7 +489,16 @@ export default function FeedIdeacion() {
         ) : agrupar ? (
           <div className="space-y-5">
             {gruposVista.map((g) => (
-              <GrupoIdea key={g.id} grupo={g} redes={redesAMostrar} columnas={columnas} />
+              <div
+                key={g.id}
+                id={anclaFeed(g.id)}
+                className={cn(
+                  "scroll-mt-20 rounded-xl transition-shadow",
+                  g.id === piezaDestacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                )}
+              >
+                <GrupoIdea grupo={g} redes={redesAMostrar} columnas={columnas} />
+              </div>
             ))}
           </div>
         ) : (
@@ -461,10 +511,22 @@ export default function FeedIdeacion() {
           >
             {gruposVista.map((g) => {
               const p = g.piezas.find((x) => x.red === redesAMostrar[0]);
-              return p ? (
-                <PostFeed key={g.id} publicacion={p} />
-              ) : (
-                <PlaceholderRed key={g.id} red={redesAMostrar[0]} titulo={g.titulo} />
+              return (
+                <div
+                  key={g.id}
+                  id={anclaFeed(g.id)}
+                  className={cn(
+                    "scroll-mt-20 rounded-xl transition-shadow",
+                    g.id === piezaDestacada &&
+                      "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                  )}
+                >
+                  {p ? (
+                    <PostFeed publicacion={p} />
+                  ) : (
+                    <PlaceholderRed red={redesAMostrar[0]} titulo={g.titulo} />
+                  )}
+                </div>
               );
             })}
           </div>

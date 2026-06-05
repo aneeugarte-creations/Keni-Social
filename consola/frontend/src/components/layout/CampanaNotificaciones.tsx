@@ -6,7 +6,8 @@
  * - Al ABRIR el cajón se marcan todas como leídas (se limpia el badge), pero la lista
  *   recién traída conserva el resaltado de "nuevas" hasta la próxima apertura.
  * - Cada fila resume el evento (mención / comentario / OK / rechazo / publicación) y, al
- *   pulsarla, lleva al feed. Se cierra al hacer clic fuera o con Escape.
+ *   pulsarla, NAVEGA a esa pieza en el feed (deep-link `?pieza=<contenido_id>`: el feed hace
+ *   scroll y la resalta). Se cierra al hacer clic fuera o con Escape.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Bell, Megaphone, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
@@ -34,21 +35,33 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   publicacion: Megaphone,
 };
 
-/** Ruta del feed: destino al pulsar una notificación (no hay deep-link por pieza aún). */
+/** Ruta del feed: destino base al pulsar una notificación. */
 const RUTA_FEED = "/operacion/feed/feed";
+
+/**
+ * Destino de una notificación. Preferimos el `enlace` que arme el backend si lo trae;
+ * si no, hacemos DEEP-LINK al feed por `contenido_id` (`?pieza=…`): el feed lo lee,
+ * hace scroll a esa idea y la resalta (ver `FeedIdeacion`). Sin `contenido_id` (no
+ * debería pasar) caemos al feed a secas.
+ */
+function destinoNotificacion(n: Notificacion): string {
+  if (n.enlace) return n.enlace;
+  if (n.contenido_id) return `${RUTA_FEED}?pieza=${encodeURIComponent(n.contenido_id)}`;
+  return RUTA_FEED;
+}
 
 function Fila({
   notificacion,
   onIr,
 }: {
   notificacion: Notificacion;
-  onIr: () => void;
+  onIr: (n: Notificacion) => void;
 }) {
   const Icono = ICONO[notificacion.tipo] ?? Bell;
   return (
     <button
       type="button"
-      onClick={onIr}
+      onClick={() => onIr(notificacion)}
       className={cn(
         "flex w-full items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/60",
         !notificacion.leida && "bg-primary/5",
@@ -119,9 +132,11 @@ export function CampanaNotificaciones() {
     };
   }, [abierto]);
 
-  const irAlFeed = () => {
+  // Al pulsar una notificación: cierra el cajón y navega a su pieza en el feed
+  // (deep-link `?pieza=`), que hace scroll y la resalta.
+  const irAPieza = (n: Notificacion) => {
     setAbierto(false);
-    navigate(RUTA_FEED);
+    navigate(destinoNotificacion(n));
   };
 
   return (
@@ -164,7 +179,7 @@ export function CampanaNotificaciones() {
               <ul className="divide-y divide-border">
                 {notificaciones.map((n) => (
                   <li key={n.id}>
-                    <Fila notificacion={n} onIr={irAlFeed} />
+                    <Fila notificacion={n} onIr={irAPieza} />
                   </li>
                 ))}
               </ul>
