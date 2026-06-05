@@ -128,19 +128,27 @@ describe("PiezasConsolidada", () => {
     expect(screen.getByText("Noticia local")).toBeInTheDocument();
   });
 
-  it("pagina por día: arranca por el más reciente y navega al anterior", async () => {
+  it("el día es una columna ordenable más (no el eje); pagina de 50 en 50", async () => {
     const dosDias = [
-      pieza({ id: "pA", titulo: "Pieza reciente", publicado: "2026-05-21" }),
-      pieza({ id: "pB", titulo: "Pieza antigua", publicado: "2026-05-20" }),
+      pieza({ id: "pA", titulo: "Pieza reciente", publicado: "2026-05-21", visualizaciones: 1000 }),
+      pieza({ id: "pB", titulo: "Pieza antigua", publicado: "2026-05-20", visualizaciones: 2000 }),
     ];
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(dosDias));
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
 
+    // Ambas piezas en la MISMA página (50 por página), ya no separadas por día.
     expect(await screen.findByText("Pieza reciente")).toBeInTheDocument();
-    expect(screen.queryByText("Pieza antigua")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Día más antiguo" }));
-    expect(await screen.findByText("Pieza antigua")).toBeInTheDocument();
-    expect(screen.queryByText("Pieza reciente")).not.toBeInTheDocument();
+    expect(screen.getByText("Pieza antigua")).toBeInTheDocument();
+
+    // Orden por defecto = Vistas desc → la más vista (la antigua, 2000) va primero,
+    // aunque sea de un día anterior: la página 1 es el top del rango, no de un día.
+    let filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
+    expect(within(filas[0]).getByText("Pieza antigua")).toBeInTheDocument();
+
+    // El día es una columna ordenable: al ordenar por "Día" (clic = desc) manda la fecha.
+    fireEvent.click(screen.getByRole("button", { name: "Día" }));
+    filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
+    expect(within(filas[0]).getByText("Pieza reciente")).toBeInTheDocument();
   });
 
   it("en vista agregada muestra todas las marcas recibidas (sin filtro propio de marca)", async () => {
