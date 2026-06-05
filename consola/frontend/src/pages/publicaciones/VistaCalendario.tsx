@@ -5,10 +5,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
+  Zap,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,11 +106,13 @@ function PildoraPub({
   publicacion,
   onAbrir,
   onDesprogramar,
+  onPublicarYa,
   ocupado,
 }: {
   publicacion: Publicacion;
   onAbrir: (p: Publicacion) => void;
   onDesprogramar: (p: Publicacion) => void;
+  onPublicarYa: (p: Publicacion) => void;
   ocupado: boolean;
 }) {
   const Icono = iconoRed(publicacion.red);
@@ -117,6 +121,14 @@ function PildoraPub({
       disparador="contextmenu"
       etiqueta={`Acciones de "${publicacion.titulo}"`}
       items={[
+        {
+          // BREAKING: publica YA (salta la parrilla). Real o dry-run según KENI_PUBLICAR_REAL.
+          etiqueta: "Publicar ya",
+          icono: Zap,
+          deshabilitado: ocupado,
+          onClick: () => onPublicarYa(publicacion),
+        },
+        { separador: true },
         {
           etiqueta: "Editar",
           icono: Pencil,
@@ -197,8 +209,35 @@ export function VistaCalendario({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const ocupado = reprogramar.isPending || desprogramar.isPending;
+  // BREAKING: publica YA (salta la parrilla). Respeta `KENI_PUBLICAR_REAL`: ON publica de
+  // verdad por Metricool; OFF deja una vista previa (dry-run) sin publicar.
+  const publicarYa = useMutation({
+    mutationFn: (id: string) => api.programarEnMetricool(id),
+    onSuccess: (res) => {
+      invalidar();
+      const r = res.resultado;
+      const redes = (r.redes ?? []).join(", ") || "—";
+      toast.success(
+        r.dry_run
+          ? `Vista previa lista: se enviaría a Metricool (${redes}). No se publicó (dry-run).`
+          : `Publicado ya en Metricool (${redes})${r.id_post ? ` · id ${r.id_post}` : ""}`,
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const ocupado = reprogramar.isPending || desprogramar.isPending || publicarYa.isPending;
   const haciaDesprogramar = (p: Publicacion) => desprogramar.mutate(p.id);
+  const haciaPublicarYa = async (p: Publicacion) => {
+    if (
+      await confirmar({
+        titulo: "¿Publicar ya?",
+        mensaje: `Se publicará "${p.titulo}" en ${nombreRed(p.red)} de inmediato, saltando la parrilla.`,
+        textoConfirmar: "Publicar ya",
+      })
+    ) {
+      publicarYa.mutate(p.id);
+    }
+  };
 
   const programadas = React.useMemo(
     () => publicaciones.filter((p) => !!p.fecha_programada),
@@ -325,6 +364,7 @@ export function VistaCalendario({
             setColActiva={setColActiva}
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
+            onPublicarYa={haciaPublicarYa}
             onAbrirDia={abrirDia}
             onSoltarEnDia={moverADia}
             ocupado={ocupado}
@@ -336,6 +376,7 @@ export function VistaCalendario({
             porDia={porDia}
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
+            onPublicarYa={haciaPublicarYa}
             onVolver={() => setVista("semana")}
             ocupado={ocupado}
           />
@@ -433,6 +474,7 @@ function VistaSemana({
   setColActiva,
   onAbrir,
   onDesprogramar,
+  onPublicarYa,
   onAbrirDia,
   onSoltarEnDia,
   ocupado,
@@ -444,6 +486,7 @@ function VistaSemana({
   setColActiva: (v: string | null) => void;
   onAbrir: (p: Publicacion) => void;
   onDesprogramar: (p: Publicacion) => void;
+  onPublicarYa: (p: Publicacion) => void;
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
   ocupado: boolean;
@@ -500,6 +543,7 @@ function VistaSemana({
                   publicacion={p}
                   onAbrir={onAbrir}
                   onDesprogramar={onDesprogramar}
+                  onPublicarYa={onPublicarYa}
                   ocupado={ocupado}
                 />
               ))}
@@ -517,6 +561,7 @@ function VistaDia({
   porDia,
   onAbrir,
   onDesprogramar,
+  onPublicarYa,
   onVolver,
   ocupado,
 }: {
@@ -524,6 +569,7 @@ function VistaDia({
   porDia: Map<string, Publicacion[]>;
   onAbrir: (p: Publicacion) => void;
   onDesprogramar: (p: Publicacion) => void;
+  onPublicarYa: (p: Publicacion) => void;
   onVolver: () => void;
   ocupado: boolean;
 }) {
@@ -559,6 +605,7 @@ function VistaDia({
               publicacion={p}
               onAbrir={onAbrir}
               onDesprogramar={onDesprogramar}
+              onPublicarYa={onPublicarYa}
               ocupado={ocupado}
             />
           ))}
