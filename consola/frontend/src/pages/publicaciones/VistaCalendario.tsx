@@ -1,5 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarOff, CalendarX, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  CalendarOff,
+  CalendarX,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -8,54 +14,67 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { Franja, Publicacion } from "@/types";
+import type { Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
-import { CLAVE_FRANJAS } from "./franjas";
-import { datetimeLocalAIso, formatearHora, iconoRed, nombreRed } from "./meta";
+import {
+  datetimeLocalAIso,
+  formatearHora,
+  iconoRed,
+  isoADatetimeLocal,
+  nombreRed,
+} from "./meta";
+
+type Vista = "mes" | "semana" | "dia";
 
 /** Nombres de los días (lunes a domingo), abreviados es-MX. */
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-
-/** Día de la semana de un `Date` en convención de franjas: 0=lunes .. 6=domingo. */
-function diaSemanaFranja(d: Date): number {
-  return (d.getDay() + 6) % 7;
-}
-
-/** Clave YYYY-MM-DD en hora local para agrupar por día. */
-function claveDia(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return "Ocurrió un problema. Vuelve a intentarlo.";
 }
 
-/** Índice día -> publicaciones programadas ese día (ordenadas por hora). */
+/** Clave YYYY-MM-DD en hora CDMX de una pieza programada ("" si no aplica). */
+function diaCdmx(p: Publicacion): string {
+  return p.fecha_programada ? isoADatetimeLocal(p.fecha_programada).slice(0, 10) : "";
+}
+
+/** Hora "HH:mm" (24h CDMX) de una pieza, para reprogramar conservando la hora. */
+function hora24Cdmx(iso: string): string {
+  return isoADatetimeLocal(iso).slice(11, 16);
+}
+
+/** Clave YYYY-MM-DD (local) de un `Date` de celda del calendario. */
+function claveDia(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Índice día(CDMX) -> publicaciones programadas ese día (ordenadas por hora). */
 function indexarPorDia(publicaciones: Publicacion[]): Map<string, Publicacion[]> {
   const mapa = new Map<string, Publicacion[]>();
   for (const p of publicaciones) {
-    if (!p.fecha_programada) continue;
-    const d = new Date(p.fecha_programada);
-    if (Number.isNaN(d.getTime())) continue;
-    const clave = claveDia(d);
+    const clave = diaCdmx(p);
+    if (!clave) continue;
     const lista = mapa.get(clave) ?? [];
     lista.push(p);
     mapa.set(clave, lista);
   }
   for (const lista of mapa.values()) {
-    lista.sort((a, b) => {
-      const ta = a.fecha_programada ? new Date(a.fecha_programada).getTime() : 0;
-      const tb = b.fecha_programada ? new Date(b.fecha_programada).getTime() : 0;
-      return ta - tb;
-    });
+    lista.sort((a, b) => (a.fecha_programada ?? "").localeCompare(b.fecha_programada ?? ""));
   }
   return mapa;
 }
 
-/** Devuelve las celdas (42, 6 semanas) que componen la rejilla del mes. */
+/** Conteo por red de una lista de piezas (orden por más frecuentes). */
+function conteoPorRed(items: Publicacion[]): { red: string; n: number }[] {
+  const m = new Map<string, number>();
+  for (const p of items) m.set(p.red, (m.get(p.red) ?? 0) + 1);
+  return [...m.entries()].map(([red, n]) => ({ red, n })).sort((a, b) => b.n - a.n);
+}
+
+/** Las 42 celdas (6 semanas) del mes que ancla `ancla`. */
 function celdasDelMes(ancla: Date): Date[] {
   const primero = new Date(ancla.getFullYear(), ancla.getMonth(), 1);
   const offset = (primero.getDay() + 6) % 7;
@@ -68,24 +87,16 @@ function celdasDelMes(ancla: Date): Date[] {
   });
 }
 
-/**
- * Mapa día-de-semana (0=lun..6=dom) -> horas de franja ordenadas, a partir de las franjas
- * relevantes a la marca activa. Una franja `marca===""` aplica a todas; si hay marca activa,
- * además las suyas. Colapsa horas repetidas (varias redes pueden compartir hueco).
- */
-function horasPorDiaSemana(franjas: Franja[], marca: string | null): Map<number, string[]> {
-  const porDia = new Map<number, Set<string>>();
-  for (const f of franjas) {
-    if (marca != null && f.marca !== "" && f.marca !== marca) continue;
-    const set = porDia.get(f.dia_semana) ?? new Set<string>();
-    set.add(f.hora);
-    porDia.set(f.dia_semana, set);
-  }
-  const ordenado = new Map<number, string[]>();
-  for (const [dia, horas] of porDia) {
-    ordenado.set(dia, [...horas].sort());
-  }
-  return ordenado;
+/** Los 7 días (lunes→domingo) de la semana que contiene a `ancla`. */
+function diasDeSemana(ancla: Date): Date[] {
+  const offset = (ancla.getDay() + 6) % 7;
+  const lunes = new Date(ancla);
+  lunes.setDate(ancla.getDate() - offset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
+    return d;
+  });
 }
 
 /** Una píldora de publicación: arrastrable, click abre el editor, clic-derecho el menú. */
@@ -107,6 +118,11 @@ function PildoraPub({
       etiqueta={`Acciones de "${publicacion.titulo}"`}
       items={[
         {
+          etiqueta: "Editar",
+          icono: Pencil,
+          onClick: () => onAbrir(publicacion),
+        },
+        {
           etiqueta: "Desprogramar",
           icono: CalendarX,
           deshabilitado: ocupado,
@@ -122,7 +138,7 @@ function PildoraPub({
           e.dataTransfer.effectAllowed = "move";
         }}
         onClick={() => onAbrir(publicacion)}
-        title={`${formatearHora(publicacion.fecha_programada)} · ${nombreRed(publicacion.red)} · ${publicacion.titulo} · arrastra para reprogramar · clic derecho para desprogramar`}
+        title={`${formatearHora(publicacion.fecha_programada)} · ${nombreRed(publicacion.red)} · ${publicacion.titulo} · arrastra para reprogramar · clic derecho para más`}
         className="flex w-full cursor-grab items-center gap-1 truncate rounded bg-amber-500/15 px-1.5 py-0.5 text-left text-xs text-amber-800 transition-colors hover:bg-amber-500/25 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing dark:text-amber-200"
       >
         <Icono className="h-3 w-3 shrink-0" />
@@ -133,93 +149,31 @@ function PildoraPub({
   );
 }
 
-/** Un hueco de franja (hora) dentro de un día: etiqueta + piezas, y zona de drop. */
-function FranjaSlot({
-  hora,
-  items,
-  resaltado,
-  onAbrir,
-  onDesprogramar,
-  ocupado,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-}: {
-  hora: string;
-  items: Publicacion[];
-  resaltado: boolean;
-  onAbrir: (p: Publicacion) => void;
-  onDesprogramar: (p: Publicacion) => void;
-  ocupado: boolean;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: () => void;
-  onDrop: (e: React.DragEvent) => void;
-}) {
-  return (
-    <div
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={cn(
-        "rounded border border-dashed border-border/70 p-1 transition-colors",
-        resaltado && "border-primary bg-primary/10",
-      )}
-    >
-      <div className="px-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-        {hora}
-      </div>
-      {items.length === 0 ? (
-        <p className="px-0.5 text-[10px] text-muted-foreground/50">Vacío</p>
-      ) : (
-        <div className="mt-0.5 space-y-0.5">
-          {items.map((p) => (
-            <PildoraPub
-              key={p.id}
-              publicacion={p}
-              onAbrir={onAbrir}
-              onDesprogramar={onDesprogramar}
-              ocupado={ocupado}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
- * Vista calendario: rejilla mensual navegable que muestra las publicaciones programadas en
- * su día, ORGANIZADAS POR FRANJA DE POSTEO (las horas-cola de la marca). Permite:
- *  - ver las franjas de cada día (huecos, incluso vacíos);
- *  - reprogramar arrastrando una pieza de un hueco a otro (cualquier día/hora de franja);
- *  - desprogramar una pieza (clic derecho → vuelve a Borrador, sale de la parrilla).
+ * Vista calendario de la PROGRAMACIÓN, pensada para alto volumen (cientos/semana). Tres
+ * lentes sobre las piezas ya programadas:
+ *  - `mes`: rejilla mensual de RESUMEN (conteo por red por día); clic en un día → detalle.
+ *  - `semana`: 7 columnas con las piezas del día listadas; se ARRASTRA una pieza a otro día
+ *    para reprogramarla (conserva su hora). Scroll vertical por día.
+ *  - `dia`: detalle de un día (todas sus piezas, editar/desprogramar).
  *
- * Las franjas se filtran por la marca activa (las globales aplican siempre). Las horas se
- * tratan en zona CDMX (vía `@/lib/fecha`), coherente con el resto de la consola.
+ * Reprogramar/desprogramar usan `api.actualizarPublicacion` (horas en CDMX vía `@/lib/fecha`).
+ * (El reparto automático por cadencia de cada red es trabajo del motor de producción, aparte.)
  */
 export function VistaCalendario({
   publicaciones,
   onEditar,
-  marca = null,
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
-  /** Marca activa para acotar las franjas (null = todas). */
+  /** Reservado: marca activa (la usará la cadencia por red). */
   marca?: string | null;
 }) {
+  const [vista, setVista] = React.useState<Vista>("mes");
   const [ancla, setAncla] = React.useState(() => new Date());
-  // Hueco resaltado durante un drag (clave `dia|hora`), para feedback de drop.
-  const [slotActivo, setSlotActivo] = React.useState<string | null>(null);
+  const [diaSel, setDiaSel] = React.useState<string | null>(null);
+  const [colActiva, setColActiva] = React.useState<string | null>(null);
   const queryClient = useQueryClient();
-
-  const franjasQuery = useQuery({
-    queryKey: CLAVE_FRANJAS,
-    queryFn: ({ signal }) => api.franjas(signal),
-  });
-  const horasPorDia = React.useMemo(
-    () => horasPorDiaSemana(franjasQuery.data?.franjas ?? [], marca),
-    [franjasQuery.data, marca],
-  );
 
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -244,42 +198,29 @@ export function VistaCalendario({
     onError: (e) => toast.error(mensajeError(e)),
   });
   const ocupado = reprogramar.isPending || desprogramar.isPending;
+  const haciaDesprogramar = (p: Publicacion) => desprogramar.mutate(p.id);
 
   const programadas = React.useMemo(
     () => publicaciones.filter((p) => !!p.fecha_programada),
     [publicaciones],
   );
   const porDia = React.useMemo(() => indexarPorDia(programadas), [programadas]);
-  const celdas = React.useMemo(() => celdasDelMes(ancla), [ancla]);
 
   const hoy = claveDia(new Date());
-  const mesActual = ancla.getMonth();
-  const etiquetaMes = new Intl.DateTimeFormat("es-MX", {
-    month: "long",
-    year: "numeric",
-  }).format(ancla);
 
-  function cambiarMes(delta: number) {
-    setAncla((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
-  }
-
-  /** Reprograma la pieza arrastrada a `diaClave` + `hora` (CDMX); no-op si ya está ahí. */
-  function soltarEn(diaClave: string, hora: string, idArrastrada: string) {
-    setSlotActivo(null);
+  /** Mueve la pieza al día `diaClave` conservando su hora; no-op si ya está ese día. */
+  function moverADia(diaClave: string, idArrastrada: string) {
+    setColActiva(null);
     const pub = programadas.find((p) => p.id === idArrastrada);
-    if (!pub) return;
-    const yaAqui =
-      pub.fecha_programada != null &&
-      claveDia(new Date(pub.fecha_programada)) === diaClave &&
-      formatearHora(pub.fecha_programada) === hora;
-    if (yaAqui) return;
-    const iso = datetimeLocalAIso(`${diaClave}T${hora}`);
-    if (!iso) return;
-    reprogramar.mutate({ id: idArrastrada, iso });
+    if (!pub?.fecha_programada) return;
+    if (diaCdmx(pub) === diaClave) return;
+    // datetime-local (CDMX) destino = ese día a la MISMA hora; lo pasamos a instante UTC.
+    const destino = datetimeLocalAIso(`${diaClave}T${hora24Cdmx(pub.fecha_programada)}`);
+    if (!destino) return;
+    reprogramar.mutate({ id: idArrastrada, iso: destino });
   }
 
-  const sinFranjas = (franjasQuery.data?.franjas ?? []).length === 0;
-  if (programadas.length === 0 && sinFranjas) {
+  if (programadas.length === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
@@ -287,10 +228,10 @@ export function VistaCalendario({
             <CalendarOff className="h-6 w-6" />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">No hay publicaciones programadas ni franjas</p>
+            <p className="font-medium">No hay publicaciones programadas</p>
             <p className="max-w-md text-sm text-muted-foreground">
-              Define franjas de posteo (en “Gestionar”) y programa piezas para verlas y
-              moverlas aquí.
+              Pon una pieza en estado “Programado” con su fecha y hora (o deja que el motor la
+              reparta) para verla aquí.
             </p>
           </div>
         </CardContent>
@@ -298,132 +239,331 @@ export function VistaCalendario({
     );
   }
 
+  // --- Cabecera: toggle de vista + navegación contextual ------------------------------------
+  const fmtMes = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" });
+  const fmtDiaLargo = new Intl.DateTimeFormat("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  const fmtRango = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+
+  const diasSemana = diasDeSemana(ancla);
+  let etiqueta: string;
+  if (vista === "mes") etiqueta = fmtMes.format(ancla);
+  else if (vista === "semana")
+    etiqueta = `${fmtRango.format(diasSemana[0])} – ${fmtRango.format(diasSemana[6])}`;
+  else etiqueta = fmtDiaLargo.format(ancla);
+
+  function navegar(delta: number) {
+    setAncla((prev) => {
+      const d = new Date(prev);
+      if (vista === "mes") d.setMonth(d.getMonth() + delta);
+      else if (vista === "semana") d.setDate(d.getDate() + delta * 7);
+      else d.setDate(d.getDate() + delta);
+      return d;
+    });
+  }
+
+  function abrirDia(dia: Date) {
+    setAncla(dia);
+    setDiaSel(claveDia(dia));
+    setVista("dia");
+  }
+
   return (
     <Card>
       <CardContent className="space-y-3 py-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium capitalize">{etiquetaMes}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex overflow-hidden rounded-md border border-border">
+              {(["mes", "semana"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVista(v)}
+                  className={cn(
+                    "px-3 py-1 text-sm capitalize transition-colors",
+                    vista === v || (v === "semana" && vista === "dia")
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <p className="text-sm font-medium capitalize">{etiqueta}</p>
+          </div>
           <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAncla(new Date())}
-              title="Ir al mes actual"
-            >
+            <Button variant="outline" size="sm" onClick={() => setAncla(new Date())} title="Hoy">
               Hoy
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Mes anterior"
-              onClick={() => cambiarMes(-1)}
-            >
+            <Button variant="ghost" size="icon" aria-label="Anterior" onClick={() => navegar(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Mes siguiente"
-              onClick={() => cambiarMes(1)}
-            >
+            <Button variant="ghost" size="icon" aria-label="Siguiente" onClick={() => navegar(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
-          {DIAS_SEMANA.map((d) => (
-            <div
-              key={d}
-              className="bg-muted/60 px-2 py-1.5 text-center text-xs font-medium text-muted-foreground"
-            >
-              {d}
-            </div>
-          ))}
-          {celdas.map((dia) => {
-            const clave = claveDia(dia);
-            const delMes = dia.getMonth() === mesActual;
-            const esHoy = clave === hoy;
-            const items = porDia.get(clave) ?? [];
-            const franjaHoras = horasPorDia.get(diaSemanaFranja(dia)) ?? [];
-            // Reparte las piezas del día por hora de franja; las que no casan ninguna van a "otras".
-            const porHora = new Map<string, Publicacion[]>();
-            const otras: Publicacion[] = [];
-            for (const p of items) {
-              const h = formatearHora(p.fecha_programada);
-              if (franjaHoras.includes(h)) {
-                porHora.set(h, [...(porHora.get(h) ?? []), p]);
-              } else {
-                otras.push(p);
-              }
-            }
-            return (
-              <div
-                key={clave}
+        {vista === "mes" && (
+          <VistaMes
+            ancla={ancla}
+            porDia={porDia}
+            hoy={hoy}
+            onAbrirDia={abrirDia}
+          />
+        )}
+        {vista === "semana" && (
+          <VistaSemana
+            dias={diasSemana}
+            porDia={porDia}
+            hoy={hoy}
+            colActiva={colActiva}
+            setColActiva={setColActiva}
+            onAbrir={onEditar}
+            onDesprogramar={haciaDesprogramar}
+            onAbrirDia={abrirDia}
+            onSoltarEnDia={moverADia}
+            ocupado={ocupado}
+          />
+        )}
+        {vista === "dia" && (
+          <VistaDia
+            diaClave={diaSel ?? claveDia(ancla)}
+            porDia={porDia}
+            onAbrir={onEditar}
+            onDesprogramar={haciaDesprogramar}
+            onVolver={() => setVista("semana")}
+            ocupado={ocupado}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Rejilla mensual de RESUMEN: por día, total + conteo por red. Clic en un día → detalle. */
+function VistaMes({
+  ancla,
+  porDia,
+  hoy,
+  onAbrirDia,
+}: {
+  ancla: Date;
+  porDia: Map<string, Publicacion[]>;
+  hoy: string;
+  onAbrirDia: (d: Date) => void;
+}) {
+  const celdas = celdasDelMes(ancla);
+  const mesActual = ancla.getMonth();
+  return (
+    <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
+      {DIAS_SEMANA.map((d) => (
+        <div
+          key={d}
+          className="bg-muted/60 px-2 py-1.5 text-center text-xs font-medium text-muted-foreground"
+        >
+          {d}
+        </div>
+      ))}
+      {celdas.map((dia) => {
+        const clave = claveDia(dia);
+        const delMes = dia.getMonth() === mesActual;
+        const esHoy = clave === hoy;
+        const items = porDia.get(clave) ?? [];
+        const porRed = conteoPorRed(items);
+        return (
+          <button
+            type="button"
+            key={clave}
+            onClick={() => onAbrirDia(dia)}
+            className={cn(
+              "min-h-[5.5rem] space-y-1 bg-card p-1.5 text-left transition-colors hover:bg-accent/30",
+              !delMes && "bg-muted/30 text-muted-foreground",
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span
                 className={cn(
-                  "min-h-[7rem] space-y-1 bg-card p-1.5",
-                  !delMes && "bg-muted/30 text-muted-foreground",
+                  "flex h-5 w-5 items-center justify-center text-xs",
+                  esHoy && "rounded-full bg-primary font-medium text-primary-foreground",
                 )}
               >
-                <div
+                {dia.getDate()}
+              </span>
+              {items.length > 0 && (
+                <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-medium tabular-nums text-amber-800 dark:text-amber-200">
+                  {items.length}
+                </span>
+              )}
+            </div>
+            {porRed.length > 0 && (
+              <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+                {porRed.map(({ red, n }) => {
+                  const Icono = iconoRed(red);
+                  return (
+                    <span
+                      key={red}
+                      className="inline-flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground"
+                      title={`${nombreRed(red)}: ${n}`}
+                    >
+                      <Icono className="h-3 w-3" />
+                      {n}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Vista SEMANA: 7 columnas; piezas del día listadas; se arrastran entre días (reprograma). */
+function VistaSemana({
+  dias,
+  porDia,
+  hoy,
+  colActiva,
+  setColActiva,
+  onAbrir,
+  onDesprogramar,
+  onAbrirDia,
+  onSoltarEnDia,
+  ocupado,
+}: {
+  dias: Date[];
+  porDia: Map<string, Publicacion[]>;
+  hoy: string;
+  colActiva: string | null;
+  setColActiva: (v: string | null) => void;
+  onAbrir: (p: Publicacion) => void;
+  onDesprogramar: (p: Publicacion) => void;
+  onAbrirDia: (d: Date) => void;
+  onSoltarEnDia: (diaClave: string, id: string) => void;
+  ocupado: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
+      {dias.map((dia, i) => {
+        const clave = claveDia(dia);
+        const esHoy = clave === hoy;
+        const items = porDia.get(clave) ?? [];
+        return (
+          <div
+            key={clave}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (colActiva !== clave) setColActiva(clave);
+            }}
+            onDragLeave={() => setColActiva(colActiva === clave ? null : colActiva)}
+            onDrop={(e) => {
+              e.preventDefault();
+              const id = e.dataTransfer.getData("text/plain");
+              if (id) onSoltarEnDia(clave, id);
+            }}
+            className={cn(
+              "flex min-h-[18rem] flex-col bg-card transition-colors",
+              colActiva === clave && "bg-primary/10",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => onAbrirDia(dia)}
+              className="flex items-center justify-between border-b border-border px-2 py-1.5 text-left hover:bg-accent/30"
+            >
+              <span className="text-xs font-medium text-muted-foreground">
+                {DIAS_SEMANA[i]}{" "}
+                <span
                   className={cn(
-                    "flex h-5 w-5 items-center justify-center text-xs",
-                    esHoy && "rounded-full bg-primary font-medium text-primary-foreground",
+                    "ml-0.5 tabular-nums",
+                    esHoy && "rounded-full bg-primary px-1.5 text-primary-foreground",
                   )}
                 >
                   {dia.getDate()}
-                </div>
+                </span>
+              </span>
+              {items.length > 0 && (
+                <span className="text-[10px] tabular-nums text-muted-foreground">{items.length}</span>
+              )}
+            </button>
+            <div className="max-h-[28rem] flex-1 space-y-0.5 overflow-y-auto p-1">
+              {items.map((p) => (
+                <PildoraPub
+                  key={p.id}
+                  publicacion={p}
+                  onAbrir={onAbrir}
+                  onDesprogramar={onDesprogramar}
+                  ocupado={ocupado}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-                <div className="space-y-1">
-                  {franjaHoras.map((hora) => {
-                    const slotKey = `${clave}|${hora}`;
-                    return (
-                      <FranjaSlot
-                        key={slotKey}
-                        hora={hora}
-                        items={porHora.get(hora) ?? []}
-                        resaltado={slotActivo === slotKey}
-                        onAbrir={onEditar}
-                        onDesprogramar={(p) => desprogramar.mutate(p.id)}
-                        ocupado={ocupado}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = "move";
-                          if (slotActivo !== slotKey) setSlotActivo(slotKey);
-                        }}
-                        onDragLeave={() => setSlotActivo((s) => (s === slotKey ? null : s))}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const id = e.dataTransfer.getData("text/plain");
-                          if (id) soltarEn(clave, hora, id);
-                        }}
-                      />
-                    );
-                  })}
-
-                  {/* Piezas fuera de cualquier franja (hora no-cola): visibles y arrastrables. */}
-                  {otras.length > 0 && (
-                    <div className="space-y-0.5 pt-0.5">
-                      {franjaHoras.length > 0 && (
-                        <p className="px-0.5 text-[10px] text-muted-foreground/60">Fuera de franja</p>
-                      )}
-                      {otras.map((p) => (
-                        <PildoraPub
-                          key={p.id}
-                          publicacion={p}
-                          onAbrir={onEditar}
-                          onDesprogramar={(x) => desprogramar.mutate(x.id)}
-                          ocupado={ocupado}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+/** Detalle de UN día: todas sus piezas (editar/desprogramar). */
+function VistaDia({
+  diaClave,
+  porDia,
+  onAbrir,
+  onDesprogramar,
+  onVolver,
+  ocupado,
+}: {
+  diaClave: string;
+  porDia: Map<string, Publicacion[]>;
+  onAbrir: (p: Publicacion) => void;
+  onDesprogramar: (p: Publicacion) => void;
+  onVolver: () => void;
+  ocupado: boolean;
+}) {
+  const items = porDia.get(diaClave) ?? [];
+  const porRed = conteoPorRed(items);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={onVolver}>
+          <ChevronLeft className="h-4 w-4" />
+          Volver a la semana
+        </Button>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className="tabular-nums">{items.length} piezas</span>
+          {porRed.map(({ red, n }) => {
+            const Icono = iconoRed(red);
+            return (
+              <span key={red} className="inline-flex items-center gap-0.5 tabular-nums" title={nombreRed(red)}>
+                <Icono className="h-3.5 w-3.5" />
+                {n}
+              </span>
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      {items.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Nada programado este día.</p>
+      ) : (
+        <div className="space-y-1">
+          {items.map((p) => (
+            <PildoraPub
+              key={p.id}
+              publicacion={p}
+              onAbrir={onAbrir}
+              onDesprogramar={onDesprogramar}
+              ocupado={ocupado}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
