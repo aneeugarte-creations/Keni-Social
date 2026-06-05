@@ -58,6 +58,9 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_TRADUCCION,
         config.ENV_BREAKING,
         config.ENV_INVESTIGACION,
+        # Auto-feed (Ola E) — toggle bool + tuning int/float (el tope por marca se genera aparte).
+        config.ENV_AUTOFEED,
+        config.ENV_AUTOFEED_INTERVALO_MIN, config.ENV_AUTOFEED_UMBRAL, config.ENV_AUTOFEED_CAP,
         # Motor de noticias — tuning int/float.
         config.ENV_INGESTA_BATCH, config.ENV_INGESTA_WORKERS,
         config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
