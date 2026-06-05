@@ -110,6 +110,7 @@ services:
       - traefik.http.routers.front.entrypoints=websecure
       - traefik.http.routers.front.tls.certresolver=le
       - traefik.http.services.front.loadbalancer.server.port=80
+      - autoheal=true  # vigilado por el sidecar autoheal
     # nginx estatico: huella minima. 127.0.0.1 (no `localhost`): el busybox wget de
     # alpine intenta ::1 (IPv6) primero y nginx solo escucha IPv4 (ver front/Dockerfile).
     healthcheck:
@@ -216,6 +217,7 @@ services:
       - traefik.http.routers.back.entrypoints=websecure
       - traefik.http.routers.back.tls.certresolver=le
       - traefik.http.services.back.loadbalancer.server.port=8765
+      - autoheal=true  # el sidecar autoheal lo reinicia si /healthz queda unhealthy (cuelgue)
 
   daemons:
     # Proceso SOLO-daemons (Fase 3): el `back` corre uvicorn (que a proposito NO arranca
@@ -310,6 +312,8 @@ services:
       dockerfile: deploy/worker/Dockerfile
     image: keni-social/worker:${KENI_VERSION:-latest}
     restart: unless-stopped
+    labels:
+      - autoheal=true  # autoheal lo reinicia si el worker queda unhealthy/colgado
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
@@ -393,6 +397,8 @@ services:
       dockerfile: deploy/mcp/Dockerfile
     image: keni-social/mcp:${KENI_VERSION:-latest}
     restart: unless-stopped
+    labels:
+      - autoheal=true  # vigilado por el sidecar autoheal
     environment:
       KENI_MCP_TRANSPORT: http
       KENI_MCP_HOST: 0.0.0.0
@@ -464,6 +470,8 @@ services:
   files:
     image: dxflrs/garage:v1.0.1
     restart: unless-stopped
+    labels:
+      - autoheal=true  # vigilado por el sidecar autoheal
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
@@ -487,6 +495,27 @@ services:
     cpus: 2.0
     # Bootstrap de una vez (layout + bucket + clave): ver README. Sin `ports`:
     # interno; el back habla S3 por http://files:3900.
+
+  # AUTO-HEALING: vigila los contenedores keni-social con healthcheck + label `autoheal=true`
+  # y REINICIA los que pasen a `unhealthy`. Compose por si solo NO reinicia un contenedor
+  # vivo-pero-COLGADO (solo si el proceso SALE); este sidecar cierra ese hueco (p.ej. un back
+  # con el pool agotado, o un worker atascado, que dejan de responder al healthcheck sin morir).
+  # Acotado por LABEL para NO tocar otros stacks del mismo host (CI Woodpecker, learn-postgres).
+  # Excluidos a proposito: `db` (reiniciar Postgres ante un falso-negativo es disruptivo) y
+  # `traefik` (ingress host-network). Es complemento de `restart: unless-stopped` (que cubre el
+  # caso de proceso muerto), no su sustituto.
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal   # solo contenedores con label autoheal=true
+      AUTOHEAL_INTERVAL: "15"              # cada 15s revisa el estado de salud
+      AUTOHEAL_START_PERIOD: "60"          # gracia inicial antes de actuar
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: "20"  # SIGTERM->SIGKILL: deja al worker apagar limpio
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    mem_limit: 64m
+    cpus: 0.25
 
 networks:
   edge:
