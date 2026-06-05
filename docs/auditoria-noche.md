@@ -71,9 +71,11 @@ endurecimiento + unos pocos huecos realmente explotables.
    aplica a usuarios CON marcas asignadas; un usuario sin marcas ve todo. Hay que **asignar
    marcas a cada usuario del piloto** para que el aislamiento muerda. ¿Confirmas la UX?
 4. **Tool hardening de `claude -p`.** Veté `Write`/`Edit` globalmente y scrubeé secretos de
-   infra del entorno del subproceso. Dejé `WebFetch`/`WebSearch`/`Read` ACTIVOS (los necesitan
-   los prompts de investigación). **Follow-up**: bloquear Web también en flujos de SOLO copy
-   (RSS/autogen/QA) vía `endurecer` por call-site — no lo hice para no romper investigación.
+   infra del entorno del subproceso. **HECHO también**: bloqueado `WebFetch`/`WebSearch` (egreso
+   web) en los flujos de SOLO copy (RSS/autogen/QA/hashtags/green/criba/auto-QA/sugerencias) vía
+   `endurecer`, cerrando la exfil del `CLAUDE_CODE_OAUTH_TOKEN`. Investigación
+   (brief-tendencias/termometro-mundial) conserva web; `Read` NO se bloqueó (algunos skills leen
+   contexto de /data). Única decisión pendiente para ti: si quieres bloquear `Read` también.
 5. **Timeouts de fetch en el front**: 30s general, 120s en subidas/render. ¿Ok?
 
 ## Pendiente para mañana (no hecho / riesgo o decisión requerida)
@@ -104,6 +106,11 @@ endurecimiento + unos pocos huecos realmente explotables.
 10. `feat(auth)`: **MFA TOTP detrás de flag** (off por defecto, fail-safe).
 11. `perf(generaciones)`: retención de YAML (acota disco/escaneo).
 12. `fix(concurrencia)`: repos reexporta helpers + retira UNIQUE de slot incorrecto.
+13. `fix(auth)`: estrecha unión de login MFA (corrige TS2339 del build).
+14. `fix(seguridad)`: veta WebFetch/WebSearch en flujos de SOLO copy (cierra exfil del OAuth token).
+
+Estado final: **CI verde en `main`** (fronteras, frontend-build, tests-python suite completa,
+tests-app-*, deploy). Verificado leyendo los pipelines reales de Woodpecker.
 
 Proceso: validé cada push leyendo el resultado real de los pipelines de Woodpecker (API
 GitHub + logs desde la sqlite del server) y corregí las regresiones que aparecieron.
