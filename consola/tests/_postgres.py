@@ -8,11 +8,14 @@ COMO se decide "hay Postgres": la env var `KENI_TEST_DATABASE_URL` apunta al Pos
 pruebas. Si esta, los tests la usan (la copian a `DATABASE_URL`, que es lo que `motor_db`
 lee). Si NO esta, `requiere_postgres()` hace `pytest.skip`.
 
-  # local (con un contenedor):
+  # POLITICA (CLAUDE.md > Tests y CI): por DEFECTO NO se corre la suite ni se levanta Postgres
+  # en local; se empuja a la rama/main y se valida que el CI salga VERDE en el servidor (alli
+  # hay un service `postgres` que exporta KENI_TEST_DATABASE_URL). El contenedor de abajo es un
+  # ESCAPE puntual para depurar un test concreto, NO el flujo normal (ojo: tu reloj/zona local
+  # puede hacer fallar tests sensibles a la hora que en CI pasan):
   #   docker run -d --name pg -e POSTGRES_PASSWORD=x -p 55432:5432 postgres:16
   #   export KENI_TEST_DATABASE_URL=postgresql://postgres:x@127.0.0.1:55432/postgres
   #   pytest consola/tests/test_db_postgres.py
-  # CI: arranca un service `postgres` y exporta KENI_TEST_DATABASE_URL apuntandolo.
 
 AISLAMIENTO: `limpiar_postgres()` hace TRUNCATE de las tablas operacionales entre tests
 (rapido y sin recrear el esquema). El esquema se crea on-demand al primera conexion.
