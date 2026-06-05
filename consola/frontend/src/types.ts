@@ -1205,6 +1205,10 @@ export interface Etiqueta {
   /** CSV de palabras clave para auto-clasificar piezas en esta etiqueta. */
   keywords: string;
   activo: boolean;
+  /** Días que un ítem de esta línea se considera fresco. 0 = sin caducidad / evergreen. */
+  ttl_dias: number;
+  /** True = línea evergreen reutilizable en fines de semana; nunca caduca. */
+  es_green: boolean;
 }
 
 /** Forma reducida de una etiqueta en los catálogos del tablero (chips/selector). */
@@ -1229,6 +1233,10 @@ export interface CuerpoCrearEtiqueta {
   color?: string;
   /** CSV de palabras clave para auto-clasificar. */
   keywords?: string;
+  /** Días de vida del ítem (0 = sin caducidad / evergreen). */
+  ttl_dias?: number;
+  /** True = línea evergreen, nunca caduca. */
+  es_green?: boolean;
 }
 
 export interface CuerpoActualizarEtiqueta {
@@ -1238,6 +1246,10 @@ export interface CuerpoActualizarEtiqueta {
   color?: string;
   keywords?: string;
   activo?: boolean;
+  /** Días de vida del ítem (0 = sin caducidad / evergreen). */
+  ttl_dias?: number;
+  /** True = línea evergreen, nunca caduca. */
+  es_green?: boolean;
 }
 
 export interface RespuestaEtiqueta {
@@ -4183,6 +4195,8 @@ export interface InsumoItem {
   contenido_id: string;
   orden: number;
   creado: string;
+  /** Estado de frescura según la TTL de la línea. "caduco" = ítem vencido. */
+  frescura?: "fresco" | "caduco";
 }
 
 /** Un cajón con sus lotes e ítems para un día concreto. */

@@ -1169,6 +1169,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         color        TEXT NOT NULL DEFAULT '',
         keywords     TEXT NOT NULL DEFAULT '',
         activo       INTEGER NOT NULL DEFAULT 1,
+        ttl_dias     INTEGER NOT NULL DEFAULT 0,
+        es_green     INTEGER NOT NULL DEFAULT 0,
         creado       TEXT NOT NULL DEFAULT '',
         actualizado  TEXT NOT NULL DEFAULT ''
     )
@@ -1651,17 +1653,30 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
 
 
 def _migrar_columnas_etiquetas(con: Any) -> None:
-    """Anade `keywords` a `etiquetas` si una BD ya creada no la tuviera (idempotente).
+    """Anade columnas nuevas a `etiquetas` si una BD ya creada no las tuviera (idempotente).
 
-    `keywords` (CSV) alimenta el auto-etiquetado de líneas (clase `vertical`) y de
-    orígenes (clase `origen`) en la ingesta. Solo aplica si la tabla ya existe (un
-    primer arranque la crea con la columna).
+    - `keywords` (CSV) alimenta el auto-etiquetado de líneas (clase `vertical`) y de
+      orígenes (clase `origen`) en la ingesta.
+    - `ttl_dias` (INTEGER, def 0): días que un ítem de esta línea se considera fresco.
+      0 = sin caducidad / evergreen.
+    - `es_green` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
+
+    Solo aplica si la tabla ya existe (un primer arranque la crea con las columnas).
     """
     if not _tabla_existe(con, "etiquetas"):
         return
-    if "keywords" not in _columnas_existentes(con, "etiquetas"):
+    cols = _columnas_existentes(con, "etiquetas")
+    if "keywords" not in cols:
         con.execute(
             "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS keywords TEXT NOT NULL DEFAULT ''"
+        )
+    if "ttl_dias" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS ttl_dias INTEGER NOT NULL DEFAULT 0"
+        )
+    if "es_green" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS es_green INTEGER NOT NULL DEFAULT 0"
         )
 
 
@@ -7126,6 +7141,8 @@ _COLS_ETIQUETA = (
     "color",
     "keywords",
     "activo",
+    "ttl_dias",
+    "es_green",
     "creado",
     "actualizado",
 )
@@ -7137,13 +7154,17 @@ _CAMPOS_EDITABLES_ETIQUETA: tuple[str, ...] = (
     "color",
     "keywords",
     "activo",
+    "ttl_dias",
+    "es_green",
 )
 
 
 def _fila_a_etiqueta(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `etiquetas` en dict (con `activo` como bool)."""
+    """Convierte una fila de `etiquetas` en dict (con `activo`/`es_green` como bool)."""
     et: dict[str, Any] = {col: fila[col] for col in _COLS_ETIQUETA}
     et["activo"] = bool(fila["activo"])
+    et["ttl_dias"] = int(fila["ttl_dias"] or 0)
+    et["es_green"] = bool(fila["es_green"])
     return et
 
 
@@ -7155,6 +7176,8 @@ def crear_etiqueta(
     color: str = "",
     keywords: str = "",
     activo: bool = True,
+    ttl_dias: int = 0,
+    es_green: bool = False,
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -7169,6 +7192,8 @@ def crear_etiqueta(
         "color": color or "",
         "keywords": keywords or "",
         "activo": 1 if activo else 0,
+        "ttl_dias": max(0, int(ttl_dias or 0)),
+        "es_green": 1 if es_green else 0,
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -7241,6 +7266,19 @@ def existe_etiqueta_nombre(
     return fila is not None
 
 
+def obtener_etiqueta_por_nombre(nombre: str, clase: str, marca: str) -> dict[str, Any] | None:
+    """Devuelve la etiqueta por (nombre, clase, marca) — case-insensitive. None si no existe."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_ETIQUETA} WHERE LOWER(nombre) = LOWER(?) AND clase = ? AND marca = ?",
+            (nombre, clase, marca),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_etiqueta(fila) if fila is not None else None
+
+
 def actualizar_etiqueta(
     etiqueta_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -7248,6 +7286,10 @@ def actualizar_etiqueta(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_ETIQUETA}
     if "activo" in cambios:
         cambios["activo"] = 1 if cambios["activo"] else 0
+    if "es_green" in cambios:
+        cambios["es_green"] = 1 if cambios["es_green"] else 0
+    if "ttl_dias" in cambios:
+        cambios["ttl_dias"] = max(0, int(cambios["ttl_dias"] or 0))
     if not cambios:
         return obtener_etiqueta(etiqueta_id)
     ahora = datetime.now().isoformat(timespec="seconds")

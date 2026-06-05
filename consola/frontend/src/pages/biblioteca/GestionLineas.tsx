@@ -9,7 +9,7 @@
  * las líneas sembradas y afina sus keywords.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
+import { Check, Leaf, Loader2, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -206,6 +207,8 @@ function FormularioLinea({
     marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : GLOBAL,
   );
   const [keywords, setKeywords] = React.useState("");
+  const [ttlDias, setTtlDias] = React.useState(0);
+  const [esGreen, setEsGreen] = React.useState(false);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -214,6 +217,8 @@ function FormularioLinea({
         clase,
         marca: marca === GLOBAL ? "" : marca,
         keywords: keywords.trim(),
+        ttl_dias: ttlDias,
+        es_green: esGreen,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_ETIQUETAS });
@@ -255,6 +260,35 @@ function FormularioLinea({
           </Select>
         </div>
       </div>
+      {clase === "vertical" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={`linea-ttl-${clase}`}>
+              TTL (días)
+            </Label>
+            <Input
+              id={`linea-ttl-${clase}`}
+              type="number"
+              min={0}
+              value={ttlDias}
+              onChange={(e) => setTtlDias(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-24"
+            />
+            <p className="text-xs text-muted-foreground">0 días = sin caducidad / green</p>
+          </div>
+          <div className="flex items-center gap-3 pt-5">
+            <Switch
+              id={`linea-green-${clase}`}
+              checked={esGreen}
+              onCheckedChange={setEsGreen}
+            />
+            <Label htmlFor={`linea-green-${clase}`} className="flex items-center gap-1 cursor-pointer">
+              <Leaf className="h-3.5 w-3.5 text-green-600" />
+              Evergreen
+            </Label>
+          </div>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor={`linea-keywords-${clase}`}>
           Palabras clave{" "}
@@ -285,7 +319,7 @@ function FormularioLinea({
   );
 }
 
-/** Una fila con edición en línea (nombre · marca · keywords) y borrado. */
+/** Una fila con edición en línea (nombre · marca · keywords · ttl · green) y borrado. */
 function FilaLinea({
   etiqueta,
   clase,
@@ -300,6 +334,8 @@ function FilaLinea({
   const [nombre, setNombre] = React.useState(etiqueta.nombre);
   const [marca, setMarca] = React.useState(etiqueta.marca || GLOBAL);
   const [keywords, setKeywords] = React.useState(etiqueta.keywords ?? "");
+  const [ttlDias, setTtlDias] = React.useState(etiqueta.ttl_dias ?? 0);
+  const [esGreen, setEsGreen] = React.useState(etiqueta.es_green ?? false);
 
   const invalidar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_ETIQUETAS });
@@ -308,6 +344,8 @@ function FilaLinea({
     setNombre(etiqueta.nombre);
     setMarca(etiqueta.marca || GLOBAL);
     setKeywords(etiqueta.keywords ?? "");
+    setTtlDias(etiqueta.ttl_dias ?? 0);
+    setEsGreen(etiqueta.es_green ?? false);
     setEditando(true);
   };
 
@@ -317,6 +355,8 @@ function FilaLinea({
         nombre: nombre.trim(),
         marca: marca === GLOBAL ? "" : marca,
         keywords: keywords.trim(),
+        ttl_dias: ttlDias,
+        es_green: esGreen,
       }),
     onSuccess: () => {
       invalidar();
@@ -364,6 +404,33 @@ function FilaLinea({
             </SelectContent>
           </Select>
         </div>
+        {clase === "vertical" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor={`edit-ttl-${etiqueta.id}`}>TTL (días)</Label>
+              <Input
+                id={`edit-ttl-${etiqueta.id}`}
+                type="number"
+                min={0}
+                value={ttlDias}
+                onChange={(e) => setTtlDias(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-24"
+              />
+              <p className="text-xs text-muted-foreground">0 días = sin caducidad / green</p>
+            </div>
+            <div className="flex items-center gap-3 pt-5">
+              <Switch
+                id={`edit-green-${etiqueta.id}`}
+                checked={esGreen}
+                onCheckedChange={setEsGreen}
+              />
+              <Label htmlFor={`edit-green-${etiqueta.id}`} className="flex items-center gap-1 cursor-pointer">
+                <Leaf className="h-3.5 w-3.5 text-green-600" />
+                Evergreen
+              </Label>
+            </div>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor={`edit-keywords-${etiqueta.id}`}>
             Palabras clave{" "}
@@ -442,6 +509,17 @@ function FilaLinea({
         <Badge variant="outline" className="font-normal">
           {etiqueta.marca_nombre || "Global"}
         </Badge>
+        {clase === "vertical" && etiqueta.es_green && (
+          <Badge variant="secondary" className="gap-1 font-normal text-green-700">
+            <Leaf className="h-3 w-3" />
+            Evergreen
+          </Badge>
+        )}
+        {clase === "vertical" && !etiqueta.es_green && etiqueta.ttl_dias > 0 && (
+          <Badge variant="outline" className="font-normal text-amber-600">
+            {etiqueta.ttl_dias}d TTL
+          </Badge>
+        )}
       </div>
       {palabras.length > 0 ? (
         <div className="flex flex-wrap gap-1">

@@ -13,6 +13,7 @@ import {
   Calendar,
   CheckCircle2,
   Edit2,
+  EyeOff,
   Inbox,
   Loader2,
   MapPin,
@@ -45,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mensajeError } from "@/lib/api";
 import type { CajonInsumo, CajonConItems, InsumoItem, InsumoLote } from "@/types";
@@ -113,7 +115,11 @@ function etiquetaFecha(fecha: string): string {
 
 // ── Claves de React Query ─────────────────────────────────────────────────────
 
-const CLAVE_INSUMOS = (fecha: string) => ["insumos", "listar", fecha] as const;
+/** Clave completa para una combinación fecha+filtro. */
+const CLAVE_INSUMOS = (fecha: string, soloFrescos: boolean) =>
+  ["insumos", "listar", fecha, soloFrescos] as const;
+/** Prefijo para invalidar todas las variantes de un día (independientemente del filtro). */
+const CLAVE_INSUMOS_PREFIJO = (fecha: string) => ["insumos", "listar", fecha] as const;
 const CLAVE_DIAS = ["insumos", "dias"] as const;
 
 // ── Componente: badge de estado de material ───────────────────────────────────
@@ -274,24 +280,25 @@ interface PropsItemCard {
 function ItemCard({ item, fecha }: PropsItemCard) {
   const queryClient = useQueryClient();
   const [editando, setEditando] = React.useState(false);
+  const esCaducado = item.frescura === "caduco";
 
   const usarMut = useMutation({
     mutationFn: () => api.insumos.usarItem(item.id, { generar: true }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS(fecha) });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
       toast.success("Ítem llevado al tablero.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
   function onGuardado() {
-    void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS(fecha) });
+    void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
   }
 
   return (
     <>
       <div
-        className={`rounded-md border p-3 text-sm ${item.usado ? "bg-muted/40" : "bg-card"}`}
+        className={`rounded-md border p-3 text-sm ${item.usado ? "bg-muted/40" : esCaducado ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" : "bg-card"}`}
         data-testid="insumo-item"
       >
         <div className="flex items-start justify-between gap-2">
@@ -344,6 +351,16 @@ function ItemCard({ item, fecha }: PropsItemCard) {
           {item.linea && (
             <Badge variant="outline">{item.linea}</Badge>
           )}
+          {esCaducado && (
+            <Badge
+              variant="aviso"
+              className="gap-1"
+              data-testid="badge-caducado"
+            >
+              <EyeOff className="h-3 w-3" />
+              Caducado
+            </Badge>
+          )}
           {(item.hora || item.lugar) && (
             <Badge variant="outline" className="gap-1">
               <MapPin className="h-3 w-3" />
@@ -393,7 +410,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
       return api.insumos.aportar(form);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS(fecha) });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
       setTexto("");
       setArchivo(null);
       if (archivoRef.current) archivoRef.current.value = "";
@@ -405,7 +422,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   const borrarLoteMut = useMutation({
     mutationFn: (id: string) => api.insumos.borrarLote(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS(fecha) });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
       toast.success("Lote eliminado.");
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -528,6 +545,8 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
 
 export default function CajonesDia() {
   const [fecha, setFecha] = React.useState<string>(hoyIso);
+  // Default ON: ocultar caducados (especialmente útil para UnoTV)
+  const [ocultarCaducados, setOcultarCaducados] = React.useState(true);
 
   // Días con insumos registrados (para el selector de historial)
   const diasQuery = useQuery({
@@ -538,8 +557,8 @@ export default function CajonesDia() {
 
   // Datos del día seleccionado
   const insumosQuery = useQuery({
-    queryKey: CLAVE_INSUMOS(fecha),
-    queryFn: ({ signal }) => api.insumos.listar(fecha, signal),
+    queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados),
+    queryFn: ({ signal }) => api.insumos.listar(fecha, signal, ocultarCaducados),
     staleTime: 30 * 1000,
   });
 
@@ -599,6 +618,23 @@ export default function CajonesDia() {
             </Select>
           </div>
         )}
+
+        {/* Toggle: ocultar caducados */}
+        <div className="flex items-center gap-2 ml-auto">
+          <Switch
+            id="cd-ocultar-caducados"
+            checked={ocultarCaducados}
+            onCheckedChange={setOcultarCaducados}
+            aria-label="Ocultar caducados"
+          />
+          <Label
+            htmlFor="cd-ocultar-caducados"
+            className="flex items-center gap-1 cursor-pointer text-sm"
+          >
+            <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+            Ocultar caducados
+          </Label>
+        </div>
       </div>
 
       {/* Error de carga */}

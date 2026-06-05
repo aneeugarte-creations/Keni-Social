@@ -345,3 +345,99 @@ def test_listar_muestra_items_despues_de_aportar(cliente, monkeypatch):
     assert portal["items"][0]["titulo"] == "Item del día"
     # marca_nombre presente en la respuesta
     assert "marca_nombre" in portal["items"][0]
+
+
+# --------------------------------------------------------------------------- #
+# Frescura: campo `frescura` y filtro `solo_frescos`                           #
+# --------------------------------------------------------------------------- #
+
+
+def test_items_tienen_campo_frescura(cliente, monkeypatch):
+    """Todos los ítems de la respuesta deben incluir el campo 'frescura'."""
+    fake_ej = _fake_ejecutor_items([{"titulo": "Con frescura", "marca": "unotv"}])
+    monkeypatch.setattr(
+        "keni_consola.dominio.insumos_parse._ejecutar_claude_json", fake_ej
+    )
+    cliente.post(
+        "/api/insumos/aportar",
+        json={"cajon": "portal", "texto": "x", "fecha": "2026-06-05"},
+    )
+    r = cliente.get("/api/insumos?fecha=2026-06-05")
+    assert r.status_code == 200
+    portal = next(c for c in r.json()["cajones"] if c["cajon"] == "portal")
+    for item in portal["items"]:
+        assert "frescura" in item
+        assert item["frescura"] in ("fresco", "caduco")
+
+
+def test_items_sin_linea_son_siempre_frescos(cliente, monkeypatch):
+    """Un ítem sin línea asignada debe ser 'fresco' (sin dato = sin caducidad)."""
+    fake_ej = _fake_ejecutor_items([{"titulo": "Sin línea", "marca": "unotv", "linea": ""}])
+    monkeypatch.setattr(
+        "keni_consola.dominio.insumos_parse._ejecutar_claude_json", fake_ej
+    )
+    # Fecha antigua para que un posible TTL la caduque
+    cliente.post(
+        "/api/insumos/aportar",
+        json={"cajon": "portal", "texto": "x", "fecha": "2020-01-01"},
+    )
+    r = cliente.get("/api/insumos?fecha=2020-01-01")
+    portal = next(c for c in r.json()["cajones"] if c["cajon"] == "portal")
+    item = next((i for i in portal["items"] if i["titulo"] == "Sin línea"), None)
+    assert item is not None
+    assert item["frescura"] == "fresco"
+
+
+def test_solo_frescos_no_devuelve_caducados(cliente, monkeypatch):
+    """Con solo_frescos=1, ítems de líneas con TTL y fecha vieja no aparecen."""
+    # Siembra una línea con TTL=1 para unotv (Nacional)
+    import keni_consola.repos as repos
+    repos.crear_etiqueta(nombre="Nacional-test-ttl", clase="vertical", marca="unotv", ttl_dias=1, es_green=False)
+
+    fecha_vieja = "2020-01-01"
+
+    fake_ej = _fake_ejecutor_items([
+        {"titulo": "Noticia vieja", "marca": "unotv", "linea": "Nacional-test-ttl"},
+    ])
+    monkeypatch.setattr(
+        "keni_consola.dominio.insumos_parse._ejecutar_claude_json", fake_ej
+    )
+    cliente.post(
+        "/api/insumos/aportar",
+        json={"cajon": "portal", "texto": "x", "fecha": fecha_vieja},
+    )
+
+    # Sin filtro: aparece
+    r_todos = cliente.get(f"/api/insumos?fecha={fecha_vieja}")
+    portal_todos = next(c for c in r_todos.json()["cajones"] if c["cajon"] == "portal")
+    titulos_todos = [i["titulo"] for i in portal_todos["items"]]
+    assert "Noticia vieja" in titulos_todos
+
+    # Con solo_frescos=1: no aparece (la fecha es muy antigua)
+    r_frescos = cliente.get(f"/api/insumos?fecha={fecha_vieja}&solo_frescos=1")
+    assert r_frescos.status_code == 200
+    portal_frescos = next(c for c in r_frescos.json()["cajones"] if c["cajon"] == "portal")
+    titulos_frescos = [i["titulo"] for i in portal_frescos["items"]]
+    assert "Noticia vieja" not in titulos_frescos
+
+
+def test_solo_frescos_mantiene_items_sin_ttl(cliente, monkeypatch):
+    """Con solo_frescos=1, ítems de líneas sin TTL (0) o sin línea siguen apareciendo."""
+    fecha_vieja = "2020-01-01"
+
+    fake_ej = _fake_ejecutor_items([
+        {"titulo": "Evergreen item", "marca": "unotv", "linea": ""},
+    ])
+    monkeypatch.setattr(
+        "keni_consola.dominio.insumos_parse._ejecutar_claude_json", fake_ej
+    )
+    cliente.post(
+        "/api/insumos/aportar",
+        json={"cajon": "portal", "texto": "x", "fecha": fecha_vieja},
+    )
+
+    r = cliente.get(f"/api/insumos?fecha={fecha_vieja}&solo_frescos=1")
+    assert r.status_code == 200
+    portal = next(c for c in r.json()["cajones"] if c["cajon"] == "portal")
+    titulos = [i["titulo"] for i in portal["items"]]
+    assert "Evergreen item" in titulos

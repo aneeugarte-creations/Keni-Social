@@ -32,6 +32,7 @@ from starlette.routing import Route
 from .. import autogen_copy, marcas, redes, repos
 from .._http_json import leer_json
 from ..dominio import insumos_parse
+from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 
 _log = logging.getLogger("keni_consola.api.insumos")
@@ -63,11 +64,27 @@ def _lote_a_dict(lote: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _item_a_dict(item: dict[str, Any]) -> dict[str, Any]:
-    """Serializa un ítem añadiendo marca_nombre (usado ya viene como bool de db)."""
+def _item_a_dict(item: dict[str, Any], hoy: str | None = None) -> dict[str, Any]:
+    """Serializa un ítem añadiendo marca_nombre y frescura.
+
+    `hoy` (ISO YYYY-MM-DD) se usa para calcular la frescura. Si es None usa la
+    fecha del día en el servidor. La frescura se resuelve por la línea+marca del ítem.
+    """
+    _hoy = hoy or date.today().isoformat()
+    ttl_dias, es_green = resolver_linea(
+        item.get("linea") or "",
+        item.get("marca") or "",
+    )
+    frescura = estado_frescura(
+        item.get("fecha") or "",
+        ttl_dias,
+        es_green,
+        hoy=_hoy,
+    )
     return {
         **item,
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
+        "frescura": frescura,
     }
 
 
@@ -88,21 +105,27 @@ def _redes_iniciales(crudo: Any) -> list[str]:
 
 
 async def listar(request: Request) -> Response:
-    """`GET /api/insumos?fecha=YYYY-MM-DD&cajon=&marca=`
+    """`GET /api/insumos?fecha=YYYY-MM-DD&cajon=&marca=&solo_frescos=1`
 
     Devuelve los 4 cajones para la fecha pedida (def hoy), cada uno con sus lotes e ítems.
+
+    Parámetros opcionales:
+    - `solo_frescos=1`: filtra (oculta, no borra) los ítems caducados según la TTL de su línea.
+      Útil para UnoTV donde publicar noticias de ayer es perjudicial.
     """
     fecha = (request.query_params.get("fecha") or "").strip()
     if not fecha:
         fecha = date.today().isoformat()
     cajon_filtro = (request.query_params.get("cajon") or "").strip() or None
     marca_filtro = (request.query_params.get("marca") or "").strip() or None
+    solo_frescos = request.query_params.get("solo_frescos") == "1"
 
     if cajon_filtro and cajon_filtro not in _CAJONES:
         return JSONResponse({"error": "Cajón no válido."}, status_code=400)
     if marca_filtro and marca_filtro not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no válida."}, status_code=400)
 
+    hoy = date.today().isoformat()
     cajones_resultado: list[dict[str, Any]] = []
     for cajon in _CAJONES:
         if cajon_filtro and cajon != cajon_filtro:
@@ -110,10 +133,13 @@ async def listar(request: Request) -> Response:
             continue
         lotes = repos.listar_lotes(fecha=fecha, cajon=cajon)
         items = repos.listar_insumo_items(fecha=fecha, cajon=cajon, marca=marca_filtro)
+        items_serializados = [_item_a_dict(i, hoy=hoy) for i in items]
+        if solo_frescos:
+            items_serializados = [i for i in items_serializados if i.get("frescura") != "caduco"]
         cajones_resultado.append({
             "cajon": cajon,
             "lotes": [_lote_a_dict(lt) for lt in lotes],
-            "items": [_item_a_dict(i) for i in items],
+            "items": items_serializados,
         })
 
     return JSONResponse({"fecha": fecha, "cajones": cajones_resultado})
@@ -233,9 +259,10 @@ async def aportar(request: Request) -> Response:
         {"total_items": len(items_insertados), "estado": "listo"},
     ) or lote
 
+    _hoy = date.today().isoformat()
     return JSONResponse({
         "lote": _lote_a_dict(lote),
-        "items": [_item_a_dict(i) for i in items_insertados],
+        "items": [_item_a_dict(i, hoy=_hoy) for i in items_insertados],
     })
 
 
@@ -251,9 +278,10 @@ async def detalle_lote(request: Request) -> Response:
     if lote is None:
         return JSONResponse({"error": "Ese lote no existe."}, status_code=404)
     items = repos.listar_insumo_items(lote_id=lote_id)
+    _hoy = date.today().isoformat()
     return JSONResponse({
         "lote": _lote_a_dict(lote),
-        "items": [_item_a_dict(i) for i in items],
+        "items": [_item_a_dict(i, hoy=_hoy) for i in items],
     })
 
 
@@ -286,7 +314,7 @@ async def editar_item(request: Request) -> Response:
     item = repos.actualizar_insumo_item(item_id, campos)
     if item is None:
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
-    return JSONResponse({"item": _item_a_dict(item)})
+    return JSONResponse({"item": _item_a_dict(item, hoy=date.today().isoformat())})
 
 
 # --------------------------------------------------------------------------- #
@@ -350,7 +378,7 @@ async def usar_item(request: Request) -> Response:
         item_actualizado = item
 
     return JSONResponse({
-        "item": _item_a_dict(item_actualizado),
+        "item": _item_a_dict(item_actualizado, hoy=date.today().isoformat()),
         "contenido_id": contenido["id"],
         "copy_en_proceso": genero,
     })

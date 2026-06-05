@@ -87,6 +87,27 @@ const ITEM_PARSED = {
   contenido_id: "",
   orden: 1,
   creado: "2026-06-05T06:00:00",
+  frescura: "fresco" as const,
+};
+
+const ITEM_CADUCADO = {
+  ...ITEM_PARSED,
+  id: "item-2",
+  titulo: "Noticia de ayer vencida",
+  frescura: "caduco" as const,
+};
+
+const LOTE_PORTAL = {
+  id: "lote-1",
+  fecha: "2026-06-05",
+  cajon: "portal",
+  marca: "",
+  origen_texto: "1.- SISMO EN CDMX",
+  origen_archivo: "",
+  estado: "listo",
+  error: "",
+  total_items: 1,
+  creado: "2026-06-05T06:00:00",
 };
 
 const INSUMOS_CON_ITEM = {
@@ -94,21 +115,22 @@ const INSUMOS_CON_ITEM = {
   cajones: [
     {
       cajon: "portal",
-      lotes: [
-        {
-          id: "lote-1",
-          fecha: "2026-06-05",
-          cajon: "portal",
-          marca: "",
-          origen_texto: "1.- SISMO EN CDMX",
-          origen_archivo: "",
-          estado: "listo",
-          error: "",
-          total_items: 1,
-          creado: "2026-06-05T06:00:00",
-        },
-      ],
+      lotes: [LOTE_PORTAL],
       items: [ITEM_PARSED],
+    },
+    { cajon: "corresponsales", lotes: [], items: [] },
+    { cajon: "reporteros", lotes: [], items: [] },
+    { cajon: "eventos_claro", lotes: [], items: [] },
+  ],
+};
+
+const INSUMOS_CON_CADUCADO = {
+  fecha: "2026-06-05",
+  cajones: [
+    {
+      cajon: "portal",
+      lotes: [LOTE_PORTAL],
+      items: [ITEM_CADUCADO],
     },
     { cajon: "corresponsales", lotes: [], items: [] },
     { cajon: "reporteros", lotes: [], items: [] },
@@ -183,6 +205,7 @@ describe("CajonesDia", () => {
       expect(apiMod.api.insumos.listar).toHaveBeenCalledWith(
         "2026-06-04",
         expect.anything(),
+        expect.anything(), // soloFrescos param
       );
     });
   });
@@ -230,6 +253,53 @@ describe("CajonesDia", () => {
 
     await waitFor(() => {
       expect(usarMock).toHaveBeenCalledWith("item-1", { generar: true });
+    });
+  });
+
+  it("muestra el badge 'Caducado' en ítems con frescura='caduco'", async () => {
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_CADUCADO as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Noticia de ayer vencida");
+    expect(screen.getByTestId("badge-caducado")).toBeInTheDocument();
+    expect(screen.getByText("Caducado")).toBeInTheDocument();
+  });
+
+  it("NO muestra el badge 'Caducado' en ítems frescos", async () => {
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    expect(screen.queryByTestId("badge-caducado")).not.toBeInTheDocument();
+  });
+
+  it("muestra el toggle 'Ocultar caducados'", async () => {
+    mockApiInsumos();
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Portal / SMS");
+    expect(screen.getByLabelText("Ocultar caducados")).toBeInTheDocument();
+  });
+
+  it("el toggle 'Ocultar caducados' está activo por defecto y llama a listar con soloFrescos=true", async () => {
+    const listarMock = vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_VACIOS as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Portal / SMS");
+
+    // La llamada inicial debe incluir soloFrescos=true (tercer argumento)
+    await waitFor(() => {
+      expect(listarMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.anything(),
+        true,
+      );
     });
   });
 });

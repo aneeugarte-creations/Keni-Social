@@ -2038,9 +2038,16 @@ export const api = {
   // El equipo vuelca material diario en 4 cajones; Haiku lo parsea y produce
   // ítems listos para llevar al tablero. Contrato: docs/maquina-contenido/01-insumos-del-dia.md.
   insumos: {
-    /** Lista los 4 cajones con sus lotes e ítems para `fecha` (def: hoy en el servidor). */
-    listar: (fecha?: string, signal?: AbortSignal) =>
-      peticion<RespuestaInsumos>(`/insumos${query({ fecha })}`, { signal }),
+    /** Lista los 4 cajones con sus lotes e ítems para `fecha` (def: hoy en el servidor).
+     *
+     * `soloFrescos=true` activa `solo_frescos=1` en la query: los ítems caducados se ocultan
+     * (no se borran). Útil para UnoTV donde publicar noticias de ayer es perjudicial.
+     */
+    listar: (fecha?: string, signal?: AbortSignal, soloFrescos?: boolean) =>
+      peticion<RespuestaInsumos>(
+        `/insumos${query({ fecha, ...(soloFrescos ? { solo_frescos: "1" } : {}) })}`,
+        { signal },
+      ),
 
     /** Días con insumos registrados (orden: fecha desc). Para el selector de historial. */
     dias: (signal?: AbortSignal) =>

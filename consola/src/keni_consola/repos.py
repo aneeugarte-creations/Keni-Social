@@ -1595,6 +1595,8 @@ def crear_etiqueta(
     color: str = "",
     keywords: str = "",
     activo: bool = True,
+    ttl_dias: int = 0,
+    es_green: bool = False,
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -1607,6 +1609,8 @@ def crear_etiqueta(
         color=color,
         keywords=keywords,
         activo=activo,
+        ttl_dias=ttl_dias,
+        es_green=es_green,
         creado=creado,
         actualizado=actualizado,
         id=id,
@@ -1622,6 +1626,11 @@ def listar_etiquetas(
 
 def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:
     return db.obtener_etiqueta(etiqueta_id)
+
+
+def obtener_etiqueta_por_nombre(nombre: str, clase: str, marca: str) -> dict[str, Any] | None:
+    """Devuelve la etiqueta por (nombre, clase, marca). None si no existe."""
+    return db.obtener_etiqueta_por_nombre(nombre, clase, marca)
 
 
 def existe_etiqueta_nombre(
