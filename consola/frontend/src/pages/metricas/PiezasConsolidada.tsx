@@ -5,10 +5,13 @@
  *   - Filtros (client-side): marca, línea editorial, red y buscador por título.
  *   - Estadísticas del conjunto filtrado: nº de piezas, vistas media/mediana y
  *     engagement medio/mediana (top/peores = ordenar por la columna Vistas).
- *   - Columnas ordenables (vistas / engagement / comentarios / compartidos / guardados /
- *     clics a enlace, estas con icono en la cabecera) reusando `useOrdenTabla`. Los clics
- *     a enlace (tráfico fuera de la red) absorben la antigua tabla "Tráfico web".
- *   - Paginación POR DÍA (un día por página, pager Prev/Siguiente).
+ *   - Columnas ordenables (día / vistas / engagement / comentarios / compartidos /
+ *     guardados / clics a enlace, estas con icono en la cabecera) reusando `useOrdenTabla`.
+ *     El día es UNA columna más (ordenable), no el eje de la vista. Los clics a enlace
+ *     (tráfico fuera de la red) absorben la antigua tabla "Tráfico web".
+ *   - Paginación de 50 piezas por página sobre el conjunto filtrado+ordenado (pager
+ *     Prev/Siguiente). Orden por defecto = Vistas desc, así la página 1 es el top 50
+ *     del rango (p. ej. el top 50 del mes), no de un solo día.
  *   - Cada fila muestra "Plataforma · Línea (· Marca)" + badge de rendimiento relativo y
  *     es ABRIBLE: drill-down al `DetallePieza` (métricas + granulares + histórico + velocidad).
  *
@@ -70,6 +73,7 @@ import { DetallePieza } from "./DetallePieza";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 type ClaveOrden =
+  | "publicado"
   | "visualizaciones"
   | "engagement_pct"
   | "comentarios"
@@ -78,6 +82,8 @@ type ClaveOrden =
   | "clics_enlace";
 
 const ACCESORES: Record<ClaveOrden, (p: PiezaListado) => number | string | null> = {
+  // ISO (AAAA-MM-DD): la comparación de strings es cronológica.
+  publicado: (p) => p.publicado || null,
   visualizaciones: (p) => p.visualizaciones,
   engagement_pct: (p) => p.engagement_pct,
   comentarios: (p) => p.comentarios,
@@ -98,6 +104,9 @@ const COLS_INTERACCION: Array<{ clave: ClaveOrden; etiqueta: string; icono: Luci
 const TODAS = "__todas__";
 const SIN_LINEA = "Sin línea";
 
+/** Piezas por página del listado (top N del rango, no por día). */
+const POR_PAGINA = 50;
+
 /** Media aritmética (null si no hay datos). */
 function media(nums: number[]): number | null {
   if (nums.length === 0) return null;
@@ -112,15 +121,13 @@ function mediana(nums: number[]): number | null {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-/** Etiqueta legible de un día ISO (AAAA-MM-DD) en es-MX: "lun 1 jun 2026". */
-function etiquetaDia(iso: string): string {
-  const [a, m, d] = iso.split("-").map((n) => parseInt(n, 10));
-  if (!a || !m || !d) return iso;
+/** Etiqueta compacta de un día ISO (AAAA-MM-DD) en es-MX para la columna: "1 jun". */
+function etiquetaDiaCorto(iso: string): string {
+  const [a, m, d] = (iso || "").split("-").map((n) => parseInt(n, 10));
+  if (!a || !m || !d) return "—";
   return new Date(a, m - 1, d).toLocaleDateString("es-MX", {
-    weekday: "short",
     day: "numeric",
     month: "short",
-    year: "numeric",
   });
 }
 
@@ -140,7 +147,7 @@ export function PiezasConsolidada({
   const [busqueda, setBusqueda] = React.useState("");
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
-  const [diaIdx, setDiaIdx] = React.useState(0);
+  const [paginaIdx, setPaginaIdx] = React.useState(0);
   const [seleccion, setSeleccion] = React.useState<PiezaListado | null>(null);
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
 
@@ -196,27 +203,25 @@ export function PiezasConsolidada({
     };
   }, [filtradas]);
 
-  // Días presentes en lo filtrado, del más reciente al más antiguo (una página = un día).
-  const dias = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const p of filtradas) if (p.publicado) set.add(p.publicado);
-    return Array.from(set).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
-  }, [filtradas]);
-
-  React.useEffect(() => {
-    setDiaIdx((i) => (i >= dias.length ? 0 : i));
-  }, [dias.length]);
-
-  const diaActual = dias[Math.min(diaIdx, Math.max(dias.length - 1, 0))] ?? "";
-  const piezasDelDia = React.useMemo(
-    () => filtradas.filter((p) => p.publicado === diaActual),
-    [filtradas, diaActual],
-  );
-
+  // Orden sobre TODO el conjunto filtrado (el día es solo una columna ordenable más).
+  // Por defecto Vistas desc → la página 1 es el top del rango (top 50 del mes).
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<PiezaListado, ClaveOrden>(
-    piezasDelDia,
+    filtradas,
     ACCESORES,
     { clave: "visualizaciones", direccion: "desc" },
+  );
+
+  // Paginación de 50 piezas sobre el conjunto ya ordenado. Al cambiar filtros u orden
+  // (cambia la lista ordenada) volvemos a la primera página.
+  const totalPaginas = Math.max(1, Math.ceil(filasOrdenadas.length / POR_PAGINA));
+  React.useEffect(() => {
+    setPaginaIdx(0);
+  }, [filasOrdenadas]);
+  const paginaActual = Math.min(paginaIdx, totalPaginas - 1);
+  const desde = paginaActual * POR_PAGINA;
+  const filasPagina = React.useMemo(
+    () => filasOrdenadas.slice(desde, desde + POR_PAGINA),
+    [filasOrdenadas, desde],
   );
 
   function abrir(pieza: PiezaListado) {
@@ -233,7 +238,7 @@ export function PiezasConsolidada({
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del rango (de la marca activa). Filtra por línea o red; ordena por columna (Vistas desc = top, asc = peores); navega día a día y toca una pieza para su detalle."
+        descripcion="Todas las piezas del rango (de la marca activa) en páginas de 50. Filtra por línea o red; ordena por columna (Vistas desc = top del rango, Día = orden cronológico); toca una pieza para su detalle."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">
@@ -312,31 +317,26 @@ export function PiezasConsolidada({
           <p className="py-10 text-center text-sm text-muted-foreground">
             Sin piezas en este periodo.
           </p>
-        ) : dias.length === 0 ? (
+        ) : filasOrdenadas.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
             Ninguna pieza coincide con los filtros.
           </p>
         ) : (
           <>
-            {/* Pager por día */}
+            {/* Pager de 50 en 50 sobre el conjunto filtrado+ordenado */}
             <div className="flex items-center justify-between gap-3 px-6 pb-3">
-              <div>
-                <p className="text-sm font-semibold capitalize text-foreground">
-                  {etiquetaDia(diaActual)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {piezasDelDia.length} {piezasDelDia.length === 1 ? "pieza" : "piezas"} · día{" "}
-                  {diaIdx + 1} de {dias.length}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                {desde + 1}–{Math.min(desde + POR_PAGINA, filasOrdenadas.length)} de{" "}
+                {filasOrdenadas.length} piezas · página {paginaActual + 1} de {totalPaginas}
+              </p>
               <div className="flex items-center gap-1">
                 <Button
                   variant="outline"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => setDiaIdx((i) => Math.max(0, i - 1))}
-                  disabled={diaIdx <= 0}
-                  aria-label="Día más reciente"
+                  onClick={() => setPaginaIdx((i) => Math.max(0, i - 1))}
+                  disabled={paginaActual <= 0}
+                  aria-label="Página anterior"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -344,9 +344,9 @@ export function PiezasConsolidada({
                   variant="outline"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => setDiaIdx((i) => Math.min(dias.length - 1, i + 1))}
-                  disabled={diaIdx >= dias.length - 1}
-                  aria-label="Día más antiguo"
+                  onClick={() => setPaginaIdx((i) => Math.min(totalPaginas - 1, i + 1))}
+                  disabled={paginaActual >= totalPaginas - 1}
+                  aria-label="Página siguiente"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -357,6 +357,15 @@ export function PiezasConsolidada({
               <TableHeader>
                 <TableRow>
                   <TableHead>Pieza</TableHead>
+                  <CabeceraOrdenable
+                    activa={estado.clave === "publicado"}
+                    direccion={estado.direccion}
+                    onClick={() => alClicar("publicado")}
+                    alinear="right"
+                    className="text-right"
+                  >
+                    Día
+                  </CabeceraOrdenable>
                   <CabeceraOrdenable
                     activa={estado.clave === "visualizaciones"}
                     direccion={estado.direccion}
@@ -393,7 +402,7 @@ export function PiezasConsolidada({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filasOrdenadas.map((p) => (
+                {filasPagina.map((p) => (
                   <FilaPieza
                     key={p.id}
                     pieza={p}
@@ -406,8 +415,8 @@ export function PiezasConsolidada({
             </Table>
             <p className="px-6 py-3 text-xs text-muted-foreground">
               {hayFiltros
-                ? `${filtradas.length} de ${piezas.length} piezas (filtrado) · ${dias.length} días`
-                : `${piezas.length} piezas · ${dias.length} días`}
+                ? `${filtradas.length} de ${piezas.length} piezas (filtrado)`
+                : `${piezas.length} piezas`}
             </p>
           </>
         )}
@@ -485,6 +494,9 @@ function FilaPieza({
             </Badge>
           )}
         </span>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right text-xs text-muted-foreground tabular-nums">
+        {etiquetaDiaCorto(pieza.publicado)}
       </TableCell>
       <TableCell className="text-right tabular-nums">
         {numeroCompacto(pieza.visualizaciones)}
