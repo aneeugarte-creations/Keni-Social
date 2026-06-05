@@ -1,23 +1,31 @@
 """Tests OFFLINE de `dominio.render_pieza`: resolución de la imagen on-demand desde la receta.
 
-No tocan Node ni la BD: mockean `estudio_imagen.componer`/`componer_desde_plantilla`/
-`marca_tiene_plantilla` y `repos.obtener_plantilla_diseno`. Verifican la PRECEDENCIA de la
-receta (imagen bespoke > placa oculta > plantilla del estudio > placa de marca > foto) y la
-URL servible que decide la serialización.
+No tocan Node ni la BD: mockean `estudio_imagen.componer_desde_plantilla`/`_bytes`,
+`estudio_imagen.marca_tiene_plantilla` (el spec, BARATO) y `repos.listar/obtener_plantilla_diseno`.
+Verifican la PRECEDENCIA de la receta (imagen bespoke > placa oculta > plantilla del estudio >
+foto cruda) y la URL servible que decide la serialización. SOLO componen plantillas de la galería
+del estudio: la placa de marca por SPEC (legada) ya NO se compone —si la marca tiene spec pero no
+hay plantilla de estudio resoluble, `/compuesta` sirve la FOTO cruda.
 """
 
 from __future__ import annotations
 
-from keni_consola import media, plantillas_marca, repos
+from keni_consola import media, repos
 from keni_consola.dominio import estudio_imagen, render_pieza
 
 
 def _sin_plantilla_de_marca(monkeypatch, valor=False):
-    monkeypatch.setattr(estudio_imagen, "marca_tiene_plantilla", lambda marca: valor)
+    """Controla si la marca tiene plantilla de ESTUDIO (`valor=True`) o no -> decide `tiene_receta`.
+
+    Parchea `render_pieza.marca_tiene_plantilla_estudio`, que es lo que `tiene_receta` usa cuando la
+    pieza no fija una `plantilla_diseno_id` explícita. (Ese helper consulta el almacén en prod; aquí
+    lo cortocircuitamos para no tocar BD.)
+    """
+    monkeypatch.setattr(render_pieza, "marca_tiene_plantilla_estudio", lambda marca: valor)
 
 
 def _sin_plantillas_estudio(monkeypatch):
-    """La marca no tiene plantillas de estudio: el render cae a la placa de marca por SPEC."""
+    """La marca no tiene plantillas de estudio: `_plantilla_efectiva` no halla la por defecto."""
     monkeypatch.setattr(repos, "listar_plantillas_diseno", lambda **k: [])
 
 
@@ -38,11 +46,13 @@ def test_tiene_receta_por_plantilla_del_estudio(monkeypatch):
 
 
 def test_tiene_receta_por_placa_de_marca(monkeypatch):
+    # Sin `plantilla_diseno_id` explícito: hay receta si la marca tiene placa configurada (spec).
     _sin_plantilla_de_marca(monkeypatch, True)
     assert render_pieza.tiene_receta({"marca": "unotv"}) is True
 
 
 def test_tiene_receta_marca_sin_plantilla(monkeypatch):
+    # Marca sin placa (spec): sin receta -> publica la foto cruda.
     _sin_plantilla_de_marca(monkeypatch, False)
     assert render_pieza.tiene_receta({"marca": "piso-15"}) is False
 
@@ -64,16 +74,20 @@ def test_imagen_bespoke_se_respeta(monkeypatch):
 
 
 def test_receta_viva_gana_a_imagen_vieja(monkeypatch):
-    # Pieza NO publicada con receta (marca con plantilla) + un PNG viejo horneado: la RECETA manda,
-    # se RECOMPONE (el feed refleja la plantilla actual, no la placa vieja). Es el bug del feed.
+    # Pieza NO publicada con receta (marca con plantilla de estudio por defecto) + un PNG viejo
+    # horneado: la RECETA manda, se RECOMPONE vía `componer_desde_plantilla` (el feed refleja la
+    # plantilla actual, no la placa vieja). Es el bug del feed.
     _sin_plantilla_de_marca(monkeypatch, True)
-    _sin_plantillas_estudio(monkeypatch)  # cae a la placa de marca por SPEC
     monkeypatch.setattr(
-        estudio_imagen, "componer",
+        repos, "listar_plantillas_diseno",
+        lambda **k: [{"id": "verde", "nombre": "UnoTV - Verde", "documento": "{\"v\":1}"}],
+    )
+    monkeypatch.setattr(
+        estudio_imagen, "componer_desde_plantilla",
         lambda *a, **k: {"id": "fresca.png", "url": "/api/media/fresca.png"},
     )
     pub = {"id": "p1", "imagen": "vieja.png", "marca": "unotv", "red": "x",
-           "copy_in": "T", "foto": "f.jpg", "estado": "en_revision"}
+           "copy_in": "T", "foto": "f.jpg", "foto_encuadre": "", "estado": "en_revision"}
     assert render_pieza.imagen_compuesta_id(pub) == "fresca.png"
     assert render_pieza.imagen_url_de(pub) == "/api/publicaciones/p1/compuesta"
 
@@ -105,22 +119,18 @@ def test_sin_receta_devuelve_foto(monkeypatch):
     assert render_pieza.imagen_compuesta_id(pub) == "foto.jpg"
 
 
-def test_placa_de_marca_compone(monkeypatch):
-    # Marca SIN plantillas de estudio: cae a la placa de marca por SPEC (legado).
+def test_sin_plantilla_de_estudio_devuelve_foto(monkeypatch):
+    # Marca CON spec (tiene_receta True) pero SIN plantilla de estudio resoluble: ya NO se compone
+    # la placa por SPEC (retirada) -> devuelve la FOTO cruda, sin llamar a `estudio_imagen.componer`.
     _sin_plantilla_de_marca(monkeypatch, True)
     _sin_plantillas_estudio(monkeypatch)
-    capt = {}
 
-    def _componer(imagen, *, marca, formato, titular, etiqueta=None, **k):
-        capt.update(imagen=imagen, marca=marca, formato=formato, titular=titular)
-        return {"id": "compuesta.png", "url": "/api/media/compuesta.png"}
+    def _boom(*a, **k):
+        raise AssertionError("no debe componer la placa por SPEC (retirada)")
 
-    monkeypatch.setattr(estudio_imagen, "componer", _componer)
-    pub = {"imagen": "", "foto": "foto.jpg", "marca": "unotv", "red": "instagram",
-           "copy_in": "TITULAR"}
-    assert render_pieza.imagen_compuesta_id(pub) == "compuesta.png"
-    assert capt["imagen"] == "foto.jpg" and capt["marca"] == "unotv"
-    assert capt["titular"] == "TITULAR" and capt["formato"] == "feed"
+    monkeypatch.setattr(estudio_imagen, "componer", _boom)
+    pub = {"imagen": "", "foto": "f.jpg", "marca": "unotv", "red": "instagram", "copy_in": "TITULAR"}
+    assert render_pieza.imagen_compuesta_id(pub) == "f.jpg"
 
 
 def test_sin_plantilla_explicita_usa_la_por_defecto_de_la_marca(monkeypatch):
@@ -203,16 +213,15 @@ def test_fotos_de_pieza_legado_hueco_unico(monkeypatch):
     assert render_pieza.fotos_de_pieza(pub) == [{"objeto": "f.jpg", "foco": [0.5, 0.5], "zoom": 2.0}]
 
 
-def test_plantilla_borrada_cae_a_placa_de_marca(monkeypatch):
-    # Si la plantilla elegida ya no existe, NO se deja la pieza sin imagen: cae a la placa.
+def test_plantilla_borrada_cae_a_la_foto_cruda(monkeypatch):
+    # Si la plantilla EXPLÍCITA elegida ya no existe (`obtener_plantilla_diseno` -> None),
+    # `_plantilla_efectiva` no resuelve ninguna plantilla de estudio y el render cae a la FOTO
+    # cruda (ya NO existe la placa de marca por SPEC). Con `plantilla_diseno_id` puesto, hay receta
+    # (no se mira la marca) pero la plantilla no compone.
     monkeypatch.setattr(repos, "obtener_plantilla_diseno", lambda pid: None)
-    monkeypatch.setattr(
-        estudio_imagen, "componer",
-        lambda *a, **k: {"id": "placa.png", "url": "/api/media/placa.png"},
-    )
     pub = {"imagen": "", "plantilla_diseno_id": "pl-borrada", "foto": "f.jpg",
            "marca": "unotv", "red": "x", "copy_in": "Y"}
-    assert render_pieza.imagen_compuesta_id(pub) == "placa.png"
+    assert render_pieza.imagen_compuesta_id(pub) == "f.jpg"
 
 
 # --------------------------------------------------------------------------- #
@@ -261,17 +270,39 @@ def test_url_fuente_externa(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_render_bytes_placa_compone_sin_persistir(monkeypatch):
+def test_render_bytes_plantilla_por_defecto_compone_sin_persistir(monkeypatch):
+    # Marca con plantilla de estudio POR DEFECTO: el render efímero compone vía
+    # `componer_desde_plantilla_bytes` y NO persiste nada en el almacén.
     _sin_plantilla_de_marca(monkeypatch, True)
-    _sin_plantillas_estudio(monkeypatch)
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [{"id": "verde", "nombre": "UnoTV - Verde", "documento": "{\"v\":1}"}],
+    )
 
     def _no_persiste(*a, **k):
         raise AssertionError("render_bytes NO debe persistir")
 
-    monkeypatch.setattr(estudio_imagen, "componer_bytes", lambda *a, **k: b"PNG")
+    monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla_bytes", lambda *a, **k: b"PNG")
     monkeypatch.setattr(media, "guardar_bytes_contenido", _no_persiste)
-    pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "copy_in": "T", "foto": "f.jpg"}
+    pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "copy_in": "T",
+           "foto": "f.jpg", "foto_encuadre": ""}
     assert render_pieza.render_bytes(pub) == (b"PNG", "image/png")
+
+
+def test_render_bytes_sin_plantilla_de_estudio_sirve_foto(monkeypatch):
+    # Marca CON spec pero SIN plantilla de estudio resoluble: ya NO se compone la placa por SPEC
+    # -> sirve los BYTES de la foto cruda (no `componer_bytes`), sin persistir nada.
+    _sin_plantilla_de_marca(monkeypatch, True)
+    _sin_plantillas_estudio(monkeypatch)
+
+    def _boom(*a, **k):
+        raise AssertionError("no debe componer la placa por SPEC (retirada)")
+
+    monkeypatch.setattr(estudio_imagen, "componer_bytes", _boom)
+    monkeypatch.setattr(media, "leer_media", lambda n: b"FOTO" if n == "f.jpg" else None)
+    monkeypatch.setattr(media, "mime_de", lambda n: "image/jpeg")
+    pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "copy_in": "T", "foto": "f.jpg"}
+    assert render_pieza.render_bytes(pub) == (b"FOTO", "image/jpeg")
 
 
 def test_render_bytes_plantilla(monkeypatch):
@@ -310,27 +341,14 @@ def test_render_bytes_none_sin_imagen(monkeypatch):
 
 
 def test_firma_estable_y_sensible(monkeypatch):
-    # Spec fijo (sin IO): la firma depende de los campos de la receta.
-    _sin_plantillas_estudio(monkeypatch)  # cae al SPEC para la firma
-    monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 1})
+    # Sin plantilla de estudio (la firma no mira el SPEC): depende de los campos de la receta.
+    _sin_plantillas_estudio(monkeypatch)
     base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
             "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
     f1 = render_pieza.firma_receta(dict(base))
     f2 = render_pieza.firma_receta(dict(base))
     f3 = render_pieza.firma_receta({**base, "copy_in": "B"})
     assert f1 == f2 and f1 != f3
-
-
-def test_firma_cambia_si_cambia_el_spec(monkeypatch):
-    # Editar el spec de la marca (mismo copy_in) invalida la caché HTTP.
-    _sin_plantillas_estudio(monkeypatch)
-    base = {"id": "p1", "imagen": "", "marca": "unotv", "red": "x", "foto": "f.jpg",
-            "copy_in": "A", "foto_encuadre": "", "placa_oculta": False, "plantilla_diseno_id": ""}
-    monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 1})
-    f1 = render_pieza.firma_receta(dict(base))
-    monkeypatch.setattr(plantillas_marca, "obtener_spec", lambda marca: {"v": 2})
-    f2 = render_pieza.firma_receta(dict(base))
-    assert f1 != f2
 
 
 def test_firma_cambia_si_cambia_la_plantilla_por_defecto(monkeypatch):
