@@ -17,7 +17,7 @@
  * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Gavel, Inbox, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Inbox, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -175,6 +175,14 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       aprobar.mutate();
       return;
     }
+    // No te toca el OK ahora. Si puedes FORZAR (admin/coordinador), el toast ofrece una
+    // acción discreta para saltarte la cadena (en vez de un icono fijo en la tarjeta).
+    if (puedeForzar && enRevision && !yaAprobada) {
+      toast(motivoBloqueo, {
+        action: { label: "Forzar", onClick: () => void onForzar() },
+      });
+      return;
+    }
     toast(motivoBloqueo);
   };
 
@@ -303,25 +311,8 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               )}
             </Button>
           )}
-          {/* OVERRIDE (admin/coordinador): forzar la aprobación saltándose la cadena. Solo en
-              revisión y sin aprobar aún; pide confirmación con un pop-up. */}
-          {puedeForzar && enRevision && !yaAprobada && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-amber-600 dark:text-amber-400"
-              onClick={() => void onForzar()}
-              disabled={ocupado}
-              title="Forzar aprobación (saltar la cadena)"
-              aria-label="Forzar aprobación"
-            >
-              {forzar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Gavel className="h-4 w-4" />
-              )}
-            </Button>
-          )}
+          {/* El OVERRIDE de forzar (admin/coordinador) ya NO es un icono en la tarjeta: se ofrece
+              como acción discreta "Forzar" en el toast al intentar dar el OK sin que toque. */}
           {/* Comentar. Con hilos SIN RESOLVER muestra una bandeja (Inbox) con el conteo y en ámbar:
               avisa de que hay conversación pendiente que bloquea publicar (como en un PR). */}
           <Button
