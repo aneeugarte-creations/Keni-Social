@@ -280,10 +280,17 @@ def test_renderizar_documento_bytes_con_logo_de_categoria(tmp_path, monkeypatch)
     monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-logo")
     monkeypatch.setattr(e, "_fuentes_extra_de_marca", lambda marca, carpeta: {})
 
+    from pathlib import Path
+
     cap: dict[str, object] = {}
 
     def _fake(payload, out):
-        cap["payload"] = payload
+        # Comprobamos DENTRO del fake: `renderizar_documento_bytes` materializa en un
+        # `TemporaryDirectory` que se borra al volver, asi que el asset solo existe aqui.
+        ruta_asset = Path(payload["assets"]["fotos/deadbeef.png"])
+        cap["asset_existe"] = ruta_asset.is_file()
+        cap["asset_parent"] = ruta_asset.parent
+        cap["tmp"] = out.parent
         out.write_bytes(b"png-doc")
 
     monkeypatch.setattr(e, "_correr_render_documento", _fake)
@@ -291,17 +298,17 @@ def test_renderizar_documento_bytes_con_logo_de_categoria(tmp_path, monkeypatch)
     doc = {
         "formato": {"w": 1080, "h": 1080},
         "capas": [
-            {"tipo": "imagen", "z": 0, "objeto": "fotos/deadbeef.png", "es_foto": True},
-            {"tipo": "texto", "z": 1, "binding": "copy_in", "texto": ""},
+            {"tipo": "imagen", "x": 0, "y": 0, "w": 1080, "h": 1080,
+             "objeto": "fotos/deadbeef.png", "es_foto": True},
         ],
     }
+    # Antes del fix esto reventaba con FileNotFoundError (el `/` de la key creaba una
+    # subcarpeta inexistente); ahora renderiza y devuelve los bytes.
     datos = e.renderizar_documento_bytes(doc, bindings={"copy_in": "HOLA"})
     assert datos == b"png-doc"
-    # El asset se materializo a una ruta PLANA (sin `/` extra tras el prefijo del tmp).
-    ruta_asset = cap["payload"]["assets"]["fotos/deadbeef.png"]
-    from pathlib import Path
-
-    assert Path(ruta_asset).is_file()
+    assert cap["asset_existe"] is True
+    # PLANO: el asset vive DIRECTO en el tmp del documento, no en un subdir `asset-fotos/`.
+    assert cap["asset_parent"] == cap["tmp"]
 
 
 # --------------------------------------------------------------------------- #
