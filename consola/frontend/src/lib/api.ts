@@ -547,6 +547,7 @@ function queryEventos(params: {
   prioridad?: string | string[];
   cambiado?: boolean | null;
   q?: string;
+  marca?: string;
 }): string {
   const sp = new URLSearchParams();
   const aniadir = (clave: string, valor?: string | string[]) => {
@@ -560,6 +561,7 @@ function queryEventos(params: {
   if (params.q && params.q.trim() !== "") sp.set("q", params.q.trim());
   if (params.cambiado === true) sp.set("cambiado", "true");
   else if (params.cambiado === false) sp.set("cambiado", "false");
+  if (params.marca) sp.set("marca", params.marca);
   aniadir("tipo_cobertura", params.tipo_cobertura);
   aniadir("prioridad", params.prioridad);
   const s = sp.toString();
@@ -1641,6 +1643,8 @@ export const api = {
       prioridad?: string | string[];
       cambiado?: boolean | null;
       q?: string;
+      /** Id canónico de marca; ausente/vacío = todas las marcas. */
+      marca?: string;
     } = {},
     signal?: AbortSignal,
   ) => peticion<RespuestaEventosRota>(`/rota/eventos${queryEventos(params)}`, { signal }),

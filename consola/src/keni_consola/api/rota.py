@@ -64,7 +64,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, permisos, repos
+from .. import auth, marcas, permisos, repos
 from .. import rota as dominio
 from .._http_json import leer_json
 from ..estados import (
@@ -169,6 +169,7 @@ def _lunes_param(request: Request) -> str:
 
 
 def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
+    marca_id = evento.get("marca") or ""
     return {
         "id": evento["id"],
         "titulo": evento["titulo"],
@@ -182,6 +183,9 @@ def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
         "cambiado": bool(evento.get("cambiado")),
         "actualizado": evento.get("actualizado", ""),
         "es_sabado": dominio.es_sabado(evento["fecha"]),
+        # Multi-tenant por marca.
+        "marca": marca_id,
+        "marca_nombre": marcas.etiqueta_de(marca_id) if marca_id else "",
     }
 
 
@@ -315,6 +319,7 @@ async def listar_eventos(request: Request) -> Response:
       - `prioridad=...` (multi)       filtra por prioridad (repetir param para multi).
       - `cambiado=true|false`         tri-estado: presente -> filtra, ausente -> todos.
       - `q=...`                       substring case-insensitive sobre `titulo` y `contenido`.
+      - `marca=...`                   id canonico de marca; ausente/vacio -> todos.
 
     Compatibilidad: `cambiados=true` (legado, plural) se mantiene como atajo equivalente
     a `cambiado=true`. Si ambos llegan, gana `cambiado` (más explícito).
@@ -348,6 +353,11 @@ async def listar_eventos(request: Request) -> Response:
 
     q = (request.query_params.get("q") or "").strip().lower()
 
+    # Filtro de marca: id canonico valido o None (sin filtro).
+    marca_filtro = (request.query_params.get("marca") or "").strip() or None
+    if marca_filtro and not marcas.es_marca(marca_filtro):
+        return JSONResponse({"error": "Marca no reconocida."}, status_code=400)
+
     # El repo solo soporta filtro mono `tipo_cobertura`; multi/prioridad/q los aplicamos
     # en Python sobre el resultado bruto (orden lineal, dataset pequeño en operación real).
     eventos = repos.listar_eventos_rota(
@@ -355,6 +365,7 @@ async def listar_eventos(request: Request) -> Response:
         hasta=hasta,
         solo_cambiados=solo_cambiados,
         tipo_cobertura=tipos_cob[0] if len(tipos_cob) == 1 else None,
+        marca=marca_filtro,
     )
 
     if len(tipos_cob) > 1:
@@ -392,6 +403,9 @@ async def crear_evento(request: Request) -> Response:
     prioridad = str(datos.get("prioridad", "media")).strip() or "media"
     if prioridad not in PRIORIDADES_EVENTO:
         return _error_prioridad()
+    marca_val = str(datos.get("marca") or "").strip()
+    if marca_val and not marcas.es_marca(marca_val):
+        return JSONResponse({"error": "Marca no reconocida."}, status_code=400)
     evento = repos.crear_evento_rota(
         titulo.strip(),
         fecha=fecha.strip(),
@@ -400,6 +414,7 @@ async def crear_evento(request: Request) -> Response:
         nota=str(datos.get("nota", "")).strip(),
         tipo_cobertura=tipo_cobertura,
         prioridad=prioridad,
+        marca=marca_val,
     )
     return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
 
@@ -431,6 +446,11 @@ async def actualizar_evento(request: Request) -> Response:
         if prioridad not in PRIORIDADES_EVENTO:
             return _error_prioridad()
         campos["prioridad"] = prioridad
+    if "marca" in datos:
+        marca_val = str(datos["marca"] or "").strip()
+        if marca_val and not marcas.es_marca(marca_val):
+            return JSONResponse({"error": "Marca no reconocida."}, status_code=400)
+        campos["marca"] = marca_val
     # `cambiado` no es un campo editable de texto: lo derivamos en db.py, pero el request
     # puede enviarlo (típicamente `false`) como acción "ya avisé / visto" de Elías.
     if "cambiado" in datos:

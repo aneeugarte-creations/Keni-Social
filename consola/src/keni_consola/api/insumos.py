@@ -426,6 +426,8 @@ async def crear_evento_item(request: Request) -> Response:
 
     # Crea el evento de la rota (la validación de tipo_cobertura/prioridad la hace
     # `crear_evento_rota`, que cae al valor por defecto si no es válido).
+    # Propaga la `marca` del ítem para que el evento quede en la marca correcta (p.ej.
+    # los eventos de Claro Sports del Excel cajón -> claro-sports).
     evento = repos.crear_evento_rota(
         item["titulo"].strip(),
         fecha=(item.get("fecha") or "").strip(),
@@ -433,6 +435,7 @@ async def crear_evento_item(request: Request) -> Response:
         nota=(item.get("resumen") or "").strip(),
         tipo_cobertura=tipo_cobertura,
         prioridad=prioridad,
+        marca=(item.get("marca") or ""),
     )
 
     # Marca el ítem como usado, guardando el id del evento en `contenido_id`.

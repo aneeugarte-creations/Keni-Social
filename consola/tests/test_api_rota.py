@@ -288,6 +288,77 @@ def test_filtro_tipo_cobertura(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# Eventos multi-tenant por marca                                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_evento_con_marca_y_serializa_marca_nombre(cliente):
+    """POST /api/rota/eventos con `marca` la persiste y la API devuelve marca + marca_nombre."""
+    r = cliente.post(
+        "/api/rota/eventos",
+        json={"titulo": "Partido Claro", "fecha": SAB1, "marca": "claro-sports"},
+    )
+    assert r.status_code == 201, r.text
+    ev = r.json()["evento"]
+    assert ev["marca"] == "claro-sports"
+    assert ev["marca_nombre"] != ""
+
+
+def test_crear_evento_sin_marca_devuelve_cadena_vacia(cliente):
+    """Un evento sin marca tiene marca="" y marca_nombre="" en la respuesta."""
+    ev = _crear_evento(cliente, titulo="Sin marca")
+    assert ev["marca"] == ""
+    assert ev["marca_nombre"] == ""
+
+
+def test_crear_evento_marca_invalida_400(cliente):
+    """POST /api/rota/eventos con una marca desconocida responde 400."""
+    r = cliente.post(
+        "/api/rota/eventos",
+        json={"titulo": "X", "fecha": SAB1, "marca": "marca-inexistente-xyz"},
+    )
+    assert r.status_code == 400
+
+
+def test_filtro_marca_eventos(cliente):
+    """`GET /api/rota/eventos?marca=` filtra por marca; sin param devuelve todos."""
+    ev_cs = _crear_evento(cliente, titulo="CS", marca="claro-sports")
+    ev_unotv = _crear_evento(cliente, titulo="UV", marca="unotv")
+    ev_sin = _crear_evento(cliente, titulo="Sin", )
+
+    # Filtrar por claro-sports: solo el de esa marca.
+    r_cs = cliente.get("/api/rota/eventos?marca=claro-sports")
+    ids_cs = {e["id"] for e in r_cs.json()["eventos"]}
+    assert ev_cs["id"] in ids_cs
+    assert ev_unotv["id"] not in ids_cs
+    assert ev_sin["id"] not in ids_cs
+
+    # Sin filtro: todos.
+    r_todos = cliente.get("/api/rota/eventos")
+    ids_todos = {e["id"] for e in r_todos.json()["eventos"]}
+    assert ev_cs["id"] in ids_todos
+    assert ev_unotv["id"] in ids_todos
+    assert ev_sin["id"] in ids_todos
+
+
+def test_filtro_marca_invalida_400(cliente):
+    """`GET /api/rota/eventos?marca=` con valor desconocido responde 400."""
+    r = cliente.get("/api/rota/eventos?marca=marca-inexistente-xyz")
+    assert r.status_code == 400
+
+
+def test_patch_evento_actualiza_marca(cliente):
+    """PATCH /api/rota/eventos/{id} acepta `marca` y la persiste."""
+    ev = _crear_evento(cliente, titulo="Editable")
+    assert ev["marca"] == ""
+
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"marca": "claro-sports"})
+    assert r.status_code == 200
+    assert r.json()["evento"]["marca"] == "claro-sports"
+    assert r.json()["evento"]["marca_nombre"] != ""
+
+
+# --------------------------------------------------------------------------- #
 # Turnos: GET semana                                                           #
 # --------------------------------------------------------------------------- #
 

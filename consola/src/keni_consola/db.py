@@ -545,10 +545,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         actualizado    TEXT NOT NULL DEFAULT '',
         creado         TEXT NOT NULL DEFAULT '',
         origen         TEXT NOT NULL DEFAULT '',
-        origen_ref     TEXT NOT NULL DEFAULT ''
+        origen_ref     TEXT NOT NULL DEFAULT '',
+        marca          TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_eventos_marca ON rota_eventos (marca)",
     # FRANJAS POR SEMANA (#XYZ "Mundial"): el feedback real del piloto AMX descubrio
     # semanas con coberturas atipicas (Mundial, eventos grandes) con MAS de 2 franjas y
     # CON SOLAPES (ej. semana 24 jun 2026: 09:00-17:00, 13:00-21:00, 17:00-01:00). El
@@ -2212,6 +2214,7 @@ _COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("actualizado", "TEXT NOT NULL DEFAULT ''"),
     ("origen", "TEXT NOT NULL DEFAULT ''"),
     ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
+    ("marca", "TEXT NOT NULL DEFAULT ''"),
 )
 
 # Columnas de PROVENANCE que se anaden a `rota_turnos` para bases viejas (idempotente; el DDL
@@ -3141,6 +3144,7 @@ _COLS_EVENTO_ROTA = (
     "cambiado",
     "actualizado",
     "creado",
+    "marca",
 )
 _SELECT_EVENTO_ROTA = f"SELECT {', '.join(_COLS_EVENTO_ROTA)} FROM rota_eventos"
 _CAMPOS_EDITABLES_EVENTO_ROTA = (
@@ -3151,6 +3155,7 @@ _CAMPOS_EDITABLES_EVENTO_ROTA = (
     "nota",
     "tipo_cobertura",
     "prioridad",
+    "marca",
 )
 
 
@@ -3161,6 +3166,8 @@ def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
     # Defensa retrocompatible: una fila migrada con NULL/"" cae al valor por defecto.
     evento["tipo_cobertura"] = fila["tipo_cobertura"] or TIPO_COBERTURA_TRANSMISION
     evento["prioridad"] = fila["prioridad"] or PRIORIDAD_EVENTO_DEFECTO
+    # `marca` puede ser NULL en filas muy antiguas (antes de la columna); normalizar a "".
+    evento["marca"] = fila["marca"] or ""
     return evento
 
 
@@ -3176,10 +3183,12 @@ def crear_evento_rota(
     nota: str = "",
     tipo_cobertura: str = TIPO_COBERTURA_TRANSMISION,
     prioridad: str = PRIORIDAD_EVENTO_DEFECTO,
+    marca: str = "",
 ) -> dict[str, Any]:
     """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API).
 
     Nace `cambiado=0` (sin reprogramar) y con `actualizado`=`creado` (alta = primera version).
+    `marca` es el id canonico de la marca a la que pertenece el evento ("" = sin marca asignada).
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
@@ -3194,6 +3203,7 @@ def crear_evento_rota(
         "cambiado": 0,
         "actualizado": ahora,
         "creado": ahora,
+        "marca": marca or "",
     }
     con = _conectar()
     try:
@@ -3215,12 +3225,14 @@ def listar_eventos_rota(
     *,
     solo_cambiados: bool = False,
     tipo_cobertura: str | None = None,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
     """Eventos de la rota, en orden cronologico. Filtros opcionales (todos combinables).
 
     `desde`/`hasta` acotan por rango de fechas (ISO). `solo_cambiados` deja solo los
     REPROGRAMADOS (`cambiado=1`, los que Elias debe re-avisar). `tipo_cobertura` filtra por
     tipo de cobertura (transmision|imagenes|no_cubrir); la API ya valida el valor.
+    `marca` filtra por id canonico de marca; None o "" -> sin filtro (devuelve todas).
     """
     clausulas: list[str] = []
     params: list[Any] = []
@@ -3236,6 +3248,9 @@ def listar_eventos_rota(
     if tipo_cobertura:
         clausulas.append("tipo_cobertura = ?")
         params.append(tipo_cobertura)
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
     sql = _SELECT_EVENTO_ROTA
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)

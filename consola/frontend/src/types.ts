@@ -1913,6 +1913,10 @@ export interface EventoRota {
   /** ISO de la última edición. */
   actualizado: string;
   es_sabado: boolean;
+  /** Id canónico de la marca a la que pertenece el evento ("" = sin marca). */
+  marca: string;
+  /** Nombre legible de la marca (derivado del catálogo; "" si sin marca). */
+  marca_nombre: string;
 }
 
 export interface RespuestaEventosRota {
@@ -1936,6 +1940,8 @@ export interface FiltrosListaEventos {
   /** Tri-estado: `true` solo reprogramados, `false` solo avisados, `null|undefined` todos. */
   cambiado?: boolean | null;
   q?: string;
+  /** Id canónico de marca; ausente/vacío = todas las marcas. */
+  marca?: string;
 }
 
 export interface CuerpoCrearEventoRota {
@@ -1946,6 +1952,8 @@ export interface CuerpoCrearEventoRota {
   nota?: string;
   tipo_cobertura?: TipoCoberturaEvento;
   prioridad?: PrioridadEvento;
+  /** Id canónico de marca del evento ("" o ausente = sin marca). */
+  marca?: string;
 }
 
 /**

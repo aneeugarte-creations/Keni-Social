@@ -759,6 +759,7 @@ def crear_evento_rota(
     nota: str = "",
     tipo_cobertura: str = "transmision",
     prioridad: str = "media",
+    marca: str = "",
 ) -> dict[str, Any]:
     return db.crear_evento_rota(
         titulo,
@@ -768,6 +769,7 @@ def crear_evento_rota(
         nota=nota,
         tipo_cobertura=tipo_cobertura,
         prioridad=prioridad,
+        marca=marca,
     )
 
 
@@ -777,9 +779,14 @@ def listar_eventos_rota(
     *,
     solo_cambiados: bool = False,
     tipo_cobertura: str | None = None,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
     return db.listar_eventos_rota(
-        desde=desde, hasta=hasta, solo_cambiados=solo_cambiados, tipo_cobertura=tipo_cobertura
+        desde=desde,
+        hasta=hasta,
+        solo_cambiados=solo_cambiados,
+        tipo_cobertura=tipo_cobertura,
+        marca=marca,
     )
 
 

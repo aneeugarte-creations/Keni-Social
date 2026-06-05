@@ -28,6 +28,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { MARCA_TODAS } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +44,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { COBERTURA, COLOR_PRIORIDAD } from "@/lib/rota-calendario";
 import type { EventoRota, PrioridadEvento, TipoCoberturaEvento } from "@/types";
@@ -359,6 +362,7 @@ function FiltrosEventos({
 function NuevoEvento({
   onCreado,
   ultimoEventoUsuario,
+  marcaDefecto,
 }: {
   onCreado: () => void;
   /**
@@ -366,7 +370,10 @@ function NuevoEvento({
    * botón "Duplicar último" lo clona con fecha=hoy (o +1 si ya hay uno hoy).
    */
   ultimoEventoUsuario?: EventoRota | null;
+  /** Marca activa del workspace: se usa como valor por defecto del campo marca. */
+  marcaDefecto?: string | null;
 }) {
+  const { marcasParaSwitch } = useMarcaActiva();
   const [titulo, setTitulo] = React.useState("");
   // Fecha default = hoy (el caso típico es dar de alta el evento del día).
   const [fecha, setFecha] = React.useState<string>(() => hoyIso());
@@ -374,6 +381,12 @@ function NuevoEvento({
   const [contenido, setContenido] = React.useState("");
   const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
   const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
+  // `marca`: arranca en la marca activa del workspace; "todas" = sin marca (MARCA_TODAS).
+  const [marca, setMarca] = React.useState<string>(() => marcaDefecto ?? MARCA_TODAS);
+  // Si la marca activa cambia desde fuera (el usuario cambia de workspace), actualizamos el default.
+  React.useEffect(() => {
+    setMarca(marcaDefecto ?? MARCA_TODAS);
+  }, [marcaDefecto]);
   // Validación inline de hora HH:MM al submit. El campo permite texto libre para no
   // molestar mientras escribes; el error sale solo al intentar guardar y se borra al editar.
   const [errorHora, setErrorHora] = React.useState<string | null>(null);
@@ -387,6 +400,7 @@ function NuevoEvento({
         contenido: contenido.trim(),
         tipo_cobertura: tipoCobertura,
         prioridad,
+        marca: marca === MARCA_TODAS ? "" : marca,
       }),
     onSuccess: () => {
       toast.success("Evento creado.");
@@ -526,6 +540,23 @@ function NuevoEvento({
             </Select>
           </div>
         </div>
+        {marcasParaSwitch.length > 0 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="ev-marca">
+              Marca <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <SelectorMarca
+              id="ev-marca"
+              marcas={marcasParaSwitch}
+              valor={marca}
+              onCambio={setMarca}
+              incluirTodas
+              etiquetaTodas="Sin marca"
+              className="w-full"
+              ariaLabel="Marca del evento"
+            />
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="ev-contenido">
             Qué sacar <span className="font-normal text-muted-foreground">(opcional)</span>
@@ -584,6 +615,11 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
             <Badge variant="outline" className={`gap-1 font-normal ${cob.chip}`}>
               <IconoCob className="h-3 w-3" /> {cob.etiqueta}
             </Badge>
+            {evento.marca_nombre && (
+              <Badge variant="secondary" className="font-normal">
+                {evento.marca_nombre}
+              </Badge>
+            )}
             {evento.es_sabado && (
               <Badge variant="outline" className="font-normal">
                 Sábado
@@ -669,6 +705,7 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
  */
 export function PanelEventos() {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
   const [searchParams, setSearchParams] = useSearchParams();
   const estado = React.useMemo(() => leerFiltrosDesdeUrl(searchParams), [searchParams]);
   // Persistencia en URL: cada cambio refleja la URL (un refresh respeta el filtro).
@@ -677,7 +714,8 @@ export function PanelEventos() {
   };
   const limpiar = () => setSearchParams(new URLSearchParams(), { replace: true });
 
-  // La query depende de los filtros: se reejecuta cuando cambian (clave incluye el SP).
+  // La query depende de los filtros Y de la marca activa: se reejecuta cuando cambian.
+  // `marcaActiva === null` → vista agregada "Todas" → sin filtro de marca.
   const clave = [
     "rota",
     "eventos",
@@ -687,6 +725,7 @@ export function PanelEventos() {
     estado.prioridades.join(","),
     estado.cambiado,
     estado.q,
+    marcaActiva ?? "",
   ] as const;
   const filtrosApi: Parameters<typeof api.rotaEventos>[0] = {
     desde: estado.desde || undefined,
@@ -695,6 +734,7 @@ export function PanelEventos() {
     prioridad: estado.prioridades,
     cambiado: estado.cambiado === "si" ? true : estado.cambiado === "no" ? false : undefined,
     q: estado.q || undefined,
+    marca: marcaActiva ?? undefined,
   };
   const q = useQuery({
     queryKey: clave,
@@ -709,7 +749,11 @@ export function PanelEventos() {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-        <NuevoEvento onCreado={invalidar} ultimoEventoUsuario={ultimoEventoUsuario} />
+        <NuevoEvento
+          onCreado={invalidar}
+          ultimoEventoUsuario={ultimoEventoUsuario}
+          marcaDefecto={marcaActiva}
+        />
         <div className="space-y-3">
           <FiltrosEventos
             estado={estado}

@@ -340,6 +340,16 @@ def test_crear_evento_item_inexistente_404(cliente):
     assert r.status_code == 404
 
 
+def test_crear_evento_propaga_marca_del_item(cliente, monkeypatch):
+    """El evento creado desde un ítem de cajón hereda la `marca` del ítem."""
+    item_id = _crear_item_evento(cliente, monkeypatch)
+    r = cliente.post(f"/api/insumos/item/{item_id}/crear-evento", json={})
+    assert r.status_code == 200, r.text
+    evento = r.json()["evento"]
+    # El ítem fue creado con marca="claro-sports" (ver _crear_item_evento).
+    assert evento["marca"] == "claro-sports"
+
+
 # --------------------------------------------------------------------------- #
 # DELETE /api/insumos/lote/{id}                                                #
 # --------------------------------------------------------------------------- #
