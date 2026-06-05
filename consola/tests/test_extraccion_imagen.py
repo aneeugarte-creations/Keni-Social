@@ -150,7 +150,7 @@ def test_descargar_media_error_se_envuelve(almacen_disco, monkeypatch):
     """Un `media.MediaError` (p.ej. imagen demasiado grande) se traduce a ExtraccionError."""
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
 
-    def revienta(datos, *, ext="png"):  # noqa: ANN001
+    def revienta(datos, *, ext="png", categoria="fotos"):  # noqa: ANN001
         raise media.MediaError("La imagen generada es demasiado grande.")
 
     monkeypatch.setattr(media, "guardar_bytes", revienta)

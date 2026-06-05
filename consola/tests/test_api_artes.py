@@ -39,8 +39,9 @@ def test_crear_arte_ok(cliente):
     )
     assert r.status_code == 200
     arte = r.json()["arte"]
-    assert arte["objeto"] == objeto
-    assert arte["url"] == f"/api/media/{objeto}"
+    # Catalogar PROMUEVE el objeto a la carpeta biblioteca/ (reusable); conserva el basename.
+    assert arte["objeto"] == "biblioteca/" + objeto.rsplit("/", 1)[-1]
+    assert arte["url"] == f"/api/media/{arte['objeto']}"
     assert arte["marca"] == "unotv"
     assert arte["marca_nombre"]  # nombre legible resuelto en servidor
     assert arte["etiquetas"] == ["mundial", "futbol"]  # lista, no JSON string
@@ -51,10 +52,10 @@ def test_crear_arte_idempotente(cliente):
     objeto = _subir_objeto(cliente)
     a = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
     b = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
-    assert a["id"] == b["id"]  # no duplica: el objeto es UNIQUE
-    # Y en el listado aparece una sola vez.
+    assert a["id"] == b["id"]  # no duplica: el objeto (ya promovido) es UNIQUE
+    # Y en el listado aparece una sola vez (por su key catalogada en biblioteca/).
     artes = cliente.get("/api/artes").json()["artes"]
-    assert sum(1 for x in artes if x["objeto"] == objeto) == 1
+    assert sum(1 for x in artes if x["objeto"] == a["objeto"]) == 1
 
 
 def test_crear_objeto_inexistente_400(cliente):
@@ -86,20 +87,20 @@ def test_crear_tipo_invalido_400(cliente):
 
 def test_listar_filtra_por_marca(cliente):
     o1, o2 = _subir_objeto(cliente), _subir_objeto(cliente)
-    cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv"})
-    cliente.post("/api/artes", json={"objeto": o2, "marca": "claro-sports"})
+    a1 = cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv"}).json()["arte"]
+    a2 = cliente.post("/api/artes", json={"objeto": o2, "marca": "claro-sports"}).json()["arte"]
     artes = cliente.get("/api/artes", params={"marca": "unotv"}).json()["artes"]
     objetos = {a["objeto"] for a in artes}
-    assert o1 in objetos and o2 not in objetos
+    assert a1["objeto"] in objetos and a2["objeto"] not in objetos
 
 
 def test_listar_busqueda_q(cliente):
     o1, o2 = _subir_objeto(cliente), _subir_objeto(cliente)
-    cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv", "etiquetas": ["mundial"]})
-    cliente.post("/api/artes", json={"objeto": o2, "marca": "unotv", "titulo": "Liga MX"})
+    a1 = cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv", "etiquetas": ["mundial"]}).json()["arte"]
+    a2 = cliente.post("/api/artes", json={"objeto": o2, "marca": "unotv", "titulo": "Liga MX"}).json()["arte"]
     artes = cliente.get("/api/artes", params={"q": "mundial"}).json()["artes"]
     objetos = {a["objeto"] for a in artes}
-    assert o1 in objetos and o2 not in objetos
+    assert a1["objeto"] in objetos and a2["objeto"] not in objetos
 
 
 # --------------------------------------------------------------------------- #
@@ -124,8 +125,8 @@ def test_borrar_purgar_borra_el_binario(cliente):
     objeto = _subir_objeto(cliente)
     arte = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
     assert cliente.delete(f"/api/artes/{arte['id']}", params={"purgar": "1"}).status_code == 200
-    # Con purgar=1 el objeto desaparece del almacen.
-    assert cliente.get(f"/api/media/{objeto}").status_code == 404
+    # Con purgar=1 el binario catalogado (la copia en biblioteca/) desaparece del almacen.
+    assert cliente.get(f"/api/media/{arte['objeto']}").status_code == 404
 
 
 # --------------------------------------------------------------------------- #
@@ -137,5 +138,6 @@ def test_arte_catalogado_es_referencia_viva(cliente):
     """Catalogar un objeto lo protege del GC: aparece en `referencias_vivas`."""
     objeto = _subir_objeto(cliente)
     assert objeto not in media_gc.referencias_vivas()
-    cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"})
-    assert objeto in media_gc.referencias_vivas()
+    arte = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
+    # El arte se cataloga por su key PROMOVIDA (biblioteca/...): esa es la referencia viva.
+    assert arte["objeto"] in media_gc.referencias_vivas()
