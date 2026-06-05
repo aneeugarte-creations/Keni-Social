@@ -360,7 +360,7 @@ function FilaIdea({
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
       toast.success("Pieza evergreen generada.", {
         action: {
-          label: "Ver en el tablero",
+          label: "Ver feed",
           onClick: () => navigate("/operacion/feed/lista"),
         },
       });

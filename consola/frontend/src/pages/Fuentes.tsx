@@ -700,11 +700,11 @@ function AportarManual({
       setTexto("");
       toast.success(
         data.copy_en_proceso
-          ? "Aportación creada; generando copy en segundo plano"
+          ? "Copy en marcha — aparecerá en el Feed para imagen y aprobación."
           : "Aportación creada en Pendientes",
         {
           action: {
-            label: "Ver en el tablero",
+            label: "Ver feed",
             onClick: () => navigate("/operacion/feed/lista"),
           },
         },
@@ -1658,7 +1658,7 @@ function DialogoGenerar({
         n > 0
           ? `Generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
           : "Copy generado",
-        { action: { label: "Ver en el tablero", onClick: () => navigate("/operacion/feed/lista") } },
+        { action: { label: "Ver feed", onClick: () => navigate("/operacion/feed/lista") } },
       );
       void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });

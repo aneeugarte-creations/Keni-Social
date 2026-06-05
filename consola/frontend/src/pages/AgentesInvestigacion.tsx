@@ -26,6 +26,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -361,6 +362,17 @@ function TarjetaBrief({ brief, onEditar }: PropsTarjetaBrief) {
           </div>
         </div>
       </div>
+
+      {/* Visor en vivo del stream de investigación mientras corre */}
+      {seguimiento.generacion && seguimiento.ejecutando && (
+        <div className="mt-3 border-t pt-3" data-testid="investigacion-progreso">
+          <ProgresoGeneracion
+            generacion={seguimiento.generacion}
+            onCancelar={seguimiento.cancelar}
+            cancelando={seguimiento.cancelando}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -484,7 +496,7 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
       void queryClient.invalidateQueries({
         queryKey: ["investigacion", "candidatos", fecha],
       });
-      toast.success("Candidato aceptado y enviado al tablero.");
+      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -519,7 +531,8 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
                 className="h-7 gap-1 px-2 text-xs"
                 onClick={() => aceptar.mutate()}
                 disabled={aceptar.isPending || descartar.isPending}
-                aria-label={`Aceptar "${candidato.titulo}"`}
+                aria-label={`Enviar al feed "${candidato.titulo}"`}
+                title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
                 data-testid="btn-aceptar"
               >
                 {aceptar.isPending ? (
@@ -527,7 +540,7 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
                 ) : (
                   <Send className="h-3 w-3" />
                 )}
-                Aceptar
+                Enviar al feed
               </Button>
               <Button
                 size="sm"
@@ -550,7 +563,7 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
           {esAceptado && (
             <Badge variant="ok" className="gap-1 text-xs">
               <CheckCircle2 className="h-3 w-3" />
-              En tablero
+              En el feed
             </Badge>
           )}
           {esDescartado && (
@@ -680,7 +693,7 @@ function SeccionCandidatos() {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          {etiquetaFecha(fecha)} — Los agentes proponen; tú decides qué va al tablero.
+          {etiquetaFecha(fecha)} — Los agentes proponen; tú decides qué va al feed.
         </p>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -723,7 +736,7 @@ export default function AgentesInvestigacion() {
     <>
       <PageHeader
         titulo="Agentes de investigación"
-        descripcion="Los agentes investigan por marca y tema, y dejan candidatos fechados. Tú decides qué entra al tablero."
+        descripcion="Los agentes investigan por marca y tema, y dejan candidatos fechados. Tú decides qué entra al feed."
       />
 
       <div className="space-y-6">

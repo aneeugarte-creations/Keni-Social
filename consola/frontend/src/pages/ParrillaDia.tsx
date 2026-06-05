@@ -90,7 +90,7 @@ export default function PlanDelDia() {
     <>
       <PageHeader
         titulo="Plan del día"
-        descripcion="La lista de contenidos del día: posteos y video-editoriales jerarquizados por importancia. Llévalos al tablero o genera el copy. El Termómetro mundial aporta su galería al plan."
+        descripcion="La lista de contenidos del día: posteos y video-editoriales jerarquizados por importancia. Envíalos al feed o genera el copy. El Termómetro mundial aporta su galería al plan."
         acciones={
           <Button asChild variant="outline" size="sm">
             <Link to="/datos/investigacion/termometro">
@@ -297,7 +297,7 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
   const sub = SUBTIPO[item.subtipo] ?? SUBTIPO[""];
   const SubIcono = sub.Icono;
 
-  // Promueve el tema al tablero del CM como "importante del día" (origen Radar). El CM
+  // Envía el tema al feed del CM como "importante del día" (origen Radar). El CM
   // luego elige plataformas y responsable allí. Prioridad alta para los 3 primeros.
   const llevarAlTablero = useMutation({
     mutationFn: () =>
@@ -308,7 +308,7 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
           .join("\n"),
         prioridad: item.orden <= 3 ? "alta" : "media",
       }),
-    onSuccess: () => toast.success("Llevado al tablero (Importante del día)."),
+    onSuccess: () => toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación."),
     onError: (e) => toast.error(mensajeError(e)),
   });
   return (
@@ -402,13 +402,15 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
             size="sm"
             onClick={() => llevarAlTablero.mutate()}
             disabled={llevarAlTablero.isPending}
+            aria-label="Enviar al feed (genera copy)"
+            title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
           >
             {llevarAlTablero.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <ListPlus className="h-3.5 w-3.5" />
             )}
-            Llevar al tablero
+            Enviar al feed
           </Button>
         </div>
       </div>

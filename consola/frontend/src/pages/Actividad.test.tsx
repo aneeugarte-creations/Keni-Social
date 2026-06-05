@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Actividad from "./Actividad";
+import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 
 const LISTA = {
   items: [
@@ -76,9 +77,9 @@ describe("Actividad (feed unificado de IA)", () => {
     stubFetch();
     renderConProviders(<Actividad />);
     expect(await screen.findByText("Resumen de la jornada")).toBeInTheDocument();
-    // Ya no hay badge de fuente (todo es generación): queda el de tipo (copy, también en
-    // "Por tipo") y el de estado.
-    expect(screen.getAllByText("copy").length).toBeGreaterThan(0);
+    // Ya no hay badge de fuente (todo es generación): queda el de tipo (etiqueta "Copy",
+    // también en la tabla "Por tipo") y el de estado.
+    expect(screen.getAllByText("Copy").length).toBeGreaterThan(0);
     expect(screen.getByText("Completado")).toBeInTheDocument();
   });
 
@@ -113,6 +114,48 @@ describe("Actividad (feed unificado de IA)", () => {
     const fila = (await screen.findByText("En curso")).closest("tr");
     expect(fila).toHaveAttribute("role", "button");
     expect(screen.queryByRole("button", { name: /Ver en vivo/ })).toBeNull();
+  });
+
+  it("muestra la etiqueta legible del tipo (insumos → Cajones del día)", async () => {
+    const listaInsumos = {
+      items: [
+        {
+          id: "g2",
+          fuente: "generacion",
+          tipo: "insumos",
+          etiqueta: "Cajón portal · 2026-06-05",
+          marca: "",
+          estado: "completado",
+          fecha: "2026-06-05T08:00:00",
+          metricas: { tokens: 1000, coste_usd: 0.001, duration_ms: 800, num_turns: 1 },
+          resultado_url: "/datos/investigacion/cajones",
+        },
+      ],
+      total: 1,
+    };
+    const agregadosInsumos = {
+      total: { items: 1, coste_usd: 0.001, tokens: 1000 },
+      por_tipo: [{ tipo: "insumos", items: 1, coste_usd: 0.001, tokens: 1000 }],
+      por_dia: [{ dia: "2026-06-05", items: 1, coste_usd: 0.001 }],
+    };
+    stubFetch(listaInsumos, agregadosInsumos);
+    renderConProviders(<Actividad />);
+    // La tabla y el desglose deben mostrar "Cajones del día", no "insumos".
+    const labels = await screen.findAllByText("Cajones del día");
+    expect(labels.length).toBeGreaterThan(0);
+    // El raw tipo NO debe aparecer como texto visible.
+    expect(screen.queryByText("insumos")).toBeNull();
+  });
+
+  it("etiquetaTipoGeneracion devuelve label para todos los tipos conocidos", () => {
+    expect(etiquetaTipoGeneracion("copy")).toBe("Copy");
+    expect(etiquetaTipoGeneracion("rss")).toBe("RSS");
+    expect(etiquetaTipoGeneracion("imagen")).toBe("Imagen");
+    expect(etiquetaTipoGeneracion("insumos")).toBe("Cajones del día");
+    expect(etiquetaTipoGeneracion("investigacion")).toBe("Investigación");
+    expect(etiquetaTipoGeneracion("import-calendario")).toBe("Importar calendario");
+    // Fallback para tipos desconocidos
+    expect(etiquetaTipoGeneracion("desconocido")).toBe("desconocido");
   });
 
   it("muestra el estado vacío honesto cuando no hay actividad", async () => {

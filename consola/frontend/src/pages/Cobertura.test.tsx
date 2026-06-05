@@ -349,16 +349,16 @@ describe("Cobertura · lista de noticias", () => {
     expect(screen.getByText("Reforma")).toBeTruthy();
   });
 
-  it("muestra 'En tablero' en un ítem con estado 'usado'", async () => {
+  it("muestra 'En el feed' en un ítem con estado 'usado'", async () => {
     mockListar.mockResolvedValue(RESPUESTA_USADO);
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
     await irAArticulos();
     await waitFor(() => {
-      expect(screen.getByText(/En tablero/i)).toBeTruthy();
+      expect(screen.getByText(/En el feed/i)).toBeTruthy();
     });
-    // El botón "Usar" no debe aparecer
-    expect(screen.queryByRole("button", { name: /Usar noticia/i })).toBeNull();
+    // El botón "Enviar al feed" no debe aparecer
+    expect(screen.queryByRole("button", { name: /Enviar al feed/i })).toBeNull();
   });
 
   it("muestra 'Descartada' en un ítem con estado 'descartado'", async () => {
@@ -381,7 +381,7 @@ describe("Cobertura · acciones Usar / Descartar", () => {
     await waitFor(() => {
       expect(screen.getByText("Título de prueba")).toBeTruthy();
     });
-    const boton = screen.getByRole("button", { name: /Usar noticia/i });
+    const boton = screen.getByRole("button", { name: /Enviar al feed/i });
     fireEvent.click(boton);
     await waitFor(() => {
       expect(mockUsar).toHaveBeenCalledWith("n-1", { generar: true });
@@ -546,13 +546,13 @@ describe("Cobertura · Historias — renderizado de clusters", () => {
     expect(badge.textContent).toMatch(/6 fuentes/i);
   });
 
-  it("muestra 'En tablero' cuando la historia está usada", async () => {
+  it("muestra 'En el feed' cuando la historia está usada", async () => {
     mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_USADA);
     renderConProviders(<Cobertura />);
     await waitFor(() => {
-      expect(screen.getByText(/En tablero/i)).toBeTruthy();
+      expect(screen.getByText(/En el feed/i)).toBeTruthy();
     });
-    expect(screen.queryByRole("button", { name: /Usar historia/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Enviar al feed/i })).toBeNull();
   });
 
   it("muestra 'Descartada' cuando la historia está descartada", async () => {
@@ -586,7 +586,7 @@ describe("Cobertura · Historias — acciones Usar / Descartar", () => {
     await waitFor(() => {
       expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
     });
-    const boton = screen.getByRole("button", { name: /Usar historia/i });
+    const boton = screen.getByRole("button", { name: /Enviar al feed/i });
     fireEvent.click(boton);
     await waitFor(() => {
       expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true });

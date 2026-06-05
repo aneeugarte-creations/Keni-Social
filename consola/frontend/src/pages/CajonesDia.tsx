@@ -3,7 +3,7 @@
  *
  * El equipo vuelca material en 4 cajones (Portal/SMS, Corresponsales,
  * Reporteros y Eventos Claro). Haiku los parsea y produce ítems limpios,
- * ordenados y listos para llevar al tablero con un clic.
+ * ordenados y listos para enviar al feed con un clic.
  *
  * Contrato: docs/maquina-contenido/01-insumos-del-dia.md
  */
@@ -49,8 +49,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import type { CajonInsumo, CajonConItems, InsumoItem, InsumoLote } from "@/types";
 
 // ── Constantes de los 4 cajones ───────────────────────────────────────────────
@@ -284,15 +286,15 @@ function ItemCard({ item, fecha }: PropsItemCard) {
   const [editando, setEditando] = React.useState(false);
   const esCaducado = item.frescura === "caduco";
   // Los ítems del cajón Eventos Claro (programación de TV) se convierten en EVENTOS de
-  // la rota (no en piezas del tablero): muestran "Crear evento" en vez de "Llevar al
-  // tablero". El evento creado se gestiona luego en Fuentes › Eventos.
+  // la rota (no en piezas del feed): muestran "Crear evento" en vez de "Enviar al feed".
+  // El evento creado se gestiona luego en Fuentes › Eventos.
   const esEvento = item.cajon === "eventos_claro" || item.tipo === "evento";
 
   const usarMut = useMutation({
     mutationFn: () => api.insumos.usarItem(item.id, { generar: true }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
-      toast.success("Ítem llevado al tablero.");
+      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -351,14 +353,15 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                     className="h-7 gap-1 px-2 text-xs"
                     onClick={() => usarMut.mutate()}
                     disabled={usarMut.isPending}
-                    aria-label="Llevar al tablero"
+                    aria-label="Enviar al feed (genera copy)"
+                    title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
                   >
                     {usarMut.isPending ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <Send className="h-3 w-3" />
                     )}
-                    Llevar al tablero
+                    Enviar al feed
                   </Button>
                 )}
               </>
@@ -366,7 +369,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
             {item.usado && (
               <Badge variant="ok" className="gap-1">
                 <CheckCircle2 className="h-3 w-3" />
-                {esEvento ? "Evento creado" : "En tablero"}
+                {esEvento ? "Evento creado" : "En el feed"}
               </Badge>
             )}
           </div>
@@ -432,6 +435,9 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const archivoRef = React.useRef<HTMLInputElement>(null);
 
+  // Seguimiento de la generación en curso (el worker parsea el cajón con IA).
+  const { generacion: genActual, ejecutando: genEjecutando, iniciar: iniciarGen, cancelar: cancelarGen, cancelando: cancelandoGen } = useGeneracion();
+
   const aportarMut = useMutation({
     mutationFn: () => {
       const form = new FormData();
@@ -441,10 +447,10 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
       if (archivo) form.set("archivo", archivo);
       return api.insumos.aportar(form);
     },
-    onSuccess: () => {
-      // El parseo corre ASÍNCRONO en el worker: el lote nace "parseando". Invalidamos para
-      // que aparezca con su indicador; el sondeo (refetchInterval del query) lo refresca hasta
-      // que pase a "listo"/"error" y muestre los ítems. El back ya NO ejecuta `claude`.
+    onSuccess: (data) => {
+      // El parseo corre ASÍNCRONO en el worker: el lote nace "parseando". Si el back
+      // devuelve la generación, arrancamos el sondeo para mostrar el stream en vivo.
+      if (data.generacion) iniciarGen(data.generacion);
       void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
       setTexto("");
       setArchivo(null);
@@ -453,6 +459,15 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  // Al completarse la generación, refrescamos para que aparezcan los ítems parseados.
+  React.useEffect(() => {
+    if (!genActual || genEjecutando) return;
+    if (genActual.estado === "completado" || genActual.estado === "error") {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genActual?.estado, genEjecutando]);
 
   const borrarLoteMut = useMutation({
     mutationFn: (id: string) => api.insumos.borrarLote(id),
@@ -516,15 +531,31 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
           </Button>
         </div>
 
-        {/* Lotes en proceso (el worker corre Haiku; el sondeo refresca al terminar) */}
+        {/* Lotes en proceso (el worker corre Haiku; mostramos el stream en vivo si está disponible) */}
         {lotesParseando.map((l) => (
           <div
             key={l.id}
-            className="flex items-center gap-2 rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground"
+            className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground"
             data-testid="lote-parseando"
           >
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            <span className="flex-1">Procesando con Haiku…</span>
+            {genActual && genEjecutando ? (
+              <div className="space-y-2">
+                <p className="flex items-center gap-2 font-medium">
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  Procesando con IA…
+                </p>
+                <ProgresoGeneracion
+                  generacion={genActual}
+                  onCancelar={cancelarGen}
+                  cancelando={cancelandoGen}
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                <span className="flex-1">Procesando con Haiku…</span>
+              </div>
+            )}
           </div>
         ))}
 
@@ -634,7 +665,7 @@ export default function CajonesDia() {
     <>
       <PageHeader
         titulo="Cajones del día"
-        descripcion="Vuelca el material diario en cada cajón y Haiku lo parsea y ordena. Luego lleva los ítems al tablero con un clic."
+        descripcion="Vuelca el material diario en cada cajón y Haiku lo parsea y ordena. Luego envía los ítems al feed con un clic."
       />
 
       {/* Controles de fecha e historial */}

@@ -6,7 +6,7 @@
  * 2. Muestra los briefs cargados desde la API.
  * 3. "Investigar ahora" llama a api.investigacion.correr con el brief_id.
  * 4. Muestra los candidatos del día.
- * 5. "Aceptar" llama a api.investigacion.aceptar.
+ * 5. "Enviar al feed" llama a api.investigacion.aceptar.
  * 6. "Descartar" llama a api.investigacion.descartar.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -204,7 +204,7 @@ describe("AgentesInvestigacion", () => {
     expect(screen.getByText("Reforma")).toBeInTheDocument();
   });
 
-  it("'Aceptar' llama a api.investigacion.aceptar con el id del candidato", async () => {
+  it("'Enviar al feed' llama a api.investigacion.aceptar con el id del candidato", async () => {
     const aceptarMock = vi
       .spyOn(apiMod.api.investigacion, "aceptar")
       .mockResolvedValue({
@@ -218,7 +218,7 @@ describe("AgentesInvestigacion", () => {
     await screen.findByText("Propuesta de reforma constitucional avanza en el Congreso");
 
     const boton = screen.getByRole("button", {
-      name: /Aceptar "Propuesta de reforma constitucional avanza en el Congreso"/,
+      name: /Enviar al feed "Propuesta de reforma constitucional avanza en el Congreso"/,
     });
     fireEvent.click(boton);
 
@@ -297,14 +297,14 @@ describe("AgentesInvestigacion", () => {
     });
   });
 
-  it("candidato aceptado muestra badge 'En tablero' (sin botones de acción)", async () => {
+  it("candidato aceptado muestra badge 'En el feed' (sin botones de acción)", async () => {
     const candidatoAceptado = { ...CANDIDATO_NUEVO, estado: "aceptado" as const };
     mockApi(BRIEFS_VACIOS, { candidatos: [candidatoAceptado] });
 
     renderConProviders(<AgentesInvestigacion />);
 
     await screen.findByText("Propuesta de reforma constitucional avanza en el Congreso");
-    expect(screen.getByText("En tablero")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Aceptar/ })).not.toBeInTheDocument();
+    expect(screen.getByText("En el feed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Enviar al feed/ })).not.toBeInTheDocument();
   });
 });

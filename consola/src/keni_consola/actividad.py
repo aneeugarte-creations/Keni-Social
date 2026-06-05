@@ -101,6 +101,10 @@ _URL_RESULTADO_POR_TIPO = {
     "imagen": "/contenido/estudio",
     "verificacion": "/operacion/revision/verificacion",
     "qa-editorial": "/operacion/revision/editorial",
+    # Nuevos tipos asíncronos (Ola 6+ y calendario):
+    "insumos": "/datos/investigacion/cajones",
+    "investigacion": "/datos/investigacion/agentes",
+    "import-calendario": "/operacion/feed",
 }
 
 

@@ -211,7 +211,7 @@ function TarjetaNoticia({ item, queryKey }: PropsTarjetaNoticia) {
     mutationFn: () => api.noticias.usar(item.id, { generar: true }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey });
-      toast.success("Noticia llevada al tablero.");
+      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -258,7 +258,7 @@ function TarjetaNoticia({ item, queryKey }: PropsTarjetaNoticia) {
             {esUsado ? (
               <Badge variant="ok" className="gap-1 text-xs">
                 <CheckCircle2 className="h-3 w-3" />
-                En tablero
+                En el feed
               </Badge>
             ) : esDescartado ? (
               <Badge variant="secondary" className="text-xs">Descartada</Badge>
@@ -269,14 +269,15 @@ function TarjetaNoticia({ item, queryKey }: PropsTarjetaNoticia) {
                   className="h-7 gap-1 px-2 text-xs"
                   onClick={() => usarMut.mutate()}
                   disabled={enCurso}
-                  aria-label="Usar noticia"
+                  aria-label="Enviar al feed (genera copy)"
+                  title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
                 >
                   {usarMut.isPending ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <Newspaper className="h-3 w-3" />
                   )}
-                  Usar
+                  Enviar al feed
                 </Button>
                 <Button
                   size="sm"
@@ -341,7 +342,7 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
     mutationFn: () => api.noticias.usarHistoria(historia.id, { generar: true }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey });
-      toast.success("Historia llevada al tablero.");
+      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -377,7 +378,7 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
             {esUsada ? (
               <Badge variant="ok" className="gap-1 text-xs">
                 <CheckCircle2 className="h-3 w-3" />
-                En tablero
+                En el feed
               </Badge>
             ) : esDescartada ? (
               <Badge variant="secondary" className="text-xs">Descartada</Badge>
@@ -388,14 +389,15 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
                   className="h-7 gap-1 px-2 text-xs"
                   onClick={() => usarMut.mutate()}
                   disabled={enCurso}
-                  aria-label="Usar historia"
+                  aria-label="Enviar al feed (genera copy)"
+                  title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
                 >
                   {usarMut.isPending ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <Newspaper className="h-3 w-3" />
                   )}
-                  Usar
+                  Enviar al feed
                 </Button>
                 <Button
                   size="sm"

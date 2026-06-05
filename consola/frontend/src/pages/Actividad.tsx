@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/table";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError } from "@/lib/api";
+import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { cn } from "@/lib/utils";
 import { formatearDia, formatearFechaHoraCorta } from "@/lib/fecha";
 import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
@@ -137,7 +138,9 @@ function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
             ) : (
               filas.map((f) => (
                 <TableRow key={f.tipo}>
-                  <TableCell className="pl-6 font-medium">{f.tipo || "—"}</TableCell>
+                  <TableCell className="pl-6 font-medium">
+                    {f.tipo ? etiquetaTipoGeneracion(f.tipo) : "—"}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {numeroCompleto(f.items)}
                   </TableCell>
@@ -348,7 +351,9 @@ function TablaActividad({
                       </span>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{it.tipo || "—"}</Badge>
+                      <Badge variant="outline">
+                        {it.tipo ? etiquetaTipoGeneracion(it.tipo) : "—"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {it.marca || <span className="text-muted-foreground">—</span>}
@@ -412,7 +417,8 @@ function EsqueletoActividad() {
 
 /**
  * Página Actividad IA: feed de la actividad de IA (generaciones en segundo plano:
- * copy, RSS, imágenes, verificación) con sus métricas (tokens, coste, duración).
+ * copy, RSS, imágenes, cajones, investigación, importaciones, verificación…) con
+ * sus métricas (tokens, coste, duración).
  *
  * Combina dos consultas: los agregados (`GET /api/actividad/agregados`) para las
  * tarjetas KPI y los desgloses, y el listado paginado (`GET /api/actividad`) para
@@ -470,7 +476,7 @@ export default function Actividad() {
     <>
       <PageHeader
         titulo="Actividad IA"
-        descripcion="Tokens, coste y duración de las generaciones de IA (copy, RSS, imágenes, verificación)."
+        descripcion="Generaciones en segundo plano de la IA: copy, imágenes, cajones, investigación, importaciones, verificación…"
         acciones={acciones}
       />
 
@@ -489,7 +495,7 @@ export default function Actividad() {
             <SelectItem value={TODOS}>Todos los tipos</SelectItem>
             {tipos.map((t) => (
               <SelectItem key={t} value={t}>
-                {t}
+                {etiquetaTipoGeneracion(t)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -551,7 +557,7 @@ function Contenido({
       <EstadoVacio
         icono={Activity}
         titulo="Aún no hay actividad IA"
-        texto="Cuando se generen copies, imágenes o verificaciones, aquí verás sus tokens, coste y duración."
+        texto="Cuando se generen copies, cajones, investigaciones, importaciones o verificaciones, aquí verás sus tokens, coste y duración."
       />
     );
   }

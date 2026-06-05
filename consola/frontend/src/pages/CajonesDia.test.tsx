@@ -5,7 +5,7 @@
  * 1. Renderiza las 4 tarjetas de cajones.
  * 2. Permite cambiar el día (selector de fecha).
  * 3. Muestra los ítems parseados cuando la API devuelve datos.
- * 4. El botón "Llevar al tablero" llama a `api.insumos.usarItem`.
+ * 4. El botón "Enviar al feed" llama a `api.insumos.usarItem`.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -126,7 +126,7 @@ const INSUMOS_CON_ITEM = {
 };
 
 // Ítem del cajón Eventos Claro (tipo='evento'): se convierte en EVENTO de la rota,
-// no en pieza del tablero. Debe ofrecer "Crear evento" en vez de "Llevar al tablero".
+// no en pieza del feed. Debe ofrecer "Crear evento" en vez de "Enviar al feed".
 const ITEM_EVENTO = {
   ...ITEM_PARSED,
   id: "item-ev",
@@ -299,7 +299,7 @@ describe("CajonesDia", () => {
     expect(screen.getByText("Nacional")).toBeInTheDocument();
   });
 
-  it("el botón 'Llevar al tablero' llama a api.insumos.usarItem", async () => {
+  it("el botón 'Enviar al feed' llama a api.insumos.usarItem", async () => {
     // Configurar mocks antes de renderizar
     const usarMock = vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
       item: { ...ITEM_PARSED, usado: true },
@@ -313,8 +313,8 @@ describe("CajonesDia", () => {
     // Esperar a que los ítems aparezcan (la carga puede estar en skeleton primero)
     await screen.findByText("Sismo en CDMX de 5.4 grados");
 
-    // Ahora encontrar y hacer clic en el botón "Llevar al tablero"
-    const boton = screen.getByRole("button", { name: "Llevar al tablero" });
+    // Ahora encontrar y hacer clic en el botón "Enviar al feed"
+    const boton = screen.getByRole("button", { name: "Enviar al feed (genera copy)" });
     fireEvent.click(boton);
 
     await waitFor(() => {
@@ -322,7 +322,7 @@ describe("CajonesDia", () => {
     });
   });
 
-  it("un ítem de Eventos Claro ofrece 'Crear evento' (no 'Llevar al tablero')", async () => {
+  it("un ítem de Eventos Claro ofrece 'Crear evento' (no 'Enviar al feed')", async () => {
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_EVENTO as never);
     vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
 
@@ -331,7 +331,7 @@ describe("CajonesDia", () => {
     await screen.findByText("Cruz Azul vs América");
     expect(screen.getByRole("button", { name: "Crear evento" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Llevar al tablero" }),
+      screen.queryByRole("button", { name: "Enviar al feed (genera copy)" }),
     ).not.toBeInTheDocument();
   });
 
@@ -402,13 +402,47 @@ describe("CajonesDia", () => {
     });
   });
 
-  it("muestra el indicador 'Procesando…' cuando un lote está en estado parseando", async () => {
+  it("muestra el indicador 'Procesando con Haiku…' cuando un lote está parseando sin generación activa", async () => {
     mockApiInsumos(INSUMOS_PARSEANDO, { dias: [] });
     renderConProviders(<CajonesDia />);
 
-    // El flujo es asíncrono: mientras el worker corre Haiku, el lote está `parseando`.
+    // Sin generación activa: muestra el spinner de texto "Procesando con Haiku…".
     expect(await screen.findByTestId("lote-parseando")).toBeInTheDocument();
     expect(screen.getByText("Procesando con Haiku…")).toBeInTheDocument();
+  });
+
+  it("muestra el visor de streaming cuando hay lote parseando con generación en ejecución", async () => {
+    // Simula aportar devolviendo una generación en ejecución.
+    const genEjecutando = { ...GENERACION_INSUMOS, estado: "ejecutando" };
+    vi.spyOn(apiMod.api.insumos, "aportar").mockResolvedValue({
+      lote: LOTE_PARSEANDO,
+      generacion: genEjecutando,
+    } as never);
+    // Después del aportar, el listar devuelve el lote parseando.
+    vi.spyOn(apiMod.api.insumos, "listar")
+      .mockResolvedValueOnce(INSUMOS_VACIOS as never)
+      .mockResolvedValue(INSUMOS_PARSEANDO as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+    // El sondeo de useGeneracion llama a api.generacion; devolvemos la misma gen ejecutando.
+    vi.spyOn(apiMod.api, "generacion").mockResolvedValue({
+      generacion: genEjecutando,
+    } as never);
+
+    renderConProviders(<CajonesDia />);
+    await screen.findByText("Portal / SMS");
+
+    // Enviar material para arrancar el flujo.
+    const textarea = screen.getByLabelText("Texto para Portal / SMS");
+    fireEvent.change(textarea, { target: { value: "1.- Sismo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Procesar Portal / SMS" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("lote-parseando")).toBeInTheDocument();
+    });
+    // Con la generación en ejecución debe mostrar "Procesando con IA…" (no "Haiku").
+    await waitFor(() => {
+      expect(screen.getByText("Procesando con IA…")).toBeInTheDocument();
+    });
   });
 
   it("aportar encola el job (devuelve {lote, generacion}) y refresca el cajón", async () => {
