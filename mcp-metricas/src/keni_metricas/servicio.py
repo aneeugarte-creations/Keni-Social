@@ -23,6 +23,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import statistics
+import threading
 from pathlib import Path
 
 from . import analisis_diario as _analisis
@@ -97,13 +98,68 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 
 
+# Cache de la fuente BASE (sin acotar a marca) y su `httpx.Client` subyacente. La
+# fuente Metricool mantiene UN solo `httpx.Client` durante su vida (keep-alive + pool de
+# conexiones), así que reusarla entre llamadas por-pieza evita abrir docenas de
+# conexiones nuevas y re-construir la fuente en cada tarjeta del tablero (N+1).
+#
+# Invalidación: la cache se keyea con la MISMA huella que `cargar_config`
+# (`_config._clave_cache_config()` = ruta + mtime del fichero + env relevantes). Un token
+# nuevo en disco cambia el mtime -> la clave cambia -> se reconstruye la fuente (y su
+# cliente) sin reiniciar el proceso. El acotado por marca (`FuenteScoped`) es un wrapper
+# barato sobre la base: NO crea cliente ni relee config, así que no se cachea por marca.
+#
+# Thread-safety: un lock protege el llenado para que dos hilos no construyan dos fuentes/
+# clientes a la vez. La lectura del puntero es atómica en CPython; el lock solo se toma
+# en el camino de (re)construcción.
+_fuente_lock = threading.Lock()
+_cache_fuente: tuple[object, object] | None = None
+
+
+def _fuente_base():
+    """Fuente activa SIN acotar (cacheada), reconstruida solo si cambia la config.
+
+    Reusa el mismo objeto fuente —y por tanto el mismo `httpx.Client` con keep-alive—
+    mientras la huella de config (`_config._clave_cache_config`) no cambie.
+    """
+    global _cache_fuente
+    clave = _config._clave_cache_config()
+    cacheada = _cache_fuente
+    if cacheada is not None and cacheada[0] == clave:
+        return cacheada[1]
+    with _fuente_lock:
+        cacheada = _cache_fuente
+        if cacheada is not None and cacheada[0] == clave:
+            return cacheada[1]
+        # `cargar_config` ya está memoizada con la misma clave: aquí solo reconstruimos
+        # la fuente/cliente cuando la config cambió de verdad.
+        fuente = _config.construir_fuente(_config.cargar_config())
+        _cache_fuente = (clave, fuente)
+        return fuente
+
+
+def reset_cache_fuente() -> None:
+    """Vacía la cache de la fuente base (la próxima llamada la reconstruye).
+
+    Se invoca tras escribir el config (ver `asistente.escribir_config_atomico`) para que
+    un cambio de credenciales/fuente se refleje de inmediato. No cierra el cliente viejo
+    explícitamente: httpx lo libera al recolectarse; cerrarlo aquí arriesgaría usar un
+    cliente cerrado si otro hilo lo tomó justo antes del reset.
+    """
+    global _cache_fuente
+    with _fuente_lock:
+        _cache_fuente = None
+
+
 def _fuente(marca: str | None = None):
     """Fuente activa segun el config, opcionalmente acotada a UNA marca.
 
     El acotado por marca se delega en la propia fuente (FuenteScoped es interno):
-    la Consola pasa el id en forma `id_metricas` (guion_bajo) y la fuente filtra.
+    la Consola pasa el id en forma `id_metricas` (guion_bajo) y la fuente filtra. La
+    fuente BASE se reusa entre llamadas (cache + cliente httpx con keep-alive); el
+    wrapper `FuenteScoped` por marca es barato y no abre conexiones nuevas.
     """
-    fuente = _config.construir_fuente(_config.cargar_config())
+    fuente = _fuente_base()
     if marca:
         return _config.FuenteScoped(fuente, [marca])
     return fuente
@@ -114,7 +170,7 @@ def nombre_fuente() -> str:
 
     Para que la UI distinga datos ficticios de reales (riesgo operativo del piloto).
     """
-    return _config.construir_fuente(_config.cargar_config()).nombre
+    return _fuente_base().nombre
 
 
 def cuentas_disponibles(marca: str | None = None) -> list[tuple[str, str]]:

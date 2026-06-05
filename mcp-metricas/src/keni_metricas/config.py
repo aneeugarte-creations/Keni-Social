@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -254,7 +255,80 @@ def _parsear_metricool(datos: dict) -> MetricoolConfig:
     return MetricoolConfig(user_token=str(user_token or ""), user_id=user_id, marcas=marcas)
 
 
+# Env vars que cambian el RESULTADO de `cargar_config` sin tocar el mtime del fichero.
+# Forman parte de la clave de cache: si cualquiera cambia, re-parseamos. (En proceso
+# raramente cambian, pero los tests las monkeypatchean entre llamadas.)
+_ENV_RELEVANTES: tuple[str, ...] = (
+    "KENI_METRICAS_CONFIG",
+    "KENI_METRICAS_FUENTE",
+    "KENI_METRICAS_MARCAS",
+    "METRICOOL_USER_TOKEN",
+    "METRICOOL_USER_ID",
+    ENV_PERMITIR_REAL,
+    "XDG_CONFIG_HOME",
+)
+
+# Memoización de `cargar_config`: re-parsea SOLO cuando cambia la clave (ruta + mtime
+# del fichero + huella de las env relevantes). Evita re-leer y re-parsear el TOML en
+# cada llamada por-pieza (N+1 de config en el tablero). El lock protege el llenado para
+# que dos hilos no parseen a la vez ni se pisen la entrada cacheada.
+_cache_lock = threading.Lock()
+_cache_config: tuple[object, Config] | None = None
+
+
+def _clave_cache_config() -> tuple:
+    """Huella que invalida la cache: ruta + mtime del fichero + env relevantes.
+
+    `mtime` es `None` si el fichero no existe (caso muestra/sin config); así pasar de
+    'no existe' a 'existe' (o un guardado posterior) invalida la entrada. Cualquier
+    cambio en una env relevante también la invalida (los tests cambian env entre
+    llamadas; un token nuevo en disco lo capta el mtime).
+    """
+    ruta = ruta_config()
+    try:
+        mtime = ruta.stat().st_mtime_ns
+    except OSError:
+        mtime = None
+    env = tuple(os.environ.get(k) for k in _ENV_RELEVANTES)
+    return (str(ruta), mtime, env)
+
+
 def cargar_config() -> Config:
+    """Config memoizada: re-lee del disco solo si cambia su mtime o una env relevante.
+
+    Antes cada llamada por-pieza re-parseaba el TOML; ahora se reusa la última `Config`
+    mientras la clave (`_clave_cache_config`) no cambie. Un cambio de token en disco
+    (mtime distinto) se sigue captando sin reiniciar el proceso. El `Config` es
+    efectivamente inmutable aguas abajo (los consumidores no lo mutan), por lo que es
+    seguro compartir la misma instancia entre llamadas/hilos.
+    """
+    global _cache_config
+    clave = _clave_cache_config()
+    cacheada = _cache_config
+    if cacheada is not None and cacheada[0] == clave:
+        return cacheada[1]
+    with _cache_lock:
+        # Re-chequea bajo el lock: otro hilo pudo llenarla mientras esperábamos.
+        cacheada = _cache_config
+        if cacheada is not None and cacheada[0] == clave:
+            return cacheada[1]
+        cfg = _cargar_config_desde_disco()
+        _cache_config = (clave, cfg)
+        return cfg
+
+
+def reset_cache_config() -> None:
+    """Vacía la memoización de `cargar_config` (la próxima llamada re-lee del disco).
+
+    Para tests o tras un cambio de config que deba reflejarse sin esperar al mtime. No
+    es necesario en operación normal (el mtime ya invalida), pero da un seam explícito.
+    """
+    global _cache_config
+    with _cache_lock:
+        _cache_config = None
+
+
+def _cargar_config_desde_disco() -> Config:
     datos: dict = {}
     ruta = ruta_config()
     if ruta.exists():

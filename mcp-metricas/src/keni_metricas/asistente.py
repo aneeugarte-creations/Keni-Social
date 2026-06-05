@@ -450,6 +450,19 @@ def escribir_config_atomico(ruta: Path, datos: dict, cabecera: str = CABECERA) -
     """
     contenido = cabecera + "\n" + serializar_toml(datos)
     escribir_atomico(Path(ruta), contenido, modo=0o600, prefijo=".config-", sufijo=".toml.tmp")
+    # El config en disco acaba de cambiar: invalida la memoización de `cargar_config` y
+    # la cache de fuentes/clientes para que el cambio (p.ej. un token nuevo) se refleje
+    # de inmediato sin esperar a la siguiente lectura de mtime ni reiniciar el proceso.
+    # Import perezoso para no crear un ciclo (config/servicio no se importan a nivel módulo).
+    try:
+        from . import config as _config
+
+        _config.reset_cache_config()
+        from . import servicio as _servicio
+
+        _servicio.reset_cache_fuente()
+    except Exception:  # noqa: BLE001 -- la invalidación es best-effort; el mtime ya respalda
+        pass
 
 
 def construir_y_fusionar(plan: PlanConfig, ruta: Path) -> dict:
