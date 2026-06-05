@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -127,6 +128,12 @@ _LISTADO_MAX = 50
 def _timeout() -> int:
     """Wall-timeout (s) de un trabajo de claude; `KENI_CLAUDE_TIMEOUT` lo sobreescribe."""
     return config.claude_timeout()
+
+
+# Patron del NOMBRE base de un registro de generacion (`<id>.yaml`): exactamente 12 hex,
+# tal como los acuna `nuevo_id`. La poda solo borra ficheros cuyo stem case con esto (nunca
+# temporales `.tmp-*` ni nombres ajenos en el dir).
+_ES_ID = re.compile(r"[0-9a-f]{12}")
 
 
 def nuevo_id() -> str:
@@ -325,7 +332,16 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
 
     Las generaciones NO viven en el indice SQLite (son estado efimero de ejecucion en
     su propio almacen), asi que el orden/recorte se hace en memoria sobre el glob. El
-    volumen es bajo (trabajos en vuelo + recientes), por eso basta este escaneo.
+    volumen lo ACOTA la poda de retencion (`podar_generaciones`, #128): sin ella el
+    almacen y este escaneo crecian sin tope. Con la poda activa el conjunto queda en el
+    orden de `KENI_GENERACIONES_RETENCION_MAX` (def 2000), un escaneo barato.
+
+    SEGUIMIENTO (no en este cambio, bajo riesgo): este metodo parsea TODOS los .yaml en
+    cada peticion solo para devolver una pagina. NO se cambia el orden aqui a mtime porque
+    el orden CONTRACTUAL es por `fecha_inicio` (campo DENTRO del YAML), que difiere del
+    mtime (el mtime cambia en cada `actualizar`); ordenar por mtime alteraria la semantica
+    visible. La via correcta es un indice (un campo/columna `fecha_inicio` indexado) para
+    paginar sin parsear todo; queda pendiente. De momento la poda basta para acotar el coste.
     """
     base = raiz()
     if not base.is_dir():
@@ -365,6 +381,107 @@ def listar(
 def contar() -> int:
     """Total de generaciones almacenadas (para el `total` del envelope de paginacion)."""
     return len(_todas_ordenadas())
+
+
+# --------------------------------------------------------------------------- #
+# Poda de retencion: acota el almacen de registros (disco + escaneo) #128       #
+# --------------------------------------------------------------------------- #
+
+# Defaults de la politica de retencion. Se leen INLINE de `os.environ` (no por
+# `config.py`, propiedad de otro agente). Un registro se CONSERVA si es mas nuevo que
+# `KENI_GENERACIONES_RETENCION_DIAS` (def 30 d) O si esta entre los `KENI_GENERACIONES_
+# RETENCION_MAX` mas recientes (def 2000); solo se borra lo viejo que ademas cae fuera
+# del piso de los N mas recientes. Asi el listado de Actividad (`_todas_ordenadas`,
+# que parsea TODOS los .yaml en cada peticion) y el disco quedan acotados.
+_RETENCION_DIAS_DEF = 30
+_RETENCION_MAX_DEF = 2000
+
+
+def _entero_env(nombre: str, defecto: int, *, minimo: int = 0) -> int:
+    """Lee un entero >= `minimo` de `os.environ[nombre]`; cae a `defecto` si falta/inválido.
+
+    Helper INLINE (no toca `config.py`, de otro agente): tolera valores ausentes, no
+    numéricos o por debajo del mínimo sin romper la poda.
+    """
+    crudo = os.environ.get(nombre)
+    if crudo is None:
+        return defecto
+    try:
+        valor = int(str(crudo).strip())
+    except (TypeError, ValueError):
+        return defecto
+    return valor if valor >= minimo else defecto
+
+
+def podar_generaciones(
+    *,
+    dias: int | None = None,
+    maximo: int | None = None,
+    ahora: datetime | None = None,
+) -> int:
+    """Borra registros YAML de generacion fuera de la politica de retencion. Devuelve cuantos.
+
+    POLITICA (conservadora, doble red de seguridad):
+      - CONSERVA todo registro mas nuevo que `dias` (def `KENI_GENERACIONES_RETENCION_DIAS`,
+        30 d), juzgado por el mtime del fichero (barato; sin parsear el YAML).
+      - CONSERVA SIEMPRE los `maximo` registros mas recientes (def `KENI_GENERACIONES_
+        RETENCION_MAX`, 2000), AUNQUE sean viejos: el piso de los N mas recientes NUNCA se
+        borra. Solo es candidato a borrar lo que es viejo Y ademas cae por debajo del piso.
+
+    SEGURIDAD: solo toca ficheros `<id>.yaml` del dir de generaciones cuyo nombre case con
+    el patron de id (12 hex de `nuevo_id`) — nunca temporales `.tmp-*` ni nada ajeno. Tolera
+    carreras (fichero ya borrado por otro): un `FileNotFoundError`/`OSError` al hacer stat o
+    unlink se ignora por item, sin abortar el barrido. NO parsea los YAML (no depende de que
+    sean validos), asi un fichero corrupto no rompe la poda. Loguea el total podado.
+
+    `dias`/`maximo`/`ahora` se inyectan en tests; por defecto salen del entorno / del reloj.
+    """
+    dias_ret = dias if dias is not None else _entero_env(
+        "KENI_GENERACIONES_RETENCION_DIAS", _RETENCION_DIAS_DEF, minimo=0
+    )
+    max_ret = maximo if maximo is not None else _entero_env(
+        "KENI_GENERACIONES_RETENCION_MAX", _RETENCION_MAX_DEF, minimo=0
+    )
+    base = raiz()
+    if not base.is_dir():
+        return 0
+
+    referencia = ahora if ahora is not None else datetime.now()
+    corte = referencia.timestamp() - dias_ret * 86400.0
+
+    # Recolecta (mtime, ruta) de los registros de generacion REALES (id de 12 hex), saltando
+    # temporales y cualquier nombre ajeno. El stat es barato (no parsea el YAML).
+    candidatos: list[tuple[float, Path]] = []
+    for ruta_fichero in base.glob("*.yaml"):
+        nombre = ruta_fichero.stem
+        if not _ES_ID.fullmatch(nombre):
+            continue  # no es un registro de generacion (`.tmp-*`, ajeno): no se toca
+        try:
+            mtime = ruta_fichero.stat().st_mtime
+        except OSError:
+            continue  # carrera (ya borrado) o ilegible: se omite
+        candidatos.append((mtime, ruta_fichero))
+
+    if len(candidatos) <= max_ret:
+        return 0  # por debajo del piso: nada que podar
+
+    # Mas reciente primero; el piso de los `max_ret` primeros queda SIEMPRE protegido.
+    candidatos.sort(key=lambda par: par[0], reverse=True)
+    podados = 0
+    for mtime, ruta_fichero in candidatos[max_ret:]:
+        if mtime >= corte:
+            continue  # dentro de la ventana de dias: se conserva pese a estar fuera del piso
+        try:
+            ruta_fichero.unlink()
+            podados += 1
+        except FileNotFoundError:
+            continue  # carrera: otro lo borro ya; cuenta como hecho sin sumar
+        except OSError:
+            _log.warning("Poda de generaciones: no se pudo borrar %s", ruta_fichero.name, exc_info=True)
+            continue
+    if podados:
+        _log.info("Poda de generaciones: %d registro(s) viejo(s) borrado(s).", podados)
+    return podados
 
 
 def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> int:

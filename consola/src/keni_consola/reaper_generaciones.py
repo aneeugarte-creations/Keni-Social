@@ -33,10 +33,22 @@ _log = logging.getLogger("keni_consola.reaper_generaciones")
 
 
 def ejecutar_barrido() -> int:
-    """Un barrido: reclama las generaciones zombi. Devuelve cuantas cerro."""
+    """Un barrido: reclama zombis y PODA registros viejos. Devuelve cuantas zombis cerro.
+
+    Dos saneamientos en el mismo tick (reusa el scheduling del reaper, no abre un proceso
+    nuevo): (1) cierra las `ejecutando` huerfanas (`reclamar_zombis`); (2) PODA los registros
+    YAML fuera de la politica de retencion (`podar_generaciones`, #128), que acota disco +
+    el escaneo de `_todas_ordenadas`. La poda es best-effort y NO afecta al valor devuelto
+    (que sigue siendo el numero de zombis cerradas, contrato del reaper); un fallo se loguea
+    y no aborta el barrido (asi un problema de poda nunca impide reclamar zombis).
+    """
     n = generaciones.reclamar_zombis(config.generaciones_ttl_seg())
     if n:
         _log.info("Reaper de generaciones: %d generacion(es) zombi cerrada(s) como error.", n)
+    try:
+        generaciones.podar_generaciones()
+    except Exception:  # noqa: BLE001 -- la poda es best-effort; no debe tumbar el barrido
+        _log.warning("Reaper de generaciones: fallo la poda de registros viejos.", exc_info=True)
     return n
 
 
