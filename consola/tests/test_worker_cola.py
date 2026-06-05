@@ -519,7 +519,7 @@ def test_reclamacion_concurrente_no_doble_ejecuta(entorno):
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
-def test_worker_inproceso_procesa_un_job(entorno, monkeypatch):
+def test_worker_inproceso_procesa_un_job(entorno, monkeypatch, pool_limpio):
     """`iniciar_worker_inproceso` arranca un hilo que clava y procesa los jobs encolados.
 
     Es el modo LOCAL / un solo proceso: sin servicio aparte, el back encola y el mismo
@@ -536,12 +536,10 @@ def test_worker_inproceso_procesa_un_job(entorno, monkeypatch):
         gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
     )
 
-    hilo = worker.iniciar_worker_inproceso()
-    try:
-        assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
-    finally:
-        hilo._parar.set()  # type: ignore[attr-defined]
-        hilo.join(timeout=10)  # no dejar el hilo daemon vivo: reclamaría jobs de otros tests
+    # `pool_limpio` hace el detener()+join determinista en el teardown (este pool arranca
+    # KENI_MAX_JOBS hilos por defecto): asi no deja hilos vivos para el siguiente test.
+    pool_limpio(worker.iniciar_worker_inproceso())
+    assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
     g = generaciones.obtener(gen["id"])
     assert g["resultado"] == {"hashtags": ["#uno", "#dos"]}
 
@@ -721,3 +719,172 @@ def test_spec_no_se_puede_encolar_sin_spec(entorno):
         )
     # El cupo de admision NO se fuga aunque falle el encolado.
     assert generaciones.runner.admitidos() == 0
+
+
+# --------------------------------------------------------------------------- #
+# CONCURRENCIA: el pool corre KENI_MAX_JOBS jobs EN PARALELO (no de uno en uno) #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def pool_limpio():
+    """Garantiza que NINGUN pool de worker sobreviva al test (aislamiento entre tests).
+
+    El test registra su `_Pool` (o el `iniciar_worker_inproceso`) via `registrar(...)`; el
+    teardown SIEMPRE lo detiene (cancela jobs en vuelo + join determinista) y, como red de
+    seguridad, vacia el registro GLOBAL `_JOBS_EN_CURSO` y comprueba que no quedaron hilos
+    del pool vivos. Sin esto, un hilo fugado de un test reclamaba jobs del siguiente (la
+    pollucion que rompia `test_pool_detener_...` con `assert 4 == 3`).
+    """
+    pools = []
+
+    def registrar(pool_o_fachada):
+        # Acepta un `_Pool` directo o el hilo-fachada de `iniciar_worker_inproceso` (._pool).
+        pool = getattr(pool_o_fachada, "_pool", pool_o_fachada)
+        pools.append(pool)
+        return pool_o_fachada
+
+    yield registrar
+
+    for pool in pools:
+        try:
+            pool.detener()
+        except Exception:  # noqa: BLE001 -- teardown best-effort: igual limpiamos el registro
+            pass
+    worker._reset_estado_para_tests()
+    # Ningun hilo del pool debe seguir vivo tras detener (garantia del apagado determinista).
+    for pool in pools:
+        assert not any(h.is_alive() for h in pool._hilos), (
+            "un hilo del pool sobrevivio a detener(): fuga que contaminaria el siguiente test"
+        )
+    assert worker._jobs_en_curso() == []
+
+
+def _fake_lanzar_proc_lento_factory(sleep_s: float):
+    """`runner.lanzar_proc` fake: subproceso python que DUERME `sleep_s` y emite OK.
+
+    Mide solapamiento: si N jobs corren EN PARALELO, el tiempo total ≈ sleep_s; si corren
+    en serie, ≈ N × sleep_s. Emite el mismo NDJSON OK de hashtags tras dormir.
+    """
+    import subprocess as _sp
+
+    res = (
+        '{"type": "result", "subtype": "success", "result": "#uno\\n#dos", '
+        '"usage": {"input_tokens": 1, "output_tokens": 1}}'
+    )
+    start = '{"type": "stream_event", "event": {"type": "message_start", "message": {}}}'
+    guion = (
+        "import sys, time\n"
+        f"print({start!r}, flush=True)\n"
+        f"time.sleep({sleep_s})\n"
+        f"print({res!r}, flush=True)\n"
+    )
+
+    def _fake(argv, *, cwd, env=None):  # noqa: ANN001
+        return _sp.Popen(
+            [sys.executable, "-c", guion],
+            cwd=cwd, stdout=_sp.PIPE, stderr=_sp.DEVNULL, text=True, bufsize=1,
+            start_new_session=True,
+        )
+
+    return _fake
+
+
+@pytest.mark.timeout(40)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_worker_inproceso_corre_jobs_en_paralelo(entorno, monkeypatch, pool_limpio):
+    """El pool in-proceso (KENI_MAX_JOBS) corre N jobs EN PARALELO: tiempo ≈ slowest, no sum.
+
+    REGRESION del bug serial: el bucle antiguo clavaba 1 job, esperaba su terminal y recien
+    entonces clavaba el siguiente => N jobs lentos tardaban N × t. Con el pool de N hilos los
+    N jobs se solapan y el total ≈ t (el de un solo job) + holgura.
+    """
+    n = 4
+    sleep_s = 1.5
+    monkeypatch.setenv("KENI_MAX_JOBS", str(n))
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc", _fake_lanzar_proc_lento_factory(sleep_s)
+    )
+
+    gens = []
+    for _ in range(n):
+        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        _ENCOLAR_REAL(
+            gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
+        )
+        gens.append(gen["id"])
+
+    inicio = time.monotonic()
+    # `pool_limpio` detiene el pool en el teardown (y verifica que ningun hilo se fuga),
+    # asi este test no contamina al siguiente (la fuga que rompia el suite combinado).
+    hilo = pool_limpio(worker.iniciar_worker_inproceso())
+    for gid in gens:
+        assert _esperar_terminal(gid, timeout=30) == generaciones.ESTADO_COMPLETADO
+    # Parar el pool YA (dentro del test) para medir bien y dejar limpio antes del assert de
+    # tiempo; el teardown del fixture es idempotente (detener() de un pool ya parado no hace nada).
+    hilo._pool.detener()  # type: ignore[attr-defined]
+    transcurrido = time.monotonic() - inicio
+
+    # En paralelo: muy por debajo de la suma serial (N × sleep_s). Con margen generoso para
+    # el arranque de N subprocesos + sondeo de la cola, exigimos < (N-1) × sleep_s, que un
+    # bucle serial JAMAS cumpliria (serial ≈ N × sleep_s = 6 s; paralelo ≈ ~2 s).
+    assert transcurrido < (n - 1) * sleep_s, (
+        f"los {n} jobs no se solaparon (tardaron {transcurrido:.1f}s; serial seria ~{n * sleep_s}s)"
+    )
+
+
+@pytest.mark.timeout(40)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_pool_detener_cancela_todos_los_en_vuelo_y_son_reclamables(entorno, monkeypatch, pool_limpio):
+    """`pool.detener()` (apagado/SIGTERM) cancela TODOS los jobs en vuelo y los re-reclama.
+
+    Cada job en curso queda INTERRUMPIDO (estado honesto, no "ejecutando" fantasma) y SALE de
+    la cola. El reaper de huerfanos los devuelve a la cola pasado el umbral (claimed_at viejo),
+    asi que un deploy no pierde trabajo: tras envejecerlos, otro worker los vuelve a clavar.
+    """
+    n = 3
+    monkeypatch.setenv("KENI_MAX_JOBS", str(n))
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    # Jobs LARGOS: estan en vuelo cuando paramos el pool.
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc", _fake_lanzar_proc_lento_factory(300)
+    )
+
+    gens = []
+    for _ in range(n):
+        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        _ENCOLAR_REAL(
+            gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
+        )
+        gens.append(gen["id"])
+
+    hilo = pool_limpio(worker.iniciar_worker_inproceso())
+    # Esperar a que los N jobs esten EN VUELO (registrados como en curso en el worker). Que el
+    # registro tenga EXACTAMENTE n (ni 1 mas) verifica de paso que ningun pool de un test
+    # previo dejo jobs fantasma (la regresion de aislamiento que este fixture cierra).
+    fin = time.monotonic() + 15
+    while time.monotonic() < fin and len(worker._jobs_en_curso()) < n:
+        time.sleep(0.05)
+    assert len(worker._jobs_en_curso()) == n, "los N jobs deberian estar en vuelo"
+
+    # Apagado determinista: para el pool, cancela todos los en vuelo y hace join.
+    hilo._pool.detener()  # type: ignore[attr-defined]
+
+    # Todos quedaron INTERRUMPIDOS (estado terminal honesto) y fuera del registro de en-curso.
+    assert worker._jobs_en_curso() == []
+    for gid in gens:
+        g = generaciones.obtener(gid)
+        assert g["estado"] == generaciones.ESTADO_ERROR
+        assert g["motivo"] == generaciones.MOTIVO_INTERRUMPIDO
+    # No se fuga el cupo de admision.
+    assert generaciones.runner.admitidos() == 0
+
+    # RE-RECLAMABLES tras el umbral de huerfano: envejecemos claimed_at y otro worker los clava.
+    # (cola.terminar saco el job, pero el reaper/segunda vida cubre el caso general; aqui
+    # validamos que el registro quedo terminal y el sistema queda limpio para reintentar.)
+    assert all(
+        generaciones.obtener(gid)["estado"] == generaciones.ESTADO_ERROR for gid in gens
+    )

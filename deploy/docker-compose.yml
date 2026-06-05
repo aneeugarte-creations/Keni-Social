@@ -34,7 +34,7 @@ name: keni-social
 #   Servicio   mem_limit (def)   env override            cpus
 #   ────────   ───────────────   ─────────────────────   ─────────
 #   db         8g                DB_MEM_LIMIT            (reserva: sin tope de CPU)
-#   worker     6g                WORKER_MEM_LIMIT        WORKER_CPUS (def 4)
+#   worker     14g               WORKER_MEM_LIMIT        WORKER_CPUS (def 6)
 #   back       3g                BACK_MEM_LIMIT          3.0
 #   files      3g                FILES_MEM_LIMIT         2.0
 #   daemons    2g                DAEMONS_MEM_LIMIT       2.0
@@ -42,7 +42,10 @@ name: keni-social
 #   traefik    512m              —                       1.0
 #   front      256m              —                       1.0
 #
-# Suma de defaults ≈ 23.8 GiB sobre 61 GiB: deja ~37 GiB para host + CI + learn-postgres.
+# El worker subio de 6g/4cpu a 14g/6cpu porque ahora corre KENI_MAX_JOBS (def 4) jobs
+# `claude -p` EN PARALELO (antes el bucle era serial: 1 a la vez, asi 6g bastaba). Cada job
+# ~1.5–2.5 GiB en pico => 4 × 2.5 + margen ≈ 14 GiB. Ver la nota junto al servicio `worker`.
+# Suma de defaults ≈ 31.8 GiB sobre 61 GiB: deja ~29 GiB para host + CI + learn-postgres.
 # Los `cpus` son TOPES (no reservas): si keni esta ocioso, el CI usa los 12 nucleos.
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -320,7 +323,11 @@ services:
       IS_SANDBOX: "1"
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
       # Concurrencia de `claude` por worker + topes de coste/tiempo (mismos nombres que antes).
-      KENI_MAX_JOBS: ${KENI_MAX_JOBS}
+      # El worker corre un POOL de KENI_MAX_JOBS hilos => hasta N jobs `claude` EN PARALELO
+      # (antes el bucle era serial y solo corria 1 a la vez pese a este valor). Default 4 (ver
+      # config.MAX_JOBS_DEF); explicito aqui con fallback 4 para no depender del .env. El
+      # mem_limit/cpus de abajo estan dimensionados para ESTOS 4 jobs concurrentes.
+      KENI_MAX_JOBS: ${KENI_MAX_JOBS:-4}
       # Credencial de Claude para `claude -p` (el back ya no la necesita: no genera).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN}
@@ -367,8 +374,18 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    mem_limit: ${WORKER_MEM_LIMIT:-6g}
-    cpus: ${WORKER_CPUS:-4}
+    # DIMENSIONADO PARA KENI_MAX_JOBS=4 CONCURRENTES (el worker ahora corre N jobs `claude`
+    # EN PARALELO, no de uno en uno). Cada `claude -p` (Node + uso de herramientas del modelo)
+    # consume ~1.5–2.5 GiB en pico. Matematica: 4 × ~2.5 GiB ≈ 10 GiB + ~2 GiB de margen
+    # (post-procesado, descarga de media S3, buffers de stream) ≈ 12 GiB. Antes el limite era
+    # 6g (correcto para 1 job a la vez, pero OOM-killaria a 4 concurrentes). Si subes
+    # KENI_MAX_JOBS, sube WORKER_MEM_LIMIT en proporcion (~3 GiB/job) y revisa la suma global
+    # (cabecera de este fichero): a 14g el worker sigue dejando holgura amplia sobre 61 GiB.
+    mem_limit: ${WORKER_MEM_LIMIT:-14g}
+    # CPU: 4 `claude` concurrentes quieren ~4–6 nucleos (cada uno empuja CPU al razonar/usar
+    # tools). 6 da holgura para los picos sin monopolizar la caja (12 vCPU). Es un TOPE, no
+    # reserva: si el worker esta ocioso, esos nucleos quedan para el resto del stack/CI.
+    cpus: ${WORKER_CPUS:-6}
 
   mcp:
     build:

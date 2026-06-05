@@ -2,15 +2,24 @@
 
 DOS modos de ejecucion (se elige por entorno; ver `config.worker_externo`):
 
-  - LOCAL / un solo proceso (def): el back arranca ESTE worker EN PROCESO, en un hilo de
-    fondo (`iniciar_worker_inproceso`), llamado desde `__main__` (NO desde `crear_app`, para
-    no arrancarlo en los tests). La UX de una sola maquina NO cambia: no hace falta un
-    servicio aparte y `claude` esta en el mismo entorno que el back.
+  - LOCAL / un solo proceso (def): el back arranca ESTE worker EN PROCESO, como un POOL de
+    `config.max_jobs()` hilos de fondo (`iniciar_worker_inproceso`), llamado desde `__main__`
+    (NO desde `crear_app`, para no arrancarlo en los tests). La UX de una sola maquina NO
+    cambia: no hace falta un servicio aparte y `claude` esta en el mismo entorno que el back.
 
   - HOSTED: un servicio `worker` SEPARADO corre `python -m keni_consola.worker` (este
-    modulo como entry-point). Consume la MISMA cola (Postgres compartido). El back arranca
-    con `KENI_WORKER_EXTERNO=1` para NO arrancar su worker in-proceso. La imagen del worker
-    SI lleva Node + `claude`; la del back ya NO (ADR 0002 Fase B).
+    modulo como entry-point), tambien con un POOL de `config.max_jobs()` hilos. Consume la
+    MISMA cola (Postgres compartido). El back arranca con `KENI_WORKER_EXTERNO=1` para NO
+    arrancar su worker in-proceso. La imagen del worker SI lleva Node + `claude`; la del
+    back ya NO (ADR 0002 Fase B).
+
+CONCURRENCIA (KENI_MAX_JOBS): el worker corre HASTA `config.max_jobs()` jobs `claude` EN
+PARALELO. Cada hilo del POOL corre su propio bucle reclama->procesa->termina, bloqueando en
+SU job (`_esperar_terminal`); el POOL da el paralelismo de N vias. Reclamar es concurrente-
+seguro (`FOR UPDATE SKIP LOCKED`: dos hilos nunca cogen el mismo job). El semaforo de
+`runner.slot` (BoundedSemaphore(max_jobs)) es un tope adicional al numero de procesos.
+ANTES el bucle era UNICO y serial (clavaba 1 job y ESPERABA su terminal antes del siguiente),
+asi que corria 1 job a la vez pese a KENI_MAX_JOBS; el POOL arregla eso.
 
 POR QUE REUSA `generaciones.lanzar_job_claude`: ahi vive TODO el endurecimiento #137 que
 hay que PRESERVAR (grupo de procesos propio, kill del ARBOL al timeout/cancel, tope de
@@ -46,23 +55,44 @@ from .dominio import jobspec
 
 _log = logging.getLogger("keni_consola.worker")
 
-# Job (id, gen_id) que el worker está EJECUTANDO ahora mismo (claude en vuelo), o None.
-# Lo usa el manejador de apagado: si el worker muere a mitad (deploy/SIGTERM), marca esa
-# generación como INTERRUMPIDA al instante (en vez de dejarla "ejecutando" fantasma hasta el
-# reaper) y saca el job de la cola para que NO se re-ejecute en bucle reiniciando el run.
-_JOB_EN_CURSO: dict[str, str] | None = None
-_JOB_EN_CURSO_LOCK = threading.Lock()
+# Jobs (id -> {id, gen_id}) que el worker está EJECUTANDO ahora mismo (claude en vuelo).
+# Con el pool de hilos (KENI_MAX_JOBS) puede haber VARIOS a la vez, asi que es un MAPA, no
+# un solo job. Lo usa el manejador de apagado: si el worker muere a mitad (deploy/SIGTERM),
+# marca TODAS esas generaciones como INTERRUMPIDAS al instante (en vez de dejarlas
+# "ejecutando" fantasma hasta el reaper) y saca cada job de la cola para que NO se
+# re-ejecute en bucle reiniciando el run. Cada hilo del pool registra y des-registra SU job.
+_JOBS_EN_CURSO: dict[str, dict[str, str]] = {}
+_JOBS_EN_CURSO_LOCK = threading.Lock()
 
 
-def _marcar_job_en_curso(job: dict[str, str] | None) -> None:
-    global _JOB_EN_CURSO
-    with _JOB_EN_CURSO_LOCK:
-        _JOB_EN_CURSO = job
+def _marcar_job_en_curso(job: dict[str, str]) -> None:
+    """Registra un job (por su id) como en curso en ESTE worker (lo llama su hilo del pool)."""
+    with _JOBS_EN_CURSO_LOCK:
+        _JOBS_EN_CURSO[job["id"]] = job
 
 
-def _job_en_curso() -> dict[str, str] | None:
-    with _JOB_EN_CURSO_LOCK:
-        return _JOB_EN_CURSO
+def _desmarcar_job_en_curso(job_id: str) -> None:
+    """Saca un job del registro de en-curso (su hilo terminó de procesarlo)."""
+    with _JOBS_EN_CURSO_LOCK:
+        _JOBS_EN_CURSO.pop(job_id, None)
+
+
+def _reset_estado_para_tests() -> None:
+    """Vacia el registro GLOBAL de jobs en curso (solo tests).
+
+    `_JOBS_EN_CURSO` es estado de MODULO (proceso): si un test arranca un pool y por lo que
+    sea no lo detiene del todo, su entrada contaminaria el siguiente test (que veria jobs
+    "en vuelo" fantasma). `_Pool.detener()` ya lo deja vacio; este helper es la red de
+    seguridad del teardown para garantizar aislamiento entre tests pase lo que pase.
+    """
+    with _JOBS_EN_CURSO_LOCK:
+        _JOBS_EN_CURSO.clear()
+
+
+def _jobs_en_curso() -> list[dict[str, str]]:
+    """Copia de los jobs en vuelo ahora mismo (para el apagado): lista, sin el lock fuera."""
+    with _JOBS_EN_CURSO_LOCK:
+        return list(_JOBS_EN_CURSO.values())
 
 # Cuanto sondea el vigia de cancelacion el flag de la cola (s). Bajo para que cancelar
 # se sienta inmediato sin martillear la BD.
@@ -209,7 +239,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         )
         _esperar_terminal(gen_id)
     finally:
-        _marcar_job_en_curso(None)
+        _desmarcar_job_en_curso(job_id)
         parar.set()
         cola.terminar(job_id)
 
@@ -231,7 +261,15 @@ def _esperar_terminal(gen_id: str) -> None:
 
 
 def _bucle(parar: threading.Event, worker_id: str) -> None:
-    """Bucle del worker: clava un job y lo procesa; duerme si la cola esta vacia."""
+    """Bucle de UN hilo del pool: clava un job y lo procesa; duerme si la cola esta vacia.
+
+    CONCURRENCIA (KENI_MAX_JOBS): este bucle lo corren EN PARALELO `config.max_jobs()`
+    hilos del pool (ver `_Pool`/`iniciar_worker_inproceso`). Cada hilo reclama,
+    procesa (bloqueando en SU job via `_esperar_terminal`) y reclama el siguiente. La
+    reclamacion concurrente es SEGURA: `cola.reclamar` usa `FOR UPDATE SKIP LOCKED`, asi
+    que dos hilos NUNCA se llevan el mismo job. El paralelismo lo da el POOL: N hilos =>
+    hasta N jobs `claude` en vuelo a la vez (acotado tambien por `runner.slot`).
+    """
     sondeo = config.worker_sondeo_segundos()
     while not parar.is_set():
         try:
@@ -245,63 +283,117 @@ def _bucle(parar: threading.Event, worker_id: str) -> None:
             if parar.wait(sondeo):
                 return
             continue
+        # CARRERA DE APAGADO: `parar` pudo activarse DESPUES de pasar el `while` y ANTES (o
+        # durante) este `reclamar`. Sin esta re-comprobacion el hilo procesaria un job nuevo
+        # tras el apagado, sobreviviendo al `detener()` (atascado luego en `_esperar_terminal`)
+        # y FUGANDOSE al siguiente test/deploy. Si ya hay que parar, NO lanzamos `claude`:
+        # registramos el job como en-curso (para que `detener()` lo cierre INTERRUMPIDO y lo
+        # saque de la cola), liberamos su cupo de admision (lo tomo el encolado; sin esto se
+        # fugaria) y salimos limpio. Asi el hilo muere SIEMPRE y no queda cupo colgado.
+        if parar.is_set():
+            _marcar_job_en_curso({"id": job["id"], "gen_id": job["gen_id"]})
+            try:
+                generaciones.runner.liberar_admision()
+            except Exception:  # noqa: BLE001 -- en apagado, best-effort
+                pass
+            return
         try:
             procesar_job(job, worker_id)
         except Exception:  # noqa: BLE001 -- un fallo de UN job no debe matar el worker
             _log.exception("worker: fallo al procesar el job %s", job.get("id"))
 
 
-def iniciar_worker_inproceso() -> threading.Thread:
-    """Arranca el worker EN PROCESO (hilo daemon) — perfil LOCAL / un solo proceso.
+class _Pool:
+    """Pool de N hilos worker (N = `config.max_jobs()`) corriendo el bucle de reclamacion.
 
-    Lo llama `__main__` (servidor real), NO `crear_app` (tests). El hilo es daemon: muere
-    al cerrar el back. Asi la UX de una sola maquina no cambia: el mismo proceso encola y
-    ejecuta, sin servicio aparte. Si hay un worker EXTERNO (`KENI_WORKER_EXTERNO`), NO se
-    arranca el in-proceso (lo hace el contenedor `worker`).
+    Cada hilo reclama y procesa jobs de forma independiente; el pool da el PARALELISMO
+    real (hasta N jobs `claude` a la vez). Comparten el mismo `parar` (Event): `detener()`
+    lo activa, cancela TODOS los jobs en vuelo y hace join con timeout (apagado determinista).
     """
-    parar = threading.Event()
-    worker_id = f"inproc-{uuid.uuid4().hex[:8]}"
-    hilo = threading.Thread(
-        target=_bucle, args=(parar, worker_id), name="worker-generacion", daemon=True
-    )
-    hilo.start()
-    hilo._parar = parar  # type: ignore[attr-defined]  # para pararlo en tests
-    _log.info("Worker de generacion in-proceso activo (perfil local).")
-    return hilo
 
-
-def main() -> int:
-    """Entry-point del servicio `worker` (hosted): corre el bucle hasta SIGTERM/Ctrl-C.
-
-        python -m keni_consola.worker
-
-    Consume la MISMA cola que el back (Postgres compartido). Bloqueante a proposito (es el
-    proceso principal del contenedor). El back arranca con `KENI_WORKER_EXTERNO=1` para no
-    duplicar el worker in-proceso.
-    """
-    from .observabilidad import configurar_logging
-
-    configurar_logging()
-    # Crea el esquema de la cola on-demand (idempotente) en el backend compartido.
-    from . import repos
-
-    repos.arrancar_persistencia()
-
-    parar = threading.Event()
-    worker_id = f"svc-{uuid.uuid4().hex[:8]}"
-
-    def _al_apagar(signum: int, _frame: object) -> None:
-        """SIGTERM/SIGINT (apagado por deploy): detecta el job EN CURSO y lo deja en estado
-        honesto en vez de "ejecutando" fantasma. Lo marca INTERRUMPIDO y lo SACA de la cola
-        (no se re-ejecuta en bucle, que reiniciaría el razonamiento desde cero). El reaper
-        cubre las muertes NO graciosas (SIGKILL/OOM), donde este manejador no llega a correr."""
-        parar.set()
-        job = _job_en_curso()
-        if job:
-            gid, jid = job.get("gen_id", ""), job.get("id", "")
-            _log.warning(
-                "worker: apagado (señal %s) con job en curso gen=%s; lo marco interrumpido", signum, gid
+    def __init__(self, n: int, prefijo_id: str) -> None:
+        self._parar = threading.Event()
+        self._hilos: list[threading.Thread] = []
+        for i in range(max(1, n)):
+            worker_id = f"{prefijo_id}-{uuid.uuid4().hex[:8]}"
+            hilo = threading.Thread(
+                target=_bucle, args=(self._parar, worker_id),
+                name=f"worker-generacion-{i}", daemon=True,
             )
+            self._hilos.append(hilo)
+
+    @property
+    def parar(self) -> threading.Event:
+        return self._parar
+
+    def arrancar(self) -> None:
+        for hilo in self._hilos:
+            hilo.start()
+
+    def detener(self, *, timeout: float = 10.0) -> None:
+        """Apagado DETERMINISTA: para el bucle, cancela TODOS los jobs en vuelo y hace join.
+
+        GARANTIA: al volver, NINGUN hilo del pool sigue vivo y `_JOBS_EN_CURSO` esta vacio
+        (ni un job procesandose, ni un hilo en su bucle de reclamacion). No quedan hilos
+        fugados que reclamen un job nuevo en el siguiente test/deploy.
+
+        ORDEN (para que el estado final sea INTERRUMPIDO, no CANCELADO):
+        1) Activa `parar`: tras esto NINGUN hilo entra a procesar un job nuevo (el bucle
+           re-comprueba `parar` JUSTO despues de reclamar; si esta puesto, devuelve el job a
+           la cola y sale en vez de procesarlo).
+        2) BUCLE de cancelacion+join: repetidamente captura los jobs en vuelo, MATA EL ARBOL
+           de cada `claude` (`generaciones.cancelar` -> desbloquea su hilo `gen-<id>`, que fija
+           terminal y libera el slot -> desbloquea al hilo del pool en `_esperar_terminal`) y
+           hace join. Se REPITE porque un hilo pudo haber reclamado un job en la ventana de
+           carrera justo antes de ver `parar`: ese job aparece en una pasada posterior y se
+           cancela tambien. Se acota por `timeout` global (defensa: nunca colgar el apagado).
+        3) Marca cada job capturado INTERRUMPIDO (gana al `cancelado` que pudo escribir el hilo
+           del job: un apagado por deploy es "interrumpido", no cancelacion del usuario) y lo
+           SACA de la cola (`cola.terminar`) para que se re-reclame mas tarde (reaper) sin
+           reiniciar el run en bucle.
+        4) Limpia `_JOBS_EN_CURSO` (defensa final): si un hilo quedo colgado pasado el timeout
+           (no deberia), su entrada no debe contaminar el registro global.
+
+        El reaper cubre las muertes NO graciosas (SIGKILL/OOM), donde esto no llega a correr.
+        """
+        self._parar.set()
+        limite = time.monotonic() + timeout
+        capturados: dict[str, dict[str, str]] = {}
+        # 2) Cancelar + join, repetido hasta que todos los hilos mueran (o se agote el timeout).
+        while True:
+            for job in _jobs_en_curso():
+                capturados[job["id"]] = job  # acumula (no se pierde ninguno entre pasadas)
+                try:
+                    generaciones.cancelar(job.get("gen_id", ""))
+                except Exception:  # noqa: BLE001 -- en apagado, best-effort por job
+                    pass
+            vivos = [h for h in self._hilos if h.is_alive()]
+            if not vivos:
+                break
+            restante = limite - time.monotonic()
+            if restante <= 0:
+                _log.warning(
+                    "worker: %d hilo(s) del pool no salieron en %.0fs; sigo el apagado",
+                    len(vivos), timeout,
+                )
+                break
+            # Join CORTO por pasada: si un hilo clava un job en la ventana de carrera, volvemos
+            # a la cabeza del bucle para capturarlo+cancelarlo (no nos quedamos ciegos 10s).
+            vivos[0].join(timeout=min(0.2, restante))
+        # Barrido FINAL: un hilo pudo registrar su job (en `_bucle`, antes de morir) DESPUES de
+        # la ultima captura del bucle. Como ya esta muerto, el bucle no lo recapturaria; lo
+        # recogemos aqui para que reciba estado honesto (y no quede en `_JOBS_EN_CURSO`).
+        for job in _jobs_en_curso():
+            if job["id"] not in capturados:
+                capturados[job["id"]] = job
+                try:
+                    generaciones.cancelar(job.get("gen_id", ""))
+                except Exception:  # noqa: BLE001 -- en apagado, best-effort por job
+                    pass
+        # 3) Estado HONESTO final: interrumpido (no cancelado) + fuera de la cola.
+        for job in capturados.values():
+            gid, jid = job.get("gen_id", ""), job.get("id", "")
+            _log.warning("worker: apagado con job en curso gen=%s; lo marco interrumpido", gid)
             try:
                 generaciones.actualizar(gid, {
                     "estado": generaciones.ESTADO_ERROR,
@@ -315,19 +407,82 @@ def main() -> int:
                 cola.terminar(jid)  # fuera de la cola: NO re-ejecutar (evita reinicio en bucle)
             except Exception:  # noqa: BLE001
                 pass
-            try:
-                generaciones.cancelar(gid)  # mata el árbol de claude si sigue vivo
-            except Exception:  # noqa: BLE001
-                pass
-        raise SystemExit(0)
+        # 4) Defensa: vaciar el registro global por si un hilo quedo colgado (no debe ocurrir).
+        with _JOBS_EN_CURSO_LOCK:
+            _JOBS_EN_CURSO.clear()
+
+
+def iniciar_worker_inproceso() -> threading.Thread:
+    """Arranca el worker EN PROCESO (pool de hilos daemon) — perfil LOCAL / un solo proceso.
+
+    Lo llama `__main__` (servidor real), NO `crear_app` (tests). Arranca un POOL de
+    `config.max_jobs()` hilos daemon (mueren al cerrar el back): asi el mismo proceso
+    encola y ejecuta HASTA N jobs `claude` en paralelo, sin servicio aparte. Si hay un
+    worker EXTERNO (`KENI_WORKER_EXTERNO`), NO se arranca el in-proceso (lo hace `worker`).
+
+    Devuelve un hilo "fachada" (el primero del pool) con `_parar`/`_pool` adjuntos para
+    compatibilidad con el arranque y para pararlo en tests (parar el pool entero).
+    """
+    pool = _Pool(config.max_jobs(), "inproc")
+    pool.arrancar()
+    fachada = pool._hilos[0]
+    fachada._parar = pool.parar  # type: ignore[attr-defined]  # para pararlo en tests
+    fachada._pool = pool  # type: ignore[attr-defined]  # acceso al pool (detener con cancelacion)
+    _log.info(
+        "Worker de generacion in-proceso activo (perfil local; pool de %d hilos).",
+        len(pool._hilos),
+    )
+    return fachada
+
+
+def main() -> int:
+    """Entry-point del servicio `worker` (hosted): corre el POOL hasta SIGTERM/Ctrl-C.
+
+        python -m keni_consola.worker
+
+    Consume la MISMA cola que el back (Postgres compartido). Arranca un POOL de
+    `config.max_jobs()` hilos (cada uno reclama+procesa), asi corre HASTA N jobs `claude`
+    en paralelo. El proceso principal se queda BLOQUEADO esperando la señal de apagado; al
+    recibirla, para el pool y cancela TODOS los jobs en vuelo. El back arranca con
+    `KENI_WORKER_EXTERNO=1` para no duplicar el worker in-proceso.
+    """
+    from .observabilidad import configurar_logging
+
+    configurar_logging()
+    # Crea el esquema de la cola on-demand (idempotente) en el backend compartido.
+    from . import repos
+
+    repos.arrancar_persistencia()
+
+    pool = _Pool(config.max_jobs(), "svc")
+    # Señal de "apagar el proceso principal": el manejador la activa y el hilo principal,
+    # que espera en ella, detiene el pool (cancelando TODOS los jobs en vuelo) y sale.
+    apagar = threading.Event()
+
+    def _al_apagar(signum: int, _frame: object) -> None:
+        """SIGTERM/SIGINT (apagado por deploy): NO hace trabajo pesado en el manejador (corre
+        en el hilo principal y debe ser breve/reentrante-seguro). Solo activa los eventos; el
+        hilo principal hace el apagado real (parar el pool + cancelar todos los jobs en vuelo,
+        dejandolos INTERRUMPIDOS y re-reclamables). El reaper cubre las muertes NO graciosas."""
+        _log.warning("worker: señal de apagado %s recibida; deteniendo el pool", signum)
+        pool.parar.set()  # corta YA la reclamacion de jobs nuevos en todos los hilos
+        apagar.set()
 
     signal.signal(signal.SIGTERM, _al_apagar)
     signal.signal(signal.SIGINT, _al_apagar)
-    _log.info("Worker de generacion (servicio) iniciado: %s", worker_id)
+    pool.arrancar()
+    _log.info(
+        "Worker de generacion (servicio) iniciado: pool de %d hilos.", len(pool._hilos)
+    )
     try:
-        _bucle(parar, worker_id)
+        # Hilo principal bloqueado hasta la señal de apagado (los hilos del pool trabajan).
+        while not apagar.wait(timeout=1.0):
+            pass
     except (KeyboardInterrupt, SystemExit):
-        parar.set()
+        pool.parar.set()
+    finally:
+        # Apagado determinista: cancela los jobs en vuelo y hace join con timeout del pool.
+        pool.detener()
     return 0
 
 
