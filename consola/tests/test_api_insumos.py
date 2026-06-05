@@ -277,6 +277,70 @@ def test_usar_item_inexistente_404(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# POST /api/insumos/item/{id}/crear-evento                                     #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_item_evento(cliente, monkeypatch):
+    """Crea un ítem en el cajón `eventos_claro` (tipo='evento') y devuelve su id."""
+    fake_ej = _fake_ejecutor_items([
+        {
+            "titulo": "Cruz Azul vs América",
+            "fecha": "2026-06-10",
+            "hora": "21:00",
+            "resumen": "Clip del gol y resumen 1 min",
+            "marca": "claro-sports",
+            "tipo": "evento",
+        }
+    ])
+    monkeypatch.setattr(
+        "keni_consola.dominio.insumos_parse._ejecutar_claude_json", fake_ej
+    )
+    return cliente.post(
+        "/api/insumos/aportar",
+        json={"cajon": "eventos_claro", "texto": "x", "fecha": "2026-06-10"},
+    ).json()["items"][0]["id"]
+
+
+def test_crear_evento_crea_evento_y_marca_item_usado(cliente, monkeypatch):
+    item_id = _crear_item_evento(cliente, monkeypatch)
+
+    r = cliente.post(f"/api/insumos/item/{item_id}/crear-evento", json={})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # El ítem queda usado y guarda el id del evento en `contenido_id`.
+    assert data["item"]["usado"] is True
+    assert data["evento_id"] != ""
+    assert data["item"]["contenido_id"] == data["evento_id"]
+    # El evento mapea los campos del insumo (resumen → nota).
+    evento = data["evento"]
+    assert evento["titulo"] == "Cruz Azul vs América"
+    assert evento["fecha"] == "2026-06-10"
+    assert evento["hora"] == "21:00"
+    assert evento["nota"] == "Clip del gol y resumen 1 min"
+
+    # El evento es visible en /api/rota/eventos (recorrido Excel → cajón → evento).
+    eventos = cliente.get("/api/rota/eventos?desde=2026-06-10&hasta=2026-06-10").json()["eventos"]
+    assert any(e["id"] == data["evento_id"] for e in eventos)
+
+
+def test_crear_evento_doble_es_idempotente(cliente, monkeypatch):
+    item_id = _crear_item_evento(cliente, monkeypatch)
+
+    r1 = cliente.post(f"/api/insumos/item/{item_id}/crear-evento", json={})
+    r2 = cliente.post(f"/api/insumos/item/{item_id}/crear-evento", json={})
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    # La segunda no crea un evento nuevo: devuelve el mismo evento_id.
+    assert r1.json()["evento_id"] == r2.json()["evento_id"]
+
+
+def test_crear_evento_item_inexistente_404(cliente):
+    r = cliente.post("/api/insumos/item/noexiste/crear-evento", json={})
+    assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
 # DELETE /api/insumos/lote/{id}                                                #
 # --------------------------------------------------------------------------- #
 

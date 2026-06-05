@@ -26,6 +26,9 @@ const Termometro = lazy(() => import("@/pages/Termometro"));
 // + descubrimiento; el Termómetro se abre desde un botón dentro de ella.
 const Investigador = lazy(() => import("@/pages/Investigador"));
 const CajonesDia = lazy(() => import("@/pages/CajonesDia"));
+// Eventos (a cubrir): la gestión de eventos se mudó del Calendario al hub de Fuentes
+// (ola "Calendario = turnos / Fuentes = eventos"). Reutiliza /api/rota/eventos.
+const EventosCobertura = lazy(() => import("@/pages/EventosCobertura"));
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
@@ -202,6 +205,9 @@ export const router = createBrowserRouter([
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
               { path: "cajones", element: <CajonesDia /> },
+              // Eventos a cubrir (antes en el Calendario): alta/filtrado/edición sobre
+              // /api/rota/eventos. La asignación de cobertura sigue en Turnos (Claro Sports).
+              { path: "eventos", element: <EventosCobertura /> },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (el índice); "algoritmos" se mudó a la
               // Biblioteca.

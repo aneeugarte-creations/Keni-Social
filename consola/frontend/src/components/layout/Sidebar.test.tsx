@@ -322,10 +322,12 @@ describe("apps-scope · helpers", () => {
       "/contenido/biblioteca/documentos",
       "/contenido/biblioteca/estrategia",
       "/contenido/biblioteca/algoritmos",
-      // /datos/investigacion (hub) → sus sub-pestañas (Investigador = índice + Fuentes + Cajones)
+      // /datos/investigacion (hub) → sus sub-pestañas (Investigador = índice + Fuentes +
+      // Cajones + Eventos a cubrir, mudados desde el Calendario)
       "/datos/investigacion",
       "/datos/investigacion/fuentes",
       "/datos/investigacion/cajones",
+      "/datos/investigacion/eventos",
       // /operacion/revision (hub) → sus 2 sub-pestañas
       "/operacion/revision/editorial",
       "/operacion/revision/verificacion",

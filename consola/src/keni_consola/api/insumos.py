@@ -15,6 +15,7 @@ Endpoints:
   GET  /api/insumos/lote/{id}        -> {lote, items}
   PATCH /api/insumos/item/{id}       -> {item}
   POST /api/insumos/item/{id}/usar   -> {item, contenido_id}
+  POST /api/insumos/item/{id}/crear-evento -> {item, evento}
   DELETE /api/insumos/lote/{id}      -> {ok: true}
 """
 
@@ -385,6 +386,70 @@ async def usar_item(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
+# POST /api/insumos/item/{id}/crear-evento                                     #
+# --------------------------------------------------------------------------- #
+
+
+async def crear_evento_item(request: Request) -> Response:
+    """`POST /api/insumos/item/{item_id}/crear-evento` -> {item, evento}.
+
+    Crea un evento de la rota (`rota_eventos`) a partir de un ítem del cajón
+    `eventos_claro` (Excel/CSV de programación de Claro Sports): mapea
+    titulo→titulo, fecha→fecha, hora→hora, resumen→nota, y marca el ítem como
+    usado guardando el id del evento creado en `contenido_id` (reutilizamos el
+    campo existente, sin añadir columnas). Así el recorrido Excel → cajón →
+    evento queda visible de punta a punta en Fuentes.
+
+    Idempotente: si el ítem ya está usado, devuelve su estado actual sin crear
+    un evento nuevo (mismo patrón que `usar_item`).
+
+    Cuerpo JSON (todo opcional):
+      {tipo_cobertura: str, prioridad: str}
+    """
+    item_id = request.path_params["item_id"]
+    item = repos.obtener_insumo_item(item_id)
+    if item is None:
+        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+    if item.get("usado"):
+        # Ya fue convertido en evento (o llevado al tablero); devuelve el estado actual.
+        return JSONResponse(
+            {"item": _item_a_dict(item), "evento_id": item.get("contenido_id", "")}
+        )
+    if not (item.get("titulo") or "").strip():
+        return JSONResponse({"error": "El ítem necesita un título."}, status_code=400)
+    if not (item.get("fecha") or "").strip():
+        return JSONResponse({"error": "El ítem necesita una fecha."}, status_code=400)
+
+    datos = await leer_json(request)
+    tipo_cobertura = str(datos.get("tipo_cobertura", "transmision")).strip() or "transmision"
+    prioridad = str(datos.get("prioridad", "media")).strip() or "media"
+
+    # Crea el evento de la rota (la validación de tipo_cobertura/prioridad la hace
+    # `crear_evento_rota`, que cae al valor por defecto si no es válido).
+    evento = repos.crear_evento_rota(
+        item["titulo"].strip(),
+        fecha=(item.get("fecha") or "").strip(),
+        hora=(item.get("hora") or "").strip(),
+        nota=(item.get("resumen") or "").strip(),
+        tipo_cobertura=tipo_cobertura,
+        prioridad=prioridad,
+    )
+
+    # Marca el ítem como usado, guardando el id del evento en `contenido_id`.
+    item_actualizado = repos.marcar_insumo_item_usado(item_id, contenido_id=evento["id"])
+    if item_actualizado is None:
+        item_actualizado = item
+
+    return JSONResponse(
+        {
+            "item": _item_a_dict(item_actualizado, hoy=date.today().isoformat()),
+            "evento": evento,
+            "evento_id": evento["id"],
+        }
+    )
+
+
+# --------------------------------------------------------------------------- #
 # DELETE /api/insumos/lote/{id}                                                #
 # --------------------------------------------------------------------------- #
 
@@ -409,4 +474,5 @@ RUTAS = [
     Route("/api/insumos/lote/{lote_id}", borrar_lote, methods=["DELETE"]),
     Route("/api/insumos/item/{item_id}", editar_item, methods=["PATCH"]),
     Route("/api/insumos/item/{item_id}/usar", usar_item, methods=["POST"]),
+    Route("/api/insumos/item/{item_id}/crear-evento", crear_evento_item, methods=["POST"]),
 ]

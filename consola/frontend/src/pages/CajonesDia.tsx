@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Calendar,
+  CalendarPlus,
   CheckCircle2,
   Edit2,
   EyeOff,
@@ -281,12 +282,25 @@ function ItemCard({ item, fecha }: PropsItemCard) {
   const queryClient = useQueryClient();
   const [editando, setEditando] = React.useState(false);
   const esCaducado = item.frescura === "caduco";
+  // Los ítems del cajón Eventos Claro (programación de TV) se convierten en EVENTOS de
+  // la rota (no en piezas del tablero): muestran "Crear evento" en vez de "Llevar al
+  // tablero". El evento creado se gestiona luego en Fuentes › Eventos.
+  const esEvento = item.cajon === "eventos_claro" || item.tipo === "evento";
 
   const usarMut = useMutation({
     mutationFn: () => api.insumos.usarItem(item.id, { generar: true }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
       toast.success("Ítem llevado al tablero.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const crearEventoMut = useMutation({
+    mutationFn: () => api.insumos.crearEvento(item.id, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
+      toast.success("Evento creado en la rota.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -315,26 +329,43 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 >
                   <Edit2 className="h-3 w-3" />
                 </Button>
-                <Button
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
-                  onClick={() => usarMut.mutate()}
-                  disabled={usarMut.isPending}
-                  aria-label="Llevar al tablero"
-                >
-                  {usarMut.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Send className="h-3 w-3" />
-                  )}
-                  Llevar al tablero
-                </Button>
+                {esEvento ? (
+                  <Button
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => crearEventoMut.mutate()}
+                    disabled={crearEventoMut.isPending}
+                    aria-label="Crear evento"
+                  >
+                    {crearEventoMut.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <CalendarPlus className="h-3 w-3" />
+                    )}
+                    Crear evento
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => usarMut.mutate()}
+                    disabled={usarMut.isPending}
+                    aria-label="Llevar al tablero"
+                  >
+                    {usarMut.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                    Llevar al tablero
+                  </Button>
+                )}
               </>
             )}
             {item.usado && (
               <Badge variant="ok" className="gap-1">
                 <CheckCircle2 className="h-3 w-3" />
-                En tablero
+                {esEvento ? "Evento creado" : "En tablero"}
               </Badge>
             )}
           </div>

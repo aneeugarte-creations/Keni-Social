@@ -55,6 +55,7 @@ import type {
   CuerpoCrearTurnoRota,
   CuerpoCrearTurnosLote,
   CuerpoDuplicarEventoRota,
+  EventoRota,
   CuerpoDuplicarTurnoRota,
   CuerpoPerfilesMetricool,
   CuerpoGuardarMetricool,
@@ -2089,6 +2090,20 @@ export const api = {
     usarItem: (id: string, body: { redes?: string[]; generar?: boolean }) =>
       peticion<{ item: InsumoItem; contenido_id: string }>(
         `/insumos/item/${encodeURIComponent(id)}/usar`,
+        { metodo: "POST", json: body, muestrear: false },
+      ),
+
+    /**
+     * Convierte un ítem del cajón `eventos_claro` (tipo='evento') en un evento de la
+     * rota (`/api/rota/eventos`): mapea titulo/fecha/hora/resumen→nota y marca el ítem
+     * como usado guardando el id del evento en `contenido_id`. Devuelve el evento creado.
+     */
+    crearEvento: (
+      id: string,
+      body: { tipo_cobertura?: string; prioridad?: string } = {},
+    ) =>
+      peticion<{ item: InsumoItem; evento: EventoRota; evento_id: string }>(
+        `/insumos/item/${encodeURIComponent(id)}/crear-evento`,
         { metodo: "POST", json: body, muestrear: false },
       ),
 

@@ -124,6 +124,33 @@ const INSUMOS_CON_ITEM = {
   ],
 };
 
+// Ítem del cajón Eventos Claro (tipo='evento'): se convierte en EVENTO de la rota,
+// no en pieza del tablero. Debe ofrecer "Crear evento" en vez de "Llevar al tablero".
+const ITEM_EVENTO = {
+  ...ITEM_PARSED,
+  id: "item-ev",
+  cajon: "eventos_claro" as const,
+  tipo: "evento" as const,
+  titulo: "Cruz Azul vs América",
+  resumen: "Clip del gol y resumen 1 min",
+  marca: "claro-sports",
+  marca_nombre: "Claro Sports",
+};
+
+const INSUMOS_CON_EVENTO = {
+  fecha: "2026-06-05",
+  cajones: [
+    { cajon: "portal", lotes: [], items: [] },
+    { cajon: "corresponsales", lotes: [], items: [] },
+    { cajon: "reporteros", lotes: [], items: [] },
+    {
+      cajon: "eventos_claro",
+      lotes: [{ ...LOTE_PORTAL, cajon: "eventos_claro" }],
+      items: [ITEM_EVENTO],
+    },
+  ],
+};
+
 const INSUMOS_CON_CADUCADO = {
   fecha: "2026-06-05",
   cajones: [
@@ -253,6 +280,38 @@ describe("CajonesDia", () => {
 
     await waitFor(() => {
       expect(usarMock).toHaveBeenCalledWith("item-1", { generar: true });
+    });
+  });
+
+  it("un ítem de Eventos Claro ofrece 'Crear evento' (no 'Llevar al tablero')", async () => {
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_EVENTO as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Cruz Azul vs América");
+    expect(screen.getByRole("button", { name: "Crear evento" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Llevar al tablero" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("el botón 'Crear evento' llama a api.insumos.crearEvento", async () => {
+    const crearMock = vi.spyOn(apiMod.api.insumos, "crearEvento").mockResolvedValue({
+      item: { ...ITEM_EVENTO, usado: true, contenido_id: "ev-nuevo" },
+      evento: { id: "ev-nuevo" },
+      evento_id: "ev-nuevo",
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_EVENTO as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Cruz Azul vs América");
+    fireEvent.click(screen.getByRole("button", { name: "Crear evento" }));
+
+    await waitFor(() => {
+      expect(crearMock).toHaveBeenCalledWith("item-ev", {});
     });
   });
 
