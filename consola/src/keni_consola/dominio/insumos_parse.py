@@ -37,6 +37,14 @@ _CLAUDE_TIMEOUT_S = 180
 # Cajones válidos.
 CAJONES: tuple[str, ...] = ("portal", "corresponsales", "reporteros", "eventos_claro")
 
+# Tipo de ítem natural de cada cajón (default cuando el modelo no lo entrega o da uno inválido).
+_TIPO_POR_CAJON: dict[str, str] = {
+    "portal": "nota",
+    "corresponsales": "cobertura",
+    "reporteros": "cobertura",
+    "eventos_claro": "evento",
+}
+
 # Tipo del ejecutor inyectable: (prompt, dir_permitido) -> texto final.
 Ejecutor = Callable[[str, str], str]
 
@@ -249,6 +257,9 @@ def _items_desde_registros(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Lista de dicts de Haiku -> (ítems normalizados, errores). PURO."""
     tipos_validos = {"nota", "cobertura", "evento"}
+    # Tipo por defecto SEGÚN EL CAJÓN cuando el modelo no lo da (o da uno inválido): cada cajón
+    # tiene una naturaleza fija (portal=nota, corresponsales/reporteros=cobertura, eventos=evento).
+    tipo_default = _TIPO_POR_CAJON.get(cajon, "nota")
     estados_material_validos = {"tengo", "espero", ""}
     items: list[dict[str, Any]] = []
     errores: list[dict[str, Any]] = []
@@ -260,9 +271,9 @@ def _items_desde_registros(
         if not titulo:
             errores.append({"fila": i, "motivo": "Registro sin título; se omitió."})
             continue
-        tipo = str(reg.get("tipo") or "nota").strip()
+        tipo = str(reg.get("tipo") or tipo_default).strip()
         if tipo not in tipos_validos:
-            tipo = "nota"
+            tipo = tipo_default
         estado_material = str(reg.get("estado_material") or "").strip().lower()
         if estado_material not in estados_material_validos:
             estado_material = ""

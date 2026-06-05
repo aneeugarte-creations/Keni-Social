@@ -89,6 +89,10 @@ _TABLAS = (
     # Investigador (Fase 1): snapshot del Radar por marca. Sin esto, las filas se acumulan
     # entre tests del mismo worker (marca/geo compartidos) y rompen el aislamiento.
     "radar_items",
+    # Insumos del día (cajones): ítems antes que lotes. Sin esto, los ítems se acumulan entre
+    # tests del mismo worker (misma fecha+cajón) y rompen el aislamiento del listado por día.
+    "insumos_item",
+    "insumos_lote",
 )
 
 
