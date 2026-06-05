@@ -215,7 +215,7 @@ async def preview(request: Request) -> Response:
     try:
         doc = json.loads(documento) if isinstance(documento, str) else documento
         datos = estudio_imagen.renderizar_documento_bytes(
-            doc, bindings={"copy_in": "Titular de ejemplo", "etiqueta_default": ""}
+            doc, bindings={"copy_in": "TITULAR", "etiqueta_default": ""}
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": f"Documento inválido: {e}"}, status_code=422)

@@ -281,10 +281,12 @@ export default function EditorPro() {
     };
   }, [activa, pestanas, qc]);
 
-  // Genera la miniatura (render best-effort) del documento actual.
+  // Genera la miniatura (render best-effort) del documento actual. Inyecta un titular de muestra:
+  // las capas con `binding:"copy_in"` renderizan ese texto en vez de quedar vacías (sin esto, la
+  // miniatura de la galería sale SIN titular, porque su texto sale del binding, no del literal).
   const miniaturaDe = async (documento: Documento): Promise<string> => {
     try {
-      return (await api.editorRender(documento)).id;
+      return (await api.editorRender(documento, { copy_in: "TITULAR", etiqueta_default: "" })).id;
     } catch {
       return "";
     }
