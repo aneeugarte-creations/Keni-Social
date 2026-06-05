@@ -391,9 +391,10 @@ def test_varias_piezas_una_sin_creds_no_rompe_otras(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
     monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
 
-    # Dos piezas en X (sin media, no necesitan URL publica)
-    pub1 = _pub_programada(entorno, red="x", contenido="Post 1", imagen="")
-    pub2 = _pub_programada(entorno, red="x", contenido="Post 2", imagen="")
+    # Dos piezas en X (sin media, no necesitan URL publica). Slots DISTINTOS: el UNIQUE
+    # `idx_parrilla_slot_uniq` (marca, red, fecha_programada) no permite dos en el mismo minuto.
+    pub1 = _pub_programada(entorno, red="x", contenido="Post 1", imagen="", minutos_atras=10)
+    pub2 = _pub_programada(entorno, red="x", contenido="Post 2", imagen="", minutos_atras=5)
 
     llamadas: list[str] = []
 
