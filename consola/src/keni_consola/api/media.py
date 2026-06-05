@@ -25,8 +25,14 @@ from ..dominio import extraccion_url
 from ..seguridad import autor_de_peticion
 
 
+# Carpetas en las que el CLIENTE puede pedir guardar una subida (allowlist publica). Las demas
+# categorias (logos/biblioteca/render/generadas/documentos) las asigna el server por su flujo;
+# el cliente solo distingue una foto de pieza (`fotos`) de un asset del editor de plantillas.
+_CATEGORIAS_SUBIDA = {"fotos", "plantillas"}
+
+
 async def subir(request: Request) -> Response:
-    """Guarda una imagen subida (multipart `archivo`) -> `{id, url}`."""
+    """Guarda una imagen subida (multipart `archivo`; opcional `categoria`) -> `{id, url}`."""
     try:
         form = await request.form()
     except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro, sin traza
@@ -34,8 +40,10 @@ async def subir(request: Request) -> Response:
     archivo = form.get("archivo")
     if not isinstance(archivo, UploadFile):
         return JSONResponse({"error": "No se recibió ninguna imagen."}, status_code=400)
+    categoria = form.get("categoria")
+    categoria = categoria if categoria in _CATEGORIAS_SUBIDA else "fotos"
     try:
-        nombre = await media.guardar_subida(archivo)
+        nombre = await media.guardar_subida(archivo, categoria=categoria)
     except media.MediaError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -128,5 +136,5 @@ RUTAS = [
     Route("/api/media", subir, methods=["POST"]),
     Route("/api/media/desde-url", desde_url, methods=["POST"]),
     Route("/api/media/generar", generar, methods=["POST"]),
-    Route("/api/media/{nombre}", servir, methods=["GET"]),
+    Route("/api/media/{nombre:path}", servir, methods=["GET"]),
 ]

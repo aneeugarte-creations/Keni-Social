@@ -24,7 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, repos
+from .. import almacen_media, marcas, repos
 from .._http_json import leer_json
 from ..dominio import estudio_imagen
 from ..seguridad import autor_de_peticion
@@ -124,6 +124,9 @@ async def crear(request: Request) -> Response:
     nombre = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
     categoria = (datos.get("categoria") or "post").strip()[:40] or "post"
     miniatura = (datos.get("miniatura") or "").strip() if isinstance(datos.get("miniatura"), str) else ""
+    if miniatura:
+        # La miniatura es un asset REUSABLE de la plantilla: a la carpeta `plantillas/`.
+        miniatura = almacen_media.promover_objeto(miniatura, "plantillas")
     lineas = _normalizar_lineas(datos.get("lineas"))
 
     plantilla = repos.crear_plantilla_diseno(

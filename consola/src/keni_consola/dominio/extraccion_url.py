@@ -286,7 +286,9 @@ def descargar_imagen_a_media(url: str) -> str:
     if ext is None:
         raise ExtraccionError("El contenido descargado no es una imagen (png/jpg/gif/webp).")
     try:
-        return media.guardar_bytes(datos, ext=ext)
+        # Es la foto ORIGINAL de un articulo (RSS de marca): va a la carpeta `fotos` como
+        # cualquier foto cruda, no a `generadas`.
+        return media.guardar_bytes(datos, ext=ext, categoria="fotos")
     except media.MediaError as e:
         raise ExtraccionError(str(e)) from e
 

@@ -146,13 +146,18 @@ def test_s3_leer_inexistente_none(s3):
     assert almacen_media.leer_objeto("noexiste.png") is None
 
 
-def test_s3_nombre_con_separador_rechazado(s3):
-    # Defensa en profundidad: una key con `/` o `..` no se acepta (aunque siempre la
-    # generamos nosotros como uuid+ext).
-    assert almacen_media.leer_objeto("a/b.png") is None
+def test_s3_prefijo_desconocido_o_traversal_rechazado(s3):
+    # Defensa en profundidad: una key con un prefijo que NO es categoria, o con `..`, no se
+    # acepta. Una categoria VALIDA (`fotos/...`) si (es como guardamos ahora).
+    assert almacen_media.leer_objeto("desconocida/b.png") is None  # prefijo no es categoria
     assert almacen_media.leer_objeto("../secreto.png") is None
+    assert almacen_media.leer_objeto("fotos/../secreto.png") is None  # traversal tras categoria
     with pytest.raises(ValueError):
-        almacen_media._nombre_objeto_seguro("a/b.png")
+        almacen_media._nombre_plano_seguro("a/b.png")
+    with pytest.raises(ValueError):
+        almacen_media._clave_segura("desconocida/b.png")
+    # Una categoria valida + nombre plano pasa la validacion.
+    assert almacen_media._clave_segura("fotos/abc.png") == "fotos/abc.png"
 
 
 def test_s3_borrar(s3):
@@ -166,4 +171,65 @@ def test_s3_objeto_existe(s3):
     assert almacen_media.objeto_existe("z.png") is False
     almacen_media.guardar_objeto("z.png", b"z", content_type="image/png")
     assert almacen_media.objeto_existe("z.png") is True
-    assert almacen_media.objeto_existe("a/b.png") is False
+    assert almacen_media.objeto_existe("desconocida/b.png") is False
+
+
+# --------------------------------------------------------------------------- #
+# Categorias (subcarpetas por tipo): componer_clave / categoria_de            #
+# --------------------------------------------------------------------------- #
+
+
+def test_componer_clave_con_y_sin_categoria():
+    assert almacen_media.componer_clave(None, "abc.png") == "abc.png"
+    assert almacen_media.componer_clave("fotos", "abc.png") == "fotos/abc.png"
+    with pytest.raises(ValueError):
+        almacen_media.componer_clave("inventada", "abc.png")
+    with pytest.raises(ValueError):
+        almacen_media.componer_clave("fotos", "sub/abc.png")  # el nombre debe ser plano
+
+
+def test_categoria_de():
+    assert almacen_media.categoria_de("fotos/abc.png") == "fotos"
+    assert almacen_media.categoria_de("logos/abc.png") == "logos"
+    assert almacen_media.categoria_de("abc.png") is None          # key plana
+    assert almacen_media.categoria_de("inventada/abc.png") is None  # prefijo no es categoria
+
+
+def test_disco_guardar_leer_borrar_con_categoria(disco):
+    clave = almacen_media.componer_clave("fotos", "abc.png")
+    almacen_media.guardar_objeto(clave, b"foto", content_type="image/png")
+    assert almacen_media.leer_objeto(clave) == b"foto"
+    assert almacen_media.objeto_existe(clave) is True
+    # El listado en disco devuelve la key RELATIVA con su carpeta (espejo de S3).
+    nombres = {n for (n, _m) in almacen_media.listar_objetos()}
+    assert "fotos/abc.png" in nombres
+    almacen_media.borrar_objeto(clave)
+    assert almacen_media.leer_objeto(clave) is None
+
+
+def test_s3_guardar_leer_con_categoria(s3):
+    clave = almacen_media.componer_clave("logos", "logo.png")
+    almacen_media.guardar_objeto(clave, b"logo-bytes", content_type="image/png")
+    assert almacen_media.leer_objeto(clave) == b"logo-bytes"
+    # La key en el bucket lleva su carpeta.
+    assert s3.get_object(Bucket="keni-media", Key="logos/logo.png")["Body"].read() == b"logo-bytes"
+    nombres = {n for (n, _m) in almacen_media.listar_objetos()}
+    assert "logos/logo.png" in nombres
+
+
+def test_promover_objeto_copia_a_carpeta_disco(disco):
+    """Promover COPIA a la carpeta destino, conserva el nombre plano y NO borra el origen."""
+    origen = almacen_media.componer_clave("fotos", "deadbeef.png")
+    almacen_media.guardar_objeto(origen, b"pixeles", content_type="image/png")
+    destino = almacen_media.promover_objeto(origen, "logos")
+    assert destino == "logos/deadbeef.png"
+    assert almacen_media.leer_objeto(destino) == b"pixeles"
+    # COPIA: el origen sigue existiendo (lo limpia el equipo al vaciar `fotos/`).
+    assert almacen_media.leer_objeto(origen) == b"pixeles"
+    # Idempotente: re-promover devuelve la misma key sin duplicar.
+    assert almacen_media.promover_objeto(destino, "logos") == destino
+
+
+def test_promover_objeto_inexistente_conserva_clave(disco):
+    # Si el objeto no existe, devuelve la clave original (no perdemos la referencia).
+    assert almacen_media.promover_objeto("fotos/noexiste.png", "logos") == "fotos/noexiste.png"

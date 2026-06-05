@@ -32,8 +32,43 @@ def test_subir_imagen_ok(cliente):
     cuerpo = r.json()
     assert cuerpo["id"].endswith(".png")
     assert cuerpo["url"] == f"/api/media/{cuerpo['id']}"
-    # el nombre en disco NO es el del cliente
-    assert "foto" not in cuerpo["id"]
+    # Va a la carpeta `fotos/` (division por tipo) con nombre content-addressed.
+    assert cuerpo["id"].startswith("fotos/")
+    # El nombre en el almacen NO es el del cliente (es un hash, no "foto.png").
+    assert "foto.png" not in cuerpo["id"]
+
+
+def test_subir_misma_foto_deduplica(cliente):
+    """Subir la MISMA imagen dos veces guarda UN solo objeto (misma key content-addressed)."""
+    id1 = cliente.post(
+        "/api/media", files={"archivo": ("a.png", _PNG_1x1, "image/png")}
+    ).json()["id"]
+    id2 = cliente.post(
+        "/api/media", files={"archivo": ("otro-nombre.png", _PNG_1x1, "image/png")}
+    ).json()["id"]
+    assert id1 == id2  # mismo contenido -> misma key -> no se duplica
+
+
+def test_subir_categoria_plantillas(cliente):
+    """El editor de plantillas sube con `categoria=plantillas` -> carpeta `plantillas/`."""
+    r = cliente.post(
+        "/api/media",
+        data={"categoria": "plantillas"},
+        files={"archivo": ("fondo.png", _PNG_1x1, "image/png")},
+    )
+    assert r.status_code == 200
+    assert r.json()["id"].startswith("plantillas/")
+
+
+def test_subir_categoria_invalida_cae_a_fotos(cliente):
+    """Una categoria fuera de la allowlist publica (p.ej. `logos`) cae a `fotos/` (no se cuela)."""
+    r = cliente.post(
+        "/api/media",
+        data={"categoria": "logos"},
+        files={"archivo": ("x.png", _PNG_1x1, "image/png")},
+    )
+    assert r.status_code == 200
+    assert r.json()["id"].startswith("fotos/")
 
 
 def test_subir_sin_archivo_400(cliente):

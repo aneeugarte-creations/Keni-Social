@@ -8,10 +8,16 @@ modulo solo decide DONDE vive ese objeto, segun la config S3 (ver `config.s3_con
   - CON S3 cableado  -> bucket S3/Garage (`S3_ENDPOINT`/`S3_BUCKET`/credenciales). El stack
     `deploy/` lo cablea; el cutover de objetos lo hace `migracion.py` (one-shot).
 
-SEGURIDAD: el nombre del objeto lo genera SIEMPRE el llamante (`media.py`: uuid + ext
-saneada), NUNCA el cliente. En disco, `resolver_media` valida ANTI-TRAVERSAL que el nombre
-caiga dentro del dir. En S3 el nombre es la KEY del objeto: rechazamos cualquier nombre con
-`/`, `..` o separadores (defensa en profundidad, aunque siempre sea un uuid+ext nuestro).
+CARPETAS POR TIPO: el almacen se DIVIDE en subcarpetas por categoria de dato (`fotos/`,
+`logos/`, `plantillas/`, `render/`, ...). La key de un objeto es `<categoria>/<nombre-plano>`
+(o el nombre plano, compat historico). El prefijo lo elige SIEMPRE el server (`componer_clave`
+desde `media.py` o la promocion de reusables), NUNCA el cliente. Asi se puede limpiar a mano
+unas carpetas (fotos efimeras) sin tocar otras (logos/plantillas reusables).
+
+SEGURIDAD: el nombre plano del objeto lo genera SIEMPRE el llamante (`media.py`: uuid/sha256 +
+ext saneada), NUNCA el cliente. En disco, `resolver_media` valida ANTI-TRAVERSAL que la key
+caiga dentro del dir. En S3 la key se valida con `_clave_segura`: la categoria (si la hay) debe
+ser una de CATEGORIAS y el resto un nombre plano; cualquier `..`/separador raro se rechaza.
 
 El cliente S3 (boto3) se importa de forma DIFERIDA: en local no es necesario (extra `s3`).
 """
@@ -24,10 +30,48 @@ from pathlib import Path
 
 from . import config, rutas
 
-# Un nombre de objeto VALIDO es exactamente `<hex/uuid>.<ext>`: minusculas/digitos y un
+# Un nombre de objeto plano VALIDO es exactamente `<hex/uuid>.<ext>`: minusculas/digitos y un
 # unico punto de extension. Lo generamos nosotros asi; esta regex es defensa en profundidad
-# para que un nombre con `/`, `..` o separadores NUNCA llegue a una key de S3.
+# para que un nombre con `/`, `..` o separadores NUNCA se cuele crudo en una key de S3.
 _RE_NOMBRE_OBJETO = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# CATEGORIAS = subcarpetas (prefijos de key) en las que se DIVIDE el almacen por TIPO de dato.
+# Cerrado a proposito: el prefijo lo elige SIEMPRE el server (`media.py` / promocion), NUNCA el
+# cliente. Permite limpiar manualmente unas carpetas sin tocar otras (logos/plantillas reusables
+# frente a fotos efimeras). Una key con categoria es exactamente `<categoria>/<nombre-plano>` (un
+# solo nivel). Sin categoria, la key es el nombre plano (compat con el almacen historico).
+CATEGORIAS: frozenset[str] = frozenset(
+    {
+        "fotos",        # fotos crudas subidas / extraidas (efimeras; borrables manualmente)
+        "documentos",   # documentos de importacion de parrilla (PDF/word/...; efimeros)
+        "generadas",    # variantes de imagen generadas por IA (efimeras)
+        "render",       # composites horneados / cache de render (reciclable, regenerable)
+        "plantillas",   # assets del editor de plantillas + miniaturas (reusable)
+        "logos",        # activos de marca: logos, tipografias, plecas (reusable)
+        "biblioteca",   # artes catalogadas para reutilizar (reusable)
+    }
+)
+
+
+def componer_clave(categoria: str | None, nombre: str) -> str:
+    """Compone la KEY del almacen a partir de la `categoria` (subcarpeta) y el `nombre` plano.
+
+    `nombre` es el nombre de objeto plano que genera `media.py` (uuid/sha256 + ext saneada). Con
+    `categoria` (∈ CATEGORIAS) la key es `<categoria>/<nombre>`; sin ella, el nombre plano (compat
+    con el almacen historico sin carpetas). Valida ambos trozos; lanza ValueError si algo no cuadra.
+    """
+    base = _nombre_plano_seguro(nombre)
+    if categoria is None:
+        return base
+    if categoria not in CATEGORIAS:
+        raise ValueError(f"categoria de objeto invalida: {categoria!r}")
+    return f"{categoria}/{base}"
+
+
+def categoria_de(clave: str) -> str | None:
+    """Categoria (subcarpeta) de una key, o None si es una key plana / prefijo desconocido."""
+    cat, sep, _ = clave.partition("/")
+    return cat if sep and cat in CATEGORIAS else None
 
 
 def s3_activo() -> bool:
@@ -80,17 +124,33 @@ def resolver_media(nombre: str) -> Path | None:
 # --------------------------------------------------------------------------- #
 
 
-def _nombre_objeto_seguro(nombre: str) -> str:
-    """Valida que `nombre` sea un nombre de objeto plano (sin separadores); lo devuelve.
+def _nombre_plano_seguro(nombre: str) -> str:
+    """Valida que `nombre` sea un nombre de objeto PLANO (sin separadores); lo devuelve.
 
     Lanza ValueError si trae `/`, `..` o caracteres fuera del set seguro. Siempre lo
-    generamos nosotros (uuid+ext), asi que esto es defensa en profundidad para S3.
+    generamos nosotros (uuid/sha256 + ext), asi que esto es defensa en profundidad.
     """
     if not nombre or "/" in nombre or "\\" in nombre or ".." in nombre:
         raise ValueError(f"nombre de objeto invalido: {nombre!r}")
     if not _RE_NOMBRE_OBJETO.match(nombre):
         raise ValueError(f"nombre de objeto invalido: {nombre!r}")
     return nombre
+
+
+def _clave_segura(clave: str) -> str:
+    """Valida una KEY de almacen: nombre plano O `<categoria>/<nombre-plano>` (un solo nivel).
+
+    Es la frontera defensiva para S3: la categoria, si la hay, debe ser una de CATEGORIAS, y el
+    resto un nombre plano seguro. Un `..`, doble `/`, prefijo desconocido o caracter raro -> error.
+    Las keys SIEMPRE las componemos nosotros (`componer_clave`), asi que esto es defensa en
+    profundidad para que nada con separadores arbitrarios llegue al bucket.
+    """
+    cat, sep, resto = clave.partition("/")
+    if not sep:
+        return _nombre_plano_seguro(clave)
+    if cat not in CATEGORIAS:
+        raise ValueError(f"categoria de objeto invalida: {cat!r}")
+    return f"{cat}/{_nombre_plano_seguro(resto)}"
 
 
 # Cliente S3 cacheado por proceso: boto3 es caro de crear y la config no cambia en runtime.
@@ -148,20 +208,25 @@ def _resetear_cliente_s3() -> None:
 def guardar_objeto(nombre: str, datos: bytes, *, content_type: str) -> None:
     """Guarda `datos` con clave/nombre `nombre` en el backend activo (disco o S3).
 
-    El llamante (`media.py`) ya valido el contenido y genero el nombre (uuid+ext). En S3
-    sube con `Content-Type` para que el GET lo sirva correcto; en disco solo escribe.
+    El llamante (`media.py`) ya valido el contenido y compuso la key (`componer_clave`: nombre
+    plano o `<categoria>/<nombre>`). En S3 sube con `Content-Type` para que el GET lo sirva
+    correcto; en disco escribe, creando la subcarpeta de la categoria si hace falta.
     """
+    clave = _clave_segura(nombre)
     if s3_activo():
         cliente = _s3()
         cliente.put_object(
             Bucket=config.s3_bucket(),
-            Key=_nombre_objeto_seguro(nombre),
+            Key=clave,
             Body=datos,
             ContentType=content_type,
         )
         return
-    destino_dir = asegurar_dir()
-    (destino_dir / nombre).write_bytes(datos)
+    destino = resolver_media(clave)
+    if destino is None:
+        raise ValueError(f"clave de objeto invalida: {nombre!r}")
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(datos)
 
 
 def leer_objeto(nombre: str) -> bytes | None:
@@ -172,7 +237,7 @@ def leer_objeto(nombre: str) -> bytes | None:
     """
     if s3_activo():
         try:
-            nombre_seguro = _nombre_objeto_seguro(nombre)
+            nombre_seguro = _clave_segura(nombre)
         except ValueError:
             return None
         cliente = _s3()
@@ -199,7 +264,7 @@ def objeto_existe(nombre: str) -> bool:
     """
     if s3_activo():
         try:
-            nombre_seguro = _nombre_objeto_seguro(nombre)
+            nombre_seguro = _clave_segura(nombre)
         except ValueError:
             return False
         try:
@@ -218,10 +283,12 @@ def listar_objetos() -> list[tuple[str, float]]:
     fichero; en S3/Garage el `LastModified` de la key. Lo usa el GC de huerfanos para borrar
     SOLO los objetos viejos (no las variantes recien generadas que el usuario aun revisa).
 
-    - DISCO: recorre `dir_media()` y devuelve los FICHEROS (no subdirectorios) con su mtime.
-      Si el directorio no existe aun, devuelve lista vacia.
+    - DISCO: recorre `dir_media()` RECURSIVAMENTE y devuelve cada fichero con su mtime. La key
+      es la ruta RELATIVA a la raiz en estilo posix (`fotos/<uuid>.jpg`), espejo de la key de
+      S3: asi el GC y el resto del codigo ven el MISMO identificador en ambos backends. Si el
+      directorio no existe aun, devuelve lista vacia.
     - S3/Garage: pagina `list_objects_v2` sobre el bucket y devuelve `Key` + `LastModified`
-      (convertido a epoch). El nombre es la key plana (asi la subimos: uuid+ext).
+      (convertido a epoch). La key incluye su subcarpeta de categoria (`fotos/<uuid>.jpg`).
 
     Best-effort por backend: un fallo de listado se propaga (lo gestiona el llamante), pero
     nunca devuelve nombres parciales mezclados con errores silenciosos.
@@ -253,21 +320,56 @@ def listar_objetos() -> list[tuple[str, float]]:
     if not base.is_dir():
         return []
     salida: list[tuple[str, float]] = []
-    for entrada in base.iterdir():
+    for entrada in base.rglob("*"):
         if not entrada.is_file():
             continue
         try:
-            salida.append((entrada.name, entrada.stat().st_mtime))
+            clave = entrada.relative_to(base).as_posix()
+            salida.append((clave, entrada.stat().st_mtime))
         except OSError:
             continue
     return salida
+
+
+def promover_objeto(clave: str, categoria: str) -> str:
+    """Promueve (COPIA) el objeto `clave` a la subcarpeta `categoria` y devuelve su nueva key.
+
+    Para llevar un objeto a su carpeta por tipo cuando su rol se decide DESPUES de subirlo (un
+    upload generico que se cataloga como logo de marca, arte de biblioteca o miniatura de
+    plantilla: no se re-sube, solo se referencia). Conserva el nombre plano (uuid/sha256+ext) y
+    solo cambia el prefijo. Idempotente: si `clave` ya esta en `categoria`, no hace nada.
+
+    COPIA, no mueve: NO borra el origen. Razon -> el mismo objeto puede seguir referenciado por
+    una pieza desde `fotos/`; borrar el origen romperia esa pieza. Con limpieza manual, la copia
+    vive en su carpeta protegida (logos/biblioteca/plantillas) y el origen efimero en `fotos/` se
+    elimina cuando el equipo vacia esa carpeta a mano. Devuelve la `clave` original sin tocar si
+    el objeto no existe (no perdemos la referencia existente).
+    """
+    if categoria not in CATEGORIAS:
+        raise ValueError(f"categoria de objeto invalida: {categoria!r}")
+    if categoria_de(clave) == categoria:
+        return clave
+    base = clave.rpartition("/")[2] if "/" in clave else clave
+    destino = componer_clave(categoria, base)
+    if destino == clave:
+        return clave
+    if objeto_existe(destino):
+        return destino
+    datos = leer_objeto(clave)
+    if datos is None:
+        return clave
+    import mimetypes
+
+    ct = mimetypes.guess_type(base)[0] or "application/octet-stream"
+    guardar_objeto(destino, datos, content_type=ct)
+    return destino
 
 
 def borrar_objeto(nombre: str) -> None:
     """Borra el objeto `nombre` del backend activo (idempotente; usado al limpiar restos)."""
     if s3_activo():
         try:
-            nombre_seguro = _nombre_objeto_seguro(nombre)
+            nombre_seguro = _clave_segura(nombre)
         except ValueError:
             return
         try:

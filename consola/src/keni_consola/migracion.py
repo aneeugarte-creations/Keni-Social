@@ -97,10 +97,13 @@ def migrar_media(*, dry_run: bool = False) -> tuple[int, int]:
     saltados = 0
     cliente = None if dry_run else almacen_media._s3()  # noqa: SLF001 -- cliente interno del almacen
     bucket = config.s3_bucket()
-    for ruta in sorted(dir_origen.iterdir()):
+    # Recorrido RECURSIVO: la media en disco se divide en subcarpetas por categoria
+    # (`fotos/`, `logos/`, ...); la key en el bucket es la ruta RELATIVA en estilo posix, asi
+    # el objeto cae en la misma carpeta en S3 que en disco.
+    for ruta in sorted(dir_origen.rglob("*")):
         if not ruta.is_file():
             continue
-        nombre = ruta.name
+        nombre = ruta.relative_to(dir_origen).as_posix()
         if dry_run:
             copiados += 1
             continue

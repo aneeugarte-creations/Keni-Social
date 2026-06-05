@@ -882,9 +882,13 @@ export const api = {
     peticion<RespuestaSugerenciasReciclaje>(`/reciclaje/sugerencias${query(filtros)}`, { signal }),
 
   // --- Media (imágenes) ---
-  subirMedia: (archivo: File) => {
+  // `categoria` (opcional) = carpeta de destino en el almacén: `fotos` (def) para una foto de
+  // pieza, `plantillas` para un asset del editor de plantillas. Así el bucket queda dividido por
+  // tipo y se puede limpiar `fotos/` a mano sin tocar plantillas/logos reusables.
+  subirMedia: (archivo: File, categoria?: "fotos" | "plantillas") => {
     const form = new FormData();
     form.set("archivo", archivo);
+    if (categoria) form.set("categoria", categoria);
     return peticion<RespuestaMedia>("/media", { metodo: "POST", form });
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>

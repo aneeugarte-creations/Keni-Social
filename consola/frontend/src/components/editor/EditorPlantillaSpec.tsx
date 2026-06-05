@@ -148,12 +148,12 @@ export function EditorPlantillaSpec({
   });
 
   const subirLogo = useMutation({
-    mutationFn: (a: File) => api.subirMedia(a),
+    mutationFn: (a: File) => api.subirMedia(a, "plantillas"),
     onSuccess: (d) => mutarFmt((f) => { f.logo = { ...f.logo, tipo: "imagen", media_id: d.id }; }),
     onError: (e) => toast.error(msg(e)),
   });
   const subirFondo = useMutation({
-    mutationFn: (a: File) => api.subirMedia(a),
+    mutationFn: (a: File) => api.subirMedia(a, "plantillas"),
     onSuccess: (d) => mutarFmt((f) => { f.fondo = { tipo: "imagen", imagen: { media_id: d.id, ajuste: "cover" } }; }),
     onError: (e) => toast.error(msg(e)),
   });

@@ -129,6 +129,9 @@ async def crear(request: Request) -> Response:
     objeto = objeto.strip()
     if media.leer_media(objeto) is None:
         return JSONResponse({"error": "Esa imagen no existe en el almacén."}, status_code=400)
+    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `biblioteca/` ANTES
+    # de la idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta protegida.
+    objeto = almacen_media.promover_objeto(objeto, "biblioteca")
 
     marca, err = _validar_marca(datos.get("marca"))
     if err:

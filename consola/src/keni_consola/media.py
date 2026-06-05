@@ -224,17 +224,35 @@ def _ext_desde_nombre(nombre_cliente: str | None) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
-async def guardar_subida(archivo, *, content_type: str | None = None) -> str:  # noqa: ANN001
+def _guardar_contenido(datos: bytes, *, ext: str, categoria: str, mime: str) -> str:
+    """Guarda `datos` bajo una key CONTENT-ADDRESSED `<categoria>/<sha256>.<ext>`; devuelve la key.
+
+    Misma categoria + mismo contenido -> misma key -> UN solo objeto (dedup). Idempotente: si la
+    key ya existe NO re-sube bytes identicos. Es el camino comun de subidas y composiciones: por
+    eso subir la misma foto 4 veces guarda 1 objeto, no 4.
+    """
+    digest = hashlib.sha256(datos).hexdigest()
+    clave = almacen_media.componer_clave(categoria, f"{digest}.{ext}")
+    if not almacen_media.objeto_existe(clave):
+        almacen_media.guardar_objeto(clave, datos, content_type=mime)
+    return clave
+
+
+async def guardar_subida(
+    archivo, *, content_type: str | None = None, categoria: str = "fotos"
+) -> str:  # noqa: ANN001
     """Vuelca un `UploadFile` de imagen al almacen de media (disco o S3) de forma segura.
 
     - Acepta SOLO mimes de imagen (por content-type o, en su defecto, por la
-      extension del nombre del cliente). El NOMBRE del objeto lo generamos (uuid +
-      extension canonica); NUNCA el del cliente.
+      extension del nombre del cliente). El NOMBRE del objeto lo generamos; NUNCA el del cliente.
+    - DEDUP: la key es CONTENT-ADDRESSED (`<categoria>/<sha256>.<ext>`), asi subir la misma foto
+      varias veces guarda UN solo objeto. La `categoria` (carpeta) la fija el llamante segun el
+      contexto de subida (def `fotos`; el editor de plantillas sube como `plantillas`).
     - Lee en trozos MIDIENDO el tamano; si supera `LIMITE_IMAGEN`, aborta antes de
       escribir nada. Se bufferea en memoria (acotado por el limite de 15 MB) para tener
       UN solo camino de guardado valido en disco y en S3 (S3 no escribe en streaming).
 
-    Devuelve el NOMBRE del objeto (no la ruta). Lanza `MediaError` (en espanol) ante
+    Devuelve la KEY del objeto (con su carpeta). Lanza `MediaError` (en espanol) ante
     mime no permitido, archivo vacio o demasiado grande.
     """
     ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
@@ -262,14 +280,12 @@ async def guardar_subida(archivo, *, content_type: str | None = None) -> str:  #
     if total == 0:
         raise MediaError("La imagen está vacía.")
     datos = b"".join(trozos)
-    nombre = f"{uuid.uuid4().hex}.{ext}"
     try:
-        almacen_media.guardar_objeto(nombre, datos, content_type=_EXT_A_MIME[ext])
+        return _guardar_contenido(datos, ext=ext, categoria=categoria, mime=_EXT_A_MIME[ext])
     except MediaError:
         raise
     except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
         raise MediaError("No se pudo guardar la imagen subida.") from e
-    return nombre
 
 
 def _ext_doc_desde_content_type(content_type: str | None) -> str | None:
@@ -295,11 +311,12 @@ async def guardar_documento_subido(
 ) -> tuple[str, str]:  # noqa: ANN001
     """Vuelca un `UploadFile` de DOCUMENTO (PDF/imagen/docx/xlsx/txt/csv) al almacen de media.
 
-    Camino PARALELO a `guardar_subida` (NO lo modifica): la importacion de parrilla acepta MAS
-    tipos (documentos y tambien imagenes/capturas) y un limite mayor (`LIMITE_DOCUMENTO`). El
-    NOMBRE del objeto lo generamos (uuid + extension canonica); NUNCA el del cliente. Lee en
-    trozos midiendo el tamano y aborta si supera el limite. Devuelve `(nombre_objeto, ext)`.
-    Lanza `MediaError` (en espanol) ante tipo no permitido, archivo vacio o demasiado grande.
+    Camino PARALELO a `guardar_subida`: la importacion de parrilla acepta MAS tipos (documentos y
+    tambien imagenes/capturas) y un limite mayor (`LIMITE_DOCUMENTO`). El NOMBRE del objeto lo
+    generamos; NUNCA el del cliente, y va a la carpeta `documentos/` con key CONTENT-ADDRESSED
+    (dedup: el mismo PDF subido dos veces guarda un objeto). Lee en trozos midiendo el tamano y
+    aborta si supera el limite. Devuelve `(key_objeto, ext)`. Lanza `MediaError` (en espanol) ante
+    tipo no permitido, archivo vacio o demasiado grande.
     """
     ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
     nombre_cli = getattr(archivo, "filename", None)
@@ -335,23 +352,23 @@ async def guardar_documento_subido(
     if total == 0:
         raise MediaError("El documento está vacío.")
     datos = b"".join(trozos)
-    nombre = f"{uuid.uuid4().hex}.{ext}"
     mime = _EXT_A_MIME.get(ext) or _EXT_A_MIME_DOC.get(ext) or "application/octet-stream"
     try:
-        almacen_media.guardar_objeto(nombre, datos, content_type=mime)
+        clave = _guardar_contenido(datos, ext=ext, categoria="documentos", mime=mime)
     except MediaError:
         raise
     except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
         raise MediaError("No se pudo guardar el documento subido.") from e
-    return nombre, ext
+    return clave, ext
 
 
-def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
-    """Guarda `datos` (una imagen ya generada) en el almacen de media y devuelve su nombre.
+def guardar_bytes(datos: bytes, *, ext: str = "png", categoria: str = "generadas") -> str:
+    """Guarda `datos` (una imagen ya generada) en el almacen de media y devuelve su KEY.
 
     NOMBRE por UUID (objeto ÚNICO por llamada): para la generación por IA (`generar_variante`),
-    donde cada variante debe ser un objeto distinto aunque el contenido coincida. Las
-    composiciones de plantilla NO pasan por aquí: usan `importar_imagen` (content-addressed).
+    donde cada variante debe ser un objeto distinto aunque el contenido coincida. Va a la carpeta
+    `categoria` (def `generadas`). Las composiciones de plantilla NO pasan por aquí: usan
+    `importar_imagen`/`guardar_bytes_contenido` (content-addressed, carpeta `render`).
     """
     ext = ext.lower().lstrip(".")
     if ext == "jpeg":
@@ -360,19 +377,19 @@ def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
         ext = "png"
     if len(datos) > LIMITE_IMAGEN:
         raise MediaError("La imagen generada es demasiado grande.")
-    nombre = f"{uuid.uuid4().hex}.{ext}"
-    almacen_media.guardar_objeto(nombre, datos, content_type=_EXT_A_MIME[ext])
-    return nombre
+    clave = almacen_media.componer_clave(categoria, f"{uuid.uuid4().hex}.{ext}")
+    almacen_media.guardar_objeto(clave, datos, content_type=_EXT_A_MIME[ext])
+    return clave
 
 
-def guardar_bytes_contenido(datos: bytes, *, ext: str = "png") -> str:
-    """Guarda `datos` bajo una key CONTENT-ADDRESSED (`<sha256>.<ext>`) y devuelve el nombre.
+def guardar_bytes_contenido(datos: bytes, *, ext: str = "png", categoria: str = "render") -> str:
+    """Guarda `datos` bajo una key CONTENT-ADDRESSED (`<categoria>/<sha256>.<ext>`); devuelve la key.
 
     Mismo contenido -> misma key -> UN solo objeto en el almacén. Es la pieza que evita los
     duplicados de plantilla: dos piezas con el mismo logo+pleca+titular(+foto) comparten la
     imagen compuesta en vez de hornear un PNG idéntico por cada una. Si la key ya existe, NO
-    re-sube los bytes (el contenido es, por definición, idéntico). La key sigue siendo un
-    nombre PLANO `<hex>.<ext>` (sin separadores), válido para disco y para S3/Garage.
+    re-sube los bytes (el contenido es, por definición, idéntico). Va a la carpeta `categoria`
+    (def `render`: composites/cache regenerable).
     """
     ext = ext.lower().lstrip(".")
     if ext == "jpeg":
@@ -381,26 +398,22 @@ def guardar_bytes_contenido(datos: bytes, *, ext: str = "png") -> str:
         ext = "png"
     if len(datos) > LIMITE_IMAGEN:
         raise MediaError("La imagen generada es demasiado grande.")
-    digest = hashlib.sha256(datos).hexdigest()
-    nombre = f"{digest}.{ext}"
-    # Idempotente: si ya está ese contenido, no re-subimos bytes idénticos.
-    if not almacen_media.objeto_existe(nombre):
-        almacen_media.guardar_objeto(nombre, datos, content_type=_EXT_A_MIME[ext])
-    return nombre
+    return _guardar_contenido(datos, ext=ext, categoria=categoria, mime=_EXT_A_MIME[ext])
 
 
-def importar_imagen(ruta) -> str:  # noqa: ANN001 -- acepta str | Path
+def importar_imagen(ruta, *, categoria: str = "render") -> str:  # noqa: ANN001 -- acepta str | Path
     """COPIA una imagen que ya está en disco (ruta absoluta) al almacén de media.
 
     Pensado para la salida de los motores de imagen (estudio-imagen): las herramientas
     deterministas/generativas escriben los .png en disco y aquí los importamos al almacén para
     poder servirlos por `/api/media/...`. El NOMBRE lo generamos nosotros (NUNCA el de origen):
-    es CONTENT-ADDRESSED (`<sha256>.<ext>`), de modo que dos salidas idénticas (la misma placa
-    de marca, la misma composición de plantilla) comparten UN solo objeto y no se duplican.
-    Valida que sea un archivo de imagen real (extensión conocida) y respeta el límite de tamaño.
+    es CONTENT-ADDRESSED (`<categoria>/<sha256>.<ext>`), de modo que dos salidas idénticas (la
+    misma placa de marca, la misma composición de plantilla) comparten UN solo objeto y no se
+    duplican. Va a la carpeta `categoria` (def `render`). Valida que sea un archivo de imagen
+    real (extensión conocida) y respeta el límite de tamaño.
 
-    Devuelve el NOMBRE de archivo del media importado. Lanza `MediaError` (en español) si la
-    ruta no existe, no es imagen o es demasiado grande.
+    Devuelve la KEY del media importado. Lanza `MediaError` (en español) si la ruta no existe,
+    no es imagen o es demasiado grande.
     """
     origen = Path(ruta)
     ext = _ext_desde_nombre(origen.name)
@@ -416,7 +429,7 @@ def importar_imagen(ruta) -> str:  # noqa: ANN001 -- acepta str | Path
         raise MediaError("No se pudo leer la imagen generada.") from e
     if not datos:
         raise MediaError("La imagen generada está vacía.")
-    return guardar_bytes_contenido(datos, ext=ext)
+    return guardar_bytes_contenido(datos, ext=ext, categoria=categoria)
 
 
 # --------------------------------------------------------------------------- #

@@ -154,6 +154,9 @@ async def crear(request: Request) -> Response:
             return JSONResponse({"error": "Falta el archivo del activo."}, status_code=400)
         if media.leer_media(objeto) is None:
             return JSONResponse({"error": "Ese archivo no existe en el almacén."}, status_code=400)
+        # Un activo de marca (logo/tipografía/pleca) es REUSABLE: lo promovemos a la carpeta
+        # `logos/`. Así, al limpiar `fotos/` a mano, el logo (en otra carpeta) no se toca.
+        objeto = almacen_media.promover_objeto(objeto, "logos")
 
     marca, err = _validar_marca(datos.get("marca"))
     if err:
