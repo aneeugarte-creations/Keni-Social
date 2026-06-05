@@ -33,9 +33,50 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, metricas_cache, metricas_linea, metricas_pieza, repos
+from .. import marcas, metricas_cache, metricas_linea, metricas_pieza, permisos, repos
 
 _log = logging.getLogger("keni_consola.api.metricas")
+
+
+def _gate_marca_metricas(
+    request: Request, marca_metricas: str | None
+) -> tuple[str | None, Response | None]:
+    """Acota una peticion de metricas por marca al alcance de la sesion (cierre ADR 0003).
+
+    La frontera de metricas habla en `id_metricas` (guion_bajo); `marcas_visibles` da ids
+    CANONICOS. Aqui se cruza el catalogo para decidir. Devuelve `(marca_efectiva, rechazo)`:
+
+      - rechazo != None: respuesta a devolver (no continuar el handler).
+      - marca_efectiva: el `?marca=` (id_metricas) ya saneado que el handler debe usar; puede
+        ser None = "todas" SOLO cuando la sesion no tiene restriccion (admin/token/global).
+
+    Reglas (preservan admin/sin restriccion EXACTAMENTE: scope None => nada se toca):
+      - Con marca EXPLICITA: 404 si su id canonico esta fuera de `marcas_visibles` (mismo
+        criterio generico que `rechazo_pieza`: no se filtra existencia). Si esta dentro, pasa.
+      - SIN marca y sesion RESTRINGIDA: "todas" se reinterpreta como "mis marcas". Como la
+        fachada de metricas acepta UNA sola marca (set-scoping exigiria tocar la fachada/db),
+        si la sesion ve EXACTAMENTE una marca se sustituye por la suya; si ve VARIAS, se EXIGE
+        elegir una (400) en vez de devolver un reporte all-brands a un usuario acotado.
+      - SIN marca y sesion SIN restriccion: None ("todas"), como antes.
+    """
+    visibles = permisos.marcas_visibles(request)
+    if marca_metricas:
+        marca_obj = marcas.marca_por_id_metricas(marca_metricas)
+        canonico = marca_obj.id if marca_obj is not None else marca_metricas
+        if visibles is not None and canonico not in visibles:
+            return None, JSONResponse(
+                {"error": "Ese recurso ya no existe."}, status_code=404
+            )
+        return marca_metricas, None
+    if visibles is None:
+        return None, None  # sin restriccion: todas
+    if len(visibles) == 1:
+        canonico = next(iter(visibles))
+        return marcas.id_metricas_de(canonico), None
+    return None, JSONResponse(
+        {"error": "Elige una marca: no puedes ver el agregado de todas las marcas."},
+        status_code=400,
+    )
 
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
@@ -365,14 +406,30 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
 async def opciones(request: Request) -> Response:
     # La frontera con metricas habla en `id_metricas` (guion_bajo): este `id` es el
     # que viaja como `?marca=` y acota la fuente (FuenteScoped), no el id canonico.
-    marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in marcas.opciones_metricas()]
+    # Alcance por marca: una sesion acotada solo ve SUS marcas en el selector (no las ajenas).
+    # `opciones_metricas` da `(id_metricas, etiqueta)`; cruzamos al id canonico para filtrar
+    # contra `marcas_visibles`. Admin/sin restriccion (scope None): el catalogo completo.
+    visibles = permisos.marcas_visibles(request)
+    pares = marcas.opciones_metricas()
+    if visibles is not None:
+        pares = [
+            (mid, etiqueta)
+            for mid, etiqueta in pares
+            if (
+                (marcas.marca_por_id_metricas(mid).id if marcas.marca_por_id_metricas(mid) else mid)
+                in visibles
+            )
+        ]
+    marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in pares]
     rangos = [{"id": r, "etiqueta": _etiqueta_rango(r)} for r in RANGOS_VALIDOS]
     return JSONResponse({"marcas": marcas_lista, "rangos": rangos})
 
 
 async def reporte(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         # Lee de cache (instantaneo); si el combo falta, lo calcula al vuelo y lo guarda.
         # En executor: un combo frío golpea la API externa y NO debe bloquear el loop.
@@ -390,7 +447,9 @@ async def reporte(request: Request) -> Response:
 async def comparar(request: Request) -> Response:
     rango_a = _validar_rango(request.query_params.get("rango_a", "semana"))
     rango_b = _validar_rango(request.query_params.get("rango_b", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         # Ambos reportes salen de cache (lazy fill); la comparativa se computa en memoria.
         # En executor y CONCURRENTES (gather): combos fríos no bloquean el event loop y,
@@ -497,7 +556,9 @@ def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dic
 
 async def analisis(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "semana"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         # Lee de cache (instantaneo); lazy fill (en executor) si el combo aun no esta guardado.
         a, generado_en = await metricas_cache.analisis_async(rango, marca)
@@ -525,7 +586,9 @@ async def piezas(request: Request) -> Response:
     `etiqueta_rango` y `generado_en`.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     red = request.query_params.get("red") or None
     if red not in _REDES_FILTRO:
         red = None  # red desconocida o ausente -> todas (sin filtro)
@@ -559,7 +622,9 @@ async def tendencia(request: Request) -> Response:
     cache (lazy fill). `puntos` vacío = la fuente activa no expone serie diaria.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         payload, generado_en = await metricas_cache.tendencia_async(rango, marca)
     except ValueError as e:
@@ -577,7 +642,9 @@ async def seguidores(request: Request) -> Response:
     `puntos` vacío = la fuente activa no expone serie de seguidores (degradación honesta).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         payload, generado_en = await metricas_cache.seguidores_async(rango, marca)
     except ValueError as e:
@@ -594,7 +661,9 @@ async def desglose(request: Request) -> Response:
     `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         payload, generado_en = await metricas_cache.desglose_async(rango, marca)
     except ValueError as e:
@@ -611,7 +680,9 @@ async def crosstab(request: Request) -> Response:
     `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         payload, generado_en = await metricas_cache.crosstab_async(rango, marca)
     except ValueError as e:
@@ -628,7 +699,9 @@ async def correlacion(request: Request) -> Response:
     `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         payload, generado_en = await metricas_cache.correlacion_async(rango, marca)
     except ValueError as e:
@@ -690,7 +763,11 @@ async def piezas_rendimiento(request: Request) -> Response:
     sin marca, agrega todas. Degradación honesta: las piezas que Metricool aún no tiene
     salen con `encontrado=False` (la UI muestra "sin datos todavía", nunca ceros falsos).
     """
-    marca_metricas = request.query_params.get("marca") or None
+    marca_metricas, rechazo = _gate_marca_metricas(
+        request, request.query_params.get("marca") or None
+    )
+    if rechazo is not None:
+        return rechazo
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     try:
         # Lee BD + golpea Metricool por pieza (lazy-fill con TTL): potencialmente lento, así
@@ -732,7 +809,9 @@ async def piezas_listado(request: Request) -> Response:
     `?marca=` (en forma `id_metricas`) acota a una marca; sin marca, agrega todas.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     try:
         payload, generado_en = await metricas_cache.piezas_listado_async(rango, marca)
     except ValueError as e:
@@ -882,6 +961,11 @@ async def pieza_historico(request: Request) -> Response:
     pieza_id = request.query_params.get("id") or ""
     if not pieza_id:
         return JSONResponse({"error": "Falta el parámetro 'id'."}, status_code=400)
+    # RIESGO RESIDUAL (alcance por marca): `id` es un id de pieza de Metricool (espacio plano,
+    # sin marca asociada en la tabla de snapshots). Acotar esto por tenant exigiria un cruce/
+    # columna de marca en `metricas_pieza_snapshots` (cambio de db.py, reservado a otro agente).
+    # Datos de baja sensibilidad (serie de vis/inter de UNA pieza) -> se deja al dueño cerrarlo
+    # cuando exista el cruce. Ver ADR 0003.
     try:
         serie = await asyncio.get_running_loop().run_in_executor(
             None, repos.serie_pieza, pieza_id
@@ -910,7 +994,11 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     `?marca=` (en forma `id_metricas`) acota; sin marca, todas. Trabajo bloqueante (BD +
     listado de piezas de la fuente) en executor para no congelar el event loop.
     """
-    marca_metricas = request.query_params.get("marca") or None
+    marca_metricas, rechazo = _gate_marca_metricas(
+        request, request.query_params.get("marca") or None
+    )
+    if rechazo is not None:
+        return rechazo
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
@@ -951,7 +1039,11 @@ async def lineas(request: Request) -> Response:
     Trabajo bloqueante (BD + listado de piezas de la fuente) en executor para no congelar
     el event loop.
     """
-    marca_metricas = request.query_params.get("marca") or None
+    marca_metricas, rechazo = _gate_marca_metricas(
+        request, request.query_params.get("marca") or None
+    )
+    if rechazo is not None:
+        return rechazo
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
@@ -1024,7 +1116,10 @@ def _descarga(texto: str, nombre: str, media_type: str) -> Response:
 
 async def export_csv(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        # Export devuelve texto plano; traducimos el JSON del gate a un texto/error coherente.
+        return PlainTextResponse("Acceso restringido por marca.", status_code=rechazo.status_code)
     try:
         texto = servicio.reporte_csv(rango, marca)
     except ValueError as e:
@@ -1037,7 +1132,9 @@ async def export_csv(request: Request) -> Response:
 
 async def export_md(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return PlainTextResponse("Acceso restringido por marca.", status_code=rechazo.status_code)
     try:
         texto = servicio.reporte_markdown(rango, marca)
     except ValueError as e:
@@ -1050,7 +1147,9 @@ async def export_md(request: Request) -> Response:
 
 async def export_json(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return PlainTextResponse("Acceso restringido por marca.", status_code=rechazo.status_code)
     try:
         texto = servicio.reporte_json(rango, marca)
     except ValueError as e:
@@ -1155,7 +1254,9 @@ async def piezas_export(request: Request) -> Response:
     `fmt` desconocido cae a csv (igual criterio tolerante que el resto de la API).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return PlainTextResponse("Acceso restringido por marca.", status_code=rechazo.status_code)
     fmt = (request.query_params.get("fmt") or "csv").lower()
     if fmt not in ("csv", "md", "json"):
         fmt = "csv"

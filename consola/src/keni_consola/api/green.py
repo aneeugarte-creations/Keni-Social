@@ -33,7 +33,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, redes, repos
+from .. import generaciones, marcas, permisos, redes, repos
 from .._http_json import leer_json
 from ..dominio import generar as gen_dom
 from ..dominio import green as dom_green
@@ -76,7 +76,17 @@ async def listar(request: Request) -> Response:
     estado = q.get("estado") or None
     if estado is not None and estado not in ESTADOS_GREEN_IDEA:
         return JSONResponse({"error": "Estado no permitido."}, status_code=400)
+    # Alcance por marca: una sesion acotada no puede pedir ideas de una marca ajena.
+    rechazo = permisos.rechazo_marca(request, q.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     ideas = repos.listar_green_ideas(marca=q.get("marca") or None, estado=estado)
+    # SCOPING POR DEFECTO: sin marca explicita, una sesion acotada solo ve SUS marcas
+    # (post-filtro en memoria; admin/sin restriccion ve todo).
+    if not (q.get("marca") or None):
+        visibles = permisos.marcas_scope(request)
+        if visibles is not None:
+            ideas = [i for i in ideas if not i.get("marca") or i.get("marca") in visibles]
     return JSONResponse(
         {
             "ideas": [_idea_a_dict(i) for i in ideas],
@@ -96,6 +106,10 @@ async def crear(request: Request) -> Response:
     marca, error = _validar_marca(datos.get("marca"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    # Alcance por marca: no crees ideas para una marca fuera de tu alcance.
+    rechazo = permisos.rechazo_marca(request, marca)
+    if rechazo is not None:
+        return rechazo
     titulo = datos.get("titulo")
     if not isinstance(titulo, str) or not titulo.strip():
         return JSONResponse({"error": "La idea necesita un título."}, status_code=400)
@@ -119,8 +133,12 @@ async def actualizar(request: Request) -> Response:
     la idea ya no existe.
     """
     idea_id = request.path_params["idea_id"]
-    if repos.obtener_green_idea(idea_id) is None:
+    idea_actual = repos.obtener_green_idea(idea_id)
+    if idea_actual is None:
         return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, idea_actual.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
 
@@ -152,6 +170,13 @@ async def actualizar(request: Request) -> Response:
 async def borrar(request: Request) -> Response:
     """DELETE /api/green/ideas/{id}: borra la idea (no toca la pieza generada, si la hubiera)."""
     idea_id = request.path_params["idea_id"]
+    # Alcance por marca: no borres una idea de otra marca (404 generico desde fuera del tenant).
+    idea = repos.obtener_green_idea(idea_id)
+    if idea is None:
+        return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, idea.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     if not repos.borrar_green_idea(idea_id):
         return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Idea borrada."})
@@ -168,6 +193,10 @@ async def proponer(request: Request) -> Response:
     marca, error = _validar_marca(datos.get("marca"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    # Alcance por marca: no lances propuestas de IA para una marca fuera de tu alcance.
+    rechazo = permisos.rechazo_marca(request, marca)
+    if rechazo is not None:
+        return rechazo
     contexto = datos.get("contexto")
     contexto = contexto.strip()[:_MAX_CONTEXTO] if isinstance(contexto, str) else ""
 
@@ -194,6 +223,9 @@ async def generar_pieza(request: Request) -> Response:
     idea = repos.obtener_green_idea(idea_id)
     if idea is None:
         return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, idea.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     if idea["estado"] != ESTADO_GREEN_APROBADA:
         return JSONResponse(
             {"error": "Solo se puede generar contenido de una idea aprobada."}, status_code=400

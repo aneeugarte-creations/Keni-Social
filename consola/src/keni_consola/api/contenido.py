@@ -106,6 +106,22 @@ def _plataforma_a_dict(plat: dict) -> dict:
     return {**plat, "red_nombre": _red_nombre(plat.get("red", ""))}
 
 
+def _marca_de_plataforma(plataforma_id: str) -> tuple[str | None, bool]:
+    """Marca (id canonico) del contenido padre de una fila por plataforma.
+
+    Devuelve `(marca, existe)`: `existe=False` si la fila o su padre ya no existen (el
+    handler responde 404 como siempre); `marca` puede ser "" si el padre no tiene marca.
+    Se usa para el alcance por marca de los endpoints que actuan sobre una fila por su id.
+    """
+    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    if plat is None:
+        return None, False
+    padre = repos.obtener_contenido(plat.get("contenido_id", "") or "")
+    if padre is None:
+        return None, False
+    return padre.get("marca") or "", True
+
+
 def _contenido_a_dict(
     item: dict, plataformas: list[dict], etiquetas: list[str] | None = None
 ) -> dict:
@@ -168,6 +184,24 @@ def _catalogos() -> dict:
     }
 
 
+def _acotar_items_por_marca(
+    request: Request, items: list[dict], marca_explicita: str | None
+) -> list[dict]:
+    """Acota un listado de contenidos a las marcas visibles de la sesion (scoping por defecto).
+
+    Solo actua cuando la sesion esta RESTRINGIDA (`marcas_scope` != None) y NO se pidio una
+    marca explicita (esa ya la valida `rechazo_marca`). Sin restriccion (admin/token/cobertura
+    global) o con marca explicita ya valida, devuelve la lista intacta. Las filas sin marca se
+    conservan (no son de ningun tenant ajeno).
+    """
+    if marca_explicita:
+        return items
+    visibles = permisos.marcas_scope(request)
+    if visibles is None:
+        return items
+    return [it for it in items if not it.get("marca") or it.get("marca") in visibles]
+
+
 # --------------------------------------------------------------------------- #
 # Endpoints                                                                    #
 # --------------------------------------------------------------------------- #
@@ -195,6 +229,13 @@ async def listar(request: Request) -> Response:
         desde=q.get("desde") or None,
         hasta=q.get("hasta") or None,
     )
+    # SCOPING POR DEFECTO (cierre ADR 0003): si la sesion esta acotada a unas marcas y NO se
+    # pidio una marca explicita (ya validada arriba), el listado se restringe a SUS marcas en
+    # vez de devolver todas. `listar_contenido` solo acepta UNA marca (set-scoping exigiria
+    # tocar db.py), asi que aqui se POST-FILTRAN las filas por `marcas_visibles`. Coste: se leen
+    # todas las filas y se filtran en memoria (universo del piloto, asumible). Admin/sin
+    # restriccion (scope None) NO filtra: ve todo igual que antes.
+    items = _acotar_items_por_marca(request, items, q.get("marca") or None)
     # Filtro por etiqueta: acota a los contenidos que la llevan (una sola lectura del N:M).
     etiqueta_id = q.get("etiqueta") or None
     if etiqueta_id:
@@ -342,6 +383,14 @@ async def crear(request: Request) -> Response:
 async def actualizar(request: Request) -> Response:
     """PATCH /api/contenido/{id}: edita campos del padre (todos opcionales)."""
     contenido_id = request.path_params["contenido_id"]
+    # Alcance por marca: carga la pieza y bloquea si es de una marca fuera de tu alcance
+    # (404 generico: desde fuera del tenant el recurso "no existe").
+    actual = repos.obtener_contenido(contenido_id)
+    if actual is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, actual.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     datos = await leer_json(request)
     campos: dict[str, object] = {}
 
@@ -366,6 +415,15 @@ async def actualizar(request: Request) -> Response:
         marca, err = _validar_marca(datos.get("marca"))
         if err:
             return JSONResponse({"error": err}, status_code=400)
+        # MASS-ASSIGNMENT / escalada de tenant: reasignar la pieza a OTRA marca es cambiar su
+        # clave de tenant. Un editor acotado no puede moverla a una marca fuera de su alcance
+        # (ni "robarla" hacia su propia marca, ya bloqueado arriba por la marca de origen). La
+        # marca NUEVA debe estar tambien dentro de `marcas_visibles`. Admin/sin restriccion: libre.
+        rechazo_destino = permisos.rechazo_pieza(request, marca or "")
+        if rechazo_destino is not None:
+            return JSONResponse(
+                {"error": "No puedes mover la pieza a esa marca."}, status_code=403
+            )
         campos["marca"] = marca
     if "evento_id" in datos:
         evento_id = datos.get("evento_id") or ""
@@ -399,6 +457,13 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     contenido_id = request.path_params["contenido_id"]
+    # Alcance por marca: no borres una pieza de otra marca (404 generico desde fuera del tenant).
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, item.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     if not repos.borrar_contenido(contenido_id):
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Contenido borrado."})
@@ -407,8 +472,12 @@ async def borrar(request: Request) -> Response:
 async def agregar_plataforma(request: Request) -> Response:
     """POST /api/contenido/{id}/plataformas: anade una fila por red al contenido."""
     contenido_id = request.path_params["contenido_id"]
-    if repos.obtener_contenido(contenido_id) is None:
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, item.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     datos = await leer_json(request)
     red = datos.get("red")
     if not isinstance(red, str) or not _red_valida(red):
@@ -427,6 +496,13 @@ _EVENTO_POR_ESTADO: dict[str, str] = {
 async def actualizar_plataforma(request: Request) -> Response:
     """PATCH /api/contenido/{id}/plataformas/{plataforma_id}: estado/checklist/copy/...."""
     plataforma_id = request.path_params["plataforma_id"]
+    # Alcance por marca (la fila hereda la marca de su contenido padre).
+    marca_pieza, existe = _marca_de_plataforma(plataforma_id)
+    if not existe:
+        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, marca_pieza)
+    if rechazo is not None:
+        return rechazo
     datos = await leer_json(request)
     campos: dict[str, object] = {}
 
@@ -504,6 +580,9 @@ async def adaptar_imagen(request: Request) -> Response:
     item = repos.obtener_contenido(contenido_id)
     if item is None:
         return JSONResponse({"error": "Esa pieza ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, item.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
 
     datos = await leer_json(request)
     imagen = datos.get("imagen")
@@ -544,6 +623,13 @@ async def adaptar_imagen(request: Request) -> Response:
 
 async def borrar_plataforma(request: Request) -> Response:
     plataforma_id = request.path_params["plataforma_id"]
+    # Alcance por marca (la fila hereda la marca de su contenido padre).
+    marca_pieza, existe = _marca_de_plataforma(plataforma_id)
+    if not existe:
+        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, marca_pieza)
+    if rechazo is not None:
+        return rechazo
     if not repos.borrar_contenido_plataforma(plataforma_id):
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Plataforma borrada."})
@@ -552,8 +638,12 @@ async def borrar_plataforma(request: Request) -> Response:
 async def asignar_etiqueta(request: Request) -> Response:
     """POST /api/contenido/{id}/etiquetas: asigna una etiqueta (`{"etiqueta_id": ...}`)."""
     contenido_id = request.path_params["contenido_id"]
-    if repos.obtener_contenido(contenido_id) is None:
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, item.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     datos = await leer_json(request)
     etiqueta_id = datos.get("etiqueta_id")
     if not isinstance(etiqueta_id, str) or not etiqueta_id:
@@ -569,6 +659,13 @@ async def quitar_etiqueta(request: Request) -> Response:
     """DELETE /api/contenido/{id}/etiquetas/{etiqueta_id}: quita una etiqueta del contenido."""
     contenido_id = request.path_params["contenido_id"]
     etiqueta_id = request.path_params["etiqueta_id"]
+    # Alcance por marca: no toques las etiquetas de una pieza de otra marca.
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
+        return JSONResponse({"error": "Esa etiqueta no estaba asignada."}, status_code=404)
+    rechazo = permisos.rechazo_pieza(request, item.get("marca") or "")
+    if rechazo is not None:
+        return rechazo
     if not repos.quitar_etiqueta(contenido_id, etiqueta_id):
         return JSONResponse({"error": "Esa etiqueta no estaba asignada."}, status_code=404)
     etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
@@ -677,6 +774,9 @@ async def metricas(request: Request) -> Response:
         desde=q.get("desde") or None,
         hasta=q.get("hasta") or None,
     )
+    # SCOPING POR DEFECTO (ver `listar`): sin marca explicita, una sesion acotada solo ve SUS
+    # marcas (post-filtrado en memoria; set-scoping exigiria tocar db.py). Admin: ve todo.
+    items = _acotar_items_por_marca(request, items, q.get("marca") or None)
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma():
         por_contenido.setdefault(plat["contenido_id"], []).append(plat)

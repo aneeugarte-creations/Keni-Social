@@ -61,3 +61,49 @@ def test_editor_sin_marcas_no_restringe(monkeypatch):
     req = _request({"id": "u1", "rol": "editor"})
     assert permisos.marcas_visibles(req) is None
     assert permisos.rechazo_marca(req, "claro-sports") is None
+
+
+# --------------------------------------------------------------------------- #
+# rechazo_pieza (cerrojo por-id): 404 cross-tenant, None si autorizado/sin marca
+# --------------------------------------------------------------------------- #
+
+
+def test_rechazo_pieza_sin_marca_no_bloquea():
+    # Una pieza SIN marca no es de ningun tenant ajeno: no se bloquea por marca.
+    req = _request({"id": "u1", "rol": "editor"})
+    assert permisos.rechazo_pieza(req, None) is None
+    assert permisos.rechazo_pieza(req, "") is None
+
+
+def test_rechazo_pieza_admin_nunca_bloquea():
+    req = _request({"id": "u1", "rol": "admin"})
+    assert permisos.rechazo_pieza(req, "claro-sports") is None
+
+
+def test_rechazo_pieza_token_no_restringe():
+    req = _request(None)
+    assert permisos.rechazo_pieza(req, "unotv") is None
+
+
+def test_rechazo_pieza_editor_marca_propia_ok_ajena_404(monkeypatch):
+    monkeypatch.setattr(
+        "keni_consola.auth.obtener_usuario_por_id",
+        lambda _id: {"id": "u1", "marcas": ["unotv"]},
+    )
+    req = _request({"id": "u1", "rol": "editor"})
+    assert permisos.rechazo_pieza(req, "unotv") is None
+    rechazo = permisos.rechazo_pieza(req, "claro-sports")
+    assert rechazo is not None
+    # 404 (no 403): no filtra existencia de recursos de otra marca.
+    assert rechazo.status_code == 404
+
+
+def test_marcas_scope_es_alias_de_visibles(monkeypatch):
+    monkeypatch.setattr(
+        "keni_consola.auth.obtener_usuario_por_id",
+        lambda _id: {"id": "u1", "marcas": ["unotv"]},
+    )
+    req = _request({"id": "u1", "rol": "editor"})
+    assert permisos.marcas_scope(req) == {"unotv"}
+    admin = _request({"id": "u2", "rol": "admin"})
+    assert permisos.marcas_scope(admin) is None

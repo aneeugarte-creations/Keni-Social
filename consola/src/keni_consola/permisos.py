@@ -122,3 +122,39 @@ def rechazo_marca(request: Request, marca: str | None) -> Response | None:
     if visibles is None or marca in visibles:
         return None
     return JSONResponse({"error": "No tienes acceso a esa marca."}, status_code=403)
+
+
+def rechazo_pieza(request: Request, marca: str | None) -> Response | None:
+    """404 si una PIEZA/recurso (por id) pertenece a una marca fuera del alcance de la sesion.
+
+    Es el cerrojo por-id del aislamiento multimarca (cierre del ADR 0003 para el piloto): el
+    handler carga el recurso por su id de path, deduce su `marca` y llama a este helper ANTES
+    de leer/mutar. Semantica:
+
+      - None (sin bloqueo) cuando la sesion no tiene restriccion (`marcas_visibles` es None:
+        admin, token de mantenimiento, o usuario sin marcas = cobertura global) PRESERVANDO
+        EXACTAMENTE el comportamiento de admin/sin-restriccion: nada se bloquea.
+      - None tambien cuando la pieza NO tiene marca (`marca` vacia/None): un recurso sin
+        marca no es de ningun tenant ajeno, asi que no se bloquea por marca (otras barreras
+        —existencia, rol— siguen aplicando).
+      - 404 cuando la pieza pertenece a una marca que NO esta en `marcas_visibles`. Se usa
+        404 (no 403) para NO filtrar la existencia de recursos de otra marca: desde fuera del
+        tenant el recurso "no existe". Mensaje generico, alineado con los 404 cercanos.
+    """
+    if not marca:
+        return None
+    visibles = marcas_visibles(request)
+    if visibles is None or marca in visibles:
+        return None
+    return JSONResponse({"error": "Ese recurso ya no existe."}, status_code=404)
+
+
+def marcas_scope(request: Request) -> set[str] | None:
+    """Alias semantico de `marcas_visibles` para el SCOPING POR DEFECTO de listados.
+
+    Mismo contrato (None = sin restriccion). Lo usan los listados que, cuando NO se pide una
+    marca explicita, deben acotar el universo a las marcas de la sesion (en vez de devolver
+    todas). Se expone aparte para que el call site lea su intencion ("acota la lista a mi
+    alcance") sin acoplarse al nombre del helper de consulta.
+    """
+    return marcas_visibles(request)

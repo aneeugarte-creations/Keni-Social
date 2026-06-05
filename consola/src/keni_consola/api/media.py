@@ -10,6 +10,13 @@ SEGURIDAD: el nombre en disco lo genera el servidor (uuid); el GET valida que el
 nombre pedido no escape del dir (anti-traversal). Errores en espanol, sin tracebacks.
 El proveedor de imagen y su clave viven en `consola.media` y son mockeables: los
 tests NUNCA tocan la red.
+
+RIESGO RESIDUAL — ALCANCE POR MARCA (cierre ADR 0003, DIFERIDO aqui): el media tiene un
+espacio de nombres PLANO (uuid) SIN etiqueta de marca. `GET /api/media/{n}` sirve cualquier
+imagen a cualquier sesion autenticada: no se puede acotar por tenant sin asociar marca a cada
+asset (columna/tabla -> cambio de db.py, reservado a otro agente). Es coste/abuso de baja
+gravedad (no expone estado editorial, solo el binario para quien adivine el uuid). Se deja al
+dueño cuando exista el tag de marca; no se sobre-restringe aqui para no romper accesos legitimos.
 """
 
 from __future__ import annotations
