@@ -1034,8 +1034,8 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
         <>
           {/* IMAGEN · PRINCIPAL: hueco de foto, forma y ajuste. */}
           <div className="flex flex-col gap-2 border-t border-border pt-3">
-            {/* Hueco de foto: la capa donde entra la foto de la pieza. Único y obligatorio por
-                plantilla; al marcar otra, esta se desmarca. Marcarlo lo deja bloqueado. */}
+            {/* Hueco de foto: la capa donde entra una foto de la pieza. Una plantilla puede tener
+                VARIOS (collage de 2..12); mínimo uno. Marcarlo lo deja bloqueado; "Quitar" lo libera. */}
             <Campo etiqueta="Hueco de foto">
               {(capa as CapaImagen).es_foto ? (
                 <div className="flex items-center gap-1.5">
@@ -1063,7 +1063,7 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
               )}
             </Campo>
             {(capa as CapaImagen).es_foto && (
-              <p className="text-[11px] text-muted-foreground">La plantilla requiere un hueco de foto.</p>
+              <p className="text-[11px] text-muted-foreground">Hueco de foto. Marca varios para un collage.</p>
             )}
             <Campo etiqueta="Forma">
               <select

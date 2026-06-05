@@ -38,8 +38,8 @@ export interface EstadoEditor {
   // Inserta VARIAS capas (un bloque) en un solo paso de historial, encima de todo, con ids frescos.
   insertarBloque: (capas: Capa[]) => void;
   actualizar: (id: string, cambios: Partial<Capa>, registrar?: boolean) => void;
-  // Designa la capa imagen `id` como HUECO DE FOTO (único): la marca `es_foto`+bloqueada y
-  // desmarca el resto de imágenes. Toda plantilla tiene exactamente uno.
+  // Marca la capa imagen `id` como HUECO DE FOTO (`es_foto`+bloqueada), SIN tocar las demás: una
+  // plantilla puede tener varios huecos (collage de 2..12). Mínimo uno (lo exige el guardado).
   marcarHuecoFoto: (id: string) => void;
   // Convierte un MARCO en una capa IMAGEN (hueco para foto), conservando geometría/forma. Y al
   // revés: una IMAGEN en MARCO (forma rellena). El usuario alterna entre forma vacía y foto.
@@ -150,11 +150,14 @@ export function crearStoreEditor(inicial: Documento) {
         aplicar((doc) =>
           conCapas(
             doc,
-            doc.capas.map((c) => {
-              if (c.tipo !== "imagen") return c;
-              if (c.id === id) return { ...c, es_foto: true, bloqueada: true } as Capa;
-              return { ...c, es_foto: false } as Capa;
-            }),
+            doc.capas.map((c) =>
+              // Marca ESTA imagen como hueco de foto (+ bloqueada). NO desmarca las demás: una
+              // plantilla puede tener VARIOS huecos (collage de 2..12 fotos). Para quitar uno se
+              // usa "Quitar" en su propio panel.
+              c.id === id && c.tipo === "imagen"
+                ? ({ ...c, es_foto: true, bloqueada: true } as Capa)
+                : c,
+            ),
           ),
         ),
 
