@@ -12,14 +12,21 @@ niveles ordenados (p. ej. Edicion -> Coordinacion -> Direccion). Cada nivel arra
 
   - Se decide POR ORDEN: solo el primer nivel `pendiente` (el mas bajo aun sin decidir)
     acepta decision. No se puede aprobar Direccion si Coordinacion sigue pendiente.
-  - Un `rechazado` en cualquier nivel PARA la cadena (la pieza vuelve a la redaccion).
+  - La pieza se RECHAZA cuando acumula `UMBRAL_RECHAZO` niveles `rechazado` (dos "dislikes"
+    de dos personas distintas, ESPEJO de los dos OK del feed). Un SOLO rechazo NO para la
+    cadena: deja disponible el siguiente nivel para que otra persona decida. En una cadena
+    de 1 solo nivel basta 1 rechazo (no hay un segundo que pedir).
   - La pieza esta TOTALMENTE aprobada cuando TODOS los niveles estan `aprobado`.
+  - Una decision PROPIA se puede DESHACER (`deshacer_decision`): el revisor retira su OK o su
+    dislike y su nivel vuelve a `pendiente`. Es lo que da el toggle del feed (un dislike tras
+    un like quita el like; el siguiente dislike lo marca). Solo la decision propia, y solo si
+    es la mas alta decidida (no se deja un hueco en una cadena que se decide por orden).
   - Separacion de funciones (como el flujo legado #9): el decisor de un nivel NO puede
     ser el autor que pidio la revision, salvo admin. "Otro par de ojos" por nivel.
 
 `estado_cadena(cadena)` resume la cadena en uno de: "sin_cadena" (vacia), "pendiente"
-(quedan niveles por decidir), "aprobado" (todos aprobados) o "rechazado" (alguno
-rechazado). Es lo que la UI pinta y lo que el resto del flujo puede consultar.
+(quedan niveles por decidir), "aprobado" (todos aprobados) o "rechazado" (acumula el
+umbral de rechazos). Es lo que la UI pinta y lo que el resto del flujo puede consultar.
 """
 
 from __future__ import annotations
@@ -40,6 +47,33 @@ from ..estados import (
 
 def _ahora_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+# Cuantos niveles `rechazado` hacen falta para RECHAZAR la pieza: dos "dislikes" de dos
+# personas distintas, ESPEJO de los dos OK del feed. En una cadena mas corta no se puede
+# exigir mas rechazos que niveles tiene (1 nivel => basta 1 rechazo): el umbral efectivo es
+# `min(UMBRAL_RECHAZO, len(cadena))`. Un solo rechazo NO para la cadena.
+UMBRAL_RECHAZO = 2
+
+# Campos que devuelven un nivel a `pendiente` (sin decisor ni sello): los aplica `deshacer`
+# para RETIRAR la decision propia de un revisor (quitar su OK o su dislike). Son justo las
+# columnas que `repos.actualizar_aprobacion` permite escribir.
+CAMPOS_NIVEL_PENDIENTE: dict[str, Any] = {
+    "decision": DECISION_PENDIENTE,
+    "decisor_id": "",
+    "decisor_nombre": "",
+    "comentario": "",
+    "decidido_en": "",
+}
+
+
+def umbral_rechazo(cadena: list[dict[str, Any]]) -> int:
+    """Rechazos necesarios para rechazar ESTA cadena: `min(UMBRAL_RECHAZO, nº de niveles)`.
+
+    Garantiza que una cadena de 1 nivel siga rechazandose con 1 rechazo (no hay un segundo
+    que pedir) mientras la cadena por defecto del feed (dos niveles) exige los dos dislikes.
+    """
+    return min(UMBRAL_RECHAZO, len(cadena)) if cadena else 0
 
 
 def cadena_simple() -> list[str]:
@@ -75,18 +109,24 @@ def estado_publicacion_para(estado_global: str) -> str | None:
     return None  # "sin_cadena": ninguna aprobacion configurada, no se toca el estado.
 
 
+def contar_rechazados(cadena: list[dict[str, Any]]) -> int:
+    """Cuenta cuantos niveles de la cadena estan en `rechazado` (los "dislikes" acumulados)."""
+    return sum(1 for n in cadena if n.get("decision") == DECISION_RECHAZADO)
+
+
 def estado_cadena(cadena: list[dict[str, Any]]) -> str:
     """Resume una cadena de niveles en su estado global.
 
-    "sin_cadena" si esta vacia; "rechazado" si algun nivel lo esta; "aprobado" si TODOS
-    lo estan; "pendiente" en cualquier otro caso (quedan niveles por decidir).
+    "sin_cadena" si esta vacia; "rechazado" cuando los rechazos acumulados alcanzan el umbral
+    (`umbral_rechazo`: dos dislikes, o uno en cadenas de 1 nivel); "aprobado" si TODOS los
+    niveles lo estan; "pendiente" en cualquier otro caso (aun caben decisiones, incluido el
+    caso en que ya hay UN rechazo pero falta el segundo para parar la cadena).
     """
     if not cadena:
         return "sin_cadena"
-    decisiones = [n.get("decision") for n in cadena]
-    if DECISION_RECHAZADO in decisiones:
+    if contar_rechazados(cadena) >= umbral_rechazo(cadena):
         return DECISION_RECHAZADO
-    if all(d == DECISION_APROBADO for d in decisiones):
+    if all(n.get("decision") == DECISION_APROBADO for n in cadena):
         return DECISION_APROBADO
     return DECISION_PENDIENTE
 
@@ -136,16 +176,56 @@ def cumple_minimo_aprobaciones(
 def nivel_actual(cadena: list[dict[str, Any]]) -> dict[str, Any] | None:
     """El primer nivel `pendiente` por orden (el que toca decidir); None si no queda.
 
-    Si algun nivel ya esta `rechazado`, la cadena esta parada: devuelve None (no hay
-    siguiente decision util hasta que se reinicie la cadena).
+    Mientras la cadena no sea TERMINAL (ni aprobada ni rechazada por umbral), devuelve el
+    siguiente nivel pendiente: un rechazo aislado (sub-umbral) NO la para, el siguiente
+    nivel sigue disponible para que otra persona decida (asi se acumula el segundo dislike).
+    Si la cadena ya esta aprobada o rechazada por umbral, devuelve None (no hay mas decisiones
+    utiles). Tambien None en un empate sin niveles pendientes (p. ej. un OK y un dislike en
+    una cadena de dos): no quedan niveles que decidir y lo desatasca un coordinador (forzar).
     """
-    if any(n.get("decision") == DECISION_RECHAZADO for n in cadena):
+    if estado_cadena(cadena) in (DECISION_APROBADO, DECISION_RECHAZADO):
         return None
     ordenada = sorted(cadena, key=lambda n: n.get("nivel", 0))
     for nivel in ordenada:
         if nivel.get("decision") == DECISION_PENDIENTE:
             return nivel
     return None
+
+
+def deshacer_decision(
+    cadena: list[dict[str, Any]], decisor_id: str
+) -> tuple[str | None, str | None]:
+    """Retira la decision PROPIA de `decisor_id`: devuelve `(nivel_id, None)` o `(None, error)`.
+
+    El llamante aplica `CAMPOS_NIVEL_PENDIENTE` al `nivel_id` para devolver ese nivel a
+    `pendiente` (quitar el OK o el dislike del revisor). Reglas:
+      - Solo se deshace la decision PROPIA (un nivel cuyo `decisor_id` sea el del revisor; los
+        automaticos AUTO/QA no se deshacen). Sin sesion (`decisor_id` vacio) no hay nada que
+        deshacer.
+      - Como la cadena se decide POR ORDEN, solo se permite deshacer si NO hay un nivel
+        SUPERIOR ya decidido por alguien: deshacer uno inferior dejaria un hueco. En el flujo
+        normal del feed (cada quien decide un nivel) esto se cumple solo.
+    """
+    if not decisor_id:
+        return None, "No hay sesión para deshacer una decisión."
+    ordenada = sorted(cadena, key=lambda n: n.get("nivel", 0))
+    mios = [
+        n
+        for n in ordenada
+        if n.get("decisor_id") == decisor_id
+        and n.get("decision") in (DECISION_APROBADO, DECISION_RECHAZADO)
+    ]
+    if not mios:
+        return None, "No tienes ninguna decisión que deshacer en esta pieza."
+    nivel = mios[-1]  # el mas alto que decidio esta persona (decide a lo sumo uno)
+    hay_superior_decidido = any(
+        n.get("nivel", 0) > nivel.get("nivel", 0)
+        and n.get("decision") != DECISION_PENDIENTE
+        for n in ordenada
+    )
+    if hay_superior_decidido:
+        return None, "Ya hay una decisión posterior en la cadena; no puedes deshacer la tuya."
+    return nivel.get("id", ""), None
 
 
 def _es_admin(rol: str | None, autor: dict[str, Any] | None) -> bool:

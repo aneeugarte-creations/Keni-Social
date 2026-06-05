@@ -6,18 +6,20 @@
  *  2. Copy generado por la IA: el cuerpo del post (`contenido`), dentro de una previa fiel de la
  *     red (`VistaPreviaRed`, variante limpia: sin chrome social falso ni cabecera duplicada).
  *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): "Me gusta" (el OK humano),
- *     "Editar" (copy, copy-in, foto+plantilla, vía `DialogoEditar`) y "Comentar"; "Rechazar"
- *     cuando puedes decidir. El "me gusta" se habilita solo cuando te toca el OK
- *     (`elegibilidadOK`); en otros estados se ve deshabilitado y el aviso explica qué falta.
+ *     "No me gusta" (dislike), "Editar" (copy, copy-in, foto+plantilla, vía `DialogoEditar`) y
+ *     "Comentar". Like y dislike son un TOGGLE de tu reacción: un dislike tras tu like lo quita
+ *     (vuelve a neutro) y el siguiente lo marca; el like quita tu dislike. El "me gusta" (marcar
+ *     OK) y el "marcar dislike" solo se habilitan cuando te toca decidir (`elegibilidadOK`);
+ *     QUITAR tu propia reacción siempre puedes. Dos dislikes (dos personas) rechazan la pieza.
  *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): veredicto de IA + OK del
  *     equipo (cuántos y de quién) + lo que falta. La acción vive en la fila, no aquí.
  *
- * El OK/rechazo van por `aprobar`/`rechazar` de `api/aprobacion`, que forwardean al nivel ACTUAL
- * de la cadena multinivel (respetando "otro par de ojos" y "un rechazo para la cadena"); el gate
- * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
+ * Like/dislike/deshacer van por `aprobar`/`rechazar`/`deshacer` de `api/aprobacion`, que
+ * forwardean al nivel ACTUAL de la cadena multinivel (respetando "otro par de ojos" y "dos
+ * dislikes para rechazar"); el gate lo decide el backend, `elegibilidadOK` solo habilita/explica.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Inbox, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Inbox, Loader2, MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -106,7 +108,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   });
   const rechazar = useMutation({
     mutationFn: () => api.rechazarPublicacion(publicacion.id),
-    onSuccess: tras("Devuelta a borrador."),
+    // Un dislike NO devuelve a borrador por sí solo: hacen falta dos (de dos personas). El back
+    // refleja el desenlace; aquí solo confirmamos que tu dislike quedó registrado.
+    onSuccess: tras("Dislike registrado."),
+    onError,
+  });
+  // Retira TU decisión (quitar tu like o tu dislike): tu nivel vuelve a pendiente.
+  const deshacer = useMutation({
+    mutationFn: () => api.deshacerAprobacion(publicacion.id),
+    onSuccess: tras("Quitamos tu reacción."),
     onError,
   });
   // OVERRIDE: forzar la aprobación saltándose la cadena (admin/coordinador). Lo decide el backend;
@@ -116,7 +126,23 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     onSuccess: tras("Aprobación forzada (cadena saltada)."),
     onError,
   });
-  const ocupado = aprobar.isPending || rechazar.isPending || forzar.isPending;
+  const ocupado =
+    aprobar.isPending || rechazar.isPending || forzar.isPending || deshacer.isPending;
+  // TU reacción en esta pieza, leída de la cadena: el nivel que TÚ decidiste (si lo hay). "like"
+  // si lo aprobaste, "dislike" si lo rechazaste, "neutral" si aún no decidiste. Es lo que hace
+  // el toggle: con un like puesto, el dislike lo quita; desde neutro, el dislike lo marca.
+  const miNivel = (cadena?.niveles ?? []).find(
+    (n) =>
+      !!usuario?.id &&
+      n.decisor_id === usuario.id &&
+      (n.decision === "aprobado" || n.decision === "rechazado"),
+  );
+  const miReaccion: "like" | "dislike" | "neutral" =
+    miNivel?.decision === "aprobado"
+      ? "like"
+      : miNivel?.decision === "rechazado"
+        ? "dislike"
+        : "neutral";
   // ¿Esta sesión puede FORZAR? Admin o cargo de coordinación (o candidato a coordinador). El
   // backend es la fuente de verdad (403 si no); esto solo decide si se muestra el botón.
   const puedeForzar =
@@ -163,9 +189,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           ? "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
           : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
 
-  // "Me gusta": si te toca, da el OK; si no, explica por qué con un toast (no bloquea en silencio).
-  // Los comentarios sin resolver son un gate previo (como en un PR): resuélvelos antes de dar el OK.
+  // "Me gusta" (toggle): si ya es tu reacción, la quita; si tenías un dislike, lo quita primero
+  // (un clic más dará el OK); si estás en neutro y te toca, da el OK. Si no te toca, un toast
+  // explica por qué (no bloquea en silencio). Los comentarios sin resolver son un gate previo
+  // (como en un PR): resuélvelos antes de dar el OK.
   const onLike = () => {
+    if (miReaccion === "like" || miReaccion === "dislike") {
+      deshacer.mutate(); // quita tu like (toggle off) o tu dislike (antes de poder dar OK)
+      return;
+    }
     if (sinResolver > 0) {
       toast(`Resuelve ${plural(sinResolver, "comentario")} antes de aprobar y publicar.`);
       setComentariosAbierto(true);
@@ -181,6 +213,23 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       toast(motivoBloqueo, {
         action: { label: "Forzar", onClick: () => void onForzar() },
       });
+      return;
+    }
+    toast(motivoBloqueo);
+  };
+
+  // "No me gusta" (toggle): con tu like puesto, lo quita (vuelve a neutro); si ya tenías dislike,
+  // lo quita (toggle off); desde neutro, si te toca, marca tu dislike (rechaza el nivel actual).
+  // Dos dislikes de dos personas distintas rechazan la pieza (lo decide el backend). Si no te
+  // toca decidir, un toast explica por qué. Marcar dislike NO depende de comentarios sin resolver
+  // (ese gate es para publicar, no para objetar).
+  const onDislike = () => {
+    if (miReaccion === "like" || miReaccion === "dislike") {
+      deshacer.mutate(); // "se quita el like" (o quita tu dislike si ya estaba marcado)
+      return;
+    }
+    if (puedeDar) {
+      rechazar.mutate(); // "se marca con dislike"
       return;
     }
     toast(motivoBloqueo);
@@ -268,9 +317,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         variante="limpia"
       />
 
-      {/* Acciones: badge de ETAPA (izq) + iconos me gusta / rechazar / comentar (der). Esta zona
-          NO abre el editor (para la propagación). El "me gusta" da el OK si te toca; si no, un toast
-          explica por qué. "Rechazar" solo cuando puedes decidir. */}
+      {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). Esta
+          zona NO abre el editor (para la propagación). Like y dislike son un TOGGLE de tu
+          reacción; marcar OK / marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
       <div
         className="flex items-center gap-2 px-4 py-3"
         onClick={(e) => e.stopPropagation()}
@@ -278,15 +327,28 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <BadgeEtapa etapa={etapa} />
         <div className="ml-auto flex items-center gap-1">
           <Button
-            variant={puedeDar && sinResolver === 0 ? "positive" : "ghost"}
+            variant={
+              miReaccion === "like" || yaAprobada || (puedeDar && sinResolver === 0)
+                ? "positive"
+                : "ghost"
+            }
             size="icon"
             className="h-8 w-8"
             onClick={onLike}
             disabled={ocupado}
-            title={sinResolver > 0 ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar` : tituloLike}
-            aria-label="Me gusta"
+            title={
+              miReaccion === "like"
+                ? "Quitar tu OK"
+                : miReaccion === "dislike"
+                  ? "Quita tu dislike para poder dar el OK"
+                  : sinResolver > 0
+                    ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar`
+                    : tituloLike
+            }
+            aria-label={miReaccion === "like" ? "Quitar tu OK" : "Me gusta"}
+            aria-pressed={miReaccion === "like"}
           >
-            {aprobar.isPending ? (
+            {aprobar.isPending || (deshacer.isPending && miReaccion === "like") ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : yaAprobada ? (
               <Check className="h-4 w-4" />
@@ -294,20 +356,23 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               <ThumbsUp className="h-4 w-4" />
             )}
           </Button>
-          {puedeDar && (
+          {/* Dislike: visible cuando puedes marcarlo (te toca) o cuando tienes una reacción que
+              quitar (tu like o tu dislike). Dos dislikes de dos personas rechazan la pieza. */}
+          {enRevision && (puedeDar || miReaccion !== "neutral") && (
             <Button
-              variant="ghost"
+              variant={miReaccion === "dislike" ? "destructive" : "ghost"}
               size="icon"
               className="h-8 w-8"
-              onClick={() => rechazar.mutate()}
+              onClick={onDislike}
               disabled={ocupado}
-              title="Rechazar"
-              aria-label="Rechazar"
+              title={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
+              aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
+              aria-pressed={miReaccion === "dislike"}
             >
-              {rechazar.isPending ? (
+              {rechazar.isPending || (deshacer.isPending && miReaccion === "dislike") ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <XCircle className="h-4 w-4" />
+                <ThumbsDown className="h-4 w-4" />
               )}
             </Button>
           )}

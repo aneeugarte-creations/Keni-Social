@@ -199,7 +199,9 @@ function TarjetaFeed({
   });
   const rechazar = useMutation({
     mutationFn: () => api.rechazarPublicacion(publicacion.id),
-    onSuccess: tras("Devuelta a borrador."),
+    // Un solo rechazo ya NO devuelve a borrador: hacen falta dos (de dos personas). El backend
+    // refleja el desenlace; aquí solo confirmamos que tu rechazo quedó registrado.
+    onSuccess: tras("Rechazo registrado."),
     onError,
   });
   const ocupado = aprobar.isPending || rechazar.isPending;

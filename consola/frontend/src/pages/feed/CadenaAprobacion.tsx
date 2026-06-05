@@ -12,7 +12,7 @@
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, Sparkles, ThumbsUp } from "lucide-react";
+import { Check, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
@@ -52,7 +52,11 @@ export function CadenaAprobacion({
   const humanos = niveles.filter((n) => !esNivelIA(n));
   const nivelIA = niveles.find(esNivelIA);
   const okDados = humanos.filter((n) => n.decision === "aprobado");
+  const disDados = humanos.filter((n) => n.decision === "rechazado");
   const totalOK = humanos.length || 1;
+  // Dos dislikes (de dos personas) rechazan la pieza; en una cadena más corta basta con tantos
+  // como niveles tenga. Espeja `dominio.colaboracion.umbral_rechazo`.
+  const umbralDislike = Math.min(2, humanos.length || 1);
   const ia = pintaIA(nivelIA, veredictoIA);
 
   const lista = cadena.estado === "aprobado";
@@ -80,6 +84,19 @@ export function CadenaAprobacion({
           </span>
         )}
       </div>
+
+      {/* Los dislikes acumulados (solo si hay alguno): dos rechazan la pieza. */}
+      {disDados.length > 0 && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="inline-flex items-center gap-1 font-medium text-red-600 dark:text-red-400">
+            <ThumbsDown className="h-4 w-4" />
+            Dislikes {disDados.length}/{umbralDislike}
+          </span>
+          <span className="text-muted-foreground">
+            · {disDados.map((n) => n.decisor_nombre || "alguien").join(", ")}
+          </span>
+        </div>
+      )}
 
       {/* Desenlace de la cadena. */}
       {lista ? (

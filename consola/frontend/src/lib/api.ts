@@ -835,9 +835,14 @@ export const api = {
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/aprobar`, {
       metodo: "POST",
     }),
-  /** Rechaza el nivel actual de la cadena de una publicación (vuelve a borrador). */
+  /** Da un "dislike": rechaza el nivel actual. Dos dislikes (dos personas) vuelven a borrador. */
   rechazarPublicacion: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/rechazar`, {
+      metodo: "POST",
+    }),
+  /** Retira la decisión propia (quitar tu OK o tu dislike): tu nivel vuelve a pendiente. */
+  deshacerAprobacion: (id: string) =>
+    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/deshacer`, {
       metodo: "POST",
     }),
   /** FUERZA la aprobación (admin/coordinador): se salta la cadena y deja la pieza aprobada. */

@@ -256,21 +256,75 @@ def test_token_de_mantenimiento_puede_aprobar(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Rechazo: vuelve a borrador                                                  #
+# Dislike: un solo rechazo NO basta; dos (de dos personas) vuelven a borrador  #
 # --------------------------------------------------------------------------- #
 
 
-def test_rechazar_devuelve_a_borrador(entorno):
-    """Beto rechaza la pieza en revision de ana: vuelve a borrador, con el revisor."""
+def test_un_dislike_no_devuelve_a_borrador(entorno):
+    """Un solo dislike (Beto) NO devuelve a borrador: la pieza sigue en revisión (falta el 2º)."""
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    revisor = _cli_usuario("beto")
-    r = revisor.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    r = beto.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "en_revision"
+
+
+def test_dos_dislikes_de_personas_distintas_devuelven_a_borrador(entorno):
+    """Dos dislikes (Beto + Caro) alcanzan el umbral: la pieza vuelve a borrador, con el revisor."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    assert beto.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN).status_code == 200
+    caro = _cli_usuario("caro")
+    r = caro.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     rechazada = r.json()["publicacion"]
     assert rechazada["estado"] == "borrador"
-    assert rechazada["revisor_nombre"] == "beto"
+    assert rechazada["revisor_nombre"] == "caro"
+
+
+def test_deshacer_quita_el_ok_y_vuelve_a_revision(entorno):
+    """Beto da su OK y luego lo RETIRA (deshacer): su nivel vuelve a pendiente, pieza en revisión."""
+    from keni_consola import repos
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    assert beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    # Beto retira su OK: su nivel vuelve a pendiente (sin decisor) y no queda ningún OK humano.
+    r = beto.post(f"/api/aprobacion/{pub['id']}/deshacer", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "en_revision"
+    niveles = repos.listar_aprobaciones(pub["id"])
+    assert all(n["decision"] == "pendiente" and not n["decisor_id"] for n in niveles)
+
+
+def test_deshacer_dislike_tras_like_y_remarcar(entorno):
+    """Toggle del feed: Beto da OK, lo quita (deshacer) y luego marca dislike sobre el mismo nivel."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    assert beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    assert beto.post(f"/api/aprobacion/{pub['id']}/deshacer", headers=_ORIGIN).status_code == 200
+    # Ya sin su OK, Beto marca un dislike: válido (un solo dislike no rechaza todavía).
+    r = beto.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "en_revision"
+
+
+def test_deshacer_sin_decision_propia_da_409(entorno):
+    """Deshacer sin haber decidido nada en la pieza responde 409 (no hay qué retirar)."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    r = beto.post(f"/api/aprobacion/{pub['id']}/deshacer", headers=_ORIGIN)
+    assert r.status_code == 409
 
 
 # --------------------------------------------------------------------------- #

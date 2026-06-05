@@ -213,8 +213,45 @@ async def aprobar(request: Request) -> Response:
 
 
 async def rechazar(request: Request) -> Response:
-    """POST /api/aprobacion/{id}/rechazar: decide el nivel actual como rechazado (vuelve a borrador)."""
+    """POST /api/aprobacion/{id}/rechazar: decide el nivel actual como rechazado ("dislike").
+
+    Un solo dislike NO devuelve a borrador: marca un nivel `rechazado` y deja el siguiente
+    disponible. La pieza vuelve a borrador cuando acumula dos dislikes de dos personas
+    distintas (espejo de los dos OK); lo decide `dominio.colaboracion.estado_cadena`.
+    """
     return await _decidir(request, DECISION_RECHAZADO)
+
+
+async def deshacer(request: Request) -> Response:
+    """POST /api/aprobacion/{id}/deshacer: el revisor RETIRA su decisión (su OK o su dislike).
+
+    Devuelve el nivel que decidió esta sesión a `pendiente` (sin decisor ni sello) y refleja
+    el estado resultante en la pieza. Es lo que da el toggle del feed: un dislike tras un like
+    quita el like (deshacer) y el siguiente dislike lo marca (rechazar). 404 si la pieza no
+    existe; 409 si no tienes ninguna decisión propia que deshacer (o hay una decisión posterior).
+    """
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    cadena = repos.listar_aprobaciones(publicacion_id)
+    decisor_id = (autor_de_peticion(request) or {}).get("id", "") or ""
+    nivel_id, error = colaboracion.deshacer_decision(cadena, decisor_id)
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=409)
+
+    if repos.actualizar_aprobacion(nivel_id, dict(colaboracion.CAMPOS_NIVEL_PENDIENTE)) is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    # Tras retirar la decisión NO hay "último revisor" que mostrar: se limpia (la pieza vuelve
+    # a su estado según el resto de la cadena, normalmente `en_revision`).
+    actualizada = _reflejar_estado_pieza(
+        publicacion_id, {"decisor_id": "", "decisor_nombre": "", "decidido_en": ""}
+    )
+    if actualizada is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
 
 
 def _puede_forzar(request: Request) -> bool:
@@ -376,5 +413,6 @@ RUTAS = [
     Route("/api/aprobacion/{publicacion_id}/aprobar", aprobar, methods=["POST"]),
     Route("/api/aprobacion/{publicacion_id}/forzar", forzar, methods=["POST"]),
     Route("/api/aprobacion/{publicacion_id}/rechazar", rechazar, methods=["POST"]),
+    Route("/api/aprobacion/{publicacion_id}/deshacer", deshacer, methods=["POST"]),
     Route("/api/aprobacion/{publicacion_id}/programar", programar, methods=["POST"]),
 ]

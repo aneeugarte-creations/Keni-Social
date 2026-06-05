@@ -14,8 +14,16 @@ from __future__ import annotations
 from keni_consola.dominio import colaboracion
 
 
-def _nivel(id_: str, nivel: int, decision: str = "pendiente") -> dict[str, object]:
-    return {"id": id_, "nivel": nivel, "decision": decision, "etiqueta": f"N{nivel}"}
+def _nivel(
+    id_: str, nivel: int, decision: str = "pendiente", decisor_id: str = ""
+) -> dict[str, object]:
+    return {
+        "id": id_,
+        "nivel": nivel,
+        "decision": decision,
+        "etiqueta": f"N{nivel}",
+        "decisor_id": decisor_id,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -37,9 +45,34 @@ def test_estado_cadena_aprobado_si_todos_aprobados():
     assert colaboracion.estado_cadena(cadena) == "aprobado"
 
 
-def test_estado_cadena_rechazado_si_algun_nivel_rechazado():
-    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "rechazado")]
+def test_estado_cadena_un_solo_rechazo_sigue_pendiente():
+    # Un dislike NO para la cadena de dos niveles: falta el segundo para rechazar.
+    cadena = [_nivel("a", 1, "rechazado"), _nivel("b", 2, "pendiente")]
+    assert colaboracion.estado_cadena(cadena) == "pendiente"
+
+
+def test_estado_cadena_rechazado_con_dos_dislikes():
+    # Dos dislikes (de dos niveles) alcanzan el umbral: la pieza queda rechazada.
+    cadena = [_nivel("a", 1, "rechazado"), _nivel("b", 2, "rechazado")]
     assert colaboracion.estado_cadena(cadena) == "rechazado"
+
+
+def test_estado_cadena_un_ok_y_un_dislike_es_empate_pendiente():
+    # Un OK y un dislike en la cadena de dos: ni aprobada ni rechazada (lo desatasca un coord).
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "rechazado")]
+    assert colaboracion.estado_cadena(cadena) == "pendiente"
+
+
+def test_estado_cadena_un_solo_nivel_se_rechaza_con_un_dislike():
+    # En una cadena de 1 nivel no hay un segundo dislike que pedir: basta uno (umbral = 1).
+    cadena = [_nivel("a", 1, "rechazado")]
+    assert colaboracion.estado_cadena(cadena) == "rechazado"
+
+
+def test_umbral_rechazo_es_dos_o_el_largo_de_la_cadena():
+    assert colaboracion.umbral_rechazo([_nivel("a", 1), _nivel("b", 2), _nivel("c", 3)]) == 2
+    assert colaboracion.umbral_rechazo([_nivel("a", 1)]) == 1
+    assert colaboracion.umbral_rechazo([]) == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -58,8 +91,22 @@ def test_nivel_actual_none_si_cadena_completa():
     assert colaboracion.nivel_actual(cadena) is None
 
 
-def test_nivel_actual_none_si_hay_rechazo():
+def test_nivel_actual_sigue_tras_un_solo_rechazo():
+    # Un dislike aislado NO para la cadena: el siguiente nivel sigue disponible (segundo dislike).
     cadena = [_nivel("a", 1, "rechazado"), _nivel("b", 2, "pendiente")]
+    actual = colaboracion.nivel_actual(cadena)
+    assert actual is not None and actual["id"] == "b"
+
+
+def test_nivel_actual_none_tras_dos_rechazos():
+    # Alcanzado el umbral de rechazo, la cadena es terminal: no hay más decisiones útiles.
+    cadena = [_nivel("a", 1, "rechazado"), _nivel("b", 2, "rechazado")]
+    assert colaboracion.nivel_actual(cadena) is None
+
+
+def test_nivel_actual_none_en_empate_sin_pendientes():
+    # Un OK + un dislike (sin pendientes): empate, no hay nivel que decidir (lo fuerza un coord).
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "rechazado")]
     assert colaboracion.nivel_actual(cadena) is None
 
 
@@ -176,6 +223,60 @@ def test_decidir_admin_da_un_ok_de_pieza_propia():
         autor_pieza_id="u1",
     )
     assert error is None and campos is not None
+
+
+# --------------------------------------------------------------------------- #
+# deshacer_decision: retirar la decision propia (toggle del feed)             #
+# --------------------------------------------------------------------------- #
+
+
+def test_deshacer_devuelve_el_nivel_propio():
+    """El revisor retira SU OK: devuelve el id de su nivel para resetearlo a pendiente."""
+    cadena = [
+        _nivel("n1", 1, "aprobado", decisor_id="u2"),
+        _nivel("n2", 2, "pendiente"),
+    ]
+    nivel_id, error = colaboracion.deshacer_decision(cadena, "u2")
+    assert error is None and nivel_id == "n1"
+
+
+def test_deshacer_un_dislike_propio():
+    """También se retira un dislike propio (quita tu rechazo, vuelve a pendiente)."""
+    cadena = [
+        _nivel("n1", 1, "rechazado", decisor_id="u2"),
+        _nivel("n2", 2, "pendiente"),
+    ]
+    nivel_id, error = colaboracion.deshacer_decision(cadena, "u2")
+    assert error is None and nivel_id == "n1"
+
+
+def test_deshacer_sin_decision_propia_falla():
+    cadena = [_nivel("n1", 1, "aprobado", decisor_id="otro"), _nivel("n2", 2, "pendiente")]
+    nivel_id, error = colaboracion.deshacer_decision(cadena, "u2")
+    assert nivel_id is None and error is not None
+
+
+def test_deshacer_sin_sesion_falla():
+    cadena = [_nivel("n1", 1, "aprobado", decisor_id="u2")]
+    nivel_id, error = colaboracion.deshacer_decision(cadena, "")
+    assert nivel_id is None and error is not None
+
+
+def test_deshacer_bloqueado_si_hay_decision_posterior():
+    """No se deshace un nivel inferior si ya hay uno superior decidido (dejaría un hueco)."""
+    cadena = [
+        _nivel("n1", 1, "aprobado", decisor_id="u2"),
+        _nivel("n2", 2, "aprobado", decisor_id="u3"),
+    ]
+    nivel_id, error = colaboracion.deshacer_decision(cadena, "u2")
+    assert nivel_id is None and error is not None and "posterior" in error.lower()
+
+
+def test_campos_nivel_pendiente_resetea_decisor_y_sello():
+    campos = colaboracion.CAMPOS_NIVEL_PENDIENTE
+    assert campos["decision"] == "pendiente"
+    assert campos["decisor_id"] == "" and campos["decisor_nombre"] == ""
+    assert campos["decidido_en"] == ""
 
 
 # --------------------------------------------------------------------------- #
