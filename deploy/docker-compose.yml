@@ -17,6 +17,35 @@
 
 name: keni-social
 
+# ──────────────────────────────────────────────────────────────────────────────
+# LIMITES DE RECURSOS / SALUD (hardening, single-VPS Compose — NO Swarm).
+#
+# Esto es un deploy de Docker Compose en UNA sola maquina (Latitude), no Swarm: por
+# eso usamos las claves de Compose `mem_limit` / `cpus` (top-level del servicio), NO
+# `deploy.resources` (que Compose IGNORA fuera de Swarm).
+#
+# Los `mem_limit` de abajo son PUNTOS DE PARTIDA CONSERVADORES, no valores medidos:
+# no conocemos la RAM/CPU exacta del VPS. El objetivo es que un pico de `claude -p`
+# (worker) o un Garage (files) desbocado NO pueda OOM-matar a Postgres y tumbar la
+# caja entera. Ajustalos a la RAM REAL del servidor: la SUMA de los limites debe
+# dejar holgura para el host (kernel, dockerd, SSH, sistema). Los limites de los
+# servicios pesados son OVERRIDABLES por env (.env) sin tocar este fichero:
+#
+#   Servicio   mem_limit (def)   env override            cpus
+#   ────────   ───────────────   ─────────────────────   ─────────
+#   db         1g                DB_MEM_LIMIT            (reserva: sin tope de CPU)
+#   worker     1.5g              WORKER_MEM_LIMIT        WORKER_CPUS (def 1.5)
+#   back       768m              BACK_MEM_LIMIT          1.0
+#   files      768m              FILES_MEM_LIMIT         1.0
+#   daemons    512m              DAEMONS_MEM_LIMIT       0.75
+#   mcp        384m              MCP_MEM_LIMIT           0.5
+#   traefik    192m              —                       0.5
+#   front      128m              —                       0.5
+#
+# Suma de defaults ≈ 5.25 GiB. En un VPS de 8 GiB deja ~2.75 GiB para el host; en uno
+# de 4 GiB hay que BAJAR worker/back/files. Confirmar tamaño del VPS antes de subir.
+# ──────────────────────────────────────────────────────────────────────────────
+
 services:
   traefik:
     # v3 (movil): Traefik v3.1 trae un cliente Docker que negocia API 1.24 y falla
@@ -57,6 +86,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/acme
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    # Ingress liviano; topes conservadores (ver bloque de cabecera).
+    mem_limit: 192m
+    cpus: 0.5
 
   front:
     build:
@@ -75,6 +107,16 @@ services:
       - traefik.http.routers.front.entrypoints=websecure
       - traefik.http.routers.front.tls.certresolver=le
       - traefik.http.services.front.loadbalancer.server.port=80
+    # nginx estatico: huella minima. 127.0.0.1 (no `localhost`): el busybox wget de
+    # alpine intenta ::1 (IPv6) primero y nginx solo escucha IPv4 (ver front/Dockerfile).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 128m
+    cpus: 0.5
 
   back:
     build:
@@ -147,8 +189,19 @@ services:
     networks:
       - edge
       - internal
+    # Arranque en frio ordenado: no levantar el back antes de que Postgres acepte
+    # conexiones (si no, crash-loop al boot). `files` (S3/Garage) tambien sano: el
+    # back consume S3_* al arrancar. `mcp` no expone condicion -> service_started.
     depends_on:
-      - mcp
+      db:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+      mcp:
+        condition: service_started
+    # El HEALTHCHECK lo hereda del Dockerfile (curl :8765/healthz). No lo redefinimos.
+    mem_limit: ${BACK_MEM_LIMIT:-768m}
+    cpus: 1.0
     labels:
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge
@@ -226,8 +279,15 @@ services:
       - keni-data:/data
     networks:
       - internal
+    # Arranque ordenado: Postgres sano (lee la cola/estado) y Garage sano (el
+    # auto-arte importa media a S3). Evita crash-loop en cold start.
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+    mem_limit: ${DAEMONS_MEM_LIMIT:-512m}
+    cpus: 0.75
 
   worker:
     # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): consume la cola (tabla `jobs`
@@ -277,8 +337,31 @@ services:
       - keni-data:/data
     networks:
       - internal
+    # Arranque ordenado: el worker LEE la cola de Postgres y ESCRIBE media en S3/Garage,
+    # ambos deben estar sanos antes de arrancar (evita crash-loop en cold start).
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+    # El worker NO sirve HTTP (solo consume la cola): no hay endpoint que sondear. Como
+    # heartbeat comprobamos que el bucle del worker (`keni_consola.worker`) sigue vivo
+    # escaneando /proc con el python que ya trae la imagen (sin depender de procps/pgrep).
+    # Si el bucle muere, el contenedor sale y `restart: unless-stopped` lo reinicia; este
+    # healthcheck ademas lo marca `unhealthy` para visibilidad/monitorizacion.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import os,glob,sys;
+          sys.exit(0 if any('keni_consola.worker' in open(p).read().replace(chr(0),' ')
+          for p in glob.glob('/proc/[0-9]*/cmdline')) else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    mem_limit: ${WORKER_MEM_LIMIT:-1536m}
+    cpus: ${WORKER_CPUS:-1.5}
 
   mcp:
     build:
@@ -296,6 +379,19 @@ services:
     #   - ./config:/config:ro   # monta aqui el config.toml real (fuente=real)
     networks:
       - internal
+    # El endpoint /mcp (streamable-http) no responde 200 a un GET simple; comprobamos
+    # que el puerto 8000 acepta conexiones con el python que ya trae la imagen (mismo
+    # criterio que el HEALTHCHECK del Dockerfile, explicitado aqui).
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import socket; socket.create_connection(('127.0.0.1',8000),2)\" || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    mem_limit: ${MCP_MEM_LIMIT:-384m}
+    cpus: 0.5
     # INTERNO por defecto: el endpoint /mcp NO lleva auth propia. Para exponerlo a
     # clientes Claude del equipo, añade un router Traefik con un middleware bearer/
     # basicauth y un subdominio (p.ej. mcp.kenitech.io). Ver README.
@@ -303,6 +399,18 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    # Tuning conservador. La app abre MUCHAS conexiones cortas (back + daemons + worker
+    # escalable); el techo por defecto de Postgres (max_connections=100) se queda corto y
+    # da "too many clients". Subimos a 200 y damos un shared_buffers modesto acorde al
+    # mem_limit de 1g (regla ~25% de la RAM del contenedor). Si subes DB_MEM_LIMIT, puedes
+    # subir shared_buffers en proporcion. max_connections altas consumen mas RAM: si bajas
+    # la RAM del VPS, baja tambien este numero.
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -323,6 +431,10 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    # Postgres es el corazon del stack: le reservamos holgura de RAM y NO le ponemos tope
+    # de CPU (no queremos throttlearlo). El mem_limit es un suelo defensivo para que un pico
+    # de otro servicio no lo OOM-mate; subelo si el VPS tiene RAM de sobra.
+    mem_limit: ${DB_MEM_LIMIT:-1g}
     # Sin `ports`: NO se publica 5432 al host (evita choque con learn-postgres y
     # no se expone a la red). Solo el back lo alcanza por la red interna.
 
@@ -338,6 +450,18 @@ services:
       - garage-data:/var/lib/garage/data
     networks:
       - internal
+    # La imagen de Garage es minima (sin shell, ni curl/wget, ni python): no podemos usar
+    # CMD-SHELL. Usamos su PROPIO binario `/garage status` (forma exec, sin shell), que se
+    # conecta por RPC al daemon local leyendo /etc/garage.toml y sale !=0 si el nodo no
+    # responde. start_period holgado por el arranque del motor LMDB.
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    mem_limit: ${FILES_MEM_LIMIT:-768m}
+    cpus: 1.0
     # Bootstrap de una vez (layout + bucket + clave): ver README. Sin `ports`:
     # interno; el back habla S3 por http://files:3900.
 
