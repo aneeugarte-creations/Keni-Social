@@ -168,11 +168,28 @@ def sembrar_lineas() -> int:
 _PRIORIDAD_CATEGORIA: dict[str, int] = {
     "deportes": 3,
     "mx": 2,
+    "regional": 2,
     "internacional": 2,
+    "negocios": 1,
     "tendencias": 2,
     "ciencia-tech": 1,
     "gaming": 1,
 }
+
+# Subset por DEFECTO que se activa en una instalación nueva (auto-seed). El catálogo completo
+# (cientos de presets) se activa a mano desde la UI; aquí solo sembramos un subconjunto sensato
+# por marca para que el motor de ingesta arranque con cobertura útil SIN ruido:
+#   - UnoTV (noticias): MX + regional + internacional + ciencia-tech + tendencias.
+#   - Claro Sports (deporte): deportes (todas las competiciones) + algo de internacional.
+#   - Nación Gamer (gaming/tech): gaming + ciencia-tech.
+# El ruteo es por `marca_sugerida` del preset y su `categoria`. Un preset sin marca_sugerida
+# (p.ej. plantillas) no entra. Cada marca declara las categorías que le interesan.
+_CATEGORIAS_SEED_POR_MARCA: dict[str, set[str]] = {
+    "unotv": {"mx", "regional", "internacional", "negocios", "ciencia-tech", "tendencias"},
+    "claro-sports": {"deportes", "internacional"},
+    "nacion-gamer": {"gaming", "ciencia-tech"},
+}
+
 
 # Las PLANTILLAS (con `{variable}` sin sustituir, p.ej. Google News búsqueda, GDELT, YouTube,
 # Reddit personalizado) NO se activan en el auto-seed: su URL no es un feed real hasta que el
@@ -182,14 +199,34 @@ def _es_plantilla(preset: dict) -> bool:
     return "[PLANTILLA]" in (preset.get("nombre") or "")
 
 
+def _preset_va_en_seed(preset: dict) -> bool:
+    """True si el preset debe activarse en el auto-seed por defecto.
+
+    Función PURA (sin red ni BD), reutilizable en tests. Un preset entra si:
+      - NO es plantilla (su URL es un feed real, sondeable directamente), y
+      - su `marca_sugerida` tiene categorías de interés declaradas, y
+      - su `categoria` está entre las de interés de esa marca.
+    """
+    if _es_plantilla(preset):
+        return False
+    marca = (preset.get("marca_sugerida") or "").strip()
+    categoria = (preset.get("categoria") or "").strip()
+    cats_marca = _CATEGORIAS_SEED_POR_MARCA.get(marca)
+    if not cats_marca:
+        return False
+    return categoria in cats_marca
+
+
 def sembrar_fuentes_ingesta() -> int:
     """Activa los presets de feeds como `fuentes_rss` SI el catálogo está vacío (idempotente).
 
     Garantiza cobertura inicial real para que el motor de ingesta no arranque vacío. Solo
     siembra cuando NO hay ninguna `fuentes_rss` (no pisa un catálogo que el equipo ya curó).
     Idempotente por URL: omite cualquier preset cuya URL ya exista. Salta las PLANTILLAS (URL
-    con variable). Fija `categoria`/`marca_sugerida`/`prioridad` para la planificación. La Ola C
-    amplía a cientos verificados; aquí solo el mínimo de cobertura. Best-effort por preset.
+    con variable) y los presets fuera del subset por defecto (`_preset_va_en_seed`): el catálogo
+    completo (cientos de presets verificados) se activa a mano desde la UI; aquí sembramos un
+    subconjunto sensato por marca para arrancar con cobertura útil sin ruido. Fija
+    `categoria`/`marca_sugerida`/`prioridad` para la planificación. Best-effort por preset.
     """
     try:
         if repos.contar_fuentes_rss() > 0:
@@ -209,7 +246,7 @@ def sembrar_fuentes_ingesta() -> int:
     creadas = 0
     for preset in fuentes_presets.listar_presets():
         url = (preset.get("url") or "").strip()
-        if not url or url in existentes or _es_plantilla(preset):
+        if not url or url in existentes or not _preset_va_en_seed(preset):
             continue
         categoria = preset.get("categoria") or ""
         try:
