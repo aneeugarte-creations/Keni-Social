@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { GuardTurnos } from "@/components/layout/GuardTurnos";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
+import Error404 from "@/pages/Error404";
 import { Loader2 } from "lucide-react";
 
 // Carga diferida por ruta (code-splitting): cada pagina viaja en su propio chunk
@@ -317,8 +318,10 @@ export const router = createBrowserRouter([
       { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },
       { path: "carpetas", element: <Navigate to="/datos/actividad" replace /> },
 
-      // Cualquier otra ruta: de vuelta a la home (el feed del equipo).
-      { path: "*", element: <Navigate to="/operacion/feed" replace /> },
+      // Cualquier otra ruta (URL desconocida, no cubierta por las redirecciones
+      // legacy de arriba): página 404 dedicada en vez de rebotar en silencio al
+      // feed, para dejar claro que la dirección no existe.
+      { path: "*", element: <Error404 /> },
     ],
   },
 ]);

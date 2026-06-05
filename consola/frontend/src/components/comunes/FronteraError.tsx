@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2, RefreshCw, RotateCw } from "lucide-react";
+import { AlertTriangle, Home, Loader2, RefreshCw, RotateCw } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -90,12 +90,12 @@ export class FronteraError extends React.Component<Props, Estado> {
           <AlertTriangle className="h-6 w-6 text-destructive" aria-hidden="true" />
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">
-              {chunk ? "Hay una versión nueva de la consola" : "Esta página tuvo un problema"}
+              {chunk ? "Hay una versión nueva de la consola" : "Algo salió mal"}
             </p>
             <p className="max-w-md text-sm text-muted-foreground">
               {chunk
                 ? "Se publicó una actualización mientras tenías la pestaña abierta. Recarga para cargar la versión nueva."
-                : "Algo falló al mostrar esta sección. Puedes reintentar o ir a otra parte de la consola desde el menú."}
+                : "Esta sección tuvo un problema al mostrarse. Puedes reintentar, recargar la consola o volver al feed del equipo."}
             </p>
           </div>
           {chunk ? (
@@ -104,13 +104,31 @@ export class FronteraError extends React.Component<Props, Estado> {
               Recargar la app
             </Button>
           ) : (
-            <Button
-              variant="outline"
-              onClick={() => this.setState({ error: null, recargando: false })}
-            >
-              <RefreshCw className="h-4 w-4" />
-              Reintentar
-            </Button>
+            // Crash de render (no chunk): tres salidas. "Reintentar" remonta los
+            // hijos in-place (sirve si el fallo era transitorio); "Recargar" hace
+            // una recarga completa (limpia todo el estado del SPA); "Volver al
+            // feed" lleva a la home. Usamos un <a> normal (no react-router) porque
+            // la frontera está fuera del Router en main.tsx: una navegación dura a
+            // la home también limpia el estado de error.
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => this.setState({ error: null, recargando: false })}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Reintentar
+              </Button>
+              <Button variant="outline" onClick={() => window.location.reload()}>
+                <RotateCw className="h-4 w-4" />
+                Recargar
+              </Button>
+              <Button asChild>
+                <a href="/operacion/feed">
+                  <Home className="h-4 w-4" />
+                  Volver al feed
+                </a>
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

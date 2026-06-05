@@ -58,8 +58,13 @@ describe("FronteraError", () => {
         <Explota mensaje="Cannot read properties of undefined (reading 'x')" />
       </FronteraError>,
     );
-    expect(screen.getByText("Esta página tuvo un problema")).toBeInTheDocument();
+    expect(screen.getByText("Algo salió mal")).toBeInTheDocument();
+    // El fallback humano ofrece tres salidas: reintentar (remonta), recargar
+    // (recarga dura) y volver al feed (enlace a la home). Ninguna recarga sola.
     expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^recargar$/i })).toBeInTheDocument();
+    const volver = screen.getByRole("link", { name: /volver al feed/i });
+    expect(volver).toHaveAttribute("href", "/operacion/feed");
     expect(reload).not.toHaveBeenCalled();
     espia.mockRestore();
   });
