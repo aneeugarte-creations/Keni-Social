@@ -11,7 +11,7 @@ Tres capacidades, todas reutilizando la infra existente (sin red en tests):
                                 (Pillow, sin coste: recortar/redimensionar/comprimir/
                                 extender/placa). Patron identico a `api/verificaciones`.
   - EXPANDIR (outpainting IA)-> motor `motores/estudio_imagen/expandir.py` por subproceso,
-                                con la clave del proveedor inyectada via `_entorno_skill`.
+                                con la clave del proveedor inyectada via `_entorno_generacion`.
 
 SEGURIDAD: sin shell (argv como lista); la imagen de entrada se materializa en un
 temporal que se borra al terminar; los nombres en el almacen los genera el servidor
@@ -294,7 +294,7 @@ def expandir(
 ) -> dict[str, Any]:
     """Outpainting GENERATIVO fiel (el sujeto no se toca) a un formato -> resultado uniforme.
 
-    Requiere proveedor configurado: la clave viaja al subproceso via `_entorno_skill`.
+    Requiere proveedor configurado: la clave viaja al subproceso via `_entorno_generacion`.
     """
     if not imagen:
         raise EstudioError("Falta la imagen de entrada para expandir.")
@@ -311,7 +311,7 @@ def expandir(
             cmd += ["--strength", str(strength)]
         if lado and lado != "auto":
             cmd += ["--lado", lado]
-        info = _correr_motor(cmd, timeout=_TIMEOUT_EXPANDIR_S, env=generaciones._entorno_skill())
+        info = _correr_motor(cmd, timeout=_TIMEOUT_EXPANDIR_S, env=generaciones._entorno_generacion())
         return _resultado(_importar_salidas(info), info)
 
 
@@ -320,7 +320,7 @@ def retocar(imagen: str, instruccion: str, *, strength: float | None = None) -> 
 
     A diferencia de `expandir` (outpainting fiel: solo rellena una banda), `retocar` reinterpreta
     TODA la imagen segun la instruccion. Es generativo (coste + timeout como expandir); requiere
-    proveedor configurado (la clave viaja al subproceso via `_entorno_skill`).
+    proveedor configurado (la clave viaja al subproceso via `_entorno_generacion`).
     """
     if not imagen:
         raise EstudioError("Falta la imagen de entrada para retocar.")
@@ -337,7 +337,7 @@ def retocar(imagen: str, instruccion: str, *, strength: float | None = None) -> 
         ]
         if strength is not None:
             cmd += ["--strength", str(strength)]
-        info = _correr_motor(cmd, timeout=_TIMEOUT_RETOCAR_S, env=generaciones._entorno_skill())
+        info = _correr_motor(cmd, timeout=_TIMEOUT_RETOCAR_S, env=generaciones._entorno_generacion())
         return _resultado(_importar_salidas(info), info)
 
 

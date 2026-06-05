@@ -130,8 +130,8 @@ def test_delega_en_db_editorial_reutilizable(entorno):
     assert db.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
 
 
-def test_historial_skill_por_repos(entorno):
-    hid = repos.registrar_historial_skill("copy-desde-nota", "unotv", "RES", titulo="T")
-    leido = ficheros.obtener_historial_skill(hid)
+def test_historial_prompt_por_repos(entorno):
+    hid = repos.registrar_historial_prompt("copy-desde-nota", "unotv", "RES", titulo="T")
+    leido = ficheros.obtener_historial_prompt(hid)
     assert leido is not None
-    assert leido["skill"] == "copy-desde-nota"
+    assert leido["prompt"] == "copy-desde-nota"

@@ -8,8 +8,8 @@ y serializa.
 
 Dominio de la consola: la consola lee y publica metricas/contenido; NO transcribe
 clips localmente. Por eso se descartan los chequeos de la cadena clip-a-copy
-(`whisper-cli`, `ffmpeg`, modelo de whisper): son herramientas locales de la skill
-de transcripcion, no de la consola, y verlos en rojo en la consola desorientaba
+(`whisper-cli`, `ffmpeg`, modelo de whisper): son herramientas locales de la
+transcripcion, no de la consola, y verlos en rojo en la consola desorientaba
 (el indicador salia ambar/rojo por algo ajeno a su dominio). El `doctor` sigue
 informando de todo para la CLI; aqui solo se muestra lo que la consola gobierna.
 

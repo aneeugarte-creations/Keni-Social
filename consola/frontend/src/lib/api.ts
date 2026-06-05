@@ -754,7 +754,7 @@ export const api = {
   // Guardar una entrada del historial como publicaciones (borradores). El listado/detalle
   // del historial ya no tiene página propia; este "guardar" lo usa ResultadoDocumento.
   guardarHistorial: (id: string, cuerpo: CuerpoGuardarHistorial = {}) =>
-    peticion<RespuestaPublicaciones>(`/skills/historial/${encodeURIComponent(id)}/guardar`, {
+    peticion<RespuestaPublicaciones>(`/prompts/historial/${encodeURIComponent(id)}/guardar`, {
       metodo: "POST",
       json: cuerpo,
     }),

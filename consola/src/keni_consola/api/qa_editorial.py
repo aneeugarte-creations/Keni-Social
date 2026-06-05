@@ -1,7 +1,7 @@
 """API QA editorial: revisa el copy YA escrito por el community y devuelve un INFORME.
 
-Ficha F3 (issue #143). NUEVO MODO de la verificacion editorial: hoy las skills de copy
-solo se auto-verifican lo que ELLAS generan; aqui aplicamos esa misma capacidad a TEXTO
+Ficha F3 (issue #143). NUEVO MODO de la verificacion editorial: hoy los prompts de copy
+solo se auto-verifican lo que ELLOS generan; aqui aplicamos esa misma capacidad a TEXTO
 AJENO (el copy que escribio el community manager) y devolvemos un veredicto 🟢/🟡/🔴 con
 los hallazgos clasificados (ortografia / dato / legal / voz), cada uno con su correccion
 SUGERIDA.
@@ -11,17 +11,17 @@ un INFORME; puede OFRECER una correccion, pero NO la aplica ni reescribe el copy
 publica. Honestidad: un dato que no se puede comprobar se marca como "no verificable", no se
 inventa.
 
-  - `GET  /api/qa-editorial`          -> marcas + plataformas + si la skill esta instalada.
+  - `GET  /api/qa-editorial`          -> marcas + plataformas + si el prompt esta instalado.
   - `POST /api/qa-editorial/revisar`  (JSON `{marca, texto, plataforma?, contexto?}`) ->
     `{generacion}` (estado "ejecutando"); el frontend SONDEA `GET /api/generaciones/{id}` y,
     al completar, recoge `resultado = {informe: <reporte>}`.
 
-Reutiliza la infra de generaciones en background (mismo sondeo que copy/verificacion) y el
-catalogo de skills de archivos (la skill `qa-editorial` con su contexto editorial versionado).
-El POST-PROCESADO parsea el bloque ```json de hallazgos que emite la skill en un reporte
+Reutiliza la infra de generaciones en background (mismo sondeo que copy/verificacion) y la
+Biblioteca de Prompts (el prompt `qa-editorial` con su contexto editorial versionado).
+El POST-PROCESADO parsea el bloque ```json de hallazgos que emite el prompt en un reporte
 estructurado para la UI; cae con elegancia a un informe de solo-texto si no hay JSON valido.
 
-SEGURIDAD: marca∈catalogo unico; skill∈catalogo de archivos; el texto viaja como argumento
+SEGURIDAD: marca∈catalogo unico; prompt∈Biblioteca; el texto viaja como argumento
 de subprocess (sin shell). Errores en espanol, sin tracebacks.
 """
 
@@ -40,7 +40,7 @@ from ..seguridad import autor_de_peticion
 
 # Prompt base (Biblioteca) que hace el QA + etiqueta de origen del historial.
 PROMPT_ID = "prompt/qa-editorial"
-ORIGEN_HISTORIAL = dom_qa.SKILL_ID
+ORIGEN_HISTORIAL = dom_qa.PROMPT_ID
 
 # Parseo del informe + post-procesado viven AHORA en `dominio.qa_editorial` (para que el
 # worker los reconstruya sin importar de `api/`, #130 Fase 2). Se reexportan aqui por compat
@@ -53,7 +53,7 @@ _GRAVEDADES = dom_qa._GRAVEDADES
 _MAX_HALLAZGOS = dom_qa._MAX_HALLAZGOS
 
 # Plataformas que se pueden indicar (para validar el limite de caracteres). El value es la
-# etiqueta que entiende la skill / `plataformas.md`; "" = no validar ningun limite.
+# etiqueta que entiende el prompt / `plataformas.md`; "" = no validar ningun limite.
 PLATAFORMAS: tuple[str, ...] = (
     "X / Twitter",
     "Instagram",
@@ -69,16 +69,16 @@ def _marcas_lista() -> list[dict[str, str]]:
 
 
 async def opciones(request: Request) -> Response:
-    """`GET /api/qa-editorial` -> `{marcas, plataformas, skill_disponible}` (para el form).
+    """`GET /api/qa-editorial` -> `{marcas, plataformas, prompt_disponible}` (para el form).
 
-    `skill_disponible` se conserva por compat del frontend: el prompt base viaja en la semilla
+    `prompt_disponible` indica si el prompt base está instalado: viaja en la semilla
     del paquete, así que siempre está disponible (salvo borrado manual del store).
     """
     return JSONResponse(
         {
             "marcas": _marcas_lista(),
             "plataformas": list(PLATAFORMAS),
-            "skill_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
+            "prompt_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
         }
     )
 
@@ -87,7 +87,7 @@ async def revisar(request: Request) -> Response:
     """`POST /api/qa-editorial/revisar` -> lanza el QA EN SEGUNDO PLANO -> `{generacion}`.
 
     Cuerpo JSON: `{marca, texto, plataforma?, contexto?}`. Valida marca∈catalogo, que `texto`
-    no este vacio ni sea gigante, y que la skill `qa-editorial` exista. Renderiza la invocacion
+    no este vacio ni sea gigante, y que el prompt `qa-editorial` exista. Renderiza la invocacion
     y lanza el trabajo con un post-procesado propio (parsea el informe). NO bloquea: el frontend
     sondea `GET /api/generaciones/{id}` y recoge `resultado.informe` al completarse.
     """

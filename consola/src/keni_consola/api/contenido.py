@@ -748,14 +748,14 @@ async def previsualizar(request: Request) -> Response:
 async def asistente_ia(request: Request) -> Response:
     """POST /api/contenido/{id}/asistente: lanza el asistente IA sobre un contenido.
 
-    Cuerpo JSON `{modo, redes?}` (`modo` ∈ generar|variantes|resumir). Reutiliza la skill
+    Cuerpo JSON `{modo, redes?}` (`modo` ∈ generar|variantes|resumir). Reutiliza el prompt
     de copy y la pipeline de generacion: arma el brief del contenido (titulo+descripcion+
     notas), lanza un trabajo en segundo plano y responde `{generacion}` (estado
     "ejecutando"). El frontend sondea `GET /api/generaciones/{id}` y, al completarse, lee
     `resultado.piezas` para rellenar el `copy` de cada fila `contenido_plataforma`.
 
-    Requiere que el contenido tenga MARCA (la voz de marca es el insumo de la skill) y al
-    menos una red CANONICA en sus plataformas (el canal "web" no entra en las skills de
+    Requiere que el contenido tenga MARCA (la voz de marca es el insumo del prompt) y al
+    menos una red CANONICA en sus plataformas (el canal "web" no entra en los prompts de
     copy). Si faltan, responde 400 con un mensaje en espanol.
     """
     contenido_id = request.path_params["contenido_id"]

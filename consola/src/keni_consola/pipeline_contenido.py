@@ -761,7 +761,7 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
 def qa_lexico(publicacion: dict[str, Any]) -> dict[str, Any]:
     """Veredicto léxico de UN borrador (PURO, testeable): `{verdicto, observaciones:[..]}`.
 
-    Comprobaciones DETERMINISTAS y baratas (no editorial; el gancho a la skill `qa-editorial`
+    Comprobaciones DETERMINISTAS y baratas (no editorial; el gancho al prompt `qa-editorial`
     real es un TODO):
       - copy no vacío,
       - longitud del copy <= límite duro de la red (`redes`), cuando la red tiene tope.

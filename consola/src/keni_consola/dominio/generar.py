@@ -298,7 +298,7 @@ def lanzar_copy(
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
     clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
     procesar_spec = jobspec.construir_copy(
-        skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
+        prompt_id=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
         contenido_id=contenido_id or "",
@@ -311,6 +311,6 @@ def lanzar_copy(
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
         # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/veredicto; el usuario no ve la salida
-        # cruda) y la skill auto-verifica: puede necesitar la web para corroborar datos. No se
+        # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
         # veta la web por-callsite; queda la veta global `Bash Write Edit`.
     )

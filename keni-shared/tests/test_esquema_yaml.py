@@ -48,14 +48,14 @@ def test_migrar_estampa_version_cuando_falta():
 
 
 def test_migrar_version_no_entera_se_trata_como_cero():
-    migrado = migrar("skill", {"version": "no-es-int", "nombre": "X"})
-    assert migrado["version"] == VERSIONES["skill"]
+    migrado = migrar("prompt", {"version": "no-es-int", "nombre": "X"})
+    assert migrado["version"] == VERSIONES["prompt"]
 
 
 def test_migrar_version_bool_no_cuenta_como_int():
     # True es un int en Python; aqui NO debe contar como una version valida.
-    migrado = migrar("skill", {"version": True, "nombre": "X"})
-    assert migrado["version"] == VERSIONES["skill"]
+    migrado = migrar("prompt", {"version": True, "nombre": "X"})
+    assert migrado["version"] == VERSIONES["prompt"]
 
 
 def test_migrar_es_idempotente():
@@ -114,7 +114,7 @@ def test_todos_los_tipos_en_v1():
     assert all(esquema_yaml.MIGRACIONES[t] == [] for t in VERSIONES)
     esperados = {
         "publicacion", "plantilla", "fuente_rss", "grupo_hashtags",
-        "historial_skill", "marca", "franjas", "rss_vistos", "run",
-        "agente", "generacion", "skill",
+        "historial_prompt", "marca", "franjas", "rss_vistos", "run",
+        "agente", "generacion", "prompt",
     }
     assert set(VERSIONES) == esperados

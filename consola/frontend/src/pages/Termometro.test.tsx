@@ -31,7 +31,7 @@ function sesionValor(): ValorSesion {
 
 const PAYLOAD_BASE = {
   config: { numero: 8, regiones: "", hora: "07:00", marca: "" },
-  skill_disponible: true,
+  prompt_disponible: true,
   marcas: [
     { id: "unotv", nombre: "UnoTV" },
     { id: "claro-sports", nombre: "Claro Sports" },
@@ -178,7 +178,7 @@ describe("Termometro", () => {
   });
 
   it("avisa cuando falta el prompt base en la Biblioteca", async () => {
-    stubFetch({ ...PAYLOAD_BASE, skill_disponible: false });
+    stubFetch({ ...PAYLOAD_BASE, prompt_disponible: false });
     renderConProviders(<Termometro />);
 
     expect(await screen.findByText(/falta el prompt base del termómetro/i)).toBeInTheDocument();

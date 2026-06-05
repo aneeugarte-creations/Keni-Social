@@ -2,13 +2,13 @@
 
 TODO OFFLINE: NUNCA se llama a `claude` real. `parsear_resultado_json` es una funcion
 PURA (se prueba con fixtures del JSON que devuelve `claude -p ... --output-format json`);
-los endpoints corren con `skills._runner` parcheado a un runner que devuelve `(texto,
+los endpoints corren con `generaciones._runner` parcheado a un runner que devuelve `(texto,
 MetricasRun)`.
 
 Fixtures de stdout cubiertos:
   - exito con `modelUsage` (tokens preferentes por modelo) + `usage` (cache/fallback)
   - exito SIN `modelUsage` (fallback a `usage`)
-  - error de presupuesto (`subtype == "error_max_budget"`) -> SkillError en espanol
+  - error de presupuesto (`subtype == "error_max_budget"`) -> GeneracionError en espanol
   - stdout NO-JSON -> se trata como texto y `metricas is None`
 """
 
@@ -19,7 +19,7 @@ import json
 import pytest
 
 from keni_consola import agentes
-from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
+from keni_consola.dominio import stream
 
 from .conftest import _cliente, lanzador_generacion_completa
 
@@ -97,7 +97,7 @@ _STDOUT_NO_JSON = "✅ Copy listo.\n\n## X\nUn texto plano, no es JSON."
 
 
 def test_parsear_exito_con_modelusage_suma_tokens_por_modelo():
-    texto, m = skills.parsear_resultado_json(_JSON_EXITO_MODELUSAGE)
+    texto, m = stream.parsear_resultado_json(_JSON_EXITO_MODELUSAGE)
     assert texto == "Copy generado por el asistente."
     assert m is not None
     # tokens preferentes de modelUsage: 100+30 in, 40+10 out
@@ -115,7 +115,7 @@ def test_parsear_exito_con_modelusage_suma_tokens_por_modelo():
 
 
 def test_parsear_exito_fallback_a_usage_sin_modelusage():
-    texto, m = skills.parsear_resultado_json(_JSON_EXITO_SOLO_USAGE)
+    texto, m = stream.parsear_resultado_json(_JSON_EXITO_SOLO_USAGE)
     assert texto == "Copy con fallback a usage."
     assert m is not None
     assert m.tokens_in == 77
@@ -125,20 +125,20 @@ def test_parsear_exito_fallback_a_usage_sin_modelusage():
     assert m.modelo == "claude-sonnet-4-6"
 
 
-def test_parsear_error_presupuesto_lanza_skillerror_en_espanol():
-    with pytest.raises(skills.SkillError) as exc:
-        skills.parsear_resultado_json(_JSON_ERROR_PRESUPUESTO)
+def test_parsear_error_presupuesto_lanza_generacionerror_en_espanol():
+    with pytest.raises(stream.GeneracionError) as exc:
+        stream.parsear_resultado_json(_JSON_ERROR_PRESUPUESTO)
     assert "presupuesto" in str(exc.value).lower()
 
 
-def test_parsear_error_generico_lanza_skillerror():
-    with pytest.raises(skills.SkillError) as exc:
-        skills.parsear_resultado_json(_JSON_ERROR_GENERICO)
+def test_parsear_error_generico_lanza_generacionerror():
+    with pytest.raises(stream.GeneracionError) as exc:
+        stream.parsear_resultado_json(_JSON_ERROR_GENERICO)
     assert "error" in str(exc.value).lower()
 
 
 def test_parsear_stdout_no_json_devuelve_texto_y_metricas_none():
-    texto, m = skills.parsear_resultado_json(_STDOUT_NO_JSON)
+    texto, m = stream.parsear_resultado_json(_STDOUT_NO_JSON)
     assert texto == _STDOUT_NO_JSON
     assert m is None
 
@@ -146,13 +146,13 @@ def test_parsear_stdout_no_json_devuelve_texto_y_metricas_none():
 def test_parsear_json_que_no_es_objeto_result_es_texto():
     # JSON valido pero NO el objeto result esperado: se trata como texto plano.
     crudo = '{"type": "system", "foo": 1}'
-    texto, m = skills.parsear_resultado_json(crudo)
+    texto, m = stream.parsear_resultado_json(crudo)
     assert texto == crudo
     assert m is None
 
 
 def test_parsear_vacio_devuelve_texto_vacio_sin_metricas():
-    texto, m = skills.parsear_resultado_json("")
+    texto, m = stream.parsear_resultado_json("")
     assert texto == ""
     assert m is None
 
@@ -164,16 +164,16 @@ def test_parsear_vacio_devuelve_texto_vacio_sin_metricas():
 
 def test_arg_presupuesto_valido(monkeypatch):
     monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "0.50")
-    assert skills.arg_presupuesto() == ["--max-budget-usd", "0.5"]
+    assert stream.arg_presupuesto() == ["--max-budget-usd", "0.5"]
 
 
 def test_arg_presupuesto_invalido_o_ausente_se_ignora(monkeypatch):
     monkeypatch.delenv("KENI_CLAUDE_MAX_USD", raising=False)
-    assert skills.arg_presupuesto() == []
+    assert stream.arg_presupuesto() == []
     monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "no-numero")
-    assert skills.arg_presupuesto() == []
+    assert stream.arg_presupuesto() == []
     monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "0")
-    assert skills.arg_presupuesto() == []
+    assert stream.arg_presupuesto() == []
 
 
 # --------------------------------------------------------------------------- #
@@ -207,17 +207,17 @@ def test_arg_max_turns_invalido_o_ausente_se_ignora(monkeypatch):
 
 
 def test_metricas_a_dict_omite_none_y_extras():
-    m = skills.MetricasRun(
+    m = stream.MetricasRun(
         tokens_in=10, tokens_out=20, cache_read=5, num_turns=2,
         total_cost_usd=0.01, duration_ms=100, session_id="s", modelo="mod",
     )
-    d = skills.metricas_a_dict(m)
+    d = stream.metricas_a_dict(m)
     # cache_read/session_id NO se persisten; las claves None se omiten.
     assert d == {
         "tokens_in": 10, "tokens_out": 20, "num_turns": 2,
         "total_cost_usd": 0.01, "duration_ms": 100, "modelo": "mod",
     }
-    assert skills.metricas_a_dict(None) is None
+    assert stream.metricas_a_dict(None) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -225,18 +225,18 @@ def test_metricas_a_dict_omite_none_y_extras():
 # --------------------------------------------------------------------------- #
 
 
-_METRICAS_DEMO = skills.MetricasRun(
+_METRICAS_DEMO = stream.MetricasRun(
     tokens_in=130, tokens_out=50, num_turns=3, total_cost_usd=0.0123,
     duration_ms=4200, session_id="sess-abc-123", modelo="claude-opus-4-7",
 )
 
 
 # --------------------------------------------------------------------------- #
-# Persistencia: metricas en el historial de skills                            #
+# Persistencia: metricas en el historial de prompts                            #
 # --------------------------------------------------------------------------- #
 
 
-_SALIDA_SKILL = """✅ Copy listo.
+_SALIDA_PROMPT = """✅ Copy listo.
 
 ```json
 {"piezas": [{"red": "x", "texto": "Tweet."}]}
@@ -244,13 +244,13 @@ _SALIDA_SKILL = """✅ Copy listo.
 """
 
 
-def test_historial_skill_guarda_y_expone_metricas(entorno):
+def test_historial_prompt_guarda_y_expone_metricas(entorno):
     """Una generacion de COPY (Biblioteca, prompt salida=piezas) registra historial+metricas.
 
     Tras retirar el motor de skills, el copy se lanza desde la Biblioteca: un prompt con
     `salida: piezas` lanzado con redes usa el post-procesado de COPY (mismo `procesar` que la
-    skill antigua: parsea piezas, registra historial con sus metricas, crea borradores). El
-    historial sigue vivo en `/api/skills/historial` (modulo NEUTRO).
+    prompt antiguo: parsea piezas, registra historial con sus metricas, crea borradores). El
+    historial sigue vivo en `/api/prompts/historial` (modulo NEUTRO).
     """
     from keni_consola import biblioteca
 
@@ -262,7 +262,7 @@ def test_historial_skill_guarda_y_expone_metricas(entorno):
         encoding="utf-8",
     )
 
-    c = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL, _METRICAS_DEMO))
+    c = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT, _METRICAS_DEMO))
     gen = c.post(
         "/api/biblioteca/lanzar",
         json={"prompt_id": prompt.id, "marca": _MARCA, "redes": ["x"],
@@ -271,20 +271,20 @@ def test_historial_skill_guarda_y_expone_metricas(entorno):
     hid = gen["generacion"]["resultado"]["historial_id"]
 
     # Listado expone metricas.
-    lista = c.get("/api/skills/historial").json()["historial"]
+    lista = c.get("/api/prompts/historial").json()["historial"]
     assert lista[0]["metricas"]["tokens_out"] == 50
     # Detalle tambien.
-    detalle = c.get(f"/api/skills/historial/{hid}").json()
+    detalle = c.get(f"/api/prompts/historial/{hid}").json()
     assert detalle["metricas"]["total_cost_usd"] == pytest.approx(0.0123)
     assert detalle["metricas"]["modelo"] == "claude-opus-4-7"
 
 
-def test_historial_skill_sin_metricas_devuelve_none(entorno):
+def test_historial_prompt_sin_metricas_devuelve_none(entorno):
     from keni_consola import repos
 
-    hid = repos.registrar_historial_skill("copy-desde-nota", _MARCA, "texto plano")
+    hid = repos.registrar_historial_prompt("copy-desde-nota", _MARCA, "texto plano")
     c = _cliente()
-    detalle = c.get(f"/api/skills/historial/{hid}").json()
+    detalle = c.get(f"/api/prompts/historial/{hid}").json()
     assert detalle["metricas"] is None
 
 

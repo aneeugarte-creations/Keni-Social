@@ -52,7 +52,7 @@ def test_opciones_por_defecto(cliente):
     assert {"id": "unotv", "nombre": "UnoTV"} in datos["marcas"]
     assert "Instagram" in datos["plataformas"]
     # El prompt de QA viaja en la semilla del paquete: siempre disponible.
-    assert datos["skill_disponible"] is True
+    assert datos["prompt_disponible"] is True
 
 
 # --------------------------------------------------------------------------- #
@@ -82,8 +82,8 @@ def test_revisar_completa_y_parsea_informe(entorno):
     # El bloque json no contamina el informe legible.
     assert "```json" not in informe["informe_texto"]
     # Se registro en el historial (descubrible desde "Generar copy").
-    historial = cli.get("/api/skills/historial").json()["historial"]
-    assert any(h["skill"] == "qa-editorial" for h in historial)
+    historial = cli.get("/api/prompts/historial").json()["historial"]
+    assert any(h["prompt"] == "qa-editorial" for h in historial)
 
 
 def test_revisar_inyecta_texto_plataforma_contexto_en_prompt(entorno):
@@ -139,8 +139,8 @@ def test_revisar_plataforma_desconocida_se_ignora(entorno):
     assert "MySpace" not in capturado["prompt"]
 
 
-def test_revisar_funciona_sin_sembrar_skill(cliente):
-    # El prompt de QA viaja en la semilla del paquete: la revision se arma sin catalogo de skills.
+def test_revisar_funciona_sin_sembrar_prompt(cliente):
+    # El prompt de QA viaja en la semilla del paquete: la revision se arma sin sembrarlo a mano.
     r = cliente.post("/api/qa-editorial/revisar", json={"marca": "unotv", "texto": "algo"})
     assert r.status_code == 200
 

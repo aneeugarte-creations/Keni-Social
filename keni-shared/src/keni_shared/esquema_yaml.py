@@ -41,14 +41,14 @@ VERSIONES: dict[str, int] = {
     "plantilla": 1,
     "fuente_rss": 1,
     "grupo_hashtags": 1,
-    "historial_skill": 1,
+    "historial_prompt": 1,
     "marca": 1,
     "franjas": 1,
     "rss_vistos": 1,
     "run": 1,
     "agente": 1,
     "generacion": 1,
-    "skill": 1,
+    "prompt": 1,
 }
 
 # Registro de migraciones por tipo. `MIGRACIONES[tipo][i]` sube de la version `i+1`

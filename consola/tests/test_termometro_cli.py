@@ -96,12 +96,12 @@ def test_generar_registra_historial(entorno, monkeypatch):
     assert "documento" in res
     assert res["verdicto"] == "listo"
     assert res["historial_id"]
-    entradas = repos.listar_historial_skills()
-    assert any(e["skill"] == "termometro-mundial" for e in entradas)
+    entradas = repos.listar_historial_prompts()
+    assert any(e["prompt"] == "termometro-mundial" for e in entradas)
 
 
-def test_generar_funciona_sin_catalogo_de_skills(entorno):
-    # El prompt del termometro viaja en la semilla del paquete: se arma sin catalogo de skills.
+def test_generar_funciona_sin_sembrar_prompt(entorno):
+    # El prompt del termometro viaja en la semilla del paquete: se arma sin sembrarlo a mano.
     res = termometro_cli.generar_termometro(marca="unotv", noticias="algo", dry_run=True)
     assert res["dry_run"] is True
     assert "Termómetro" in res["prompt"]
@@ -129,7 +129,7 @@ def test_main_genera_desde_archivo(entorno, monkeypatch, capsys, tmp_path):
     rc = termometro_cli.main(["--marca", "unotv", "--noticias-file", str(noticias)])
     assert rc == 0
     assert "Termómetro generado para unotv" in capsys.readouterr().out
-    assert any(e["skill"] == "termometro-mundial" for e in repos.listar_historial_skills())
+    assert any(e["prompt"] == "termometro-mundial" for e in repos.listar_historial_prompts())
 
 
 def test_main_sin_marca_error(entorno, capsys):

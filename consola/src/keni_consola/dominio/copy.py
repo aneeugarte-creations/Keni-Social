@@ -197,7 +197,7 @@ def _persistir_url_fuente(publicaciones: list[dict[str, object]], url_fuente: st
 
 
 def construir_procesar_copy(
-    skill: str,
+    prompt_id: str,
     marca: str,
     *,
     redes_ids: list[str],
@@ -215,7 +215,7 @@ def construir_procesar_copy(
 
     Parsea la salida en piezas/verdicto, registra el historial (con metricas), AUTO-GUARDA
     una publicacion (borrador) por pieza y devuelve `{resultado, historial_id, verdicto,
-    piezas, publicaciones[, imagenes]}`. `skill` es solo la etiqueta de origen del historial.
+    piezas, publicaciones[, imagenes]}`. `prompt_id` es solo la etiqueta de origen del historial.
 
     `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
@@ -229,8 +229,8 @@ def construir_procesar_copy(
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
         parsed = stream.parsear_salida(salida, redes_ids)
         titulo = titulo_dado or stream.derivar_titulo(texto_base or str(parsed["resultado"]))
-        historial_id = repos.registrar_historial_skill(
-            skill, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
+        historial_id = repos.registrar_historial_prompt(
+            prompt_id, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         # El veredicto de la salida manda; si viene vacío, cae al inicial (p. ej. no_verificado).
@@ -262,7 +262,7 @@ def construir_procesar_copy(
 
 
 def construir_procesar_galeria(
-    skill: str,
+    prompt_id: str,
     marca: str,
     *,
     redes_ids: list[str],
@@ -284,8 +284,8 @@ def construir_procesar_galeria(
         parsed = stream.parsear_salida(salida, redes_ids)
         resultado = str(parsed["resultado"])
         titulo = titulo_dado or stream.derivar_titulo(titulo_base or resultado)
-        historial_id = repos.registrar_historial_skill(
-            skill, marca, resultado, piezas=parsed["piezas"], titulo=titulo,
+        historial_id = repos.registrar_historial_prompt(
+            prompt_id, marca, resultado, piezas=parsed["piezas"], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         return {
@@ -301,7 +301,7 @@ def construir_procesar_galeria(
 
 
 def construir_procesar_documento(
-    skill: str,
+    prompt_id: str,
     marca: str,
     *,
     titulo_base: str,
@@ -319,8 +319,8 @@ def construir_procesar_documento(
         doc = stream.quitar_emojis(salida)
         verdicto = stream.derivar_verdicto(salida)
         titulo = titulo_dado or stream.derivar_titulo(titulo_base or doc)
-        historial_id = repos.registrar_historial_skill(
-            skill, marca, doc, piezas=[], titulo=titulo,
+        historial_id = repos.registrar_historial_prompt(
+            prompt_id, marca, doc, piezas=[], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         resultado: dict[str, object] = {

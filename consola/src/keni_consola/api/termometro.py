@@ -3,19 +3,19 @@
 El Termometro mundial es el posteo de GALERIA con las 5-8 noticias internacionales
 mas importantes (una por region). Esta API:
 
-  - `GET  /api/termometro`          -> config guardada + si la skill esta instalada +
+  - `GET  /api/termometro`          -> config guardada + si el prompt esta instalado +
                                        marcas y regiones sugeridas (para el formulario).
   - `PUT  /api/termometro/config`   -> guarda la config (numero 5-8, regiones, hora, marca).
   - `POST /api/termometro/generar`  -> lanza la generacion EN SEGUNDO PLANO reutilizando
-                                       el motor de Skills (`skills.lanzar_generacion_skill`)
-                                       con la skill `termometro-mundial` (salida documento).
+                                       el lanzador NEUTRO con el prompt `termometro-mundial`
+                                       (salida documento).
 
 No bloquea: `generar` responde de inmediato con `{generacion}` (estado "ejecutando")
 y el frontend sondea `GET /api/generaciones/{id}` hasta el estado terminal, igual que
 "Generar copy". El cron de las 7:00 (`keni-termometro`) usa la misma config pero corre
-la skill de forma sincrona (ver `consola.termometro_cli`).
+el prompt de forma sincrona (ver `consola.termometro_cli`).
 
-SEGURIDAD: la marca se valida contra el catalogo (`skills._MARCAS_IDS`); la skill contra
+SEGURIDAD: la marca se valida contra el catalogo (`marcas`); el prompt contra
 el catalogo de archivos; el texto viaja como argumento de subprocess (sin shell). Errores
 en espanol, sin tracebacks.
 """
@@ -39,7 +39,7 @@ from ..seguridad import autor_de_peticion
 PROMPT_ID = "prompt/termometro-mundial"
 ORIGEN_HISTORIAL = "termometro-mundial"
 
-# Regiones sugeridas en la UI (el reparto por defecto de la skill si no se indican otras).
+# Regiones sugeridas en la UI (el reparto por defecto del prompt si no se indican otras).
 REGIONES_SUGERIDAS: tuple[str, ...] = (
     "EEUU",
     "América Latina",
@@ -65,8 +65,8 @@ def _ultimo_resultado() -> dict[str, str] | None:
     Un termómetro nuevo la reemplaza (queda como la más reciente); borrarla del historial la
     elimina. El listado viene recientes-primero, así que basta el primer match.
     """
-    for e in repos.listar_historial_skills():
-        if e.get("skill") == ORIGEN_HISTORIAL:
+    for e in repos.listar_historial_prompts():
+        if e.get("prompt") == ORIGEN_HISTORIAL:
             return {
                 "historial_id": e["id"],
                 "documento": e.get("resultado", "") or "",
@@ -78,9 +78,9 @@ def _ultimo_resultado() -> dict[str, str] | None:
 
 
 async def obtener_config(request: Request) -> Response:
-    """`GET /api/termometro` -> `{config, skill_disponible, marcas, regiones_sugeridas, ultimo}`.
+    """`GET /api/termometro` -> `{config, prompt_disponible, marcas, regiones_sugeridas, ultimo}`.
 
-    `skill_disponible` se conserva por compat del frontend: el prompt base viaja en la
+    `prompt_disponible` indica si el prompt base está instalado: viaja en la
     semilla del paquete, así que siempre está disponible (salvo borrado manual del store).
     `ultimo` es el último termómetro generado (o `null`): la página lo usa como resultado
     PERSISTENTE entre navegaciones, sin depender del estado de cliente.
@@ -88,7 +88,7 @@ async def obtener_config(request: Request) -> Response:
     return JSONResponse(
         {
             "config": termometro.obtener(),
-            "skill_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
+            "prompt_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
             "marcas": _marcas_lista(),
             "regiones_sugeridas": list(REGIONES_SUGERIDAS),
             "ultimo": _ultimo_resultado(),
@@ -109,7 +109,7 @@ async def guardar_config(request: Request) -> Response:
 
 
 def construir_valores(datos: dict[str, object]) -> dict[str, str]:
-    """Extrae los valores de los campos de la skill desde el cuerpo (todo como texto)."""
+    """Extrae los valores de los campos del prompt desde el cuerpo (todo como texto)."""
     valores: dict[str, str] = {}
     for campo in ("noticias", "numero", "regiones", "fecha"):
         valor = datos.get(campo)
@@ -172,7 +172,7 @@ async def generar(request: Request) -> Response:
         sin_emojis=True, redes_ids=redes_ids,
     )
     procesar_spec = jobspec.construir_galeria(
-        skill=ORIGEN_HISTORIAL, marca=marca, redes_ids=redes_ids, titulo_base=titulo,
+        prompt_id=ORIGEN_HISTORIAL, marca=marca, redes_ids=redes_ids, titulo_base=titulo,
         titulo_dado=titulo, autor=autor,
     )
     gen = gen_dom.lanzar(

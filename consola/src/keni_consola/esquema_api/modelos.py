@@ -787,7 +787,7 @@ EtapaIa = Literal[
     "programada",
     "publicada",
 ]
-# Veredicto editorial de una pieza: TEXTO LIBRE. El auto-verificador (skills de copy)
+# Veredicto editorial de una pieza: TEXTO LIBRE. El auto-verificador (prompts de copy)
 # escribe veredictos legibles y matizados ("ok — confirmar marcador con el equipo",
 # "marcar claramente como rumor", "pendiente resultado real del partido"), no un enum
 # cerrado. La UI deriva la insignia (Listo/Revisar/No publicar) de un prefijo normalizado

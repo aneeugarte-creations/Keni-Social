@@ -25,7 +25,7 @@ import pytest
 
 from keni_consola import generaciones, preferencias
 from keni_consola.dominio import runner
-from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
+from keni_consola.dominio import stream
 
 from .conftest import _cliente
 
@@ -209,54 +209,54 @@ def test_argv_max_turns_invalido_o_cero_se_ignora(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_entorno_skill_inyecta_clave_de_imagen_del_almacen(entorno, monkeypatch):
+def test_entorno_generacion_inyecta_clave_de_imagen_del_almacen(entorno, monkeypatch):
     # secretos.toml es la unica fuente; la skill (plugin) la recibe por variable de entorno.
     from keni_consola import secretos
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     secretos.guardar_clave_imagen("openai", "sk-almacen")
-    env = generaciones._entorno_skill()
+    env = generaciones._entorno_generacion()
     assert env["OPENAI_API_KEY"] == "sk-almacen"
 
 
-def test_entorno_skill_mapea_proveedor_a_su_variable(entorno, monkeypatch):
+def test_entorno_generacion_mapea_proveedor_a_su_variable(entorno, monkeypatch):
     from keni_consola import secretos
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     secretos.guardar_clave_imagen("gemini", "g-almacen")
-    env = generaciones._entorno_skill()
+    env = generaciones._entorno_generacion()
     assert env["GEMINI_API_KEY"] == "g-almacen"
     assert "OPENAI_API_KEY" not in env  # no inventa otras variables
 
 
-def test_entorno_skill_mapea_openrouter(entorno, monkeypatch):
+def test_entorno_generacion_mapea_openrouter(entorno, monkeypatch):
     from keni_consola import secretos
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     secretos.guardar_clave_imagen("openrouter", "sk-or-almacen")
-    env = generaciones._entorno_skill()
+    env = generaciones._entorno_generacion()
     assert env["OPENROUTER_API_KEY"] == "sk-or-almacen"
 
 
-def test_entorno_skill_no_pisa_una_variable_ya_puesta(entorno, monkeypatch):
+def test_entorno_generacion_no_pisa_una_variable_ya_puesta(entorno, monkeypatch):
     from keni_consola import secretos
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-del-entorno")
     secretos.guardar_clave_imagen("openai", "sk-almacen")
-    env = generaciones._entorno_skill()
+    env = generaciones._entorno_generacion()
     assert env["OPENAI_API_KEY"] == "sk-del-entorno"  # prioridad de lo ya presente
 
 
-def test_entorno_skill_sin_clave_no_anade_nada(entorno, monkeypatch):
+def test_entorno_generacion_sin_clave_no_anade_nada(entorno, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    env = generaciones._entorno_skill()  # almacen vacio (entorno aislado en tmp)
+    env = generaciones._entorno_generacion()  # almacen vacio (entorno aislado en tmp)
     assert "OPENAI_API_KEY" not in env
     assert "GEMINI_API_KEY" not in env
 
 
-def test_entorno_skill_scrub_secretos_de_infra(entorno, monkeypatch):
+def test_entorno_generacion_scrub_secretos_de_infra(entorno, monkeypatch):
     # Los secretos de INFRA (Postgres/S3/Garage/Metricool) NO deben viajar al subproceso
     # `claude -p`: defensa contra exfiltracion si el modelo es prompt-injectado. PERO el
     # token de Claude y PATH SI deben conservarse (la generacion los necesita).
@@ -268,7 +268,7 @@ def test_entorno_skill_scrub_secretos_de_infra(entorno, monkeypatch):
     monkeypatch.setenv("METRICOOL_TOKEN", "mc-secreto")
     monkeypatch.setenv("MC_USER_ID", "123")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "claude-token")
-    env = generaciones._entorno_skill()
+    env = generaciones._entorno_generacion()
     # Secretos de infra: AUSENTES.
     for fuera in (
         "S3_SECRET_KEY", "S3_ACCESS_KEY", "DATABASE_URL", "POSTGRES_PASSWORD",
@@ -291,7 +291,7 @@ def _se(event: dict) -> str:
 
 
 def test_acumulador_streaming_texto_token_a_token():
-    acc = skills.AcumuladorStream()
+    acc = stream.AcumuladorStream()
     acc.procesar_linea(_se({"type": "message_start", "message": {"model": "claude-haiku-4-5"}}))
     # thinking NO debe acumularse en el texto del copy.
     acc.procesar_linea(_se({"type": "content_block_delta", "index": 0,
@@ -320,24 +320,24 @@ def test_acumulador_fase_avanza_razonando_generando_completado():
     - Tras el primer `text_delta`: generando (escribiendo el copy).
     - Tras el `result`: completado (terminal).
     """
-    acc = skills.AcumuladorStream()
+    acc = stream.AcumuladorStream()
     assert acc.fase() == ""  # aun no arranco
     acc.procesar_linea(_se({"type": "message_start", "message": {}}))
     acc.procesar_linea(_se({"type": "content_block_delta", "index": 0,
                             "delta": {"type": "thinking_delta", "thinking": "pensando..."}}))
-    assert acc.fase() == skills.FASE_RAZONANDO  # thinking NO es texto visible
+    assert acc.fase() == stream.FASE_RAZONANDO  # thinking NO es texto visible
     acc.procesar_linea(_se({"type": "content_block_delta", "index": 1,
                             "delta": {"type": "text_delta", "text": "Hola"}}))
-    assert acc.fase() == skills.FASE_GENERANDO
+    assert acc.fase() == stream.FASE_GENERANDO
     acc.procesar_linea(json.dumps({"type": "result", "subtype": "success", "result": "Hola",
                                    "usage": {"input_tokens": 1, "output_tokens": 1}}))
-    assert acc.fase() == skills.FASE_COMPLETADO
+    assert acc.fase() == stream.FASE_COMPLETADO
 
 
 def test_acumulador_parcial_no_recuenta_turnos_desde_assistant():
     """En modo parcial los turnos los cuenta `message_start`; un `assistant` posterior
     (que el CLI tambien emite) NO debe sumar otro turno."""
-    acc = skills.AcumuladorStream()
+    acc = stream.AcumuladorStream()
     acc.procesar_linea(_se({"type": "message_start", "message": {}}))
     acc.procesar_linea(_se({"type": "content_block_delta", "index": 0,
                             "delta": {"type": "text_delta", "text": "ok"}}))

@@ -23,7 +23,7 @@ from datetime import date
 from .. import config
 
 
-class SkillError(RuntimeError):
+class GeneracionError(RuntimeError):
     """Error de ejecucion con mensaje ya en espanol, apto para mostrar al usuario."""
 
 
@@ -236,7 +236,7 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
         TODO el stdout como texto y se devuelve `(stdout.strip(), None)` (degradacion
         robusta: la generacion de copy nunca debe romperse por un formato inesperado).
       - Si el objeto marca error (`is_error` true o `subtype` distinto de "success"),
-        se lanza `SkillError` en espanol (mensaje especifico si es tope de presupuesto).
+        se lanza `GeneracionError` en espanol (mensaje especifico si es tope de presupuesto).
       - En caso de exito, el texto = campo `result`; las metricas se parsean sumando
         tokens preferentemente de `modelUsage`, con fallback a `usage`.
     """
@@ -253,7 +253,7 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
     es_error = bool(datos.get("is_error")) or (subtype not in (None, "success"))
     if es_error:
         if isinstance(subtype, str) and subtype in _SUBTIPOS_PRESUPUESTO:
-            raise SkillError(
+            raise GeneracionError(
                 "El asistente alcanzó el tope de presupuesto configurado y se detuvo. "
                 "Sube el límite o prueba con una nota más corta."
             )
@@ -261,7 +261,7 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
         detalle = detalle.strip() if isinstance(detalle, str) and detalle.strip() else (
             subtype if isinstance(subtype, str) and subtype else "error desconocido al generar"
         )
-        raise SkillError(f"El asistente terminó con error: {detalle}")
+        raise GeneracionError(f"El asistente terminó con error: {detalle}")
 
     texto = datos.get("result")
     texto = texto.strip() if isinstance(texto, str) else ""
@@ -409,7 +409,7 @@ class AcumuladorStream:
             self.terminado = True
             try:
                 texto, metricas = parsear_resultado_json(crudo)
-            except SkillError as e:
+            except GeneracionError as e:
                 self.error = True
                 self.mensaje_error = str(e)
                 return

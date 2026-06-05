@@ -6,10 +6,10 @@
  * una PORTADA + N SLIDES en miniatura (carrusel/grid de tarjetas), más el veredicto
  * destacado arriba y el detalle editorial (fuentes, auto-verificación) plegable abajo.
  *
- * Es SOLO PRESENTACIÓN: parsea el mismo documento Markdown que produce la skill
+ * Es SOLO PRESENTACIÓN: parsea el mismo documento Markdown que produce el prompt
  * `termometro-mundial` (veredicto → PORTADA → SLIDES → Fuentes → Auto-verificación +
  * bloque ```json con `piezas`). El guardado sigue el MISMO contrato neutro que el resto:
- * `POST /api/skills/historial/{id}/guardar` con `{ redes: [...] }` (un borrador por red).
+ * `POST /api/prompts/historial/{id}/guardar` con `{ redes: [...] }` (un borrador por red).
  * No toca el parser de `piezas` del backend.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -93,7 +93,7 @@ function limpiarTitulo(linea: string): string {
 const RE_DETALLE = /^#{0,6}\s*\**\s*(fuentes?|auto[\s-]?verificaci[óo]n|verificaci[óo]n)\b/i;
 
 /**
- * Parsea el documento Markdown de la skill en veredicto + slides (portada incluida) +
+ * Parsea el documento Markdown del prompt en veredicto + slides (portada incluida) +
  * detalle. Tolerante: si el formato no encaja (modelo se sale del molde), `slides` puede
  * venir vacío y el llamador cae al render Markdown plano. Nunca lanza.
  */
@@ -155,7 +155,7 @@ function parsearTermometro(documento: string): TermometroParseado {
       actual = { numero: "Portada", lineas: [l], esPortada: true };
     } else if (mSlide && l.length > mSlide[0].length) {
       empuja();
-      // Etiqueta del slide tal cual la escribió la skill ("2/8", "3"…), sin la puntuación.
+      // Etiqueta del slide tal cual la escribió el prompt ("2/8", "3"…), sin la puntuación.
       const etiqueta = mSlide[0].replace(/[).:·\-*\s]+$/g, "").replace(/\*\*/g, "").trim();
       actual = { numero: etiqueta || String(slides.length + 1), lineas: [l], esPortada: false };
     } else if (actual) {

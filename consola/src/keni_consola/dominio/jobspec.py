@@ -74,7 +74,7 @@ def _autor_spec(autor: dict[str, str] | None) -> dict[str, str] | None:
 
 def construir_copy(
     *,
-    skill: str,
+    prompt_id: str,
     marca: str,
     redes_ids: list[str],
     titulo_dado: str,
@@ -106,7 +106,7 @@ def construir_copy(
     """
     return {
         "kind": PROC_COPY,
-        "skill": skill,
+        "prompt_id": prompt_id,
         "marca": marca,
         "redes_ids": list(redes_ids),
         "titulo_dado": titulo_dado,
@@ -125,7 +125,7 @@ def construir_copy(
 
 def construir_galeria(
     *,
-    skill: str,
+    prompt_id: str,
     marca: str,
     redes_ids: list[str],
     titulo_base: str,
@@ -135,7 +135,7 @@ def construir_galeria(
     """Spec del post-procesado de una GALERÍA (termómetro): piezas sin auto-borradores."""
     return {
         "kind": PROC_GALERIA,
-        "skill": skill,
+        "prompt_id": prompt_id,
         "marca": marca,
         "redes_ids": list(redes_ids),
         "titulo_base": titulo_base,
@@ -146,17 +146,17 @@ def construir_galeria(
 
 def construir_documento(
     *,
-    skill: str,
+    prompt_id: str,
     marca: str,
     titulo_base: str,
     titulo_dado: str = "",
     con_imagenes: bool = False,
     autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Spec del post-procesado de un DOCUMENTO (skill de salida documento, sin piezas)."""
+    """Spec del post-procesado de un DOCUMENTO (prompt de salida documento, sin piezas)."""
     return {
         "kind": PROC_DOCUMENTO,
-        "skill": skill,
+        "prompt_id": prompt_id,
         "marca": marca,
         "titulo_base": titulo_base,
         "titulo_dado": titulo_dado,
@@ -402,21 +402,21 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
     if kind == PROC_GALERIA:
         return dom_copy.construir_procesar_galeria(
-            p["skill"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
+            p["prompt_id"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
             titulo_base=p.get("titulo_base", ""), titulo_dado=p.get("titulo_dado", ""),
             autor=autor,
         )
 
     if kind == PROC_DOCUMENTO:
         return dom_copy.construir_procesar_documento(
-            p["skill"], p["marca"], titulo_base=p.get("titulo_base", ""),
+            p["prompt_id"], p["marca"], titulo_base=p.get("titulo_base", ""),
             titulo_dado=p.get("titulo_dado", ""), con_imagenes=bool(p.get("con_imagenes")),
             autor=autor,
         )
 
     if kind == PROC_COPY:
         procesar_copy = dom_copy.construir_procesar_copy(
-            p["skill"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
+            p["prompt_id"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
             titulo_dado=p.get("titulo_dado", ""), texto_base=p.get("texto_base", ""),
             con_imagenes=bool(p.get("con_imagenes")), autor=autor,
             contenido_id=p.get("contenido_id", "") or "",

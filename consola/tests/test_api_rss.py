@@ -23,8 +23,8 @@ from .conftest import _cliente, lanzador_generacion_completa
 # IP publica literal: pasa el guard SSRF sin tocar DNS. example.com no se resuelve aqui.
 _URL_OK = "https://93.184.216.34/feed.xml"
 
-# Salida mock de la generacion de skills: ✅ + bloque json con dos piezas (sin red real).
-_SALIDA_SKILL = """✅ Copy listo.
+# Salida mock de la generacion: ✅ + bloque json con dos piezas (sin red real).
+_SALIDA_PROMPT = """✅ Copy listo.
 
 ```json
 {"piezas": [{"red": "x", "texto": "Tweet desde el item."},
@@ -814,13 +814,13 @@ def test_items_actualiza_salud_error(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# POST /api/rss/generar: reutiliza el auto-guardado de Skills (runner mockeado) #
+# POST /api/rss/generar: reutiliza el auto-guardado del post-procesado de copy (runner mock) #
 # --------------------------------------------------------------------------- #
 
 
 def test_generar_autocrea_publicaciones_y_marca_usado(entorno, monkeypatch):
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     f = _fuente(cli, "Diario", marca="unotv")
 
     r = cli.post(
@@ -861,7 +861,7 @@ def test_generar_persiste_url_fuente_canonica(entorno, monkeypatch):
     from keni_consola import repos
 
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     f = _fuente(cli, "Diario", marca="unotv")
 
     r = cli.post(
@@ -891,7 +891,7 @@ def test_generar_sin_enlace_no_persiste_url_fuente(entorno, monkeypatch):
     """Sin enlace http(s), `url_fuente` queda vacía (no rompe la generación)."""
     from keni_consola import repos
 
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     r = cli.post(
         "/api/rss/generar",
         json={"titulo": "Solo titulo", "marca": "unotv", "redes": ["x"]},
@@ -905,7 +905,7 @@ def test_generar_sin_enlace_no_persiste_url_fuente(entorno, monkeypatch):
 
 
 def test_generar_sin_fuente_no_marca_pero_genera(entorno):
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     r = cli.post(
         "/api/rss/generar",
         json={"titulo": "Solo titulo", "marca": "unotv", "redes": ["x"]},
@@ -921,10 +921,10 @@ def test_generar_marca_invalida_400(cliente):
     assert r.status_code == 400
 
 
-def test_generar_skill_invalida_400(cliente):
+def test_generar_prompt_invalido_400(cliente):
     r = cliente.post(
         "/api/rss/generar",
-        json={"titulo": "T", "marca": "unotv", "skill": "skill-pirata", "redes": ["x"]},
+        json={"titulo": "T", "marca": "unotv", "prompt": "prompt-pirata", "redes": ["x"]},
     )
     assert r.status_code == 400
 
@@ -965,7 +965,7 @@ def test_generar_fuente_propia_usa_imagen_original(entorno, monkeypatch):
         return "asset-hosteado.jpg"
 
     monkeypatch.setattr(extraccion_url, "descargar_imagen_a_media", fake_descargar)
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     f = cli.post(
         "/api/rss/fuentes",
         json={"nombre": "Sitio propio", "url": _URL_OK, "marca": "unotv", "propia": True},
@@ -1011,7 +1011,7 @@ def test_generar_fuente_propia_descarga_falla_degrada_a_url(entorno, monkeypatch
         raise extraccion_url.ExtraccionError("La URL no devolvió ninguna imagen.")
 
     monkeypatch.setattr(extraccion_url, "descargar_imagen_a_media", revienta)
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     f = cli.post(
         "/api/rss/fuentes",
         json={"nombre": "Sitio propio", "url": _URL_OK, "marca": "unotv", "propia": True},
@@ -1043,7 +1043,7 @@ def test_generar_fuente_propia_descarga_falla_degrada_a_url(entorno, monkeypatch
 def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):
     """Fuente NO propia + `imagen=<http>` => el gate la descarta: pieza 'ia', sin imagen_fuente."""
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     f = _fuente(cli, "Diario ajeno", marca="unotv")  # propia=False por defecto
 
     r = cli.post(
@@ -1068,7 +1068,7 @@ def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):
 def test_generar_fuente_propia_imagen_no_http_se_ignora(entorno, monkeypatch):
     """Aunque la fuente sea propia, una imagen que NO es http(s) no se reutiliza (gate)."""
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT))
     f = cli.post(
         "/api/rss/fuentes",
         json={"nombre": "Propio", "url": _URL_OK, "marca": "unotv", "propia": True},
@@ -1091,9 +1091,9 @@ def test_generar_fuente_propia_imagen_no_http_se_ignora(entorno, monkeypatch):
     assert p["imagen_fuente"] == ""
 
 
-def test_generar_skill_por_defecto(entorno):
+def test_generar_prompt_por_defecto(entorno):
     capturado = {}
-    base = lanzador_generacion_completa(_SALIDA_SKILL)
+    base = lanzador_generacion_completa(_SALIDA_PROMPT)
 
     def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
         capturado["prompt"] = prompt
@@ -1104,7 +1104,7 @@ def test_generar_skill_por_defecto(entorno):
         "/api/rss/generar", json={"titulo": "T", "resumen": "R", "marca": "unotv", "redes": ["x"]}
     )
     assert r.status_code == 200
-    # skill por defecto: copy-desde-nota (prompt autocontenido) + la nota (titulo + resumen)
+    # prompt por defecto: copy-desde-nota (prompt autocontenido) + la nota (titulo + resumen)
     assert "redactor de redes" in capturado["prompt"]
     assert "T" in capturado["prompt"] and "R" in capturado["prompt"]
 

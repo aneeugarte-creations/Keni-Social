@@ -1,14 +1,12 @@
 """API HISTORIAL de generaciones: listado, detalle y "guardar como publicación".
 
 El historial es el registro DURADERO de las generaciones de copy/documento (lo escribe el
-post-procesado vía `repos.registrar_historial_skill`). Lo consumen TODAS las generaciones
-(copy, termómetro, QA…), no solo la antigua página de skills, por eso vive en su propio
-módulo NEUTRO (al retirar el sistema de skills). Mantiene los paths `/api/skills/historial*`
-para no romper el frontend.
+post-procesado vía `repos.registrar_historial_prompt`). Lo consumen TODAS las generaciones
+(copy, termómetro, QA…), por eso vive en su propio módulo NEUTRO.
 
-  - `GET  /api/skills/historial`               -> listado (metadatos + preview).
-  - `GET  /api/skills/historial/{id}`          -> detalle (resultado completo).
-  - `POST /api/skills/historial/{id}/guardar`  -> crea publicaciones (borradores) desde la
+  - `GET  /api/prompts/historial`               -> listado (metadatos + preview).
+  - `GET  /api/prompts/historial/{id}`          -> detalle (resultado completo).
+  - `POST /api/prompts/historial/{id}/guardar`  -> crea publicaciones (borradores) desde la
                                                   entrada (una por pieza, o una con `red`).
 """
 
@@ -60,13 +58,13 @@ def _preview(resultado: str) -> str:
     return resultado[:_PREVIEW_CHARS].rstrip() + "…"
 
 
-def _nombre(skill: str) -> str:
+def _nombre(prompt_id: str) -> str:
     """Nombre legible de la generación de origen (sin catálogo: prettify del id)."""
-    return (skill or "").replace("-", " ").strip().capitalize() or skill
+    return (prompt_id or "").replace("-", " ").strip().capitalize() or prompt_id
 
 
 async def historial(request: Request) -> Response:
-    """`GET /api/skills/historial` -> listado (metadatos + preview), recientes primero.
+    """`GET /api/prompts/historial` -> listado (metadatos + preview), recientes primero.
 
     Paginado (`?limite=&desplazamiento=`): cada entrada lleva el resultado completo, asi que
     sin tope la respuesta crece sin limite. Por defecto se devuelven las 50 mas recientes
@@ -74,13 +72,13 @@ async def historial(request: Request) -> Response:
     `paginacion:{total, limite, desplazamiento}`.
     """
     limite, desplazamiento = _paginacion(request)
-    entradas = repos.listar_historial_skills(limite=limite, desplazamiento=desplazamiento)
-    total = repos.contar_historial_skills()
+    entradas = repos.listar_historial_prompts(limite=limite, desplazamiento=desplazamiento)
+    total = repos.contar_historial_prompts()
     salida = [
         {
             "id": e["id"],
-            "skill": e["skill"],
-            "skill_nombre": _nombre(e["skill"]),
+            "prompt": e["prompt"],
+            "prompt_nombre": _nombre(e["prompt"]),
             "marca": e["marca"],
             "marca_nombre": _MARCA_NOMBRE.get(e["marca"], e["marca"]),
             "fecha": e["fecha"],
@@ -102,14 +100,14 @@ async def historial(request: Request) -> Response:
 
 
 async def historial_detalle(request: Request) -> Response:
-    """`GET /api/skills/historial/{id}` -> detalle con el resultado completo (404)."""
-    entrada = repos.obtener_historial_skill(request.path_params["historial_id"])
+    """`GET /api/prompts/historial/{id}` -> detalle con el resultado completo (404)."""
+    entrada = repos.obtener_historial_prompt(request.path_params["historial_id"])
     if entrada is None:
         return JSONResponse({"error": "No se encontró ese borrador en el historial."}, status_code=404)
     return JSONResponse(
         {
             "id": entrada["id"],
-            "skill": entrada["skill"],
+            "prompt": entrada["prompt"],
             "marca": entrada["marca"],
             "fecha": entrada["fecha"],
             "titulo": entrada["titulo"],
@@ -153,7 +151,7 @@ def _revertir(ids: list[str]) -> None:
 
 
 async def historial_guardar(request: Request) -> Response:
-    """`POST /api/skills/historial/{id}/guardar` -> crea publicaciones (borradores).
+    """`POST /api/prompts/historial/{id}/guardar` -> crea publicaciones (borradores).
 
     Con piezas: UNA publicación (borrador) por pieza, acotadas a las `redes` pedidas
     (selector multi-red). Sin piezas (entradas antiguas): requiere `red`/`redes` ∈ redes
@@ -164,7 +162,7 @@ async def historial_guardar(request: Request) -> Response:
     ya creadas (no quedan publicaciones rotas) y se devuelve un 500 en español.
     """
     historial_id = request.path_params["historial_id"]
-    entrada = repos.obtener_historial_skill(historial_id)
+    entrada = repos.obtener_historial_prompt(historial_id)
     if entrada is None:
         return JSONResponse({"error": "No se encontró ese borrador en el historial."}, status_code=404)
 
@@ -231,7 +229,7 @@ async def historial_guardar(request: Request) -> Response:
 
 
 RUTAS = [
-    Route("/api/skills/historial", historial, methods=["GET"]),
-    Route("/api/skills/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
-    Route("/api/skills/historial/{historial_id}", historial_detalle, methods=["GET"]),
+    Route("/api/prompts/historial", historial, methods=["GET"]),
+    Route("/api/prompts/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
+    Route("/api/prompts/historial/{historial_id}", historial_detalle, methods=["GET"]),
 ]

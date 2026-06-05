@@ -282,7 +282,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   }
 
   const generando = generar.isPending || ejecutando;
-  const puedeGenerar = datos.skill_disponible && marca !== "" && noticias.trim().length > 0 && !generando;
+  const puedeGenerar = datos.prompt_disponible && marca !== "" && noticias.trim().length > 0 && !generando;
   const resultado = generacion?.resultado;
   const completado = generacion?.estado === "completado" && resultado?.documento !== undefined;
   const nombreMarca = (id: string) => datos.marcas.find((m) => m.id === id)?.nombre ?? id;
@@ -304,7 +304,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!datos.skill_disponible && (
+          {!datos.prompt_disponible && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
               Falta el prompt base del Termómetro en la Biblioteca, así que ahora mismo no se puede
               generar. Restáuralo desde la semilla para volver a habilitarlo.

@@ -11,8 +11,8 @@ CAPACIDADES (RSS v2):
     (`redes_def`) + salud (ultima_actualizacion / ultimo_error / ultimo_conteo).
   - Items: `clave` estable por item (guid/id del feed, fallback al enlace), marcado
     de usado / dedup (`rss_items_vistos`) y filtros del feed aplicados al listar.
-  - Generar: copy DIRECTO desde un item, reutilizando el AUTO-GUARDADO de Skills
-    (`api.skills._responder_generacion`): crea historial + N publicaciones borrador.
+  - Generar: copy DIRECTO desde un item, reutilizando el AUTO-GUARDADO del post-procesado
+    de copy (`dominio.copy`): crea historial + N publicaciones borrador.
 
 SEGURIDAD / VALIDACION:
   - `nombre` y `url` obligatorios al crear una fuente.
@@ -22,7 +22,7 @@ SEGURIDAD / VALIDACION:
     (defensa en profundidad: una IP puede cambiar de resolucion entre el alta y la
     lectura).
   - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`, por su id canonico);
-    `redes_def`/`redes` solo redes canonicas; `skill` solo de la allowlist de Skills.
+    `redes_def`/`redes` solo redes canonicas; `prompt` solo de la allowlist de la Biblioteca.
   - SQL parametrizado en `consola.db`; errores en espanol, sin tracebacks crudos.
 
 DESCARGA Y PARSEO:
@@ -143,7 +143,7 @@ def _parsear_redes_def(crudo: Any) -> list[str]:
     """Parsea `redes_def` (JSON de ids) a una lista de ids de red canonicos y en orden.
 
     Tolerante: JSON invalido / no-lista / ids desconocidos => se descartan. El
-    resultado respeta el orden fijo de `redes.REDES` (igual criterio que Skills).
+    resultado respeta el orden fijo de `redes.REDES` (igual criterio que el copy).
     """
     if not crudo:
         return []
@@ -412,12 +412,12 @@ async def marcar_item_usado(request: Request) -> Response:
     return JSONResponse({"mensaje": "Item marcado como usado." if usado else "Item desmarcado."})
 
 
-# Skill por defecto para generar copy desde un item del feed.
-_SKILL_DEFECTO = "copy-desde-nota"
+# Prompt por defecto para generar copy desde un item del feed.
+_PROMPT_DEFECTO = "copy-desde-nota"
 
 
 def _nota_desde_item(titulo: str, resumen: str, enlace: str) -> str:
-    """Construye la nota para la skill: titulo + resumen + enlace (los vacios se omiten)."""
+    """Construye la nota para el prompt: titulo + resumen + enlace (los vacios se omiten)."""
     partes = [p for p in (titulo.strip(), resumen.strip(), enlace.strip()) if p]
     return "\n\n".join(partes)
 
@@ -425,14 +425,14 @@ def _nota_desde_item(titulo: str, resumen: str, enlace: str) -> str:
 async def generar(request: Request) -> Response:
     """Genera copy DIRECTO desde un item, EN SEGUNDO PLANO -> `{generacion}` (tipo "rss").
 
-    `{titulo, resumen?, enlace?, marca, redes:[..], skill?, fuente_id?, clave?}`:
+    `{titulo, resumen?, enlace?, marca, redes:[..], prompt?, fuente_id?, clave?}`:
       - Construye la nota (`titulo + "\\n\\n" + resumen + "\\n\\n" + enlace`) y lanza un
         trabajo de claude en background (no bloquea). El frontend sondea
         `GET /api/generaciones/{id}` y, al completarse, recoge `resultado` (misma forma
         que copy: `{resultado, historial_id, verdicto, piezas, publicaciones}`).
       - El item se marca como USADO solo si la generacion completa con exito (en el
         post-procesado), no al lanzar.
-      - Skill por defecto `copy-desde-nota`. Valida marca/redes/skill contra allowlists.
+      - Prompt por defecto `copy-desde-nota`. Valida marca/redes/prompt contra allowlists.
     """
     datos = await leer_json(request)
     titulo = datos.get("titulo")
@@ -445,11 +445,11 @@ async def generar(request: Request) -> Response:
     if not gen_dom.marca_valida(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
 
-    skill = datos.get("skill")
-    if not isinstance(skill, str) or not skill.strip():
-        skill = _SKILL_DEFECTO
+    prompt = datos.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        prompt = _PROMPT_DEFECTO
     # El "tipo de contenido" es ahora un PROMPT de la Biblioteca (store-or-semilla).
-    prompt_id = f"prompt/{skill.strip()}"
+    prompt_id = f"prompt/{prompt.strip()}"
     cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
     if cuerpo is None:
         return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
@@ -489,7 +489,7 @@ async def generar(request: Request) -> Response:
     url_fuente = dedup.url_canonica(enlace) if enlace.strip().startswith(("http://", "https://")) else ""
 
     gen = gen_dom.lanzar_copy(
-        tipo="rss", prompt_id=prompt_id, origen_historial=skill.strip(), marca=marca,
+        tipo="rss", prompt_id=prompt_id, origen_historial=prompt.strip(), marca=marca,
         contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), titulo_dado=titulo.strip(),
         texto_base=nota, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,

@@ -509,7 +509,7 @@ def _texto_respuesta(data: dict) -> str:
 def _proveedor_openrouter(prompt: str) -> bytes:
     """Genera una imagen vía OpenRouter (gateway compatible con OpenAI) y devuelve bytes.
 
-    Mismo camino que la skill `estudio-imagen`: endpoint chat/completions con
+    Mismo camino que el estudio de imagen: endpoint chat/completions con
     `modalities:["image","text"]`; el modelo se elige por id (`OPENROUTER_IMAGE_MODEL`).
     `follow_redirects=False`: un 3xx a otro host no debe reenviar el Bearer (anti-SSRF).
     Importacion diferida de httpx; los tests NUNCA llegan aqui (parchean `_PROVEEDOR`).

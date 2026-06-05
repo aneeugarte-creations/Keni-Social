@@ -123,7 +123,7 @@ def test_jobspec_roundtrip(entorno):
     spec = jobspec.construir(
         prompt="el prompt",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
             texto_base="nota", autor={"id": "u1", "usuario": "ana"},
         ),
         dir_temporal=None,
@@ -141,7 +141,7 @@ def test_jobspec_copy_contenido_id_roundtrip_puro():
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
             texto_base="nota", contenido_id="tema-123",
         ),
     )
@@ -152,7 +152,7 @@ def test_jobspec_copy_contenido_id_roundtrip_puro():
 def test_jobspec_copy_sin_contenido_id_default_vacio_puro():
     # PURO (sin DB): sin `contenido_id`, el spec lleva "" (back-compat: borrador suelto).
     spec = jobspec.construir_copy(
-        skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+        prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
         texto_base="nota",
     )
     assert spec["contenido_id"] == ""
@@ -170,7 +170,7 @@ def test_reconstruir_procesar_copy_crea_publicaciones(entorno):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
             texto_base="nota",
         ),
     )
@@ -193,7 +193,7 @@ def test_reconstruir_procesar_copy_guarda_copy_in(entorno):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
             texto_base="nota",
         ),
     )
@@ -217,7 +217,7 @@ def test_reconstruir_procesar_galeria_registra_piezas_sin_publicaciones(entorno)
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_galeria(
-            skill="termometro-mundial", marca=_MARCA, redes_ids=["x", "instagram"],
+            prompt_id="termometro-mundial", marca=_MARCA, redes_ids=["x", "instagram"],
             titulo_base="Termómetro mundial · 2026-05-25", titulo_dado="Termómetro mundial · 2026-05-25",
         ),
     )
@@ -250,7 +250,7 @@ def test_no_hornea_placa_al_crear_marca_visual(entorno, monkeypatch):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
             texto_base="nota",
         ),
     )
@@ -271,7 +271,7 @@ def test_crear_marca_sin_plantilla_sin_imagen(entorno):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca="piso-15", redes_ids=["x"], titulo_dado="Titulo",
+            prompt_id="copy-desde-nota", marca="piso-15", redes_ids=["x"], titulo_dado="Titulo",
             texto_base="nota",
         ),
     )
@@ -293,7 +293,7 @@ def test_reconstruir_procesar_copy_nida_bajo_el_tema(entorno):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
             texto_base="nota", contenido_id=tema["id"],
         ),
     )
@@ -323,7 +323,7 @@ def test_reconstruir_procesar_copy_contenido_inexistente_cae_a_borrador_suelto(e
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
             texto_base="nota", contenido_id="no-existe",
         ),
     )
@@ -340,7 +340,7 @@ def test_reconstruir_procesar_copy_sin_contenido_id_back_compat(entorno):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
             texto_base="nota",
         ),
     )
@@ -361,7 +361,7 @@ def test_reconstruir_procesar_rss_marca_item(entorno):
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
-            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
             texto_base="nota", fuente_id=fuente["id"], clave="item-1",
         ),
     )

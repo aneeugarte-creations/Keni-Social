@@ -336,7 +336,7 @@ export interface ResultadoGeneracion {
   verdicto?: Veredicto;
   piezas?: PiezaGenerada[];
   publicaciones?: Publicacion[];
-  /** Documento Markdown completo (skills con `salida === "documento"`). */
+  /** Documento Markdown completo (prompts con `salida === "documento"`). */
   documento?: string;
   // hashtags
   hashtags?: string[];
@@ -344,9 +344,9 @@ export interface ResultadoGeneracion {
   id?: string;
   url?: string;
   /**
-   * Imágenes producidas por una skill de imagen (estudio-imagen), ya importadas al
+   * Imágenes producidas por el estudio de imagen, ya importadas al
    * almacén de media para previsualizarlas. Cada una trae su `nombre` y la `url`
-   * (`/api/media/...`). Vacío o ausente si la skill no generó imágenes.
+   * (`/api/media/...`). Vacío o ausente si no se generaron imágenes.
    */
   imagenes?: ImagenGenerada[];
   // verificacion (workflow propio: datar un video)
@@ -355,7 +355,7 @@ export interface ResultadoGeneracion {
   informe?: InformeQaEditorial;
 }
 
-/** Una imagen producida por una skill de imagen, lista para previsualizar. */
+/** Una imagen producida por el estudio de imagen, lista para previsualizar. */
 export interface ImagenGenerada {
   /** Nombre del archivo en el almacén de media. */
   nombre: string;
@@ -514,8 +514,8 @@ export interface OpcionesQaEditorial {
   marcas: { id: string; nombre: string }[];
   /** Plataformas seleccionables (para validar el límite); "" = no validar límite. */
   plataformas: string[];
-  /** `true` si la skill `qa-editorial` está instalada en este equipo. */
-  skill_disponible: boolean;
+  /** `true` si el prompt `qa-editorial` está instalado en este equipo. */
+  prompt_disponible: boolean;
 }
 
 /** Cuerpo de POST /api/qa-editorial/revisar: el copy a revisar + su marca/plataforma. */
@@ -608,8 +608,8 @@ export interface ConfigTermometro {
 /** Respuesta de GET /api/termometro. */
 export interface RespuestaTermometro {
   config: ConfigTermometro;
-  /** `true` si la skill `termometro-mundial` está instalada en este equipo. */
-  skill_disponible: boolean;
+  /** `true` si el prompt `termometro-mundial` está instalado en este equipo. */
+  prompt_disponible: boolean;
   marcas: MarcaDisponible[];
   regiones_sugeridas: string[];
   /**
@@ -643,7 +643,7 @@ export interface CuerpoGenerarTermometro {
   marca: string;
   /** Noticias internacionales candidatas (la materia prima de la galería). */
   noticias: string;
-  /** Número de slides (5–8) como texto; vacío = el de la config/skill. */
+  /** Número de slides (5–8) como texto; vacío = el de la config/prompt. */
   numero?: string;
   /** Regiones a cubrir (CSV); vacío = reparto por defecto. */
   regiones?: string;
@@ -1063,8 +1063,8 @@ export interface RespuestaProgramarMetricool {
 
 export interface EntradaHistorial {
   id: string;
-  skill: string;
-  skill_nombre: string;
+  prompt: string;
+  prompt_nombre: string;
   marca: string;
   marca_nombre: string;
   fecha: string;
@@ -1081,7 +1081,7 @@ export interface RespuestaHistorial {
 
 export interface DetalleHistorial {
   id: string;
-  skill: string;
+  prompt: string;
   marca: string;
   fecha: string;
   resultado: string;
@@ -1097,7 +1097,7 @@ export interface DetalleHistorial {
 
 /**
  * Cuerpo opcional para recuperar una entrada del historial como publicación(es)
- * (`POST /api/skills/historial/{id}/guardar`). Si la entrada no tiene piezas,
+ * (`POST /api/prompts/historial/{id}/guardar`). Si la entrada no tiene piezas,
  * hay que indicar `red`; si las tiene, `redes` permite acotar cuáles guardar.
  */
 export interface CuerpoGuardarHistorial {
@@ -2830,7 +2830,7 @@ export interface CuerpoGenerarDesdeItem {
 
 /**
  * Respuesta de generar copy desde un item (auto-guarda como Publicaciones).
- * Misma forma que ejecutar una skill.
+ * Misma forma que ejecutar un prompt.
  */
 export interface RespuestaGenerarDesdeItem {
   resultado: string;

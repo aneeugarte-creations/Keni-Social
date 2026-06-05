@@ -626,7 +626,7 @@ def _argv_claude(
 # del entorno credenciales de la INFRA (Postgres, S3/Garage, Metricool/agencias) y filtrarlas.
 # La generacion NO las necesita: solo precisa PATH/HOME/locale/XDG, el token de Claude
 # (`CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`) y, en su caso, la clave del proveedor de
-# imagen (que `_entorno_skill` inyecta explicitamente). Usamos DENYLIST (no allowlist) para no
+# imagen (que `_entorno_generacion` inyecta explicitamente). Usamos DENYLIST (no allowlist) para no
 # romper variables legitimas que `claude` pueda necesitar y que no preveamos. CRITICO: estos
 # prefijos NO deben cazar `PATH`/`HOME`/`CLAUDE_*` (`PG` es prefijo, no caza `PATH`: empieza
 # por `PA`, no `PG`).
@@ -648,16 +648,16 @@ def _es_secreto_infra(nombre: str) -> bool:
     return any(arriba.startswith(p) for p in _ENV_DENYLIST_PREFIJOS)
 
 
-def _entorno_skill() -> dict[str, str]:
-    """Entorno del subproceso de la skill.
+def _entorno_generacion() -> dict[str, str]:
+    """Entorno del subproceso de la generacion.
 
     Hereda `os.environ` PERO con un SCRUB de los secretos de infra (`_es_secreto_infra`):
     Postgres/S3/Garage/Metricool no deben viajar al subproceso `claude -p` (defensa contra
     exfiltracion si el modelo es prompt-injectado). Se conserva todo lo demas que la
     generacion necesita (PATH/HOME/locale/XDG, `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`).
     Si hay una clave de imagen en el ALMACEN (secretos.toml, la UNICA fuente de verdad) y la
-    variable correspondiente no esta ya puesta, la inyecta: la skill es un plugin independiente
-    que solo lee variables de entorno, asi que este es el canal por el que recibe la clave. NO
+    variable correspondiente no esta ya puesta, la inyecta: el motor de imagen es un proceso
+    independiente que solo lee variables de entorno, asi que este es el canal por el que recibe la clave. NO
     duplica el almacen: solo lo transporta al subproceso. Una variable ya presente en el
     entorno tiene prioridad (no se pisa).
     """
@@ -911,7 +911,7 @@ def lanzar_job_claude(
                             endurecer=endurecer,
                         ),
                         cwd=str(cwd),
-                        env=_entorno_skill(),
+                        env=_entorno_generacion(),
                     )
                 except (OSError, ValueError):
                     if dir_temporal is not None:

@@ -4,7 +4,7 @@
  *
  * Renderiza el documento con `Markdown`, ofrece copiar al portapapeles y permite
  * guardarlo como publicación eligiendo UNA O VARIAS redes vía el historial NEUTRO
- * `POST /api/skills/historial/{id}/guardar` (común a todas las generaciones). El
+ * `POST /api/prompts/historial/{id}/guardar` (común a todas las generaciones). El
  * termómetro genera el caption del posteo por red; al guardar se crea UN borrador por
  * red elegida (selector multi-red). Componente compartido (lo usa Termómetro).
  */
@@ -34,7 +34,7 @@ function EnlacePublicaciones() {
 }
 
 /**
- * Galería de imágenes producidas por una skill de imagen (estudio-imagen). Cada
+ * Galería de imágenes producidas por el estudio de imagen. Cada
  * imagen ya está en el almacén de media; aquí se PREVISUALIZA con un enlace para
  * abrirla/descargarla a tamaño completo. No renderiza nada si no hay imágenes.
  */
@@ -82,7 +82,7 @@ export function ResultadoDocumento({
 }: {
   documento: string;
   historialId: string;
-  /** Imágenes producidas (skills de imagen); vacío para documentos de solo texto. */
+  /** Imágenes producidas (estudio de imagen); vacío para documentos de solo texto. */
   imagenes?: ImagenGenerada[];
 }) {
   const queryClient = useQueryClient();

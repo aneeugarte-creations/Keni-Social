@@ -4,8 +4,8 @@
  * (contenido pegado / URL / sección de la Consola / archivo), adjuntando la línea editorial
  * de la marca. El resultado llega por streaming (sondeo de la generación).
  *
- * Reemplaza la antigua página de "skills": aquí el contenido es markdown libre, no un
- * formulario rígido. Reutiliza el editor (AutoTextarea + BarraFormato + Markdown), el
+ * Reemplaza la antigua página de generación por formulario: aquí el contenido es markdown
+ * libre, no un formulario rígido. Reutiliza el editor (AutoTextarea + BarraFormato + Markdown), el
  * selector de marca y el hook de generación existentes.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

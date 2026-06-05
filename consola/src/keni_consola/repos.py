@@ -6,7 +6,7 @@ enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
 
   - CONTENIDO editorial (editable a mano, fuente de verdad) -> ficheros YAML por
     marca (`ficheros.py`), con un indice SQLite regenerable (`indice.py`):
-    publicaciones, plantillas e historial de skills.
+    publicaciones, plantillas e historial de prompts.
   - OPERACIONAL + editorial reutilizable -> Postgres (`db.py`, via `motor_db`; ADR
     0004/0006): `comercial` (piezas + serie temporal de snapshots), `rota`,
     `usuarios`/`sesiones` (via `auth/`), la cola de `jobs`, y las 3 entidades editoriales
@@ -75,12 +75,12 @@ def raiz_datos() -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# Historial de skills (CONTENIDO: ficheros YAML via ficheros.py)               #
+# Historial de prompts (CONTENIDO: ficheros YAML via ficheros.py)              #
 # --------------------------------------------------------------------------- #
 
 
-def registrar_historial_skill(
-    skill: str,
+def registrar_historial_prompt(
+    prompt_id: str,
     marca: str,
     resultado: str,
     *,
@@ -89,23 +89,23 @@ def registrar_historial_skill(
     metricas: dict[str, Any] | None = None,
     autor: dict[str, str] | None = None,
 ) -> str:
-    return ficheros.registrar_historial_skill(
-        skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas, autor=autor
+    return ficheros.registrar_historial_prompt(
+        prompt_id, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas, autor=autor
     )
 
 
-def listar_historial_skills(
+def listar_historial_prompts(
     *, limite: int | None = None, desplazamiento: int | None = None
 ) -> list[dict[str, Any]]:
-    return ficheros.listar_historial_skills(limite=limite, desplazamiento=desplazamiento)
+    return ficheros.listar_historial_prompts(limite=limite, desplazamiento=desplazamiento)
 
 
-def contar_historial_skills() -> int:
-    return ficheros.contar_historial_skills()
+def contar_historial_prompts() -> int:
+    return ficheros.contar_historial_prompts()
 
 
-def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
-    return ficheros.obtener_historial_skill(historial_id)
+def obtener_historial_prompt(historial_id: str) -> dict[str, Any] | None:
+    return ficheros.obtener_historial_prompt(historial_id)
 
 
 def registrar_veredicto_qa(
@@ -164,7 +164,7 @@ def ultimo_veredicto_qa(
 # Publicaciones (OPERACIONAL: Postgres via db.py; fusión sobre `contenido`, paso 3)    #
 # --------------------------------------------------------------------------- #
 # Una publicacion = una fila `contenido_plataforma` (es_publicacion=1) + su padre. Misma
-# forma de dict que antes (YAML); el resto del sistema (API/aprobación/Metricool/skills)
+# forma de dict que antes (YAML); el resto del sistema (API/aprobación/Metricool/prompts)
 # no cambia. `id`/`fecha_creacion` permiten preservar identidad al migrar desde YAML.
 
 

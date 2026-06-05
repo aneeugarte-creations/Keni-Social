@@ -171,7 +171,7 @@ def generar_termometro(
     stdout = _ejecutar_claude(prompt, cwd=gen_dom.cwd_generacion(), timeout=timeout)
     try:
         texto, metricas = stream.parsear_resultado_json(stdout)
-    except stream.SkillError as e:
+    except stream.GeneracionError as e:
         raise TermometroCronError(str(e)) from e
     if not texto.strip():
         raise TermometroCronError("El asistente terminó sin devolver un termómetro.")

@@ -1,6 +1,6 @@
 """Tests de ATRIBUCION por usuario del estado compartido (#130 Fase 1, ADR 0001).
 
-El estado (borradores/publicaciones, historial de skills, tareas/pendientes y el
+El estado (borradores/publicaciones, historial de prompts, tareas/pendientes y el
 registro de generaciones) es COMPARTIDO en el servidor; estos tests prueban que cada
 registro creado por la API queda ATRIBUIDO al usuario autenticado y que la atribucion
 se EXPONE en las respuestas y se RENDERIZA. RETROCOMPATIBILIDAD: un registro legado /
@@ -124,7 +124,7 @@ def test_duplicar_atribuye_al_usuario_que_duplica(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Historial de skills + registro de generacion (via el flujo de generacion)    #
+# Historial de prompts + registro de generacion (via el flujo de generacion)   #
 # --------------------------------------------------------------------------- #
 
 
@@ -174,10 +174,10 @@ def test_generacion_atribuye_registro_historial_y_publicaciones(entorno):
 
     # 2) La entrada de historial creada en el post-procesado se atribuye a `ana`.
     hid = gen["resultado"]["historial_id"]
-    detalle = c.get(f"/api/skills/historial/{hid}").json()
+    detalle = c.get(f"/api/prompts/historial/{hid}").json()
     assert detalle["autor_nombre"] == "ana"
     assert detalle["autor_id"]
-    lista = c.get("/api/skills/historial").json()["historial"]
+    lista = c.get("/api/prompts/historial").json()["historial"]
     assert lista[0]["autor_nombre"] == "ana"
 
     # 3) La publicacion (borrador) auto-creada por pieza tambien.
@@ -200,21 +200,21 @@ def test_generacion_por_token_sin_autor(entorno):
     assert gen["autor_id"] == ""
     assert gen["autor_nombre"] == ""
     hid = gen["resultado"]["historial_id"]
-    assert c.get(f"/api/skills/historial/{hid}").json()["autor_nombre"] == ""
+    assert c.get(f"/api/prompts/historial/{hid}").json()["autor_nombre"] == ""
     assert c.get("/api/publicaciones").json()["publicaciones"][0]["autor_nombre"] == ""
 
 
 def test_historial_legado_sin_autor_se_lee_como_desconocido(entorno):
     """Una entrada de historial registrada SIN autor se lee con autor vacio, sin romper."""
-    hid = repos.registrar_historial_skill("copy-desde-nota", _MARCA, "texto plano")
+    hid = repos.registrar_historial_prompt("copy-desde-nota", _MARCA, "texto plano")
     c = _cli_por_token()
-    detalle = c.get(f"/api/skills/historial/{hid}").json()
+    detalle = c.get(f"/api/prompts/historial/{hid}").json()
     assert detalle["autor_id"] == ""
     assert detalle["autor_nombre"] == ""
 
 
 def test_historial_listado_pagina_y_reporta_total(entorno):
-    """`GET /api/skills/historial` pagina (`?limite=&desplazamiento=`) y reporta el `total`.
+    """`GET /api/prompts/historial` pagina (`?limite=&desplazamiento=`) y reporta el `total`.
 
     Cada entrada lleva el resultado completo, asi que el listado se acota: con `?limite=`
     se devuelve solo esa pagina, el envelope `paginacion.total` cuenta TODAS, y la clave
@@ -222,15 +222,15 @@ def test_historial_listado_pagina_y_reporta_total(entorno):
     """
     c = _cli_por_token()
     for i in range(5):
-        repos.registrar_historial_skill("copy-desde-nota", _MARCA, f"texto {i}")
+        repos.registrar_historial_prompt("copy-desde-nota", _MARCA, f"texto {i}")
 
-    cuerpo = c.get("/api/skills/historial?limite=2&desplazamiento=1").json()
+    cuerpo = c.get("/api/prompts/historial?limite=2&desplazamiento=1").json()
     assert len(cuerpo["historial"]) == 2
     assert cuerpo["paginacion"]["total"] == 5
     assert cuerpo["paginacion"]["limite"] == 2
     assert cuerpo["paginacion"]["desplazamiento"] == 1
 
     # Sin params hay defaults sensatos (no peta) y la clave `historial` sigue ahi.
-    por_defecto = c.get("/api/skills/historial").json()
+    por_defecto = c.get("/api/prompts/historial").json()
     assert por_defecto["paginacion"]["total"] == 5
     assert len(por_defecto["historial"]) == 5

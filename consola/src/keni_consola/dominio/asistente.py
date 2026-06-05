@@ -1,8 +1,8 @@
 """Dominio ASISTENTE de tablero: IA sobre un item de `contenido` (PURO orquestador).
 
 El asistente del tablero (herramienta de community manager) toma un item de `contenido`
-—su titulo, brief/descripcion y notas— y lanza una generacion de IA que REUTILIZA las
-skills de copy ya existentes (`copy-desde-nota`, voz de marca + tropicalizacion MX +
+—su titulo, brief/descripcion y notas— y lanza una generacion de IA que REUTILIZA los
+prompts de copy ya existentes (`copy-desde-nota`, voz de marca + tropicalizacion MX +
 auto-verificacion) para producir el copy por red. Tres modos:
 
   - `generar`    : copy nuevo, UNA pieza por red (las redes del propio contenido). El
@@ -26,12 +26,12 @@ from . import generar
 # Etiqueta de origen del historial: el asistente REUTILIZA la pipeline de copy por red
 # (piezas + veredicto + voz de marca). Solo cambia el TEXTO BASE (brief) y una instruccion
 # ADITIVA por modo; el resto es la generacion de copy de siempre.
-SKILL_COPY = "copy-desde-nota"
+PROMPT_COPY = "copy-desde-nota"
 
 # Modos soportados por el asistente (allowlist; cualquier otro => 400 en el handler).
 MODOS: tuple[str, ...] = ("generar", "variantes", "resumir")
 
-# Instruccion ADITIVA por modo. Se ANEXA al prompt de la skill (la skill mantiene su voz
+# Instruccion ADITIVA por modo. Se ANEXA al prompt de copy (el prompt mantiene su voz
 # de marca, tropicalizacion y auto-verificacion). `generar` no anade nada extra.
 _INSTRUCCION_MODO: dict[str, str] = {
     "variantes": (
@@ -47,10 +47,10 @@ _INSTRUCCION_MODO: dict[str, str] = {
 
 
 def _brief(titulo: str, descripcion: str, notas: str) -> str:
-    """Arma el TEXTO BASE (nota) que alimenta la skill de copy desde el item del tablero.
+    """Arma el TEXTO BASE (nota) que alimenta el prompt de copy desde el item del tablero.
 
     Junta el titulo (como encabezado), el brief/descripcion y las notas internas en un
-    solo bloque de texto. Es lo que la skill trata como "la nota" a convertir en copy.
+    solo bloque de texto. Es lo que el prompt trata como "la nota" a convertir en copy.
     """
     partes: list[str] = []
     if titulo.strip():
@@ -65,10 +65,10 @@ def _brief(titulo: str, descripcion: str, notas: str) -> str:
 def construir_texto_base(
     *, modo: str, titulo: str, descripcion: str, notas: str
 ) -> str:
-    """Texto base (brief + instruccion del modo) que se pasa a la skill de copy.
+    """Texto base (brief + instruccion del modo) que se pasa al prompt de copy.
 
     El brief sale del item del tablero; la instruccion ADITIVA del modo se anexa al final
-    para no tocar el cuerpo del prompt de la skill (que ya trae voz de marca, etc.).
+    para no tocar el cuerpo del prompt de copy (que ya trae voz de marca, etc.).
     """
     base = _brief(titulo, descripcion, notas)
     extra = _INSTRUCCION_MODO.get(modo, "")
@@ -87,7 +87,7 @@ def lanzar(
 ) -> dict[str, object]:
     """Lanza (ENCOLA) la generacion del asistente para un item del tablero.
 
-    Reutiliza el prompt de copy (`SKILL_COPY`) y la pipeline de `generar.lanzar_copy`:
+    Reutiliza el prompt de copy (`PROMPT_COPY`) y la pipeline de `generar.lanzar_copy`:
     compone el prompt autocontenido (copy + editorial + brief) y lo encola. Devuelve el
     registro de `generacion` (estado "ejecutando"); el frontend lo sondea y, al completarse,
     lee `resultado.piezas` para rellenar el `copy` de cada fila.
@@ -102,6 +102,6 @@ def lanzar(
         titulo=titulo,
         titulo_dado=titulo,  # el asistente fija el título de la fila como título del historial
         texto_base=texto_base,
-        origen_historial=SKILL_COPY,
+        origen_historial=PROMPT_COPY,
         autor=autor,
     )

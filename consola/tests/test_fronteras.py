@@ -232,7 +232,7 @@ def test_allowlist_no_tiene_seams_muertos():
     mapa = registro.modulo_a_app()
     routers = _routers()
     for origen, destino in SEAMS_PERMITIDOS:
-        # El origen debe ser un módulo de api/ conocido (router o helper como skills).
+        # El origen debe ser un módulo de api/ conocido (router o helper como historial).
         existe_origen = (_RAIZ_API / f"{origen}.py").is_file()
         assert existe_origen, f"Seam con origen inexistente en api/: {origen}"
         assert destino in mapa, f"Seam con destino que no es de ninguna app: {destino}"

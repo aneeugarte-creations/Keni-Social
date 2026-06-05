@@ -39,7 +39,7 @@ def test_config_por_defecto(cliente):
     datos = cliente.get("/api/termometro").json()
     assert datos["config"] == {"numero": 8, "regiones": "", "hora": "07:00", "marca": ""}
     # El prompt del termometro viaja en la semilla del paquete: siempre disponible.
-    assert datos["skill_disponible"] is True
+    assert datos["prompt_disponible"] is True
     assert {"id": "unotv", "nombre": "UnoTV"} in datos["marcas"]
     assert "Europa" in datos["regiones_sugeridas"]
     # Sin generaciones previas no hay resultado persistente.
@@ -108,8 +108,8 @@ def test_generar_completa_y_registra_historial(entorno):
     # El bloque JSON ya no contamina el documento visible.
     assert "```json" not in res["documento"]
     # Se registro en el historial CON piezas (descubrible desde "Generar copy").
-    historial = cli.get("/api/skills/historial").json()["historial"]
-    entrada = next(h for h in historial if h["skill"] == "termometro-mundial")
+    historial = cli.get("/api/prompts/historial").json()["historial"]
+    entrada = next(h for h in historial if h["prompt"] == "termometro-mundial")
     assert entrada["piezas"]
 
 
@@ -122,11 +122,11 @@ def test_guardar_termometro_crea_borradores_por_red(entorno):
         json={"marca": "unotv", "noticias": "China: algo grande.", "numero": "5"},
     )
     entrada = next(
-        h for h in cli.get("/api/skills/historial").json()["historial"]
-        if h["skill"] == "termometro-mundial"
+        h for h in cli.get("/api/prompts/historial").json()["historial"]
+        if h["prompt"] == "termometro-mundial"
     )
     r = cli.post(
-        f"/api/skills/historial/{entrada['id']}/guardar",
+        f"/api/prompts/historial/{entrada['id']}/guardar",
         json={"redes": ["x", "instagram"]},
     )
     assert r.status_code == 200
@@ -143,10 +143,10 @@ def test_guardar_termometro_sin_redes_400(entorno):
         json={"marca": "unotv", "noticias": "China: algo grande.", "numero": "5"},
     )
     entrada = next(
-        h for h in cli.get("/api/skills/historial").json()["historial"]
-        if h["skill"] == "termometro-mundial"
+        h for h in cli.get("/api/prompts/historial").json()["historial"]
+        if h["prompt"] == "termometro-mundial"
     )
-    assert cli.post(f"/api/skills/historial/{entrada['id']}/guardar", json={}).status_code == 400
+    assert cli.post(f"/api/prompts/historial/{entrada['id']}/guardar", json={}).status_code == 400
 
 
 def test_get_devuelve_ultimo_termometro_persistente(entorno):
@@ -163,7 +163,7 @@ def test_get_devuelve_ultimo_termometro_persistente(entorno):
     assert "Termómetro mundial" in ultimo["documento"]
     assert ultimo["marca"] == "unotv"
     # Nota: que `ultimo` apunte al MÁS RECIENTE es responsabilidad del orden
-    # "recientes primero" de `listar_historial_skills` (cubierto en su módulo); aquí no se
+    # "recientes primero" de `listar_historial_prompts` (cubierto en su módulo); aquí no se
     # reasevera con dos generaciones porque `fecha_creacion` tiene resolución de segundos y
     # ambas caerían en el mismo segundo (empate de orden no determinista).
 
@@ -199,8 +199,8 @@ def test_generar_sin_noticias_400(entorno):
     assert cli.post("/api/termometro/generar", json={"marca": "unotv", "noticias": "  "}).status_code == 400
 
 
-def test_generar_funciona_sin_sembrar_skill(cliente):
+def test_generar_funciona_sin_sembrar_prompt(cliente):
     # El prompt del termometro viaja en la semilla del paquete: la generacion se arma sin
-    # necesidad de un catalogo de skills (que ya no existe).
+    # necesidad de sembrarlo a mano.
     r = cliente.post("/api/termometro/generar", json={"marca": "unotv", "noticias": "algo"})
     assert r.status_code == 200

@@ -64,11 +64,11 @@ _SUBDIR = {
 _MARCA_SIN = "_sin-marca"
 
 # Tipo de INDICE -> tipo de ESQUEMA (`keni_shared.esquema_yaml.VERSIONES`). Solo
-# difieren en `historial` (indice) vs `historial_skill` (esquema); el resto coincide.
+# difieren en `historial` (indice) vs `historial_prompt` (esquema); el resto coincide.
 _TIPO_ESQUEMA = {
     "publicacion": "publicacion",
     "plantilla": "plantilla",
-    "historial": "historial_skill",
+    "historial": "historial_prompt",
 }
 
 
@@ -764,7 +764,7 @@ def borrar_plantilla(plantilla_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Historial de skills (historial/<YYYY>/<MM>/<id>.yaml)                        #
+# Historial de prompts (historial/<YYYY>/<MM>/<id>.yaml)                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -778,7 +778,7 @@ def _parsear_historial(datos: dict[str, Any], marca: str, hid: str) -> dict[str,
         metricas = None
     return {
         "id": hid,
-        "skill": datos.get("skill", "") or "",
+        "prompt": datos.get("prompt", "") or "",
         "marca": marca,
         "fecha": datos.get("fecha", "") or "",
         "resultado": datos.get("resultado", "") or "",
@@ -791,8 +791,8 @@ def _parsear_historial(datos: dict[str, Any], marca: str, hid: str) -> dict[str,
     }
 
 
-def registrar_historial_skill(
-    skill: str,
+def registrar_historial_prompt(
+    prompt_id: str,
     marca: str,
     resultado: str,
     *,
@@ -801,7 +801,7 @@ def registrar_historial_skill(
     metricas: dict[str, Any] | None = None,
     autor: dict[str, str] | None = None,
 ) -> str:
-    """Guarda una ejecucion de skill (un YAML en `<marca>/historial/<YYYY>/<MM>/`) y devuelve su id.
+    """Guarda una ejecucion de prompt (un YAML en `<marca>/historial/<YYYY>/<MM>/`) y devuelve su id.
 
     `metricas` (tokens/turnos/coste/duracion/modelo del run) se guarda como un mapa en
     el YAML, o se omite si es None. `autor` (atribucion por usuario, #130 Fase 1) es
@@ -811,7 +811,7 @@ def registrar_historial_skill(
     hid = _nuevo_id()
     ahora = datetime.now()
     cuerpo: dict[str, Any] = {
-        "skill": skill,
+        "prompt": prompt_id,
         "fecha": date.today().isoformat(),
         "fecha_creacion": ahora.isoformat(timespec="seconds"),
         "titulo": titulo,
@@ -824,12 +824,12 @@ def registrar_historial_skill(
         cuerpo["metricas"] = dict(metricas)
     carpeta = carpeta_marca(marca) / "historial" / f"{ahora.year:04d}" / f"{ahora.month:02d}"
     ruta = carpeta / f"{hid}.yaml"
-    _escribir_yaml(ruta, cuerpo, tipo="historial_skill")
+    _escribir_yaml(ruta, cuerpo, tipo="historial_prompt")
     _indexar("historial", marca, ruta, cuerpo)
     return hid
 
 
-def listar_historial_skills(
+def listar_historial_prompts(
     *, limite: int | None = None, desplazamiento: int | None = None
 ) -> list[dict[str, Any]]:
     """Historial (recientes primero por fecha_creacion), con paginacion opcional."""
@@ -842,19 +842,19 @@ def listar_historial_skills(
     )
 
 
-def contar_historial_skills() -> int:
+def contar_historial_prompts() -> int:
     """Total de entradas de historial (para el `total` de paginacion)."""
     if indice.contar("historial", None) == 0 and _rutas_de_tipo("historial"):
         _reindexar_tipo("historial")
     return indice.contar("historial", None)
 
 
-def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
+def obtener_historial_prompt(historial_id: str) -> dict[str, Any] | None:
     """Una entrada del historial por id (None si no existe)."""
     ruta = _buscar_ruta("historial", historial_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta, tipo="historial_skill")
+    datos = _leer_yaml(ruta, tipo="historial_prompt")
     if datos is None:
         return None
     # historial/<YYYY>/<MM>/<id>.yaml -> la marca es 3 niveles arriba del fichero.

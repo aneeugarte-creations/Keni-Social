@@ -92,12 +92,12 @@ def test_round_trip_plantilla(base):
 
 
 def test_historial_round_trip_y_layout_por_fecha(base):
-    hid = repos.registrar_historial_skill(
+    hid = repos.registrar_historial_prompt(
         "copy-desde-nota", "unotv", "Resultado largo\ncon saltos", titulo="T",
         piezas=[{"red": "x", "contenido": "c", "caracteres": 1}],
     )
-    leido = repos.obtener_historial_skill(hid)
-    assert leido["skill"] == "copy-desde-nota"
+    leido = repos.obtener_historial_prompt(hid)
+    assert leido["prompt"] == "copy-desde-nota"
     assert leido["piezas"][0]["red"] == "x"
     # Sin metricas => None.
     assert leido["metricas"] is None
@@ -109,12 +109,12 @@ def test_historial_round_trip_y_layout_por_fecha(base):
 def test_historial_guarda_y_devuelve_metricas(base):
     metricas = {"tokens_in": 10, "tokens_out": 5, "num_turns": 1,
                 "total_cost_usd": 0.02, "duration_ms": 99, "modelo": "m"}
-    hid = repos.registrar_historial_skill(
+    hid = repos.registrar_historial_prompt(
         "copy-desde-nota", "unotv", "RES", metricas=metricas
     )
-    leido = repos.obtener_historial_skill(hid)
+    leido = repos.obtener_historial_prompt(hid)
     assert leido["metricas"] == metricas
-    assert repos.listar_historial_skills()[0]["metricas"] == metricas
+    assert repos.listar_historial_prompts()[0]["metricas"] == metricas
 
 
 # --------------------------------------------------------------------------- #

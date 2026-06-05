@@ -24,7 +24,7 @@ const CATALOGO = {
       id: "produccion",
       etiqueta: "Producción",
       icono: "Sparkles",
-      descripcion: "Copy, clips, skills y verificación",
+      descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
       rutas_frontend: ["/contenido/estudio", "/datos/investigacion", "/operacion/revision", "/datos/actividad"],
       nav: [

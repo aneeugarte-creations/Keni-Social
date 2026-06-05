@@ -128,7 +128,7 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     spec = encolado["spec"]["procesar"]
     assert spec["kind"] == jobspec.PROC_COPY
     assert spec["redes_ids"] == redes_ids
-    assert spec["skill"] == doc.id.rsplit("/", 1)[-1]
+    assert spec["prompt_id"] == doc.id.rsplit("/", 1)[-1]
     # El prompt compuesto pide el bloque json de piezas por red.
     assert "piezas" in encolado["prompt"]
     # POLÍTICA REVISADA: el camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por

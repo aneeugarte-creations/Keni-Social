@@ -66,7 +66,7 @@ def _suma_tokens(metricas: dict[str, Any] | None) -> int | None:
 def _metricas_generacion(metricas: dict[str, Any] | None) -> dict[str, Any]:
     """Bloque de metricas normalizado de una GENERACION.
 
-    Las generaciones ya guardan `tokens_in`/`tokens_out` (de la skill) ademas de
+    Las generaciones ya guardan `tokens_in`/`tokens_out` (del prompt) ademas de
     `total_cost_usd`/`duration_ms`/`num_turns`; agregamos tokens como en los runs.
     """
     if not isinstance(metricas, dict):

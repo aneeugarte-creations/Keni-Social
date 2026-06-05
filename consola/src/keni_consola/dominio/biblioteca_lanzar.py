@@ -160,7 +160,7 @@ def lanzar(
         # `titulo_dado` titula los borradores: si el llamante sugiere un título del contenido
         # (titular de la URL) lo usamos; si no, "" para que se DERIVE de la nota (texto_base).
         procesar_spec = jobspec.construir_copy(
-            skill=origen_historial, marca=marca, redes_ids=redes_ids,
+            prompt_id=origen_historial, marca=marca, redes_ids=redes_ids,
             titulo_dado=titulo_contenido.strip(),
             texto_base=bloque_contexto, autor=autor,
         )

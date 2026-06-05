@@ -5,7 +5,7 @@ el post-procesado de un job de QA SIN importar de `api/` (corre fuera del proces
 `api/qa_editorial.py` reexporta estas funciones, asi que su contrato HTTP no cambia.
 
 Frontera del producto: el QA SEÑALA (devuelve un informe con hallazgos), NO publica ni
-reescribe. Aqui solo vive el PARSEO de la salida de la skill en ese informe estructurado.
+reescribe. Aqui solo vive el PARSEO de la salida del prompt en ese informe estructurado.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ import json
 
 from . import stream
 
-# Id de la skill que hace el QA editorial.
-SKILL_ID = "qa-editorial"
+# Id del prompt que hace el QA editorial.
+PROMPT_ID = "qa-editorial"
 
 
 def hash_copy(texto: str) -> str:
@@ -45,7 +45,7 @@ _MAX_HALLAZGOS = 200
 def _verdicto_de_texto(texto: str) -> str:
     """Deriva el verdicto del informe: primero el semaforo 🟢/🟡/🔴, luego ✅/⚠️/❌.
 
-    La skill abre con la linea de semaforo (🟢/🟡/🔴); si por lo que sea saliera con los
+    El prompt abre con la linea de semaforo (🟢/🟡/🔴); si por lo que sea saliera con los
     simbolos clasicos, `stream.derivar_verdicto` los cubre. Devuelve "" si no hay ninguno.
     """
     for linea in texto.splitlines():
@@ -59,7 +59,7 @@ def _verdicto_de_texto(texto: str) -> str:
 
 
 def _hallazgo_limpio(crudo: object) -> dict[str, object] | None:
-    """Normaliza un hallazgo del JSON de la skill o devuelve None si no es usable.
+    """Normaliza un hallazgo del JSON del prompt o devuelve None si no es usable.
 
     Acota `tipo`/`gravedad` a los valores permitidos (un `tipo` desconocido se descarta;
     una `gravedad` desconocida cae a "aviso", la menos alarmante). Recorta los textos a un
@@ -90,7 +90,7 @@ def _hallazgo_limpio(crudo: object) -> dict[str, object] | None:
 
 
 def parsear_informe(salida: str) -> dict[str, object]:
-    """Parsea la salida de la skill en un INFORME estructurado para la UI.
+    """Parsea la salida del prompt en un INFORME estructurado para la UI.
 
     Localiza el ULTIMO bloque ```json cercado (igual criterio que `stream.parsear_salida`)
     y mapea `veredicto`/`resumen`/`hallazgos`. El `informe_texto` es el documento legible
@@ -157,7 +157,7 @@ VERDICTO_PROBLEMA = "problema"
 
 # Mapa del veredicto editorial clásico (semáforo) al veredicto de FUENTE: solo el rojo
 # (`no_publicar`) cuenta como `problema`; verde/amarillo (o sin veredicto) -> `no_verificado`
-# (permisivo: ante la duda, deja pasar). Cubre que la skill use el lenguaje de semáforo.
+# (permisivo: ante la duda, deja pasar). Cubre que el prompt use el lenguaje de semáforo.
 _FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
 
 
@@ -217,8 +217,8 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
         informe = parsear_verdicto_fuente(salida)
-        historial_id = repos.registrar_historial_skill(
-            SKILL_ID, marca, str(informe.get("informe_texto") or ""), piezas=[], titulo=titulo,
+        historial_id = repos.registrar_historial_prompt(
+            PROMPT_ID, marca, str(informe.get("informe_texto") or ""), piezas=[], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         verdicto = str(informe.get("verdicto") or VERDICTO_NO_VERIFICADO)
@@ -264,8 +264,8 @@ def construir_procesar_qa(  # noqa: ANN201
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
         informe = parsear_informe(salida)
-        historial_id = repos.registrar_historial_skill(
-            SKILL_ID, marca, informe["informe_texto"], piezas=[], titulo=titulo,
+        historial_id = repos.registrar_historial_prompt(
+            PROMPT_ID, marca, informe["informe_texto"], piezas=[], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         if plataforma_id:

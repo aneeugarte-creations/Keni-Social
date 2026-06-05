@@ -288,11 +288,10 @@ export const router = createBrowserRouter([
       { path: "monitor", element: <Navigate to="/datos/actividad" replace /> },
       { path: "agentes", element: <Navigate to="/datos/actividad" replace /> },
       { path: "agentes/actividad", element: <Navigate to="/datos/actividad" replace /> },
-      // El copy se generaba en /generacion (motor de skills, retirado): ahora vive en
-      // la Biblioteca; el catálogo de skills (/skills) también pasa a la Biblioteca.
+      // El copy se generaba en /generacion (motor antiguo, retirado): ahora vive en
+      // la Biblioteca; el catálogo de prompts también vive en la Biblioteca.
       { path: "generar-copy", element: <Navigate to="/contenido/biblioteca" replace /> },
       { path: "generacion", element: <Navigate to="/contenido/biblioteca" replace /> },
-      { path: "skills", element: <Navigate to="/contenido/biblioteca" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
       { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },

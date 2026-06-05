@@ -202,13 +202,13 @@ export default function RevisionEditorial() {
   const [texto, setTexto] = React.useState("");
   const [contexto, setContexto] = React.useState("");
 
-  // Catálogo para el formulario (plataformas, si la skill está instalada).
+  // Catálogo para el formulario (plataformas, si el prompt está instalado).
   const opcionesQuery = useQuery({
     queryKey: ["qa-editorial", "opciones"],
     queryFn: ({ signal }) => api.qaEditorialOpciones(signal),
   });
   const plataformas = opcionesQuery.data?.plataformas ?? [];
-  const skillDisponible = opcionesQuery.data?.skill_disponible ?? true;
+  const promptDisponible = opcionesQuery.data?.prompt_disponible ?? true;
 
   // Revisión en segundo plano (reanudable al cambiar de pestaña y volver).
   const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion(CLAVE_GEN_QA);
@@ -247,10 +247,10 @@ export default function RevisionEditorial() {
         descripcion="Pega el copy que escribió el community manager y obtén un veredicto con typos, datos sospechosos, reglas legales y desviaciones de la voz de marca. Señala; no reescribe ni publica."
       />
 
-      {!skillDisponible && (
+      {!promptDisponible && (
         <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-          La skill de QA editorial no está instalada en este equipo. Actualiza el plugin de
-          skills de Keni para usar la revisión.
+          El prompt de QA editorial no está instalado en este equipo. Restáuralo desde la
+          semilla de la Biblioteca para usar la revisión.
         </div>
       )}
 

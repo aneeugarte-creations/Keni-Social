@@ -44,7 +44,7 @@ _SALIDA = """🟢 LISTO PARA APROBAR
 
 def test_procesar_qa_ata_veredicto_a_la_pieza(monkeypatch):
     registros: list[dict] = []
-    monkeypatch.setattr(repos, "registrar_historial_skill", lambda *a, **k: "hist-1")
+    monkeypatch.setattr(repos, "registrar_historial_prompt", lambda *a, **k: "hist-1")
     monkeypatch.setattr(
         repos, "registrar_veredicto_qa", lambda **k: registros.append(k) or "ver-1"
     )
@@ -67,7 +67,7 @@ def test_procesar_qa_ata_veredicto_a_la_pieza(monkeypatch):
 
 def test_procesar_qa_revision_suelta_no_ata_nada(monkeypatch):
     registros: list[dict] = []
-    monkeypatch.setattr(repos, "registrar_historial_skill", lambda *a, **k: "hist-2")
+    monkeypatch.setattr(repos, "registrar_historial_prompt", lambda *a, **k: "hist-2")
     monkeypatch.setattr(
         repos, "registrar_veredicto_qa", lambda **k: registros.append(k) or "x"
     )
