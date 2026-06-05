@@ -1342,6 +1342,11 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     return db.titulos_recientes_marca(marca, desde_iso)
 
 
+def contar_contenido_origen_desde(marca: str, origen: str, desde_iso: str) -> int:
+    """Nº de items del tablero de `marca` con `origen` creados desde `desde_iso`. Delegado en `db.py`."""
+    return db.contar_contenido_origen_desde(marca, origen, desde_iso)
+
+
 def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int:
     """Upsert del snapshot curado del Radar por (marca, geo, clave). Delegado en `db.py`."""
     return db.upsert_radar_items(marca, geo, items)

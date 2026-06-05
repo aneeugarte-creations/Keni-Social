@@ -367,6 +367,22 @@ def construir_procesar_insumos(*, lote_id: str, cajon: str, fecha: str):  # noqa
         repos.actualizar_insumo_lote(
             lote_id, {"total_items": len(insertados), "estado": "listo"}
         )
+        # Pool único (Ola E): además de su tabla propia, cada nota entra al pool
+        # `noticias_items` para que el clustering la deduplique y el auto-feed la use.
+        # Los EVENTOS NO entran (agenda de cobertura, no notas de copy). Idempotente por
+        # UNIQUE(fuente_id, clave). Best-effort: un fallo aquí no marca el lote en error.
+        try:
+            from . import ingesta as dom_ingesta
+
+            pool = [
+                fila
+                for it in items
+                if (fila := dom_ingesta.noticia_item_de_insumo(it)) is not None
+            ]
+            if pool:
+                repos.crear_noticias_items(pool)
+        except Exception:  # noqa: BLE001 -- el pool es aditivo; nunca rompe el parseo del cajón
+            _log.warning("insumos: no se pudo volcar el cajón al pool de noticias", exc_info=True)
         return {"total_items": len(insertados), "estado": "listo"}
 
     return procesar

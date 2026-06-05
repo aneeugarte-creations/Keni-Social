@@ -268,6 +268,21 @@ def construir_procesar_investigacion(*, brief: dict[str, Any], fecha: str):  # n
         if not candidatos:
             return {"candidatos": 0}
         insertados = repos.crear_inv_candidatos(candidatos)
+        # Pool único (Ola E): además de `inv_candidato`, cada candidato entra al pool
+        # `noticias_items` (fuente_id='investigacion') para el clustering + auto-feed.
+        # Idempotente por UNIQUE(fuente_id, clave). Best-effort: nunca rompe la inserción.
+        try:
+            from . import ingesta as dom_ingesta
+
+            pool = [
+                fila
+                for c in candidatos
+                if (fila := dom_ingesta.noticia_item_de_candidato(c)) is not None
+            ]
+            if pool:
+                repos.crear_noticias_items(pool)
+        except Exception:  # noqa: BLE001 -- el pool es aditivo; nunca rompe la investigación
+            _log.warning("investigacion: no se pudo volcar al pool de noticias", exc_info=True)
         return {"candidatos": len(insertados)}
 
     return procesar

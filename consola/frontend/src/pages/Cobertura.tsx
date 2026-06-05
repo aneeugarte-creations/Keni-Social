@@ -264,20 +264,22 @@ function TarjetaNoticia({ item, queryKey }: PropsTarjetaNoticia) {
               <Badge variant="secondary" className="text-xs">Descartada</Badge>
             ) : (
               <>
+                <Badge variant="secondary" className="text-xs">En el pool</Badge>
                 <Button
                   size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
+                  variant="ghost"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                   onClick={() => usarMut.mutate()}
                   disabled={enCurso}
-                  aria-label="Enviar al feed (genera copy)"
-                  title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
+                  aria-label="Empujar ya (fuerza al feed)"
+                  title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
                 >
                   {usarMut.isPending ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <Newspaper className="h-3 w-3" />
                   )}
-                  Enviar al feed
+                  Empujar ya
                 </Button>
                 <Button
                   size="sm"
@@ -384,20 +386,22 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
               <Badge variant="secondary" className="text-xs">Descartada</Badge>
             ) : (
               <>
+                <Badge variant="secondary" className="text-xs">En el pool</Badge>
                 <Button
                   size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
+                  variant="ghost"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                   onClick={() => usarMut.mutate()}
                   disabled={enCurso}
-                  aria-label="Enviar al feed (genera copy)"
-                  title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
+                  aria-label="Empujar ya (fuerza al feed)"
+                  title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
                 >
                   {usarMut.isPending ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <Newspaper className="h-3 w-3" />
                   )}
-                  Enviar al feed
+                  Empujar ya
                 </Button>
                 <Button
                   size="sm"
@@ -1120,6 +1124,11 @@ export default function Cobertura() {
 
       {/* Barra de salud del motor */}
       <BarraCobertura />
+
+      {/* Explainer del pool */}
+      <p className="mb-4 text-xs text-muted-foreground">
+        El auto-feed lleva al feed las historias relevantes (tope por marca, configurable). Aquí curas el pool: descarta lo que no sirva o empuja algo concreto con "Empujar ya".
+      </p>
 
       {/* Sub-pestañas: Historias (Ola B, alta señal) vs Artículos (Ola A, raw) vs Salud (Ola D) */}
       <Tabs defaultValue="historias" className="w-full">

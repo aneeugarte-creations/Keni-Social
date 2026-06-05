@@ -526,13 +526,15 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
         <div className="flex shrink-0 items-center gap-1">
           {esNuevo && (
             <>
+              <Badge variant="secondary" className="text-xs">En el pool</Badge>
               <Button
                 size="sm"
-                className="h-7 gap-1 px-2 text-xs"
+                variant="ghost"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                 onClick={() => aceptar.mutate()}
                 disabled={aceptar.isPending || descartar.isPending}
-                aria-label={`Enviar al feed "${candidato.titulo}"`}
-                title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
+                aria-label={`Empujar ya "${candidato.titulo}"`}
+                title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
                 data-testid="btn-aceptar"
               >
                 {aceptar.isPending ? (
@@ -540,7 +542,7 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
                 ) : (
                   <Send className="h-3 w-3" />
                 )}
-                Enviar al feed
+                Empujar ya
               </Button>
               <Button
                 size="sm"

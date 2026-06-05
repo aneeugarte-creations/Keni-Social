@@ -121,6 +121,28 @@ def _publicacion_por_marca() -> list[Ajuste]:
     ]
 
 
+def _autofeed_cap_por_marca() -> list[Ajuste]:
+    """Excepción del TOPE DIARIO del auto-feed por marca (clave `KENI_AUTOFEED_CAP::marca`).
+
+    A diferencia de las etapas (toggle bool), el override del auto-feed es un ENTERO: cada marca
+    puede tener su propio tope (incl. 0 = sin auto-feed para esa marca) mientras el resto sigue
+    al global. Mismo mecanismo `clave_por_marca` que `marca_apagada`/`_ETAPAS_MARCA`; sin override
+    la marca cae al cap global (`config.autofeed_cap`). Se generan desde el catálogo de marcas."""
+    return [
+        Ajuste(
+            clave=config.clave_por_marca(config.ENV_AUTOFEED_CAP, mid),
+            tipo="int",
+            etiqueta=f"{nombre} · Auto-feed: tope diario",
+            ayuda="Tope diario de auto-feed solo para esta marca (0 = desactiva el auto-feed de "
+            "esta marca). Sin tocarla, sigue al tope global.",
+            grupo="automatizacion_marca",
+            defecto=config.autofeed_cap(),
+            minimo=0,
+        )
+        for mid, nombre in marcas.opciones()
+    ]
+
+
 @dataclass(frozen=True)
 class Ajuste:
     """Un ajuste editable del catalogo (declarativo)."""
@@ -264,6 +286,17 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_AUTOFEED,
+            tipo="bool",
+            etiqueta="Auto-feed · pool → feed automático",
+            ayuda="Lleva solas al feed las historias relevantes del pool (cajones, "
+            "investigación, RSS, ya deduplicadas) como borradores con copy+QA, respetando un "
+            "tope diario por marca (Ola E). Nunca publica: todo cae en el feed para imagen + "
+            "aprobación humana. Conservador por defecto (OFF).",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
             clave=config.ENV_INVESTIGACION,
             tipo="bool",
             etiqueta="Noticias · Agentes de investigación (background)",
@@ -320,6 +353,37 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="tuning",
             defecto=config.AUTOGEN_ARTE_MAX_DEF,
             minimo=1,
+        ),
+        # --- Auto-feed (Ola E) --------------------------------------------------- #
+        Ajuste(
+            clave=config.ENV_AUTOFEED_INTERVALO_MIN,
+            tipo="int",
+            etiqueta="Auto-feed: intervalo (minutos)",
+            ayuda="Cada cuántos minutos barre el daemon de auto-feed el pool de historias.",
+            grupo="tuning",
+            defecto=config.AUTOFEED_INTERVALO_MIN_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_AUTOFEED_UMBRAL,
+            tipo="float",
+            etiqueta="Auto-feed: umbral de relevancia",
+            ayuda="Score mínimo (0–1) de una historia para entrar sola al feed. "
+            "Sube el valor para dejar entrar solo lo más relevante.",
+            grupo="tuning",
+            defecto=config.AUTOFEED_UMBRAL_DEF,
+            minimo=0,
+            maximo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_AUTOFEED_CAP,
+            tipo="int",
+            etiqueta="Auto-feed: tope diario por marca",
+            ayuda="Máximo de piezas que el auto-feed crea por marca y día (cada una encola un "
+            "copy+QA). Admite excepción por marca (abajo); 0 = desactiva el auto-feed.",
+            grupo="tuning",
+            defecto=config.AUTOFEED_CAP_DEF,
+            minimo=0,
         ),
         Ajuste(
             clave=config.ENV_RADAR_AUTO_UMBRAL,
@@ -563,6 +627,7 @@ def catalogo() -> list[Ajuste]:
         _maestros_etapa()
         + _construir_catalogo()
         + _ajustes_por_marca()
+        + _autofeed_cap_por_marca()
         + _publicacion_por_marca()
     )
 

@@ -51,6 +51,7 @@ def main() -> int:
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
     from .auto_avance import iniciar_auto_avance
+    from .autofeed_daemon import iniciar_autofeed
     from .autogen_arte import iniciar_autogen_arte
     from .autogen_copy import iniciar_autogen
     from .breaking_daemon import iniciar_breaking
@@ -93,6 +94,11 @@ def main() -> int:
     # copy+arte y valida, registrando cada etapa en "Actividad IA"; deja borradores en revision.
     # No barre salvo KENI_PIPELINE=1 (def OFF); nunca publica.
     iniciar_pipeline()
+    # Auto-feed (Ola E): pool único → dedup → feed automático. Lleva las historias relevantes
+    # del pool al feed como borradores con copy+QA encolados, respetando un tope diario por
+    # marca. GATEADO y SAFE BY DEFAULT: no barre salvo KENI_MAQUINA=1 Y KENI_AUTOFEED=1 (def
+    # OFF). Nunca publica (todo cae en el feed para imagen + aprobación humana).
+    iniciar_autofeed()
     # Auto-avance "dale el OK" (Flujo D): lleva SOLO a en_revision las piezas listas (copy out +
     # copy in/exención + imagen con formato + QA 🟢/🟡) y lanza la QA de las que falte. GATEADO:
     # no barre salvo KENI_AUTO_AVANCE=1 (def OFF). Abre los OK del equipo; nunca aprueba ni publica.

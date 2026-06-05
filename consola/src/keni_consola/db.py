@@ -4646,6 +4646,24 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     return [(f["titulo"] or "") for f in filas]
 
 
+def contar_contenido_origen_desde(marca: str, origen: str, desde_iso: str) -> int:
+    """Nº de items del tablero de `marca` con `origen` creados desde `desde_iso` (ISO inclusivo).
+
+    Consulta de COUNT ligera para el tope diario del auto-feed: cuántas piezas `origen='autofeed'`
+    se han creado hoy para una marca, para restarlo del cap. `clase='contenido'` excluye tareas.
+    """
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT COUNT(*) AS n FROM contenido "
+            "WHERE marca = ? AND origen = ? AND clase = 'contenido' AND creado >= ?",
+            (marca, origen, desde_iso),
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
 # --------------------------------------------------------------------------- #
 # Investigador (Fase 1): snapshot persistido del Radar curado (`radar_items`)   #
 # --------------------------------------------------------------------------- #

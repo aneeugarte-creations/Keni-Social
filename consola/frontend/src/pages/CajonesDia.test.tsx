@@ -5,7 +5,8 @@
  * 1. Renderiza las 4 tarjetas de cajones.
  * 2. Permite cambiar el día (selector de fecha).
  * 3. Muestra los ítems parseados cuando la API devuelve datos.
- * 4. El botón "Enviar al feed" llama a `api.insumos.usarItem`.
+ * 4. El botón "Empujar ya" (override del auto-feed) llama a `api.insumos.usarItem`.
+ * 5. Ítems en pool muestran badge "En el pool"; ítems en feed muestran "En el feed".
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -299,7 +300,7 @@ describe("CajonesDia", () => {
     expect(screen.getByText("Nacional")).toBeInTheDocument();
   });
 
-  it("el botón 'Enviar al feed' llama a api.insumos.usarItem", async () => {
+  it("el botón 'Empujar ya' llama a api.insumos.usarItem", async () => {
     // Configurar mocks antes de renderizar
     const usarMock = vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
       item: { ...ITEM_PARSED, usado: true },
@@ -313,8 +314,8 @@ describe("CajonesDia", () => {
     // Esperar a que los ítems aparezcan (la carga puede estar en skeleton primero)
     await screen.findByText("Sismo en CDMX de 5.4 grados");
 
-    // Ahora encontrar y hacer clic en el botón "Enviar al feed"
-    const boton = screen.getByRole("button", { name: "Enviar al feed (genera copy)" });
+    // Ahora encontrar y hacer clic en el botón "Empujar ya" (override del auto-feed)
+    const boton = screen.getByRole("button", { name: "Empujar ya (fuerza al feed)" });
     fireEvent.click(boton);
 
     await waitFor(() => {
@@ -322,7 +323,37 @@ describe("CajonesDia", () => {
     });
   });
 
-  it("un ítem de Eventos Claro ofrece 'Crear evento' (no 'Enviar al feed')", async () => {
+  it("ítem en pool muestra badge 'En el pool'", async () => {
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    expect(screen.getByText("En el pool")).toBeInTheDocument();
+  });
+
+  it("ítem ya usado muestra badge 'En el feed' (sin 'Empujar ya')", async () => {
+    const itemUsado = { ...ITEM_PARSED, usado: true, contenido_id: "c-99" };
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue({
+      ...INSUMOS_CON_ITEM,
+      cajones: [
+        { cajon: "portal", lotes: [LOTE_PORTAL], items: [itemUsado] },
+        { cajon: "corresponsales", lotes: [], items: [] },
+        { cajon: "reporteros", lotes: [], items: [] },
+        { cajon: "eventos_claro", lotes: [], items: [] },
+      ],
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    expect(screen.getByText("En el feed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Empujar ya (fuerza al feed)" })).not.toBeInTheDocument();
+  });
+
+  it("un ítem de Eventos Claro ofrece 'Crear evento' (no 'Empujar ya')", async () => {
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_EVENTO as never);
     vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
 
@@ -331,7 +362,7 @@ describe("CajonesDia", () => {
     await screen.findByText("Cruz Azul vs América");
     expect(screen.getByRole("button", { name: "Crear evento" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Enviar al feed (genera copy)" }),
+      screen.queryByRole("button", { name: "Empujar ya (fuerza al feed)" }),
     ).not.toBeInTheDocument();
   });
 

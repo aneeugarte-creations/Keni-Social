@@ -3,7 +3,9 @@
  *
  * El equipo vuelca material en 4 cajones (Portal/SMS, Corresponsales,
  * Reporteros y Eventos Claro). Haiku los parsea y produce ítems limpios,
- * ordenados y listos para enviar al feed con un clic.
+ * ordenados y listos para curar: el auto-feed lleva las historias relevantes
+ * al feed automáticamente; aquí se descarta lo que no sirva o se empuja algo
+ * de inmediato con "Empujar ya".
  *
  * Contrato: docs/maquina-contenido/01-insumos-del-dia.md
  */
@@ -348,21 +350,25 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                     Crear evento
                   </Button>
                 ) : (
-                  <Button
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs"
-                    onClick={() => usarMut.mutate()}
-                    disabled={usarMut.isPending}
-                    aria-label="Enviar al feed (genera copy)"
-                    title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
-                  >
-                    {usarMut.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Send className="h-3 w-3" />
-                    )}
-                    Enviar al feed
-                  </Button>
+                  <>
+                    <Badge variant="secondary" className="text-xs">En el pool</Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                      onClick={() => usarMut.mutate()}
+                      disabled={usarMut.isPending}
+                      aria-label="Empujar ya (fuerza al feed)"
+                      title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
+                    >
+                      {usarMut.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3" />
+                      )}
+                      Empujar ya
+                    </Button>
+                  </>
                 )}
               </>
             )}
@@ -665,8 +671,13 @@ export default function CajonesDia() {
     <>
       <PageHeader
         titulo="Cajones del día"
-        descripcion="Vuelca el material diario en cada cajón y Haiku lo parsea y ordena. Luego envía los ítems al feed con un clic."
+        descripcion="Vuelca el material diario en cada cajón y Haiku lo parsea y ordena."
       />
+
+      {/* Explainer del pool */}
+      <p className="mb-4 text-xs text-muted-foreground">
+        El auto-feed lleva al feed las historias relevantes (tope por marca, configurable). Aquí curas el pool: descarta lo que no sirva o empuja algo concreto con "Empujar ya".
+      </p>
 
       {/* Controles de fecha e historial */}
       <div className="mb-6 flex flex-wrap items-end gap-3">

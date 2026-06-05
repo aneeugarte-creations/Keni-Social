@@ -6,8 +6,9 @@
  * 2. Muestra los briefs cargados desde la API.
  * 3. "Investigar ahora" llama a api.investigacion.correr con el brief_id.
  * 4. Muestra los candidatos del día.
- * 5. "Enviar al feed" llama a api.investigacion.aceptar.
+ * 5. "Empujar ya" (override del auto-feed) llama a api.investigacion.aceptar.
  * 6. "Descartar" llama a api.investigacion.descartar.
+ * 7. Candidatos nuevos muestran badge "En el pool".
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -204,7 +205,7 @@ describe("AgentesInvestigacion", () => {
     expect(screen.getByText("Reforma")).toBeInTheDocument();
   });
 
-  it("'Enviar al feed' llama a api.investigacion.aceptar con el id del candidato", async () => {
+  it("'Empujar ya' llama a api.investigacion.aceptar con el id del candidato", async () => {
     const aceptarMock = vi
       .spyOn(apiMod.api.investigacion, "aceptar")
       .mockResolvedValue({
@@ -218,7 +219,7 @@ describe("AgentesInvestigacion", () => {
     await screen.findByText("Propuesta de reforma constitucional avanza en el Congreso");
 
     const boton = screen.getByRole("button", {
-      name: /Enviar al feed "Propuesta de reforma constitucional avanza en el Congreso"/,
+      name: /Empujar ya "Propuesta de reforma constitucional avanza en el Congreso"/,
     });
     fireEvent.click(boton);
 
@@ -247,6 +248,14 @@ describe("AgentesInvestigacion", () => {
     await waitFor(() => {
       expect(descartarMock).toHaveBeenCalledWith("cand-1");
     });
+  });
+
+  it("candidato nuevo muestra badge 'En el pool'", async () => {
+    mockApi(BRIEFS_VACIOS, CANDIDATOS_CON_DATOS);
+    renderConProviders(<AgentesInvestigacion />);
+
+    await screen.findByText("Propuesta de reforma constitucional avanza en el Congreso");
+    expect(screen.getByText("En el pool")).toBeInTheDocument();
   });
 
   it("muestra estado vacío cuando no hay candidatos", async () => {
@@ -297,7 +306,7 @@ describe("AgentesInvestigacion", () => {
     });
   });
 
-  it("candidato aceptado muestra badge 'En el feed' (sin botones de acción)", async () => {
+  it("candidato aceptado muestra badge 'En el feed' (sin botón 'Empujar ya')", async () => {
     const candidatoAceptado = { ...CANDIDATO_NUEVO, estado: "aceptado" as const };
     mockApi(BRIEFS_VACIOS, { candidatos: [candidatoAceptado] });
 
@@ -305,6 +314,6 @@ describe("AgentesInvestigacion", () => {
 
     await screen.findByText("Propuesta de reforma constitucional avanza en el Congreso");
     expect(screen.getByText("En el feed")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Enviar al feed/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Empujar ya/ })).not.toBeInTheDocument();
   });
 });

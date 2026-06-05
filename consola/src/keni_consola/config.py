@@ -349,6 +349,18 @@ ENV_PIPELINE = "KENI_PIPELINE"
 ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 
+# Auto-feed (Ola E): pool único -> dedup -> feed automático. Un hilo demonio que, cada N
+# minutos y por marca activa, toma las HISTORIAS (clusters) relevantes del pool (score >=
+# umbral), descarta las caducas para líneas no-green, respeta un TOPE DIARIO POR MARCA y crea
+# en el feed una pieza borrador con copy+QA encolados (1 agente, mismo camino que el botón
+# manual). NUNCA publica (todo cae en el feed para imagen + aprobación humana). CONSERVADOR por
+# defecto (OFF): sin `KENI_AUTOFEED` nada fluye solo. El tope por marca admite override por-marca
+# `KENI_AUTOFEED_CAP::<marca>` (mismo mecanismo `clave_por_marca` que `marca_apagada`).
+ENV_AUTOFEED = "KENI_AUTOFEED"
+ENV_AUTOFEED_UMBRAL = "KENI_AUTOFEED_UMBRAL"
+ENV_AUTOFEED_CAP = "KENI_AUTOFEED_CAP"
+ENV_AUTOFEED_INTERVALO_MIN = "KENI_AUTOFEED_INTERVALO_MIN"
+
 # Auto-generacion de ARTE (imagen) para temas con copy pero sin imagen (fase3 auto-produccion,
 # H2-b). Un hilo demonio barre el tablero y, para los temas con borrador/copy en alguna
 # plataforma a la que le FALTA imagen, genera UN arte por IA (mismo proveedor que
@@ -634,6 +646,14 @@ AUTO_AVANCE_MAX_DEF = 4
 # (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
 PIPELINE_INTERVALO_HORAS_DEF = 1
 PIPELINE_MAX_DEF = 3
+
+# Auto-feed (Ola E): barrido frecuente en MINUTOS (def 10) — toma historias ya cribadas del
+# pool, sin coste de ingesta. Umbral de relevancia 0.5 (el score del cluster vive en [0,1];
+# las notas curadas del equipo lo superan de sobra). Tope diario por marca def 20 (cada pieza
+# encola un copy+QA: el cap acota cuántas piezas auto-fluyen al feed por marca y día).
+AUTOFEED_UMBRAL_DEF = 0.5
+AUTOFEED_CAP_DEF = 20
+AUTOFEED_INTERVALO_MIN_DEF = 10
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
 # barrido cada 10 min. El barrido tambien corre al arrancar (limpia los huerfanos del crash
@@ -1632,6 +1652,58 @@ def pipeline_max() -> int:
     Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
     """
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
+
+
+def autofeed_activo() -> bool:
+    """True si el daemon de auto-feed debe BARRER (`KENI_AUTOFEED`).
+
+    Def OFF (conservador): sin el flag, nada del pool fluye solo al feed (el equipo empuja a
+    mano con el override "empujar ya"). Con el flag, un hilo demonio lleva las historias
+    relevantes del pool al feed como borradores con copy+QA. Gateado además por el maestro
+    `KENI_MAQUINA`. NUNCA publica (todo cae en el feed para imagen + aprobación humana).
+    """
+    return _crudo(ENV_AUTOFEED).lower() in _VERDADEROS
+
+
+def autofeed_umbral() -> float:
+    """Umbral de relevancia (score de cluster) para auto-fluir al feed (`KENI_AUTOFEED_UMBRAL`, def 0.5).
+
+    Score mínimo (en [0,1]) que una historia debe alcanzar para entrar al feed sola. Valor
+    inválido o fuera de [0,1] → def. Subirlo deja entrar solo lo más relevante.
+    """
+    crudo = _crudo(ENV_AUTOFEED_UMBRAL)
+    if not crudo:
+        return AUTOFEED_UMBRAL_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return AUTOFEED_UMBRAL_DEF
+    if valor < 0.0 or valor > 1.0:
+        return AUTOFEED_UMBRAL_DEF
+    return valor
+
+
+def autofeed_cap(marca: str | None = None) -> int:
+    """Tope DIARIO de piezas auto-fluidas al feed por marca (`KENI_AUTOFEED_CAP`, def 20, min 0).
+
+    Con `marca`, primero mira el override por-marca `KENI_AUTOFEED_CAP::<marca>` (mismo mecanismo
+    `clave_por_marca` que `marca_apagada`/`_ETAPAS_MARCA`); si existe y parsea, manda. Si no, cae
+    al global. El override permite que una marca tenga un tope distinto (p. ej. 0 = no auto-feed
+    para esa marca) sin tocar el global. min 0: un cap 0 desactiva el auto-feed de esa marca.
+    """
+    if marca:
+        crudo_marca = _crudo(clave_por_marca(ENV_AUTOFEED_CAP, marca))
+        if crudo_marca:
+            try:
+                return max(0, int(crudo_marca))
+            except ValueError:
+                pass  # override ilegible: cae al global
+    return _entero(ENV_AUTOFEED_CAP, AUTOFEED_CAP_DEF, minimo=0)
+
+
+def autofeed_intervalo_min() -> int:
+    """Cada cuántos MINUTOS barre el daemon de auto-feed (`KENI_AUTOFEED_INTERVALO_MIN`, def 10, min 1)."""
+    return _entero(ENV_AUTOFEED_INTERVALO_MIN, AUTOFEED_INTERVALO_MIN_DEF, minimo=1)
 
 
 def autogen_arte_activo() -> bool:

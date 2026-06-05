@@ -398,19 +398,20 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
 
         <div className="flex flex-wrap gap-2 pt-1">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
+            className="text-muted-foreground"
             onClick={() => llevarAlTablero.mutate()}
             disabled={llevarAlTablero.isPending}
-            aria-label="Enviar al feed (genera copy)"
-            title="Genera el copy con la voz de la marca y lo deja en el Feed, listo para imagen y publicar."
+            aria-label="Empujar ya (fuerza al feed)"
+            title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
           >
             {llevarAlTablero.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <ListPlus className="h-3.5 w-3.5" />
             )}
-            Enviar al feed
+            Empujar ya
           </Button>
         </div>
       </div>

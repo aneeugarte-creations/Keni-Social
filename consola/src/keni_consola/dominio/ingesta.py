@@ -152,3 +152,80 @@ def items_de_feed(
             }
         )
     return items, {"conteo": len(items), "error": ""}
+
+
+# --------------------------------------------------------------------------- #
+# Pool único (Ola E): unificar TODAS las notas en `noticias_items`             #
+# --------------------------------------------------------------------------- #
+#
+# Las notas de CUALQUIER origen (cajones del equipo, investigación) deben entrar al MISMO pool
+# (`noticias_items`) para que el clustering las deduplique y el auto-feed las pueda usar. Estos
+# constructores son PUROS: arman el dict de `noticias_items` (con su `clave` de dedup, reusando
+# `url_canonica`/`_clave_dedup`) a partir de la fila propia (insumo_item / inv_candidato). El
+# `crear_noticias_items` es idempotente por UNIQUE(fuente_id, clave): re-insertar es inofensivo.
+
+# Señal alta de las notas CURADAS por el equipo (cajones): material elegido a mano = alta
+# prioridad, así su historia supera fácilmente el umbral del auto-feed. Por encima del log-norm
+# de viralidad (`_SENAL_SATURA`=1e6 en clustering) NO tiene sentido; este valor satura el peso.
+SENAL_CURADO = 1_000_000
+
+
+def noticia_item_de_insumo(insumo: dict[str, Any]) -> dict[str, Any] | None:
+    """Fila de `noticias_items` a partir de un `insumo_item` de cajón. None si no se puede.
+
+    Los EVENTOS no entran al pool (son agenda de cobertura, no notas de copy): se omiten
+    devolviendo None. La `clave` es el hash del título normalizado (los cajones no traen URL);
+    sin título útil no hay identidad estable y se omite. `senal` alta (curado por el equipo).
+    """
+    if str(insumo.get("tipo") or "").strip().lower() == "evento":
+        return None
+    titulo = str(insumo.get("titulo") or "").strip()
+    clave = _clave_dedup("", titulo)
+    if not clave:
+        return None
+    cajon = str(insumo.get("cajon") or "").strip()
+    return {
+        "fuente_id": f"cajon-{cajon}" if cajon else "cajon",
+        "fuente_nombre": cajon or "cajón",
+        "categoria": str(insumo.get("linea") or "").strip(),
+        "marca": str(insumo.get("marca") or "").strip(),
+        "titulo": titulo,
+        "resumen": str(insumo.get("resumen") or "").strip(),
+        "url": "",
+        "url_canonica": "",
+        "idioma": str(insumo.get("idioma") or "es").strip(),
+        "publicado_en": str(insumo.get("fecha") or "").strip(),
+        "clave": clave,
+        "senal": SENAL_CURADO,
+        "estado": "nuevo",
+    }
+
+
+def noticia_item_de_candidato(cand: dict[str, Any]) -> dict[str, Any] | None:
+    """Fila de `noticias_items` a partir de un `inv_candidato` (investigación). None si no se puede.
+
+    La `clave` es la URL canónica del enlace si la hay; si no, el hash del título normalizado.
+    Sin identidad estable (ni url ni título útil) se omite. `senal` 0 (la corroboración/relevancia
+    del clustering decide su peso; no es material curado a mano como los cajones).
+    """
+    titulo = str(cand.get("titulo") or "").strip()
+    url = str(cand.get("enlace") or "").strip()
+    url_can = url_canonica(url)
+    clave = _clave_dedup(url_can, titulo)
+    if not clave:
+        return None
+    return {
+        "fuente_id": "investigacion",
+        "fuente_nombre": str(cand.get("fuente") or "Investigación").strip() or "Investigación",
+        "categoria": str(cand.get("linea") or "").strip(),
+        "marca": str(cand.get("marca") or "").strip(),
+        "titulo": titulo,
+        "resumen": str(cand.get("resumen") or "").strip(),
+        "url": url,
+        "url_canonica": url_can,
+        "idioma": str(cand.get("idioma") or "es").strip(),
+        "publicado_en": str(cand.get("fecha") or "").strip(),
+        "clave": clave,
+        "senal": 0,
+        "estado": "nuevo",
+    }

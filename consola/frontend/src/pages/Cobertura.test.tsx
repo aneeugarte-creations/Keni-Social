@@ -5,17 +5,18 @@
  *   1. Renderiza la barra de cobertura con los datos de salud del motor.
  *   2. Muestra la lista de noticias ingeridas (Artículos).
  *   3. Los filtros (categoría, idioma, estado, q) pasan los parámetros correctos a la API.
- *   4. El botón "Usar" llama a `api.noticias.usar`.
+ *   4. El botón "Empujar ya" (override del auto-feed) llama a `api.noticias.usar`.
  *   5. El botón "Descartar" llama a `api.noticias.descartar`.
  *   6. La página es marca-aware: pasa `marcaActiva` a la query.
  *   7. Estado vacío cuando no hay ítems.
  *   8. Vista Historias (Ola B): renderiza clusters con badge "N fuentes".
  *   9. Cambiar entre modos Historias/Artículos.
- *  10. Acciones Usar/Descartar de historias llaman a los endpoints correctos.
+ *  10. Acciones Empujar/Descartar de historias llaman a los endpoints correctos.
  *  11. Historias son marca-aware (incluye marcaActiva en query keys).
  *  12. (Ola D) Pestaña Salud: resumen, huecos y tabla de feeds.
  *  13. (Ola D) Botón Reactivar llama a fuentes.reactivar.
  *  14. (Ola D) Badges verificación y traducido en tarjetas de historias.
+ *  15. Ítems en pool muestran badge "En el pool".
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -357,8 +358,8 @@ describe("Cobertura · lista de noticias", () => {
     await waitFor(() => {
       expect(screen.getByText(/En el feed/i)).toBeTruthy();
     });
-    // El botón "Enviar al feed" no debe aparecer
-    expect(screen.queryByRole("button", { name: /Enviar al feed/i })).toBeNull();
+    // El botón "Empujar ya" no debe aparecer para ítems ya en el feed
+    expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
   });
 
   it("muestra 'Descartada' en un ítem con estado 'descartado'", async () => {
@@ -372,8 +373,8 @@ describe("Cobertura · lista de noticias", () => {
   });
 });
 
-describe("Cobertura · acciones Usar / Descartar", () => {
-  it("el botón 'Usar' llama a api.noticias.usar con el id del ítem", async () => {
+describe("Cobertura · acciones Empujar / Descartar", () => {
+  it("el botón 'Empujar ya' llama a api.noticias.usar con el id del ítem", async () => {
     mockListar.mockResolvedValue(RESPUESTA_UN_ITEM);
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
@@ -381,7 +382,7 @@ describe("Cobertura · acciones Usar / Descartar", () => {
     await waitFor(() => {
       expect(screen.getByText("Título de prueba")).toBeTruthy();
     });
-    const boton = screen.getByRole("button", { name: /Enviar al feed/i });
+    const boton = screen.getByRole("button", { name: /Empujar ya/i });
     fireEvent.click(boton);
     await waitFor(() => {
       expect(mockUsar).toHaveBeenCalledWith("n-1", { generar: true });
@@ -552,7 +553,8 @@ describe("Cobertura · Historias — renderizado de clusters", () => {
     await waitFor(() => {
       expect(screen.getByText(/En el feed/i)).toBeTruthy();
     });
-    expect(screen.queryByRole("button", { name: /Enviar al feed/i })).toBeNull();
+    // El botón "Empujar ya" no debe aparecer para historias ya en el feed
+    expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
   });
 
   it("muestra 'Descartada' cuando la historia está descartada", async () => {
@@ -579,14 +581,14 @@ describe("Cobertura · Historias — renderizado de clusters", () => {
   });
 });
 
-describe("Cobertura · Historias — acciones Usar / Descartar", () => {
-  it("el botón 'Usar' de una historia llama a api.noticias.usarHistoria", async () => {
+describe("Cobertura · Historias — acciones Empujar / Descartar", () => {
+  it("el botón 'Empujar ya' de una historia llama a api.noticias.usarHistoria", async () => {
     mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
     renderConProviders(<Cobertura />);
     await waitFor(() => {
       expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
     });
-    const boton = screen.getByRole("button", { name: /Enviar al feed/i });
+    const boton = screen.getByRole("button", { name: /Empujar ya/i });
     fireEvent.click(boton);
     await waitFor(() => {
       expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true });
@@ -842,5 +844,29 @@ describe("Cobertura · Historias — badge traducido", () => {
       expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
     });
     expect(screen.queryByTestId("badge-traducido")).toBeNull();
+  });
+});
+
+// ── Tests: Badges de estado del pool ─────────────────────────────────────────
+
+describe("Cobertura · badge de estado del pool", () => {
+  it("historia nueva muestra badge 'En el pool'", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    expect(screen.getByText("En el pool")).toBeTruthy();
+  });
+
+  it("noticia nueva en Artículos muestra badge 'En el pool'", async () => {
+    mockListar.mockResolvedValue(RESPUESTA_UN_ITEM);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
+    await irAArticulos();
+    await waitFor(() => {
+      expect(screen.getByText("Título de prueba")).toBeTruthy();
+    });
+    expect(screen.getByText("En el pool")).toBeTruthy();
   });
 });
