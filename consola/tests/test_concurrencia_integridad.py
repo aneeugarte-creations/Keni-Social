@@ -197,57 +197,13 @@ def test_indice_unico_copy_version_rechaza_duplicado(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# 4) Parrilla: índice parcial único + retry evitan la doble-reserva           #
+# 4) Parrilla: la doble-reserva de slot queda como FOLLOW-UP                   #
 # --------------------------------------------------------------------------- #
-
-
-def test_indice_parrilla_rechaza_doble_reserva_mismo_slot(entorno):
-    # Dos piezas de la misma red programadas en la MISMA fecha: el índice parcial único
-    # (red, fecha) WHERE estado='programado' rechaza la segunda.
-    pub_a = repos.crear_publicacion(_MARCA, "x", titulo="A", contenido="C")
-    pub_b = repos.crear_publicacion(_MARCA, "x", titulo="B", contenido="C")
-    slot = "2026-06-10T15:00"
-    assert repos.actualizar_publicacion(
-        pub_a["id"], {"estado": "programado", "fecha_programada": slot}
-    ) is not None
-    with pytest.raises(db.IntegrityError):
-        repos.actualizar_publicacion(
-            pub_b["id"], {"estado": "programado", "fecha_programada": slot}
-        )
-
-
-def test_indice_parrilla_no_afecta_borradores_ni_otras_redes(entorno):
-    # El índice es PARCIAL: dos borradores (sin fecha) y dos redes distintas en el mismo
-    # minuto conviven sin chocar (solo cuenta `programado` con fecha no vacía y misma red).
-    a = repos.crear_publicacion(_MARCA, "x", titulo="A", contenido="C")
-    b = repos.crear_publicacion(_MARCA, "instagram", titulo="B", contenido="C")
-    slot = "2026-06-10T15:00"
-    assert repos.actualizar_publicacion(a["id"], {"estado": "programado", "fecha_programada": slot})
-    # Otra red, mismo minuto: permitido.
-    assert repos.actualizar_publicacion(b["id"], {"estado": "programado", "fecha_programada": slot})
-
-
-def test_encolar_recalcula_hueco_ante_choque(entorno, monkeypatch):
-    # `_encolar_en_hueco_libre` debe REINTENTAR con el siguiente hueco si el primero choca.
-    # Simulamos: el primer cálculo devuelve un slot ya OCUPADO por otra pieza programada; el
-    # segundo cálculo (tras el IntegrityError) devuelve uno libre.
-    from keni_consola.api import publicaciones as ap
-
-    ocupado = repos.crear_publicacion(_MARCA, "x", titulo="ocupa", contenido="C")
-    slot_ocupado = "2026-06-10T15:00"
-    slot_libre = "2026-06-17T15:00"
-    repos.actualizar_publicacion(
-        ocupado["id"], {"estado": "programado", "fecha_programada": slot_ocupado}
-    )
-
-    pieza = repos.crear_publicacion(_MARCA, "x", titulo="nueva", contenido="C")
-    huecos = iter([slot_ocupado, slot_libre])
-    monkeypatch.setattr(ap, "calcular_hueco_para", lambda pub, ahora=None: next(huecos))
-
-    actualizada, hubo_hueco = ap._encolar_en_hueco_libre(pieza)
-    assert hubo_hueco is True
-    assert actualizada is not None
-    assert actualizada["fecha_programada"] == slot_libre  # tomó el libre tras el choque.
+# Se RETIRÓ el UNIQUE parcial (red, fecha_programada): el slot correcto es por MARCA y `marca`
+# no vive en `contenido_plataforma`, así que un índice solo por (red, fecha) chocaba entre
+# marcas y rompía el programador multi-marca. La protección correcta (denormalizar `marca` o
+# advisory lock por (marca, red)) queda documentada en db.py. Sin índice no hay test de
+# rechazo/retry aquí.
 
 
 # --------------------------------------------------------------------------- #

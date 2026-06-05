@@ -25,6 +25,7 @@ Uso en las features:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -259,6 +260,19 @@ def borrar_publicacion(publicacion_id: str) -> bool:
 
 def reclamar_preparacion(publicacion_id: str, ts: str) -> bool:
     return db.reclamar_preparacion(publicacion_id, ts)
+
+
+def decidir_nivel_aprobacion_tx(
+    plataforma_id: str,
+    nivel_id: str,
+    validar: Any,
+) -> tuple[dict[str, Any] | None, str | None]:
+    return db.decidir_nivel_aprobacion_tx(plataforma_id, nivel_id, validar)
+
+
+def lock_barrido(nombre: str) -> Iterator[bool]:
+    # Passthrough del single-flight cross-proceso (advisory lock). `with repos.lock_barrido(x) as ok:`
+    return db.lock_barrido(nombre)
 
 
 # --------------------------------------------------------------------------- #

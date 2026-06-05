@@ -5910,14 +5910,13 @@ _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     # (ver `crear_documento_version` / `registrar_copy_version`).
     ("idx_documento_versiones_uniq", "documento_versiones (contenido_id, plataforma_id, version)"),
     ("idx_copy_versiones_uniq", "contenido_copy_versiones (plataforma_id, version)"),
-    # Slot de PARRILLA: dos piezas no pueden quedar PROGRAMADAS a la misma (red, fecha). Parcial
-    # (solo filas `programado` con fecha no vacia) para no estorbar a borradores/temas sin fecha.
-    # El encolado convierte el choque en UniqueViolation y recalcula el siguiente hueco libre.
-    (
-        "idx_parrilla_slot_uniq",
-        "contenido_plataforma (red, fecha_programada) "
-        "WHERE estado = 'programado' AND fecha_programada <> ''",
-    ),
+    # NOTA: NO se impone UNIQUE de slot de parrilla. El slot correcto es POR MARCA (dos marcas
+    # distintas SI pueden publicar en la misma red a la misma hora), pero `marca` vive en
+    # `contenido` (padre), no en `contenido_plataforma`, y un indice PARCIAL no puede cruzar el
+    # join. Un UNIQUE solo por (red, fecha_programada) chocaba ENTRE MARCAS y rompia el
+    # programador multi-marca. La doble-reserva intra-marca queda como FOLLOW-UP: denormalizar
+    # `marca` en `contenido_plataforma` y entonces UNIQUE (marca, red, fecha) WHERE programado, o
+    # serializar calculo+escritura del hueco con un advisory lock por (marca, red).
 )
 
 
