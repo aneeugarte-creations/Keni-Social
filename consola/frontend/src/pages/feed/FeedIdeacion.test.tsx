@@ -203,13 +203,15 @@ describe("FeedIdeacion · feed de ideación interno", () => {
 
   it("scroll infinito: la 1ª página trae cursor; al intersectar el sentinel pide la siguiente (con ?cursor=)", async () => {
     // IntersectionObserver controlable: capturamos su callback para disparar la intersección a mano
-    // (jsdom no lo implementa). Cada instancia registra su callback en `disparar`.
-    let disparar: (() => void) | null = null;
+    // (jsdom no lo implementa). Cada instancia registra su disparador en `disparadores` (un holder
+    // array: TS no estrecha el tipo del elemento a `null` como haría con una `let` asignada solo
+    // dentro del constructor anidado).
+    const disparadores: Array<() => void> = [];
     class IOFalso {
       cb: IntersectionObserverCallback;
       constructor(cb: IntersectionObserverCallback) {
         this.cb = cb;
-        disparar = () => this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this);
+        disparadores.push(() => this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this));
       }
       observe() {}
       unobserve() {}
@@ -266,8 +268,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // Primera página pintada.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Dispara la intersección del sentinel -> debe pedir la página 2 con ?cursor= y pintarla.
-    await waitFor(() => expect(disparar).not.toBeNull());
-    disparar?.();
+    await waitFor(() => expect(disparadores.length).toBeGreaterThan(0));
+    disparadores[0]();
     expect(await screen.findByText("Segunda página")).toBeInTheDocument();
     expect(urls.some((u) => u.includes("cursor="))).toBe(true);
   });
