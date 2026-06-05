@@ -14,6 +14,39 @@ from keni_consola.motores.estudio_imagen import documento as d
 from keni_consola.motores.estudio_imagen import spec_plantilla as sp
 
 
+def _img(x, y, w, h, es_foto=True):
+    return {"tipo": "imagen", "x": x, "y": y, "w": w, "h": h, "es_foto": es_foto}
+
+
+# --------------------------------------------------------------------------- #
+# Collage: VARIOS huecos de foto (es_foto)                                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_capas_foto_conserva_varios_huecos():
+    # Un collage declara N huecos (es_foto): validar los CONSERVA todos (antes colapsaba a 1).
+    doc = d.validar(_doc(capas=[_img(0, 0, 540, 1350), _img(540, 0, 540, 1350), _img(0, 0, 100, 100, es_foto=False)]))
+    assert d.cuenta_huecos_foto(doc) == 2
+    assert len(d.capas_foto(doc)) == 2
+
+
+def test_cuenta_huecos_acotada_al_maximo():
+    capas = [_img(i * 10, 0, 50, 50) for i in range(d.MAX_HUECOS_FOTO + 3)]
+    doc = d.validar(_doc(capas=capas))
+    assert d.cuenta_huecos_foto(doc) == d.MAX_HUECOS_FOTO
+
+
+def test_inyectar_fotos_por_hueco():
+    # `componer_desde_plantilla` mete una foto por hueco, en orden de `capas`.
+    doc = d.validar(_doc(capas=[_img(0, 0, 540, 1350), _img(540, 0, 540, 1350)]))
+    inyectado = e._doc_plantilla_con_fotos(
+        doc, [{"objeto": "a.jpg", "foco": [0.3, 0.4], "zoom": 1.2}, {"objeto": "b.jpg"}]
+    )
+    huecos = d.capas_foto(inyectado)
+    assert huecos[0]["objeto"] == "a.jpg" and huecos[0]["foco"] == [0.3, 0.4] and huecos[0]["zoom"] == 1.2
+    assert huecos[1]["objeto"] == "b.jpg"
+
+
 # --------------------------------------------------------------------------- #
 # Esquema (validar)                                                            #
 # --------------------------------------------------------------------------- #

@@ -106,6 +106,37 @@ def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
     return plantillas[0]
 
 
+def fotos_de_pieza(pub: dict[str, Any]) -> list[dict[str, Any]]:
+    """Fotos por HUECO de la pieza (collage): `[{objeto, foco, zoom}, …]`, una por hueco en orden.
+
+    Fuente: el campo `fotos` (JSON array) si lo hay; si está vacío, deriva el HUECO ÚNICO del par
+    legado `foto`/`foto_encuadre` (retrocompat con la foto única). Tolerante a JSON inválido.
+    """
+    from . import estudio_imagen
+
+    crudo = (pub.get("fotos") or "").strip()
+    if crudo:
+        try:
+            datos = json.loads(crudo)
+        except (ValueError, TypeError):
+            datos = None
+        if isinstance(datos, list):
+            specs: list[dict[str, Any]] = []
+            for it in datos:
+                if isinstance(it, dict):
+                    specs.append(
+                        {
+                            "objeto": str(it.get("objeto") or ""),
+                            "foco": it.get("foco"),
+                            "zoom": it.get("zoom") or 0.0,
+                        }
+                    )
+            if specs:
+                return specs
+    foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
+    return [{"objeto": (pub.get("foto") or "").strip(), "foco": foco, "zoom": zoom}]
+
+
 def imagen_compuesta_id(pub: dict[str, Any]) -> str:
     """Media id de la imagen PUBLICABLE de la pieza, renderizando on-demand si hace falta.
 
@@ -136,13 +167,10 @@ def imagen_compuesta_id(pub: dict[str, Any]) -> str:
     # Plantilla de estudio EFECTIVA (explícita o la por defecto de la marca, como el editor).
     plantilla = _plantilla_efectiva(pub)
     if plantilla is not None:
-        foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
         resultado = estudio_imagen.componer_desde_plantilla(
             plantilla.get("documento") or "{}",
             copy_in=copy_in,
-            foto=foto,
-            foco=foco,
-            zoom=zoom,
+            fotos=fotos_de_pieza(pub),  # una foto por hueco (collage); legado = hueco único
         )
         return resultado["id"]
     # Marca sin plantillas de estudio: placa de marca por SPEC (legado).
@@ -226,10 +254,10 @@ def render_bytes(pub: dict[str, Any]) -> tuple[bytes, str] | None:
     # Plantilla de estudio EFECTIVA (explícita o la por defecto de la marca, como el editor).
     plantilla = _plantilla_efectiva(pub)
     if plantilla is not None:
-        foco, zoom = estudio_imagen.parsear_encuadre(pub.get("foto_encuadre") or "")
         datos = estudio_imagen.componer_desde_plantilla_bytes(
             plantilla.get("documento") or "{}",
-            copy_in=copy_in, foto=foto, foco=foco, zoom=zoom,
+            copy_in=copy_in,
+            fotos=fotos_de_pieza(pub),  # una foto por hueco (collage); legado = hueco único
         )
         return datos, "image/png"
     # Marca sin plantillas de estudio: placa de marca por SPEC (legado).
@@ -258,6 +286,7 @@ def firma_receta(pub: dict[str, Any]) -> str:
         "foto": pub.get("foto") or "",
         "copy_in": pub.get("copy_in") or "",
         "foto_encuadre": pub.get("foto_encuadre") or "",
+        "fotos": pub.get("fotos") or "",
         "placa_oculta": bool(pub.get("placa_oculta")),
         "plantilla_diseno_id": (pub.get("plantilla_diseno_id") or "").strip(),
         "imagen": (pub.get("imagen") or "").strip(),

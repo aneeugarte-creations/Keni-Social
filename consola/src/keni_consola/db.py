@@ -626,6 +626,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         placa_oculta          INTEGER NOT NULL DEFAULT 0,
         plantilla_diseno_id   TEXT NOT NULL DEFAULT '',
         foto_encuadre         TEXT NOT NULL DEFAULT '',
+        fotos                 TEXT NOT NULL DEFAULT '',
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
@@ -1489,6 +1490,14 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS foto_encuadre TEXT NOT NULL DEFAULT ''"
+        )
+    # `fotos`: COLLAGE multi-hueco. JSON array `[{"objeto":media_id,"foco":[x,y],"zoom":z}, …]`,
+    # un elemento por HUECO de la plantilla (en orden de `capas`). "" = sin collage; entonces el
+    # hueco 0 se deriva del par legado `foto`/`foto_encuadre` (retrocompat con la foto única).
+    if "fotos" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS fotos TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -4452,6 +4461,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "placa_oculta",
     "plantilla_diseno_id",
     "foto_encuadre",
+    "fotos",
     "qa_auto_hash",
     "hora_post",
     "creado",
@@ -4542,6 +4552,7 @@ def crear_contenido_plataforma(
     placa_oculta: bool = False,
     plantilla_diseno_id: str = "",
     foto_encuadre: str = "",
+    fotos: str = "",
     qa_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
@@ -4586,6 +4597,7 @@ def crear_contenido_plataforma(
         "placa_oculta": 1 if placa_oculta else 0,
         "plantilla_diseno_id": plantilla_diseno_id or "",
         "foto_encuadre": foto_encuadre or "",
+        "fotos": fotos or "",
         "qa_auto_hash": qa_auto_hash or "",
         "hora_post": hora_post or "",
         "creado": creado or ahora,
@@ -7768,7 +7780,7 @@ _SELECT_PUBLICACION = (
     "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
     "cp.placa_oculta AS placa_oculta, cp.plantilla_diseno_id AS plantilla_diseno_id, "
-    "cp.foto_encuadre AS foto_encuadre, "
+    "cp.foto_encuadre AS foto_encuadre, cp.fotos AS fotos, "
     "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
@@ -7831,6 +7843,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "plantilla_diseno_id": f["plantilla_diseno_id"] or "",
         # Reencuadre manual de la foto (JSON `{"foco":[x,y],"zoom":z}`; "" = sin reencuadre).
         "foto_encuadre": f["foto_encuadre"] or "",
+        # COLLAGE: JSON array `[{objeto,foco,zoom}, …]`, una por hueco. "" = sin collage (hueco
+        # único derivado de `foto`/`foto_encuadre`).
+        "fotos": f["fotos"] or "",
         "qa_auto_hash": f["qa_auto_hash"] or "",
     }
 
@@ -8040,6 +8055,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "placa_oculta": "placa_oculta",
     "plantilla_diseno_id": "plantilla_diseno_id",
     "foto_encuadre": "foto_encuadre",
+    "fotos": "fotos",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",
     "revisor_nombre": "revisor_nombre",

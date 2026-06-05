@@ -140,6 +140,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`;
         # "" = sin reencuadre). El editor lo edita; persiste la elección humana del recorte.
         "foto_encuadre": pub.get("foto_encuadre") or "",
+        # COLLAGE multi-hueco: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco de la
+        # plantilla (en orden de `capas`). "" = sin collage (hueco único derivado de `foto`).
+        "fotos": pub.get("fotos") or "",
         # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
         # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
         "etapa_ia": etapa_ia,

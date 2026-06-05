@@ -685,18 +685,29 @@ def renderizar_documento(
     return {"id": nombre, "url": f"/api/media/{nombre}"}
 
 
-def _doc_plantilla_con_foto(
-    documento: dict[str, Any] | str,
-    *,
+def _fotos_de(
+    fotos: list[dict[str, Any]] | None,
     foto: str,
     foco: tuple[float, float] | list[float] | None,
     zoom: float,
+) -> list[dict[str, Any]]:
+    """Normaliza la entrada de fotos: si llega la lista de COLLAGE (`fotos`) se usa tal cual; si no,
+    se construye una lista de UN elemento con la foto única + su reencuadre (retrocompat)."""
+    if fotos:
+        return fotos
+    return [{"objeto": foto or "", "foco": foco, "zoom": zoom}]
+
+
+def _doc_plantilla_con_fotos(
+    documento: dict[str, Any] | str,
+    fotos: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Inyecta la FOTO (+ reencuadre) de la pieza en el HUECO de un documento de plantilla.
+    """Inyecta UNA foto por HUECO (`es_foto`) del documento, en orden de `capas`.
 
     Devuelve una COPIA del documento lista para renderizar. `documento` puede ser dict o JSON
-    string (lo que guarda `PlantillaDiseno`). El hueco (`es_foto`) es la ÚNICA capa donde entra
-    la foto; las plantillas de solo texto/gráfica no tienen hueco y la foto no entra.
+    string (lo que guarda `PlantillaDiseno`). `fotos[i]` (`{objeto, foco:[x,y]|None, zoom}`) va al
+    hueco i; los huecos sin foto correspondiente quedan vacíos (placeholder). Las plantillas de solo
+    texto/gráfica no tienen hueco y no reciben nada.
     """
     if isinstance(documento, str):
         try:
@@ -704,12 +715,17 @@ def _doc_plantilla_con_foto(
         except (ValueError, TypeError) as exc:
             raise EstudioError("La plantilla no tiene un documento válido.") from exc
     doc = copy.deepcopy(documento)
-    hueco = doc_capas.capa_foto(doc)
-    if hueco is not None:
-        hueco["objeto"] = foto or ""
-        if foco is not None and len(foco) == 2:
+    huecos = doc_capas.capas_foto(doc)
+    for i, hueco in enumerate(huecos):
+        spec = fotos[i] if i < len(fotos) else None
+        if not isinstance(spec, dict):
+            continue
+        hueco["objeto"] = str(spec.get("objeto") or "")
+        foco = spec.get("foco")
+        if isinstance(foco, (list, tuple)) and len(foco) == 2:
             hueco["foco"] = [float(foco[0]), float(foco[1])]
-        if zoom and zoom > 0:
+        zoom = spec.get("zoom")
+        if zoom and float(zoom) > 0:
             hueco["zoom"] = float(zoom)
     return doc
 
@@ -721,13 +737,14 @@ def componer_desde_plantilla(
     foto: str = "",
     foco: tuple[float, float] | list[float] | None = None,
     zoom: float = 0.0,
+    fotos: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Renderiza la plantilla con la foto+copy_in de la pieza y PERSISTE el PNG -> `{id, url}`.
+    """Renderiza la plantilla con la(s) foto(s)+copy_in de la pieza y PERSISTE el PNG -> `{id, url}`.
 
-    Inyecta la foto en el hueco (`es_foto`) y el `copy_in` como binding del titular. Para flujos
-    con asset durable (materialización al publicar). El render on-demand usa la variante `_bytes`.
+    Inyecta UNA foto por hueco (`es_foto`) y el `copy_in` como binding del titular. `fotos` (collage)
+    tiene prioridad; si no llega, usa la foto única (`foto`/`foco`/`zoom`) en el primer hueco.
     """
-    doc = _doc_plantilla_con_foto(documento, foto=foto, foco=foco, zoom=zoom)
+    doc = _doc_plantilla_con_fotos(documento, _fotos_de(fotos, foto, foco, zoom))
     return renderizar_documento(doc, bindings={"copy_in": copy_in})
 
 
@@ -738,9 +755,10 @@ def componer_desde_plantilla_bytes(
     foto: str = "",
     foco: tuple[float, float] | list[float] | None = None,
     zoom: float = 0.0,
+    fotos: list[dict[str, Any]] | None = None,
 ) -> bytes:
     """Como `componer_desde_plantilla` pero devuelve los BYTES del PNG SIN persistir (on-demand)."""
-    doc = _doc_plantilla_con_foto(documento, foto=foto, foco=foco, zoom=zoom)
+    doc = _doc_plantilla_con_fotos(documento, _fotos_de(fotos, foto, foco, zoom))
     return renderizar_documento_bytes(doc, bindings={"copy_in": copy_in})
 
 

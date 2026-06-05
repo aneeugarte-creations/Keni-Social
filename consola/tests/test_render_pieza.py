@@ -138,15 +138,17 @@ def test_sin_plantilla_explicita_usa_la_por_defecto_de_la_marca(monkeypatch):
     monkeypatch.setattr(estudio_imagen, "componer", _no_spec)
     capt = {}
 
-    def _desde(documento, *, copy_in, foto, foco=None, zoom=0.0):
-        capt.update(documento=documento, copy_in=copy_in, foto=foto)
+    def _desde(documento, *, copy_in, fotos):
+        capt.update(documento=documento, copy_in=copy_in, fotos=fotos)
         return {"id": "verde.png", "url": "/api/media/verde.png"}
 
     monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla", _desde)
     pub = {"id": "p1", "imagen": "", "marca": "unotv", "red": "instagram",
            "copy_in": "T", "foto": "f.jpg", "foto_encuadre": "", "estado": "en_revision"}
     assert render_pieza.imagen_compuesta_id(pub) == "verde.png"
-    assert capt["documento"] == "{\"v\":1}" and capt["foto"] == "f.jpg" and capt["copy_in"] == "T"
+    assert capt["documento"] == "{\"v\":1}" and capt["copy_in"] == "T"
+    # Sin collage: el hueco único deriva de la foto legada.
+    assert capt["fotos"] == [{"objeto": "f.jpg", "foco": None, "zoom": 0.0}]
 
 
 def test_prefiere_plantilla_llamada_placa_de_marca(monkeypatch):
@@ -173,15 +175,32 @@ def test_plantilla_del_estudio_compone_desde_plantilla(monkeypatch):
     monkeypatch.setattr(repos, "obtener_plantilla_diseno", lambda pid: {"documento": "{}"})
     capt = {}
 
-    def _desde(documento, *, copy_in, foto, foco=None, zoom=0.0):
-        capt.update(copy_in=copy_in, foto=foto)
+    def _desde(documento, *, copy_in, fotos):
+        capt.update(copy_in=copy_in, fotos=fotos)
         return {"id": "doc.png", "url": "/api/media/doc.png"}
 
     monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla", _desde)
     pub = {"imagen": "", "plantilla_diseno_id": "pl-1", "foto": "f.jpg",
            "copy_in": "X", "marca": "unotv", "foto_encuadre": ""}
     assert render_pieza.imagen_compuesta_id(pub) == "doc.png"
-    assert capt == {"copy_in": "X", "foto": "f.jpg"}
+    assert capt == {"copy_in": "X", "fotos": [{"objeto": "f.jpg", "foco": None, "zoom": 0.0}]}
+
+
+def test_fotos_de_pieza_collage_desde_json(monkeypatch):
+    # Con el campo `fotos` (JSON), se devuelve una foto por hueco (collage); ignora la foto legada.
+    pub = {"fotos": '[{"objeto":"a.jpg","foco":[0.3,0.7],"zoom":1.5},{"objeto":"b.jpg"}]',
+           "foto": "vieja.jpg"}
+    fotos = render_pieza.fotos_de_pieza(pub)
+    assert fotos == [
+        {"objeto": "a.jpg", "foco": [0.3, 0.7], "zoom": 1.5},
+        {"objeto": "b.jpg", "foco": None, "zoom": 0.0},
+    ]
+
+
+def test_fotos_de_pieza_legado_hueco_unico(monkeypatch):
+    # Sin `fotos`, el hueco único se deriva de `foto` + `foto_encuadre`.
+    pub = {"fotos": "", "foto": "f.jpg", "foto_encuadre": '{"foco":[0.5,0.5],"zoom":2.0}'}
+    assert render_pieza.fotos_de_pieza(pub) == [{"objeto": "f.jpg", "foco": [0.5, 0.5], "zoom": 2.0}]
 
 
 def test_plantilla_borrada_cae_a_placa_de_marca(monkeypatch):

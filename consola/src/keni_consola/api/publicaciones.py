@@ -318,6 +318,14 @@ async def actualizar(request: Request) -> Response:
                 {"error": "El reencuadre de la foto debe ser texto."}, status_code=400
             )
         campos["foto_encuadre"] = foto_encuadre.strip()
+    if "fotos" in datos:
+        # COLLAGE: JSON array `[{objeto,foco,zoom}, …]` (una por hueco), serializado por el editor.
+        fotos = datos.get("fotos")
+        if not isinstance(fotos, str):
+            return JSONResponse(
+                {"error": "Las fotos del collage deben ser texto (JSON)."}, status_code=400
+            )
+        campos["fotos"] = fotos.strip()
 
     if not campos:
         return JSONResponse(
@@ -342,7 +350,7 @@ async def actualizar(request: Request) -> Response:
     cambia_contenido = any(
         clave in campos and campos[clave] != actual.get(clave)
         for clave in (
-            "titulo", "contenido", "copy_in", "imagen", "foto",
+            "titulo", "contenido", "copy_in", "imagen", "foto", "fotos",
             "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
         )
     )

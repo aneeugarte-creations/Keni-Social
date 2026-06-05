@@ -451,21 +451,22 @@ def _validar_formato(f: Any) -> dict[str, int]:
     }
 
 
-def _normalizar_hueco_foto(capas: list[dict[str, Any]]) -> None:
-    """Garantiza COMO MUCHO un hueco de foto (`es_foto`) entre las capas imagen, IN PLACE.
+# Máximo de huecos de foto por plantilla (collage). Más allá es un error de diseño; acotamos para
+# no desbordar el editor ni el almacén de fotos por pieza.
+MAX_HUECOS_FOTO = 12
 
-    Si varias capas imagen vienen marcadas, conserva la de MENOR z (el fondo) y desmarca el resto:
-    el hueco de foto es único por plantilla. NO auto-designa una si no hay ninguna marcada —esa es
-    decisión del diseñador (el estudio la exige y la bloquea); aquí solo se evita el estado ambiguo
-    de tener dos. `componer` usa luego `capa_foto` (con respaldo al fondo) para colocar la foto.
+
+def _normalizar_hueco_foto(capas: list[dict[str, Any]]) -> None:
+    """Acota los huecos de foto (`es_foto`) a un máximo de collage, IN PLACE.
+
+    Una plantilla puede declarar VARIOS huecos (collage de 2..12 fotos): se conservan TODOS, en
+    orden de aparición, hasta `MAX_HUECOS_FOTO`; los que sobren se desmarcan (estado de diseño
+    inválido). NO auto-designa ninguno si no hay marcas —esa es decisión del diseñador (el estudio
+    lo exige). `componer` coloca una foto por hueco vía `capas_foto`.
     """
     marcadas = [c for c in capas if c.get("tipo") == "imagen" and c.get("es_foto")]
-    if len(marcadas) <= 1:
-        return
-    conservar = min(marcadas, key=lambda c: c.get("z", 0))
-    for c in marcadas:
-        if c is not conservar:
-            c["es_foto"] = False
+    for c in marcadas[MAX_HUECOS_FOTO:]:
+        c["es_foto"] = False
 
 
 def validar(doc: Any) -> dict[str, Any]:
@@ -510,6 +511,30 @@ def capa_foto(doc: dict[str, Any]) -> dict[str, Any] | None:
     if not grandes:
         return None
     return max(grandes, key=lambda c: float(c.get("w", 0)) * float(c.get("h", 0)))
+
+
+def capas_foto(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """TODAS las capas que son hueco de foto (`es_foto`), en ORDEN de aparición en `capas`.
+
+    Una plantilla de COLLAGE declara N huecos (2..12); el orden del array `capas` es el CONTRATO con
+    el editor y con el almacén de fotos por hueco de la pieza (`fotos[i]` va al hueco i). Si no hay
+    ninguna marcada, cae al respaldo legado de `capa_foto` (una sola, plantillas antiguas): lista de
+    0 o 1. Las plantillas de solo texto/gráfica devuelven [].
+    """
+    marcadas = [
+        c
+        for c in (doc.get("capas") or [])
+        if isinstance(c, dict) and c.get("tipo") == "imagen" and c.get("es_foto")
+    ]
+    if marcadas:
+        return marcadas
+    una = capa_foto(doc)
+    return [una] if una is not None else []
+
+
+def cuenta_huecos_foto(doc: dict[str, Any]) -> int:
+    """Número de HUECOS de foto que tiene la plantilla (0 si es de solo texto/gráfica)."""
+    return len(capas_foto(doc))
 
 
 def tiene_hueco_explicito(doc: dict[str, Any]) -> bool:
