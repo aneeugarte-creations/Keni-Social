@@ -15,6 +15,11 @@ import type {
   InsumoItem,
   RespuestaPresets,
   RespuestaActivarPresets,
+  RespuestaInvBriefs,
+  RespuestaInvBrief,
+  RespuestaInvCandidatos,
+  RespuestaInvCandidato,
+  RespuestaInvCorrer,
 } from "@/types";
 
 import type {
@@ -2164,5 +2169,86 @@ export const api = {
      */
     preparar: (cuerpo: CuerpoPreparar) =>
       peticion<RespuestaPreparar>("/breaking/preparar", { metodo: "POST", json: cuerpo }),
+  },
+
+  // --- Agentes de investigación (Ola 6) ---
+  // Contrato: docs/maquina-contenido/06-agentes-investigacion.md
+  // Los agentes PROPONEN candidatos fechados; el humano filtra (aceptar→tablero / descartar).
+  investigacion: {
+    /** Lista todos los briefs activos e inactivos. */
+    briefs: (signal?: AbortSignal) =>
+      peticion<RespuestaInvBriefs>("/investigacion/briefs", { signal }),
+
+    /** Crea un nuevo brief de investigación. */
+    crearBrief: (body: {
+      nombre: string;
+      marca: string;
+      linea?: string;
+      instrucciones: string;
+      idiomas?: string;
+    }) =>
+      peticion<RespuestaInvBrief>("/investigacion/briefs", { metodo: "POST", json: body, muestrear: false }),
+
+    /** Actualización parcial de un brief (nombre, instrucciones, activo, etc.). */
+    editarBrief: (id: string, campos: {
+      nombre?: string;
+      marca?: string;
+      linea?: string;
+      instrucciones?: string;
+      idiomas?: string;
+      activo?: number;
+    }) =>
+      peticion<RespuestaInvBrief>(`/investigacion/briefs/${encodeURIComponent(id)}`, {
+        metodo: "PUT",
+        json: campos,
+        muestrear: false,
+      }),
+
+    /** Elimina un brief por id. */
+    borrarBrief: (id: string) =>
+      peticion<{ ok: boolean }>(`/investigacion/briefs/${encodeURIComponent(id)}`, {
+        metodo: "DELETE",
+        muestrear: false,
+      }),
+
+    /**
+     * Corre un agente de investigación. Acepta `{brief_id}` para correr un brief
+     * guardado, o ad-hoc `{marca, linea, instrucciones}` para una corrida puntual.
+     * Devuelve los candidatos insertados (estado="nuevo") + errores.
+     */
+    correr: (body: { brief_id: string } | { marca: string; linea: string; instrucciones: string }) =>
+      peticion<RespuestaInvCorrer>("/investigacion/correr", {
+        metodo: "POST",
+        json: body,
+        muestrear: false,
+        timeoutMs: 360_000, // Los agentes con web pueden tardar varios minutos.
+      }),
+
+    /** Lista candidatos filtrados por fecha (def: hoy), marca y/o estado. */
+    candidatos: (
+      params: { fecha?: string; marca?: string; estado?: string } = {},
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaInvCandidatos>(
+        `/investigacion/candidatos${query({ fecha: params.fecha, marca: params.marca, estado: params.estado })}`,
+        { signal },
+      ),
+
+    /**
+     * Acepta un candidato: lo lleva al tablero (origen='investigacion') y marca
+     * estado=aceptado. `redes` y `generar` son opcionales.
+     */
+    aceptar: (id: string, body: { redes?: string[]; generar?: boolean } = {}) =>
+      peticion<RespuestaInvCandidato>(
+        `/investigacion/candidatos/${encodeURIComponent(id)}/aceptar`,
+        { metodo: "POST", json: body, muestrear: false },
+      ),
+
+    /** Descarta un candidato (estado=descartado). */
+    descartar: (id: string) =>
+      peticion<RespuestaInvCandidato>(
+        `/investigacion/candidatos/${encodeURIComponent(id)}/descartar`,
+        { metodo: "POST", muestrear: false },
+      ),
   },
 };

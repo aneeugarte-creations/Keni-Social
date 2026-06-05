@@ -121,7 +121,7 @@ function usuario(): UsuarioSesion {
 }
 
 function sesionValor(u: UsuarioSesion | null): ValorSesion {
-  return { usuario: u, cargando: false, iniciarSesion: vi.fn(), verificarMfa: vi.fn(), cerrarSesion: vi.fn(), refrescar: vi.fn() };
+  return { usuario: u, cargando: false, iniciarSesion: vi.fn(), verificarConPasskey: vi.fn(), verificarConCodigo: vi.fn(), cerrarSesion: vi.fn(), refrescar: vi.fn() };
 }
 
 function renderFuentes() {

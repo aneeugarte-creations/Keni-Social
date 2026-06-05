@@ -4329,3 +4329,68 @@ export interface DiaInsumos {
 export interface RespuestaDiasInsumos {
   dias: DiaInsumos[];
 }
+
+// ── Agentes de investigación (Ola 6) ─────────────────────────────────────────
+// Contrato: docs/maquina-contenido/06-agentes-investigacion.md
+
+/** Un encargo de investigación reutilizable (brief). */
+export interface InvBrief {
+  id: string;
+  nombre: string;
+  marca: string;
+  linea: string;
+  instrucciones: string;
+  /** CSV de idiomas a rastrear ("" = cualquiera). */
+  idiomas: string;
+  activo: number; // 1 = activo, 0 = inactivo
+  creado: string;
+}
+
+/** Un candidato propuesto por un agente de investigación. */
+export interface InvCandidato {
+  id: string;
+  brief_id: string;
+  fecha: string;
+  marca: string;
+  /** Nombre legible de la marca (puede estar ausente en respuestas minimalistas). */
+  marca_nombre?: string;
+  linea: string;
+  titulo: string;
+  resumen: string;
+  /** Por qué es relevante hoy. */
+  por_que: string;
+  /** Medio/origen de la noticia. */
+  fuente: string;
+  enlace: string;
+  idioma: string;
+  /** Estado del candidato: "nuevo" | "aceptado" | "descartado". */
+  estado: "nuevo" | "aceptado" | "descartado" | string;
+  /** Id del contenido en el tablero (si fue aceptado). */
+  contenido_id: string;
+  creado: string;
+}
+
+// ── Respuestas de la API de investigación ─────────────────────────────────────
+
+export interface RespuestaInvBriefs {
+  briefs: InvBrief[];
+}
+
+export interface RespuestaInvBrief {
+  brief: InvBrief;
+}
+
+export interface RespuestaInvCandidatos {
+  candidatos: InvCandidato[];
+}
+
+export interface RespuestaInvCandidato {
+  candidato: InvCandidato;
+  /** Id del contenido en el tablero (para aceptar). */
+  contenido_id?: string;
+}
+
+export interface RespuestaInvCorrer {
+  candidatos: InvCandidato[];
+  errores: unknown[];
+}

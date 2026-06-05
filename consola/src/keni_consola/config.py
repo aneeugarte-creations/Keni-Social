@@ -340,6 +340,13 @@ ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
 # `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
 ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 
+# Agentes de investigacion (Ola 6): briefs reutilizables que proponen candidatos fechados.
+# GATEADO OFF por defecto: sin el flag, el daemon no barre. El endpoint /api/investigacion/correr
+# funciona a demanda independientemente del flag del daemon.
+ENV_INVESTIGACION = "KENI_INVESTIGACION_AUTO"
+ENV_INVESTIGACION_INTERVALO_HORAS = "KENI_INVESTIGACION_INTERVALO_HORAS"
+ENV_INVESTIGACION_MAX = "KENI_INVESTIGACION_MAX"
+
 # Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4).
 # `KENI_TRADUCCION=0` apaga la traducción (def ON: ahorra pedir explicitamente activarla).
 # `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top se traducen por request
@@ -457,6 +464,11 @@ RADAR_AUTO_MAX_DEF = 3
 # cada N horas. Intervalo holgado (def 6h, igual que radar-auto): el snapshot vive con un TTL
 # de ~2 intervalos, asi que con 6h las lecturas sirven datos de a lo sumo medio dia.
 INVESTIGADOR_INTERVALO_HORAS_DEF = 6
+
+# Agentes de investigacion (Ola 6): cadencia holgada (def 6h, cada barrido lanza claude -p
+# por brief activo). Cap bajo por barrido (def 5) para no disparar costes.
+INVESTIGACION_INTERVALO_HORAS_DEF = 6
+INVESTIGACION_MAX_DEF = 5
 
 # Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
 # cambian a cada minuto y no conviene martillear los feeds.
@@ -1646,3 +1658,27 @@ def traduccion_activa() -> bool:
 def traduccion_max() -> int:
     """Cap de temas extranjeros a traducir por request del Radar (`KENI_TRADUCCION_MAX`, def 15, min 1)."""
     return _entero(ENV_TRADUCCION_MAX, 15, minimo=1)
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: agentes de investigacion (Ola 6)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def investigacion_auto_activa() -> bool:
+    """True si el daemon de investigacion debe barrer briefs activos (`KENI_INVESTIGACION_AUTO`).
+
+    Def OFF (conservador): el daemon arranca pero no barre. Con el flag ON corre cada
+    N horas y deposita candidatos para revision humana; NUNCA crea tablero solo.
+    """
+    return _crudo(ENV_INVESTIGACION).lower() in _VERDADEROS
+
+
+def investigacion_intervalo_horas() -> int:
+    """Cada cuantas horas barre el daemon de investigacion (`KENI_INVESTIGACION_INTERVALO_HORAS`, def 6, min 1)."""
+    return _entero(ENV_INVESTIGACION_INTERVALO_HORAS, INVESTIGACION_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def investigacion_max() -> int:
+    """Cap de candidatos a depositar por barrido (`KENI_INVESTIGACION_MAX`, def 5, min 1)."""
+    return _entero(ENV_INVESTIGACION_MAX, INVESTIGACION_MAX_DEF, minimo=1)

@@ -2287,3 +2287,65 @@ def listar_lotes(
 
 def dias_con_insumos() -> list[dict[str, Any]]:
     return db.dias_con_insumos()
+
+
+# --------------------------------------------------------------------------- #
+# Agentes de investigacion (Ola 6): briefs + candidatos                        #
+# --------------------------------------------------------------------------- #
+
+
+def crear_inv_brief(
+    *,
+    nombre: str,
+    marca: str = "",
+    linea: str = "",
+    instrucciones: str,
+    idiomas: str = "",
+) -> dict[str, Any]:
+    return db.crear_inv_brief(
+        nombre=nombre, marca=marca, linea=linea,
+        instrucciones=instrucciones, idiomas=idiomas,
+    )
+
+
+def listar_inv_briefs(*, solo_activos: bool = False) -> list[dict[str, Any]]:
+    return db.listar_inv_briefs(solo_activos=solo_activos)
+
+
+def obtener_inv_brief(brief_id: str) -> dict[str, Any] | None:
+    return db.obtener_inv_brief(brief_id)
+
+
+def actualizar_inv_brief(brief_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_inv_brief(brief_id, campos)
+
+
+def borrar_inv_brief(brief_id: str) -> bool:
+    return db.borrar_inv_brief(brief_id)
+
+
+def crear_inv_candidatos(candidatos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return db.crear_inv_candidatos(candidatos)
+
+
+def listar_inv_candidatos(
+    *,
+    fecha: str | None = None,
+    marca: str | None = None,
+    estado: str | None = None,
+    brief_id: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_inv_candidatos(fecha=fecha, marca=marca, estado=estado, brief_id=brief_id)
+
+
+def obtener_inv_candidato(candidato_id: str) -> dict[str, Any] | None:
+    return db.obtener_inv_candidato(candidato_id)
+
+
+def actualizar_inv_candidato(
+    candidato_id: str,
+    *,
+    estado: str | None = None,
+    contenido_id: str | None = None,
+) -> dict[str, Any] | None:
+    return db.actualizar_inv_candidato(candidato_id, estado=estado, contenido_id=contenido_id)

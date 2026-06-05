@@ -401,6 +401,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_metricas_runs": "app_produccion",
     "test_plantillas_marca": "app_produccion",
     "test_api_plantillas_marca": "app_produccion",
+    "test_investigacion": "app_produccion",
 }
 
 

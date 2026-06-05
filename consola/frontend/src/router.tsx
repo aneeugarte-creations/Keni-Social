@@ -29,6 +29,8 @@ const CajonesDia = lazy(() => import("@/pages/CajonesDia"));
 // Eventos (a cubrir): la gestión de eventos se mudó del Calendario al hub de Fuentes
 // (ola "Calendario = turnos / Fuentes = eventos"). Reutiliza /api/rota/eventos.
 const EventosCobertura = lazy(() => import("@/pages/EventosCobertura"));
+// Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
+const AgentesInvestigacion = lazy(() => import("@/pages/AgentesInvestigacion"));
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
@@ -212,6 +214,8 @@ export const router = createBrowserRouter([
               // Eventos a cubrir (antes en el Calendario): alta/filtrado/edición sobre
               // /api/rota/eventos. La asignación de cobertura sigue en Turnos (Claro Sports).
               { path: "eventos", element: <EventosCobertura /> },
+              // Agentes de investigación (Ola 6).
+              { path: "agentes", element: <AgentesInvestigacion /> },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (el índice); "algoritmos" se mudó a la
               // Biblioteca.

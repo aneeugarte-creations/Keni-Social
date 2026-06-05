@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bot,
   BookText,
   CalendarClock,
   CalendarDays,
@@ -54,6 +55,8 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   // Eventos a cubrir: se mudó del Calendario al hub de Fuentes (ola "Calendario =
   // turnos / Fuentes = eventos"). La asignación de cobertura sigue en Turnos.
   { ruta: "/datos/investigacion/eventos", etiqueta: "Eventos", icono: CalendarPlus },
+  // Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
+  { ruta: "/datos/investigacion/agentes", etiqueta: "Agentes", icono: Bot },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [

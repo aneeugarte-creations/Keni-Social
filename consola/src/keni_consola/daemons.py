@@ -56,6 +56,7 @@ def main() -> int:
     from .breaking_daemon import iniciar_breaking
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
+    from .investigacion_daemon import iniciar_investigacion
     from .investigador import iniciar_investigador
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
@@ -98,6 +99,10 @@ def main() -> int:
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
+    # Agentes de investigacion (Ola 6): corre briefs activos periodicamente y deposita
+    # candidatos para revision humana. SOLO CANDIDATOS, NUNCA tablero automatico.
+    # No barre salvo KENI_INVESTIGACION_AUTO=1 (def OFF).
+    iniciar_investigacion()
     # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las
     # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los huerfanos del

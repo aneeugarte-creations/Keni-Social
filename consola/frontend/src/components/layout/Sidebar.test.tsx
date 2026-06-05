@@ -324,14 +324,16 @@ describe("apps-scope · helpers", () => {
       "/contenido/biblioteca/estrategia",
       "/contenido/biblioteca/algoritmos",
       // /datos/investigacion (hub) → sus sub-pestañas (Investigador = índice + Fuentes +
-      // Cajones + Eventos a cubrir, mudados desde el Calendario)
+      // Cajones + Eventos a cubrir + Agentes de investigación Ola 6)
       "/datos/investigacion",
       "/datos/investigacion/fuentes",
       "/datos/investigacion/cajones",
       "/datos/investigacion/eventos",
-      // /operacion/revision (hub) → sus 2 sub-pestañas
+      "/datos/investigacion/agentes",
+      // /operacion/revision (hub) → sus sub-pestañas
       "/operacion/revision/editorial",
       "/operacion/revision/verificacion",
+      "/operacion/revision/breaking",
       // /datos/actividad NO es hub: queda como hoja directa.
       "/datos/actividad",
     ]);
