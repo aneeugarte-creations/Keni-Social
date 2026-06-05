@@ -163,6 +163,9 @@ import type {
   CadenaAprobacion,
   RespuestaComentario,
   RespuestaComentarios,
+  RespuestaNotificaciones,
+  RespuestaContadorNotificaciones,
+  RespuestaMencionesCandidatos,
   RespuestaContenido,
   RespuestaContenidoItem,
   RespuestaMetricasContenido,
@@ -1425,10 +1428,15 @@ export const api = {
       { signal },
     );
   },
-  crearComentario: (contenidoId: string, texto: string, plataformaId?: string) =>
+  crearComentario: (
+    contenidoId: string,
+    texto: string,
+    plataformaId?: string,
+    menciones?: string[],
+  ) =>
     peticion<RespuestaComentario>(`/contenido/${encodeURIComponent(contenidoId)}/comentarios`, {
       metodo: "POST",
-      json: { texto, plataforma_id: plataformaId ?? "" },
+      json: { texto, plataforma_id: plataformaId ?? "", menciones: menciones ?? [] },
     }),
   actualizarComentario: (id: string, cuerpo: { texto?: string; resuelto?: boolean }) =>
     peticion<RespuestaComentario>(`/comentarios/${encodeURIComponent(id)}`, {
@@ -1901,4 +1909,24 @@ export const api = {
   ) => peticion<RespuestaReporteComercial>(`/comercial/reporte${query(params)}`, { signal }),
   descargarReporteComercial: (params: { publicacion?: string; campania?: string; cliente?: string }) =>
     descargar(`/comercial/reporte${query({ ...params, formato: "md" })}`),
+
+  // --- Notificaciones in-app (el "cajón" de la campana, acotado a la marca activa) ---
+  notificaciones: (marcaId?: string, signal?: AbortSignal) =>
+    peticion<RespuestaNotificaciones>(`/notificaciones${query({ marca_id: marcaId })}`, { signal }),
+  contadorNotificaciones: (marcaId?: string, signal?: AbortSignal) =>
+    peticion<RespuestaContadorNotificaciones>(
+      `/notificaciones/contador${query({ marca_id: marcaId })}`,
+      { signal },
+    ),
+  marcarNotificacionLeida: (id: string) =>
+    peticion<{ ok: boolean }>(`/notificaciones/${encodeURIComponent(id)}/leer`, { metodo: "POST" }),
+  marcarNotificacionesLeidas: (marcaId?: string) =>
+    peticion<{ marcadas: number }>(`/notificaciones/leer-todas${query({ marca_id: marcaId })}`, {
+      metodo: "POST",
+    }),
+  mencionesCandidatos: (marcaId?: string, signal?: AbortSignal) =>
+    peticion<RespuestaMencionesCandidatos>(
+      `/notificaciones/menciones-candidatos${query({ marca_id: marcaId })}`,
+      { signal },
+    ),
 };

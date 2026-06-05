@@ -4,6 +4,7 @@ import * as React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { FronteraError } from "@/components/comunes/FronteraError";
+import { CampanaNotificaciones } from "@/components/layout/CampanaNotificaciones";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SubnavHub } from "@/components/layout/SubnavHub";
@@ -215,6 +216,7 @@ export function AppShell() {
               manda en toda la consola: la marca activa filtra implícitamente lo que
               se ve (deriva del perfil, ver SwitchMarca). */}
           <div className="ml-auto flex items-center gap-3">
+            <CampanaNotificaciones />
             <SwitchMarca />
           </div>
         </header>

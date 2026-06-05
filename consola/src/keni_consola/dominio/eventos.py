@@ -226,6 +226,21 @@ def emitir(
     if not nuevo:
         # Ya emitido antes (idempotencia): no se reparte de nuevo.
         return False
+    # Notificaciones IN-APP (el "cajon"): cuando una pieza se PUBLICA, avisa a sus interesados.
+    # Best-effort y local (solo BD, sin red); un fallo aqui no frena el evento ni los webhooks.
+    if tipo == "pieza.publicada":
+        try:
+            from . import notificaciones as _notif
+
+            _notif.tras_publicacion(
+                contenido_id=datos.get("contenido_id", "") or contenido_id,
+                plataforma_id=datos.get("plataforma_id", "") or plataforma_id,
+                marca_id=datos.get("marca", "") or "",
+                titulo=datos.get("titulo", "") or "",
+                red_nombre=datos.get("red_nombre", "") or "",
+            )
+        except Exception:  # noqa: BLE001 -- notificar nunca rompe la emision del evento
+            log.exception("Fallo creando notificaciones in-app para %s.", contenido_id)
     if en_hilo:
         hilo = threading.Thread(
             target=_repartir, args=(tipo, payload), name=f"webhook-{tipo}", daemon=True

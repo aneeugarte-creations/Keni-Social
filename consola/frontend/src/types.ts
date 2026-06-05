@@ -1662,6 +1662,8 @@ export interface ComentarioContenido {
   resuelto: boolean;
   creado: string;
   actualizado: string;
+  /** Ids de usuarios mencionados (@) en el comentario. */
+  menciones: string[];
 }
 
 export interface RespuestaComentarios {
@@ -1671,6 +1673,54 @@ export interface RespuestaComentarios {
 
 export interface RespuestaComentario {
   comentario: ComentarioContenido;
+}
+
+// --- Notificaciones in-app (el "cajón" de la campana) ---
+
+/** Tipo de notificación; clasifica el evento que la originó. */
+export type TipoNotificacion =
+  | "mencion"
+  | "comentario"
+  | "aprobacion"
+  | "rechazo"
+  | "publicacion";
+
+/** Una notificación del buzón de un usuario sobre una pieza. */
+export interface Notificacion {
+  id: string;
+  usuario_id: string;
+  marca_id: string;
+  tipo: TipoNotificacion;
+  contenido_id: string;
+  plataforma_id: string;
+  actor_id: string;
+  actor_nombre: string;
+  /** Frase ya armada para la UI (p. ej. "Diana te mencionó en «…»"). */
+  resumen: string;
+  enlace: string;
+  leida: boolean;
+  creada: string;
+}
+
+export interface RespuestaNotificaciones {
+  notificaciones: Notificacion[];
+  no_leidas: number;
+  total: number;
+}
+
+export interface RespuestaContadorNotificaciones {
+  no_leidas: number;
+}
+
+/** Candidato para el autocompletado de menciones (@) en comentarios. */
+export interface MencionCandidato {
+  id: string;
+  nombre: string;
+  usuario: string;
+}
+
+export interface RespuestaMencionesCandidatos {
+  usuarios: MencionCandidato[];
 }
 
 /** Un snapshot inmutable del copy de una plataforma (historial de versiones). `version`

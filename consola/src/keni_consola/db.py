@@ -656,9 +656,14 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         texto         TEXT NOT NULL DEFAULT '',
         resuelto      INTEGER NOT NULL DEFAULT 0,
         creado        TEXT NOT NULL DEFAULT '',
-        actualizado   TEXT NOT NULL DEFAULT ''
+        actualizado   TEXT NOT NULL DEFAULT '',
+        -- ids de usuarios MENCIONADOS (@) en el comentario, separados por coma ("" = ninguno).
+        -- Una mencion notifica a esa persona y la deja SUSCRITA a la pieza (cajon de notis).
+        menciones     TEXT NOT NULL DEFAULT ''
     )
     """,
+    # `menciones` se anadio despues del CREATE original: ALTER idempotente para BD existentes.
+    "ALTER TABLE contenido_comentarios ADD COLUMN IF NOT EXISTS menciones TEXT NOT NULL DEFAULT ''",
     "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON contenido_comentarios (contenido_id)",
     "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON contenido_comentarios (plataforma_id)",
     # Historial de versiones del COPY de una fila por plataforma. Cada vez que el copy de una
@@ -1049,6 +1054,31 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_eventos_internos_tipo ON eventos_internos (tipo)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_eventos_internos_idem "
     "ON eventos_internos (clave_idempotencia)",
+    # Notificaciones IN-APP por usuario (el "cajon" de la campana, junto al selector de marca).
+    # Una fila = una noticia para UN destinatario (`usuario_id`) sobre una pieza. `tipo` clasifica
+    # el evento (mencion/comentario/aprobacion/rechazo/publicacion); `marca_id` ACOTA al workspace
+    # activo (el cajon solo muestra la marca seleccionada). `actor_*` es quien lo provoco (no se
+    # auto-notifica). `resumen` es la frase ya armada para la UI; `enlace` opcional para navegar.
+    # `leida` se marca al abrir el cajon. Se BORRA en cascada logica? No: se purga por antiguedad
+    # fuera de aqui si hace falta. Append + update de `leida`; nunca se reescribe el contenido.
+    """
+    CREATE TABLE IF NOT EXISTS notificaciones (
+        id            TEXT PRIMARY KEY,
+        usuario_id    TEXT NOT NULL DEFAULT '',
+        marca_id      TEXT NOT NULL DEFAULT '',
+        tipo          TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        actor_id      TEXT NOT NULL DEFAULT '',
+        actor_nombre  TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        enlace        TEXT NOT NULL DEFAULT '',
+        leida         INTEGER NOT NULL DEFAULT 0,
+        creada        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_notif_buzon "
+    "ON notificaciones (usuario_id, marca_id, leida, creada)",
     # Etiquetas editoriales del tablero (campaña / vertical / tipo), ola "organizacion".
     # Una etiqueta clasifica transversalmente un `contenido` (p.ej. campaña "Mundial 2026",
     # vertical "futbol", tipo "reel"). `marca` ACOTA la etiqueta a una marca/workspace
@@ -7308,14 +7338,16 @@ _COLS_COMENTARIO = (
     "resuelto",
     "creado",
     "actualizado",
+    "menciones",
 )
 _SELECT_COMENTARIO = f"SELECT {', '.join(_COLS_COMENTARIO)} FROM contenido_comentarios"
 
 
 def _fila_a_comentario(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `contenido_comentarios` en dict (`resuelto` como bool)."""
+    """Convierte una fila de `contenido_comentarios` en dict (`resuelto` bool, `menciones` lista)."""
     item: dict[str, Any] = {col: fila[col] for col in _COLS_COMENTARIO}
     item["resuelto"] = bool(fila["resuelto"])
+    item["menciones"] = [m for m in (fila["menciones"] or "").split(",") if m]
     return item
 
 
@@ -7325,8 +7357,13 @@ def crear_comentario(
     plataforma_id: str = "",
     texto: str,
     autor: dict[str, str] | None = None,
+    menciones: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Inserta un comentario en el hilo de un contenido y lo devuelve. NO valida."""
+    """Inserta un comentario en el hilo de un contenido y lo devuelve. NO valida.
+
+    `menciones` son ids de usuarios etiquetados con @ (se guardan separados por coma); los
+    devolvemos como lista en el dict de salida (ver `_fila_a_comentario`).
+    """
     autor = autor or {}
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
@@ -7339,6 +7376,7 @@ def crear_comentario(
         "resuelto": 0,
         "creado": ahora,
         "actualizado": ahora,
+        "menciones": ",".join(menciones or []),
     }
     con = _conectar()
     try:
@@ -7423,6 +7461,141 @@ def borrar_comentario(comentario_id: str) -> bool:
         )
         con.commit()
         return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Notificaciones IN-APP (el "cajon" de la campana)                             #
+# --------------------------------------------------------------------------- #
+# Una fila = una noticia para UN destinatario. Append + update de `leida`. El reparto
+# (a quien notificar) vive en `dominio/notificaciones.py`; aqui solo se persiste/lee.
+
+_COLS_NOTIFICACION = (
+    "id",
+    "usuario_id",
+    "marca_id",
+    "tipo",
+    "contenido_id",
+    "plataforma_id",
+    "actor_id",
+    "actor_nombre",
+    "resumen",
+    "enlace",
+    "leida",
+    "creada",
+)
+_SELECT_NOTIFICACION = f"SELECT {', '.join(_COLS_NOTIFICACION)} FROM notificaciones"
+
+
+def _fila_a_notificacion(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `notificaciones` en dict (`leida` como bool)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_NOTIFICACION}
+    item["leida"] = bool(fila["leida"])
+    return item
+
+
+def crear_notificacion(
+    *,
+    usuario_id: str,
+    marca_id: str,
+    tipo: str,
+    contenido_id: str = "",
+    plataforma_id: str = "",
+    actor: dict[str, str] | None = None,
+    resumen: str = "",
+    enlace: str = "",
+) -> dict[str, Any]:
+    """Inserta UNA notificacion para un destinatario y la devuelve. NO valida ni filtra."""
+    actor = actor or {}
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "usuario_id": usuario_id or "",
+        "marca_id": marca_id or "",
+        "tipo": tipo or "",
+        "contenido_id": contenido_id or "",
+        "plataforma_id": plataforma_id or "",
+        "actor_id": actor.get("id", "") or "",
+        "actor_nombre": actor.get("usuario", "") or actor.get("nombre", "") or "",
+        "resumen": resumen or "",
+        "enlace": enlace or "",
+        "leida": 0,
+        "creada": datetime.now().isoformat(timespec="seconds"),
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_NOTIFICACION)
+        con.execute(
+            f"INSERT INTO notificaciones ({', '.join(_COLS_NOTIFICACION)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_NOTIFICACION),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_notificacion(fila)
+
+
+def listar_notificaciones(
+    usuario_id: str, marca_id: str | None = None, limite: int = 50
+) -> list[dict[str, Any]]:
+    """Notificaciones de un usuario (mas recientes primero). `marca_id` filtra el workspace."""
+    sql = f"{_SELECT_NOTIFICACION} WHERE usuario_id = ?"
+    params: list[Any] = [usuario_id]
+    if marca_id:
+        sql += " AND marca_id = ?"
+        params.append(marca_id)
+    sql += " ORDER BY creada DESC, id DESC LIMIT ?"
+    params.append(max(1, min(limite, 200)))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_notificacion(f) for f in filas]
+
+
+def contar_notificaciones_no_leidas(usuario_id: str, marca_id: str | None = None) -> int:
+    """Cuenta las notificaciones SIN leer de un usuario (filtro opcional por marca)."""
+    sql = "SELECT COUNT(*) AS n FROM notificaciones WHERE usuario_id = ? AND leida = 0"
+    params: list[Any] = [usuario_id]
+    if marca_id:
+        sql += " AND marca_id = ?"
+        params.append(marca_id)
+    con = _conectar()
+    try:
+        fila = con.execute(sql, tuple(params)).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def marcar_notificacion_leida(notificacion_id: str, usuario_id: str) -> bool:
+    """Marca UNA notificacion como leida (solo si es del usuario). True si existia."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE notificaciones SET leida = 1 WHERE id = ? AND usuario_id = ?",
+            (notificacion_id, usuario_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def marcar_notificaciones_leidas(usuario_id: str, marca_id: str | None = None) -> int:
+    """Marca como leidas TODAS las del usuario (opcionalmente solo las de una marca)."""
+    sql = "UPDATE notificaciones SET leida = 1 WHERE usuario_id = ? AND leida = 0"
+    params: list[Any] = [usuario_id]
+    if marca_id:
+        sql += " AND marca_id = ?"
+        params.append(marca_id)
+    con = _conectar()
+    try:
+        cur = con.execute(sql, tuple(params))
+        con.commit()
+        return cur.rowcount
     finally:
         con.close()
 

@@ -41,7 +41,7 @@ from starlette.routing import Route
 
 from .. import config, repos
 from .._http_json import leer_json
-from ..dominio import colaboracion
+from ..dominio import colaboracion, notificaciones
 from ..estados import CADENA_APROBACION_DEFECTO, ROL_ADMIN
 from ..seguridad import autor_de_peticion
 
@@ -95,9 +95,15 @@ async def listar_comentarios(request: Request) -> Response:
 
 
 async def crear_comentario(request: Request) -> Response:
-    """POST /api/contenido/{cid}/comentarios: anade un comentario al hilo."""
+    """POST /api/contenido/{cid}/comentarios: anade un comentario al hilo.
+
+    `menciones` (opcional) es la lista de ids de usuarios etiquetados con @ en el texto: se
+    guardan con el comentario y disparan una notificacion `mencion` a cada uno (y los dejan
+    suscritos a la pieza). Tras crear el comentario notificamos tambien al resto de interesados.
+    """
     contenido_id = request.path_params["contenido_id"]
-    if repos.obtener_contenido(contenido_id) is None:
+    contenido = repos.obtener_contenido(contenido_id)
+    if contenido is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     datos = await leer_json(request)
     texto = datos.get("texto")
@@ -113,12 +119,25 @@ async def crear_comentario(request: Request) -> Response:
         if plat is None or plat.get("contenido_id") != contenido_id:
             return JSONResponse({"error": "Esa plataforma no es de este contenido."}, status_code=400)
 
+    # Menciones (@): ids de usuario unicos y no vacios (cap defensivo). El front los manda
+    # resueltos por el autocompletado; aqui solo saneamos la forma.
+    menciones_raw = datos.get("menciones")
+    menciones = (
+        list(dict.fromkeys(m for m in menciones_raw if isinstance(m, str) and m.strip()))[:20]
+        if isinstance(menciones_raw, list)
+        else []
+    )
+
+    autor = autor_de_peticion(request)
     comentario = repos.crear_comentario(
         contenido_id=contenido_id,
         plataforma_id=plataforma_id,
         texto=texto.strip()[:_MAX_TEXTO],
-        autor=autor_de_peticion(request),
+        autor=autor,
+        menciones=menciones,
     )
+    # Notificar (best-effort, ya envuelto en su propio try/except): nunca rompe el comentar.
+    notificaciones.tras_comentario(contenido, comentario, autor)
     return JSONResponse({"comentario": comentario}, status_code=201)
 
 
@@ -451,6 +470,14 @@ async def decidir_nivel(request: Request) -> Response:
     actualizado = repos.actualizar_aprobacion(aprobacion_id, campos)
     if actualizado is None:
         return JSONResponse({"error": "Ese nivel de aprobación ya no existe."}, status_code=404)
+
+    # Notificar la decision recien aplicada (OK -> interesados + coordinador; rechazo ->
+    # interesados). Best-effort: nunca rompe el OK/rechazo ya registrado.
+    if plat is not None:
+        contenido_padre = repos.obtener_contenido(plat.get("contenido_id", "") or "") or {}
+        notificaciones.tras_decision(
+            plat, contenido_padre, actualizado.get("decision", ""), autor_de_peticion(request)
+        )
 
     # Reflejar el estado GLOBAL de la cadena en la pieza (si quedó totalmente aprobada).
     cadena = repos.listar_aprobaciones(plataforma_id)

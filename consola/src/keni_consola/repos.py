@@ -1710,12 +1710,14 @@ def crear_comentario(
     plataforma_id: str = "",
     texto: str,
     autor: dict[str, str] | None = None,
+    menciones: list[str] | None = None,
 ) -> dict[str, Any]:
     return db.crear_comentario(
         contenido_id=contenido_id,
         plataforma_id=plataforma_id,
         texto=texto,
         autor=autor,
+        menciones=menciones,
     )
 
 
@@ -1757,6 +1759,56 @@ def actualizar_comentario(
 
 def borrar_comentario(comentario_id: str) -> bool:
     return db.borrar_comentario(comentario_id)
+
+
+# --------------------------------------------------------------------------- #
+# Notificaciones IN-APP (el "cajon" de la campana; reparto en dominio/notificaciones) #
+# --------------------------------------------------------------------------- #
+
+
+def crear_notificacion(
+    *,
+    usuario_id: str,
+    marca_id: str,
+    tipo: str,
+    contenido_id: str = "",
+    plataforma_id: str = "",
+    actor: dict[str, str] | None = None,
+    resumen: str = "",
+    enlace: str = "",
+) -> dict[str, Any]:
+    return db.crear_notificacion(
+        usuario_id=usuario_id,
+        marca_id=marca_id,
+        tipo=tipo,
+        contenido_id=contenido_id,
+        plataforma_id=plataforma_id,
+        actor=actor,
+        resumen=resumen,
+        enlace=enlace,
+    )
+
+
+def listar_notificaciones(
+    usuario_id: str, marca_id: str | None = None, limite: int = 50
+) -> list[dict[str, Any]]:
+    return db.listar_notificaciones(usuario_id, marca_id, limite)
+
+
+def contar_notificaciones_no_leidas(
+    usuario_id: str, marca_id: str | None = None
+) -> int:
+    return db.contar_notificaciones_no_leidas(usuario_id, marca_id)
+
+
+def marcar_notificacion_leida(notificacion_id: str, usuario_id: str) -> bool:
+    return db.marcar_notificacion_leida(notificacion_id, usuario_id)
+
+
+def marcar_notificaciones_leidas(
+    usuario_id: str, marca_id: str | None = None
+) -> int:
+    return db.marcar_notificaciones_leidas(usuario_id, marca_id)
 
 
 def registrar_copy_version(

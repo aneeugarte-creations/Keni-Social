@@ -30,6 +30,7 @@ modulos_backend = [
   "artes",
   "alertas",
   "sugerencias",
+  "notificaciones",
   "carpetas",
   "proyectos",
 ]
