@@ -109,8 +109,26 @@ endurecimiento + unos pocos huecos realmente explotables.
 13. `fix(auth)`: estrecha unión de login MFA (corrige TS2339 del build).
 14. `fix(seguridad)`: veta WebFetch/WebSearch en flujos de SOLO copy (cierra exfil del OAuth token).
 
-Estado final: **CI verde en `main`** (fronteras, frontend-build, tests-python suite completa,
-tests-app-*, deploy). Verificado leyendo los pipelines reales de Woodpecker.
+## Fase 2 — correcciones con el owner despierto (mismos commits, main)
 
-Proceso: validé cada push leyendo el resultado real de los pipelines de Woodpecker (API
-GitHub + logs desde la sqlite del server) y corregí las regresiones que aparecieron.
+15. `refactor(marca)`: la marca pasa a ser un **DEFAULT de enfoque, NO un cerrojo** (revierte el
+    muro duro del #5 — el owner aclara: equipo multidisciplinar, capacitar no limitar; todos
+    pueden cubrir cualquier marca, por defecto se enfocan en la suya). **El #5 queda anulado.**
+16. `refactor(seguridad)`: tools por **riesgo** (estructurado vs crudo), no por "copy" — retira el
+    veto web del #14 (ningún flujo devuelve salida cruda bajo prompt de usuario). **#14 anulado.**
+17. `fix(deploy)`: límites afinados al **VPS real** (12 vCPU, 61 GiB): db 8g/sb 2GB, worker 6g/4cpu…
+18. `docs(generacion)`: corrige comentarios de la era skills (el motor de skills YA estaba borrado;
+    `--dangerously-skip-permissions` se mantiene para TOOLS headless, no para skills).
+19. `refactor(naming)`: **purga el naming legacy "skills" → "prompt"** en todo el stack
+    (backend↔repos↔API↔frontend; ruta `/api/skills/historial` → `/api/prompts/historial`).
+20. `feat(auth)`: **MFA por PASSKEYS (WebAuthn)** en vez de TOTP (el equipo no tiene authenticator).
+    **El #10 (TOTP) queda sustituido.** Flag off por defecto; py_webauthn + @simplewebauthn/browser;
+    config RP (`KENI_CONSOLA_RP_ID/RP_ORIGIN`, prod `social.kenitech.io`).
+
+NOTA: el CI self-hosted (un solo agente) sufre `exit 126` (kills por contención) cuando un push
+toca muchos paths y dispara todos los pipelines a la vez; es flake conocido (ver CLAUDE.md), no
+fallo lógico — se reintenta. Validado leyendo los pipelines reales (API GitHub + sqlite del server).
+
+Pendiente real que queda: **pool de conexiones Postgres** (CRIT a escala, sin hacer a propósito),
+doble-reserva de slot de parrilla (UNIQUE por marca), paginación de tablero, y decidir si activar
+MFA + generar `KENI_CONSOLA_MFA_KEY`/RP en prod.
