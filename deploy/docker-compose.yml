@@ -24,26 +24,26 @@ name: keni-social
 # eso usamos las claves de Compose `mem_limit` / `cpus` (top-level del servicio), NO
 # `deploy.resources` (que Compose IGNORA fuera de Swarm).
 #
-# Los `mem_limit` de abajo son PUNTOS DE PARTIDA CONSERVADORES, no valores medidos:
-# no conocemos la RAM/CPU exacta del VPS. El objetivo es que un pico de `claude -p`
-# (worker) o un Garage (files) desbocado NO pueda OOM-matar a Postgres y tumbar la
-# caja entera. Ajustalos a la RAM REAL del servidor: la SUMA de los limites debe
-# dejar holgura para el host (kernel, dockerd, SSH, sistema). Los limites de los
-# servicios pesados son OVERRIDABLES por env (.env) sin tocar este fichero:
+# Los `mem_limit` de abajo estan AFINADOS al VPS REAL (medido): 12 vCPU, 61 GiB RAM,
+# 879 GB disco. El objetivo es que un pico de `claude -p` (worker) o un Garage (files)
+# desbocado NO pueda OOM-matar a Postgres y tumbar la caja entera, dejando a la vez
+# holgura amplia (la caja comparte con el stack de CI Woodpecker + un learn-postgres).
+# Los limites de los servicios pesados son OVERRIDABLES por env (.env) sin tocar este
+# fichero:
 #
 #   Servicio   mem_limit (def)   env override            cpus
 #   ────────   ───────────────   ─────────────────────   ─────────
-#   db         1g                DB_MEM_LIMIT            (reserva: sin tope de CPU)
-#   worker     1.5g              WORKER_MEM_LIMIT        WORKER_CPUS (def 1.5)
-#   back       768m              BACK_MEM_LIMIT          1.0
-#   files      768m              FILES_MEM_LIMIT         1.0
-#   daemons    512m              DAEMONS_MEM_LIMIT       0.75
-#   mcp        384m              MCP_MEM_LIMIT           0.5
-#   traefik    192m              —                       0.5
-#   front      128m              —                       0.5
+#   db         8g                DB_MEM_LIMIT            (reserva: sin tope de CPU)
+#   worker     6g                WORKER_MEM_LIMIT        WORKER_CPUS (def 4)
+#   back       3g                BACK_MEM_LIMIT          3.0
+#   files      3g                FILES_MEM_LIMIT         2.0
+#   daemons    2g                DAEMONS_MEM_LIMIT       2.0
+#   mcp        1g                MCP_MEM_LIMIT           1.0
+#   traefik    512m              —                       1.0
+#   front      256m              —                       1.0
 #
-# Suma de defaults ≈ 5.25 GiB. En un VPS de 8 GiB deja ~2.75 GiB para el host; en uno
-# de 4 GiB hay que BAJAR worker/back/files. Confirmar tamaño del VPS antes de subir.
+# Suma de defaults ≈ 23.8 GiB sobre 61 GiB: deja ~37 GiB para host + CI + learn-postgres.
+# Los `cpus` son TOPES (no reservas): si keni esta ocioso, el CI usa los 12 nucleos.
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -87,8 +87,8 @@ services:
       - traefik-acme:/acme
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
     # Ingress liviano; topes conservadores (ver bloque de cabecera).
-    mem_limit: 192m
-    cpus: 0.5
+    mem_limit: 512m
+    cpus: 1.0
 
   front:
     build:
@@ -115,8 +115,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    mem_limit: 128m
-    cpus: 0.5
+    mem_limit: 256m
+    cpus: 1.0
 
   back:
     build:
@@ -200,8 +200,8 @@ services:
       mcp:
         condition: service_started
     # El HEALTHCHECK lo hereda del Dockerfile (curl :8765/healthz). No lo redefinimos.
-    mem_limit: ${BACK_MEM_LIMIT:-768m}
-    cpus: 1.0
+    mem_limit: ${BACK_MEM_LIMIT:-3g}
+    cpus: 3.0
     labels:
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge
@@ -286,8 +286,8 @@ services:
         condition: service_healthy
       files:
         condition: service_healthy
-    mem_limit: ${DAEMONS_MEM_LIMIT:-512m}
-    cpus: 0.75
+    mem_limit: ${DAEMONS_MEM_LIMIT:-2g}
+    cpus: 2.0
 
   worker:
     # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): consume la cola (tabla `jobs`
@@ -360,8 +360,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    mem_limit: ${WORKER_MEM_LIMIT:-1536m}
-    cpus: ${WORKER_CPUS:-1.5}
+    mem_limit: ${WORKER_MEM_LIMIT:-6g}
+    cpus: ${WORKER_CPUS:-4}
 
   mcp:
     build:
@@ -390,8 +390,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    mem_limit: ${MCP_MEM_LIMIT:-384m}
-    cpus: 0.5
+    mem_limit: ${MCP_MEM_LIMIT:-1g}
+    cpus: 1.0
     # INTERNO por defecto: el endpoint /mcp NO lleva auth propia. Para exponerlo a
     # clientes Claude del equipo, añade un router Traefik con un middleware bearer/
     # basicauth y un subdominio (p.ej. mcp.kenitech.io). Ver README.
@@ -399,18 +399,17 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
-    # Tuning conservador. La app abre MUCHAS conexiones cortas (back + daemons + worker
-    # escalable); el techo por defecto de Postgres (max_connections=100) se queda corto y
-    # da "too many clients". Subimos a 200 y damos un shared_buffers modesto acorde al
-    # mem_limit de 1g (regla ~25% de la RAM del contenedor). Si subes DB_MEM_LIMIT, puedes
-    # subir shared_buffers en proporcion. max_connections altas consumen mas RAM: si bajas
-    # la RAM del VPS, baja tambien este numero.
+    # Tuning para el VPS real (61 GiB, db mem_limit 8g). La app abre MUCHAS conexiones
+    # cortas (back + daemons + worker escalable); el techo por defecto (max_connections=100)
+    # da "too many clients". Subimos a 200 y shared_buffers a ~25% del mem_limit (2GB). El
+    # arreglo de fondo (pool de conexiones) sigue pendiente: con pool, 200 sobra. Si bajas
+    # DB_MEM_LIMIT, baja shared_buffers en proporcion.
     command:
       - postgres
       - -c
       - max_connections=200
       - -c
-      - shared_buffers=256MB
+      - shared_buffers=2GB
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -434,7 +433,7 @@ services:
     # Postgres es el corazon del stack: le reservamos holgura de RAM y NO le ponemos tope
     # de CPU (no queremos throttlearlo). El mem_limit es un suelo defensivo para que un pico
     # de otro servicio no lo OOM-mate; subelo si el VPS tiene RAM de sobra.
-    mem_limit: ${DB_MEM_LIMIT:-1g}
+    mem_limit: ${DB_MEM_LIMIT:-8g}
     # Sin `ports`: NO se publica 5432 al host (evita choque con learn-postgres y
     # no se expone a la red). Solo el back lo alcanza por la red interna.
 
@@ -460,8 +459,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    mem_limit: ${FILES_MEM_LIMIT:-768m}
-    cpus: 1.0
+    mem_limit: ${FILES_MEM_LIMIT:-3g}
+    cpus: 2.0
     # Bootstrap de una vez (layout + bucket + clave): ver README. Sin `ports`:
     # interno; el back habla S3 por http://files:3900.
 
