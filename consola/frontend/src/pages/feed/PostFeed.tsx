@@ -29,7 +29,7 @@ import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { plural } from "@/lib/formato";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
@@ -40,12 +40,6 @@ import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
 import { BadgeEtapa } from "./TarjetaEtapa";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema. Vuelve a intentarlo.";
-}
 
 export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();

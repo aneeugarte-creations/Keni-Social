@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { formatearFecha as fmtFechaCdmx } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { Sugerencia } from "@/types";
@@ -62,12 +62,6 @@ const ESTADO_VARIANTE: Record<string, VarianteBadge> = {
 
 function etiqueta(mapa: Record<string, string>, clave: string): string {
   return mapa[clave] ?? clave;
-}
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
 // Fecha en CDMX (el instante "creada" del backend es UTC); ver `@/lib/fecha`.

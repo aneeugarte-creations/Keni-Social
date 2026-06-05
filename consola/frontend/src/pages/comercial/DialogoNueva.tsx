@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { numeroCompacto } from "@/lib/formato";
 import type {
   CuerpoCrearComercial,
@@ -44,11 +44,6 @@ import type {
 
 import { CLAVE_COMERCIAL } from "./claves";
 import { fechaCorta } from "./formato";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Resumen legible de un post en el selector: fecha + título + métricas. */
 function etiquetaPost(p: PostSeleccionableComercial): string {

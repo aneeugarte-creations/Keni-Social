@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { capasFotoDoc, type FotoCollage } from "@/lib/placa/docPieza";
 import {
   parsearEncuadre,
@@ -31,12 +31,6 @@ import { CLAVE_PUBLICACIONES } from "./claves";
 import { GestionHashtags } from "./GestionHashtags";
 import { metaRed } from "./meta";
 import { etapaDePublicacion } from "@/pages/feed/etapa";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Diálogo de edición de una publicación, MÍNIMO: solo contenido (copy) + hashtags + imagen. Los
  *  posts no llevan título; el formato es texto plano (sin barra de formato ni UTM). Comentarios y

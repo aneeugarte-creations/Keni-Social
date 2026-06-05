@@ -43,7 +43,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { GestionCadencia } from "@/pages/publicaciones/GestionCadencia";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
@@ -69,11 +69,6 @@ const CLASE_ETIQUETA_LABEL: Record<string, string> = {
   vertical: "Vertical",
   tipo: "Tipo",
 };
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /**
  * Pestaña "Lista" del hub Feed: la SUPERFICIE de contenido en lista.

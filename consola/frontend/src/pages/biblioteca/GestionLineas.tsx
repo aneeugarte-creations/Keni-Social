@@ -32,7 +32,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { Etiqueta } from "@/types";
 
 /** Las dos clases de etiqueta que esta vista gestiona. */
@@ -54,12 +54,6 @@ const CLASE_AYUDA: Record<ClaseLinea, string> = {
 
 /** Centinela del selector de marca: etiqueta global (sin marca). */
 const GLOBAL = "__global__";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 const CLAVE_ETIQUETAS = ["etiquetas"] as const;
 

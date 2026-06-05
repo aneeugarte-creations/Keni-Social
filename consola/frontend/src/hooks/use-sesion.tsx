@@ -6,6 +6,20 @@ import type { UsuarioSesion } from "@/types";
 import { SesionContexto, type ValorSesion } from "./sesion-contexto";
 
 /**
+ * Puente Sesión ↔ QueryClient. El `QueryClient` se crea FUERA de React (en `main.tsx`),
+ * así que no puede leer el contexto de sesión. El provider registra aquí un callback que
+ * limpia la sesión; el manejador global de errores 401 lo invoca para devolver la app al
+ * login cuando la sesión expira a mitad de uso. Module-level y mono-instancia (un solo
+ * provider en el árbol).
+ */
+let limpiarSesionGlobal: (() => void) | null = null;
+
+/** Llama el manejador global de 401: limpia la sesión (vuelve al login). No-op si no hay provider. */
+export function marcarSesionExpirada(): void {
+  limpiarSesionGlobal?.();
+}
+
+/**
  * Provider de sesión. Al montar, llama `GET /api/auth/me`:
  *   - 200 → hay sesión viva: guarda el usuario y entra a la app.
  *   - 401 → no hay sesión: deja `usuario` en `null` (se muestra el login).
@@ -43,6 +57,15 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       vivo = false;
     };
   }, [cargarMe]);
+
+  // Registra el puente para que el manejador global de 401 (en `main.tsx`) pueda
+  // limpiar la sesión y devolver la app al login cuando una sesión expira a media sesión.
+  React.useEffect(() => {
+    limpiarSesionGlobal = () => setUsuario(null);
+    return () => {
+      limpiarSesionGlobal = null;
+    };
+  }, []);
 
   const iniciarSesion = React.useCallback(async (nombre: string, password: string) => {
     const { usuario } = await api.login({ usuario: nombre, password });

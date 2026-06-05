@@ -35,7 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { Cadencia, MarcaDisponible, RedPublicacion } from "@/types";
 
 import { DIAS_SEMANA_CORTO, nombreDiaCorto } from "./franjas";
@@ -43,12 +43,6 @@ import { EtiquetaRed } from "./insignias";
 
 /** Clave de React Query para las cadencias. */
 const CLAVE_CADENCIAS = ["cadencias"] as const;
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Resumen legible de los días de una cadencia (p. ej. "Lun, Mié, Vie"). */
 function resumenDias(dias: number[]): string {

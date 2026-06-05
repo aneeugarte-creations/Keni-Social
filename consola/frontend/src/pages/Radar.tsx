@@ -37,7 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { FuenteRadar, RespuestaRadar, TemaRadar } from "@/types";
 
 const CABECERA = {
@@ -75,11 +75,6 @@ export default function Radar() {
       </Tabs>
     </>
   );
-}
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
 /** Mapea los temas del radar a ítems exportables (Markdown copiar-pegar). */

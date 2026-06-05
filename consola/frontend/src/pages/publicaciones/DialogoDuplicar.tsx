@@ -22,16 +22,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { MarcaDisponible, Publicacion, RedPublicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 export function DialogoDuplicar({
   publicacion,

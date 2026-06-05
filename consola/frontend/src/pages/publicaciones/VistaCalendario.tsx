@@ -14,7 +14,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
 
@@ -31,11 +31,6 @@ type Vista = "mes" | "semana" | "dia";
 
 /** Nombres de los días (lunes a domingo), abreviados es-MX. */
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema. Vuelve a intentarlo.";
-}
 
 /** Clave YYYY-MM-DD en hora CDMX de una pieza programada ("" si no aplica). */
 function diaCdmx(p: Publicacion): string {

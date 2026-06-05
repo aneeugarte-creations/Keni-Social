@@ -36,17 +36,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { Franja, MarcaDisponible, RedPublicacion } from "@/types";
 
 import { CLAVE_FRANJAS, DIAS_SEMANA, nombreDiaCorto } from "./franjas";
 import { EtiquetaRed } from "./insignias";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Formulario para añadir una franja nueva. */
 function FormularioFranja({

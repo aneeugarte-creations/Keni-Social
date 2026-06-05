@@ -333,6 +333,28 @@ export class ApiError extends Error {
 }
 
 /**
+ * Mensaje legible (en español) para CUALQUIER error capturado en la UI. Fuente única que
+ * reemplaza las ~30 copias locales que vivían en páginas y componentes:
+ *   - `ApiError` con `status === 0` → fallo de red/servidor caído (sin respuesta HTTP);
+ *     el `.message` ya trae un texto de red, con fallback explícito de "sin conexión".
+ *   - `ApiError`/`Error` → su `.message` (el backend ya manda texto legible en español).
+ *   - cualquier otra cosa → fallback genérico.
+ */
+export function mensajeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 0) {
+      return (
+        error.message ||
+        "No hay conexión con el servidor. Espera unos segundos y vuelve a intentarlo."
+      );
+    }
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
+
+/**
  * Extrae mensaje + cuerpo JSON de una respuesta de error. Devuelve `{mensaje, cuerpo}`:
  * `cuerpo` es el JSON crudo (o null si no era JSON), `mensaje` lo legible.
  */
@@ -398,6 +420,14 @@ async function parsear<T>(
   return datos;
 }
 
+/**
+ * Tope por defecto de una petición (ms): un back colgado no debe dejar la UI girando
+ * para siempre. Al vencer, abortamos y caemos a la ruta de error de red (`ApiError` con
+ * `status 0`). Los endpoints conocidos como lentos (subidas, render de imagen) pueden
+ * subir el techo con `timeoutMs`.
+ */
+const TIMEOUT_PETICION_MS = 30_000;
+
 interface OpcionesPeticion {
   metodo?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Cuerpo JSON (se serializa). Mutuamente excluyente con `form`. */
@@ -405,6 +435,11 @@ interface OpcionesPeticion {
   /** Cuerpo multipart (FormData) para subir archivos. */
   form?: FormData;
   signal?: AbortSignal;
+  /**
+   * Tope de tiempo de ESTA petición en ms (def 30s). Súbelo para endpoints
+   * conocidos como lentos (subidas/render). `0` desactiva el timeout.
+   */
+  timeoutMs?: number;
   /**
    * Nombre del `$def` del contrato contra el que validar el body (opt-in, #120).
    * Solo se valida si el modelo existe en `esquema.gen.json`.
@@ -419,7 +454,7 @@ interface OpcionesPeticion {
 
 /** Petición base: arma la URL, serializa el cuerpo y delega en `parsear`. */
 async function peticion<T>(ruta: string, opciones: OpcionesPeticion = {}): Promise<T> {
-  const { metodo = "GET", json, form, signal, validador, muestrear } = opciones;
+  const { metodo = "GET", json, form, signal, validador, muestrear, timeoutMs } = opciones;
   const headers: Record<string, string> = { ...cabecerasAuth() };
   let body: BodyInit | undefined;
 
@@ -431,12 +466,38 @@ async function peticion<T>(ruta: string, opciones: OpcionesPeticion = {}): Promi
     body = JSON.stringify(json);
   }
 
+  // Timeout propio (AbortController + setTimeout, soporte universal): un back colgado no
+  // debe dejar un spinner infinito. Combinamos el `signal` del llamante con el del timeout;
+  // distinguimos "lo abortó el llamante" (re-lanzamos AbortError, lo gestiona react-query)
+  // de "venció el timeout" (lo tratamos como fallo de red con mensaje claro).
+  const ms = timeoutMs ?? TIMEOUT_PETICION_MS;
+  const controlador = new AbortController();
+  let vencido = false;
+  const temporizador =
+    ms > 0
+      ? setTimeout(() => {
+          vencido = true;
+          controlador.abort();
+        }, ms)
+      : undefined;
+  if (signal) {
+    if (signal.aborted) controlador.abort();
+    else signal.addEventListener("abort", () => controlador.abort(), { once: true });
+  }
+
   let res: Response;
   try {
-    res = await fetch(`${BASE_API}${ruta}`, { method: metodo, headers, body, signal });
+    res = await fetch(`${BASE_API}${ruta}`, { method: metodo, headers, body, signal: controlador.signal });
   } catch (e) {
+    if (vencido) {
+      throw new ApiError("La solicitud tardó demasiado. Vuelve a intentarlo.", 0);
+    }
+    // El llamante (react-query) canceló: propagamos el AbortError tal cual.
+    if (signal?.aborted) throw e;
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw new ApiError("No se pudo contactar con la consola. ¿Está corriendo el servidor local?", 0);
+  } finally {
+    if (temporizador !== undefined) clearTimeout(temporizador);
   }
   return parsear<T>(res, validador, muestrear);
 }
@@ -758,7 +819,11 @@ export const api = {
     if (opts.titulo) form.set("titulo", opts.titulo);
     for (const a of opts.adjuntos ?? []) form.append("adjuntos", a);
     for (const r of opts.redes ?? []) form.append("redes", r);
-    return peticion<RespuestaGeneracion>("/biblioteca/lanzar-archivo", { metodo: "POST", form });
+    return peticion<RespuestaGeneracion>("/biblioteca/lanzar-archivo", {
+      metodo: "POST",
+      form,
+      timeoutMs: 120_000,
+    });
   },
 
   // --- Límites de caracteres por red (fuente única backend, #112) ---
@@ -866,7 +931,7 @@ export const api = {
     if (opts.previsualizar) form.set("previsualizar", "1");
     return peticion<RespuestaImportPreview | RespuestaImportCalendario>(
       "/contenido/importar",
-      { metodo: "POST", form },
+      { metodo: "POST", form, timeoutMs: 120_000 },
     );
   },
 
@@ -889,7 +954,7 @@ export const api = {
     const form = new FormData();
     form.set("archivo", archivo);
     if (categoria) form.set("categoria", categoria);
-    return peticion<RespuestaMedia>("/media", { metodo: "POST", form });
+    return peticion<RespuestaMedia>("/media", { metodo: "POST", form, timeoutMs: 120_000 });
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
     peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
@@ -945,7 +1010,11 @@ export const api = {
   // `bindings` (opcional): titular/pleca REAL de la pieza (`copy_in`/`etiqueta_default`) para que
   // las capas con `binding` rendericen el texto real en vez del de muestra. Sin pieza no se pasa.
   editorRender: (documento: unknown, bindings?: Record<string, string>) =>
-    peticion<{ id: string; url: string }>("/editor/render", { metodo: "POST", json: { documento, bindings } }),
+    peticion<{ id: string; url: string }>("/editor/render", {
+      metodo: "POST",
+      json: { documento, bindings },
+      timeoutMs: 120_000,
+    }),
   // Documento de capas editable derivado de la plantilla de una marca (punto de partida del editor).
   editorPlantilla: (marca: string, formato: string, signal?: AbortSignal) =>
     peticion<{ documento: unknown }>(
@@ -967,7 +1036,7 @@ export const api = {
   ) =>
     peticion<{ id: string; url: string; version: number }>(
       `/editor/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
-      { metodo: "POST", json: { documento, bindings } },
+      { metodo: "POST", json: { documento, bindings }, timeoutMs: 120_000 },
     ),
 
   // --- Biblioteca de activos por marca (logos, tipografías, artes, infografías, …) ---
@@ -1325,7 +1394,11 @@ export const api = {
     if (cuerpo.imagen) form.set("imagen", cuerpo.imagen);
     // Vídeo/audio: se transcribe EN LOCAL en el back y el texto alimenta el auto-copy.
     if (cuerpo.clip) form.set("clip", cuerpo.clip);
-    return peticion<RespuestaContenidoItem>("/contenido/aportar", { metodo: "POST", form });
+    return peticion<RespuestaContenidoItem>("/contenido/aportar", {
+      metodo: "POST",
+      form,
+      timeoutMs: 120_000,
+    });
   },
   // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).
   sugerirHora: (cuerpo: CuerpoSugerirHora) =>
@@ -1727,6 +1800,7 @@ export const api = {
     return peticion<RespuestaImportarParrilla>("/parrilla/importar", {
       metodo: "POST",
       form,
+      timeoutMs: 120_000,
     });
   },
   propuestasParrilla: (

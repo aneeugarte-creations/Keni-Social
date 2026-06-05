@@ -28,6 +28,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 
+import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -42,7 +43,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { FILTRO_TODOS } from "@/pages/publicaciones/Filtros";
@@ -50,12 +51,6 @@ import type { Publicacion } from "@/types";
 
 import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PostFeed } from "./PostFeed";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema. Vuelve a intentarlo.";
-}
 
 // --- Posts por fila del feed (preferencia local del usuario, por dispositivo) --- //
 // Un solo control: nº de columnas en PC (1-4). Más columnas = posts más pequeños (es a la vez
@@ -350,9 +345,12 @@ export default function FeedIdeacion() {
           {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
         </div>
       ) : feedQuery.isError ? (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive">
-          No se pudo cargar el feed. {mensajeError(feedQuery.error)}
-        </div>
+        <BloqueError
+          titulo="No se pudo cargar el feed"
+          mensaje={mensajeError(feedQuery.error)}
+          onReintentar={() => void feedQuery.refetch()}
+          cargando={feedQuery.isFetching}
+        />
       ) : gruposVista.length === 0 ? (
         <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
       ) : agrupar ? (

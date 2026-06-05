@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type {
   CuerpoActualizarComercial,
   EstadoComercial,
@@ -52,11 +52,6 @@ import { numeroCompacto, numeroCompleto, porcentaje } from "@/lib/formato";
 import { CLAVE_COMERCIAL } from "./claves";
 import { etiquetaMetrica, fechaDia, fechaHora, presentacionEstado } from "./formato";
 import { GraficaSerie } from "./GraficaSerie";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 export function Detalle({
   publicacionId,

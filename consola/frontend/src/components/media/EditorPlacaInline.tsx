@@ -32,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import type { CapaImagen, CapaTexto, Documento } from "@/editor/documento";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError, urlMedia } from "@/lib/api";
+import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { dibujarDocumento } from "@/lib/placa/dibujar.mjs";
 import {
   capasFotoDoc,
@@ -72,11 +72,6 @@ function familiasDeDocumento(doc: Documento): string[] {
     else if (c.tipo === "logo" && c.tipo_logo === "wordmark") reales.add(fr(c.wordmark.familia));
   }
   return [...reales].filter(Boolean);
-}
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
 /** Carga una URL como `HTMLImageElement` (o null si falla/está vacía). */

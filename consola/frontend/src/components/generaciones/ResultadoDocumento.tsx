@@ -19,14 +19,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Markdown } from "@/components/ui/Markdown";
-import { api, ApiError, urlMedia } from "@/lib/api";
+import { api, mensajeError, urlMedia } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import type { ImagenGenerada } from "@/types";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Enlace de éxito al tablero (modo Publicaciones) que se muestra en el toast. */
 function EnlacePublicaciones() {

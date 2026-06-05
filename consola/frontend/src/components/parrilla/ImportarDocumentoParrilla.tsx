@@ -45,18 +45,13 @@ import {
 } from "@/components/comunes/MenuContextual";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   ConflictoAplicarParrilla,
   EstadoPropuestaParrilla,
   PropuestaParrilla,
 } from "@/types";
-
-function mensajeError(e: unknown): string {
-  if (e instanceof ApiError || e instanceof Error) return e.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Colapsable con el prompt EXACTO enviado a `claude -p` (visibilidad/control). */
 function VerPrompt({ prompt }: { prompt: string }) {

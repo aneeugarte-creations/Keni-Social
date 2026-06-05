@@ -32,7 +32,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   HallazgoQaEditorial,
@@ -47,12 +47,6 @@ const CLAVE_GEN_QA = "keni:generacion-qa-editorial";
 
 /** Centinela del selector de plataforma para "sin plataforma" (no validar límite). */
 const SIN_PLATAFORMA = "__sin_plataforma__";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "No se pudo revisar el copy. Vuelve a intentarlo.";
-}
 
 /**
  * Veredicto del informe con su semáforo 🟢/🟡/🔴 y leyenda, consistente con el

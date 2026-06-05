@@ -36,7 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatearDia, formatearFechaHoraCorta } from "@/lib/fecha";
 import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
@@ -56,10 +56,6 @@ const TODOS = "__todos__";
 const TAM_PAGINA = 50;
 
 /** Texto legible del error de la API (o un fallback en español). */
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
-}
 
 // Fecha/hora en hora CDMX (los instantes del backend son UTC): se formatean con
 // `@/lib/fecha`. `formatearFecha` aquí es la variante corta (sin año) con hora.

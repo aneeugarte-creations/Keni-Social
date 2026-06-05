@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { formatearFecha as fmtFechaCdmx } from "@/lib/fecha";
 import {
   cabezaDeArea,
@@ -85,12 +85,6 @@ const SIN_CARGO = "__sin_cargo__";
 const SIN_SUPERIOR = "__sin_superior__";
 
 const MIN_PASSWORD = 8;
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 // Fecha en CDMX (instantes UTC del backend); ver `@/lib/fecha`.
 const formatearFecha = (iso: string | null): string => fmtFechaCdmx(iso) || "—";

@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { ItemParrilla, RespuestaParrilla, SubtipoParrilla } from "@/types";
 
 /** Etiqueta + icono por subtipo de posteo (vacío => posteo normal). */
@@ -48,11 +48,6 @@ const SUBTIPO: Record<SubtipoParrilla, { etiqueta: string; Icono: typeof Film }>
   normal: { etiqueta: "Posteo", Icono: LayoutList },
   "": { etiqueta: "Posteo", Icono: LayoutList },
 };
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 function etiquetaRed(red: string): string {
   if (red.startsWith("busquedas-")) return "Búsquedas";

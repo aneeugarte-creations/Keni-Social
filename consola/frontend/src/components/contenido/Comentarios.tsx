@@ -21,15 +21,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { MencionCandidato } from "@/types";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return "No se pudo completar la acción.";
-}
 
 // Fecha+hora en CDMX (el instante del backend es UTC).
 const fecha = (iso: string): string => formatearFechaHoraCorta(iso);

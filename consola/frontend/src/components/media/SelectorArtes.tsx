@@ -22,14 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { api, ApiError, urlMedia } from "@/lib/api";
+import { api, mensajeError, urlMedia } from "@/lib/api";
 import type { Arte } from "@/types";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 export interface SelectorArtesProps {
   open: boolean;

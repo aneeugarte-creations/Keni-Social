@@ -43,7 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, ApiError, urlS3Objeto } from "@/lib/api";
+import { ApiError, api, mensajeError, urlS3Objeto } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { DiscoSistema, MigaS3, ObjetoS3, RespuestaProbarS3, RespuestaS3 } from "@/types";
@@ -962,12 +962,6 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: React.ReactNode })
       <dd className="truncate text-right font-medium tabular-nums">{valor}</dd>
     </div>
   );
-}
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un error inesperado.";
 }
 
 /**

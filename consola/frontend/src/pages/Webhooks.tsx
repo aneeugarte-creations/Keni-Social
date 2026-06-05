@@ -45,7 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
 import type {
   CuerpoCrearWebhook,
@@ -76,11 +76,6 @@ const ETIQUETA_FORMATO: Record<FormatoWebhook, string> = {
   generico: "Genérico (JSON)",
   slack: "Slack",
 };
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 // Fecha+hora en CDMX (los instantes del backend son UTC); ver `@/lib/fecha`.
 const formatearFechaHora = (iso: string): string => formatearFechaHoraCorta(iso);

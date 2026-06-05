@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip } from "@/components/ui/tooltip";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { FiltrosReciclaje, MotivoReciclaje, SugerenciaReciclaje } from "@/types";
 
@@ -26,12 +26,6 @@ import { tiempoRelativo } from "./meta";
 
 /** Clave de caché de las sugerencias de reciclaje (depende de los filtros). */
 export const CLAVE_RECICLAJE = ["reciclaje", "sugerencias"] as const;
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Capa visual de cada motivo (icono + etiqueta + color del badge). */
 const META_MOTIVO: Record<

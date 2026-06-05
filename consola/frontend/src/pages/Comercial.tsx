@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { OpcionesComercial, PublicacionComercial } from "@/types";
 
@@ -37,11 +37,6 @@ import { presentacionEstado } from "./comercial/formato";
 import { numeroCompacto, numeroCompleto } from "./metricas/formato";
 
 const ESTADO_TODAS = "__todas__";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 function Cabecera({ acciones }: { acciones?: React.ReactNode }) {
   return (

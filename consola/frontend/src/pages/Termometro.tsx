@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { ItemRss, RespuestaTermometro } from "@/types";
 
 /** Clave de sessionStorage para reanudar la generación en curso al volver a la página. */
@@ -41,11 +41,6 @@ const CABECERA = {
 
 /** Opciones del número de slides (coinciden con el backend). */
 const OPCIONES_NUMERO = ["5", "6", "7", "8"] as const;
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Formatea un item de RSS como una línea de noticia para el textarea. */
 function formatearItem(item: ItemRss): string {

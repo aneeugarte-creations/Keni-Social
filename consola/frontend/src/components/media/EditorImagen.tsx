@@ -40,15 +40,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError, urlMedia } from "@/lib/api";
+import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { nombreRed, tamanoRed } from "@/pages/publicaciones/meta";
 import type { Arte, FormatoImagen, TipoArte } from "@/types";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Convierte una relación tipo "16:9" o "1.91:1" en un número (ancho/alto). */
 function ratioDe(txt: string): number | null {

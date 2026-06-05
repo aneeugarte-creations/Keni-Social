@@ -29,18 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { api, ApiError, urlMedia } from "@/lib/api";
+import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import type { Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
 import { BadgeEstado, EtiquetaRed } from "./insignias";
 import { formatearFechaHora, metaEstado, siguienteEstado } from "./meta";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /**
  * Una tarjeta de publicación. Click izquierdo sobre la tarjeta = editar (acción

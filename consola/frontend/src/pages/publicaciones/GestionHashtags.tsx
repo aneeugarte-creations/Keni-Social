@@ -28,16 +28,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type { GrupoHashtags, MarcaDisponible } from "@/types";
 
 import { CLAVE_HASHTAGS, parsearHashtags } from "./hashtags";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Formulario de creación/edición de un grupo (inline). */
 function FormularioGrupo({

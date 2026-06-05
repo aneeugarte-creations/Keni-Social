@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
@@ -25,11 +25,6 @@ import { VistaLista } from "@/pages/publicaciones/VistaLista";
 import type { OpcionesPublicaciones, Publicacion } from "@/types";
 
 const TAM_PAGINA = 30;
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /**
  * GESTIÓN de publicaciones en dos modos: `lista` (paginada, con duplicar/editar) y

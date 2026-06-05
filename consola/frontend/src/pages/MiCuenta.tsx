@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { ApiError, api } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora as fmtFechaHoraCdmx } from "@/lib/fecha";
 import type { RolUsuario } from "@/types";
 
@@ -38,11 +38,6 @@ const ROL_LABEL: Record<RolUsuario, string> = {
   admin: "Administrador",
   editor: "Editor",
 };
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Fecha + hora legible en CDMX (instantes UTC del backend); guion si vacía/inválida. */
 function formatearFechaHora(iso: string | null | undefined): string {

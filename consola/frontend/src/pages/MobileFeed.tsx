@@ -45,17 +45,11 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
 import type { CuerpoCrearContenido, MarcaDisponible, Publicacion } from "@/types";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema. Vuelve a intentarlo.";
-}
 
 /** Estados que ve el revisor en el feed: lo pendiente de su revisión y lo ya aprobado. */
 type Bandeja = "en_revision" | "aprobado";

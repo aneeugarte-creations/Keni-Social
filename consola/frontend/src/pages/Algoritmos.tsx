@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type {
   CuerpoFuenteAlgoritmo,
   FuenteAlgoritmo,
@@ -65,12 +65,6 @@ const CABECERA = {
 };
 
 const TODAS = "__todas__";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /** Variante de badge según el nivel de importancia. */
 function badgeNivel(nivel: NivelAlgoritmo): { variante: "ok" | "secondary" | "outline"; texto: string } {

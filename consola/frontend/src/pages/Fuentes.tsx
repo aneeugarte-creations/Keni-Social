@@ -59,7 +59,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   FuenteRss,
@@ -80,12 +80,6 @@ const CLAVE_ITEMS = ["rss", "items"] as const;
 
 /** Valor de "todas las fuentes" en el filtro de items. */
 const FUENTE_TODAS = "__todas__";
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 /**
  * Limpia emojis de estado (❌ ✅ ⚠️) que el backend puede anteponer a los

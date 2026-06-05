@@ -78,7 +78,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
 import {
   COBERTURA,
@@ -196,11 +196,6 @@ const PRESENTACION_AUSENCIA: Record<
     chip: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
   },
 };
-
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
 
 // --- Utilidades de fechas (semana lunes->domingo) --------------------------
 //
@@ -2291,7 +2286,6 @@ function DialogEditarTurno({
   );
 }
 
-
 // --- Popup "Carga del equipo" -----------------------------------------------
 
 /**
@@ -2377,7 +2371,6 @@ function DialogCargaEquipo({ lunes, onCerrar }: { lunes: string; onCerrar: () =>
     </Dialog>
   );
 }
-
 
 // --- Pestaña: Mis turnos ----------------------------------------------------
 
@@ -2566,7 +2559,6 @@ function DialogFranjasDeSemana({
   );
 }
 
-
 function FilaFranjaSemana({
   franja,
   onCambio,
@@ -2700,7 +2692,6 @@ function FilaFranjaSemana({
     </div>
   );
 }
-
 
 function FormCrearFranjaSemana({
   cargando,
