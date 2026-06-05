@@ -2,7 +2,8 @@
 
 Cubre:
   (a) el manejador central convierte una `Exception` no controlada en la forma JSON
-      estandar `{"error", "tipo"}` con status 500, SIN filtrar el mensaje/stack real;
+      estandar `{"error", "request_id"}` con status 500, SIN filtrar el mensaje/stack
+      real (ni siquiera el nombre de la clase de excepcion);
   (b) el middleware de peticiones loguea UNA linea con metodo, ruta, estado y ms,
       y NO incluye la query string (privacidad);
   (c) el helper `error()` devuelve la forma de error estandar del proyecto.
@@ -75,18 +76,20 @@ def modulo_api_que_lanza(monkeypatch):
 
 
 def test_excepcion_no_controlada_da_500_json_estandar(entorno, modulo_api_que_lanza):
-    """Un endpoint que lanza -> 500 con `{"error", "tipo", "request_id"}`, sin filtrar.
+    """Un endpoint que lanza -> 500 con `{"error", "request_id"}`, sin filtrar.
 
     El cuerpo lleva el id de correlacion (#123): un usuario que reporta el fallo da ese
-    id y casa 1:1 con la traza del servidor. `error` sigue siendo el mensaje generico y
-    `tipo` el nombre de la clase; NUNCA el detalle interno ni el stack.
+    id y casa 1:1 con la traza del servidor. `error` es el mensaje generico; el nombre de
+    la clase de excepcion NO viaja al cliente (queda solo en el log del servidor), igual
+    que NUNCA el detalle interno ni el stack.
     """
     cliente = _cli_obs(raise_server_exceptions=False)
     r = cliente.get(modulo_api_que_lanza["lanza"])
     assert r.status_code == 500
     cuerpo = r.json()
-    assert set(cuerpo) == {"error", "tipo", "request_id"}
-    assert cuerpo["tipo"] == "RuntimeError"
+    assert set(cuerpo) == {"error", "request_id"}
+    # El nombre de la clase de excepcion NO se filtra en el cuerpo.
+    assert "RuntimeError" not in r.text
     assert cuerpo["request_id"], "el 500 debe llevar un id de correlacion no vacio"
     # El id del cuerpo casa con la cabecera X-Request-ID de la respuesta.
     assert r.headers.get("x-request-id") == cuerpo["request_id"]

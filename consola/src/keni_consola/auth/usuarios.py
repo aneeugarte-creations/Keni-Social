@@ -436,6 +436,9 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
 
         bloqueo = _comun.parsear_iso(fila["bloqueo_hasta"])
         if bloqueo is not None and _comun.ahora() < bloqueo:
+            # Igualamos el coste con un hash "en falso" antes de salir: sin esto la cuenta
+            # bloqueada responde mas rapido (sin scrypt) y delata que existe y esta bloqueada.
+            hash_en_falso(password)
             return None  # bloqueado: no revelamos el motivo
 
         if not verificar_password(password, fila["salt"], fila["hash"]):

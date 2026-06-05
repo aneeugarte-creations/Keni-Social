@@ -15,8 +15,8 @@ manejador central de excepciones y los errores salian como ~250 respuestas
 
   - `manejar_excepcion`: manejador central de `Exception`. Registra el traceback en
     el SERVIDOR y devuelve una respuesta JSON consistente
-    `{"error": "...", "tipo": "..."}` con status 500, SIN filtrar detalles internos
-    ni el stack al cliente. Es ADITIVO: los endpoints que ya devuelven su propio
+    `{"error": "...", "request_id": "..."}` con status 500, SIN filtrar detalles
+    internos (ni el nombre de la clase) ni el stack al cliente. Es ADITIVO: los endpoints que ya devuelven su propio
     `{"error": ...}` siguen igual; esto solo atrapa lo que hoy cae a un 500 por defecto.
 
   - `error(mensaje, status)`: helper que devuelve la respuesta de error ESTANDAR del
@@ -208,10 +208,11 @@ async def manejar_excepcion(request: Request, exc: Exception) -> Response:
     """Manejador central de `Exception`: loguea el traceback y responde JSON 500.
 
     Registra el error CON traceback Y el id de correlacion en el servidor (para auditar
-    en beta) y devuelve una respuesta consistente `{"error", "tipo", "request_id"}` con
-    status 500, SIN filtrar el mensaje real ni el stack al cliente. `tipo` es solo el
-    NOMBRE de la clase de excepcion (p.ej. "ValueError"), util para depurar sin revelar
-    detalles; `request_id` permite al usuario reportar el fallo y casarlo con la traza.
+    en beta) y devuelve una respuesta consistente `{"error", "request_id"}` con status
+    500, SIN filtrar el mensaje real ni el stack al cliente. El NOMBRE de la clase de
+    excepcion queda SOLO en el log del servidor (via `exc_info`): exponerlo en el cuerpo
+    filtra detalle interno. `request_id` permite al usuario reportar el fallo y casarlo
+    con la traza del servidor.
     """
     rid = getattr(request.state, "request_id", "") or request_id_actual()
     _logger.error(
@@ -221,7 +222,7 @@ async def manejar_excepcion(request: Request, exc: Exception) -> Response:
         request.url.path,  # sin query string: puede llevar secretos
         exc_info=exc,
     )
-    cuerpo: dict[str, str] = {"error": _MENSAJE_500, "tipo": type(exc).__name__}
+    cuerpo: dict[str, str] = {"error": _MENSAJE_500}
     # Cabecera explicita aqui: el 500 lo emite `ServerErrorMiddleware` (el mas externo,
     # POR ENCIMA del middleware de peticiones), asi que la inyeccion de cabecera de
     # `RegistroPeticiones` NO lo alcanza. La ponemos directamente para que el id viaje

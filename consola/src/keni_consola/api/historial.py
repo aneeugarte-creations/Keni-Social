@@ -19,7 +19,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, redes, repos
-from .._http_json import leer_json
+from .._http_json import envoltura_paginacion, leer_json
 from ..dominio import copy as dom_copy
 from ..dominio import publicaciones as dom_publicaciones
 from ..dominio import stream
@@ -27,6 +27,26 @@ from ..seguridad import autor_de_peticion
 
 # Longitud del preview del resultado en el listado (chars).
 _PREVIEW_CHARS = 140
+
+# Paginacion del listado: el historial guarda el RESULTADO COMPLETO por entrada, asi que
+# devolverlo entero crece sin tope. Acotamos por defecto y limitamos el techo por peticion.
+_LIMITE_DEFECTO = 50
+_LIMITE_MAX = 200
+
+
+def _paginacion(request: Request) -> tuple[int, int]:
+    """`(limite, desplazamiento)` del listado; `limite` por defecto 50, acotado a [1, 200]."""
+    qp = request.query_params
+    try:
+        limite = int(qp.get("limite") or _LIMITE_DEFECTO)
+    except (TypeError, ValueError):
+        limite = _LIMITE_DEFECTO
+    limite = max(1, min(limite, _LIMITE_MAX))
+    try:
+        desplazamiento = int(qp.get("desplazamiento") or 0)
+    except (TypeError, ValueError):
+        desplazamiento = 0
+    return limite, max(0, desplazamiento)
 
 # Mapa id->nombre de marca (catálogo único) para enriquecer el listado.
 _MARCA_NOMBRE: dict[str, str] = dict(marcas.opciones())
@@ -46,8 +66,16 @@ def _nombre(skill: str) -> str:
 
 
 async def historial(request: Request) -> Response:
-    """`GET /api/skills/historial` -> listado (metadatos + preview), recientes primero."""
-    entradas = repos.listar_historial_skills()
+    """`GET /api/skills/historial` -> listado (metadatos + preview), recientes primero.
+
+    Paginado (`?limite=&desplazamiento=`): cada entrada lleva el resultado completo, asi que
+    sin tope la respuesta crece sin limite. Por defecto se devuelven las 50 mas recientes
+    (`limite` acotado a 200). Envelope RETROCOMPATIBLE: mantiene la clave `historial` y AÑADE
+    `paginacion:{total, limite, desplazamiento}`.
+    """
+    limite, desplazamiento = _paginacion(request)
+    entradas = repos.listar_historial_skills(limite=limite, desplazamiento=desplazamiento)
+    total = repos.contar_historial_skills()
     salida = [
         {
             "id": e["id"],
@@ -65,7 +93,12 @@ async def historial(request: Request) -> Response:
         }
         for e in entradas
     ]
-    return JSONResponse({"historial": salida})
+    return JSONResponse(
+        {
+            "historial": salida,
+            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+        }
+    )
 
 
 async def historial_detalle(request: Request) -> Response:

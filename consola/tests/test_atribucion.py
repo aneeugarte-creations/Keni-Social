@@ -211,3 +211,26 @@ def test_historial_legado_sin_autor_se_lee_como_desconocido(entorno):
     detalle = c.get(f"/api/skills/historial/{hid}").json()
     assert detalle["autor_id"] == ""
     assert detalle["autor_nombre"] == ""
+
+
+def test_historial_listado_pagina_y_reporta_total(entorno):
+    """`GET /api/skills/historial` pagina (`?limite=&desplazamiento=`) y reporta el `total`.
+
+    Cada entrada lleva el resultado completo, asi que el listado se acota: con `?limite=`
+    se devuelve solo esa pagina, el envelope `paginacion.total` cuenta TODAS, y la clave
+    `historial` sigue presente (retrocompatible).
+    """
+    c = _cli_por_token()
+    for i in range(5):
+        repos.registrar_historial_skill("copy-desde-nota", _MARCA, f"texto {i}")
+
+    cuerpo = c.get("/api/skills/historial?limite=2&desplazamiento=1").json()
+    assert len(cuerpo["historial"]) == 2
+    assert cuerpo["paginacion"]["total"] == 5
+    assert cuerpo["paginacion"]["limite"] == 2
+    assert cuerpo["paginacion"]["desplazamiento"] == 1
+
+    # Sin params hay defaults sensatos (no peta) y la clave `historial` sigue ahi.
+    por_defecto = c.get("/api/skills/historial").json()
+    assert por_defecto["paginacion"]["total"] == 5
+    assert len(por_defecto["historial"]) == 5
