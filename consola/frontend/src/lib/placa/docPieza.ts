@@ -35,6 +35,26 @@ export function capaFotoDoc(doc: Documento): CapaImagen | null {
   return grandes.reduce((a, b) => (a.w * a.h >= b.w * b.h ? a : b));
 }
 
+/**
+ * TODAS las capas que son HUECO DE FOTO (`es_foto`), en ORDEN de `capas`. Mirror del backend
+ * `documento.capas_foto`: un COLLAGE declara N huecos (2..12); el orden es el contrato con el
+ * almacén de fotos por hueco de la pieza (`fotos[i]` va al hueco i). Sin marcas, cae al respaldo
+ * legado de `capaFotoDoc` (una sola): lista de 0 o 1.
+ */
+export function capasFotoDoc(doc: Documento): CapaImagen[] {
+  const marcadas = doc.capas.filter((c): c is CapaImagen => c.tipo === "imagen" && !!c.es_foto);
+  if (marcadas.length) return marcadas;
+  const una = capaFotoDoc(doc);
+  return una ? [una] : [];
+}
+
+/** Una foto del collage por hueco: media id + reencuadre (foco/zoom). Espejo del JSON `fotos`. */
+export interface FotoCollage {
+  objeto: string;
+  foco: [number, number] | null;
+  zoom: number;
+}
+
 /** Capa de texto del TITULAR (binding copy_in), o null. Para la edición in place. */
 export function capaTitularDoc(doc: Documento): CapaTexto | null {
   for (const c of todasLasCapas(doc.capas)) {
@@ -55,22 +75,26 @@ export function mediaIdsDe(doc: Documento): string[] {
 }
 
 /**
- * Prepara una copia del documento para ESTA pieza: mete `foto` en el hueco y, si hay `encuadre`,
- * pisa su foco/zoom (reencuadre manual). No muta el original. Si la plantilla no tiene hueco
- * (solo texto/gráfica), la foto no entra. Devuelve el documento listo para `dibujarDocumento`.
+ * Prepara una copia del documento para ESTA pieza: mete UNA foto por HUECO (collage), con su
+ * reencuadre (foco/zoom). No muta el original. `fotos[i]` va al hueco i (orden de `capas`); los
+ * huecos sin foto quedan vacíos (placeholder). Devuelve el documento listo para `dibujarDocumento`.
  */
 export function prepararDocumento(
   doc: Documento,
-  opts: { foto: string; encuadre: EncuadreFoto | null },
+  opts: { fotos: FotoCollage[] } | { foto: string; encuadre: EncuadreFoto | null },
 ): Documento {
+  // Acepta el collage (`fotos`) o la foto única legada (`foto`+`encuadre` = hueco 0).
+  const fotos: FotoCollage[] =
+    "fotos" in opts
+      ? opts.fotos
+      : [{ objeto: opts.foto || "", foco: opts.encuadre?.foco ?? null, zoom: opts.encuadre?.zoom ?? 0 }];
   const copia: Documento = structuredClone(doc);
-  const hueco = capaFotoDoc(copia);
-  if (hueco) {
-    hueco.objeto = opts.foto || "";
-    if (opts.encuadre) {
-      hueco.foco = [opts.encuadre.foco[0], opts.encuadre.foco[1]];
-      hueco.zoom = opts.encuadre.zoom;
-    }
-  }
+  capasFotoDoc(copia).forEach((hueco, i) => {
+    const spec = fotos[i];
+    if (!spec) return;
+    hueco.objeto = spec.objeto || "";
+    if (spec.foco) hueco.foco = [spec.foco[0], spec.foco[1]];
+    if (spec.zoom && spec.zoom > 0) hueco.zoom = spec.zoom;
+  });
   return copia;
 }
