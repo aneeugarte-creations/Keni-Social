@@ -13,7 +13,9 @@ from keni_consola.dominio import estudio_imagen
 # Marcas y nombres esperados (espejo del catálogo de la semilla). UnoTV NO se siembra.
 _ESPERADO: dict[str, set[str]] = {
     "claro-sports": {"Titular", "Breaking", "Cita textual", "Foto limpia"},
-    "fundacion": {"Comunidad", "Historia", "Foto limpia"},
+    "fundacion": {"Titular", "Foto limpia"},
+    "nacion-gamer": {"Titular", "Destacado", "Foto limpia"},
+    "piso-15": {"Titular", "Foto limpia"},
 }
 
 
@@ -64,8 +66,10 @@ def test_titular_usa_binding_copy_in_donde_aplica() -> None:
         ("claro-sports", "Titular"),
         ("claro-sports", "Breaking"),
         ("claro-sports", "Cita textual"),
-        ("fundacion", "Comunidad"),
-        ("fundacion", "Historia"),
+        ("fundacion", "Titular"),
+        ("nacion-gamer", "Titular"),
+        ("nacion-gamer", "Destacado"),
+        ("piso-15", "Titular"),
     ]
     for clave in con_copy:
         capas = docs[clave]["capas"]
@@ -99,19 +103,62 @@ def test_claro_cita_tiene_retrato_y_aro_elipse() -> None:
     assert aros[0].get("borde"), "el aro debe tener borde de acento"
 
 
-def test_chip_usa_acento_de_marca() -> None:
-    # El chip de etiqueta/píldora debe pintar con el acento de la marca (rojo / ámbar).
+def test_claro_sports_intacto() -> None:
+    # El catálogo de Claro Sports NO cambia (4 plantillas), tokens de marcas.json.
     docs = _docs()
-    casos = {
-        ("claro-sports", "Breaking"): "#CF2E2E",
-        ("fundacion", "Comunidad"): "#D97706",
-    }
-    for clave, acento in casos.items():
-        chips = [
-            c.get("chip") for c in docs[clave]["capas"]
-            if c.get("tipo") == "texto" and c.get("chip")
-        ]
-        assert chips, f"{clave} debe tener un chip de etiqueta"
-        assert any(ch["color"] == acento for ch in chips), (
-            f"{clave}: el chip debe usar el acento {acento}"
+    nombres = {n for (m, n) in docs if m == "claro-sports"}
+    assert nombres == {"Titular", "Breaking", "Cita textual", "Foto limpia"}
+
+
+def test_nacion_gamer_destacado_chip_de_acento() -> None:
+    # Destacado de Nación Gamer: chip neón FIJO "NUEVO" del color de acento placeholder.
+    acento = ps._tokens("nacion-gamer")["acento"]
+    capas = _docs()[("nacion-gamer", "Destacado")]["capas"]
+    chips = [
+        c for c in capas
+        if c.get("tipo") == "texto" and c.get("chip") and c.get("texto") == "NUEVO"
+    ]
+    assert chips, "Destacado debe tener un chip fijo 'NUEVO'"
+    assert chips[0]["chip"]["color"] == acento, "el chip debe usar el acento neón de la marca"
+    assert chips[0]["binding"] is None, "el chip 'NUEVO' es texto fijo (sin binding)"
+
+
+def test_nacion_gamer_titular_tiene_glow_neon() -> None:
+    # El titular gamer lleva GLOW: sombra dy=0, desenfoque alto, color = acento.
+    acento = ps._tokens("nacion-gamer")["acento"]
+    for nombre in ("Titular", "Destacado"):
+        capas = _docs()[("nacion-gamer", nombre)]["capas"]
+        titulares = [c for c in capas if c.get("id") == "titular" and c.get("binding") == "copy_in"]
+        assert titulares, f"nacion-gamer/{nombre} debe tener un titular copy_in"
+        sombra = titulares[0].get("sombra") or {}
+        assert sombra.get("color") == acento and sombra.get("desenfoque", 0) >= 20, (
+            f"nacion-gamer/{nombre}: el titular debe tener glow neón (sombra color acento, desenfoque alto)"
         )
+
+
+def test_fundacion_es_minima_sin_chips() -> None:
+    # Fundación quedó MÍNIMA: sin chips ni pleca en NINGUNA de sus plantillas.
+    docs = _docs()
+    fundacion = [d for (m, _n), d in docs.items() if m == "fundacion"]
+    assert len(fundacion) == 2, "Fundación debe tener exactamente 2 plantillas mínimas"
+    for doc in fundacion:
+        chips = [c for c in doc["capas"] if c.get("tipo") == "texto" and c.get("chip")]
+        assert not chips, "Fundación no debe llevar chips (estética sobria/mínima)"
+        plecas = [c for c in doc["capas"] if c.get("id") == "pleca"]
+        assert not plecas, "Fundación no debe llevar pleca"
+
+
+def test_fundacion_titular_sin_mayusculas() -> None:
+    # El titular de Fundación es limpio: SIN mayúsculas (tono cálido, no editorial duro).
+    capas = _docs()[("fundacion", "Titular")]["capas"]
+    titular = next(c for c in capas if c.get("id") == "titular")
+    assert titular["binding"] == "copy_in"
+    assert titular.get("mayusculas") is False, "el titular de Fundación no debe ir en mayúsculas"
+
+
+def test_marcas_sin_marcas_json_usan_tokens_inline() -> None:
+    # nacion-gamer y piso-15 no están en marcas.json: caen a _TOKENS_EXTRA (placeholders).
+    for marca in ("nacion-gamer", "piso-15"):
+        tk = ps._tokens(marca)
+        assert tk["acento"] == ps._TOKENS_EXTRA[marca]["acento"]
+        assert tk["wordmark"] == ps._TOKENS_EXTRA[marca]["wordmark"]

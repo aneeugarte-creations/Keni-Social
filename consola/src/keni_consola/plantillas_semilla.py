@@ -67,9 +67,45 @@ def _cargar_marcas() -> dict[str, Any]:
         return json.load(fh).get("marcas", {})
 
 
+# Tokens INLINE para marcas que aún NO están en marcas.json con tokens propios. Son colores
+# PLACEHOLDER, no del manual oficial — el equipo los confirma/ajusta al subir su identidad real.
+# [VERIFICAR] todos los colores aquí son placeholders, no del manual oficial de cada marca.
+_TOKENS_EXTRA: dict[str, dict[str, str]] = {
+    "nacion-gamer": {
+        # Estética gaming: fondo casi negro + acento neón violeta para el glow.
+        "acento": "#8B5CF6",  # [VERIFICAR] neón violeta placeholder, no del manual oficial
+        "tinta": "#0B0B12",   # [VERIFICAR] casi negro placeholder, no del manual oficial
+        "blanco": "#FFFFFF",
+        "wordmark": "Nación Gamer",
+        "etiqueta": "NUEVO",
+    },
+    "piso-15": {
+        # Entretenimiento/espectáculo: magenta vivo, limpio.
+        "acento": "#EC4899",  # [VERIFICAR] magenta espectáculo placeholder, no del manual oficial
+        "tinta": "#111111",   # [VERIFICAR] tinta placeholder, no del manual oficial
+        "blanco": "#FFFFFF",
+        "wordmark": "Piso 15",
+        "etiqueta": "ESPECTÁCULOS",
+    },
+}
+
+
 def _tokens(marca: str) -> dict[str, str]:
-    """Tokens de diseño de una marca: acento (rojo/ámbar), tinta, blanco, wordmark, etiqueta."""
-    m = _cargar_marcas().get(marca, {})
+    """Tokens de diseño de una marca: acento (rojo/ámbar), tinta, blanco, wordmark, etiqueta.
+
+    Las marcas con tokens propios viven en marcas.json. Para las que aún no están allí, se
+    cae a `_TOKENS_EXTRA` (placeholders inline). Si no está en ninguno, defaults neutros.
+    """
+    m = _cargar_marcas().get(marca)
+    if m is None:
+        extra = _TOKENS_EXTRA.get(marca, {})
+        return {
+            "acento": extra.get("acento", "#CF2E2E"),
+            "tinta": extra.get("tinta", "#0A0A0A"),
+            "blanco": extra.get("blanco", "#FFFFFF"),
+            "wordmark": extra.get("wordmark", marca),
+            "etiqueta": extra.get("etiqueta", "ÚLTIMA HORA"),
+        }
     return {
         "acento": m.get("rojo", "#CF2E2E"),  # 'rojo' es la clave del acento en marcas.json
         "tinta": m.get("tinta", "#0A0A0A"),
@@ -400,45 +436,149 @@ def _doc_cs_foto_limpia(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# Documentos por plantilla — FUNDACIÓN (se mantienen; acento ámbar)             #
+# Documentos por plantilla — FUNDACIÓN (set MÍNIMO y sobrio; acento ámbar)       #
 # --------------------------------------------------------------------------- #
+# Estética cálida y muy simple: nada de chips ni pleca. Solo foto + logo + (degradado
+# suave) + un titular limpio en Montserrat sin mayúsculas. Lo emocional manda; la marca
+# no grita. Reemplaza al set anterior (Comunidad/Historia): la deprecación de la semilla
+# borra sola las viejas (autor "semilla") por no estar ya en el catálogo.
+
+_FUNDACION_TITULAR = "Montserrat"  # sobria/cálida; "Lato" como alternativa si no encaja
 
 
-def _doc_fundacion(
-    marca: str, tokens: dict[str, str], *, alineacion: str, con_chip: bool = False,
-) -> dict[str, Any]:
-    """Caso mainstream de Fundación: foto + degradado + pleca + logo + titular + secundario + crédito.
-
-    `con_chip`: añade el chip de etiqueta_default (acento ámbar) sobre el titular.
-    """
-    a, b = tokens["acento"], tokens["blanco"]
-    chip_x = 64
-    chip_w = 400 if alineacion != "centro" else 952
+def _doc_fundacion_titular(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
+    """Titular de Fundación: foto + logo + degradado suave + titular limpio. Nada más."""
+    b = tokens["blanco"]
     capas: list[dict[str, Any]] = [
         _capa_foto(),
-        _capa_degradado(tokens["tinta"], alto_frac=0.5, alpha=220),
-        _capa_pleca(a),
-        _capa_logo(tokens["wordmark"], a, b),
-    ]
-    if con_chip:
-        capas.append(_capa_chip(a, b, x=chip_x, y=692, w=chip_w, h=60, tamano=38))
-    capas += [
-        _capa_titular(alineacion=alineacion, blanco=b, y=760, h=360),
-        _capa_secundario(blanco=b),
-        _capa_credito(b),
+        _capa_degradado(tokens["tinta"], alto_frac=0.45, alpha=200),
+        _capa_logo(tokens["wordmark"], tokens["acento"], b),
+        # Titular limpio: Montserrat, SIN mayúsculas, sombra sutil para legibilidad.
+        {
+            "id": "titular",
+            "tipo": "texto",
+            "x": 64, "y": 900, "w": 920, "h": 340,
+            "texto": "",
+            "binding": "copy_in",
+            "familia": _FUNDACION_TITULAR,
+            "tamano": 96,
+            "peso": 600,
+            "color": b,
+            "alineacion": "izquierda",
+            "mayusculas": False,
+            "valign": "abajo",
+            "auto_ajuste": {"max_lineas": 3, "tam_min": 56},
+            "sombra": {"dx": 0, "dy": 2, "color": "#000000", "desenfoque": 8, "opacidad": 0.4},
+            "z": 20,
+        },
     ]
     return _envoltura(marca, tokens, capas)
 
 
 def _doc_fundacion_foto_limpia(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
-    """Foto limpia de Fundación: foto + logo + pleca + chip pequeño; SIN titular grande."""
-    a, b = tokens["acento"], tokens["blanco"]
+    """Foto limpia de Fundación: foto + logo; SIN titular, degradado muy leve. La foto manda."""
     capas = [
         _capa_foto(),
-        _capa_degradado(tokens["tinta"], alto_frac=0.32, alpha=180),
-        _capa_pleca(a),
-        _capa_logo(tokens["wordmark"], a, b),
-        _capa_chip(a, b, x=64, y=1180, w=380, h=60, tamano=38),
+        _capa_degradado(tokens["tinta"], alto_frac=0.25, alpha=140),
+        _capa_logo(tokens["wordmark"], tokens["acento"], tokens["blanco"]),
+    ]
+    return _envoltura(marca, tokens, capas)
+
+
+# --------------------------------------------------------------------------- #
+# Documentos por plantilla — NACIÓN GAMER (gaming: fondo oscuro + neón + glow)   #
+# --------------------------------------------------------------------------- #
+# Tokens placeholder inline (`_TOKENS_EXTRA`): acento neón violeta + tinta casi negra.
+# El glow neón se logra con una sombra de desenfoque alto y color = acento sobre el titular.
+
+
+def _capa_titular_glow(
+    acento: str, blanco: str, *, x: int = 64, y: int = 780, w: int = 920, h: int = 440,
+    tamano: int = 150, max_lineas: int = 3, tam_min: int = 80,
+) -> dict[str, Any]:
+    """Titular gamer (binding copy_in) con GLOW neón: sombra dy=0 desenfoque alto color=acento."""
+    cap = _capa_titular(
+        alineacion="izquierda", tamano=tamano, max_lineas=max_lineas, tam_min=tam_min,
+        blanco=blanco, x=x, y=y, w=w, h=h,
+    )
+    cap["sombra"] = {"dx": 0, "dy": 0, "color": acento, "desenfoque": 28, "opacidad": 0.8}
+    return cap
+
+
+def _doc_ng_titular(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
+    """Titular gamer: foto + degradado oscuro intenso + logo + crédito + titular con glow neón."""
+    a, t, b, wm = tokens["acento"], tokens["tinta"], tokens["blanco"], tokens["wordmark"]
+    capas = [
+        _capa_foto(),
+        _capa_degradado(t, alto_frac=0.6, alpha=240),
+        _capa_logo(wm, a, b),
+        _capa_credito(b),
+        _capa_titular_glow(a, b, x=64, y=780, w=920, h=440, tamano=150, max_lineas=3, tam_min=80),
+    ]
+    return _envoltura(marca, tokens, capas)
+
+
+def _doc_ng_destacado(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
+    """Destacado gamer: chip neón FIJO "NUEVO" + titular con glow debajo."""
+    a, t, b, wm = tokens["acento"], tokens["tinta"], tokens["blanco"], tokens["wordmark"]
+    capas = [
+        _capa_foto(),
+        _capa_degradado(t, alto_frac=0.6, alpha=240),
+        _capa_logo(wm, a, b),
+        _capa_credito(b),
+        # Píldora neón FIJA "NUEVO".
+        _capa_chip(
+            a, b, x=64, y=700, w=360, h=66, tamano=42, radio=40, pad_x=28, pad_y=12,
+            texto="NUEVO", binding=None,
+        ),
+        _capa_titular_glow(a, b, x=64, y=790, w=920, h=320, tamano=130, max_lineas=2, tam_min=80),
+    ]
+    return _envoltura(marca, tokens, capas)
+
+
+def _doc_ng_foto_limpia(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
+    """Foto limpia gamer: foto + logo + degradado + crédito; sin titular."""
+    a, t, b, wm = tokens["acento"], tokens["tinta"], tokens["blanco"], tokens["wordmark"]
+    capas = [
+        _capa_foto(),
+        _capa_degradado(t, alto_frac=0.5, alpha=220),
+        _capa_logo(wm, a, b),
+        _capa_credito(b),
+    ]
+    return _envoltura(marca, tokens, capas)
+
+
+# --------------------------------------------------------------------------- #
+# Documentos por plantilla — PISO 15 (entretenimiento: simple y limpio)         #
+# --------------------------------------------------------------------------- #
+# Tokens placeholder inline (`_TOKENS_EXTRA`): magenta espectáculo. Composición simple.
+
+
+def _doc_p15_titular(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
+    """Titular Piso 15: foto + degradado + logo + crédito + titular + barrita de acento mínima."""
+    a, t, b, wm = tokens["acento"], tokens["tinta"], tokens["blanco"], tokens["wordmark"]
+    capas = [
+        _capa_foto(),
+        _capa_degradado(t, alto_frac=0.55, alpha=230),
+        _capa_logo(wm, a, b),
+        _capa_credito(b),
+        # Acento mínimo: una barrita del color de acento sobre el titular (nada recargado).
+        _capa_acento_esquina(a, id_="acento", x=64, y=792, w=120, h=10),
+        _capa_titular(
+            alineacion="izquierda", tamano=130, max_lineas=3, tam_min=70, blanco=b,
+            x=64, y=820, w=920, h=400,
+        ),
+    ]
+    return _envoltura(marca, tokens, capas)
+
+
+def _doc_p15_foto_limpia(marca: str, tokens: dict[str, str]) -> dict[str, Any]:
+    """Foto limpia Piso 15: foto + logo + degradado; sin titular."""
+    a, t, b, wm = tokens["acento"], tokens["tinta"], tokens["blanco"], tokens["wordmark"]
+    capas = [
+        _capa_foto(),
+        _capa_degradado(t, alto_frac=0.5, alpha=220),
+        _capa_logo(wm, a, b),
         _capa_credito(b),
     ]
     return _envoltura(marca, tokens, capas)
@@ -457,11 +597,17 @@ _CATALOGO: dict[str, list[tuple[str, str, Any]]] = {
         ("Foto limpia", "post", _doc_cs_foto_limpia),
     ],
     "fundacion": [
-        ("Comunidad", "post",
-         lambda m, t: _doc_fundacion(m, t, alineacion="centro", con_chip=True)),
-        ("Historia", "post",
-         lambda m, t: _doc_fundacion(m, t, alineacion="izquierda")),
+        ("Titular", "post", _doc_fundacion_titular),
         ("Foto limpia", "post", _doc_fundacion_foto_limpia),
+    ],
+    "nacion-gamer": [
+        ("Titular", "post", _doc_ng_titular),
+        ("Destacado", "post", _doc_ng_destacado),
+        ("Foto limpia", "post", _doc_ng_foto_limpia),
+    ],
+    "piso-15": [
+        ("Titular", "post", _doc_p15_titular),
+        ("Foto limpia", "post", _doc_p15_foto_limpia),
     ],
 }
 
