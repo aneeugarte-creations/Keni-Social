@@ -756,25 +756,36 @@ def claude_skip_permisos() -> bool:
 
 # Herramientas VETADAS por defecto en la generacion (`--disallowed-tools`). Defensa en
 # profundidad frente a prompt-injection (el contenido de usuario/RSS viaja en el prompt):
-# corremos con skip-permissions para cargar skills/leer ficheros del cwd, PERO vetamos
-# `Bash` —el vector de MAYOR impacto: ejecucion de comandos arbitrarios, lectura/exfiltracion
-# de secretos de `/data` y del entorno—. NINGUN flujo de generacion (copy-desde-nota ni los
-# prompts de investigacion de biblioteca) necesita Bash. Web (`WebFetch`/`WebSearch`) NO se
+# corremos con skip-permissions para cargar skills/leer ficheros del cwd, PERO vetamos:
+#   - `Bash` —el vector de MAYOR impacto: ejecucion de comandos arbitrarios, lectura/
+#     exfiltracion de secretos de `/data` y del entorno—.
+#   - `Write` y `Edit` —escritura/edicion de ficheros en disco—. NINGUN flujo de generacion
+#     (copy-desde-nota, QA, hashtags, termometro, green, sugerencias, NI los prompts de
+#     investigacion `brief-tendencias`/`termometro-mundial`) escribe ficheros: su salida es
+#     SIEMPRE texto que parsea el post-procesado. Vetarlas cierra un vector de persistencia/
+#     manipulacion del cwd sin afectar a ningun flujo legitimo (defensa en profundidad).
+# NINGUN flujo de generacion necesita Bash/Write/Edit. Web (`WebFetch`/`WebSearch`) NO se
 # veta por defecto a proposito: los prompts curados `brief-tendencias`/`termometro-mundial`
 # los usan para confirmar frescura, y comparten este mismo constructor de argv. El riesgo
-# residual de Web en el flujo copy-desde-nota lo cubre el delimitador `<contenido_usuario>`
-# (ver `dominio.generar.componer`). Configurable con `KENI_CLAUDE_DISALLOWED_TOOLS` (lista
-# coma/espacio): un operador puede endurecer (p.ej. "Bash WebFetch WebSearch") si lo desea.
-CLAUDE_DISALLOWED_TOOLS_DEF = "Bash"
+# residual de Web en el flujo copy-desde-nota lo cubre el delimitador con NONCE
+# `<contenido_usuario_…>` (ver `dominio.generar.envolver_contenido_usuario`). Vetar Web SOLO
+# en los flujos de copy/RSS/autogen/QA (que no la necesitan) exige `endurecer` por-callsite en
+# cada lanzador (`api/hashtags`, `api/qa_editorial`, `api/termometro`, `dominio/green`,
+# `autogen_copy`, `pipeline_contenido`, `dominio/biblioteca_lanzar`...): queda PENDIENTE de
+# revision humana, porque esos lanzadores son de otros modulos (no de este endurecimiento).
+# Configurable con `KENI_CLAUDE_DISALLOWED_TOOLS` (lista coma/espacio): un operador puede
+# endurecer mas (p.ej. "Bash Write Edit WebFetch WebSearch") si lo desea.
+CLAUDE_DISALLOWED_TOOLS_DEF = "Bash Write Edit"
 
 
 def claude_disallowed_tools() -> list[str]:
     """Herramientas vetadas en la generacion (`--disallowed-tools`); lista, posiblemente vacia.
 
-    Por defecto veta `Bash` (`CLAUDE_DISALLOWED_TOOLS_DEF`); Web queda disponible para los
-    prompts de investigacion. `KENI_CLAUDE_DISALLOWED_TOOLS` lo sobreescribe (separadores
-    coma o espacio); vacio explicito ("" / solo separadores) => sin veto (lista vacia, para
-    depurar). Tolerante: duplicados y espacios sobrantes se limpian conservando el orden.
+    Por defecto veta `Bash Write Edit` (`CLAUDE_DISALLOWED_TOOLS_DEF`); Web queda disponible
+    para los prompts de investigacion. `KENI_CLAUDE_DISALLOWED_TOOLS` lo sobreescribe
+    (separadores coma o espacio); vacio explicito ("" / solo separadores) => sin veto (lista
+    vacia, para depurar). Tolerante: duplicados y espacios sobrantes se limpian conservando el
+    orden.
     """
     crudo = os.environ.get(ENV_CLAUDE_DISALLOWED_TOOLS)
     if crudo is None:

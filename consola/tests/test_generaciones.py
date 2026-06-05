@@ -98,6 +98,15 @@ def test_argv_veta_bash_por_defecto(entorno, monkeypatch):
     assert "Bash" in argv[i + 1 :]
 
 
+def test_argv_veta_write_y_edit_por_defecto(entorno, monkeypatch):
+    # Endurecimiento: ningun flujo de generacion escribe ficheros (la salida es texto que
+    # parsea el post-procesado), asi que ademas de Bash se vetan Write/Edit por defecto.
+    monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
+    argv = generaciones._argv_claude("hola")
+    i = argv.index("--disallowed-tools")
+    assert {"Bash", "Write", "Edit"} <= set(argv[i + 1 :])
+
+
 def test_argv_no_veta_web_por_defecto(entorno, monkeypatch):
     # Web NO se veta por defecto: los prompts de investigacion (brief-tendencias /
     # termometro-mundial) usan WebSearch/WebFetch y comparten este constructor de argv.
@@ -197,6 +206,30 @@ def test_entorno_skill_sin_clave_no_anade_nada(entorno, monkeypatch):
     env = generaciones._entorno_skill()  # almacen vacio (entorno aislado en tmp)
     assert "OPENAI_API_KEY" not in env
     assert "GEMINI_API_KEY" not in env
+
+
+def test_entorno_skill_scrub_secretos_de_infra(entorno, monkeypatch):
+    # Los secretos de INFRA (Postgres/S3/Garage/Metricool) NO deben viajar al subproceso
+    # `claude -p`: defensa contra exfiltracion si el modelo es prompt-injectado. PERO el
+    # token de Claude y PATH SI deben conservarse (la generacion los necesita).
+    monkeypatch.setenv("S3_SECRET_KEY", "s3-secreto")
+    monkeypatch.setenv("S3_ACCESS_KEY", "s3-acceso")
+    monkeypatch.setenv("DATABASE_URL", "postgres://user:pass@db/keni")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "pg-secreto")
+    monkeypatch.setenv("GARAGE_ADMIN_TOKEN", "garage-secreto")
+    monkeypatch.setenv("METRICOOL_TOKEN", "mc-secreto")
+    monkeypatch.setenv("MC_USER_ID", "123")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "claude-token")
+    env = generaciones._entorno_skill()
+    # Secretos de infra: AUSENTES.
+    for fuera in (
+        "S3_SECRET_KEY", "S3_ACCESS_KEY", "DATABASE_URL", "POSTGRES_PASSWORD",
+        "GARAGE_ADMIN_TOKEN", "METRICOOL_TOKEN", "MC_USER_ID",
+    ):
+        assert fuera not in env, fuera
+    # Lo que la generacion necesita: PRESENTE.
+    assert env.get("CLAUDE_CODE_OAUTH_TOKEN") == "claude-token"
+    assert "PATH" in env
 
 
 # --------------------------------------------------------------------------- #

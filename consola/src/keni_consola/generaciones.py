@@ -501,18 +501,51 @@ def _argv_claude(
     ]
 
 
+# Prefijos/nombres de variables de entorno que NUNCA deben llegar al subproceso `claude -p`
+# (case-insensitive). Defensa contra EXFILTRACION de secretos: la generacion corre con
+# skip-permissions y el prompt incluye contenido de usuario/RSS NO confiable; si el modelo
+# fuese prompt-injectado y tuviera una herramienta de salida (Web, MCP), no debe poder leer
+# del entorno credenciales de la INFRA (Postgres, S3/Garage, Metricool/agencias) y filtrarlas.
+# La generacion NO las necesita: solo precisa PATH/HOME/locale/XDG, el token de Claude
+# (`CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`) y, en su caso, la clave del proveedor de
+# imagen (que `_entorno_skill` inyecta explicitamente). Usamos DENYLIST (no allowlist) para no
+# romper variables legitimas que `claude` pueda necesitar y que no preveamos. CRITICO: estos
+# prefijos NO deben cazar `PATH`/`HOME`/`CLAUDE_*` (`PG` es prefijo, no caza `PATH`: empieza
+# por `PA`, no `PG`).
+_ENV_DENYLIST_PREFIJOS: tuple[str, ...] = (
+    "S3_", "GARAGE_", "POSTGRES_", "APP_DB_", "PG", "METRICOOL", "MC_",
+)
+_ENV_DENYLIST_EXACTOS: frozenset[str] = frozenset({"DATABASE_URL"})
+
+
+def _es_secreto_infra(nombre: str) -> bool:
+    """True si `nombre` es una var de secreto de INFRA que no debe llegar al subproceso.
+
+    Case-insensitive. Caza por PREFIJO (`S3_`, `POSTGRES_`, `PG`, `METRICOOL`, ...) o por
+    nombre EXACTO (`DATABASE_URL`). Nunca caza el token de Claude ni `PATH`/`HOME`.
+    """
+    arriba = nombre.upper()
+    if arriba in _ENV_DENYLIST_EXACTOS:
+        return True
+    return any(arriba.startswith(p) for p in _ENV_DENYLIST_PREFIJOS)
+
+
 def _entorno_skill() -> dict[str, str]:
     """Entorno del subproceso de la skill.
 
-    Hereda `os.environ` y, si hay una clave de imagen en el ALMACEN (secretos.toml, la
-    UNICA fuente de verdad) y la variable correspondiente no esta ya puesta, la inyecta:
-    la skill es un plugin independiente que solo lee variables de entorno, asi que este
-    es el canal por el que recibe la clave. NO duplica el almacen: solo lo transporta al
-    subproceso. Una variable ya presente en el entorno tiene prioridad (no se pisa).
+    Hereda `os.environ` PERO con un SCRUB de los secretos de infra (`_es_secreto_infra`):
+    Postgres/S3/Garage/Metricool no deben viajar al subproceso `claude -p` (defensa contra
+    exfiltracion si el modelo es prompt-injectado). Se conserva todo lo demas que la
+    generacion necesita (PATH/HOME/locale/XDG, `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`).
+    Si hay una clave de imagen en el ALMACEN (secretos.toml, la UNICA fuente de verdad) y la
+    variable correspondiente no esta ya puesta, la inyecta: la skill es un plugin independiente
+    que solo lee variables de entorno, asi que este es el canal por el que recibe la clave. NO
+    duplica el almacen: solo lo transporta al subproceso. Una variable ya presente en el
+    entorno tiene prioridad (no se pisa).
     """
     from . import secretos
 
-    entorno = dict(os.environ)
+    entorno = {k: v for k, v in os.environ.items() if not _es_secreto_infra(k)}
     clave = secretos.obtener_clave_imagen()
     if not clave:
         return entorno
