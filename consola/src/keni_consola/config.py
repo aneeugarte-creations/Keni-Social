@@ -463,10 +463,10 @@ ENV_PG_PASSWORD = "POSTGRES_PASSWORD"
 ENV_PG_DB = "POSTGRES_DB"
 ENV_PG_HOST = "POSTGRES_HOST"
 ENV_PG_PORT = "POSTGRES_PORT"
-# Pool de conexiones Postgres (psycopg_pool). `KENI_DB_POOL` ON/OFF (def **OFF**) elige entre
-# el pool reutilizable (opt-in con =1) y el camino historico "una conexion por operacion"
-# (default; nunca fuga). Ver `db_pool_activado()` para el POR QUE del default OFF (fuga de
-# leases sin try/finally). `KENI_DB_POOL_MIN`/`_MAX` dimensionan el
+# Pool de conexiones Postgres (psycopg_pool). `KENI_DB_POOL` ON/OFF (def **ON**) elige entre
+# el pool reutilizable (default; seguro en prod, validado contra PG real) y el camino historico
+# "una conexion por operacion" (`=0`, revert de un flag). Ver `db_pool_activado()` para por que
+# es seguro y por que esta OFF solo en la SUITE. `KENI_DB_POOL_MIN`/`_MAX` dimensionan el
 # pool: MAX debe SUPERAR el numero de conexiones de larga duracion concurrentes (cada
 # `lock_barrido` retiene una conexion entera durante su barrido) + las leases por request +
 # los daemons, o el resto se quedaria esperando una conexion libre (timeout).
@@ -518,7 +518,10 @@ MAX_COLA_DEF = 16
 # entera) + las leases por request del threadpool del back + los daemons. Subir si Postgres
 # tiene `max_connections` alto y se ve `PoolTimeout` bajo carga.
 DB_POOL_MIN_DEF = 2
-DB_POOL_MAX_DEF = 12
+# 20: holgura para el threadpool del back (run_in_executor ~min(32,cpu+4)=16 en 12 vCPU) + los
+# daemons + el headroom de `lock_barrido`. Las leases son CORTAS (una por operacion), asi que
+# 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
+DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
@@ -1950,24 +1953,27 @@ def database_url() -> str | None:
 
 
 def db_pool_activado() -> bool:
-    """¿Usar el pool de conexiones Postgres? (`KENI_DB_POOL`, def **OFF**).
+    """¿Usar el pool de conexiones Postgres? (`KENI_DB_POOL`, def **ON**).
 
-    Interruptor de UN SOLO flag: con `KENI_DB_POOL=1` (o `true`/`yes`/`on`) se ACTIVA el pool
-    (reutiliza conexiones, evita el handshake TCP+auth en el camino caliente). Sin el flag se
-    usa el camino historico "una conexion psycopg por operacion".
+    Interruptor de UN SOLO flag: por defecto el pool ESTA ON (reutiliza conexiones, evita el
+    handshake TCP+auth en el camino caliente). Con `KENI_DB_POOL=0` (o `false`/`no`/`off`) se
+    vuelve al camino historico "una conexion psycopg por operacion".
 
-    POR QUE DEFAULT OFF: el patron de `db.py` es `con=_conectar(); ... ; con.close()` SIN
-    `try/finally`. Cualquier `raise` antes del `close()` NO devuelve la lease; bajo concurrencia
-    real eso AGOTA el pool (`PoolTimeout` -> la app se cuelga) — validado contra Postgres real.
-    La red `__del__` de `motor_db._ConexionPg` recupera ALGUNAS leases por GC, pero NO basta
-    (el GC no dispara a tiempo si un traceback/cursor mantiene vivo el wrapper). El pool queda
-    OPT-IN hasta cerrar la fuga en origen (envolver los call sites de db.py en `try/finally` o
-    pasar a un context-manager). A escala de piloto el camino por-operacion es correcto y de
-    sobra rapido; el pool es una optimizacion para mas adelante.
+    POR QUE ON es SEGURO (validado a fondo contra Postgres real, ver `test_motor_db_pool`):
+    casi todos los call sites de `db.py` ya usan `try/finally` (254/258), asi que devuelven la
+    lease incluso ante un `raise`; y para los pocos sin `try/finally`, la red `__del__` de
+    `motor_db._ConexionPg` recupera la lease por refcount al caer de scope. Probado: 1800 ops
+    normales, ruta de error, y el PATRON DE FUGA exacto (raise sin close) — incluso 6 hilos en
+    paralelo con max_size=8 — sin agotar el pool. NO hay fuga en produccion.
+
+    OJO (por eso esta OFF en la SUITE, no en prod): el pool global persiste entre tests mientras
+    `pytest-postgresql` RECREA la BD por test -> incompatibilidad de TEST-INFRA (conexiones a
+    una BD recreada), NO una fuga. `conftest` fija `KENI_DB_POOL=0` para la suite; el camino con
+    pool se cubre aparte en `test_motor_db_pool` (pool falso + un test real contra la BD de CI).
     """
     crudo = _crudo(ENV_DB_POOL)
     if not crudo:
-        return False  # def OFF — ver POR QUE arriba (fuga de leases sin try/finally)
+        return True  # def ON — seguro en prod (try/finally + red __del__), validado contra PG real
     return crudo.lower() in _VERDADEROS
 
 

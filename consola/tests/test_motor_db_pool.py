@@ -316,3 +316,44 @@ def test_del_es_noop_tras_close_explicito(pool_falso):
     gc.collect()
 
     assert cruda.rollbacks == rollbacks_tras_close  # __del__ fue no-op
+
+
+# --------------------------------------------------------------------------- #
+# Cobertura del CAMINO REAL del pool contra Postgres de CI                     #
+# (la SUITE corre con pool OFF por la infra de tests; esto cubre el path prod) #
+# --------------------------------------------------------------------------- #
+
+
+def test_pool_real_pg_patron_de_fuga_no_agota(monkeypatch):
+    """Contra la BD real de CI, fuerza el pool ON con `max_size` pequeño y ejecuta el PATRON
+    DE FUGA exacto (lease + `raise` SIN `close()`) muchas mas veces que `max_size`. Solo
+    sobrevive si las leases se DEVUELVEN (try/finally en los call sites + red `__del__`); si
+    se fugaran, `PoolTimeout`. Skip si no hay Postgres real (`KENI_TEST_DATABASE_URL`)."""
+    import os
+
+    url = os.environ.get("KENI_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("sin KENI_TEST_DATABASE_URL: requiere Postgres real")
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # la suite lo pone a 0; aqui probamos el pool REAL
+    monkeypatch.setenv("KENI_DB_POOL_MIN", "1")
+    monkeypatch.setenv("KENI_DB_POOL_MAX", "6")
+    monkeypatch.setattr(motor_db, "_pool", None)
+    monkeypatch.setattr(motor_db, "_pool_url", None)
+    monkeypatch.setattr(motor_db, "_modo_logueado", False)
+    try:
+        for _ in range(40):  # 40 >> max_size=6: solo pasa si cada lease vuelve al pool
+            con = motor_db.conectar_cruda()
+            try:
+                con.execute("SELECT * FROM tabla_inexistente_para_fuga")  # lanza
+                con.close()  # NUNCA se alcanza
+            except Exception:
+                pass  # la lease se 'fuga' aqui; debe recuperarse o el pool se agota
+        # Si llegamos sin PoolTimeout, el pool no se fugó: una lease mas debe ir bien.
+        con = motor_db.conectar_cruda()
+        try:
+            assert con.execute("SELECT 1 AS uno").fetchone()["uno"] == 1
+        finally:
+            con.close()
+    finally:
+        motor_db.cerrar_pool()
