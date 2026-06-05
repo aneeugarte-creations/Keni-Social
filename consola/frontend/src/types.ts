@@ -2579,6 +2579,8 @@ export interface CuerpoActualizarPublicacion {
   plantilla_diseno_id?: string;
   /** Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`; "" = sin reencuadre). */
   foto_encuadre?: string;
+  /** COLLAGE: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco. "" = sin collage. */
+  fotos?: string;
 }
 
 /** Respuesta al reciclar una publicación perenne. */

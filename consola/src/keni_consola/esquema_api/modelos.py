@@ -872,6 +872,9 @@ class Publicacion(TypedDict):
     # Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`; "" = sin
     # reencuadre). Persiste la elección humana del recorte. Opcional (piezas legadas no lo traen).
     foto_encuadre: NotRequired[str]
+    # COLLAGE multi-hueco: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco de la plantilla.
+    # "" = sin collage (hueco único derivado de `foto`). Opcional. Frontera API->frontend.
+    fotos: NotRequired[str]
 
 
 class RespuestaPublicaciones(TypedDict):

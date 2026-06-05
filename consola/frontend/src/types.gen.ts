@@ -347,7 +347,7 @@ export interface TendenciaDiaria {
  * A diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la
  * lista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó
  * desde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza
- * a la pieza en el tablero (`/parrilla/pendientes`). `encontrado=False` => Metricool aún
+ * a la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún
  * no tiene datos (recién publicada): la UI muestra "sin datos todavía", no ceros falsos.
  */
 export interface PiezaRendimiento {
@@ -679,6 +679,7 @@ export interface Publicacion {
   placa_oculta?: boolean;
   plantilla_diseno_id?: string;
   foto_encuadre?: string;
+  fotos?: string;
 }
 /**
  * Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).

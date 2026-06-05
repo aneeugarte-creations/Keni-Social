@@ -1311,7 +1311,7 @@
           "type": "string"
         }
       },
-      "description": "Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).\n\nA diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la\nlista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó\ndesde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza\na la pieza en el tablero (`/parrilla/pendientes`). `encontrado=False` => Metricool aún\nno tiene datos (recién publicada): la UI muestra \"sin datos todavía\", no ceros falsos.",
+      "description": "Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).\n\nA diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la\nlista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó\ndesde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza\na la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún\nno tiene datos (recién publicada): la UI muestra \"sin datos todavía\", no ceros falsos.",
       "required": [
         "contenido_id",
         "plataforma_id",
@@ -2272,6 +2272,9 @@
           "type": "string"
         },
         "foto_encuadre": {
+          "type": "string"
+        },
+        "fotos": {
           "type": "string"
         }
       },
