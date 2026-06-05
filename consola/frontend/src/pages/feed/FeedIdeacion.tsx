@@ -56,8 +56,8 @@ import { PostFeed } from "./PostFeed";
 // Dos controles independientes que persisten por dispositivo:
 //  - Columnas (1-4): nº de posts por fila. Aplica en TODOS los anchos, móvil incluido; más
 //    columnas = posts más pequeños y densos (en móvil quedan apretados, es lo que se quiere).
-//  - Zoom (escala CSS del feed, 60%-140%): agranda/encoge los posts en CUALQUIER pantalla, encima
-//    de las columnas (p.ej. para ampliar sin reducir el nº de posts por fila).
+//  - Zoom (60%-140%): escala cada caja ENTERA del feed (imagen + texto a la vez, vía `FeedZoom`),
+//    en cualquier pantalla y por encima de las columnas (ampliar sin tocar el nº de posts por fila).
 const COLUMNAS_MIN = 1;
 const COLUMNAS_MAX = 4;
 const ESCALA_MIN = 0.6;
@@ -89,6 +89,51 @@ function guardarPref(clave: string, valor: number): void {
   } catch {
     /* sin localStorage: la preferencia simplemente no persiste */
   }
+}
+
+/**
+ * Escala TODO el feed de forma uniforme —cada caja entera: imagen + texto a la vez— como el zoom
+ * del navegador. Usa `transform: scale`, NO la propiedad CSS `zoom`: `zoom` sobre un contenedor de
+ * ancho fijo deja las imágenes (ancho %) a tamaño constante mientras el texto (px) crece —el
+ * clásico "reverse zoom" en el que la cabecera engorda y la foto encoge—. `transform` escala el
+ * render completo por igual, así que la caja crece/encoge entera.
+ *
+ * `transform` no reserva sitio en el flujo: medimos el alto real del contenido (sin escalar) y lo
+ * reservamos en el contenedor (× escala) con un `ResizeObserver`. El ancho interno se compensa con
+ * `width: 100/escala %` para que, ya escalado, el feed ocupe justo el 100% disponible.
+ */
+function FeedZoom({ escala, children }: { escala: number; children: React.ReactNode }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [alto, setAlto] = React.useState<number>();
+  React.useLayoutEffect(() => {
+    if (escala === 1) {
+      setAlto(undefined);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const medir = () => setAlto(Math.ceil(el.offsetHeight * escala) + 2);
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [escala]);
+
+  if (escala === 1) return <>{children}</>;
+  return (
+    <div style={{ height: alto, overflow: "hidden" }}>
+      <div
+        ref={ref}
+        style={{
+          width: `${100 / escala}%`,
+          transform: `scale(${escala})`,
+          transformOrigin: "top left",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -385,8 +430,8 @@ export default function FeedIdeacion() {
       {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla con
           todas las redes y huecos "No generado" en las que falten) — así no se mezclan ideas en una
           fila. Filtrado a UNA red: rejilla PLANA (1 col = centrado; 2-4 = a lo ancho). `columnas`
-          fija cuántas por fila en cualquier pantalla; `zoom` escala todo el feed por encima. */}
-      <div style={escala !== 1 ? { zoom: escala } : undefined}>
+          fija cuántas por fila en cualquier pantalla; el zoom escala cada caja entera por encima. */}
+      <FeedZoom escala={escala}>
         {feedQuery.isLoading ? (
           <div className={cn("grid items-start gap-4", GRID_COLS[columnas])}>
             {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
@@ -424,7 +469,7 @@ export default function FeedIdeacion() {
             })}
           </div>
         )}
-      </div>
+      </FeedZoom>
     </div>
   );
 }
