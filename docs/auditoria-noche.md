@@ -56,8 +56,54 @@ endurecimiento + unos pocos huecos realmente explotables.
 - **[MED] series de métricas sin LIMIT** — `db.py:2741`.
 - **[MED] sin healthchecks en front/worker/files/mcp** — `deploy/docker-compose.yml`. NO-BRAINER (compose).
 
-## Preguntas para el owner (mañana)
-(pendiente — se rellena con dudas que surjan)
+## Preguntas / decisiones para el owner (mañana)
 
-## Cambios pusheados a main
-(se registra al promover cada lote)
+1. **Tamaño real del VPS Latitude (RAM/CPU).** Puse `mem_limit`/`cpus` conservadores en
+   `deploy/docker-compose.yml` (suma ~5.25 GiB) + `max_connections=200`/`shared_buffers=256MB`
+   en Postgres. Hay que afinarlos al tamaño real para dejar headroom al host. Todo es
+   overridable por env (`WORKER_MEM_LIMIT`, etc.).
+2. **MFA.** Implementado y **OFF por defecto** (`KENI_CONSOLA_MFA=0`). Para activarlo: generar
+   `KENI_CONSOLA_MFA_KEY` (Fernet) y ponerlo en el contenedor. ¿Lo activamos para AMX o lo
+   dejamos listo y apagado? (No lo enciendo sin ti.)
+3. **Aislamiento por marca — cambio de comportamiento.** Las métricas ahora exigen una marca en
+   alcance para usuarios restringidos a varias marcas (400 "Elige una marca" en vez de agregado
+   de todas); listados/aprobación se acotan por defecto a `marcas_visibles`. La restricción SOLO
+   aplica a usuarios CON marcas asignadas; un usuario sin marcas ve todo. Hay que **asignar
+   marcas a cada usuario del piloto** para que el aislamiento muerda. ¿Confirmas la UX?
+4. **Tool hardening de `claude -p`.** Veté `Write`/`Edit` globalmente y scrubeé secretos de
+   infra del entorno del subproceso. Dejé `WebFetch`/`WebSearch`/`Read` ACTIVOS (los necesitan
+   los prompts de investigación). **Follow-up**: bloquear Web también en flujos de SOLO copy
+   (RSS/autogen/QA) vía `endurecer` por call-site — no lo hice para no romper investigación.
+5. **Timeouts de fetch en el front**: 30s general, 120s en subidas/render. ¿Ok?
+
+## Pendiente para mañana (no hecho / riesgo o decisión requerida)
+
+- **[CRIT perf] Pool de conexiones Postgres** — mayor impacto a escala. NO lo toqué: camino
+  crítico de `db.py`/`motor_db.py`, alto blast-radius; mejor con atención y CI. Hoy no muerde.
+- **Doble-reserva de slot de parrilla** — retiré el UNIQUE incorrecto (chocaba entre marcas).
+  Fix correcto pendiente: denormalizar `marca` en `contenido_plataforma` + UNIQUE
+  (marca,red,fecha), o advisory lock por (marca,red). Severidad baja.
+- **Paginación de tablero** (`listar_contenido`) y **LIMIT en series de métricas**.
+- **Cap global de `claude -p` a nivel de cola** (hoy worker serial lo acota; `--scale worker=N`
+  no tiene techo de flota). Documentado.
+- **Idempotencia al lanzar generación**, **rate-limit por IP en login**, **vida absoluta de
+  sesión** — endurecimientos menores no críticos.
+- **IDOR en `media`/`pieza_historico`** — namespace plano sin marca; requiere cambio de esquema.
+
+## Cambios pusheados a main (cronológico)
+
+1. `fix(seguridad)`: hardening de `claude -p` (nonce anti prompt-injection, scrub de env, veta Write/Edit, cap MAX_TEXTO).
+2. `fix(frontend)`: fiabilidad (401 global, timeouts, reintento de feed, `mensajeError` central).
+3. `fix(backend)`: 500 sin clase de excepción, timing de login, paginar `/skills/historial`.
+4. `fix(deploy)`: límites RAM/CPU, healthchecks, orden de arranque, Postgres tuning.
+5. `fix(seguridad)`: **aislamiento por marca** (cierra IDOR cross-marca en API).
+6. `test(media)`: adapta 3 tests al contrato content-addressed (main estaba ROJO antes de empezar; ahora verde).
+7. `fix(concurrencia)`: CAS de aprobación, UNIQUE de versiones, rota guard, orphan dedup, single-flight.
+8. `perf(metricas)`: reutiliza httpx.Client + memoiza config (N+1 por pieza).
+9. `ci(tests-shell)`: quita referencia obsoleta a `test_api_panel.py`.
+10. `feat(auth)`: **MFA TOTP detrás de flag** (off por defecto, fail-safe).
+11. `perf(generaciones)`: retención de YAML (acota disco/escaneo).
+12. `fix(concurrencia)`: repos reexporta helpers + retira UNIQUE de slot incorrecto.
+
+Proceso: validé cada push leyendo el resultado real de los pipelines de Woodpecker (API
+GitHub + logs desde la sqlite del server) y corregí las regresiones que aparecieron.
