@@ -10,7 +10,7 @@ when:
   - event: [push, pull_request]
     path:
       include:
-        - "consola/src/keni_consola/api/{auth,usuarios,config,estado,conexiones,limites,media,panel,sugerencias,carpetas,proyectos,catalogo}.py"
+        - "consola/src/keni_consola/api/{auth,usuarios,config,estado,conexiones,limites,media,sugerencias,carpetas,proyectos,catalogo}.py"
         - "consola/src/keni_consola/apps/shell.toml"
 
 services:
@@ -44,7 +44,6 @@ steps:
         consola/tests/test_api_limites.py
         consola/tests/test_api_media.py
         consola/tests/test_almacen_media.py
-        consola/tests/test_api_panel.py
         consola/tests/test_api_sugerencias.py
         consola/tests/test_api_carpetas.py
         consola/tests/test_api_proyectos.py
