@@ -1037,7 +1037,8 @@ def test_generar_fuente_propia_descarga_falla_degrada_a_url(entorno, monkeypatch
     # decide internamente el respaldo a la fuente; lo que importa aquí es que NO se pierde la
     # imagen_fuente y que no hay PNG horneado.
     assert p["imagen"] == ""
-    assert p["imagen_url"] == f"/api/publicaciones/{p['id']}/compuesta"
+    # La URL puede llevar sufijo `?v=` (cache-bust por `actualizado`); comparamos solo la ruta.
+    assert p["imagen_url"].split("?")[0] == f"/api/publicaciones/{p['id']}/compuesta"
 
 
 def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):

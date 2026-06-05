@@ -53,7 +53,8 @@ def test_crear_sin_imagen_horneada_usa_compuesta(cliente):
     # on-demand `/compuesta` (no a "" ni a un media): la placa se compone al pedirla.
     pub = _crear(cliente).json()["publicacion"]
     assert pub["imagen"] == ""
-    assert pub["imagen_url"] == f"/api/publicaciones/{pub['id']}/compuesta"
+    # La URL puede llevar sufijo `?v=` (cache-bust por `actualizado`); comparamos solo la ruta.
+    assert pub["imagen_url"].split("?")[0] == f"/api/publicaciones/{pub['id']}/compuesta"
 
 
 def test_actualizar_imagen(cliente):

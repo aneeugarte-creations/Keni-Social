@@ -261,7 +261,8 @@ def test_no_hornea_placa_al_crear_marca_visual(entorno, monkeypatch):
     pub = resultado["publicaciones"][0]
     assert pub["imagen"] == ""  # nada horneado al crear
     # La marca visual (unotv) tiene placa: la URL apunta al render on-demand.
-    assert pub["imagen_url"] == f"/api/publicaciones/{pub['id']}/compuesta"
+    # La URL puede llevar un sufijo `?v=` (cache-bust por `actualizado`); comparamos solo la ruta.
+    assert pub["imagen_url"].split("?")[0] == f"/api/publicaciones/{pub['id']}/compuesta"
 
 
 def test_crear_marca_sin_plantilla_sin_imagen(entorno):

@@ -293,7 +293,8 @@ def test_aplicar_plantilla_persiste_receta_no_hornea(cliente, monkeypatch):
     assert pub["imagen"] == ""  # NO se hornea
     assert pub["plantilla_diseno_id"] == plantilla["id"]
     assert pub["foto"] == "f.jpg"
-    assert pub["imagen_url"] == f"/api/publicaciones/{pid}/compuesta"
+    # La URL puede llevar sufijo `?v=` (cache-bust por `actualizado`); comparamos solo la ruta.
+    assert pub["imagen_url"].split("?")[0] == f"/api/publicaciones/{pid}/compuesta"
 
 
 def test_actualizar_estado_invalido_400(cliente):
