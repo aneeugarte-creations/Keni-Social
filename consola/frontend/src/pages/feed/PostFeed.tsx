@@ -189,26 +189,29 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           ? "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
           : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
 
-  // "Me gusta" (toggle): si ya es tu reacción, la quita; si tenías un dislike, lo quita primero
-  // (un clic más dará el OK); si estás en neutro y te toca, da el OK. Si no te toca, un toast
-  // explica por qué (no bloquea en silencio). Los comentarios sin resolver son un gate previo
-  // (como en un PR): resuélvelos antes de dar el OK.
+  // "Me gusta": el like NUNCA quita tu like (eso es trabajo del dislike). Si tienes un dislike,
+  // un like lo retira primero (un clic más dará el OK). En neutro y si te toca, da el OK (con el
+  // gate de comentarios sin resolver). Si YA diste tu OK o no te toca, cae al manejo de "no
+  // toca": un segundo like ofrece FORZAR la aprobación (saltar la cadena) a quien pueda; al resto
+  // le explica con un toast por qué no puede dar el OK (no bloquea en silencio).
   const onLike = () => {
-    if (miReaccion === "like" || miReaccion === "dislike") {
-      deshacer.mutate(); // quita tu like (toggle off) o tu dislike (antes de poder dar OK)
+    if (miReaccion === "dislike") {
+      deshacer.mutate(); // retira tu dislike antes de poder dar el OK
       return;
     }
-    if (sinResolver > 0) {
-      toast(`Resuelve ${plural(sinResolver, "comentario")} antes de aprobar y publicar.`);
-      setComentariosAbierto(true);
-      return;
+    if (miReaccion === "neutral") {
+      if (sinResolver > 0) {
+        toast(`Resuelve ${plural(sinResolver, "comentario")} antes de aprobar y publicar.`);
+        setComentariosAbierto(true);
+        return;
+      }
+      if (puedeDar) {
+        aprobar.mutate();
+        return;
+      }
     }
-    if (puedeDar) {
-      aprobar.mutate();
-      return;
-    }
-    // No te toca el OK ahora. Si puedes FORZAR (admin/coordinador), el toast ofrece una
-    // acción discreta para saltarte la cadena (en vez de un icono fijo en la tarjeta).
+    // Ya diste tu OK (segundo like) o no te toca: si puedes FORZAR (admin/coordinador), el toast
+    // ofrece saltarte la cadena; si no, explica por qué no puedes dar el OK.
     if (puedeForzar && enRevision && !yaAprobada) {
       toast(motivoBloqueo, {
         action: { label: "Forzar", onClick: () => void onForzar() },
@@ -338,17 +341,19 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             disabled={ocupado}
             title={
               miReaccion === "like"
-                ? "Quitar tu OK"
+                ? puedeForzar
+                  ? "Ya diste tu OK · pulsa para forzar la aprobación (saltar la cadena)"
+                  : "Ya diste tu OK; falta el de otra persona"
                 : miReaccion === "dislike"
                   ? "Quita tu dislike para poder dar el OK"
                   : sinResolver > 0
                     ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar`
                     : tituloLike
             }
-            aria-label={miReaccion === "like" ? "Quitar tu OK" : "Me gusta"}
+            aria-label="Me gusta"
             aria-pressed={miReaccion === "like"}
           >
-            {aprobar.isPending || (deshacer.isPending && miReaccion === "like") ? (
+            {aprobar.isPending || (deshacer.isPending && miReaccion === "dislike") ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : yaAprobada ? (
               <Check className="h-4 w-4" />
@@ -365,11 +370,17 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               className="h-8 w-8"
               onClick={onDislike}
               disabled={ocupado}
-              title={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
-              aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
+              title={
+                miReaccion === "like"
+                  ? "Quitar tu OK"
+                  : miReaccion === "dislike"
+                    ? "Quitar tu dislike"
+                    : "No me gusta"
+              }
+              aria-label={miReaccion === "like" ? "Quitar tu OK" : "No me gusta"}
               aria-pressed={miReaccion === "dislike"}
             >
-              {rechazar.isPending || (deshacer.isPending && miReaccion === "dislike") ? (
+              {rechazar.isPending || (deshacer.isPending && miReaccion !== "neutral") ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <ThumbsDown className="h-4 w-4" />
