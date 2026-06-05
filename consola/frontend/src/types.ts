@@ -591,6 +591,46 @@ export interface RespuestaGeneraciones {
   paginacion?: Paginacion;
 }
 
+// --- Carril Rápido de Breaking (Claro Sports) ---
+
+/**
+ * Un tema breaking del Radar de Claro Sports.
+ * `estado_borrador`: "ninguno" | "generando" | "listo"
+ */
+export interface BreakingItem {
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  senal: number;
+  senal_texto: string;
+  breaking: true;
+  idioma: string;
+  fuentes: string[];
+  enlaces: { titulo: string; url: string; fuente: string }[];
+  fecha: string;
+  estado_borrador: "ninguno" | "generando" | "listo";
+  contenido_id: string;
+  generacion_id: string;
+}
+
+/** Respuesta de GET /api/breaking. */
+export interface RespuestaBreaking {
+  items: BreakingItem[];
+}
+
+/** Cuerpo de POST /api/breaking/preparar. */
+export interface CuerpoPreparar {
+  titulo: string;
+  marca: string;
+  redes?: string[];
+}
+
+/** Respuesta de POST /api/breaking/preparar. */
+export interface RespuestaPreparar {
+  contenido_id: string;
+  generacion_id: string;
+}
+
 // --- Termómetro mundial (galería diaria de noticias internacionales) ---
 
 /** Config del Termómetro mundial (la comparten la página y el cron de las 7:00). */

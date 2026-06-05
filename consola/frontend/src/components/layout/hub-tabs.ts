@@ -13,6 +13,7 @@ import {
   ScanSearch,
   ScanText,
   Target,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -58,6 +59,9 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
 export const TABS_REVISION: ItemTabHub[] = [
   { ruta: "/operacion/revision/editorial", etiqueta: "Editorial", icono: ScanText },
   { ruta: "/operacion/revision/verificacion", etiqueta: "Verificación", icono: ScanSearch },
+  // Carril Rápido: solo Claro Sports (y vista "Todas"). El gating se aplica en
+  // `gating-marca.ts` (oculta del nav para otras marcas) y en el GuardTurnos equivalente.
+  { ruta: "/operacion/revision/breaking", etiqueta: "Breaking", icono: Zap },
 ];
 
 export const TABS_ANALITICAS: ItemTabHub[] = [

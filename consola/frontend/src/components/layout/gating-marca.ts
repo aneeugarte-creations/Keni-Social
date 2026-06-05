@@ -25,7 +25,11 @@ export const MARCA_CLARO_SPORTS = "claro-sports";
  * (del nav / de su pestaña) y su ruta redirige; en "Todas" (`marcaActiva === null`, vista
  * agregada de admin) sí se permiten, porque incluye a Claro Sports.
  */
-const RUTAS_SOLO_CLARO_SPORTS = ["/operacion/calendario/turnos"];
+const RUTAS_SOLO_CLARO_SPORTS = [
+  "/operacion/calendario/turnos",
+  // Carril Rápido de Breaking: específico del piloto Claro Sports.
+  "/operacion/revision/breaking",
+];
 
 /**
  * ¿Es `ruta` visible para la `marcaActiva`? `true` salvo que la ruta esté restringida a

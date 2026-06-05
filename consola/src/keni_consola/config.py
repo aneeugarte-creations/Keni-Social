@@ -266,6 +266,14 @@ ENV_SUGERENCIAS_EDITORIALES = "KENI_SUGERENCIAS_EDITORIALES"
 ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS = "KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS"
 ENV_SUGERENCIAS_EDITORIALES_MAX = "KENI_SUGERENCIAS_EDITORIALES_MAX"
 
+# Carril Rápido de Breaking (Claro Sports): un hilo demonio barre el snapshot del Investigador
+# cada N minutos y, para los temas breaking de Claro Sports sin borrador aún, crea un DRAFT y
+# encola la generación de copy (mismo camino que /api/breaking/preparar). SÓLO BORRADORES; nunca
+# publica. CONSERVADOR por defecto (OFF): sin `KENI_BREAKING` el equipo lo hace a mano con el tap.
+ENV_BREAKING = "KENI_BREAKING"
+ENV_BREAKING_INTERVALO_MIN = "KENI_BREAKING_INTERVALO_MIN"
+ENV_BREAKING_MAX = "KENI_BREAKING_MAX"
+
 # Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
 # demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
 # radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
@@ -458,6 +466,10 @@ ALGORITMOS_INTERVALO_HORAS_DEF = 6
 # cuesta un claude -p). Conservador a proposito.
 SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF = 24
 SUGERENCIAS_EDITORIALES_MAX_DEF = 3
+
+# Carril Rápido de Breaking: barre cada 5 min (def) y cap 3 borradores por barrido.
+BREAKING_INTERVALO_MIN_DEF = 5
+BREAKING_MAX_DEF = 3
 
 # Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
 # porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
@@ -1215,6 +1227,30 @@ def sugerencias_editoriales_max() -> int:
     Cada plataforma cuesta un `claude -p`: el tope acota el gasto por dia.
     """
     return _entero(ENV_SUGERENCIAS_EDITORIALES_MAX, SUGERENCIAS_EDITORIALES_MAX_DEF, minimo=1)
+
+
+def breaking_auto_activo() -> bool:
+    """True si el daemon del Carril Rápido de Breaking debe barrer (`KENI_BREAKING`).
+
+    Def OFF (conservador): el equipo prepara borradores de breaking a mano (tap en la UI).
+    Con el flag a un valor afirmativo, un hilo demonio barre el snapshot del Investigador
+    cada N min y pre-genera borradores para los temas breaking de Claro Sports sin draft.
+    SÓLO BORRADORES: nunca publica; el aprobador humano sigue siendo obligatorio.
+    """
+    return _crudo(ENV_BREAKING).lower() in _VERDADEROS
+
+
+def breaking_intervalo_min() -> int:
+    """Cada cuantos minutos barre el daemon de breaking (`KENI_BREAKING_INTERVALO_MIN`, def 5, min 1)."""
+    return _entero(ENV_BREAKING_INTERVALO_MIN, BREAKING_INTERVALO_MIN_DEF, minimo=1)
+
+
+def breaking_max() -> int:
+    """Maximo de borradores breaking a preparar por barrido (`KENI_BREAKING_MAX`, def 3, min 1).
+
+    Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
+    """
+    return _entero(ENV_BREAKING_MAX, BREAKING_MAX_DEF, minimo=1)
 
 
 def autogen_activo() -> bool:

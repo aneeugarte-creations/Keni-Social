@@ -34,6 +34,8 @@ const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
 const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
 const Verificacion = lazy(() => import("@/pages/Verificacion"));
+// Carril Rápido de Breaking: solo para Claro Sports (y vista "Todas").
+const CarrilRapido = lazy(() => import("@/pages/CarrilRapido"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
@@ -154,13 +156,15 @@ export const router = createBrowserRouter([
               { path: "*", element: <Navigate to="/operacion/feed" replace /> },
             ],
           },
-          // Hub Revisión: cola de aprobación (editorial) + verificación de media.
+          // Hub Revisión: cola de aprobación (editorial) + verificación de media
+          // + Carril Rápido de Breaking (Claro Sports: temas con señal acelerando).
           {
             path: "revision",
             children: [
               { index: true, element: <Navigate to="editorial" replace /> },
               { path: "editorial", element: <RevisionEditorial /> },
               { path: "verificacion", element: <Verificacion /> },
+              { path: "breaking", element: <CarrilRapido /> },
             ],
           },
         ],

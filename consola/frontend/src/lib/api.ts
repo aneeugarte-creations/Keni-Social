@@ -269,6 +269,9 @@ import type {
   ActividadAgregados,
   RespuestaPipelines,
   RespuestaPipelineDetalle,
+  RespuestaBreaking,
+  CuerpoPreparar,
+  RespuestaPreparar,
 } from "@/types";
 
 import { type NombreContrato, validarContrato } from "./contrato";
@@ -2142,5 +2145,24 @@ export const api = {
         metodo: "DELETE",
         muestrear: false,
       }),
+  },
+
+  // --- Carril Rápido de Breaking (Claro Sports) ---
+  breaking: {
+    /**
+     * Lista los temas del Radar marcados como breaking para la marca, con su estado de borrador.
+     * GET /api/breaking?marca=claro-sports
+     */
+    listar: (marca?: string, signal?: AbortSignal) =>
+      peticion<RespuestaBreaking>(
+        `/breaking${marca ? `?marca=${encodeURIComponent(marca)}` : ""}`,
+        { signal },
+      ),
+    /**
+     * Prepara un borrador de copy para un tema breaking (DRAFT, nunca publica).
+     * POST /api/breaking/preparar
+     */
+    preparar: (cuerpo: CuerpoPreparar) =>
+      peticion<RespuestaPreparar>("/breaking/preparar", { metodo: "POST", json: cuerpo }),
   },
 };
