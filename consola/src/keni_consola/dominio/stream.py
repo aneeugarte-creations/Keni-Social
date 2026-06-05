@@ -126,19 +126,25 @@ def arg_max_turns() -> list[str]:
 def arg_skip_permisos() -> list[str]:
     """`['--dangerously-skip-permissions']` salvo `KENI_CLAUDE_SKIP_PERMISSIONS` falsy (def. ON).
 
-    En modo `-p` (headless) NO hay forma interactiva de aprobar el "trust" de la carpeta
-    ni el permiso de una herramienta. SIN esto, `claude` no carga las skills del proyecto
-    (`.claude/skills`) —y la skill se ejecuta "a mano"— ni puede usar WebFetch/Bash (se
-    cuelga pidiendo un permiso que nadie puede conceder). El subproceso corre ACOTADO (cwd
-    de skills, tope de turnos/coste/wall-timeout y, en hosted, dentro del contenedor), por
-    lo que se saltan los permisos por defecto. Desactivable con
+    POR QUÉ: en modo `-p` (headless) NO hay forma interactiva de aprobar el permiso de una
+    herramienta. SIN esto, en cuanto un flujo necesita una tool (WebFetch para corroborar
+    datos en investigación/QA, o Read de un fichero pasado por `--add-dir`), `claude` se
+    cuelga pidiendo un permiso que nadie puede conceder. NO tiene NADA que ver con "skills":
+    NO usamos el motor de skills de Claude Code (`.claude/skills`) —el contexto se inyecta
+    EXPLÍCITAMENTE en el prompt desde la Biblioteca de Prompts— y el cwd de generación es
+    NEUTRO (sin `.claude/skills` ni `CLAUDE.md`). El subproceso corre ACOTADO (tope de
+    turnos/coste/wall-timeout y, en hosted, dentro del contenedor). Desactivable con
     `KENI_CLAUDE_SKIP_PERMISSIONS=0` (p.ej. para depurar qué permiso falta). La decision
     vive en `config.claude_skip_permisos`.
 
-    DEFENSA EN PROFUNDIDAD: como corremos con skip-permissions, las herramientas
-    peligrosas (Bash/WebFetch/WebSearch) se VETAN aparte con `arg_tools_restringidas`,
-    para que un prompt-injection en el contenido de usuario/RSS no acabe ejecutando
-    comandos ni saliendo a la red."""
+    OJO (footgun): este flag NO es "el flag de las skills"; si lo quitas, TODOS los flujos
+    que usan tools (WebFetch/Read) dejan de funcionar. Para endurecer, usa `--allowedTools`
+    o amplía el veto de `arg_tools_restringidas`, no quites esto a ciegas.
+
+    DEFENSA EN PROFUNDIDAD: como corremos con skip-permissions, las herramientas que ningún
+    flujo de generación necesita (`Bash`/`Write`/`Edit`) se VETAN aparte con
+    `arg_tools_restringidas`, para que un prompt-injection en el contenido de usuario/RSS no
+    acabe ejecutando comandos ni escribiendo ficheros."""
     return ["--dangerously-skip-permissions"] if config.claude_skip_permisos() else []
 
 
@@ -146,12 +152,13 @@ def arg_tools_restringidas() -> list[str]:
     """Devuelve `['--disallowed-tools', '<t1>', '<t2>', ...]` con las herramientas vetadas.
 
     DEFENSA contra prompt-injection: como corremos con `--dangerously-skip-permissions`
-    (para cargar skills y leer ficheros del cwd sin aprobacion interactiva), vetamos por
-    defecto `Bash` —el vector de mayor impacto (ejecucion de comandos, exfiltracion de
-    secretos)— que NINGUN flujo de generacion necesita. Web (`WebFetch`/`WebSearch`) NO se
-    veta por defecto: los prompts de investigacion (`brief-tendencias`/`termometro-mundial`)
-    la usan y comparten este constructor de argv. Asi, aunque el contenido de usuario/RSS
-    inyectado intente abrir una shell, `claude` lo rechaza. La lista es configurable
+    (para que las tools funcionen en headless sin aprobacion interactiva), vetamos por
+    defecto `Bash`/`Write`/`Edit` —los vectores de mayor impacto (ejecucion de comandos,
+    escritura de ficheros)— que NINGUN flujo de generacion necesita. Web (`WebFetch`/
+    `WebSearch`) y `Read` NO se vetan por defecto: los prompts de investigacion
+    (`brief-tendencias`/`termometro-mundial`) y la verificacion/QA usan web para corroborar
+    datos, y comparten este constructor de argv. Asi, aunque el contenido de usuario/RSS
+    inyectado intente abrir una shell o escribir, `claude` lo rechaza. La lista es configurable
     (`config.claude_disallowed_tools`); un operador puede endurecerla.
 
     El flag de Claude Code es `--disallowed-tools` (alias `--disallowedTools`); usamos la

@@ -605,11 +605,12 @@ def _argv_claude(
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-        # Headless: sin esto `claude` no carga las skills del proyecto ni usa WebFetch/Bash
-        # (no hay forma de aprobar el "trust"/permiso en `-p`). Acotado por cwd + topes.
+        # Headless: sin esto `claude` se cuelga al usar una tool (WebFetch/Read), no hay forma
+        # de aprobar el permiso en `-p`. NO es el flag de skills: no usamos el motor de skills,
+        # el contexto se inyecta en el prompt; el cwd es neutro. Acotado por topes.
         *stream.arg_skip_permisos(),
         # Defensa en profundidad anti prompt-injection: veta herramientas peligrosas (por
-        # defecto `Bash`, mas las extra del job). Va DESPUES de skip-permisos para tener efecto.
+        # defecto `Bash`/`Write`/`Edit`, mas las extra del job). Va DESPUES de skip-permisos.
         *arg_tools,
         *arg_effort,
         *arg_budget,

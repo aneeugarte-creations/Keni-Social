@@ -76,8 +76,8 @@ def test_argv_sin_dirs_no_anade_add_dir(entorno):
 
 
 def test_argv_incluye_skip_permissions_por_defecto(entorno, monkeypatch):
-    # Headless (-p): sin --dangerously-skip-permissions `claude` no carga las skills del
-    # proyecto ni usa WebFetch (no hay forma de aprobar el trust/permiso). Por defecto va.
+    # Headless (-p): sin --dangerously-skip-permissions `claude` se cuelga al usar una tool
+    # (WebFetch/Read), no hay forma de aprobar el permiso. NO es el flag de skills. Por defecto va.
     monkeypatch.delenv("KENI_CLAUDE_SKIP_PERMISSIONS", raising=False)
     assert "--dangerously-skip-permissions" in generaciones._argv_claude("hola")
 
