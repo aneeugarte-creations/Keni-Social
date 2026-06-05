@@ -1,10 +1,23 @@
-"""Tests del segundo factor TOTP (MFA), GATEADO por `KENI_CONSOLA_MFA` (def OFF).
+"""Tests del segundo factor PASSKEYS / WebAuthn (MFA), GATEADO por `KENI_CONSOLA_MFA` (def OFF).
 
-Cubre el CONTRATO contra el que se construye el frontend y, sobre todo, la garantia critica
-del piloto: con el flag OFF el login es IDENTICO a hoy (nunca se pide segundo factor). Tambien:
-enrolar -> activar -> el siguiente login pide codigo -> codigo correcto entra / incorrecto 401 /
-recovery de un solo uso; la cookie pre-auth NO abre endpoints protegidos; el reset admin limpia
-el MFA; y el fail-safe cuando falta `KENI_CONSOLA_MFA_KEY`.
+QUE SE CUBRE (y que NO):
+
+  - Flag OFF => el login es IDENTICO a hoy (NUNCA se pide segundo factor), aunque el usuario
+    tenga una passkey en BD. Esta es la garantia critica del piloto.
+  - Generacion de OPCIONES (registro y login): devuelven un challenge bien formado y siembran
+    la cookie Fernet correspondiente; el challenge NO se confia desde el cliente.
+  - Round-trip de la cookie de CHALLENGE (Fernet, atada al usuario + TTL).
+  - Recovery codes: un solo uso (entra una vez, falla a la segunda); fail-safe y reset admin.
+  - La cookie PRE-AUTH no abre endpoints protegidos.
+  - Fail-safe (503) cuando falta `KENI_CONSOLA_MFA_KEY` con el flag ON.
+
+  - NO se ejercita la verificacion criptografica REAL de una assertion/registration WebAuthn:
+    eso exige un autenticador (Face ID / llave) que firme un challenge, imposible en CI sin
+    hardware/virtual authenticator. En su lugar, MOCKEAMOS `auth.verificar_registro` /
+    `auth.verificar_login` en la FRONTERA y comprobamos el FLUJO alrededor (persistencia de la
+    credencial, `mfa_activo`, entrega de recovery la primera vez, actualizacion del sign_count y
+    creacion de la sesion real). Lo que SI es real: las option builders de py_webauthn (generan
+    un challenge), el round-trip de la cookie y los recovery codes.
 
 Reusa el aislamiento de `entorno` (Postgres de pruebas; se salta si no hay) y las apps con
 TOKEN de prueba, igual que `test_auth.py`.
@@ -12,13 +25,15 @@ TOKEN de prueba, igual que `test_auth.py`.
 
 from __future__ import annotations
 
-import pyotp
+import json
+
 import pytest
 from cryptography.fernet import Fernet
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
 from keni_consola import auth
+from keni_consola.api import auth as api_auth
 
 from .conftest import TOKEN_PRUEBA
 
@@ -43,15 +58,43 @@ def _login(c: TestClient, usuario: str, password: str):
     )
 
 
-def _activar_mfa_para(c: TestClient, usuario_id: str) -> tuple[str, list[str]]:
-    """Enrola+activa el MFA del usuario logueado en `c`. Devuelve `(secreto, recovery_codes)`."""
-    r_setup = c.post("/api/auth/mfa/setup", headers=_ORIGIN)
-    assert r_setup.status_code == 200, r_setup.text
-    secreto = r_setup.json()["secret"]
-    codigo = pyotp.TOTP(secreto).now()
-    r_act = c.post("/api/auth/mfa/activate", json={"codigo": codigo}, headers=_ORIGIN)
-    assert r_act.status_code == 200, r_act.text
-    return secreto, r_act.json()["recovery_codes"]
+def _credencial_falsa(usuario_id: str, *, credential_id: str = "cred-1", sign_count: int = 0):
+    """Inserta una passkey directamente (sin ceremonia real) para tests de flujo."""
+    auth.guardar_credencial_mfa(
+        usuario_id,
+        credential_id=credential_id,
+        public_key="pubkey-b64url",
+        sign_count=sign_count,
+        transports=json.dumps(["internal"]),
+        nombre="Test",
+    )
+
+
+def _registrar_passkey_via_api(c: TestClient, monkeypatch, *, credential_id="cred-1"):
+    """Enrola una passkey por la API mockeando la verificacion criptografica en la frontera.
+
+    Devuelve la respuesta de `registro/verificar` (que trae los recovery la primera vez).
+    """
+    # Pedimos opciones (siembra la cookie de challenge real).
+    r_op = c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN)
+    assert r_op.status_code == 200, r_op.text
+    # Mockeamos SOLO la verificacion WebAuthn (no hay autenticador en CI): devolvemos una
+    # credencial valida como si el navegador hubiera respondido bien.
+    monkeypatch.setattr(
+        api_auth.auth,
+        "verificar_registro",
+        lambda credential, challenge, rp_id, origenes: {
+            "credential_id": credential_id,
+            "public_key": "pubkey-b64url",
+            "sign_count": 0,
+            "transports": json.dumps(["internal"]),
+        },
+    )
+    return c.post(
+        "/api/auth/mfa/registro/verificar",
+        json={"credential": {"id": credential_id}, "nombre": "Mi llave"},
+        headers=_ORIGIN,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -59,103 +102,176 @@ def _activar_mfa_para(c: TestClient, usuario_id: str) -> tuple[str, list[str]]:
 # --------------------------------------------------------------------------- #
 
 
-def test_flag_off_login_no_pide_mfa_aunque_usuario_tenga_mfa_activo(entorno, monkeypatch):
-    # MFA key presente pero flag OFF (lo que hace `entorno` por defecto).
+def test_flag_off_login_no_pide_mfa_aunque_usuario_tenga_passkey(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     u = auth.crear_usuario("ana", CLAVE, "editor")
-    # Forzamos mfa_activo en BD aunque el flag este OFF.
-    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
-    c = _cli()
-    _login(c, "ana", CLAVE)
-    _activar_mfa_para(c, u["id"])
-    c.post("/api/auth/logout", headers=_ORIGIN)
-    monkeypatch.setenv("KENI_CONSOLA_MFA", "0")  # flag OFF de nuevo
+    # Forzamos una passkey en BD (mfa_activo) aunque el flag este OFF.
+    _credencial_falsa(u["id"])
+    assert auth.obtener_usuario_por_id(u["id"])["mfa_activo"] is True
 
-    c2 = _cli()
-    r = _login(c2, "ana", CLAVE)
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
     assert r.status_code == 200
     cuerpo = r.json()
     # Con el flag OFF, el login devuelve la sesion directamente (sin mfa_required).
     assert "mfa_required" not in cuerpo
     assert cuerpo["usuario"]["usuario"] == "ana"
-    # Y la sesion ya sirve para /api/auth/me.
-    assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 200
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 200
 
 
-def test_flag_off_no_expone_endpoints_mfa_setup(entorno, monkeypatch):
+def test_flag_off_no_expone_endpoints_registro(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)
-    # setup/activate rehusan (404) con el flag OFF.
-    assert c.post("/api/auth/mfa/setup", headers=_ORIGIN).status_code == 404
+    # registro/opciones rehusa (404) con el flag OFF.
+    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 404
+    assert c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).status_code == 404
 
 
 # --------------------------------------------------------------------------- #
-# 2) Flag ON: enrolar -> activar -> el login eleva al segundo factor           #
+# 2) Flag ON: registro de passkey, flujo y elevacion del login                 #
 # --------------------------------------------------------------------------- #
 
 
-def test_enrolar_activar_y_login_pide_codigo(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
-    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    u = auth.crear_usuario("ana", CLAVE, "editor")
-
-    c = _cli()
-    _login(c, "ana", CLAVE)  # sin MFA activo todavia => sesion directa
-    secreto, recovery = _activar_mfa_para(c, u["id"])
-    assert len(recovery) == auth.NUM_CODIGOS_RECUPERACION
-    c.post("/api/auth/logout", headers=_ORIGIN)
-
-    # Proximo login: ahora SI eleva.
-    c2 = _cli()
-    r = _login(c2, "ana", CLAVE)
-    assert r.status_code == 200
-    assert r.json() == {"mfa_required": True}
-    # Aun NO hay sesion: /api/auth/me debe dar 401.
-    assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 401
-
-    # Codigo TOTP correcto -> entra.
-    codigo = pyotp.TOTP(secreto).now()
-    rv = c2.post("/api/auth/mfa/verify", json={"codigo": codigo}, headers=_ORIGIN)
-    assert rv.status_code == 200
-    assert rv.json()["usuario"]["usuario"] == "ana"
-    assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 200
-
-
-def test_codigo_incorrecto_es_401(entorno, monkeypatch):
+def test_registro_passkey_guarda_credencial_y_entrega_recovery(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     u = auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)
-    _activar_mfa_para(c, u["id"])
-    c.post("/api/auth/logout", headers=_ORIGIN)
 
-    c2 = _cli()
-    _login(c2, "ana", CLAVE)
-    rv = c2.post("/api/auth/mfa/verify", json={"codigo": "000000"}, headers=_ORIGIN)
+    r = _registrar_passkey_via_api(c, monkeypatch)
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    # La PRIMERA passkey entrega los recovery codes una sola vez.
+    assert len(cuerpo["recovery_codes"]) == auth.NUM_CODIGOS_RECUPERACION
+    # La credencial quedo persistida y el flag activo.
+    estado = auth.estado_mfa(u["id"])
+    assert estado["activo"] is True and estado["num_credenciales"] == 1
+    # Listar via API NO expone secretos (solo id/nombre/fechas).
+    r_list = c.get("/api/auth/mfa/credenciales", headers=_ORIGIN)
+    assert r_list.status_code == 200
+    cred = r_list.json()["credenciales"][0]
+    assert set(cred) == {"id", "nombre", "creada", "ultimo_uso"}
+    assert cred["nombre"] == "Mi llave"
+
+
+def test_segunda_passkey_no_reentrega_recovery(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-1")
+    r2 = _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-2")
+    assert r2.status_code == 200
+    # La segunda passkey NO vuelve a entregar recovery codes.
+    assert "recovery_codes" not in r2.json()
+
+
+def test_login_eleva_y_opciones_devuelven_challenge(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
+
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200 and r.json() == {"mfa_required": True}
+    # Aun NO hay sesion.
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
+
+    # Las opciones de login traen un challenge bien formado (option builder REAL de py_webauthn)
+    # y siembran la cookie de challenge.
+    r_op = c.post("/api/auth/mfa/login/opciones", headers=_ORIGIN)
+    assert r_op.status_code == 200, r_op.text
+    opciones = r_op.json()
+    assert isinstance(opciones.get("challenge"), str) and opciones["challenge"]
+    assert api_auth.COOKIE_MFA_CHALLENGE_LOGIN in c.cookies
+
+
+def test_verify_assertion_mockeada_crea_sesion_y_actualiza_sign_count(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"], credential_id="cred-1", sign_count=0)
+
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    c.post("/api/auth/mfa/login/opciones", headers=_ORIGIN)  # siembra la cookie de challenge
+
+    # Mock de la verificacion criptografica: devuelve un sign_count nuevo (5).
+    monkeypatch.setattr(
+        api_auth.auth,
+        "verificar_login",
+        lambda assertion, challenge, credencial, rp_id, origenes: 5,
+    )
+    rv = c.post(
+        "/api/auth/mfa/verify",
+        json={"assertion": {"id": "cred-1"}},
+        headers=_ORIGIN,
+    )
+    assert rv.status_code == 200, rv.text
+    assert rv.json()["usuario"]["usuario"] == "ana"
+    # La sesion real ya sirve.
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 200
+    # El sign_count se actualizo al valor devuelto por la verificacion.
+    cred = auth.credencial_mfa_por_credential_id(u["id"], "cred-1")
+    assert cred["sign_count"] == 5 and cred["ultimo_uso"]
+
+
+def test_verify_sin_cookie_challenge_es_401(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    # NO pedimos opciones (no hay cookie de challenge): la assertion no puede verificarse.
+    monkeypatch.setattr(
+        api_auth.auth, "verificar_login", lambda *a, **k: 1  # no deberia llamarse
+    )
+    rv = c.post("/api/auth/mfa/verify", json={"assertion": {"id": "cred-1"}}, headers=_ORIGIN)
     assert rv.status_code == 401
-    assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 401
+
+
+def test_verify_challenge_manipulado_es_401(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    c.post("/api/auth/mfa/login/opciones", headers=_ORIGIN)
+    # Manipulamos la cookie de challenge: Fernet no la descifra -> se trata como ausente.
+    c.cookies.set(api_auth.COOKIE_MFA_CHALLENGE_LOGIN, "valor-corrupto")
+    rv = c.post("/api/auth/mfa/verify", json={"assertion": {"id": "cred-1"}}, headers=_ORIGIN)
+    assert rv.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# 3) Codigos de recuperacion: un solo uso (sin assertion)                      #
+# --------------------------------------------------------------------------- #
 
 
 def test_recovery_code_funciona_una_sola_vez(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    u = auth.crear_usuario("ana", CLAVE, "editor")
+    auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)
-    _secreto, recovery = _activar_mfa_para(c, u["id"])
+    recovery = _registrar_passkey_via_api(c, monkeypatch).json()["recovery_codes"]
     c.post("/api/auth/logout", headers=_ORIGIN)
     codigo_recovery = recovery[0]
 
-    # 1er uso: entra.
+    # 1er uso: entra (sin assertion, sin cookie de challenge: el recovery no la necesita).
     c2 = _cli()
     _login(c2, "ana", CLAVE)
     rv = c2.post("/api/auth/mfa/verify", json={"codigo": codigo_recovery}, headers=_ORIGIN)
-    assert rv.status_code == 200
+    assert rv.status_code == 200, rv.text
     c2.post("/api/auth/logout", headers=_ORIGIN)
 
     # 2o uso del MISMO recovery: rechazado (un solo uso).
@@ -166,7 +282,7 @@ def test_recovery_code_funciona_una_sola_vez(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 3) La cookie PRE-AUTH no abre endpoints protegidos                          #
+# 4) La cookie PRE-AUTH no abre endpoints protegidos                          #
 # --------------------------------------------------------------------------- #
 
 
@@ -174,121 +290,107 @@ def test_pre_auth_no_alcanza_endpoint_protegido(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
     c = _cli()
-    _login(c, "ana", CLAVE)
-    _activar_mfa_para(c, u["id"])
-    c.post("/api/auth/logout", headers=_ORIGIN)
-
-    c2 = _cli()
-    r = _login(c2, "ana", CLAVE)
+    r = _login(c, "ana", CLAVE)
     assert r.json() == {"mfa_required": True}
     # El cliente conserva la cookie pre-auth, pero NINGUN /api protegido la acepta.
-    assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 401
-    # Un endpoint cualquiera protegido tampoco (estado).
-    assert c2.get("/api/estado", headers=_ORIGIN).status_code == 401
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
+    assert c.get("/api/estado", headers=_ORIGIN).status_code == 401
+    # El enrolamiento (sesion completa) tampoco se alcanza con la pre-auth.
+    assert c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).status_code == 401
 
 
 # --------------------------------------------------------------------------- #
-# 4) Reset admin limpia el MFA (recuperacion de cuenta)                       #
+# 5) Borrar passkeys, disable y reset admin                                   #
 # --------------------------------------------------------------------------- #
 
 
-def test_admin_reset_mfa_limpia_y_login_deja_de_pedir_codigo(entorno, monkeypatch):
+def test_borrar_ultima_passkey_apaga_mfa(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-1")
+    cred_id = c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).json()["credenciales"][0]["id"]
+
+    r = c.delete(f"/api/auth/mfa/credenciales/{cred_id}", headers=_ORIGIN)
+    assert r.status_code == 204
+    # Era la ultima: mfa_activo se apaga.
+    assert auth.obtener_usuario_por_id(u["id"])["mfa_activo"] is False
+
+
+def test_admin_reset_mfa_limpia_y_login_deja_de_elevar(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     admin = auth.crear_usuario("jefe", CLAVE, "admin")
     victima = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(victima["id"])
 
-    # Ana enrola su MFA.
-    c_ana = _cli()
-    _login(c_ana, "ana", CLAVE)
-    _activar_mfa_para(c_ana, victima["id"])
-    c_ana.post("/api/auth/logout", headers=_ORIGIN)
-
-    # El admin resetea el MFA de Ana.
     c_admin = _cli()
     _login(c_admin, "jefe", CLAVE)
     r = c_admin.patch(
         f"/api/usuarios/{victima['id']}", json={"mfa_reset": True}, headers=_ORIGIN
     )
     assert r.status_code == 200
-
-    # Ahora el login de Ana ya NO eleva (vuelve a entrar con solo user/pass).
+    # Sin passkeys: el login de Ana ya NO eleva.
     c2 = _cli()
     rl = _login(c2, "ana", CLAVE)
-    assert rl.status_code == 200
-    assert "mfa_required" not in rl.json()
+    assert rl.status_code == 200 and "mfa_required" not in rl.json()
     assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 200
     assert admin["rol"] == "admin"
 
 
 # --------------------------------------------------------------------------- #
-# 5) Fail-safe: flag ON pero falta KENI_CONSOLA_MFA_KEY                        #
+# 6) Fail-safe: flag ON pero falta KENI_CONSOLA_MFA_KEY                        #
 # --------------------------------------------------------------------------- #
 
 
-def test_failsafe_setup_rehusa_sin_clave(entorno, monkeypatch):
+def test_failsafe_registro_opciones_rehusa_sin_clave(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
     auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)
-    # Sin clave de cifrado, el enrolamiento REHUSA (503): nunca se guarda el secreto en claro.
-    r = c.post("/api/auth/mfa/setup", headers=_ORIGIN)
+    # Sin clave de firma, no se puede recordar el challenge -> 503 (fail-safe).
+    r = c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN)
     assert r.status_code == 503
-    # Y en BD el usuario sigue sin secreto.
-    u = auth.obtener_usuario_por_id(c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["id"])
-    assert u["mfa_activo"] is False
 
 
 def test_failsafe_login_rechaza_si_mfa_activo_pero_falta_clave(entorno, monkeypatch):
-    # Enrolamos CON clave, luego la quitamos: el login no puede verificar -> 503 (no se cuela).
+    # Con passkey activa pero sin clave, el login no puede emitir la pre-auth -> 503.
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
-    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     u = auth.crear_usuario("ana", CLAVE, "editor")
-    c = _cli()
-    _login(c, "ana", CLAVE)
-    _activar_mfa_para(c, u["id"])
-    c.post("/api/auth/logout", headers=_ORIGIN)
-
+    _credencial_falsa(u["id"])
     monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
-    c2 = _cli()
-    r = _login(c2, "ana", CLAVE)
-    assert r.status_code == 503
-    assert c2.get("/api/auth/me", headers=_ORIGIN).status_code == 401
 
-
-# --------------------------------------------------------------------------- #
-# 6) Unit: el secreto se guarda CIFRADO (nunca en claro)                       #
-# --------------------------------------------------------------------------- #
-
-
-def test_secreto_se_guarda_cifrado_en_bd(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
-    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    u = auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
-    _login(c, "ana", CLAVE)
-    secreto, _ = _activar_mfa_para(c, u["id"])
-    estado = auth.estado_mfa(u["id"])
-    assert estado is not None and estado["activo"] is True
-    # El secreto en claro NO aparece tal cual en la columna; lo cifrado SI descifra a el.
-    assert secreto not in estado["secret_cifrado"]
-    assert auth.descifrar_secreto(estado["secret_cifrado"], _MFA_KEY) == secreto
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 503
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
 
 
-def test_mfa_unit_cifrado_recovery_y_totp():
-    """Unit de la capa cripto (sin BD): cifrado round-trip, TOTP y recovery de un solo uso."""
-    secreto = auth.generar_secreto()
-    cifrado = auth.cifrar_secreto(secreto, _MFA_KEY)
-    assert auth.descifrar_secreto(cifrado, _MFA_KEY) == secreto
-    # Sin clave -> rehusa (fail-safe), no devuelve claro.
-    with pytest.raises(auth.MfaNoDisponible):
-        auth.cifrar_secreto(secreto, None)
+# --------------------------------------------------------------------------- #
+# 7) Unit: round-trip de la cookie de challenge + recovery codes               #
+# --------------------------------------------------------------------------- #
 
-    assert auth.verificar_totp(secreto, pyotp.TOTP(secreto).now()) is True
-    assert auth.verificar_totp(secreto, "000000") is False
 
+def test_unit_cookie_challenge_round_trip(monkeypatch):
+    """La cookie de challenge se firma con la clave MFA y solo se lee para el MISMO usuario."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    token = api_auth._emitir_token_challenge("reto-b64url", "u1")
+    assert token is not None
+    # Mismo usuario -> recupera el challenge.
+    assert api_auth._leer_token_challenge(token, "u1") == "reto-b64url"
+    # OTRO usuario -> None (el challenge esta atado al usuario de la ceremonia).
+    assert api_auth._leer_token_challenge(token, "u2") is None
+    # Token corrupto -> None.
+    assert api_auth._leer_token_challenge("basura", "u1") is None
+
+
+def test_unit_recovery_codes_un_solo_uso():
+    """Unit de la capa de recovery (sin BD): hash + consumo de un solo uso."""
     codigos = auth.generar_codigos_recuperacion()
     hash_json = auth.hashear_codigos_recuperacion(codigos)
     ok, restantes = auth.verificar_codigo_recuperacion(codigos[0], hash_json)
@@ -296,3 +398,9 @@ def test_mfa_unit_cifrado_recovery_y_totp():
     # Consumido: el mismo codigo ya no vale contra la lista restante.
     ok2, _ = auth.verificar_codigo_recuperacion(codigos[0], restantes)
     assert ok2 is False
+
+
+def test_unit_failsafe_sin_clave_no_emite_token():
+    """Sin clave Fernet, emitir el token de challenge devuelve None (fail-safe), no revienta."""
+    with pytest.raises(auth.MfaNoDisponible):
+        auth.cifrador(None)

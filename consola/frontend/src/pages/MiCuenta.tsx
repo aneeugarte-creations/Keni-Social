@@ -11,8 +11,9 @@
  * La gestión de OTRAS cuentas (alta, rol, reset, baja) vive en `/usuarios` y es solo
  * para admin; aquí cada quien opera únicamente sobre su propia cuenta.
  */
+import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2, ShieldCheck, ShieldOff } from "lucide-react";
+import { Fingerprint, KeyRound, Loader2, ShieldOff, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -202,50 +203,72 @@ function SeccionCambiarPassword() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Sección: Verificación en dos pasos (MFA / TOTP)                    */
+/* Sección: Llaves de acceso (passkeys / WebAuthn)                     */
 /* ------------------------------------------------------------------ */
 
+/** Clave de caché de la lista de passkeys del usuario. */
+const CLAVE_PASSKEYS = ["sesion", "mfa-credenciales"] as const;
+
 /**
- * Enrolamiento del segundo factor. Solo se muestra si el servidor tiene el flag
- * `KENI_CONSOLA_MFA` ON (`me.usuario.mfa_habilitado`). Flujo:
- *   - Si NO está activo: botón "Activar" -> `setup` (muestra el secreto y un campo de código)
- *     -> `activate` con el primer código -> muestra los códigos de recuperación UNA vez.
- *   - Si YA está activo: botón "Desactivar" (pide la contraseña actual).
+ * Gestión del segundo factor con LLAVES DE ACCESO (passkeys). Solo se muestra si el servidor
+ * tiene el flag `KENI_CONSOLA_MFA` ON (`me.usuario.mfa_habilitado`). Flujo:
+ *   - Registrar una passkey nueva: pide opciones -> `startRegistration` (Face ID / huella /
+ *     llave) -> el backend la guarda. Al registrar la PRIMERA, devuelve los códigos de
+ *     recuperación (se muestran una sola vez).
+ *   - Listar y borrar las llaves existentes.
+ *   - Desactivar todo (pide la contraseña actual): borra todas las llaves + recovery.
  */
 function SeccionMfa({ activo }: { activo: boolean }) {
   const queryClient = useQueryClient();
   const { refrescar } = useSesion();
 
-  const [secreto, setSecreto] = React.useState<string | null>(null);
-  const [uri, setUri] = React.useState<string | null>(null);
-  const [codigo, setCodigo] = React.useState("");
+  const [nombre, setNombre] = React.useState("");
   const [recovery, setRecovery] = React.useState<string[] | null>(null);
   const [passwordDisable, setPasswordDisable] = React.useState("");
 
   const refrescarEstado = React.useCallback(async () => {
     await refrescar();
     void queryClient.invalidateQueries({ queryKey: CLAVE_ME });
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PASSKEYS });
   }, [refrescar, queryClient]);
 
-  const setup = useMutation({
-    mutationFn: () => api.mfaSetup(),
-    onSuccess: (r) => {
-      setSecreto(r.secret);
-      setUri(r.uri);
-      setRecovery(null);
-      setCodigo("");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
+  const listado = useQuery({
+    queryKey: CLAVE_PASSKEYS,
+    queryFn: ({ signal }) => api.mfaCredenciales(signal),
+    // Solo tiene sentido listar cuando el flag está ON (la sección ya lo garantiza).
   });
 
-  const activar = useMutation({
-    mutationFn: () => api.mfaActivate(codigo.trim()),
+  const registrar = useMutation({
+    mutationFn: async () => {
+      // 1) Opciones (el backend siembra la cookie de challenge). 2) Ceremonia en el navegador.
+      // 3) El backend verifica y guarda la credencial.
+      const optionsJSON = await api.mfaRegistroOpciones();
+      const credential = await startRegistration({
+        optionsJSON: optionsJSON as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      });
+      return api.mfaRegistroVerificar(credential, nombre.trim());
+    },
     onSuccess: async (r) => {
-      setRecovery(r.recovery_codes);
-      setSecreto(null);
-      setUri(null);
-      setCodigo("");
-      toast.success("Verificación en dos pasos activada.");
+      setNombre("");
+      if (r.recovery_codes && r.recovery_codes.length > 0) {
+        setRecovery(r.recovery_codes);
+      }
+      toast.success("Llave de acceso registrada.");
+      await refrescarEstado();
+    },
+    onError: (e) => {
+      if (e instanceof DOMException && e.name === "NotAllowedError") {
+        toast.error("Registro cancelado.");
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const borrar = useMutation({
+    mutationFn: (id: string) => api.mfaBorrarCredencial(id),
+    onSuccess: async () => {
+      toast.success("Llave de acceso eliminada.");
       await refrescarEstado();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -255,8 +278,6 @@ function SeccionMfa({ activo }: { activo: boolean }) {
     mutationFn: () => api.mfaDisable(passwordDisable),
     onSuccess: async () => {
       setPasswordDisable("");
-      setSecreto(null);
-      setUri(null);
       setRecovery(null);
       toast.success("Verificación en dos pasos desactivada.");
       await refrescarEstado();
@@ -264,54 +285,20 @@ function SeccionMfa({ activo }: { activo: boolean }) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const credenciales = listado.data?.credenciales ?? [];
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Verificación en dos pasos</CardTitle>
+        <CardTitle className="text-base">Llaves de acceso (passkeys)</CardTitle>
         <CardDescription>
-          Añade un código temporal (TOTP) además de tu contraseña al iniciar sesión.
+          Confirma tu identidad con Face ID, huella, Windows Hello o tu teléfono, además de la
+          contraseña, al iniciar sesión.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
-        {activo ? (
-          <>
-            <p className="text-sm text-muted-foreground">
-              La verificación en dos pasos está <span className="font-medium">activa</span>.
-            </p>
-            <form
-              className="max-w-sm space-y-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (passwordDisable.length > 0 && !desactivar.isPending) desactivar.mutate();
-              }}
-              noValidate
-            >
-              <div className="space-y-1.5">
-                <Label htmlFor="mfa-disable-pass">Contraseña actual (para desactivar)</Label>
-                <Input
-                  id="mfa-disable-pass"
-                  type="password"
-                  autoComplete="current-password"
-                  value={passwordDisable}
-                  onChange={(e) => setPasswordDisable(e.target.value)}
-                  disabled={desactivar.isPending}
-                />
-              </div>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={passwordDisable.length === 0 || desactivar.isPending}
-              >
-                {desactivar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldOff className="h-4 w-4" />
-                )}
-                Desactivar
-              </Button>
-            </form>
-          </>
-        ) : recovery ? (
+        {/* Códigos de recuperación: solo tras registrar la PRIMERA llave. */}
+        {recovery && (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
               Guarda estos códigos de recuperación en un lugar seguro. Cada uno sirve una sola vez
@@ -323,51 +310,97 @@ function SeccionMfa({ activo }: { activo: boolean }) {
               ))}
             </ul>
           </div>
-        ) : secreto ? (
+        )}
+
+        {/* Lista de llaves registradas. */}
+        {activo && credenciales.length > 0 && (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {credenciales.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{c.nombre || "Llave sin nombre"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Creada {formatearFechaHora(c.creada)}
+                    {c.ultimo_uso ? ` · Último uso ${formatearFechaHora(c.ultimo_uso)}` : ""}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Eliminar llave"
+                  disabled={borrar.isPending}
+                  onClick={() => borrar.mutate(c.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Registrar una llave nueva. */}
+        <form
+          className="max-w-sm space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!registrar.isPending) registrar.mutate();
+          }}
+          noValidate
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="mfa-nombre-llave">Nombre de la llave (opcional)</Label>
+            <Input
+              id="mfa-nombre-llave"
+              placeholder="iPhone de Ana, Laptop…"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              disabled={registrar.isPending}
+            />
+          </div>
+          <Button type="submit" disabled={registrar.isPending}>
+            {registrar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Fingerprint className="h-4 w-4" />
+            )}
+            {activo ? "Añadir otra llave" : "Registrar llave de acceso"}
+          </Button>
+        </form>
+
+        {/* Desactivar todo el segundo factor (pide la contraseña). */}
+        {activo && (
           <form
-            className="max-w-sm space-y-3"
+            className="max-w-sm space-y-3 border-t border-border pt-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (codigo.trim().length > 0 && !activar.isPending) activar.mutate();
+              if (passwordDisable.length > 0 && !desactivar.isPending) desactivar.mutate();
             }}
             noValidate
           >
-            <p className="text-sm text-muted-foreground">
-              Escanea el QR en tu app de autenticación o introduce esta clave manualmente:
-            </p>
-            <code className="block break-all rounded-lg border border-border p-2 font-mono text-xs">
-              {secreto}
-            </code>
-            <p className="break-all text-[10px] text-muted-foreground">{uri}</p>
             <div className="space-y-1.5">
-              <Label htmlFor="mfa-activar-codigo">Código de tu app</Label>
+              <Label htmlFor="mfa-disable-pass">Contraseña actual (para desactivar todo)</Label>
               <Input
-                id="mfa-activar-codigo"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                disabled={activar.isPending}
+                id="mfa-disable-pass"
+                type="password"
+                autoComplete="current-password"
+                value={passwordDisable}
+                onChange={(e) => setPasswordDisable(e.target.value)}
+                disabled={desactivar.isPending}
               />
             </div>
-            <Button type="submit" disabled={codigo.trim().length === 0 || activar.isPending}>
-              {activar.isPending ? (
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={passwordDisable.length === 0 || desactivar.isPending}
+            >
+              {desactivar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <ShieldCheck className="h-4 w-4" />
+                <ShieldOff className="h-4 w-4" />
               )}
-              Activar
+              Desactivar verificación en dos pasos
             </Button>
           </form>
-        ) : (
-          <Button onClick={() => setup.mutate()} disabled={setup.isPending}>
-            {setup.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldCheck className="h-4 w-4" />
-            )}
-            Activar verificación en dos pasos
-          </Button>
         )}
       </CardContent>
     </Card>

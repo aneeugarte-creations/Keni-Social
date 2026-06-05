@@ -58,7 +58,8 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
     usuario: { id: "u1", usuario: "revisor", rol: "editor", debe_cambiar_password: false, ...usuario } as UsuarioSesion,
     cargando: false,
     iniciarSesion: vi.fn(),
-    verificarMfa: vi.fn(),
+    verificarConPasskey: vi.fn(),
+    verificarConCodigo: vi.fn(),
     cerrarSesion: vi.fn(),
     refrescar: vi.fn(),
   };

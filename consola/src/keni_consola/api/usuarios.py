@@ -241,8 +241,8 @@ async def actualizar(request: Request) -> Response:
     nuevo_manager_id = datos.get("manager_id")
     nuevas_marcas = datos.get("marcas")
     # `mfa_reset` (recuperacion de cuenta): si `true`, el admin APAGA el segundo factor de la
-    # cuenta (limpia secreto + flag + recovery). Es el equivalente al reset de contrasena para
-    # cuando alguien pierde su dispositivo TOTP. Mismo guard admin que el resto del PATCH.
+    # cuenta (borra todas las passkeys + recovery + flag). Es el equivalente al reset de
+    # contrasena para cuando alguien pierde sus dispositivos. Mismo guard admin que el PATCH.
     reset_mfa = datos.get("mfa_reset")
     if (
         nuevo_rol is None

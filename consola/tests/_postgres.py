@@ -36,6 +36,7 @@ ENV_TEST_DATABASE_URL = "KENI_TEST_DATABASE_URL"
 # si el orden de las tablas cambiara).
 _TABLAS = (
     "usuarios_marcas",
+    "webauthn_credenciales",
     "sesiones",
     "usuarios",
     "comercial_snapshots",

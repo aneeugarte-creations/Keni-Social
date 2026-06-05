@@ -123,15 +123,24 @@ ENV_SESION_HORAS = "KENI_CONSOLA_SESION_HORAS"
 ENV_ADMIN_USER = "KENI_CONSOLA_ADMIN_USER"
 ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
 
-# MFA TOTP (segundo factor), GATEADO OFF por defecto. `KENI_CONSOLA_MFA` afirmativo activa
-# la elevacion de login (un usuario con `mfa_activo` debe presentar un codigo TOTP tras la
-# contrasena) y la seccion de enrolamiento en "Mi cuenta". Con el flag OFF el login se
-# comporta EXACTAMENTE como hoy (nunca se pide segundo factor). `KENI_CONSOLA_MFA_KEY` es
-# una clave Fernet (base64 url-safe de 32 bytes) con la que se cifra EN REPOSO el secreto
-# TOTP; si el flag esta ON pero la clave falta/es invalida, el enrolamiento y la
-# verificacion REHUSAN (fail-safe), nunca se guarda ni se acepta el secreto en claro.
+# MFA PASSKEYS / WebAuthn (segundo factor), GATEADO OFF por defecto. `KENI_CONSOLA_MFA`
+# afirmativo activa la elevacion de login (un usuario con >=1 passkey debe completar una
+# ceremonia WebAuthn tras la contrasena) y la seccion de "Llaves de acceso" en "Mi cuenta".
+# Con el flag OFF el login se comporta EXACTAMENTE como hoy (nunca se pide segundo factor).
+# `KENI_CONSOLA_MFA_KEY` es una clave Fernet (base64 url-safe de 32 bytes) que ahora FIRMA y
+# fecha la cookie del CHALLENGE/pre-auth de vida corta (ya no cifra un secreto TOTP: en
+# passkeys el secreto vive en el dispositivo del usuario). Si el flag esta ON pero la clave
+# falta/es invalida, las ceremonias REHUSAN (fail-safe, 503), nunca se media-autentica.
 ENV_MFA = "KENI_CONSOLA_MFA"
 ENV_MFA_KEY = "KENI_CONSOLA_MFA_KEY"
+# WebAuthn Relying Party: identidad del servidor frente al autenticador.
+#   - RP_ID: dominio efectivo (sin esquema ni puerto). Dev: `localhost`. Prod: `social.kenitech.io`.
+#   - RP_ORIGIN: origen(es) esperado(s) de la ceremonia (con esquema y puerto). Dev:
+#     `http://localhost:8765`. Prod: `https://social.kenitech.io`. Admite lista separada por comas.
+#   - RP_NOMBRE: nombre legible que el SO muestra al crear/usar la passkey ("Keni Social").
+ENV_RP_ID = "KENI_CONSOLA_RP_ID"
+ENV_RP_ORIGIN = "KENI_CONSOLA_RP_ORIGIN"
+ENV_RP_NOMBRE = "KENI_CONSOLA_RP_NOMBRE"
 
 # MCP operativo (servidor MCP montado en `/mcp`): bearer que exige el endpoint a los
 # clientes (este Claude Code) e identidad (usuario) con la que el MCP opera la API
@@ -667,25 +676,52 @@ def admin_pass() -> str:
 
 
 def mfa_habilitado() -> bool:
-    """True si el segundo factor TOTP esta ACTIVO (`KENI_CONSOLA_MFA` afirmativo).
+    """True si el segundo factor (passkeys/WebAuthn) esta ACTIVO (`KENI_CONSOLA_MFA` afirmativo).
 
     Default OFF (mismo espiritu CONSERVADOR que el resto de gates): con el flag apagado, el
     login NO pide nunca un segundo factor y se comporta EXACTAMENTE como hoy. Encenderlo solo
-    afecta a usuarios que YA hayan enrolado y activado su TOTP (`mfa_activo`); el resto sigue
-    entrando con usuario+contrasena hasta que se enrolen.
+    afecta a usuarios que YA tengan >=1 passkey (`mfa_activo`); el resto sigue entrando con
+    usuario+contrasena hasta que enrolen una.
     """
     return _crudo(ENV_MFA).lower() in _VERDADEROS
 
 
 def mfa_key() -> str | None:
-    """Clave Fernet para cifrar el secreto TOTP en reposo (`KENI_CONSOLA_MFA_KEY`).
+    """Clave Fernet que firma/fecha la cookie de challenge + pre-auth WebAuthn (`KENI_CONSOLA_MFA_KEY`).
 
     None si no esta (vacio cuenta como no fijada). NO se valida aqui que sea una clave Fernet
     bien formada: eso lo comprueba `auth.mfa` al construir el cifrador, para REHUSAR (fail-safe)
-    el enrolamiento/verificacion si la clave falta o es invalida, en vez de tocar el secreto en
-    claro. SIN normalizar mas alla del strip: una clave Fernet es base64 url-safe sin espacios.
+    la ceremonia si la clave falta o es invalida, en vez de media-autenticar. SIN normalizar mas
+    alla del strip: una clave Fernet es base64 url-safe sin espacios.
     """
     return _crudo(ENV_MFA_KEY) or None
+
+
+def rp_id() -> str:
+    """WebAuthn Relying Party ID (`KENI_CONSOLA_RP_ID`, def `localhost`).
+
+    Es el dominio efectivo SIN esquema ni puerto. En prod debe ser `social.kenitech.io`. El
+    defecto `localhost` cubre el desarrollo (`python -m keni_consola` en 127.0.0.1:8765).
+    """
+    return _crudo(ENV_RP_ID) or "localhost"
+
+
+def rp_origenes() -> list[str]:
+    """Origen(es) esperado(s) de la ceremonia WebAuthn (`KENI_CONSOLA_RP_ORIGIN`, def dev).
+
+    Con esquema y puerto. Admite una lista separada por comas (varios origenes permitidos). El
+    defecto `http://localhost:8765` cubre el desarrollo; en prod: `https://social.kenitech.io`.
+    """
+    crudo = _crudo(ENV_RP_ORIGIN) or "http://localhost:8765"
+    return [o.strip() for o in crudo.split(",") if o.strip()]
+
+
+def rp_nombre() -> str:
+    """Nombre legible de la Relying Party (`KENI_CONSOLA_RP_NOMBRE`, def "Keni Social").
+
+    Es lo que el sistema operativo muestra al crear/usar una passkey.
+    """
+    return _crudo(ENV_RP_NOMBRE) or "Keni Social"
 
 
 # --------------------------------------------------------------------------- #

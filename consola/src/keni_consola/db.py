@@ -455,18 +455,43 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         puede_coordinar        BOOLEAN NOT NULL DEFAULT FALSE,
         nombre                 TEXT NOT NULL DEFAULT '',
         manager_id             TEXT NOT NULL DEFAULT '',
-        -- MFA TOTP (segundo factor, gateado por `KENI_CONSOLA_MFA`). ADITIVAS y con DEFAULT,
-        -- de modo que un usuario legado nace SIN MFA (`mfa_activo=0`) y el login no cambia.
-        --   - mfa_secret_cifrado: secreto TOTP CIFRADO con Fernet (`KENI_CONSOLA_MFA_KEY`).
-        --     NUNCA en claro. "" = sin secreto enrolado.
-        --   - mfa_activo: 1 solo tras confirmar el primer codigo (`/api/auth/mfa/activate`).
+        -- MFA PASSKEYS / WebAuthn (segundo factor, gateado por `KENI_CONSOLA_MFA`). ADITIVAS y
+        -- con DEFAULT, de modo que un usuario legado nace SIN MFA (`mfa_activo=0`) y el login no
+        -- cambia. Las CREDENCIALES (clave publica + sign_count) viven en `webauthn_credenciales`
+        -- (1:N); aqui solo el flag derivado y los recovery.
+        --   - mfa_activo: 1 = el usuario tiene >=1 passkey (se enciende al registrar la primera
+        --     y se apaga al borrar la ultima o al reset admin).
         --   - mfa_recovery_codes: JSON con la lista de codigos de recuperacion HASHEADOS
         --     (scrypt, mismo hasher que la contrasena); cada uno se consume de un solo uso.
-        mfa_secret_cifrado     TEXT NOT NULL DEFAULT '',
+        -- (La columna TOTP `mfa_secret_cifrado` se ELIMINO al pasar a passkeys; ver
+        --  `_migrar_columnas_usuarios`, que la dropa idempotentemente en BDs viejas.)
         mfa_activo             INTEGER NOT NULL DEFAULT 0,
         mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]'
     )
     """,
+    # Passkeys (WebAuthn/FIDO2): una credencial publica por dispositivo enrolado. Un usuario
+    # puede tener VARIAS (telefono, laptop, llave). El "secreto" (clave privada) NUNCA llega
+    # aqui: solo guardamos la clave PUBLICA y el contador de firmas (anti-clonado).
+    #   - credential_id: id de la credencial en base64url (UNIQUE global: lo asigna el
+    #     autenticador). public_key: COSE public key en base64url. transports: JSON con las
+    #     pistas de transporte (["internal","hybrid"...]). sign_count: contador del autenticador.
+    #     nombre: etiqueta humana que pone el usuario ("iPhone de Ana"). Borrar el usuario
+    #     propaga (ON DELETE CASCADE).
+    """
+    CREATE TABLE IF NOT EXISTS webauthn_credenciales (
+        id             TEXT PRIMARY KEY,
+        usuario_id     TEXT NOT NULL,
+        credential_id  TEXT NOT NULL UNIQUE,
+        public_key     TEXT NOT NULL,
+        sign_count     INTEGER NOT NULL DEFAULT 0,
+        transports     TEXT NOT NULL DEFAULT '[]',
+        nombre         TEXT NOT NULL DEFAULT '',
+        creada         TEXT NOT NULL DEFAULT '',
+        ultimo_uso     TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_webauthn_cred_usuario ON webauthn_credenciales (usuario_id)",
     """
     CREATE TABLE IF NOT EXISTS sesiones (
         token       TEXT PRIMARY KEY,
@@ -2418,19 +2443,25 @@ def _migrar_columnas_programas(con: Any) -> None:
 #     -> "" (sin superior, p.ej. el director). No es FK en la BD (ALTER ADD COLUMN no la
 #     anade en SQLite y el organigrama tolera ids colgados tras un borrado); la capa API
 #     valida que apunte a un usuario existente, distinto de si mismo y sin ciclos.
-#   - mfa_secret_cifrado / mfa_activo / mfa_recovery_codes (segundo factor TOTP, gateado por
+#   - mfa_activo / mfa_recovery_codes (segundo factor PASSKEYS/WebAuthn, gateado por
 #     `KENI_CONSOLA_MFA`): ADITIVAS y con DEFAULT, asi una BD/usuario previos quedan SIN MFA
-#     (`mfa_activo=0`, sin secreto) y el login sigue siendo identico hasta que alguien enrole.
+#     (`mfa_activo=0`) y el login sigue siendo identico hasta que alguien enrole una passkey.
+#     La antigua columna TOTP `mfa_secret_cifrado` ya NO se anade (passkeys no guardan secreto
+#     en el servidor); en BDs viejas se DROPA en `_migrar_columnas_usuarios`.
 _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("cargo", "TEXT NOT NULL DEFAULT ''"),
     ("cobertura", "INTEGER NOT NULL DEFAULT 0"),
     ("puede_coordinar", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("nombre", "TEXT NOT NULL DEFAULT ''"),
     ("manager_id", "TEXT NOT NULL DEFAULT ''"),
-    ("mfa_secret_cifrado", "TEXT NOT NULL DEFAULT ''"),
     ("mfa_activo", "INTEGER NOT NULL DEFAULT 0"),
     ("mfa_recovery_codes", "TEXT NOT NULL DEFAULT '[]'"),
 )
+
+# Columnas RETIRADAS de `usuarios` (se dropan si una BD vieja las tiene). `mfa_secret_cifrado`
+# era el secreto TOTP cifrado; al migrar a passkeys (WebAuthn) ya no hay secreto del lado
+# servidor, asi que la columna sobra. DROP idempotente (`IF EXISTS`).
+_COLUMNAS_USUARIOS_RETIRADAS: tuple[str, ...] = ("mfa_secret_cifrado",)
 
 
 def _migrar_columnas_usuarios(con: Any) -> None:
@@ -2443,6 +2474,11 @@ def _migrar_columnas_usuarios(con: Any) -> None:
     for columna, tipo in _COLUMNAS_USUARIOS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+    # Migracion passkeys: dropamos la columna TOTP retirada (`mfa_secret_cifrado`) si la BD vieja
+    # aun la tiene. `{columna}` viene de una allowlist del modulo (nunca entrada de usuario).
+    for columna in _COLUMNAS_USUARIOS_RETIRADAS:
+        if columna in columnas:
+            con.execute(f"ALTER TABLE usuarios DROP COLUMN IF EXISTS {columna}")
 
 
 # --------------------------------------------------------------------------- #

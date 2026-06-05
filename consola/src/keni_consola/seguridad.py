@@ -130,7 +130,7 @@ def origenes_permitidos() -> frozenset[str]:
 
 
 def mfa_habilitado() -> bool:
-    """¿Esta activo el segundo factor TOTP? (`KENI_CONSOLA_MFA`, def OFF).
+    """¿Esta activo el segundo factor (passkeys/WebAuthn)? (`KENI_CONSOLA_MFA`, def OFF).
 
     Wrapper sobre `config.mfa_habilitado()` (fuente unica). Con el flag OFF el login NO pide
     nunca un segundo factor: comportamiento INTACTO. Lo consultan `api/auth` (elevacion del
@@ -250,13 +250,16 @@ def _host_de_url(url: str) -> str | None:
 
 # Rutas /api PUBLICAS (no exigen credencial previa / sesion COMPLETA). El login crea la
 # sesion; aun asi pasan por la verificacion Origin/CSRF de las mutaciones (son POST).
-#   - `/api/auth/mfa/verify`: SEGUNDO PASO del login con MFA. Solo se alcanza con la cookie
-#     PRE-AUTH de corta vida (factor-1 superado, sin sesion real). NO es una sesion: el propio
-#     handler valida la cookie pre-auth + el codigo TOTP/recuperacion antes de emitir la sesion
-#     real. Que sea publica NO debilita nada: un estado factor-1-only NUNCA alcanza otro `/api`
-#     (esos siguen exigiendo sesion COMPLETA). El enrolamiento (`/api/auth/mfa/setup|activate|
-#     disable`) NO es publico: exige sesion completa.
-_RUTAS_API_PUBLICAS = frozenset({"/api/auth/login", "/api/auth/mfa/verify"})
+#   - `/api/auth/mfa/login/opciones` y `/api/auth/mfa/verify`: SEGUNDO PASO del login con MFA
+#     (passkeys). Solo se alcanzan con la cookie PRE-AUTH de corta vida (factor-1 superado, sin
+#     sesion real). NO son una sesion: `login/opciones` arma las opciones WebAuthn y siembra la
+#     cookie de challenge; `verify` valida la assertion (o un recovery) antes de emitir la sesion
+#     real. Que sean publicas NO debilita nada: un estado factor-1-only NUNCA alcanza otro `/api`
+#     (esos siguen exigiendo sesion COMPLETA). El enrolamiento (`/api/auth/mfa/registro/*`,
+#     `/api/auth/mfa/credenciales`, `/api/auth/mfa/disable`) NO es publico: exige sesion completa.
+_RUTAS_API_PUBLICAS = frozenset(
+    {"/api/auth/login", "/api/auth/mfa/login/opciones", "/api/auth/mfa/verify"}
+)
 
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el

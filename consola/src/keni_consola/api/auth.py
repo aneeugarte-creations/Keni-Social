@@ -37,30 +37,42 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 _MSG_LOGIN_KO = "Usuario o contraseña incorrectos."
 
 # --------------------------------------------------------------------------- #
-# MFA (segundo factor TOTP), GATEADO por `KENI_CONSOLA_MFA` (def OFF).          #
+# MFA (segundo factor PASSKEYS / WebAuthn), GATEADO por `KENI_CONSOLA_MFA` (def OFF).
 # --------------------------------------------------------------------------- #
 #
-# FLUJO con MFA ON y usuario `mfa_activo`:
+# FLUJO LOGIN con MFA ON y usuario con >=1 passkey:
 #   1) POST /api/auth/login  con user/pass OK -> NO crea sesion. Devuelve 200 {mfa_required:
 #      true} y siembra una cookie PRE-AUTH de corta vida (5 min) que SOLO identifica al usuario
 #      que ya supero el factor 1. No es una sesion: no abre nada de `/api`.
-#   2) POST /api/auth/mfa/verify  con el codigo TOTP (o un recovery code) + esa cookie pre-auth
-#      -> valida y SOLO entonces crea la sesion real + la cookie de sesion.
-# Con el flag OFF o `mfa_activo=0`, el login crea la sesion directamente (comportamiento de hoy).
+#   2) POST /api/auth/mfa/login/opciones (cookie pre-auth) -> devuelve las opciones WebAuthn de
+#      autenticacion y siembra la cookie de CHALLENGE (Fernet, 5 min) atada al usuario.
+#   3) El navegador corre `startAuthentication` (Face ID / huella / llave) y POSTea la assertion
+#      a POST /api/auth/mfa/verify (cookie pre-auth + cookie challenge) -> verifica y SOLO
+#      entonces crea la sesion real. `verify` tambien acepta un RECOVERY code (sin assertion).
+# Con el flag OFF o sin passkeys, el login crea la sesion directamente (comportamiento de hoy).
+#
+# El CHALLENGE de cada ceremonia se recuerda SOLO en una cookie Fernet de vida corta (nunca se
+# confia en un challenge que mande el cliente). Hay cookies de challenge SEPARADAS para la
+# ceremonia de REGISTRO y la de LOGIN.
 
-# Cookie PRE-AUTH (factor-1 superado, pendiente de TOTP). Separada de la de sesion, HttpOnly +
-# SameSite=Strict. Su valor es un token CIFRADO (Fernet, clave `KENI_CONSOLA_MFA_KEY`) con el id
-# del usuario + un timestamp; Fernet aporta firma + caducidad (TTL). NUNCA da acceso a `/api`.
+# Cookie PRE-AUTH (factor-1 superado, pendiente del segundo factor). Separada de la de sesion,
+# HttpOnly + SameSite=Strict. Su valor es un token CIFRADO (Fernet, `KENI_CONSOLA_MFA_KEY`) con
+# el id del usuario + un timestamp; Fernet aporta firma + caducidad (TTL). NUNCA abre `/api`.
 COOKIE_MFA_PENDIENTE = "keni_consola_mfa_pendiente"
-# Vida del estado pre-auth: 5 minutos para teclear el codigo. Corta a proposito.
+# Cookies de CHALLENGE WebAuthn (Fernet, atan `{challenge, usuario_id}`). Una por ceremonia.
+COOKIE_MFA_CHALLENGE_LOGIN = "keni_consola_mfa_reto_login"
+COOKIE_MFA_CHALLENGE_REGISTRO = "keni_consola_mfa_reto_registro"
+# Vida del estado pre-auth/challenge: 5 minutos para completar la ceremonia. Corta a proposito.
 _MFA_PENDIENTE_TTL_SEG = 300
 
 _MSG_MFA_NO_DISPONIBLE = (
-    "El segundo factor no está disponible: falta configurar la clave de cifrado "
+    "El segundo factor no está disponible: falta configurar la clave de firma "
     "(KENI_CONSOLA_MFA_KEY). Avisa a un administrador."
 )
 _MSG_MFA_CODIGO_KO = "Código incorrecto o caducado."
 _MSG_MFA_PENDIENTE_KO = "Sesión de verificación caducada. Vuelve a iniciar sesión."
+# Mensaje generico de fallo de la ceremonia WebAuthn (no damos pistas sobre el porque).
+_MSG_MFA_CEREMONIA_KO = "No se pudo verificar la llave de acceso. Inténtalo de nuevo."
 
 
 def _mfa_clave() -> str | None:
@@ -109,6 +121,70 @@ def _leer_token_pendiente(token: str | None) -> str | None:
         return None
     uid = datos.get("uid") if isinstance(datos, dict) else None
     return uid if isinstance(uid, str) and uid else None
+
+
+def _emitir_token_challenge(challenge_b64url: str, usuario_id: str) -> str | None:
+    """Token CIFRADO (Fernet) que recuerda el challenge de una ceremonia atado al usuario.
+
+    Reusa la clave de MFA: Fernet firma + fecha el token (caduca via `_MFA_PENDIENTE_TTL_SEG`).
+    None si no hay clave valida (la API lo trata como MFA no disponible: fail-safe).
+    """
+    clave = _mfa_clave()
+    try:
+        fernet = auth.cifrador(clave)
+    except auth.MfaNoDisponible:
+        return None
+    carga = json.dumps({"reto": challenge_b64url, "uid": usuario_id, "ts": int(time.time())})
+    return fernet.encrypt(carga.encode("utf-8")).decode("utf-8")
+
+
+def _leer_token_challenge(token: str | None, usuario_id: str) -> str | None:
+    """Challenge (base64url) de una cookie valida, NO caducada y del MISMO usuario; None si no.
+
+    Verifica firma + TTL via Fernet y que el `uid` del token coincida con el de la cookie
+    pre-auth (la ceremonia es de ESE usuario). Cualquier fallo -> None (no se confia en un
+    challenge corrupto, ajeno o vencido). El cliente NUNCA aporta el challenge esperado.
+    """
+    if not token:
+        return None
+    clave = _mfa_clave()
+    try:
+        fernet = auth.cifrador(clave)
+        from cryptography.fernet import InvalidToken
+    except auth.MfaNoDisponible:
+        return None
+    except ImportError:  # pragma: no cover - cryptography presente en el back hosted
+        return None
+    try:
+        crudo = fernet.decrypt(token.encode("utf-8"), ttl=_MFA_PENDIENTE_TTL_SEG)
+    except (InvalidToken, ValueError, TypeError):
+        return None
+    try:
+        datos = json.loads(crudo.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(datos, dict) or datos.get("uid") != usuario_id:
+        return None
+    reto = datos.get("reto")
+    return reto if isinstance(reto, str) and reto else None
+
+
+def _set_cookie_challenge(resp: Response, nombre: str, token: str) -> None:
+    """Siembra una cookie de challenge WebAuthn: HttpOnly, SameSite=Strict, vida corta (5 min)."""
+    resp.set_cookie(
+        nombre,
+        token,
+        httponly=True,
+        samesite="strict",
+        secure=seguridad.cookie_secure(),
+        path="/",
+        max_age=_MFA_PENDIENTE_TTL_SEG,
+    )
+
+
+def _borrar_cookie_challenge(resp: Response, nombre: str) -> None:
+    """Borra una cookie de challenge WebAuthn (tras verificar o al fallar)."""
+    resp.delete_cookie(nombre, path="/")
 
 
 def _set_cookie_sesion(resp: Response, token: str) -> None:
@@ -172,6 +248,8 @@ def _respuesta_sesion_creada(usuario_id: str, usuario: dict) -> Response:
     )
     _set_cookie_sesion(resp, token)
     _borrar_cookie_pendiente(resp)
+    # Higiene: la ceremonia termino, cerramos la cookie de challenge de login.
+    _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_LOGIN)
     return resp
 
 
@@ -191,10 +269,10 @@ async def login(request: Request) -> Response:
     if autenticado is None:
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
-    # ELEVACION MFA (gateada): si el flag esta ON y este usuario tiene el segundo factor activo,
+    # ELEVACION MFA (gateada): si el flag esta ON y este usuario tiene >=1 passkey (`mfa_activo`),
     # NO abrimos la sesion todavia. Devolvemos {mfa_required: true} y sembramos la cookie
-    # pre-auth (factor-1 superado, pendiente de TOTP). Con el flag OFF o `mfa_activo=0`, este
-    # bloque se salta entero y el login crea la sesion EXACTAMENTE como hoy.
+    # pre-auth (factor-1 superado, pendiente de la ceremonia WebAuthn). Con el flag OFF o
+    # `mfa_activo=0`, este bloque se salta entero y el login crea la sesion EXACTAMENTE como hoy.
     if seguridad.mfa_habilitado() and autenticado.get("mfa_activo"):
         token_pendiente = _emitir_token_pendiente(autenticado["id"])
         if token_pendiente is None:
@@ -220,8 +298,10 @@ async def logout(request: Request) -> Response:
         auth.borrar_sesion(token)
     resp = Response(status_code=204)
     _borrar_cookie_sesion(resp)
-    # Higiene: si quedara una cookie pre-auth a medias, la limpiamos tambien.
+    # Higiene: si quedara una cookie pre-auth o de challenge a medias, las limpiamos tambien.
     _borrar_cookie_pendiente(resp)
+    _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_LOGIN)
+    _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
     return resp
 
 
@@ -254,9 +334,10 @@ async def me(request: Request) -> Response:
                     refrescado.get("puede_coordinar") or usuario.get("puede_coordinar")
                 ),
                 "marcas": list(refrescado.get("marcas") or []),
-                # MFA (segundo factor): `mfa_habilitado` refleja el flag del servidor (la UI
-                # solo muestra la seccion de MFA en "Mi cuenta" si esta ON); `mfa_activo` dice
-                # si ESTE usuario ya lo enrolo. Con el flag OFF, la UI no pinta nada de MFA.
+                # MFA (segundo factor, passkeys): `mfa_habilitado` refleja el flag del servidor
+                # (la UI solo muestra la seccion de llaves en "Mi cuenta" si esta ON);
+                # `mfa_activo` dice si ESTE usuario tiene >=1 passkey. Con el flag OFF, la UI no
+                # pinta nada de MFA.
                 "mfa_habilitado": seguridad.mfa_habilitado(),
                 "mfa_activo": bool(refrescado.get("mfa_activo")),
             }
@@ -308,20 +389,76 @@ async def cambiar_password(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# MFA: verificacion del segundo factor en el login (cookie pre-auth)            #
+# MFA: configuracion de la Relying Party (RP) WebAuthn                          #
 # --------------------------------------------------------------------------- #
 
 
-async def mfa_verify(request: Request) -> Response:
-    """POST /api/auth/mfa/verify: 2o paso del login. Valida TOTP o recovery + cookie pre-auth.
+def _rp_id() -> str:
+    """RP ID efectivo (dominio sin esquema/puerto). Dev `localhost`, prod `social.kenitech.io`."""
+    return config.rp_id()
 
-    Es PUBLICO (solo exige la cookie pre-auth, no una sesion). Cuerpo: `{codigo}` (un TOTP de 6
-    digitos o un codigo de recuperacion). Si el codigo es valido, crea la sesion real, siembra
-    su cookie y borra la pre-auth. Si el flag esta OFF, esta ruta no deberia recibir trafico
-    (el login nunca emite la cookie pre-auth); aun asi rehusa limpiamente.
+
+def _rp_nombre() -> str:
+    """Nombre legible de la RP que muestra el SO al crear/usar la passkey."""
+    return config.rp_nombre()
+
+
+def _rp_origenes() -> list[str]:
+    """Origen(es) esperado(s) de la ceremonia (lista; el primero es el canonico para py_webauthn)."""
+    return config.rp_origenes()
+
+
+# --------------------------------------------------------------------------- #
+# MFA: ceremonia de LOGIN (segundo paso, cookie pre-auth + challenge)           #
+# --------------------------------------------------------------------------- #
+
+
+async def mfa_login_opciones(request: Request) -> Response:
+    """POST /api/auth/mfa/login/opciones: opciones WebAuthn de autenticacion + cookie de challenge.
+
+    PUBLICO (solo exige la cookie pre-auth). Devuelve las opciones spec-JSON para
+    `startAuthentication` y siembra la cookie de challenge (Fernet, 5 min, atada al usuario).
+    Si el usuario ya no tiene passkeys (reset admin entre pasos), caduca la pre-auth.
     """
     if not seguridad.mfa_habilitado():
-        # Con el flag OFF nunca se emite la cookie pre-auth; cerramos la via por si acaso.
+        return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
+    usuario_id = _leer_token_pendiente(request.cookies.get(COOKIE_MFA_PENDIENTE))
+    if usuario_id is None:
+        resp = JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
+        _borrar_cookie_pendiente(resp)
+        return resp
+
+    credenciales = auth.listar_credenciales_mfa(usuario_id)
+    if not credenciales:
+        resp = JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
+        _borrar_cookie_pendiente(resp)
+        return resp
+
+    try:
+        opciones_json, challenge = auth.opciones_login(_rp_id(), credenciales)
+    except auth.MfaNoDisponible:  # pragma: no cover - opciones_login no firma; defensivo
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+
+    # Recordamos el challenge SOLO en la cookie (firmada+fechada). Fail-safe si falta la clave.
+    token_reto = _emitir_token_challenge(challenge, usuario_id)
+    if token_reto is None:
+        _logger.warning("MFA login/opciones: KENI_CONSOLA_MFA_KEY falta/es invalida (fail-safe).")
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+
+    resp = Response(content=opciones_json, media_type="application/json")
+    _set_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_LOGIN, token_reto)
+    return resp
+
+
+async def mfa_verify(request: Request) -> Response:
+    """POST /api/auth/mfa/verify: 2o paso del login. Valida una ASSERTION WebAuthn o un recovery.
+
+    PUBLICO (cookie pre-auth + cookie challenge). Cuerpo: `{assertion: {...}}` (la credencial que
+    devuelve `startAuthentication`) O `{codigo: "XXXX-XXXX"}` (un codigo de recuperacion). Si
+    cuadra, crea la sesion real, siembra su cookie y borra las pre-auth/challenge. Con el flag OFF
+    no deberia recibir trafico; aun asi rehusa limpiamente.
+    """
+    if not seguridad.mfa_habilitado():
         return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
 
     usuario_id = _leer_token_pendiente(request.cookies.get(COOKIE_MFA_PENDIENTE))
@@ -330,45 +467,74 @@ async def mfa_verify(request: Request) -> Response:
         _borrar_cookie_pendiente(resp)
         return resp
 
-    datos = await leer_json(request)
-    codigo = datos.get("codigo")
-    if not isinstance(codigo, str) or not codigo.strip():
-        return JSONResponse({"error": "Falta el código."}, status_code=400)
-
     estado = auth.estado_mfa(usuario_id)
-    if estado is None or not estado["activo"] or not estado["secret_cifrado"]:
-        # El usuario perdio el MFA entre el login y este paso (reset admin, p.ej.). Caduca.
+    if estado is None or not estado["activo"]:
+        # El usuario perdio sus passkeys entre el login y este paso (reset admin). Caduca.
         resp = JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
         _borrar_cookie_pendiente(resp)
         return resp
 
-    # 1) Codigo TOTP. Descifrar el secreto puede rehusar (fail-safe) si la clave desaparecio.
+    datos = await leer_json(request)
+    assertion = datos.get("assertion")
+    codigo = datos.get("codigo")
+
+    # VIA 1: codigo de RECUPERACION (un solo uso). No necesita challenge.
+    if isinstance(codigo, str) and codigo.strip():
+        ok, restantes = auth.verificar_codigo_recuperacion(codigo, estado["recovery_codes"])
+        if ok:
+            auth.actualizar_recovery_mfa(usuario_id, restantes)
+            usuario = auth.obtener_usuario_por_id(usuario_id)
+            if usuario is None:
+                return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
+            return _respuesta_sesion_creada(usuario_id, usuario)
+        return JSONResponse({"error": _MSG_MFA_CODIGO_KO}, status_code=401)
+
+    # VIA 2: assertion WebAuthn. Exige la cookie de challenge (NUNCA un challenge del cliente).
+    if not isinstance(assertion, (dict, str)) or not assertion:
+        return JSONResponse({"error": "Falta la llave de acceso o el código."}, status_code=400)
+
+    challenge = _leer_token_challenge(
+        request.cookies.get(COOKIE_MFA_CHALLENGE_LOGIN), usuario_id
+    )
+    if challenge is None:
+        resp = JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_LOGIN)
+        return resp
+
+    credential_id = auth.credential_id_de_respuesta(assertion)
+    credencial = (
+        auth.credencial_mfa_por_credential_id(usuario_id, credential_id)
+        if credential_id
+        else None
+    )
+    if credencial is None:
+        return JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
+
     try:
-        secreto = auth.descifrar_secreto(estado["secret_cifrado"], _mfa_clave())
-    except auth.MfaNoDisponible:
-        _logger.warning("MFA verify: no se pudo descifrar el secreto (clave ausente/invalida).")
-        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+        nuevo_sign_count = auth.verificar_login(
+            assertion, challenge, credencial, _rp_id(), _rp_origenes()
+        )
+    except Exception as exc:  # noqa: BLE001 - py_webauthn lanza varias; tratamos todas como KO
+        _logger.info("MFA verify: assertion WebAuthn rechazada: %s", exc)
+        return JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
 
-    if auth.verificar_totp(secreto, codigo):
-        usuario = auth.obtener_usuario_por_id(usuario_id)
-        if usuario is None:
-            return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
-        return _respuesta_sesion_creada(usuario_id, usuario)
+    # Aviso (no bloqueante) si el contador RETROCEDE: posible clon, pero muchos autenticadores
+    # reportan 0 y nunca incrementan, asi que no es veredicto. Igual actualizamos el contador.
+    if nuevo_sign_count and nuevo_sign_count < int(credencial.get("sign_count", 0) or 0):
+        _logger.warning(
+            "MFA verify: sign_count retrocedio para la credencial %s (posible clon).",
+            credencial["id"],
+        )
+    auth.actualizar_sign_count_mfa(credencial["id"], nuevo_sign_count)
 
-    # 2) Codigo de RECUPERACION (un solo uso). Si acierta, se consume y se re-persiste la lista.
-    ok, restantes = auth.verificar_codigo_recuperacion(codigo, estado["recovery_codes"])
-    if ok:
-        auth.actualizar_recovery_mfa(usuario_id, restantes)
-        usuario = auth.obtener_usuario_por_id(usuario_id)
-        if usuario is None:
-            return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
-        return _respuesta_sesion_creada(usuario_id, usuario)
-
-    return JSONResponse({"error": _MSG_MFA_CODIGO_KO}, status_code=401)
+    usuario = auth.obtener_usuario_por_id(usuario_id)
+    if usuario is None:
+        return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
+    return _respuesta_sesion_creada(usuario_id, usuario)
 
 
 # --------------------------------------------------------------------------- #
-# MFA: enrolamiento (requiere sesion COMPLETA: el middleware ya la exige)        #
+# MFA: enrolamiento de passkeys (requiere sesion COMPLETA)                      #
 # --------------------------------------------------------------------------- #
 
 
@@ -378,11 +544,11 @@ def _exige_sesion(request: Request) -> dict | None:
     return usuario if isinstance(usuario, dict) else None
 
 
-async def mfa_setup(request: Request) -> Response:
-    """POST /api/auth/mfa/setup: genera un secreto TOTP nuevo, lo cifra y lo guarda (sin activar).
+async def mfa_registro_opciones(request: Request) -> Response:
+    """POST /api/auth/mfa/registro/opciones: opciones WebAuthn de REGISTRO + cookie de challenge.
 
-    Devuelve `{secret, uri}` para pintar el QR. El MFA NO queda activo hasta confirmar el primer
-    codigo (`/api/auth/mfa/activate`). Requiere el flag MFA ON y sesion completa.
+    Requiere flag ON + sesion completa. Devuelve las opciones spec-JSON para `startRegistration`
+    (excluye las passkeys ya enroladas) y siembra la cookie de challenge de registro.
     """
     if not seguridad.mfa_habilitado():
         return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
@@ -390,26 +556,31 @@ async def mfa_setup(request: Request) -> Response:
     if usuario is None:
         return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
 
-    secreto = auth.generar_secreto()
+    existentes = auth.listar_credenciales_mfa(usuario["id"])
     try:
-        cifrado = auth.cifrar_secreto(secreto, _mfa_clave())
-    except auth.MfaNoDisponible:
-        _logger.warning("MFA setup rechazado: KENI_CONSOLA_MFA_KEY falta/es invalida (fail-safe).")
+        opciones_json, challenge = auth.opciones_registro(
+            usuario["id"], usuario.get("usuario", "usuario"), _rp_id(), _rp_nombre(), existentes
+        )
+    except auth.MfaNoDisponible:  # pragma: no cover - opciones_registro no firma; defensivo
         return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
 
-    auth.guardar_secreto_mfa(usuario["id"], cifrado)
-    uri = auth.uri_aprovisionamiento(secreto, usuario.get("usuario", "usuario"))
-    # `secret` se devuelve para que la UI lo muestre como texto alternativo al QR. El secreto
-    # cifrado ya quedo en BD; este claro solo viaja al cliente que acaba de autenticarse.
-    return JSONResponse({"secret": secreto, "uri": uri})
+    token_reto = _emitir_token_challenge(challenge, usuario["id"])
+    if token_reto is None:
+        _logger.warning("MFA registro/opciones: KENI_CONSOLA_MFA_KEY falta/es invalida (fail-safe).")
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+
+    resp = Response(content=opciones_json, media_type="application/json")
+    _set_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO, token_reto)
+    return resp
 
 
-async def mfa_activate(request: Request) -> Response:
-    """POST /api/auth/mfa/activate: confirma el primer TOTP, activa el MFA y devuelve recovery.
+async def mfa_registro_verificar(request: Request) -> Response:
+    """POST /api/auth/mfa/registro/verificar: guarda la passkey nueva; devuelve recovery la 1a vez.
 
-    Cuerpo `{codigo}`. Verifica el codigo contra el secreto enrolado por `setup`; si cuadra,
-    marca `mfa_activo=1`, genera los codigos de recuperacion, guarda sus HASHES y devuelve los
-    codigos en CLARO UNA sola vez (`{recovery_codes}`). Requiere flag ON + sesion completa.
+    Cuerpo `{credential: {...}, nombre?}`. Verifica la respuesta de `startRegistration` contra la
+    cookie de challenge, persiste la credencial (clave publica + sign_count + transports) y marca
+    `mfa_activo=1`. Si era la PRIMERA passkey, genera y devuelve los codigos de recuperacion en
+    CLARO UNA sola vez (`{recovery_codes}`). Requiere flag ON + sesion completa.
     """
     if not seguridad.mfa_habilitado():
         return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
@@ -418,34 +589,102 @@ async def mfa_activate(request: Request) -> Response:
         return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
 
     datos = await leer_json(request)
-    codigo = datos.get("codigo")
-    if not isinstance(codigo, str) or not codigo.strip():
-        return JSONResponse({"error": "Falta el código."}, status_code=400)
+    credential = datos.get("credential")
+    nombre = datos.get("nombre")
+    nombre = nombre.strip()[:80] if isinstance(nombre, str) else ""
+    if not isinstance(credential, (dict, str)) or not credential:
+        return JSONResponse({"error": "Falta la credencial de la llave."}, status_code=400)
 
-    estado = auth.estado_mfa(usuario["id"])
-    if estado is None or not estado["secret_cifrado"]:
-        return JSONResponse(
-            {"error": "Primero genera un código de configuración (setup)."}, status_code=400
+    challenge = _leer_token_challenge(
+        request.cookies.get(COOKIE_MFA_CHALLENGE_REGISTRO), usuario["id"]
+    )
+    if challenge is None:
+        resp = JSONResponse(
+            {"error": "La ceremonia de registro caducó. Vuelve a intentarlo."}, status_code=400
         )
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
+        return resp
+
     try:
-        secreto = auth.descifrar_secreto(estado["secret_cifrado"], _mfa_clave())
-    except auth.MfaNoDisponible:
-        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+        nueva = auth.verificar_registro(credential, challenge, _rp_id(), _rp_origenes())
+    except Exception as exc:  # noqa: BLE001 - py_webauthn lanza varias; tratamos todas como KO
+        _logger.info("MFA registro/verificar: respuesta WebAuthn rechazada: %s", exc)
+        resp = JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=400)
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
+        return resp
 
-    if not auth.verificar_totp(secreto, codigo):
-        return JSONResponse({"error": _MSG_MFA_CODIGO_KO}, status_code=400)
+    # ¿Es la PRIMERA passkey? Lo es si el usuario aun no tenia ninguna antes de guardar esta.
+    es_primera = not auth.listar_credenciales_mfa(usuario["id"])
+    guardada = auth.guardar_credencial_mfa(
+        usuario["id"],
+        credential_id=nueva["credential_id"],
+        public_key=nueva["public_key"],
+        sign_count=nueva["sign_count"],
+        transports=nueva["transports"],
+        nombre=nombre,
+    )
+    if not guardada:
+        # credential_id duplicado (mismo autenticador ya enrolado).
+        resp = JSONResponse(
+            {"error": "Esa llave de acceso ya está registrada."}, status_code=409
+        )
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
+        return resp
 
-    codigos = auth.generar_codigos_recuperacion()
-    auth.activar_mfa(usuario["id"], auth.hashear_codigos_recuperacion(codigos))
-    return JSONResponse({"recovery_codes": codigos})
+    cuerpo: dict = {"ok": True}
+    if es_primera:
+        codigos = auth.generar_codigos_recuperacion()
+        auth.fijar_recovery_mfa(usuario["id"], auth.hashear_codigos_recuperacion(codigos))
+        cuerpo["recovery_codes"] = codigos
+    resp = JSONResponse(cuerpo)
+    _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
+    return resp
+
+
+async def mfa_credenciales(request: Request) -> Response:
+    """GET /api/auth/mfa/credenciales: lista las passkeys del usuario (SIN secretos).
+
+    Devuelve `{credenciales: [{id, nombre, creada, ultimo_uso}]}`. Requiere flag ON + sesion.
+    """
+    if not seguridad.mfa_habilitado():
+        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
+    usuario = _exige_sesion(request)
+    if usuario is None:
+        return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
+    credenciales = [
+        {
+            "id": c["id"],
+            "nombre": c["nombre"],
+            "creada": c["creada"],
+            "ultimo_uso": c["ultimo_uso"],
+        }
+        for c in auth.listar_credenciales_mfa(usuario["id"])
+    ]
+    return JSONResponse({"credenciales": credenciales})
+
+
+async def mfa_credencial_borrar(request: Request) -> Response:
+    """DELETE /api/auth/mfa/credenciales/{id}: borra UNA passkey del propio usuario (204).
+
+    Si era la ULTIMA, `borrar_credencial_mfa` apaga `mfa_activo` y limpia recovery. Requiere
+    sesion completa (flag ON u OFF: un usuario debe poder quitar una llave aunque el operador
+    apague el gate). 404 si esa credencial no es suya / no existe.
+    """
+    usuario = _exige_sesion(request)
+    if usuario is None:
+        return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
+    cred_id = request.path_params.get("id", "")
+    if not auth.borrar_credencial_mfa(usuario["id"], cred_id):
+        return JSONResponse({"error": "Esa llave de acceso no existe."}, status_code=404)
+    return Response(status_code=204)
 
 
 async def mfa_disable(request: Request) -> Response:
     """POST /api/auth/mfa/disable: apaga el MFA del propio usuario (exige su contrasena actual).
 
     Cuerpo `{password_actual}`. Verifica la contrasena (misma guarda que el cambio de pass) y
-    limpia secreto + flag + recovery. Requiere sesion completa (el flag puede estar ON u OFF: un
-    usuario debe poder desactivar su MFA aunque el operador haya apagado el gate luego).
+    borra TODAS las passkeys + recovery + flag. Requiere sesion completa (el flag puede estar ON
+    u OFF: un usuario debe poder desactivar su MFA aunque el operador haya apagado el gate luego).
     """
     usuario = _exige_sesion(request)
     if usuario is None:
@@ -469,9 +708,13 @@ RUTAS = [
     Route("/api/auth/logout", logout, methods=["POST"]),
     Route("/api/auth/me", me, methods=["GET"]),
     Route("/api/auth/cambiar-password", cambiar_password, methods=["POST"]),
-    # MFA (segundo factor). `verify` es publico (cookie pre-auth); el resto exige sesion.
+    # MFA passkeys. `login/opciones` y `verify` son PUBLICOS (cookie pre-auth); el resto exige
+    # sesion completa.
+    Route("/api/auth/mfa/login/opciones", mfa_login_opciones, methods=["POST"]),
     Route("/api/auth/mfa/verify", mfa_verify, methods=["POST"]),
-    Route("/api/auth/mfa/setup", mfa_setup, methods=["POST"]),
-    Route("/api/auth/mfa/activate", mfa_activate, methods=["POST"]),
+    Route("/api/auth/mfa/registro/opciones", mfa_registro_opciones, methods=["POST"]),
+    Route("/api/auth/mfa/registro/verificar", mfa_registro_verificar, methods=["POST"]),
+    Route("/api/auth/mfa/credenciales", mfa_credenciales, methods=["GET"]),
+    Route("/api/auth/mfa/credenciales/{id}", mfa_credencial_borrar, methods=["DELETE"]),
     Route("/api/auth/mfa/disable", mfa_disable, methods=["POST"]),
 ]

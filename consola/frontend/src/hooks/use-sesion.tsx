@@ -1,3 +1,4 @@
+import { startAuthentication } from "@simplewebauthn/browser";
 import * as React from "react";
 
 import { api, ApiError } from "@/lib/api";
@@ -70,7 +71,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   const iniciarSesion = React.useCallback(async (nombre: string, password: string) => {
     const respuesta = await api.login({ usuario: nombre, password });
     // Con MFA activo el backend devuelve `{mfa_required:true}` y NO una sesión: dejamos el
-    // usuario en `null` (sigue fuera) y avisamos a la UI para que pida el código TOTP.
+    // usuario en `null` (sigue fuera) y avisamos a la UI para que corra la ceremonia de passkey.
     // Estrechamos por la presencia de `usuario` (discrimina la unión sesión vs MFA-pendiente).
     if (!("usuario" in respuesta)) {
       return { mfaRequerido: true };
@@ -79,10 +80,22 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     return { mfaRequerido: false };
   }, []);
 
-  const verificarMfa = React.useCallback(async (codigo: string) => {
-    // 2º paso: el backend valida el código contra la cookie pre-auth y, si cuadra, emite la
-    // sesión real (cookie) y devuelve el usuario.
-    const { usuario } = await api.mfaVerify(codigo);
+  const verificarConPasskey = React.useCallback(async () => {
+    // 2º paso (passkey): pedimos opciones (el backend siembra la cookie de challenge), corremos
+    // la ceremonia WebAuthn en el navegador y enviamos la assertion. py_webauthn la verifica
+    // contra el challenge de la cookie y, si cuadra, emite la sesión real y devuelve el usuario.
+    const optionsJSON = await api.mfaLoginOpciones();
+    const assertion = await startAuthentication({
+      // py_webauthn ya devuelve JSON spec-compliant; lo pasamos tal cual.
+      optionsJSON: optionsJSON as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+    });
+    const { usuario } = await api.mfaVerify({ assertion });
+    setUsuario(usuario);
+  }, []);
+
+  const verificarConCodigo = React.useCallback(async (codigo: string) => {
+    // Fallback sin passkey: un código de recuperación de un solo uso (no necesita challenge).
+    const { usuario } = await api.mfaVerify({ codigo });
     setUsuario(usuario);
   }, []);
 
@@ -101,8 +114,24 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   }, [cargarMe]);
 
   const valor = React.useMemo<ValorSesion>(
-    () => ({ usuario, cargando, iniciarSesion, verificarMfa, cerrarSesion, refrescar }),
-    [usuario, cargando, iniciarSesion, verificarMfa, cerrarSesion, refrescar],
+    () => ({
+      usuario,
+      cargando,
+      iniciarSesion,
+      verificarConPasskey,
+      verificarConCodigo,
+      cerrarSesion,
+      refrescar,
+    }),
+    [
+      usuario,
+      cargando,
+      iniciarSesion,
+      verificarConPasskey,
+      verificarConCodigo,
+      cerrarSesion,
+      refrescar,
+    ],
   );
 
   return <SesionContexto.Provider value={valor}>{children}</SesionContexto.Provider>;

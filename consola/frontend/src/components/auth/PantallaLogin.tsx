@@ -1,4 +1,4 @@
-import { Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { Fingerprint, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,18 +18,20 @@ const ERROR_CREDENCIALES = "Usuario o contraseña incorrectos.";
  * app continúa. Ocupa toda la pantalla (no muestra el shell hasta entrar).
  */
 export function PantallaLogin() {
-  const { iniciarSesion, verificarMfa } = useSesion();
+  const { iniciarSesion, verificarConPasskey, verificarConCodigo } = useSesion();
   const [usuario, setUsuario] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [enviando, setEnviando] = React.useState(false);
-  // Paso 2 (MFA): cuando el backend pide segundo factor, mostramos la entrada del código TOTP
-  // en lugar del formulario de usuario/contraseña. La sesión NO existe hasta verificar.
+  // Paso 2 (MFA): cuando el backend pide segundo factor, mostramos la ceremonia de passkey en
+  // lugar del formulario de usuario/contraseña. La sesión NO existe hasta verificar.
   const [pidiendoMfa, setPidiendoMfa] = React.useState(false);
+  // Modo "código de recuperación": fallback cuando el usuario no tiene su passkey a mano.
+  const [usandoCodigo, setUsandoCodigo] = React.useState(false);
   const [codigoMfa, setCodigoMfa] = React.useState("");
 
   const puedeEnviar = usuario.trim().length > 0 && password.length > 0 && !enviando;
-  const puedeVerificar = codigoMfa.trim().length > 0 && !enviando;
+  const puedeVerificarCodigo = codigoMfa.trim().length > 0 && !enviando;
 
   async function alEnviar(e: React.FormEvent) {
     e.preventDefault();
@@ -39,8 +41,9 @@ export function PantallaLogin() {
     try {
       const { mfaRequerido } = await iniciarSesion(usuario.trim(), password);
       if (mfaRequerido) {
-        // Pasamos al paso del código; limpiamos la contraseña de memoria.
+        // Pasamos al paso de la passkey; limpiamos la contraseña de memoria.
         setPidiendoMfa(true);
+        setUsandoCodigo(false);
         setPassword("");
         setEnviando(false);
         return;
@@ -60,25 +63,48 @@ export function PantallaLogin() {
     }
   }
 
-  async function alVerificarMfa(e: React.FormEvent) {
-    e.preventDefault();
-    if (!puedeVerificar) return;
+  async function alUsarPasskey() {
+    if (enviando) return;
     setEnviando(true);
     setError(null);
     try {
-      await verificarMfa(codigoMfa.trim());
+      await verificarConPasskey();
       // En éxito, el provider re-renderiza con la sesión y desmonta esta pantalla.
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        // Código inválido/caducado o sesión de verificación expirada (mensaje del backend).
+      if (err instanceof ApiError) {
         setError(err.message);
-      } else if (err instanceof ApiError) {
+      } else if (err instanceof DOMException && err.name === "NotAllowedError") {
+        // El usuario canceló la ceremonia (o expiró): mensaje suave, puede reintentar.
+        setError("Verificación cancelada. Vuelve a intentarlo con tu llave de acceso.");
+      } else {
+        setError("No se pudo usar la llave de acceso. Vuelve a intentarlo.");
+      }
+      setEnviando(false);
+    }
+  }
+
+  async function alVerificarCodigo(e: React.FormEvent) {
+    e.preventDefault();
+    if (!puedeVerificarCodigo) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await verificarConCodigo(codigoMfa.trim());
+    } catch (err) {
+      if (err instanceof ApiError) {
         setError(err.message);
       } else {
         setError("No se pudo verificar el código. Vuelve a intentarlo.");
       }
       setEnviando(false);
     }
+  }
+
+  function volverAlLogin() {
+    setPidiendoMfa(false);
+    setUsandoCodigo(false);
+    setCodigoMfa("");
+    setError(null);
   }
 
   if (pidiendoMfa) {
@@ -91,53 +117,98 @@ export function PantallaLogin() {
             </div>
             <CardTitle className="text-xl">Verificación en dos pasos</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Introduce el código de tu app de autenticación (o un código de recuperación).
+              {usandoCodigo
+                ? "Introduce uno de tus códigos de recuperación."
+                : "Confirma con tu llave de acceso (Face ID, huella o tu teléfono)."}
             </p>
           </CardHeader>
           <CardContent>
-            <form className="space-y-4" onSubmit={alVerificarMfa} noValidate>
-              <div className="space-y-1.5">
-                <Label htmlFor="mfa-codigo">Código</Label>
-                <Input
-                  id="mfa-codigo"
-                  name="one-time-code"
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  autoFocus
-                  value={codigoMfa}
-                  onChange={(e) => setCodigoMfa(e.target.value)}
-                  disabled={enviando}
-                />
-              </div>
+            {usandoCodigo ? (
+              <form className="space-y-4" onSubmit={alVerificarCodigo} noValidate>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mfa-codigo">Código de recuperación</Label>
+                  <Input
+                    id="mfa-codigo"
+                    name="one-time-code"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    value={codigoMfa}
+                    onChange={(e) => setCodigoMfa(e.target.value)}
+                    disabled={enviando}
+                  />
+                </div>
 
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-
-              <Button type="submit" className="w-full" disabled={!puedeVerificar}>
-                {enviando ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="h-4 w-4" />
+                {error && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {error}
+                  </p>
                 )}
-                Verificar
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                disabled={enviando}
-                onClick={() => {
-                  setPidiendoMfa(false);
-                  setCodigoMfa("");
-                  setError(null);
-                }}
-              >
-                Volver
-              </Button>
-            </form>
+
+                <Button type="submit" className="w-full" disabled={!puedeVerificarCodigo}>
+                  {enviando ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-4 w-4" />
+                  )}
+                  Verificar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  disabled={enviando}
+                  onClick={() => {
+                    setUsandoCodigo(false);
+                    setError(null);
+                  }}
+                >
+                  Usar mi llave de acceso
+                </Button>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                {error && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={enviando}
+                  onClick={alUsarPasskey}
+                >
+                  {enviando ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Fingerprint className="h-4 w-4" />
+                  )}
+                  Usar mi llave de acceso
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  disabled={enviando}
+                  onClick={() => {
+                    setUsandoCodigo(true);
+                    setError(null);
+                  }}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Usar un código de recuperación
+                </Button>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              className="mt-2 w-full"
+              disabled={enviando}
+              onClick={volverAlLogin}
+            >
+              Volver
+            </Button>
           </CardContent>
         </Card>
       </div>

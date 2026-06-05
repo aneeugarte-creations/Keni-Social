@@ -3620,10 +3620,10 @@ export interface UsuarioSesion {
    */
   marcas?: string[];
   /**
-   * MFA (segundo factor TOTP). Solo llegan por `GET /api/auth/me`:
+   * MFA (segundo factor, passkeys/WebAuthn). Solo llegan por `GET /api/auth/me`:
    *   - `mfa_habilitado`: el flag del servidor (`KENI_CONSOLA_MFA`). Si es `false`/ausente,
    *     la UI NO muestra nada de MFA (la sección de "Mi cuenta" se oculta).
-   *   - `mfa_activo`: si ESTA cuenta ya enroló y activó su TOTP.
+   *   - `mfa_activo`: si ESTA cuenta ya tiene ≥1 llave de acceso registrada.
    */
   mfa_habilitado?: boolean;
   mfa_activo?: boolean;
@@ -3634,17 +3634,34 @@ export interface RespuestaLoginMfa {
   mfa_required: true;
 }
 
-/** Respuesta de `POST /api/auth/mfa/setup`: datos para pintar el QR de enrolamiento. */
-export interface RespuestaMfaSetup {
-  /** Secreto TOTP en base32 (texto alternativo al QR). */
-  secret: string;
-  /** URI `otpauth://` que codifica el QR. */
-  uri: string;
+/**
+ * Opciones de una ceremonia WebAuthn (registro o login). El backend las arma con py_webauthn
+ * (`options_to_json`) y son JSON spec-compliant: se pasan TAL CUAL a `@simplewebauthn/browser`
+ * (`startRegistration`/`startAuthentication`) como `optionsJSON`. No las tipamos campo a campo:
+ * son opacas para nuestro código (la librería conoce su forma).
+ */
+export type OpcionesCeremoniaWebauthn = Record<string, unknown>;
+
+/**
+ * Respuesta de `POST /api/auth/mfa/registro/verificar`. `recovery_codes` solo llega la PRIMERA
+ * vez (al registrar la primera passkey); se muestran una sola vez.
+ */
+export interface RespuestaMfaRegistro {
+  ok: true;
+  recovery_codes?: string[];
 }
 
-/** Respuesta de `POST /api/auth/mfa/activate`: los códigos de recuperación (se muestran 1 vez). */
-export interface RespuestaMfaActivate {
-  recovery_codes: string[];
+/** Una passkey en la lista de `GET /api/auth/mfa/credenciales` (sin secretos). */
+export interface CredencialPasskey {
+  id: string;
+  nombre: string;
+  creada: string;
+  ultimo_uso: string;
+}
+
+/** Respuesta de `GET /api/auth/mfa/credenciales`. */
+export interface RespuestaMfaCredenciales {
+  credenciales: CredencialPasskey[];
 }
 
 /** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */

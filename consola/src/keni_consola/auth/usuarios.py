@@ -72,8 +72,8 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
         "puede_coordinar": bool(fila["puede_coordinar"]),
         "nombre": fila["nombre"],
         "manager_id": fila["manager_id"],
-        # `mfa_activo` (segundo factor TOTP): bool. La UI lo usa para mostrar "MFA activo"
-        # y el login para decidir si eleva. NUNCA sale el secreto cifrado ni los recovery.
+        # `mfa_activo` (segundo factor PASSKEYS): bool, = "tiene >=1 passkey". La UI lo usa
+        # para mostrar el estado y el login para decidir si eleva. NUNCA salen claves ni recovery.
         "mfa_activo": bool(fila["mfa_activo"]),
         "marcas": marcas,
     }
@@ -357,6 +357,11 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     ).fetchone()
 
 
+def _ahora_iso() -> str:
+    """Marca de tiempo ISO actual (helper local para las filas de passkeys)."""
+    return _comun.iso(_comun.ahora())
+
+
 def contar_admins() -> int:
     """Numero de usuarios con rol admin (para las guardas de 'ultimo admin')."""
     con = db.conectar()
@@ -480,7 +485,7 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "puede_coordinar": bool(fila["puede_coordinar"]),
             "nombre": fila["nombre"],
             "manager_id": fila["manager_id"],
-            # Para que el login decida si ELEVA al segundo factor (TOTP) tras la contrasena.
+            # Para que el login decida si ELEVA al segundo factor (passkey) tras la contrasena.
             "mfa_activo": bool(fila["mfa_activo"]),
             "marcas": marcas,
         }
@@ -503,51 +508,134 @@ def verificar_password_actual(usuario_id: str, password: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# MFA TOTP: persistencia del secreto cifrado, el flag y los recovery codes      #
+# MFA PASSKEYS / WebAuthn: credenciales, el flag derivado y los recovery codes   #
 # --------------------------------------------------------------------------- #
 #
-# El TRABAJO criptografico (generar/cifrar/verificar el secreto y los codigos) vive en
-# `auth.mfa` (sin tocar la BD). Estas funciones SOLO leen/escriben las tres columnas
-# ADITIVAS de `usuarios` (`mfa_secret_cifrado`, `mfa_activo`, `mfa_recovery_codes`). El
-# secreto se guarda SIEMPRE cifrado (Fernet) y los recovery SIEMPRE hasheados (scrypt).
+# El TRABAJO criptografico (opciones, verificacion de la respuesta del autenticador, recovery)
+# vive en `auth.mfa` (sin tocar la BD). Estas funciones leen/escriben la tabla
+# `webauthn_credenciales` (1:N) y las dos columnas de `usuarios` (`mfa_activo`,
+# `mfa_recovery_codes`). NUNCA se guarda un secreto del lado servidor: solo la clave PUBLICA y
+# el contador de firmas. Los recovery van SIEMPRE hasheados (scrypt).
 
 
 def estado_mfa(usuario_id: str) -> dict[str, Any] | None:
-    """Estado MFA crudo de un usuario: `{secret_cifrado, activo, recovery_codes}`; None si no existe.
+    """Estado MFA crudo de un usuario: `{activo, recovery_codes, num_credenciales}`; None si no existe.
 
-    Es de uso INTERNO de la capa MFA (la API lo usa para verificar/activar): incluye el
-    secreto CIFRADO (no en claro) y la lista de recovery codes HASHEADOS. Nunca sale a la API.
+    Uso INTERNO de la capa MFA (la API lo usa para verificar/decidir). `activo` deriva de tener
+    >=1 passkey; `recovery_codes` es la lista HASHEADA. Nunca sale tal cual a la API.
     """
     con = db.conectar()
     try:
         fila = con.execute(
-            "SELECT mfa_secret_cifrado, mfa_activo, mfa_recovery_codes FROM usuarios WHERE id = ?",
+            "SELECT mfa_activo, mfa_recovery_codes FROM usuarios WHERE id = ?",
+            (usuario_id,),
+        ).fetchone()
+        if fila is None:
+            return None
+        n = con.execute(
+            "SELECT COUNT(*) AS n FROM webauthn_credenciales WHERE usuario_id = ?",
             (usuario_id,),
         ).fetchone()
     finally:
         con.close()
-    if fila is None:
-        return None
+    num = int(n["n"]) if n is not None else 0
     return {
-        "secret_cifrado": fila["mfa_secret_cifrado"] or "",
-        "activo": bool(fila["mfa_activo"]),
+        "activo": bool(fila["mfa_activo"]) and num > 0,
         "recovery_codes": fila["mfa_recovery_codes"] or "[]",
+        "num_credenciales": num,
     }
 
 
-def guardar_secreto_mfa(usuario_id: str, secret_cifrado: str) -> bool:
-    """Guarda el secreto TOTP (YA cifrado) y deja `mfa_activo=0`; True si el usuario existia.
+def listar_credenciales_mfa(usuario_id: str) -> list[dict[str, Any]]:
+    """Passkeys de un usuario, con su forma INTERNA (incluye `credential_id`/`public_key`).
 
-    Es el paso de ENROLAMIENTO (`/api/auth/mfa/setup`): se persiste el secreto pero el MFA NO
-    queda activo hasta confirmar el primer codigo (`activar_mfa`). Reescribe cualquier secreto
-    previo (re-enrolar) y limpia los recovery anteriores.
+    La usa la capa MFA para construir `allow_credentials`/`exclude_credentials` y para localizar
+    la credencial al verificar un login. La API NO devuelve `public_key`; expone solo
+    `{id, nombre, creada, ultimo_uso}` (ver `api/auth`).
     """
     con = db.conectar()
     try:
+        filas = con.execute(
+            "SELECT id, usuario_id, credential_id, public_key, sign_count, transports, "
+            "nombre, creada, ultimo_uso FROM webauthn_credenciales "
+            "WHERE usuario_id = ? ORDER BY creada ASC",
+            (usuario_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "id": f["id"],
+            "usuario_id": f["usuario_id"],
+            "credential_id": f["credential_id"],
+            "public_key": f["public_key"],
+            "sign_count": int(f["sign_count"] or 0),
+            "transports": f["transports"] or "[]",
+            "nombre": f["nombre"] or "",
+            "creada": f["creada"] or "",
+            "ultimo_uso": f["ultimo_uso"] or "",
+        }
+        for f in filas
+    ]
+
+
+def credencial_mfa_por_credential_id(usuario_id: str, credential_id: str) -> dict[str, Any] | None:
+    """Una passkey concreta del usuario por su `credential_id` (base64url); None si no es suya.
+
+    Atar la busqueda al `usuario_id` evita que una assertion verifique contra la credencial de
+    OTRO usuario (la cookie pre-auth fija de quien es la ceremonia).
+    """
+    for c in listar_credenciales_mfa(usuario_id):
+        if c["credential_id"] == credential_id:
+            return c
+    return None
+
+
+def guardar_credencial_mfa(
+    usuario_id: str,
+    *,
+    credential_id: str,
+    public_key: str,
+    sign_count: int,
+    transports: str,
+    nombre: str,
+) -> bool:
+    """Inserta una passkey nueva y enciende `mfa_activo`; True si se guardo.
+
+    Es el paso final del ENROLAMIENTO (`/api/auth/mfa/registro/verificar`). Tras insertar marca
+    `mfa_activo=1` (el usuario ya tiene >=1 passkey). Devuelve False si el `credential_id` ya
+    existia (UNIQUE) o el usuario no existe.
+    """
+    con = db.conectar()
+    try:
+        ahora = _ahora_iso()
+        con.execute(
+            "INSERT INTO webauthn_credenciales (id, usuario_id, credential_id, public_key, "
+            "sign_count, transports, nombre, creada, ultimo_uso) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                uuid.uuid4().hex[:12], usuario_id, credential_id, public_key,
+                int(sign_count), transports, nombre, ahora, "",
+            ),
+        )
         cur = con.execute(
-            "UPDATE usuarios SET mfa_secret_cifrado = ?, mfa_activo = 0, "
-            "mfa_recovery_codes = '[]' WHERE id = ?",
-            (secret_cifrado, usuario_id),
+            "UPDATE usuarios SET mfa_activo = 1 WHERE id = ?", (usuario_id,)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    except motor_db.IntegrityError:
+        return False  # credential_id duplicado (mismo autenticador) o usuario inexistente
+    finally:
+        con.close()
+
+
+def actualizar_sign_count_mfa(credencial_id: str, sign_count: int) -> bool:
+    """Actualiza el `sign_count` y marca `ultimo_uso` de una passkey tras un login OK; True si existia."""
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE webauthn_credenciales SET sign_count = ?, ultimo_uso = ? WHERE id = ?",
+            (int(sign_count), _ahora_iso(), credencial_id),
         )
         con.commit()
         return cur.rowcount > 0
@@ -555,30 +643,48 @@ def guardar_secreto_mfa(usuario_id: str, secret_cifrado: str) -> bool:
         con.close()
 
 
-def activar_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
-    """Marca `mfa_activo=1` y guarda los recovery (YA hasheados, JSON); True si existia.
+def borrar_credencial_mfa(usuario_id: str, credencial_id: str) -> bool:
+    """Borra UNA passkey del usuario; si era la ULTIMA, apaga `mfa_activo`. True si existia.
 
-    Solo se llama tras verificar con exito el PRIMER codigo TOTP contra el secreto ya enrolado
-    (`/api/auth/mfa/activate`). Exige que el usuario tenga un secreto enrolado.
+    Ata el borrado al `usuario_id` (un usuario solo borra las suyas). Recalcula `mfa_activo`
+    en la misma transaccion para que el flag siga reflejando "tiene >=1 passkey".
     """
     con = db.conectar()
     try:
         cur = con.execute(
-            "UPDATE usuarios SET mfa_activo = 1, mfa_recovery_codes = ? "
-            "WHERE id = ? AND mfa_secret_cifrado <> ''",
-            (recovery_codes_hash_json, usuario_id),
+            "DELETE FROM webauthn_credenciales WHERE id = ? AND usuario_id = ?",
+            (credencial_id, usuario_id),
         )
+        if cur.rowcount == 0:
+            return False
+        restantes = con.execute(
+            "SELECT COUNT(*) AS n FROM webauthn_credenciales WHERE usuario_id = ?",
+            (usuario_id,),
+        ).fetchone()
+        if restantes is not None and int(restantes["n"]) == 0:
+            con.execute(
+                "UPDATE usuarios SET mfa_activo = 0, mfa_recovery_codes = '[]' WHERE id = ?",
+                (usuario_id,),
+            )
         con.commit()
-        return cur.rowcount > 0
+        return True
     finally:
         con.close()
+
+
+def fijar_recovery_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
+    """Fija la lista de recovery codes (JSON de hashes); True si existia.
+
+    Se llama UNA vez, al registrar la PRIMERA passkey (cuando se entregan los codigos en claro).
+    """
+    return actualizar_recovery_mfa(usuario_id, recovery_codes_hash_json)
 
 
 def actualizar_recovery_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
     """Reescribe la lista de recovery codes (JSON de hashes); True si existia.
 
-    Se usa al CONSUMIR un codigo de recuperacion en el login: el codigo gastado se elimina de
-    la lista para que sea de un solo uso.
+    Se usa al CONSUMIR un codigo de recuperacion en el login (el gastado se elimina, un solo
+    uso) y al fijar los codigos al enrolar la primera passkey.
     """
     con = db.conectar()
     try:
@@ -593,16 +699,19 @@ def actualizar_recovery_mfa(usuario_id: str, recovery_codes_hash_json: str) -> b
 
 
 def desactivar_mfa(usuario_id: str) -> bool:
-    """Limpia secreto + flag + recovery (apaga el MFA del usuario); True si existia.
+    """Borra TODAS las passkeys + recovery y apaga `mfa_activo`; True si existia.
 
     Lo usan el `disable` del propio usuario (con su contrasena) y el reset del admin
-    (recuperacion de cuenta). Idempotente: dejar a un usuario sin MFA dos veces no falla.
+    (recuperacion de cuenta: dispositivo perdido). Idempotente: dejar a un usuario sin MFA dos
+    veces no falla.
     """
     con = db.conectar()
     try:
+        con.execute(
+            "DELETE FROM webauthn_credenciales WHERE usuario_id = ?", (usuario_id,)
+        )
         cur = con.execute(
-            "UPDATE usuarios SET mfa_secret_cifrado = '', mfa_activo = 0, "
-            "mfa_recovery_codes = '[]' WHERE id = ?",
+            "UPDATE usuarios SET mfa_activo = 0, mfa_recovery_codes = '[]' WHERE id = ?",
             (usuario_id,),
         )
         con.commit()
