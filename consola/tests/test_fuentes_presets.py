@@ -114,12 +114,13 @@ def test_get_presets_filtro_categoria(cliente):
 
 def test_get_presets_activa_refleja_fuentes_existentes(cliente, monkeypatch):
     """Un preset cuya URL ya tiene fuente RSS sale con activa=True."""
-    from keni_consola.dominio import http_feed
+    from keni_consola.api import rss
 
     # Añadir fuente RSS con URL de un preset conocido (Reuters).
     url_reuters = "https://feeds.reuters.com/reuters/worldNews"
-    # Parcheamos validar_url para evitar resolución DNS en tests
-    monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
+    # `crear_fuente` usa el binding `rss.validar_url` (re-exportado en import), no
+    # `http_feed.validar_url`: parcheamos ESE para evitar DNS/SSRF real en tests.
+    monkeypatch.setattr(rss, "validar_url", lambda u: (u, None))
     cliente.post("/api/rss/fuentes", json={"nombre": "Reuters Test", "url": url_reuters})
 
     r = cliente.get("/api/fuentes/presets?categoria=internacional")

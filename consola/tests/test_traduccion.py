@@ -25,7 +25,10 @@ def _ejecutor_ok(prompt: str, dir_permitido: str) -> str:
     # Extrae el JSON de ítems del prompt para construir una respuesta coherente.
     import re
 
-    m = re.search(r"\[.*\]", prompt, re.DOTALL)
+    # Aísla la lista REAL de ítems (va tras "Lista de ítems:"); el prompt también
+    # contiene un ejemplo con corchetes en las instrucciones que confundía al regex.
+    cola = prompt.partition("Lista de ítems:")[2] or prompt
+    m = re.search(r"\[.*\]", cola, re.DOTALL)
     if not m:
         return json.dumps({"traducciones": []})
     try:
@@ -55,7 +58,10 @@ def _ejecutor_respuesta_parcial(prompt: str, dir_permitido: str) -> str:
     """Solo devuelve traducción para el primer ítem."""
     import re
 
-    m = re.search(r"\[.*\]", prompt, re.DOTALL)
+    # Aísla la lista REAL de ítems (va tras "Lista de ítems:"); el prompt también
+    # contiene un ejemplo con corchetes en las instrucciones que confundía al regex.
+    cola = prompt.partition("Lista de ítems:")[2] or prompt
+    m = re.search(r"\[.*\]", cola, re.DOTALL)
     if not m:
         return json.dumps({"traducciones": []})
     try:
@@ -174,6 +180,10 @@ def test_radar_con_traduccion_activa(cliente, monkeypatch):
 
     # Registra una fuente con la URL exacta del preset reuters-world (idioma=en).
     url_reuters = "https://feeds.reuters.com/reuters/worldNews"
+    # Hay DOS validar_url que tocar para evitar DNS/SSRF real en tests: `rss.validar_url`
+    # (lo usa `crear_fuente` al dar de alta) y `http_feed.validar_url` (lo usa
+    # `leer_items_fuente` al descargar el feed dentro del Radar). Parcheamos ambos.
+    monkeypatch.setattr(rss, "validar_url", lambda u: (u, None))
     monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
     cliente.post("/api/rss/fuentes", json={"nombre": "Reuters EN", "url": url_reuters})
 

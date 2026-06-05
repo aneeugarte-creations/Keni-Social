@@ -60,7 +60,7 @@ class TestItemsBreaking:
             _item_radar(titulo="No breaking", breaking=False, senal=50_000),
         ]
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_radar_items",
+            "keni_consola.repos.listar_radar_items",
             lambda **_: filas,
         )
         items = dom.items_breaking("claro-sports", "MX")
@@ -77,7 +77,7 @@ class TestItemsBreaking:
             _item_radar(titulo="B2", senal=50_000, breaking=True),
         ]
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_radar_items",
+            "keni_consola.repos.listar_radar_items",
             lambda **_: filas,
         )
         items = dom.items_breaking("claro-sports", "MX")
@@ -86,7 +86,7 @@ class TestItemsBreaking:
     def test_respeta_maximo(self, monkeypatch):
         filas = [_item_radar(titulo=f"T{i}", breaking=True, senal=i) for i in range(30)]
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_radar_items",
+            "keni_consola.repos.listar_radar_items",
             lambda **_: filas,
         )
         items = dom.items_breaking("claro-sports", "MX")
@@ -96,7 +96,7 @@ class TestItemsBreaking:
         def explota(**_):
             raise RuntimeError("DB caída")
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_radar_items",
+            "keni_consola.repos.listar_radar_items",
             explota,
         )
         items = dom.items_breaking("claro-sports", "MX")
@@ -106,7 +106,7 @@ class TestItemsBreaking:
 class TestAnotarEstadoBorrador:
     def test_ninguno_si_no_hay_borradores(self, monkeypatch):
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_contenido",
+            "keni_consola.repos.listar_contenido",
             lambda **_: [],
         )
         items = [_item_radar(titulo="Breaking A")]
@@ -116,12 +116,12 @@ class TestAnotarEstadoBorrador:
 
     def test_listo_cuando_hay_borrador(self, monkeypatch):
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_contenido",
+            "keni_consola.repos.listar_contenido",
             lambda **_: [_item_contenido()],
         )
         # Sin generaciones activas.
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.generaciones.listar",
+            "keni_consola.generaciones.listar",
             lambda **_: [],
         )
         items = [_item_radar()]
@@ -131,11 +131,11 @@ class TestAnotarEstadoBorrador:
 
     def test_generando_cuando_hay_generacion_ejecutando(self, monkeypatch):
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.repos.listar_contenido",
+            "keni_consola.repos.listar_contenido",
             lambda **_: [_item_contenido()],
         )
         monkeypatch.setattr(
-            "keni_consola.dominio.breaking.generaciones.listar",
+            "keni_consola.generaciones.listar",
             lambda **_: [{"id": "gen-1", "contenido_id": "c-1", "estado": "ejecutando"}],
         )
         items = [_item_radar()]
@@ -314,7 +314,7 @@ def test_get_breaking_estado_borrador_listo(entorno, cliente, monkeypatch):
 
     # No hay generaciones en el almacén de tests → estado='listo' (borrador existe).
     monkeypatch.setattr(
-        "keni_consola.dominio.breaking.generaciones.listar",
+        "keni_consola.generaciones.listar",
         lambda **_: [],
     )
     datos = cliente.get("/api/breaking?marca=claro-sports").json()

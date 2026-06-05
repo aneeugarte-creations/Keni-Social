@@ -47,6 +47,7 @@ modulos_backend = [
   "termometro",
   "radar",
   "radar_auto",
+  "breaking",
   "fuentes",
   "insumos",
   "algoritmos",
