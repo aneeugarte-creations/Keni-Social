@@ -17,7 +17,7 @@
  * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Inbox, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Gavel, Inbox, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -109,7 +109,29 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     onSuccess: tras("Devuelta a borrador."),
     onError,
   });
-  const ocupado = aprobar.isPending || rechazar.isPending;
+  // OVERRIDE: forzar la aprobación saltándose la cadena (admin/coordinador). Lo decide el backend;
+  // aquí solo mostramos la acción y avisamos con un pop-up de que se salta el visto bueno del equipo.
+  const forzar = useMutation({
+    mutationFn: () => api.forzarAprobacion(publicacion.id),
+    onSuccess: tras("Aprobación forzada (cadena saltada)."),
+    onError,
+  });
+  const ocupado = aprobar.isPending || rechazar.isPending || forzar.isPending;
+  // ¿Esta sesión puede FORZAR? Admin o cargo de coordinación (o candidato a coordinador). El
+  // backend es la fuente de verdad (403 si no); esto solo decide si se muestra el botón.
+  const puedeForzar =
+    usuario?.rol === "admin" ||
+    (usuario?.cargo ?? "").startsWith("coordinador") ||
+    !!usuario?.puede_coordinar;
+  const onForzar = async () => {
+    const ok = await confirmar({
+      titulo: "Saltar la cadena de aprobación",
+      mensaje:
+        "Vas a aprobar esta pieza directamente, sin el visto bueno del resto del equipo: te saltas la cadena de aprobación. ¿Continuar?",
+      textoConfirmar: "Forzar aprobación",
+    });
+    if (ok) forzar.mutate();
+  };
 
   // ¿Puede ESTE usuario dar su "me gusta" (OK humano) ahora? Lo decide el backend; aquí
   // habilitamos/explicamos antes de pedirlo. `aprobar`/`rechazar` (legado) forwardean al
@@ -278,6 +300,25 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <XCircle className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          {/* OVERRIDE (admin/coordinador): forzar la aprobación saltándose la cadena. Solo en
+              revisión y sin aprobar aún; pide confirmación con un pop-up. */}
+          {puedeForzar && enRevision && !yaAprobada && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-amber-600 dark:text-amber-400"
+              onClick={() => void onForzar()}
+              disabled={ocupado}
+              title="Forzar aprobación (saltar la cadena)"
+              aria-label="Forzar aprobación"
+            >
+              {forzar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Gavel className="h-4 w-4" />
               )}
             </Button>
           )}

@@ -840,6 +840,11 @@ export const api = {
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/rechazar`, {
       metodo: "POST",
     }),
+  /** FUERZA la aprobación (admin/coordinador): se salta la cadena y deja la pieza aprobada. */
+  forzarAprobacion: (id: string) =>
+    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/forzar`, {
+      metodo: "POST",
+    }),
 
   // --- Importar calendario (H1): sube un .xlsx/.csv al tablero (multipart). Con
   // `previsualizar` parsea sin escribir; sin él, crea el contenido y devuelve el resumen. ---

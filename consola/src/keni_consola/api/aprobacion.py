@@ -41,10 +41,12 @@ from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
 from ..estados import (
     DECISION_APROBADO,
+    DECISION_PENDIENTE,
     DECISION_RECHAZADO,
     ESTADO_APROBADO,
     ESTADO_EN_REVISION,
     ESTADO_PROGRAMADO,
+    ROL_ADMIN,
 )
 from ..seguridad import autor_de_peticion
 from .colaboracion import montar_cadena_aprobacion
@@ -124,9 +126,16 @@ async def _decidir(request: Request, decision: str) -> Response:
     actualizada = _reflejar_estado_pieza(publicacion_id, nivel_decidido)
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    # Aprobado => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
-    # gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Devolvemos la
-    # pieza ya programada para que el llamante vea el estado final.
+    return _responder_aprobada(publicacion_id, actualizada)
+
+
+def _responder_aprobada(publicacion_id: str, actualizada: dict[str, Any]) -> Response:
+    """Auto-programa si la cadena quedó APROBADA y devuelve la pieza (estado final) como JSON.
+
+    Aprobado => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
+    gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Lo comparten la
+    decisión normal (`_decidir`) y el override (`forzar`).
+    """
     if actualizada.get("estado") == ESTADO_APROBADO:
         from .. import auto_programar
 
@@ -206,6 +215,74 @@ async def aprobar(request: Request) -> Response:
 async def rechazar(request: Request) -> Response:
     """POST /api/aprobacion/{id}/rechazar: decide el nivel actual como rechazado (vuelve a borrador)."""
     return await _decidir(request, DECISION_RECHAZADO)
+
+
+def _puede_forzar(request: Request) -> bool:
+    """¿Puede esta sesión FORZAR la aprobación (saltarse la cadena)? Admin o coordinador.
+
+    El token de mantenimiento (sin sesión) cuenta como admin. Un usuario logueado puede forzar si
+    su rol es admin o si su CARGO del organigrama es de coordinación (`coordinador`,
+    `coordinador_redes`, `coordinador_youtube`…); todos empiezan por "coordinador".
+    """
+    usuario = getattr(request.state, "usuario", None)
+    if not isinstance(usuario, dict):
+        return True  # token de mantenimiento = admin
+    if usuario.get("rol") == ROL_ADMIN:
+        return True
+    cargo = str(usuario.get("cargo") or "")
+    return cargo.startswith("coordinador") or bool(usuario.get("puede_coordinar"))
+
+
+async def forzar(request: Request) -> Response:
+    """POST /api/aprobacion/{id}/forzar: admin/coordinador APRUEBA saltándose la cadena.
+
+    Aprueba TODOS los niveles pendientes (sellados como override, con traza de quién forzó) y deja
+    la pieza APROBADA, sin exigir el segundo par de ojos ni el cargo de cada nivel. El front avisa
+    con un pop-up de que se salta la cadena. 403 si la sesión no puede forzar; 404 si la pieza no
+    existe; 409 si no está en revisión.
+    """
+    if not _puede_forzar(request):
+        return JSONResponse(
+            {"error": "Solo un admin o coordinador puede forzar la aprobación."},
+            status_code=403,
+        )
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    if pub.get("estado") != ESTADO_EN_REVISION:
+        return JSONResponse(
+            {"error": "Solo se puede forzar la aprobación de una pieza en revisión."},
+            status_code=409,
+        )
+
+    autor = autor_de_peticion(request) or {}
+    decisor_id = autor.get("id", "") or "forzado"
+    decisor_nombre = autor.get("usuario", "") or "Override"
+    ahora = datetime.now().isoformat(timespec="seconds")
+    nivel_decidido: dict[str, Any] | None = None
+    for nivel in repos.listar_aprobaciones(publicacion_id):
+        if nivel.get("decision") != DECISION_PENDIENTE:
+            continue
+        nivel_decidido = repos.actualizar_aprobacion(
+            nivel["id"],
+            {
+                "decision": DECISION_APROBADO,
+                "decisor_id": decisor_id,
+                "decisor_nombre": decisor_nombre,
+                "comentario": "Aprobación forzada (override de la cadena)",
+                "decidido_en": ahora,
+            },
+        )
+    sello = nivel_decidido or {
+        "decisor_id": decisor_id,
+        "decisor_nombre": decisor_nombre,
+        "decidido_en": ahora,
+    }
+    actualizada = _reflejar_estado_pieza(publicacion_id, sello)
+    if actualizada is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return _responder_aprobada(publicacion_id, actualizada)
 
 
 def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
@@ -297,6 +374,7 @@ RUTAS = [
     Route("/api/aprobacion/cola", cola, methods=["GET"]),
     Route("/api/aprobacion/{publicacion_id}/enviar-a-revision", enviar_a_revision, methods=["POST"]),
     Route("/api/aprobacion/{publicacion_id}/aprobar", aprobar, methods=["POST"]),
+    Route("/api/aprobacion/{publicacion_id}/forzar", forzar, methods=["POST"]),
     Route("/api/aprobacion/{publicacion_id}/rechazar", rechazar, methods=["POST"]),
     Route("/api/aprobacion/{publicacion_id}/programar", programar, methods=["POST"]),
 ]

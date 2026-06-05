@@ -27,9 +27,9 @@ def _app(bootstrap=False):
     return app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=bootstrap)
 
 
-def _cli_usuario(usuario: str, rol: str = "editor") -> TestClient:
+def _cli_usuario(usuario: str, rol: str = "editor", cargo: str = "") -> TestClient:
     """TestClient con SESION de `usuario` (login real): atribuye al crear/enviar/aprobar."""
-    auth.crear_usuario(usuario, _CLAVE, rol)
+    auth.crear_usuario(usuario, _CLAVE, rol, cargo=cargo)
     c = TestClient(_app())
     r = c.post("/api/auth/login", json={"usuario": usuario, "password": _CLAVE}, headers=_ORIGIN)
     assert r.status_code == 200
@@ -155,6 +155,52 @@ def test_editar_en_revision_sin_ok_humano_no_resetea(entorno):
     )
     assert r.status_code == 200, r.text
     assert r.json()["publicacion"]["estado"] == "en_revision"
+
+
+# --------------------------------------------------------------------------- #
+# Override: admin / coordinador fuerza la aprobación (se salta la cadena)      #
+# --------------------------------------------------------------------------- #
+
+
+def test_admin_fuerza_aprobacion_saltando_la_cadena(entorno):
+    """Un admin fuerza: la pieza en revisión pasa a aprobada sin el segundo par de ojos."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    admin = _cli_usuario("jefa", rol="admin")
+    r = admin.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "aprobado"
+
+
+def test_coordinador_puede_forzar(entorno):
+    """Un coordinador (cargo `coordinador_redes`) también puede forzar la aprobación."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    coord = _cli_usuario("elias", rol="editor", cargo="coordinador_redes")
+    r = coord.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "aprobado"
+
+
+def test_editor_normal_no_puede_forzar_403(entorno):
+    """Un editor sin cargo de coordinación NO puede forzar (403): no se salta la cadena."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")  # editor, sin cargo
+    r = beto.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
+    assert r.status_code == 403
+    assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
+
+
+def test_forzar_solo_en_revision_409(entorno):
+    """Forzar una pieza que NO está en revisión (borrador) responde 409."""
+    admin = _cli_usuario("jefa", rol="admin")
+    pub = _crear_borrador(admin)
+    r = admin.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
+    assert r.status_code == 409
 
 
 # --------------------------------------------------------------------------- #
