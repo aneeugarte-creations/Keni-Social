@@ -196,6 +196,8 @@ async def sugerir(request: Request) -> Response:
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
         autor=autor,
+        # Sugerencia texto→texto sobre material NO confiable: veta la web (anti-exfiltración).
+        endurecer=gen_dom.ENDURECER_SIN_WEB,
     )
     return JSONResponse({"generacion": gen})
 

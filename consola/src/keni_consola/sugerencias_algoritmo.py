@@ -213,6 +213,8 @@ def procesar_plataforma(plataforma: str, noticias: list[dict[str, Any]]) -> int:
         prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
+        # Convierte noticias NO confiables en propuestas (texto→texto): veta la web.
+        endurecer=generar.ENDURECER_SIN_WEB,
     )
     gen_final = _esperar_generacion(gen["id"])
     if gen_final is None or gen_final.get("estado") == generaciones.ESTADO_ERROR:

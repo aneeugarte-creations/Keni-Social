@@ -131,6 +131,13 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     assert spec["skill"] == doc.id.rsplit("/", 1)[-1]
     # El prompt compuesto pide el bloque json de piezas por red.
     assert "piezas" in encolado["prompt"]
+    # ANTI-EXFILTRACIÓN: el camino COPY (piezas) endurece el run vetando la web. El
+    # `endurecer` viaja EN EL SPEC, que es justo lo que el worker lee (`jobspec.endurecer`)
+    # y pasa a `_argv_claude`. Así el subproceso `claude -p` no puede sacar el OAuth token
+    # por WebFetch/WebSearch aunque el material (la nota) traiga un prompt-injection.
+    endurecer = encolado["spec"]["endurecer"]
+    assert endurecer is not None
+    assert set(endurecer["disallowed_tools"]) == {"WebFetch", "WebSearch"}
 
 
 def test_lanzar_piezas_titulo_contenido_titula_los_borradores(encolado):
@@ -166,6 +173,9 @@ def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     reg = biblioteca_lanzar.lanzar(prompt_id=prompt.id, marca=_MARCA)
     assert reg["tipo"] == "prompt"
     assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
+    # El camino IDENTIDAD NO endurece la web: puede enrutar prompts de INVESTIGACIÓN
+    # (brief-tendencias / termometro-mundial) que la usan legítimamente.
+    assert encolado["spec"]["endurecer"] is None
 
 
 def test_spec_prompt_round_trip_reconstruye_identidad():

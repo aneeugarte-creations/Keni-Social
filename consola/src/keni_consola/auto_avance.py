@@ -131,6 +131,8 @@ def _lanzar_qa(pub: dict[str, Any]) -> bool:
             plataforma_id=plataforma_id, contenido_id=contenido_id, copy_hash=copy_hash,
         ),
         autor=None,
+        # QA (auto) sobre un copy NO confiable (texto→informe): veta la web (anti-exfiltración).
+        endurecer=gen_dom.ENDURECER_SIN_WEB,
     )
     # Sella el hash del copy con QA lanzada: no se relanza en el próximo barrido salvo que el
     # copy cambie (entonces `hash_copy` difiere y vuelve a tocar QA). `qa_auto_hash` es un campo

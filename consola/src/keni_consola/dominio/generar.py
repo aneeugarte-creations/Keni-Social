@@ -38,6 +38,18 @@ TAG_CONTENIDO_USUARIO = "contenido_usuario"
 # SINK (`envolver_contenido_usuario`), así TODO llamante queda acotado aunque no recorte.
 MAX_TEXTO = 200_000
 
+# Endurecimiento por-job para los flujos de COPY (texto→texto que INGIEREN contenido NO
+# confiable: nota/ítem RSS/noticia/copy a revisar). El subproceso `claude -p` necesita
+# `CLAUDE_CODE_OAUTH_TOKEN` en su entorno (lo usa el CLI); si un prompt-injection en ese
+# contenido tuviera acceso a la RED (`WebFetch`/`WebSearch`), podría EXFILTRAR el token vía
+# una petición web. Ningún flujo de copy necesita la web (su entrada ya viaja en el prompt),
+# así que la VETAMOS por callsite. Se UNE a la veta global (`Bash Write Edit`) en el
+# constructor de argv (`generaciones._argv_claude`), nunca la reemplaza: el efecto es
+# global + `WebFetch`/`WebSearch`. NO vetamos `Read` (alguna skill puede leer contexto de
+# marca de `/data`; cerrar el EGRESO ya impide la exfiltración). Los flujos de INVESTIGACIÓN
+# (`brief-tendencias`/`termometro-mundial`) NO pasan esto: legítimamente usan la web.
+ENDURECER_SIN_WEB: dict[str, Any] = {"disallowed_tools": ["WebFetch", "WebSearch"]}
+
 
 def _aviso_contenido_usuario(tag: str) -> str:
     """Advertencia anti-inyección que precede al bloque, referida al tag CON nonce.
@@ -296,4 +308,6 @@ def lanzar_copy(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
+        # Copy = texto→texto sobre material NO confiable: veta la web (anti-exfiltración).
+        endurecer=ENDURECER_SIN_WEB,
     )

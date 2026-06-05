@@ -168,6 +168,9 @@ def lanzar(
             tipo="copy", titulo=titulo, marca=marca, prompt=prompt_final,
             procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
             procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
+            # MODO PIEZAS = copy texto→texto sobre material NO confiable: veta la web. El camino
+            # IDENTIDAD de abajo NO se toca: puede enrutar prompts de INVESTIGACIÓN que sí la usan.
+            endurecer=generar.ENDURECER_SIN_WEB,
         )
 
     prompt_final = generar.componer(cuerpo_prompt, adjuntos, bloque_contexto)

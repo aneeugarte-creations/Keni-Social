@@ -160,6 +160,8 @@ async def revisar(request: Request) -> Response:
             plataforma_id=plataforma_id, contenido_id=contenido_id, copy_hash=copy_hash,
         ),
         autor=autor,
+        # QA = revisa un copy NO confiable (texto→informe): veta la web (anti-exfiltración).
+        endurecer=gen_dom.ENDURECER_SIN_WEB,
     )
     return JSONResponse({"generacion": gen})
 

@@ -891,6 +891,8 @@ def lanzar_qa_fuente(
             marca=marca, titulo=titulo, autor=autor, contenido_id=tema_id,
         ),
         autor=autor,
+        # Criba QA del material de origen (texto NO confiable→veredicto): veta la web.
+        endurecer=gen_dom.ENDURECER_SIN_WEB,
     )
     registrar_etapa(
         ETAPA_QA,

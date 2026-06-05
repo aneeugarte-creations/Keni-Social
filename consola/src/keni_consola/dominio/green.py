@@ -148,6 +148,8 @@ def lanzar_propuesta(
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
         autor=autor,
+        # Brainstorming texto→texto sobre material del usuario: veta la web (anti-exfiltración).
+        endurecer=generar.ENDURECER_SIN_WEB,
     )
 
 
