@@ -4443,6 +4443,15 @@ export interface Historia {
   contenido_id: string;
   /** Hasta ~8 artículos corroborantes del cluster. */
   enlaces: { titulo: string; url: string; fuente: string }[];
+  // ── Ola D: verificación + traducción ─────────────────────────────────────
+  /** Nivel de verificación por corroboración (Ola D). */
+  verificacion?: "corroborada" | "unica_fuente" | "dudosa";
+  /** true si el título/resumen ya fueron traducidos al ES por el daemon (Ola D). */
+  traducido?: boolean;
+  /** Título en el idioma original, antes de la traducción (solo si `traducido`). */
+  titulo_original?: string;
+  /** Código de idioma del cluster antes de traducir (p. ej. 'en', 'pt'). */
+  idioma?: string;
 }
 
 /** Respuesta paginada de `GET /api/noticias/historias`. */
@@ -4508,4 +4517,62 @@ export interface ResumenCobertura {
   ultimo_sondeo?: string;
   /** Nº total de artículos en el archivo (todos los estados). */
   total_items?: number;
+}
+
+// ── Ola D: salud de fuentes (GET /api/noticias/salud) ────────────────────────
+
+/**
+ * Estado detallado de un feed individual.
+ * Espejo de la fila `fuentes_rss` + métricas calculadas.
+ */
+export interface SaludFeed {
+  id: string;
+  nombre: string;
+  categoria: string;
+  marca: string;
+  marca_nombre: string;
+  /** 1 si el feed está activo (columna activo). */
+  activo: number;
+  /** 1 si fue desactivado automáticamente por errores sucesivos. */
+  desactivado_auto: number;
+  /** ISO del último sondeo exitoso ('' si nunca). */
+  ultima_actualizacion: string;
+  /** Mensaje del último error ('' si no hay). */
+  ultimo_error: string;
+  /** Nº de errores consecutivos actuales. */
+  errores_seguidos: number;
+  /** Artículos ingeridos en las últimas 24 h desde este feed. */
+  items_24h: number;
+  /** Minutos desde el último ítem nuevo (null si nunca tuvo ítems). */
+  frescura_min: number | null;
+}
+
+/**
+ * Respuesta de `GET /api/noticias/salud`.
+ * Resumen global + detalle por feed.
+ */
+export interface SaludCobertura {
+  resumen: {
+    /** Nº total de feeds conocidos. */
+    feeds_total: number;
+    /** Nº de feeds activos y no desactivados-auto. */
+    activos: number;
+    /** Nº de feeds desactivados automáticamente por errores. */
+    auto_desactivados: number;
+    /** Nº de feeds activos con errores seguidos > 0 (sin llegar al máximo). */
+    fallando: number;
+    /** Nº de feeds activos cuya frescura supera `KENI_FEED_SLA_MIN`. */
+    stale: number;
+    /** Artículos ingeridos en las últimas 24 h (todas las fuentes). */
+    items_24h: number;
+    /** Desglose de items_24h por categoría de feed. */
+    por_categoria: Record<string, number>;
+    /** Desglose de items_24h por idioma. */
+    por_idioma: Record<string, number>;
+    /** Categorías/regiones esperadas sin ítems frescos en 24 h. */
+    huecos: string[];
+    /** Frescura global (mín de todos los feeds activos, en minutos). */
+    frescura_global_min: number;
+  };
+  feeds: SaludFeed[];
 }

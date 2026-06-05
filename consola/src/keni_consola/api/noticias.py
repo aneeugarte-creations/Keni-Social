@@ -17,14 +17,14 @@ allowlist; SQL parametrizado en `db`. Errores en español, sin tracebacks.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_copy, marcas, redes, repos
+from .. import autogen_copy, config, marcas, redes, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
 
@@ -78,6 +78,11 @@ def _historia_a_dict(cluster: dict[str, Any], enlaces: list[dict[str, Any]]) -> 
     `enlaces` = hasta `_MAX_ENLACES_HISTORIA` items del cluster como fuentes corroborantes
     `{titulo, url, fuente}` (deduplicados por url, preservando orden). `marca_nombre` resuelve
     el nombre humano de la marca dominante.
+
+    TRADUCCIÓN (Ola D): si la historia está `traducido`, se sirve `titulo`/`resumen` YA en ES
+    (`titulo_es`/`resumen_es`) y se exponen `titulo_original`/`idioma`/`traducido` para que la UI
+    pueda mostrar "traducido de {idioma}". Si no, se sirven los originales. `verificacion` expone
+    el veredicto de corroboración (corroborada / unica_fuente / dudosa).
     """
     vistos: set[str] = set()
     enlaces_pub: list[dict[str, str]] = []
@@ -96,10 +101,23 @@ def _historia_a_dict(cluster: dict[str, Any], enlaces: list[dict[str, Any]]) -> 
         )
         if len(enlaces_pub) >= _MAX_ENLACES_HISTORIA:
             break
+
+    traducido = bool(cluster.get("traducido"))
+    titulo_original = cluster.get("titulo") or ""
+    resumen_original = cluster.get("resumen") or ""
+    if traducido:
+        titulo = (cluster.get("titulo_es") or "").strip() or titulo_original
+        resumen = (cluster.get("resumen_es") or "").strip() or resumen_original
+        # `titulo_original` persistido tiene prioridad (es el de antes de traducir).
+        titulo_original = cluster.get("titulo_original") or titulo_original
+    else:
+        titulo = titulo_original
+        resumen = resumen_original
+
     return {
         "id": cluster["id"],
-        "titulo": cluster.get("titulo") or "",
-        "resumen": cluster.get("resumen") or "",
+        "titulo": titulo,
+        "resumen": resumen,
         "marca": cluster.get("marca") or "",
         "marca_nombre": marcas.etiqueta_de(cluster["marca"]) if cluster.get("marca") else "",
         "categoria": cluster.get("categoria") or "",
@@ -110,6 +128,10 @@ def _historia_a_dict(cluster: dict[str, Any], enlaces: list[dict[str, Any]]) -> 
         "senal": int(cluster.get("senal") or 0),
         "score": float(cluster.get("score") or 0.0),
         "breaking": int(cluster.get("breaking") or 0),
+        "verificacion": cluster.get("verificacion") or "unica_fuente",
+        "traducido": traducido,
+        "idioma": cluster.get("idioma") or "",
+        "titulo_original": titulo_original,
         "primer_visto": cluster.get("primer_visto") or "",
         "ultimo_visto": cluster.get("ultimo_visto") or "",
         "estado": cluster.get("estado") or "nuevo",
@@ -240,6 +262,140 @@ async def descartar(request: Request) -> Response:
 async def cobertura(request: Request) -> Response:
     """GET /api/noticias/cobertura: resumen de salud del motor de ingesta."""
     return JSONResponse(repos.resumen_cobertura())
+
+
+# --------------------------------------------------------------------------- #
+# Monitor de COBERTURA / SALUD de fuentes a escala (Ola D)                      #
+# --------------------------------------------------------------------------- #
+
+
+def _frescura_min(ultimo_item: str, *, ahora: datetime) -> int | None:
+    """Minutos transcurridos desde el último item de un feed (None si nunca capturó nada).
+
+    Best-effort: un timestamp no parseable cuenta como "sin frescura conocida" (None). Acota a
+    >= 0 (un reloj adelantado no produce frescuras negativas).
+    """
+    if not ultimo_item:
+        return None
+    try:
+        dt = datetime.fromisoformat(ultimo_item)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return max(0, int((ahora - dt).total_seconds() // 60))
+
+
+def construir_salud(
+    feeds: list[dict[str, Any]],
+    distribuciones: dict[str, dict[str, int]],
+    *,
+    sla_min: int,
+    ahora: datetime,
+) -> dict[str, Any]:
+    """Arma el payload de `/api/noticias/salud` (PURA: sin BD ni reloj propio). Ver contrato.
+
+    `feeds` = filas de `repos.salud_feeds` (cada una con `items_24h` + `ultimo_item`).
+    `distribuciones` = `repos.conteos_items_recientes` (`por_categoria` / `por_idioma`).
+    Deriva por feed `frescura_min` (minutos desde el último item) y, en el resumen, el nº de
+    feeds `stale` (activos sin items nuevos en > `sla_min`), `huecos` (categorías presentes en
+    feeds activos pero SIN items frescos en 24h) y `frescura_global_min` (el feed activo más
+    fresco). Determinista para los mismos datos.
+    """
+    por_categoria = distribuciones.get("por_categoria") or {}
+    por_idioma = distribuciones.get("por_idioma") or {}
+
+    feeds_pub: list[dict[str, Any]] = []
+    activos = 0
+    auto_desactivados = 0
+    fallando = 0
+    stale = 0
+    items_24h_total = 0
+    frescuras_activas: list[int] = []
+    # Categorías esperadas = las que cubren feeds ACTIVOS; un hueco es una esperada sin items 24h.
+    categorias_esperadas: set[str] = set()
+
+    for f in feeds:
+        es_activo = bool(f.get("activo"))
+        es_auto = bool(f.get("desactivado_auto"))
+        ultimo_item = str(f.get("ultimo_item") or "")
+        fmin = _frescura_min(ultimo_item, ahora=ahora)
+        items_24h = int(f.get("items_24h") or 0)
+        items_24h_total += items_24h
+        if es_activo:
+            activos += 1
+            categoria = str(f.get("categoria") or "")
+            categorias_esperadas.add(categoria)
+            if fmin is not None:
+                frescuras_activas.append(fmin)
+            if fmin is None or fmin > sla_min:
+                stale += 1
+        if es_auto:
+            auto_desactivados += 1
+        if (f.get("ultimo_error") or "").strip():
+            fallando += 1
+
+        feeds_pub.append(
+            {
+                "id": f.get("id") or "",
+                "nombre": f.get("nombre") or "",
+                "categoria": f.get("categoria") or "",
+                "marca": f.get("marca") or "",
+                "marca_nombre": marcas.etiqueta_de(f["marca"]) if f.get("marca") else "",
+                "activo": es_activo,
+                "desactivado_auto": es_auto,
+                "ultima_actualizacion": f.get("ultima_actualizacion") or "",
+                "ultimo_error": f.get("ultimo_error") or "",
+                "errores_seguidos": int(f.get("errores_seguidos") or 0),
+                "items_24h": items_24h,
+                "frescura_min": fmin,
+            }
+        )
+
+    # Huecos: categoría esperada (de un feed activo) sin items frescos en 24h. Normaliza el ''
+    # de un feed sin categoría a la misma etiqueta que usan las distribuciones.
+    cats_con_items = {c for c, n in por_categoria.items() if n > 0}
+    huecos: list[str] = []
+    for cat in sorted(categorias_esperadas):
+        etiqueta = cat or "(sin categoría)"
+        if etiqueta not in cats_con_items:
+            huecos.append(etiqueta)
+
+    return {
+        "resumen": {
+            "feeds_total": len(feeds),
+            "activos": activos,
+            "auto_desactivados": auto_desactivados,
+            "fallando": fallando,
+            "stale": stale,
+            "items_24h": items_24h_total,
+            "por_categoria": por_categoria,
+            "por_idioma": por_idioma,
+            "huecos": huecos,
+            "frescura_global_min": min(frescuras_activas) if frescuras_activas else None,
+        },
+        "feeds": feeds_pub,
+    }
+
+
+async def salud(request: Request) -> Response:
+    """GET /api/noticias/salud?marca=: monitor de cobertura a escala (Ola D).
+
+    Resumen + salud por feed: items 24h, frescura (min desde el último item), stale (SLA),
+    huecos de cobertura, distribuciones por categoría/idioma. Marca-aware (`?marca=`).
+    """
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    feeds = repos.salud_feeds(marca or None)
+    distribuciones = repos.conteos_items_recientes(marca or None, horas=24)
+    payload = construir_salud(
+        feeds,
+        distribuciones,
+        sla_min=config.feed_sla_min(),
+        ahora=datetime.now(UTC),
+    )
+    return JSONResponse(payload)
 
 
 # --------------------------------------------------------------------------- #
@@ -392,6 +548,7 @@ async def descartar_historia(request: Request) -> Response:
 RUTAS = [
     Route("/api/noticias", listar, methods=["GET"]),
     Route("/api/noticias/cobertura", cobertura, methods=["GET"]),
+    Route("/api/noticias/salud", salud, methods=["GET"]),
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}", detalle_historia, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}/usar", usar_historia, methods=["POST"]),

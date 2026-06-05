@@ -112,7 +112,12 @@ def test_barrido_persiste_items_y_programa_intervalo_en_exito(monkeypatch):
                         lambda fid, **kw: registrados.append((fid, kw)))
 
     resumen = ingesta_daemon.ejecutar_barrido()
-    assert resumen == {"feeds": 1, "items_nuevos": 2, "errores": 0}
+    # Aditivo (Ola D): el resumen lleva más claves (clustering/traduccion/auto_desactivados);
+    # verificamos las del barrido de ingesta por separado, no por igualdad exacta.
+    assert resumen["feeds"] == 1
+    assert resumen["items_nuevos"] == 2
+    assert resumen["errores"] == 0
+    assert resumen["auto_desactivados"] == 0
     assert len(persistidos) == 2
     # Se programó el próximo sondeo SIN backoff (éxito) y con errores reseteados.
     fid, kw = registrados[0]
@@ -159,3 +164,115 @@ def test_barrido_respeta_single_flight(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "feeds_vencidos", _no_llamar)
     resumen = ingesta_daemon.ejecutar_barrido()
     assert resumen == {"feeds": 0, "items_nuevos": 0, "errores": 0}
+
+
+# --------------------------------------------------------------------------- #
+# AUTO-DESACTIVADO de feeds muertos (Ola D)                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_barrido_auto_desactiva_feed_al_alcanzar_max_errores(monkeypatch):
+    # Feed con errores_previos = max-1: este fallo lo lleva al umbral -> auto-desactivado.
+    max_err = config.ingesta_max_errores()
+    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
+            "marca": "unotv", "errores_seguidos": max_err - 1, "desactivado_auto": False}
+    registrados = []
+    _parchear_comun(monkeypatch, feeds=[feed], fetcher=lambda _u: "esto no es xml")
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
+                        lambda fid, **kw: registrados.append((fid, kw)))
+    # Aislar clustering/traducción (no relevantes aquí; sin BD).
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+
+    resumen = ingesta_daemon.ejecutar_barrido()
+    assert resumen["auto_desactivados"] == 1
+    _fid, kw = registrados[0]
+    assert kw["errores_seguidos"] == max_err
+    assert kw["activo"] is False
+    assert kw["desactivado_auto"] is True
+
+
+def test_barrido_no_desactiva_antes_del_umbral(monkeypatch):
+    max_err = config.ingesta_max_errores()
+    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
+            "marca": "unotv", "errores_seguidos": 0, "desactivado_auto": False}
+    registrados = []
+    _parchear_comun(monkeypatch, feeds=[feed], fetcher=lambda _u: "esto no es xml")
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
+                        lambda fid, **kw: registrados.append((fid, kw)))
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+
+    resumen = ingesta_daemon.ejecutar_barrido()
+    # Un solo error (< umbral): NO se desactiva; no se toca `activo`.
+    assert resumen["auto_desactivados"] == 0
+    assert max_err > 1  # el umbral por defecto deja margen
+    _fid, kw = registrados[0]
+    assert kw["activo"] is None
+    assert kw["desactivado_auto"] is None
+
+
+def test_barrido_reactiva_feed_auto_desactivado_al_recuperarse(monkeypatch):
+    # Un feed que venía auto-desactivado vuelve a sondear OK -> se reactiva.
+    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
+            "marca": "unotv", "errores_seguidos": 3, "desactivado_auto": True}
+    registrados = []
+    _parchear_comun(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_OK)
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
+                        lambda fid, **kw: registrados.append((fid, kw)))
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+
+    ingesta_daemon.ejecutar_barrido()
+    _fid, kw = registrados[0]
+    assert kw["errores_seguidos"] == 0
+    assert kw["activo"] is True
+    assert kw["desactivado_auto"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Paso de TRADUCCIÓN (Ola D) con ejecutor falso (sin red ni BD)                #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_traduccion_marca_clusters_y_guarda_es(monkeypatch):
+    candidatos = [
+        {"id": "c1", "titulo": "Foreign one", "resumen": "Body one", "idioma": "en"},
+        {"id": "c2", "titulo": "Foreign two", "resumen": "Body two", "idioma": "fr"},
+    ]
+    monkeypatch.setattr(ingesta_daemon.repos, "clusters_extranjeros_sin_traducir",
+                        lambda ventana_h, **kw: list(candidatos))
+    guardados = []
+    monkeypatch.setattr(ingesta_daemon.repos, "marcar_cluster_traducido",
+                        lambda cid, **kw: guardados.append((cid, kw)) or {"id": cid})
+
+    # Ejecutor falso: devuelve traducciones ES deterministas para cada id (sin llamar a claude).
+    def _ejecutor_ok(prompt, _dir):
+        import json as _json
+        import re
+        cola = prompt.partition("Lista de ítems:")[2] or prompt
+        m = re.search(r"\[.*\]", cola, re.DOTALL)
+        items = _json.loads(m.group(0)) if m else []
+        return _json.dumps({"traducciones": [
+            {"id": it["id"], "titulo_es": "ES " + it["titulo"], "resumen_es": "ES " + it["resumen"]}
+            for it in items
+        ]})
+
+    resumen = ingesta_daemon.paso_traduccion(ejecutor=_ejecutor_ok)
+    assert resumen == {"traducidos": 2, "candidatos": 2}
+    por_id = dict(guardados)
+    assert por_id["c1"]["titulo_es"] == "ES Foreign one"
+    assert por_id["c1"]["titulo_original"] == "Foreign one"
+    assert por_id["c2"]["resumen_es"] == "ES Body two"
+
+
+def test_paso_traduccion_sin_candidatos_no_hace_nada(monkeypatch):
+    monkeypatch.setattr(ingesta_daemon.repos, "clusters_extranjeros_sin_traducir",
+                        lambda ventana_h, **kw: [])
+    def _no_guardar(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("no debería guardar sin candidatos")
+    monkeypatch.setattr(ingesta_daemon.repos, "marcar_cluster_traducido", _no_guardar)
+    assert ingesta_daemon.paso_traduccion() == {"traducidos": 0, "candidatos": 0}

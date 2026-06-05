@@ -217,3 +217,63 @@ def test_puntuar_relevancia_de_marca_sube_el_score():
     sin = clustering.puntuar(_cluster(titulo="Noticia cualquiera"), ahora=_T0)[0]
     con = clustering.puntuar(_cluster(titulo="Aprueban la reforma hoy"), palabras_marca=pal, ahora=_T0)[0]
     assert con > sin
+
+
+# --------------------------------------------------------------------------- #
+# Auto-verificación por corroboración (Ola D)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_verificacion_corroborada_con_dos_outlets_distintos():
+    items = [
+        _item(fuente_id="a", url="https://medio-a.com/n"),
+        _item(fuente_id="b", url="https://medio-b.com/n"),
+    ]
+    assert clustering.clasificar_verificacion(items) == "corroborada"
+
+
+def test_verificacion_dos_enlaces_del_mismo_outlet_no_corrobora():
+    # Dos urls del MISMO host = una sola fuente real (no corroboración).
+    items = [
+        _item(fuente_id="a", url="https://medio-a.com/n1"),
+        _item(fuente_id="a2", url="https://medio-a.com/n2"),
+    ]
+    assert clustering.clasificar_verificacion(items) == "unica_fuente"
+
+
+def test_verificacion_unica_fuente_fiable():
+    items = [_item(fuente_id="a", url="https://medio-serio.com/n")]
+    assert clustering.clasificar_verificacion(items) == "unica_fuente"
+
+
+def test_verificacion_dudosa_si_unica_fuente_es_de_baja_confianza():
+    baja = frozenset({"reddit.com"})
+    items = [_item(fuente_id="r", url="https://reddit.com/r/x/post", fuente_nombre="Reddit")]
+    assert clustering.clasificar_verificacion(items, fuentes_baja=baja) == "dudosa"
+
+
+def test_verificacion_dudosa_por_clickbait():
+    items = [_item(fuente_id="a", url="https://medio.com/n", titulo="No vas a creer lo que pasó")]
+    assert clustering.clasificar_verificacion(items) == "dudosa"
+
+
+def test_verificacion_corroborada_gana_a_baja_confianza():
+    # Aunque una sea de baja confianza, dos outlets distintos = corroborada.
+    baja = frozenset({"reddit.com"})
+    items = [
+        _item(fuente_id="r", url="https://reddit.com/r/x/post"),
+        _item(fuente_id="b", url="https://medio-serio.com/n"),
+    ]
+    assert clustering.clasificar_verificacion(items, fuentes_baja=baja) == "corroborada"
+
+
+def test_recalcular_fija_verificacion_e_idioma_representativo():
+    items = [
+        _item(fuente_id="a", url="https://medio-a.com/n", idioma="en", titulo="Foreign headline here"),
+        _item(fuente_id="b", url="https://medio-b.com/n", idioma="en", titulo="Foreign headline here"),
+    ]
+    rec = clustering.recalcular({"id": "c1"}, items)
+    assert rec["verificacion"] == "corroborada"
+    # idioma del representativo (no hay 'es' -> el de mayor señal/título): inglés.
+    assert rec["idioma"] == "en"
+    assert "en" in rec["idiomas"]

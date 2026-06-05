@@ -248,6 +248,9 @@ __all__ = [
     "registrar_sondeo_feed",
     "resumen_cobertura",
     "ESTADOS_NOTICIA_ITEM",
+    # Monitor de cobertura (Ola D).
+    "salud_feeds",
+    "conteos_items_recientes",
     # Clustering de historias (Ola B).
     "upsert_noticia_cluster",
     "listar_noticia_clusters",
@@ -259,6 +262,10 @@ __all__ = [
     "asignar_cluster_item",
     "marcar_items_cluster_usados",
     "ESTADOS_NOTICIA_CLUSTER",
+    # Traducción + verificación de historias (Ola D).
+    "clusters_extranjeros_sin_traducir",
+    "marcar_cluster_traducido",
+    "VERIFICACIONES_CLUSTER",
 ]
 
 
@@ -1278,6 +1285,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         proximo_sondeo        TEXT NOT NULL DEFAULT '',
         errores_seguidos      INTEGER NOT NULL DEFAULT 0,
         pausado_hasta         TEXT NOT NULL DEFAULT '',
+        desactivado_auto      INTEGER NOT NULL DEFAULT 0,
         creado                TEXT NOT NULL DEFAULT ''
     )
     """,
@@ -1481,6 +1489,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         ultimo_visto  TEXT NOT NULL DEFAULT '',
         estado        TEXT NOT NULL DEFAULT 'nuevo',
         contenido_id  TEXT NOT NULL DEFAULT '',
+        verificacion  TEXT NOT NULL DEFAULT 'unica_fuente',
+        titulo_es     TEXT NOT NULL DEFAULT '',
+        resumen_es    TEXT NOT NULL DEFAULT '',
+        titulo_original TEXT NOT NULL DEFAULT '',
+        idioma        TEXT NOT NULL DEFAULT '',
+        traducido     INTEGER NOT NULL DEFAULT 0,
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )
@@ -1700,6 +1714,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_usuarios(con)
     _migrar_columnas_fuentes_rss(con)
     _migrar_columnas_grupos_hashtags(con)
+    _migrar_columnas_noticias_clusters(con)
     _migrar_columnas_noticias_algoritmo(con)
     _migrar_columnas_etiquetas(con)
     _migrar_columnas_contenido_plataforma(con)
@@ -6136,6 +6151,10 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("proximo_sondeo", "TEXT NOT NULL DEFAULT ''"),
     ("errores_seguidos", "INTEGER NOT NULL DEFAULT 0"),
     ("pausado_hasta", "TEXT NOT NULL DEFAULT ''"),
+    # AUTO-DESACTIVADO (Ola D): el daemon pone `desactivado_auto=1` + `activo=0` cuando un feed
+    # acumula `KENI_INGESTA_MAX_ERRORES` errores seguidos. Distingue "muerto por el motor" de
+    # "apagado a mano" para poder reactivarlo desde /salud. En éxito se resetea.
+    ("desactivado_auto", "INTEGER NOT NULL DEFAULT 0"),
 )
 _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
 
@@ -6158,6 +6177,32 @@ def _migrar_columnas_grupos_hashtags(con: Any) -> None:
     for columna, tipo in _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE grupos_hashtags ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# COBERTURA + traducción + verificación (Ola D): columnas nuevas de `noticias_clusters`. El
+# `CREATE TABLE` ya las declara para BDs nuevas; estas migran las BDs viejas (mismo patrón
+# idempotente). Algunas pueden existir ya (orden de despliegue de agentes en paralelo): el
+# guard por `_columnas_existentes` las salta sin error.
+_COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # Auto-verificación por corroboración: corroborada / unica_fuente / dudosa.
+    ("verificacion", "TEXT NOT NULL DEFAULT 'unica_fuente'"),
+    # Traducción completa de historias extranjeras (best-effort, por lotes con Haiku).
+    ("titulo_es", "TEXT NOT NULL DEFAULT ''"),
+    ("resumen_es", "TEXT NOT NULL DEFAULT ''"),
+    ("titulo_original", "TEXT NOT NULL DEFAULT ''"),
+    ("idioma", "TEXT NOT NULL DEFAULT ''"),
+    ("traducido", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_noticias_clusters(con: Any) -> None:
+    """Anade a `noticias_clusters` las columnas de la Ola D que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "noticias_clusters"):
+        return
+    columnas = _columnas_existentes(con, "noticias_clusters")
+    for columna, tipo in _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE noticias_clusters ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Indices UNICOS que dan idempotencia a tres tablas que hoy se duplican (mismo grupo/franja/
@@ -6242,12 +6287,15 @@ _COLS_FUENTE_RSS = (
     "proximo_sondeo",
     "errores_seguidos",
     "pausado_hasta",
+    "desactivado_auto",
     "creado",
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
 _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
     "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def", "propia",
     "intervalo_min", "categoria", "prioridad",
+    # Ola D: reactivar un feed auto-desactivado (resetear estado del motor de ingesta).
+    "desactivado_auto", "errores_seguidos", "proximo_sondeo", "pausado_hasta",
 )
 
 
@@ -6275,6 +6323,8 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "proximo_sondeo": fila["proximo_sondeo"] or "",
         "errores_seguidos": int(fila["errores_seguidos"] or 0),
         "pausado_hasta": fila["pausado_hasta"] or "",
+        # Auto-desactivado por el motor (Ola D): True si el daemon lo apagó por errores seguidos.
+        "desactivado_auto": bool(fila["desactivado_auto"]),
     }
 
 
@@ -6359,6 +6409,7 @@ def crear_fuente_rss(
         "proximo_sondeo": "",
         "errores_seguidos": 0,
         "pausado_hasta": "",
+        "desactivado_auto": 0,
         "creado": ahora,
     }
     con = _conectar()
@@ -6385,6 +6436,8 @@ def actualizar_fuente_rss(
         cambios["activo"] = 1 if cambios["activo"] else 0
     if "propia" in cambios:
         cambios["propia"] = 1 if cambios["propia"] else 0
+    if "desactivado_auto" in cambios:
+        cambios["desactivado_auto"] = 1 if cambios["desactivado_auto"] else 0
     if not cambios:
         return obtener_fuente_rss(fuente_id)
     asignaciones = [f"{k} = ?" for k in cambios]
@@ -6708,6 +6761,8 @@ def registrar_sondeo_feed(
     proximo_sondeo: str = "",
     errores_seguidos: int = 0,
     pausado_hasta: str = "",
+    activo: bool | None = None,
+    desactivado_auto: bool | None = None,
 ) -> None:
     """Anota el resultado de un sondeo de feed (salud + planificación). Best-effort.
 
@@ -6715,22 +6770,35 @@ def registrar_sondeo_feed(
     planificación (`proximo_sondeo`/`errores_seguidos`/`pausado_hasta`) en una sola escritura.
     El daemon calcula los valores (intervalo por categoría, backoff exponencial) y los pasa ya
     resueltos; aquí solo se persisten.
+
+    AUTO-DESACTIVADO (Ola D): si el daemon decide apagar el feed por errores seguidos, pasa
+    `activo=False` + `desactivado_auto=True`; si se recupera, NO los pasa (None = no tocar). Solo
+    se incluyen en el UPDATE cuando no son None, así un sondeo normal no pisa el `activo`.
     """
+    asignaciones = [
+        "ultima_actualizacion = ?", "ultimo_conteo = ?", "ultimo_error = ?",
+        "proximo_sondeo = ?", "errores_seguidos = ?", "pausado_hasta = ?",
+    ]
+    params: list[Any] = [
+        datetime.now(UTC).isoformat(),
+        int(conteo),
+        error or "",
+        proximo_sondeo or "",
+        int(errores_seguidos or 0),
+        pausado_hasta or "",
+    ]
+    if activo is not None:
+        asignaciones.append("activo = ?")
+        params.append(1 if activo else 0)
+    if desactivado_auto is not None:
+        asignaciones.append("desactivado_auto = ?")
+        params.append(1 if desactivado_auto else 0)
+    params.append(feed_id)
     con = _conectar()
     try:
         con.execute(
-            "UPDATE fuentes_rss SET ultima_actualizacion = ?, ultimo_conteo = ?, "
-            "ultimo_error = ?, proximo_sondeo = ?, errores_seguidos = ?, pausado_hasta = ? "
-            "WHERE id = ?",
-            (
-                datetime.now(timezone.utc).isoformat(),
-                int(conteo),
-                error or "",
-                proximo_sondeo or "",
-                int(errores_seguidos or 0),
-                pausado_hasta or "",
-                feed_id,
-            ),
+            f"UPDATE fuentes_rss SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
         )
         con.commit()
     finally:
@@ -6785,6 +6853,85 @@ def resumen_cobertura() -> dict[str, Any]:
     }
 
 
+def salud_feeds(marca: str | None = None) -> list[dict[str, Any]]:
+    """Salud por feed para `/api/noticias/salud` (Ola D): un dict por feed con frescura + items 24h.
+
+    Para cada `fuentes_rss` (opcionalmente filtrada por `marca`) devuelve sus campos públicos
+    MÁS dos agregados calculados de `noticias_items`:
+      - `items_24h`: nº de items capturados en las últimas 24h con ese `fuente_id`.
+      - `ultimo_item`: `MAX(capturado_en)` de ese feed ('' si nunca capturó nada).
+    El daemon/API derivan `frescura_min` y `stale` de `ultimo_item`. Una sola conexión; sin red.
+    Incluye feeds inactivos/auto-desactivados (la UI los muestra para reactivar).
+    """
+    hace_24h = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+    cond = ""
+    params: list[Any] = []
+    if marca:
+        cond = " WHERE marca = ?"
+        params.append(marca)
+    con = _conectar()
+    try:
+        feeds = con.execute(  # noqa: S608 -- cond de allowlist; valor parametrizado
+            f"{_SELECT_FUENTE_RSS}{cond} ORDER BY creado DESC, id DESC", tuple(params)
+        ).fetchall()
+        filas_24h = con.execute(
+            "SELECT fuente_id, COUNT(*) AS n FROM noticias_items "
+            "WHERE capturado_en >= ? GROUP BY fuente_id",
+            (hace_24h,),
+        ).fetchall()
+        filas_ult = con.execute(
+            "SELECT fuente_id, MAX(capturado_en) AS u FROM noticias_items GROUP BY fuente_id"
+        ).fetchall()
+    finally:
+        con.close()
+    por_24h = {f["fuente_id"]: int(f["n"] or 0) for f in filas_24h}
+    por_ult = {f["fuente_id"]: (f["u"] or "") for f in filas_ult}
+    salida: list[dict[str, Any]] = []
+    for f in feeds:
+        d = _fila_a_fuente_rss(f)
+        d["items_24h"] = por_24h.get(d["id"], 0)
+        d["ultimo_item"] = por_ult.get(d["id"], "")
+        salida.append(d)
+    return salida
+
+
+def conteos_items_recientes(
+    marca: str | None = None, *, horas: int = 24
+) -> dict[str, dict[str, int]]:
+    """Distribuciones de items recientes para `/salud`: por categoría y por idioma (Ola D).
+
+    Cuenta los `noticias_items` capturados en las últimas `horas` (opcionalmente filtrados por
+    `marca`) agrupados por `categoria` y por `idioma`. Sirve para `por_categoria`/`por_idioma`
+    del resumen y para detectar HUECOS (categorías/regiones esperadas sin items frescos).
+    Devuelve `{"por_categoria": {cat: n}, "por_idioma": {lang: n}}`.
+    """
+    desde = (datetime.now(UTC) - timedelta(hours=max(1, int(horas)))).isoformat()
+    cond = "capturado_en >= ?"
+    params: list[Any] = [desde]
+    if marca:
+        cond += " AND marca = ?"
+        params.append(marca)
+    con = _conectar()
+    try:
+        filas_cat = con.execute(  # noqa: S608 -- cond de allowlist; valores parametrizados
+            f"SELECT categoria, COUNT(*) AS n FROM noticias_items WHERE {cond} "
+            "GROUP BY categoria ORDER BY n DESC",
+            tuple(params),
+        ).fetchall()
+        filas_idi = con.execute(  # noqa: S608 -- idem
+            f"SELECT idioma, COUNT(*) AS n FROM noticias_items WHERE {cond} "
+            "GROUP BY idioma ORDER BY n DESC",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    por_categoria = {
+        (f["categoria"] or "(sin categoría)"): int(f["n"] or 0) for f in filas_cat
+    }
+    por_idioma = {(f["idioma"] or "(sin idioma)"): int(f["n"] or 0) for f in filas_idi}
+    return {"por_categoria": por_categoria, "por_idioma": por_idioma}
+
+
 # --- Clustering de HISTORIAS (Ola B): noticias_clusters -------------------- #
 # Una historia = la misma noticia contada por varias fuentes y en el tiempo. El daemon de
 # ingesta asigna `cluster_id` a los items recién insertados y `upsert`ea el cluster recalculado.
@@ -6808,10 +6955,18 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "ultimo_visto",
     "estado",
     "contenido_id",
+    "verificacion",
+    "titulo_es",
+    "resumen_es",
+    "titulo_original",
+    "idioma",
+    "traducido",
     "creado",
     "actualizado",
 )
 _SELECT_NOTICIA_CLUSTER = f"SELECT {', '.join(_COLS_NOTICIA_CLUSTER)} FROM noticias_clusters"
+# Verificación por corroboración (Ola D): valores válidos de `noticias_clusters.verificacion`.
+VERIFICACIONES_CLUSTER: tuple[str, ...] = ("corroborada", "unica_fuente", "dudosa")
 
 
 def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
@@ -6840,6 +6995,14 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "ultimo_visto": fila["ultimo_visto"] or "",
         "estado": fila["estado"] or "nuevo",
         "contenido_id": fila["contenido_id"] or "",
+        # Auto-verificación por corroboración (Ola D).
+        "verificacion": fila["verificacion"] or "unica_fuente",
+        # Traducción completa de historias extranjeras (Ola D).
+        "titulo_es": fila["titulo_es"] or "",
+        "resumen_es": fila["resumen_es"] or "",
+        "titulo_original": fila["titulo_original"] or "",
+        "idioma": fila["idioma"] or "",
+        "traducido": bool(fila["traducido"]),
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -6876,12 +7039,23 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "ultimo_visto": cluster.get("ultimo_visto") or "",
         "estado": cluster.get("estado") or "nuevo",
         "contenido_id": cluster.get("contenido_id") or "",
+        # Verificación: la recalcula el clustering en cada upsert (sí entra al SET de conflicto).
+        "verificacion": cluster.get("verificacion") or "unica_fuente",
+        # Traducción: el ALTA la nace vacía; el paso de traducción la escribe aparte
+        # (`marcar_cluster_traducido`). NO entra al SET de conflicto, así un recalc del cluster
+        # NO pisa una traducción ya hecha (best-effort, persistente entre barridos).
+        "titulo_es": cluster.get("titulo_es") or "",
+        "resumen_es": cluster.get("resumen_es") or "",
+        "titulo_original": cluster.get("titulo_original") or "",
+        "idioma": cluster.get("idioma") or "",
+        "traducido": 1 if cluster.get("traducido") else 0,
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
-    # En conflicto por id, actualiza todo MENOS `id`/`creado` (y conserva estado/contenido_id
-    # si el upsert no los trae distintos: el daemon los manda iguales, la API los cambia aparte).
-    actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in ("id", "creado")]
+    # En conflicto por id, actualiza casi todo MENOS `id`/`creado` y los campos de TRADUCCIÓN
+    # (que escribe `marcar_cluster_traducido` y no deben perderse al recalcular el cluster).
+    _NO_PISAR = ("id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido")
+    actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
     marcadores = ", ".join("?" for _ in _COLS_NOTICIA_CLUSTER)
     con = _conectar()
@@ -7011,6 +7185,64 @@ def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[st
     finally:
         con.close()
     return [_fila_a_noticia_cluster(f) for f in filas]
+
+
+def clusters_extranjeros_sin_traducir(
+    ventana_h: int, *, min_score: float = 0.0, limite: int = 40
+) -> list[dict[str, Any]]:
+    """Clusters EXTRANJEROS recientes aún sin traducir (Ola D), para el paso de traducción.
+
+    Selecciona clusters con `traducido = 0`, `idioma` no vacío y distinto de español
+    (no empieza por 'es'), `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado
+    distinto de `descartado`. MÁS RELEVANTES primero (`score DESC`), `limite` acota el lote por
+    barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
+    """
+    corte = (datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h)))).isoformat()
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 AND idioma <> '' "
+            "AND idioma NOT LIKE 'es%' AND score >= ? AND ultimo_visto >= ? "
+            "AND estado <> 'descartado' "
+            "ORDER BY score DESC, ultimo_visto DESC LIMIT ?",
+            (float(min_score), corte, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_cluster(f) for f in filas]
+
+
+def marcar_cluster_traducido(
+    cluster_id: str,
+    *,
+    titulo_es: str,
+    resumen_es: str,
+    titulo_original: str = "",
+) -> dict[str, Any] | None:
+    """Guarda la traducción ES de un cluster y lo marca `traducido=1` (Ola D). Best-effort.
+
+    Conserva `idioma` (ya fijado por el clustering) y guarda el `titulo_original` para mostrar
+    "traducido de {idioma}". No toca los agregados ni el estado. None si el cluster no existe.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE noticias_clusters SET titulo_es = ?, resumen_es = ?, titulo_original = ?, "
+            "traducido = 1, actualizado = ? WHERE id = ?",
+            (
+                (titulo_es or "")[:300],
+                (resumen_es or "")[:2000],
+                (titulo_original or "")[:300],
+                datetime.now(UTC).isoformat(),
+                cluster_id,
+            ),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_noticia_cluster(cluster_id)
 
 
 def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:

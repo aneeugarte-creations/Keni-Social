@@ -178,3 +178,74 @@ def test_cobertura_resume_salud(cliente):
     # Desglose por categoría de las últimas 24h.
     assert datos["items_24h_por_categoria"].get("mx") == 1
     assert datos["items_24h_por_categoria"].get("deportes") == 1
+
+
+# --------------------------------------------------------------------------- #
+# Monitor de SALUD (Ola D): construir_salud (PURA) + _frescura_min            #
+# --------------------------------------------------------------------------- #
+
+
+def test_frescura_min_calcula_minutos_y_none_sin_item():
+    from datetime import datetime
+
+    from keni_consola.api import noticias
+
+    ahora = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
+    assert noticias._frescura_min("2026-06-05T11:30:00+00:00", ahora=ahora) == 30
+    assert noticias._frescura_min("", ahora=ahora) is None
+    assert noticias._frescura_min("no-es-fecha", ahora=ahora) is None
+
+
+def test_construir_salud_resumen_stale_y_huecos():
+    from datetime import datetime
+
+    from keni_consola.api import noticias
+
+    ahora = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
+    feeds = [
+        # Fresco (10 min): activo, no stale, categoría mx (con items 24h).
+        {"id": "f1", "nombre": "Fresco", "categoria": "mx", "marca": "unotv", "activo": True,
+         "desactivado_auto": False, "ultima_actualizacion": "x", "ultimo_error": "",
+         "errores_seguidos": 0, "items_24h": 5, "ultimo_item": "2026-06-05T11:50:00+00:00"},
+        # Stale (300 min > SLA 180): activo, categoría deportes SIN items 24h -> hueco.
+        {"id": "f2", "nombre": "Viejo", "categoria": "deportes", "marca": "unotv", "activo": True,
+         "desactivado_auto": False, "ultima_actualizacion": "x", "ultimo_error": "boom",
+         "errores_seguidos": 2, "items_24h": 0, "ultimo_item": "2026-06-05T07:00:00+00:00"},
+        # Auto-desactivado: no cuenta como activo ni como categoría esperada.
+        {"id": "f3", "nombre": "Muerto", "categoria": "gaming", "marca": "unotv", "activo": False,
+         "desactivado_auto": True, "ultima_actualizacion": "x", "ultimo_error": "muerto",
+         "errores_seguidos": 8, "items_24h": 0, "ultimo_item": ""},
+    ]
+    distribuciones = {"por_categoria": {"mx": 5}, "por_idioma": {"es": 5}}
+    salud = noticias.construir_salud(feeds, distribuciones, sla_min=180, ahora=ahora)
+    r = salud["resumen"]
+    assert r["feeds_total"] == 3
+    assert r["activos"] == 2
+    assert r["auto_desactivados"] == 1
+    assert r["fallando"] == 2  # f2 y f3 tienen ultimo_error
+    assert r["stale"] == 1  # solo f2 (activo + frescura > SLA)
+    assert r["items_24h"] == 5
+    assert r["por_categoria"] == {"mx": 5}
+    assert r["por_idioma"] == {"es": 5}
+    # 'deportes' es esperada (feed activo) pero sin items 24h -> hueco. 'gaming' no cuenta (inactivo).
+    assert r["huecos"] == ["deportes"]
+    assert r["frescura_global_min"] == 10
+    # Por feed: frescura derivada.
+    por_id = {f["id"]: f for f in salud["feeds"]}
+    assert por_id["f1"]["frescura_min"] == 10
+    assert por_id["f3"]["frescura_min"] is None
+    assert por_id["f1"]["marca_nombre"] == "UnoTV"
+
+
+def test_salud_endpoint_shape_y_filtro_marca(cliente):
+    from datetime import datetime
+
+    ahora = datetime.now(UTC).isoformat()
+    repos.crear_fuente_rss("FeedUno", "https://example.com/f1.xml", marca="unotv", categoria="mx")
+    _sembrar(fuente_id="z", clave="kz", categoria="mx", marca="unotv", capturado_en=ahora)
+    datos = cliente.get("/api/noticias/salud?marca=unotv").json()
+    assert "resumen" in datos
+    assert "feeds" in datos
+    assert datos["resumen"]["activos"] >= 1
+    # Marca no permitida -> 400.
+    assert cliente.get("/api/noticias/salud?marca=noexiste").status_code == 400

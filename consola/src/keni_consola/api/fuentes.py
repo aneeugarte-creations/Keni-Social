@@ -204,6 +204,30 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Fuente borrada."})
 
 
+async def reactivar(request: Request) -> Response:
+    """`POST /api/fuentes/{id}/reactivar` -> reactiva un feed RSS auto-desactivado (Ola D).
+
+    Opera sobre `fuentes_rss` (la fuente de verdad del motor de ingesta): `activo=1`,
+    `desactivado_auto=0`, `errores_seguidos=0`, `proximo_sondeo=''` (reintentar YA). Idempotente.
+    404 si el feed no existe.
+    """
+    fuente_id = request.path_params["fuente_id"]
+    if repos.obtener_fuente_rss(fuente_id) is None:
+        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
+    fuente = repos.actualizar_fuente_rss(
+        fuente_id,
+        {
+            "activo": True,
+            "desactivado_auto": False,
+            "errores_seguidos": 0,
+            "proximo_sondeo": "",
+        },
+    )
+    if fuente is None:
+        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
+    return JSONResponse({"fuente": fuente})
+
+
 # --------------------------------------------------------------------------- #
 # Aportacion MANUAL: idea / enlace / interna -> item REAL en el tablero        #
 # --------------------------------------------------------------------------- #
@@ -441,6 +465,7 @@ RUTAS = [
     Route("/api/fuentes/aportar", aportar, methods=["POST"]),
     Route("/api/fuentes/presets", listar_presets_handler, methods=["GET"]),
     Route("/api/fuentes/presets/activar", activar_presets_handler, methods=["POST"]),
+    Route("/api/fuentes/{fuente_id}/reactivar", reactivar, methods=["POST"]),
     Route("/api/fuentes/{fuente_id}", actualizar, methods=["PUT"]),
     Route("/api/fuentes/{fuente_id}", borrar, methods=["DELETE"]),
 ]

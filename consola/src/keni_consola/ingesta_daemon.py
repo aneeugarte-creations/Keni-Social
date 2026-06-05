@@ -35,7 +35,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import config, daemon_util, db, relevancia_marca, repos
-from .dominio import clustering, http_feed, ingesta
+from .dominio import clustering, http_feed, ingesta, traduccion
 
 _log = logging.getLogger("keni_consola.ingesta_daemon")
 
@@ -122,6 +122,7 @@ def paso_clustering() -> dict[str, Any]:
     umbral = config.cluster_umbral()
     breaking_fuentes = config.cluster_breaking_fuentes()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
+    fuentes_baja = config.fuentes_baja_confianza()
 
     ahora = datetime.now(UTC)
     desde = (ahora - timedelta(hours=ventana_h)).isoformat()
@@ -168,6 +169,7 @@ def paso_clustering() -> dict[str, Any]:
                 items_cluster,
                 breaking_fuentes=breaking_fuentes,
                 breaking_ventana_h=breaking_ventana_h,
+                fuentes_baja_confianza=fuentes_baja,
             )
             palabras = relevancia_marca.palabras_de_marca(recalc.get("marca") or None)
             score, _razon = clustering.puntuar(recalc, palabras_marca=palabras, ahora=ahora)
@@ -177,6 +179,55 @@ def paso_clustering() -> dict[str, Any]:
             _log.exception("ingesta_daemon: fallo al recalcular el cluster %s.", cid)
 
     return {"items": len(pendientes), "clusters_nuevos": nuevos, "clusters_tocados": len(tocados)}
+
+
+def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str, Any]:
+    """Traduce a ES los clusters EXTRANJEROS recientes sin traducir. Best-effort, ACOTADO.
+
+    Selecciona hasta `KENI_TRAD_LOTE` clusters con `idioma != es`, `score >= KENI_TRAD_MIN_SCORE`,
+    `traducido=0` dentro de la ventana reciente; los traduce+tropicaliza a MX con UNA sola
+    llamada a Haiku (`traduccion.traducir_items`) y persiste `titulo_es`/`resumen_es` +
+    `titulo_original` + `traducido=1` por cluster. Sin tope artificial total: cada barrido
+    procesa un lote del backlog; lo que falte se coge en barridos sucesivos.
+
+    `ejecutor` inyectable (tests): si es None se usa el subproceso real. Devuelve
+    `{traducidos, candidatos}`. Un fallo de la traducción NO aborta el barrido.
+    """
+    ventana_h = config.cluster_ventana_h()
+    min_score = config.trad_min_score()
+    lote = config.trad_lote()
+    candidatos = repos.clusters_extranjeros_sin_traducir(
+        ventana_h, min_score=min_score, limite=lote
+    )
+    if not candidatos:
+        return {"traducidos": 0, "candidatos": 0}
+
+    # Payload para Haiku: id + titulo + resumen ORIGINALES (en idioma extranjero).
+    items = [
+        {"id": c["id"], "titulo": c.get("titulo") or "", "resumen": c.get("resumen") or ""}
+        for c in candidatos
+    ]
+    traducciones = traduccion.traducir_items(items, ejecutor=ejecutor)
+    por_id = {str(t.get("id") or ""): t for t in traducciones}
+    originales = {c["id"]: c for c in candidatos}
+
+    traducidos = 0
+    for cid, original in originales.items():
+        t = por_id.get(cid)
+        if not t:
+            continue
+        try:
+            repos.marcar_cluster_traducido(
+                cid,
+                titulo_es=str(t.get("titulo_es") or original.get("titulo") or ""),
+                resumen_es=str(t.get("resumen_es") or ""),
+                titulo_original=str(original.get("titulo") or ""),
+            )
+            traducidos += 1
+        except Exception:  # noqa: BLE001 -- persistir una traducción no aborta el paso
+            _log.exception("ingesta_daemon: fallo al guardar la traducción del cluster %s.", cid)
+
+    return {"traducidos": traducidos, "candidatos": len(candidatos)}
 
 
 def ejecutar_barrido() -> dict[str, Any]:
@@ -204,8 +255,10 @@ def ejecutar_barrido() -> dict[str, Any]:
             max_workers=config.ingesta_workers(),
         )
 
+        max_errores = config.ingesta_max_errores()
         items_nuevos = 0
         errores = 0
+        auto_desactivados = 0
         for feed, items, salud in resultados:
             hubo_error = bool(salud.get("error"))
             if hubo_error:
@@ -226,6 +279,22 @@ def ejecutar_barrido() -> dict[str, Any]:
                 error=hubo_error,
                 errores_previos=int(feed.get("errores_seguidos") or 0),
             )
+            # AUTO-DESACTIVADO (Ola D): al alcanzar `max_errores` errores seguidos, el daemon
+            # apaga el feed (activo=0 + desactivado_auto=1) y deja de sondearlo (queda visible
+            # para reactivar). En ÉXITO se resetea (activo=1, desactivado_auto=0). Si no hay
+            # cambio de estado, se pasan None para NO pisar `activo` (gestión manual del equipo).
+            activo: bool | None = None
+            desactivado_auto: bool | None = None
+            if not hubo_error:
+                # Recuperación: si el feed venía marcado auto-desactivado, lo reactiva.
+                if feed.get("desactivado_auto"):
+                    activo = True
+                    desactivado_auto = False
+            elif plan["errores_seguidos"] >= max_errores:
+                activo = False
+                desactivado_auto = True
+                auto_desactivados += 1
+
             try:
                 repos.registrar_sondeo_feed(
                     feed["id"],
@@ -234,6 +303,8 @@ def ejecutar_barrido() -> dict[str, Any]:
                     proximo_sondeo=plan["proximo_sondeo"],
                     errores_seguidos=plan["errores_seguidos"],
                     pausado_hasta=plan["pausado_hasta"],
+                    activo=activo,
+                    desactivado_auto=desactivado_auto,
                 )
             except Exception:  # noqa: BLE001 -- registrar salud es best-effort
                 _log.exception(
@@ -249,17 +320,30 @@ def ejecutar_barrido() -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- el clustering es aditivo; nunca tumba la ingesta
             _log.exception("ingesta_daemon: fallo en el paso de clustering.")
 
+        # Paso de TRADUCCIÓN (Ola D): traduce a ES, por lotes, los clusters EXTRANJEROS recientes
+        # aún sin traducir. Best-effort: un fallo (subproceso, JSON, etc.) se loguea y NO invalida
+        # el barrido. Sin tope artificial: cada barrido procesa un lote del backlog.
+        trad_resumen: dict[str, Any] = {"traducidos": 0, "candidatos": 0}
+        try:
+            trad_resumen = paso_traduccion()
+        except Exception:  # noqa: BLE001 -- la traducción es aditiva; nunca tumba la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de traducción.")
+
         _log.info(
-            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s), %d error(es); "
-            "clustering: %d item(s), %d historia(s) nueva(s).",
-            len(feeds), items_nuevos, errores,
+            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s), %d error(es), "
+            "%d auto-desactivado(s); clustering: %d item(s), %d historia(s) nueva(s); "
+            "traducción: %d historia(s).",
+            len(feeds), items_nuevos, errores, auto_desactivados,
             cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
+            trad_resumen["traducidos"],
         )
         return {
             "feeds": len(feeds),
             "items_nuevos": items_nuevos,
             "errores": errores,
+            "auto_desactivados": auto_desactivados,
             "clustering": cluster_resumen,
+            "traduccion": trad_resumen,
         }
 
 

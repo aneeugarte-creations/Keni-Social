@@ -308,6 +308,19 @@ ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
 ENV_CLUSTER_BREAKING_FUENTES = "KENI_CLUSTER_BREAKING_FUENTES"
 ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
 
+# Monitor de COBERTURA + traducción completa + auto-verificación (Ola D). Aditivo sobre A-C.
+#   MAX_ERRORES: tras N errores seguidos el daemon AUTO-DESACTIVA el feed (deja de sondearlo).
+#   FEED_SLA_MIN: un feed activo sin items nuevos en > N min cuenta como "stale" en /salud.
+#   TRAD_MIN_SCORE: score mínimo de un cluster extranjero para entrar a traducción.
+#   TRAD_LOTE: clusters por barrido a traducir (acotado; el resto se cogen en el siguiente).
+#   FUENTES_BAJA_CONFIANZA: dominios/outlets agregadores/foros que marcan una historia 'dudosa'
+#     si son su única fuente (lista CSV configurable).
+ENV_INGESTA_MAX_ERRORES = "KENI_INGESTA_MAX_ERRORES"
+ENV_FEED_SLA_MIN = "KENI_FEED_SLA_MIN"
+ENV_TRAD_MIN_SCORE = "KENI_TRAD_MIN_SCORE"
+ENV_TRAD_LOTE = "KENI_TRAD_LOTE"
+ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
+
 # Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
 # demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
 # radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
@@ -564,6 +577,30 @@ CLUSTER_VENTANA_H_DEF = 72
 CLUSTER_UMBRAL_DEF = 0.82
 CLUSTER_BREAKING_FUENTES_DEF = 3
 CLUSTER_BREAKING_VENTANA_H_DEF = 6
+
+# Monitor de cobertura + traducción + verificación (Ola D): defaults.
+#   8 errores seguidos ya es señal robusta de feed muerto (con backoff, son horas de fallos).
+#   SLA de frescura por feed: 180 min (3h) sin items nuevos en un feed activo = "stale".
+#   Umbral de score 0 = traducir TODO cluster extranjero reciente (sin filtro de relevancia);
+#   subirlo limita la traducción a historias más relevantes. Lote de 40 por barrido para no
+#   saturar Haiku (el backlog se procesa a lo largo de varios barridos, sin tope artificial).
+INGESTA_MAX_ERRORES_DEF = 8
+FEED_SLA_MIN_DEF = 180
+TRAD_MIN_SCORE_DEF = 0.0
+TRAD_LOTE_DEF = 40
+# Outlets/agregadores de baja confianza: una historia cuya ÚNICA fuente es uno de estos se
+# marca 'dudosa' (no corroborada por una fuente fiable). CSV configurable por env/ajustes; se
+# compara contra el host del item y contra su `fuente_nombre`, normalizados a minúsculas.
+FUENTES_BAJA_CONFIANZA_DEF: tuple[str, ...] = (
+    "reddit.com",
+    "t.me",
+    "telegram",
+    "4chan",
+    "medium.com",
+    "blogspot.com",
+    "wordpress.com",
+    "substack.com",
+)
 
 # Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
 # porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
@@ -1449,6 +1486,67 @@ def cluster_breaking_fuentes() -> int:
 def cluster_breaking_ventana_h() -> int:
     """Ventana (horas) para la heurística de breaking (`KENI_CLUSTER_BREAKING_VENTANA_H`, def 6, min 1)."""
     return _entero(ENV_CLUSTER_BREAKING_VENTANA_H, CLUSTER_BREAKING_VENTANA_H_DEF, minimo=1)
+
+
+# --------------------------------------------------------------------------- #
+# Monitor de cobertura + traducción completa + auto-verificación (Ola D)        #
+# --------------------------------------------------------------------------- #
+
+
+def ingesta_max_errores() -> int:
+    """Errores seguidos tras los que el daemon AUTO-DESACTIVA un feed (`KENI_INGESTA_MAX_ERRORES`, def 8, min 1).
+
+    Al alcanzar el umbral, el barrido pone `activo=0` + `desactivado_auto=1` y deja de sondear
+    el feed (queda visible para reactivar). En éxito el contador se resetea.
+    """
+    return _entero(ENV_INGESTA_MAX_ERRORES, INGESTA_MAX_ERRORES_DEF, minimo=1)
+
+
+def feed_sla_min() -> int:
+    """SLA de frescura por feed en minutos (`KENI_FEED_SLA_MIN`, def 180, min 1).
+
+    Un feed activo sin items nuevos en más de este margen cuenta como "stale" en `/salud`.
+    """
+    return _entero(ENV_FEED_SLA_MIN, FEED_SLA_MIN_DEF, minimo=1)
+
+
+def trad_min_score() -> float:
+    """Score mínimo de un cluster extranjero para entrar a traducción (`KENI_TRAD_MIN_SCORE`, def 0).
+
+    0 = traducir TODO cluster extranjero reciente; subirlo limita la traducción a las historias
+    más relevantes. Valor inválido o negativo → def.
+    """
+    crudo = _crudo(ENV_TRAD_MIN_SCORE)
+    if not crudo:
+        return TRAD_MIN_SCORE_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return TRAD_MIN_SCORE_DEF
+    return max(0.0, valor)
+
+
+def trad_lote() -> int:
+    """Clusters extranjeros a traducir por barrido (`KENI_TRAD_LOTE`, def 40, min 1).
+
+    Acota el trabajo por barrido para no saturar Haiku; el backlog se procesa a lo largo de
+    varios barridos (sin tope artificial: lo que falte se coge en el siguiente).
+    """
+    return _entero(ENV_TRAD_LOTE, TRAD_LOTE_DEF, minimo=1)
+
+
+def fuentes_baja_confianza() -> frozenset[str]:
+    """Outlets/agregadores de baja confianza (`KENI_FUENTES_BAJA_CONFIANZA`, CSV).
+
+    Una historia cuya ÚNICA fuente es uno de estos se marca 'dudosa'. Si la env/ajuste está
+    vacía cae al default (`FUENTES_BAJA_CONFIANZA_DEF`); CSV explícito la SUSTITUYE por completo.
+    Todo a minúsculas y sin espacios; se compara contra el host del item y su `fuente_nombre`.
+    """
+    crudo = _crudo(ENV_FUENTES_BAJA_CONFIANZA)
+    if not crudo:
+        return frozenset(FUENTES_BAJA_CONFIANZA_DEF)
+    partes = {p.strip().lower() for p in crudo.split(",") if p.strip()}
+    return frozenset(partes) if partes else frozenset(FUENTES_BAJA_CONFIANZA_DEF)
 
 
 def autogen_activo() -> bool:

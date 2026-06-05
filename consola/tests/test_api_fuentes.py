@@ -164,3 +164,29 @@ def test_aportar_enlace_url_invalida_400(cliente):
         cliente.post("/api/fuentes/aportar", json={"tipo": "enlace", "url": "no-es-url"}).status_code
         == 400
     )
+
+
+# --------------------------------------------------------------------------- #
+# Reactivar feed auto-desactivado (Ola D)                                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_reactivar_feed_auto_desactivado(cliente):
+    from keni_consola import repos
+
+    f = repos.crear_fuente_rss("Demo", "https://example.com/feed.xml", categoria="mx")
+    # Simula el estado tras auto-desactivado por el daemon.
+    repos.actualizar_fuente_rss(
+        f["id"], {"activo": False, "desactivado_auto": True, "errores_seguidos": 8}
+    )
+    r = cliente.post(f"/api/fuentes/{f['id']}/reactivar")
+    assert r.status_code == 200, r.text
+    fuente = r.json()["fuente"]
+    assert fuente["activo"] is True
+    assert fuente["desactivado_auto"] is False
+    assert fuente["errores_seguidos"] == 0
+    assert fuente["proximo_sondeo"] == ""
+
+
+def test_reactivar_feed_inexistente_404(cliente):
+    assert cliente.post("/api/fuentes/nope/reactivar").status_code == 404

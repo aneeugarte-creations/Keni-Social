@@ -22,6 +22,7 @@ import type {
   RespuestaInvCorrer,
   RespuestaNoticias,
   ResumenCobertura,
+  SaludCobertura,
   Historia,
   RespuestaHistorias,
 } from "@/types";
@@ -2390,6 +2391,33 @@ export const api = {
     descartarHistoria: (id: string) =>
       peticion<{ ok: boolean }>(
         `/noticias/historias/${encodeURIComponent(id)}/descartar`,
+        { metodo: "POST", muestrear: false },
+      ),
+
+    // --- Ola D: salud de fuentes ---
+
+    /**
+     * Salud detallada del motor de ingesta: resumen + detalle por feed.
+     * Marca-aware (?marca=).
+     * GET /api/noticias/salud
+     */
+    salud: (marca?: string, signal?: AbortSignal) =>
+      peticion<SaludCobertura>(
+        `/noticias/salud${query({ marca })}`,
+        { signal },
+      ),
+  },
+
+  // --- Ola D: acciones sobre fuentes RSS ---
+  fuentes: {
+    /**
+     * Reactiva un feed desactivado automáticamente:
+     * activo=1, desactivado_auto=0, errores_seguidos=0, proximo_sondeo='' (reintentar ya).
+     * POST /api/fuentes/{id}/reactivar
+     */
+    reactivar: (id: string) =>
+      peticion<{ ok: boolean }>(
+        `/fuentes/${encodeURIComponent(id)}/reactivar`,
         { metodo: "POST", muestrear: false },
       ),
   },

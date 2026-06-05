@@ -1,5 +1,5 @@
 /**
- * Tests de la página Cobertura (flujo continuo de noticias — Motor de ingesta Ola A + Ola B).
+ * Tests de la página Cobertura (flujo continuo de noticias — Motor de ingesta Ola A + Ola B + Ola D).
  *
  * Cubre:
  *   1. Renderiza la barra de cobertura con los datos de salud del motor.
@@ -13,6 +13,9 @@
  *   9. Cambiar entre modos Historias/Artículos.
  *  10. Acciones Usar/Descartar de historias llaman a los endpoints correctos.
  *  11. Historias son marca-aware (incluye marcaActiva en query keys).
+ *  12. (Ola D) Pestaña Salud: resumen, huecos y tabla de feeds.
+ *  13. (Ola D) Botón Reactivar llama a fuentes.reactivar.
+ *  14. (Ola D) Badges verificación y traducido en tarjetas de historias.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -27,7 +30,7 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
-import type { Historia, NoticiaItem, ResumenCobertura, UsuarioSesion } from "@/types";
+import type { Historia, NoticiaItem, ResumenCobertura, SaludCobertura, UsuarioSesion } from "@/types";
 
 import Cobertura from "./Cobertura";
 
@@ -177,6 +180,69 @@ const RESPUESTA_HISTORIA_BREAKING = {
   total: 1,
 };
 
+// ── Fixtures: Salud (Ola D) ───────────────────────────────────────────────────
+
+const SALUD_COBERTURA: SaludCobertura = {
+  resumen: {
+    feeds_total: 20,
+    activos: 15,
+    auto_desactivados: 2,
+    fallando: 1,
+    stale: 3,
+    items_24h: 420,
+    por_categoria: { mx: 200, deportes: 120, internacional: 100 },
+    por_idioma: { es: 300, en: 120 },
+    huecos: ["gaming", "ciencia-tech"],
+    frescura_global_min: 45,
+  },
+  feeds: [
+    {
+      id: "feed-1",
+      nombre: "Reforma RSS",
+      categoria: "mx",
+      marca: "unotv",
+      marca_nombre: "UnoTV",
+      activo: 1,
+      desactivado_auto: 0,
+      ultima_actualizacion: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      ultimo_error: "",
+      errores_seguidos: 0,
+      items_24h: 45,
+      frescura_min: 30,
+    },
+    {
+      id: "feed-2",
+      nombre: "Feed caído",
+      categoria: "deportes",
+      marca: "unotv",
+      marca_nombre: "UnoTV",
+      activo: 0,
+      desactivado_auto: 1,
+      ultima_actualizacion: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+      ultimo_error: "Connection refused",
+      errores_seguidos: 9,
+      items_24h: 0,
+      frescura_min: null,
+    },
+  ],
+};
+
+const SALUD_VACIA: SaludCobertura = {
+  resumen: {
+    feeds_total: 0,
+    activos: 0,
+    auto_desactivados: 0,
+    fallando: 0,
+    stale: 0,
+    items_24h: 0,
+    por_categoria: {},
+    por_idioma: {},
+    huecos: [],
+    frescura_global_min: 0,
+  },
+  feeds: [],
+};
+
 // ── Stubs de API ──────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -191,6 +257,10 @@ let mockHistorias: any;
 let mockUsarHistoria: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarHistoria: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockSalud: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockReactivar: any;
 
 beforeEach(() => {
   mockListar = vi
@@ -211,6 +281,12 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, contenido_id: "c-hist-nuevo" });
   mockDescartarHistoria = vi
     .spyOn(apiMod.api.noticias, "descartarHistoria")
+    .mockResolvedValue({ ok: true });
+  mockSalud = vi
+    .spyOn(apiMod.api.noticias, "salud")
+    .mockResolvedValue(SALUD_VACIA);
+  mockReactivar = vi
+    .spyOn(apiMod.api.fuentes, "reactivar")
     .mockResolvedValue({ ok: true });
 });
 
@@ -578,5 +654,193 @@ describe("Cobertura · cambio de modo Historias / Artículos", () => {
         expect.anything(),
       );
     });
+  });
+});
+
+// ── Tests: Vista Salud (Ola D) ────────────────────────────────────────────────
+
+/** Helper: activa la pestaña Salud. */
+async function irASalud() {
+  await waitFor(() => expect(screen.getByTestId("tab-salud")).toBeTruthy());
+  fireEvent.mouseDown(screen.getByTestId("tab-salud"), { button: 0 });
+  await waitFor(() => {
+    expect(screen.getByTestId("tabs-cobertura")).toBeTruthy();
+  }, { timeout: 3000 });
+}
+
+describe("Cobertura · Salud — pestaña existe y es accesible", () => {
+  it("muestra la pestaña Salud en el selector de tabs", async () => {
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByTestId("tab-salud")).toBeTruthy();
+    });
+  });
+
+  it("al activar la pestaña Salud llama a api.noticias.salud con la marca activa", async () => {
+    renderConProviders(<Cobertura />, usuario(), "unotv");
+    await irASalud();
+    await waitFor(() => {
+      expect(mockSalud).toHaveBeenCalledWith("unotv", expect.anything());
+    });
+  });
+
+  it("con marcaActiva=null pasa undefined a api.noticias.salud", async () => {
+    renderConProviders(<Cobertura />, usuario(), null);
+    await irASalud();
+    await waitFor(() => {
+      expect(mockSalud).toHaveBeenCalledWith(undefined, expect.anything());
+    });
+  });
+});
+
+describe("Cobertura · Salud — resumen y huecos", () => {
+  it("muestra el resumen con chips de estado", async () => {
+    mockSalud.mockResolvedValue(SALUD_COBERTURA);
+    renderConProviders(<Cobertura />);
+    await irASalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("salud-resumen")).toBeTruthy();
+    });
+    // Chips de feeds activos, auto-desactivados, items 24h
+    expect(screen.getByText(/15 activos/i)).toBeTruthy();
+    expect(screen.getByText(/2 auto-desactivados/i)).toBeTruthy();
+    expect(screen.getByText(/420/)).toBeTruthy();
+  });
+
+  it("muestra la lista de huecos de cobertura cuando los hay", async () => {
+    mockSalud.mockResolvedValue(SALUD_COBERTURA);
+    renderConProviders(<Cobertura />);
+    await irASalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("salud-huecos-lista")).toBeTruthy();
+    });
+    expect(screen.getByText(/gaming/i)).toBeTruthy();
+    expect(screen.getByText(/ciencia-tech/i)).toBeTruthy();
+  });
+
+  it("no muestra el bloque de huecos cuando no hay ninguno", async () => {
+    mockSalud.mockResolvedValue(SALUD_VACIA);
+    renderConProviders(<Cobertura />);
+    await irASalud();
+    // Esperamos que la vista cargue (estado vacío de feeds)
+    await waitFor(() => {
+      expect(screen.getByText(/Sin feeds registrados/i)).toBeTruthy();
+    });
+    expect(screen.queryByTestId("salud-huecos-lista")).toBeNull();
+  });
+});
+
+describe("Cobertura · Salud — tabla de feeds", () => {
+  it("muestra la tabla de feeds con nombre y estado", async () => {
+    mockSalud.mockResolvedValue(SALUD_COBERTURA);
+    renderConProviders(<Cobertura />);
+    await irASalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("salud-tabla-feeds")).toBeTruthy();
+    });
+    expect(screen.getByText("Reforma RSS")).toBeTruthy();
+    expect(screen.getByText("Feed caído")).toBeTruthy();
+  });
+
+  it("muestra el botón Reactivar solo para feeds auto-desactivados", async () => {
+    mockSalud.mockResolvedValue(SALUD_COBERTURA);
+    renderConProviders(<Cobertura />);
+    await irASalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("btn-reactivar-feed-2")).toBeTruthy();
+    });
+    // El feed activo no tiene botón Reactivar
+    expect(screen.queryByTestId("btn-reactivar-feed-1")).toBeNull();
+  });
+
+  it("el botón Reactivar llama a api.fuentes.reactivar con el id del feed", async () => {
+    mockSalud.mockResolvedValue(SALUD_COBERTURA);
+    renderConProviders(<Cobertura />);
+    await irASalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("btn-reactivar-feed-2")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("btn-reactivar-feed-2"));
+    await waitFor(() => {
+      expect(mockReactivar).toHaveBeenCalledWith("feed-2");
+    });
+  });
+});
+
+// ── Tests: Badges de verificación y traducción (Ola D) ───────────────────────
+
+describe("Cobertura · Historias — badge verificación", () => {
+  it("muestra badge 'Corroborada' cuando verificacion='corroborada'", async () => {
+    mockHistorias.mockResolvedValue({
+      historias: [historiaItem({ verificacion: "corroborada" })],
+      total: 1,
+    });
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-verificacion")).toBeTruthy();
+    });
+    expect(screen.getByTestId("badge-verificacion").textContent).toMatch(/Corroborada/i);
+  });
+
+  it("muestra badge 'Única fuente' cuando verificacion='unica_fuente'", async () => {
+    mockHistorias.mockResolvedValue({
+      historias: [historiaItem({ verificacion: "unica_fuente" })],
+      total: 1,
+    });
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-verificacion")).toBeTruthy();
+    });
+    expect(screen.getByTestId("badge-verificacion").textContent).toMatch(/Única fuente/i);
+  });
+
+  it("muestra badge 'Dudosa' cuando verificacion='dudosa'", async () => {
+    mockHistorias.mockResolvedValue({
+      historias: [historiaItem({ verificacion: "dudosa" })],
+      total: 1,
+    });
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-verificacion")).toBeTruthy();
+    });
+    expect(screen.getByTestId("badge-verificacion").textContent).toMatch(/Dudosa/i);
+  });
+
+  it("no muestra badge de verificación cuando el campo está ausente", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("badge-verificacion")).toBeNull();
+  });
+});
+
+describe("Cobertura · Historias — badge traducido", () => {
+  it("muestra badge 'traducido de EN' cuando traducido=true e idioma='en'", async () => {
+    mockHistorias.mockResolvedValue({
+      historias: [
+        historiaItem({
+          traducido: true,
+          idioma: "en",
+          titulo_original: "Original English Title",
+        }),
+      ],
+      total: 1,
+    });
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-traducido")).toBeTruthy();
+    });
+    expect(screen.getByTestId("badge-traducido").textContent).toMatch(/traducido de EN/i);
+  });
+
+  it("no muestra badge traducido cuando traducido=false o ausente", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("badge-traducido")).toBeNull();
   });
 });

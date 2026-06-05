@@ -10,8 +10,13 @@
  * defecto, con señal de corroboración (N fuentes), acciones Usar/Descartar y
  * lista expandible de enlaces.
  *
+ * Ola D: sub-pestaña «Salud» con resumen de feeds, huecos de cobertura y
+ * tabla de feeds con reactivación. Badges de verificación y traducción en
+ * las tarjetas de Historias.
+ *
  * Contrato: docs/maquina-contenido/A-motor-ingesta.md
  *           docs/maquina-contenido/B-clustering-historias.md
+ *           docs/maquina-contenido/D-cobertura-verificacion.md
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,9 +26,14 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Globe,
   Loader2,
   Newspaper,
   Radio,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldQuestion,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -45,7 +55,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { Historia, NoticiaItem } from "@/types";
@@ -97,6 +116,9 @@ const CLAVE_HISTORIAS = (
 ) => ["noticias", "historias", marcaActiva ?? "", categoria, estado, offset] as const;
 
 const CLAVE_COBERTURA = ["noticias", "cobertura"] as const;
+
+const CLAVE_SALUD = (marcaActiva: string | null) =>
+  ["noticias", "salud", marcaActiva ?? ""] as const;
 
 // ── Componente: barra de cobertura (resumen de salud) ─────────────────────────
 
@@ -413,6 +435,55 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
             {historia.n_fuentes} fuente{historia.n_fuentes !== 1 ? "s" : ""}
           </Badge>
 
+          {/* Verificación (Ola D) */}
+          {historia.verificacion === "corroborada" && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-xs border-green-500 text-green-700"
+              data-testid="badge-verificacion"
+            >
+              <ShieldCheck className="h-3 w-3" />
+              Corroborada
+            </Badge>
+          )}
+          {historia.verificacion === "unica_fuente" && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-xs text-muted-foreground"
+              data-testid="badge-verificacion"
+            >
+              <ShieldQuestion className="h-3 w-3" />
+              Única fuente
+            </Badge>
+          )}
+          {historia.verificacion === "dudosa" && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-xs border-amber-400 text-amber-600"
+              data-testid="badge-verificacion"
+            >
+              <ShieldAlert className="h-3 w-3" />
+              Dudosa
+            </Badge>
+          )}
+
+          {/* Traducción (Ola D) */}
+          {historia.traducido && historia.idioma && (
+            <Tooltip
+              label={historia.titulo_original ? `Original: ${historia.titulo_original}` : `Traducido de ${historia.idioma.toUpperCase()}`}
+              side="top"
+            >
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs text-blue-600 border-blue-400"
+                data-testid="badge-traducido"
+              >
+                <Globe className="h-3 w-3" />
+                traducido de {historia.idioma.toUpperCase()}
+              </Badge>
+            </Tooltip>
+          )}
+
           {/* Breaking */}
           {historia.breaking === 1 && (
             <Badge className="gap-1 text-xs bg-red-600 hover:bg-red-600 text-white border-0">
@@ -641,6 +712,220 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
   );
 }
 
+// ── Vista: Salud de fuentes (Ola D) ──────────────────────────────────────────
+
+interface PropsVistaSalud {
+  marcaActiva: string | null;
+}
+
+function VistaSalud({ marcaActiva }: PropsVistaSalud) {
+  const queryClient = useQueryClient();
+  const clave = CLAVE_SALUD(marcaActiva);
+
+  const query = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.noticias.salud(marcaActiva ?? undefined, signal),
+    staleTime: 30_000,
+    refetchInterval: REFETCH_INTERVAL_MS,
+  });
+
+  const reactivarMut = useMutation({
+    mutationFn: (id: string) => api.fuentes.reactivar(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: clave });
+      toast.success("Feed reactivado.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  if (query.isError) {
+    return (
+      <BloqueError
+        titulo="No se pudo cargar el estado de cobertura"
+        mensaje={mensajeError(query.error)}
+        onReintentar={() => void query.refetch()}
+      />
+    );
+  }
+
+  if (query.isPending) {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-8 w-32 rounded-full" />
+          ))}
+        </div>
+        <Skeleton className="h-48 w-full rounded-lg" />
+      </div>
+    );
+  }
+
+  const resumen = query.data?.resumen;
+  const feeds = query.data?.feeds ?? [];
+
+  /** Frescura en texto legible. */
+  function frescuraTexto(min: number | null): string {
+    if (min === null || min === undefined) return "—";
+    if (min < 60) return `${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `${h} h`;
+    return `${Math.floor(h / 24)} día${Math.floor(h / 24) !== 1 ? "s" : ""}`;
+  }
+
+  /** Etiqueta y variante para el estado de un feed. */
+  function estadoFeed(feed: (typeof feeds)[number]): {
+    label: string;
+    className: string;
+  } {
+    if (feed.desactivado_auto === 1) {
+      return { label: "Auto-desactivado", className: "border-red-400 text-red-600" };
+    }
+    if (!feed.activo) {
+      return { label: "Inactivo", className: "text-muted-foreground" };
+    }
+    const slaMin = 180; // KENI_FEED_SLA_MIN por defecto
+    if (feed.frescura_min !== null && feed.frescura_min > slaMin) {
+      return { label: "Stale", className: "border-amber-400 text-amber-600" };
+    }
+    if (feed.errores_seguidos > 0) {
+      return { label: "Con error", className: "border-amber-400 text-amber-600" };
+    }
+    return { label: "Activo", className: "border-green-500 text-green-700" };
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Chips de resumen */}
+      {resumen && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="salud-resumen">
+          <Badge variant="outline" className="gap-1 text-xs border-green-500 text-green-700">
+            <Radio className="h-3 w-3" />
+            {resumen.activos} activo{resumen.activos !== 1 ? "s" : ""}
+          </Badge>
+          {resumen.fallando > 0 && (
+            <Badge variant="outline" className="gap-1 text-xs border-amber-400 text-amber-600">
+              <AlertTriangle className="h-3 w-3" />
+              {resumen.fallando} fallando
+            </Badge>
+          )}
+          {resumen.auto_desactivados > 0 && (
+            <Badge variant="outline" className="gap-1 text-xs border-red-400 text-red-600">
+              <AlertTriangle className="h-3 w-3" />
+              {resumen.auto_desactivados} auto-desactivado{resumen.auto_desactivados !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          {resumen.stale > 0 && (
+            <Badge variant="outline" className="gap-1 text-xs border-amber-300 text-amber-500">
+              <AlertTriangle className="h-3 w-3" />
+              {resumen.stale} stale
+            </Badge>
+          )}
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <Newspaper className="h-3 w-3" />
+            {resumen.items_24h.toLocaleString("es-MX")} en 24 h
+          </Badge>
+          {resumen.frescura_global_min != null && (
+            <Badge variant="outline" className="text-xs">
+              Frescura: {frescuraTexto(resumen.frescura_global_min)}
+            </Badge>
+          )}
+          {query.isFetching && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-label="Actualizando" />
+          )}
+        </div>
+      )}
+
+      {/* Huecos de cobertura */}
+      {resumen && resumen.huecos.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/30">
+          <CardContent className="pt-3 pb-3">
+            <p className="text-xs font-semibold text-amber-700 mb-2" data-testid="salud-huecos-titulo">
+              Huecos de cobertura ({resumen.huecos.length})
+            </p>
+            <ul className="space-y-1" data-testid="salud-huecos-lista">
+              {resumen.huecos.map((hueco) => (
+                <li key={hueco} className="flex items-center gap-1.5 text-xs text-amber-700">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  {hueco}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tabla de feeds */}
+      {feeds.length === 0 ? (
+        <EstadoVacio
+          icono={Radio}
+          titulo="Sin feeds registrados"
+          texto="No hay fuentes RSS configuradas para esta marca."
+        />
+      ) : (
+        <div data-testid="salud-tabla-feeds">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead>Marca</TableHead>
+                <TableHead className="text-right">Items 24 h</TableHead>
+                <TableHead className="text-right">Frescura</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Último error</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {feeds.map((feed) => {
+                const est = estadoFeed(feed);
+                return (
+                  <TableRow key={feed.id}>
+                    <TableCell className="font-medium text-xs">{feed.nombre}</TableCell>
+                    <TableCell className="text-xs">{feed.categoria || "—"}</TableCell>
+                    <TableCell className="text-xs">{feed.marca_nombre || feed.marca || "—"}</TableCell>
+                    <TableCell className="text-right text-xs">{feed.items_24h}</TableCell>
+                    <TableCell className="text-right text-xs">{frescuraTexto(feed.frescura_min)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs ${est.className}`}>
+                        {est.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                      {feed.ultimo_error || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {feed.desactivado_auto === 1 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 px-2 text-xs"
+                          disabled={reactivarMut.isPending}
+                          onClick={() => reactivarMut.mutate(feed.id)}
+                          data-testid={`btn-reactivar-${feed.id}`}
+                          aria-label={`Reactivar feed ${feed.nombre}`}
+                        >
+                          {reactivarMut.isPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3 w-3" />
+                          )}
+                          Reactivar
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Vista: Artículos (Ola A) ──────────────────────────────────────────────────
 
 interface PropsVistaArticulos {
@@ -834,7 +1119,7 @@ export default function Cobertura() {
       {/* Barra de salud del motor */}
       <BarraCobertura />
 
-      {/* Sub-pestañas: Historias (Ola B, alta señal) vs Artículos (Ola A, raw) */}
+      {/* Sub-pestañas: Historias (Ola B, alta señal) vs Artículos (Ola A, raw) vs Salud (Ola D) */}
       <Tabs defaultValue="historias" className="w-full">
         <TabsList className="mb-4" data-testid="tabs-cobertura">
           <TabsTrigger value="historias" data-testid="tab-historias">
@@ -842,6 +1127,9 @@ export default function Cobertura() {
           </TabsTrigger>
           <TabsTrigger value="articulos" data-testid="tab-articulos">
             Artículos
+          </TabsTrigger>
+          <TabsTrigger value="salud" data-testid="tab-salud">
+            Salud
           </TabsTrigger>
         </TabsList>
 
@@ -851,6 +1139,10 @@ export default function Cobertura() {
 
         <TabsContent value="articulos">
           <VistaArticulos marcaActiva={marcaActiva} />
+        </TabsContent>
+
+        <TabsContent value="salud">
+          <VistaSalud marcaActiva={marcaActiva} />
         </TabsContent>
       </Tabs>
     </>

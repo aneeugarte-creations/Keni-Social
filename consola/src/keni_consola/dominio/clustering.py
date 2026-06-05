@@ -211,24 +211,102 @@ def _representativo(items: list[dict[str, Any]]) -> dict[str, Any]:
     return max(items, key=llave)
 
 
+# --------------------------------------------------------------------------- #
+# Verificación por corroboración (Ola D)                                        #
+# --------------------------------------------------------------------------- #
+
+# Señales de CLICKBAIT en un titular (sin acentos, minúsculas): si la ÚNICA fuente además
+# dispara una de estas, la historia se marca 'dudosa'. Conservador: lista corta y específica.
+_SENALES_CLICKBAIT: frozenset[str] = frozenset({
+    "no vas a creer", "te sorprendera", "lo que paso despues", "esto es lo que",
+    "shocking", "you wont believe", "increible lo que", "mira lo que",
+})
+
+
+def _host_de(url: str) -> str:
+    """Host (sin esquema/www/path) de una url para cruzarlo con la lista de baja confianza."""
+    base = dedup.url_canonica(url)
+    if not base:
+        return ""
+    return base.split("?", 1)[0].split("/", 1)[0]
+
+
+def _es_baja_confianza(item: dict[str, Any], fuentes_baja: frozenset[str]) -> bool:
+    """True si el item viene de una fuente de baja confianza (host o `fuente_nombre` listado)."""
+    if not fuentes_baja:
+        return False
+    host = _host_de(str(item.get("url") or item.get("url_canonica") or "")).lower()
+    nombre = str(item.get("fuente_nombre") or "").lower()
+    for marca in fuentes_baja:
+        if not marca:
+            continue
+        if (host and marca in host) or (nombre and marca in nombre):
+            return True
+    return False
+
+
+def _hay_clickbait(items: list[dict[str, Any]]) -> bool:
+    """True si algún titular de los items dispara una señal de clickbait conocida."""
+    for it in items:
+        titulo = _sin_acentos(str(it.get("titulo") or ""))
+        if any(senal in titulo for senal in _SENALES_CLICKBAIT):
+            return True
+    return False
+
+
+def clasificar_verificacion(
+    items: list[dict[str, Any]],
+    *,
+    fuentes_baja: frozenset[str] = frozenset(),
+) -> str:
+    """Verificación por CORROBORACIÓN de una historia (PURA). Devuelve uno de:
+
+      - `corroborada`: >= 2 fuentes con dominios/outlets DISTINTOS (la misma noticia, confirmada
+        por medios independientes).
+      - `dudosa`: una sola fuente Y esa fuente es de baja confianza (agregador/foro), o hay señal
+        de clickbait en los titulares (no fiable aunque haya enlace).
+      - `unica_fuente`: una sola fuente fiable (sin corroborar todavía, pero no sospechosa).
+
+    Distingue "outlets distintos" por host de url (cae a `fuente_id` si no hay url), para no
+    contar dos enlaces del MISMO medio como corroboración.
+    """
+    if not items:
+        return "unica_fuente"
+    outlets: set[str] = set()
+    for it in items:
+        host = _host_de(str(it.get("url") or it.get("url_canonica") or "")).lower()
+        clave = host or str(it.get("fuente_id") or "")
+        if clave:
+            outlets.add(clave)
+    if len(outlets) >= 2:
+        return "corroborada"
+    # Una sola fuente: dudosa si es de baja confianza o hay clickbait; si no, única fuente.
+    if any(_es_baja_confianza(it, fuentes_baja) for it in items) or _hay_clickbait(items):
+        return "dudosa"
+    return "unica_fuente"
+
+
 def recalcular(
     cluster: dict[str, Any],
     items: list[dict[str, Any]],
     *,
     breaking_fuentes: int = BREAKING_FUENTES_DEF,
     breaking_ventana_h: int = BREAKING_VENTANA_H_DEF,
+    fuentes_baja_confianza: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Recomputa los agregados de un cluster a partir de TODOS sus items. PURA.
 
     Devuelve un dict listo para `upsert` (sin `score`, que lo pone `puntuar`):
       - `n_items`, `n_fuentes` (fuente_id distintos = corroboración).
-      - `idiomas` (lista ordenada de idiomas distintos presentes).
+      - `idiomas` (lista ordenada de idiomas distintos presentes); `idioma` (el del item
+        representativo: idioma "principal" de la historia, para decidir si traducir).
       - `senal` (máximo de las señales de los items: la viralidad de la fuente más fuerte).
       - `titulo`/`resumen` representativos (idioma es / mayor señal), `clave` del cluster,
         `categoria`/`geo`/`marca` (marca dominante).
       - `primer_visto`/`ultimo_visto` (min/máx instante de los items).
       - `breaking`: 1 si junta >= `breaking_fuentes` fuentes distintas dentro de una ventana
         de `breaking_ventana_h` horas (aceleración real, no goteo lento).
+      - `verificacion`: corroborada / unica_fuente / dudosa (corroboración multi-outlet).
     Conserva `id`/`estado`/`contenido_id`/`creado` del cluster existente.
     """
     if not items:
@@ -238,8 +316,10 @@ def recalcular(
             "n_items": 0,
             "n_fuentes": 0,
             "idiomas": [],
+            "idioma": "",
             "senal": 0,
             "breaking": 0,
+            "verificacion": "unica_fuente",
         }
 
     rep = _representativo(items)
@@ -262,12 +342,14 @@ def recalcular(
         "n_items": len(items),
         "n_fuentes": len(fuentes),
         "idiomas": idiomas,
+        "idioma": str(rep.get("idioma") or "").lower(),
         "senal": senal,
         "primer_visto": primer_visto,
         "ultimo_visto": ultimo_visto,
         "breaking": 1 if _es_breaking(
             items, fuentes_min=breaking_fuentes, ventana_h=breaking_ventana_h
         ) else 0,
+        "verificacion": clasificar_verificacion(items, fuentes_baja=fuentes_baja_confianza),
     }
 
 

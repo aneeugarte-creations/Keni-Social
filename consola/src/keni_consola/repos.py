@@ -503,6 +503,8 @@ def registrar_sondeo_feed(
     proximo_sondeo: str = "",
     errores_seguidos: int = 0,
     pausado_hasta: str = "",
+    activo: bool | None = None,
+    desactivado_auto: bool | None = None,
 ) -> None:
     return db.registrar_sondeo_feed(
         feed_id,
@@ -511,6 +513,8 @@ def registrar_sondeo_feed(
         proximo_sondeo=proximo_sondeo,
         errores_seguidos=errores_seguidos,
         pausado_hasta=pausado_hasta,
+        activo=activo,
+        desactivado_auto=desactivado_auto,
     )
 
 
@@ -518,9 +522,23 @@ def resumen_cobertura() -> dict[str, Any]:
     return db.resumen_cobertura()
 
 
+# --- Monitor de cobertura / salud (Ola D): delega 1:1 en db.py ------------- #
+
+
+def salud_feeds(marca: str | None = None) -> list[dict[str, Any]]:
+    return db.salud_feeds(marca)
+
+
+def conteos_items_recientes(
+    marca: str | None = None, *, horas: int = 24
+) -> dict[str, dict[str, int]]:
+    return db.conteos_items_recientes(marca, horas=horas)
+
+
 # --- Clustering de historias (Ola B): delega 1:1 en db.py ------------------ #
 
 ESTADOS_NOTICIA_CLUSTER = db.ESTADOS_NOTICIA_CLUSTER
+VERIFICACIONES_CLUSTER = db.VERIFICACIONES_CLUSTER
 
 
 def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
@@ -571,6 +589,29 @@ def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, An
 
 def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
     return db.items_sin_cluster(desde, limite)
+
+
+def clusters_extranjeros_sin_traducir(
+    ventana_h: int, *, min_score: float = 0.0, limite: int = 40
+) -> list[dict[str, Any]]:
+    return db.clusters_extranjeros_sin_traducir(
+        ventana_h, min_score=min_score, limite=limite
+    )
+
+
+def marcar_cluster_traducido(
+    cluster_id: str,
+    *,
+    titulo_es: str,
+    resumen_es: str,
+    titulo_original: str = "",
+) -> dict[str, Any] | None:
+    return db.marcar_cluster_traducido(
+        cluster_id,
+        titulo_es=titulo_es,
+        resumen_es=resumen_es,
+        titulo_original=titulo_original,
+    )
 
 
 def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
