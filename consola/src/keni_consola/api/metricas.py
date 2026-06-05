@@ -372,18 +372,34 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
                 p = por_plat[red]
                 vis = p.get("visualizaciones", 0) or 0
                 inter = p.get("interacciones", 0) or 0
-                estado = "con_datos" if (vis or inter) else "sin_metricas"
-                redes.append(
-                    {
-                        "red": red,
-                        "estado": estado,
-                        "visualizaciones": vis,
-                        "alcance": p.get("alcance"),
-                        "interacciones": inter,
-                        "engagement_pct": p.get("engagement_pct", 0.0),
-                        "motivo": _MOTIVO_COBERTURA[estado],
-                    }
-                )
+                if vis or inter:
+                    redes.append(
+                        {
+                            "red": red,
+                            "estado": "con_datos",
+                            "visualizaciones": vis,
+                            "alcance": p.get("alcance"),
+                            "interacciones": inter,
+                            "engagement_pct": p.get("engagement_pct", 0.0),
+                            "motivo": None,
+                        }
+                    )
+                else:
+                    # Conectada pero SIN actividad en el rango: métricas a null (no un 0/0.0%
+                    # falso) + motivo, igual que el resto de estados no-con_datos. Antes
+                    # emitía 0/0/0.0%, que se leía como dato real (justo lo que mina la
+                    # confianza en la página).
+                    redes.append(
+                        {
+                            "red": red,
+                            "estado": "sin_metricas",
+                            "visualizaciones": None,
+                            "alcance": None,
+                            "interacciones": None,
+                            "engagement_pct": None,
+                            "motivo": _MOTIVO_COBERTURA["sin_metricas"],
+                        }
+                    )
             else:
                 if red in omitidas:
                     motivo_id = str(motivos.get(red, "error_api"))

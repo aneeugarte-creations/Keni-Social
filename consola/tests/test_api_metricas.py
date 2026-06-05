@@ -102,8 +102,13 @@ def test_cobertura_por_marca_clasifica_los_cuatro_estados():
     # con datos -> métricas reales.
     assert por_red["tiktok"]["estado"] == "con_datos"
     assert por_red["tiktok"]["visualizaciones"] == 1000
-    # respondió pero todo a 0 -> conectada sin métricas en el rango.
+    # respondió pero todo a 0 -> conectada sin métricas en el rango: métricas null (no un
+    # 0/0.0% falso) + motivo, igual que el resto de estados no-con_datos.
     assert por_red["instagram"]["estado"] == "sin_metricas"
+    assert por_red["instagram"]["visualizaciones"] is None
+    assert por_red["instagram"]["interacciones"] is None
+    assert por_red["instagram"]["engagement_pct"] is None
+    assert por_red["instagram"]["motivo"]
     # omitida por error_api -> "sin lectura", métricas null.
     assert por_red["facebook"]["estado"] == "sin_lectura"
     assert por_red["facebook"]["visualizaciones"] is None
