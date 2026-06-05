@@ -38,11 +38,16 @@ estilo del marcador, nunca inyecta datos en el SQL.
 
 from __future__ import annotations
 
+import atexit
+import logging
 import re
 import sqlite3
+import threading
 from typing import Any
 
 from . import config
+
+_log = logging.getLogger("keni_consola.motor_db")
 
 
 # --------------------------------------------------------------------------- #
@@ -118,9 +123,13 @@ class _ConexionPg:
     contrato historico).
     """
 
-    def __init__(self, conexion: Any, dict_row: Any) -> None:
+    def __init__(self, conexion: Any, dict_row: Any, pool: Any = None) -> None:
         self._con = conexion
         self._dict_row = dict_row
+        # Si `pool` no es None, esta conexion es una LEASE del pool: `close()` la DEVUELVE
+        # (putconn) en vez de cerrar el socket. Si es None, es una conexion dedicada (camino
+        # fallback) y `close()` la cierra de verdad. None tras devolverla (idempotencia).
+        self._pool = pool
 
     def execute(self, sql: str, params: Any = ()) -> _CursorPg:
         import psycopg
@@ -138,7 +147,28 @@ class _ConexionPg:
         self._con.commit()
 
     def close(self) -> None:
-        self._con.close()
+        """Cierra la conexion. Si vino del pool, la DEVUELVE; si no, cierra el socket.
+
+        Idempotente (varios `close()` no rompen). En el camino pooled, `putconn` del
+        `psycopg_pool` hace rollback de cualquier transaccion abierta y DESCARTA la conexion
+        si esta rota (no la devuelve poisoned); si `putconn` fallara (conexion inservible),
+        la cerramos para no filtrar la lease.
+        """
+        pool, self._pool = self._pool, None
+        con, self._con = self._con, None
+        if con is None:
+            return  # ya cerrada
+        if pool is None:
+            con.close()
+            return
+        try:
+            pool.putconn(con)
+        except Exception:  # noqa: BLE001 -- devolver es best-effort; si falla, cerramos.
+            _log.warning("No se pudo devolver la conexion al pool; se cierra.", exc_info=True)
+            try:
+                con.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _mensaje_sin_url() -> str:
@@ -153,6 +183,139 @@ def _mensaje_sin_url() -> str:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Pool de conexiones (psycopg_pool). UNO por proceso, lazy y thread-safe.       #
+# --------------------------------------------------------------------------- #
+#
+# El camino caliente (cientos de call sites) abria una conexion nueva por operacion (TCP +
+# handshake de auth de Postgres) y la cerraba: bajo carga, la latencia DOMINANTE y un riesgo de
+# tocar `max_connections`. El pool reutiliza conexiones fisicas: `conectar_cruda` toma una en
+# prestamo (lease) y `close()` la DEVUELVE en vez de cerrar el socket.
+#
+# FALLBACK de un solo flag (`KENI_DB_POOL=0`) o si el pool no arranca: se vuelve al camino
+# historico de "una conexion por operacion" (ver `_conectar_directa`). Asi un mal comportamiento
+# en prod se revierte con UNA env var, sin tocar codigo.
+
+_pool: Any = None  # psycopg_pool.ConnectionPool, o None si no inicializado / fallback
+_pool_url: str | None = None  # URL con la que se construyo el pool (rehacer si cambia, p. ej. tests)
+_pool_lock = threading.Lock()  # protege el check-then-act de inicializacion del pool
+_modo_logueado = False  # log "pool ON/OFF" una sola vez por proceso
+
+
+def _configurar_conexion(con: Any) -> None:
+    """Setup por-conexion del pool: REPLICA lo que aplicaba `psycopg.connect(..., autocommit=False)`.
+
+    El pool crea las conexiones por su cuenta; este `configure` se ejecuta una vez por
+    conexion fisica al crearla, de modo que toda conexion prestada llega con `autocommit=False`
+    (los call sites hacen `commit()` explicito), igual que el camino directo. El `row_factory`
+    NO se fija aqui: se pasa por cursor en `_ConexionPg.execute` (paridad con el camino directo).
+    """
+    con.autocommit = False
+
+
+def _crear_pool(url: str) -> Any:
+    """Construye el `ConnectionPool` (no abre conexiones aun: `open=False`, se abre en `.open()`)."""
+    from psycopg_pool import ConnectionPool
+
+    minimo = config.db_pool_min()
+    maximo = config.db_pool_max()
+    pool = ConnectionPool(
+        conninfo=url,
+        min_size=minimo,
+        max_size=maximo,
+        # `timeout`: segundos que un lease espera por una conexion libre antes de fallar con
+        # `PoolTimeout` (mejor un error claro que colgarse para siempre si el MAX se queda corto).
+        timeout=30.0,
+        # Reciclado: cierra conexiones ociosas mas de `max_idle` y recrea las que superen
+        # `max_lifetime`, para no arrastrar conexiones eternas (server reinicia, NAT, etc.).
+        max_idle=300.0,
+        max_lifetime=3600.0,
+        kwargs={"autocommit": False},
+        configure=_configurar_conexion,
+        # `check`: el pool valida la conexion al PRESTARLA y en `putconn`; una conexion rota se
+        # DESCARTA y se recrea en vez de devolverse poisoned al call site siguiente.
+        check=ConnectionPool.check_connection,
+        open=False,
+        name="keni-consola-db",
+    )
+    pool.open()
+    return pool
+
+
+def _obtener_pool() -> Any:
+    """Devuelve el pool del proceso (lo crea lazy y thread-safe), o None si hay que ir directo.
+
+    None significa "usa el camino directo": flag OFF, falta el driver, o el pool no arranco
+    (se loguea y se cae al fallback). Si la URL cambio respecto al pool actual (caso de tests
+    que reapuntan `DATABASE_URL`), se cierra el viejo y se crea uno nuevo.
+    """
+    global _pool, _pool_url, _modo_logueado
+    if not config.db_pool_activado():
+        if not _modo_logueado:
+            _log.info("Pool de conexiones Postgres DESACTIVADO (KENI_DB_POOL=0): una conexion por operacion.")
+            _modo_logueado = True
+        return None
+    url = config.database_url()
+    if url is None:
+        raise RuntimeError(_mensaje_sin_url())
+    pool = _pool
+    if pool is not None and _pool_url == url:
+        return pool
+    with _pool_lock:
+        if _pool is not None and _pool_url == url:
+            return _pool
+        # URL distinta (o primer arranque): cierra el pool previo si lo habia.
+        if _pool is not None and _pool_url != url:
+            try:
+                _pool.close()
+            except Exception:  # noqa: BLE001
+                pass
+            _pool = None
+            _pool_url = None
+        try:
+            _pool = _crear_pool(url)
+            _pool_url = url
+            _log.info(
+                "Pool de conexiones Postgres ACTIVADO (min=%s max=%s).",
+                config.db_pool_min(), config.db_pool_max(),
+            )
+            _modo_logueado = True
+            return _pool
+        except Exception:  # noqa: BLE001 -- fallback: sin pool, una conexion por operacion.
+            _log.warning(
+                "No se pudo inicializar el pool de conexiones; fallback a una conexion por "
+                "operacion.", exc_info=True,
+            )
+            _modo_logueado = True
+            return None
+
+
+def cerrar_pool() -> None:
+    """Cierra el pool del proceso si esta abierto (hook de shutdown; evita filtrar conexiones)."""
+    global _pool, _pool_url
+    with _pool_lock:
+        if _pool is not None:
+            try:
+                _pool.close()
+            except Exception:  # noqa: BLE001
+                pass
+            _pool = None
+            _pool_url = None
+
+
+# Cierre del pool al terminar el proceso (back/worker/daemons). Es lazy y best-effort: el SO
+# reclama los sockets igual, pero cerrar limpio evita warnings de psycopg_pool al salir.
+atexit.register(cerrar_pool)
+
+
+def _conectar_directa(url: str, dict_row: Any) -> _ConexionPg:
+    """Camino historico (fallback): UNA conexion psycopg por operacion (`close()` cierra el socket)."""
+    import psycopg
+
+    con = psycopg.connect(url, autocommit=False)
+    return _ConexionPg(con, dict_row, pool=None)
+
+
 def conectar_cruda() -> _ConexionPg:
     """Conexion al Postgres operacional SIN crear esquema (lo hace `db._conectar`).
 
@@ -160,20 +323,26 @@ def conectar_cruda() -> _ConexionPg:
     one-liner para arrancar un Postgres local. La eleccion/lectura se hace en tiempo de
     LLAMADA (no al importar), para que los tests aislen el backend con env vars.
 
-    `autocommit=False` (los call sites hacen `commit()` explicito). Filas como dict
-    (`dict_row`) para que `fila["col"]` funcione como con `sqlite3.Row`. Importacion
-    DIFERIDA de psycopg: solo se necesita en runtime (extra `postgres`).
+    Por defecto toma una conexion en PRESTAMO del pool del proceso (reutiliza el socket; el
+    `close()` del call site la devuelve). Con `KENI_DB_POOL=0` o si el pool no arranca, cae al
+    camino directo (`_conectar_directa`): una conexion por operacion, identica al comportamiento
+    historico. En ambos casos: `autocommit=False` (los call sites hacen `commit()` explicito) y
+    filas como dict (`dict_row`) para que `fila["col"]` funcione como con `sqlite3.Row`.
+    Importacion DIFERIDA de psycopg/psycopg_pool: solo se necesitan en runtime (extra `postgres`).
     """
     url = config.database_url()
     if url is None:
         raise RuntimeError(_mensaje_sin_url())
     try:
-        import psycopg
+        import psycopg  # noqa: F401 -- valida que el driver este presente
         from psycopg.rows import dict_row
     except ImportError as e:  # pragma: no cover -- solo si falta el extra
         raise RuntimeError(
             "DATABASE_URL esta fijada pero falta el driver de Postgres. Instala el extra "
             "`postgres` (psycopg[binary]) en el entorno del back."
         ) from e
-    con = psycopg.connect(url, autocommit=False)
-    return _ConexionPg(con, dict_row)
+    pool = _obtener_pool()
+    if pool is None:
+        return _conectar_directa(url, dict_row)
+    con = pool.getconn()
+    return _ConexionPg(con, dict_row, pool=pool)

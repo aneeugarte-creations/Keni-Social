@@ -395,6 +395,15 @@ ENV_PG_PASSWORD = "POSTGRES_PASSWORD"
 ENV_PG_DB = "POSTGRES_DB"
 ENV_PG_HOST = "POSTGRES_HOST"
 ENV_PG_PORT = "POSTGRES_PORT"
+# Pool de conexiones Postgres (psycopg_pool). `KENI_DB_POOL` ON/OFF (def ON) elige entre el
+# pool reutilizable y el camino historico de "una conexion por operacion" (fallback de
+# un-solo-flag por si el pool se porta mal en prod). `KENI_DB_POOL_MIN`/`_MAX` dimensionan el
+# pool: MAX debe SUPERAR el numero de conexiones de larga duracion concurrentes (cada
+# `lock_barrido` retiene una conexion entera durante su barrido) + las leases por request +
+# los daemons, o el resto se quedaria esperando una conexion libre (timeout).
+ENV_DB_POOL = "KENI_DB_POOL"
+ENV_DB_POOL_MIN = "KENI_DB_POOL_MIN"
+ENV_DB_POOL_MAX = "KENI_DB_POOL_MAX"
 ENV_S3_ENDPOINT = "S3_ENDPOINT"
 ENV_S3_REGION = "S3_REGION"
 ENV_S3_BUCKET = "S3_BUCKET"
@@ -431,6 +440,12 @@ ADMIN_USER_DEF = "admin"
 LOG_LEVEL_DEF = "INFO"
 MAX_JOBS_DEF = 4
 MAX_COLA_DEF = 16
+# Pool Postgres: arranca pequeño (la mayoria de ops son cortas) y crece hasta el MAX. El MAX
+# (12) cubre con holgura los ~4 `lock_barrido` simultaneos (cada uno retiene una conexion
+# entera) + las leases por request del threadpool del back + los daemons. Subir si Postgres
+# tiene `max_connections` alto y se ve `PoolTimeout` bajo carga.
+DB_POOL_MIN_DEF = 2
+DB_POOL_MAX_DEF = 12
 CLAUDE_TIMEOUT_DEF = 600
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
@@ -1553,6 +1568,35 @@ def database_url() -> str | None:
             f"@{host}:{port}/{db}"
         )
     return None
+
+
+def db_pool_activado() -> bool:
+    """¿Usar el pool de conexiones Postgres? (`KENI_DB_POOL`, def ON).
+
+    Flag de revert de UN SOLO interruptor: con `KENI_DB_POOL=0` (o `false`/`no`/`off`) el
+    factory vuelve al camino historico de "una conexion psycopg por operacion". Por defecto
+    ON: el pool reutiliza conexiones y evita el handshake TCP+auth en el camino caliente.
+    """
+    crudo = _crudo(ENV_DB_POOL)
+    if not crudo:
+        return True  # def ON
+    return crudo.lower() in _VERDADEROS
+
+
+def db_pool_min() -> int:
+    """Conexiones minimas que el pool mantiene abiertas (`KENI_DB_POOL_MIN`, def 2, min 0)."""
+    return _entero(ENV_DB_POOL_MIN, DB_POOL_MIN_DEF, minimo=0)
+
+
+def db_pool_max() -> int:
+    """Conexiones maximas del pool (`KENI_DB_POOL_MAX`, def 12).
+
+    DEBE superar las conexiones de larga duracion concurrentes (cada `lock_barrido` retiene
+    una conexion entera durante su barrido) + las leases por request + los daemons, o el
+    resto se quedaria esperando una conexion libre. Se fuerza `>= min` para que el pool sea
+    coherente aunque alguien fije un MAX por debajo del MIN.
+    """
+    return max(db_pool_min(), _entero(ENV_DB_POOL_MAX, DB_POOL_MAX_DEF, minimo=1))
 
 
 def s3_endpoint() -> str | None:
