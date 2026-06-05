@@ -24,12 +24,13 @@ export interface GrupoDeIdea {
   piezas: Publicacion[];
 }
 
-/** Clases estáticas (Tailwind las detecta) por nº de columnas de la rejilla interna en lg+. */
-const GRID_LG: Record<number, string> = {
-  1: "lg:grid-cols-1",
-  2: "lg:grid-cols-2",
-  3: "lg:grid-cols-3",
-  4: "lg:grid-cols-4",
+/** Clases estáticas (Tailwind las detecta) por nº de columnas de la rejilla interna. Sin prefijo:
+ *  aplican en TODOS los anchos (móvil incluido), igual que en el feed plano. */
+const GRID_COLS: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-4",
 };
 
 /** Hueco de una red SIN pieza generada para esta idea: misma forma que un post, atenuado.
@@ -86,7 +87,7 @@ export function GrupoIdea({
           {generadas}/{redes.length} redes
         </span>
       </header>
-      <div className={cn("grid grid-cols-1 items-start gap-3", GRID_LG[columnas])}>
+      <div className={cn("grid items-start gap-3", GRID_COLS[columnas])}>
         {redes.map((r) => {
           const p = porRed.get(r);
           return p ? <PostFeed key={r} publicacion={p} /> : <PlaceholderRed key={r} red={r} />;

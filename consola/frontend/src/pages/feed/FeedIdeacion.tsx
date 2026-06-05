@@ -54,20 +54,21 @@ import { PostFeed } from "./PostFeed";
 
 // --- Tamaño (zoom) y nº de columnas del feed (preferencia local, por dispositivo) --- //
 // Dos controles independientes que persisten por dispositivo:
-//  - Columnas (1-4): nº de posts por fila. Solo afecta la rejilla en PC (lg+); más columnas =
-//    posts más pequeños y densos. En móvil la rejilla es siempre de 1 columna (lectura cómoda).
-//  - Zoom (escala CSS del feed, 60%-140%): agranda/encoge los posts en CUALQUIER pantalla. Es la
-//    palanca de tamaño en móvil, donde las columnas no aplican.
+//  - Columnas (1-4): nº de posts por fila. Aplica en TODOS los anchos, móvil incluido; más
+//    columnas = posts más pequeños y densos (en móvil quedan apretados, es lo que se quiere).
+//  - Zoom (escala CSS del feed, 60%-140%): agranda/encoge los posts en CUALQUIER pantalla, encima
+//    de las columnas (p.ej. para ampliar sin reducir el nº de posts por fila).
 const COLUMNAS_MIN = 1;
 const COLUMNAS_MAX = 4;
 const ESCALA_MIN = 0.6;
 const ESCALA_MAX = 1.4;
-// Clases estáticas (Tailwind las detecta) por nº de columnas en pantallas anchas (lg+).
-const GRID_LG: Record<number, string> = {
-  1: "lg:grid-cols-1",
-  2: "lg:grid-cols-2",
-  3: "lg:grid-cols-3",
-  4: "lg:grid-cols-4",
+// Clases estáticas (Tailwind las detecta) por nº de columnas. Sin prefijo: aplican en TODOS los
+// anchos (móvil incluido), no solo en PC. El usuario manda cuántos posts por fila en cada pantalla.
+const GRID_COLS: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-4",
 };
 
 /** Lee una preferencia numérica de localStorage, acotada a [min, max]; `defecto` si falta/ inválida. */
@@ -317,7 +318,7 @@ export default function FeedIdeacion() {
             </SelectContent>
           </Select>
 
-          {/* Posts por fila: +/- de 1 a 4 (afecta la rejilla en PC; en móvil es siempre 1 col). Persiste. */}
+          {/* Posts por fila: +/- de 1 a 4 (parte la rejilla en CUALQUIER pantalla, móvil incluido). Persiste. */}
           <div
             className="flex items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1"
             role="group"
@@ -384,10 +385,10 @@ export default function FeedIdeacion() {
       {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla con
           todas las redes y huecos "No generado" en las que falten) — así no se mezclan ideas en una
           fila. Filtrado a UNA red: rejilla PLANA (1 col = centrado; 2-4 = a lo ancho). `columnas`
-          fija cuántas por fila; `zoom` escala todo el feed de forma uniforme (palanca en móvil). */}
+          fija cuántas por fila en cualquier pantalla; `zoom` escala todo el feed por encima. */}
       <div style={escala !== 1 ? { zoom: escala } : undefined}>
         {feedQuery.isLoading ? (
-          <div className={cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas])}>
+          <div className={cn("grid items-start gap-4", GRID_COLS[columnas])}>
             {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
           </div>
         ) : feedQuery.isError ? (
@@ -410,7 +411,7 @@ export default function FeedIdeacion() {
             className={cn(
               columnas === 1
                 ? "mx-auto w-full max-w-2xl space-y-4"
-                : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
+                : cn("grid items-start gap-4", GRID_COLS[columnas]),
             )}
           >
             {gruposVista.map((g) => {
