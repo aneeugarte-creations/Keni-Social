@@ -20,6 +20,13 @@ import { toast } from "sonner";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { CapaTexto, Documento } from "@/editor/documento";
 import { useGeneracion } from "@/hooks/use-generacion";
@@ -84,6 +91,8 @@ export interface EditorPlacaInlineProps {
   copyIn: string;
   /** Edita el titular: el copy-in es clicable y reescribible IN PLACE sobre la plantilla. */
   onCopyInCambio?: (valor: string) => void;
+  /** Copy de la pieza (contenido del post): se usa como SUGERENCIA del prompt al generar con IA. */
+  copy?: string;
   /** Media id de la FOTO de la pieza ("" = sin foto). */
   foto: string;
   /** Notifica un cambio de foto (nuevo media id). */
@@ -107,6 +116,7 @@ export function EditorPlacaInline({
   documento,
   copyIn,
   onCopyInCambio,
+  copy = "",
   foto,
   onCambioFoto,
   imagenFuente,
@@ -119,6 +129,9 @@ export function EditorPlacaInline({
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
+  // Opciones de ORIGEN de la foto (Biblioteca / Subir / Generar con IA): se abren al TOCAR la imagen
+  // (fuera del titular), no como bloque permanente en el panel de edición.
+  const [fuenteAbierta, setFuenteAbierta] = React.useState(false);
   const [prompt, setPrompt] = React.useState("");
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
   const [fuentesListas, setFuentesListas] = React.useState(false);
@@ -232,7 +245,10 @@ export function EditorPlacaInline({
   // --- Origen de la FOTO --- //
   const subir = useMutation({
     mutationFn: (archivo: File) => api.subirMedia(archivo),
-    onSuccess: (d) => onCambioFoto(d.id),
+    onSuccess: (d) => {
+      onCambioFoto(d.id);
+      setFuenteAbierta(false);
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
   const usarOriginal = useMutation({
@@ -242,6 +258,7 @@ export function EditorPlacaInline({
     },
     onSuccess: (d) => {
       onCambioFoto(d.id);
+      setFuenteAbierta(false);
       toast.success("Imagen original cargada");
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -270,6 +287,7 @@ export function EditorPlacaInline({
       if (r?.id) {
         setPrompt("");
         onCambioFoto(r.id);
+        setFuenteAbierta(false);
       }
     } else if (genIA.estado === "error") {
       iaTerminal.current = genIA.id;
@@ -335,17 +353,23 @@ export function EditorPlacaInline({
     } catch {
       /* el puntero pudo soltarse fuera del canvas */
     }
-    // Un CLIC (sin arrastre) sobre la caja del titular abre la edición in place del copy-in.
-    if (fueArrastre || !titularEditable || !capaTitular) return;
+    // Solo nos interesa un CLIC (sin arrastre): el arrastre era reencuadre.
+    if (editandoTitular || fueArrastre) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const cx = ((e.clientX - rect.left) / rect.width) * lienzo.w;
     const cy = ((e.clientY - rect.top) / rect.height) * lienzo.h;
-    const box = cajaTitularLienzo(capaTitular);
-    if (cx >= box.x && cx <= box.x + box.w && cy >= box.y && cy <= box.y + box.h) {
-      setEditandoTitular(true);
+    // Clic sobre la caja del TITULAR -> reescribir el copy-in in place.
+    if (titularEditable && capaTitular) {
+      const box = cajaTitularLienzo(capaTitular);
+      if (cx >= box.x && cx <= box.x + box.w && cy >= box.y && cy <= box.y + box.h) {
+        setEditandoTitular(true);
+        return;
+      }
     }
+    // Clic en la IMAGEN (fuera del titular) -> opciones de origen de la foto (Biblioteca/Subir/IA).
+    abrirFuente();
   }
   function onZoom(valor: number) {
     onEncuadreCambio?.(normalizarEncuadre({ foco: encRef.current.foco, zoom: valor }));
@@ -378,6 +402,14 @@ export function EditorPlacaInline({
   }
   function elegirArte(arte: Arte) {
     onCambioFoto(arte.objeto);
+    setFuenteAbierta(false);
+  }
+
+  // Abre las opciones de origen de la foto y SIEMBRA el prompt de IA con el copy del post (o el
+  // titular), como sugerencia editable, si el prompt está vacío.
+  function abrirFuente() {
+    setPrompt((p) => (p.trim() ? p : (copy || copyIn || "").trim()));
+    setFuenteAbierta(true);
   }
 
   const ocupado = subir.isPending || generar.isPending || generandoIA || usarOriginal.isPending;
@@ -441,7 +473,7 @@ export function EditorPlacaInline({
               className="max-h-[22rem] w-auto rounded-md"
               style={{
                 aspectRatio: `${lienzo.w} / ${lienzo.h}`,
-                cursor: hayFoto ? "move" : "default",
+                cursor: hayFoto ? "move" : "pointer",
                 touchAction: "none",
               }}
               onPointerDown={onPointerDownFoto}
@@ -475,11 +507,11 @@ export function EditorPlacaInline({
           </div>
         )}
       </div>
-      {titularEditable && (
-        <p className="text-xs text-muted-foreground">
-          Toca el titular sobre la imagen para reescribirlo. No afecta a la foto ni a la plantilla.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        {titularEditable
+          ? "Toca el titular para reescribirlo · toca la imagen para cambiar la foto."
+          : "Toca la imagen para añadir o cambiar la foto (biblioteca, subir o generar con IA)."}
+      </p>
 
       {/* Reencuadre 4:5: arrastra la foto en el lienzo + zoom. Solo si hay foto y se puede persistir. */}
       {hayFoto && (
@@ -523,77 +555,94 @@ export function EditorPlacaInline({
         aria-label="Adjuntar imagen"
       />
 
-      {/* Origen de la foto. */}
-      <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {imagenFuente && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => usarOriginal.mutate()}
-              disabled={ocupado}
-            >
-              {usarOriginal.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ImagePlus className="h-4 w-4" />
+      {/* Origen de la foto: se abre al TOCAR la imagen (no es un bloque fijo del panel). */}
+      <Dialog open={fuenteAbierta} onOpenChange={setFuenteAbierta}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Imagen de la pieza</DialogTitle>
+            <DialogDescription>
+              Elígela de la biblioteca, súbela o genérala con IA.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {imagenFuente && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => usarOriginal.mutate()}
+                  disabled={ocupado}
+                >
+                  {usarOriginal.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ImagePlus className="h-4 w-4" />
+                  )}
+                  Usar imagen original
+                </Button>
               )}
-              Usar imagen original
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setGaleriaAbierta(true)}
-            disabled={ocupado}
-          >
-            <Library className="h-4 w-4" />
-            Biblioteca
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => inputRef.current?.click()}
-            disabled={ocupado}
-          >
-            {subir.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Subir
-          </Button>
-          <span className="text-xs text-muted-foreground">o genera con IA:</span>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
-            disabled={ocupado}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && prompt.trim() && !ocupado) {
-                e.preventDefault();
-                generar.mutate();
-              }
-            }}
-          />
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => generar.mutate()}
-            disabled={ocupado || prompt.trim().length === 0}
-            className="shrink-0"
-          >
-            {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
-            {generandoIA ? "Generando…" : "Generar con IA"}
-          </Button>
-        </div>
-        {avisoGenerar && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
-            {avisoGenerar}
-          </p>
-        )}
-      </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFuenteAbierta(false);
+                  setGaleriaAbierta(true);
+                }}
+                disabled={ocupado}
+              >
+                <Library className="h-4 w-4" />
+                Biblioteca
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={ocupado}
+              >
+                {subir.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Subir
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-xs text-muted-foreground">
+                o genera con IA (sugerencia: el copy del post):
+              </span>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
+                  disabled={ocupado}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && prompt.trim() && !ocupado) {
+                      e.preventDefault();
+                      generar.mutate();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => generar.mutate()}
+                  disabled={ocupado || prompt.trim().length === 0}
+                  className="shrink-0"
+                >
+                  {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
+                  {generandoIA ? "Generando…" : "Generar con IA"}
+                </Button>
+              </div>
+            </div>
+            {avisoGenerar && (
+              <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+                {avisoGenerar}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <SelectorArtes
         open={galeriaAbierta}

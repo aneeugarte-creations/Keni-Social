@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, History, Link2, Loader2, MessageSquare, Pencil } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { History, Link2, MessageSquare, Pencil } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -19,7 +19,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -79,8 +78,7 @@ export function DialogoEditar({
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
   const [vista, setVista] = React.useState<VistaEditor>("editar");
   // --- Autoguardado --- //
-  // Estado del indicador de guardado (la pieza se guarda sola al editar; el botón es opcional).
-  const [estadoGuardado, setEstadoGuardado] = React.useState<"idle" | "guardando" | "guardado">("idle");
+  // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
   const guardandoRef = React.useRef(false); // hay un guardado en vuelo
   const pendienteRef = React.useRef(false); // hubo cambios durante el guardado en vuelo
@@ -142,7 +140,6 @@ export function DialogoEditar({
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
     setEncuadre(parsearEncuadre(publicacion.foto_encuadre));
     setVista("editar");
-    setEstadoGuardado("idle");
     // Reabrimos el autoguardado tras aplicar la carga (en un tick: así el render que dispara esta
     // carga ve `cargandoRef=true` y no guarda; solo los cambios del usuario posteriores guardan).
     const t = setTimeout(() => {
@@ -200,7 +197,6 @@ export function DialogoEditar({
       return;
     }
     guardandoRef.current = true;
-    setEstadoGuardado("guardando");
     try {
       await persistir();
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -210,9 +206,7 @@ export function DialogoEditar({
       if (publicacion) {
         void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
       }
-      setEstadoGuardado("guardado");
     } catch (e) {
-      setEstadoGuardado("idle");
       toast.error(mensajeError(e));
     } finally {
       guardandoRef.current = false;
@@ -226,6 +220,14 @@ export function DialogoEditar({
   const autoguardarRef = React.useRef(autoguardar);
   autoguardarRef.current = autoguardar;
 
+  // Cerrar = salir. No hay botón "Guardar": los cambios se guardan solos. Al cerrar forzamos un
+  // último guardado por si quedaba algo sin volcar (el autoguardado es debounced); es best-effort y
+  // no bloquea el cierre (la promesa sigue aunque el diálogo se desmonte).
+  const cerrar = React.useCallback(() => {
+    void autoguardarRef.current();
+    onCerrar();
+  }, [onCerrar]);
+
   // Dispara el autoguardado (debounced 1.2 s) cuando el usuario cambia algo. La `imagen` NO entra
   // en la firma: es resultado del horneado, no una edición del usuario (evita un bucle de guardado).
   const firmaAutoguardado = JSON.stringify({
@@ -238,28 +240,8 @@ export function DialogoEditar({
     return () => clearTimeout(t);
   }, [firmaAutoguardado, publicacion]);
 
-  const guardar = useMutation({
-    mutationFn: persistir,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      // El tablero (feed/lista) lee `/api/contenido`: invalidamos su clave para que
-      // refleje el copy/estado/imagen recién guardados desde este editor unificado.
-      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      // Editar puede RESETEAR las aprobaciones: refresca la cadena (los OK viejos desaparecen).
-      if (publicacion) {
-        void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
-      }
-      setEstadoGuardado("guardado");
-      onCerrar();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const puedeGuardar =
-    !!publicacion && titulo.trim().length > 0 && contenido.trim().length > 0 && !guardar.isPending;
-
   return (
-    <Dialog open={publicacion !== null} onOpenChange={(o) => !o && onCerrar()}>
+    <Dialog open={publicacion !== null} onOpenChange={(o) => !o && cerrar()}>
       {/* En móvil el editor ocupa toda la pantalla (h-dvh, ancho completo, sin
           radios) para que el revisor edite cómodo en el feed; en escritorio
           mantiene el modal centrado de 2xl. */}
@@ -357,6 +339,7 @@ export function DialogoEditar({
                   documento={documentoSel}
                   copyIn={copyIn}
                   onCopyInCambio={setCopyIn}
+                  copy={contenido}
                   foto={foto}
                   onCambioFoto={setFoto}
                   imagenFuente={publicacion.imagen_fuente}
@@ -401,31 +384,8 @@ export function DialogoEditar({
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="items-center gap-2 sm:justify-between">
-          {/* Indicador de autoguardado: la pieza se guarda sola al editar. */}
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-            {estadoGuardado === "guardando" ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
-              </>
-            ) : estadoGuardado === "guardado" ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Guardado
-              </>
-            ) : (
-              "Los cambios se guardan solos"
-            )}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onCerrar} disabled={guardar.isPending}>
-              Cerrar
-            </Button>
-            <Button variant="positive" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
-              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Guardar y cerrar
-            </Button>
-          </div>
-        </DialogFooter>
+        {/* Sin footer: los cambios se guardan solos. Para salir: la "X" o clic fuera (ambos
+            fuerzan un último guardado vía `cerrar`). */}
 
         <GestionHashtags
           abierto={gestionHashtags}
