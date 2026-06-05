@@ -8687,6 +8687,70 @@ def reclamar_preparacion(publicacion_id: str, ts: str) -> bool:
         con.close()
 
 
+def transicionar_estado_publicacion(
+    publicacion_id: str,
+    estado_origen: str,
+    estado_destino: str,
+    campos_extra: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Transicion de estado GUARDADA (CAS) de una publicacion. None si el origen ya cambió.
+
+    Cierra el TOCTOU de "leer estado en Python -> escribir en una transaccion posterior" del
+    flujo de aprobacion (`enviar_a_revision`, `programar`): en lugar de confiar en un snapshot,
+    mueve el `estado` en un UNICO UPDATE condicional
+        `UPDATE contenido_plataforma SET estado=? [, extras...] WHERE id=? AND estado=?`
+    sobre la fila por plataforma (la publicacion ES esa fila; su id ES `publicacion_id`). Asi
+    dos peticiones simultaneas (doble-click, dos revisores) NO pasan ambas: la primera gana y la
+    segunda ve `rowcount == 0` y recibe `None` (el caller lo traduce a 409 "el estado cambió").
+
+    `estado_origen`/`estado_destino` son estados de PUBLICACION (`borrador`/`en_revision`/
+    `aprobado`/`programado`/...); se mapean a los de la fila por plataforma con `_ESTADO_PUB_A_PLAT`
+    (espejo del CAS de `actualizar_publicacion`). `campos_extra` son campos de PUBLICACION
+    adicionales a sellar EN EL MISMO UPDATE (p.ej. `enviado_a_revision_en`, `fecha_programada`,
+    `revisor_*`, `preparado_en`); solo se aceptan los que mapean a columnas de la fila por
+    plataforma via `_CAMPOS_PUB_A_PLAT` (el resto se ignora). Igual que `reclamar_preparacion`,
+    una `IntegrityError` (p.ej. el indice de slot de parrilla) se PROPAGA al caller para que la
+    traduzca (no la traga). Devuelve la publicacion actualizada o None (no existe / CAS no aplicó).
+    """
+    plat_origen = _ESTADO_PUB_A_PLAT.get(estado_origen, estado_origen)
+    plat_destino = _ESTADO_PUB_A_PLAT.get(estado_destino, estado_destino)
+    asignaciones = ["estado = ?", "actualizado = ?"]
+    params: list[Any] = [plat_destino, datetime.now().isoformat(timespec="seconds")]
+    for clave, valor in (campos_extra or {}).items():
+        columna = _CAMPOS_PUB_A_PLAT.get(clave)
+        if columna is None or columna == "estado":
+            continue  # solo columnas de la fila por plataforma; el estado va por el CAS
+        asignaciones.append(f"{columna} = ?")
+        params.append(valor)
+    params.extend([publicacion_id, plat_origen])
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE contenido_plataforma SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
+            "WHERE id = ? AND estado = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_publicacion(publicacion_id)
+
+
+def existe_cadena_aprobacion(plataforma_id: str) -> bool:
+    """True si la pieza YA tiene cadena de aprobacion (>=1 nivel). Para montarla idempotente."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT 1 FROM contenido_aprobaciones WHERE plataforma_id = ? LIMIT 1",
+            (plataforma_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return fila is not None
+
+
 def borrar_publicacion(publicacion_id: str) -> bool:
     """Borra una publicacion. True si existía.
 

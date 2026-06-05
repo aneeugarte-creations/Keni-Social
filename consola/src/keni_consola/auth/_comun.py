@@ -43,3 +43,8 @@ def parsear_iso(texto: str) -> datetime | None:
 def horas_sesion() -> int:
     """Duracion de la sesion en horas (env `KENI_CONSOLA_SESION_HORAS`, def 12)."""
     return config.sesion_horas()
+
+
+def max_horas_sesion() -> int:
+    """Tope ABSOLUTO de vida de la sesion en horas (env `KENI_CONSOLA_SESION_MAX_HORAS`, def 720)."""
+    return config.sesion_max_horas()

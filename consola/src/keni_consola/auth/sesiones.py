@@ -42,13 +42,20 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
 
     Si la sesion expiro, la borra y devuelve None. Si es valida, RENUEVA `ultimo_uso`
     y `expira` (ventana deslizante) y actualiza el `ultimo_acceso` del usuario.
+
+    TOPE ABSOLUTO: ademas de la expiracion DESLIZANTE (`expira`, que se renueva en cada uso),
+    se impone un tope DURO contra `creada`: si la sesion lleva mas de `max_horas_sesion()`
+    desde que se creo, se rechaza y borra AUNQUE se haya usado hace un instante. Asi un token
+    renovado indefinidamente (sesion viva o robada-y-usada) no vive para siempre; la ventana
+    deslizante (idle) sigue intacta. Default GENEROSO (30 d): no afecta el uso normal del piloto.
     """
     if not token:
         return None
     con = db.conectar()
     try:
         fila = con.execute(
-            "SELECT s.token AS s_token, s.expira AS s_expira, u.id AS id, u.usuario AS usuario, "
+            "SELECT s.token AS s_token, s.expira AS s_expira, s.creada AS s_creada, "
+            "u.id AS id, u.usuario AS usuario, "
             "u.rol AS rol, u.debe_cambiar_password AS debe_cambiar_password, "
             "u.cargo AS cargo, u.creado AS creado, u.ultimo_acceso AS ultimo_acceso "
             "FROM sesiones s JOIN usuarios u ON u.id = s.usuario_id WHERE s.token = ?",
@@ -62,6 +69,17 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
             con.execute("DELETE FROM sesiones WHERE token = ?", (token,))
             con.commit()
             return None
+        # Tope ABSOLUTO contra `creada`: caduca la sesion pasada `max_horas_sesion()` desde su
+        # creacion, AUNQUE la ventana deslizante siga vigente (token renovado/robado-y-usado).
+        # Una `creada` ilegible/vacia (registros muy viejos) NO se castiga: si no podemos juzgar
+        # su edad, dejamos que mande la expiracion deslizante (degradacion conservadora).
+        creada = _comun.parsear_iso(fila["s_creada"])
+        if creada is not None:
+            tope = creada + timedelta(hours=_comun.max_horas_sesion())
+            if ahora >= tope:
+                con.execute("DELETE FROM sesiones WHERE token = ?", (token,))
+                con.commit()
+                return None
         # Vigente: ventana deslizante + ultimo_acceso del usuario.
         nueva_expira = ahora + timedelta(hours=_comun.horas_sesion())
         con.execute(

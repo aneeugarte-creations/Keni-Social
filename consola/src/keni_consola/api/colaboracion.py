@@ -348,7 +348,8 @@ def montar_cadena_aprobacion(
     etiquetas: list[str],
     *,
     con_cargos: bool,
-) -> None:
+    solo_si_ausente: bool = False,
+) -> bool:
     """Crea (o RECREA) la cadena de aprobacion de una pieza, con todos sus automatismos.
 
     Punto unico compartido por `crear_aprobacion_cadena` (recrear la cadena del tablero) y
@@ -362,7 +363,14 @@ def montar_cadena_aprobacion(
       3. crea la cadena (todos los niveles `pendiente`) via `repos.crear_cadena_aprobacion`.
       4. aplica el veredicto de QA al nivel automatico (best-effort) y la pre-aprobacion de
          piezas de bajo riesgo (ambos gateados por sus flags, def OFF).
+
+    `solo_si_ausente` (idempotencia): si la pieza YA tiene cadena, NO la recrea (devuelve
+    False). Lo usa `enviar_a_revision` para que dos envios a revision concurrentes no monten
+    DOS cadenas: el segundo encuentra la del primero y no la pisa. Devuelve True si montó la
+    cadena, False si la saltó por existir ya.
     """
+    if solo_si_ausente and repos.existe_cadena_aprobacion(plataforma_id):
+        return False
     if config.auto_qa_editorial():
         etiquetas = colaboracion.cadena_con_qa(etiquetas)
     cargos = [colaboracion.cargo_requerido_para(e) for e in etiquetas] if con_cargos else None
@@ -378,6 +386,7 @@ def montar_cadena_aprobacion(
     # Auto-aprueba los niveles INFERIORES, dejando el ULTIMO a un humano (trazable, decisor
     # "auto"). Si todo lo demas queda aprobado, la cadena solo espera el OK final.
     _aplicar_preaprobacion_bajo_riesgo(plataforma_id, plat)
+    return True
 
 
 def _aplicar_preaprobacion_bajo_riesgo(

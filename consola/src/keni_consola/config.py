@@ -34,6 +34,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CONSOLA_COOKIE_SECURE  cookies Secure (flag)              def derivado de HTTPS
     - KENI_CONSOLA_HTTPS          vamos tras TLS (flag)              def off
     - KENI_CONSOLA_SESION_HORAS   duracion de sesion (horas)         def 12
+    - KENI_CONSOLA_SESION_MAX_HORAS  tope ABSOLUTO de vida de sesion (horas) def 720 (30 d)
     - KENI_CONSOLA_ADMIN_USER     usuario del admin de bootstrap     def "admin"
     - KENI_CONSOLA_ADMIN_PASS     contrasena del admin de bootstrap  def (genera una)
 
@@ -120,6 +121,11 @@ ENV_ORIGENES = "KENI_CONSOLA_ORIGENES"
 ENV_COOKIE_SECURE = "KENI_CONSOLA_COOKIE_SECURE"
 ENV_HTTPS = "KENI_CONSOLA_HTTPS"
 ENV_SESION_HORAS = "KENI_CONSOLA_SESION_HORAS"
+# Tope ABSOLUTO de vida de una sesion (horas): la expiracion deslizante (`SESION_HORAS`) se
+# renueva en cada uso, asi que una sesion activa (o robada-pero-usada) nunca caduca. Este cap,
+# medido contra `creada`, la mata pasado el tope AUNQUE se siga usando. Default GENEROSO (30 d)
+# para no molestar el uso normal del piloto: solo acota sesiones renovadas indefinidamente.
+ENV_SESION_MAX_HORAS = "KENI_CONSOLA_SESION_MAX_HORAS"
 ENV_ADMIN_USER = "KENI_CONSOLA_ADMIN_USER"
 ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
 
@@ -436,6 +442,10 @@ PORT_DEF = 8765
 # ("cuatro ojos" reales: dos personas distintas firman antes de que entre al calendario).
 MIN_APROBACIONES_DEF = 2
 SESION_HORAS_DEF = 12
+# Tope absoluto de vida de sesion (horas). Def 720 = 30 dias: MUY por encima de la ventana
+# deslizante (def 12h), asi nunca corta una sesion en uso normal del piloto; solo bota las que
+# se renuevan indefinidamente (token vivo o robado-y-usado) pasados los 30 dias desde `creada`.
+SESION_MAX_HORAS_DEF = 720
 ADMIN_USER_DEF = "admin"
 LOG_LEVEL_DEF = "INFO"
 MAX_JOBS_DEF = 4
@@ -701,6 +711,17 @@ def sesion_horas() -> int:
     """Duracion de la sesion en horas (`KENI_CONSOLA_SESION_HORAS`, def 12; >0)."""
     horas = _entero(ENV_SESION_HORAS, SESION_HORAS_DEF)
     return horas if horas > 0 else SESION_HORAS_DEF
+
+
+def sesion_max_horas() -> int:
+    """Tope ABSOLUTO de vida de sesion en horas (`KENI_CONSOLA_SESION_MAX_HORAS`, def 720; >0).
+
+    A diferencia de `sesion_horas()` (ventana DESLIZANTE que se renueva en cada uso), este es
+    un tope DURO medido contra `creada`: pasado el cap la sesion se rechaza y borra AUNQUE se
+    haya usado hace un segundo. Default GENEROSO (30 d) para no afectar el uso normal del
+    piloto; solo acota sesiones renovadas indefinidamente (token vivo o robado-y-usado)."""
+    horas = _entero(ENV_SESION_MAX_HORAS, SESION_MAX_HORAS_DEF)
+    return horas if horas > 0 else SESION_MAX_HORAS_DEF
 
 
 def admin_user() -> str:

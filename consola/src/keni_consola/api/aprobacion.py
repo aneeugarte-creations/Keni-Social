@@ -203,32 +203,43 @@ async def enviar_a_revision(request: Request) -> Response:
             status_code=409,
         )
 
-    autor = autor_de_peticion(request) or {}
+    # CAS de la transicion borrador->en_revision: cierra el TOCTOU (dos envios a revision
+    # concurrentes leian el mismo snapshot `borrador` y pasaban ambos). El estado se mueve EN
+    # EL MISMO UPDATE que sella autoria/sello de envio y limpia los `revisor_*`, condicionado a
+    # que la pieza SIGA en `borrador`. El perdedor de la carrera ve None -> 409 (recarga).
+    # Nota: `revisor_*`/`revisado_en` se sellan en la fila por plataforma; `autor_*` viven en el
+    # `contenido` PADRE (no son columnas por plataforma), asi que el CAS NO los puede tocar: el
+    # autor ya quedo fijado al crear la pieza, y la cola muestra ese autor (no se re-escribe aqui).
+    actualizada = repos.transicionar_estado_publicacion(
+        publicacion_id,
+        "borrador",
+        ESTADO_EN_REVISION,
+        {
+            "enviado_a_revision_en": datetime.now().isoformat(timespec="seconds"),
+            "revisor_id": "",
+            "revisor_nombre": "",
+            "revisado_en": "",
+        },
+    )
+    if actualizada is None:
+        return JSONResponse(
+            {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."},
+            status_code=409,
+        )
+
     # `contenido_id` no viaja en el dict publico de la publicacion; se lee de la fila
     # plataforma (la publicacion ES esa fila: su id es el `plataforma_id`).
     plat = repos.obtener_contenido_plataforma(publicacion_id)
     # Monta la cadena por defecto del flujo "dale el OK": dos niveles humanos (Edición +
     # Coordinación = los dos OK) y, si el flag lo activa, el nivel automatico "QA Editorial"
     # (la aprobacion de IA) delante. SIN exigir cargo (`con_cargos=False`): cualquiera del
-    # equipo da su OK, salvo el autor. Con los dos OK la pieza pasa sola a `aprobado`. Luego
-    # marca la pieza en revision y fija autoria/sello de envio (el autor original no se pisa).
+    # equipo da su OK, salvo el autor. La RECREA (cadena fresca toda `pendiente`) a proposito:
+    # re-enviar a revision tras un rechazo debe arrancar limpio, no heredar decisiones viejas.
+    # La carrera "dos cadenas" la cierra el CAS de arriba (solo UN envio gana la transicion
+    # borrador->en_revision y llega aqui); el `solo_si_ausente` queda para otros llamantes.
     montar_cadena_aprobacion(
         publicacion_id, plat or {}, colaboracion.cadena_simple(), con_cargos=False
     )
-    actualizada = repos.actualizar_publicacion(
-        publicacion_id,
-        {
-            "estado": ESTADO_EN_REVISION,
-            "enviado_a_revision_en": datetime.now().isoformat(timespec="seconds"),
-            "revisor_id": "",
-            "revisor_nombre": "",
-            "revisado_en": "",
-            "autor_id": pub.get("autor_id") or autor.get("id", ""),
-            "autor_nombre": pub.get("autor_nombre") or autor.get("usuario", ""),
-        },
-    )
-    if actualizada is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
 
 
@@ -424,9 +435,15 @@ async def programar(request: Request) -> Response:
         return JSONResponse({"error": error}, status_code=400)
 
     try:
-        actualizada = repos.actualizar_publicacion(
+        # CAS de la transicion aprobado->programado: cierra el TOCTOU (los gates de arriba se
+        # evaluaron sobre un snapshot; entre la lectura y la escritura la pieza pudo dejar de
+        # estar `aprobado` —p.ej. un deshacer concurrente—). El estado se mueve EN EL MISMO
+        # UPDATE que fija `fecha_programada`/`preparado_en`, condicionado a que SIGA `aprobado`.
+        actualizada = repos.transicionar_estado_publicacion(
             publicacion_id,
-            {"estado": ESTADO_PROGRAMADO, "fecha_programada": fecha, "preparado_en": ""},
+            ESTADO_APROBADO,
+            ESTADO_PROGRAMADO,
+            {"fecha_programada": fecha, "preparado_en": ""},
         )
     except IntegrityError:
         # Backstop de doble-reserva (índice parcial `idx_parrilla_slot_uniq`): ese (red, fecha)
@@ -436,8 +453,12 @@ async def programar(request: Request) -> Response:
             {"error": "Ya hay una publicación programada en esa red y fecha; elige otra hora."},
             status_code=409,
         )
-    if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    if actualizada is None:
+        # El CAS no aplicó: la pieza ya no está `aprobado` (transición concurrente) o se borró.
+        return JSONResponse(
+            {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."},
+            status_code=409,
+        )
     return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
 
 

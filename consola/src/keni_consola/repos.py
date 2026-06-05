@@ -262,6 +262,23 @@ def reclamar_preparacion(publicacion_id: str, ts: str) -> bool:
     return db.reclamar_preparacion(publicacion_id, ts)
 
 
+def transicionar_estado_publicacion(
+    publicacion_id: str,
+    estado_origen: str,
+    estado_destino: str,
+    campos_extra: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    # CAS de transicion de estado (cierra el TOCTOU de enviar-a-revision/programar). None si
+    # el estado origen ya cambió (el caller lo traduce a 409).
+    return db.transicionar_estado_publicacion(
+        publicacion_id, estado_origen, estado_destino, campos_extra
+    )
+
+
+def existe_cadena_aprobacion(plataforma_id: str) -> bool:
+    return db.existe_cadena_aprobacion(plataforma_id)
+
+
 def decidir_nivel_aprobacion_tx(
     plataforma_id: str,
     nivel_id: str,

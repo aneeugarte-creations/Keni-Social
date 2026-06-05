@@ -182,6 +182,7 @@ def lanzar(
     prefetch_s3: dict[str, str] | None = None,
     autor: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
+    clave_idem: str | None = None,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
 
@@ -192,15 +193,36 @@ def lanzar(
     topar turnos/coste mas bajo). Lo usa un job READ-ONLY como la importacion de parrilla.
     `prefetch_s3` (opcional): `{clave, destino}` para que el WORKER baje un objeto de S3 a una
     ruta local ANTES de claude (la importacion de parrilla no comparte los bytes via disco).
+
+    IDEMPOTENCIA DE LANZAMIENTO: dos llamadas casi-simultaneas del MISMO trabajo logico (un
+    doble-click en la UI, un POST reintentado) NO deben mintar dos `gen_id` y correr dos
+    `claude -p` que producen borradores duplicados/competidores del mismo tema. La clave es
+    `(autor_id, tipo, marca, hash(prompt))`: el prompt es AUTOCONTENIDO (lleva dentro el
+    contexto/redes/editorial), asi que dos lanzamientos del mismo tema/redes coinciden y dos
+    DISTINTOS (otro tema, otras redes, otro tipo) no. Mientras hay un run EN VUELO con esa
+    clave, un segundo lanzamiento DEVUELVE ese run en lugar de arrancar otro; al terminar, un
+    re-lanzamiento legitimo (regenerar) vuelve a correr. Un caller puede forzar la clave con
+    `clave_idem` (p.ej. un token de idempotencia del cliente). La convergencia atomica la
+    garantiza `generaciones.crear_idempotente` (creacion exclusiva de un indice en disco).
     """
     import shutil
 
-    gen = generaciones.crear({
+    clave = clave_idem or generaciones.clave_idempotencia(
+        _autor_campos(autor)["autor_id"], tipo, marca, prompt
+    )
+    gen, nueva = generaciones.crear_idempotente(clave, {
         "tipo": tipo,
         "marca": marca,
         "etiqueta": f"{titulo} · {nombre_marca(marca)}",
         **_autor_campos(autor),
     })
+    if not nueva:
+        # Ya hay un run EN VUELO con esta clave (otro POST lo arrancó): NO encolamos un segundo.
+        # Devolvemos ese run para que la UI lo sondee. Limpiamos el temporal que este llamante
+        # preparó y que ya no se usará (lo consume el run en vuelo con su propio temporal).
+        if dir_temporal is not None:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+        return gen
     spec = jobspec.construir(
         prompt=prompt,
         procesar=procesar_spec,

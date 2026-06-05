@@ -471,3 +471,56 @@ def test_comentario_sin_resolver_bloquea_programar(entorno, monkeypatch):
     )
     assert r.status_code == 409
     assert "sin resolver" in r.json()["error"].lower()
+
+
+# --------------------------------------------------------------------------- #
+# TOCTOU: la transicion de estado va GUARDADA (CAS); un segundo intento -> 409 #
+# --------------------------------------------------------------------------- #
+
+
+def test_segundo_enviar_a_revision_da_409_sin_duplicar_cadena(entorno):
+    """Un segundo enviar-a-revision sobre una pieza YA en revision da 409 y no monta otra cadena.
+
+    Espeja el doble-click: dos envios secuenciales del mismo borrador. El primero transiciona
+    borrador->en_revision (CAS) y monta la cadena; el segundo ya no esta en `borrador`, asi que
+    el CAS no aplica -> 409, y NO crea una segunda cadena (no se duplican niveles).
+    """
+    from keni_consola import repos
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    r1 = autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    assert r1.status_code == 200, r1.text
+    cadena_1 = repos.listar_aprobaciones(pub["id"])
+    assert len(cadena_1) >= 1  # se montó una cadena
+
+    r2 = autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    assert r2.status_code == 409  # el estado cambió: no se reenvía
+    # La cadena NO se duplicó: mismos niveles (mismos ids) que tras el primer envío.
+    cadena_2 = repos.listar_aprobaciones(pub["id"])
+    assert [n["id"] for n in cadena_2] == [n["id"] for n in cadena_1]
+
+
+def test_segundo_programar_da_409_si_ya_no_esta_aprobada(entorno, monkeypatch):
+    """Programar dos veces: el primero mueve aprobado->programado (CAS); el segundo da 409.
+
+    Tras programar, la pieza ya no esta `aprobado`; el CAS de la transicion no aplica y el
+    segundo intento recibe 409 ("el estado cambió"), sin re-escribir la fecha.
+    """
+    monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar del gate A
+    from datetime import datetime, timedelta
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora, estado="aprobado")
+    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+
+    r1 = autora.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["publicacion"]["estado"] == "programado"
+
+    r2 = autora.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r2.status_code == 409  # ya no está aprobada: el CAS no aplica

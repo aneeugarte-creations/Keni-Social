@@ -54,6 +54,7 @@ Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -289,6 +290,94 @@ def crear(datos: dict[str, Any]) -> dict[str, Any]:
     pub = _publico(completo, gen_id)
     _escribir_yaml_atomico(_ruta(gen_id), _cuerpo(pub))
     return pub
+
+
+# Estados TERMINALES de una generacion (ya no esta en vuelo). Una idempotencia solo retiene a
+# DOS lanzamientos del MISMO trabajo mientras hay uno EN VUELO; al terminar, un re-lanzamiento
+# legitimo (el usuario quiere regenerar) vuelve a correr.
+_ESTADOS_TERMINALES = frozenset({ESTADO_COMPLETADO, ESTADO_ERROR})
+
+
+def clave_idempotencia(*partes: Any) -> str:
+    """Deriva una clave de idempotencia ESTABLE (hex de 32) de las partes del lanzamiento.
+
+    Une las partes (autor, tipo, marca, contenido, prompt...) con un separador que no puede
+    aparecer dentro de ellas y la hashea. Dos lanzamientos del MISMO trabajo logico producen la
+    MISMA clave; un trabajo distinto (otro tema/tipo/redes -> otro prompt) produce otra. El
+    resultado es un nombre de fichero seguro (solo hex), apto para el indice en disco.
+    """
+    crudo = "\x1f".join("" if p is None else str(p) for p in partes)
+    return hashlib.blake2b(crudo.encode("utf-8"), digest_size=16).hexdigest()
+
+
+def _ruta_idem(clave: str) -> Path:
+    """Ruta `<raiz>/idem-<clave>.idx` saneada (solo hex; anti-traversal). El indice clave->gen_id."""
+    base = raiz()
+    seguro = re.sub(r"[^0-9a-f]", "", (clave or "").lower())
+    if not seguro:
+        raise ValueError("Clave de idempotencia no válida.")
+    destino = (base / f"idem-{seguro}.idx").resolve()
+    if destino.parent != base.resolve():
+        raise ValueError("Ruta de idempotencia fuera del almacén.")
+    return destino
+
+
+def crear_idempotente(clave: str, datos: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Crea una generacion BAJO una clave de idempotencia. Devuelve `(gen, nueva)`.
+
+    CONVERGENCIA ATOMICA: usa una creacion EXCLUSIVA de fichero (`O_CREAT|O_EXCL`) del indice
+    `idem-<clave>.idx` como mutex en disco (el analogo a un indice UNICO): SOLO un llamante puede
+    crearlo. El ganador acuña un `gen_id`, escribe el registro, sella el indice con ese id y
+    devuelve `(gen, True)` (debe encolar). Un llamante CONCURRENTE que choca con el `O_EXCL` lee
+    el `gen_id` del indice; si esa generacion EXISTE y NO es terminal, devuelve `(gen_existente,
+    False)` (NO encola: comparte el run en vuelo). Si el indice apunta a una generacion ya
+    TERMINAL o desaparecida (claim viejo de un run que ya acabo), el indice se RECLAMA para este
+    lanzamiento nuevo (un re-lanzamiento legitimo tras completar debe poder correr).
+
+    Asi dos POST casi-simultaneos del MISMO trabajo convergen a UNA generacion (un solo `claude
+    -p`), y dos trabajos DISTINTOS (claves distintas) corren cada uno el suyo.
+    """
+    base = raiz()
+    base.mkdir(parents=True, exist_ok=True)
+    ruta_idx = _ruta_idem(clave)
+    # Reintento acotado: cubre la carrera "el ganador aun no sello el id" y el reciclaje de un
+    # claim terminal. En la practica converge en 1-2 vueltas; el tope evita un bucle infinito.
+    for _ in range(50):
+        try:
+            fd = os.open(ruta_idx, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            gen_id_existente = _leer_idem(ruta_idx)
+            if gen_id_existente:
+                existente = obtener(gen_id_existente)
+                if existente is not None and existente.get("estado") not in _ESTADOS_TERMINALES:
+                    return existente, False  # run en vuelo: comparte, NO encoles otro
+            # Claim viejo (terminal/ausente) o aun sin sellar: intenta reclamarlo borrandolo y
+            # reintentando la creacion exclusiva. Si otro lo recrea entre medias, la siguiente
+            # vuelta lo vera y compartira (o reciclara) segun su estado.
+            try:
+                os.unlink(ruta_idx)
+            except FileNotFoundError:
+                pass
+            continue
+        else:
+            try:
+                gen = crear(datos)
+                os.write(fd, gen["id"].encode("ascii"))
+            finally:
+                os.close(fd)
+            return gen, True
+    # No deberia ocurrir (la carrera converge): degradamos a un lanzamiento NO idempotente
+    # (crear + encolar) antes que bloquear al usuario. Mejor un posible duplicado que un cuelgue.
+    _log.warning("idempotencia de generación: no convergió la clave %s; lanzo sin guardia", clave[:16])
+    return crear(datos), True
+
+
+def _leer_idem(ruta_idx: Path) -> str:
+    """Lee el `gen_id` sellado en un indice de idempotencia ("" si vacio/ilegible)."""
+    try:
+        return ruta_idx.read_text(encoding="ascii").strip()
+    except OSError:
+        return ""
 
 
 def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
