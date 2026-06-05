@@ -58,13 +58,14 @@ export function GaleriaPlantillas({
                     className="block w-full overflow-hidden rounded border border-border bg-muted/40 hover:ring-2 hover:ring-primary"
                   >
                     <div className="aspect-[4/5] w-full">
-                      {p.miniatura ? (
-                        <img src={urlMedia(p.miniatura)} alt={p.nombre} className="h-full w-full object-contain" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                          {p.categoria}
-                        </div>
-                      )}
+                      {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
+                          plantillas creadas por API/agente—, el render on-demand del documento. */}
+                      <img
+                        src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
+                        alt={p.nombre}
+                        loading="lazy"
+                        className="h-full w-full object-contain"
+                      />
                     </div>
                   </button>
                   {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}

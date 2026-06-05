@@ -17,6 +17,7 @@ SEGURIDAD: `marca` (si llega) del catálogo único; el `documento` se valida en 
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from starlette.requests import Request
@@ -191,10 +192,44 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Plantilla borrada."})
 
 
+async def preview(request: Request) -> Response:
+    """GET /api/plantillas-diseno/{id}/preview: MINIATURA on-demand del diseño (sin persistir).
+
+    Renderiza el DOCUMENTO de la plantilla (sus huecos vacíos + un titular de ejemplo) a PNG. Es el
+    RESPALDO de la galería cuando la plantilla no tiene `miniatura` guardada —p. ej. las creadas por
+    API/agente, que no pasan por el guardado del estudio (es ahí donde se genera la miniatura)—. Así
+    se ven todas sin tener que abrir+editar cada una. ETag por hash del documento; cacheable (304 sin
+    recomponer si no cambió). 404 si no existe; 422 si el render falla.
+    """
+    item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
+    if item is None:
+        return JSONResponse({"error": "Esa plantilla no existe."}, status_code=404)
+    documento = item.get("documento") or "{}"
+    etag = '"' + hashlib.sha256(str(documento).encode("utf-8")).hexdigest()[:32] + '"'
+    cache = "private, max-age=300"
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
+    try:
+        doc = json.loads(documento) if isinstance(documento, str) else documento
+        datos = estudio_imagen.renderizar_documento_bytes(
+            doc, bindings={"copy_in": "Titular de ejemplo", "etiqueta_default": ""}
+        )
+    except (ValueError, TypeError) as e:
+        return JSONResponse({"error": f"Documento inválido: {e}"}, status_code=422)
+    except estudio_imagen.EstudioError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+    return Response(
+        content=datos,
+        media_type="image/png",
+        headers={"ETag": etag, "Cache-Control": cache},
+    )
+
+
 RUTAS = [
     Route("/api/plantillas-diseno", listar, methods=["GET"]),
     Route("/api/plantillas-diseno", crear, methods=["POST"]),
     Route("/api/plantillas-diseno/{plantilla_id}", obtener, methods=["GET"]),
+    Route("/api/plantillas-diseno/{plantilla_id}/preview", preview, methods=["GET"]),
     Route("/api/plantillas-diseno/{plantilla_id}", actualizar, methods=["PATCH"]),
     Route("/api/plantillas-diseno/{plantilla_id}", borrar, methods=["DELETE"]),
 ]
