@@ -194,7 +194,7 @@ function Cuerpo({
           cargando={query.isFetching}
         />
       ) : calendario ? (
-        <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} />
+        <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} marca={marcaActiva} />
       ) : publicaciones.length === 0 ? (
         <EstadoVacio
           icono={Send}
