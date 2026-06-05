@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import formatos_red, generaciones, marcas, media, permisos, redes
+from .. import formatos_red, generaciones, marcas, media, redes
 from .._http_json import leer_json
 from ..dominio import estudio_imagen
 from ..seguridad import autor_de_peticion
@@ -65,10 +65,6 @@ async def generar(request: Request) -> Response:
     marca = datos.get("marca") if isinstance(datos.get("marca"), str) else ""
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca desconocida."}, status_code=400)
-    # Alcance por marca (solo si se pide una explicita; sin marca no se bloquea).
-    rechazo = permisos.rechazo_marca(request, marca or None)
-    if rechazo is not None:
-        return rechazo
     formato = datos.get("formato") if datos.get("formato") in estudio_imagen.FORMATOS else "feed"
     prompt_id = datos.get("prompt_id")
     prompt_id = prompt_id if isinstance(prompt_id, str) and prompt_id.strip() else estudio_imagen.PROMPT_IMAGEN_DEFECTO
@@ -161,10 +157,6 @@ async def expandir(request: Request) -> Response:
     marca = datos.get("marca") if isinstance(datos.get("marca"), str) else ""
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca desconocida."}, status_code=400)
-    # Alcance por marca (solo si se pide una explicita; sin marca no se bloquea).
-    rechazo = permisos.rechazo_marca(request, marca or None)
-    if rechazo is not None:
-        return rechazo
     strength = _num(datos, "strength")
     if strength is not None:
         strength = max(0.0, min(1.0, strength))
@@ -220,10 +212,6 @@ async def componer(request: Request) -> Response:
     marca = datos.get("marca")
     if not isinstance(marca, str) or not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca desconocida."}, status_code=400)
-    # Alcance por marca (coste/abuso): no compongas arte de una marca fuera de tu alcance.
-    rechazo = permisos.rechazo_marca(request, marca)
-    if rechazo is not None:
-        return rechazo
     formato = datos.get("formato")
     # `horizontal` se mapea a `feed` en el dominio; el resto debe ser un formato de componer.
     formato = formato if formato in estudio_imagen.FORMATOS else "feed"
@@ -254,10 +242,6 @@ async def revisar(request: Request) -> Response:
     marca = datos.get("marca") if isinstance(datos.get("marca"), str) else ""
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca desconocida."}, status_code=400)
-    # Alcance por marca (solo si se pide una explicita; sin marca no se bloquea).
-    rechazo = permisos.rechazo_marca(request, marca or None)
-    if rechazo is not None:
-        return rechazo
     try:
         gen = estudio_imagen.revisar(
             imagen.strip(), marca=marca, autor=autor_de_peticion(request)
@@ -299,10 +283,6 @@ async def set_formatos(request: Request) -> Response:
     marca = datos.get("marca")
     if not isinstance(marca, str) or not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca desconocida."}, status_code=400)
-    # Alcance por marca (coste/abuso): no generes el set de formatos de una marca ajena.
-    rechazo = permisos.rechazo_marca(request, marca)
-    if rechazo is not None:
-        return rechazo
     red = datos.get("red") if isinstance(datos.get("red"), str) else ""
     if red and not redes.es_red(red):
         return JSONResponse({"error": "Red desconocida."}, status_code=400)

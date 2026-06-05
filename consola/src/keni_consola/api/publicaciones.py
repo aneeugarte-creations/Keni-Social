@@ -163,10 +163,6 @@ async def listar(request: Request) -> Response:
     """
     qp = request.query_params
     marca = qp.get("marca") or None
-    # Alcance por marca: un editor no puede pedir el feed de una marca que no es suya.
-    rechazo = permisos.rechazo_marca(request, marca)
-    if rechazo is not None:
-        return rechazo
     red = qp.get("red") or None
     estado = qp.get("estado") or None
     # `linea` = id de una etiqueta editorial de clase `vertical` (la LÍNEA de contenido):
@@ -174,21 +170,20 @@ async def listar(request: Request) -> Response:
     linea = qp.get("linea") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
-    # SCOPING POR DEFECTO (cierre ADR 0003): si la sesion esta acotada y NO se pidio marca
-    # explicita (ya validada arriba), el feed se restringe a SUS marcas. `listar_publicaciones`
-    # y `contar_publicaciones` aceptan UNA sola marca; el set-scoping nativo exigiria tocar
-    # db.py (no permitido aqui). LIMITACION CONOCIDA: cuando la sesion ve >1 marca y no pide
-    # una, se post-filtra la pagina ya devuelta por `marcas_visibles` (en memoria). Con una
-    # sola marca visible se empuja al repo (paginacion/total exactos). Admin/sin restriccion
-    # (scope None): sin cambios, ve todas las marcas.
-    visibles = permisos.marcas_scope(request)
+    # FOCO POR DEFECTO (no es restriccion): si la sesion tiene marcas preferentes y NO se pidio
+    # marca explicita, el feed se ENFOCA en SUS marcas para reducir la mezcla de contexto. Es
+    # siempre sobreescribible: con `?marca=` (cualquiera) se ve esa marca. `listar_publicaciones`
+    # y `contar_publicaciones` aceptan UNA sola marca; con una sola marca preferente se empuja al
+    # repo (paginacion/total exactos), con varias se post-filtra la pagina en memoria. Sin
+    # preferencia (admin/token/sin marcas): sin cambios, ve todas las marcas.
+    preferentes = permisos.marcas_preferentes(request)
     marca_efectiva = marca
     post_filtrar: set[str] | None = None
-    if marca is None and visibles is not None:
-        if len(visibles) == 1:
-            marca_efectiva = next(iter(visibles))  # empuja al repo: total/paginacion exactos
+    if marca is None and preferentes is not None:
+        if len(preferentes) == 1:
+            marca_efectiva = next(iter(preferentes))  # empuja al repo: total/paginacion exactos
         else:
-            post_filtrar = visibles  # >1 marca: filtro en memoria sobre la pagina
+            post_filtrar = preferentes  # >1 marca: filtro en memoria sobre la pagina
     pubs = repos.listar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
         limite=limite, desplazamiento=desplazamiento,
@@ -261,24 +256,17 @@ async def detalle(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
 
 async def actualizar(request: Request) -> Response:
     """Edicion PARCIAL: titulo/contenido/copy_in/estado/fecha_programada (404 si no existe)."""
     publicacion_id = request.path_params["publicacion_id"]
-    # Alcance por marca: bloquea editar una pieza de otra marca antes de leer el cuerpo
-    # (404 generico desde fuera del tenant). Mas abajo se recarga `actual` para el reset de
-    # aprobaciones; esta lectura es la barrera de tenant.
+    # Existencia: 404 si la pieza ya no existe. Mas abajo se recarga `actual` para el reset de
+    # aprobaciones. La marca NO acota nada: el equipo edita piezas de cualquier marca.
     pieza = repos.obtener_publicacion(publicacion_id)
     if pieza is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pieza.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     datos = await leer_json(request)
 
     campos: dict[str, Any] = {}
@@ -429,13 +417,9 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     publicacion_id = request.path_params["publicacion_id"]
-    # Alcance por marca: no borres una pieza de otra marca (404 generico desde fuera del tenant).
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     if not repos.borrar_publicacion(publicacion_id):
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Publicación borrada."})
@@ -491,9 +475,6 @@ async def encolar(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
     if not hubo_hueco:
         return JSONResponse(
@@ -552,9 +533,6 @@ async def duplicar(request: Request) -> Response:
     original = repos.obtener_publicacion(publicacion_id)
     if original is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, original.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     datos = await leer_json(request)
     marca = original["marca"]
@@ -564,12 +542,7 @@ async def duplicar(request: Request) -> Response:
         nueva_marca = datos.get("marca")
         if not isinstance(nueva_marca, str) or nueva_marca not in _MARCAS_IDS:
             return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-        # Escalada de tenant: no se puede duplicar HACIA una marca fuera de tu alcance.
-        rechazo_destino = permisos.rechazo_pieza(request, nueva_marca)
-        if rechazo_destino is not None:
-            return JSONResponse(
-                {"error": "No puedes duplicar la pieza a esa marca."}, status_code=403
-            )
+        # Duplicar hacia CUALQUIER marca es legitimo: la marca es un foco, no un cerrojo.
         marca = nueva_marca
     if "red" in datos:
         nueva_red = datos.get("red")
@@ -612,9 +585,6 @@ async def reciclar(request: Request) -> Response:
     original = repos.obtener_publicacion(publicacion_id)
     if original is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, original.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     copia = repos.crear_publicacion(
         original["marca"],
@@ -657,10 +627,6 @@ async def programar_metricool(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    # Alcance por marca: el publish REAL no debe lanzarse sobre una pieza de otra marca.
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     resultado = programador.programar_pieza_metricool(pub)
     if not resultado.get("ok"):
@@ -693,9 +659,6 @@ async def integrar_foto(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     datos = await leer_json(request)
     imagen = datos.get("imagen")
@@ -740,9 +703,6 @@ async def aplicar_plantilla(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     datos = await leer_json(request)
     plantilla_id = datos.get("plantilla_id")
@@ -811,9 +771,6 @@ async def compuesta(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     etag = f'"{render_pieza.firma_receta(pub)}"'
     cache = "private, max-age=300"

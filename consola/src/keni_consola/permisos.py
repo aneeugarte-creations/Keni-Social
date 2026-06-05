@@ -84,15 +84,30 @@ def usuario_actual(request: Request) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
-# Alcance por MARCA (la consola es por marca: cada quien ve la(s) suya(s))      #
+# Marca como FOCO POR DEFECTO (NO una restriccion): capacitar, no limitar       #
 # --------------------------------------------------------------------------- #
+#
+# CONTRATO (revertido respecto al cerrojo duro del ADR 0003): el equipo es
+# MULTIDISCIPLINAR; la marca NO acota lo que alguien puede ver o tocar. Cualquiera
+# cubre/accede CUALQUIER marca. La marca es solo un FOCO POR DEFECTO: cuando un
+# listado/metrica no pide marca explicita, se enfoca en la(s) marca(s) preferida(s)
+# del usuario para reducir la mezcla de contexto. Ese foco es SIEMPRE sobreescribible
+# pasando una `marca` explicita (cualquiera) y NUNCA bloquea (sin 403/404/400 por marca).
+#
+# Por eso NO existe ya `rechazo_pieza`/`rechazo_marca`: no hay cerrojo por marca. Solo
+# queda `marcas_preferentes` (antes `marcas_visibles`/`marcas_scope`), que da el FOCO
+# por defecto (None = sin preferencia => todas las marcas).
 
-def marcas_visibles(request: Request) -> set[str] | None:
-    """Marcas (ids canonicos) que la sesion puede CONSULTAR, o None si sin restriccion.
 
-    None (sin restriccion) cuando: es admin, se entro por token (sin usuario de
-    sesion), o el usuario no tiene marcas asignadas (cobertura global). En otro caso,
-    el conjunto de ids canonicos de sus marcas (relacion N:M del organigrama AMX).
+def marcas_preferentes(request: Request) -> set[str] | None:
+    """Marcas (ids canonicos) en las que la sesion se ENFOCA por defecto, o None si sin foco.
+
+    None (sin foco => todas las marcas) cuando: es admin, se entro por token (sin usuario
+    de sesion), o el usuario no tiene marcas asignadas. En otro caso, el conjunto de ids
+    canonicos de sus marcas (relacion N:M del organigrama AMX).
+
+    NO es una restriccion: solo es el FOCO POR DEFECTO de listados/metricas cuando no se
+    pide marca explicita. Pasar una `marca` explicita (cualquiera) sobreescribe este foco.
 
     La sesion del middleware no arrastra las marcas (la cookie no carga la tabla N:M),
     asi que se consultan al vuelo por id de usuario, igual que hace `GET /api/auth/me`.
@@ -107,54 +122,3 @@ def marcas_visibles(request: Request) -> set[str] | None:
     refrescado = obtener_usuario_por_id(usuario["id"]) or {}
     marcas = refrescado.get("marcas") or []
     return set(marcas) if marcas else None
-
-
-def rechazo_marca(request: Request, marca: str | None) -> Response | None:
-    """403 si la sesion pide EXPLICITAMENTE una `marca` (id canonico) fuera de su alcance.
-
-    Devuelve None (sin bloqueo) cuando no se pide marca: en ese caso el filtro por marca
-    es implicito (la marca activa la fija el cliente desde el perfil). Solo se bloquea el
-    intento deliberado de consultar otra marca que no es la tuya (ni eres admin).
-    """
-    if not marca:
-        return None
-    visibles = marcas_visibles(request)
-    if visibles is None or marca in visibles:
-        return None
-    return JSONResponse({"error": "No tienes acceso a esa marca."}, status_code=403)
-
-
-def rechazo_pieza(request: Request, marca: str | None) -> Response | None:
-    """404 si una PIEZA/recurso (por id) pertenece a una marca fuera del alcance de la sesion.
-
-    Es el cerrojo por-id del aislamiento multimarca (cierre del ADR 0003 para el piloto): el
-    handler carga el recurso por su id de path, deduce su `marca` y llama a este helper ANTES
-    de leer/mutar. Semantica:
-
-      - None (sin bloqueo) cuando la sesion no tiene restriccion (`marcas_visibles` es None:
-        admin, token de mantenimiento, o usuario sin marcas = cobertura global) PRESERVANDO
-        EXACTAMENTE el comportamiento de admin/sin-restriccion: nada se bloquea.
-      - None tambien cuando la pieza NO tiene marca (`marca` vacia/None): un recurso sin
-        marca no es de ningun tenant ajeno, asi que no se bloquea por marca (otras barreras
-        —existencia, rol— siguen aplicando).
-      - 404 cuando la pieza pertenece a una marca que NO esta en `marcas_visibles`. Se usa
-        404 (no 403) para NO filtrar la existencia de recursos de otra marca: desde fuera del
-        tenant el recurso "no existe". Mensaje generico, alineado con los 404 cercanos.
-    """
-    if not marca:
-        return None
-    visibles = marcas_visibles(request)
-    if visibles is None or marca in visibles:
-        return None
-    return JSONResponse({"error": "Ese recurso ya no existe."}, status_code=404)
-
-
-def marcas_scope(request: Request) -> set[str] | None:
-    """Alias semantico de `marcas_visibles` para el SCOPING POR DEFECTO de listados.
-
-    Mismo contrato (None = sin restriccion). Lo usan los listados que, cuando NO se pide una
-    marca explicita, deben acotar el universo a las marcas de la sesion (en vez de devolver
-    todas). Se expone aparte para que el call site lea su intencion ("acota la lista a mi
-    alcance") sin acoplarse al nombre del helper de consulta.
-    """
-    return marcas_visibles(request)

@@ -41,42 +41,26 @@ _log = logging.getLogger("keni_consola.api.metricas")
 def _gate_marca_metricas(
     request: Request, marca_metricas: str | None
 ) -> tuple[str | None, Response | None]:
-    """Acota una peticion de metricas por marca al alcance de la sesion (cierre ADR 0003).
+    """Resuelve el FOCO POR DEFECTO de una peticion de metricas por marca. NUNCA bloquea.
 
-    La frontera de metricas habla en `id_metricas` (guion_bajo); `marcas_visibles` da ids
-    CANONICOS. Aqui se cruza el catalogo para decidir. Devuelve `(marca_efectiva, rechazo)`:
+    La marca NO acota lo que alguien puede ver: el equipo es multidisciplinar y consulta las
+    metricas de CUALQUIER marca. Esto es solo un FOCO POR DEFECTO para reducir la mezcla de
+    contexto cuando no se pide marca. Devuelve `(marca_efectiva, None)` (el `rechazo` siempre
+    es None; se conserva la tupla por compatibilidad con los call sites). La frontera de
+    metricas habla en `id_metricas` (guion_bajo); `marcas_preferentes` da ids CANONICOS.
 
-      - rechazo != None: respuesta a devolver (no continuar el handler).
-      - marca_efectiva: el `?marca=` (id_metricas) ya saneado que el handler debe usar; puede
-        ser None = "todas" SOLO cuando la sesion no tiene restriccion (admin/token/global).
-
-    Reglas (preservan admin/sin restriccion EXACTAMENTE: scope None => nada se toca):
-      - Con marca EXPLICITA: 404 si su id canonico esta fuera de `marcas_visibles` (mismo
-        criterio generico que `rechazo_pieza`: no se filtra existencia). Si esta dentro, pasa.
-      - SIN marca y sesion RESTRINGIDA: "todas" se reinterpreta como "mis marcas". Como la
-        fachada de metricas acepta UNA sola marca (set-scoping exigiria tocar la fachada/db),
-        si la sesion ve EXACTAMENTE una marca se sustituye por la suya; si ve VARIAS, se EXIGE
-        elegir una (400) en vez de devolver un reporte all-brands a un usuario acotado.
-      - SIN marca y sesion SIN restriccion: None ("todas"), como antes.
+      - Con marca EXPLICITA: se respeta tal cual (cualquier marca), sin bloqueo.
+      - SIN marca y sesion con UNA marca preferente: se enfoca en la suya (la fachada acepta
+        UNA sola marca). Sobreescribible pasando `?marca=`.
+      - SIN marca y sesion con VARIAS o sin preferencia (admin/token): None = "todas".
     """
-    visibles = permisos.marcas_visibles(request)
     if marca_metricas:
-        marca_obj = marcas.marca_por_id_metricas(marca_metricas)
-        canonico = marca_obj.id if marca_obj is not None else marca_metricas
-        if visibles is not None and canonico not in visibles:
-            return None, JSONResponse(
-                {"error": "Ese recurso ya no existe."}, status_code=404
-            )
         return marca_metricas, None
-    if visibles is None:
-        return None, None  # sin restriccion: todas
-    if len(visibles) == 1:
-        canonico = next(iter(visibles))
+    preferentes = permisos.marcas_preferentes(request)
+    if preferentes is not None and len(preferentes) == 1:
+        canonico = next(iter(preferentes))
         return marcas.id_metricas_de(canonico), None
-    return None, JSONResponse(
-        {"error": "Elige una marca: no puedes ver el agregado de todas las marcas."},
-        status_code=400,
-    )
+    return None, None  # varias preferentes o sin preferencia: todas
 
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
@@ -406,20 +390,10 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
 async def opciones(request: Request) -> Response:
     # La frontera con metricas habla en `id_metricas` (guion_bajo): este `id` es el
     # que viaja como `?marca=` y acota la fuente (FuenteScoped), no el id canonico.
-    # Alcance por marca: una sesion acotada solo ve SUS marcas en el selector (no las ajenas).
-    # `opciones_metricas` da `(id_metricas, etiqueta)`; cruzamos al id canonico para filtrar
-    # contra `marcas_visibles`. Admin/sin restriccion (scope None): el catalogo completo.
-    visibles = permisos.marcas_visibles(request)
+    # El selector ofrece TODAS las marcas: cualquiera puede consultar las metricas de cualquier
+    # marca (el equipo es multidisciplinar). La marca preferente solo fija el foco por defecto
+    # del SPA, no recorta el catalogo.
     pares = marcas.opciones_metricas()
-    if visibles is not None:
-        pares = [
-            (mid, etiqueta)
-            for mid, etiqueta in pares
-            if (
-                (marcas.marca_por_id_metricas(mid).id if marcas.marca_por_id_metricas(mid) else mid)
-                in visibles
-            )
-        ]
     marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in pares]
     rangos = [{"id": r, "etiqueta": _etiqueta_rango(r)} for r in RANGOS_VALIDOS]
     return JSONResponse({"marcas": marcas_lista, "rangos": rangos})

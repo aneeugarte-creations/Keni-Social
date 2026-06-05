@@ -99,9 +99,6 @@ async def _decidir(request: Request, decision: str) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     # Pre-flight (solo para un mensaje claro): si no hay nivel pendiente, la pieza no está en
     # revisión. La validación REAL (orden, "otro par de ojos", estado) se re-hace bajo bloqueo
@@ -175,13 +172,14 @@ async def cola(request: Request) -> Response:
     revision y desde cuando. Lectura: sin cambios respecto al flujo legado.
     """
     pendientes = repos.listar_publicaciones(estado=ESTADO_EN_REVISION)
-    # SCOPING POR DEFECTO (cierre ADR 0003): la cola es un listado all-brands; una sesion
-    # acotada solo debe ver las piezas de SUS marcas. Post-filtro en memoria (la cola es
-    # pequeña); admin/sin restriccion (scope None) ve todo.
-    visibles = permisos.marcas_scope(request)
-    if visibles is not None:
+    # FOCO POR DEFECTO (no es restriccion): la cola se ENFOCA en las marcas preferentes de la
+    # sesion para reducir la mezcla de contexto. No bloquea: cualquiera puede revisar piezas de
+    # cualquier marca (las verá filtrando por esa marca). Sin preferencia (admin/token/sin
+    # marcas) ve todo. Post-filtro en memoria (la cola es pequeña).
+    preferentes = permisos.marcas_preferentes(request)
+    if preferentes is not None:
         pendientes = [
-            p for p in pendientes if not p.get("marca") or p.get("marca") in visibles
+            p for p in pendientes if not p.get("marca") or p.get("marca") in preferentes
         ]
     # Mas antiguas primero por `enviado_a_revision_en` (lo que lleva mas esperando, arriba).
     pendientes.sort(key=lambda p: p.get("enviado_a_revision_en") or "")
@@ -199,9 +197,6 @@ async def enviar_a_revision(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     if pub.get("estado") != "borrador":
         return JSONResponse(
             {"error": "Solo se puede enviar a revisión una pieza en borrador."},
@@ -264,9 +259,6 @@ async def deshacer(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
 
     cadena = repos.listar_aprobaciones(publicacion_id)
     decisor_id = (autor_de_peticion(request) or {}).get("id", "") or ""
@@ -320,11 +312,6 @@ async def forzar(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    # Alcance por marca SOBRE el gate de cargo: un coordinador no puede forzar piezas de
-    # otra marca (el cargo no abre el tenant ajeno). Admin/sin restriccion: sin cambios.
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     if pub.get("estado") != ESTADO_EN_REVISION:
         return JSONResponse(
             {"error": "Solo se puede forzar la aprobación de una pieza en revisión."},
@@ -395,9 +382,6 @@ async def programar(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
-    if rechazo is not None:
-        return rechazo
     if pub.get("estado") != ESTADO_APROBADO:
         return JSONResponse(
             {"error": "Solo se puede programar una pieza aprobada."}, status_code=409
