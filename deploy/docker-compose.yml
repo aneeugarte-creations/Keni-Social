@@ -265,11 +265,13 @@ services:
       KENI_REUTERS_API_KEY: ${KENI_REUTERS_API_KEY:-}
       KENI_AFP_CLIENT_ID: ${KENI_AFP_CLIENT_ID:-}
       KENI_AFP_CLIENT_SECRET: ${KENI_AFP_CLIENT_SECRET:-}
-      # MOTOR DE INGESTA PERSISTENTE (Ola A): ACTIVO en producción. SOLO LEE feeds RSS públicos
-      # y persiste cada artículo en `noticias_items` (archivo a nivel de artículo) en background;
-      # NO genera ni publica nada, así que es seguro encenderlo aquí (a diferencia de los gates
-      # de abajo). El Radar/Plan y la UI leen del store; la red se sondea con cadencia por feed.
-      KENI_INGESTA: "1"
+      # MOTOR DE INGESTA / MÁQUINA DE CONTENIDO (Olas A–D): APAGADO por defecto. Se enciende
+      # EN CALIENTE desde el panel admin (avatar -> Configuración) o, si se prefiere fijar por
+      # entorno, descomentando los flags de abajo. Mientras esté apagado el daemon no sondea nada.
+      #   KENI_INGESTA:            "1"   # motor de ingesta persistente (archivo + historias)
+      #   KENI_TRADUCCION:         "1"   # traducción/tropicalización MX de noticias extranjeras
+      #   KENI_BREAKING:           "1"   # carril rápido de breaking (borradores Claro)
+      #   KENI_INVESTIGACION_AUTO: "1"   # agentes de investigación en background
       # GATES DE SEGURIDAD: ausentes por defecto. Sin estos, el sistema NO publica ni crea
       # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md §Validacion):
       #   KENI_RADAR_AUTO:    "1"   # auto-promueve temas del Radar (def: solo bandeja revisable)

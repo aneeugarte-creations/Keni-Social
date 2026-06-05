@@ -213,6 +213,48 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        # --- Motor de noticias (Olas A–D + Ola 6) -------------------------------- #
+        # Todos arrancan OFF: la máquina entera se activa desde aquí; ninguno publica.
+        Ajuste(
+            clave=config.ENV_INGESTA,
+            tipo="bool",
+            etiqueta="Noticias · Motor de ingesta",
+            ayuda="Sondea en background los feeds RSS y persiste artículos en el archivo "
+            "de noticias (Ola A). Solo lee fuentes públicas; no genera ni publica nada. "
+            "Seguro: la producción lo necesita activo.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_TRADUCCION,
+            tipo="bool",
+            etiqueta="Noticias · Traducción/tropicalización MX",
+            ayuda="Traduce y tropicaliza al español MX las noticias extranjeras (Radar + "
+            "historias). Usa Haiku, best-effort: si falla, el Radar sigue funcionando. "
+            "Apagado por defecto (forma parte de la máquina de contenido).",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_BREAKING,
+            tipo="bool",
+            etiqueta="Noticias · Carril rápido de breaking (Claro)",
+            ayuda="Hilo demonio que barre el snapshot del Investigador y pre-genera "
+            "borradores de breaking para Claro Sports sin draft (Ola C). Solo crea "
+            "borradores; nunca publica. Seguro.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_INVESTIGACION,
+            tipo="bool",
+            etiqueta="Noticias · Agentes de investigación (background)",
+            ayuda="Daemon que ejecuta los briefs de investigación activos y deposita "
+            "candidatos fechados para revisión humana (Ola 6). Cada barrido lanza "
+            "claude -p por brief: conservador por defecto (OFF).",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -351,6 +393,146 @@ def _construir_catalogo() -> list[Ajuste]:
             "huérfano (protege las variantes del Estudio que aún se revisan).",
             grupo="tuning",
             defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
+            minimo=1,
+        ),
+        # --- Ingesta (Ola A) ------------------------------------------------------ #
+        Ajuste(
+            clave=config.ENV_INGESTA_BATCH,
+            tipo="int",
+            etiqueta="Ingesta: feeds por barrido",
+            ayuda="Máximo de feeds RSS a sondear por barrido del motor de ingesta.",
+            grupo="tuning",
+            defecto=config.INGESTA_BATCH_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_INGESTA_WORKERS,
+            tipo="int",
+            etiqueta="Ingesta: descargas en paralelo",
+            ayuda="Conexiones simultáneas para descargar feeds en un mismo barrido.",
+            grupo="tuning",
+            defecto=config.INGESTA_WORKERS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_INGESTA_MAX_ITEMS,
+            tipo="int",
+            etiqueta="Ingesta: artículos por feed",
+            ayuda="Máximo de artículos a archivar por feed y sondeo.",
+            grupo="tuning",
+            defecto=config.INGESTA_MAX_ITEMS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_INGESTA_MAX_ERRORES,
+            tipo="int",
+            etiqueta="Ingesta: errores seguidos para auto-desactivar feed",
+            ayuda="Tras este número de errores consecutivos el daemon apaga el feed "
+            "automáticamente (Ola D). Se reintenta a mano desde la UI.",
+            grupo="tuning",
+            defecto=config.INGESTA_MAX_ERRORES_DEF,
+            minimo=1,
+        ),
+        # --- Clustering (Ola B) -------------------------------------------------- #
+        Ajuste(
+            clave=config.ENV_CLUSTER_VENTANA_H,
+            tipo="int",
+            etiqueta="Clustering: ventana de agrupación (horas)",
+            ayuda="Solo se cargan los clusters con actividad en esta ventana para "
+            "decidir si un item nuevo pertenece a uno existente. Acota el trabajo.",
+            grupo="tuning",
+            defecto=config.CLUSTER_VENTANA_H_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_CLUSTER_BREAKING_FUENTES,
+            tipo="int",
+            etiqueta="Clustering: fuentes mínimas para marcar breaking",
+            ayuda="Número de fuentes distintas requeridas para que una historia se "
+            "marque automáticamente como breaking en la ventana de breaking.",
+            grupo="tuning",
+            defecto=config.CLUSTER_BREAKING_FUENTES_DEF,
+            minimo=2,
+        ),
+        Ajuste(
+            clave=config.ENV_CLUSTER_BREAKING_VENTANA_H,
+            tipo="int",
+            etiqueta="Clustering: ventana breaking (horas)",
+            ayuda="Ventana de tiempo (horas) en la que deben coincidir las fuentes "
+            "para que un cluster se marque como breaking.",
+            grupo="tuning",
+            defecto=config.CLUSTER_BREAKING_VENTANA_H_DEF,
+            minimo=1,
+        ),
+        # --- Carril breaking (Ola C) --------------------------------------------- #
+        Ajuste(
+            clave=config.ENV_BREAKING_INTERVALO_MIN,
+            tipo="int",
+            etiqueta="Breaking: intervalo de barrido (minutos)",
+            ayuda="Cada cuántos minutos barre el daemon del carril rápido de breaking.",
+            grupo="tuning",
+            defecto=config.BREAKING_INTERVALO_MIN_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_BREAKING_MAX,
+            tipo="int",
+            etiqueta="Breaking: borradores por barrido",
+            ayuda="Máximo de borradores breaking a preparar por barrido "
+            "(cada uno lanza claude -p).",
+            grupo="tuning",
+            defecto=config.BREAKING_MAX_DEF,
+            minimo=1,
+        ),
+        # --- Traducción (Ola D) -------------------------------------------------- #
+        Ajuste(
+            clave=config.ENV_TRAD_MIN_SCORE,
+            tipo="float",
+            etiqueta="Traducción: score mínimo de cluster",
+            ayuda="Score mínimo de un cluster extranjero para entrar a traducción. "
+            "0 = traducir todo cluster reciente; sube el valor para limitar a los más relevantes.",
+            grupo="tuning",
+            defecto=config.TRAD_MIN_SCORE_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_TRAD_LOTE,
+            tipo="int",
+            etiqueta="Traducción: clusters por barrido",
+            ayuda="Máximo de clusters extranjeros a traducir por barrido. "
+            "El backlog pendiente se procesa en barridos sucesivos.",
+            grupo="tuning",
+            defecto=config.TRAD_LOTE_DEF,
+            minimo=1,
+        ),
+        # --- SLA de frescura (Ola D) --------------------------------------------- #
+        Ajuste(
+            clave=config.ENV_FEED_SLA_MIN,
+            tipo="int",
+            etiqueta="Ingesta: SLA de frescura por feed (minutos)",
+            ayuda="Un feed activo sin items nuevos en más de este margen aparece como "
+            "'stale' en el panel de salud (/salud).",
+            grupo="tuning",
+            defecto=config.FEED_SLA_MIN_DEF,
+            minimo=1,
+        ),
+        # --- Agentes de investigación (Ola 6) ------------------------------------ #
+        Ajuste(
+            clave=config.ENV_INVESTIGACION_INTERVALO_HORAS,
+            tipo="int",
+            etiqueta="Investigación: intervalo (horas)",
+            ayuda="Cada cuántas horas barre el daemon de investigación los briefs activos.",
+            grupo="tuning",
+            defecto=config.INVESTIGACION_INTERVALO_HORAS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_INVESTIGACION_MAX,
+            tipo="int",
+            etiqueta="Investigación: máximo de briefs por barrido",
+            ayuda="Máximo de briefs activos a ejecutar por barrido (cada uno lanza claude -p).",
+            grupo="tuning",
+            defecto=config.INVESTIGACION_MAX_DEF,
             minimo=1,
         ),
     ]

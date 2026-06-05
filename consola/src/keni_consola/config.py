@@ -1956,16 +1956,14 @@ def insumos_modelo() -> str:
 
 
 def traduccion_activa() -> bool:
-    """¿Traducir temas extranjeros en el Radar? (`KENI_TRADUCCION`, def ON).
+    """¿Traducir temas/noticias extranjeras? (`KENI_TRADUCCION`, def OFF).
 
-    Por defecto ACTIVO: `KENI_TRADUCCION=0` o falsy lo apaga. La traduccion usa Haiku
-    (mismo modelo que insumos), es best-effort (si falla, el Radar no se rompe) y se
-    acota a `traduccion_max()` temas del top.
+    Def OFF: forma parte de la máquina de contenido, que arranca apagada; se enciende
+    en caliente desde el panel admin (toggle) o con `KENI_TRADUCCION=1`. La traduccion
+    usa Haiku, es best-effort (si falla, el Radar no se rompe) y se acota a
+    `traduccion_max()` temas del top en el Radar en vivo.
     """
-    crudo = _crudo(ENV_TRADUCCION)
-    if not crudo:
-        return True  # no fijada => ON por defecto
-    return crudo.lower() not in _FALSOS
+    return _crudo(ENV_TRADUCCION).lower() in _VERDADEROS
 
 
 def traduccion_max() -> int:

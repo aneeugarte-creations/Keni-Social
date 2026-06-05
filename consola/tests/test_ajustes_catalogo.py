@@ -51,12 +51,77 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_MEDIA_GC, config.ENV_MEDIA_GC_INTERVALO_HORAS,
         config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
         config.ENV_PIPELINE_LINEAS,
+        # Motor de noticias (Olas A–D + Ola 6) — toggles bool.
+        config.ENV_INGESTA,
+        config.ENV_TRADUCCION,
+        config.ENV_BREAKING,
+        config.ENV_INVESTIGACION,
+        # Motor de noticias — tuning int/float.
+        config.ENV_INGESTA_BATCH, config.ENV_INGESTA_WORKERS,
+        config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
+        config.ENV_CLUSTER_VENTANA_H, config.ENV_CLUSTER_BREAKING_FUENTES,
+        config.ENV_CLUSTER_BREAKING_VENTANA_H,
+        config.ENV_BREAKING_INTERVALO_MIN, config.ENV_BREAKING_MAX,
+        config.ENV_TRAD_MIN_SCORE, config.ENV_TRAD_LOTE,
+        config.ENV_FEED_SLA_MIN,
+        config.ENV_INVESTIGACION_INTERVALO_HORAS, config.ENV_INVESTIGACION_MAX,
     }
     # Los toggles por marca (clave `ENV::marca`) se generan en caliente; el resto del catálogo
     # son exactamente las claves globales esperadas.
     por_marca = {c for c in claves if config.SEP_MARCA in c}
     assert claves - por_marca == esperadas
     assert por_marca, "deben existir toggles de auto-producción por marca"
+
+
+def test_motor_noticias_bool_toggles(store):
+    """Los cuatro toggles del motor de noticias son bool, pertenecen al grupo correcto
+    y tienen el defecto esperado (toda la máquina de contenido OFF por defecto)."""
+    esperados = {
+        config.ENV_INGESTA: (False, "automatismos_generales"),
+        config.ENV_TRADUCCION: (False, "automatismos_generales"),
+        config.ENV_BREAKING: (False, "automatismos_generales"),
+        config.ENV_INVESTIGACION: (False, "automatismos_generales"),
+    }
+    for clave, (defecto, grupo) in esperados.items():
+        a = ajustes_catalogo.por_clave(clave)
+        assert a is not None, f"falta la clave {clave}"
+        assert a.tipo == "bool", f"{clave} debe ser bool"
+        assert a.defecto == defecto, f"{clave} defecto esperado {defecto}, got {a.defecto}"
+        assert a.grupo == grupo, f"{clave} grupo esperado {grupo}"
+
+
+def test_motor_noticias_tuning_int(store):
+    """Los knobs de tuning del motor de noticias son int con minimo >= 1."""
+    claves_int = [
+        config.ENV_INGESTA_BATCH,
+        config.ENV_INGESTA_WORKERS,
+        config.ENV_INGESTA_MAX_ITEMS,
+        config.ENV_INGESTA_MAX_ERRORES,
+        config.ENV_CLUSTER_VENTANA_H,
+        config.ENV_CLUSTER_BREAKING_FUENTES,
+        config.ENV_CLUSTER_BREAKING_VENTANA_H,
+        config.ENV_BREAKING_INTERVALO_MIN,
+        config.ENV_BREAKING_MAX,
+        config.ENV_TRAD_LOTE,
+        config.ENV_FEED_SLA_MIN,
+        config.ENV_INVESTIGACION_INTERVALO_HORAS,
+        config.ENV_INVESTIGACION_MAX,
+    ]
+    for clave in claves_int:
+        a = ajustes_catalogo.por_clave(clave)
+        assert a is not None, f"falta la clave {clave}"
+        assert a.tipo == "int", f"{clave} debe ser int"
+        assert a.grupo == "tuning", f"{clave} debe estar en grupo tuning"
+        assert a.minimo is not None and a.minimo >= 1, f"{clave} debe tener minimo >= 1"
+
+
+def test_motor_noticias_trad_min_score_float(store):
+    """KENI_TRAD_MIN_SCORE es float en el grupo tuning con minimo 0."""
+    a = ajustes_catalogo.por_clave(config.ENV_TRAD_MIN_SCORE)
+    assert a is not None
+    assert a.tipo == "float"
+    assert a.grupo == "tuning"
+    assert a.minimo == 0
 
 
 def test_publicar_real_es_peligroso(store):
