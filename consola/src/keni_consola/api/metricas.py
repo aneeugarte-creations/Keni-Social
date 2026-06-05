@@ -128,38 +128,116 @@ def _fuente_combinada(rep_a: dict, rep_b: dict) -> str:
     return fuente_a
 
 
+# Métricas de CONTEO comparables entre dos periodos, en orden de presentación. Son
+# sumas homogéneas (no porcentajes), así que su delta/variación se calculan igual.
+# `visualizaciones`/`interacciones` vienen del reporte; el resto (granulares +
+# seguidores) se inyectan desde el desglose y la serie de seguidores (ver
+# `_total_comparable`). Una métrica ausente en este nivel (p. ej. el desglose por marca
+# solo trae vistas/interacciones) se OMITE: no se pinta una tarjeta con datos a medias.
+_METRICAS_CONTEO_COMPARABLES: tuple[str, ...] = (
+    "visualizaciones",
+    "interacciones",
+    "likes",
+    "comentarios",
+    "compartidos",
+    "guardados",
+    "video_views",
+    "clics_enlace",
+    "seguidores_netos",
+)
+
+
 def _comparar_totales(total_a: dict, total_b: dict) -> dict:
-    """Comparativa del total consolidado: vistas, interacciones y engagement.
+    """Comparativa del total consolidado: conteos (vistas, interacciones, granulares,
+    seguidores) + engagement.
+
+    A = periodo "antes", B = periodo "actual" (así lo pinta la UI: B es el valor grande,
+    A el "antes"). La VARIACIÓN y la DIFERENCIA miden B respecto a A —cuánto cambió lo
+    ACTUAL frente a lo ANTERIOR—; al revés (A respecto a B) la flecha y el signo salían
+    invertidos (subir 170M→236M aparecía como −28 % en vez de +39 %).
+
+    Solo se emiten las métricas de conteo presentes en los totales (las ausentes se
+    omiten: el desglose por marca trae menos que el total global). El engagement NO se
+    toma crudo del total: viene `None` cuando hay varias redes (denominadores
+    heterogéneos, #138). Se RECALCULA int/vis por periodo —igual que
+    `_reporte_serializable`— para que deje de salir "—".
 
     NO incluye `alcance`: no se mide con la fuente de posts (sería siempre null y la UI ya
     no lo muestra). Emitirlo dejaba una fila con valor null que reventaba el comparador.
     """
     metricas = []
-    for clave in ("visualizaciones", "interacciones"):
+    for clave in _METRICAS_CONTEO_COMPARABLES:
         va = total_a.get(clave)
         vb = total_b.get(clave)
+        if va is None and vb is None:
+            continue  # métrica no provista a este nivel (no se inventa una tarjeta vacía)
         metricas.append(
             {
                 "metrica": clave,
                 "a": va,
                 "b": vb,
-                "diferencia": _delta(va, vb),
-                "variacion_pct": _variacion_pct(va, vb),
+                # B (actual) respecto a A (antes): el sentido que ve el operador.
+                "diferencia": _delta(vb, va),
+                "variacion_pct": _variacion_pct(vb, va),
             }
         )
-    eng_a = total_a.get("engagement_pct")
-    eng_b = total_b.get("engagement_pct")
-    eng_d = _delta(eng_a, eng_b)
+    eng_a = _engagement_pct(total_a.get("interacciones"), total_a.get("visualizaciones"))
+    eng_b = _engagement_pct(total_b.get("interacciones"), total_b.get("visualizaciones"))
+    eng_d = _delta(eng_b, eng_a)
     metricas.append(
         {
             "metrica": "engagement_pct",
             "a": eng_a,
             "b": eng_b,
             "diferencia": round(eng_d, 1) if eng_d is not None else None,
-            "variacion_pct": _variacion_pct(eng_a, eng_b),
+            "variacion_pct": _variacion_pct(eng_b, eng_a),
         }
     )
     return {"metricas": metricas}
+
+
+# Granulares que el desglose (`/api/metricas/desglose` › `totales`) ya agrega por periodo.
+_GRANULARES_DESGLOSE: tuple[str, ...] = (
+    "likes",
+    "comentarios",
+    "compartidos",
+    "guardados",
+    "video_views",
+)
+
+
+def _suma_clics(listado: dict) -> int | None:
+    """Suma `clics_enlace` del listado de piezas del periodo. None si NINGUNA lo expone.
+
+    Los clics no se agregan en el desglose (solo existen a nivel pieza), así que se suman
+    aquí desde el listado de piezas ya cacheado. None (no 0) cuando ninguna pieza trae el
+    dato: degradación honesta (la tarjeta no se pinta en vez de un 0 falso)."""
+    piezas = (listado or {}).get("piezas") or []
+    presentes = [p.get("clics_enlace") for p in piezas if p.get("clics_enlace") is not None]
+    return sum(presentes) if presentes else None
+
+
+def _total_comparable(rep: dict, desglose: dict, seguidores: dict, listado: dict) -> dict:
+    """Total de un periodo enriquecido para la comparativa: reporte + granulares + seguidores.
+
+    Parte del `total` del reporte (vistas, interacciones) y le añade, SIN tocar el MCP:
+      - los granulares (likes/comentarios/compartidos/guardados/reproducciones) que el
+        DESGLOSE ya suma por periodo (`totales`);
+      - los CLICS a enlace, sumados del listado de piezas (no están en el desglose);
+      - el neto de SEGUIDORES del periodo (serie de seguidores › `neto`).
+
+    Así la comparativa muestra esas métricas que antes faltaban. Cada campo queda en `None`
+    si su fuente no lo expone (degradación honesta: la tarjeta no se pinta en vez de mostrar
+    un 0 falso); `seguidores_netos` sí puede ser 0 real (stock plano en el periodo).
+    """
+    total = dict(rep.get("total") or {})
+    tg = (desglose or {}).get("totales") or {}
+    for clave in _GRANULARES_DESGLOSE:
+        total[clave] = tg.get(clave)
+    total["clics_enlace"] = _suma_clics(listado)
+    # La serie de seguidores siempre trae `neto` (0 si la fuente no expone followers).
+    total["seguidores_netos"] = (seguidores or {}).get("neto")
+    return total
 
 
 def _comparar_por_marca(rep_a: dict, rep_b: dict) -> list[dict]:
@@ -185,8 +263,9 @@ def _comparar_por_marca(rep_a: dict, rep_b: dict) -> list[dict]:
                 "marca_id": cid,
                 "marca": _nombre_marca_id(cid, nombres),
                 "comparativa": _comparar_totales(
-                    {k: ra.get(k, 0) for k in ("visualizaciones", "interacciones", "engagement_pct")},
-                    {k: rb.get(k, 0) for k in ("visualizaciones", "interacciones", "engagement_pct")},
+                    # engagement se RECALCULA dentro a partir de int/vis; no se pasa crudo.
+                    {k: ra.get(k, 0) for k in ("visualizaciones", "interacciones")},
+                    {k: rb.get(k, 0) for k in ("visualizaciones", "interacciones")},
                 )["metricas"],
             }
         )
@@ -425,12 +504,28 @@ async def comparar(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        # Ambos reportes salen de cache (lazy fill); la comparativa se computa en memoria.
-        # En executor y CONCURRENTES (gather): combos fríos no bloquean el event loop y,
-        # si ambos están fríos, se calculan en paralelo en vez de en serie.
-        (rep_a, gen_a), (rep_b, gen_b) = await asyncio.gather(
+        # Reporte + desglose (granulares) + seguidores de AMBOS periodos, todo de cache
+        # (lazy fill) y CONCURRENTE (gather): combos fríos no bloquean el event loop y, si
+        # están fríos, se calculan en paralelo. El desglose aporta likes/comentarios/…
+        # y la serie de seguidores el neto; con eso la comparativa deja de ir a medias.
+        (
+            (rep_a, gen_a),
+            (rep_b, gen_b),
+            (des_a, _da),
+            (des_b, _db),
+            (seg_a, _sa),
+            (seg_b, _sb),
+            (lis_a, _la),
+            (lis_b, _lb),
+        ) = await asyncio.gather(
             metricas_cache.reporte_async(rango_a, marca),
             metricas_cache.reporte_async(rango_b, marca),
+            metricas_cache.desglose_async(rango_a, marca),
+            metricas_cache.desglose_async(rango_b, marca),
+            metricas_cache.seguidores_async(rango_a, marca),
+            metricas_cache.seguidores_async(rango_b, marca),
+            metricas_cache.piezas_listado_async(rango_a, marca),
+            metricas_cache.piezas_listado_async(rango_b, marca),
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -453,7 +548,10 @@ async def comparar(request: Request) -> Response:
             # reportes lo es. La UI pinta un badge de advertencia con esto (N6, igual que
             # /reporte) para no confundir datos de muestra con reales (piloto AMX).
             "fuente": _fuente_combinada(rep_a, rep_b),
-            "total": _comparar_totales(rep_a.get("total") or {}, rep_b.get("total") or {}),
+            "total": _comparar_totales(
+                _total_comparable(rep_a, des_a, seg_a, lis_a),
+                _total_comparable(rep_b, des_b, seg_b, lis_b),
+            ),
             "por_marca": _comparar_por_marca(rep_a, rep_b),
         }
     )

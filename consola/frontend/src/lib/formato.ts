@@ -162,6 +162,43 @@ export function nombreRed(red: string): string {
 }
 
 /**
+ * Lista CANÓNICA de redes que el piloto audita, en orden de presentación. TODAS las
+ * tablas/gráficas de métricas deben iterar sobre ESTA lista (no sobre las redes presentes
+ * en los datos): así una red sin datos aparece igualmente como fila/serie con "—" y no
+ * "desaparece" de la tabla. Es el mismo universo que `_REDES_AUDITABLES` del backend.
+ *
+ * Incluye `x` (Twitter) aunque en el piloto AMX no esté contratada en Metricool: se
+ * muestra como fila vacía (la ausencia es una decisión de contratación, no un hueco de
+ * datos; el "por qué" se explica en la auditoría de cobertura). `x` va al final porque
+ * es la que sistemáticamente no aporta datos en el piloto.
+ */
+export const REDES_CANONICAS = ["facebook", "instagram", "tiktok", "youtube", "x"] as const;
+export type RedCanonica = (typeof REDES_CANONICAS)[number];
+
+/**
+ * Alinea unas filas "por red" a la lista canónica completa: por cada red de
+ * `REDES_CANONICAS` devuelve la fila existente (casada por su id de red, normalizado a
+ * minúsculas y con `twitter`→`x`) o `undefined` si esa red no trae datos en el periodo.
+ *
+ * Es el cimiento de "todas las tablas, todas las redes": el componente mapea cada entrada
+ * y, cuando `fila` es `undefined`, pinta una fila/serie con "—" en vez de omitirla. El
+ * accesor `redDe` permite usarlo con datos cuyo campo de red no se llame `red`
+ * (p. ej. `plataforma`).
+ */
+export function alinearPorRedCanonica<T>(
+  filas: ReadonlyArray<T>,
+  redDe: (fila: T) => string,
+): Array<{ red: RedCanonica; fila: T | undefined }> {
+  const norm = (r: string) => (r.toLowerCase() === "twitter" ? "x" : r.toLowerCase());
+  const porRed = new Map<string, T>();
+  for (const f of filas) {
+    const red = norm(redDe(f) || "");
+    if (red && !porRed.has(red)) porRed.set(red, f);
+  }
+  return REDES_CANONICAS.map((red) => ({ red, fila: porRed.get(red) }));
+}
+
+/**
  * Nombre legible de un formato de pieza a partir de su id crudo. Maneja el prefijo
  * `feed_` de Meta (feed_image → "Feed image", feed_carousel_album → "Carrusel",
  * feed_video → "Vídeo", feed_reel → "Reel") y los ids genéricos (reel, foto/photo,

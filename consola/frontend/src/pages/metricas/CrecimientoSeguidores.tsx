@@ -16,7 +16,7 @@ import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
-import { nombreRed, numeroCompacto, numeroCompleto } from "@/lib/formato";
+import { nombreRed, numeroCompacto, numeroCompleto, REDES_CANONICAS } from "@/lib/formato";
 import type { PuntoSeguidores } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
@@ -55,11 +55,9 @@ export function CrecimientoSeguidores({
     staleTime: 2 * 60_000,
   });
 
-  // Redes presentes en la serie (orden estable por aparición en el neto_por_red).
-  const redes = React.useMemo(
-    () => (data ? Object.keys(data.neto_por_red) : []),
-    [data],
-  );
+  // Siempre las 5 redes canónicas en orden fijo (facebook, instagram, tiktok, youtube, x),
+  // aunque alguna no aporte datos: no se omite ninguna red de la vista.
+  const redes = React.useMemo(() => [...REDES_CANONICAS], []);
 
   // Categorías legibles para la leyenda/serie: cada id de red → su nombre de marca.
   // Re-mapeamos las claves de `por_red` a ese nombre para que el chart use la etiqueta
@@ -130,7 +128,6 @@ function KpisNeto({
   neto: number;
   netoPorRed: Record<string, number>;
 }) {
-  const redes = Object.keys(netoPorRed);
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       <TarjetaKpi
@@ -138,14 +135,24 @@ function KpisNeto({
         valor={netoSeguidores(neto)}
         titulo={`${numeroCompleto(neto)} seguidores`}
       />
-      {redes.map((red) => (
-        <TarjetaKpi
-          key={red}
-          etiqueta={nombreRed(red)}
-          valor={netoSeguidores(netoPorRed[red])}
-          titulo={`${numeroCompleto(netoPorRed[red])} seguidores`}
-        />
-      ))}
+      {REDES_CANONICAS.map((red) => {
+        // Distinguimos "red ausente" (no está en neto_por_red → "—") de un neto real de 0
+        // (la red existe pero no ganó/perdió → "0"). Usamos la presencia de la clave.
+        const presente = Object.prototype.hasOwnProperty.call(netoPorRed, red);
+        const valor = presente ? netoPorRed[red] : null;
+        return (
+          <TarjetaKpi
+            key={red}
+            etiqueta={nombreRed(red)}
+            valor={valor === null ? "—" : netoSeguidores(valor)}
+            titulo={
+              valor === null
+                ? "Sin datos para este periodo"
+                : `${numeroCompleto(valor)} seguidores`
+            }
+          />
+        );
+      })}
     </div>
   );
 }

@@ -21,7 +21,7 @@ import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { nombreMarca, variacion } from "@/lib/formato";
+import { nombreMarca, numeroCompleto, variacion } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
 
@@ -29,9 +29,27 @@ import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./Controles";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { METRICAS } from "./metricas-meta";
 
+/**
+ * Metadatos de las métricas EXTRA de la comparativa (granulares + seguidores) que no están
+ * en `METRICAS` (las 4 del reporte). Las inyecta el backend en `total.metricas` cuando el
+ * desglose/serie de seguidores las trae; aquí solo definimos su etiqueta y formato. Son
+ * conteos, así que se formatean con separador de miles.
+ */
+const ETIQUETAS_EXTRA: Record<string, string> = {
+  likes: "Likes",
+  comentarios: "Comentarios",
+  compartidos: "Compartidos",
+  guardados: "Guardados",
+  video_views: "Reproducciones",
+  clics_enlace: "Clicks",
+  seguidores_netos: "Seguidores netos",
+};
+
 /** Etiqueta legible de una métrica del backend según su nombre interno. */
 function etiquetaMetrica(metrica: string): string {
-  return METRICAS.find((m) => m.metrica === metrica)?.etiqueta ?? metrica;
+  return (
+    METRICAS.find((m) => m.metrica === metrica)?.etiqueta ?? ETIQUETAS_EXTRA[metrica] ?? metrica
+  );
 }
 
 /**
@@ -54,7 +72,8 @@ function formatoValor(metrica: string, valor: number | null): string {
   // null reventaba TODA la página de Analíticas (error boundary).
   if (valor == null || !Number.isFinite(valor)) return "—";
   const meta = METRICAS.find((m) => m.metrica === metrica);
-  return meta ? meta.completo(valor) : valor.toLocaleString("es-MX");
+  // Métricas extra (granulares + seguidores) son conteos: separador de miles es-MX.
+  return meta ? meta.completo(valor) : numeroCompleto(valor);
 }
 
 /** Traduce la variación porcentual al `deltaType` de Tremor BadgeDelta. */

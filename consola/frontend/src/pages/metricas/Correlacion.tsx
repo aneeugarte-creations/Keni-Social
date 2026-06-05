@@ -33,7 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { nombreMarca, nombreRed, numeroCompleto, porcentaje } from "@/lib/formato";
+import { nombreMarca, nombreRed, numeroCompleto, porcentaje, REDES_CANONICAS } from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -87,10 +87,8 @@ export function Correlacion({
   });
 
   const items = React.useMemo(() => data?.items ?? [], [data]);
-  const redesDisponibles = React.useMemo(
-    () => Array.from(new Set(items.map((it) => it.red).filter(Boolean))).sort(),
-    [items],
-  );
+  // TODAS las redes canónicas en el selector (no solo las que traen datos).
+  const redesDisponibles = REDES_CANONICAS;
 
   // El filtro de red solo tiene sentido cuando hay datos cargados.
   const filtroRed =
@@ -187,6 +185,13 @@ function TablaCorrelacion({
     { clave: "seguidores_ganados", direccion: "desc" },
   );
 
+  // Todas las redes canónicas presentes en CADA día: si una red no publicó ni ganó
+  // seguidores ese día (o no está contratada, como X), aparece igualmente como fila "—".
+  const redesConDatos = new Set(itemsDelDia.map((it) => it.red.toLowerCase()));
+  const redesFaltantes = (
+    redFiltro === RED_TODAS ? REDES_CANONICAS : REDES_CANONICAS.filter((r) => r === redFiltro)
+  ).filter((r) => !redesConDatos.has(r));
+
   if (dias.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -278,6 +283,17 @@ function TablaCorrelacion({
                 <TableCell className="max-w-[18rem]">
                   <PiezaEstrella post={it.post_estrella} />
                 </TableCell>
+              </TableRow>
+            ))}
+            {/* Redes sin datos ese día: fila presente con "—" (no se omiten). */}
+            {redesFaltantes.map((red) => (
+              <TableRow key={`falta-${red}`} className="text-muted-foreground">
+                <TableCell className="font-medium">—</TableCell>
+                <TableCell>{nombreRed(red)}</TableCell>
+                <TableCell className="text-right tabular-nums">—</TableCell>
+                <TableCell className="text-right tabular-nums">—</TableCell>
+                <TableCell className="text-right tabular-nums">—</TableCell>
+                <TableCell className="max-w-[18rem]">—</TableCell>
               </TableRow>
             ))}
           </TableBody>

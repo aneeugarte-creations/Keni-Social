@@ -28,7 +28,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { nombreRed, numeroCompacto, numeroCompleto, porcentaje } from "@/lib/formato";
+import {
+  nombreRed,
+  numeroCompacto,
+  numeroCompleto,
+  porcentaje,
+  REDES_CANONICAS,
+} from "@/lib/formato";
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -68,10 +74,9 @@ function calcularTotales(redes: RedMetrica[]): {
 
 export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
   const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
-  const redesDisponibles = React.useMemo(
-    () => Array.from(new Set(redes.map((r) => r.red).filter(Boolean))).sort(),
-    [redes],
-  );
+  // TODAS las redes canónicas en el selector (no solo las que traen datos): el operador
+  // puede enfocar cualquiera y, si no tiene datos en el rango, la tabla lo dice con "—".
+  const redesDisponibles = REDES_CANONICAS;
 
   // Filas tras aplicar el filtro de red (cliente). `visibles` alimenta orden, totales y reparto.
   const visibles = redFiltro === RED_TODAS ? redes : redes.filter((r) => r.red === redFiltro);
@@ -83,6 +88,14 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
   });
 
   const totales = calcularTotales(visibles);
+
+  // "Todas las tablas, todas las redes": además de las filas con datos (ya ordenadas),
+  // pintamos una fila "—" por cada red canónica que no aparezca en el periodo —incluida X,
+  // que en el piloto no está contratada en Metricool—. Así ninguna red desaparece.
+  const objetivoRedes =
+    redFiltro === RED_TODAS ? REDES_CANONICAS : REDES_CANONICAS.filter((r) => r === redFiltro);
+  const conDatos = new Set(visibles.map((r) => r.red.toLowerCase()));
+  const redesFaltantes = objetivoRedes.filter((r) => !conDatos.has(r));
 
   // Reparto "% de vistas por red", ordenado de mayor a menor (como GraficaMarcas).
   const totalVis = totales.visualizaciones;
@@ -131,44 +144,44 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visibles.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={COLUMNAS.length + 1}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  No hay redes para mostrar en este rango.
-                </TableCell>
-              </TableRow>
-            ) : (
-              <>
-                {filasOrdenadas.map((r) => (
-                  <TableRow key={r.red}>
-                    <TableCell className="pl-6 font-medium">{nombreRed(r.red)}</TableCell>
-                    {COLUMNAS.map((c) => (
-                      <TableCell
-                        key={c.clave}
-                        className="pr-6 text-right tabular-nums last:pr-6"
-                      >
-                        {valorCelda(r, c.clave)}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+            {filasOrdenadas.map((r) => (
+              <TableRow key={r.red}>
+                <TableCell className="pl-6 font-medium">{nombreRed(r.red)}</TableCell>
+                {COLUMNAS.map((c) => (
+                  <TableCell
+                    key={c.clave}
+                    className="pr-6 text-right tabular-nums last:pr-6"
+                  >
+                    {valorCelda(r, c.clave)}
+                  </TableCell>
                 ))}
-                <TableRow className="border-t-2 font-medium">
-                  <TableCell className="pl-6">Total</TableCell>
-                  {COLUMNAS.map((c) => (
-                    <TableCell
-                      key={c.clave}
-                      className="pr-6 text-right tabular-nums last:pr-6"
-                    >
-                      {c.clave === "engagement_pct"
-                        ? porcentaje(totales.engagement_pct)
-                        : numeroCompleto(totales[c.clave])}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </>
+              </TableRow>
+            ))}
+            {/* Redes sin datos en el periodo: fila presente con "—" (no se omiten). */}
+            {redesFaltantes.map((red) => (
+              <TableRow key={red} className="text-muted-foreground">
+                <TableCell className="pl-6 font-medium">{nombreRed(red)}</TableCell>
+                {COLUMNAS.map((c) => (
+                  <TableCell key={c.clave} className="pr-6 text-right tabular-nums last:pr-6">
+                    —
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+            {visibles.length > 0 && (
+              <TableRow className="border-t-2 font-medium">
+                <TableCell className="pl-6">Total</TableCell>
+                {COLUMNAS.map((c) => (
+                  <TableCell
+                    key={c.clave}
+                    className="pr-6 text-right tabular-nums last:pr-6"
+                  >
+                    {c.clave === "engagement_pct"
+                      ? porcentaje(totales.engagement_pct)
+                      : numeroCompleto(totales[c.clave])}
+                  </TableCell>
+                ))}
+              </TableRow>
             )}
           </TableBody>
         </Table>

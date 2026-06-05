@@ -64,6 +64,7 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  REDES_CANONICAS,
 } from "@/lib/formato";
 import type { MarcaDisponible, PiezaListado } from "@/types";
 
@@ -166,10 +167,10 @@ export function PiezasConsolidada({
     () => Array.from(new Set(piezas.map((p) => p.cuenta).filter(Boolean) as string[])).sort(),
     [piezas],
   );
-  const redesDisponibles = React.useMemo(
-    () => Array.from(new Set(piezas.map((p) => p.plataforma).filter(Boolean))).sort(),
-    [piezas],
-  );
+  // El filtro de Red ofrece SIEMPRE las redes canónicas en orden (no solo las
+  // presentes en los datos): así una red sin piezas se puede seleccionar igualmente
+  // (la tabla mostrará entonces su estado vacío). Mismo universo que el resto de vistas.
+  const redesDisponibles = REDES_CANONICAS;
   const lineasDisponibles = React.useMemo(() => {
     const set = new Set<string>();
     for (const p of piezas) set.add(p.linea || SIN_LINEA);

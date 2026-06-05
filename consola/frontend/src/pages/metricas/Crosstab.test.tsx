@@ -70,9 +70,11 @@ describe("Crosstab (rendimiento por formato)", () => {
     );
 
     // marca (unotv → "UnoTV"), red (instagram → "Instagram"), formato (feed_image → "Feed image").
-    expect(await screen.findByText("UnoTV")).toBeInTheDocument();
-    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
-    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    // Cada marca/red aparece varias veces: el cruce pinta TODAS las redes canónicas por marca
+    // (la fila real + las filas "—"), así que usamos getAllByText para los nombres.
+    expect((await screen.findAllByText("UnoTV")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Claro Sports").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
     expect(screen.getByText("Feed image")).toBeInTheDocument();
     // no muestra ids crudos.
     expect(screen.queryByText("unotv")).not.toBeInTheDocument();
@@ -92,9 +94,13 @@ describe("Crosstab (rendimiento por formato)", () => {
 
     // Orden por defecto = rendimiento desc: la celda de UnoTV (1.4×) va antes que la de
     // Claro Sports (0.6×).
-    await screen.findByText("UnoTV");
+    await screen.findAllByText("UnoTV");
+    // Solo las filas CON datos (rendimiento "×"); las filas "—" canónicas van al final y no
+    // deben contar para el aserto de orden.
     const filasDatos = () =>
-      screen.getAllByRole("row").filter((f) => within(f).queryByText(/UnoTV|Claro Sports/));
+      screen
+        .getAllByRole("row")
+        .filter((f) => within(f).queryByText(/UnoTV|Claro Sports/) && within(f).queryByText(/×/));
     expect(within(filasDatos()[0]).getByText("UnoTV")).toBeInTheDocument();
 
     // Reordenar por Piezas asc (Claro Sports tiene 5 piezas, UnoTV 12): clic = desc, otro = asc.

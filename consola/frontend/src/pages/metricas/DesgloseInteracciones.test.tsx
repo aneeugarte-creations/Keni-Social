@@ -65,7 +65,8 @@ describe("DesgloseInteracciones", () => {
     );
 
     // marca (unotv → "UnoTV") y red (instagram → "Instagram") legibles, no el id crudo.
-    expect(await screen.findByText("UnoTV")).toBeInTheDocument();
+    // "UnoTV" aparece varias veces: una por cada red canónica (la real + las filas "—").
+    expect((await screen.findAllByText("UnoTV")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
     expect(screen.queryByText("instagram")).not.toBeInTheDocument();
     // fila de totales.

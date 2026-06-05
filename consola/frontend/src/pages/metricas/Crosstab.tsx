@@ -30,6 +30,7 @@ import {
   nombreRed,
   numeroCompacto,
   porcentaje,
+  REDES_CANONICAS,
 } from "@/lib/formato";
 import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
@@ -124,6 +125,24 @@ function TablaCrosstab({
     { clave: "rendimiento", direccion: "desc" },
   );
 
+  // "Todas las tablas, todas las redes": la dimensión RED del cruce SIEMPRE incluye las 5
+  // redes canónicas (facebook, instagram, tiktok, youtube, x) por cada marca presente.
+  // Por cada marca×red sin ninguna celda en el periodo añadimos una fila placeholder con
+  // "—" (no inventamos ceros ni la omitimos —incluida X, no contratada en el piloto—).
+  const norm = (red: string) => (red.toLowerCase() === "twitter" ? "x" : red.toLowerCase());
+  const marcasPresentes: string[] = [];
+  const combosConDatos = new Set<string>();
+  for (const c of celdas) {
+    if (!marcasPresentes.includes(c.marca)) marcasPresentes.push(c.marca);
+    combosConDatos.add(`${c.marca}::${norm(c.red)}`);
+  }
+  const filasVacias: Array<{ marca: string; red: string }> = [];
+  for (const marca of marcasPresentes) {
+    for (const red of REDES_CANONICAS) {
+      if (!combosConDatos.has(`${marca}::${red}`)) filasVacias.push({ marca, red });
+    }
+  }
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -188,6 +207,18 @@ function TablaCrosstab({
               >
                 {textoRendimiento(c.rendimiento_relativo_medio)}
               </TableCell>
+            </TableRow>
+          ))}
+          {/* Marca×red canónica sin datos en el periodo: fila presente con "—" (no se omite). */}
+          {filasVacias.map(({ marca, red }) => (
+            <TableRow key={`vacia-${marca}-${red}`} className="text-muted-foreground">
+              <TableCell className="font-medium">{nombreMarca(marca, marcas)}</TableCell>
+              <TableCell>{nombreRed(red)}</TableCell>
+              <TableCell>—</TableCell>
+              <TableCell className="text-right tabular-nums">—</TableCell>
+              <TableCell className="text-right tabular-nums">—</TableCell>
+              <TableCell className="text-right tabular-nums">—</TableCell>
+              <TableCell className="text-right tabular-nums">—</TableCell>
             </TableRow>
           ))}
         </TableBody>

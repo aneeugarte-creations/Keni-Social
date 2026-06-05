@@ -147,6 +147,59 @@ def test_comparar_total_y_por_marca(cliente):
     assert "por_marca" in data
 
 
+def test_comparar_totales_mide_b_respecto_a_a_y_recalcula_engagement():
+    # A = "antes", B = "actual". La UI pinta B como valor grande y A como "antes", así que
+    # la variación debe medir B respecto a A: subir 170M→236M es +39 %, NO −28 % (bug previo
+    # que invertía base y signo). El engagement se RECALCULA int/vis por periodo (el total no
+    # lo trae con varias redes) para no salir "—".
+    from keni_consola.api.metricas import _comparar_totales
+
+    total_a = {"visualizaciones": 170, "interacciones": 10}
+    total_b = {"visualizaciones": 236, "interacciones": 20}
+    metricas = {m["metrica"]: m for m in _comparar_totales(total_a, total_b)["metricas"]}
+    vis = metricas["visualizaciones"]
+    assert (vis["a"], vis["b"]) == (170, 236)
+    assert vis["diferencia"] == 66  # b - a (actual menos antes)
+    assert vis["variacion_pct"] == round((236 - 170) / 170 * 100, 1)
+    assert vis["variacion_pct"] > 0  # una subida sale positiva, flecha arriba
+    eng = metricas["engagement_pct"]
+    assert eng["a"] == round(10 / 170 * 100, 1)
+    assert eng["b"] == round(20 / 236 * 100, 1)
+    assert eng["variacion_pct"] is not None  # ya no es "—"
+
+
+def test_comparar_totales_incluye_granulares_y_seguidores_cuando_estan():
+    # Las métricas que faltaban (likes/comentarios/…/seguidores) se comparan cuando el
+    # total las trae (las inyecta `_total_comparable` desde desglose + serie de seguidores).
+    from keni_consola.api.metricas import _comparar_totales
+
+    total_a = {"visualizaciones": 100, "interacciones": 10, "likes": 8, "clics_enlace": 3, "seguidores_netos": 40}
+    total_b = {"visualizaciones": 120, "interacciones": 15, "likes": 12, "clics_enlace": 7, "seguidores_netos": 50}
+    claves = {m["metrica"] for m in _comparar_totales(total_a, total_b)["metricas"]}
+    assert {"likes", "clics_enlace", "seguidores_netos"} <= claves
+
+
+def test_suma_clics_none_si_ninguna_pieza_lo_expone():
+    # clics se suma del listado de piezas; None (no 0) si ninguna lo trae (degradación honesta).
+    from keni_consola.api.metricas import _suma_clics
+
+    assert _suma_clics({"piezas": [{"clics_enlace": 3}, {"clics_enlace": None}, {"clics_enlace": 4}]}) == 7
+    assert _suma_clics({"piezas": [{"clics_enlace": None}, {}]}) is None
+    assert _suma_clics({}) is None
+
+
+def test_comparar_totales_omite_metricas_ausentes():
+    # A nivel "por marca" solo llegan vistas/interacciones: no se pinta una tarjeta de
+    # likes/seguidores con datos a medias (se omite la métrica ausente).
+    from keni_consola.api.metricas import _comparar_totales
+
+    solo_base = {"visualizaciones": 100, "interacciones": 10}
+    claves = {m["metrica"] for m in _comparar_totales(solo_base, solo_base)["metricas"]}
+    assert "likes" not in claves
+    assert "seguidores_netos" not in claves
+    assert {"visualizaciones", "interacciones", "engagement_pct"} <= claves
+
+
 def test_comparar_expone_fuente_muestra(cliente):
     # N6: la comparativa A vs B tambien lleva `fuente` para el badge de muestra,
     # igual que `/reporte`. Con la fuente offline de `entorno`, ambos lados son muestra.

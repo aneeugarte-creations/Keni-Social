@@ -78,9 +78,15 @@ describe("TablaRedes", () => {
     expect(screen.getByText("57%")).toBeInTheDocument();
   });
 
-  it("dice con honestidad cuando no hay redes", () => {
+  it("muestra TODAS las redes canónicas (con '—') aunque no haya datos", () => {
+    // Contrato "todas las tablas, todas las redes": sin datos NO se oculta la tabla; cada
+    // red canónica aparece como fila con "—" (incluida X, no contratada en el piloto).
     render(<TablaRedes redes={[]} />);
 
-    expect(screen.getByText(/No hay redes para mostrar/i)).toBeInTheDocument();
+    for (const nombre of ["Facebook", "Instagram", "TikTok", "YouTube", "X"]) {
+      expect(screen.getByText(nombre)).toBeInTheDocument();
+    }
+    // Celdas vacías con guion largo, nunca ceros falsos.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });

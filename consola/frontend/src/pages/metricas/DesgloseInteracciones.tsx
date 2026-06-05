@@ -33,7 +33,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { nombreMarca, nombreRed, numeroCompacto } from "@/lib/formato";
+import {
+  nombreMarca,
+  nombreRed,
+  numeroCompacto,
+  REDES_CANONICAS,
+  type RedCanonica,
+} from "@/lib/formato";
 import type { CeldaDesglose, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -80,16 +86,15 @@ export function DesgloseInteracciones({
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
 
   const celdas = React.useMemo(() => data?.celdas ?? [], [data]);
-  const redesDisp = React.useMemo(
-    () => Array.from(new Set(celdas.map((c) => c.red))),
-    [celdas],
-  );
-  const celdasFiltradas = React.useMemo(
-    () => celdas.filter((c) => redFiltro === TODAS || c.red === redFiltro),
-    [celdas, redFiltro],
-  );
+  // "Todas las tablas, todas las redes": el selector ofrece SIEMPRE las 5 redes canónicas
+  // (no solo las que traen datos), así el operador puede enfocar cualquiera —incluida X, que
+  // en el piloto no está contratada en Metricool— y, si no hay datos, la tabla lo dice con "—".
+  // El filtro por red NO se aplica recortando celdas aquí: `construirRejilla` deriva las marcas
+  // del conjunto completo y restringe las redes a `redFiltro`, de modo que enfocar una red sin
+  // datos sigue mostrando esa red como fila "—" para cada marca (no se vacía la tabla).
+  const redesDisp = REDES_CANONICAS;
 
-  const acciones = redesDisp.length ? (
+  const acciones = (
     <Select value={redFiltro} onValueChange={setRedFiltro}>
       <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
         <SelectValue placeholder="Red" />
@@ -103,7 +108,7 @@ export function DesgloseInteracciones({
         ))}
       </SelectContent>
     </Select>
-  ) : undefined;
+  );
 
   return (
     <SeccionColapsable
@@ -123,39 +128,69 @@ export function DesgloseInteracciones({
         <p className="py-10 text-center text-sm text-muted-foreground">
           La fuente activa no expone el desglose de interacciones para este periodo.
         </p>
-      ) : celdasFiltradas.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Ninguna celda coincide con los filtros seleccionados.
-        </p>
       ) : (
         <>
-          <GraficaApilada celdas={celdasFiltradas} marcas={marcas} />
-          <TablaDesglose celdas={celdasFiltradas} totales={data.totales} marcas={marcas} />
+          <GraficaApilada celdas={celdas} marcas={marcas} redFiltro={redFiltro} />
+          <TablaDesglose
+            celdas={celdas}
+            totales={data.totales}
+            marcas={marcas}
+            redFiltro={redFiltro}
+          />
         </>
       )}
     </SeccionColapsable>
   );
 }
 
-/** Una etiqueta legible "Marca · Red" por celda (eje del BarChart / filas de tabla). */
-function etiquetaCelda(c: CeldaDesglose, marcas: MarcaDisponible[]): string {
-  return `${nombreMarca(c.marca, marcas)} · ${nombreRed(c.red)}`;
+/** Una entrada de la rejilla marca×red: la celda real o `undefined` si esa red no trae datos. */
+type EntradaRejilla = { marca: string; red: RedCanonica; celda: CeldaDesglose | undefined };
+
+/**
+ * Construye la rejilla marca×red completa: por cada marca presente (en su orden de aparición)
+ * y cada red canónica objetivo (todas, o la única bajo filtro) devuelve la celda real o
+ * `undefined`. Así "todas las tablas, todas las redes": una red sin datos no se omite, aparece
+ * como entrada vacía que el render pinta con "—" (tabla) o sin barra (gráfica).
+ */
+function construirRejilla(celdas: CeldaDesglose[], redFiltro: string): EntradaRejilla[] {
+  const redesObjetivo =
+    redFiltro === TODAS
+      ? REDES_CANONICAS
+      : REDES_CANONICAS.filter((r) => r === redFiltro);
+  // Marcas en orden de primera aparición en las celdas (estable, sin reordenar).
+  const marcasOrden: string[] = [];
+  const porClave = new Map<string, CeldaDesglose>();
+  for (const c of celdas) {
+    if (!marcasOrden.includes(c.marca)) marcasOrden.push(c.marca);
+    porClave.set(`${c.marca}::${c.red.toLowerCase()}`, c);
+  }
+  const rejilla: EntradaRejilla[] = [];
+  for (const marca of marcasOrden) {
+    for (const red of redesObjetivo) {
+      rejilla.push({ marca, red, celda: porClave.get(`${marca}::${red}`) });
+    }
+  }
+  return rejilla;
 }
 
 function GraficaApilada({
   celdas,
   marcas,
+  redFiltro,
 }: {
   celdas: CeldaDesglose[];
   marcas: MarcaDisponible[];
+  redFiltro: string;
 }) {
-  const datos = celdas.map((c) => ({
-    grupo: etiquetaCelda(c, marcas),
-    Likes: c.likes,
-    Comentarios: c.comentarios,
-    Compartidos: c.compartidos,
-    Guardados: c.guardados,
-    Reproducciones: c.video_views,
+  // Una barra por marca×red canónica: las redes sin datos quedan en 0 (sin barra) pero
+  // conservan su entrada/etiqueta en el eje, para no "desaparecer" de la gráfica.
+  const datos = construirRejilla(celdas, redFiltro).map(({ marca, red, celda }) => ({
+    grupo: `${nombreMarca(marca, marcas)} · ${nombreRed(red)}`,
+    Likes: celda?.likes ?? 0,
+    Comentarios: celda?.comentarios ?? 0,
+    Compartidos: celda?.compartidos ?? 0,
+    Guardados: celda?.guardados ?? 0,
+    Reproducciones: celda?.video_views ?? 0,
   }));
   return (
     <BarChart
@@ -177,28 +212,38 @@ function TablaDesglose({
   celdas,
   totales,
   marcas,
+  redFiltro,
 }: {
   celdas: CeldaDesglose[];
   totales: Record<string, number>;
   marcas: MarcaDisponible[];
+  redFiltro: string;
 }) {
-  // Cada componente del engagement + nº de piezas es ordenable.
-  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CeldaDesglose, ClaveDesglose>(
-    celdas,
+  // Rejilla marca×red COMPLETA: las redes sin datos van como entradas con `celda` undefined,
+  // que el orden empuja al final (`null` no es un 0 real) y el render pinta con "—".
+  const rejilla = React.useMemo(
+    () => construirRejilla(celdas, redFiltro),
+    [celdas, redFiltro],
+  );
+
+  // Cada componente del engagement + nº de piezas es ordenable. Para entradas sin celda
+  // devolvemos `null`: `useOrdenTabla` las manda al final en cualquier dirección.
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<EntradaRejilla, ClaveDesglose>(
+    rejilla,
     {
-      likes: (c) => c.likes,
-      comentarios: (c) => c.comentarios,
-      compartidos: (c) => c.compartidos,
-      guardados: (c) => c.guardados,
-      video_views: (c) => c.video_views,
-      n_piezas: (c) => c.n_piezas,
+      likes: (e) => e.celda?.likes ?? null,
+      comentarios: (e) => e.celda?.comentarios ?? null,
+      compartidos: (e) => e.celda?.compartidos ?? null,
+      guardados: (e) => e.celda?.guardados ?? null,
+      video_views: (e) => e.celda?.video_views ?? null,
+      n_piezas: (e) => e.celda?.n_piezas ?? null,
       // El resto de claves de CeldaDesglose no se usan como orden, pero el tipo las exige.
-      marca: (c) => c.marca,
-      red: (c) => c.red,
-      interacciones: (c) => c.interacciones,
-      visualizaciones: (c) => c.visualizaciones,
-      engagement_pct: (c) => c.engagement_pct,
-    } as Record<ClaveDesglose, (c: CeldaDesglose) => number | string | null>,
+      marca: (e) => e.marca,
+      red: (e) => e.red,
+      interacciones: (e) => e.celda?.interacciones ?? null,
+      visualizaciones: (e) => e.celda?.visualizaciones ?? null,
+      engagement_pct: (e) => e.celda?.engagement_pct ?? null,
+    } as Record<ClaveDesglose, (e: EntradaRejilla) => number | string | null>,
   );
 
   return (
@@ -230,16 +275,19 @@ function TablaDesglose({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filasOrdenadas.map((c) => (
-            <TableRow key={`${c.marca}-${c.red}`}>
-              <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
-              <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>
+          {filasOrdenadas.map(({ marca, red, celda }) => (
+            <TableRow
+              key={`${marca}-${red}`}
+              className={celda ? undefined : "text-muted-foreground"}
+            >
+              <TableCell className="font-medium">{nombreMarca(marca, marcas)}</TableCell>
+              <TableCell className="text-muted-foreground">{nombreRed(red)}</TableCell>
               {COMPONENTES.map((comp) => (
                 <TableCell key={comp.clave} className="text-right tabular-nums">
-                  {numeroCompacto(c[comp.clave] as number)}
+                  {celda ? numeroCompacto(celda[comp.clave] as number) : "—"}
                 </TableCell>
               ))}
-              <TableCell className="text-right tabular-nums">{c.n_piezas}</TableCell>
+              <TableCell className="text-right tabular-nums">{celda ? celda.n_piezas : "—"}</TableCell>
             </TableRow>
           ))}
           <TableRow className="border-t-2 font-medium">
