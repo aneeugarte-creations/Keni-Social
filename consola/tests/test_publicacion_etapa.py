@@ -44,9 +44,16 @@ def test_etapa_generando_copy_solo_si_no_hay_copy():
     assert d["etapa_ia"] == "generando_copy"
 
 
-def test_pieza_solo_texto_sin_imagen_esta_lista():
-    # Sin copy-in (ni exención): es de SOLO TEXTO, no necesita imagen -> lista aunque no haya foto.
-    d = publicacion_a_dict(_pub(contenido="Solo texto", copy_in="", imagen=""))
+def test_pieza_sin_foto_no_esta_lista_aunque_no_lleve_copy_in():
+    # TODO post necesita una FOTO real: sin foto (ni copy-in) NO está lista -> "Falta imagen".
+    # (Antes una pieza de solo texto se daba por lista sin foto; ya no.)
+    d = publicacion_a_dict(_pub(contenido="Solo texto", copy_in="", imagen="", foto=""))
+    assert d["etapa_ia"] == "generando_arte"
+
+
+def test_pieza_sin_marca_con_imagen_subida_esta_lista():
+    # En piezas SIN marca/placa, la imagen subida (bespoke) SÍ cuenta como foto real -> lista.
+    d = publicacion_a_dict(_pub(marca="", contenido="copy", copy_in="", imagen="subida.png", foto=""))
     assert d["etapa_ia"] == "lista_para_revisar"
 
 

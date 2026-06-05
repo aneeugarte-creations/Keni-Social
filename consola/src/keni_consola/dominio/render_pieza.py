@@ -156,6 +156,21 @@ def imagen_compuesta_id(pub: dict[str, Any]) -> str:
     return resultado["id"]
 
 
+def _sufijo_cache(pub: dict[str, Any]) -> str:
+    """Sufijo `?v=...` para la URL del render on-demand (`/compuesta`).
+
+    El `/compuesta` se sirve con `Cache-Control: max-age=300`, así que el navegador reusaría la
+    imagen cacheada hasta 5 min tras EDITAR la pieza (p. ej. subir/cambiar la foto) y el feed no se
+    actualizaría. El token deriva de `actualizado` (lo bumpea TODA edición): al editar cambia la
+    URL -> cache miss -> imagen fresca. Las piezas sin tocar conservan su URL (y su caché). Las
+    rutas `/api/media/{id}` no lo necesitan (son content-addressed: el id ya cambia con el contenido).
+    """
+    sello = str(pub.get("actualizado") or pub.get("fecha_actualizacion") or "").strip()
+    if not sello:
+        return ""
+    return f"?v={hashlib.sha256(sello.encode('utf-8')).hexdigest()[:8]}"
+
+
 def imagen_url_de(pub: dict[str, Any]) -> str:
     """URL servible de la imagen de la pieza para la UI/MCP (sin renderizar nada aquí).
 
@@ -174,7 +189,7 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     if imagen and not _receta_manda(pub):
         return f"/api/media/{imagen}"
     if tiene_receta(pub):
-        return f"/api/publicaciones/{pub['id']}/compuesta"
+        return f"/api/publicaciones/{pub['id']}/compuesta{_sufijo_cache(pub)}"
     foto = (pub.get("foto") or "").strip()
     if foto:
         return f"/api/media/{foto}"

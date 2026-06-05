@@ -76,12 +76,12 @@ export function etapaDePublicacion(p: Publicacion): EtapaIa {
   if (p.estado === "programado") return "programada";
   if (p.estado === "aprobado") return "aprobada";
   if (p.estado === "en_revision") return "lista_para_revisar";
-  // ESPEJO del backend. Solo "generando_copy" si DE VERDAD falta el copy. La placa NO cuenta como
-  // imagen: una pieza "lleva imagen" si tiene copy-in (o está exenta) y entonces necesita una FOTO
-  // real (`foto`/`imagen_fuente`); las de solo texto no necesitan imagen.
+  // ESPEJO del backend. Solo "generando_copy" si DE VERDAD falta el copy.
   if (!p.contenido?.trim()) return "generando_copy";
-  const necesitaImagen = !!p.copy_in?.trim() || !!p.copy_in_exento;
-  const hayImagenReal = !!p.foto || !!p.imagen_fuente;
-  if (necesitaImagen && !hayImagenReal) return "generando_arte";
+  // TODO post necesita una FOTO REAL para estar listo (no se manda a revisión sin foto): la foto
+  // cruda (`foto`), la imagen de fuente (`imagen_fuente`) o —en piezas SIN marca— la imagen subida
+  // bespoke (`imagen`). La placa (`imagen`) de una pieza de MARCA NO cuenta como foto.
+  const hayImagenReal = !!p.foto || !!p.imagen_fuente || (!p.marca && !!p.imagen);
+  if (!hayImagenReal) return "generando_arte";
   return "lista_para_revisar";
 }

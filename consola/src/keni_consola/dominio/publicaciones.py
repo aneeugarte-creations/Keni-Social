@@ -63,13 +63,21 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     # está exenta; entonces necesita una FOTO real —subida (`foto`) o de fuente (`imagen_fuente`)—.
     # Las piezas de SOLO TEXTO (sin copy-in ni exención) NO necesitan imagen y están listas con
     # el copy. Por eso `imagen` (la placa) NO basta: lo que cuenta es la foto real.
-    necesita_imagen = bool(str(pub.get("copy_in") or "").strip()) or bool(pub.get("copy_in_exento"))
-    hay_imagen_real = bool(pub.get("foto") or "") or bool(imagen_fuente)
+    # TODO post necesita una FOTO REAL para estar LISTO (no se manda a revisión sin foto): la foto
+    # cruda subida (`foto`), la imagen de la fuente (`imagen_fuente`) o —en piezas SIN marca/placa—
+    # la imagen subida bespoke (`imagen`). En piezas de MARCA, `imagen` es solo la placa compuesta y
+    # NO cuenta como foto. (Antes una pieza sin copy-in se daba por lista SIN foto; ya no.)
+    marca = str(pub.get("marca") or "").strip()
+    hay_imagen_real = (
+        bool(str(pub.get("foto") or "").strip())
+        or bool(imagen_fuente)
+        or (not marca and bool(str(pub.get("imagen") or "").strip()))
+    )
     etapa_ia = pipeline_estado.etapa_de_pieza(
         {
             "estado": pub.get("estado"),
             "falta_copy": not str(pub.get("contenido") or "").strip(),
-            "falta_imagen": necesita_imagen and not hay_imagen_real,
+            "falta_imagen": not hay_imagen_real,
         }
     )
     return {

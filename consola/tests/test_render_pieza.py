@@ -213,6 +213,17 @@ def test_url_receta_apunta_a_compuesta(monkeypatch):
     assert render_pieza.imagen_url_de(pub) == "/api/publicaciones/p1/compuesta"
 
 
+def test_url_compuesta_lleva_sufijo_cache_por_actualizado(monkeypatch):
+    # Con `actualizado`, la URL del render lleva `?v=...` (cache-bust): cambia al editar la pieza
+    # (p. ej. subir foto), forzando al feed a recargar la imagen en vez de servir la cacheada.
+    _sin_plantilla_de_marca(monkeypatch, True)
+    base = {"id": "p1", "imagen": "", "marca": "unotv"}
+    u1 = render_pieza.imagen_url_de({**base, "actualizado": "2026-06-04T10:00:00"})
+    u2 = render_pieza.imagen_url_de({**base, "actualizado": "2026-06-04T11:30:00"})
+    assert u1.startswith("/api/publicaciones/p1/compuesta?v=")
+    assert u1 != u2  # otro `actualizado` => otra URL => el navegador recarga
+
+
 def test_url_solo_foto(monkeypatch):
     _sin_plantilla_de_marca(monkeypatch, False)
     pub = {"id": "p1", "imagen": "", "marca": "piso-15", "foto": "f.jpg"}

@@ -71,10 +71,18 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("generando_arte");
   });
 
-  it("pieza de SOLO TEXTO (sin copy-in) no necesita imagen → lista_para_revisar", () => {
+  it("sin foto NO está lista, aunque no lleve copy-in → generando_arte (falta imagen)", () => {
     expect(
       etapaDePublicacion(
-        pub({ estado: "borrador", contenido: "copy", copy_in: "", foto: "", etapa_ia: undefined }),
+        pub({ estado: "borrador", contenido: "copy", copy_in: "", foto: "", imagen: "", etapa_ia: undefined }),
+      ),
+    ).toBe("generando_arte");
+  });
+
+  it("pieza SIN marca con imagen subida (bespoke) → lista_para_revisar", () => {
+    expect(
+      etapaDePublicacion(
+        pub({ estado: "borrador", marca: "", contenido: "copy", copy_in: "", foto: "", imagen: "subida.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
   });
