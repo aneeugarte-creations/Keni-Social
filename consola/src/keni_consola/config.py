@@ -451,9 +451,10 @@ ENV_PG_PASSWORD = "POSTGRES_PASSWORD"
 ENV_PG_DB = "POSTGRES_DB"
 ENV_PG_HOST = "POSTGRES_HOST"
 ENV_PG_PORT = "POSTGRES_PORT"
-# Pool de conexiones Postgres (psycopg_pool). `KENI_DB_POOL` ON/OFF (def ON) elige entre el
-# pool reutilizable y el camino historico de "una conexion por operacion" (fallback de
-# un-solo-flag por si el pool se porta mal en prod). `KENI_DB_POOL_MIN`/`_MAX` dimensionan el
+# Pool de conexiones Postgres (psycopg_pool). `KENI_DB_POOL` ON/OFF (def **OFF**) elige entre
+# el pool reutilizable (opt-in con =1) y el camino historico "una conexion por operacion"
+# (default; nunca fuga). Ver `db_pool_activado()` para el POR QUE del default OFF (fuga de
+# leases sin try/finally). `KENI_DB_POOL_MIN`/`_MAX` dimensionan el
 # pool: MAX debe SUPERAR el numero de conexiones de larga duracion concurrentes (cada
 # `lock_barrido` retiene una conexion entera durante su barrido) + las leases por request +
 # los daemons, o el resto se quedaria esperando una conexion libre (timeout).
@@ -1877,15 +1878,24 @@ def database_url() -> str | None:
 
 
 def db_pool_activado() -> bool:
-    """¿Usar el pool de conexiones Postgres? (`KENI_DB_POOL`, def ON).
+    """¿Usar el pool de conexiones Postgres? (`KENI_DB_POOL`, def **OFF**).
 
-    Flag de revert de UN SOLO interruptor: con `KENI_DB_POOL=0` (o `false`/`no`/`off`) el
-    factory vuelve al camino historico de "una conexion psycopg por operacion". Por defecto
-    ON: el pool reutiliza conexiones y evita el handshake TCP+auth en el camino caliente.
+    Interruptor de UN SOLO flag: con `KENI_DB_POOL=1` (o `true`/`yes`/`on`) se ACTIVA el pool
+    (reutiliza conexiones, evita el handshake TCP+auth en el camino caliente). Sin el flag se
+    usa el camino historico "una conexion psycopg por operacion".
+
+    POR QUE DEFAULT OFF: el patron de `db.py` es `con=_conectar(); ... ; con.close()` SIN
+    `try/finally`. Cualquier `raise` antes del `close()` NO devuelve la lease; bajo concurrencia
+    real eso AGOTA el pool (`PoolTimeout` -> la app se cuelga) — validado contra Postgres real.
+    La red `__del__` de `motor_db._ConexionPg` recupera ALGUNAS leases por GC, pero NO basta
+    (el GC no dispara a tiempo si un traceback/cursor mantiene vivo el wrapper). El pool queda
+    OPT-IN hasta cerrar la fuga en origen (envolver los call sites de db.py en `try/finally` o
+    pasar a un context-manager). A escala de piloto el camino por-operacion es correcto y de
+    sobra rapido; el pool es una optimizacion para mas adelante.
     """
     crudo = _crudo(ENV_DB_POOL)
     if not crudo:
-        return True  # def ON
+        return False  # def OFF — ver POR QUE arriba (fuga de leases sin try/finally)
     return crudo.lower() in _VERDADEROS
 
 

@@ -170,6 +170,46 @@ class _ConexionPg:
             except Exception:  # noqa: BLE001
                 pass
 
+    def __del__(self) -> None:
+        """Red de seguridad ANTI-FUGA de leases del pool.
+
+        Casi todas las funciones de `db.py` hacen `con = _conectar(); ... ; con.close()` SIN
+        `try/finally`. Si la funcion lanza ANTES del `con.close()` (un `IntegrityError`, un
+        retry, cualquier error), la lease del pool NO se devolveria. Sin pool eso era inocuo
+        (el socket lo cerraba el GC); CON pool, cada fuga deja una conexion prestada para
+        siempre y, tras `max_size` fugas, todo `getconn()` se cuelga 30 s -> `PoolTimeout` ->
+        la app entera se cuelga. Aqui: cuando el `con` local cae de scope sin `close()`, el
+        refcount de CPython dispara `__del__` al instante y devolvemos la lease.
+
+        Tras un `close()` explicito esto es un NO-OP (close() ya dejo `_con`/`_pool` en None),
+        asi que el camino feliz no paga nada. `__del__` JAMAS propaga (contrato de Python):
+        absorbe todo, incluido el shutdown del interprete (pool/logging a medio desmontar).
+        """
+        try:
+            pool, self._pool = self._pool, None
+            con, self._con = self._con, None
+            if con is None or pool is None:
+                return  # ya devuelta por close(), o conexion dedicada (su GC cierra el socket)
+            # Lease POOLED fugada: scrub antes de reciclar. `rollback()` suelta locks de
+            # transaccion/fila; `pg_advisory_unlock_all()` suelta los de SESION (un rollback NO
+            # lo hace), si no una conexion reciclada arrastraria el advisory lock de
+            # `lock_barrido` y romperia el single-flight de los barridos.
+            try:
+                con.rollback()
+                con.execute("SELECT pg_advisory_unlock_all()")
+                con.commit()
+            except Exception:  # noqa: BLE001 -- inservible: que putconn/check la descarte.
+                pass
+            try:
+                pool.putconn(con)
+            except Exception:  # noqa: BLE001 -- best-effort; si falla, cerramos para no filtrar.
+                try:
+                    con.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001 -- __del__ jamas propaga.
+            pass
+
 
 def _mensaje_sin_url() -> str:
     """Mensaje accionable cuando falta `DATABASE_URL` (Postgres es obligatorio, ADR 0004)."""

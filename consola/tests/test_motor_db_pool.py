@@ -30,7 +30,8 @@ from keni_consola import motor_db
 
 
 class _ConFalsa:
-    """Conexion falsa: solo lo que el wrapper toca (`autocommit`, `close`, `closed`)."""
+    """Conexion falsa: lo que el wrapper toca (`autocommit`, `close`, y en la ruta de fuga
+    `rollback`/`execute`/`commit` del scrub). Registra el scrub para verificarlo."""
 
     _siguiente_id = 0
 
@@ -40,9 +41,25 @@ class _ConFalsa:
         self.autocommit = False
         self.closed = False
         self.rota = False  # marca de "transaccion/conexion rota" para el caso poisoned
+        self.rollbacks = 0
+        self.sql_ejecutado: list[str] = []
 
     def close(self) -> None:
         self.closed = True
+
+    def rollback(self) -> None:
+        if self.rota:
+            raise RuntimeError("conexion rota")
+        self.rollbacks += 1
+
+    def execute(self, sql, params=()):  # noqa: ANN001 -- firma minima del scrub
+        if self.rota:
+            raise RuntimeError("conexion rota")
+        self.sql_ejecutado.append(sql)
+
+    def commit(self) -> None:
+        if self.rota:
+            raise RuntimeError("conexion rota")
 
 
 class _PoolFalso:
@@ -87,7 +104,7 @@ def pool_falso(monkeypatch):
     contaminar otros tests que comparten el proceso.
     """
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@localhost:5432/keni_test")
-    monkeypatch.delenv("KENI_DB_POOL", raising=False)  # def ON
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # el default es OFF: forzamos ON para probar el pool
 
     falso = _PoolFalso()
     monkeypatch.setattr(motor_db, "_crear_pool", lambda url: falso)
@@ -211,7 +228,7 @@ def test_fallback_flag_off_usa_camino_directo(monkeypatch):
 def test_fallback_si_pool_no_arranca(monkeypatch):
     # Si construir el pool LANZA, `_obtener_pool` cae a None (camino directo) sin propagar.
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@localhost:5432/keni_test")
-    monkeypatch.delenv("KENI_DB_POOL", raising=False)
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # default OFF: forzamos ON para probar el fallback de arranque
     monkeypatch.setattr(motor_db, "_pool", None)
     monkeypatch.setattr(motor_db, "_pool_url", None)
     monkeypatch.setattr(motor_db, "_modo_logueado", False)
@@ -226,7 +243,7 @@ def test_fallback_si_pool_no_arranca(monkeypatch):
 def test_pool_se_rehace_si_cambia_la_url(monkeypatch):
     # Cambiar `DATABASE_URL` (caso de tests que reapuntan la BD) cierra el pool viejo y crea
     # uno nuevo para la URL nueva.
-    monkeypatch.delenv("KENI_DB_POOL", raising=False)
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # el default es OFF: forzamos ON para probar el pool
     monkeypatch.setattr(motor_db, "_pool", None)
     monkeypatch.setattr(motor_db, "_pool_url", None)
     monkeypatch.setattr(motor_db, "_modo_logueado", False)
@@ -249,3 +266,53 @@ def test_pool_se_rehace_si_cambia_la_url(monkeypatch):
     assert p1.closed is True  # el pool de la URL vieja se cerro
     assert len(pools) == 2
     motor_db.cerrar_pool()
+
+
+# --------------------------------------------------------------------------- #
+# Red de seguridad __del__: una lease soltada SIN close() vuelve al pool (GC)  #
+# (regresion del bug de fuga que agotaba el pool -> PoolTimeout -> app colgada)#
+# --------------------------------------------------------------------------- #
+
+
+def test_del_devuelve_la_lease_fugada_sin_close(pool_falso):
+    """Patron historico de `db.py`: `con = _conectar(); ... ; con.close()` sin try/finally.
+    Si la funcion lanza antes del close(), la lease se 'fuga'. La red `__del__` la devuelve
+    por GC, asi el pool NO se agota (el bug original dejaba `vivas` creciendo sin tope)."""
+    import gc
+
+    for _ in range(50):
+        con = motor_db.conectar_cruda()
+        del con  # se cae de scope SIN close() (simula un raise a mitad de una funcion db.py)
+        gc.collect()
+
+    assert pool_falso.vivas <= 1, f"el pool se fuga: vivas={pool_falso.vivas}"
+
+
+def test_del_scrubea_la_lease_fugada_antes_de_reciclar(pool_falso):
+    """En la fuga, antes de reciclar se hace rollback + `pg_advisory_unlock_all` (soltar los
+    locks de SESION, que el rollback NO suelta), para no arrastrar el advisory lock de
+    `lock_barrido` a la siguiente lease y romper el single-flight."""
+    import gc
+
+    wrap = motor_db.conectar_cruda()
+    cruda = wrap._con  # la _ConFalsa subyacente; la mantenemos viva para inspeccionarla
+    del wrap
+    gc.collect()
+
+    assert cruda.rollbacks >= 1
+    assert any("pg_advisory_unlock_all" in s for s in cruda.sql_ejecutado)
+
+
+def test_del_es_noop_tras_close_explicito(pool_falso):
+    """Tras un `close()` explicito (camino feliz), `__del__` no hace NADA: no re-scrubea ni
+    doble-devuelve (close() ya dejo `_con`/`_pool` en None)."""
+    import gc
+
+    wrap = motor_db.conectar_cruda()
+    cruda = wrap._con
+    wrap.close()
+    rollbacks_tras_close = cruda.rollbacks
+    del wrap
+    gc.collect()
+
+    assert cruda.rollbacks == rollbacks_tras_close  # __del__ fue no-op
