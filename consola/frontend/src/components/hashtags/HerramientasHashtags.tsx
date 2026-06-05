@@ -1,21 +1,18 @@
 /**
  * Herramientas de hashtags para el compositor/editor de publicaciones.
  *
- * Ofrece dos acciones que insertan hashtags al final del contenido:
- *  - **Insertar grupo**: elige un grupo guardado (`/api/hashtags`).
- *  - **Sugerir con IA**: pide sugerencias (`/api/hashtags/sugerir`) y muestra
- *    chips seleccionables que se insertan en bloque.
+ * Una sola acción: **Insertar grupo** — elige un grupo guardado (`/api/hashtags`)
+ * y se añaden sus hashtags al final del contenido. Solo se ofrecen los grupos de
+ * la marca actual (más los generales sin marca); los de otras marcas no aparecen.
  *
  * También expone un acceso a la gestión de grupos. React Query + toasts; modo
  * claro/oscuro; texto es-MX.
  */
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Hash, Loader2, Plus, Settings2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Hash, Settings2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { MarcaIA } from "@/components/comunes/MarcaIA";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -24,25 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useGeneracion } from "@/hooks/use-generacion";
-import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 import { agregarHashtags, CLAVE_HASHTAGS } from "../../pages/publicaciones/hashtags";
 
-function mensajeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
-
 export interface HerramientasHashtagsProps {
-  /** Contenido actual (para detectar duplicados y dar contexto a la IA). */
+  /** Contenido actual (para detectar duplicados al insertar). */
   contenido: string;
   /** Inserta el contenido resultante (con hashtags añadidos). */
   onContenido: (nuevo: string) => void;
   marca: string;
-  red: string;
   /** Abre la gestión de grupos (CRUD). */
   onGestionar: () => void;
 }
@@ -51,26 +39,20 @@ export function HerramientasHashtags({
   contenido,
   onContenido,
   marca,
-  red,
   onGestionar,
 }: HerramientasHashtagsProps) {
-  // Chips sugeridos por IA pendientes de insertar.
-  const [sugeridos, setSugeridos] = React.useState<string[]>([]);
-  const [seleccion, setSeleccion] = React.useState<Set<string>>(new Set());
-
   const gruposQuery = useQuery({
     queryKey: CLAVE_HASHTAGS,
     queryFn: ({ signal }) => api.hashtags(signal),
   });
 
   const grupos = React.useMemo(() => gruposQuery.data?.grupos ?? [], [gruposQuery.data]);
-  // Mostramos primero los grupos de la marca actual, luego los generales.
-  const gruposOrdenados = React.useMemo(() => {
-    return [...grupos].sort((a, b) => {
-      const pa = a.marca === marca ? 0 : a.marca ? 2 : 1;
-      const pb = b.marca === marca ? 0 : b.marca ? 2 : 1;
-      return pa - pb;
-    });
+  // Solo los grupos de la marca actual (más los generales sin marca); los de otras
+  // marcas no se muestran. Primero la marca, luego los generales.
+  const gruposVisibles = React.useMemo(() => {
+    return grupos
+      .filter((g) => g.marca === marca || !g.marca)
+      .sort((a, b) => (a.marca === marca ? 0 : 1) - (b.marca === marca ? 0 : 1));
   }, [grupos, marca]);
 
   function insertarGrupo(id: string) {
@@ -78,57 +60,6 @@ export function HerramientasHashtags({
     if (!grupo) return;
     onContenido(agregarHashtags(contenido, grupo.hashtags));
     toast.success(`Insertado: ${grupo.nombre}`);
-  }
-
-  // La sugerencia corre como trabajo de IA en background; seguimos su progreso.
-  const { generacion, ejecutando, iniciar } = useGeneracion();
-
-  const sugerir = useMutation({
-    mutationFn: () =>
-      api.sugerirHashtags({ texto: contenido, marca, red: red || undefined }),
-    onSuccess: (data) => iniciar(data.generacion),
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  // Al completarse la generación, volcamos los hashtags sugeridos (una vez por id).
-  const terminalRef = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    if (!generacion || generacion.id === terminalRef.current) return;
-    if (generacion.estado === "completado") {
-      terminalRef.current = generacion.id;
-      const lista = generacion.resultado?.hashtags ?? [];
-      if (lista.length === 0) {
-        toast.info("No se obtuvieron sugerencias.");
-        return;
-      }
-      setSugeridos(lista);
-      setSeleccion(new Set(lista));
-    } else if (generacion.estado === "error") {
-      terminalRef.current = generacion.id;
-      toast.error(generacion.error || "No se pudieron sugerir hashtags.");
-    }
-  }, [generacion]);
-
-  const sugiriendo = sugerir.isPending || ejecutando;
-
-  function alternar(h: string) {
-    setSeleccion((prev) => {
-      const sig = new Set(prev);
-      if (sig.has(h)) sig.delete(h);
-      else sig.add(h);
-      return sig;
-    });
-  }
-
-  function insertarSeleccionados() {
-    const elegidos = sugeridos.filter((h) => seleccion.has(h));
-    if (elegidos.length === 0) return;
-    onContenido(agregarHashtags(contenido, elegidos));
-    toast.success(
-      `Insertados ${elegidos.length} ${elegidos.length === 1 ? "hashtag" : "hashtags"}`,
-    );
-    setSugeridos([]);
-    setSeleccion(new Set());
   }
 
   return (
@@ -142,39 +73,23 @@ export function HerramientasHashtags({
         <Select
           value=""
           onValueChange={insertarGrupo}
-          disabled={gruposQuery.isPending || grupos.length === 0}
+          disabled={gruposQuery.isPending || gruposVisibles.length === 0}
         >
           <SelectTrigger className="h-8 w-auto gap-1.5 text-xs" aria-label="Insertar grupo de hashtags">
             <SelectValue
               placeholder={
-                grupos.length === 0 ? "Sin grupos guardados" : "Insertar grupo"
+                gruposVisibles.length === 0 ? "Sin grupos guardados" : "Insertar grupo"
               }
             />
           </SelectTrigger>
           <SelectContent>
-            {gruposOrdenados.map((g) => (
+            {gruposVisibles.map((g) => (
               <SelectItem key={g.id} value={g.id}>
-                {g.nombre}
-                {g.marca ? ` · ${g.marca_nombre || g.marca}` : ""} ({g.hashtags.length})
+                {g.nombre} ({g.hashtags.length})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => sugerir.mutate()}
-          disabled={sugiriendo || contenido.trim().length === 0}
-        >
-          {sugiriendo ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <MarcaIA />
-          )}
-          {sugiriendo ? "Sugiriendo…" : "Sugerir con IA"}
-        </Button>
 
         <Button
           type="button"
@@ -188,73 +103,6 @@ export function HerramientasHashtags({
           Gestionar grupos
         </Button>
       </div>
-
-      {sugeridos.length > 0 && (
-        <div className="space-y-2 border-t border-border pt-2">
-          <p className="text-xs text-muted-foreground">
-            Toca para seleccionar y luego inserta los elegidos:
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {sugeridos.map((h) => {
-              const activo = seleccion.has(h);
-              return (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => alternar(h)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    activo
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-foreground hover:bg-accent",
-                  )}
-                  aria-pressed={activo}
-                >
-                  {h}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={insertarSeleccionados}
-              disabled={seleccion.size === 0}
-            >
-              <Plus className="h-4 w-4" />
-              Insertar seleccionados ({seleccion.size})
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSugeridos([]);
-                setSeleccion(new Set());
-              }}
-            >
-              Descartar
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {sugeridos.length === 0 && grupos.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {gruposOrdenados.slice(0, 4).map((g) => (
-            <Badge
-              key={g.id}
-              variant="secondary"
-              className="cursor-pointer font-normal hover:bg-secondary/70"
-              onClick={() => insertarGrupo(g.id)}
-              title={`Insertar ${g.nombre}`}
-            >
-              {g.nombre}
-            </Badge>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

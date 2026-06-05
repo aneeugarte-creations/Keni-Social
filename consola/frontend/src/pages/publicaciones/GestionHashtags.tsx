@@ -6,7 +6,7 @@
  * toasts; modo claro/oscuro; texto es-MX.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Hash, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Hash, Loader2, Plus, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -122,15 +122,6 @@ function FormularioGrupo({
           placeholder="#futbol #deportes #unotv — separa por espacios o comas"
           className="min-h-[5rem]"
         />
-        {hashtags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {hashtags.map((h) => (
-              <Badge key={h} variant="secondary" className="font-normal">
-                {h}
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onCancelar} disabled={guardar.isPending}>
@@ -147,7 +138,8 @@ function FormularioGrupo({
 
 /**
  * Una fila de grupo guardado. Click izquierdo sobre la fila = editar (acción
- * primaria); borrar vive en el menú contextual (click derecho) y en el kebab "⋮".
+ * primaria); la única acción secundaria es BORRAR, que `FilaConAcciones` muestra
+ * como un icono de papelera directo (sin kebab "⋮" ni menú).
  */
 function FilaGrupo({
   grupo,
@@ -166,10 +158,9 @@ function FilaGrupo({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Acción primaria = editar. Borrar, al menú (con confirmación).
+  // Acción primaria = editar (click en la fila). Única secundaria = borrar, que se
+  // pinta como icono de papelera directo (al ser una sola acción, sin kebab ni menú).
   const acciones: EntradaMenuContextual[] = [
-    { etiqueta: "Editar", icono: Pencil, onClick: () => onEditar(grupo) },
-    { separador: true },
     {
       etiqueta: "Borrar",
       icono: Trash2,

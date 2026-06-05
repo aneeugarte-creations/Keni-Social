@@ -263,31 +263,8 @@ export function DialogoEditar({
           )}
         </DialogHeader>
 
+        {/* Orden de edición: primero la IMAGEN, luego el CONTENIDO (copy) y al final los HASHTAGS. */}
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="editar-contenido">Contenido</Label>
-              <ContadorCaracteres caracteres={contenido.length} limite={limite} />
-            </div>
-            <AutoTextarea
-              id="editar-contenido"
-              value={contenido}
-              onChange={(e) => setContenido(e.target.value)}
-              maxHeight={420}
-              className="min-h-[10rem] font-mono text-sm"
-            />
-          </div>
-
-          {publicacion && (
-            <HerramientasHashtags
-              contenido={contenido}
-              onContenido={setContenido}
-              marca={publicacion.marca}
-              red={publicacion.red}
-              onGestionar={() => setGestionHashtags(true)}
-            />
-          )}
-
           {publicacion &&
             (publicacion.marca ? (
               // SISTEMA ÚNICO: la plantilla del estudio se renderiza EN VIVO en el lienzo (con tu
@@ -323,6 +300,29 @@ export function DialogoEditar({
                 imagenFuente={publicacion.imagen_fuente}
               />
             ))}
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="editar-contenido">Contenido</Label>
+              <ContadorCaracteres caracteres={contenido.length} limite={limite} />
+            </div>
+            <AutoTextarea
+              id="editar-contenido"
+              value={contenido}
+              onChange={(e) => setContenido(e.target.value)}
+              maxHeight={420}
+              className="min-h-[10rem] font-mono text-sm"
+            />
+          </div>
+
+          {publicacion && (
+            <HerramientasHashtags
+              contenido={contenido}
+              onContenido={setContenido}
+              marca={publicacion.marca}
+              onGestionar={() => setGestionHashtags(true)}
+            />
+          )}
         </div>
 
         {/* Sin footer: los cambios se guardan solos. Para salir: la "X" o clic fuera (ambos
