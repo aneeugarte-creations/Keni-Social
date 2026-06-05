@@ -12,6 +12,7 @@ import {
   ListTodo,
   Megaphone,
   Newspaper,
+  Radio,
   Rss,
   ScanSearch,
   ScanText,
@@ -62,6 +63,8 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   { ruta: "/datos/investigacion/eventos", etiqueta: "Eventos", icono: CalendarPlus },
   // Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
   { ruta: "/datos/investigacion/agentes", etiqueta: "Agentes", icono: Bot },
+  // Cobertura (Ola A): flujo continuo del archivo del motor de ingesta persistente.
+  { ruta: "/datos/investigacion/cobertura", etiqueta: "Cobertura", icono: Radio },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [

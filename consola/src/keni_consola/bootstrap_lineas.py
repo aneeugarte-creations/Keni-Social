@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 
 from . import repos
+from .dominio import fuentes_presets
 
 _log = logging.getLogger(__name__)
 
@@ -153,4 +154,77 @@ def sembrar_lineas() -> int:
             _log.warning("semilla orígenes: no se pudo crear %s", nombre, exc_info=True)
     if creadas or actualizadas:
         _log.info("semilla líneas/orígenes: %d creadas, %d actualizadas (TTL backfill)", creadas, actualizadas)
+    return creadas
+
+
+# --------------------------------------------------------------------------- #
+# Auto-seed del catálogo de feeds para el motor de ingesta (Ola A)             #
+# --------------------------------------------------------------------------- #
+
+# Prioridad de sondeo por categoría (mayor = más frecuente al planificar). Espeja la cadencia:
+# breaking/deportes son prioritarias; mx/internacional/tendencias medias; ciencia-tech/gaming
+# de cambio lento. El motor usa además la cadencia por categoría; la prioridad ordena los
+# vencidos dentro de un barrido.
+_PRIORIDAD_CATEGORIA: dict[str, int] = {
+    "deportes": 3,
+    "mx": 2,
+    "internacional": 2,
+    "tendencias": 2,
+    "ciencia-tech": 1,
+    "gaming": 1,
+}
+
+# Las PLANTILLAS (con `{variable}` sin sustituir, p.ej. Google News búsqueda, GDELT, YouTube,
+# Reddit personalizado) NO se activan en el auto-seed: su URL no es un feed real hasta que el
+# equipo la ajusta. Se reconocen por el sufijo "[PLANTILLA]" en el nombre del preset.
+def _es_plantilla(preset: dict) -> bool:
+    """True si el preset es una PLANTILLA (URL con variable sin sustituir)."""
+    return "[PLANTILLA]" in (preset.get("nombre") or "")
+
+
+def sembrar_fuentes_ingesta() -> int:
+    """Activa los presets de feeds como `fuentes_rss` SI el catálogo está vacío (idempotente).
+
+    Garantiza cobertura inicial real para que el motor de ingesta no arranque vacío. Solo
+    siembra cuando NO hay ninguna `fuentes_rss` (no pisa un catálogo que el equipo ya curó).
+    Idempotente por URL: omite cualquier preset cuya URL ya exista. Salta las PLANTILLAS (URL
+    con variable). Fija `categoria`/`marca_sugerida`/`prioridad` para la planificación. La Ola C
+    amplía a cientos verificados; aquí solo el mínimo de cobertura. Best-effort por preset.
+    """
+    try:
+        if repos.contar_fuentes_rss() > 0:
+            return 0
+    except Exception:  # noqa: BLE001 -- si no se puede leer, no sembramos (no rompe el arranque)
+        _log.warning("semilla feeds ingesta: no se pudo consultar fuentes_rss", exc_info=True)
+        return 0
+
+    existentes: set[str] = set()
+    try:
+        existentes = {
+            str(f.get("url", "")).strip() for f in repos.listar_fuentes_rss() if f.get("url")
+        }
+    except Exception:  # noqa: BLE001
+        existentes = set()
+
+    creadas = 0
+    for preset in fuentes_presets.listar_presets():
+        url = (preset.get("url") or "").strip()
+        if not url or url in existentes or _es_plantilla(preset):
+            continue
+        categoria = preset.get("categoria") or ""
+        try:
+            repos.crear_fuente_rss(
+                preset.get("nombre") or url,
+                url,
+                marca=preset.get("marca_sugerida") or "",
+                categoria=categoria,
+                prioridad=_PRIORIDAD_CATEGORIA.get(categoria, 0),
+            )
+            existentes.add(url)
+            creadas += 1
+        except Exception:  # noqa: BLE001 -- un preset no debe romper el resto
+            _log.warning("semilla feeds ingesta: no se pudo crear %s", url, exc_info=True)
+
+    if creadas:
+        _log.info("semilla feeds ingesta: %d fuente(s) activadas desde presets.", creadas)
     return creadas

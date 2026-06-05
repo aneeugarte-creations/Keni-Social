@@ -31,6 +31,8 @@ const CajonesDia = lazy(() => import("@/pages/CajonesDia"));
 const EventosCobertura = lazy(() => import("@/pages/EventosCobertura"));
 // Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
 const AgentesInvestigacion = lazy(() => import("@/pages/AgentesInvestigacion"));
+// Cobertura (Ola A): flujo continuo del archivo del motor de ingesta persistente.
+const Cobertura = lazy(() => import("@/pages/Cobertura"));
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
@@ -216,6 +218,8 @@ export const router = createBrowserRouter([
               { path: "eventos", element: <EventosCobertura /> },
               // Agentes de investigación (Ola 6).
               { path: "agentes", element: <AgentesInvestigacion /> },
+              // Cobertura (Ola A): archivo del motor de ingesta persistente.
+              { path: "cobertura", element: <Cobertura /> },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (el índice); "algoritmos" se mudó a la
               // Biblioteca.

@@ -4402,3 +4402,65 @@ export interface RespuestaInvCorrer {
   candidatos: InvCandidato[];
   errores: unknown[];
 }
+
+// --- Motor de ingesta persistente (Ola A): archivo a nivel de artículo --------
+// Contrato: docs/maquina-contenido/A-motor-ingesta.md
+
+/**
+ * Un artículo ingerido del archivo persistente (`noticias_items`).
+ * Todos los campos de texto son '' si el feed no los entregó.
+ */
+export interface NoticiaItem {
+  id: string;
+  fuente_id: string;
+  fuente_nombre: string;
+  /** Categoría del feed: mx | internacional | deportes | ciencia-tech | gaming | tendencias | '' */
+  categoria: string;
+  /** Id canónico de la marca del feed ('' = global/sin marca). */
+  marca: string;
+  marca_nombre?: string;
+  titulo: string;
+  resumen: string;
+  url: string;
+  url_canonica: string;
+  idioma: string;
+  autor: string;
+  imagen: string;
+  /** pubDate del feed (ISO) o '' si no hay. */
+  publicado_en: string;
+  /** Cuándo lo ingestó el daemon (ISO). */
+  capturado_en: string;
+  /** Señal/score numérico (0 = sin señal). */
+  senal: number;
+  /** Código geográfico (ISO o '' si no aplica). */
+  geo: string;
+  /** Estado editorial: 'nuevo' | 'usado' | 'descartado'. */
+  estado: "nuevo" | "usado" | "descartado" | string;
+  /** Id del contenido en el tablero cuando `estado='usado'`. '' si no. */
+  contenido_id: string;
+}
+
+/** Respuesta paginada de `GET /api/noticias`. */
+export interface RespuestaNoticias {
+  items: NoticiaItem[];
+  total: number;
+}
+
+/**
+ * Resumen de salud del motor de ingesta.
+ * Todos los campos son opcionales: el back puede arrancar vacío hasta el primer barrido.
+ */
+export interface ResumenCobertura {
+  /** Nº de fuentes RSS activas y sin error sostenido. */
+  feeds_activos?: number;
+  /** Nº de fuentes con error sostenido (backoff / pausadas). */
+  feeds_con_error?: number;
+  /** Artículos ingeridos en las últimas 24 h. */
+  items_24h?: number;
+  /** Desglose de `items_24h` por categoría de feed. */
+  por_categoria?: Record<string, number>;
+  /** ISO del último barrido completado ('') si aún no hay. */
+  ultimo_sondeo?: string;
+  /** Nº total de artículos en el archivo (todos los estados). */
+  total_items?: number;
+}

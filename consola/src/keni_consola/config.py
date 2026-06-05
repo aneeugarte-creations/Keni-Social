@@ -280,6 +280,26 @@ ENV_BREAKING = "KENI_BREAKING"
 ENV_BREAKING_INTERVALO_MIN = "KENI_BREAKING_INTERVALO_MIN"
 ENV_BREAKING_MAX = "KENI_BREAKING_MAX"
 
+# MOTOR DE INGESTA PERSISTENTE (Ola A): un hilo demonio sondea en background los feeds RSS
+# VENCIDOS (cadencia por feed/categoría) y PERSISTE cada artículo en `noticias_items` (archivo
+# a nivel de artículo). A diferencia del resto, SOLO LEE feeds públicos y persiste; no genera ni
+# publica nada. Def OFF para CI/tests; se ACTIVA en producción (deploy: KENI_INGESTA=1). `BATCH`
+# = feeds por barrido; `WORKERS` = descargas en paralelo; `MAX_ITEMS` = artículos por feed.
+ENV_INGESTA = "KENI_INGESTA"
+ENV_INGESTA_BATCH = "KENI_INGESTA_BATCH"
+ENV_INGESTA_WORKERS = "KENI_INGESTA_WORKERS"
+ENV_INGESTA_MAX_ITEMS = "KENI_INGESTA_MAX_ITEMS"
+# Cadencia por categoría (segundos). Prioritarias agresivas (~3 min), generales ~10 min, las
+# de cambio lento ~30 min. Configurables por env; un feed puede sobrescribir con `intervalo_min`.
+ENV_INGESTA_INTERVALO_BREAKING = "KENI_INGESTA_INTERVALO_BREAKING"
+ENV_INGESTA_INTERVALO_DEPORTES = "KENI_INGESTA_INTERVALO_DEPORTES"
+ENV_INGESTA_INTERVALO_MX = "KENI_INGESTA_INTERVALO_MX"
+ENV_INGESTA_INTERVALO_INTERNACIONAL = "KENI_INGESTA_INTERVALO_INTERNACIONAL"
+ENV_INGESTA_INTERVALO_TENDENCIAS = "KENI_INGESTA_INTERVALO_TENDENCIAS"
+ENV_INGESTA_INTERVALO_CIENCIA_TECH = "KENI_INGESTA_INTERVALO_CIENCIA_TECH"
+ENV_INGESTA_INTERVALO_GAMING = "KENI_INGESTA_INTERVALO_GAMING"
+ENV_INGESTA_INTERVALO_DEFECTO = "KENI_INGESTA_INTERVALO_DEFECTO"
+
 # Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
 # demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
 # radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
@@ -507,6 +527,27 @@ SUGERENCIAS_EDITORIALES_MAX_DEF = 3
 # Carril Rápido de Breaking: barre cada 5 min (def) y cap 3 borradores por barrido.
 BREAKING_INTERVALO_MIN_DEF = 5
 BREAKING_MAX_DEF = 3
+
+# Motor de ingesta persistente (Ola A): tope de feeds por barrido, descargas en paralelo y
+# artículos por feed. Defaults escalables (concurrencia ACOTADA para no abrir cientos de
+# conexiones de golpe ante muchos feeds).
+INGESTA_BATCH_DEF = 40
+INGESTA_WORKERS_DEF = 12
+INGESTA_MAX_ITEMS_DEF = 100
+# Cadencia por categoría (segundos). El tablero/UI ven el archivo "vivo"; los feeds prioritarios
+# se sondean agresivo y los de cambio lento con holgura.
+INGESTA_INTERVALO_BREAKING_DEF = 180
+INGESTA_INTERVALO_DEPORTES_DEF = 180
+INGESTA_INTERVALO_MX_DEF = 600
+INGESTA_INTERVALO_INTERNACIONAL_DEF = 600
+INGESTA_INTERVALO_TENDENCIAS_DEF = 600
+INGESTA_INTERVALO_CIENCIA_TECH_DEF = 1800
+INGESTA_INTERVALO_GAMING_DEF = 1800
+# Categoría desconocida / sin clasificar: cadencia general.
+INGESTA_INTERVALO_DEFECTO_DEF = 600
+# Tope del backoff exponencial (segundos): un feed que falla repetidamente no se pausa más de
+# esto (1 hora), para que se reintente con regularidad cuando vuelva.
+INGESTA_BACKOFF_TOPE_SEG = 3600
 
 # Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
 # porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
@@ -1299,6 +1340,62 @@ def breaking_max() -> int:
     Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
     """
     return _entero(ENV_BREAKING_MAX, BREAKING_MAX_DEF, minimo=1)
+
+
+# --------------------------------------------------------------------------- #
+# Motor de ingesta persistente (Ola A)                                          #
+# --------------------------------------------------------------------------- #
+
+
+def ingesta_activa() -> bool:
+    """True si el motor de ingesta persistente debe sondear feeds (`KENI_INGESTA`).
+
+    Def OFF (CI/tests): sin el flag, el hilo arranca pero no sondea nada. Se ACTIVA en
+    producción (deploy: `KENI_INGESTA=1`) para que el archivo de artículos esté siempre al día.
+    SOLO LEE feeds públicos y persiste artículos; no genera ni publica nada.
+    """
+    return _crudo(ENV_INGESTA).lower() in _VERDADEROS
+
+
+def ingesta_batch() -> int:
+    """Máximo de feeds a sondear por barrido (`KENI_INGESTA_BATCH`, def 40, min 1)."""
+    return _entero(ENV_INGESTA_BATCH, INGESTA_BATCH_DEF, minimo=1)
+
+
+def ingesta_workers() -> int:
+    """Descargas de feeds en paralelo por barrido (`KENI_INGESTA_WORKERS`, def 12, min 1)."""
+    return _entero(ENV_INGESTA_WORKERS, INGESTA_WORKERS_DEF, minimo=1)
+
+
+def ingesta_max_items() -> int:
+    """Artículos a archivar por feed y sondeo (`KENI_INGESTA_MAX_ITEMS`, def 100, min 1)."""
+    return _entero(ENV_INGESTA_MAX_ITEMS, INGESTA_MAX_ITEMS_DEF, minimo=1)
+
+
+# Cadencia por categoría: env var + defecto de cada una (segundos), para el accesor genérico.
+_INGESTA_INTERVALOS: dict[str, tuple[str, int]] = {
+    "breaking": (ENV_INGESTA_INTERVALO_BREAKING, INGESTA_INTERVALO_BREAKING_DEF),
+    "deportes": (ENV_INGESTA_INTERVALO_DEPORTES, INGESTA_INTERVALO_DEPORTES_DEF),
+    "mx": (ENV_INGESTA_INTERVALO_MX, INGESTA_INTERVALO_MX_DEF),
+    "internacional": (ENV_INGESTA_INTERVALO_INTERNACIONAL, INGESTA_INTERVALO_INTERNACIONAL_DEF),
+    "tendencias": (ENV_INGESTA_INTERVALO_TENDENCIAS, INGESTA_INTERVALO_TENDENCIAS_DEF),
+    "ciencia-tech": (ENV_INGESTA_INTERVALO_CIENCIA_TECH, INGESTA_INTERVALO_CIENCIA_TECH_DEF),
+    "gaming": (ENV_INGESTA_INTERVALO_GAMING, INGESTA_INTERVALO_GAMING_DEF),
+}
+
+
+def ingesta_intervalo_categoria(categoria: str) -> int:
+    """Cadencia (segundos) de sondeo para una categoría de feed.
+
+    breaking/deportes ~180s, mx/internacional/tendencias ~600s, ciencia-tech/gaming ~1800s.
+    Una categoría desconocida (o '') cae al defecto general (`KENI_INGESTA_INTERVALO_DEFECTO`,
+    def 600s). Cada accesor es configurable por env y min 1s.
+    """
+    env, defecto = _INGESTA_INTERVALOS.get(
+        (categoria or "").strip().lower(),
+        (ENV_INGESTA_INTERVALO_DEFECTO, INGESTA_INTERVALO_DEFECTO_DEF),
+    )
+    return _entero(env, defecto, minimo=1)
 
 
 def autogen_activo() -> bool:

@@ -323,8 +323,8 @@ def item_pasa_filtros(item: dict[str, Any], incluir: str, excluir: str) -> bool:
     return True
 
 
-def parsear_feed(xml: str) -> list[dict[str, str]]:
-    """Parsea un feed RSS 2.0 o Atom y devuelve hasta `_MAX_ITEMS` items.
+def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str]]:
+    """Parsea un feed RSS 2.0 o Atom y devuelve hasta `max_items` items.
 
     Cada item es `{titulo, resumen, enlace, fecha, clave, imagen}`. La `clave` es
     estable (`<guid>`/`<id>` del feed, con fallback al enlace) y sirve para dedup /
@@ -332,9 +332,14 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
     thumbnail/enclosure), "" si no la trae. Tolerante: campos ausentes salen como ''.
     Lanza `RSSError` si el XML no se puede parsear.
 
+    `max_items` controla cuántos items se devuelven (def `_MAX_ITEMS`=30 para los callers
+    existentes del Radar/RSS; el MOTOR DE INGESTA pasa un tope mayor, p.ej. 100, para archivar
+    más artículos por feed). Se acota a >= 1.
+
     No depende de feedparser: la stdlib `xml.etree.ElementTree` basta para RSS 2.0
     (`<channel><item>`) y Atom (`<feed><entry>`), que cubren el caso de uso.
     """
+    tope = max(1, int(max_items))
     try:
         raiz = ET.fromstring(xml)
     except ET.ParseError as e:
@@ -346,7 +351,7 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
     if nombre_raiz == "feed":
         # Atom: <feed><entry>...
         entradas = [h for h in raiz if _quitar_ns(h.tag) == "entry"]
-        for entrada in entradas[:_MAX_ITEMS]:
+        for entrada in entradas[:tope]:
             titulo = _texto_local(_buscar_hijo(entrada, "title"))
             resumen = _texto_local(_buscar_hijo(entrada, "summary", "content"))
             enlace = _enlace_atom(entrada)
@@ -371,7 +376,7 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
     if not entradas:
         # RSS 1.0 (RDF): los <item> cuelgan de la raiz, no del channel.
         entradas = [h for h in raiz if _quitar_ns(h.tag) == "item"]
-    for entrada in entradas[:_MAX_ITEMS]:
+    for entrada in entradas[:tope]:
         titulo = _texto_local(_buscar_hijo(entrada, "title"))
         resumen = _texto_local(_buscar_hijo(entrada, "description", "summary"))
         enlace = _texto_local(_buscar_hijo(entrada, "link"))
@@ -424,13 +429,17 @@ def mapear_en_paralelo(
 
 
 def leer_items_fuente(
-    fuente: dict[str, Any], descargador: Any | None = None
+    fuente: dict[str, Any],
+    descargador: Any | None = None,
+    *,
+    max_items: int = _MAX_ITEMS,
 ) -> list[dict[str, Any]]:
     """Descarga y parsea el feed de una fuente, etiquetando cada item con la fuente.
 
     Aplica el guard SSRF ANTES de descargar (la IP puede haber cambiado desde el alta).
     `descargador` es el punto INYECTABLE (def. `_DESCARGADOR`); el router `api/rss.py`
     pasa el suyo para que los tests que parchean `rss._DESCARGADOR` sigan controlandolo.
+    `max_items` (def `_MAX_ITEMS`=30) sube el tope de items para el motor de ingesta.
     Lanza `RSSError` si la URL ya no es válida, si la descarga falla o si el XML no
     parsea. El llamante decide si omitir la fuente con su error.
     """
@@ -439,7 +448,7 @@ def leer_items_fuente(
     if error is not None:
         raise RSSError(error)
     xml = descargar(url)
-    items = parsear_feed(xml)
+    items = parsear_feed(xml, max_items=max_items)
     return [
         {**item, "fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"]}
         for item in items

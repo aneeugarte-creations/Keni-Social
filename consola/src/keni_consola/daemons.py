@@ -56,6 +56,7 @@ def main() -> int:
     from .breaking_daemon import iniciar_breaking
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
+    from .ingesta_daemon import iniciar_ingesta
     from .investigacion_daemon import iniciar_investigacion
     from .investigador import iniciar_investigador
     from .media_gc_daemon import iniciar_media_gc
@@ -103,6 +104,12 @@ def main() -> int:
     # candidatos para revision humana. SOLO CANDIDATOS, NUNCA tablero automatico.
     # No barre salvo KENI_INVESTIGACION_AUTO=1 (def OFF).
     iniciar_investigacion()
+    # MOTOR DE INGESTA PERSISTENTE (Ola A): sondea en background los feeds RSS vencidos y
+    # PERSISTE cada artículo en `noticias_items` (archivo a nivel de artículo). SOLO LEE feeds
+    # públicos y persiste; no genera ni publica. GATEADO: no sondea salvo KENI_INGESTA=1 (def
+    # OFF para CI/tests; ACTIVO en producción vía deploy). Escalable: batch + workers acotados,
+    # cadencia por feed/categoría y backoff exponencial por feed con error.
+    iniciar_ingesta()
     # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las
     # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los huerfanos del

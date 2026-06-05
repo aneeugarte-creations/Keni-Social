@@ -409,6 +409,9 @@ def crear_fuente_rss(
     excluir: str = "",
     redes_def: str = "",
     propia: bool = False,
+    categoria: str = "",
+    prioridad: int = 0,
+    intervalo_min: int = 0,
 ) -> dict[str, Any]:
     return db.crear_fuente_rss(
         nombre,
@@ -418,6 +421,9 @@ def crear_fuente_rss(
         excluir=excluir,
         redes_def=redes_def,
         propia=propia,
+        categoria=categoria,
+        prioridad=prioridad,
+        intervalo_min=intervalo_min,
     )
 
 
@@ -437,6 +443,79 @@ def borrar_fuente_rss(fuente_id: str) -> bool:
 
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     return db.marcar_item(fuente_id, clave, usado)
+
+
+# --- Motor de ingesta persistente (Ola A): delega 1:1 en db.py ------------- #
+
+ESTADOS_NOTICIA_ITEM = db.ESTADOS_NOTICIA_ITEM
+
+
+def crear_noticias_items(items: list[dict[str, Any]]) -> int:
+    return db.crear_noticias_items(items)
+
+
+def listar_noticias_items(
+    *,
+    marca: str | None = None,
+    categoria: str | None = None,
+    desde: str | None = None,
+    q: str | None = None,
+    estado: str | None = None,
+    limite: int = 50,
+    desplazamiento: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    return db.listar_noticias_items(
+        marca=marca,
+        categoria=categoria,
+        desde=desde,
+        q=q,
+        estado=estado,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def obtener_noticia_item(item_id: str) -> dict[str, Any] | None:
+    return db.obtener_noticia_item(item_id)
+
+
+def actualizar_noticia_item(
+    item_id: str,
+    *,
+    estado: str | None = None,
+    contenido_id: str | None = None,
+    cluster_id: str | None = None,
+) -> dict[str, Any] | None:
+    return db.actualizar_noticia_item(
+        item_id, estado=estado, contenido_id=contenido_id, cluster_id=cluster_id
+    )
+
+
+def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:
+    return db.feeds_vencidos(ahora, limite)
+
+
+def registrar_sondeo_feed(
+    feed_id: str,
+    *,
+    conteo: int = 0,
+    error: str = "",
+    proximo_sondeo: str = "",
+    errores_seguidos: int = 0,
+    pausado_hasta: str = "",
+) -> None:
+    return db.registrar_sondeo_feed(
+        feed_id,
+        conteo=conteo,
+        error=error,
+        proximo_sondeo=proximo_sondeo,
+        errores_seguidos=errores_seguidos,
+        pausado_hasta=pausado_hasta,
+    )
+
+
+def resumen_cobertura() -> dict[str, Any]:
+    return db.resumen_cobertura()
 
 
 # --- Hub generico de fuentes (item G): delega 1:1 en db.py ----------------- #

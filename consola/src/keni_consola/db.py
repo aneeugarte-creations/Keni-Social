@@ -239,6 +239,15 @@ __all__ = [
     "listar_inv_candidatos",
     "obtener_inv_candidato",
     "actualizar_inv_candidato",
+    # Motor de ingesta persistente (Ola A).
+    "crear_noticias_items",
+    "listar_noticias_items",
+    "obtener_noticia_item",
+    "actualizar_noticia_item",
+    "feeds_vencidos",
+    "registrar_sondeo_feed",
+    "resumen_cobertura",
+    "ESTADOS_NOTICIA_ITEM",
 ]
 
 
@@ -1252,11 +1261,20 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         ultimo_error          TEXT NOT NULL DEFAULT '',
         ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
         propia                INTEGER NOT NULL DEFAULT 0,
+        intervalo_min         INTEGER NOT NULL DEFAULT 0,
+        categoria             TEXT NOT NULL DEFAULT '',
+        prioridad             INTEGER NOT NULL DEFAULT 0,
+        proximo_sondeo        TEXT NOT NULL DEFAULT '',
+        errores_seguidos      INTEGER NOT NULL DEFAULT 0,
+        pausado_hasta         TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_marca ON fuentes_rss (marca)",
     "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_creado ON fuentes_rss (creado)",
+    # Selección de feeds VENCIDOS por el motor de ingesta (Ola A): el daemon barre las activas
+    # con `proximo_sondeo` <= ahora. Indexar (activo, proximo_sondeo) hace barata esa consulta.
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_sondeo ON fuentes_rss (activo, proximo_sondeo)",
     # Items RSS ya VISTOS/usados por fuente. Antes un mapa `{fuente_id: [clave]}` en
     # `.keni/rss-vistos.yaml` por marca; aqui una fila por (fuente_id, clave). PK compuesta
     # evita duplicados y hace `marcar_item(usado=True)` idempotente. SIN FK (igual que el
@@ -1390,6 +1408,43 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_algoritmo_dedup ON noticias_algoritmo (fuente_id, clave)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_orden ON noticias_algoritmo (importancia DESC, fecha DESC)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_plataforma ON noticias_algoritmo (plataforma)",
+    # MOTOR DE INGESTA PERSISTENTE (Ola A): ARCHIVO a NIVEL DE ARTÍCULO. A diferencia de los
+    # items RSS del Radar v1 (que se leen en VIVO por request, con tope), aqui cada artículo de
+    # cada feed se PERSISTE una vez (dedup por (fuente_id, clave)) para tener cobertura
+    # newsroom-grade: el Radar/Plan y la UI leen del store y la red se sondea en background por
+    # el `ingesta_daemon`. `clave` = url_canonica normalizada (o hash del título si no hay url);
+    # `categoria`/`marca` vienen de la fuente; `estado` nuevo|usado|descartado; `contenido_id`
+    # enlaza al tablero cuando el equipo lo usa; `cluster_id` lo llena la Ola B (historias).
+    """
+    CREATE TABLE IF NOT EXISTS noticias_items (
+        id             TEXT PRIMARY KEY,
+        fuente_id      TEXT NOT NULL DEFAULT '',
+        fuente_nombre  TEXT NOT NULL DEFAULT '',
+        categoria      TEXT NOT NULL DEFAULT '',
+        marca          TEXT NOT NULL DEFAULT '',
+        titulo         TEXT NOT NULL DEFAULT '',
+        resumen        TEXT NOT NULL DEFAULT '',
+        url            TEXT NOT NULL DEFAULT '',
+        url_canonica   TEXT NOT NULL DEFAULT '',
+        idioma         TEXT NOT NULL DEFAULT '',
+        autor          TEXT NOT NULL DEFAULT '',
+        imagen         TEXT NOT NULL DEFAULT '',
+        publicado_en   TEXT NOT NULL DEFAULT '',
+        capturado_en   TEXT NOT NULL DEFAULT '',
+        clave          TEXT NOT NULL DEFAULT '',
+        cluster_id     TEXT NOT NULL DEFAULT '',
+        senal          INTEGER NOT NULL DEFAULT 0,
+        geo            TEXT NOT NULL DEFAULT '',
+        estado         TEXT NOT NULL DEFAULT 'nuevo',
+        contenido_id   TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_items_dedup ON noticias_items (fuente_id, clave)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_capturado ON noticias_items (capturado_en)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_marca_capturado ON noticias_items (marca, capturado_en)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_categoria ON noticias_items (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_estado ON noticias_items (estado)",
     # Sugerencias editoriales GENERADAS por el job diario a partir de las noticias importantes:
     # propuestas de cambio a la ficha editorial de una plataforma (`tipo='editorial'`) o a sus
     # limites (`tipo='limite'`). PROPUESTAS, no aplicadas: el equipo revisa y decide (estado
@@ -6025,6 +6080,17 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # reutilizable. Al generar desde un item de una fuente propia, la pieza nace con la
     # imagen del artículo en `imagen_fuente` + `tipo_contenido='fuente'`.
     ("propia", "INTEGER NOT NULL DEFAULT 0"),
+    # PLANIFICACIÓN del motor de ingesta persistente (Ola A). El `CREATE TABLE` ya las declara
+    # para BDs nuevas; estas migran las BDs viejas (mismo patrón idempotente que
+    # `_migrar_columnas_eventos_rota`). `intervalo_min`=0 -> usar el default por categoría;
+    # `categoria` clasifica/ajusta la cadencia; `prioridad` mayor = más frecuente;
+    # `proximo_sondeo` ISO ('' = sondear ya); `errores_seguidos`/`pausado_hasta` = backoff.
+    ("intervalo_min", "INTEGER NOT NULL DEFAULT 0"),
+    ("categoria", "TEXT NOT NULL DEFAULT ''"),
+    ("prioridad", "INTEGER NOT NULL DEFAULT 0"),
+    ("proximo_sondeo", "TEXT NOT NULL DEFAULT ''"),
+    ("errores_seguidos", "INTEGER NOT NULL DEFAULT 0"),
+    ("pausado_hasta", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
 
@@ -6125,11 +6191,18 @@ _COLS_FUENTE_RSS = (
     "ultimo_error",
     "ultimo_conteo",
     "propia",
+    "intervalo_min",
+    "categoria",
+    "prioridad",
+    "proximo_sondeo",
+    "errores_seguidos",
+    "pausado_hasta",
     "creado",
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
 _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
     "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def", "propia",
+    "intervalo_min", "categoria", "prioridad",
 )
 
 
@@ -6150,6 +6223,13 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "ultimo_conteo": int(fila["ultimo_conteo"] or 0),
         # Sitio de marca PROPIA: habilita reutilizar la imagen original del artículo.
         "propia": bool(fila["propia"]),
+        # Planificación del motor de ingesta (Ola A).
+        "intervalo_min": int(fila["intervalo_min"] or 0),
+        "categoria": fila["categoria"] or "",
+        "prioridad": int(fila["prioridad"] or 0),
+        "proximo_sondeo": fila["proximo_sondeo"] or "",
+        "errores_seguidos": int(fila["errores_seguidos"] or 0),
+        "pausado_hasta": fila["pausado_hasta"] or "",
     }
 
 
@@ -6202,8 +6282,15 @@ def crear_fuente_rss(
     excluir: str = "",
     redes_def: str = "",
     propia: bool = False,
+    categoria: str = "",
+    prioridad: int = 0,
+    intervalo_min: int = 0,
 ) -> dict[str, Any]:
-    """Crea una fuente RSS (activa, salud vacia) y la devuelve."""
+    """Crea una fuente RSS (activa, salud vacia) y la devuelve.
+
+    `categoria`/`prioridad`/`intervalo_min` alimentan la planificación del motor de ingesta
+    (Ola A); `proximo_sondeo` nace '' para que el primer barrido la sondee de inmediato.
+    """
     # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
     # en el mismo segundo empataban, dejando el orden al `id` (uuid aleatorio) -> test flaky.
     ahora = datetime.now().isoformat(timespec="microseconds")
@@ -6221,6 +6308,12 @@ def crear_fuente_rss(
         "ultimo_error": "",
         "ultimo_conteo": 0,
         "propia": 1 if propia else 0,
+        "intervalo_min": int(intervalo_min or 0),
+        "categoria": categoria or "",
+        "prioridad": int(prioridad or 0),
+        "proximo_sondeo": "",
+        "errores_seguidos": 0,
+        "pausado_hasta": "",
         "creado": ahora,
     }
     con = _conectar()
@@ -6325,6 +6418,326 @@ def claves_vistas(fuente_id: str) -> set[str]:
     finally:
         con.close()
     return {f["clave"] for f in filas}
+
+
+# --------------------------------------------------------------------------- #
+# MOTOR DE INGESTA PERSISTENTE (Ola A): archivo a nivel de artículo            #
+# --------------------------------------------------------------------------- #
+# `noticias_items` es el ARCHIVO: una fila por artículo de feed, persistido una vez (dedup por
+# (fuente_id, clave)). Lo alimenta el `ingesta_daemon` en background; el Radar/Plan y la UI
+# leen de aqui. El bulk-insert usa `ON CONFLICT DO NOTHING` sobre el indice unico, asi
+# re-ingerir el mismo artículo es inofensivo. La planificación de feeds (`feeds_vencidos`,
+# `registrar_sondeo_feed`) vive en las columnas de `fuentes_rss` (mismas conexiones).
+
+_COLS_NOTICIA_ITEM: tuple[str, ...] = (
+    "id",
+    "fuente_id",
+    "fuente_nombre",
+    "categoria",
+    "marca",
+    "titulo",
+    "resumen",
+    "url",
+    "url_canonica",
+    "idioma",
+    "autor",
+    "imagen",
+    "publicado_en",
+    "capturado_en",
+    "clave",
+    "cluster_id",
+    "senal",
+    "geo",
+    "estado",
+    "contenido_id",
+    "creado",
+)
+_SELECT_NOTICIA_ITEM = f"SELECT {', '.join(_COLS_NOTICIA_ITEM)} FROM noticias_items"
+# Estados validos de un item de archivo.
+ESTADOS_NOTICIA_ITEM: tuple[str, ...] = ("nuevo", "usado", "descartado")
+
+
+def _fila_a_noticia_item(fila: Any) -> dict[str, Any]:
+    """Fila de `noticias_items` -> dict publico (snake_case, tipos saneados)."""
+    return {
+        "id": fila["id"],
+        "fuente_id": fila["fuente_id"] or "",
+        "fuente_nombre": fila["fuente_nombre"] or "",
+        "categoria": fila["categoria"] or "",
+        "marca": fila["marca"] or "",
+        "titulo": fila["titulo"] or "",
+        "resumen": fila["resumen"] or "",
+        "url": fila["url"] or "",
+        "url_canonica": fila["url_canonica"] or "",
+        "idioma": fila["idioma"] or "",
+        "autor": fila["autor"] or "",
+        "imagen": fila["imagen"] or "",
+        "publicado_en": fila["publicado_en"] or "",
+        "capturado_en": fila["capturado_en"] or "",
+        "clave": fila["clave"] or "",
+        "cluster_id": fila["cluster_id"] or "",
+        "senal": int(fila["senal"] or 0),
+        "geo": fila["geo"] or "",
+        "estado": fila["estado"] or "nuevo",
+        "contenido_id": fila["contenido_id"] or "",
+        "creado": fila["creado"] or "",
+    }
+
+
+def crear_noticias_items(items: list[dict[str, Any]]) -> int:
+    """Inserta en bloque items de archivo; ignora duplicados ((fuente_id, clave)).
+
+    Cada dict debe traer al menos `clave` (sin ella no hay identidad estable: se omite). Los
+    campos ausentes caen a su default. Devuelve cuántas filas se INSERTARON realmente
+    (`ON CONFLICT DO NOTHING` no cuenta los duplicados). Idempotente: re-ingerir es inofensivo.
+    """
+    candidatos = [it for it in items if (it.get("clave") or "").strip()]
+    if not candidatos:
+        return 0
+    ahora = datetime.now(timezone.utc).isoformat()
+    marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ITEM)
+    insertadas = 0
+    con = _conectar()
+    try:
+        for it in candidatos:
+            fila = {
+                "id": it.get("id") or uuid.uuid4().hex[:12],
+                "fuente_id": it.get("fuente_id") or "",
+                "fuente_nombre": it.get("fuente_nombre") or "",
+                "categoria": it.get("categoria") or "",
+                "marca": it.get("marca") or "",
+                "titulo": it.get("titulo") or "",
+                "resumen": it.get("resumen") or "",
+                "url": it.get("url") or "",
+                "url_canonica": it.get("url_canonica") or "",
+                "idioma": it.get("idioma") or "",
+                "autor": it.get("autor") or "",
+                "imagen": it.get("imagen") or "",
+                "publicado_en": it.get("publicado_en") or "",
+                "capturado_en": it.get("capturado_en") or ahora,
+                "clave": (it.get("clave") or "").strip(),
+                "cluster_id": it.get("cluster_id") or "",
+                "senal": int(it.get("senal") or 0),
+                "geo": it.get("geo") or "",
+                "estado": it.get("estado") or "nuevo",
+                "contenido_id": it.get("contenido_id") or "",
+                "creado": it.get("creado") or ahora,
+            }
+            cur = con.execute(
+                f"INSERT INTO noticias_items ({', '.join(_COLS_NOTICIA_ITEM)}) "
+                f"VALUES ({marcadores}) "
+                "ON CONFLICT (fuente_id, clave) DO NOTHING",
+                tuple(fila[col] for col in _COLS_NOTICIA_ITEM),
+            )
+            if cur.rowcount and cur.rowcount > 0:
+                insertadas += 1
+        con.commit()
+    finally:
+        con.close()
+    return insertadas
+
+
+def listar_noticias_items(
+    *,
+    marca: str | None = None,
+    categoria: str | None = None,
+    desde: str | None = None,
+    q: str | None = None,
+    estado: str | None = None,
+    limite: int = 50,
+    desplazamiento: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """Items de archivo filtrables, MÁS NUEVOS primero (`capturado_en` desc) + total.
+
+    Filtros: `marca` ('' / None = todas), `categoria`, `desde` (ISO; `capturado_en >= desde`),
+    `q` (subcadena insensible sobre titulo+resumen), `estado`. Devuelve `(items, total)` donde
+    `total` cuenta los que pasan los filtros (para la paginación), no solo la página.
+    """
+    condiciones: list[str] = []
+    params: list[Any] = []
+    if marca:
+        condiciones.append("marca = ?")
+        params.append(marca)
+    if categoria:
+        condiciones.append("categoria = ?")
+        params.append(categoria)
+    if desde:
+        condiciones.append("capturado_en >= ?")
+        params.append(desde)
+    if estado:
+        condiciones.append("estado = ?")
+        params.append(estado)
+    if q and q.strip():
+        condiciones.append("(LOWER(titulo) LIKE ? OR LOWER(resumen) LIKE ?)")
+        patron = f"%{q.strip().lower()}%"
+        params.extend([patron, patron])
+    where = (" WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    sql = (
+        f"{_SELECT_NOTICIA_ITEM}{where} "
+        "ORDER BY capturado_en DESC, creado DESC, id DESC LIMIT ? OFFSET ?"
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- condiciones de allowlist; valores parametrizados
+            sql, (*params, max(1, int(limite)), max(0, int(desplazamiento)))
+        ).fetchall()
+        fila_total = con.execute(  # noqa: S608 -- idem
+            f"SELECT COUNT(*) AS n FROM noticias_items{where}", tuple(params)
+        ).fetchone()
+    finally:
+        con.close()
+    total = int(fila_total["n"]) if fila_total is not None else 0
+    return [_fila_a_noticia_item(f) for f in filas], total
+
+
+def obtener_noticia_item(item_id: str) -> dict[str, Any] | None:
+    """Un item de archivo por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_NOTICIA_ITEM} WHERE id = ?", (item_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_noticia_item(fila) if fila is not None else None
+
+
+def actualizar_noticia_item(
+    item_id: str,
+    *,
+    estado: str | None = None,
+    contenido_id: str | None = None,
+    cluster_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Edita `estado` / `contenido_id` / `cluster_id` de un item (None si no existe)."""
+    cambios: dict[str, Any] = {}
+    if estado is not None:
+        cambios["estado"] = estado
+    if contenido_id is not None:
+        cambios["contenido_id"] = contenido_id
+    if cluster_id is not None:
+        cambios["cluster_id"] = cluster_id
+    if not cambios:
+        return obtener_noticia_item(item_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), item_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_items SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_noticia_item(item_id)
+
+
+def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:
+    """Feeds RSS ACTIVOS listos para sondear AHORA (planificación del motor de ingesta).
+
+    Un feed está vencido si `activo=1`, `proximo_sondeo` está vacío ('' = sondear ya) o es
+    `<= ahora`, y NO está pausado por backoff (`pausado_hasta` vacío o `<= ahora`). Se ordena
+    por `prioridad DESC` (las prioritarias primero) y luego por `proximo_sondeo` (las más
+    atrasadas antes). `ahora` es un ISO comparable lexicográficamente con las columnas ISO.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_FUENTE_RSS} WHERE activo = 1 "
+            "AND (proximo_sondeo = '' OR proximo_sondeo <= ?) "
+            "AND (pausado_hasta = '' OR pausado_hasta <= ?) "
+            "ORDER BY prioridad DESC, proximo_sondeo ASC, creado ASC LIMIT ?",
+            (ahora, ahora, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_fuente_rss(f) for f in filas]
+
+
+def registrar_sondeo_feed(
+    feed_id: str,
+    *,
+    conteo: int = 0,
+    error: str = "",
+    proximo_sondeo: str = "",
+    errores_seguidos: int = 0,
+    pausado_hasta: str = "",
+) -> None:
+    """Anota el resultado de un sondeo de feed (salud + planificación). Best-effort.
+
+    Actualiza la salud (`ultima_actualizacion`/`ultimo_conteo`/`ultimo_error`) y la
+    planificación (`proximo_sondeo`/`errores_seguidos`/`pausado_hasta`) en una sola escritura.
+    El daemon calcula los valores (intervalo por categoría, backoff exponencial) y los pasa ya
+    resueltos; aquí solo se persisten.
+    """
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE fuentes_rss SET ultima_actualizacion = ?, ultimo_conteo = ?, "
+            "ultimo_error = ?, proximo_sondeo = ?, errores_seguidos = ?, pausado_hasta = ? "
+            "WHERE id = ?",
+            (
+                datetime.now(timezone.utc).isoformat(),
+                int(conteo),
+                error or "",
+                proximo_sondeo or "",
+                int(errores_seguidos or 0),
+                pausado_hasta or "",
+                feed_id,
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def resumen_cobertura() -> dict[str, Any]:
+    """Resumen de salud del motor de ingesta (para `/api/noticias/cobertura`).
+
+    Devuelve nº de feeds activos, feeds con error (último sondeo falló), items capturados en
+    las últimas 24h por categoría, total de items, y el último sondeo registrado. Todo en una
+    conexión, sin tocar la red.
+    """
+    hace_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    con = _conectar()
+    try:
+        feeds_activos = int(
+            (con.execute(
+                "SELECT COUNT(*) AS n FROM fuentes_rss WHERE activo = 1"
+            ).fetchone() or {"n": 0})["n"] or 0
+        )
+        feeds_error = int(
+            (con.execute(
+                "SELECT COUNT(*) AS n FROM fuentes_rss WHERE activo = 1 AND ultimo_error <> ''"
+            ).fetchone() or {"n": 0})["n"] or 0
+        )
+        total_items = int(
+            (con.execute("SELECT COUNT(*) AS n FROM noticias_items").fetchone() or {"n": 0})["n"]
+            or 0
+        )
+        filas_cat = con.execute(
+            "SELECT categoria, COUNT(*) AS n FROM noticias_items "
+            "WHERE capturado_en >= ? GROUP BY categoria ORDER BY n DESC",
+            (hace_24h,),
+        ).fetchall()
+        fila_ultimo = con.execute(
+            "SELECT MAX(ultima_actualizacion) AS u FROM fuentes_rss "
+            "WHERE ultima_actualizacion <> ''"
+        ).fetchone()
+    finally:
+        con.close()
+    items_24h_por_categoria = {
+        (f["categoria"] or "(sin categoría)"): int(f["n"] or 0) for f in filas_cat
+    }
+    return {
+        "feeds_activos": feeds_activos,
+        "feeds_con_error": feeds_error,
+        "items_total": total_items,
+        "items_24h": sum(items_24h_por_categoria.values()),
+        "items_24h_por_categoria": items_24h_por_categoria,
+        "ultimo_sondeo": (fila_ultimo["u"] if fila_ultimo is not None else "") or "",
+    }
 
 
 # --- Hub GENERICO de fuentes (item G) -------------------------------------- #

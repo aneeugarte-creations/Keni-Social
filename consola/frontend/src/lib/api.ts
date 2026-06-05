@@ -20,6 +20,8 @@ import type {
   RespuestaInvCandidatos,
   RespuestaInvCandidato,
   RespuestaInvCorrer,
+  RespuestaNoticias,
+  ResumenCobertura,
 } from "@/types";
 
 import type {
@@ -2254,5 +2256,75 @@ export const api = {
         `/investigacion/candidatos/${encodeURIComponent(id)}/descartar`,
         { metodo: "POST", muestrear: false },
       ),
+  },
+
+  // --- Motor de ingesta persistente (Ola A): archivo a nivel de artículo ---
+  // Contrato: docs/maquina-contenido/A-motor-ingesta.md
+  noticias: {
+    /**
+     * Lista el archivo de noticias ingeridas, newest-first (`capturado_en` desc).
+     * `marca` = '' / ausente → todas (admin); en caso contrario filtra por marca.
+     * `estado` = 'nuevo' | 'usado' | 'descartado' | ausente → todos.
+     * `desde` es una fecha ISO (YYYY-MM-DD) de corte mínimo de `capturado_en`.
+     * `q` es búsqueda libre sobre título.
+     * `limit`/`offset` para paginación.
+     */
+    listar: (
+      params: {
+        marca?: string;
+        categoria?: string;
+        desde?: string;
+        q?: string;
+        estado?: string;
+        limit?: number;
+        offset?: number;
+      } = {},
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaNoticias>(
+        `/noticias${query({
+          marca: params.marca,
+          categoria: params.categoria,
+          desde: params.desde,
+          q: params.q,
+          estado: params.estado,
+          limit: params.limit != null ? String(params.limit) : undefined,
+          offset: params.offset != null ? String(params.offset) : undefined,
+        })}`,
+        { signal },
+      ),
+
+    /**
+     * Lleva una noticia al tablero como pieza de contenido.
+     * `redes` y `generar` son opcionales (igual que `insumos.usarItem`).
+     * Marca `estado=usado` y guarda el `contenido_id`.
+     * POST /api/noticias/{id}/usar
+     */
+    usar: (
+      id: string,
+      body: { redes?: string[]; generar?: boolean } = {},
+    ) =>
+      peticion<{ ok: boolean; contenido_id: string }>(
+        `/noticias/${encodeURIComponent(id)}/usar`,
+        { metodo: "POST", json: body, muestrear: false },
+      ),
+
+    /**
+     * Descarta una noticia (estado=descartado). No se borra del archivo.
+     * POST /api/noticias/{id}/descartar
+     */
+    descartar: (id: string) =>
+      peticion<{ ok: boolean }>(
+        `/noticias/${encodeURIComponent(id)}/descartar`,
+        { metodo: "POST", muestrear: false },
+      ),
+
+    /**
+     * Resumen básico de salud del motor de ingesta:
+     * nº feeds activos/con error, items últimas 24h por categoría, último sondeo.
+     * GET /api/noticias/cobertura
+     */
+    cobertura: (signal?: AbortSignal) =>
+      peticion<ResumenCobertura>("/noticias/cobertura", { signal }),
   },
 };
