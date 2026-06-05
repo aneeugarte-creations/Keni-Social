@@ -71,7 +71,8 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     const respuesta = await api.login({ usuario: nombre, password });
     // Con MFA activo el backend devuelve `{mfa_required:true}` y NO una sesión: dejamos el
     // usuario en `null` (sigue fuera) y avisamos a la UI para que pida el código TOTP.
-    if ("mfa_required" in respuesta && respuesta.mfa_required) {
+    // Estrechamos por la presencia de `usuario` (discrimina la unión sesión vs MFA-pendiente).
+    if (!("usuario" in respuesta)) {
       return { mfaRequerido: true };
     }
     setUsuario(respuesta.usuario);
