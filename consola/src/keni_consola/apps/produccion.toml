@@ -48,6 +48,7 @@ modulos_backend = [
   "radar",
   "radar_auto",
   "breaking",
+  "investigacion",
   "fuentes",
   "insumos",
   "algoritmos",

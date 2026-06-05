@@ -87,7 +87,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     const optionsJSON = await api.mfaLoginOpciones();
     const assertion = await startAuthentication({
       // py_webauthn ya devuelve JSON spec-compliant; lo pasamos tal cual.
-      optionsJSON: optionsJSON as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+      optionsJSON: optionsJSON as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
     });
     const { usuario } = await api.mfaVerify({ assertion });
     setUsuario(usuario);

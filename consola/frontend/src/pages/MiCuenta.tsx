@@ -244,7 +244,7 @@ function SeccionMfa({ activo }: { activo: boolean }) {
       // 3) El backend verifica y guarda la credencial.
       const optionsJSON = await api.mfaRegistroOpciones();
       const credential = await startRegistration({
-        optionsJSON: optionsJSON as Parameters<typeof startRegistration>[0]["optionsJSON"],
+        optionsJSON: optionsJSON as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
       });
       return api.mfaRegistroVerificar(credential, nombre.trim());
     },
