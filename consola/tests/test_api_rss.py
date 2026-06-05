@@ -222,11 +222,11 @@ def test_parsear_xml_invalido_lanza():
         rss.parsear_feed("esto no es xml <<<")
 
 
-def test_parsear_limita_items(monkeypatch):
-    # La logica de parseo vive en `dominio.http_feed` (rss.parsear_feed la re-exporta);
-    # el limite se parchea alli, donde se lee.
-    monkeypatch.setattr(http_feed, "_MAX_ITEMS", 1)
-    items = rss.parsear_feed(_RSS_XML)
+def test_parsear_limita_items():
+    # `parsear_feed` acepta `max_items` (def `_MAX_ITEMS`=30). El límite se PASA como argumento:
+    # parchear el global `http_feed._MAX_ITEMS` no sirve porque el default del parámetro se
+    # captura en la definición de la función, no se relee en cada llamada.
+    items = rss.parsear_feed(_RSS_XML, max_items=1)
     assert len(items) == 1
 
 
