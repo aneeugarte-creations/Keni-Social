@@ -335,6 +335,7 @@ export function Lienzo({
   onSalirReencuadre,
   recorteId = null,
   onSalirRecorte,
+  muestra = false,
   onStage,
 }: {
   maxAncho?: number;
@@ -344,6 +345,9 @@ export function Lienzo({
   // Capa imagen en MODO RECORTE visual (crop con tiradores). Mutuamente excluyente con reencuadre.
   recorteId?: string | null;
   onSalirRecorte?: () => void;
+  // "Vista con muestra": overlay de PRESENTACIÓN. Rellena el hueco con una foto de muestra y los
+  // bindings de texto con copy de ejemplo. NO muta el documento ni afecta al export.
+  muestra?: boolean;
   // Expone el Stage de Konva + la escala actual al padre (para muestrear píxeles, p.ej. legibilidad).
   onStage?: (stage: Konva.Stage | null, escala: number) => void;
 }) {
@@ -840,6 +844,7 @@ export function Lienzo({
                 key={capa.id}
                 capa={capa}
                 seleccionada={capa.id === seleccion}
+                muestra={muestra}
                 onSelect={(e) => {
                   const add = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
                   const st = store.getState();

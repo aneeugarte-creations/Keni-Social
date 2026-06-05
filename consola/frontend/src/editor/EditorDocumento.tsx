@@ -17,6 +17,7 @@ import {
   DollarSign,
   Eye,
   ImageOff,
+  ImagePlay,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
@@ -53,6 +54,18 @@ import type { StoreEditor } from "./store";
 import { useFuentesMarca } from "./useFuentesMarca";
 
 type Herramienta = "elementos" | "biblioteca" | "ia" | "capas";
+
+// Preferencia de "Vista con muestra" (toggle de PRESENTACIÓN del editor) en localStorage. Por
+// defecto ENCENDIDO: al abrir una plantilla se ve de inmediato cómo cae la foto y un titular real.
+const CLAVE_MUESTRA = "keni.editor.muestra";
+function leerMuestra(): boolean {
+  try {
+    const v = localStorage.getItem(CLAVE_MUESTRA);
+    return v === null ? true : v === "1";
+  } catch {
+    return true;
+  }
+}
 
 const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
@@ -92,6 +105,17 @@ export function EditorDocumento({
   const [reencuadreId, setReencuadreId] = useState<string | null>(null);
   const [recorteId, setRecorteId] = useState<string | null>(null);
   const [reemplazarId, setReemplazarId] = useState<string | null>(null);
+  // "Vista con muestra": overlay de PRESENTACIÓN (rellena el hueco con una foto de muestra y los
+  // bindings con copy de ejemplo). NO muta el documento ni afecta al export; solo el render del
+  // lienzo. Preferencia persistida en localStorage.
+  const [muestra, setMuestra] = useState(leerMuestra);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_MUESTRA, muestra ? "1" : "0");
+    } catch {
+      /* almacenamiento no disponible: la preferencia no se persiste, sin romper. */
+    }
+  }, [muestra]);
 
   const puedeDeshacer = store.getState().pasado.length > 0; // se refresca abajo con suscripción
   const [, force] = useState(0);
@@ -271,6 +295,23 @@ export function EditorDocumento({
                   </>
                 )}
               </div>
+              {/* VISTA CON MUESTRA — rellena el hueco con una foto de muestra y los bindings con
+                  copy de ejemplo. Solo presentación: no toca el documento ni el export. */}
+              <button
+                title={
+                  muestra
+                    ? "Vista con muestra activa: foto y titular de ejemplo (no se guarda)"
+                    : "Activar vista con muestra: rellena el hueco y los bindings para previsualizar"
+                }
+                aria-pressed={muestra}
+                onClick={() => setMuestra((v) => !v)}
+                className={`flex items-center gap-1 rounded-md p-1.5 hover:bg-accent ${
+                  muestra ? "bg-accent text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                <ImagePlay className="h-4 w-4" />
+                <span className="hidden text-xs sm:inline">Muestra</span>
+              </button>
               {/* REVISAR LEGIBILIDAD — contraste WCAG de los titulares sobre la foto. */}
               <button
                 title="Revisar legibilidad de los titulares (contraste WCAG)"
@@ -311,6 +352,7 @@ export function EditorDocumento({
               onSalirReencuadre={() => setReencuadreId(null)}
               recorteId={recorteId}
               onSalirRecorte={() => setRecorteId(null)}
+              muestra={muestra}
               onStage={(stage, escala) => { stageInfo.current = { stage, escala }; }}
             />
           </div>

@@ -37,6 +37,7 @@ import {
   quitarEstiloGuardado,
 } from "./estilos-guardados";
 import { PRESETS_FORMATO, mismoFormato } from "./formatos";
+import { Seccion } from "./Seccion";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 // Color totalmente transparente (#RRGGBBAA con alfa 00). Válido en render y validación.
@@ -594,125 +595,123 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
     const setFmt = (f: typeof formato) => store.getState().setFormato(f);
     const PRESETS = PRESETS_FORMATO;
     const activo = (f: typeof formato) => mismoFormato(f, formato);
+    const esTransparente = fondo.tipo === "color" && alfaHex(fondo.color) === 0;
     return (
       <div className="flex flex-col gap-3 p-3">
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lienzo</div>
-        <div className="flex flex-wrap gap-1">
-          {PRESETS.map((p) => (
-            <button
-              key={p.etiqueta}
-              onClick={() => setFmt(p.f)}
-              className={`rounded border px-2 py-1 text-xs ${activo(p.f) ? "border-primary bg-accent" : "border-input hover:bg-accent/50"}`}
-            >
-              {p.etiqueta}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Campo etiqueta="Ancho"><Num valor={formato.w} onChange={(v) => setFmt({ ...formato, w: Math.max(16, Math.round(v)) })} /></Campo>
-          <Campo etiqueta="Alto"><Num valor={formato.h} onChange={(v) => setFmt({ ...formato, h: Math.max(16, Math.round(v)) })} /></Campo>
-        </div>
-        {/* MÁRGENES (encuadre): se dibujan como guías en el lienzo y el imán hace snap a ellos. Cada
-            lado se acota a >=0 y < su dimensión. safe_left/right son aditivos (formatos sin ellos = 0). */}
-        <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Márgenes</div>
-        <div className="grid grid-cols-2 gap-2">
-          <Campo etiqueta="Arriba">
-            <Num valor={formato.safe_top} onChange={(v) => setFmt({ ...formato, safe_top: Math.max(0, Math.min(formato.h - 1, Math.round(v))) })} />
+
+        {/* PRINCIPAL: Fondo → Tipo + (control directo según tipo). La opción "Transparente" vive en
+            el mismo select (un color de alfa 0 = #00000000: el render produce PNG con alfa real y el
+            editor muestra el tablero de ajedrez a través del lienzo). */}
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
+        <Campo etiqueta="Tipo">
+          <select
+            value={esTransparente ? "transparente" : fondo.tipo}
+            onChange={(e) => {
+              const tipo = e.target.value;
+              if (tipo === "transparente") setFondo({ tipo: "color", color: COLOR_TRANSPARENTE });
+              else if (tipo === "color")
+                setFondo({ tipo: "color", color: esTransparente ? "#111315" : fondo.color || "#111315" });
+              else if (tipo === "degradado")
+                setFondo({ tipo: "degradado", degradado: fondo.degradado || { desde: "#0a3d62", hasta: "#111315", angulo: 180 } });
+              else if (tipo === "imagen")
+                setFondo({ tipo: "imagen", imagen: fondo.imagen || { media_id: "", ajuste: "cover" } });
+            }}
+            className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+          >
+            <option value="color">Color</option>
+            <option value="degradado">Degradado</option>
+            <option value="imagen">Imagen</option>
+            <option value="transparente">Transparente</option>
+          </select>
+        </Campo>
+        {esTransparente && (
+          <p className="text-[11px] text-muted-foreground">
+            Fondo transparente: la pieza exportada llevará canal alfa (sin fondo).
+          </p>
+        )}
+        {fondo.tipo === "color" && !esTransparente && (
+          <Campo etiqueta="Color">
+            <ColorControl valor={fondo.color || "#111315"} onChange={(c) => setFondo({ tipo: "color", color: c })} />
           </Campo>
-          <Campo etiqueta="Abajo">
-            <Num valor={formato.safe_bottom} onChange={(v) => setFmt({ ...formato, safe_bottom: Math.max(0, Math.min(formato.h - 1, Math.round(v))) })} />
-          </Campo>
-          <Campo etiqueta="Izquierda">
-            <Num valor={formato.safe_left ?? 0} onChange={(v) => setFmt({ ...formato, safe_left: Math.max(0, Math.min(formato.w - 1, Math.round(v))) })} />
-          </Campo>
-          <Campo etiqueta="Derecha">
-            <Num valor={formato.safe_right ?? 0} onChange={(v) => setFmt({ ...formato, safe_right: Math.max(0, Math.min(formato.w - 1, Math.round(v))) })} />
-          </Campo>
-        </div>
-        <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
-        {/* "Transparente" = un color de alfa 0 (#00000000): el render produce PNG con alfa real y el
-            editor muestra el tablero de ajedrez a través del lienzo. */}
-        {(() => {
-          const esTransparente = fondo.tipo === "color" && alfaHex(fondo.color) === 0;
-          const tipoUI = esTransparente ? "transparente" : fondo.tipo;
-          return (
+        )}
+
+        {/* MÁS: presets de formato + tamaño del lienzo. */}
+        <Seccion titulo="Más">
+          <div className="flex flex-wrap gap-1">
+            {PRESETS.map((p) => (
+              <button
+                key={p.etiqueta}
+                onClick={() => setFmt(p.f)}
+                className={`rounded border px-2 py-1 text-xs ${activo(p.f) ? "border-primary bg-accent" : "border-input hover:bg-accent/50"}`}
+              >
+                {p.etiqueta}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Campo etiqueta="Ancho"><Num valor={formato.w} onChange={(v) => setFmt({ ...formato, w: Math.max(16, Math.round(v)) })} /></Campo>
+            <Campo etiqueta="Alto"><Num valor={formato.h} onChange={(v) => setFmt({ ...formato, h: Math.max(16, Math.round(v)) })} /></Campo>
+          </div>
+        </Seccion>
+
+        {/* AVANZADO: márgenes (encuadre) + degradado de fondo + fondo por imagen. */}
+        <Seccion titulo="Avanzado">
+          {/* MÁRGENES (encuadre): se dibujan como guías en el lienzo y el imán hace snap a ellos. Cada
+              lado se acota a >=0 y < su dimensión. safe_left/right son aditivos (formatos sin ellos = 0). */}
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Márgenes</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Campo etiqueta="Arriba">
+              <Num valor={formato.safe_top} onChange={(v) => setFmt({ ...formato, safe_top: Math.max(0, Math.min(formato.h - 1, Math.round(v))) })} />
+            </Campo>
+            <Campo etiqueta="Abajo">
+              <Num valor={formato.safe_bottom} onChange={(v) => setFmt({ ...formato, safe_bottom: Math.max(0, Math.min(formato.h - 1, Math.round(v))) })} />
+            </Campo>
+            <Campo etiqueta="Izquierda">
+              <Num valor={formato.safe_left ?? 0} onChange={(v) => setFmt({ ...formato, safe_left: Math.max(0, Math.min(formato.w - 1, Math.round(v))) })} />
+            </Campo>
+            <Campo etiqueta="Derecha">
+              <Num valor={formato.safe_right ?? 0} onChange={(v) => setFmt({ ...formato, safe_right: Math.max(0, Math.min(formato.w - 1, Math.round(v))) })} />
+            </Campo>
+          </div>
+          {fondo.tipo === "degradado" && fondo.degradado && (
             <>
-              <Campo etiqueta="Tipo">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Degradado de fondo</div>
+              <CamposDegradado
+                deg={fondo.degradado}
+                onChange={(d) => setFondo({ tipo: "degradado", degradado: d })}
+              />
+            </>
+          )}
+          {fondo.tipo === "imagen" && (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Fondo por imagen</div>
+              <Campo etiqueta="Media ID">
+                <input
+                  type="text"
+                  value={fondo.imagen?.media_id ?? ""}
+                  placeholder="id de media"
+                  onChange={(e) =>
+                    setFondo({ tipo: "imagen", imagen: { media_id: e.target.value.trim(), ajuste: fondo.imagen?.ajuste ?? "cover" } })
+                  }
+                  className="w-40 rounded border border-input bg-background px-1.5 py-0.5 text-right text-xs"
+                />
+              </Campo>
+              <Campo etiqueta="Ajuste">
                 <select
-                  value={tipoUI}
-                  onChange={(e) => {
-                    const tipo = e.target.value;
-                    if (tipo === "transparente") setFondo({ tipo: "color", color: COLOR_TRANSPARENTE });
-                    else if (tipo === "color")
-                      setFondo({ tipo: "color", color: esTransparente ? "#111315" : fondo.color || "#111315" });
-                    else if (tipo === "degradado")
-                      setFondo({ tipo: "degradado", degradado: fondo.degradado || { desde: "#0a3d62", hasta: "#111315", angulo: 180 } });
-                    else if (tipo === "imagen")
-                      setFondo({ tipo: "imagen", imagen: fondo.imagen || { media_id: "", ajuste: "cover" } });
-                  }}
+                  value={fondo.imagen?.ajuste ?? "cover"}
+                  onChange={(e) =>
+                    setFondo({ tipo: "imagen", imagen: { media_id: fondo.imagen?.media_id ?? "", ajuste: e.target.value as "cover" | "contain" } })
+                  }
                   className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
                 >
-                  <option value="color">Color</option>
-                  <option value="degradado">Degradado</option>
-                  <option value="imagen">Imagen</option>
-                  <option value="transparente">Transparente</option>
+                  <option value="cover">Cubrir</option>
+                  <option value="contain">Contener</option>
                 </select>
               </Campo>
-              {esTransparente && (
-                <p className="text-[11px] text-muted-foreground">
-                  Fondo transparente: la pieza exportada llevará canal alfa (sin fondo).
-                </p>
-              )}
-              {fondo.tipo === "color" && !esTransparente && (
-                <>
-                  <Campo etiqueta="Color">
-                    <ColorControl valor={fondo.color || "#111315"} onChange={(c) => setFondo({ tipo: "color", color: c })} />
-                  </Campo>
-                  <button
-                    type="button"
-                    onClick={() => setFondo({ tipo: "color", color: COLOR_TRANSPARENTE })}
-                    className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-                  >
-                    Fondo transparente
-                  </button>
-                </>
-              )}
             </>
-          );
-        })()}
-        {fondo.tipo === "degradado" && fondo.degradado && (
-          <CamposDegradado
-            deg={fondo.degradado}
-            onChange={(d) => setFondo({ tipo: "degradado", degradado: d })}
-          />
-        )}
-        {fondo.tipo === "imagen" && (
-          <>
-            <Campo etiqueta="Media ID">
-              <input
-                type="text"
-                value={fondo.imagen?.media_id ?? ""}
-                placeholder="id de media"
-                onChange={(e) =>
-                  setFondo({ tipo: "imagen", imagen: { media_id: e.target.value.trim(), ajuste: fondo.imagen?.ajuste ?? "cover" } })
-                }
-                className="w-40 rounded border border-input bg-background px-1.5 py-0.5 text-right text-xs"
-              />
-            </Campo>
-            <Campo etiqueta="Ajuste">
-              <select
-                value={fondo.imagen?.ajuste ?? "cover"}
-                onChange={(e) =>
-                  setFondo({ tipo: "imagen", imagen: { media_id: fondo.imagen?.media_id ?? "", ajuste: e.target.value as "cover" | "contain" } })
-                }
-                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-              >
-                <option value="cover">Cubrir</option>
-                <option value="contain">Contener</option>
-              </select>
-            </Campo>
-          </>
-        )}
+          )}
+        </Seccion>
       </div>
     );
   }
@@ -735,12 +734,9 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
         {ETIQUETA_TIPO[capa.tipo]}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Campo etiqueta="X"><Num valor={capa.x} onChange={(v) => set({ x: v } as Partial<Capa>)} /></Campo>
-        <Campo etiqueta="Y"><Num valor={capa.y} onChange={(v) => set({ y: v } as Partial<Capa>)} /></Campo>
-        <Campo etiqueta="Ancho"><Num valor={capa.w} onChange={(v) => set({ w: v } as Partial<Capa>)} /></Campo>
-        <Campo etiqueta="Alto"><Num valor={capa.h} onChange={(v) => set({ h: v } as Partial<Capa>)} /></Campo>
-        <Campo etiqueta="Rotación"><Num valor={capa.rotacion} onChange={(v) => set({ rotacion: v } as Partial<Capa>)} /></Campo>
+      {/* BLOQUE COMÚN. Principal: nada imprescindible (lo específico va por tipo más abajo).
+          MÁS: Opacidad. AVANZADO: geometría (X/Y/Ancho/Alto), rotación, mezcla y Estilos. */}
+      <Seccion titulo="Más" defaultAbierta>
         <Campo etiqueta="Opacidad">
           <input
             type="range"
@@ -752,538 +748,582 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
             className="w-20"
           />
         </Campo>
-        <Campo etiqueta="Mezcla">
-          <select
-            value={capa.mezcla ?? "normal"}
-            onChange={(e) => set({ mezcla: e.target.value as TipoMezcla } as Partial<Capa>)}
-            className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-          >
-            {(Object.keys(ETIQUETA_MEZCLA) as TipoMezcla[]).map((m) => (
-              <option key={m} value={m}>
-                {ETIQUETA_MEZCLA[m]}
-              </option>
-            ))}
-          </select>
-        </Campo>
-      </div>
+      </Seccion>
 
-      {/* Copiar/pegar estilo + estilos guardados (grupo/overlay/logo solo comparten opacidad/mezcla,
-          igual de válido). */}
-      <EstilosCapa capa={capa} marca={marca} />
-
-      {capa.tipo === "texto" && (
-        <div className="flex flex-col gap-2 border-t border-border pt-3">
-          <Campo etiqueta="Rol en la plantilla">
+      <Seccion titulo="Avanzado">
+        <div className="grid grid-cols-2 gap-2">
+          <Campo etiqueta="X"><Num valor={capa.x} onChange={(v) => set({ x: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Y"><Num valor={capa.y} onChange={(v) => set({ y: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Ancho"><Num valor={capa.w} onChange={(v) => set({ w: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Alto"><Num valor={capa.h} onChange={(v) => set({ h: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Rotación"><Num valor={capa.rotacion} onChange={(v) => set({ rotacion: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Mezcla">
             <select
-              value={(capa as CapaTexto).binding ?? "fijo"}
-              onChange={(e) => set({ binding: e.target.value === "fijo" ? null : (e.target.value as CapaTexto["binding"]) } as Partial<Capa>)}
+              value={capa.mezcla ?? "normal"}
+              onChange={(e) => set({ mezcla: e.target.value as TipoMezcla } as Partial<Capa>)}
               className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
             >
-              <option value="fijo">{ETIQUETA_BINDING.fijo}</option>
-              <option value="copy_in">{ETIQUETA_BINDING.copy_in}</option>
-              <option value="etiqueta_default">{ETIQUETA_BINDING.etiqueta_default}</option>
+              {(Object.keys(ETIQUETA_MEZCLA) as TipoMezcla[]).map((m) => (
+                <option key={m} value={m}>
+                  {ETIQUETA_MEZCLA[m]}
+                </option>
+              ))}
             </select>
           </Campo>
-          <textarea
-            value={(capa as CapaTexto).texto}
-            onChange={(e) => set({ texto: e.target.value } as Partial<Capa>)}
-            placeholder={(capa as CapaTexto).binding ? "Texto de ejemplo (se sustituye por el de la pieza)…" : "Texto…"}
-            className="min-h-[60px] rounded border border-input bg-background p-1.5 text-sm"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <Campo etiqueta="Tamaño"><Num valor={(capa as CapaTexto).tamano} onChange={(v) => set({ tamano: v } as Partial<Capa>)} /></Campo>
-            <Campo etiqueta="Peso"><Num valor={(capa as CapaTexto).peso} paso={100} onChange={(v) => set({ peso: v } as Partial<Capa>)} /></Campo>
-            <Campo etiqueta="Color">
-              <ColorControl valor={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} />
+        </div>
+        {/* Copiar/pegar estilo + estilos guardados (grupo/overlay/logo solo comparten opacidad/mezcla,
+            igual de válido). */}
+        <EstilosCapa capa={capa} marca={marca} />
+      </Seccion>
+
+      {capa.tipo === "texto" && (
+        <>
+          {/* TEXTO · PRINCIPAL: contenido, rol/binding, mayúsculas, valign y el chip (toggle + color).
+              Los detalles del chip (margen/redondeo) viven en Avanzado. */}
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <Campo etiqueta="Rol en la plantilla">
+              <select
+                value={(capa as CapaTexto).binding ?? "fijo"}
+                onChange={(e) => set({ binding: e.target.value === "fijo" ? null : (e.target.value as CapaTexto["binding"]) } as Partial<Capa>)}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                <option value="fijo">{ETIQUETA_BINDING.fijo}</option>
+                <option value="copy_in">{ETIQUETA_BINDING.copy_in}</option>
+                <option value="etiqueta_default">{ETIQUETA_BINDING.etiqueta_default}</option>
+              </select>
             </Campo>
+            <textarea
+              value={(capa as CapaTexto).texto}
+              onChange={(e) => set({ texto: e.target.value } as Partial<Capa>)}
+              placeholder={(capa as CapaTexto).binding ? "Texto de ejemplo (se sustituye por el de la pieza)…" : "Texto…"}
+              className="min-h-[60px] rounded border border-input bg-background p-1.5 text-sm"
+            />
             <Campo etiqueta="Mayúsculas">
               <input type="checkbox" checked={(capa as CapaTexto).mayusculas} onChange={(e) => set({ mayusculas: e.target.checked } as Partial<Capa>)} />
             </Campo>
-          </div>
-          <Campo etiqueta="Fuente">
-            <select
-              value={(capa as CapaTexto).familia}
-              onChange={(e) => set({ familia: e.target.value } as Partial<Capa>)}
-              className="max-w-[140px] rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              {familias.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-              {/* Si la capa usa una familia que ya no está en la lista, la mostramos igual. */}
-              {!familias.includes((capa as CapaTexto).familia) && (
-                <option value={(capa as CapaTexto).familia}>{(capa as CapaTexto).familia}</option>
-              )}
-            </select>
-          </Campo>
-          <Campo etiqueta="Alineación">
-            <select
-              value={(capa as CapaTexto).alineacion}
-              onChange={(e) => set({ alineacion: e.target.value as CapaTexto["alineacion"] } as Partial<Capa>)}
-              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              <option value="izquierda">Izquierda</option>
-              <option value="centro">Centro</option>
-              <option value="derecha">Derecha</option>
-              <option value="justificado">Justificado</option>
-            </select>
-          </Campo>
-          <Campo etiqueta="Alineación vertical">
-            <div className="flex gap-1">
-              {(["arriba", "centro", "abajo"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => set({ valign: v } as Partial<Capa>)}
-                  className={`rounded border px-1.5 py-0.5 text-xs capitalize ${
-                    ((capa as CapaTexto).valign ?? "centro") === v
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-input bg-background text-muted-foreground hover:bg-accent"
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </Campo>
-          <div className="grid grid-cols-2 gap-2">
-            <Campo etiqueta="Máx. líneas">
-              <Num
-                valor={(capa as CapaTexto).auto_ajuste?.max_lineas ?? 4}
-                onChange={(v) =>
-                  set({ auto_ajuste: { ...(capa as CapaTexto).auto_ajuste, max_lineas: Math.max(1, v) } } as Partial<Capa>)
-                }
-              />
+            <Campo etiqueta="Alineación vertical">
+              <div className="flex gap-1">
+                {(["arriba", "centro", "abajo"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => set({ valign: v } as Partial<Capa>)}
+                    className={`rounded border px-1.5 py-0.5 text-xs capitalize ${
+                      ((capa as CapaTexto).valign ?? "centro") === v
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-input bg-background text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
             </Campo>
-            <Campo etiqueta="Tamaño mínimo">
-              <Num
-                valor={(capa as CapaTexto).auto_ajuste?.tam_min ?? 40}
-                onChange={(v) =>
-                  set({ auto_ajuste: { ...(capa as CapaTexto).auto_ajuste, tam_min: Math.max(1, v) } } as Partial<Capa>)
-                }
-              />
-            </Campo>
-          </div>
-          <Campo etiqueta="Interlineado">
-            <Num valor={(capa as CapaTexto).interlineado} paso={0.05} onChange={(v) => set({ interlineado: v } as Partial<Capa>)} />
-          </Campo>
-          <Campo etiqueta="Interletra">
-            <Num valor={(capa as CapaTexto).interletra ?? 0} paso={0.5} onChange={(v) => set({ interletra: v } as Partial<Capa>)} />
-          </Campo>
-          {/* Texto curvo (en arco): el toggle activa una curva con radio por defecto; el slider lo
-              ajusta (+ = sonrisa, - = ceño). Sin curva el texto es recto (camino legado). */}
-          <Campo etiqueta="Curvar">
-            <input
-              type="checkbox"
-              checked={!!(capa as CapaTexto).curva?.radio}
-              onChange={(e) => set({ curva: e.target.checked ? { radio: 600 } : null } as Partial<Capa>)}
-            />
-          </Campo>
-          {!!(capa as CapaTexto).curva?.radio && (
-            <Campo etiqueta="Radio">
+            <Campo etiqueta="Fondo (chip)">
               <input
-                type="range"
-                min={-2000}
-                max={2000}
-                step={20}
-                value={(capa as CapaTexto).curva?.radio ?? 600}
-                onChange={(e) => {
-                  const r = Number(e.target.value);
-                  set({ curva: r === 0 ? null : { radio: r } } as Partial<Capa>);
-                }}
-                className="w-full"
+                type="checkbox"
+                checked={!!(capa as CapaTexto).chip}
+                onChange={(e) =>
+                  set({ chip: e.target.checked ? { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } : null } as Partial<Capa>)
+                }
               />
             </Campo>
-          )}
-          {/* Presets rápidos de efecto de texto: rellenan sombra/contorno de un clic (reusan los
-              campos existentes, sin esquema nuevo). El "Glow" toma el color del texto. */}
-          <div className="flex flex-wrap gap-1">
-            {(() => {
-              const colorTexto = (capa as CapaTexto).color || "#FFFFFF";
-              const presets: { etiqueta: string; cambios: Partial<CapaTexto> }[] = [
-                { etiqueta: "Glow", cambios: { sombra: { dx: 0, dy: 0, color: colorTexto, desenfoque: 24, opacidad: 0.9 } } },
-                { etiqueta: "Neón", cambios: { sombra: { dx: 0, dy: 0, color: "#22D3EE", desenfoque: 28, opacidad: 0.95 }, contorno: { color: "#22D3EE", grosor: 2 } } },
-                { etiqueta: "Contorno", cambios: { contorno: { color: "#000000", grosor: 8 } } },
-                { etiqueta: "Sombra suave", cambios: { sombra: { dx: 0, dy: 8, color: "#000000", desenfoque: 16, opacidad: 0.5 } } },
-                { etiqueta: "Quitar efectos", cambios: { sombra: null, contorno: null } },
-              ];
-              return presets.map((p) => (
-                <button
-                  key={p.etiqueta}
-                  type="button"
-                  onClick={() => set(p.cambios as Partial<Capa>)}
-                  className="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] hover:bg-accent"
-                >
-                  {p.etiqueta}
-                </button>
-              ));
-            })()}
-          </div>
-          <Campo etiqueta="Contorno">
-            <input
-              type="checkbox"
-              checked={!!(capa as CapaTexto).contorno}
-              onChange={(e) => set({ contorno: e.target.checked ? { color: "#000000", grosor: 6 } : null } as Partial<Capa>)}
-            />
-          </Campo>
-          {(capa as CapaTexto).contorno && (
-            <>
-              <Campo etiqueta="Color del contorno">
-                <ColorControl
-                  valor={(capa as CapaTexto).contorno!.color}
-                  onChange={(c) => set({ contorno: { ...(capa as CapaTexto).contorno!, color: c } } as Partial<Capa>)}
-                />
-              </Campo>
-              <Campo etiqueta="Grosor del contorno">
-                <Num
-                  valor={(capa as CapaTexto).contorno!.grosor}
-                  onChange={(v) => set({ contorno: { ...(capa as CapaTexto).contorno!, grosor: Math.max(0, v) } } as Partial<Capa>)}
-                />
-              </Campo>
-            </>
-          )}
-          <Campo etiqueta="Relleno">
-            <select
-              value={(capa as CapaTexto).relleno_degradado ? "degradado" : "solido"}
-              onChange={(e) =>
-                set({
-                  relleno_degradado:
-                    e.target.value === "degradado"
-                      ? { desde: (capa as CapaTexto).color, hasta: "#111315", angulo: 180 }
-                      : null,
-                } as Partial<Capa>)
-              }
-              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              <option value="solido">Sólido</option>
-              <option value="degradado">Degradado</option>
-            </select>
-          </Campo>
-          {(capa as CapaTexto).relleno_degradado && (
-            <CamposDegradado
-              deg={(capa as CapaTexto).relleno_degradado!}
-              onChange={(d) => set({ relleno_degradado: d } as Partial<Capa>)}
-            />
-          )}
-          <Campo etiqueta="Sombra">
-            <input
-              type="checkbox"
-              checked={!!(capa as CapaTexto).sombra}
-              onChange={(e) => set({ sombra: e.target.checked ? { dx: 2, dy: 2, color: "#000000" } : null } as Partial<Capa>)}
-            />
-          </Campo>
-          {(capa as CapaTexto).sombra && (
-            <CamposSombra sombra={(capa as CapaTexto).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
-          )}
-          <Campo etiqueta="Fondo (chip)">
-            <input
-              type="checkbox"
-              checked={!!(capa as CapaTexto).chip}
-              onChange={(e) =>
-                set({ chip: e.target.checked ? { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } : null } as Partial<Capa>)
-              }
-            />
-          </Campo>
-          {(capa as CapaTexto).chip && (
-            <>
+            {(capa as CapaTexto).chip && (
               <Campo etiqueta="Color del chip">
                 <ColorControl
                   valor={(capa as CapaTexto).chip!.color}
                   onChange={(c) => set({ chip: { ...(capa as CapaTexto).chip!, color: c } } as Partial<Capa>)}
                 />
               </Campo>
-              <div className="grid grid-cols-2 gap-2">
-                <Campo etiqueta="Margen X">
-                  <Num valor={(capa as CapaTexto).chip!.pad_x} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, pad_x: Math.max(0, v) } } as Partial<Capa>)} />
-                </Campo>
-                <Campo etiqueta="Margen Y">
-                  <Num valor={(capa as CapaTexto).chip!.pad_y} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, pad_y: Math.max(0, v) } } as Partial<Capa>)} />
-                </Campo>
-              </div>
-              <Campo etiqueta="Redondeo">
-                <Num valor={(capa as CapaTexto).chip!.radio} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, radio: Math.max(0, v) } } as Partial<Capa>)} />
-              </Campo>
-            </>
-          )}
-        </div>
-      )}
-
-      {capa.tipo === "imagen" && (
-        <div className="flex flex-col gap-2 border-t border-border pt-3">
-          {/* Hueco de foto: la capa donde entra la foto de la pieza. Único y obligatorio por
-              plantilla; al marcar otra, esta se desmarca. Marcarlo lo deja bloqueado. */}
-          <Campo etiqueta="Hueco de foto">
-            {(capa as CapaImagen).es_foto ? (
-              <div className="flex items-center gap-1.5">
-                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  Sí · bloqueado
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    store.getState().actualizar(capa.id, { es_foto: false, bloqueada: false } as Partial<Capa>)
-                  }
-                  className="rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-                >
-                  Quitar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => store.getState().marcarHuecoFoto(capa.id)}
-                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-              >
-                Marcar como hueco
-              </button>
             )}
-          </Campo>
-          {(capa as CapaImagen).es_foto && (
-            <p className="text-[11px] text-muted-foreground">La plantilla requiere un hueco de foto.</p>
-          )}
-          <Campo etiqueta="Forma">
-            <select
-              value={(capa as CapaImagen).forma ?? "rect"}
-              onChange={(e) => set({ forma: e.target.value as Forma } as Partial<Capa>)}
-              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              {CATALOGO_FORMAS.map((f) => (
-                <option key={f} value={f}>{ETIQUETA_FORMA[f]}</option>
-              ))}
-            </select>
-          </Campo>
-          {/* "Esquinas" (radio uniforme o por esquina) solo aplica al rectángulo. */}
-          {((capa as CapaImagen).forma ?? "rect") === "rect" && (
-            <RadioEsquinas
-              radio={(capa as CapaImagen).radio ?? 0}
-              radios={(capa as CapaImagen).radios}
-              onChange={(cambios) => set(cambios as Partial<Capa>)}
-            />
-          )}
-          {/* Convertir la foto en una FORMA (marco) vacía, conservando su silueta. */}
-          {!(capa as CapaImagen).es_foto && (
-            <button
-              type="button"
-              onClick={() => store.getState().convertirEnMarco(capa.id)}
-              className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-            >
-              Convertir en forma
-            </button>
-          )}
-          <Campo etiqueta="Ajuste">
-            <select
-              value={(capa as CapaImagen).ajuste}
-              onChange={(e) => set({ ajuste: e.target.value as CapaImagen["ajuste"] } as Partial<Capa>)}
-              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              <option value="cover">Cubrir</option>
-              <option value="contain">Contener</option>
-            </select>
-          </Campo>
-          <Campo etiqueta="Zoom (reencuadre)">
-            <input
-              type="range"
-              min={1}
-              max={6}
-              step={0.05}
-              value={(capa as CapaImagen).zoom ?? 1}
-              onChange={(e) => set({ zoom: Number(e.target.value) } as Partial<Capa>)}
-              className="w-24"
-            />
-          </Campo>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Filtros</div>
-          <Campo etiqueta="Brillo">
-            <input type="range" min={0.2} max={1.8} step={0.05} value={fil.brillo ?? 1} onChange={(e) => setFiltro("brillo", Number(e.target.value))} className="w-24" />
-          </Campo>
-          <Campo etiqueta="Contraste">
-            <input type="range" min={0.2} max={1.8} step={0.05} value={fil.contraste ?? 1} onChange={(e) => setFiltro("contraste", Number(e.target.value))} className="w-24" />
-          </Campo>
-          <Campo etiqueta="Saturación">
-            <input type="range" min={0} max={2} step={0.05} value={fil.saturacion ?? 1} onChange={(e) => setFiltro("saturacion", Number(e.target.value))} className="w-24" />
-          </Campo>
-          <Campo etiqueta="Desenfoque">
-            <input type="range" min={0} max={20} step={1} value={fil.desenfoque ?? 0} onChange={(e) => setFiltro("desenfoque", Number(e.target.value))} className="w-24" />
-          </Campo>
-          <button onClick={() => set({ filtros: null } as Partial<Capa>)} className="self-start text-xs text-muted-foreground underline">
-            Quitar filtros
-          </button>
-          {/* DUOTONO: tinte de marca por luminancia (sombras->color1, luces->color2). */}
-          <Campo etiqueta="Duotono">
-            <input
-              type="checkbox"
-              checked={!!fil.duotono}
-              onChange={(e) =>
-                set({
-                  filtros: {
-                    brillo: fil.brillo ?? 1,
-                    contraste: fil.contraste ?? 1,
-                    saturacion: fil.saturacion ?? 1,
-                    desenfoque: fil.desenfoque ?? 0,
-                    duotono: e.target.checked ? { sombra: "#111315", luz: "#E30613" } : null,
-                  },
-                } as Partial<Capa>)
-              }
-            />
-          </Campo>
-          {fil.duotono && (
-            <div className="grid grid-cols-2 gap-2 pl-2">
-              <Campo etiqueta="Sombra">
-                <ColorControl
-                  valor={fil.duotono.sombra}
-                  onChange={(c) => set({ filtros: { ...fil, duotono: { ...fil.duotono!, sombra: c } } } as Partial<Capa>)}
+          </div>
+
+          {/* TEXTO · MÁS: tipografía de uso frecuente (también accesible en la barra rápida). */}
+          <Seccion titulo="Más">
+            <div className="grid grid-cols-2 gap-2">
+              <Campo etiqueta="Tamaño"><Num valor={(capa as CapaTexto).tamano} onChange={(v) => set({ tamano: v } as Partial<Capa>)} /></Campo>
+              <Campo etiqueta="Peso"><Num valor={(capa as CapaTexto).peso} paso={100} onChange={(v) => set({ peso: v } as Partial<Capa>)} /></Campo>
+              <Campo etiqueta="Color">
+                <ColorControl valor={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} />
+              </Campo>
+            </div>
+            <Campo etiqueta="Fuente">
+              <select
+                value={(capa as CapaTexto).familia}
+                onChange={(e) => set({ familia: e.target.value } as Partial<Capa>)}
+                className="max-w-[140px] rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                {familias.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+                {/* Si la capa usa una familia que ya no está en la lista, la mostramos igual. */}
+                {!familias.includes((capa as CapaTexto).familia) && (
+                  <option value={(capa as CapaTexto).familia}>{(capa as CapaTexto).familia}</option>
+                )}
+              </select>
+            </Campo>
+            <Campo etiqueta="Alineación">
+              <select
+                value={(capa as CapaTexto).alineacion}
+                onChange={(e) => set({ alineacion: e.target.value as CapaTexto["alineacion"] } as Partial<Capa>)}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                <option value="izquierda">Izquierda</option>
+                <option value="centro">Centro</option>
+                <option value="derecha">Derecha</option>
+                <option value="justificado">Justificado</option>
+              </select>
+            </Campo>
+            <Campo etiqueta="Interlineado">
+              <Num valor={(capa as CapaTexto).interlineado} paso={0.05} onChange={(v) => set({ interlineado: v } as Partial<Capa>)} />
+            </Campo>
+          </Seccion>
+
+          {/* TEXTO · AVANZADO: ajuste fino tipográfico, curvado, efectos (presets + manual),
+              relleno degradado y detalles del chip. */}
+          <Seccion titulo="Avanzado">
+            <Campo etiqueta="Interletra">
+              <Num valor={(capa as CapaTexto).interletra ?? 0} paso={0.5} onChange={(v) => set({ interletra: v } as Partial<Capa>)} />
+            </Campo>
+            <div className="grid grid-cols-2 gap-2">
+              <Campo etiqueta="Máx. líneas">
+                <Num
+                  valor={(capa as CapaTexto).auto_ajuste?.max_lineas ?? 4}
+                  onChange={(v) =>
+                    set({ auto_ajuste: { ...(capa as CapaTexto).auto_ajuste, max_lineas: Math.max(1, v) } } as Partial<Capa>)
+                  }
                 />
               </Campo>
-              <Campo etiqueta="Luz">
-                <ColorControl
-                  valor={fil.duotono.luz}
-                  onChange={(c) => set({ filtros: { ...fil, duotono: { ...fil.duotono!, luz: c } } } as Partial<Capa>)}
+              <Campo etiqueta="Tamaño mínimo">
+                <Num
+                  valor={(capa as CapaTexto).auto_ajuste?.tam_min ?? 40}
+                  onChange={(v) =>
+                    set({ auto_ajuste: { ...(capa as CapaTexto).auto_ajuste, tam_min: Math.max(1, v) } } as Partial<Capa>)
+                  }
                 />
               </Campo>
             </div>
-          )}
-          {/* RECORTE (crop) no destructivo de la fuente: 4 campos en % (Izq/Arriba/Ancho/Alto). No hay
-              editor visual interactivo (anotado como pendiente); los campos numéricos bastan. */}
-          {(() => {
-            const cap = capa as CapaImagen;
-            const crop = cap.crop;
-            const pct = (v: number) => Math.round(v * 1000) / 10;
-            const setCrop = (k: "cx" | "cy" | "cw" | "ch", v: number) => {
-              const actual = crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 };
-              const f = Math.max(0, Math.min(1, v / 100));
-              set({ crop: { ...actual, [k]: f } } as Partial<Capa>);
-            };
-            return (
+            {/* Texto curvo (en arco): el toggle activa una curva con radio por defecto; el slider lo
+                ajusta (+ = sonrisa, - = ceño). Sin curva el texto es recto (camino legado). */}
+            <Campo etiqueta="Curvar">
+              <input
+                type="checkbox"
+                checked={!!(capa as CapaTexto).curva?.radio}
+                onChange={(e) => set({ curva: e.target.checked ? { radio: 600 } : null } as Partial<Capa>)}
+              />
+            </Campo>
+            {!!(capa as CapaTexto).curva?.radio && (
+              <Campo etiqueta="Radio">
+                <input
+                  type="range"
+                  min={-2000}
+                  max={2000}
+                  step={20}
+                  value={(capa as CapaTexto).curva?.radio ?? 600}
+                  onChange={(e) => {
+                    const r = Number(e.target.value);
+                    set({ curva: r === 0 ? null : { radio: r } } as Partial<Capa>);
+                  }}
+                  className="w-full"
+                />
+              </Campo>
+            )}
+            {/* Presets rápidos de efecto de texto: rellenan sombra/contorno de un clic (reusan los
+                campos existentes, sin esquema nuevo). El "Glow" toma el color del texto. */}
+            <div className="flex flex-wrap gap-1">
+              {(() => {
+                const colorTexto = (capa as CapaTexto).color || "#FFFFFF";
+                const presets: { etiqueta: string; cambios: Partial<CapaTexto> }[] = [
+                  { etiqueta: "Glow", cambios: { sombra: { dx: 0, dy: 0, color: colorTexto, desenfoque: 24, opacidad: 0.9 } } },
+                  { etiqueta: "Neón", cambios: { sombra: { dx: 0, dy: 0, color: "#22D3EE", desenfoque: 28, opacidad: 0.95 }, contorno: { color: "#22D3EE", grosor: 2 } } },
+                  { etiqueta: "Contorno", cambios: { contorno: { color: "#000000", grosor: 8 } } },
+                  { etiqueta: "Sombra suave", cambios: { sombra: { dx: 0, dy: 8, color: "#000000", desenfoque: 16, opacidad: 0.5 } } },
+                  { etiqueta: "Quitar efectos", cambios: { sombra: null, contorno: null } },
+                ];
+                return presets.map((p) => (
+                  <button
+                    key={p.etiqueta}
+                    type="button"
+                    onClick={() => set(p.cambios as Partial<Capa>)}
+                    className="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] hover:bg-accent"
+                  >
+                    {p.etiqueta}
+                  </button>
+                ));
+              })()}
+            </div>
+            <Campo etiqueta="Contorno">
+              <input
+                type="checkbox"
+                checked={!!(capa as CapaTexto).contorno}
+                onChange={(e) => set({ contorno: e.target.checked ? { color: "#000000", grosor: 6 } : null } as Partial<Capa>)}
+              />
+            </Campo>
+            {(capa as CapaTexto).contorno && (
               <>
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Recorte</div>
-                  {onRecortar && (
-                    <button
-                      type="button"
-                      onClick={onRecortar}
-                      className="flex items-center gap-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-                      title="Recortar visualmente con tiradores"
-                    >
-                      <CropIcon className="h-3.5 w-3.5" /> Recortar
-                    </button>
-                  )}
-                </div>
+                <Campo etiqueta="Color del contorno">
+                  <ColorControl
+                    valor={(capa as CapaTexto).contorno!.color}
+                    onChange={(c) => set({ contorno: { ...(capa as CapaTexto).contorno!, color: c } } as Partial<Capa>)}
+                  />
+                </Campo>
+                <Campo etiqueta="Grosor del contorno">
+                  <Num
+                    valor={(capa as CapaTexto).contorno!.grosor}
+                    onChange={(v) => set({ contorno: { ...(capa as CapaTexto).contorno!, grosor: Math.max(0, v) } } as Partial<Capa>)}
+                  />
+                </Campo>
+              </>
+            )}
+            <Campo etiqueta="Sombra">
+              <input
+                type="checkbox"
+                checked={!!(capa as CapaTexto).sombra}
+                onChange={(e) => set({ sombra: e.target.checked ? { dx: 2, dy: 2, color: "#000000" } : null } as Partial<Capa>)}
+              />
+            </Campo>
+            {(capa as CapaTexto).sombra && (
+              <CamposSombra sombra={(capa as CapaTexto).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
+            )}
+            <Campo etiqueta="Relleno">
+              <select
+                value={(capa as CapaTexto).relleno_degradado ? "degradado" : "solido"}
+                onChange={(e) =>
+                  set({
+                    relleno_degradado:
+                      e.target.value === "degradado"
+                        ? { desde: (capa as CapaTexto).color, hasta: "#111315", angulo: 180 }
+                        : null,
+                  } as Partial<Capa>)
+                }
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                <option value="solido">Sólido</option>
+                <option value="degradado">Degradado</option>
+              </select>
+            </Campo>
+            {(capa as CapaTexto).relleno_degradado && (
+              <CamposDegradado
+                deg={(capa as CapaTexto).relleno_degradado!}
+                onChange={(d) => set({ relleno_degradado: d } as Partial<Capa>)}
+              />
+            )}
+            {/* Detalles del chip (solo si está activo): margen y redondeo. El toggle + color están en Principal. */}
+            {(capa as CapaTexto).chip && (
+              <>
                 <div className="grid grid-cols-2 gap-2">
-                  <Campo etiqueta="Izq. %"><Num valor={pct(crop?.cx ?? 0)} onChange={(v) => setCrop("cx", v)} /></Campo>
-                  <Campo etiqueta="Arriba %"><Num valor={pct(crop?.cy ?? 0)} onChange={(v) => setCrop("cy", v)} /></Campo>
-                  <Campo etiqueta="Ancho %"><Num valor={pct(crop?.cw ?? 1)} onChange={(v) => setCrop("cw", v)} /></Campo>
-                  <Campo etiqueta="Alto %"><Num valor={pct(crop?.ch ?? 1)} onChange={(v) => setCrop("ch", v)} /></Campo>
+                  <Campo etiqueta="Margen X">
+                    <Num valor={(capa as CapaTexto).chip!.pad_x} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, pad_x: Math.max(0, v) } } as Partial<Capa>)} />
+                  </Campo>
+                  <Campo etiqueta="Margen Y">
+                    <Num valor={(capa as CapaTexto).chip!.pad_y} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, pad_y: Math.max(0, v) } } as Partial<Capa>)} />
+                  </Campo>
                 </div>
-                {crop && (
+                <Campo etiqueta="Redondeo">
+                  <Num valor={(capa as CapaTexto).chip!.radio} onChange={(v) => set({ chip: { ...(capa as CapaTexto).chip!, radio: Math.max(0, v) } } as Partial<Capa>)} />
+                </Campo>
+              </>
+            )}
+          </Seccion>
+        </>
+      )}
+
+      {capa.tipo === "imagen" && (
+        <>
+          {/* IMAGEN · PRINCIPAL: hueco de foto, forma y ajuste. */}
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            {/* Hueco de foto: la capa donde entra la foto de la pieza. Único y obligatorio por
+                plantilla; al marcar otra, esta se desmarca. Marcarlo lo deja bloqueado. */}
+            <Campo etiqueta="Hueco de foto">
+              {(capa as CapaImagen).es_foto ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    Sí · bloqueado
+                  </span>
                   <button
                     type="button"
-                    onClick={() => set({ crop: undefined } as Partial<Capa>)}
-                    className="self-start text-xs text-muted-foreground underline"
+                    onClick={() =>
+                      store.getState().actualizar(capa.id, { es_foto: false, bloqueada: false } as Partial<Capa>)
+                    }
+                    className="rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
                   >
-                    Quitar recorte
+                    Quitar
                   </button>
-                )}
-              </>
-            );
-          })()}
-          <Campo etiqueta="Sombra">
-            <input
-              type="checkbox"
-              checked={!!(capa as CapaImagen).sombra}
-              onChange={(e) => set({ sombra: e.target.checked ? { dx: 0, dy: 12, color: "#000000", desenfoque: 24, opacidad: 0.5 } : null } as Partial<Capa>)}
-            />
-          </Campo>
-          {(capa as CapaImagen).sombra && (
-            <CamposSombra sombra={(capa as CapaImagen).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
-          )}
-        </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => store.getState().marcarHuecoFoto(capa.id)}
+                  className="rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+                >
+                  Marcar como hueco
+                </button>
+              )}
+            </Campo>
+            {(capa as CapaImagen).es_foto && (
+              <p className="text-[11px] text-muted-foreground">La plantilla requiere un hueco de foto.</p>
+            )}
+            <Campo etiqueta="Forma">
+              <select
+                value={(capa as CapaImagen).forma ?? "rect"}
+                onChange={(e) => set({ forma: e.target.value as Forma } as Partial<Capa>)}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                {CATALOGO_FORMAS.map((f) => (
+                  <option key={f} value={f}>{ETIQUETA_FORMA[f]}</option>
+                ))}
+              </select>
+            </Campo>
+            <Campo etiqueta="Ajuste">
+              <select
+                value={(capa as CapaImagen).ajuste}
+                onChange={(e) => set({ ajuste: e.target.value as CapaImagen["ajuste"] } as Partial<Capa>)}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                <option value="cover">Cubrir</option>
+                <option value="contain">Contener</option>
+              </select>
+            </Campo>
+          </div>
+
+          {/* IMAGEN · MÁS: reencuadre rápido (recorte visual + zoom). */}
+          <Seccion titulo="Más">
+            {onRecortar && (
+              <button
+                type="button"
+                onClick={onRecortar}
+                className="flex items-center gap-1 self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+                title="Recortar visualmente con tiradores"
+              >
+                <CropIcon className="h-3.5 w-3.5" /> Recortar
+              </button>
+            )}
+            <Campo etiqueta="Zoom (reencuadre)">
+              <input
+                type="range"
+                min={1}
+                max={6}
+                step={0.05}
+                value={(capa as CapaImagen).zoom ?? 1}
+                onChange={(e) => set({ zoom: Number(e.target.value) } as Partial<Capa>)}
+                className="w-24"
+              />
+            </Campo>
+          </Seccion>
+
+          {/* IMAGEN · AVANZADO: esquinas, filtros, duotono, sombra, recorte por % y conversión. */}
+          <Seccion titulo="Avanzado">
+            {/* "Esquinas" (radio uniforme o por esquina) solo aplica al rectángulo. */}
+            {((capa as CapaImagen).forma ?? "rect") === "rect" && (
+              <RadioEsquinas
+                radio={(capa as CapaImagen).radio ?? 0}
+                radios={(capa as CapaImagen).radios}
+                onChange={(cambios) => set(cambios as Partial<Capa>)}
+              />
+            )}
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Filtros</div>
+            <Campo etiqueta="Brillo">
+              <input type="range" min={0.2} max={1.8} step={0.05} value={fil.brillo ?? 1} onChange={(e) => setFiltro("brillo", Number(e.target.value))} className="w-24" />
+            </Campo>
+            <Campo etiqueta="Contraste">
+              <input type="range" min={0.2} max={1.8} step={0.05} value={fil.contraste ?? 1} onChange={(e) => setFiltro("contraste", Number(e.target.value))} className="w-24" />
+            </Campo>
+            <Campo etiqueta="Saturación">
+              <input type="range" min={0} max={2} step={0.05} value={fil.saturacion ?? 1} onChange={(e) => setFiltro("saturacion", Number(e.target.value))} className="w-24" />
+            </Campo>
+            <Campo etiqueta="Desenfoque">
+              <input type="range" min={0} max={20} step={1} value={fil.desenfoque ?? 0} onChange={(e) => setFiltro("desenfoque", Number(e.target.value))} className="w-24" />
+            </Campo>
+            <button onClick={() => set({ filtros: null } as Partial<Capa>)} className="self-start text-xs text-muted-foreground underline">
+              Quitar filtros
+            </button>
+            {/* DUOTONO: tinte de marca por luminancia (sombras->color1, luces->color2). */}
+            <Campo etiqueta="Duotono">
+              <input
+                type="checkbox"
+                checked={!!fil.duotono}
+                onChange={(e) =>
+                  set({
+                    filtros: {
+                      brillo: fil.brillo ?? 1,
+                      contraste: fil.contraste ?? 1,
+                      saturacion: fil.saturacion ?? 1,
+                      desenfoque: fil.desenfoque ?? 0,
+                      duotono: e.target.checked ? { sombra: "#111315", luz: "#E30613" } : null,
+                    },
+                  } as Partial<Capa>)
+                }
+              />
+            </Campo>
+            {fil.duotono && (
+              <div className="grid grid-cols-2 gap-2 pl-2">
+                <Campo etiqueta="Sombra">
+                  <ColorControl
+                    valor={fil.duotono.sombra}
+                    onChange={(c) => set({ filtros: { ...fil, duotono: { ...fil.duotono!, sombra: c } } } as Partial<Capa>)}
+                  />
+                </Campo>
+                <Campo etiqueta="Luz">
+                  <ColorControl
+                    valor={fil.duotono.luz}
+                    onChange={(c) => set({ filtros: { ...fil, duotono: { ...fil.duotono!, luz: c } } } as Partial<Capa>)}
+                  />
+                </Campo>
+              </div>
+            )}
+            <Campo etiqueta="Sombra">
+              <input
+                type="checkbox"
+                checked={!!(capa as CapaImagen).sombra}
+                onChange={(e) => set({ sombra: e.target.checked ? { dx: 0, dy: 12, color: "#000000", desenfoque: 24, opacidad: 0.5 } : null } as Partial<Capa>)}
+              />
+            </Campo>
+            {(capa as CapaImagen).sombra && (
+              <CamposSombra sombra={(capa as CapaImagen).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
+            )}
+            {/* RECORTE (crop) no destructivo de la fuente: 4 campos en % (Izq/Arriba/Ancho/Alto). El
+                editor visual (botón "Recortar") vive en "Más"; aquí van los campos numéricos finos. */}
+            {(() => {
+              const cap = capa as CapaImagen;
+              const crop = cap.crop;
+              const pct = (v: number) => Math.round(v * 1000) / 10;
+              const setCrop = (k: "cx" | "cy" | "cw" | "ch", v: number) => {
+                const actual = crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 };
+                const f = Math.max(0, Math.min(1, v / 100));
+                set({ crop: { ...actual, [k]: f } } as Partial<Capa>);
+              };
+              return (
+                <>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Recorte</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Campo etiqueta="Izq. %"><Num valor={pct(crop?.cx ?? 0)} onChange={(v) => setCrop("cx", v)} /></Campo>
+                    <Campo etiqueta="Arriba %"><Num valor={pct(crop?.cy ?? 0)} onChange={(v) => setCrop("cy", v)} /></Campo>
+                    <Campo etiqueta="Ancho %"><Num valor={pct(crop?.cw ?? 1)} onChange={(v) => setCrop("cw", v)} /></Campo>
+                    <Campo etiqueta="Alto %"><Num valor={pct(crop?.ch ?? 1)} onChange={(v) => setCrop("ch", v)} /></Campo>
+                  </div>
+                  {crop && (
+                    <button
+                      type="button"
+                      onClick={() => set({ crop: undefined } as Partial<Capa>)}
+                      className="self-start text-xs text-muted-foreground underline"
+                    >
+                      Quitar recorte
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+            {/* Convertir la foto en una FORMA (marco) vacía, conservando su silueta. */}
+            {!(capa as CapaImagen).es_foto && (
+              <button
+                type="button"
+                onClick={() => store.getState().convertirEnMarco(capa.id)}
+                className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+              >
+                Convertir en forma
+              </button>
+            )}
+          </Seccion>
+        </>
       )}
 
       {capa.tipo === "marco" && (
-        <div className="flex flex-col gap-2 border-t border-border pt-3">
-          <Campo etiqueta="Forma">
-            <select
-              value={(capa as CapaMarco).forma}
-              onChange={(e) => set({ forma: e.target.value as CapaMarco["forma"] } as Partial<Capa>)}
-              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              {CATALOGO_FORMAS.map((f) => (
-                <option key={f} value={f}>{ETIQUETA_FORMA[f]}</option>
-              ))}
-              <option value="linea">Línea</option>
-            </select>
-          </Campo>
-          {/* Convertir la forma en un hueco de FOTO (capa imagen), conservando su silueta. */}
-          <button
-            type="button"
-            onClick={() => store.getState().convertirEnImagen(capa.id)}
-            className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-          >
-            Convertir en foto
-          </button>
-          <Campo etiqueta="Relleno">
-            <select
-              value={(capa as CapaMarco).relleno_degradado ? "degradado" : "solido"}
-              onChange={(e) =>
-                set({
-                  relleno_degradado:
-                    e.target.value === "degradado"
-                      ? { desde: (capa as CapaMarco).relleno ?? "#E30613", hasta: "#111315", angulo: 180 }
-                      : null,
-                } as Partial<Capa>)
-              }
-              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
-            >
-              <option value="solido">Sólido</option>
-              <option value="degradado">Degradado</option>
-            </select>
-          </Campo>
-          {(capa as CapaMarco).relleno_degradado ? (
-            <CamposDegradado
-              deg={(capa as CapaMarco).relleno_degradado!}
-              onChange={(d) => set({ relleno_degradado: d } as Partial<Capa>)}
-            />
-          ) : (
-            <Campo etiqueta="Color de relleno">
-              <ColorControl valor={(capa as CapaMarco).relleno ?? "#000000"} onChange={(c) => set({ relleno: c } as Partial<Capa>)} />
+        <>
+          {/* MARCO · PRINCIPAL: forma, color de relleno sólido y borde (color + grosor). El relleno
+              degradado se gestiona en Avanzado. */}
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <Campo etiqueta="Forma">
+              <select
+                value={(capa as CapaMarco).forma}
+                onChange={(e) => set({ forma: e.target.value as CapaMarco["forma"] } as Partial<Capa>)}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                {CATALOGO_FORMAS.map((f) => (
+                  <option key={f} value={f}>{ETIQUETA_FORMA[f]}</option>
+                ))}
+                <option value="linea">Línea</option>
+              </select>
             </Campo>
-          )}
-          <Campo etiqueta="Borde">
-            <ColorControl
-              valor={(capa as CapaMarco).borde?.color ?? "#FFFFFF"}
-              onChange={(c) => set({ borde: { color: c, grosor: (capa as CapaMarco).borde?.grosor ?? 6 } } as Partial<Capa>)}
-            />
-          </Campo>
-          <Campo etiqueta="Grosor">
-            <Num
-              valor={(capa as CapaMarco).borde?.grosor ?? 0}
-              onChange={(v) =>
-                set({
-                  // Grosor <= 0: el back descarta el borde (borde:null); el front hace lo mismo.
-                  borde: v > 0 ? { color: (capa as CapaMarco).borde?.color ?? "#FFFFFF", grosor: v } : null,
-                } as Partial<Capa>)
-              }
-            />
-          </Campo>
-          {/* Esquinas: radio uniforme o independiente por esquina (solo rect). */}
-          {(capa as CapaMarco).forma === "rect" && (
-            <RadioEsquinas
-              radio={(capa as CapaMarco).radio}
-              radios={(capa as CapaMarco).radios}
-              onChange={(cambios) => set(cambios as Partial<Capa>)}
-            />
-          )}
-          <Campo etiqueta="Sombra">
-            <input
-              type="checkbox"
-              checked={!!(capa as CapaMarco).sombra}
-              onChange={(e) => set({ sombra: e.target.checked ? { dx: 0, dy: 12, color: "#000000", desenfoque: 24, opacidad: 0.5 } : null } as Partial<Capa>)}
-            />
-          </Campo>
-          {(capa as CapaMarco).sombra && (
-            <CamposSombra sombra={(capa as CapaMarco).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
-          )}
-        </div>
+            {/* Color de relleno sólido: solo cuando NO hay relleno degradado activo (Avanzado). */}
+            {!(capa as CapaMarco).relleno_degradado && (
+              <Campo etiqueta="Color de relleno">
+                <ColorControl valor={(capa as CapaMarco).relleno ?? "#000000"} onChange={(c) => set({ relleno: c } as Partial<Capa>)} />
+              </Campo>
+            )}
+            <Campo etiqueta="Borde">
+              <ColorControl
+                valor={(capa as CapaMarco).borde?.color ?? "#FFFFFF"}
+                onChange={(c) => set({ borde: { color: c, grosor: (capa as CapaMarco).borde?.grosor ?? 6 } } as Partial<Capa>)}
+              />
+            </Campo>
+            <Campo etiqueta="Grosor">
+              <Num
+                valor={(capa as CapaMarco).borde?.grosor ?? 0}
+                onChange={(v) =>
+                  set({
+                    // Grosor <= 0: el back descarta el borde (borde:null); el front hace lo mismo.
+                    borde: v > 0 ? { color: (capa as CapaMarco).borde?.color ?? "#FFFFFF", grosor: v } : null,
+                  } as Partial<Capa>)
+                }
+              />
+            </Campo>
+          </div>
+
+          {/* MARCO · AVANZADO: relleno degradado, esquinas, sombra y conversión a foto. */}
+          <Seccion titulo="Avanzado">
+            <Campo etiqueta="Relleno">
+              <select
+                value={(capa as CapaMarco).relleno_degradado ? "degradado" : "solido"}
+                onChange={(e) =>
+                  set({
+                    relleno_degradado:
+                      e.target.value === "degradado"
+                        ? { desde: (capa as CapaMarco).relleno ?? "#E30613", hasta: "#111315", angulo: 180 }
+                        : null,
+                  } as Partial<Capa>)
+                }
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+              >
+                <option value="solido">Sólido</option>
+                <option value="degradado">Degradado</option>
+              </select>
+            </Campo>
+            {(capa as CapaMarco).relleno_degradado && (
+              <CamposDegradado
+                deg={(capa as CapaMarco).relleno_degradado!}
+                onChange={(d) => set({ relleno_degradado: d } as Partial<Capa>)}
+              />
+            )}
+            {/* Esquinas: radio uniforme o independiente por esquina (solo rect). */}
+            {(capa as CapaMarco).forma === "rect" && (
+              <RadioEsquinas
+                radio={(capa as CapaMarco).radio}
+                radios={(capa as CapaMarco).radios}
+                onChange={(cambios) => set(cambios as Partial<Capa>)}
+              />
+            )}
+            <Campo etiqueta="Sombra">
+              <input
+                type="checkbox"
+                checked={!!(capa as CapaMarco).sombra}
+                onChange={(e) => set({ sombra: e.target.checked ? { dx: 0, dy: 12, color: "#000000", desenfoque: 24, opacidad: 0.5 } : null } as Partial<Capa>)}
+              />
+            </Campo>
+            {(capa as CapaMarco).sombra && (
+              <CamposSombra sombra={(capa as CapaMarco).sombra!} onChange={(s) => set({ sombra: s } as Partial<Capa>)} />
+            )}
+            {/* Convertir la forma en un hueco de FOTO (capa imagen), conservando su silueta. */}
+            <button
+              type="button"
+              onClick={() => store.getState().convertirEnImagen(capa.id)}
+              className="self-start rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+            >
+              Convertir en foto
+            </button>
+          </Seccion>
+        </>
       )}
 
       {capa.tipo === "overlay" && (

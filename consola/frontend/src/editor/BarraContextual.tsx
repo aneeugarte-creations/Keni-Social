@@ -14,8 +14,8 @@ import {
   Settings2,
 } from "lucide-react";
 
-import type { Capa, CapaImagen, CapaMarco, CapaTexto } from "./documento";
-import { CATALOGO_FUENTES, ETIQUETA_BINDING } from "./documento";
+import type { Capa, CapaTexto } from "./documento";
+import { CATALOGO_FUENTES } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignRight } as const;
@@ -158,61 +158,21 @@ export function BarraContextual({
               </BotonIcono>
             );
           })()}
-          <Sep />
-          <select
-            value={(capa as CapaTexto).binding ?? "fijo"}
-            onChange={(e) => set({ binding: e.target.value === "fijo" ? null : (e.target.value as CapaTexto["binding"]) } as Partial<Capa>)}
-            className="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-sm"
-            title="Rol en la plantilla (qué dato de la pieza rellena este texto)"
-          >
-            <option value="fijo">{ETIQUETA_BINDING.fijo}</option>
-            <option value="copy_in">{ETIQUETA_BINDING.copy_in}</option>
-            <option value="etiqueta_default">{ETIQUETA_BINDING.etiqueta_default}</option>
-          </select>
         </>
       )}
 
       {capa.tipo === "imagen" && (
         <>
-          <BotonIcono
-            titulo={`Ajuste: ${(capa as CapaImagen).ajuste === "cover" ? "cubrir" : "contener"} (clic para alternar)`}
-            onClick={() => set({ ajuste: (capa as CapaImagen).ajuste === "cover" ? "contain" : "cover" } as Partial<Capa>)}
-          >
-            {(capa as CapaImagen).ajuste === "cover" ? "Cubrir" : "Contener"}
-          </BotonIcono>
-          <BotonIcono titulo="Reencuadrar (arrastra la foto dentro del marco)" onClick={onReencuadrar}><Crop className="h-4 w-4" /> Reencuadrar</BotonIcono>
           <BotonIcono titulo="Reemplazar imagen" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
+          <BotonIcono titulo="Reencuadrar (arrastra la foto dentro del marco)" onClick={onReencuadrar}><Crop className="h-4 w-4" /> Reencuadrar</BotonIcono>
         </>
       )}
 
-      {capa.tipo === "marco" && (
-        <>
-          <select
-            value={(capa as CapaMarco).forma}
-            onChange={(e) => set({ forma: e.target.value as CapaMarco["forma"] } as Partial<Capa>)}
-            className="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-sm"
-            title="Forma"
-          >
-            <option value="rect">Rectángulo</option>
-            <option value="elipse">Elipse</option>
-            <option value="linea">Línea</option>
-          </select>
-          {(capa as CapaMarco).forma !== "linea" && (
-            <Swatch
-              color={(capa as CapaMarco).relleno ?? "#000000"}
-              onChange={(c) => set({ relleno: c } as Partial<Capa>)}
-              titulo="Relleno"
-            />
-          )}
-          <Swatch
-            color={(capa as CapaMarco).borde?.color ?? "#FFFFFF"}
-            onChange={(c) => set({ borde: { color: c, grosor: (capa as CapaMarco).borde?.grosor ?? 6 } } as Partial<Capa>)}
-            titulo="Color del borde"
-          />
-        </>
-      )}
+      {/* Marco: Forma, Relleno y Borde viven en el Inspector; la barra solo expone «Ajustes» (abajo). */}
 
-      {capa.tipo === "logo" && <span className="px-1 text-sm text-muted-foreground">Logo</span>}
+      {capa.tipo === "logo" && (
+        <BotonIcono titulo="Reemplazar logo" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
+      )}
 
       <div className="ml-auto flex items-center gap-1">
         <Sep />

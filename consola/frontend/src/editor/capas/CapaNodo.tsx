@@ -3,11 +3,12 @@
 // Aquí priorizamos manipulación directa (seleccionar, arrastrar, escalar, rotar).
 
 import Konva from "konva";
-import { useEffect, useRef } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text, TextPath } from "react-konva";
 
 import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
 import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado } from "../documento";
+import { copyMuestra, fotoMuestra } from "../muestra";
 import { useImagen } from "../useImagen";
 
 // Traza, en COORDS LOCALES (0..w, 0..h), la silueta de `forma` — espejo EXACTO de `pathForma`
@@ -116,6 +117,9 @@ export interface CapaNodoProps {
   onGesto: () => void;
   // Hijas de un grupo: no son arrastrables ni transformables por separado (el grupo manda).
   interactivo?: boolean;
+  // "Vista con muestra": rellena el hueco de foto con una foto de muestra y los bindings de texto
+  // con copy de ejemplo. Solo PRESENTACIÓN; no muta la capa ni afecta al export.
+  muestra?: boolean;
 }
 
 const ALIN: Record<string, string> = {
@@ -336,19 +340,28 @@ function NodoImagenAjustada({
   );
 }
 
-function textoMuestra(c: CapaTexto): string {
-  const base = c.binding === "copy_in"
-    ? c.texto || "Titular de ejemplo"
-    : c.binding === "etiqueta_default"
-      ? c.texto || "PLECA"
-      : c.texto;
+function textoMuestra(c: CapaTexto, muestra = false): string {
+  // En "Vista con muestra" los bindings usan copy de ejemplo REPRESENTATIVO (titular largo, pleca
+  // "EN VIVO") para ver saltos de línea y auto-encogido — aunque la capa ya tenga `texto`. Fuera de
+  // ese modo, comportamiento de hoy: respeta `texto` y cae a un placeholder genérico si está vacío.
+  const ejemplo = muestra ? copyMuestra(c.binding) : null;
+  const base = ejemplo
+    ? ejemplo
+    : c.binding === "copy_in"
+      ? c.texto || "Titular de ejemplo"
+      : c.binding === "etiqueta_default"
+        ? c.texto || "PLECA"
+        : c.texto;
   return c.mayusculas ? base.toUpperCase() : base;
 }
 
-export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true }: CapaNodoProps) {
+export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestra = false }: CapaNodoProps) {
   // Hook SIEMPRE llamado (regla de hooks); null para capas sin imagen.
   const objetoImg = capa.tipo === "imagen" ? capa.objeto : capa.tipo === "logo" ? capa.media_id : null;
   const img = useImagen(objetoImg);
+  // Fuerza un redibujo del lienzo cuando la foto de muestra (generada async en cliente) ya está
+  // lista, para que el hueco la pinte sin esperar a otra interacción.
+  const [, redibujar] = useReducer((n: number) => n + 1, 0);
 
   const comun = {
     id: capa.id,
@@ -406,13 +419,25 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
 
   const props = { ...comun, onTransformEnd };
 
+  // Visibilidad: una capa OCULTA no se dibuja en el editor (igual que el render del servidor, que
+  // hace `if (capa.visible === false) return`). EXCEPCIÓN: en "Vista con muestra" el hueco de foto
+  // oculto SÍ se pinta con la foto de muestra, para diseñar viéndolo. Así el hueco que nace oculto
+  // no ensucia el lienzo con su placeholder gris cuando la muestra está apagada.
+  const esHuecoImg = capa.tipo === "imagen" && ((capa as CapaImagen).es_foto || !(capa as CapaImagen).objeto);
+  if (capa.visible === false && !(muestra && esHuecoImg)) return null;
+
   switch (capa.tipo) {
     case "imagen": {
       const c = capa as CapaImagen;
-      if (!img) {
+      // "Vista con muestra": el hueco de foto (es_foto, o cualquier imagen vacía) se RELLENA con una
+      // foto de muestra sintética para ver recorte/encuadre/forma/filtros/duotono/sombra. Solo
+      // visual; el dato sigue vacío. La imagen real (objeto cargado) manda; la muestra es fallback.
+      const esHueco = c.es_foto || !c.objeto;
+      const imgEfectiva = img ?? (muestra && esHueco ? fotoMuestra(() => redibujar()) : null);
+      if (!imgEfectiva) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      const nodoImg = <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} radios={c.radios} crop={c.crop} props={props} />;
+      const nodoImg = <NodoImagenAjustada img={imgEfectiva} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} radios={c.radios} crop={c.crop} props={props} />;
       // Realce de selección que SIGUE LA FORMA: el Transformer de Konva usa su bbox rect (sus
       // tiradores definen la caja), pero cuando la imagen NO es un rect simple el contorno azul
       // punteado debe cuadrar con su silueta. Solo visual (listening=false). Trazamos el mismo path
@@ -509,7 +534,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           <TextPath
             {...props}
             data={pathArco(c.curva.radio, c.w, ancla)}
-            text={textoMuestra(c)}
+            text={textoMuestra(c, muestra)}
             fontFamily={familiaReal(c.familia)}
             fontSize={c.tamano}
             fontStyle={c.peso >= 600 ? "bold" : "normal"}
@@ -539,7 +564,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       const nodoTexto = (
         <Text
           {...(c.chip ? {} : props)}
-          text={textoMuestra(c)}
+          text={textoMuestra(c, muestra)}
           width={c.w}
           height={enCaja ? c.h : undefined}
           verticalAlign={enCaja ? (c.valign === "centro" ? "middle" : c.valign === "abajo" ? "bottom" : "top") : undefined}
