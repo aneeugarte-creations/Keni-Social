@@ -240,6 +240,10 @@ async def actualizar(request: Request) -> Response:
     nuevo_nombre = datos.get("nombre")
     nuevo_manager_id = datos.get("manager_id")
     nuevas_marcas = datos.get("marcas")
+    # `mfa_reset` (recuperacion de cuenta): si `true`, el admin APAGA el segundo factor de la
+    # cuenta (limpia secreto + flag + recovery). Es el equivalente al reset de contrasena para
+    # cuando alguien pierde su dispositivo TOTP. Mismo guard admin que el resto del PATCH.
+    reset_mfa = datos.get("mfa_reset")
     if (
         nuevo_rol is None
         and nueva_password is None
@@ -249,15 +253,21 @@ async def actualizar(request: Request) -> Response:
         and nuevo_nombre is None
         and nuevo_manager_id is None
         and nuevas_marcas is None
+        and reset_mfa is None
     ):
         return JSONResponse(
             {
                 "error": (
                     "Indica un campo a modificar (rol, contraseña, cargo, cobertura, "
-                    "puede_coordinar, nombre, manager_id o marcas)."
+                    "puede_coordinar, nombre, manager_id, marcas o mfa_reset)."
                 )
             },
             status_code=400,
+        )
+
+    if reset_mfa is not None and not isinstance(reset_mfa, bool):
+        return JSONResponse(
+            {"error": "El campo 'mfa_reset' debe ser true o false."}, status_code=400
         )
 
     if nuevo_rol is not None:
@@ -366,6 +376,13 @@ async def actualizar(request: Request) -> Response:
     if nueva_password is not None:
         # Reset por el admin: la cuenta debera cambiarla en su proximo acceso.
         auth.establecer_password(usuario_id, nueva_password, debe_cambiar_password=True)
+    if reset_mfa:
+        # Recuperacion de cuenta: el admin apaga el segundo factor (perdida de dispositivo).
+        auth.desactivar_mfa(usuario_id)
+        _logger.warning(
+            "Admin reseteo el MFA de la cuenta %s (recuperacion de segundo factor).",
+            objetivo["usuario"],
+        )
     if (
         nuevo_cargo is not None
         or nueva_cobertura is not None

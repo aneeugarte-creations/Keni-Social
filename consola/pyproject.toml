@@ -39,6 +39,12 @@ dependencies = [
     # va por `shutil` (stdlib); psutil aporta CPU/RAM. La API degrada con elegancia si
     # faltara, pero lo fijamos como dependencia para que el panel funcione en hosted.
     "psutil>=5.9",
+    # MFA TOTP (segundo factor, gateado por `KENI_CONSOLA_MFA`). `pyotp` genera/verifica los
+    # codigos TOTP y el URI de aprovisionamiento del QR; `cryptography` (Fernet) cifra EN REPOSO
+    # el secreto TOTP bajo `KENI_CONSOLA_MFA_KEY`. Con el flag OFF no se ejercitan, pero se fijan
+    # como dependencia para que el back hosted pueda activarlos sin recompilar la imagen.
+    "pyotp>=2.9",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

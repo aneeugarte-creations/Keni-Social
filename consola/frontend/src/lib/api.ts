@@ -236,6 +236,9 @@ import type {
   CuerpoCrearUsuario,
   CuerpoLogin,
   RespuestaSesion,
+  RespuestaLoginMfa,
+  RespuestaMfaSetup,
+  RespuestaMfaActivate,
   RespuestaUsuarios,
   RespuestaRecursos,
   RespuestaS3,
@@ -615,12 +618,28 @@ export const api = {
   // El login depende de la cookie de sesión que pone el backend; `api.ts` ya
   // manda las cabeceras de auth (#134) en cada petición para las mutaciones.
   // `me` se llama al cargar la app: 200 => sesión viva; 401 => mostrar login.
+  // Con MFA activo (flag `KENI_CONSOLA_MFA` ON), el login puede devolver `{mfa_required:true}`
+  // en vez de `{usuario}`: el llamante debe entonces pedir el código TOTP y llamar `mfaVerify`.
   login: (cuerpo: CuerpoLogin) =>
-    peticion<RespuestaSesion>("/auth/login", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaSesion | RespuestaLoginMfa>("/auth/login", { metodo: "POST", json: cuerpo }),
   logout: () => peticion<void>("/auth/logout", { metodo: "POST" }),
   me: (signal?: AbortSignal) => peticion<RespuestaSesion>("/auth/me", { signal }),
   cambiarPassword: (cuerpo: CuerpoCambiarPassword) =>
     peticion<void>("/auth/cambiar-password", { metodo: "POST", json: cuerpo }),
+
+  // --- MFA (segundo factor TOTP; gateado por `KENI_CONSOLA_MFA`) ---
+  // `mfaVerify`: 2º paso del login (usa la cookie pre-auth que dejó `login`).
+  mfaVerify: (codigo: string) =>
+    peticion<RespuestaSesion>("/auth/mfa/verify", { metodo: "POST", json: { codigo } }),
+  // Enrolamiento (requiere sesión completa): generar secreto/QR, activar, desactivar.
+  mfaSetup: () => peticion<RespuestaMfaSetup>("/auth/mfa/setup", { metodo: "POST" }),
+  mfaActivate: (codigo: string) =>
+    peticion<RespuestaMfaActivate>("/auth/mfa/activate", { metodo: "POST", json: { codigo } }),
+  mfaDisable: (passwordActual: string) =>
+    peticion<void>("/auth/mfa/disable", {
+      metodo: "POST",
+      json: { password_actual: passwordActual },
+    }),
 
   // --- Usuarios (solo admin; 403 si no) ---
   usuarios: (signal?: AbortSignal) => peticion<RespuestaUsuarios>("/usuarios", { signal }),

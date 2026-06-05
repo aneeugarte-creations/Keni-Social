@@ -23,6 +23,7 @@ function sesionValor(): ValorSesion {
     usuario,
     cargando: false,
     iniciarSesion: vi.fn(),
+    verificarMfa: vi.fn(),
     cerrarSesion: vi.fn(),
     refrescar: vi.fn(),
   };

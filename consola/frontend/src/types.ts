@@ -3558,6 +3558,32 @@ export interface UsuarioSesion {
    * Solo llega por `GET /api/auth/me`; el login no lo incluye.
    */
   marcas?: string[];
+  /**
+   * MFA (segundo factor TOTP). Solo llegan por `GET /api/auth/me`:
+   *   - `mfa_habilitado`: el flag del servidor (`KENI_CONSOLA_MFA`). Si es `false`/ausente,
+   *     la UI NO muestra nada de MFA (la sección de "Mi cuenta" se oculta).
+   *   - `mfa_activo`: si ESTA cuenta ya enroló y activó su TOTP.
+   */
+  mfa_habilitado?: boolean;
+  mfa_activo?: boolean;
+}
+
+/** Respuesta de `POST /api/auth/login` cuando el usuario necesita el segundo factor (MFA). */
+export interface RespuestaLoginMfa {
+  mfa_required: true;
+}
+
+/** Respuesta de `POST /api/auth/mfa/setup`: datos para pintar el QR de enrolamiento. */
+export interface RespuestaMfaSetup {
+  /** Secreto TOTP en base32 (texto alternativo al QR). */
+  secret: string;
+  /** URI `otpauth://` que codifica el QR. */
+  uri: string;
+}
+
+/** Respuesta de `POST /api/auth/mfa/activate`: los códigos de recuperación (se muestran 1 vez). */
+export interface RespuestaMfaActivate {
+  recovery_codes: string[];
 }
 
 /** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */

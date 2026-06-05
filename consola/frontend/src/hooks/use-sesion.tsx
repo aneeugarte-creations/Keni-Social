@@ -68,7 +68,20 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const iniciarSesion = React.useCallback(async (nombre: string, password: string) => {
-    const { usuario } = await api.login({ usuario: nombre, password });
+    const respuesta = await api.login({ usuario: nombre, password });
+    // Con MFA activo el backend devuelve `{mfa_required:true}` y NO una sesión: dejamos el
+    // usuario en `null` (sigue fuera) y avisamos a la UI para que pida el código TOTP.
+    if ("mfa_required" in respuesta && respuesta.mfa_required) {
+      return { mfaRequerido: true };
+    }
+    setUsuario(respuesta.usuario);
+    return { mfaRequerido: false };
+  }, []);
+
+  const verificarMfa = React.useCallback(async (codigo: string) => {
+    // 2º paso: el backend valida el código contra la cookie pre-auth y, si cuadra, emite la
+    // sesión real (cookie) y devuelve el usuario.
+    const { usuario } = await api.mfaVerify(codigo);
     setUsuario(usuario);
   }, []);
 
@@ -87,8 +100,8 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   }, [cargarMe]);
 
   const valor = React.useMemo<ValorSesion>(
-    () => ({ usuario, cargando, iniciarSesion, cerrarSesion, refrescar }),
-    [usuario, cargando, iniciarSesion, cerrarSesion, refrescar],
+    () => ({ usuario, cargando, iniciarSesion, verificarMfa, cerrarSesion, refrescar }),
+    [usuario, cargando, iniciarSesion, verificarMfa, cerrarSesion, refrescar],
   );
 
   return <SesionContexto.Provider value={valor}>{children}</SesionContexto.Provider>;

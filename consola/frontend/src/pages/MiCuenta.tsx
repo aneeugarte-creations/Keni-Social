@@ -12,7 +12,7 @@
  * para admin; aquí cada quien opera únicamente sobre su propia cuenta.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -202,17 +202,202 @@ function SeccionCambiarPassword() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sección: Verificación en dos pasos (MFA / TOTP)                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Enrolamiento del segundo factor. Solo se muestra si el servidor tiene el flag
+ * `KENI_CONSOLA_MFA` ON (`me.usuario.mfa_habilitado`). Flujo:
+ *   - Si NO está activo: botón "Activar" -> `setup` (muestra el secreto y un campo de código)
+ *     -> `activate` con el primer código -> muestra los códigos de recuperación UNA vez.
+ *   - Si YA está activo: botón "Desactivar" (pide la contraseña actual).
+ */
+function SeccionMfa({ activo }: { activo: boolean }) {
+  const queryClient = useQueryClient();
+  const { refrescar } = useSesion();
+
+  const [secreto, setSecreto] = React.useState<string | null>(null);
+  const [uri, setUri] = React.useState<string | null>(null);
+  const [codigo, setCodigo] = React.useState("");
+  const [recovery, setRecovery] = React.useState<string[] | null>(null);
+  const [passwordDisable, setPasswordDisable] = React.useState("");
+
+  const refrescarEstado = React.useCallback(async () => {
+    await refrescar();
+    void queryClient.invalidateQueries({ queryKey: CLAVE_ME });
+  }, [refrescar, queryClient]);
+
+  const setup = useMutation({
+    mutationFn: () => api.mfaSetup(),
+    onSuccess: (r) => {
+      setSecreto(r.secret);
+      setUri(r.uri);
+      setRecovery(null);
+      setCodigo("");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const activar = useMutation({
+    mutationFn: () => api.mfaActivate(codigo.trim()),
+    onSuccess: async (r) => {
+      setRecovery(r.recovery_codes);
+      setSecreto(null);
+      setUri(null);
+      setCodigo("");
+      toast.success("Verificación en dos pasos activada.");
+      await refrescarEstado();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const desactivar = useMutation({
+    mutationFn: () => api.mfaDisable(passwordDisable),
+    onSuccess: async () => {
+      setPasswordDisable("");
+      setSecreto(null);
+      setUri(null);
+      setRecovery(null);
+      toast.success("Verificación en dos pasos desactivada.");
+      await refrescarEstado();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Verificación en dos pasos</CardTitle>
+        <CardDescription>
+          Añade un código temporal (TOTP) además de tu contraseña al iniciar sesión.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0">
+        {activo ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              La verificación en dos pasos está <span className="font-medium">activa</span>.
+            </p>
+            <form
+              className="max-w-sm space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (passwordDisable.length > 0 && !desactivar.isPending) desactivar.mutate();
+              }}
+              noValidate
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="mfa-disable-pass">Contraseña actual (para desactivar)</Label>
+                <Input
+                  id="mfa-disable-pass"
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordDisable}
+                  onChange={(e) => setPasswordDisable(e.target.value)}
+                  disabled={desactivar.isPending}
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={passwordDisable.length === 0 || desactivar.isPending}
+              >
+                {desactivar.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldOff className="h-4 w-4" />
+                )}
+                Desactivar
+              </Button>
+            </form>
+          </>
+        ) : recovery ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Guarda estos códigos de recuperación en un lugar seguro. Cada uno sirve una sola vez
+              y <span className="font-medium">no volverán a mostrarse</span>.
+            </p>
+            <ul className="grid grid-cols-2 gap-1 rounded-lg border border-border p-3 font-mono text-sm">
+              {recovery.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          </div>
+        ) : secreto ? (
+          <form
+            className="max-w-sm space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (codigo.trim().length > 0 && !activar.isPending) activar.mutate();
+            }}
+            noValidate
+          >
+            <p className="text-sm text-muted-foreground">
+              Escanea el QR en tu app de autenticación o introduce esta clave manualmente:
+            </p>
+            <code className="block break-all rounded-lg border border-border p-2 font-mono text-xs">
+              {secreto}
+            </code>
+            <p className="break-all text-[10px] text-muted-foreground">{uri}</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="mfa-activar-codigo">Código de tu app</Label>
+              <Input
+                id="mfa-activar-codigo"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                disabled={activar.isPending}
+              />
+            </div>
+            <Button type="submit" disabled={codigo.trim().length === 0 || activar.isPending}>
+              {activar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4" />
+              )}
+              Activar
+            </Button>
+          </form>
+        ) : (
+          <Button onClick={() => setup.mutate()} disabled={setup.isPending}>
+            {setup.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ShieldCheck className="h-4 w-4" />
+            )}
+            Activar verificación en dos pasos
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Página                                                             */
 /* ------------------------------------------------------------------ */
+
+function ContenidoMiCuenta() {
+  // Un solo `me` decide qué pintar; la sección de MFA solo aparece si el flag del servidor
+  // (`mfa_habilitado`) está ON. Con el flag OFF, la UI no muestra nada de MFA.
+  const { data } = useQuery({ queryKey: CLAVE_ME, queryFn: ({ signal }) => api.me(signal) });
+  const mfaHabilitado = !!data?.usuario.mfa_habilitado;
+  const mfaActivo = !!data?.usuario.mfa_activo;
+  return (
+    <div className="space-y-6">
+      <SeccionTuCuenta />
+      <SeccionCambiarPassword />
+      {mfaHabilitado && <SeccionMfa activo={mfaActivo} />}
+    </div>
+  );
+}
 
 export default function MiCuenta() {
   return (
     <>
       <PageHeader titulo="Mi cuenta" descripcion="Consulta tus datos y cambia tu contraseña." />
-      <div className="space-y-6">
-        <SeccionTuCuenta />
-        <SeccionCambiarPassword />
-      </div>
+      <ContenidoMiCuenta />
     </>
   );
 }

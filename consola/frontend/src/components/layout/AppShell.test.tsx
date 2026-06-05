@@ -94,7 +94,8 @@ afterEach(() => {
 const sesion: ValorSesion = {
   usuario: { id: "u1", usuario: "x", rol: "editor", debe_cambiar_password: false },
   cargando: false,
-  iniciarSesion: async () => {},
+  iniciarSesion: async () => ({ mfaRequerido: false }),
+  verificarMfa: async () => {},
   cerrarSesion: async () => {},
   refrescar: async () => {},
 };

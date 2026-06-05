@@ -454,7 +454,17 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         cobertura              INTEGER NOT NULL DEFAULT 0,
         puede_coordinar        BOOLEAN NOT NULL DEFAULT FALSE,
         nombre                 TEXT NOT NULL DEFAULT '',
-        manager_id             TEXT NOT NULL DEFAULT ''
+        manager_id             TEXT NOT NULL DEFAULT '',
+        -- MFA TOTP (segundo factor, gateado por `KENI_CONSOLA_MFA`). ADITIVAS y con DEFAULT,
+        -- de modo que un usuario legado nace SIN MFA (`mfa_activo=0`) y el login no cambia.
+        --   - mfa_secret_cifrado: secreto TOTP CIFRADO con Fernet (`KENI_CONSOLA_MFA_KEY`).
+        --     NUNCA en claro. "" = sin secreto enrolado.
+        --   - mfa_activo: 1 solo tras confirmar el primer codigo (`/api/auth/mfa/activate`).
+        --   - mfa_recovery_codes: JSON con la lista de codigos de recuperacion HASHEADOS
+        --     (scrypt, mismo hasher que la contrasena); cada uno se consume de un solo uso.
+        mfa_secret_cifrado     TEXT NOT NULL DEFAULT '',
+        mfa_activo             INTEGER NOT NULL DEFAULT 0,
+        mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]'
     )
     """,
     """
@@ -2347,12 +2357,18 @@ def _migrar_columnas_programas(con: Any) -> None:
 #     -> "" (sin superior, p.ej. el director). No es FK en la BD (ALTER ADD COLUMN no la
 #     anade en SQLite y el organigrama tolera ids colgados tras un borrado); la capa API
 #     valida que apunte a un usuario existente, distinto de si mismo y sin ciclos.
+#   - mfa_secret_cifrado / mfa_activo / mfa_recovery_codes (segundo factor TOTP, gateado por
+#     `KENI_CONSOLA_MFA`): ADITIVAS y con DEFAULT, asi una BD/usuario previos quedan SIN MFA
+#     (`mfa_activo=0`, sin secreto) y el login sigue siendo identico hasta que alguien enrole.
 _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("cargo", "TEXT NOT NULL DEFAULT ''"),
     ("cobertura", "INTEGER NOT NULL DEFAULT 0"),
     ("puede_coordinar", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("nombre", "TEXT NOT NULL DEFAULT ''"),
     ("manager_id", "TEXT NOT NULL DEFAULT ''"),
+    ("mfa_secret_cifrado", "TEXT NOT NULL DEFAULT ''"),
+    ("mfa_activo", "INTEGER NOT NULL DEFAULT 0"),
+    ("mfa_recovery_codes", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
 

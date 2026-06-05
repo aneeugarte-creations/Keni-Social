@@ -15,8 +15,15 @@ export interface ValorSesion {
   usuario: UsuarioSesion | null;
   /** `true` mientras se resuelve el `me` inicial (pantalla de carga). */
   cargando: boolean;
-  /** Inicia sesión; el backend pone la cookie. Lanza `ApiError` (401 genérico). */
-  iniciarSesion: (usuario: string, password: string) => Promise<void>;
+  /**
+   * Inicia sesión; el backend pone la cookie. Lanza `ApiError` (401 genérico).
+   * Devuelve `{ mfaRequerido: true }` cuando el backend pide un segundo factor (MFA ON y
+   * cuenta con TOTP activo): en ese caso NO hay sesión todavía y la UI debe pedir el código y
+   * llamar a `verificarMfa`. `{ mfaRequerido: false }` => sesión iniciada (flujo de hoy).
+   */
+  iniciarSesion: (usuario: string, password: string) => Promise<{ mfaRequerido: boolean }>;
+  /** Completa el login con el código TOTP (o de recuperación) tras `iniciarSesion`. */
+  verificarMfa: (codigo: string) => Promise<void>;
   /** Cierra sesión (POST /api/auth/logout) y vuelve al login. */
   cerrarSesion: () => Promise<void>;
   /** Refresca el usuario actual desde el backend (tras cambiar contraseña). */

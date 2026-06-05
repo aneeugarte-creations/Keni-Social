@@ -37,7 +37,7 @@ BLOQUEO_MINUTOS = 5
 # desincronicen.
 _COLUMNAS_USUARIO_PUBLICAS = (
     "id", "usuario", "rol", "debe_cambiar_password", "creado", "ultimo_acceso",
-    "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id",
+    "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id", "mfa_activo",
 )
 _SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
 
@@ -72,6 +72,9 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
         "puede_coordinar": bool(fila["puede_coordinar"]),
         "nombre": fila["nombre"],
         "manager_id": fila["manager_id"],
+        # `mfa_activo` (segundo factor TOTP): bool. La UI lo usa para mostrar "MFA activo"
+        # y el login para decidir si eleva. NUNCA sale el secreto cifrado ni los recovery.
+        "mfa_activo": bool(fila["mfa_activo"]),
         "marcas": marcas,
     }
 
@@ -240,6 +243,8 @@ def crear_usuario(
         "puede_coordinar": bool(nuevo["puede_coordinar"]),
         "nombre": nuevo["nombre"],
         "manager_id": nuevo["manager_id"],
+        # Un usuario nuevo nace SIN segundo factor: lo enrola luego desde "Mi cuenta".
+        "mfa_activo": False,
         "marcas": marcas_norm,
     }
 
@@ -346,7 +351,7 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     return con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
         "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-        "puede_coordinar, nombre, manager_id "
+        "puede_coordinar, nombre, manager_id, mfa_activo "
         "FROM usuarios WHERE usuario = ?",
         (usuario,),
     ).fetchone()
@@ -475,6 +480,8 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "puede_coordinar": bool(fila["puede_coordinar"]),
             "nombre": fila["nombre"],
             "manager_id": fila["manager_id"],
+            # Para que el login decida si ELEVA al segundo factor (TOTP) tras la contrasena.
+            "mfa_activo": bool(fila["mfa_activo"]),
             "marcas": marcas,
         }
     finally:
@@ -493,3 +500,112 @@ def verificar_password_actual(usuario_id: str, password: str) -> bool:
     if fila is None:
         return False
     return verificar_password(password, fila["salt"], fila["hash"])
+
+
+# --------------------------------------------------------------------------- #
+# MFA TOTP: persistencia del secreto cifrado, el flag y los recovery codes      #
+# --------------------------------------------------------------------------- #
+#
+# El TRABAJO criptografico (generar/cifrar/verificar el secreto y los codigos) vive en
+# `auth.mfa` (sin tocar la BD). Estas funciones SOLO leen/escriben las tres columnas
+# ADITIVAS de `usuarios` (`mfa_secret_cifrado`, `mfa_activo`, `mfa_recovery_codes`). El
+# secreto se guarda SIEMPRE cifrado (Fernet) y los recovery SIEMPRE hasheados (scrypt).
+
+
+def estado_mfa(usuario_id: str) -> dict[str, Any] | None:
+    """Estado MFA crudo de un usuario: `{secret_cifrado, activo, recovery_codes}`; None si no existe.
+
+    Es de uso INTERNO de la capa MFA (la API lo usa para verificar/activar): incluye el
+    secreto CIFRADO (no en claro) y la lista de recovery codes HASHEADOS. Nunca sale a la API.
+    """
+    con = db.conectar()
+    try:
+        fila = con.execute(
+            "SELECT mfa_secret_cifrado, mfa_activo, mfa_recovery_codes FROM usuarios WHERE id = ?",
+            (usuario_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return None
+    return {
+        "secret_cifrado": fila["mfa_secret_cifrado"] or "",
+        "activo": bool(fila["mfa_activo"]),
+        "recovery_codes": fila["mfa_recovery_codes"] or "[]",
+    }
+
+
+def guardar_secreto_mfa(usuario_id: str, secret_cifrado: str) -> bool:
+    """Guarda el secreto TOTP (YA cifrado) y deja `mfa_activo=0`; True si el usuario existia.
+
+    Es el paso de ENROLAMIENTO (`/api/auth/mfa/setup`): se persiste el secreto pero el MFA NO
+    queda activo hasta confirmar el primer codigo (`activar_mfa`). Reescribe cualquier secreto
+    previo (re-enrolar) y limpia los recovery anteriores.
+    """
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE usuarios SET mfa_secret_cifrado = ?, mfa_activo = 0, "
+            "mfa_recovery_codes = '[]' WHERE id = ?",
+            (secret_cifrado, usuario_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def activar_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
+    """Marca `mfa_activo=1` y guarda los recovery (YA hasheados, JSON); True si existia.
+
+    Solo se llama tras verificar con exito el PRIMER codigo TOTP contra el secreto ya enrolado
+    (`/api/auth/mfa/activate`). Exige que el usuario tenga un secreto enrolado.
+    """
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE usuarios SET mfa_activo = 1, mfa_recovery_codes = ? "
+            "WHERE id = ? AND mfa_secret_cifrado <> ''",
+            (recovery_codes_hash_json, usuario_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def actualizar_recovery_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
+    """Reescribe la lista de recovery codes (JSON de hashes); True si existia.
+
+    Se usa al CONSUMIR un codigo de recuperacion en el login: el codigo gastado se elimina de
+    la lista para que sea de un solo uso.
+    """
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE usuarios SET mfa_recovery_codes = ? WHERE id = ?",
+            (recovery_codes_hash_json, usuario_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def desactivar_mfa(usuario_id: str) -> bool:
+    """Limpia secreto + flag + recovery (apaga el MFA del usuario); True si existia.
+
+    Lo usan el `disable` del propio usuario (con su contrasena) y el reset del admin
+    (recuperacion de cuenta). Idempotente: dejar a un usuario sin MFA dos veces no falla.
+    """
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE usuarios SET mfa_secret_cifrado = '', mfa_activo = 0, "
+            "mfa_recovery_codes = '[]' WHERE id = ?",
+            (usuario_id,),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()

@@ -138,7 +138,8 @@ function valorSesion(rol: RolUsuario): ValorSesion {
   return {
     usuario: { id: "u1", usuario: "x", rol, debe_cambiar_password: false },
     cargando: false,
-    iniciarSesion: async () => {},
+    iniciarSesion: async () => ({ mfaRequerido: false }),
+    verificarMfa: async () => {},
     cerrarSesion: async () => {},
     refrescar: async () => {},
   };

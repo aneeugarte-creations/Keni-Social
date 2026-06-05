@@ -129,6 +129,16 @@ def origenes_permitidos() -> frozenset[str]:
     return config.origenes_permitidos()
 
 
+def mfa_habilitado() -> bool:
+    """¿Esta activo el segundo factor TOTP? (`KENI_CONSOLA_MFA`, def OFF).
+
+    Wrapper sobre `config.mfa_habilitado()` (fuente unica). Con el flag OFF el login NO pide
+    nunca un segundo factor: comportamiento INTACTO. Lo consultan `api/auth` (elevacion del
+    login y enrolamiento) y `api/auth.me` (para que la UI muestre o no la seccion de MFA).
+    """
+    return config.mfa_habilitado()
+
+
 def generar_token() -> str:
     """Genera un token de sesion aleatorio (url-safe, ~256 bits)."""
     return secrets.token_urlsafe(32)
@@ -238,9 +248,15 @@ def _host_de_url(url: str) -> str | None:
     return netloc.lower()
 
 
-# Rutas /api PUBLICAS (no exigen credencial previa). El login crea la sesion; aun
-# asi pasa por la verificacion Origin/CSRF de las mutaciones (es un POST).
-_RUTAS_API_PUBLICAS = frozenset({"/api/auth/login"})
+# Rutas /api PUBLICAS (no exigen credencial previa / sesion COMPLETA). El login crea la
+# sesion; aun asi pasan por la verificacion Origin/CSRF de las mutaciones (son POST).
+#   - `/api/auth/mfa/verify`: SEGUNDO PASO del login con MFA. Solo se alcanza con la cookie
+#     PRE-AUTH de corta vida (factor-1 superado, sin sesion real). NO es una sesion: el propio
+#     handler valida la cookie pre-auth + el codigo TOTP/recuperacion antes de emitir la sesion
+#     real. Que sea publica NO debilita nada: un estado factor-1-only NUNCA alcanza otro `/api`
+#     (esos siguen exigiendo sesion COMPLETA). El enrolamiento (`/api/auth/mfa/setup|activate|
+#     disable`) NO es publico: exige sesion completa.
+_RUTAS_API_PUBLICAS = frozenset({"/api/auth/login", "/api/auth/mfa/verify"})
 
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
