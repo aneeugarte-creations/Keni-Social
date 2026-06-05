@@ -18,10 +18,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
+import { capasFotoDoc, type FotoCollage } from "@/lib/placa/docPieza";
 import {
   parsearEncuadre,
+  parsearFotos,
   serializarEncuadre,
-  type EncuadreFoto,
+  serializarFotos,
 } from "@/lib/placa/encuadre";
 import type { CuerpoActualizarPublicacion, Publicacion } from "@/types";
 
@@ -53,15 +55,14 @@ export function DialogoEditar({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
-  // Foto cruda de fondo (media id) para el editor inline de placa; se hornea a `imagen` al guardar.
-  const [foto, setFoto] = React.useState("");
   // "Quitar plantilla": publicar solo la foto, sin placa. Se persiste en la pieza (`placa_oculta`).
   const [placaOculta, setPlacaOculta] = React.useState(false);
   // Plantilla del estudio elegida ("" = placa de marca por defecto / editor en vivo). La pieza la
   // recuerda (`plantilla_diseno_id`); en modo plantilla el editor muestra el resultado renderizado.
   const [plantillaId, setPlantillaId] = React.useState("");
-  // Reencuadre manual de la foto dentro del marco 4:5 (null = sin reencuadre). La pieza lo persiste.
-  const [encuadre, setEncuadre] = React.useState<EncuadreFoto | null>(null);
+  // COLLAGE: una foto por HUECO (media id + reencuadre), en orden de `capas`. El hueco único legado
+  // es `[{objeto: foto, foco/zoom de foto_encuadre}]`. La pieza lo persiste como JSON en `fotos`.
+  const [fotos, setFotos] = React.useState<FotoCollage[]>([]);
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
@@ -118,10 +119,17 @@ export function DialogoEditar({
     setCopyIn(publicacion.copy_in ?? "");
     setImagen(publicacion.imagen ?? "");
     setImagenUrl(publicacion.imagen_url ?? "");
-    setFoto(publicacion.foto ?? "");
     setPlacaOculta(publicacion.placa_oculta ?? false);
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
-    setEncuadre(parsearEncuadre(publicacion.foto_encuadre));
+    // Carga del collage: si la pieza trae `fotos` (JSON), úsalo; si no, deriva el hueco único del
+    // par legado `foto`/`foto_encuadre`.
+    const fotosGuardadas = parsearFotos(publicacion.fotos);
+    if (fotosGuardadas.length) {
+      setFotos(fotosGuardadas);
+    } else {
+      const enc = parsearEncuadre(publicacion.foto_encuadre);
+      setFotos([{ objeto: publicacion.foto ?? "", foco: enc?.foco ?? null, zoom: enc?.zoom ?? 0 }]);
+    }
     // Reabrimos el autoguardado tras aplicar la carga (en un tick: así el render que dispara esta
     // carga ve `cargandoRef=true` y no guarda; solo los cambios del usuario posteriores guardan).
     const t = setTimeout(() => {
@@ -141,31 +149,50 @@ export function DialogoEditar({
     // Así no se duplica un PNG por cada edición de texto. Las piezas SIN marca conservan su
     // `imagen` (imagen subida/generada, sin receta de placa).
     const imagenFinal = publicacion.marca ? "" : imagen;
+    // COLLAGE: persistimos `fotos` (una foto por hueco). Por RETROCOMPAT sincronizamos el hueco 0 al
+    // par legado `foto`/`foto_encuadre`, que el backend (y consumidores viejos) siguen leyendo.
+    const hueco0 = fotos[0];
+    const foco0 = hueco0?.foco ?? null;
+    const zoom0 = hueco0?.zoom && hueco0.zoom > 0 ? hueco0.zoom : 1;
     // NO se envía `titulo`: los posts no llevan título; PATCH parcial deja intacto lo no enviado.
     const cuerpo: CuerpoActualizarPublicacion = {
       contenido,
       copy_in: copyIn,
       imagen: imagenFinal,
-      foto,
+      // Hueco 0 derivado del collage (retrocompat con `foto`/`foto_encuadre`).
+      foto: hueco0?.objeto ?? "",
       placa_oculta: placaOculta,
       // Recuerda (o limpia) la plantilla del estudio elegida.
       plantilla_diseno_id: plantillaId,
-      // Reencuadre manual de la foto ("" si está centrada sin zoom).
-      foto_encuadre: serializarEncuadre(encuadre),
+      // Reencuadre manual del hueco 0 ("" si está centrado sin zoom).
+      foto_encuadre: foco0 ? serializarEncuadre({ foco: foco0, zoom: zoom0 }) : "",
+      // Collage completo (todas las fotos por hueco) como JSON.
+      fotos: serializarFotos(fotos),
     };
     // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → QA →
     // me gusta → auto-programar). PATCH parcial: lo no enviado queda intacto.
     const { publicacion: actualizada } = await api.actualizarPublicacion(publicacion.id, cuerpo);
     // AUTO-AVANCE: una pieza autogenerada/editada que YA tiene todo el contenido entra sola a
     // revisión (abre los "me gusta" del equipo). Sustituye al botón manual "Enviar a revisión".
-    if (actualizada.estado === "borrador" && etapaDePublicacion(actualizada) === "lista_para_revisar") {
+    // GATE COLLAGE: solo auto-avanza si TODOS los huecos del diseño están llenos (no faltan fotos).
+    // El hueco 0 cuenta como lleno también si la pieza trae imagen original de RSS (`imagen_fuente`),
+    // que es el respaldo que pinta el editor (igual que su contador): sin esto, una pieza de marca
+    // cuya única imagen es la original ya no auto-avanzaría al editar el copy.
+    const huecosDoc = documentoSel ? capasFotoDoc(documentoSel).length : 1;
+    const llenos = fotos.filter((f, i) => f.objeto || (i === 0 && !!publicacion.imagen_fuente)).length;
+    const fotosCompletas = llenos >= Math.max(1, huecosDoc);
+    if (
+      fotosCompletas &&
+      actualizada.estado === "borrador" &&
+      etapaDePublicacion(actualizada) === "lista_para_revisar"
+    ) {
       try {
         await api.enviarARevision(publicacion.id);
       } catch {
         /* carrera / ya en revisión: lo ignoramos (el feed reflejará el estado real) */
       }
     }
-  }, [publicacion, foto, copyIn, placaOculta, plantillaId, encuadre, imagen, contenido]);
+  }, [publicacion, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel]);
 
   // Solo se autoguarda cuando hay contenido (el copy del post). Sin título: ya no lo exige.
   const datosValidos = !!publicacion && contenido.trim().length > 0;
@@ -212,8 +239,8 @@ export function DialogoEditar({
   // Dispara el autoguardado (debounced 1.2 s) cuando el usuario cambia algo. La `imagen` NO entra
   // en la firma: es resultado del horneado, no una edición del usuario (evita un bucle de guardado).
   const firmaAutoguardado = JSON.stringify({
-    contenido, copyIn, foto, placaOculta, plantillaId,
-    encuadre: serializarEncuadre(encuadre),
+    contenido, copyIn, placaOculta, plantillaId,
+    fotos: serializarFotos(fotos),
   });
   React.useEffect(() => {
     if (cargandoRef.current || !publicacion) return;
@@ -272,13 +299,11 @@ export function DialogoEditar({
                 copyIn={copyIn}
                 onCopyInCambio={setCopyIn}
                 copy={contenido}
-                foto={foto}
-                onCambioFoto={setFoto}
+                fotos={fotos}
+                onFotosCambio={setFotos}
                 imagenFuente={publicacion.imagen_fuente}
                 sinPlantilla={placaOculta}
                 onAlternarSinPlantilla={() => setPlacaOculta((v) => !v)}
-                encuadre={encuadre}
-                onEncuadreCambio={setEncuadre}
                 onAbrirGaleria={() => setGaleriaPlantillas(true)}
               />
             ) : (
