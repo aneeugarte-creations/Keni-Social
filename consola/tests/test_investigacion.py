@@ -14,18 +14,30 @@ from __future__ import annotations
 
 import json
 
+from .conftest import _cliente, lanzador_generacion_completa
+
 # --------------------------------------------------------------------------- #
 # Helpers / fixtures                                                           #
 # --------------------------------------------------------------------------- #
+#
+# FLUJO ASÍNCRONO: `POST /correr` ya NO ejecuta `claude` en el back (no tiene binario):
+# ENCOLA un job y devuelve `{generacion}`. El WORKER corre Haiku+web y su `procesar`
+# inserta los `inv_candidato`. En los tests inyectamos
+# `lanzar_generacion=lanzador_generacion_completa(<salida canned>)`, que corre el
+# `procesar` REAL de forma SÍNCRONA (parsea el JSON e inserta los candidatos). Luego se
+# leen por `GET /candidatos`. Así cubrimos el post-procesado sin tocar `claude`.
 
 
-def _fake_ejecutor(candidatos: list[dict]) -> object:
-    """Ejecutor fake: devuelve los candidatos dados sin tocar red ni binario."""
+def _salida_candidatos(candidatos: list[dict]) -> str:
+    """Salida canned del worker (Haiku): el JSON `{"candidatos":[...]}` que `procesar` parsea."""
+    return json.dumps({"candidatos": candidatos})
 
-    def _ejecutor(prompt: str) -> str:
-        return json.dumps({"candidatos": candidatos})
 
-    return _ejecutor
+def _cliente_con_candidatos(candidatos: list[dict]):
+    """Cliente cuyo lanzador de generación COMPLETA el job de investigación (corre `procesar`)."""
+    return _cliente(
+        lanzar_generacion=lanzador_generacion_completa(_salida_candidatos(candidatos))
+    )
 
 
 def _brief_base():
@@ -106,12 +118,9 @@ def test_borrar_brief_inexistente_404(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_correr_brief_devuelve_candidatos(cliente, monkeypatch):
-    # Crea el brief.
-    brief_id = cliente.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
-
-    # Inyecta el ejecutor falso.
-    fake = _fake_ejecutor([
+def test_correr_brief_devuelve_candidatos(entorno):
+    # Cliente cuyo worker (fake) devuelve estos candidatos y corre el `procesar` real.
+    cli = _cliente_con_candidatos([
         {
             "titulo": "Mexico gana el Mundial",
             "resumen": "La seleccion mexicana logro un hito historico.",
@@ -129,36 +138,36 @@ def test_correr_brief_devuelve_candidatos(cliente, monkeypatch):
             "idioma": "es",
         },
     ])
-    monkeypatch.setattr(
-        "keni_consola.dominio.investigacion_agente._ejecutar_claude_json", fake
-    )
+    brief_id = cli.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
 
-    r = cliente.post("/api/investigacion/correr", json={"brief_id": brief_id})
+    # `/correr` encola y devuelve la generación; el `procesar` (síncrono en el test) inserta.
+    r = cli.post("/api/investigacion/correr", json={"brief_id": brief_id})
     assert r.status_code == 200, r.text
-    data = r.json()
-    candidatos = data["candidatos"]
+    assert r.json()["generacion"]["tipo"] == "investigacion"
+
+    # Los candidatos quedaron insertados: se leen por GET (orden no garantizado).
+    candidatos = cli.get("/api/investigacion/candidatos").json()["candidatos"]
     assert len(candidatos) == 2
-    assert candidatos[0]["titulo"] == "Mexico gana el Mundial"
-    assert candidatos[0]["marca"] == "claro-sports"
-    assert candidatos[0]["estado"] == "nuevo"
-    assert candidatos[0]["brief_id"] == brief_id
-    assert data["errores"] == []
+    assert {c["titulo"] for c in candidatos} == {"Mexico gana el Mundial", "Liga MX jornada 10"}
+    for c in candidatos:
+        assert c["marca"] == "claro-sports"
+        assert c["estado"] == "nuevo"
+        assert c["brief_id"] == brief_id
 
 
-def test_correr_adhoc_sin_brief_guardado(cliente, monkeypatch):
+def test_correr_adhoc_sin_brief_guardado(entorno):
     """Correr un brief ad-hoc (sin guardarlo) tambien funciona."""
-    fake = _fake_ejecutor([
+    cli = _cliente_con_candidatos([
         {"titulo": "Breaking news", "resumen": "...", "por_que": "hoy", "fuente": "CNN", "enlace": "", "idioma": "es"},
     ])
-    monkeypatch.setattr(
-        "keni_consola.dominio.investigacion_agente._ejecutar_claude_json", fake
-    )
-    r = cliente.post(
+    r = cli.post(
         "/api/investigacion/correr",
         json={"instrucciones": "Busca noticias de tecnologia MX", "marca": "unotv"},
     )
     assert r.status_code == 200, r.text
-    assert len(r.json()["candidatos"]) == 1
+    assert r.json()["generacion"]["tipo"] == "investigacion"
+    candidatos = cli.get("/api/investigacion/candidatos").json()["candidatos"]
+    assert len(candidatos) == 1
 
 
 def test_correr_sin_brief_id_ni_instrucciones_400(cliente):
@@ -171,21 +180,18 @@ def test_correr_brief_inexistente_404(cliente):
     assert r.status_code == 404
 
 
-def test_correr_almacena_y_se_puede_listar(cliente, monkeypatch):
+def test_correr_almacena_y_se_puede_listar(entorno):
     """Los candidatos insertados aparecen en GET /api/investigacion/candidatos."""
-    brief_id = cliente.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
-    fake = _fake_ejecutor([
+    cli = _cliente_con_candidatos([
         {
             "titulo": "Candidato A", "resumen": "r", "por_que": "p",
             "fuente": "f", "enlace": "https://a.com", "idioma": "es",
         },
     ])
-    monkeypatch.setattr(
-        "keni_consola.dominio.investigacion_agente._ejecutar_claude_json", fake
-    )
-    cliente.post("/api/investigacion/correr", json={"brief_id": brief_id})
+    brief_id = cli.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
+    cli.post("/api/investigacion/correr", json={"brief_id": brief_id})
 
-    r = cliente.get("/api/investigacion/candidatos")
+    r = cli.get("/api/investigacion/candidatos")
     assert r.status_code == 200
     titulos = [c["titulo"] for c in r.json()["candidatos"]]
     assert "Candidato A" in titulos
@@ -196,24 +202,21 @@ def test_correr_almacena_y_se_puede_listar(cliente, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_aceptar_candidato_crea_borrador_y_marca_aceptado(cliente, monkeypatch):
+def test_aceptar_candidato_crea_borrador_y_marca_aceptado(entorno):
     """Aceptar un candidato crea un item del tablero (origen=investigacion) y marca aceptado."""
-    brief_id = cliente.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
-    fake = _fake_ejecutor([
+    cli = _cliente_con_candidatos([
         {
             "titulo": "Semifinal Copa MX", "resumen": "Gran partido.",
             "por_que": "Hoy es el partido.", "fuente": "ESPN",
             "enlace": "https://espn.com/copa", "idioma": "es",
         },
     ])
-    monkeypatch.setattr(
-        "keni_consola.dominio.investigacion_agente._ejecutar_claude_json", fake
-    )
-    candidatos = cliente.post("/api/investigacion/correr", json={"brief_id": brief_id}).json()["candidatos"]
-    candidato_id = candidatos[0]["id"]
+    brief_id = cli.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
+    cli.post("/api/investigacion/correr", json={"brief_id": brief_id})
+    candidato_id = cli.get("/api/investigacion/candidatos").json()["candidatos"][0]["id"]
 
     # Acepta sin generar copy para no depender del worker.
-    r = cliente.post(
+    r = cli.post(
         f"/api/investigacion/candidatos/{candidato_id}/aceptar",
         json={"generar": False},
     )
@@ -224,13 +227,13 @@ def test_aceptar_candidato_crea_borrador_y_marca_aceptado(cliente, monkeypatch):
     assert contenido_id
 
     # El candidato ya tiene contenido_id.
-    listado = cliente.get("/api/investigacion/candidatos?estado=aceptado").json()["candidatos"]
+    listado = cli.get("/api/investigacion/candidatos?estado=aceptado").json()["candidatos"]
     aceptados = [c for c in listado if c["id"] == candidato_id]
     assert len(aceptados) == 1
     assert aceptados[0]["contenido_id"] == contenido_id
 
     # El contenido del tablero existe con origen='investigacion': aparece en el listado.
-    r2 = cliente.get("/api/contenido")
+    r2 = cli.get("/api/contenido")
     assert r2.status_code == 200, r2.text
     contenidos = r2.json()["contenidos"]
     investigacion_items = [it for it in contenidos if it.get("id") == contenido_id]
@@ -249,22 +252,20 @@ def test_aceptar_candidato_inexistente_404(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_descartar_candidato(cliente, monkeypatch):
-    brief_id = cliente.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
-    fake = _fake_ejecutor([
+def test_descartar_candidato(entorno):
+    cli = _cliente_con_candidatos([
         {"titulo": "Descartable", "resumen": "r", "por_que": "p", "fuente": "f", "enlace": "", "idioma": "es"},
     ])
-    monkeypatch.setattr(
-        "keni_consola.dominio.investigacion_agente._ejecutar_claude_json", fake
-    )
-    candidato_id = cliente.post("/api/investigacion/correr", json={"brief_id": brief_id}).json()["candidatos"][0]["id"]
+    brief_id = cli.post("/api/investigacion/briefs", json=_brief_base()).json()["brief"]["id"]
+    cli.post("/api/investigacion/correr", json={"brief_id": brief_id})
+    candidato_id = cli.get("/api/investigacion/candidatos").json()["candidatos"][0]["id"]
 
-    r = cliente.post(f"/api/investigacion/candidatos/{candidato_id}/descartar")
+    r = cli.post(f"/api/investigacion/candidatos/{candidato_id}/descartar")
     assert r.status_code == 200, r.text
     assert r.json()["candidato"]["estado"] == "descartado"
 
     # Aparece en el filtro de descartados.
-    listado = cliente.get("/api/investigacion/candidatos?estado=descartado").json()["candidatos"]
+    listado = cli.get("/api/investigacion/candidatos?estado=descartado").json()["candidatos"]
     assert any(c["id"] == candidato_id for c in listado)
 
 

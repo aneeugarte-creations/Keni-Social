@@ -1229,6 +1229,32 @@ _PRESETS: list[dict[str, Any]] = [
         "region": "ES",
         "descripcion": "Noticias de videojuegos de VidaExtra (español).",
     },
+    # --- Tech/hardware para gamers (RSS directo, verificado) ---------------- #
+    # Nación Gamer cubre gaming + el tech/hardware adyacente (GPUs, consolas, PC):
+    # estos presets son `ciencia-tech` pero enfocados a una audiencia gamer (por eso
+    # van a `nacion-gamer`, no a `unotv`).
+    {
+        "id": "toms-hardware",
+        "nombre": "Tom's Hardware",
+        "url": "https://www.tomshardware.com/feeds/all",
+        "categoria": "ciencia-tech",
+        "marca_sugerida": "nacion-gamer",
+        "linea_sugerida": "Hardware",
+        "idioma": "en",
+        "region": "GLOBAL",
+        "descripcion": "Hardware de PC: GPUs, CPUs y componentes (inglés).",
+    },
+    {
+        "id": "theverge-gaming",
+        "nombre": "The Verge — Gaming",
+        "url": "https://www.theverge.com/games/rss/index.xml",
+        "categoria": "ciencia-tech",
+        "marca_sugerida": "nacion-gamer",
+        "linea_sugerida": "Gaming & Tech",
+        "idioma": "en",
+        "region": "GLOBAL",
+        "descripcion": "Cobertura de gaming y tecnología de The Verge (inglés).",
+    },
     # --- Google News gaming por franquicia (concreto, español MX) ----------- #
     *[
         {

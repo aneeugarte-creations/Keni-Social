@@ -15,7 +15,26 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from .conftest import _cliente, lanzador_generacion_completa
+
+# --------------------------------------------------------------------------- #
+# Aislamiento: TODOS los tests de este módulo tocan Postgres                   #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(autouse=True)
+def _entorno_aislado(entorno):
+    """Fija `DATABASE_URL` y aísla (truncate) el Postgres de pruebas en CADA test.
+
+    Los tests del flujo asíncrono construyen su cliente vía `_cliente_con_items`
+    (sin la fixture `cliente`), así que no arrastraban `entorno` y fallaban con
+    `DATABASE_URL no fijada` cuando ningún test previo del worker lo había montado.
+    Hacerlo autouse del módulo garantiza la BD aislada para todos.
+    """
+    return entorno
+
 
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #

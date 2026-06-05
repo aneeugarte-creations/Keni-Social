@@ -98,6 +98,11 @@ _TABLAS = (
     # tests del mismo worker (misma fecha+cajón) y rompen el aislamiento del listado por día.
     "insumos_item",
     "insumos_lote",
+    # Agentes de investigación (Ola 6): candidatos antes que briefs (FK). Sin esto, los
+    # candidatos se acumulan entre tests del mismo worker (GET /candidatos devuelve todos los
+    # de HOY) y rompen el aislamiento del listado por fecha.
+    "inv_candidato",
+    "inv_brief",
 )
 
 
