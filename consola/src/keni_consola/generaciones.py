@@ -107,7 +107,7 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
 TIPOS = (
     "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
-    "parrilla-import", "insumos", "investigacion",
+    "parrilla-import", "insumos", "investigacion", "import-calendario",
     # Taller GREEN / brainstorming: `green-ideas` = la PROPUESTA de ideas evergreen (IA);
     # `green` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
     "green-ideas", "green",

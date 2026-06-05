@@ -7,6 +7,9 @@ Cubre:
   - Best-effort: ítem faltante en la respuesta -> devuelve el original para ese ítem.
   - Lista vacía -> devuelve lista vacía.
   - Textos largos se truncan en el payload (no en la respuesta final).
+  - El Radar EN VIVO ya NO traduce (#desacoplo del back): solo etiqueta `idioma` y nunca
+    llama a `traducir_items`. La traducción de historias persistidas la hace el daemon de
+    ingesta (tests del daemon, no aquí).
 """
 
 from __future__ import annotations
@@ -154,12 +157,16 @@ def test_texto_largo_no_rompe():
 
 
 # --------------------------------------------------------------------------- #
-# Integración con el Radar (traducción mockeada, sin red ni claude real)       #
+# Integración con el Radar EN VIVO (#desacoplo del back: el back NO ejecuta     #
+# `claude`, así que el Radar en vivo YA NO traduce). Cada tema queda con su     #
+# `idioma` etiquetado pero `traducido` se mantiene False en el camino en vivo.  #
+# La traducción de historias PERSISTIDAS ocurre en el DAEMON de ingesta (que    #
+# corre en `daemons` con `claude`), cubierta por los tests del daemon, NO aquí.  #
 # --------------------------------------------------------------------------- #
 
 
-def test_radar_con_traduccion_activa(cliente, monkeypatch):
-    """El Radar traduce temas extranjeros (idioma != 'es') cuando el flag está ON."""
+def test_radar_en_vivo_no_traduce_y_etiqueta_idioma(cliente, monkeypatch):
+    """El Radar en vivo NO llama a `traducir_items` ni marca `traducido`; etiqueta `idioma`."""
     from keni_consola.api import rss
     from keni_consola.dominio import http_feed
     from keni_consola.dominio import traduccion as dom_trad
@@ -195,17 +202,15 @@ def test_radar_con_traduccion_activa(cliente, monkeypatch):
 
     monkeypatch.setattr(rss, "_DESCARGADOR", fake_descargador)
 
-    # Activa la traducción y parcheamos `traducir_items` para no llamar a claude.
+    # El flag de traducción puede estar ON: el Radar EN VIVO ya no traduce de todos modos.
     monkeypatch.setenv("KENI_TRADUCCION", "1")
 
-    traducido_llamado: list[list] = []
+    # Centinela: si el Radar en vivo llamara a `traducir_items`, este fake lo delataría.
+    llamadas: list[int] = []
 
     def fake_traducir(items, *, ejecutor=None):
-        traducido_llamado.append(items[:])
-        return [
-            {"id": it["id"], "titulo_es": f"[TRAD] {it['titulo']}", "resumen_es": "Resumen ES"}
-            for it in items
-        ]
+        llamadas.append(1)
+        return []
 
     monkeypatch.setattr(dom_trad, "traducir_items", fake_traducir)
 
@@ -214,18 +219,16 @@ def test_radar_con_traduccion_activa(cliente, monkeypatch):
     temas = datos["temas"]
     # Debe haber al menos el tema del feed en inglés.
     assert len(temas) >= 1
-    # Se llamó a traducir_items con el tema extranjero.
-    assert len(traducido_llamado) >= 1
-    # El tema traducido tiene `traducido=True` y `titulo_original`.
-    traducidos = [t for t in temas if t.get("traducido")]
-    assert len(traducidos) >= 1
-    t = traducidos[0]
-    assert "[TRAD]" in t["titulo"]
-    assert t.get("titulo_original", "")
+    # El Radar en vivo NUNCA llama a traducir_items (el back no ejecuta `claude`).
+    assert llamadas == []
+    # El tema extranjero queda con `idioma` etiquetado pero SIN traducir en vivo.
+    extranjeros = [t for t in temas if t.get("idioma") and t.get("idioma") != "es"]
+    assert len(extranjeros) >= 1
+    assert all(not t.get("traducido") for t in temas)
 
 
 def test_radar_sin_traduccion_no_llama_traducir(cliente, monkeypatch):
-    """Con KENI_TRADUCCION=0, el Radar NO llama a traducir_items."""
+    """Con KENI_TRADUCCION=0, el Radar tampoco llama a traducir_items (igual que con el flag ON)."""
     from keni_consola.api import rss
     from keni_consola.dominio import traduccion as dom_trad
 
@@ -246,42 +249,3 @@ def test_radar_sin_traduccion_no_llama_traducir(cliente, monkeypatch):
 
     cliente.get("/api/radar?feeds=0")
     assert len(llamadas) == 0
-
-
-def test_radar_fallo_traduccion_no_rompe_radar(cliente, monkeypatch):
-    """Si traducir_items lanza, el Radar devuelve los temas sin traducir (best-effort)."""
-    from keni_consola.api import rss
-    from keni_consola.dominio import http_feed
-    from keni_consola.dominio import traduccion as dom_trad
-
-    _TRENDS_XML = """<?xml version="1.0" encoding="UTF-8"?>
-    <rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0"><channel>
-      <item>
-        <title>Trending topic</title>
-        <ht:approx_traffic>5K+</ht:approx_traffic>
-      </item>
-    </channel></rss>"""
-
-    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _TRENDS_XML)
-    monkeypatch.setenv("KENI_TRADUCCION", "1")
-    monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
-
-    # Feed inglés registrado.
-    url_reuters = "https://feeds.reuters.com/reuters/worldNews"
-    _FEED_EN = """<?xml version="1.0"?><rss version="2.0"><channel>
-      <item><title>English item</title><guid>e1</guid></item>
-    </channel></rss>"""
-    cliente.post("/api/rss/fuentes", json={"nombre": "R", "url": url_reuters})
-    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: (_FEED_EN if "reuters" in url else _TRENDS_XML))
-
-    def traduccion_que_falla(items, *, ejecutor=None):
-        raise RuntimeError("Error simulado de traducción")
-
-    monkeypatch.setattr(dom_trad, "traducir_items", traduccion_que_falla)
-
-    r = cliente.get("/api/radar?feeds=1")
-    assert r.status_code == 200
-    datos = r.json()
-    # El Radar responde aunque la traducción haya fallado.
-    assert "temas" in datos
-    assert isinstance(datos["temas"], list)

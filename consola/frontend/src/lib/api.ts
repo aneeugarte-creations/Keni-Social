@@ -171,6 +171,7 @@ import type {
   EstadoSugerenciaEditorial,
   RespuestaImportPreview,
   RespuestaImportCalendario,
+  RespuestaImportCalendarioPendiente,
   RespuestaAjustes,
   RespuestaAjusteGuardado,
   RespuestaAlertas,
@@ -989,10 +990,9 @@ export const api = {
     form.set("archivo", archivo);
     if (opts.marca) form.set("marca", opts.marca);
     if (opts.previsualizar) form.set("previsualizar", "1");
-    return peticion<RespuestaImportPreview | RespuestaImportCalendario>(
-      "/contenido/importar",
-      { metodo: "POST", form, timeoutMs: 120_000 },
-    );
+    return peticion<
+      RespuestaImportPreview | RespuestaImportCalendario | RespuestaImportCalendarioPendiente
+    >("/contenido/importar", { metodo: "POST", form, timeoutMs: 120_000 });
   },
 
   // --- Alertas de rendimiento (bitácora editorial: reciclaje / bajo rendimiento) ---

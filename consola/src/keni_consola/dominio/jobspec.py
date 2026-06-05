@@ -71,6 +71,11 @@ PROC_INSUMOS = "insumos"
 # de claude (Haiku + web) e INSERTA `inv_candidato` en estado `nuevo`. El daemon de fondo ya
 # corre en `daemons` (con claude); este camino MANUAL lo movemos al worker (el back no tiene claude).
 PROC_INVESTIGACION = "investigacion"
+# Importacion de CALENDARIO desde un archivo NO tabular (PDF/Word/imagen/captura): parsea el
+# JSON `{"filas":[...]}` de claude (Haiku) e IMPORTA al tablero (`importar_a_tablero`). El camino
+# tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA, que
+# antes ejecutaba `claude -p` en la peticion, se ENCOLA al worker (el back no tiene claude).
+PROC_IMPORT_CALENDARIO = "import-calendario"
 
 
 def _autor_spec(autor: dict[str, str] | None) -> dict[str, str] | None:
@@ -290,6 +295,22 @@ def construir_investigacion(
     }
 
 
+def construir_import_calendario(
+    *, marca_defecto: str = "", autor: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Spec del post-procesado de la IMPORTACION de calendario por IA (#import-calendario).
+
+    `marca_defecto` (id canonico) se aplica a las filas sin marca reconocida; `autor` atribuye
+    los contenidos creados. El worker parsea `{"filas":[...]}` de Haiku con
+    `importador_calendario.parsear_respuesta_claude` e IMPORTA al tablero (`importar_a_tablero`).
+    """
+    return {
+        "kind": PROC_IMPORT_CALENDARIO,
+        "marca_defecto": marca_defecto or "",
+        "autor": _autor_spec(autor),
+    }
+
+
 def construir(
     *,
     prompt: str,
@@ -440,6 +461,15 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
         return investigacion_agente.construir_procesar_investigacion(
             brief=p.get("brief") or {}, fecha=p.get("fecha", ""),
+        )
+
+    if kind == PROC_IMPORT_CALENDARIO:
+        # Import perezoso: el factory toca BD (`repos`); `importador_calendario` vive en el
+        # paquete raiz (no en `dominio`), por eso el import sube un nivel.
+        from .. import importador_calendario
+
+        return importador_calendario.construir_procesar_import(
+            marca_defecto=p.get("marca_defecto", "") or "", autor=autor,
         )
 
     if kind == PROC_QA:

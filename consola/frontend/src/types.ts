@@ -353,6 +353,10 @@ export interface ResultadoGeneracion {
   verificacion?: ReporteVerificacion;
   // qa-editorial (workflow propio: revisar el copy ya escrito por el community)
   informe?: InformeQaEditorial;
+  // import-calendario (importación AGNÓSTICA por IA en el worker)
+  creados?: number;
+  omitidos?: { titulo: string; motivo: string }[];
+  errores?: ErrorImportCalendario[];
 }
 
 /** Una imagen producida por el estudio de imagen, lista para previsualizar. */
@@ -4089,6 +4093,24 @@ export interface RespuestaImportCalendario {
   creados: number;
   omitidos: { titulo: string; motivo: string }[];
   errores: ErrorImportCalendario[];
+}
+
+/**
+ * Importación AGNÓSTICA (PDF/Word/imagen/captura): el back NO ejecuta `claude`, así que
+ * ENCOLA un job de IA al worker y responde con esto. El SPA sondea la `generacion` con
+ * `useGeneracion`; al completarse, su `resultado` trae `{creados, omitidos, errores}` y los
+ * ítems aterrizan como borradores en el tablero (la superficie de revisión).
+ */
+export interface RespuestaImportCalendarioPendiente {
+  pendiente: true;
+  generacion: Generacion;
+}
+
+/** Resultado de una generación de importación de calendario por IA (worker). */
+export interface ResultadoImportCalendario {
+  creados?: number;
+  omitidos?: { titulo: string; motivo: string }[];
+  errores?: ErrorImportCalendario[];
 }
 
 // ── Ajustes de funcionalidad (admin, toggles + tuning en caliente) ──────────

@@ -517,6 +517,42 @@ def extraer_con_claude(
 
 
 # --------------------------------------------------------------------------- #
+# Post-procesado para el WORKER (#desacoplo del back)                          #
+# --------------------------------------------------------------------------- #
+#
+# El back NO ejecuta `claude -p` (no tiene binario ni token; solo el worker/daemons). El camino
+# tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (`parsear`, sin claude). Solo el camino
+# AGNOSTICO (PDF/Word/imagen/captura), que antes corria `extraer_con_claude` en la peticion, se
+# ENCOLA como un job de generacion (Haiku); el WORKER corre claude y luego este
+# `procesar(salida, metricas)` parsea su salida (`parsear_respuesta_claude`) e IMPORTA al
+# tablero (`importar_a_tablero`). Es la factory que `jobspec.reconstruir_procesar` arma a partir
+# del spec `PROC_IMPORT_CALENDARIO` (mismo patron que `insumos_parse.construir_procesar_insumos`).
+
+
+def construir_procesar_import(
+    *, marca_defecto: str = "", autor: dict[str, str] | None = None
+):  # noqa: ANN201 -- generaciones.Procesar (evita ciclo de tipos)
+    """Devuelve el callback `procesar(salida, metricas) -> dict` de la importacion IA (worker).
+
+    Parsea la salida de Haiku (`parsear_respuesta_claude`) e IMPORTA al tablero
+    (`importar_a_tablero`) con las MISMAS reglas que el camino tabular. Devuelve un resumen
+    `{creados, omitidos, errores}` (los items quedan como borradores en el tablero, que es la
+    superficie de revision). Reusa la logica pura, solo cambia el lugar de EJECUCION.
+    """
+
+    def procesar(salida: str, _metricas: object) -> dict[str, Any]:
+        filas, errores = parsear_respuesta_claude(salida or "")
+        resumen = importar_a_tablero(filas, autor=autor, marca_defecto=marca_defecto or "")
+        return {
+            "creados": len(resumen["creados"]),
+            "omitidos": resumen["omitidos"],
+            "errores": errores,
+        }
+
+    return procesar
+
+
+# --------------------------------------------------------------------------- #
 # Escritura al tablero (mismo camino que radar_auto / desde_radar)             #
 # --------------------------------------------------------------------------- #
 
