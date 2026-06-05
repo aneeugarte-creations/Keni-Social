@@ -18,9 +18,16 @@ _PNG_1x1 = (
 )
 
 
-def _subir_objeto(cliente) -> str:
-    """Sube un objeto de media y devuelve su id (nombre uuid.png)."""
-    r = cliente.post("/api/media", files={"archivo": ("foto.png", _PNG_1x1, "image/png")})
+def _subir_objeto(cliente, sufijo: bytes = b"") -> str:
+    """Sube un objeto de media y devuelve su key (`fotos/<sha256>.png`).
+
+    El almacen es CONTENT-ADDRESSED con dedup: subir los MISMOS bytes colapsa a UNA key.
+    Para tener objetos DISTINTOS (filtros de listado), `sufijo` varia el contenido (el
+    content-type fija la extension; estos bytes extra no rompen la deteccion PNG).
+    """
+    r = cliente.post(
+        "/api/media", files={"archivo": ("foto.png", _PNG_1x1 + sufijo, "image/png")}
+    )
     assert r.status_code == 200
     return r.json()["id"]
 
@@ -86,7 +93,7 @@ def test_crear_tipo_invalido_400(cliente):
 
 
 def test_listar_filtra_por_marca(cliente):
-    o1, o2 = _subir_objeto(cliente), _subir_objeto(cliente)
+    o1, o2 = _subir_objeto(cliente, b"\x01"), _subir_objeto(cliente, b"\x02")
     a1 = cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv"}).json()["arte"]
     a2 = cliente.post("/api/artes", json={"objeto": o2, "marca": "claro-sports"}).json()["arte"]
     artes = cliente.get("/api/artes", params={"marca": "unotv"}).json()["artes"]
@@ -95,7 +102,7 @@ def test_listar_filtra_por_marca(cliente):
 
 
 def test_listar_busqueda_q(cliente):
-    o1, o2 = _subir_objeto(cliente), _subir_objeto(cliente)
+    o1, o2 = _subir_objeto(cliente, b"\x01"), _subir_objeto(cliente, b"\x02")
     a1 = cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv", "etiquetas": ["mundial"]}).json()["arte"]
     a2 = cliente.post("/api/artes", json={"objeto": o2, "marca": "unotv", "titulo": "Liga MX"}).json()["arte"]
     artes = cliente.get("/api/artes", params={"q": "mundial"}).json()["artes"]

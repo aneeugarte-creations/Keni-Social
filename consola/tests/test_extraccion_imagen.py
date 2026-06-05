@@ -70,12 +70,14 @@ def test_ext_imagen_no_imagen_none():
 
 
 def test_descargar_imagen_a_media_png_guarda_y_es_legible(almacen_disco, monkeypatch):
-    """Bytes PNG validos => nombre `<uuid>.png` y el objeto se lee con `media.leer_media`."""
+    """Bytes PNG validos => key `fotos/<uuid>.png` y el objeto se lee con `media.leer_media`."""
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     nombre = extraccion_url.descargar_imagen_a_media("https://example.com/x.png")
     assert nombre.endswith(".png")
-    # El nombre lo generamos nosotros (uuid hex), NO viene de la URL.
-    stem = nombre.rsplit(".", 1)[0]
+    # La foto original va a la carpeta `fotos/` (key con prefijo de categoria).
+    assert nombre.startswith("fotos/")
+    # El nombre plano lo generamos nosotros (uuid hex de 32), NO viene de la URL.
+    stem = nombre.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     assert len(stem) == 32 and all(c in "0123456789abcdef" for c in stem)
     assert media.leer_media(nombre) == _PNG
 
