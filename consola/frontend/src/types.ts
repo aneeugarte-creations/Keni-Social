@@ -4139,3 +4139,73 @@ export interface PiezasPorEtiqueta {
   sin_enlace: number;
   fuente: string;
 }
+
+// ── Insumos del día (cajones) ─────────────────────────────────────────────────
+// Contrato compartido con el backend (01-insumos-del-dia.md). Todos los campos
+// usan snake_case tal como los devuelve la API (verificado en el contrato).
+
+/** Los cuatro cajones de insumos diarios. */
+export type CajonInsumo = "portal" | "corresponsales" | "reporteros" | "eventos_claro";
+
+/** Un lote de insumos (un "drop" en un cajón; el parseo Haiku produce los items). */
+export interface InsumoLote {
+  id: string;
+  fecha: string;
+  cajon: CajonInsumo;
+  marca: string;
+  origen_texto: string;
+  origen_archivo: string;
+  estado: "listo" | "error";
+  error: string;
+  total_items: number;
+  creado: string;
+}
+
+/** Un ítem parseado dentro de un lote de insumos. */
+export interface InsumoItem {
+  id: string;
+  lote_id: string;
+  fecha: string;
+  cajon: CajonInsumo;
+  marca: string;
+  /** Nombre legible de la marca (resuelto por el backend). */
+  marca_nombre: string;
+  linea: string;
+  titulo: string;
+  resumen: string;
+  hora: string;
+  lugar: string;
+  estado_material: "tengo" | "espero" | "";
+  tipo: "nota" | "cobertura" | "evento";
+  idioma: string;
+  /** `true` si ya se llevó al tablero. */
+  usado: boolean;
+  contenido_id: string;
+  orden: number;
+  creado: string;
+}
+
+/** Un cajón con sus lotes e ítems para un día concreto. */
+export interface CajonConItems {
+  cajon: CajonInsumo;
+  lotes: InsumoLote[];
+  items: InsumoItem[];
+}
+
+/** Respuesta de `GET /api/insumos?fecha=`. */
+export interface RespuestaInsumos {
+  fecha: string;
+  cajones: CajonConItems[];
+}
+
+/** Resumen de un día con insumos (para el selector de historial). */
+export interface DiaInsumos {
+  fecha: string;
+  total: number;
+  por_cajon: Record<CajonInsumo, number>;
+}
+
+/** Respuesta de `GET /api/insumos/dias`. */
+export interface RespuestaDiasInsumos {
+  dias: DiaInsumos[];
+}

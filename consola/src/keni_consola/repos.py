@@ -2198,3 +2198,83 @@ def aplicar_propuesta_parrilla(
     return db.aplicar_propuesta_parrilla(
         propuesta_id, operaciones, nombres_miembros=nombres_miembros, origen=origen
     )
+
+
+# --------------------------------------------------------------------------- #
+# Insumos del día (cajones): delega 1:1 en db.py                               #
+# --------------------------------------------------------------------------- #
+
+
+def crear_insumo_lote(
+    *,
+    fecha: str,
+    cajon: str,
+    marca: str = "",
+    origen_texto: str = "",
+    origen_archivo: str = "",
+    estado: str = "listo",
+    error: str = "",
+    total_items: int = 0,
+    creado_por: str = "",
+) -> dict[str, Any]:
+    return db.crear_insumo_lote(
+        fecha=fecha,
+        cajon=cajon,
+        marca=marca,
+        origen_texto=origen_texto,
+        origen_archivo=origen_archivo,
+        estado=estado,
+        error=error,
+        total_items=total_items,
+        creado_por=creado_por,
+    )
+
+
+def actualizar_insumo_lote(lote_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_insumo_lote(lote_id, campos)
+
+
+def obtener_insumo_lote(lote_id: str) -> dict[str, Any] | None:
+    return db.obtener_insumo_lote(lote_id)
+
+
+def borrar_insumo_lote(lote_id: str) -> bool:
+    return db.borrar_insumo_lote(lote_id)
+
+
+def crear_insumo_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return db.crear_insumo_items(items)
+
+
+def listar_insumo_items(
+    *,
+    fecha: str | None = None,
+    cajon: str | None = None,
+    marca: str | None = None,
+    lote_id: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_insumo_items(fecha=fecha, cajon=cajon, marca=marca, lote_id=lote_id)
+
+
+def obtener_insumo_item(item_id: str) -> dict[str, Any] | None:
+    return db.obtener_insumo_item(item_id)
+
+
+def actualizar_insumo_item(item_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_insumo_item(item_id, campos)
+
+
+def marcar_insumo_item_usado(item_id: str, *, contenido_id: str) -> dict[str, Any] | None:
+    return db.marcar_insumo_item_usado(item_id, contenido_id=contenido_id)
+
+
+def listar_lotes(
+    *,
+    fecha: str | None = None,
+    cajon: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_lotes(fecha=fecha, cajon=cajon)
+
+
+def dias_con_insumos() -> list[dict[str, Any]]:
+    return db.dias_con_insumos()

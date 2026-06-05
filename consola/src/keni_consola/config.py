@@ -317,6 +317,12 @@ ENV_MEDIA_GC = "KENI_MEDIA_GC"
 ENV_MEDIA_GC_INTERVALO_HORAS = "KENI_MEDIA_GC_INTERVALO_HORAS"
 ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
 
+# Insumos del día (cajones): modelo de parseo que usa `claude -p` para extraer los ítems
+# del material diario (portal/corresponsales/reporteros/eventos_claro). Por defecto "haiku"
+# (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
+# `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
+ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -1516,3 +1522,24 @@ def override_ruta(nombre: str) -> Path | None:
     if crudo:
         return Path(crudo).expanduser()
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Accesor: insumos del día                                                     #
+# --------------------------------------------------------------------------- #
+
+
+def insumos_modelo() -> str:
+    """Modelo de claude para parsear insumos del día (`KENI_INSUMOS_MODELO`, def "haiku").
+
+    Si la var esta explicitamente vacia (""), devuelve "" -> el llamante NO pasa `--model`
+    y claude usa su propio default. Si no esta fijada, devuelve "haiku". Si esta fijada a
+    un valor no vacio, devuelve ese valor como nombre de modelo.
+    """
+    # _crudo() hace strip: si la var es "" o solo espacios, devuelve "".
+    # Si la var no esta en el entorno, os.environ.get devuelve None -> _crudo da "".
+    # Por eso chequeamos la var cruda del entorno para distinguir "no fijada" de "vacia".
+    raw = os.environ.get(ENV_INSUMOS_MODELO)
+    if raw is None:
+        return "haiku"  # no fijada: default haiku
+    return raw.strip()  # fijada: respeta el valor (puede ser "" para desactivar --model)

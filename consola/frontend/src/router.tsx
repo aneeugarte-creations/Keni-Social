@@ -25,6 +25,7 @@ const Termometro = lazy(() => import("@/pages/Termometro"));
 // Investigador: página única del hub de Investigación (índice). Reúne plan del día
 // + descubrimiento; el Termómetro se abre desde un botón dentro de ella.
 const Investigador = lazy(() => import("@/pages/Investigador"));
+const CajonesDia = lazy(() => import("@/pages/CajonesDia"));
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
@@ -200,6 +201,7 @@ export const router = createBrowserRouter([
               { index: true, element: <Investigador /> },
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
+              { path: "cajones", element: <CajonesDia /> },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (el índice); "algoritmos" se mudó a la
               // Biblioteca.

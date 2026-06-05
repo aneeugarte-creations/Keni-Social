@@ -3,6 +3,7 @@ import {
   BookText,
   CalendarClock,
   CalendarDays,
+  Inbox,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -47,6 +48,7 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   // activo en la coincidencia exacta del índice.
   { ruta: "/datos/investigacion", etiqueta: "Investigador", icono: ScanSearch, end: true },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
+  { ruta: "/datos/investigacion/cajones", etiqueta: "Cajones del día", icono: Inbox },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [

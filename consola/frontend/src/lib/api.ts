@@ -9,6 +9,13 @@
  * - Soporta JSON, multipart (FormData) y descargas (abre la URL en el navegador).
  */
 import type {
+  RespuestaInsumos,
+  RespuestaDiasInsumos,
+  InsumoLote,
+  InsumoItem,
+} from "@/types";
+
+import type {
   RespuestaBiblioteca,
   RespuestaDocumento,
   RespuestaPapelera,
@@ -2026,4 +2033,63 @@ export const api = {
       `/notificaciones/menciones-candidatos${query({ marca_id: marcaId })}`,
       { signal },
     ),
+
+  // --- Insumos del día (cajones) ---
+  // El equipo vuelca material diario en 4 cajones; Haiku lo parsea y produce
+  // ítems listos para llevar al tablero. Contrato: docs/maquina-contenido/01-insumos-del-dia.md.
+  insumos: {
+    /** Lista los 4 cajones con sus lotes e ítems para `fecha` (def: hoy en el servidor). */
+    listar: (fecha?: string, signal?: AbortSignal) =>
+      peticion<RespuestaInsumos>(`/insumos${query({ fecha })}`, { signal }),
+
+    /** Días con insumos registrados (orden: fecha desc). Para el selector de historial. */
+    dias: (signal?: AbortSignal) =>
+      peticion<RespuestaDiasInsumos>("/insumos/dias", { signal }),
+
+    /**
+     * Aporta material a un cajón: parsea con Haiku (puede tardar hasta 200s) y
+     * devuelve el lote creado + sus ítems. Acepta texto pegado y/o archivo.
+     */
+    aportar: (form: FormData) =>
+      peticion<{ lote: InsumoLote; items: InsumoItem[] }>("/insumos/aportar", {
+        metodo: "POST",
+        form,
+        timeoutMs: 200_000,
+      }),
+
+    /** Detalle de un lote con sus ítems. */
+    lote: (id: string, signal?: AbortSignal) =>
+      peticion<{ lote: InsumoLote; items: InsumoItem[] }>(
+        `/insumos/lote/${encodeURIComponent(id)}`,
+        { signal },
+      ),
+
+    /** Edición parcial de un ítem (título, resumen, marca, línea, hora, lugar, etc.). */
+    editarItem: (
+      id: string,
+      campos: Partial<Pick<InsumoItem, "titulo" | "resumen" | "marca" | "linea" | "hora" | "lugar" | "estado_material" | "tipo">>,
+    ) =>
+      peticion<{ item: InsumoItem }>(`/insumos/item/${encodeURIComponent(id)}`, {
+        metodo: "PATCH",
+        json: campos,
+        muestrear: false,
+      }),
+
+    /**
+     * Lleva un ítem al tablero: crea contenido con `origen="insumo"` y marca el ítem
+     * como `usado`. Acepta `redes` y `generar` (lanza copy si `true` y hay marca).
+     */
+    usarItem: (id: string, body: { redes?: string[]; generar?: boolean }) =>
+      peticion<{ item: InsumoItem; contenido_id: string }>(
+        `/insumos/item/${encodeURIComponent(id)}/usar`,
+        { metodo: "POST", json: body, muestrear: false },
+      ),
+
+    /** Borra un lote y todos sus ítems. */
+    borrarLote: (id: string) =>
+      peticion<{ ok: boolean }>(`/insumos/lote/${encodeURIComponent(id)}`, {
+        metodo: "DELETE",
+        muestrear: false,
+      }),
+  },
 };
