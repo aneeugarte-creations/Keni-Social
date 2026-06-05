@@ -27,8 +27,9 @@ _SIDEBAR_BLOQUES = [
     # "Estudio" y el "Editor" se fusionaron en uno) y Biblioteca (prompts + plantillas).
     ["Estudio", "Biblioteca"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
-    # Analíticas (medición que cierra el loop), Actividad IA (qué hizo), Pipelines (CI/CD).
-    ["Investigación", "Analíticas", "Actividad IA", "Pipelines"],
+    # Analíticas (medición que cierra el loop) y Actividad IA (qué hizo la IA). Pipelines
+    # (CI/CD) ya no es entrada de sidebar: vive como pestaña del hub Actividad IA.
+    ["Investigación", "Analíticas", "Actividad IA"],
 ]
 
 # Encabezados humanos de cada bloque, en el mismo orden.

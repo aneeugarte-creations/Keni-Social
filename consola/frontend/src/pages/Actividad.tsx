@@ -46,10 +46,9 @@ import type {
   ActividadPorDia,
   ActividadPorTipo,
   ActividadTotal,
-  FuenteActividad,
 } from "@/types";
 
-/** Centinela del filtro "todas las fuentes / todos los tipos". */
+/** Centinela del filtro "todos los tipos". */
 const TODOS = "__todos__";
 
 /** Tamaño de página de la tabla de actividad (cuántos suma cada "Cargar más"). */
@@ -61,17 +60,7 @@ const TAM_PAGINA = 50;
 // `@/lib/fecha`. `formatearFecha` aquí es la variante corta (sin año) con hora.
 const formatearFecha = (iso: string): string => formatearFechaHoraCorta(iso) || "—";
 
-/** Etiqueta legible de la fuente de un ítem. */
-function etiquetaFuente(fuente: FuenteActividad): string {
-  return fuente === "run" ? "Agente" : "Generación";
-}
-
-/** Variante de badge por fuente (sutil, sin gritar). */
-function varianteFuente(fuente: FuenteActividad): BadgeProps["variant"] {
-  return fuente === "run" ? "secondary" : "outline";
-}
-
-/** Etiqueta + variante de badge para un estado de actividad (generación o run). */
+/** Etiqueta + variante de badge para un estado de actividad (generación). */
 function presentacionEstado(estado: string): {
   texto: string;
   variante: BadgeProps["variant"];
@@ -332,20 +321,16 @@ function TablaActividad({
                 const est = presentacionEstado(it.estado);
                 const m = it.metricas;
                 // Acción PRINCIPAL del item (sin columna aparte): la fila entera la dispara.
-                // Generación en vivo -> verla en directo; con resultado -> abrirlo donde salga.
-                // Generación EN VIVO o SIN página de resultado (p.ej. importar parrilla) ->
-                // abrir el visor (stream + prompt + error), también en estados terminales.
-                // Generación/agente CON resultado -> abrir su página. Resto -> no clicable.
+                // EN VIVO o SIN página de resultado (p.ej. importar parrilla) -> abrir el visor
+                // (stream + prompt + error), también en estados terminales. CON resultado ->
+                // abrir su página.
                 const accion =
-                  it.fuente === "generacion" &&
-                  (it.estado === "ejecutando" || !it.resultado_url)
+                  it.estado === "ejecutando" || !it.resultado_url
                     ? () => onVerEnVivo(it.id)
-                    : it.resultado_url
-                      ? () => onVerResultado(it)
-                      : null;
+                    : () => onVerResultado(it);
                 return (
                   <TableRow
-                    key={`${it.fuente}:${it.id}`}
+                    key={it.id}
                     onClick={accion ?? undefined}
                     role={accion ? "button" : undefined}
                     tabIndex={accion ? 0 : undefined}
@@ -367,12 +352,7 @@ function TablaActividad({
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant={varianteFuente(it.fuente)}>
-                          {etiquetaFuente(it.fuente)}
-                        </Badge>
-                        <Badge variant="outline">{it.tipo || "—"}</Badge>
-                      </div>
+                      <Badge variant="outline">{it.tipo || "—"}</Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {it.marca || <span className="text-muted-foreground">—</span>}
@@ -435,32 +415,29 @@ function EsqueletoActividad() {
 }
 
 /**
- * Página Actividad IA: feed unificado de la actividad de IA (generaciones en
- * segundo plano + runs de agentes) con sus métricas (tokens, coste, duración).
+ * Página Actividad IA: feed de la actividad de IA (generaciones en segundo plano:
+ * copy, RSS, imágenes, verificación) con sus métricas (tokens, coste, duración).
  *
  * Combina dos consultas: los agregados (`GET /api/actividad/agregados`) para las
  * tarjetas KPI y los desgloses, y el listado paginado (`GET /api/actividad`) para
- * la tabla, con filtros por `fuente` y `tipo`. Cada bloque maneja su carga; un
- * error en cualquiera de las dos consultas se muestra como bloque de error.
+ * la tabla, con filtro por `tipo`. Cada bloque maneja su carga; un error en
+ * cualquiera de las dos consultas se muestra como bloque de error.
  */
 export default function Actividad() {
   const navigate = useNavigate();
   // Item D: id de la generación que se está viendo EN VIVO en el modal (o null).
   const [visorId, setVisorId] = React.useState<string | null>(null);
-  const [fuente, setFuente] = React.useState<string>(TODOS);
   const [tipo, setTipo] = React.useState<string>(TODOS);
   // Paginación offset-based: pedimos `paginas * TAM_PAGINA` (offset 0) y "Cargar
   // más" sube `paginas`. Cambiar de filtro reinicia las páginas.
   const [paginas, setPaginas] = React.useState(1);
   const limite = paginas * TAM_PAGINA;
 
-  const fuenteParam = fuente === TODOS ? undefined : fuente;
   const tipoParam = tipo === TODOS ? undefined : tipo;
 
   const listaQuery = useQuery({
-    queryKey: ["actividad", "lista", limite, fuenteParam, tipoParam],
-    queryFn: ({ signal }) =>
-      api.actividad({ limite, fuente: fuenteParam, tipo: tipoParam }, signal),
+    queryKey: ["actividad", "lista", limite, tipoParam],
+    queryFn: ({ signal }) => api.actividad({ limite, tipo: tipoParam }, signal),
   });
   const agregadosQuery = useQuery({
     queryKey: ["actividad", "agregados"],
@@ -497,27 +474,11 @@ export default function Actividad() {
     <>
       <PageHeader
         titulo="Actividad IA"
-        descripcion="Tokens, coste y duración de la actividad de IA (generaciones y agentes)."
+        descripcion="Tokens, coste y duración de las generaciones de IA (copy, RSS, imágenes, verificación)."
         acciones={acciones}
       />
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
-        <Select
-          value={fuente}
-          onValueChange={(v) => {
-            setFuente(v);
-            setPaginas(1);
-          }}
-        >
-          <SelectTrigger className="w-full sm:w-[200px]" aria-label="Filtrar por fuente">
-            <SelectValue placeholder="Fuente" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todas las fuentes</SelectItem>
-            <SelectItem value="generacion">Generación</SelectItem>
-            <SelectItem value="run">Agente</SelectItem>
-          </SelectContent>
-        </Select>
         <Select
           value={tipo}
           onValueChange={(v) => {
@@ -553,7 +514,7 @@ export default function Actividad() {
           agregados={agregadosQuery.data}
           items={listaQuery.data.items}
           total={listaQuery.data.total}
-          filtrado={fuenteParam != null || tipoParam != null}
+          filtrado={tipoParam != null}
           cargando={listaQuery.isFetching}
           onCargarMas={() => setPaginas((p) => p + 1)}
           onVerEnVivo={setVisorId}
@@ -594,7 +555,7 @@ function Contenido({
       <EstadoVacio
         icono={Activity}
         titulo="Aún no hay actividad IA"
-        texto="Cuando se generen copies o se lancen runs de agentes, aquí verás sus tokens, coste y duración."
+        texto="Cuando se generen copies, imágenes o verificaciones, aquí verás sus tokens, coste y duración."
       />
     );
   }

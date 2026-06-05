@@ -1,10 +1,12 @@
 import {
+  Activity,
   BarChart3,
   Bot,
   BookText,
   CalendarClock,
   CalendarDays,
   CalendarPlus,
+  GitBranch,
   Inbox,
   LayoutGrid,
   ListTodo,
@@ -99,6 +101,16 @@ export const TABS_BIBLIOTECA: ItemTabHub[] = [
   { ruta: "/contenido/biblioteca/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
+// Actividad IA es un hub: el feed de actividad (índice del hub) y los Pipelines (vista
+// CI/CD del pipeline de contenido, etapa a etapa). Pipelines deja de ser una entrada suelta
+// del sidebar para vivir como pestaña aquí.
+export const TABS_ACTIVIDAD: ItemTabHub[] = [
+  // `end: true`: comparte prefijo con `/pipelines`, así que el tab raíz (el feed) solo se
+  // marca activo en la coincidencia exacta del índice.
+  { ruta: "/datos/actividad", etiqueta: "Actividad", icono: Activity, end: true },
+  { ruta: "/datos/actividad/pipelines", etiqueta: "Pipelines", icono: GitBranch },
+];
+
 /**
  * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del hub (la misma que
  * entrega el catálogo para esa entrada de nav). El sidebar la usa para saber que
@@ -111,6 +123,7 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/operacion/feed": TABS_FEED,
   "/operacion/calendario": TABS_CALENDARIO,
   "/contenido/biblioteca": TABS_BIBLIOTECA,
+  "/datos/actividad": TABS_ACTIVIDAD,
 };
 
 /**

@@ -76,7 +76,7 @@ rutas_frontend = [
   "/operacion/revision/editorial",
   "/operacion/revision/verificacion",
   "/datos/actividad",
-  "/datos/pipelines",
+  "/datos/actividad/pipelines",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -129,19 +129,12 @@ orden = 30
 ruta = "/datos/actividad"
 etiqueta = "Actividad IA"
 icono = "Activity"
-descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) y runs de agente, con su coste y consumo."
+descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) con su coste y consumo, y los Pipelines (vista CI/CD del pipeline de contenido, etapa a etapa). Pestañas Actividad / Pipelines."
 grupo = "datos"
 grupo_orden = 30
 orden = 30
-
-[[nav]]
-ruta = "/datos/pipelines"
-etiqueta = "Pipelines"
-icono = "GitBranch"
-descripcion = "Vista CI/CD del pipeline de contenido: cada pieza con sus etapas (Ingesta → Copy → Validación → Aprobación) y su actividad."
-grupo = "datos"
-grupo_orden = 30
-orden = 40
+# Pipelines dejó de ser una entrada suelta del sidebar: ahora es la pestaña
+# `/datos/actividad/pipelines` del hub Actividad IA (ver `hub-tabs.ts`).
 
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
 # de la Biblioteca y dejó de ser una entrada de nav.)

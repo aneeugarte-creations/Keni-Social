@@ -237,10 +237,18 @@ export const router = createBrowserRouter([
               { path: "comercial", element: <Comercial /> },
             ],
           },
-          // Actividad IA: feed unificado de generaciones + runs de agentes con métricas.
-          { path: "actividad", element: <Actividad /> },
-          // Pipelines: vista CI/CD del pipeline de contenido (etapas por pieza).
-          { path: "pipelines", element: <Pipelines /> },
+          // Hub Actividad IA: el feed de actividad (índice) + Pipelines (vista CI/CD del
+          // pipeline de contenido, etapa a etapa). Pipelines es una pestaña del hub, no una
+          // entrada suelta del sidebar.
+          {
+            path: "actividad",
+            children: [
+              { index: true, element: <Actividad /> },
+              { path: "pipelines", element: <Pipelines /> },
+            ],
+          },
+          // Compat: la antigua ruta plana /datos/pipelines ahora es pestaña de Actividad IA.
+          { path: "pipelines", element: <Navigate to="/datos/actividad/pipelines" replace /> },
         ],
       },
 

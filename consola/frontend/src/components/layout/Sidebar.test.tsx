@@ -330,12 +330,13 @@ describe("apps-scope · helpers", () => {
       "/datos/investigacion/cajones",
       "/datos/investigacion/eventos",
       "/datos/investigacion/agentes",
-      // /operacion/revision (hub) → sus sub-pestañas
+      // /operacion/revision (hub) → sus sub-pestañas (Breaking = carril rápido Claro Sports)
       "/operacion/revision/editorial",
       "/operacion/revision/verificacion",
       "/operacion/revision/breaking",
-      // /datos/actividad NO es hub: queda como hoja directa.
+      // /datos/actividad (hub) → el feed (índice) + Pipelines (pestaña, antes entrada suelta)
       "/datos/actividad",
+      "/datos/actividad/pipelines",
     ]);
   });
 

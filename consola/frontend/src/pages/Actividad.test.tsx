@@ -72,12 +72,13 @@ describe("Actividad (feed unificado de IA)", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
-  it("lista un ítem del feed con su etiqueta y badge de fuente", async () => {
+  it("lista un ítem del feed con su etiqueta, tipo y estado", async () => {
     stubFetch();
     renderConProviders(<Actividad />);
     expect(await screen.findByText("Resumen de la jornada")).toBeInTheDocument();
-    // Badge de fuente (Generación) y de tipo (copy) — copy aparece también en "Por tipo".
-    expect(screen.getAllByText("Generación").length).toBeGreaterThan(0);
+    // Ya no hay badge de fuente (todo es generación): queda el de tipo (copy, también en
+    // "Por tipo") y el de estado.
+    expect(screen.getAllByText("copy").length).toBeGreaterThan(0);
     expect(screen.getByText("Completado")).toBeInTheDocument();
   });
 
