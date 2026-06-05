@@ -22,6 +22,8 @@ import type {
   RespuestaInvCorrer,
   RespuestaNoticias,
   ResumenCobertura,
+  Historia,
+  RespuestaHistorias,
 } from "@/types";
 
 import type {
@@ -2326,5 +2328,69 @@ export const api = {
      */
     cobertura: (signal?: AbortSignal) =>
       peticion<ResumenCobertura>("/noticias/cobertura", { signal }),
+
+    // --- Ola B: clusters de historias ---
+
+    /**
+     * Lista los clusters de historias (misma noticia, múltiples fuentes).
+     * Orden: score desc. marca-aware.
+     * GET /api/noticias/historias
+     */
+    historias: (
+      params: {
+        marca?: string;
+        categoria?: string;
+        desde?: string;
+        estado?: string;
+        limit?: number;
+        offset?: number;
+      } = {},
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaHistorias>(
+        `/noticias/historias${query({
+          marca: params.marca,
+          categoria: params.categoria,
+          desde: params.desde,
+          estado: params.estado,
+          limit: params.limit != null ? String(params.limit) : undefined,
+          offset: params.offset != null ? String(params.offset) : undefined,
+        })}`,
+        { signal },
+      ),
+
+    /**
+     * Detalle de un cluster: la historia + sus artículos corroborantes.
+     * GET /api/noticias/historias/{id}
+     */
+    historia: (id: string, signal?: AbortSignal) =>
+      peticion<{ historia: Historia; items: unknown[] }>(
+        `/noticias/historias/${encodeURIComponent(id)}`,
+        { signal },
+      ),
+
+    /**
+     * Lleva una historia al tablero como pieza de contenido.
+     * Marca el cluster + sus ítems como `usado`.
+     * POST /api/noticias/historias/{id}/usar
+     */
+    usarHistoria: (
+      id: string,
+      body: { redes?: string[]; generar?: boolean } = {},
+    ) =>
+      peticion<{ ok: boolean; contenido_id: string }>(
+        `/noticias/historias/${encodeURIComponent(id)}/usar`,
+        { metodo: "POST", json: body, muestrear: false },
+      ),
+
+    /**
+     * Descarta una historia (estado=descartado). No se borra del archivo.
+     * POST /api/noticias/historias/{id}/descartar
+     */
+    descartarHistoria: (id: string) =>
+      peticion<{ ok: boolean }>(
+        `/noticias/historias/${encodeURIComponent(id)}/descartar`,
+        { metodo: "POST", muestrear: false },
+      ),
   },
 };

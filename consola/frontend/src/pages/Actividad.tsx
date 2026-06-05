@@ -331,20 +331,16 @@ function TablaActividad({
                 return (
                   <TableRow
                     key={it.id}
-                    onClick={accion ?? undefined}
-                    role={accion ? "button" : undefined}
-                    tabIndex={accion ? 0 : undefined}
-                    onKeyDown={
-                      accion
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              accion();
-                            }
-                          }
-                        : undefined
-                    }
-                    className={cn(accion && "cursor-pointer hover:bg-muted/40")}
+                    onClick={accion}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        accion();
+                      }
+                    }}
+                    className={cn("cursor-pointer hover:bg-muted/40")}
                   >
                     <TableCell className="max-w-[22rem] pl-6 font-medium">
                       <span className="block truncate" title={it.etiqueta}>

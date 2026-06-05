@@ -518,6 +518,69 @@ def resumen_cobertura() -> dict[str, Any]:
     return db.resumen_cobertura()
 
 
+# --- Clustering de historias (Ola B): delega 1:1 en db.py ------------------ #
+
+ESTADOS_NOTICIA_CLUSTER = db.ESTADOS_NOTICIA_CLUSTER
+
+
+def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
+    return db.upsert_noticia_cluster(cluster)
+
+
+def listar_noticia_clusters(
+    *,
+    marca: str | None = None,
+    categoria: str | None = None,
+    desde: str | None = None,
+    estado: str | None = None,
+    limite: int = 50,
+    desplazamiento: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    return db.listar_noticia_clusters(
+        marca=marca,
+        categoria=categoria,
+        desde=desde,
+        estado=estado,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
+    return db.obtener_noticia_cluster(cluster_id)
+
+
+def actualizar_noticia_cluster(
+    cluster_id: str,
+    *,
+    estado: str | None = None,
+    contenido_id: str | None = None,
+) -> dict[str, Any] | None:
+    return db.actualizar_noticia_cluster(
+        cluster_id, estado=estado, contenido_id=contenido_id
+    )
+
+
+def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[str, Any]]:
+    return db.clusters_recientes(ventana_h, marca)
+
+
+def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
+    return db.items_de_cluster(cluster_id, limite=limite)
+
+
+def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
+    return db.items_sin_cluster(desde, limite)
+
+
+def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
+    return db.asignar_cluster_item(item_id, cluster_id)
+
+
+def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
+    return db.marcar_items_cluster_usados(cluster_id, contenido_id)
+
+
 # --- Hub generico de fuentes (item G): delega 1:1 en db.py ----------------- #
 
 

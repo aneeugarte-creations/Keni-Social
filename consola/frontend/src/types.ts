@@ -4406,6 +4406,51 @@ export interface RespuestaInvCorrer {
 // --- Motor de ingesta persistente (Ola A): archivo a nivel de artículo --------
 // Contrato: docs/maquina-contenido/A-motor-ingesta.md
 
+// --- Motor de ingesta: Ola B — Clustering de historias ---
+
+/**
+ * Un cluster de noticias (misma historia contada por varias fuentes).
+ * Espejo de `noticias_clusters` + cálculo de `Ola B`.
+ */
+export interface Historia {
+  id: string;
+  titulo: string;
+  resumen: string;
+  /** Id de la marca dominante del cluster ('' = sin marca). */
+  marca: string;
+  marca_nombre: string;
+  categoria: string;
+  geo: string;
+  /** Nº de artículos en el cluster. */
+  n_items: number;
+  /** Nº de fuentes distintas (corroboración). */
+  n_fuentes: number;
+  /** Idiomas presentes en el cluster. */
+  idiomas: string[];
+  /** Señal agregada. */
+  senal: number;
+  /** Score de ranking. */
+  score: number;
+  /** 1 si la historia está en modo breaking (aceleración de fuentes). */
+  breaking: number;
+  /** ISO del artículo más antiguo del cluster. */
+  primer_visto: string;
+  /** ISO del artículo más reciente del cluster. */
+  ultimo_visto: string;
+  /** Estado editorial: 'nuevo' | 'usado' | 'descartado'. */
+  estado: "nuevo" | "usado" | "descartado" | string;
+  /** Id del contenido en el tablero cuando `estado='usado'`. '' si no. */
+  contenido_id: string;
+  /** Hasta ~8 artículos corroborantes del cluster. */
+  enlaces: { titulo: string; url: string; fuente: string }[];
+}
+
+/** Respuesta paginada de `GET /api/noticias/historias`. */
+export interface RespuestaHistorias {
+  historias: Historia[];
+  total: number;
+}
+
 /**
  * Un artículo ingerido del archivo persistente (`noticias_items`).
  * Todos los campos de texto son '' si el feed no los entregó.

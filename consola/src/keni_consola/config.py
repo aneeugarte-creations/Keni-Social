@@ -300,6 +300,14 @@ ENV_INGESTA_INTERVALO_CIENCIA_TECH = "KENI_INGESTA_INTERVALO_CIENCIA_TECH"
 ENV_INGESTA_INTERVALO_GAMING = "KENI_INGESTA_INTERVALO_GAMING"
 ENV_INGESTA_INTERVALO_DEFECTO = "KENI_INGESTA_INTERVALO_DEFECTO"
 
+# Clustering de HISTORIAS (Ola B): ventana reciente de agrupación, umbral fuzzy de cruce de
+# títulos y heurística de "breaking" (N fuentes distintas en < M horas). Clustering INCREMENTAL
+# acotado por la ventana: nunca re-cluster el archivo entero. Corre dentro del barrido de ingesta.
+ENV_CLUSTER_VENTANA_H = "KENI_CLUSTER_VENTANA_H"
+ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
+ENV_CLUSTER_BREAKING_FUENTES = "KENI_CLUSTER_BREAKING_FUENTES"
+ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
+
 # Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
 # demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
 # radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
@@ -548,6 +556,14 @@ INGESTA_INTERVALO_DEFECTO_DEF = 600
 # Tope del backoff exponencial (segundos): un feed que falla repetidamente no se pausa más de
 # esto (1 hora), para que se reintente con regularidad cuando vuelva.
 INGESTA_BACKOFF_TOPE_SEG = 3600
+
+# Clustering de historias (Ola B): defaults. Ventana de 72h (una historia evoluciona varios
+# días); umbral fuzzy 0.82 (alto, conservador: solo une variantes claras del mismo titular);
+# breaking = 3 fuentes distintas en < 6h (aceleración real, no goteo).
+CLUSTER_VENTANA_H_DEF = 72
+CLUSTER_UMBRAL_DEF = 0.82
+CLUSTER_BREAKING_FUENTES_DEF = 3
+CLUSTER_BREAKING_VENTANA_H_DEF = 6
 
 # Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
 # porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
@@ -1396,6 +1412,43 @@ def ingesta_intervalo_categoria(categoria: str) -> int:
         (ENV_INGESTA_INTERVALO_DEFECTO, INGESTA_INTERVALO_DEFECTO_DEF),
     )
     return _entero(env, defecto, minimo=1)
+
+
+def cluster_ventana_h() -> int:
+    """Ventana reciente (horas) de agrupación de historias (`KENI_CLUSTER_VENTANA_H`, def 72, min 1).
+
+    Clustering INCREMENTAL: solo se cargan los clusters cuya `ultimo_visto` cae en esta ventana
+    para decidir a cuál unir un item nuevo. Acota el trabajo por barrido (nunca el archivo entero).
+    """
+    return _entero(ENV_CLUSTER_VENTANA_H, CLUSTER_VENTANA_H_DEF, minimo=1)
+
+
+def cluster_umbral() -> float:
+    """Umbral fuzzy de cruce de títulos para unir un item a un cluster (`KENI_CLUSTER_UMBRAL`, def 0.82).
+
+    Ratio `SequenceMatcher` mínimo (en [0,1]) para considerar dos titulares la misma historia.
+    Alto a propósito: conservador, solo une variantes claras. Valor inválido o fuera de [0,1] → def.
+    """
+    crudo = _crudo(ENV_CLUSTER_UMBRAL)
+    if not crudo:
+        return CLUSTER_UMBRAL_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return CLUSTER_UMBRAL_DEF
+    if valor < 0.0 or valor > 1.0:
+        return CLUSTER_UMBRAL_DEF
+    return valor
+
+
+def cluster_breaking_fuentes() -> int:
+    """Fuentes distintas mínimas para marcar una historia "breaking" (`KENI_CLUSTER_BREAKING_FUENTES`, def 3, min 2)."""
+    return _entero(ENV_CLUSTER_BREAKING_FUENTES, CLUSTER_BREAKING_FUENTES_DEF, minimo=2)
+
+
+def cluster_breaking_ventana_h() -> int:
+    """Ventana (horas) para la heurística de breaking (`KENI_CLUSTER_BREAKING_VENTANA_H`, def 6, min 1)."""
+    return _entero(ENV_CLUSTER_BREAKING_VENTANA_H, CLUSTER_BREAKING_VENTANA_H_DEF, minimo=1)
 
 
 def autogen_activo() -> bool:

@@ -65,7 +65,7 @@ import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 
 _log = logging.getLogger("keni_consola.db")
@@ -248,6 +248,17 @@ __all__ = [
     "registrar_sondeo_feed",
     "resumen_cobertura",
     "ESTADOS_NOTICIA_ITEM",
+    # Clustering de historias (Ola B).
+    "upsert_noticia_cluster",
+    "listar_noticia_clusters",
+    "obtener_noticia_cluster",
+    "actualizar_noticia_cluster",
+    "clusters_recientes",
+    "items_de_cluster",
+    "items_sin_cluster",
+    "asignar_cluster_item",
+    "marcar_items_cluster_usados",
+    "ESTADOS_NOTICIA_CLUSTER",
 ]
 
 
@@ -1445,6 +1456,40 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_marca_capturado ON noticias_items (marca, capturado_en)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_categoria ON noticias_items (categoria)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_estado ON noticias_items (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_cluster ON noticias_items (cluster_id)",
+    # HISTORIAS (Ola B): una fila por cluster = la misma noticia contada por varias fuentes y
+    # en el tiempo (dedup + corroboración + score). `clave` es la clave de cluster del título
+    # representativo (url canónica o hash); `n_fuentes` es la corroboración (fuentes distintas);
+    # `senal` agrega la viralidad; `breaking` = muchas fuentes en poco tiempo; `score` ranking.
+    # `noticias_items.cluster_id` apunta aquí. Tabla NUEVA: `CREATE TABLE IF NOT EXISTS` basta.
+    """
+    CREATE TABLE IF NOT EXISTS noticias_clusters (
+        id            TEXT PRIMARY KEY,
+        titulo        TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        marca         TEXT NOT NULL DEFAULT '',
+        categoria     TEXT NOT NULL DEFAULT '',
+        geo           TEXT NOT NULL DEFAULT '',
+        clave         TEXT NOT NULL DEFAULT '',
+        n_items       INTEGER NOT NULL DEFAULT 0,
+        n_fuentes     INTEGER NOT NULL DEFAULT 0,
+        idiomas       TEXT NOT NULL DEFAULT '[]',
+        senal         INTEGER NOT NULL DEFAULT 0,
+        score         REAL NOT NULL DEFAULT 0,
+        breaking      INTEGER NOT NULL DEFAULT 0,
+        primer_visto  TEXT NOT NULL DEFAULT '',
+        ultimo_visto  TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'nuevo',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_marca_score ON noticias_clusters (marca, score)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_categoria ON noticias_clusters (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_ultimo ON noticias_clusters (ultimo_visto)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_estado ON noticias_clusters (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_clave ON noticias_clusters (clave)",
     # Sugerencias editoriales GENERADAS por el job diario a partir de las noticias importantes:
     # propuestas de cambio a la ficha editorial de una plataforma (`tipo='editorial'`) o a sus
     # limites (`tipo='limite'`). PROPUESTAS, no aplicadas: el equipo revisa y decide (estado
@@ -6738,6 +6783,294 @@ def resumen_cobertura() -> dict[str, Any]:
         "items_24h_por_categoria": items_24h_por_categoria,
         "ultimo_sondeo": (fila_ultimo["u"] if fila_ultimo is not None else "") or "",
     }
+
+
+# --- Clustering de HISTORIAS (Ola B): noticias_clusters -------------------- #
+# Una historia = la misma noticia contada por varias fuentes y en el tiempo. El daemon de
+# ingesta asigna `cluster_id` a los items recién insertados y `upsert`ea el cluster recalculado.
+ESTADOS_NOTICIA_CLUSTER: tuple[str, ...] = ("nuevo", "usado", "descartado")
+
+_COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
+    "id",
+    "titulo",
+    "resumen",
+    "marca",
+    "categoria",
+    "geo",
+    "clave",
+    "n_items",
+    "n_fuentes",
+    "idiomas",
+    "senal",
+    "score",
+    "breaking",
+    "primer_visto",
+    "ultimo_visto",
+    "estado",
+    "contenido_id",
+    "creado",
+    "actualizado",
+)
+_SELECT_NOTICIA_CLUSTER = f"SELECT {', '.join(_COLS_NOTICIA_CLUSTER)} FROM noticias_clusters"
+
+
+def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
+    """Fila de `noticias_clusters` -> dict publico (snake_case; `idiomas` deserializado)."""
+    try:
+        idiomas = json.loads(fila["idiomas"] or "[]")
+        if not isinstance(idiomas, list):
+            idiomas = []
+    except (ValueError, TypeError):
+        idiomas = []
+    return {
+        "id": fila["id"],
+        "titulo": fila["titulo"] or "",
+        "resumen": fila["resumen"] or "",
+        "marca": fila["marca"] or "",
+        "categoria": fila["categoria"] or "",
+        "geo": fila["geo"] or "",
+        "clave": fila["clave"] or "",
+        "n_items": int(fila["n_items"] or 0),
+        "n_fuentes": int(fila["n_fuentes"] or 0),
+        "idiomas": idiomas,
+        "senal": int(fila["senal"] or 0),
+        "score": float(fila["score"] or 0.0),
+        "breaking": int(fila["breaking"] or 0),
+        "primer_visto": fila["primer_visto"] or "",
+        "ultimo_visto": fila["ultimo_visto"] or "",
+        "estado": fila["estado"] or "nuevo",
+        "contenido_id": fila["contenido_id"] or "",
+        "creado": fila["creado"] or "",
+        "actualizado": fila["actualizado"] or "",
+    }
+
+
+def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
+    """Crea o actualiza un cluster por `id` (idempotente). Devuelve el cluster persistido.
+
+    Si falta `id`, lo genera. `idiomas` se serializa a JSON. `creado` se fija solo en el alta;
+    `actualizado` siempre se sella al instante actual. Los agregados (`n_items`/`n_fuentes`/
+    `senal`/`score`/`breaking`/`titulo`/...) los calcula el dominio (`clustering`) y aquí solo
+    se persisten. `estado`/`contenido_id` NO se pisan en un upsert salvo que vengan en el dict.
+    """
+    ahora = datetime.now(UTC).isoformat()
+    cid = (cluster.get("id") or "").strip() or uuid.uuid4().hex[:12]
+    idiomas = cluster.get("idiomas") or []
+    if not isinstance(idiomas, list):
+        idiomas = []
+    fila = {
+        "id": cid,
+        "titulo": (cluster.get("titulo") or "")[:300],
+        "resumen": (cluster.get("resumen") or "")[:2000],
+        "marca": cluster.get("marca") or "",
+        "categoria": cluster.get("categoria") or "",
+        "geo": cluster.get("geo") or "",
+        "clave": cluster.get("clave") or "",
+        "n_items": int(cluster.get("n_items") or 0),
+        "n_fuentes": int(cluster.get("n_fuentes") or 0),
+        "idiomas": json.dumps(idiomas, ensure_ascii=False),
+        "senal": int(cluster.get("senal") or 0),
+        "score": float(cluster.get("score") or 0.0),
+        "breaking": int(cluster.get("breaking") or 0),
+        "primer_visto": cluster.get("primer_visto") or "",
+        "ultimo_visto": cluster.get("ultimo_visto") or "",
+        "estado": cluster.get("estado") or "nuevo",
+        "contenido_id": cluster.get("contenido_id") or "",
+        "creado": cluster.get("creado") or ahora,
+        "actualizado": ahora,
+    }
+    # En conflicto por id, actualiza todo MENOS `id`/`creado` (y conserva estado/contenido_id
+    # si el upsert no los trae distintos: el daemon los manda iguales, la API los cambia aparte).
+    actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in ("id", "creado")]
+    set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
+    marcadores = ", ".join("?" for _ in _COLS_NOTICIA_CLUSTER)
+    con = _conectar()
+    try:
+        con.execute(
+            f"INSERT INTO noticias_clusters ({', '.join(_COLS_NOTICIA_CLUSTER)}) "
+            f"VALUES ({marcadores}) "
+            f"ON CONFLICT (id) DO UPDATE SET {set_clause}",  # noqa: S608 -- columnas de allowlist
+            tuple(fila[c] for c in _COLS_NOTICIA_CLUSTER),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_noticia_cluster(cid) or _fila_a_noticia_cluster(fila)
+
+
+def listar_noticia_clusters(
+    *,
+    marca: str | None = None,
+    categoria: str | None = None,
+    desde: str | None = None,
+    estado: str | None = None,
+    limite: int = 50,
+    desplazamiento: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """Historias filtrables, MÁS RELEVANTES primero (`score` desc) + total.
+
+    Filtros: `marca` ('' / None = todas), `categoria`, `desde` (ISO; `ultimo_visto >= desde`),
+    `estado`. Orden `score DESC, ultimo_visto DESC`. Devuelve `(clusters, total)`.
+    """
+    condiciones: list[str] = []
+    params: list[Any] = []
+    if marca:
+        condiciones.append("marca = ?")
+        params.append(marca)
+    if categoria:
+        condiciones.append("categoria = ?")
+        params.append(categoria)
+    if desde:
+        condiciones.append("ultimo_visto >= ?")
+        params.append(desde)
+    if estado:
+        condiciones.append("estado = ?")
+        params.append(estado)
+    where = (" WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    sql = (
+        f"{_SELECT_NOTICIA_CLUSTER}{where} "
+        "ORDER BY score DESC, ultimo_visto DESC, id DESC LIMIT ? OFFSET ?"
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- condiciones de allowlist; valores parametrizados
+            sql, (*params, max(1, int(limite)), max(0, int(desplazamiento)))
+        ).fetchall()
+        fila_total = con.execute(  # noqa: S608 -- idem
+            f"SELECT COUNT(*) AS n FROM noticias_clusters{where}", tuple(params)
+        ).fetchone()
+    finally:
+        con.close()
+    total = int(fila_total["n"]) if fila_total is not None else 0
+    return [_fila_a_noticia_cluster(f) for f in filas], total
+
+
+def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
+    """Una historia por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE id = ?", (cluster_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_noticia_cluster(fila) if fila is not None else None
+
+
+def actualizar_noticia_cluster(
+    cluster_id: str,
+    *,
+    estado: str | None = None,
+    contenido_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Edita `estado` / `contenido_id` de una historia (None si no existe)."""
+    cambios: dict[str, Any] = {}
+    if estado is not None:
+        cambios["estado"] = estado
+    if contenido_id is not None:
+        cambios["contenido_id"] = contenido_id
+    if not cambios:
+        return obtener_noticia_cluster(cluster_id)
+    cambios["actualizado"] = datetime.now(UTC).isoformat()
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), cluster_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_clusters SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_noticia_cluster(cluster_id)
+
+
+def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[str, Any]]:
+    """Clusters cuya `ultimo_visto` cae dentro de la ventana reciente (para asignación).
+
+    El daemon de ingesta carga estos para decidir a cuál unir un item nuevo (clustering
+    incremental ACOTADO por la ventana: nunca re-cluster el archivo entero). Excluye los
+    `descartado` (no se reabren). `marca` opcional acota a una marca. Orden `ultimo_visto` desc.
+    """
+    corte = (datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h)))).isoformat()
+    condiciones = ["ultimo_visto >= ?", "estado <> 'descartado'"]
+    params: list[Any] = [corte]
+    if marca:
+        condiciones.append("marca = ?")
+        params.append(marca)
+    where = " WHERE " + " AND ".join(condiciones)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- condiciones de allowlist; valores parametrizados
+            f"{_SELECT_NOTICIA_CLUSTER}{where} ORDER BY ultimo_visto DESC",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_cluster(f) for f in filas]
+
+
+def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
+    """Items de archivo de una historia, MÁS RECIENTES primero (`capturado_en` desc)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_NOTICIA_ITEM} WHERE cluster_id = ? "
+            "ORDER BY capturado_en DESC, creado DESC, id DESC LIMIT ?",
+            (cluster_id, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_item(f) for f in filas]
+
+
+def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
+    """Items de archivo recientes SIN cluster asignado (para el paso de clustering del daemon).
+
+    Filtra `cluster_id = ''` y `capturado_en >= desde` (ventana reciente: clustering acotado,
+    nunca el archivo entero). MÁS ANTIGUOS primero, para agrupar en orden cronológico (el
+    primero de una historia funda el cluster; los siguientes se unen). `limite` acota el trabajo.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_NOTICIA_ITEM} WHERE cluster_id = '' AND capturado_en >= ? "
+            "ORDER BY capturado_en ASC, creado ASC, id ASC LIMIT ?",
+            (desde, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_item(f) for f in filas]
+
+
+def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
+    """Fija `noticias_items.cluster_id` de un item (best-effort, una escritura)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_items SET cluster_id = ? WHERE id = ?",
+            (cluster_id, item_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
+    """Marca TODOS los items de un cluster como `usado` + enlaza el `contenido_id` (una escritura)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_items SET estado = 'usado', contenido_id = ? "
+            "WHERE cluster_id = ? AND estado <> 'descartado'",
+            (contenido_id, cluster_id),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 # --- Hub GENERICO de fuentes (item G) -------------------------------------- #

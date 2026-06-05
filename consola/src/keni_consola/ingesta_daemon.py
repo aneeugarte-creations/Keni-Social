@@ -30,16 +30,22 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from . import config, daemon_util, db, repos
-from .dominio import http_feed, ingesta
+from . import config, daemon_util, db, relevancia_marca, repos
+from .dominio import clustering, http_feed, ingesta
 
 _log = logging.getLogger("keni_consola.ingesta_daemon")
 
 # Tick corto: apagar aplica en <= esto y un feed vencido se recoge pronto.
 _TICK_SEG = 30.0
+
+# Tope de items a CLUSTERIZAR por barrido: el clustering es best-effort y ACOTADO. Si un
+# barrido inserta más, el resto queda sin cluster y se recoge en el siguiente tick (siguen
+# en la ventana). Evita un barrido caro tras un arranque en frío con miles de items pendientes.
+_CLUSTER_BATCH = 500
 
 
 def _intervalo_feed(feed: dict[str, Any]) -> int:
@@ -98,6 +104,79 @@ def _sondear_feed(
     """
     items, salud = ingesta.items_de_feed(feed, max_items=max_items)
     return feed, items, salud
+
+
+def paso_clustering() -> dict[str, Any]:
+    """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
+
+    Incremental: NO re-cluster el archivo entero. Carga (1) los clusters cuya `ultimo_visto`
+    está en la ventana (`KENI_CLUSTER_VENTANA_H`) y (2) hasta `_CLUSTER_BATCH` items recientes
+    sin `cluster_id`, en orden cronológico. Para cada item: lo une al cluster reciente que casa
+    (misma url canónica o título fuzzy ≥ `KENI_CLUSTER_UMBRAL`) o crea uno nuevo. Al final,
+    recalcula y `upsert`ea SOLO los clusters tocados (puntuándolos con su vocabulario de marca).
+
+    Devuelve `{items, clusters_nuevos, clusters_tocados}`. Un fallo de un item se loguea y no
+    aborta el paso. PURA la decisión (`clustering.asignar`); aquí solo orquesta I/O.
+    """
+    ventana_h = config.cluster_ventana_h()
+    umbral = config.cluster_umbral()
+    breaking_fuentes = config.cluster_breaking_fuentes()
+    breaking_ventana_h = config.cluster_breaking_ventana_h()
+
+    ahora = datetime.now(UTC)
+    desde = (ahora - timedelta(hours=ventana_h)).isoformat()
+    pendientes = repos.items_sin_cluster(desde, _CLUSTER_BATCH)
+    if not pendientes:
+        return {"items": 0, "clusters_nuevos": 0, "clusters_tocados": 0}
+
+    # Índice de trabajo de los clusters de la ventana (vivo durante el paso, para que items del
+    # MISMO barrido se unan entre sí sin re-consultar la BD). id -> dict-resumen del cluster.
+    recientes = repos.clusters_recientes(ventana_h)
+    indice: dict[str, dict[str, Any]] = {c["id"]: c for c in recientes}
+    tocados: set[str] = set()
+    nuevos = 0
+
+    for item in pendientes:
+        try:
+            destino = clustering.asignar(item, list(indice.values()), umbral=umbral)
+            if destino is None:
+                # Cluster nuevo: lo funda este item (un cluster en blanco con su identidad).
+                destino = uuid.uuid4().hex[:12]
+                indice[destino] = {
+                    "id": destino,
+                    "titulo": item.get("titulo") or "",
+                    "clave": clustering.clave_cluster(item),
+                    "estado": "nuevo",
+                    "contenido_id": "",
+                    "creado": "",
+                }
+                nuevos += 1
+            repos.asignar_cluster_item(item["id"], destino)
+            tocados.add(destino)
+        except Exception:  # noqa: BLE001 -- un item problemático no aborta el paso
+            _log.exception("ingesta_daemon: fallo al clusterizar el item %s.", item.get("id"))
+
+    # Recalcula + puntúa SOLO los clusters tocados, leyendo sus items ya persistidos.
+    for cid in tocados:
+        try:
+            base = indice.get(cid) or repos.obtener_noticia_cluster(cid) or {"id": cid}
+            items_cluster = repos.items_de_cluster(cid, limite=500)
+            if not items_cluster:
+                continue
+            recalc = clustering.recalcular(
+                base,
+                items_cluster,
+                breaking_fuentes=breaking_fuentes,
+                breaking_ventana_h=breaking_ventana_h,
+            )
+            palabras = relevancia_marca.palabras_de_marca(recalc.get("marca") or None)
+            score, _razon = clustering.puntuar(recalc, palabras_marca=palabras, ahora=ahora)
+            recalc["score"] = score
+            repos.upsert_noticia_cluster(recalc)
+        except Exception:  # noqa: BLE001 -- recalcular un cluster no aborta el paso
+            _log.exception("ingesta_daemon: fallo al recalcular el cluster %s.", cid)
+
+    return {"items": len(pendientes), "clusters_nuevos": nuevos, "clusters_tocados": len(tocados)}
 
 
 def ejecutar_barrido() -> dict[str, Any]:
@@ -161,11 +240,27 @@ def ejecutar_barrido() -> dict[str, Any]:
                     "ingesta_daemon: fallo al registrar el sondeo de feed %s.", feed.get("id")
                 )
 
+        # Paso de CLUSTERING (Ola B): agrupa en historias los items recién insertados (y
+        # cualquier reciente sin cluster), recalcula y puntúa. Best-effort: un fallo del paso
+        # se loguea y NO invalida el barrido de ingesta (que ya persistió los artículos).
+        cluster_resumen: dict[str, Any] = {"items": 0, "clusters_nuevos": 0, "clusters_tocados": 0}
+        try:
+            cluster_resumen = paso_clustering()
+        except Exception:  # noqa: BLE001 -- el clustering es aditivo; nunca tumba la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de clustering.")
+
         _log.info(
-            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s), %d error(es).",
+            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s), %d error(es); "
+            "clustering: %d item(s), %d historia(s) nueva(s).",
             len(feeds), items_nuevos, errores,
+            cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
         )
-        return {"feeds": len(feeds), "items_nuevos": items_nuevos, "errores": errores}
+        return {
+            "feeds": len(feeds),
+            "items_nuevos": items_nuevos,
+            "errores": errores,
+            "clustering": cluster_resumen,
+        }
 
 
 def iniciar_ingesta() -> threading.Thread:
