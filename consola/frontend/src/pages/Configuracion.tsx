@@ -1306,6 +1306,55 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
               );
             }
 
+            // Publicación: el mega-maestro del paso final (postea de verdad), en su BLOQUE PROPIO
+            // destacado (acento ámbar) por ser el más peligroso. Mismo patrón maestro+excepción:
+            // el maestro autoriza el posteo real global; debajo, las excepciones por marca lo
+            // restan (apagan una marca -> dry-run). El grupo `publicacion_marca` se pinta AQUÍ.
+            if (grupo.id === "publicacion") {
+              const maestroPub = grupo.ajustes[0];
+              const maestroPubOn = Boolean(maestroPub?.valor);
+              const exMarca = grupos.find((g) => g.id === "publicacion_marca")?.ajustes ?? [];
+              return (
+                <div
+                  key={grupo.id}
+                  className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"
+                >
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                      {grupo.titulo} · publica de verdad
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      El maestro autoriza el posteo <strong>REAL</strong> a Metricool para todas las
+                      marcas. Con él encendido, apaga marcas concretas abajo para dejarlas en
+                      dry-run.
+                    </p>
+                  </div>
+                  <div>{filas}</div>
+                  {exMarca.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Excepciones por marca
+                      </p>
+                      <div>
+                        {exMarca.map((a) => (
+                          <FilaAjuste
+                            key={a.clave}
+                            ajuste={a}
+                            onGuardar={onGuardar}
+                            guardando={guardar.isPending}
+                            bloqueado={!maestroPubOn}
+                            notaBloqueo="maestro apagado"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            // Las excepciones de publicación se pintan dentro del bloque «publicacion» de arriba.
+            if (grupo.id === "publicacion_marca") return null;
+
             // Automatismos generales: barridos del sistema; van en un colapsible para no confundir
             // con los controles de auto-producción de arriba.
             if (grupo.id === "automatismos_generales") {

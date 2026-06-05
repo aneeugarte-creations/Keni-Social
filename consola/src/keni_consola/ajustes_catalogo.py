@@ -33,6 +33,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
     ("automatizacion_marca", "Excepciones por marca"),
     ("publicacion", "Publicación"),
+    ("publicacion_marca", "Publicación · excepciones por marca"),
     ("automatismos_generales", "Automatismos generales"),
     ("tuning", "Ajustes finos"),
 )
@@ -97,6 +98,25 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 )
             )
     return salida
+
+
+def _publicacion_por_marca() -> list[Ajuste]:
+    """Excepción de PUBLICACIÓN REAL por marca (clave `KENI_PUBLICAR_REAL::marca`). Mismo patrón
+    que las etapas: con el maestro encendido, apagar una marca la deja en dry-run mientras el
+    resto publica de verdad. Sin override, la marca sigue al maestro. Se generan desde el catálogo
+    de marcas, así que añadir una marca añade su excepción sin tocar código."""
+    return [
+        Ajuste(
+            clave=config.clave_por_marca(config.ENV_PUBLICAR_REAL, mid),
+            tipo="bool",
+            etiqueta=nombre,
+            ayuda=f"Si la apagas, «{nombre}» se queda en dry-run aunque la publicación real esté "
+            "activa; sin tocarla, sigue al maestro.",
+            grupo="publicacion_marca",
+            defecto=config.publicar_real(),
+        )
+        for mid, nombre in marcas.opciones()
+    ]
 
 
 @dataclass(frozen=True)
@@ -339,7 +359,12 @@ def _construir_catalogo() -> list[Ajuste]:
 def catalogo() -> list[Ajuste]:
     """Lista completa de ajustes editables (la fuente de verdad): maestros de etapa, automatismos
     generales + publicación + tuning, y las excepciones por marca."""
-    return _maestros_etapa() + _construir_catalogo() + _ajustes_por_marca()
+    return (
+        _maestros_etapa()
+        + _construir_catalogo()
+        + _ajustes_por_marca()
+        + _publicacion_por_marca()
+    )
 
 
 def por_clave(clave: str) -> Ajuste | None:

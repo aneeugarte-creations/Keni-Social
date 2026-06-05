@@ -949,6 +949,18 @@ def publicar_real() -> bool:
     return _crudo(ENV_PUBLICAR_REAL).lower() in _VERDADEROS
 
 
+def publicar_real_para(marca: str) -> bool:
+    """True si las piezas de `marca` deben publicarse DE VERDAD.
+
+    Mismo patrón maestro+excepción que las etapas de auto-producción: el MAESTRO global
+    `KENI_PUBLICAR_REAL` debe estar ON y la marca NO debe estar EXCLUIDA (override falsy por
+    marca, `KENI_PUBLICAR_REAL::marca`). Con el maestro OFF, todas van a dry-run; con el maestro
+    ON, una marca excluida sigue en dry-run mientras el resto publica. `marca` vacía sigue al
+    maestro (sin override no está excluida).
+    """
+    return publicar_real() and not marca_apagada(ENV_PUBLICAR_REAL, marca)
+
+
 def auto_preaprobacion() -> bool:
     """True si la pre-aprobacion de piezas de bajo riesgo esta activa (`KENI_AUTO_PREAPROBACION`).
 

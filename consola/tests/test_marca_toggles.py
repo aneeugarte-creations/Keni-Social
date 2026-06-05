@@ -40,7 +40,30 @@ def test_catalogo_expone_toggles_por_marca():
     assert config.clave_por_marca(config.ENV_PIPELINE, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_AUTO_AVANCE, "claro-sports") in claves
     assert config.clave_por_marca(config.ENV_AUTOGEN_ARTE, "unotv") in claves
+    # Las etapas de auto-producción van en `automatizacion_marca`; la publicación, en su propio
+    # grupo `publicacion_marca`. Todos los toggles por marca son booleanos.
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
     assert por_marca and all(
-        a.tipo == "bool" and a.grupo == "automatizacion_marca" for a in por_marca
+        a.tipo == "bool" and a.grupo in {"automatizacion_marca", "publicacion_marca"}
+        for a in por_marca
     )
+
+
+def test_catalogo_expone_publicacion_por_marca():
+    claves = {a.clave for a in ajustes_catalogo.catalogo()}
+    assert config.clave_por_marca(config.ENV_PUBLICAR_REAL, "fundacion") in claves
+    pub_marca = [a for a in ajustes_catalogo.catalogo() if a.grupo == "publicacion_marca"]
+    assert pub_marca and all(config.ENV_PUBLICAR_REAL in a.clave for a in pub_marca)
+
+
+def test_publicar_real_para_maestro_y_excepcion(monkeypatch):
+    # Maestro OFF: ninguna marca publica de verdad.
+    _store(monkeypatch, {})
+    monkeypatch.delenv(config.ENV_PUBLICAR_REAL, raising=False)
+    assert config.publicar_real_para("claro-sports") is False
+
+    # Maestro ON: publican todas salvo las excluidas con override falsy por marca.
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PUBLICAR_REAL, "fundacion"): "0"})
+    monkeypatch.setenv(config.ENV_PUBLICAR_REAL, "1")
+    assert config.publicar_real_para("claro-sports") is True   # sin override: sigue al maestro
+    assert config.publicar_real_para("fundacion") is False     # excluida explícitamente

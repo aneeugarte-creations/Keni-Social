@@ -262,17 +262,18 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         (creds faltantes, fallo de red, red no soportada), se loguea y la pieza
         SIGUE en `programado` con `preparado_en` estampado (no rompe el barrido).
     """
-    publicar_real_flag = config.publicar_real()
+    # Gate maestro + excepción por marca: el maestro global debe estar ON y la marca NO excluida.
+    marca_id = pub.get("marca") or ""
+    publicar_real_flag = config.publicar_real_para(marca_id)
 
     campos_base: dict[str, Any] = {"preparado_en": ahora.isoformat(timespec="seconds")}
 
     if not publicar_real_flag:
-        # DRY-RUN: comportamiento original intacto.
+        # DRY-RUN (maestro OFF o marca excluida): comportamiento original intacto.
         return repos.actualizar_publicacion(pub["id"], campos_base)
 
     # --- camino REAL: intentar entregar a Metricool ---------------------------
     pub_id = pub["id"]
-    marca_id = pub.get("marca") or ""
 
     creds = _creds_metricool(marca_id)
     if not creds:
@@ -337,8 +338,9 @@ def programar_pieza_metricool(
         {ok, dry_run, motivo?, redes, cuerpo?, id_post?, estados?}
     """
     ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
-    dry_run = not config.publicar_real()
     marca_id = pub.get("marca") or ""
+    # Mismo gate que el barrido: maestro global + excepción por marca (marca excluida -> dry-run).
+    dry_run = not config.publicar_real_para(marca_id)
 
     # GUARDA DE RE-PUBLICACION (solo camino REAL): el barrido automatico evita el doble envio
     # via `preparado_en` (claim atomico), pero el boton manual no pasaba por ahi. Si la pieza
