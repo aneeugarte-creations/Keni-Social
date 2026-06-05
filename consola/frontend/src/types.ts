@@ -3267,6 +3267,18 @@ export interface FiltrosPublicaciones {
   limite?: string;
   /** Paginacion offset-based (#121): offset; ausente = 0. */
   desplazamiento?: string;
+  /**
+   * Paginacion KEYSET para el feed (scroll infinito): clave `"<creado>|<id>"` de la última
+   * fila vista. Devuelve solo las piezas posteriores en el orden `creado DESC`. La respuesta
+   * trae `paginacion.cursor_siguiente` para encadenar; ausente = primera página/desde el inicio.
+   */
+  cursor?: string;
+  /**
+   * Activa el MODO FEED (keyset/scroll infinito) en la PRIMERA página, que llega sin `cursor`:
+   * acota a un tamaño de página y devuelve `paginacion.cursor_siguiente`. Sin esto (y sin
+   * `limite`), el endpoint devuelve el conjunto completo (modo retrocompatible). `"1"` para activar.
+   */
+  feed?: string;
   /** Permite pasarse a `query()` (Record<string, string | undefined>). */
   [clave: string]: string | undefined;
 }

@@ -26,7 +26,9 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, permisos, redes, repos
-from .._http_json import envoltura_paginacion, leer_json, paginacion_query
+import os
+
+from .._http_json import cursor_query, envoltura_paginacion, leer_json, paginacion_query
 from ..dominio import cadencia as dom_cadencia
 from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
@@ -152,14 +154,34 @@ def _parsear_bool_query(valor: str | None) -> bool | None:
     return None
 
 
+# Tamaño de página por defecto del FEED (scroll infinito) cuando se pagina por keyset
+# (`?cursor=`) sin `?limite=` explícito. Pequeño para que la primera carga sea instantánea
+# y se vayan pidiendo más al hacer scroll. Configurable por entorno (sin tocar config.py).
+_FEED_PAGINA_DEFECTO = 20
+
+
+def _feed_pagina_defecto() -> int:
+    """Tamaño de página por defecto del keyset (env `KENI_FEED_PAGINA`, fallback 20)."""
+    try:
+        n = int(os.environ.get("KENI_FEED_PAGINA", "") or _FEED_PAGINA_DEFECTO)
+    except (TypeError, ValueError):
+        return _FEED_PAGINA_DEFECTO
+    return n if n >= 1 else _FEED_PAGINA_DEFECTO
+
+
 async def listar(request: Request) -> Response:
     """Listado de publicaciones con filtros `?marca=&red=&estado=&evergreen=` y paginacion.
 
     Envelope RETROCOMPATIBLE: mantiene la clave `publicaciones` (las paginas que solo
     desestructuran esa clave siguen funcionando) y AÑADE `paginacion:{total, limite,
-    desplazamiento}`. Sin `?limite=` se devuelve el conjunto completo (igual que antes),
-    con un `total` exacto. Con `?limite=&desplazamiento=` se pagina en el indice (solo
-    se leen los cuerpos YAML de la pagina).
+    desplazamiento}`. Tres modos de lectura:
+      - COMPLETO (sin `?limite=` ni `?cursor=`): conjunto completo, con `total` exacto.
+        Lo usan el calendario y la lista (esperan todas las filas).
+      - OFFSET (`?limite=&desplazamiento=`): ventana clásica en el índice.
+      - KEYSET/FEED (`?cursor=`): scroll infinito por `(creado, id)` en orden `creado DESC`.
+        Inmune a inserciones nuevas (no desplaza páginas). Tamaño de página = `?limite=` o
+        `KENI_FEED_PAGINA` (def 20). Devuelve `paginacion.cursor_siguiente` (clave de la
+        siguiente página) mientras haya más; se OMITE en la última página.
     """
     qp = request.query_params
     marca = qp.get("marca") or None
@@ -170,6 +192,14 @@ async def listar(request: Request) -> Response:
     linea = qp.get("linea") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
+    cursor = cursor_query(request)
+    # MODO FEED (keyset/scroll infinito): se activa con `?feed=1` o en cuanto llega un `?cursor=`
+    # (páginas 2+). La PRIMERA página del feed llega sin cursor (desde el inicio) pero igualmente
+    # debe acotarse y devolver `cursor_siguiente`; sin esta marca caería al modo COMPLETO y traería
+    # todo de golpe. Si no se pidió `?limite=`, usa el tamaño de página por defecto del feed.
+    modo_feed = cursor is not None or _parsear_bool_query(qp.get("feed")) is True
+    if modo_feed and limite is None:
+        limite = _feed_pagina_defecto()
     # FOCO POR DEFECTO (no es restriccion): si la sesion tiene marcas preferentes y NO se pidio
     # marca explicita, el feed se ENFOCA en SUS marcas para reducir la mezcla de contexto. Es
     # siempre sobreescribible: con `?marca=` (cualquiera) se ve esa marca. `listar_publicaciones`
@@ -186,7 +216,7 @@ async def listar(request: Request) -> Response:
             post_filtrar = preferentes  # >1 marca: filtro en memoria sobre la pagina
     pubs = repos.listar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        limite=limite, desplazamiento=desplazamiento,
+        limite=limite, desplazamiento=desplazamiento, cursor=cursor,
     )
     total = repos.contar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea
@@ -196,10 +226,20 @@ async def listar(request: Request) -> Response:
         # `total` queda como el total SIN el post-filtro (el repo no lo conoce); es el
         # numero de piezas de la pagina cruda. Aceptable para el piloto (universo pequeño);
         # un set-scoping exacto requeriria db.py.
+    # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
+    # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la
+    # última fila vista (`<creado>|<id>`). Si vino corta (o vacía), es la última página y omitimos
+    # el cursor. El modo OFFSET puro (sin `?feed=`/`?cursor=`) NO emite cursor (usa `total`).
+    cursor_siguiente: str | None = None
+    if modo_feed and limite is not None and len(pubs) >= limite and pubs:
+        ultima = pubs[-1]
+        cursor_siguiente = f"{ultima.get('fecha_creacion', '')}|{ultima.get('id', '')}"
     return JSONResponse(
         {
             "publicaciones": [_publicacion_a_dict(p) for p in pubs],
-            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+            "paginacion": envoltura_paginacion(
+                total, limite, desplazamiento, cursor_siguiente=cursor_siguiente
+            ),
         }
     )
 

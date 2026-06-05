@@ -24,8 +24,8 @@
  *    + comentarios (`Comentarios`).
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Minus, Plus, RefreshCw } from "lucide-react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -237,10 +237,12 @@ export default function FeedIdeacion() {
     }
   }, [lineasElegibles, linea]);
 
-  // UN solo fetch por (marca, red, línea): TODAS las etapas mezcladas y ordenadas por fecha
-  // (el backend devuelve `creado DESC` cuando no se filtra estado). Las pestañas filtran ese
-  // listado en memoria (por estado), sin más llamadas.
-  const feedQuery = useQuery({
+  // SCROLL INFINITO (feed social): se pide la PRIMERA página pequeña (instantánea) por keyset
+  // `creado DESC` y se van pidiendo más al hacer scroll (sentinel + IntersectionObserver). El
+  // backend devuelve `paginacion.cursor_siguiente` (clave `<creado>|<id>`) mientras haya más; al
+  // omitirlo, `getNextPageParam` devuelve undefined y `hasNextPage` se apaga. Las pestañas siguen
+  // filtrando en memoria por estado sobre TODAS las páginas ya cargadas (sin más llamadas).
+  const feedQuery = useInfiniteQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
       "feed-ideacion",
@@ -248,22 +250,51 @@ export default function FeedIdeacion() {
       red,
       linea,
     ],
-    queryFn: ({ signal }) =>
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) =>
       api.publicaciones(
         {
           marca: marcaActiva ?? undefined,
           red: red === FILTRO_TODOS ? undefined : red,
           linea: linea === FILTRO_TODOS ? undefined : linea,
+          // `feed=1` activa el keyset desde la 1ª página (que va sin cursor); `cursor` encadena
+          // las siguientes. Así la primera carga es pequeña/instantánea y trae `cursor_siguiente`.
+          feed: "1",
+          cursor: pageParam,
         },
         signal,
       ),
+    // El cursor de la siguiente página lo da el backend; ausente = última página (fin del scroll).
+    getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
   });
 
   // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).
+  // Aplanamos TODAS las páginas cargadas en un único listado que el resto de la UI consume igual.
   const piezas = React.useMemo(
-    () => feedQuery.data?.publicaciones ?? [],
+    () => (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones),
     [feedQuery.data],
   );
+
+  // Sentinel de scroll infinito: cuando el ancla del fondo entra en viewport, pide la siguiente
+  // página (con guardas de `hasNextPage`/`isFetchingNextPage` para no encadenar peticiones).
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
+  React.useEffect(() => {
+    const nodo = sentinelRef.current;
+    if (!nodo || !hasNextPage) return;
+    const obs = new IntersectionObserver(
+      (entradas) => {
+        if (entradas[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      // `rootMargin` adelanta la carga ~600px antes del fondo: el feed se siente continuo, sin
+      // que el usuario llegue a ver el final antes de que aparezca lo siguiente.
+      { rootMargin: "600px 0px" },
+    );
+    obs.observe(nodo);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Redes del catálogo: el feed enseña CADA idea en TODAS las redes; las que aún no tienen pieza
   // salen como hueco "No generado" (queremos todo el contenido en todas las redes). Si se filtra
@@ -296,12 +327,22 @@ export default function FeedIdeacion() {
   // y la resalta un instante. Forzamos la vista "todo" (que siempre la muestra, esté en el
   // estado que esté) y limpiamos el parámetro para no re-disparar en refetch/re-render. Si la
   // idea no está en el feed de la marca activa (otra marca, ya archivada…), solo limpiamos.
+  //
+  // SCROLL INFINITO: la idea puede vivir en una página AÚN no cargada. Mientras no esté entre
+  // las páginas cargadas y queden más por traer, vamos pidiendo la siguiente (sin limpiar el
+  // parámetro) hasta encontrarla o agotar el feed; recién entonces resolvemos (salto + resalte
+  // si existe, o solo limpiar si no apareció en todo el feed). No bloquea ni rompe el scroll.
   const [searchParams, setSearchParams] = useSearchParams();
   const piezaParam = searchParams.get("pieza");
   const [piezaDestacada, setPiezaDestacada] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!piezaParam || feedQuery.isLoading) return;
     const existe = grupos.some((g) => g.id === piezaParam);
+    // Aún no la vemos pero quedan páginas: trae la siguiente y reevalúa (sin limpiar el param).
+    if (!existe && hasNextPage) {
+      if (!isFetchingNextPage) void fetchNextPage();
+      return;
+    }
     setSearchParams(
       (prev) => {
         prev.delete("pieza");
@@ -322,7 +363,15 @@ export default function FeedIdeacion() {
       window.clearTimeout(tScroll);
       window.clearTimeout(tResalte);
     };
-  }, [piezaParam, feedQuery.isLoading, grupos, setSearchParams]);
+  }, [
+    piezaParam,
+    feedQuery.isLoading,
+    grupos,
+    setSearchParams,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  ]);
 
   // Las pestañas filtran por estado a nivel de IDEA: una idea aparece si ALGUNA de sus piezas
   // cumple la vista. El badge de cada pestaña cuenta IDEAS (no piezas sueltas).
@@ -530,6 +579,30 @@ export default function FeedIdeacion() {
               );
             })}
           </div>
+        )}
+
+        {/* SCROLL INFINITO: el sentinel (invisible) dispara la carga de la siguiente página al
+            acercarse al fondo. Solo cuando hay feed cargado y NO estamos en carga/error/vacío,
+            para no encadenar peticiones mientras se pinta la primera página. El spinner
+            "Cargando más…" da feedback sin saltos de layout (alto fijo). */}
+        {!feedQuery.isLoading && !feedQuery.isError && gruposVista.length > 0 && (
+          <>
+            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+            {isFetchingNextPage ? (
+              <div
+                className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando más…
+              </div>
+            ) : !hasNextPage ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                Has llegado al final del feed.
+              </p>
+            ) : null}
+          </>
         )}
       </FeedZoom>
     </div>

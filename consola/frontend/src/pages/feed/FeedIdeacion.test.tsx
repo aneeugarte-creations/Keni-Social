@@ -201,6 +201,77 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
   });
 
+  it("scroll infinito: la 1ª página trae cursor; al intersectar el sentinel pide la siguiente (con ?cursor=)", async () => {
+    // IntersectionObserver controlable: capturamos su callback para disparar la intersección a mano
+    // (jsdom no lo implementa). Cada instancia registra su callback en `disparar`.
+    let disparar: (() => void) | null = null;
+    class IOFalso {
+      cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+        disparar = () => this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    }
+    vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
+
+    const PUB2 = { ...PUBLICACION, id: "p2", contenido_id: "c2", contenido: "Segunda página" };
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          urls.push(ruta);
+          // Página 1 (sin cursor): trae cursor_siguiente. Página 2 (con cursor): última, sin cursor.
+          if (ruta.includes("cursor=")) {
+            return new Response(
+              JSON.stringify({ publicaciones: [PUB2], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
+              { status: 200 },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              publicaciones: [PUBLICACION],
+              paginacion: { total: 2, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    renderFeed();
+    // Primera página pintada.
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Dispara la intersección del sentinel -> debe pedir la página 2 con ?cursor= y pintarla.
+    await waitFor(() => expect(disparar).not.toBeNull());
+    disparar?.();
+    expect(await screen.findByText("Segunda página")).toBeInTheDocument();
+    expect(urls.some((u) => u.includes("cursor="))).toBe(true);
+  });
+
   it("matriz por idea: con varias redes, la idea muestra el post de la red generada y huecos 'No generado' en las que faltan", async () => {
     // Catálogo de 3 redes pero la idea solo tiene pieza en X: las otras 2 salen como hueco.
     vi.stubGlobal(

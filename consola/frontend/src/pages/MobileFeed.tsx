@@ -15,7 +15,12 @@
  * Esta ruta vive FUERA del `AppShell` (layout propio, sin sidebar); es acceso directo
  * por enlace, así que no se registra en el catálogo de apps.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   Loader2,
@@ -305,21 +310,47 @@ export default function MobileFeed() {
       ? catalogoMarcas.filter((m) => marcasUsuario.includes(m.id))
       : catalogoMarcas;
 
-  const feedQuery = useQuery({
+  // SCROLL INFINITO (feed tipo red social): primera página pequeña e instantánea por keyset
+  // `creado DESC`; se piden más al hacer scroll (sentinel + IntersectionObserver). El backend
+  // devuelve `paginacion.cursor_siguiente` mientras haya más; al omitirlo se apaga `hasNextPage`.
+  const feedQuery = useInfiniteQuery({
     queryKey: [...CLAVE_PUBLICACIONES, "feed", bandeja, marca],
-    queryFn: ({ signal }) =>
-      api.publicaciones({ estado: bandeja, marca: marcaParam(marca) }, signal),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) =>
+      api.publicaciones(
+        { estado: bandeja, marca: marcaParam(marca), feed: "1", cursor: pageParam },
+        signal,
+      ),
+    getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
   });
 
-  // Si el usuario tiene marcas asignadas y el filtro está en "todas", restringimos el
-  // listado a sus marcas en cliente (defensa extra al pre-filtro del selector).
+  // Aplana todas las páginas cargadas. Si el usuario tiene marcas asignadas y el filtro está en
+  // "todas", restringimos el listado a sus marcas en cliente (defensa extra al pre-filtro).
   const piezas = React.useMemo(() => {
-    const todas = feedQuery.data?.publicaciones ?? [];
+    const todas = (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones);
     if (marca === MARCA_TODAS && marcasUsuario.length > 0) {
       return todas.filter((p) => marcasUsuario.includes(p.marca));
     }
     return todas;
   }, [feedQuery.data, marca, marcasUsuario]);
+
+  // Sentinel del fondo del feed: al acercarse, pide la siguiente página (con guardas).
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
+  React.useEffect(() => {
+    const nodo = sentinelRef.current;
+    if (!nodo || !hasNextPage) return;
+    const obs = new IntersectionObserver(
+      (entradas) => {
+        if (entradas[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    obs.observe(nodo);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const refrescar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -394,14 +425,28 @@ export default function MobileFeed() {
             />
           </div>
         ) : (
-          piezas.map((p) => (
-            <TarjetaFeed
-              key={p.id}
-              publicacion={p}
-              bandeja={bandeja}
-              onComentar={setEditando}
-            />
-          ))
+          <>
+            {piezas.map((p) => (
+              <TarjetaFeed
+                key={p.id}
+                publicacion={p}
+                bandeja={bandeja}
+                onComentar={setEditando}
+              />
+            ))}
+            {/* SCROLL INFINITO: sentinel invisible + spinner "Cargando más…" al fondo. */}
+            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+            {isFetchingNextPage && (
+              <div
+                className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando más…
+              </div>
+            )}
+          </>
         )}
       </main>
 

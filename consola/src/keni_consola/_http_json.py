@@ -67,14 +67,44 @@ def paginacion_query(request: Request) -> tuple[int | None, int]:
     return limite, desplazamiento
 
 
-def envoltura_paginacion(total: int, limite: int | None, desplazamiento: int) -> dict[str, int]:
+def cursor_query(request: Request) -> tuple[str, str] | None:
+    """Lee `?cursor=<creado>|<id>` (keyset) y devuelve `(creado, id)` o None.
+
+    El cursor codifica la ULTIMA clave vista del listado ordenado por
+    `(creado DESC, id DESC)` como `"<creado>|<id>"`. Ausente, vacio o mal formado
+    (sin separador `|`, o con alguna mitad vacia) => None (sin paginar por keyset; el
+    handler cae al modo offset/completo de siempre). Tolerante por diseño: nunca lanza.
+    """
+    crudo = request.query_params.get("cursor")
+    if not crudo:
+        return None
+    creado, sep, ident = crudo.partition("|")
+    if not sep or not creado or not ident:
+        return None
+    return creado, ident
+
+
+def envoltura_paginacion(
+    total: int,
+    limite: int | None,
+    desplazamiento: int,
+    *,
+    cursor_siguiente: str | None = None,
+) -> dict[str, int | str]:
     """Construye el bloque `paginacion:{total, limite, desplazamiento}` del envelope.
 
     `limite` se reporta como el valor efectivo: si no se paginó (`None`), se reporta
     `total` (el cliente ve que la pagina abarca todo el conjunto).
+
+    `cursor_siguiente` (keyset): clave `"<creado>|<id>"` para pedir la SIGUIENTE pagina,
+    o None si no hay mas (ultima pagina) o no se pagina por keyset. Se OMITE de la
+    respuesta cuando es None (campo opcional aditivo; no afecta a los callers offset).
     """
-    return {
+    env: dict[str, int | str] = {
         "total": total,
         "limite": total if limite is None else limite,
         "desplazamiento": desplazamiento,
     }
+    if cursor_siguiente is not None:
+        env["cursor_siguiente"] = cursor_siguiente
+    return env

@@ -9704,13 +9704,36 @@ def listar_publicaciones(
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
+    cursor: tuple[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Publicaciones (más recientes primero) con filtros y paginación opcionales."""
+    """Publicaciones (más recientes primero) con filtros y paginación opcionales.
+
+    Orden estable `(c.creado DESC, cp.id DESC)` apto para scroll infinito. Dos modos
+    de paginar, mutuamente excluyentes (KEYSET tiene prioridad si se pasan ambos):
+      - OFFSET (`limite`/`desplazamiento`): ventana clásica; sirve al calendario/lista que
+        ya lo usaban. Sin `limite` se devuelve el conjunto COMPLETO (comportamiento previo).
+      - KEYSET (`cursor`): `cursor=(creado, id)` = última clave vista; devuelve solo las
+        filas ESTRICTAMENTE posteriores en el orden (más antiguas). Inmune a inserciones
+        nuevas al principio (no desplaza páginas), ideal para el feed social.
+    """
     extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea)
+    if cursor is not None:
+        # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
+        # con (creado, id) ESTRICTAMENTE menor que la última vista. Forma expandida (no
+        # row-value) para máxima portabilidad del motor.
+        cur_creado, cur_id = cursor
+        extra += " AND (c.creado < ? OR (c.creado = ? AND cp.id < ?))"
+        params = [*params, cur_creado, cur_creado, cur_id]
     sql = f"{_SELECT_PUBLICACION}{extra} ORDER BY c.creado DESC, cp.id DESC"
     if limite is not None:
-        sql += " LIMIT ? OFFSET ?"
-        params = [*params, limite, desplazamiento or 0]
+        if cursor is not None:
+            # Con keyset el offset no aplica (la posición la fija el cursor); solo acotamos el
+            # tamaño de página.
+            sql += " LIMIT ?"
+            params = [*params, limite]
+        else:
+            sql += " LIMIT ? OFFSET ?"
+            params = [*params, limite, desplazamiento or 0]
     con = _conectar()
     try:
         filas = con.execute(sql, tuple(params)).fetchall()

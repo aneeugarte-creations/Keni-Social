@@ -741,11 +741,16 @@ class Paginacion(TypedDict):
     Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
     clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
     pagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.
+
+    `cursor_siguiente` (KEYSET, feed de scroll infinito): clave `"<creado>|<id>"` para
+    pedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay
+    mas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).
     """
 
     total: int
     limite: int
     desplazamiento: int
+    cursor_siguiente: NotRequired[str]
 
 
 # --------------------------------------------------------------------------- #

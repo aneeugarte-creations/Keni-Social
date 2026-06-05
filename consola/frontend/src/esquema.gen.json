@@ -2098,9 +2098,12 @@
         },
         "desplazamiento": {
           "type": "integer"
+        },
+        "cursor_siguiente": {
+          "type": "string"
         }
       },
-      "description": "Envelope ADITIVO de paginacion (offset-based, #121).\n\nLo añaden los listados pesados (publicaciones/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.",
+      "description": "Envelope ADITIVO de paginacion (offset-based, #121).\n\nLo añaden los listados pesados (publicaciones/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.\n\n`cursor_siguiente` (KEYSET, feed de scroll infinito): clave `\"<creado>|<id>\"` para\npedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay\nmas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).",
       "required": [
         "total",
         "limite",

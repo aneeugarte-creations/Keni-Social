@@ -605,11 +605,16 @@ export interface CorrelacionSeguidores {
  * Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
  * clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
  * pagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.
+ *
+ * `cursor_siguiente` (KEYSET, feed de scroll infinito): clave `"<creado>|<id>"` para
+ * pedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay
+ * mas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).
  */
 export interface Paginacion {
   total: number;
   limite: number;
   desplazamiento: number;
+  cursor_siguiente?: string;
 }
 /**
  * Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).

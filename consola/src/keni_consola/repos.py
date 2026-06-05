@@ -220,6 +220,7 @@ def listar_publicaciones(
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
+    cursor: tuple[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     return db.listar_publicaciones(
         marca=marca,
@@ -229,6 +230,7 @@ def listar_publicaciones(
         linea=linea,
         limite=limite,
         desplazamiento=desplazamiento,
+        cursor=cursor,
     )
 
 
