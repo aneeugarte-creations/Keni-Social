@@ -196,8 +196,9 @@ async def sugerir(request: Request) -> Response:
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
         autor=autor,
-        # Sugerencia texto→texto sobre material NO confiable: veta la web (anti-exfiltración).
-        endurecer=gen_dom.ENDURECER_SIN_WEB,
+        # Hashtags = SALIDA ESTRUCTURADA (se parsea a `{hashtags:[..]}`; el usuario no ve la
+        # salida cruda): bajo riesgo de exfiltración por el canal de salida. No se veta la web
+        # por-callsite; queda la veta global `Bash Write Edit`.
     )
     return JSONResponse({"generacion": gen})
 

@@ -891,8 +891,10 @@ def lanzar_qa_fuente(
             marca=marca, titulo=titulo, autor=autor, contenido_id=tema_id,
         ),
         autor=autor,
-        # Criba QA del material de origen (texto NO confiable→veredicto): veta la web.
-        endurecer=gen_dom.ENDURECER_SIN_WEB,
+        # Criba QA de la FUENTE = VERIFICACIÓN con SALIDA ESTRUCTURADA (veredicto
+        # `no_verificado`/`problema` + hallazgos, parseados; el usuario no ve la salida cruda).
+        # Corroborar el material puede requerir LEER la fuente: NO se le veta la web. Queda la
+        # veta global `Bash Write Edit`.
     )
     registrar_etapa(
         ETAPA_QA,

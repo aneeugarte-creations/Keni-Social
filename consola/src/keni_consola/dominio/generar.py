@@ -38,17 +38,19 @@ TAG_CONTENIDO_USUARIO = "contenido_usuario"
 # SINK (`envolver_contenido_usuario`), así TODO llamante queda acotado aunque no recorte.
 MAX_TEXTO = 200_000
 
-# Endurecimiento por-job para los flujos de COPY (texto→texto que INGIEREN contenido NO
-# confiable: nota/ítem RSS/noticia/copy a revisar). El subproceso `claude -p` necesita
-# `CLAUDE_CODE_OAUTH_TOKEN` en su entorno (lo usa el CLI); si un prompt-injection en ese
-# contenido tuviera acceso a la RED (`WebFetch`/`WebSearch`), podría EXFILTRAR el token vía
-# una petición web. Ningún flujo de copy necesita la web (su entrada ya viaja en el prompt),
-# así que la VETAMOS por callsite. Se UNE a la veta global (`Bash Write Edit`) en el
-# constructor de argv (`generaciones._argv_claude`), nunca la reemplaza: el efecto es
-# global + `WebFetch`/`WebSearch`. NO vetamos `Read` (alguna skill puede leer contexto de
-# marca de `/data`; cerrar el EGRESO ya impide la exfiltración). Los flujos de INVESTIGACIÓN
-# (`brief-tendencias`/`termometro-mundial`) NO pasan esto: legítimamente usan la web.
-ENDURECER_SIN_WEB: dict[str, Any] = {"disallowed_tools": ["WebFetch", "WebSearch"]}
+# POLÍTICA DE RED (`WebFetch`/`WebSearch`) POR FLUJO — revisada (regla del dueño):
+# el eje de riesgo NO es "copy vs investigación", sino la forma de la SALIDA y quién controla
+# el prompt. Un flujo de SALIDA ESTRUCTURADA (la digiere el software: piezas, hallazgos,
+# veredicto, sugerencias; al usuario solo se le muestra el resultado FINAL renderizado) contiene
+# la exfiltración por el canal de salida aunque ingiera contenido no confiable: la salida CRUDA
+# del modelo nunca se expone literal. Solo sería ALTO riesgo un flujo donde el USUARIO controla
+# el prompt LIBREMENTE *y* la salida CRUDA se le devuelve VERBATIM. NINGÚN flujo de generación
+# de la consola cumple ese par (todos parsean la salida a artefactos estructurados), así que
+# NO se veta la web por-callsite: queda solo la veta GLOBAL `Bash Write Edit`
+# (`config.CLAUDE_DISALLOWED_TOOLS_DEF`), que SÍ aplica a todos. Los flujos de QA/verificación
+# (`qa-editorial`, `qa-fuente`, auto-QA) y de copy con auto-verificación legítimamente PUEDEN
+# leer una fuente para corroborar datos; no se les limita. Un operador puede endurecer la web
+# de forma global con `KENI_CLAUDE_DISALLOWED_TOOLS` si lo desea.
 
 
 def _aviso_contenido_usuario(tag: str) -> str:
@@ -308,6 +310,7 @@ def lanzar_copy(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
-        # Copy = texto→texto sobre material NO confiable: veta la web (anti-exfiltración).
-        endurecer=ENDURECER_SIN_WEB,
+        # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/veredicto; el usuario no ve la salida
+        # cruda) y la skill auto-verifica: puede necesitar la web para corroborar datos. No se
+        # veta la web por-callsite; queda la veta global `Bash Write Edit`.
     )

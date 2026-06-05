@@ -148,8 +148,9 @@ def lanzar_propuesta(
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
         autor=autor,
-        # Brainstorming texto→texto sobre material del usuario: veta la web (anti-exfiltración).
-        endurecer=generar.ENDURECER_SIN_WEB,
+        # Brainstorming = SALIDA ESTRUCTURADA (se parsea a filas `green_ideas`; el usuario no ve
+        # la salida cruda): bajo riesgo de exfiltración por el canal de salida. No se veta la web
+        # por-callsite; queda la veta global `Bash Write Edit`.
     )
 
 

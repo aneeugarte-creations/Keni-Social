@@ -160,8 +160,10 @@ async def revisar(request: Request) -> Response:
             plataforma_id=plataforma_id, contenido_id=contenido_id, copy_hash=copy_hash,
         ),
         autor=autor,
-        # QA = revisa un copy NO confiable (texto→informe): veta la web (anti-exfiltración).
-        endurecer=gen_dom.ENDURECER_SIN_WEB,
+        # QA editorial = VERIFICACIÓN de datos con SALIDA ESTRUCTURADA (se parsea a un informe
+        # 🟢/🟡/🔴 con hallazgos; el usuario no ve la salida cruda). Verificar un dato puede
+        # requerir LEER la fuente, así que NO se le veta la web. Queda la veta global `Bash Write
+        # Edit`.
     )
     return JSONResponse({"generacion": gen})
 

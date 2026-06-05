@@ -125,32 +125,44 @@ def test_argv_disallowed_tools_endurecible_por_env(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# argv de claude: veto de RED (WebFetch/WebSearch) en los flujos de COPY        #
+# Política de RED (WebFetch/WebSearch) por flujo — revisada (regla del dueño)   #
 # --------------------------------------------------------------------------- #
 #
-# Un flujo de COPY ingiere contenido NO confiable (nota / ítem RSS / noticia / copy a
-# revisar) y el subproceso `claude -p` lleva `CLAUDE_CODE_OAUTH_TOKEN` en su entorno. Para
-# cerrar la exfiltración del token vía web, los lanzadores de copy pasan
-# `generar.ENDURECER_SIN_WEB` como `endurecer`; el constructor de argv lo UNE (no reemplaza)
-# a la veta global (`Bash Write Edit`). Los flujos de INVESTIGACIÓN no pasan ese endurecer y
-# conservan la web. Estos tests baten la RUTA VIVA del worker (`_argv_claude(..., endurecer=)`).
+# El eje de riesgo NO es "copy vs investigación", sino la forma de la SALIDA: un flujo de
+# SALIDA ESTRUCTURADA (la digiere el software; al usuario solo se le muestra el resultado
+# FINAL renderizado) contiene la exfiltración por el canal de salida aunque ingiera material
+# no confiable. Sería ALTO riesgo solo un flujo donde el USUARIO controla el prompt LIBREMENTE
+# *y* la salida CRUDA se le devuelve VERBATIM; NINGÚN flujo de generación cumple ese par (todos
+# parsean la salida a artefactos). Por eso NINGÚN flujo veta la web por-callsite: queda solo la
+# veta GLOBAL `Bash Write Edit`. Los flujos de QA/verificación y el copy con auto-verificación
+# legítimamente PUEDEN leer una fuente para corroborar datos; no se les limita.
 
 
-def test_argv_copy_endurecer_sin_web_veta_web_ademas_de_lo_global(entorno, monkeypatch):
-    # COPY: el `endurecer` de copy debe RESULTAR en la veta global MÁS WebFetch/WebSearch
-    # (union, no reemplazo): no se debe perder Bash/Write/Edit al añadir el veto de red.
+def test_no_existe_endurecer_sin_web(entorno):
+    # La constante de veto de red por-callsite se RETIRÓ (era dead code tras relajar la
+    # política): ya no debe existir en el dominio de generación.
     from keni_consola.dominio import generar as gen_dom
 
+    assert not hasattr(gen_dom, "ENDURECER_SIN_WEB")
+
+
+def test_argv_un_endurecer_de_red_seguiria_uniendose_a_lo_global(entorno, monkeypatch):
+    # INVARIANTE del constructor de argv (no de un flujo): SI algún job pasara un `endurecer`
+    # con veto de red, debe UNIRSE (no reemplazar) a la veta global `Bash Write Edit`. Esto lo
+    # usa hoy el job READ-ONLY de importación de parrilla (fuera de este endurecimiento).
     monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
-    argv = generaciones._argv_claude("hola", endurecer=gen_dom.ENDURECER_SIN_WEB)
+    argv = generaciones._argv_claude(
+        "hola", endurecer={"disallowed_tools": ["WebFetch", "WebSearch"]}
+    )
     i = argv.index("--disallowed-tools")
     vetadas = set(argv[i + 1 :])
     assert {"Bash", "Write", "Edit", "WebFetch", "WebSearch"} <= vetadas
 
 
-def test_argv_investigacion_sin_endurecer_conserva_la_web(entorno, monkeypatch):
-    # INVESTIGACIÓN (brief-tendencias / termometro-mundial): NO pasa `endurecer`, así que la
-    # web sigue disponible (Bash/Write/Edit vetadas por defecto, Web NO).
+def test_argv_flujos_de_generacion_conservan_la_web(entorno, monkeypatch):
+    # Los flujos de generación (copy/QA/hashtags/green/sugerencias) NO pasan ya `endurecer`:
+    # comparten este constructor de argv SIN veto de red, así que la web sigue disponible
+    # (Bash/Write/Edit vetadas por defecto, Web NO).
     monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
     argv = generaciones._argv_claude("hola")
     i = argv.index("--disallowed-tools")
@@ -158,14 +170,6 @@ def test_argv_investigacion_sin_endurecer_conserva_la_web(entorno, monkeypatch):
     assert {"Bash", "Write", "Edit"} <= vetadas
     assert "WebFetch" not in vetadas
     assert "WebSearch" not in vetadas
-
-
-def test_endurecer_sin_web_solo_veta_red_no_lectura(entorno):
-    # El endurecer de copy veta SOLO la red (egreso); NO debe vetar `Read` (alguna skill puede
-    # leer contexto de marca de /data; cerrar el egreso ya impide la exfiltración).
-    from keni_consola.dominio import generar as gen_dom
-
-    assert gen_dom.ENDURECER_SIN_WEB["disallowed_tools"] == ["WebFetch", "WebSearch"]
 
 
 # --------------------------------------------------------------------------- #

@@ -213,8 +213,9 @@ def procesar_plataforma(plataforma: str, noticias: list[dict[str, Any]]) -> int:
         prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
-        # Convierte noticias NO confiables en propuestas (texto→texto): veta la web.
-        endurecer=generar.ENDURECER_SIN_WEB,
+        # Sugerencias = SALIDA ESTRUCTURADA (se parsea a filas `sugerencia_editorial`; el usuario
+        # no ve la salida cruda) y es un barrido interno (sin prompt controlado por el usuario):
+        # bajo riesgo. No se veta la web por-callsite; queda la veta global `Bash Write Edit`.
     )
     gen_final = _esperar_generacion(gen["id"])
     if gen_final is None or gen_final.get("estado") == generaciones.ESTADO_ERROR:
