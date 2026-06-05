@@ -759,6 +759,12 @@ export interface TemaRadar {
   /** `true` si viene de una fuente propia de la marca activa (curado: en su foco siempre). */
   curado?: boolean;
   enlaces: EnlaceRadar[];
+  /** Código de idioma del tema (p. ej. "en", "fr"). Opcional; ausente si es ES o no se detectó. */
+  idioma?: string;
+  /** `true` si el título/por_qué ya fueron traducidos al español por el backend. */
+  traducido?: boolean;
+  /** Título en el idioma original, antes de la traducción (solo si `traducido` es true). */
+  titulo_original?: string;
 }
 
 /** Estado HONESTO de una fuente del radar (disponible o no, con su motivo). */
@@ -1010,6 +1016,12 @@ export interface ItemParrilla {
   redes: string[];
   fuentes: string[];
   enlaces: EnlaceRadar[];
+  /** Código de idioma del ítem (p. ej. "en"). Opcional; ausente si es ES o no se detectó. */
+  idioma?: string;
+  /** `true` si el título/por_qué ya fueron traducidos al español por el backend. */
+  traducido?: boolean;
+  /** Título en el idioma original, antes de la traducción (solo si `traducido` es true). */
+  titulo_original?: string;
 }
 
 /** Respuesta de GET/POST /api/parrilla-dia: la parrilla editorial del día. */
@@ -2709,6 +2721,43 @@ export interface FiltrosReciclaje {
   red?: string;
   /** Permite pasarse a `query()` (Record<string, string | undefined>). */
   [clave: string]: string | undefined;
+}
+
+// --- Presets del catálogo de fuentes (Ola 4: Fuentes externas + idiomas) ---
+
+/**
+ * Un preset del catálogo curado de fuentes: RSS listo para activar con un clic.
+ * Corresponde al dict que devuelve `GET /api/fuentes/presets`.
+ */
+export interface Preset {
+  id: string;
+  nombre: string;
+  url: string;
+  /** Categoría del preset: "mx", "internacional", "deportes", "ciencia-tech", "gaming", "tendencias". */
+  categoria: string;
+  /** Marca sugerida para asignar el feed al activarlo (id canónico). */
+  marca_sugerida: string;
+  /** Línea editorial sugerida al activar. */
+  linea_sugerida: string;
+  /** Código de idioma del feed (p. ej. "en", "es", "fr"). */
+  idioma: string;
+  /** Región geográfica del feed (p. ej. "MX", "GLOBAL"). */
+  region: string;
+  descripcion: string;
+  /** `true` si ya hay una `fuentes_rss` activa con esta URL. */
+  activa: boolean;
+}
+
+/** Respuesta de GET /api/fuentes/presets. */
+export interface RespuestaPresets {
+  presets: Preset[];
+  categorias: string[];
+}
+
+/** Respuesta de POST /api/fuentes/presets/activar. */
+export interface RespuestaActivarPresets {
+  creadas: number;
+  fuentes: FuenteRss[];
 }
 
 // --- RSS (fuentes y elementos para Generar copy) ---

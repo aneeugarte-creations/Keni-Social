@@ -39,7 +39,7 @@ from starlette.routing import Route
 from .. import agencias, autogen_copy, marcas, redes, repos
 from .._http_json import leer_json
 from ..db import _TIPOS_FUENTE
-from ..dominio import extraccion_url
+from ..dominio import extraccion_url, fuentes_presets, http_feed
 from ..seguridad import autor_de_peticion
 
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}
@@ -313,10 +313,134 @@ async def aportar(request: Request) -> Response:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Catálogo de presets (Ola 4 — fuentes externas)                               #
+# --------------------------------------------------------------------------- #
+
+
+def _urls_activas() -> set[str]:
+    """Conjunto de URLs que ya tienen una fuente RSS dada de alta (para marcar `activa`)."""
+    fuentes = repos.listar_fuentes_rss()
+    return {str(f.get("url", "")).strip() for f in fuentes if f.get("url")}
+
+
+async def listar_presets_handler(request: Request) -> Response:
+    """`GET /api/fuentes/presets?categoria=` -> presets del catálogo con `activa: bool`.
+
+    `activa` es True si ya existe una `fuentes_rss` con esa URL exacta.
+    """
+    categoria = (request.query_params.get("categoria") or "").strip() or None
+    todos = fuentes_presets.listar_presets(categoria=categoria)
+    urls = _urls_activas()
+    for p in todos:
+        p["activa"] = p.get("url", "") in urls
+    return JSONResponse(
+        {
+            "presets": todos,
+            "categorias": fuentes_presets.categorias(),
+        }
+    )
+
+
+async def activar_presets_handler(request: Request) -> Response:
+    """`POST /api/fuentes/presets/activar` -> crea fuentes RSS para los presets elegidos.
+
+    Cuerpo: `{ids: ["preset-id", ...], marca?: ""}`.
+    - Para cada preset, valida la URL con el guard SSRF y crea una `fuentes_rss`.
+    - Idempotente por URL: si ya existe una fuente con esa URL, se omite (no duplica).
+    - Si no se pasa `marca`, usa `marca_sugerida` del preset. Igual con `linea_sugerida`.
+    - Devuelve `{creadas: n, fuentes: [...], omitidas: n}`.
+    """
+    datos = await leer_json(request)
+
+    ids_raw = datos.get("ids")
+    if not isinstance(ids_raw, list) or not ids_raw:
+        return JSONResponse({"error": "El campo 'ids' es obligatorio y debe ser una lista."}, status_code=400)
+    if not all(isinstance(i, str) for i in ids_raw):
+        return JSONResponse({"error": "Los ids de preset deben ser texto."}, status_code=400)
+
+    # Marca opcional: si se pasa, sobrescribe la marca_sugerida del preset.
+    marca_override = datos.get("marca")
+    if marca_override is not None:
+        if not isinstance(marca_override, str):
+            return JSONResponse({"error": "La marca debe ser texto."}, status_code=400)
+        marca_override = marca_override.strip()
+        if marca_override and marca_override not in _MARCAS_IDS:
+            return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    else:
+        marca_override = None  # usar marca_sugerida del preset
+
+    # URLs ya activas -> idempotencia.
+    urls_activas = _urls_activas()
+
+    creadas: list[dict[str, Any]] = []
+    omitidas = 0
+    errores: list[str] = []
+
+    for preset_id in ids_raw:
+        preset = fuentes_presets.obtener_preset(preset_id.strip())
+        if preset is None:
+            errores.append(f"Preset '{preset_id}' no existe en el catálogo.")
+            continue
+
+        url_preset = preset.get("url", "")
+
+        # Idempotente: ya existe una fuente con esta URL -> omitir.
+        if url_preset in urls_activas:
+            omitidas += 1
+            continue
+
+        # Guard SSRF antes de persistir.
+        url_limpia, err_url = http_feed.validar_url(url_preset)
+        if err_url is not None:
+            errores.append(f"Preset '{preset_id}': {err_url}")
+            continue
+
+        # Marca: override del body > marca_sugerida del preset > "" (compartida).
+        if marca_override is not None:
+            marca = marca_override
+        else:
+            m_sug = (preset.get("marca_sugerida") or "").strip()
+            marca = m_sug if m_sug in _MARCAS_IDS else ""
+
+        nombre = preset.get("nombre", preset_id)
+
+        fuente = repos.crear_fuente_rss(
+            nombre,
+            url_limpia,
+            marca=marca,
+            incluir="",
+            excluir="",
+            redes_def="",
+        )
+        # Añade a las ya activas para que iteraciones posteriores en este mismo request
+        # sean idempotentes (misma URL pedida dos veces -> solo se crea una).
+        urls_activas.add(url_limpia)
+        # Enriquece la respuesta con el idioma/región del preset.
+        fuente_resp = {
+            **fuente,
+            "idioma": preset.get("idioma", ""),
+            "region": preset.get("region", ""),
+            "categoria": preset.get("categoria", ""),
+        }
+        creadas.append(fuente_resp)
+
+    respuesta: dict[str, Any] = {
+        "creadas": len(creadas),
+        "fuentes": creadas,
+        "omitidas": omitidas,
+    }
+    if errores:
+        respuesta["errores"] = errores
+    return JSONResponse(respuesta)
+
+
 RUTAS = [
     Route("/api/fuentes", listar, methods=["GET"]),
     Route("/api/fuentes", crear, methods=["POST"]),
     Route("/api/fuentes/aportar", aportar, methods=["POST"]),
+    Route("/api/fuentes/presets", listar_presets_handler, methods=["GET"]),
+    Route("/api/fuentes/presets/activar", activar_presets_handler, methods=["POST"]),
     Route("/api/fuentes/{fuente_id}", actualizar, methods=["PUT"]),
     Route("/api/fuentes/{fuente_id}", borrar, methods=["DELETE"]),
 ]

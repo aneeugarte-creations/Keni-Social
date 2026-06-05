@@ -323,6 +323,14 @@ ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
 # `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
 ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 
+# Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4).
+# `KENI_TRADUCCION=0` apaga la traducción (def ON: ahorra pedir explicitamente activarla).
+# `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top se traducen por request
+# (def 15). Se usa el mismo modelo de `KENI_INSUMOS_MODELO` (Haiku). Ver
+# `dominio/traduccion.py` y la integración en `api/radar.py`.
+ENV_TRADUCCION = "KENI_TRADUCCION"
+ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -1543,3 +1551,26 @@ def insumos_modelo() -> str:
     if raw is None:
         return "haiku"  # no fijada: default haiku
     return raw.strip()  # fijada: respeta el valor (puede ser "" para desactivar --model)
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: traducción + tropicalización MX (Ola 4)                           #
+# --------------------------------------------------------------------------- #
+
+
+def traduccion_activa() -> bool:
+    """¿Traducir temas extranjeros en el Radar? (`KENI_TRADUCCION`, def ON).
+
+    Por defecto ACTIVO: `KENI_TRADUCCION=0` o falsy lo apaga. La traduccion usa Haiku
+    (mismo modelo que insumos), es best-effort (si falla, el Radar no se rompe) y se
+    acota a `traduccion_max()` temas del top.
+    """
+    crudo = _crudo(ENV_TRADUCCION)
+    if not crudo:
+        return True  # no fijada => ON por defecto
+    return crudo.lower() not in _FALSOS
+
+
+def traduccion_max() -> int:
+    """Cap de temas extranjeros a traducir por request del Radar (`KENI_TRADUCCION_MAX`, def 15, min 1)."""
+    return _entero(ENV_TRADUCCION_MAX, 15, minimo=1)

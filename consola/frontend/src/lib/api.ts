@@ -13,6 +13,8 @@ import type {
   RespuestaDiasInsumos,
   InsumoLote,
   InsumoItem,
+  RespuestaPresets,
+  RespuestaActivarPresets,
 } from "@/types";
 
 import type {
@@ -1251,6 +1253,18 @@ export const api = {
   // tablero (`flujo='importante'`) con su `origen` y, best-effort, le lanza copy de fondo.
   aportarFuente: (cuerpo: CuerpoAportarFuente) =>
     peticion<RespuestaAportarFuente>("/fuentes/aportar", { metodo: "POST", json: cuerpo }),
+
+  // --- Catálogo de presets (Ola 4: Fuentes externas + idiomas) ---
+  // Lista el catálogo curado de feeds listos para activar, opcionalmente filtrado por categoría.
+  // Marca cada preset con `activa: bool` si ya existe una `fuentes_rss` con esa URL.
+  fuentesPresets: (categoria?: string, signal?: AbortSignal) =>
+    peticion<RespuestaPresets>(
+      `/fuentes/presets${query({ categoria })}`,
+      { signal },
+    ),
+  // Activa los presets elegidos: crea `fuentes_rss` de forma idempotente por URL.
+  activarPresets: (cuerpo: { ids: string[]; marca?: string }) =>
+    peticion<RespuestaActivarPresets>("/fuentes/presets/activar", { metodo: "POST", json: cuerpo }),
 
   // --- Radar de tendencias (lo más viral del momento, multi-red · #147) ---
   // Solo lectura: consolida tendencias por tema con su estado HONESTO por fuente.

@@ -30,6 +30,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import agencias, config, investigador, marcas, parrilla, radar, relevancia_marca
+from ..dominio import fuentes_presets
 from . import rss
 
 # --------------------------------------------------------------------------- #
@@ -262,8 +263,17 @@ def _radar_feeds(marca: str | None = None) -> tuple[list[radar.Tema], list[dict[
                  and (fuente.get("marca") or "").strip() != marca)
     ]
 
+    # Índice URL->idioma del catálogo de presets (Ola 4): O(1) para feeds conocidos.
+    # Los feeds no presentes en el catálogo quedan con idioma "es" (defecto conservador).
+    _url_a_idioma: dict[str, str] = {
+        p["url"]: p.get("idioma", "es")
+        for p in fuentes_presets.listar_presets()
+    }
+
     def _trabajo(fuente: dict[str, Any]) -> tuple[list[radar.Tema], dict[str, Any]]:
         es_de_marca = bool(marca and (fuente.get("marca") or "").strip() == marca)
+        # Idioma del feed: del catálogo de presets si se conoce; "es" si no.
+        idioma_feed = _url_a_idioma.get(str(fuente.get("url", "")).strip(), "es")
         estado: dict[str, Any] = {
             "id": f"rss-{fuente['id']}",
             "nombre": fuente["nombre"],
@@ -276,7 +286,7 @@ def _radar_feeds(marca: str | None = None) -> tuple[list[radar.Tema], list[dict[
             # `vistas=set()`: el Radar NO usa la marca `usado` (sus consumidores no la leen),
             # asi evitamos el N+1 a Postgres (`repos.claves_vistas` por feed) en el path de carga.
             items = rss._items_de_fuente(fuente, ocultar_usados=False, vistas=set())
-            propios = radar.temas_de_feeds(items, curado=es_de_marca)
+            propios = radar.temas_de_feeds(items, curado=es_de_marca, idioma=idioma_feed)
             estado["conteo"] = len(propios)
             return propios, estado
         except rss.RSSError as e:
@@ -293,6 +303,56 @@ def _radar_feeds(marca: str | None = None) -> tuple[list[radar.Tema], list[dict[
         temas.extend(propios)
         estados.append(estado)
     return temas, estados
+
+
+def _aplicar_traduccion(temas: list[radar.Tema]) -> None:
+    """Traduce+tropicaliza los temas extranjeros del TOP al español MX. MUTA en sitio.
+
+    - Toma hasta `config.traduccion_max()` temas con `idioma != 'es'` del top del listado.
+    - Llama UNA sola vez a `traduccion.traducir_items` (Haiku, best-effort).
+    - Sustituye `titulo`/`por_que` por la versión ES y marca `traducido=True`.
+    - `titulo_original` preserva el original para trazabilidad.
+    - Si la traduccion falla o devuelve el original inalterado, `traducido` queda False.
+    - NUNCA lanza: el llamante ya envuelve en try/except.
+    """
+    from ..dominio import traduccion as dom_traduccion
+
+    max_trad = config.traduccion_max()
+    # Índice {tema: posicion_en_lista} para hacer la sustitución por referencia.
+    a_traducir: list[tuple[int, radar.Tema]] = [
+        (i, t) for i, t in enumerate(temas) if t.idioma != "es"
+    ][:max_trad]
+
+    if not a_traducir:
+        return
+
+    # Prepara el payload: un id serial por ítem (no usamos el titulo como id porque puede
+    # tener caracteres extraños y el modelo a veces trunca).
+    items_payload: list[dict[str, Any]] = [
+        {
+            "id": str(i),
+            "titulo": t.titulo,
+            "resumen": t.por_que,
+        }
+        for i, (_, t) in enumerate(a_traducir)
+    ]
+
+    resultado = dom_traduccion.traducir_items(items_payload)
+
+    # Aplica las traducciones por índice serial.
+    por_id: dict[str, dict[str, Any]] = {str(r.get("id", "")): r for r in resultado}
+    for serial, (_, tema) in enumerate(a_traducir):
+        trad = por_id.get(str(serial))
+        if not trad:
+            continue
+        titulo_es = (trad.get("titulo_es") or "").strip()
+        resumen_es = (trad.get("resumen_es") or "").strip()
+        # Solo se marca como traducido si la versión ES es distinta del original.
+        if titulo_es and titulo_es != tema.titulo:
+            tema.titulo_original = tema.titulo
+            tema.titulo = titulo_es
+            tema.por_que = resumen_es or tema.por_que
+            tema.traducido = True
 
 
 async def obtener(request: Request) -> Response:
@@ -337,6 +397,17 @@ async def obtener(request: Request) -> Response:
         en_foco = [t for t in temas if parrilla.tema_en_foco(t, palabras)]
         fuera_foco = len(temas) - len(en_foco)
         temas = en_foco
+
+    # Traduccion + tropicalizacion MX (Ola 4) — ADITIVA y BEST-EFFORT.
+    # Si el flag esta ON, toma los temas extranjeros del TOP (cap `traduccion_max()`),
+    # llama UNA vez a Haiku y sustituye titulo/por_que por la version ES, guardando
+    # `titulo_original` y marcando `traducido=True`. Wrap en try/except: si falla, el
+    # Radar sigue funcionando sin traduccion (no se lanza excepcion al cliente).
+    if config.traduccion_activa() and temas:
+        try:
+            _aplicar_traduccion(temas)
+        except Exception:  # noqa: BLE001 -- best-effort; nunca rompe el Radar
+            pass
 
     # Badges por tema (Investigador F2b): `estado` (cruzando el tablero de la marca AL LEER,
     # asi funciona aunque el daemon este OFF) y `prioritario` (señal >= umbral muy-viral).

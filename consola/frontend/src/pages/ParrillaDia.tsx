@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { ItemParrilla, RespuestaParrilla, SubtipoParrilla } from "@/types";
@@ -337,6 +338,24 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
             </Badge>
           )}
           {item.senal_texto && <Badge variant="aviso">{item.senal_texto}</Badge>}
+          {item.traducido && item.idioma && (
+            <Tooltip
+              label={
+                item.titulo_original
+                  ? `Original: "${item.titulo_original}"`
+                  : `Traducido del ${item.idioma.toUpperCase()}`
+              }
+            >
+              <Badge variant="secondary" className="gap-1">
+                traducido de {item.idioma.toUpperCase()}
+              </Badge>
+            </Tooltip>
+          )}
+          {!item.traducido && item.idioma && item.idioma !== "es" && (
+            <Badge variant="outline" className="font-normal">
+              {item.idioma.toUpperCase()}
+            </Badge>
+          )}
           {[...new Set(item.redes.map(etiquetaRed))].map((r) => (
             <Badge key={r} variant="outline">
               {r}

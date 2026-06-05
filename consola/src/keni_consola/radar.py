@@ -115,6 +115,12 @@ class Tema:
     REALES: para Trends, el trafico aproximado parseado (`ht:approx_traffic`); para los
     feeds del equipo, una señal baja fija (presencia, sin conteo). `senal_texto` es la
     señal tal cual la da la fuente, para mostrarla sin reinterpretar ("50 mil+").
+
+    Campos opcionales para idioma/traduccion (Ola 4):
+    - `idioma`: codigo BCP-47 del idioma del contenido de la fuente (p.ej. "en", "fr").
+      Defecto "es" si no se sabe. No rompe ninguna logica existente (campo aditivo).
+    - `traducido`: True si el titulo/por_que fueron reemplazados por la version ES.
+    - `titulo_original`: el titulo original antes de traducir (preserva trazabilidad).
     """
 
     titulo: str
@@ -127,6 +133,10 @@ class Tema:
     # `True` si el tema viene de una fuente que el equipo etiquetó con la marca activa
     # (curado): entra al foco de la marca SIEMPRE, sin pasar por el filtro de keywords.
     curado: bool = False
+    # Ola 4: idioma, traduccion (campos ADITIVOS; default conservador: no rompen nada).
+    idioma: str = "es"
+    traducido: bool = False
+    titulo_original: str = ""
     _claves_enlace: set[str] = field(default_factory=set, repr=False)
 
     def fusionar(self, otro: Tema) -> None:
@@ -156,7 +166,7 @@ class Tema:
         self.enlaces.append(enlace)
 
     def a_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "titulo": self.titulo,
             "redes": sorted(self.redes),
             "fuentes": sorted(self.fuentes),
@@ -165,7 +175,14 @@ class Tema:
             "senal_texto": self.senal_texto,
             "curado": self.curado,
             "enlaces": [e.a_dict() for e in self.enlaces],
+            # Ola 4: campos opcionales de idioma/traduccion (siempre presentes para
+            # que el frontend los lea sin necesidad de comprobar `hasOwnProperty`).
+            "idioma": self.idioma,
+            "traducido": self.traducido,
         }
+        if self.titulo_original:
+            d["titulo_original"] = self.titulo_original
+        return d
 
 
 # --------------------------------------------------------------------------- #
@@ -321,13 +338,18 @@ def parsear_trends(xml: str, *, geo: str) -> list[Tema]:
 _SENAL_FEED = 1
 
 
-def temas_de_feeds(items: list[dict[str, Any]], *, curado: bool = False) -> list[Tema]:
+def temas_de_feeds(
+    items: list[dict[str, Any]], *, curado: bool = False, idioma: str = "es"
+) -> list[Tema]:
     """Convierte items de feeds RSS del equipo en `Tema` (señal cualitativa).
 
     `items` son los que devuelve `api.rss._items_de_fuente` (router; {titulo, resumen, enlace,
     fuente_nombre, ...}). El "por que sube" es el resumen del feed (no un conteo), y se
     deja claro que la señal es editorial, no de viralidad. `curado=True` marca los temas
     como propios de la marca activa (entran a su foco sin filtro de keywords).
+
+    `idioma` (Ola 4): idioma BCP-47 del feed (p.ej. "en", "fr"). Defecto "es". Se propaga
+    a cada `Tema` para que el Radar los pueda traducir/tropicalizar si son extranjeros.
     """
     temas: list[Tema] = []
     for item in items:
@@ -346,6 +368,7 @@ def temas_de_feeds(items: list[dict[str, Any]], *, curado: bool = False) -> list
                 senal=_SENAL_FEED,
                 senal_texto="",
                 curado=curado,
+                idioma=idioma or "es",
                 enlaces=[Enlace(titulo=titulo, url=enlace, fuente=fuente)] if enlace else [],
                 _claves_enlace={enlace.lower()} if enlace else set(),
             )

@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -252,6 +253,24 @@ function TarjetaTema({ tema }: { tema: TemaRadar }) {
               <Badge variant="aviso" className="gap-1">
                 <TrendingUp className="h-3 w-3" />
                 {tema.senal_texto}
+              </Badge>
+            )}
+            {tema.traducido && tema.idioma && (
+              <Tooltip
+                label={
+                  tema.titulo_original
+                    ? `Original: "${tema.titulo_original}"`
+                    : `Traducido del ${tema.idioma.toUpperCase()}`
+                }
+              >
+                <Badge variant="secondary" className="gap-1">
+                  traducido de {tema.idioma.toUpperCase()}
+                </Badge>
+              </Tooltip>
+            )}
+            {!tema.traducido && tema.idioma && tema.idioma !== "es" && (
+              <Badge variant="outline" className="font-normal">
+                {tema.idioma.toUpperCase()}
               </Badge>
             )}
             {[...new Set(tema.redes.map(etiquetaRed))].map((r) => (
