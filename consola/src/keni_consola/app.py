@@ -259,12 +259,6 @@ def crear_app(
             bootstrap_lineas.sembrar_lineas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron sembrar las líneas/orígenes.", exc_info=True)
-        try:
-            from . import plantillas_semilla
-
-            plantillas_semilla.sembrar_plantillas()
-        except Exception:  # noqa: BLE001 -- idem: no impide el arranque
-            _logger.warning("No se pudieron sembrar las plantillas de diseño.", exc_info=True)
         # Migración al tablero de contenido unificado: lleva tareas, piezas de la rota y
         # publicaciones legadas al modelo `contenido` para que el tablero las muestre.
         # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.
