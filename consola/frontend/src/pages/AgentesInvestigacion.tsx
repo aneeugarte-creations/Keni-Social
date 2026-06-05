@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { InvBrief, InvCandidato } from "@/types";
@@ -248,20 +249,37 @@ function TarjetaBrief({ brief, onEditar }: PropsTarjetaBrief) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // La investigación corre ASÍNCRONA en el worker (el back no tiene `claude`). El POST
+  // devuelve una `generacion` en curso; la sondeamos con `useGeneracion` y, al completar,
+  // refrescamos los candidatos. El parseo inserta los `inv_candidato` en el worker.
+  const seguimiento = useGeneracion();
   const correr = useMutation({
     mutationFn: () => api.investigacion.correr({ brief_id: brief.id }),
     onSuccess: (data) => {
+      if (data.generacion) seguimiento.iniciar(data.generacion);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  React.useEffect(() => {
+    const g = seguimiento.generacion;
+    if (!g || seguimiento.ejecutando) return;
+    if (g.estado === "completado") {
       void queryClient.invalidateQueries({ queryKey: PREFIJO_CANDIDATOS });
-      const n = data.candidatos?.length ?? 0;
+      const n = (g.resultado as { candidatos?: number } | null)?.candidatos ?? 0;
       toast.success(
         n > 0
           ? `${n} candidato${n !== 1 ? "s" : ""} encontrado${n !== 1 ? "s" : ""}.`
           : "Investigación completada, sin candidatos nuevos.",
       );
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
+      seguimiento.limpiar();
+    } else if (g.estado === "error") {
+      toast.error(g.error || "No se pudo completar la investigación.");
+      seguimiento.limpiar();
+    }
+  }, [seguimiento.generacion, seguimiento.ejecutando, seguimiento, queryClient]);
 
+  const investigando = correr.isPending || seguimiento.ejecutando;
   const esActivo = brief.activo === 1;
 
   return (
@@ -329,16 +347,16 @@ function TarjetaBrief({ brief, onEditar }: PropsTarjetaBrief) {
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
               onClick={() => correr.mutate()}
-              disabled={correr.isPending}
+              disabled={investigando}
               aria-label={`Investigar ahora con brief "${brief.nombre}"`}
               data-testid="btn-investigar"
             >
-              {correr.isPending ? (
+              {investigando ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
                 <Bot className="h-3 w-3" />
               )}
-              {correr.isPending ? "Investigando…" : "Investigar ahora"}
+              {investigando ? "Investigando…" : "Investigar ahora"}
             </Button>
           </div>
         </div>

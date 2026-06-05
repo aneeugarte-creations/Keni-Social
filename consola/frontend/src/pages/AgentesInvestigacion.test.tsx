@@ -96,9 +96,26 @@ const CANDIDATO_NUEVO = {
 const CANDIDATOS_VACIOS = { candidatos: [] };
 const CANDIDATOS_CON_DATOS = { candidatos: [CANDIDATO_NUEVO] };
 
+// `correr` ahora es ASÍNCRONO: el back encola un job (el worker corre Haiku) y devuelve la
+// generación a sondear. Se entrega ya `completado` para que la prueba no dependa del sondeo.
 const CORRER_RESP = {
-  candidatos: [CANDIDATO_NUEVO],
-  errores: [],
+  generacion: {
+    id: "gen-inv-1",
+    tipo: "investigacion",
+    marca: "unotv",
+    etiqueta: "Investigar: Noticias UnoTV",
+    estado: "completado",
+    fase: "completado",
+    motivo: "",
+    salida: "",
+    error: "",
+    metricas: null,
+    resultado: { candidatos: 1 },
+    autor_id: "",
+    autor_nombre: "",
+    fecha_inicio: "2026-06-05T06:00:00",
+    fecha_fin: "2026-06-05T06:00:10",
+  },
 };
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────

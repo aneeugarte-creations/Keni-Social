@@ -22,7 +22,10 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import shutil
+import tempfile
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from starlette.datastructures import UploadFile
@@ -30,9 +33,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_copy, marcas, redes, repos
+from .. import autogen_copy, config, generaciones, marcas, redes, repos, rutas
 from .._http_json import leer_json
-from ..dominio import insumos_parse
+from ..dominio import insumos_parse, jobspec
 from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 
@@ -162,13 +165,28 @@ async def dias(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _dir_temporal_insumos() -> Path:
+    """Vuelca un temporal de subida BAJO el dir de datos compartido (back y worker lo ven).
+
+    El parseo de cajones corre en el WORKER (#desacoplo: el back no tiene `claude`). back,
+    worker y daemons montan el MISMO volumen `keni-data:/data`, así que un archivo que el back
+    escribe bajo `<data>/keni-social/insumos-tmp` lo lee el worker via `--add-dir`. El propio
+    `lanzar_job_claude` borra el `dir_temporal` al terminar el job.
+    """
+    base = rutas.dir_config() / "insumos-tmp"
+    base.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="lote-", dir=str(base)))
+
+
 async def aportar(request: Request) -> Response:
     """`POST /api/insumos/aportar` (multipart/form-data O JSON body).
 
     Campos obligatorios: `cajon`.
     Opcionales: `fecha` (def hoy), `marca`, `texto` O `archivo`.
-    Parsea con Haiku de forma SÍNCRONA, inserta lote + ítems y los devuelve.
-    Si el parse falla, devuelve lote con estado "error" (HTTP 200, no 500).
+    ASÍNCRONO: crea el lote en estado `parseando` y ENCOLA un job de generación (Haiku) que
+    el WORKER ejecuta (el back no tiene `claude`); su post-procesado parsea la salida, inserta
+    los ítems y deja el lote `listo`/`error`. Devuelve `{lote, generacion}` para que el SPA
+    sondee. Mismo patrón que la generación de copy y la subida de archivos de la Biblioteca.
     """
     content_type = request.headers.get("content-type", "")
     archivo_bytes: bytes = b""
@@ -214,56 +232,108 @@ async def aportar(request: Request) -> Response:
             {"error": "Debes aportar texto o un archivo."}, status_code=400
         )
 
-    # Resuelve el material: archivo tiene prioridad sobre texto.
-    if archivo_bytes:
-        data = archivo_bytes
-        nombre = archivo_nombre
-    else:
-        data = texto[:_MAX_TEXTO].encode("utf-8", errors="replace")
-        nombre = f"texto_{cajon}.txt"
-
     # Autor de la petición.
     autor = autor_de_peticion(request)
     creado_por = (autor or {}).get("usuario") or (autor or {}).get("id") or ""
 
-    # Crea el lote primero (con estado "listo" provisional).
+    # Crea el lote en estado "parseando": el WORKER lo dejará en "listo"/"error" al terminar.
+    archivo_nombre_lote = archivo_nombre if archivo_bytes else ""
     lote = repos.crear_insumo_lote(
         fecha=fecha,
         cajon=cajon,
         marca=marca,
         origen_texto=texto[:10000] if not archivo_bytes else "",
-        origen_archivo=nombre if archivo_bytes else "",
-        estado="listo",
+        origen_archivo=archivo_nombre_lote,
+        estado="parseando",
         creado_por=creado_por,
     )
     lote_id = lote["id"]
 
-    # Parsea con Haiku (síncrono).
-    items_parseados, errores = insumos_parse.extraer_insumos(
-        data,
-        nombre=nombre,
-        cajon=cajon,
-        fecha=fecha,
-        lote_id=lote_id,
+    # Compone el prompt y, si hay archivo, lo vuelca a un temporal del dir COMPARTIDO (back y
+    # worker montan el mismo `/data`), para que el worker lo lea via `--add-dir`/`dir_temporal`.
+    dir_temporal: Path | None = None
+    if archivo_bytes:
+        dir_temporal = _dir_temporal_insumos()
+        nombre_seguro = Path(archivo_nombre or "").name or "insumo.bin"
+        ruta = dir_temporal / nombre_seguro
+        try:
+            ruta.write_bytes(archivo_bytes)
+        except OSError:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+            repos.actualizar_insumo_lote(
+                lote_id, {"estado": "error", "error": "No se pudo preparar el archivo."}
+            )
+            lote = repos.obtener_insumo_lote(lote_id) or lote
+            return JSONResponse({"lote": _lote_a_dict(lote), "generacion": None}, status_code=500)
+        prompt = insumos_parse.construir_prompt_archivo(cajon, str(ruta))
+    else:
+        prompt = insumos_parse.construir_prompt_texto(cajon, texto)
+
+    # Spec del post-procesado: parsea la salida de Haiku e inserta los ítems (en el worker).
+    procesar_spec = jobspec.construir_insumos(lote_id=lote_id, cajon=cajon, fecha=fecha)
+    spec = jobspec.construir(
+        prompt=prompt,
+        procesar=procesar_spec,
+        dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
+        # Haiku (config.insumos_modelo()): parseo mecánico de JSON, no necesita un modelo grande.
+        endurecer={"modelo": config.insumos_modelo()},
     )
 
-    if errores and not items_parseados:
-        # Fallo total: actualiza el lote como error.
-        mensaje_error = "; ".join(e.get("motivo", "error") for e in errores[:3])
-        lote = repos.actualizar_insumo_lote(lote_id, {"estado": "error", "error": mensaje_error}) or lote
-        return JSONResponse({"lote": _lote_a_dict(lote), "items": []})
+    # Registro de generación (para sondeo del SPA) y encolado. El back NO ejecuta `claude`.
+    gen = generaciones.crear({
+        "tipo": "insumos",
+        "marca": marca,
+        "etiqueta": f"Cajón {cajon} · {fecha}",
+        "autor_id": (autor or {}).get("id", "") or "",
+        "autor_nombre": (autor or {}).get("usuario", "") or "",
+    })
+    try:
+        generaciones.encolar_job_claude(
+            gen["id"],
+            prompt=prompt,
+            cwd=jobspec.cwd_generacion(),
+            procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+            dir_temporal=dir_temporal,
+            spec=spec,
+        )
+    except generaciones.ColaLlenaError:
+        if dir_temporal is not None:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+        repos.actualizar_insumo_lote(
+            lote_id,
+            {"estado": "error", "error": "Hay demasiados trabajos en curso; inténtalo en unos segundos."},
+        )
+        generaciones.actualizar(gen["id"], {
+            "estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
+            "error": "Hay demasiados trabajos en curso; inténtalo en unos segundos.",
+            "fecha_fin": generaciones.ahora_iso(),
+        })
+        lote = repos.obtener_insumo_lote(lote_id) or lote
+        return JSONResponse(
+            {"lote": _lote_a_dict(lote), "generacion": generaciones.obtener(gen["id"])},
+            status_code=429,
+        )
+    except Exception:  # noqa: BLE001 -- reflejamos el fallo en el lote/generación, sin traceback al cliente
+        _log.exception("no se pudo encolar el parseo del lote %s", lote_id)
+        if dir_temporal is not None:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+        repos.actualizar_insumo_lote(
+            lote_id, {"estado": "error", "error": "No se pudo iniciar el parseo."}
+        )
+        generaciones.actualizar(gen["id"], {
+            "estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar el parseo.",
+            "fecha_fin": generaciones.ahora_iso(),
+        })
+        lote = repos.obtener_insumo_lote(lote_id) or lote
+        return JSONResponse(
+            {"lote": _lote_a_dict(lote), "generacion": generaciones.obtener(gen["id"])},
+            status_code=500,
+        )
 
-    # Inserta los ítems y actualiza el lote.
-    items_insertados = repos.crear_insumo_items(items_parseados)
-    lote = repos.actualizar_insumo_lote(
-        lote_id,
-        {"total_items": len(items_insertados), "estado": "listo"},
-    ) or lote
-
-    _hoy = date.today().isoformat()
+    lote = repos.obtener_insumo_lote(lote_id) or lote
     return JSONResponse({
         "lote": _lote_a_dict(lote),
-        "items": [_item_a_dict(i, hoy=_hoy) for i in items_insertados],
+        "generacion": generaciones.obtener(gen["id"]) or gen,
     })
 
 

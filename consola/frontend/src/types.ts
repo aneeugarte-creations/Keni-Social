@@ -4281,7 +4281,8 @@ export interface InsumoLote {
   marca: string;
   origen_texto: string;
   origen_archivo: string;
-  estado: "listo" | "error";
+  /** `parseando` mientras el worker corre Haiku; `listo`/`error` al terminar. */
+  estado: "parseando" | "listo" | "error";
   error: string;
   total_items: number;
   creado: string;
@@ -4398,9 +4399,9 @@ export interface RespuestaInvCandidato {
   contenido_id?: string;
 }
 
+/** Respuesta de `POST /api/investigacion/correr`. Async: devuelve la generación a sondear. */
 export interface RespuestaInvCorrer {
-  candidatos: InvCandidato[];
-  errores: unknown[];
+  generacion: Generacion | null;
 }
 
 // --- Motor de ingesta persistente (Ola A): archivo a nivel de artículo --------

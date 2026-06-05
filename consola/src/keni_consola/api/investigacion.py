@@ -16,7 +16,6 @@ Endpoints:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import date
 from typing import Any
@@ -25,9 +24,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_copy, marcas, repos
+from .. import autogen_copy, config, generaciones, marcas, repos
 from .._http_json import leer_json
-from ..dominio import investigacion_agente
+from ..dominio import investigacion_agente, jobspec
 from ..seguridad import autor_de_peticion
 
 _log = logging.getLogger("keni_consola.api.investigacion")
@@ -152,11 +151,13 @@ async def borrar_brief(request: Request) -> Response:
 
 
 async def correr(request: Request) -> Response:
-    """`POST /api/investigacion/correr` -> `{candidatos:[...], errores:[...]}`.
+    """`POST /api/investigacion/correr` -> `{generacion}`.
 
     Cuerpo: `{brief_id}` (brief guardado) o ad-hoc `{marca?, linea, instrucciones}`.
-    Corre el agente en threadpool (no bloquea el event loop), inserta los candidatos
-    con `estado=nuevo` fechados HOY. Propone; NUNCA crea tablero ni publica.
+    ASÍNCRONO: el back ENCOLA un job (Haiku + web) que el WORKER ejecuta (el back no tiene
+    `claude`); su post-procesado inserta los `inv_candidato` con `estado=nuevo` fechados HOY.
+    Devuelve la `generacion` para que el SPA sondee. Propone; NUNCA crea tablero ni publica.
+    (El daemon de fondo, que sí corre en `daemons` con claude, sigue usando `correr_brief`.)
     """
     datos = await leer_json(request)
     hoy = date.today().isoformat()
@@ -188,23 +189,47 @@ async def correr(request: Request) -> Response:
             "activo": True,
         }
 
-    # Ejecuta el agente en threadpool para no bloquear el event loop.
-    loop = asyncio.get_running_loop()
-    candidatos_norm, errores = await loop.run_in_executor(
-        None,
-        lambda: investigacion_agente.correr_brief(brief, fecha=hoy),
+    autor = autor_de_peticion(request)
+    prompt = investigacion_agente.construir_prompt(brief, fecha=hoy)
+    procesar_spec = jobspec.construir_investigacion(brief=brief, fecha=hoy)
+    spec = jobspec.construir(
+        prompt=prompt,
+        procesar=procesar_spec,
+        endurecer={"modelo": config.insumos_modelo()},
     )
 
-    if not candidatos_norm:
-        return JSONResponse({"candidatos": [], "errores": errores})
+    gen = generaciones.crear({
+        "tipo": "investigacion",
+        "marca": brief.get("marca", "") or "",
+        "etiqueta": f"Investigar: {brief.get('nombre', 'brief')}",
+        "autor_id": (autor or {}).get("id", "") or "",
+        "autor_nombre": (autor or {}).get("usuario", "") or "",
+    })
+    try:
+        generaciones.encolar_job_claude(
+            gen["id"],
+            prompt=prompt,
+            cwd=jobspec.cwd_generacion(),
+            procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+            spec=spec,
+        )
+    except generaciones.ColaLlenaError:
+        generaciones.actualizar(gen["id"], {
+            "estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
+            "error": "Hay demasiados trabajos en curso; inténtalo en unos segundos.",
+            "fecha_fin": generaciones.ahora_iso(),
+        })
+        return JSONResponse({"generacion": generaciones.obtener(gen["id"])}, status_code=429)
+    except Exception:  # noqa: BLE001 -- reflejamos el fallo en la generación, sin traceback al cliente
+        _log.exception("no se pudo encolar la investigación gen=%s", gen.get("id"))
+        generaciones.actualizar(gen["id"], {
+            "estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar la investigación.",
+            "fecha_fin": generaciones.ahora_iso(),
+        })
+        return JSONResponse({"generacion": generaciones.obtener(gen["id"])}, status_code=500)
 
-    # Inserta en bulk con estado=nuevo.
-    insertados = repos.crear_inv_candidatos(candidatos_norm)
-    _log.info(
-        "Investigacion '%s': %d candidato(s) para %s.",
-        brief.get("nombre", "?"), len(insertados), hoy,
-    )
-    return JSONResponse({"candidatos": insertados, "errores": errores})
+    _log.info("Investigacion '%s' encolada (gen %s) para %s.", brief.get("nombre", "?"), gen["id"], hoy)
+    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
 
 
 # --------------------------------------------------------------------------- #

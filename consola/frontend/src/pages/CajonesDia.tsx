@@ -442,11 +442,14 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
       return api.insumos.aportar(form);
     },
     onSuccess: () => {
+      // El parseo corre ASÍNCRONO en el worker: el lote nace "parseando". Invalidamos para
+      // que aparezca con su indicador; el sondeo (refetchInterval del query) lo refresca hasta
+      // que pase a "listo"/"error" y muestre los ítems. El back ya NO ejecuta `claude`.
       void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
       setTexto("");
       setArchivo(null);
       if (archivoRef.current) archivoRef.current.value = "";
-      toast.success(`Cajón "${def.titulo}" procesado.`);
+      toast.success(`Cajón "${def.titulo}" en proceso…`);
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -465,6 +468,8 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
 
   // Lotes con error para mostrar aviso
   const lotesError = lotes.filter((l) => l.estado === "error");
+  // Lotes en proceso: el worker aún corre Haiku; mostramos un indicador "Procesando…".
+  const lotesParseando = lotes.filter((l) => l.estado === "parseando");
 
   const puedeEnviar = (texto.trim().length > 0 || archivo !== null) && !aportarMut.isPending;
 
@@ -510,6 +515,18 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
             {aportarMut.isPending ? "Procesando…" : "Procesar"}
           </Button>
         </div>
+
+        {/* Lotes en proceso (el worker corre Haiku; el sondeo refresca al terminar) */}
+        {lotesParseando.map((l) => (
+          <div
+            key={l.id}
+            className="flex items-center gap-2 rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground"
+            data-testid="lote-parseando"
+          >
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span className="flex-1">Procesando con Haiku…</span>
+          </div>
+        ))}
 
         {/* Errores de lotes */}
         {lotesError.map((l) => (
@@ -588,12 +605,20 @@ export default function CajonesDia() {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Datos del día seleccionado — filtrados por la marca activa (null = todas)
+  // Datos del día seleccionado — filtrados por la marca activa (null = todas).
+  // SONDEO: mientras haya lotes en estado "parseando" (el worker corre Haiku), refrescamos
+  // cada ~1.5 s para que los ítems aparezcan en cuanto el lote pase a "listo"/"error".
   const insumosQuery = useQuery({
     queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados, marcaActiva),
     queryFn: ({ signal }) =>
       api.insumos.listar(fecha, signal, ocultarCaducados, marcaActiva ?? undefined),
     staleTime: 30 * 1000,
+    refetchInterval: (q) =>
+      (q.state.data?.cajones ?? []).some((c) =>
+        c.lotes.some((l) => l.estado === "parseando"),
+      )
+        ? 1500
+        : false,
   });
 
   // Indexar cajones por id para acceso rápido

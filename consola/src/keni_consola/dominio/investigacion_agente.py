@@ -232,3 +232,42 @@ def correr_brief(
     if registros is None:
         return [], [{"fila": 0, "motivo": "El agente no devolvio candidatos en JSON legible."}]
     return _normalizar_candidatos(registros, brief=brief, fecha=fecha)
+
+
+# --------------------------------------------------------------------------- #
+# Prompt + post-procesado para el WORKER (#desacoplo del back)                 #
+# --------------------------------------------------------------------------- #
+#
+# El back NO ejecuta `claude -p` (no tiene binario ni token). La investigacion bajo demanda
+# ("Investigar ahora") se ENCOLA como un job de generacion; el WORKER corre Haiku+web y luego
+# este `procesar` parsea la salida e INSERTA los candidatos. El daemon de fondo (que SI corre
+# en `daemons`, con claude) sigue usando `correr_brief` directo; solo el camino MANUAL cambia.
+
+
+def construir_prompt(brief: dict[str, Any], *, fecha: str) -> str:
+    """Prompt de investigacion web para `brief`+`fecha` (publico para el back que ENCOLA)."""
+    return _construir_prompt(brief, fecha=fecha)
+
+
+def construir_procesar_investigacion(*, brief: dict[str, Any], fecha: str):  # noqa: ANN201 -- generaciones.Procesar (evita ciclo de tipos)
+    """Devuelve el callback `procesar(salida, metricas) -> dict` de la investigacion (worker).
+
+    Parsea la salida de Haiku (`_extraer_candidatos` + `_normalizar_candidatos`) e INSERTA los
+    `inv_candidato` (estado `nuevo`) con `repos.crear_inv_candidatos`. Si no hay candidatos
+    legibles, no inserta nada (no es un error duro: el equipo puede reintentar). Devuelve un
+    resumen `{candidatos}` para el registro de la generacion.
+    """
+    from .. import repos
+
+    def procesar(salida: str, _metricas: object) -> dict[str, Any]:
+        registros = _extraer_candidatos(salida or "")
+        if registros is None:
+            _log.info("investigacion manual: claude no devolvio candidatos en JSON legible")
+            return {"candidatos": 0}
+        candidatos, _errores = _normalizar_candidatos(registros, brief=brief, fecha=fecha)
+        if not candidatos:
+            return {"candidatos": 0}
+        insertados = repos.crear_inv_candidatos(candidatos)
+        return {"candidatos": len(insertados)}
+
+    return procesar

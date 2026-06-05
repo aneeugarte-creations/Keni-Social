@@ -107,7 +107,7 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
 TIPOS = (
     "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
-    "parrilla-import",
+    "parrilla-import", "insumos", "investigacion",
     # Taller GREEN / brainstorming: `green-ideas` = la PROPUESTA de ideas evergreen (IA);
     # `green` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
     "green-ideas", "green",
@@ -653,7 +653,10 @@ def _argv_claude(
         para prohibir Write/Edit/MCP de escritura en un job que solo debe LEER).
       - `max_turns` / `max_budget_usd`: topes especificos (mas bajos) que SUSTITUYEN a los
         globales para ese run. Se aplican solo si vienen; si no, se usan los globales.
-    Los overrides solo pueden ENDURECER (vetar mas, topar mas bajo), nunca relajar.
+      - `modelo`: nombre de modelo para ESE run (`--model <modelo>`). Lo usan los parseos de
+        insumos / investigacion (Haiku via `config.insumos_modelo()`). "" / ausente = default.
+    Los overrides de seguridad solo pueden ENDURECER (vetar mas, topar mas bajo); `modelo`
+    solo SELECCIONA el modelo del run (no relaja nada).
     """
     endurecer = endurecer or {}
     extra: list[str] = []
@@ -691,6 +694,13 @@ def _argv_claude(
     else:
         arg_effort = preferencias.arg_esfuerzo()
 
+    # Modelo del job (`endurecer["modelo"]`): si viene un nombre no vacio, se anade `--model
+    # <modelo>` para que ESE run use un modelo concreto (p.ej. los parseos de insumos /
+    # investigacion usan Haiku via `config.insumos_modelo()`). Ausente/"" = el modelo por
+    # defecto de `claude`. Solo SELECCIONA el modelo del run; no relaja seguridad.
+    modelo = str(endurecer.get("modelo") or "").strip()
+    arg_modelo = ["--model", modelo] if modelo else []
+
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -702,6 +712,7 @@ def _argv_claude(
         # defecto `Bash`/`Write`/`Edit`, mas las extra del job). Va DESPUES de skip-permisos.
         *arg_tools,
         *arg_effort,
+        *arg_modelo,
         *arg_budget,
         *arg_turns,
         *extra,

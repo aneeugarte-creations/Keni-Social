@@ -166,6 +166,43 @@ const INSUMOS_CON_CADUCADO = {
   ],
 };
 
+// Lote en estado `parseando`: el worker aún corre Haiku (flujo asíncrono). El cajón debe
+// mostrar el indicador "Procesando…" y los ítems aún no aparecen.
+const LOTE_PARSEANDO = {
+  ...LOTE_PORTAL,
+  id: "lote-p",
+  estado: "parseando",
+  total_items: 0,
+};
+
+const INSUMOS_PARSEANDO = {
+  fecha: "2026-06-05",
+  cajones: [
+    { cajon: "portal", lotes: [LOTE_PARSEANDO], items: [] },
+    { cajon: "corresponsales", lotes: [], items: [] },
+    { cajon: "reporteros", lotes: [], items: [] },
+    { cajon: "eventos_claro", lotes: [], items: [] },
+  ],
+};
+
+const GENERACION_INSUMOS = {
+  id: "gen-1",
+  tipo: "insumos",
+  marca: "",
+  etiqueta: "Cajón portal · 2026-06-05",
+  estado: "ejecutando",
+  fase: "",
+  motivo: "",
+  salida: "",
+  error: "",
+  metricas: null,
+  resultado: null,
+  autor_id: "",
+  autor_nombre: "",
+  fecha_inicio: "2026-06-05T06:00:00",
+  fecha_fin: "",
+};
+
 const DIAS_HISTORIAL = {
   dias: [
     { fecha: "2026-06-05", total: 1, por_cajon: { portal: 1, corresponsales: 0, reporteros: 0, eventos_claro: 0 } },
@@ -363,6 +400,43 @@ describe("CajonesDia", () => {
         expect.anything(), // marca param
       );
     });
+  });
+
+  it("muestra el indicador 'Procesando…' cuando un lote está en estado parseando", async () => {
+    mockApiInsumos(INSUMOS_PARSEANDO, { dias: [] });
+    renderConProviders(<CajonesDia />);
+
+    // El flujo es asíncrono: mientras el worker corre Haiku, el lote está `parseando`.
+    expect(await screen.findByTestId("lote-parseando")).toBeInTheDocument();
+    expect(screen.getByText("Procesando con Haiku…")).toBeInTheDocument();
+  });
+
+  it("aportar encola el job (devuelve {lote, generacion}) y refresca el cajón", async () => {
+    const aportarMock = vi
+      .spyOn(apiMod.api.insumos, "aportar")
+      .mockResolvedValue({ lote: LOTE_PARSEANDO, generacion: GENERACION_INSUMOS } as never);
+    // 1ª carga: lote en proceso. 2ª (tras invalidar): ya listo con el ítem.
+    const listarMock = vi
+      .spyOn(apiMod.api.insumos, "listar")
+      .mockResolvedValueOnce(INSUMOS_VACIOS as never)
+      .mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Portal / SMS");
+
+    // Escribe texto en el cajón Portal y pulsa "Procesar".
+    const textarea = screen.getByLabelText("Texto para Portal / SMS");
+    fireEvent.change(textarea, { target: { value: "1.- Sismo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Procesar Portal / SMS" }));
+
+    await waitFor(() => {
+      expect(aportarMock).toHaveBeenCalled();
+    });
+    // Tras encolar, se invalida la query y aparece el ítem ya parseado (segundo listar).
+    expect(await screen.findByText("Sismo en CDMX de 5.4 grados")).toBeInTheDocument();
+    expect(listarMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("pasa la marca activa del usuario a api.insumos.listar", async () => {

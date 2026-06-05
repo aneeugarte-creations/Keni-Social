@@ -9,6 +9,7 @@
  * - Soporta JSON, multipart (FormData) y descargas (abre la URL en el navegador).
  */
 import type {
+  Generacion,
   RespuestaInsumos,
   RespuestaDiasInsumos,
   InsumoLote,
@@ -2101,14 +2102,15 @@ export const api = {
       peticion<RespuestaDiasInsumos>("/insumos/dias", { signal }),
 
     /**
-     * Aporta material a un cajón: parsea con Haiku (puede tardar hasta 200s) y
-     * devuelve el lote creado + sus ítems. Acepta texto pegado y/o archivo.
+     * Aporta material a un cajón. ASÍNCRONO: crea el lote en estado `parseando` y ENCOLA un
+     * job (Haiku) que el WORKER ejecuta (el back no tiene `claude`). Devuelve el lote +
+     * la `generacion` para sondear; los ítems aparecen al recargar el cajón cuando el lote
+     * pasa a `listo`. Acepta texto pegado y/o archivo.
      */
     aportar: (form: FormData) =>
-      peticion<{ lote: InsumoLote; items: InsumoItem[] }>("/insumos/aportar", {
+      peticion<{ lote: InsumoLote; generacion: Generacion | null }>("/insumos/aportar", {
         metodo: "POST",
         form,
-        timeoutMs: 200_000,
       }),
 
     /** Detalle de un lote con sus ítems. */
