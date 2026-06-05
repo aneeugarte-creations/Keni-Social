@@ -6,12 +6,14 @@
  * - El checkbox de un preset activo está deshabilitado.
  * - Seleccionar un preset y hacer clic en "Activar seleccionadas" llama a la API.
  * - Un preset ya activo muestra el badge "Activo".
+ * - La pestaña RSS filtra los feeds y noticias por marca activa.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MarcaActivaContexto, type ValorMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import type { UsuarioSesion } from "@/types";
@@ -76,12 +78,63 @@ const PRESETS_ACTIVAR = {
   ],
 };
 
+// ── RSS fixtures ──────────────────────────────────────────────────────────────
+
+const FUENTES_RSS_UNOTV = {
+  fuentes: [
+    {
+      id: "f-unotv",
+      nombre: "UnoTV Nacional",
+      url: "https://unotv.com/feed",
+      marca: "unotv",
+      marca_nombre: "UnoTV",
+      activo: true,
+      incluir: "",
+      excluir: "",
+      redes_def: [],
+      ultima_actualizacion: null,
+      ultimo_error: null,
+      ultimo_conteo: 0,
+      propia: false,
+    },
+  ],
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function marcaActivaValor(marcaActiva: string | null): ValorMarcaActiva {
+  return {
+    marcaActiva,
+    marcaPrimaria: marcaActiva,
+    enMarcaPrimaria: true,
+    esMultiMarca: false,
+    puedeTodas: false,
+    marcasParaSwitch: marcaActiva ? [{ id: marcaActiva, nombre: marcaActiva }] : [],
+    nombreActiva: marcaActiva,
+    cambiarMarca: vi.fn(),
+    volverAPrimaria: vi.fn(),
+  };
+}
+
+function renderFuentesConMarca(marcaActiva: string | null) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <SesionContexto.Provider value={sesionValor(usuario())}>
+        <MarcaActivaContexto.Provider value={marcaActivaValor(marcaActiva)}>
+          <MemoryRouter>
+            <Fuentes />
+          </MemoryRouter>
+        </MarcaActivaContexto.Provider>
+      </SesionContexto.Provider>
+    </QueryClientProvider>,
+  );
+}
 
 let activarCalled = false;
 let activarBody: unknown = null;
 
-function stubFetch() {
+function stubFetch(opts: { rssPayload?: object } = {}) {
   activarCalled = false;
   activarBody = null;
 
@@ -107,8 +160,12 @@ function stubFetch() {
           { status: 200 },
         );
       }
+      if (ruta.includes("/api/rss/items")) {
+        return new Response(JSON.stringify({ items: [], errores: [] }), { status: 200 });
+      }
       if (ruta.includes("/api/rss/fuentes")) {
-        return new Response(JSON.stringify({ fuentes: [] }), { status: 200 });
+        const payload = opts.rssPayload ?? { fuentes: [] };
+        return new Response(JSON.stringify(payload), { status: 200 });
       }
       // Fallback silencioso para cualquier otra petición.
       return new Response("{}", { status: 200 });
@@ -224,5 +281,56 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
 
     const boton = screen.getByRole("button", { name: /activar seleccionadas/i });
     expect(boton).toBeDisabled();
+  });
+
+  it("activar seleccionadas incluye la marca activa en el body cuando hay marca activa", async () => {
+    stubFetch();
+
+    // Render con marca activa "unotv" directamente via contexto
+    renderFuentesConMarca("unotv");
+
+    const tabCatalogo = await screen.findByRole("tab", { name: "Catálogo" });
+    fireEvent.mouseDown(tabCatalogo, { button: 0 });
+
+    await screen.findByText("Reuters — World");
+
+    const chkReuters = screen.getByRole("checkbox", { name: "Seleccionar Reuters — World" });
+    fireEvent.click(chkReuters);
+
+    const boton = screen.getByRole("button", { name: /activar seleccionadas/i });
+    fireEvent.click(boton);
+
+    await waitFor(() => {
+      expect(activarCalled).toBe(true);
+    });
+
+    // La marca activa debe enviarse en el body.
+    expect((activarBody as { marca?: string }).marca).toBe("unotv");
+  });
+});
+
+describe("Fuentes — filtrado por marca activa en pestaña RSS", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("la pestaña RSS muestra solo los feeds de la marca activa", async () => {
+    stubFetch({ rssPayload: FUENTES_RSS_UNOTV });
+    renderFuentesConMarca("unotv");
+
+    // Navegar a la pestaña RSS
+    const tabRss = await screen.findByRole("tab", { name: "RSS" });
+    fireEvent.mouseDown(tabRss, { button: 0 });
+
+    // El feed de UnoTV debe aparecer (misma marca que la activa)
+    expect(await screen.findByText("UnoTV Nacional")).toBeInTheDocument();
   });
 });

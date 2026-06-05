@@ -2081,9 +2081,9 @@ export const api = {
      * `soloFrescos=true` activa `solo_frescos=1` en la query: los ítems caducados se ocultan
      * (no se borran). Útil para UnoTV donde publicar noticias de ayer es perjudicial.
      */
-    listar: (fecha?: string, signal?: AbortSignal, soloFrescos?: boolean) =>
+    listar: (fecha?: string, signal?: AbortSignal, soloFrescos?: boolean, marca?: string) =>
       peticion<RespuestaInsumos>(
-        `/insumos${query({ fecha, ...(soloFrescos ? { solo_frescos: "1" } : {}) })}`,
+        `/insumos${query({ fecha, ...(soloFrescos ? { solo_frescos: "1" } : {}), ...(marca ? { marca } : {}) })}`,
         { signal },
       ),
 

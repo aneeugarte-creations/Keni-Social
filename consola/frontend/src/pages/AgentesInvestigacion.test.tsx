@@ -241,6 +241,45 @@ describe("AgentesInvestigacion", () => {
     ).toBeInTheDocument();
   });
 
+  it("pasa la marca activa a api.investigacion.candidatos", async () => {
+    const candidatosMock = vi
+      .spyOn(apiMod.api.investigacion, "candidatos")
+      .mockResolvedValue(CANDIDATOS_VACIOS as never);
+    vi.spyOn(apiMod.api.investigacion, "briefs").mockResolvedValue(BRIEFS_VACIOS as never);
+
+    renderConProviders(<AgentesInvestigacion />);
+
+    await screen.findByRole("heading", { name: "Agentes de investigación" });
+
+    // El usuario del helper tiene marcas: ["unotv"], así que marcaActiva = "unotv"
+    await waitFor(() => {
+      expect(candidatosMock).toHaveBeenCalledWith(
+        expect.objectContaining({ marca: "unotv" }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("pre-rellena el campo marca del brief nuevo con la marca activa", async () => {
+    mockApi(BRIEFS_VACIOS, CANDIDATOS_VACIOS);
+    renderConProviders(<AgentesInvestigacion />);
+
+    await screen.findByRole("heading", { name: "Agentes de investigación" });
+
+    // Hay dos botones "Nuevo": uno para crear brief y otro es el filtro de estado.
+    // El de brief tiene un icono Plus y está primero en el DOM (dentro del card de briefs).
+    const botonesNuevo = screen.getAllByRole("button", { name: /Nuevo/i });
+    // El botón de "Nuevo brief" tiene el icono SVG plus, aparece antes que el filtro
+    // de estado de candidatos. Usamos el primero.
+    fireEvent.click(botonesNuevo[0]);
+
+    // El campo de marca debe estar pre-rellenado con la marca activa
+    await waitFor(() => {
+      const inputMarca = screen.getByRole("textbox", { name: /Marca \(id\)/i });
+      expect((inputMarca as HTMLInputElement).value).toBe("unotv");
+    });
+  });
+
   it("candidato aceptado muestra badge 'En tablero' (sin botones de acción)", async () => {
     const candidatoAceptado = { ...CANDIDATO_NUEVO, estado: "aceptado" as const };
     mockApi(BRIEFS_VACIOS, { candidatos: [candidatoAceptado] });

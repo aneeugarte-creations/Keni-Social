@@ -49,6 +49,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { CajonInsumo, CajonConItems, InsumoItem, InsumoLote } from "@/types";
 
@@ -116,9 +117,9 @@ function etiquetaFecha(fecha: string): string {
 
 // ── Claves de React Query ─────────────────────────────────────────────────────
 
-/** Clave completa para una combinación fecha+filtro. */
-const CLAVE_INSUMOS = (fecha: string, soloFrescos: boolean) =>
-  ["insumos", "listar", fecha, soloFrescos] as const;
+/** Clave completa para una combinación fecha+filtro+marca. */
+const CLAVE_INSUMOS = (fecha: string, soloFrescos: boolean, marca: string | null) =>
+  ["insumos", "listar", fecha, soloFrescos, marca ?? ""] as const;
 /** Prefijo para invalidar todas las variantes de un día (independientemente del filtro). */
 const CLAVE_INSUMOS_PREFIJO = (fecha: string) => ["insumos", "listar", fecha] as const;
 const CLAVE_DIAS = ["insumos", "dias"] as const;
@@ -575,6 +576,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function CajonesDia() {
+  const { marcaActiva } = useMarcaActiva();
   const [fecha, setFecha] = React.useState<string>(hoyIso);
   // Default ON: ocultar caducados (especialmente útil para UnoTV)
   const [ocultarCaducados, setOcultarCaducados] = React.useState(true);
@@ -586,10 +588,11 @@ export default function CajonesDia() {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Datos del día seleccionado
+  // Datos del día seleccionado — filtrados por la marca activa (null = todas)
   const insumosQuery = useQuery({
-    queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados),
-    queryFn: ({ signal }) => api.insumos.listar(fecha, signal, ocultarCaducados),
+    queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados, marcaActiva),
+    queryFn: ({ signal }) =>
+      api.insumos.listar(fecha, signal, ocultarCaducados, marcaActiva ?? undefined),
     staleTime: 30 * 1000,
   });
 

@@ -211,8 +211,9 @@ const ETIQUETA_TIPO: Record<string, string> = {
  * se espejan automáticamente al hub y aparecen aquí.
  */
 function HubFuentes() {
+  const { marcaActiva } = useMarcaActiva();
   const query = useQuery({
-    queryKey: ["fuentes", "hub"],
+    queryKey: ["fuentes", "hub", marcaActiva ?? ""],
     queryFn: ({ signal }) => api.fuentesHub(undefined, signal),
   });
 
@@ -352,18 +353,22 @@ const ETIQUETA_CATEGORIA: Record<string, string> = {
  * que los feeds nuevos aparezcan inmediatamente en la pestaña RSS.
  */
 function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
+  const { marcaActiva } = useMarcaActiva();
   const queryClient = useQueryClient();
   const [categoriaFiltro, setCategoriaFiltro] = React.useState<string>("todas");
   const [seleccionados, setSeleccionados] = React.useState<Set<string>>(() => new Set());
 
   const query = useQuery({
-    queryKey: ["fuentes", "presets", categoriaFiltro],
+    queryKey: ["fuentes", "presets", categoriaFiltro, marcaActiva ?? ""],
     queryFn: ({ signal }) =>
       api.fuentesPresets(categoriaFiltro === "todas" ? undefined : categoriaFiltro, signal),
   });
 
   const activar = useMutation({
-    mutationFn: (ids: string[]) => api.activarPresets({ ids }),
+    // Al activar: si hay marca activa, úsala como destino por defecto (la preset puede tener
+    // su propia marca_sugerida, pero en el contexto de la marca activa tiene precedencia).
+    mutationFn: (ids: string[]) =>
+      api.activarPresets({ ids, ...(marcaActiva ? { marca: marcaActiva } : {}) }),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["fuentes", "presets"] });
       void queryClient.invalidateQueries({ queryKey: CLAVE_FUENTES });
@@ -827,17 +832,17 @@ function GestionFuentes({
   marcas: MarcaDisponible[];
   redes: RedPublicacion[];
 }) {
+  // Por marca: cada equipo gestiona los feeds de SU marca + los compartidos (sin marca).
+  // El radar/plan de la marca lee exactamente este conjunto. Admin (sin marca activa) ve todo.
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
+
   const query = useQuery({
-    queryKey: CLAVE_FUENTES,
+    queryKey: [...CLAVE_FUENTES, marcaActiva ?? ""],
     queryFn: ({ signal }) => api.fuentesRss(signal),
   });
 
   // null = sin diálogo; "nuevo" = creando; objeto = editando ese feed.
   const [editando, setEditando] = React.useState<FuenteRss | "nuevo" | null>(null);
-
-  // Por marca: cada equipo gestiona los feeds de SU marca + los compartidos (sin marca).
-  // El radar/plan de la marca lee exactamente este conjunto. Admin (sin marca activa) ve todo.
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const todas = React.useMemo(() => query.data?.fuentes ?? [], [query.data]);
   const fuentes = React.useMemo(
     () => (marcaActiva ? todas.filter((f) => !f.marca || f.marca === marcaActiva) : todas),
@@ -1282,12 +1287,13 @@ function ItemsRecientes({
   marcas: MarcaDisponible[];
   redes: RedPublicacion[];
 }) {
+  const { marcaActiva } = useMarcaActiva();
   const [fuenteSel, setFuenteSel] = React.useState(FUENTE_TODAS);
   const [ocultarUsados, setOcultarUsados] = React.useState(false);
   const [filtro, setFiltro] = React.useState("");
 
   const fuentesQuery = useQuery({
-    queryKey: CLAVE_FUENTES,
+    queryKey: [...CLAVE_FUENTES, marcaActiva ?? ""],
     queryFn: ({ signal }) => api.fuentesRss(signal),
   });
   const fuentes = React.useMemo(
@@ -1297,22 +1303,12 @@ function ItemsRecientes({
 
   const fuenteParam = fuenteSel === FUENTE_TODAS ? undefined : fuenteSel;
   const query = useQuery({
-    queryKey: [...CLAVE_ITEMS, fuenteParam ?? "", ocultarUsados],
+    queryKey: [...CLAVE_ITEMS, fuenteParam ?? "", ocultarUsados, marcaActiva ?? ""],
     queryFn: ({ signal }) => api.itemsRss(fuenteParam, ocultarUsados, signal),
   });
 
   const items = React.useMemo(() => query.data?.items ?? [], [query.data]);
   const errores = query.data?.errores ?? [];
-
-  // Filtro por palabra clave (en cliente, sobre título + resumen).
-  const itemsFiltrados = React.useMemo(() => {
-    const t = filtro.trim().toLowerCase();
-    if (!t) return items;
-    return items.filter(
-      (i) =>
-        i.titulo.toLowerCase().includes(t) || i.resumen.toLowerCase().includes(t),
-    );
-  }, [items, filtro]);
 
   // Mapa de redes por feed para predefinir al generar copy.
   const redesPorFuente = React.useMemo(() => {
@@ -1325,6 +1321,27 @@ function ItemsRecientes({
     for (const f of fuentes) mapa.set(f.id, f.marca);
     return mapa;
   }, [fuentes]);
+
+  // Filtro por marca (cliente): muestra items de feeds de la marca activa + feeds sin marca (globales).
+  // Cuando marcaActiva es null (admin "Todas"), no se filtra. Los items de feeds sin marca se
+  // consideran globales/no clasificados y siempre se muestran.
+  const itemsPorMarca = React.useMemo(() => {
+    if (!marcaActiva) return items;
+    return items.filter((i) => {
+      const marcaFuente = marcaPorFuente.get(i.fuente_id);
+      return !marcaFuente || marcaFuente === marcaActiva;
+    });
+  }, [items, marcaActiva, marcaPorFuente]);
+
+  // Filtro por palabra clave (en cliente, sobre título + resumen).
+  const itemsFiltrados = React.useMemo(() => {
+    const t = filtro.trim().toLowerCase();
+    if (!t) return itemsPorMarca;
+    return itemsPorMarca.filter(
+      (i) =>
+        i.titulo.toLowerCase().includes(t) || i.resumen.toLowerCase().includes(t),
+    );
+  }, [itemsPorMarca, filtro]);
 
   const ultimaActualizacion = React.useMemo(() => {
     const fechas = fuentes
@@ -1429,7 +1446,7 @@ function ItemsRecientes({
         ) : itemsFiltrados.length === 0 ? (
           <EstadoVacioTexto
             texto={
-              items.length === 0
+              itemsPorMarca.length === 0
                 ? "No hay noticias para mostrar. Añade un feed o cambia el filtro."
                 : "Ninguna noticia coincide con el filtro."
             }

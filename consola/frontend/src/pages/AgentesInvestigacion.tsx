@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { InvBrief, InvCandidato } from "@/types";
 
@@ -77,13 +78,15 @@ interface PropsBriefDialogo {
   brief: InvBrief | null;
   abierto: boolean;
   onCerrar: () => void;
+  /** Marca activa global: se usa como valor por defecto al crear un brief nuevo. */
+  marcaActivaDefault?: string | null;
 }
 
-function DialogoBrief({ brief, abierto, onCerrar }: PropsBriefDialogo) {
+function DialogoBrief({ brief, abierto, onCerrar, marcaActivaDefault }: PropsBriefDialogo) {
   const queryClient = useQueryClient();
 
   const [nombre, setNombre] = React.useState(brief?.nombre ?? "");
-  const [marca, setMarca] = React.useState(brief?.marca ?? "");
+  const [marca, setMarca] = React.useState(brief?.marca ?? (marcaActivaDefault ?? ""));
   const [linea, setLinea] = React.useState(brief?.linea ?? "");
   const [instrucciones, setInstrucciones] = React.useState(brief?.instrucciones ?? "");
   const [idiomas, setIdiomas] = React.useState(brief?.idiomas ?? "");
@@ -91,12 +94,13 @@ function DialogoBrief({ brief, abierto, onCerrar }: PropsBriefDialogo) {
   React.useEffect(() => {
     if (abierto) {
       setNombre(brief?.nombre ?? "");
-      setMarca(brief?.marca ?? "");
+      // Al crear nuevo brief: pre-rellena con la marca activa (editable). Al editar: respeta la guardada.
+      setMarca(brief?.marca ?? (marcaActivaDefault ?? ""));
       setLinea(brief?.linea ?? "");
       setInstrucciones(brief?.instrucciones ?? "");
       setIdiomas(brief?.idiomas ?? "");
     }
-  }, [abierto, brief]);
+  }, [abierto, brief, marcaActivaDefault]);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -346,6 +350,7 @@ function TarjetaBrief({ brief, onEditar }: PropsTarjetaBrief) {
 // ── Sección de gestión de briefs ───────────────────────────────────────────────
 
 function SeccionBriefs() {
+  const { marcaActiva } = useMarcaActiva();
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [briefEditando, setBriefEditando] = React.useState<InvBrief | null>(null);
   const [expandido, setExpandido] = React.useState(true);
@@ -439,6 +444,7 @@ function SeccionBriefs() {
         brief={briefEditando}
         abierto={dialogoAbierto}
         onCerrar={() => setDialogoAbierto(false)}
+        marcaActivaDefault={marcaActiva}
       />
     </Card>
   );
@@ -584,14 +590,15 @@ function CandidatoCard({ candidato, fecha }: PropsCandidatoCard) {
 // ── Sección de candidatos del día ──────────────────────────────────────────────
 
 function SeccionCandidatos() {
+  const { marcaActiva } = useMarcaActiva();
   const [fecha, setFecha] = React.useState<string>(hoyIso);
   const [filtroEstado, setFiltroEstado] = React.useState<"" | "nuevo" | "aceptado" | "descartado">("");
 
   const query = useQuery({
-    queryKey: CLAVES_CANDIDATOS(fecha, undefined, filtroEstado || undefined),
+    queryKey: CLAVES_CANDIDATOS(fecha, marcaActiva ?? undefined, filtroEstado || undefined),
     queryFn: ({ signal }) =>
       api.investigacion.candidatos(
-        { fecha, estado: filtroEstado || undefined },
+        { fecha, marca: marcaActiva ?? undefined, estado: filtroEstado || undefined },
         signal,
       ),
     staleTime: 30 * 1000,

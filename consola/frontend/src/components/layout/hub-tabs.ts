@@ -52,8 +52,11 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   { ruta: "/datos/investigacion", etiqueta: "Investigador", icono: ScanSearch, end: true },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
   { ruta: "/datos/investigacion/cajones", etiqueta: "Cajones del día", icono: Inbox },
-  // Eventos a cubrir: se mudó del Calendario al hub de Fuentes (ola "Calendario =
-  // turnos / Fuentes = eventos"). La asignación de cobertura sigue en Turnos.
+  // Eventos y programas: eventos a cubrir + catálogo de programas evergreen.
+  // Los eventos se mudaron del Calendario al hub de Fuentes (ola "Calendario =
+  // turnos / Fuentes = eventos"); los programas se mudaron de la pestaña
+  // "Programas" del Calendario (ola "Programas → Fuentes"). La asignación de
+  // cobertura sigue en Turnos.
   { ruta: "/datos/investigacion/eventos", etiqueta: "Eventos", icono: CalendarPlus },
   // Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
   { ruta: "/datos/investigacion/agentes", etiqueta: "Agentes", icono: Bot },

@@ -234,6 +234,7 @@ describe("CajonesDia", () => {
         "2026-06-04",
         expect.anything(),
         expect.anything(), // soloFrescos param
+        expect.anything(), // marca param
       );
     });
   });
@@ -359,6 +360,26 @@ describe("CajonesDia", () => {
         expect.any(String),
         expect.anything(),
         true,
+        expect.anything(), // marca param
+      );
+    });
+  });
+
+  it("pasa la marca activa del usuario a api.insumos.listar", async () => {
+    const listarMock = vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_VACIOS as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Portal / SMS");
+
+    // El usuario del helper tiene marcas: ["unotv"], así que marcaActiva = "unotv"
+    await waitFor(() => {
+      expect(listarMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.anything(),
+        expect.any(Boolean),
+        "unotv",
       );
     });
   });
