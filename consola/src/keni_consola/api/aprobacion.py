@@ -35,7 +35,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import config, permisos, repos
+from .. import config, db, permisos, repos
 from .._http_json import leer_json
 from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
@@ -48,6 +48,7 @@ from ..estados import (
     ESTADO_PROGRAMADO,
     ROL_ADMIN,
 )
+from ..motor_db import IntegrityError
 from ..seguridad import autor_de_peticion
 from .colaboracion import montar_cadena_aprobacion
 
@@ -102,6 +103,9 @@ async def _decidir(request: Request, decision: str) -> Response:
     if rechazo is not None:
         return rechazo
 
+    # Pre-flight (solo para un mensaje claro): si no hay nivel pendiente, la pieza no está en
+    # revisión. La validación REAL (orden, "otro par de ojos", estado) se re-hace bajo bloqueo
+    # dentro de la transacción para no decidir sobre un snapshot obsoleto.
     cadena = repos.listar_aprobaciones(publicacion_id)
     nivel = colaboracion.nivel_actual(cadena)
     if nivel is None:
@@ -111,18 +115,30 @@ async def _decidir(request: Request, decision: str) -> Response:
 
     # El autor de la pieza es quien la mando a revision (autor_id de la publicacion).
     autor_pieza_id = pub.get("autor_id", "") or ""
-    campos, error = colaboracion.decidir(
-        nivel,
-        cadena,
-        decision,
-        autor_de_peticion(request),
-        rol=_rol_de_peticion(request),
-        autor_pieza_id=autor_pieza_id,
+    decisor = autor_de_peticion(request)
+    rol = _rol_de_peticion(request)
+
+    def _validar(nivel_fresco: dict[str, Any], cadena_fresca: list[dict[str, Any]]):
+        # Re-aplica la regla PURA del dominio sobre la cadena YA bloqueada/consistente: cierra
+        # la carrera del invariante cruzado (mismo decisor en dos niveles, orden) que el CAS
+        # por-fila no ve.
+        return colaboracion.decidir(
+            nivel_fresco,
+            cadena_fresca,
+            decision,
+            decisor,
+            rol=rol,
+            autor_pieza_id=autor_pieza_id,
+        )
+
+    # ATÓMICO: bloquea la cadena, re-valida con `_validar` y aplica el CAS, todo en una sola
+    # transacción (db.decidir_nivel_aprobacion_tx). Un `error` = 409 (estado cambió / regla);
+    # un `None` sin error sólo ocurriría si la fila desapareció (carrera de borrado) -> 404.
+    nivel_decidido, error = db.decidir_nivel_aprobacion_tx(
+        publicacion_id, nivel["id"], _validar
     )
     if error is not None:
         return JSONResponse({"error": error}, status_code=409)
-
-    nivel_decidido = repos.actualizar_aprobacion(nivel["id"], campos)
     if nivel_decidido is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
@@ -423,10 +439,19 @@ async def programar(request: Request) -> Response:
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
 
-    actualizada = repos.actualizar_publicacion(
-        publicacion_id,
-        {"estado": ESTADO_PROGRAMADO, "fecha_programada": fecha, "preparado_en": ""},
-    )
+    try:
+        actualizada = repos.actualizar_publicacion(
+            publicacion_id,
+            {"estado": ESTADO_PROGRAMADO, "fecha_programada": fecha, "preparado_en": ""},
+        )
+    except IntegrityError:
+        # Backstop de doble-reserva (índice parcial `idx_parrilla_slot_uniq`): ese (red, fecha)
+        # ya está ocupado por otra pieza programada. El usuario eligió la fecha a mano, así que
+        # no recalculamos; le pedimos otra ranura.
+        return JSONResponse(
+            {"error": "Ya hay una publicación programada en esa red y fecha; elige otra hora."},
+            status_code=409,
+        )
     if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})

@@ -930,7 +930,23 @@ def ejecutar_barrido() -> dict[str, Any]:
     Best-effort: un fallo por marca/tema se loguea y se sigue; si la cola de generación está
     llena, se corta la fase en curso (reintenta el siguiente barrido). Devuelve un resumen
     `{temas, cribados, lanzados}` (para el endpoint/los tests).
+
+    SINGLE-FLIGHT cross-proceso (advisory lock de Postgres): el daemon y el endpoint a demanda
+    comparten este barrido; su dedup (`_claves_dedup_marca`) es leer-luego-escribir en Python,
+    así que dos barridos solapados podrían ingerir/cribar/generar el MISMO tema dos veces. El
+    lock hace que un segundo barrido concurrente salga de inmediato con un resumen vacío.
     """
+    from . import db
+
+    with db.lock_barrido("pipeline_contenido") as ok:
+        if not ok:
+            _log.debug("pipeline: otro barrido en curso; se omite este.")
+            return {"temas": [], "cribados": [], "lanzados": []}
+        return _ejecutar_barrido()
+
+
+def _ejecutar_barrido() -> dict[str, Any]:
+    """Cuerpo del barrido del pipeline (ya bajo el single-flight de `ejecutar_barrido`)."""
     autor = _autor_pipeline()
     maximo = config.pipeline_max()
     # --- Fase CI: crea los temas (sin copy) por marca. ---------------------------------------

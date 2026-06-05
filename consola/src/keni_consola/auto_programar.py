@@ -29,7 +29,7 @@ from typing import Any
 
 from . import config, repos
 from .dominio import colaboracion
-from .estados import ESTADO_APROBADO, ESTADO_PROGRAMADO
+from .estados import ESTADO_APROBADO
 
 _log = logging.getLogger("keni_consola.auto_programar")
 
@@ -62,18 +62,20 @@ def programar_si_aprobada(publicacion_id: str) -> dict[str, Any] | None:
 
     # Próximo hueco libre de sus franjas (reusa la lógica del encolado manual). Import perezoso:
     # `api.publicaciones` es capa API; importarlo a nivel de módulo enredaría el grafo de imports.
-    from .api.publicaciones import calcular_hueco_para
+    # `_encolar_en_hueco_libre` calcula el hueco Y escribe con el BACKSTOP de unicidad de slot
+    # (índice parcial `idx_parrilla_slot_uniq`) + reintento: si otra pieza (o el encolado manual
+    # de un humano) toma el slot a la vez, recalcula y reintenta en vez de doble-reservarlo.
+    from .api.publicaciones import _encolar_en_hueco_libre
 
-    hueco = calcular_hueco_para(pub)
-    if hueco is None:
+    actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
+    if not hubo_hueco:
         return None  # sin franja aplicable: se queda aprobado (sin inventar fecha).
 
-    actualizada = repos.actualizar_publicacion(
-        publicacion_id,
-        {"estado": ESTADO_PROGRAMADO, "fecha_programada": hueco, "preparado_en": ""},
-    )
     if actualizada is not None:
-        _log.info("Auto-programada pieza %s en %s.", publicacion_id, hueco)
+        _log.info(
+            "Auto-programada pieza %s en %s.",
+            publicacion_id, actualizada.get("fecha_programada"),
+        )
     return actualizada
 
 

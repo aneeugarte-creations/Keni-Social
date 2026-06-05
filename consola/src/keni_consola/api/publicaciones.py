@@ -31,6 +31,7 @@ from ..dominio import cadencia as dom_cadencia
 from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
 from ..estados import ESTADO_APROBADO, ESTADO_EN_REVISION, ESTADO_PROGRAMADO
+from ..motor_db import IntegrityError
 from ..seguridad import autor_de_peticion
 from . import franjas as api_franjas
 
@@ -404,7 +405,15 @@ async def actualizar(request: Request) -> Response:
             fecha_programada="",
         )
 
-    pub = repos.actualizar_publicacion(publicacion_id, campos)
+    try:
+        pub = repos.actualizar_publicacion(publicacion_id, campos)
+    except IntegrityError:
+        # Backstop de doble-reserva de parrilla (índice parcial `idx_parrilla_slot_uniq`): la
+        # edición dejaría dos piezas programadas en el mismo (red, fecha). 409 accionable.
+        return JSONResponse(
+            {"error": "Ya hay una publicación programada en esa red y fecha; elige otra hora."},
+            status_code=409,
+        )
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     if resetear:
@@ -485,18 +494,51 @@ async def encolar(request: Request) -> Response:
     rechazo = permisos.rechazo_pieza(request, pub.get("marca") or "")
     if rechazo is not None:
         return rechazo
-    hueco = calcular_hueco_para(pub)
-    if hueco is None:
+    actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
+    if not hubo_hueco:
         return JSONResponse(
             {"error": "No hay cadencia ni franjas configuradas para esta marca/red."},
             status_code=400,
         )
-    actualizada = repos.actualizar_publicacion(
-        publicacion_id, {"estado": "programado", "fecha_programada": hueco}
-    )
     if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
+
+
+# Tope de reintentos al programar en un hueco: cada choque significa que OTRA pieza tomo ese
+# slot entre el calculo y la escritura; recalculamos el siguiente hueco libre y reintentamos.
+_MAX_REINTENTOS_HUECO = 8
+
+
+def _encolar_en_hueco_libre(
+    pub: dict[str, Any], ahora: datetime | None = None
+) -> tuple[dict[str, Any] | None, bool]:
+    """Programa `pub` en el próximo hueco libre, con BACKSTOP de unicidad + reintento.
+
+    Devuelve `(publicacion_actualizada | None, hubo_hueco)`. El índice único parcial
+    `idx_parrilla_slot_uniq` impide que dos piezas queden programadas en el mismo (red, fecha):
+    si entre el cálculo del hueco y la escritura otra pieza ya tomó ese slot, el UPDATE lanza
+    una IntegrityError (carrera de doble-reserva); aquí RECALCULAMOS el siguiente hueco y
+    reintentamos (bucle acotado). `hubo_hueco=False` => no hay cadencia/franja aplicable (None,
+    sin tocar nada). `None` con `hubo_hueco=True` => la pieza se borró en la carrera.
+    """
+    for _ in range(_MAX_REINTENTOS_HUECO):
+        hueco = calcular_hueco_para(pub, ahora)
+        if hueco is None:
+            return None, False
+        try:
+            # `preparado_en=""`: una pieza recién (re)programada aún no se preparó; resetearlo
+            # evita que el programador la trate como ya preparada. Inocuo en el encolado manual.
+            actualizada = repos.actualizar_publicacion(
+                pub["id"],
+                {"estado": "programado", "fecha_programada": hueco, "preparado_en": ""},
+            )
+        except IntegrityError:
+            # Otra pieza reservó este slot antes que nosotros: recalcula y reintenta.
+            continue
+        return actualizada, True
+    # Contención patológica: tras varios choques no se consiguió un slot libre estable.
+    return None, True
 
 
 async def duplicar(request: Request) -> Response:
@@ -589,15 +631,13 @@ async def reciclar(request: Request) -> Response:
         autor=autor_de_peticion(request),
     )
 
-    hueco = calcular_hueco_para(copia)
-    if hueco is not None:
-        actualizada = repos.actualizar_publicacion(
-            copia["id"], {"estado": "programado", "fecha_programada": hueco}
+    # Encola con el mismo backstop de unicidad + reintento que `encolar` (evita doble-reserva
+    # del slot si otra pieza lo toma a la vez).
+    actualizada, hubo_hueco = _encolar_en_hueco_libre(copia)
+    if hubo_hueco and actualizada is not None:
+        return JSONResponse(
+            {"publicacion": _publicacion_a_dict(actualizada), "encolado": True}
         )
-        if actualizada is not None:
-            return JSONResponse(
-                {"publicacion": _publicacion_a_dict(actualizada), "encolado": True}
-            )
     return JSONResponse({"publicacion": _publicacion_a_dict(copia), "encolado": False})
 
 

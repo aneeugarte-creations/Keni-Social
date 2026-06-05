@@ -226,7 +226,23 @@ def ejecutar_barrido() -> list[dict[str, Any]]:
 
     Best-effort: un fallo por item se loguea y se sigue; si la cola esta llena, se corta el
     barrido (reintenta el siguiente, sin marcar los no lanzados).
+
+    SINGLE-FLIGHT cross-proceso (advisory lock de Postgres): el daemon y el endpoint a demanda
+    comparten este barrido; su dedup (`ids_ya_generados`) es leer-luego-escribir en Python, asi
+    que dos barridos solapados podrian lanzar `claude -p` para el MISMO tema dos veces. El lock
+    hace que un segundo barrido concurrente salga de inmediato con lista vacia (no lanza nada).
     """
+    from . import db
+
+    with db.lock_barrido("autogen_copy") as ok:
+        if not ok:
+            _log.debug("Auto-generacion: otro barrido en curso; se omite este.")
+            return []
+        return _ejecutar_barrido()
+
+
+def _ejecutar_barrido() -> list[dict[str, Any]]:
+    """Cuerpo del barrido de auto-generacion (ya bajo el single-flight de `ejecutar_barrido`)."""
     try:
         items = repos.listar_contenido()
     except Exception:  # noqa: BLE001 -- el tablero no disponible no debe romper el barrido

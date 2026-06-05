@@ -178,7 +178,24 @@ def ejecutar_barrido() -> list[dict[str, Any]]:
 
     Lo llaman el daemon y el endpoint de ejecucion a demanda. Usa la config viva (umbral, geo,
     cap, marca). Best-effort: un fallo se loguea y devuelve lista vacia (no rompe el hilo).
+
+    SINGLE-FLIGHT cross-proceso (advisory lock de Postgres): el daemon y el endpoint a demanda
+    comparten este barrido; su dedup (`titulos_ya_promovidos`) es leer-luego-escribir en Python,
+    asi que dos barridos solapados (deploy, admin pulsando "ejecutar" durante el ciclo del
+    daemon) podrian promover el MISMO tema dos veces. El lock hace que un segundo barrido
+    concurrente salga de inmediato con lista vacia (no promueve nada).
     """
+    from . import db
+
+    with db.lock_barrido("radar_auto") as ok:
+        if not ok:
+            _log.debug("Radar auto-promocion: otro barrido en curso; se omite este.")
+            return []
+        return _ejecutar_barrido()
+
+
+def _ejecutar_barrido() -> list[dict[str, Any]]:
+    """Cuerpo del barrido de auto-promocion (ya bajo el single-flight de `ejecutar_barrido`)."""
     geo = config.radar_auto_geo()
     temas = _leer_radar(geo)
     if not temas:

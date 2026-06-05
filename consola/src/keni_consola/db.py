@@ -58,10 +58,13 @@ motivo de migrar y de retirar SQLite (ADR 0004).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -71,6 +74,9 @@ _log = logging.getLogger("keni_consola.db")
 from . import config, motor_db
 from .estados import (
     CLASE_CONTENIDO,
+    DECISION_APROBADO,
+    DECISION_PENDIENTE,
+    DECISION_RECHAZADO,
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
@@ -272,6 +278,63 @@ def conectar() -> Any:
     abre/cierra su propia conexion.
     """
     return _conectar()
+
+
+# --------------------------------------------------------------------------- #
+# Locks de aplicacion CROSS-PROCESO (Postgres advisory locks)                  #
+# --------------------------------------------------------------------------- #
+# Sin pool de conexiones, cada operacion abre su propia conexion: el unico mutex que cruza
+# procesos (back, worker, daemons, replicas) es un advisory lock de Postgres. Lo usamos para
+# el SINGLE-FLIGHT de los barridos (radar/autogen/pipeline): un segundo barrido concurrente
+# (deploy solapado, admin pulsando "ejecutar" mientras corre el daemon) NO debe duplicar
+# items del tablero ni runs de `claude -p`, porque su dedup es leer-luego-escribir en Python.
+# `pg_try_advisory_lock` es NO bloqueante: si otro ya lo tiene, devolvemos False y el segundo
+# barrido sale de inmediato (no encola, no espera). El lock se suelta al cerrar la conexion
+# (o explicitamente con `pg_advisory_unlock`).
+
+# Espacio de nombres (clave alta de 32 bits del par de claves int) para no colisionar con
+# advisory locks de otros subsistemas. Arbitrario pero estable.
+_LOCK_NS_BARRIDO = 0x4B53  # 'KS'
+
+
+def _clave_lock(nombre: str) -> int:
+    """Deriva una clave estable de 32 bits (con signo) para un advisory lock a partir de texto."""
+    h = int.from_bytes(hashlib.blake2b(nombre.encode("utf-8"), digest_size=4).digest(), "big")
+    # Postgres usa bigint con signo; `pg_*_advisory_lock(int4, int4)` toma int de 32 bits.
+    return h - 0x1_0000_0000 if h >= 0x8000_0000 else h
+
+
+@contextmanager
+def lock_barrido(nombre: str) -> Iterator[bool]:
+    """Single-flight CROSS-PROCESO de un barrido. `with lock_barrido("autogen") as ok:`.
+
+    Intenta tomar un advisory lock de Postgres (`pg_try_advisory_lock`, NO bloqueante) keyed
+    en `nombre`. `ok` es True si ESTE proceso lo obtuvo (debe ejecutar el barrido) o False si
+    otro lo retiene ahora mismo (debe abortar sin hacer nada). El lock se mantiene mientras
+    dure el `with` y se suelta SIEMPRE al salir (incluso ante excepcion), sobre una conexion
+    propia dedicada que no se reusa para el trabajo. Es no-op-friendly: el caller solo
+    comprueba `ok`.
+    """
+    clave = _clave_lock(nombre)
+    con = _conectar()
+    obtenido = False
+    try:
+        fila = con.execute(
+            "SELECT pg_try_advisory_lock(?, ?) AS ok", (_LOCK_NS_BARRIDO, clave)
+        ).fetchone()
+        con.commit()
+        obtenido = bool(fila["ok"]) if fila is not None else False
+        yield obtenido
+    finally:
+        if obtenido:
+            try:
+                con.execute(
+                    "SELECT pg_advisory_unlock(?, ?)", (_LOCK_NS_BARRIDO, clave)
+                )
+                con.commit()
+            except Exception:  # noqa: BLE001 -- soltar es best-effort; cerrar la conexion tambien libera.
+                _log.warning("No se pudo soltar el advisory lock de barrido %s.", nombre)
+        con.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -5391,6 +5454,14 @@ def _fila_a_doc_version(fila: Any) -> dict[str, Any]:
     return item
 
 
+# Tope de reintentos del contador de versiones ante choques de version concurrentes. Cada
+# choque significa que OTRA edicion gano esa version; releemos el MAX y probamos la siguiente.
+# Generoso a proposito: en el peor caso de N escritores simultaneos, un escritor puede perder
+# hasta ~N-1 carreras antes de clavar su numero, asi que el tope debe holgar sobre la
+# concurrencia realista de editores sobre UNA misma pieza (siempre baja en este producto).
+_MAX_REINTENTOS_VERSION = 32
+
+
 def crear_documento_version(
     *,
     contenido_id: str,
@@ -5401,37 +5472,55 @@ def crear_documento_version(
     id: str = "",
     creado: str = "",
 ) -> dict[str, Any]:
-    """Apende una versión del documento de una pieza (version = max+1 para esa pieza)."""
+    """Apende una versión del documento de una pieza (version = max+1 para esa pieza).
+
+    CONTADOR SEGURO ANTE CONCURRENCIA: `MAX(version)+1` + INSERT bajo el indice UNICO
+    `(contenido_id, plataforma_id, version)`. Si dos ediciones simultaneas calculan el MISMO
+    numero, una gana y la otra recibe una UniqueViolation; aqui REINTENTAMOS (bucle acotado)
+    recalculando el siguiente numero, en vez de duplicar la version (que rompia el historial).
+    """
     autor = autor or {}
     ahora = datetime.now().isoformat(timespec="seconds")
+    fila_id = id or uuid.uuid4().hex[:12]
     con = _conectar()
     try:
-        fila_max = con.execute(
-            "SELECT COALESCE(MAX(version), 0) AS m FROM documento_versiones "
-            "WHERE contenido_id = ? AND plataforma_id = ?",
-            (contenido_id, plataforma_id),
-        ).fetchone()
-        siguiente = int(fila_max["m"]) + 1
-        fila = {
-            "id": id or uuid.uuid4().hex[:12],
-            "contenido_id": contenido_id or "",
-            "plataforma_id": plataforma_id or "",
-            "version": siguiente,
-            "documento": documento or "{}",
-            "render_objeto": render_objeto or "",
-            "autor_id": autor.get("id", "") or "",
-            "autor_nombre": autor.get("usuario", "") or "",
-            "creado": creado or ahora,
-        }
-        marcadores = ", ".join("?" for _ in _COLS_DOC_VERSIONES)
-        con.execute(
-            f"INSERT INTO documento_versiones ({', '.join(_COLS_DOC_VERSIONES)}) VALUES ({marcadores})",
-            tuple(fila[col] for col in _COLS_DOC_VERSIONES),
-        )
-        con.commit()
+        ultimo_error: Exception | None = None
+        for _ in range(_MAX_REINTENTOS_VERSION):
+            fila_max = con.execute(
+                "SELECT COALESCE(MAX(version), 0) AS m FROM documento_versiones "
+                "WHERE contenido_id = ? AND plataforma_id = ?",
+                (contenido_id, plataforma_id),
+            ).fetchone()
+            siguiente = int(fila_max["m"]) + 1
+            fila = {
+                "id": fila_id,
+                "contenido_id": contenido_id or "",
+                "plataforma_id": plataforma_id or "",
+                "version": siguiente,
+                "documento": documento or "{}",
+                "render_objeto": render_objeto or "",
+                "autor_id": autor.get("id", "") or "",
+                "autor_nombre": autor.get("usuario", "") or "",
+                "creado": creado or ahora,
+            }
+            marcadores = ", ".join("?" for _ in _COLS_DOC_VERSIONES)
+            try:
+                con.execute(
+                    f"INSERT INTO documento_versiones ({', '.join(_COLS_DOC_VERSIONES)}) VALUES ({marcadores})",
+                    tuple(fila[col] for col in _COLS_DOC_VERSIONES),
+                )
+                con.commit()
+                return _fila_a_doc_version(fila)
+            except IntegrityError as e:
+                # Choque de version (otra edicion gano la carrera): el shim ya hizo rollback;
+                # reintentamos releyendo el MAX para coger el numero siguiente.
+                ultimo_error = e
+        raise RuntimeError(
+            "No se pudo asignar una version de documento tras varios reintentos "
+            f"(contenido={contenido_id}, plataforma={plataforma_id})"
+        ) from ultimo_error
     finally:
         con.close()
-    return _fila_a_doc_version(fila)
 
 
 def listar_documento_versiones(contenido_id: str, plataforma_id: str) -> list[dict[str, Any]]:
@@ -5799,6 +5888,20 @@ def _migrar_columnas_grupos_hashtags(con: Any) -> None:
 _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
     ("idx_franjas_editoriales_uniq", "franjas_editoriales (marca, red, dia_semana, hora)"),
+    # Contador de versiones POR PIEZA: dos ediciones concurrentes calculaban `MAX(version)+1`
+    # y, sin unicidad, insertaban la MISMA version (historial duplicado/roto). El indice unico
+    # convierte ese choque en una UniqueViolation que el INSERT REINTENTA con el numero siguiente
+    # (ver `crear_documento_version` / `registrar_copy_version`).
+    ("idx_documento_versiones_uniq", "documento_versiones (contenido_id, plataforma_id, version)"),
+    ("idx_copy_versiones_uniq", "contenido_copy_versiones (plataforma_id, version)"),
+    # Slot de PARRILLA: dos piezas no pueden quedar PROGRAMADAS a la misma (red, fecha). Parcial
+    # (solo filas `programado` con fecha no vacia) para no estorbar a borradores/temas sin fecha.
+    # El encolado convierte el choque en UniqueViolation y recalcula el siguiente hueco libre.
+    (
+        "idx_parrilla_slot_uniq",
+        "contenido_plataforma (red, fecha_programada) "
+        "WHERE estado = 'programado' AND fecha_programada <> ''",
+    ),
 )
 
 
@@ -7637,37 +7740,51 @@ def registrar_copy_version(
 
     El numero de version se calcula como `MAX(version)+1` sobre esa plataforma (1 si es el
     primero). NO valida: la API decide cuando snapshotear (antes de pisar el copy vivo).
+
+    CONTADOR SEGURO ANTE CONCURRENCIA: bajo el indice UNICO `(plataforma_id, version)`, dos
+    snapshots simultaneos no pueden compartir version. Si chocan, una gana y la otra REINTENTA
+    (bucle acotado) recalculando el siguiente numero (en vez de duplicar la version).
     """
     autor = autor or {}
     ahora = datetime.now().isoformat(timespec="seconds")
+    fila_id = uuid.uuid4().hex[:12]
     con = _conectar()
     try:
-        fila_max = con.execute(
-            "SELECT MAX(version) AS m FROM contenido_copy_versiones WHERE plataforma_id = ?",
-            (plataforma_id,),
-        ).fetchone()
-        siguiente = (fila_max["m"] or 0) + 1 if fila_max is not None else 1
-        fila = {
-            "id": uuid.uuid4().hex[:12],
-            "plataforma_id": plataforma_id,
-            "contenido_id": contenido_id or "",
-            "version": siguiente,
-            "copy": copy or "",
-            "autor_id": autor.get("id", "") or "",
-            "autor_nombre": autor.get("usuario", "") or "",
-            "nota": nota or "",
-            "creado": ahora,
-        }
-        marcadores = ", ".join("?" for _ in _COLS_COPY_VERSION)
-        con.execute(
-            f"INSERT INTO contenido_copy_versiones ({', '.join(_COLS_COPY_VERSION)}) "
-            f"VALUES ({marcadores})",
-            tuple(fila[col] for col in _COLS_COPY_VERSION),
-        )
-        con.commit()
+        ultimo_error: Exception | None = None
+        for _ in range(_MAX_REINTENTOS_VERSION):
+            fila_max = con.execute(
+                "SELECT MAX(version) AS m FROM contenido_copy_versiones WHERE plataforma_id = ?",
+                (plataforma_id,),
+            ).fetchone()
+            siguiente = (fila_max["m"] or 0) + 1 if fila_max is not None else 1
+            fila = {
+                "id": fila_id,
+                "plataforma_id": plataforma_id,
+                "contenido_id": contenido_id or "",
+                "version": siguiente,
+                "copy": copy or "",
+                "autor_id": autor.get("id", "") or "",
+                "autor_nombre": autor.get("usuario", "") or "",
+                "nota": nota or "",
+                "creado": ahora,
+            }
+            marcadores = ", ".join("?" for _ in _COLS_COPY_VERSION)
+            try:
+                con.execute(
+                    f"INSERT INTO contenido_copy_versiones ({', '.join(_COLS_COPY_VERSION)}) "
+                    f"VALUES ({marcadores})",
+                    tuple(fila[col] for col in _COLS_COPY_VERSION),
+                )
+                con.commit()
+                return _fila_a_copy_version(fila)
+            except IntegrityError as e:
+                ultimo_error = e  # otra version gano la carrera; el shim ya hizo rollback.
+        raise RuntimeError(
+            "No se pudo asignar una version de copy tras varios reintentos "
+            f"(plataforma={plataforma_id})"
+        ) from ultimo_error
     finally:
         con.close()
-    return _fila_a_copy_version(fila)
 
 
 def listar_copy_versiones(plataforma_id: str) -> list[dict[str, Any]]:
@@ -7801,17 +7918,35 @@ def obtener_aprobacion(aprobacion_id: str) -> dict[str, Any] | None:
 def actualizar_aprobacion(
     aprobacion_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Aplica una decision a un nivel (`decision`/`decisor_*`/`comentario`/`decidido_en`)."""
+    """Aplica una decision a un nivel (`decision`/`decisor_*`/`comentario`/`decidido_en`).
+
+    CAS DE LA MAQUINA DE ESTADOS (concurrencia): si los `campos` mueven el nivel a una decision
+    TERMINAL (`aprobado`/`rechazado`), el UPDATE solo prospera si el nivel SEGUIA `pendiente`
+    (`AND decision = 'pendiente'`). Asi dos peticiones simultaneas (doble-click, dos revisores a
+    la vez, aprobar-tras-rechazar) NO se pisan: la primera gana y la segunda ve `rowcount == 0`
+    y recibe `None` (el caller lo traduce a 409 "ya fue decidido"). Resetear a `pendiente`
+    (deshacer) o tocar solo metadatos NO lleva guardia (no es una transicion de estado que se
+    pueda perder). El camino normal/no contendido se comporta IGUAL que antes (rowcount 1).
+    Devuelve el nivel actualizado, o None si no existia o si el CAS no aplico (ya decidido).
+    """
     permitidos = ("decision", "decisor_id", "decisor_nombre", "comentario", "decidido_en")
     cambios = {k: v for k, v in campos.items() if k in permitidos}
     if not cambios:
         return obtener_aprobacion(aprobacion_id)
     asignaciones = [f"{k} = ?" for k in cambios]
     params: list[Any] = [*cambios.values(), aprobacion_id]
+    # Guardia CAS solo al pasar a una decision terminal: la transicion pendiente->aprobado/
+    # rechazado es la unica que se puede "perder" si dos la aplican a la vez.
+    decision_nueva = cambios.get("decision")
+    where_cas = ""
+    if decision_nueva in (DECISION_APROBADO, DECISION_RECHAZADO):
+        where_cas = " AND decision = ?"
+        params.append(DECISION_PENDIENTE)
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE contenido_aprobaciones SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            f"UPDATE contenido_aprobaciones SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
+            f"WHERE id = ?{where_cas}",
             tuple(params),
         )
         con.commit()
@@ -7823,6 +7958,76 @@ def actualizar_aprobacion(
     finally:
         con.close()
     return _fila_a_aprobacion(fila) if fila is not None else None
+
+
+def decidir_nivel_aprobacion_tx(
+    plataforma_id: str,
+    nivel_id: str,
+    validar: Any,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Decide UN nivel de la cadena RE-VALIDANDO bajo bloqueo, en una sola transaccion.
+
+    Cierra la condicion de carrera de INVARIANTE CRUZADO ENTRE FILAS que el CAS por-fila no
+    cubre: el "dos OK = dos personas distintas" (y el orden de la cadena) se comprueba contra
+    el ESTADO de toda la cadena, no de un solo nivel. Dos decisiones simultaneas de la MISMA
+    persona sobre niveles distintos podrian, leyendo cada una un snapshot donde la otra aun no
+    consta, pasar las dos el chequeo de "decisor distinto" y dejar a una persona dando los dos
+    OK. Aqui:
+
+      1) Bloqueamos las filas de la cadena (`SELECT ... FOR UPDATE`) de `plataforma_id`: la otra
+         decision concurrente sobre la misma cadena ESPERA aqui (no lee un snapshot obsoleto).
+      2) Re-leemos la cadena ya consistente y llamamos `validar(nivel_actual, cadena)` —la regla
+         PURA del dominio (`colaboracion.decidir`)— sobre datos frescos. Devuelve `(campos, None)`
+         o `(None, error)`.
+      3) Si valida, aplicamos el UPDATE con la MISMA guardia CAS (`AND decision='pendiente'`) y
+         confirmamos. Todo bajo una sola conexion/transaccion.
+
+    Devuelve `(nivel_decidido, None)` con el nivel ya actualizado, o `(None, error)` si la
+    validacion lo rechaza (texto legible para 409) o si el CAS no aplico (decidido en paralelo).
+    `validar` recibe `(nivel_actual_dict | None, cadena_list)` y debe ser una funcion PURA.
+    """
+    con = _conectar()
+    try:
+        # 1) Bloqueo de la cadena: serializa las decisiones concurrentes de la MISMA pieza.
+        con.execute(
+            "SELECT id FROM contenido_aprobaciones WHERE plataforma_id = ? "
+            "ORDER BY nivel ASC, id ASC FOR UPDATE",
+            (plataforma_id,),
+        ).fetchall()
+        # 2) Re-lectura consistente de la cadena + del nivel objetivo.
+        filas = con.execute(
+            f"{_SELECT_APROBACION} WHERE plataforma_id = ? ORDER BY nivel ASC, id ASC",
+            (plataforma_id,),
+        ).fetchall()
+        cadena = [_fila_a_aprobacion(f) for f in filas]
+        nivel = next((n for n in cadena if n.get("id") == nivel_id), None)
+        if nivel is None:
+            con.commit()
+            return None, "Ese nivel ya no existe."
+        campos, error = validar(nivel, cadena)
+        if error is not None:
+            con.commit()
+            return None, error
+        # 3) Escritura con la misma guardia CAS (defensa en profundidad bajo el lock).
+        permitidos = ("decision", "decisor_id", "decisor_nombre", "comentario", "decidido_en")
+        cambios = {k: v for k, v in (campos or {}).items() if k in permitidos}
+        asignaciones = [f"{k} = ?" for k in cambios]
+        params: list[Any] = [*cambios.values(), nivel_id, DECISION_PENDIENTE]
+        cur = con.execute(
+            f"UPDATE contenido_aprobaciones SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
+            "WHERE id = ? AND decision = ?",
+            tuple(params),
+        )
+        if cur.rowcount == 0:
+            con.commit()
+            return None, "Este nivel ya fue decidido (el estado cambió)."
+        fila = con.execute(
+            f"{_SELECT_APROBACION} WHERE id = ?", (nivel_id,)
+        ).fetchone()
+        con.commit()
+    finally:
+        con.close()
+    return (_fila_a_aprobacion(fila) if fila is not None else None), None
 
 
 # --------------------------------------------------------------------------- #
@@ -9087,23 +9292,33 @@ def aplicar_swap_turno(
     ahora = datetime.now().isoformat(timespec="seconds")
     con = _conectar()
     try:
-        # 1) El swap debe existir.
+        # 1) El swap debe existir. Lo BLOQUEAMOS (`FOR UPDATE`) para serializar dos aplicaciones
+        #    concurrentes del MISMO swap: la segunda espera aqui y, al leer ya `aplicado`, sale
+        #    sin re-intercambiar (un doble-swap volveria los turnos a su sitio: corrupcion).
         swap = con.execute(
-            f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)
+            f"{_SELECT_SWAP_TURNO} WHERE id = ? FOR UPDATE", (swap_id,)
         ).fetchone()
         if swap is None:
+            con.commit()
             return None
+        # Idempotencia: si ya esta aplicado (otra peticion gano la carrera), devolvemos el swap
+        # tal cual SIN tocar los turnos. El caller lo renderiza igual (no es un error).
+        if swap["estado"] == "aplicado":
+            con.commit()
+            return _fila_a_swap_turno(swap)
         # 2) Las dos franjas reales (por miembro + fecha + franja) deben existir y
         #    seguir asignadas a quien dijo el swap. Buscamos por (fecha, franja) y
         #    comprobamos el miembro actual (asi detectamos el caso 409 con detalle).
+        #    Las BLOQUEAMOS (`FOR UPDATE`) para que el intercambio sea atomico frente a otra
+        #    reasignacion concurrente de los mismos turnos.
         fila_a = con.execute(
             "SELECT id, miembro_id, miembro_nombre, fecha, franja_id FROM rota_turnos "
-            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ?",
+            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ? FOR UPDATE",
             (fecha_a, franja_a, solicitante_id),
         ).fetchone()
         fila_b = con.execute(
             "SELECT id, miembro_id, miembro_nombre, fecha, franja_id FROM rota_turnos "
-            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ?",
+            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ? FOR UPDATE",
             (fecha_b, franja_b, destinatario_id),
         ).fetchone()
         if fila_a is None or fila_b is None:
@@ -9118,6 +9333,7 @@ def aplicar_swap_turno(
                 "WHERE fecha = ? AND franja_id = ?",
                 (fecha_b, franja_b),
             ).fetchone()
+            con.commit()  # suelta los locks FOR UPDATE; no tocamos nada (caso 409).
             return {
                 "error": "no_coinciden",
                 "esperado": {
@@ -9163,10 +9379,14 @@ def aplicar_swap_turno(
             "actualizado = ? WHERE id = ?",
             (solicitante_id, solicitante_nombre, ahora, fila_b["id"]),
         )
+        # Guardia de estado (defensa en profundidad, ademas del FOR UPDATE): el swap solo se
+        # marca `aplicado` si AUN no lo estaba. Bajo el lock esto siempre prospera; el guard
+        # protege ante cualquier via que entrara sin pasar por el lock.
         con.execute(
             "UPDATE rota_swaps_turno SET estado = ?, respuesta_admin = ?, "
-            "decidido_admin = ?, aplicado = ?, actualizado = ? WHERE id = ?",
-            ("aplicado", respuesta_admin or "", ahora, ahora, ahora, swap_id),
+            "decidido_admin = ?, aplicado = ?, actualizado = ? "
+            "WHERE id = ? AND estado <> ?",
+            ("aplicado", respuesta_admin or "", ahora, ahora, ahora, swap_id, "aplicado"),
         )
         con.commit()
         fila = con.execute(
@@ -9406,6 +9626,14 @@ def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     siempre y el registro `ejecutando` -> la UI mostraba "Generando..." sin fin). El umbral
     supera el tiempo maximo que un worker VIVO retiene la fila, asi nunca se roba un job en
     curso. El UPDATE re-sella `worker`/`claimed_at`, asi un segundo abandono se vuelve a cubrir.
+
+    GUARDIA ANTI-DUPLICADO (re-reclamo de huerfanos): un worker puede haber MUERTO DESPUES de
+    fijar el estado terminal del registro (y de correr su post-procesado: `crear_borrador` es un
+    INSERT fresco, NO idempotente) pero ANTES de llamar a `terminar_job` — el job queda
+    `reclamado`. Re-ejecutarlo DUPLICARIA el borrador. Por eso, al re-reclamar un HUERFANO,
+    consultamos el registro de generaciones: si su `gen_id` YA esta en un estado TERMINAL
+    (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
+    (su trabajo ya se hizo). Solo afecta al re-reclamo de huerfanos; un `pendiente` nunca corrio.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     limite_huerfano = (
@@ -9413,23 +9641,61 @@ def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     ).isoformat(timespec="seconds")
     con = _conectar()
     try:
-        fila = con.execute(
-            "SELECT id, gen_id, spec FROM jobs "
-            "WHERE estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?) "
-            "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-            (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano),
-        ).fetchone()
-        if fila is None:
+        # Acotamos los saltos: descartamos huerfanos ya-terminados (terminando su job) y
+        # seguimos buscando, sin reintentar para siempre.
+        for _ in range(_MAX_SALTOS_RECLAMO):
+            fila = con.execute(
+                "SELECT id, gen_id, spec, estado FROM jobs "
+                "WHERE estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?) "
+                "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano),
+            ).fetchone()
+            if fila is None:
+                con.commit()
+                return None
+            # Solo un HUERFANO (estado `reclamado`) pudo haber corrido ya su post-procesado.
+            if fila["estado"] == JOB_RECLAMADO and _gen_ya_terminal(fila["gen_id"]):
+                # El registro ya alcanzo estado terminal: el trabajo se hizo. Cerramos el job
+                # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente.
+                con.execute(
+                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
+                )
+                con.commit()
+                continue
+            con.execute(
+                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? WHERE id = ?",
+                (JOB_RECLAMADO, worker, ahora, fila["id"]),
+            )
             con.commit()
-            return None
-        con.execute(
-            "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? WHERE id = ?",
-            (JOB_RECLAMADO, worker, ahora, fila["id"]),
-        )
+            return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
         con.commit()
-        return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
+        return None
     finally:
         con.close()
+
+
+# Tope de huerfanos-ya-terminados que `reclamar_job` descarta de una tirada antes de rendirse
+# (cota dura para que el barrido nunca gire indefinidamente). Si hubiera mas, el siguiente
+# `reclamar` los sigue limpiando.
+_MAX_SALTOS_RECLAMO = 50
+
+
+def _gen_ya_terminal(gen_id: str) -> bool:
+    """True si el registro de generacion `gen_id` ya esta en estado TERMINAL (no `ejecutando`).
+
+    Lee el almacen de generaciones (YAML, fuente del estado terminal que fija el worker). Import
+    perezoso para no acoplar `db` con `generaciones` a nivel de modulo. Best-effort: ante
+    cualquier fallo de lectura devuelve False (preferimos re-ejecutar a tragarnos un job).
+    """
+    try:
+        from . import generaciones
+
+        g = generaciones.obtener(gen_id)
+    except Exception:  # noqa: BLE001 -- si no se puede leer el registro, no bloqueamos el reclamo.
+        return False
+    if g is None:
+        return False
+    return g.get("estado") in (generaciones.ESTADO_COMPLETADO, generaciones.ESTADO_ERROR)
 
 
 def terminar_job(job_id: str) -> None:
