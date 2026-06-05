@@ -80,6 +80,10 @@ _TABLAS = (
     # fuentes (sin FK, pero a la cabeza evita sorpresas de orden).
     "noticias_algoritmo",
     "fuentes_algoritmo",
+    # Motor de ingesta de noticias (Ola A): archivo de artículos + clusters. Sin truncar,
+    # acumulaban filas entre tests y reventaban counts de test_api_noticias/historias.
+    "noticias_items",
+    "noticias_clusters",
     # Sugerencias editoriales generadas por el job diario.
     "sugerencias_editoriales",
     # Hub generico de fuentes (item G): TODAS las fuentes de insumo por tipo.
