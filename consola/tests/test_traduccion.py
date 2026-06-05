@@ -164,7 +164,7 @@ def test_radar_con_traduccion_activa(cliente, monkeypatch):
     from keni_consola.dominio import http_feed
     from keni_consola.dominio import traduccion as dom_trad
 
-    # Feed RSS en inglés (idioma=en según el preset reuters-world).
+    # Feed RSS en inglés (idioma=en según el preset bbc-world del catálogo).
     _FEED_EN = """<?xml version="1.0"?><rss version="2.0"><channel>
       <item>
         <title>Breaking English News</title>
@@ -178,17 +178,18 @@ def test_radar_con_traduccion_activa(cliente, monkeypatch):
     <rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0">
     <channel></channel></rss>"""
 
-    # Registra una fuente con la URL exacta del preset reuters-world (idioma=en).
-    url_reuters = "https://feeds.reuters.com/reuters/worldNews"
+    # Registra una fuente con la URL exacta de un preset idioma=en del catálogo (bbc-world):
+    # el Radar deduce el idioma del feed por su URL en el catálogo de presets.
+    url_en = "https://feeds.bbci.co.uk/news/world/rss.xml"
     # Hay DOS validar_url que tocar para evitar DNS/SSRF real en tests: `rss.validar_url`
     # (lo usa `crear_fuente` al dar de alta) y `http_feed.validar_url` (lo usa
     # `leer_items_fuente` al descargar el feed dentro del Radar). Parcheamos ambos.
     monkeypatch.setattr(rss, "validar_url", lambda u: (u, None))
     monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
-    cliente.post("/api/rss/fuentes", json={"nombre": "Reuters EN", "url": url_reuters})
+    cliente.post("/api/rss/fuentes", json={"nombre": "BBC EN", "url": url_en})
 
     def fake_descargador(url: str) -> str:
-        if "reuters" in url:
+        if "bbci" in url:
             return _FEED_EN
         return _TRENDS_VACÍO
 
