@@ -18,6 +18,7 @@ from keni_consola import config
 
 # Todas las vars que los accesores tocan: se limpian para ejercitar los DEFAULTS.
 _TODAS = (
+    config.ENV_MAQUINA,
     config.ENV_HOST,
     config.ENV_PORT,
     config.ENV_TOKEN,
@@ -426,3 +427,64 @@ def test_override_ruta_expande_tilde(limpio, tmp_path):
     abs_ruta = tmp_path / "x" / "indice.sqlite"
     limpio.setenv(config.ENV_INDICE, str(abs_ruta))
     assert config.override_ruta(config.ENV_INDICE) == abs_ruta
+
+
+# --------------------------------------------------------------------------- #
+# Interruptor GENERAL de la maquina de contenido (kill-switch global)          #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def store_aislado(monkeypatch, tmp_path):
+    """Aisla el store de ajustes en tmp (vacio) para que `_crudo` lea solo de env/defecto."""
+    from keni_consola import ajustes
+
+    ruta = tmp_path / "ajustes.toml"
+    monkeypatch.setenv(config.ENV_AJUSTES, str(ruta))
+    ajustes._CACHE_RUTA = None
+    ajustes._CACHE_MTIME = -1.0
+    ajustes._CACHE_DATOS = {}
+    return monkeypatch
+
+
+def test_maquina_activa_default_off(limpio, store_aislado):
+    """Sin `KENI_MAQUINA` (ni en store ni en env), la maquina esta APAGADA por defecto."""
+    assert config.maquina_activa() is False
+
+
+@pytest.mark.parametrize("valor", ["1", "true", "on", "si", "sí", "yes"])
+def test_maquina_activa_afirmativo(limpio, store_aislado, valor):
+    store_aislado.setenv(config.ENV_MAQUINA, valor)
+    assert config.maquina_activa() is True
+
+
+@pytest.mark.parametrize("valor", ["0", "false", "off", "no", ""])
+def test_maquina_activa_negativo(limpio, store_aislado, valor):
+    store_aislado.setenv(config.ENV_MAQUINA, valor)
+    assert config.maquina_activa() is False
+
+
+def test_gate_maquina_off_anula_el_toggle_interno(limpio, store_aislado):
+    """Con la maquina APAGADA, el gate devuelve False aunque el accesor interno sea True."""
+    gateado = config.gate_maquina(lambda: True)
+    assert gateado() is False
+
+
+def test_gate_maquina_on_respeta_el_toggle_interno(limpio, store_aislado):
+    """Con la maquina ENCENDIDA, el gate devuelve EXACTAMENTE el valor del accesor interno."""
+    store_aislado.setenv(config.ENV_MAQUINA, "1")
+    assert config.gate_maquina(lambda: True)() is True
+    assert config.gate_maquina(lambda: False)() is False
+
+
+def test_gate_maquina_no_cambia_la_semantica_del_accesor(limpio, store_aislado):
+    """El accesor interno (p.ej. `ingesta_activa`) conserva su semantica; solo el gate ANDea.
+
+    Con su propio flag ON pero la maquina apagada (default), el accesor sigue True pero el
+    gate efectivo es False: nada corre hasta encender el interruptor general.
+    """
+    store_aislado.setenv(config.ENV_INGESTA, "1")
+    assert config.ingesta_activa() is True  # semantica intacta
+    assert config.gate_maquina(config.ingesta_activa)() is False  # maquina off -> no corre
+    store_aislado.setenv(config.ENV_MAQUINA, "1")
+    assert config.gate_maquina(config.ingesta_activa)() is True  # maquina on -> sigue su toggle

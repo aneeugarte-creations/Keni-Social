@@ -357,7 +357,7 @@ def iniciar_ingesta() -> threading.Thread:
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.ingesta_activa,
+            activo_fn=config.gate_maquina(config.ingesta_activa),
             intervalo_seg_fn=lambda: _TICK_SEG,
             sweep_fn=ejecutar_barrido,
             tick_seg=_TICK_SEG,

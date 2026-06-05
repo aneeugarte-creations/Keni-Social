@@ -253,7 +253,7 @@ def iniciar_radar_auto(intervalo_segundos: float | None = None) -> threading.Thr
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.radar_auto_activo,
+            activo_fn=config.gate_maquina(config.radar_auto_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

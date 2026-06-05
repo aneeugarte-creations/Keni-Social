@@ -292,7 +292,7 @@ def iniciar_autogen(intervalo_segundos: float | None = None) -> threading.Thread
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.autogen_activo,
+            activo_fn=config.gate_maquina(config.autogen_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

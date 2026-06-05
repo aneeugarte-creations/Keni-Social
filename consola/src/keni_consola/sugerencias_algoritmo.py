@@ -276,7 +276,7 @@ def iniciar_sugerencias_editoriales(intervalo_segundos: float | None = None) -> 
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.sugerencias_editoriales_activo,
+            activo_fn=config.gate_maquina(config.sugerencias_editoriales_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

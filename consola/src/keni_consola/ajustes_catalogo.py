@@ -27,9 +27,11 @@ _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
 _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
-# el de aparición en la UI: primero los maestros de etapa, luego las excepciones por marca,
-# después Publicación, y los automatismos generales (barridos del sistema) al final.
+# el de aparición en la UI: PRIMERO el interruptor general de la máquina de contenido (kill-switch
+# global), luego los maestros de etapa, las excepciones por marca, después Publicación, y los
+# automatismos generales (barridos del sistema) al final.
 GRUPOS: tuple[tuple[str, str], ...] = (
+    ("maquina_global", "Máquina de contenido (interruptor general)"),
     ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
     ("automatizacion_marca", "Excepciones por marca"),
     ("publicacion", "Publicación"),
@@ -156,6 +158,22 @@ def _construir_catalogo() -> list[Ajuste]:
     """Construye la lista de ajustes editables. Se llama en cada `catalogo()` (las opciones
     de marca dependen del catalogo de marcas, que es estable pero se resuelve en caliente)."""
     return [
+        # --- Interruptor GENERAL de la máquina de contenido (kill-switch global) -------- #
+        # Va PRIMERO y en su propio grupo (`maquina_global`) para que se pinte arriba del todo
+        # en la pestaña Básica. Apagado (defecto) = NADA automático de contenido corre, aunque
+        # los toggles individuales estén ON; encendido = cada subsistema sigue su propio toggle.
+        Ajuste(
+            clave=config.ENV_MAQUINA,
+            tipo="bool",
+            etiqueta="Máquina de contenido: encendida/apagada",
+            ayuda="Interruptor general de toda la automatización de contenido. APAGADO (por "
+            "defecto): nada automático corre —ni ingesta, ni auto-copy/arte, ni breaking, ni "
+            "investigación, ni radar, ni avances— aunque los toggles individuales estén "
+            "encendidos. ENCENDIDO: cada subsistema sigue su propio toggle. No afecta a la "
+            "publicación ni a los barridos de mantenimiento (métricas, alertas, limpieza).",
+            grupo="maquina_global",
+            defecto=False,
+        ),
         # --- Automatismos generales (barridos del sistema, sin dimensión por marca) ----- #
         # Las etapas de auto-producción (Auto-copy, Auto-arte, Auto-producción, Auto-avance) NO
         # están aquí: su maestro vive en `_maestros_etapa()` y sus excepciones en `_ajustes_por_marca()`.

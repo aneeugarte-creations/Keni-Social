@@ -1067,7 +1067,7 @@ def iniciar_pipeline(intervalo_segundos: float | None = None) -> threading.Threa
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.pipeline_activo,
+            activo_fn=config.gate_maquina(config.pipeline_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

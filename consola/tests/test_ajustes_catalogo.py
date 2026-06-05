@@ -37,6 +37,8 @@ def _ajuste(clave):
 def test_catalogo_tiene_las_claves_esperadas(store):
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
     esperadas = {
+        # Interruptor general de la máquina de contenido (kill-switch global).
+        config.ENV_MAQUINA,
         # Maestros de etapa (uno por etapa de auto-producción).
         config.ENV_PIPELINE, config.ENV_AUTOGEN, config.ENV_AUTOGEN_ARTE, config.ENV_AUTO_AVANCE,
         config.ENV_RADAR_AUTO,
@@ -88,6 +90,19 @@ def test_motor_noticias_bool_toggles(store):
         assert a.tipo == "bool", f"{clave} debe ser bool"
         assert a.defecto == defecto, f"{clave} defecto esperado {defecto}, got {a.defecto}"
         assert a.grupo == grupo, f"{clave} grupo esperado {grupo}"
+
+
+def test_maquina_global_kill_switch(store):
+    """El interruptor general es un bool en el grupo `maquina_global`, defecto False, y ese
+    grupo va PRIMERO en GRUPOS (se pinta arriba del todo en la pestaña Básica)."""
+    a = ajustes_catalogo.por_clave(config.ENV_MAQUINA)
+    assert a is not None, "falta el interruptor general KENI_MAQUINA"
+    assert a.tipo == "bool"
+    assert a.defecto is False
+    assert a.grupo == "maquina_global"
+    assert ajustes_catalogo.GRUPOS[0][0] == "maquina_global", (
+        "el grupo del interruptor general debe ir primero en GRUPOS"
+    )
 
 
 def test_motor_noticias_tuning_int(store):

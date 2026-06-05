@@ -100,6 +100,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
 
@@ -224,6 +225,14 @@ ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"
 # que aprueba/pendiente/rechaza segun el veredicto 🟢/🟡/🔴 de la skill de QA. El ULTIMO nivel
 # sigue siendo humano. `KENI_AUTO_QA_EDITORIAL=1` lo enciende.
 ENV_AUTO_QA_EDITORIAL = "KENI_AUTO_QA_EDITORIAL"
+
+# INTERRUPTOR GENERAL de la maquina de contenido (kill-switch GLOBAL). `KENI_MAQUINA`
+# afirmativo ENCIENDE la maquina; ausente/falso la deja APAGADA (def OFF). Cuando esta OFF,
+# NINGUN daemon de automatizacion de CONTENIDO corre, aunque su toggle individual este ON: es
+# la condicion necesaria que se ANDea con cada toggle (ver `gate_maquina`). Cuando esta ON,
+# cada subsistema sigue EXACTAMENTE su propio toggle, como hasta ahora. NO afecta a los daemons
+# de mantenimiento (metricas, alertas, vencimientos, reaper, GC de media) ni a la publicacion.
+ENV_MAQUINA = "KENI_MAQUINA"
 
 # Auto-promocion del Radar de tendencias a "lo importante del dia" (fase3 auto-planificacion).
 # `KENI_RADAR_AUTO=1` arranca el daemon que, cada N horas, promueve los temas que superan el
@@ -685,6 +694,34 @@ def _entero(nombre: str, defecto: int, *, minimo: int | None = None) -> int:
     if minimo is not None:
         return max(minimo, valor)
     return valor
+
+
+# --------------------------------------------------------------------------- #
+# Interruptor GENERAL de la maquina de contenido (kill-switch global)          #
+# --------------------------------------------------------------------------- #
+
+
+def maquina_activa() -> bool:
+    """True si la MAQUINA DE CONTENIDO esta encendida globalmente (`KENI_MAQUINA`).
+
+    Def OFF (kill-switch CONSERVADOR): con el interruptor general APAGADO, NINGUN daemon de
+    automatizacion de CONTENIDO corre, aunque su toggle individual este ON. Con el interruptor
+    ENCENDIDO, cada subsistema sigue EXACTAMENTE su propio toggle (este flag deja de restar).
+    Mismo idiom de parseo que el resto de flags (`_crudo(...).lower() in _VERDADEROS`).
+    """
+    return _crudo(ENV_MAQUINA).lower() in _VERDADEROS
+
+
+def gate_maquina(accesor: Callable[[], bool]) -> Callable[[], bool]:
+    """Envuelve el accesor de un daemon de contenido con el interruptor general (AND).
+
+    Devuelve un nuevo accesor `lambda: maquina_activa() and accesor()`: el daemon corre solo si
+    la maquina esta encendida Y su propio toggle esta ON. NO cambia la semantica del accesor
+    interno (que se sigue exponiendo intacto para tests y para la UI de ajustes); solo el
+    GATEADO del daemon (su `activo_fn`) pasa por aqui. Se evalua en cada ciclo (lectura en
+    tiempo de llamada), igual que los accesores envueltos, asi el toggle responde en caliente.
+    """
+    return lambda: maquina_activa() and accesor()
 
 
 # --------------------------------------------------------------------------- #

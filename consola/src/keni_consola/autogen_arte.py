@@ -300,7 +300,7 @@ def iniciar_autogen_arte(intervalo_segundos: float | None = None) -> threading.T
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.autogen_arte_activo,
+            activo_fn=config.gate_maquina(config.autogen_arte_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

@@ -170,7 +170,7 @@ def iniciar_investigacion(intervalo_segundos: float | None = None) -> threading.
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.investigacion_auto_activa,
+            activo_fn=config.gate_maquina(config.investigacion_auto_activa),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

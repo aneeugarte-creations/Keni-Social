@@ -62,7 +62,7 @@ def iniciar_refresco_algoritmos(intervalo_segundos: float | None = None) -> thre
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.algoritmos_auto_activo,
+            activo_fn=config.gate_maquina(config.algoritmos_auto_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,

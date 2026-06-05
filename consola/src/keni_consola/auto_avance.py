@@ -226,7 +226,7 @@ def iniciar_auto_avance(intervalo_segundos: float | None = None) -> threading.Th
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.auto_avance_activo,
+            activo_fn=config.gate_maquina(config.auto_avance_activo),
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
