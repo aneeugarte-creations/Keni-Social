@@ -2,7 +2,7 @@
 
 Solo valida la construcción de los documentos (pura): que CADA documento de la semilla
 pase `estudio_imagen.validar_documento`, declare un hueco de foto explícito, y que las
-marcas/nombres sean los esperados. La creación real en Postgres la valida el CI.
+marcas/nombres sean los esperados. La creación/refresco real en Postgres la valida el CI.
 """
 
 from __future__ import annotations
@@ -12,14 +12,13 @@ from keni_consola.dominio import estudio_imagen
 
 # Marcas y nombres esperados (espejo del catálogo de la semilla). UnoTV NO se siembra.
 _ESPERADO: dict[str, set[str]] = {
-    "claro-sports": {
-        "Galería informativa",
-        "Galería informativa · centro",
-        "Breaking",
-        "Foto limpia",
-    },
+    "claro-sports": {"Titular", "Breaking", "Cita textual", "Foto limpia"},
     "fundacion": {"Comunidad", "Historia", "Foto limpia"},
 }
+
+
+def _docs() -> dict[tuple[str, str], dict]:
+    return {(m, n): d for m, n, _c, d in ps.documentos_semilla()}
 
 
 def test_marcas_y_nombres_esperados() -> None:
@@ -59,25 +58,50 @@ def test_formato_feed_y_fondo_color() -> None:
 
 
 def test_titular_usa_binding_copy_in_donde_aplica() -> None:
-    # Las plantillas con titular grande deben bindear el copy de la pieza.
-    docs = {(m, n): d for m, n, _c, d in ps.documentos_semilla()}
-    con_titular = [
-        ("claro-sports", "Galería informativa"),
-        ("claro-sports", "Galería informativa · centro"),
+    # Las plantillas con titular/cita grande deben bindear el copy de la pieza.
+    docs = _docs()
+    con_copy = [
+        ("claro-sports", "Titular"),
         ("claro-sports", "Breaking"),
+        ("claro-sports", "Cita textual"),
         ("fundacion", "Comunidad"),
         ("fundacion", "Historia"),
     ]
-    for clave in con_titular:
+    for clave in con_copy:
         capas = docs[clave]["capas"]
         bindings = {c.get("binding") for c in capas if c.get("tipo") == "texto"}
         assert "copy_in" in bindings, f"{clave} debe tener un texto con binding copy_in"
 
 
+def test_claro_breaking_pildora_y_secundaria() -> None:
+    # Breaking: píldora roja FIJA "BREAKING" (chip redondeado) + titular + línea secundaria.
+    capas = _docs()[("claro-sports", "Breaking")]["capas"]
+    pildoras = [
+        c for c in capas
+        if c.get("tipo") == "texto" and c.get("chip") and c.get("texto") == "BREAKING"
+    ]
+    assert pildoras, "Breaking debe tener una píldora fija 'BREAKING'"
+    chip = pildoras[0]["chip"]
+    assert chip["color"] == "#CF2E2E" and chip["radio"] > 0, "la píldora debe ser roja y redondeada"
+    assert pildoras[0]["binding"] is None, "la píldora 'BREAKING' es texto fijo (sin binding)"
+
+
+def test_claro_cita_tiene_retrato_y_aro_elipse() -> None:
+    # Cita textual: 2ª capa imagen (retrato) con forma elipse + un marco elipse (aro).
+    capas = _docs()[("claro-sports", "Cita textual")]["capas"]
+    imagenes = [c for c in capas if c.get("tipo") == "imagen"]
+    assert len(imagenes) == 2, "Cita textual debe tener foto a sangre + retrato"
+    retratos = [c for c in imagenes if c.get("forma") == "elipse" and not c.get("es_foto")]
+    assert retratos, "el retrato debe ser una capa imagen NO es_foto con forma elipse"
+    assert retratos[0].get("objeto", "") == "", "el retrato lo rellena el equipo (objeto vacío)"
+    aros = [c for c in capas if c.get("tipo") == "marco" and c.get("forma") == "elipse"]
+    assert aros, "Cita textual debe tener un aro (marco elipse) alrededor del retrato"
+    assert aros[0].get("borde"), "el aro debe tener borde de acento"
+
+
 def test_chip_usa_acento_de_marca() -> None:
-    # El chip de etiqueta debe pintar con el acento de la marca (rojo / ámbar).
-    docs = {(m, n): d for m, n, _c, d in ps.documentos_semilla()}
-    # claro-sports = rojo #CF2E2E ; fundacion = ámbar #D97706 (de marcas.json)
+    # El chip de etiqueta/píldora debe pintar con el acento de la marca (rojo / ámbar).
+    docs = _docs()
     casos = {
         ("claro-sports", "Breaking"): "#CF2E2E",
         ("fundacion", "Comunidad"): "#D97706",
