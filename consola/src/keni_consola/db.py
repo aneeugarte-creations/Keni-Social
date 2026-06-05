@@ -1700,9 +1700,16 @@ def _crear_esquema(con: Any) -> None:
     # asegura `rota_franjas` con `es_descanso`, añade `franja_id` a `rota_turnos`, mueve
     # los datos y dropa `franja`. Tras esto, el DDL declarativo es idempotente.
     _migrar_modelo_franjas(con)
+    # Migraciones cuya columna usa un ÍNDICE del DDL declarativo: corren ANTES del DDL. El DDL
+    # crea `idx_rota_eventos_marca`(marca) e `idx_fuentes_rss_sondeo`(proximo_sondeo); en una BD
+    # VIEJA esas columnas aún no existen, así que crear el índice revienta y ENVENENA la conexión
+    # (mismo motivo que turnos/franjas arriba: el calendario daba 500). Tras añadir la columna, el
+    # DDL es idempotente. Guard interno: si la tabla aún no existe, no hacen nada y el DDL la crea
+    # fresca con todo.
+    _migrar_columnas_eventos_rota(con)
+    _migrar_columnas_fuentes_rss(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
-    _migrar_columnas_eventos_rota(con)
     _migrar_columnas_turnos_rota(con)
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_radar_items(con)
@@ -1712,7 +1719,6 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
-    _migrar_columnas_fuentes_rss(con)
     _migrar_columnas_grupos_hashtags(con)
     _migrar_columnas_noticias_clusters(con)
     _migrar_columnas_noticias_algoritmo(con)
@@ -2364,6 +2370,8 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
     Postgres hosted persiste entre despliegues; era el origen del 500 del calendario.
     """
     columnas = _columnas_existentes(con, "rota_eventos")
+    if not columnas:
+        return  # tabla aún no existe: el DDL declarativo la crea fresca (con marca + índice)
     for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_eventos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
@@ -6164,6 +6172,8 @@ def _migrar_columnas_fuentes_rss(con: Any) -> None:
     if not _COLUMNAS_FUENTES_RSS_AMPLIADAS:
         return
     columnas = _columnas_existentes(con, "fuentes_rss")
+    if not columnas:
+        return  # tabla aún no existe: el DDL declarativo la crea fresca (con proximo_sondeo + índice)
     for columna, tipo in _COLUMNAS_FUENTES_RSS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE fuentes_rss ADD COLUMN IF NOT EXISTS {columna} {tipo}")
