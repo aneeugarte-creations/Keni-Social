@@ -52,11 +52,16 @@ import type { Publicacion } from "@/types";
 import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PostFeed } from "./PostFeed";
 
-// --- Posts por fila del feed (preferencia local del usuario, por dispositivo) --- //
-// Un solo control: nº de columnas en PC (1-4). Más columnas = posts más pequeños (es a la vez
-// el tamaño y la densidad). NADA de `zoom` (escalaba mal el título vs la foto en multi-columna).
+// --- Tamaño (zoom) y nº de columnas del feed (preferencia local, por dispositivo) --- //
+// Dos controles independientes que persisten por dispositivo:
+//  - Columnas (1-4): nº de posts por fila. Solo afecta la rejilla en PC (lg+); más columnas =
+//    posts más pequeños y densos. En móvil la rejilla es siempre de 1 columna (lectura cómoda).
+//  - Zoom (escala CSS del feed, 60%-140%): agranda/encoge los posts en CUALQUIER pantalla. Es la
+//    palanca de tamaño en móvil, donde las columnas no aplican.
 const COLUMNAS_MIN = 1;
 const COLUMNAS_MAX = 4;
+const ESCALA_MIN = 0.6;
+const ESCALA_MAX = 1.4;
 // Clases estáticas (Tailwind las detecta) por nº de columnas en pantallas anchas (lg+).
 const GRID_LG: Record<number, string> = {
   1: "lg:grid-cols-1",
@@ -139,15 +144,23 @@ export default function FeedIdeacion() {
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [linea, setLinea] = React.useState(FILTRO_TODOS);
 
-  // Nº de posts por fila en PC (1-4). Preferencia local, persistida.
+  // Nº de posts por fila en PC (1-4) y zoom (escala) de los posts. Preferencias locales, persistidas.
   const [columnas, setColumnas] = React.useState(() =>
     leerPref("keni_feed_columnas", 2, COLUMNAS_MIN, COLUMNAS_MAX),
+  );
+  const [escala, setEscala] = React.useState(() =>
+    leerPref("keni_feed_escala", 1, ESCALA_MIN, ESCALA_MAX),
   );
   React.useEffect(() => {
     guardarPref("keni_feed_columnas", columnas);
   }, [columnas]);
+  React.useEffect(() => {
+    guardarPref("keni_feed_escala", escala);
+  }, [escala]);
   const ajustarColumnas = (delta: number) =>
     setColumnas((c) => Math.min(COLUMNAS_MAX, Math.max(COLUMNAS_MIN, c + delta)));
+  const ajustarEscala = (delta: number) =>
+    setEscala((s) => Math.round(Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, s + delta)) * 100) / 100);
 
   // Catálogo para los selects (redes + líneas editoriales).
   const opcionesQuery = useQuery({
@@ -304,9 +317,9 @@ export default function FeedIdeacion() {
             </SelectContent>
           </Select>
 
-          {/* Posts por fila (solo PC): un +/- de 1 a 4. Más columnas = posts más pequeños. Persiste. */}
+          {/* Posts por fila: +/- de 1 a 4 (afecta la rejilla en PC; en móvil es siempre 1 col). Persiste. */}
           <div
-            className="hidden items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1 lg:flex"
+            className="flex items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1"
             role="group"
             aria-label="Posts por fila"
           >
@@ -333,50 +346,84 @@ export default function FeedIdeacion() {
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
+
+          {/* Zoom: agranda/encoge los posts en CUALQUIER pantalla (la palanca de tamaño en móvil). Persiste. */}
+          <div
+            className="flex items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1"
+            role="group"
+            aria-label="Tamaño de los posts"
+          >
+            <span className="px-1 text-xs text-muted-foreground">Zoom</span>
+            <button
+              type="button"
+              onClick={() => ajustarEscala(-0.1)}
+              disabled={escala <= ESCALA_MIN}
+              title="Posts más pequeños"
+              aria-label="Reducir tamaño"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-9 text-center text-xs tabular-nums text-muted-foreground">
+              {Math.round(escala * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => ajustarEscala(0.1)}
+              disabled={escala >= ESCALA_MAX}
+              title="Posts más grandes"
+              aria-label="Aumentar tamaño"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla con
           todas las redes y huecos "No generado" en las que falten) — así no se mezclan ideas en una
           fila. Filtrado a UNA red: rejilla PLANA (1 col = centrado; 2-4 = a lo ancho). `columnas`
-          fija cuántas por fila. Sin `zoom`: el tamaño lo da el ancho de columna, uniforme. */}
-      {feedQuery.isLoading ? (
-        <div className={cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas])}>
-          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
-        </div>
-      ) : feedQuery.isError ? (
-        <BloqueError
-          titulo="No se pudo cargar el feed"
-          mensaje={mensajeError(feedQuery.error)}
-          onReintentar={() => void feedQuery.refetch()}
-          cargando={feedQuery.isFetching}
-        />
-      ) : gruposVista.length === 0 ? (
-        <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
-      ) : agrupar ? (
-        <div className="space-y-5">
-          {gruposVista.map((g) => (
-            <GrupoIdea key={g.id} grupo={g} redes={redesAMostrar} columnas={columnas} />
-          ))}
-        </div>
-      ) : (
-        <div
-          className={cn(
-            columnas === 1
-              ? "mx-auto w-full max-w-2xl space-y-4"
-              : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
-          )}
-        >
-          {gruposVista.map((g) => {
-            const p = g.piezas.find((x) => x.red === redesAMostrar[0]);
-            return p ? (
-              <PostFeed key={g.id} publicacion={p} />
-            ) : (
-              <PlaceholderRed key={g.id} red={redesAMostrar[0]} titulo={g.titulo} />
-            );
-          })}
-        </div>
-      )}
+          fija cuántas por fila; `zoom` escala todo el feed de forma uniforme (palanca en móvil). */}
+      <div style={escala !== 1 ? { zoom: escala } : undefined}>
+        {feedQuery.isLoading ? (
+          <div className={cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas])}>
+            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
+          </div>
+        ) : feedQuery.isError ? (
+          <BloqueError
+            titulo="No se pudo cargar el feed"
+            mensaje={mensajeError(feedQuery.error)}
+            onReintentar={() => void feedQuery.refetch()}
+            cargando={feedQuery.isFetching}
+          />
+        ) : gruposVista.length === 0 ? (
+          <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
+        ) : agrupar ? (
+          <div className="space-y-5">
+            {gruposVista.map((g) => (
+              <GrupoIdea key={g.id} grupo={g} redes={redesAMostrar} columnas={columnas} />
+            ))}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              columnas === 1
+                ? "mx-auto w-full max-w-2xl space-y-4"
+                : cn("grid grid-cols-1 items-start gap-4", GRID_LG[columnas]),
+            )}
+          >
+            {gruposVista.map((g) => {
+              const p = g.piezas.find((x) => x.red === redesAMostrar[0]);
+              return p ? (
+                <PostFeed key={g.id} publicacion={p} />
+              ) : (
+                <PlaceholderRed key={g.id} red={redesAMostrar[0]} titulo={g.titulo} />
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
