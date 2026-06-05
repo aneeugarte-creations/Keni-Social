@@ -359,6 +359,17 @@ def _ruta_render_node() -> Path:
     return _ruta_motor("render_node") / "componer.mjs"
 
 
+def _nombre_local_plano(clave: str) -> str:
+    """Aplana una key de almacen (`<categoria>/<nombre>`) a un nombre de fichero local PLANO.
+
+    Desde que el almacen se divide en carpetas por tipo (`logos/`, `plantillas/`, ...), la key
+    de un objeto trae un `/`. Al materializarla a un temporal NO podemos pegarla cruda en el
+    nombre del fichero: el `/` la convertiria en una subcarpeta que nadie crea (FileNotFoundError).
+    Sustituimos el separador por `-` para conservar un nombre unico y plano dentro de la carpeta.
+    """
+    return clave.replace("/", "-")
+
+
 def _materializar_logo(logo_id: str, carpeta: Path) -> str:
     """Vuelca un objeto de media (logo/fondo) a un PNG temporal; '' si no hay o no existe."""
     logo_id = (logo_id or "").strip()
@@ -367,7 +378,7 @@ def _materializar_logo(logo_id: str, carpeta: Path) -> str:
     datos = media.leer_media(logo_id)
     if datos is None:
         return ""
-    ruta = carpeta / f"asset-{logo_id}.png"
+    ruta = carpeta / f"asset-{_nombre_local_plano(logo_id)}.png"
     ruta.write_bytes(datos)
     return str(ruta)
 
@@ -622,7 +633,7 @@ def _fuentes_extra_de_marca(marca: str, carpeta: Path) -> dict[str, str]:
         datos = media.leer_media(objeto)
         if datos is None:
             continue
-        ruta = carpeta / f"fuente-{objeto}"
+        ruta = carpeta / f"fuente-{_nombre_local_plano(objeto)}"
         ruta.write_bytes(datos)
         extra[familia] = str(ruta)
     return extra

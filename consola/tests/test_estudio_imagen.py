@@ -250,6 +250,61 @@ def test_componer_bytes_no_persiste(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# Materializacion de assets con KEY de categoria (almacen por carpetas)        #
+# Regresion: desde que la key trae `<categoria>/` el nombre temporal NO debe   #
+# convertir ese `/` en una subcarpeta inexistente (FileNotFoundError -> 500).  #
+# --------------------------------------------------------------------------- #
+
+
+def test_nombre_local_plano_aplana_la_categoria():
+    assert e._nombre_local_plano("logos/abc.png") == "logos-abc.png"
+    assert e._nombre_local_plano("abc.png") == "abc.png"  # key plana: sin cambios
+
+
+def test_materializar_logo_con_key_de_categoria_no_anida(tmp_path, monkeypatch):
+    # La key `logos/<hash>.png` debe volcarse a un fichero PLANO dentro de la carpeta,
+    # no a `asset-logos/<hash>.png` (subcarpeta que nadie crea -> FileNotFoundError).
+    monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-logo")
+    ruta = e._materializar_logo("logos/deadbeef.png", tmp_path)
+    from pathlib import Path
+
+    p = Path(ruta)
+    assert p.is_file()
+    assert p.parent == tmp_path  # plano: vive directo en la carpeta, sin subdir
+    assert p.read_bytes() == b"bytes-de-logo"
+
+
+def test_renderizar_documento_bytes_con_logo_de_categoria(tmp_path, monkeypatch):
+    # Reproduce el 500 de `/compuesta`: una capa logo cuyo media_id trae prefijo de categoria.
+    # Antes del fix, materializar el asset reventaba con FileNotFoundError. Ahora renderiza.
+    monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-logo")
+    monkeypatch.setattr(e, "_fuentes_extra_de_marca", lambda marca, carpeta: {})
+
+    cap: dict[str, object] = {}
+
+    def _fake(payload, out):
+        cap["payload"] = payload
+        out.write_bytes(b"png-doc")
+
+    monkeypatch.setattr(e, "_correr_render_documento", _fake)
+
+    doc = {
+        "formato": {"w": 1080, "h": 1080},
+        "capas": [
+            {"tipo": "imagen", "z": 0, "objeto": "fotos/deadbeef.png", "es_foto": True},
+            {"tipo": "texto", "z": 1, "binding": "copy_in", "texto": ""},
+        ],
+    }
+    datos = e.renderizar_documento_bytes(doc, bindings={"copy_in": "HOLA"})
+    assert datos == b"png-doc"
+    # El asset se materializo a una ruta PLANA (sin `/` extra tras el prefijo del tmp).
+    ruta_asset = cap["payload"]["assets"]["fotos/deadbeef.png"]
+    from pathlib import Path
+
+    assert Path(ruta_asset).is_file()
+
+
+# --------------------------------------------------------------------------- #
 # generar_set_formatos (de un tiro: encaje determinista + marca por lienzo)   #
 # --------------------------------------------------------------------------- #
 
