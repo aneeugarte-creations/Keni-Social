@@ -197,13 +197,93 @@ def test_indice_unico_copy_version_rechaza_duplicado(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# 4) Parrilla: la doble-reserva de slot queda como FOLLOW-UP                   #
+# 4) Parrilla: doble-reserva de slot POR MARCA (fix implementado)             #
 # --------------------------------------------------------------------------- #
-# Se RETIRÓ el UNIQUE parcial (red, fecha_programada): el slot correcto es por MARCA y `marca`
-# no vive en `contenido_plataforma`, así que un índice solo por (red, fecha) chocaba entre
-# marcas y rompía el programador multi-marca. La protección correcta (denormalizar `marca` o
-# advisory lock por (marca, red)) queda documentada en db.py. Sin índice no hay test de
-# rechazo/retry aquí.
+# `marca` ahora está DENORMALIZADA en `contenido_plataforma`, así que el índice parcial único
+# `idx_parrilla_slot_uniq (marca, red, fecha_programada) WHERE estado='programado' AND
+# fecha_programada<>''` puede scope-arse por marca. Invariantes:
+#   - la MISMA marca NO puede programar dos piezas en el mismo (red, fecha) -> IntegrityError;
+#   - dos marcas DISTINTAS SÍ pueden compartir el mismo (red, fecha) slot;
+#   - `_encolar_en_hueco_libre` RECALCULA el siguiente hueco ante el choque (retry).
+
+_RED_PARRILLA = "facebook"
+_FECHA_SLOT = "2026-06-10T15:00"
+
+
+def _programar(pub_id: str, fecha: str):
+    """Pone una publicación en estado `programado` con `fecha_programada` (vía API de repos)."""
+    return repos.actualizar_publicacion(
+        pub_id, {"estado": "programado", "fecha_programada": fecha}
+    )
+
+
+def test_misma_marca_mismo_slot_es_rechazado(entorno):
+    # Dos piezas de la MISMA marca/red programadas a la misma fecha: la segunda choca con el
+    # índice único parcial de parrilla (doble-reserva intra-marca).
+    a = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
+    b = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="B", contenido="cb")
+    assert _programar(a["id"], _FECHA_SLOT) is not None
+    with pytest.raises(db.IntegrityError):
+        _programar(b["id"], _FECHA_SLOT)
+
+
+def test_marcas_distintas_comparten_slot(entorno):
+    # Dos MARCAS distintas SÍ pueden publicar en la misma red a la misma hora: el slot es por
+    # marca. Antes (UNIQUE solo por red+fecha) esto chocaba y rompía el programador multi-marca.
+    a = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
+    b = repos.crear_publicacion("clarosports", _RED_PARRILLA, titulo="B", contenido="cb")
+    assert _programar(a["id"], _FECHA_SLOT) is not None
+    # No debe lanzar: marca distinta, slot independiente.
+    prog_b = _programar(b["id"], _FECHA_SLOT)
+    assert prog_b is not None
+    assert prog_b["fecha_programada"] == _FECHA_SLOT
+    assert prog_b["estado"] == "programado"
+
+
+def test_marca_denormalizada_se_propaga_al_reasignar(entorno):
+    # La marca denormalizada de la fila por plataforma sigue al padre cuando se REASIGNA la marca
+    # del `contenido`: si no, el índice quedaría mal-scope-ado. Tras reasignar A->otra marca, A y
+    # una pieza de la marca ORIGINAL pueden compartir slot (ya no comparten marca).
+    a = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
+    # Reasigna la marca del padre de A; la denormalizada de su fila debe seguirla.
+    repos.actualizar_contenido(a["contenido_id"], {"marca": "clarosports"})
+    fila = db._conectar()
+    try:
+        got = fila.execute(
+            "SELECT marca FROM contenido_plataforma WHERE id = ?", (a["id"],)
+        ).fetchone()
+    finally:
+        fila.close()
+    assert got["marca"] == "clarosports"
+    # Ahora A (clarosports) y B (unotv) comparten slot sin chocar.
+    b = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="B", contenido="cb")
+    assert _programar(a["id"], _FECHA_SLOT) is not None
+    assert _programar(b["id"], _FECHA_SLOT) is not None
+
+
+def test_encolar_recalcula_hueco_ante_choque(entorno, monkeypatch):
+    # `_encolar_en_hueco_libre` confía en el índice único como backstop: si entre el cálculo del
+    # hueco y la escritura otra pieza (misma marca) tomó el slot, el UPDATE lanza IntegrityError
+    # y aquí RECALCULAMOS el siguiente hueco. Forzamos esa carrera devolviendo primero un slot
+    # YA ocupado por una pieza de la misma marca, y luego uno libre.
+    from keni_consola.api import publicaciones as api_pub
+
+    ocupada = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="OCUP", contenido="x")
+    assert _programar(ocupada["id"], _FECHA_SLOT) is not None  # ese slot ya está tomado
+
+    nueva = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="NUEVA", contenido="y")
+    libre = "2026-06-10T18:00"
+    huecos = iter([_FECHA_SLOT, libre])  # 1er intento choca; 2º hueco está libre
+
+    def _hueco_falso(pub, ahora=None):
+        return next(huecos)
+
+    monkeypatch.setattr(api_pub, "calcular_hueco_para", _hueco_falso)
+    actualizada, hubo_hueco = api_pub._encolar_en_hueco_libre(nueva)
+    assert hubo_hueco is True
+    assert actualizada is not None
+    # Tras el choque en `_FECHA_SLOT`, reintentó y aterrizó en el hueco libre.
+    assert actualizada["fecha_programada"] == libre
 
 
 # --------------------------------------------------------------------------- #

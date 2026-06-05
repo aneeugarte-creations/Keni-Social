@@ -860,8 +860,10 @@ def registrar_snapshot_comercial(
     )
 
 
-def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
-    return db.listar_snapshots_comerciales(publicacion_id)
+def listar_snapshots_comerciales(
+    publicacion_id: str, *, limite: int | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_snapshots_comerciales(publicacion_id, limite=limite)
 
 
 def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
@@ -884,8 +886,8 @@ def registrar_snapshot_pieza(
     return db.registrar_snapshot_pieza(pieza_id, marca, red, formato, ts, metricas)
 
 
-def serie_pieza(pieza_id: str) -> list[dict[str, Any]]:
-    return db.serie_pieza(pieza_id)
+def serie_pieza(pieza_id: str, *, limite: int | None = None) -> list[dict[str, Any]]:
+    return db.serie_pieza(pieza_id, limite=limite)
 
 
 def listar_snapshots_piezas(
@@ -893,8 +895,12 @@ def listar_snapshots_piezas(
     red: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    *,
+    limite: int | None = None,
 ) -> list[dict[str, Any]]:
-    return db.listar_snapshots_piezas(marca=marca, red=red, desde=desde, hasta=hasta)
+    return db.listar_snapshots_piezas(
+        marca=marca, red=red, desde=desde, hasta=hasta, limite=limite
+    )
 
 
 def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
@@ -1371,6 +1377,7 @@ def crear_contenido_plataforma(
     *,
     contenido_id: str,
     red: str,
+    marca: str | None = None,
     estado: str = "pendiente",
     falta_copy: bool | None = None,
     falta_imagen: bool | None = None,
@@ -1407,6 +1414,7 @@ def crear_contenido_plataforma(
     return db.crear_contenido_plataforma(
         contenido_id=contenido_id,
         red=red,
+        marca=marca,
         estado=estado,
         falta_copy=falta_copy,
         falta_imagen=falta_imagen,

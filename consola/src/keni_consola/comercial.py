@@ -313,7 +313,9 @@ def evaluar_aviso(pub: dict[str, Any]) -> bool:
         return False
     metrica = _metrica_objetivo(pub)
     cruce: str | None = None
-    for snap in repos.listar_snapshots_comerciales(pub["id"]):
+    # `limite=0` => serie COMPLETA: buscamos el PRIMER cruce del objetivo en TODO el histórico, no
+    # solo en el tramo reciente (un cap aquí podría perder el cruce real si fue hace mucho).
+    for snap in repos.listar_snapshots_comerciales(pub["id"], limite=0):
         if snap[metrica] >= objetivo:
             cruce = snap["ts"]
             break

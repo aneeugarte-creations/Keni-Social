@@ -738,6 +738,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         id                    TEXT PRIMARY KEY,
         contenido_id          TEXT NOT NULL DEFAULT '',
         red                   TEXT NOT NULL DEFAULT '',
+        -- `marca` DENORMALIZADA del padre `contenido`: existe SOLO para que el indice unico
+        -- parcial de parrilla (idx_parrilla_slot_uniq) pueda scope-arse POR MARCA sin cruzar el
+        -- join (un indice parcial no puede). Se mantiene en sync en TODA escritura (insert + cambio
+        -- de marca del padre). Las LECTURAS siguen tomando la marca de `c.marca` (parent), no de aqui.
+        marca                 TEXT NOT NULL DEFAULT '',
         estado                TEXT NOT NULL DEFAULT 'pendiente',
         falta_copy            INTEGER NOT NULL DEFAULT 1,
         falta_imagen          INTEGER NOT NULL DEFAULT 1,
@@ -1846,6 +1851,26 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS fotos TEXT NOT NULL DEFAULT ''"
+        )
+    # `marca`: DENORMALIZADA del padre `contenido`. Habilita el indice unico parcial de parrilla
+    # POR MARCA (`idx_parrilla_slot_uniq`, en `_INDICES_UNICOS_IDEMPOTENCIA`): dos marcas distintas
+    # SI pueden programar la misma (red, fecha); la MISMA marca no puede doble-reservar el slot.
+    # Un indice parcial no puede cruzar el join al padre, de ahi la denormalizacion. Las escrituras
+    # la mantienen en sync (`crear_contenido_plataforma` la deriva del padre; `actualizar_contenido`
+    # la propaga al reasignar la marca del padre). El backfill abajo la rellena en BDs ya creadas.
+    if "marca" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS marca TEXT NOT NULL DEFAULT ''"
+        )
+    # BACKFILL one-shot desde el padre: alinea TODA fila cuya `marca` denormalizada difiera de la
+    # del `contenido` padre (incluye filas recien migradas con ""). La app no esta en produccion-
+    # uso, asi que el volumen es minimo; un UPDATE...FROM basta. Idempotente: re-ejecutarlo no toca
+    # nada si ya estan alineadas (el WHERE filtra las que difieren).
+    if _tabla_existe(con, "contenido"):
+        con.execute(
+            "UPDATE contenido_plataforma AS cp SET marca = c.marca "
+            "FROM contenido AS c WHERE cp.contenido_id = c.id AND cp.marca <> c.marca"
         )
 
 
@@ -2959,15 +2984,59 @@ def registrar_snapshot_comercial(
         con.close()
 
 
-def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
-    """Serie temporal de una publicacion (mas antiguo primero), lista para graficar."""
+# --- Tope de puntos de las series temporales (Item: límite/downsampling) ----- #
+# Las series de métricas (`listar_snapshots_comerciales`, `serie_pieza`,
+# `listar_snapshots_piezas`) alimentan gráficas; con meses de snapshots cada 4 h crecerían sin
+# cota. Tope por DEFECTO de puntos devueltos, configurable por `KENI_METRICAS_SERIE_MAX` (entero;
+# mín 2 para que siempre quepa una recta). DECISIÓN: cuando la serie excede el tope, se devuelven
+# los ÚLTIMOS N puntos (los más recientes), NO un muestreo: así el ÚLTIMO punto —el dato actual,
+# el que la UI rotula y del que cuelga la "velocidad"— SIEMPRE entra, y la curva queda visualmente
+# correcta en su tramo reciente (el más relevante para decisiones). Se implementa como
+# `ORDER BY ts DESC LIMIT N` y luego se reinvierte a ASC (orden de graficado). `limite=None`
+# (cap por defecto) vs `limite<=0` (SIN tope, serie COMPLETA: ruta para análisis/exportación que
+# necesite todo el histórico, p. ej. la poda o un reporte agregado).
+_METRICAS_SERIE_MAX_DEF = 500
+
+
+def _tope_serie_metricas(limite: int | None) -> int | None:
+    """Resuelve el tope efectivo de puntos de una serie.
+
+    - `limite is None`  -> cap por defecto (`KENI_METRICAS_SERIE_MAX`, def 500, mín 2).
+    - `limite <= 0`     -> None (SIN tope: serie completa, para callers que la necesiten).
+    - `limite > 0`      -> ese tope explícito.
+    """
+    if limite is None:
+        return config._entero("KENI_METRICAS_SERIE_MAX", _METRICAS_SERIE_MAX_DEF, minimo=2)
+    return limite if limite > 0 else None
+
+
+def listar_snapshots_comerciales(
+    publicacion_id: str, *, limite: int | None = None
+) -> list[dict[str, Any]]:
+    """Serie temporal de una publicacion (mas antiguo primero), lista para graficar.
+
+    Acotada por DEFECTO a los últimos `KENI_METRICAS_SERIE_MAX` puntos (el dato más reciente
+    SIEMPRE entra; ver `_tope_serie_metricas`). `limite<=0` devuelve la serie COMPLETA (para
+    callers que recorren todo el histórico, p. ej. el cruce de objetivo comercial).
+    """
+    tope = _tope_serie_metricas(limite)
     con = _conectar()
     try:
-        filas = con.execute(
-            f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
-            "WHERE publicacion_id = ? ORDER BY ts ASC",
-            (publicacion_id,),
-        ).fetchall()
+        if tope is None:
+            filas = con.execute(
+                f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
+                "WHERE publicacion_id = ? ORDER BY ts ASC",
+                (publicacion_id,),
+            ).fetchall()
+        else:
+            # Trae los N más recientes (DESC + LIMIT, barato con el índice por ts) y reinvierte a
+            # ASC: el orden de graficado, con el último punto garantizado dentro del recorte.
+            filas = con.execute(
+                f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
+                "WHERE publicacion_id = ? ORDER BY ts DESC LIMIT ?",
+                (publicacion_id, tope),
+            ).fetchall()
+            filas = list(reversed(filas))
     finally:
         con.close()
     return [_fila_a_snapshot(f) for f in filas]
@@ -3089,15 +3158,30 @@ def registrar_snapshot_pieza(
         con.close()
 
 
-def serie_pieza(pieza_id: str) -> list[dict[str, Any]]:
-    """Serie temporal histórica de UNA pieza (más antiguo primero), lista para graficar."""
+def serie_pieza(pieza_id: str, *, limite: int | None = None) -> list[dict[str, Any]]:
+    """Serie temporal histórica de UNA pieza (más antiguo primero), lista para graficar.
+
+    Acotada por DEFECTO a los últimos `KENI_METRICAS_SERIE_MAX` puntos (el más reciente SIEMPRE
+    entra; ver `_tope_serie_metricas`). `limite<=0` => serie COMPLETA.
+    """
+    tope = _tope_serie_metricas(limite)
     con = _conectar()
     try:
-        filas = con.execute(
-            f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
-            "WHERE pieza_id = ? ORDER BY ts ASC",
-            (pieza_id,),
-        ).fetchall()
+        if tope is None:
+            filas = con.execute(
+                f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
+                "WHERE pieza_id = ? ORDER BY ts ASC",
+                (pieza_id,),
+            ).fetchall()
+        else:
+            # Últimos N (DESC + LIMIT, barato con `idx_metricas_pieza_snapshots_pieza`) reinvertidos
+            # a ASC: el último punto, del que cuelga la "velocidad", queda garantizado en el recorte.
+            filas = con.execute(
+                f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
+                "WHERE pieza_id = ? ORDER BY ts DESC LIMIT ?",
+                (pieza_id, tope),
+            ).fetchall()
+            filas = list(reversed(filas))
     finally:
         con.close()
     return [_fila_a_snapshot_pieza(f) for f in filas]
@@ -3108,11 +3192,15 @@ def listar_snapshots_piezas(
     red: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    *,
+    limite: int | None = None,
 ) -> list[dict[str, Any]]:
     """Snapshots históricos por pieza FILTRADOS (para análisis agregados futuros).
 
     Filtros opcionales por `marca`, `red` y ventana de `ts` (`desde`/`hasta`, ISO, inclusivos).
-    Devuelve las filas ordenadas por `ts` ascendente. Sin filtros, devuelve toda la serie.
+    Devuelve las filas ordenadas por `ts` ascendente. Acotada por DEFECTO a los últimos
+    `KENI_METRICAS_SERIE_MAX` puntos (el más reciente SIEMPRE entra). `limite<=0` => serie
+    COMPLETA (para barridos/exportaciones que necesiten todo el rango filtrado).
     """
     clausulas: list[str] = []
     params: list[Any] = []
@@ -3129,13 +3217,23 @@ def listar_snapshots_piezas(
         clausulas.append("ts <= ?")
         params.append(hasta)
     where = f"WHERE {' AND '.join(clausulas)} " if clausulas else ""
+    tope = _tope_serie_metricas(limite)
     con = _conectar()
     try:
-        filas = con.execute(
-            f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
-            f"{where}ORDER BY ts ASC",
-            tuple(params),
-        ).fetchall()
+        if tope is None:
+            filas = con.execute(
+                f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
+                f"{where}ORDER BY ts ASC",
+                tuple(params),
+            ).fetchall()
+        else:
+            # Últimos N del conjunto filtrado (DESC + LIMIT) reinvertidos a ASC para el graficado.
+            filas = con.execute(
+                f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
+                f"{where}ORDER BY ts DESC LIMIT ?",
+                (*params, tope),
+            ).fetchall()
+            filas = list(reversed(filas))
     finally:
         con.close()
     return [_fila_a_snapshot_pieza(f) for f in filas]
@@ -4797,6 +4895,15 @@ def actualizar_contenido(
             f"UPDATE contenido SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
             tuple(params),
         )
+        # REASIGNACION DE MARCA: si cambia la marca del padre, hay que PROPAGARLA a la marca
+        # denormalizada de sus filas por plataforma; si no, el indice unico de parrilla quedaria
+        # mal-scope-ado (una pieza reasignada seguiria contando contra la marca vieja). Mismo
+        # connection/commit que el UPDATE del padre -> atomico.
+        if "marca" in cambios and cur.rowcount:
+            con.execute(
+                "UPDATE contenido_plataforma SET marca = ? WHERE contenido_id = ?",
+                (cambios["marca"], contenido_id),
+            )
         con.commit()
         if cur.rowcount == 0:
             return None
@@ -4829,6 +4936,8 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "id",
     "contenido_id",
     "red",
+    # `marca` DENORMALIZADA (sync del padre). No es editable directamente (ver lista blanca).
+    "marca",
     "estado",
     "falta_copy",
     "falta_imagen",
@@ -4874,12 +4983,14 @@ _BOOLS_CONTENIDO_PLATAFORMA = (
     "placa_oculta",
 )
 # Campos editables de una fila por plataforma (lista blanca). `id`, `contenido_id`,
-# `red`, `es_publicacion`, `creado` y `actualizado` no se editan (los dos ultimos los
-# gestiona el sistema; `es_publicacion` se fija al crear).
+# `red`, `marca`, `es_publicacion`, `creado` y `actualizado` no se editan (los dos ultimos los
+# gestiona el sistema; `es_publicacion` se fija al crear; `marca` es DENORMALIZADA del padre y
+# solo la sincroniza el sistema —insert + reasignacion de marca del padre—, nunca el cliente).
 _CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA: tuple[str, ...] = tuple(
     c
     for c in _COLS_CONTENIDO_PLATAFORMA
-    if c not in ("id", "contenido_id", "red", "es_publicacion", "creado", "actualizado")
+    if c
+    not in ("id", "contenido_id", "red", "marca", "es_publicacion", "creado", "actualizado")
 )
 
 
@@ -4920,6 +5031,7 @@ def crear_contenido_plataforma(
     *,
     contenido_id: str,
     red: str,
+    marca: str | None = None,
     estado: str = "pendiente",
     falta_copy: bool | None = None,
     falta_imagen: bool | None = None,
@@ -4957,6 +5069,12 @@ def crear_contenido_plataforma(
     El checklist `falta_copy`/`falta_imagen` se autodeduce de `copy`/`imagen` si no se pasa
     explicito (copy no vacio => no falta copy). `id`/`creado`/`actualizado` se pueden pasar
     para PRESERVAR identidad al migrar (p. ej. el id de una publicacion legada).
+
+    `marca` (DENORMALIZADA del padre) se DERIVA del `contenido` padre cuando no se pasa (`None`):
+    asi la mayoria de los ~12 call-sites no tiene que enredarse con ella y la denormalizacion
+    sigue siempre correcta. Pasar `marca` explicito solo lo necesita la migracion (preservar la
+    marca de datos legados) o un padre aun no commiteado en otra transaccion. Mantenerla en sync
+    es lo que da sentido al indice unico de parrilla POR MARCA (`idx_parrilla_slot_uniq`).
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     falta_copy = (not bool(copy)) if falta_copy is None else falta_copy
@@ -4965,6 +5083,9 @@ def crear_contenido_plataforma(
         "id": id or uuid.uuid4().hex[:12],
         "contenido_id": contenido_id,
         "red": red,
+        # Marca denormalizada: la del padre salvo override explicito. La derivacion real (lookup)
+        # se hace abajo dentro de la conexion para que vea el padre ya commiteado.
+        "marca": marca or "",
         "estado": estado if estado in ESTADOS_CONTENIDO_PLATAFORMA else "pendiente",
         "falta_copy": 1 if falta_copy else 0,
         "falta_imagen": 1 if falta_imagen else 0,
@@ -4998,6 +5119,14 @@ def crear_contenido_plataforma(
     }
     con = _conectar()
     try:
+        # Deriva la marca denormalizada del padre cuando el llamante no la pasa (el caso normal):
+        # asi ningun call-site tiene que conocerla y la denormalizacion nace siempre alineada.
+        if marca is None:
+            padre = con.execute(
+                "SELECT marca FROM contenido WHERE id = ?", (contenido_id,)
+            ).fetchone()
+            if padre is not None:
+                fila["marca"] = padre["marca"] or ""
         marcadores = ", ".join("?" for _ in _COLS_CONTENIDO_PLATAFORMA)
         con.execute(
             f"INSERT INTO contenido_plataforma ({', '.join(_COLS_CONTENIDO_PLATAFORMA)}) "
@@ -6237,13 +6366,22 @@ _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     # (ver `crear_documento_version` / `registrar_copy_version`).
     ("idx_documento_versiones_uniq", "documento_versiones (contenido_id, plataforma_id, version)"),
     ("idx_copy_versiones_uniq", "contenido_copy_versiones (plataforma_id, version)"),
-    # NOTA: NO se impone UNIQUE de slot de parrilla. El slot correcto es POR MARCA (dos marcas
-    # distintas SI pueden publicar en la misma red a la misma hora), pero `marca` vive en
-    # `contenido` (padre), no en `contenido_plataforma`, y un indice PARCIAL no puede cruzar el
-    # join. Un UNIQUE solo por (red, fecha_programada) chocaba ENTRE MARCAS y rompia el
-    # programador multi-marca. La doble-reserva intra-marca queda como FOLLOW-UP: denormalizar
-    # `marca` en `contenido_plataforma` y entonces UNIQUE (marca, red, fecha) WHERE programado, o
-    # serializar calculo+escritura del hueco con un advisory lock por (marca, red).
+    # PARRILLA — doble-reserva POR MARCA (fix implementado). El slot correcto es por (marca, red,
+    # fecha): dos marcas distintas SI pueden publicar en la misma red a la misma hora, pero la
+    # MISMA marca no puede doble-reservar el mismo slot. Una version previa puso un UNIQUE solo por
+    # (red, fecha) y hubo que retirarlo: chocaba ENTRE MARCAS porque `marca` vivia en `contenido`
+    # (padre) y un indice PARCIAL no puede cruzar el join. La solucion: DENORMALIZAR `marca` en
+    # `contenido_plataforma` (columna mantenida en sync en toda escritura: derivada del padre al
+    # insertar, propagada al reasignar la marca del padre; ver `crear_contenido_plataforma` y
+    # `actualizar_contenido`) y entonces SI cabe el UNIQUE parcial por (marca, red, fecha). El
+    # predicado exige `estado='programado'` (solo lo programado reserva slot) Y `fecha_programada
+    # <> ''` (borradores sin fecha no chocan entre si). El backstop+reintento de la carrera vive en
+    # `api.publicaciones._encolar_en_hueco_libre` y en el PUT (`api.publicaciones.actualizar`).
+    (
+        "idx_parrilla_slot_uniq",
+        "contenido_plataforma (marca, red, fecha_programada) "
+        "WHERE estado = 'programado' AND fecha_programada <> ''",
+    ),
 )
 
 
@@ -9463,6 +9601,8 @@ def crear_publicacion(
         id=id,
         contenido_id=padre["id"],
         red=red,
+        # Marca denormalizada explicita: la del padre recien creado (evita un lookup extra).
+        marca=padre["marca"],
         estado=_ESTADO_PUB_A_PLAT.get(estado, "pendiente"),
         copy=contenido,
         copy_in=copy_in,
