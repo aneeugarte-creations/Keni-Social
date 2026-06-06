@@ -28,17 +28,9 @@ const Termometro = lazy(() => import("@/pages/Termometro"));
 // el descubrimiento del Investigador); ContenidosHub es el banco evergreen (GREEN).
 const NoticiasHub = lazy(() => import("@/pages/NoticiasHub"));
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
-// Investigador: vista de descubrimiento/plan del día, ahora compuesta dentro de
-// NoticiasHub. Se mantiene su ruta legacy (sin pestaña) durante la transición.
-const Investigador = lazy(() => import("@/pages/Investigador"));
-const CajonesDia = lazy(() => import("@/pages/CajonesDia"));
-// Eventos (a cubrir): la gestión de eventos se mudó del Calendario al hub de Fuentes
-// (ola "Calendario = turnos / Fuentes = eventos"). Reutiliza /api/rota/eventos.
-const EventosCobertura = lazy(() => import("@/pages/EventosCobertura"));
-// Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
-const AgentesInvestigacion = lazy(() => import("@/pages/AgentesInvestigacion"));
-// Cobertura (Ola A): flujo continuo del archivo del motor de ingesta persistente.
-const Cobertura = lazy(() => import("@/pages/Cobertura"));
+// Las antiguas hojas del hub (Investigador, Cajones, Eventos, Agentes, Cobertura) ya
+// viven COMPUESTAS dentro de NoticiasHub (pool + descubrimiento) y de Fuentes
+// (buzones/agentes/eventos); sus rutas directas redirigen a su nuevo hogar (abajo).
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
@@ -221,17 +213,23 @@ export const router = createBrowserRouter([
               { path: "contenidos", element: <ContenidosHub /> },
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
-              // Investigador (descubrimiento/plan del día): ahora compuesto dentro de
-              // NoticiasHub; su ruta directa se mantiene durante la transición.
-              { path: "investigador", element: <Investigador /> },
-              { path: "cajones", element: <CajonesDia /> },
-              // Eventos a cubrir (antes en el Calendario): alta/filtrado/edición sobre
-              // /api/rota/eventos. La asignación de cobertura sigue en Turnos (Claro Sports).
-              { path: "eventos", element: <EventosCobertura /> },
-              // Agentes de investigación (Ola 6).
-              { path: "agentes", element: <AgentesInvestigacion /> },
-              // Cobertura (Ola A): archivo del motor de ingesta persistente.
-              { path: "cobertura", element: <Cobertura /> },
+              // Las hojas del antiguo hub ya viven dentro de Noticias/Fuentes; sus rutas
+              // directas redirigen a su nuevo hogar (la pestaña de Fuentes va deep-linked
+              // vía ?tab=). Cobertura/Investigador → Noticias (índice del hub).
+              { path: "investigador", element: <Navigate to="/datos/investigacion" replace /> },
+              { path: "cobertura", element: <Navigate to="/datos/investigacion" replace /> },
+              {
+                path: "cajones",
+                element: <Navigate to="/datos/investigacion/fuentes?tab=buzones" replace />,
+              },
+              {
+                path: "eventos",
+                element: <Navigate to="/datos/investigacion/fuentes?tab=eventos" replace />,
+              },
+              {
+                path: "agentes",
+                element: <Navigate to="/datos/investigacion/fuentes?tab=agentes" replace />,
+              },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (ahora dentro de NoticiasHub); "algoritmos"
               // se mudó a la Biblioteca.

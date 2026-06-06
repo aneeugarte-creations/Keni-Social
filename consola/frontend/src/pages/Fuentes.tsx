@@ -21,7 +21,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -163,10 +163,18 @@ export default function Fuentes() {
     [opcionesQuery.data],
   );
 
+  // Deep-link de pestaña: las rutas viejas del hub (cajones/agentes/eventos)
+  // redirigen aquí con `?tab=` para abrir directamente su canal.
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tabInicial = PESTANAS_TIPO.some((p) => p.valor === tabParam)
+    ? (tabParam as string)
+    : "todas";
+
   return (
     <>
       <PageHeader {...CABECERA} />
-      <Tabs defaultValue="todas" className="space-y-4">
+      <Tabs defaultValue={tabInicial} className="space-y-4">
         <TabsList>
           {PESTANAS_TIPO.map((p) => (
             <TabsTrigger key={p.valor} value={p.valor}>
