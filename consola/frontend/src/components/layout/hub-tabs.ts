@@ -1,21 +1,18 @@
 import {
   Activity,
   BarChart3,
-  Bot,
   BookText,
   CalendarClock,
   CalendarDays,
-  CalendarPlus,
   GitBranch,
-  Inbox,
   LayoutGrid,
   ListTodo,
   Megaphone,
   Newspaper,
-  Radio,
   Rss,
   ScanSearch,
   ScanText,
+  Sparkles,
   Target,
   Zap,
   type LucideIcon,
@@ -44,27 +41,25 @@ export interface ItemTabHub {
  * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
  * `/datos`).
  */
-// Investigación = el loop diario de la marca, colapsado a DOS páginas: el
-// Investigador (plan del día + descubrimiento en una sola superficie; es el índice
-// del hub) y las Fuentes que cada marca gestiona. Todo por marca. (Termómetro
-// alimenta el Investigador y se entra desde un botón dentro de él; Algoritmos pasó
-// a la Biblioteca, porque su salida son las fichas de plataforma.)
+// Investigación = la máquina de contenido de la marca, colapsada a TRES PIEZAS,
+// todo por marca:
+//   - NOTICIAS (índice del hub): items informativos/temporales a publicar
+//     (agencias, RSS ajenos, reporteros, corresponsales). Caducan. Su núcleo es el
+//     pool persistente de cobertura + el descubrimiento/plan del Investigador.
+//   - CONTENIDOS: piezas educativas/curiosas/atemporales (reportajes internos,
+//     producciones propias). Evergreen (banco GREEN).
+//   - FUENTES: ajustes de TODOS los canales que alimentan Noticias y Contenidos
+//     (RSS, buzones, agentes de investigación, eventos/programas, cajón green,
+//     agencias, Trends). Cada fuente declara si alimenta Noticias o Contenidos.
+// (Termómetro, Cajones, Eventos, Agentes y Cobertura siguen vivos como rutas
+// durante la transición, pero ya NO son pestañas de la subnav; se fusionarán y
+// redirigirán en fases posteriores. Algoritmos pasó a la Biblioteca.)
 export const TABS_INVESTIGACION: ItemTabHub[] = [
-  // `end: true`: comparte prefijo con `/fuentes`, así que el tab raíz solo se marca
-  // activo en la coincidencia exacta del índice.
-  { ruta: "/datos/investigacion", etiqueta: "Investigador", icono: ScanSearch, end: true },
+  // `end: true`: comparte prefijo con `/contenidos` y `/fuentes`, así que el tab
+  // raíz (Noticias) solo se marca activo en la coincidencia exacta del índice.
+  { ruta: "/datos/investigacion", etiqueta: "Noticias", icono: Newspaper, end: true },
+  { ruta: "/datos/investigacion/contenidos", etiqueta: "Contenidos", icono: Sparkles },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
-  { ruta: "/datos/investigacion/cajones", etiqueta: "Cajones del día", icono: Inbox },
-  // Eventos y programas: eventos a cubrir + catálogo de programas evergreen.
-  // Los eventos se mudaron del Calendario al hub de Fuentes (ola "Calendario =
-  // turnos / Fuentes = eventos"); los programas se mudaron de la pestaña
-  // "Programas" del Calendario (ola "Programas → Fuentes"). La asignación de
-  // cobertura sigue en Turnos.
-  { ruta: "/datos/investigacion/eventos", etiqueta: "Eventos", icono: CalendarPlus },
-  // Agentes de investigación (Ola 6): briefs reutilizables + candidatos fechados.
-  { ruta: "/datos/investigacion/agentes", etiqueta: "Agentes", icono: Bot },
-  // Cobertura (Ola A): flujo continuo del archivo del motor de ingesta persistente.
-  { ruta: "/datos/investigacion/cobertura", etiqueta: "Cobertura", icono: Radio },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [

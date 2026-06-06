@@ -23,8 +23,13 @@ const EstrategiaMarcas = lazy(() =>
 // la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
-// Investigador: página única del hub de Investigación (índice). Reúne plan del día
-// + descubrimiento; el Termómetro se abre desde un botón dentro de ella.
+// Hub Investigación colapsado a 3 PIEZAS (Noticias · Contenidos · Fuentes).
+// NoticiasHub es el índice del hub (compone el pool persistente de cobertura +
+// el descubrimiento del Investigador); ContenidosHub es el banco evergreen (GREEN).
+const NoticiasHub = lazy(() => import("@/pages/NoticiasHub"));
+const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
+// Investigador: vista de descubrimiento/plan del día, ahora compuesta dentro de
+// NoticiasHub. Se mantiene su ruta legacy (sin pestaña) durante la transición.
 const Investigador = lazy(() => import("@/pages/Investigador"));
 const CajonesDia = lazy(() => import("@/pages/CajonesDia"));
 // Eventos (a cubrir): la gestión de eventos se mudó del Calendario al hub de Fuentes
@@ -203,16 +208,22 @@ export const router = createBrowserRouter([
         path: "datos",
         children: [
           { index: true, element: <Navigate to="/datos/investigacion" replace /> },
-          // Hub Investigación, colapsado a DOS páginas: el Investigador (índice: plan
-          // del día + descubrimiento en una sola superficie) y Fuentes. El Termómetro
-          // alimenta el Investigador y se entra desde un botón dentro de él (ruta propia,
-          // sin pestaña en la subnav).
+          // Hub Investigación, colapsado a 3 PIEZAS: Noticias (índice), Contenidos y
+          // Fuentes. El índice (NoticiasHub) compone el pool persistente de cobertura +
+          // el descubrimiento del Investigador. Termómetro, Cajones, Eventos, Agentes,
+          // Cobertura e Investigador siguen vivos como rutas (sin pestaña en la subnav)
+          // para no romper deep-links durante la transición; se fusionarán y redirigirán
+          // en fases posteriores.
           {
             path: "investigacion",
             children: [
-              { index: true, element: <Investigador /> },
+              { index: true, element: <NoticiasHub /> },
+              { path: "contenidos", element: <ContenidosHub /> },
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
+              // Investigador (descubrimiento/plan del día): ahora compuesto dentro de
+              // NoticiasHub; su ruta directa se mantiene durante la transición.
+              { path: "investigador", element: <Investigador /> },
               { path: "cajones", element: <CajonesDia /> },
               // Eventos a cubrir (antes en el Calendario): alta/filtrado/edición sobre
               // /api/rota/eventos. La asignación de cobertura sigue en Turnos (Claro Sports).
@@ -222,8 +233,8 @@ export const router = createBrowserRouter([
               // Cobertura (Ola A): archivo del motor de ingesta persistente.
               { path: "cobertura", element: <Cobertura /> },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
-              // se fusionaron en el Investigador (el índice); "algoritmos" se mudó a la
-              // Biblioteca.
+              // se fusionaron en el Investigador (ahora dentro de NoticiasHub); "algoritmos"
+              // se mudó a la Biblioteca.
               { path: "plan", element: <Navigate to="/datos/investigacion" replace /> },
               { path: "descubrimiento", element: <Navigate to="/datos/investigacion" replace /> },
               { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },

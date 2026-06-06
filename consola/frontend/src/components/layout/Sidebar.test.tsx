@@ -323,14 +323,10 @@ describe("apps-scope · helpers", () => {
       "/contenido/biblioteca/documentos",
       "/contenido/biblioteca/estrategia",
       "/contenido/biblioteca/algoritmos",
-      // /datos/investigacion (hub) → sus sub-pestañas (Investigador = índice + Fuentes +
-      // Cajones + Eventos a cubrir + Agentes de investigación Ola 6 + Cobertura Ola A)
+      // /datos/investigacion (hub) → sus 3 piezas: Noticias (índice) + Contenidos + Fuentes
       "/datos/investigacion",
+      "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",
-      "/datos/investigacion/cajones",
-      "/datos/investigacion/eventos",
-      "/datos/investigacion/agentes",
-      "/datos/investigacion/cobertura",
       // /operacion/revision (hub) → sus sub-pestañas (Breaking = carril rápido Claro Sports)
       "/operacion/revision/editorial",
       "/operacion/revision/verificacion",
