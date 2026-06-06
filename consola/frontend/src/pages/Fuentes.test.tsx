@@ -224,6 +224,18 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     expect(await screen.findByText("BBC Mundo")).toBeInTheDocument();
   });
 
+  it("expone los canales absorbidos del hub como pestañas (Buzones, Agentes, Eventos)", async () => {
+    stubFetch();
+    renderFuentes();
+
+    // Al colapsar el hub Investigación a 3 piezas, los buzones del día, los agentes
+    // de investigación y los eventos/programas dejan de ser pestañas sueltas y pasan
+    // a ser tipos de FUENTE dentro de esta página.
+    expect(await screen.findByRole("tab", { name: "Buzones" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Agentes" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Eventos" })).toBeInTheDocument();
+  });
+
   it("el preset ya activo muestra badge 'Activo' y su checkbox está deshabilitado", async () => {
     stubFetch();
     renderFuentes();

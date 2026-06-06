@@ -77,6 +77,14 @@ import {
   tiempoRelativo,
 } from "./publicaciones/meta";
 import { TallerGreen } from "./fuentes/TallerGreen";
+// Canales absorbidos al colapsar el hub Investigación a 3 piezas (Noticias ·
+// Contenidos · Fuentes): los buzones del día, los agentes de investigación y los
+// eventos/programas de cobertura dejan de ser pestañas sueltas del hub y pasan a
+// ser TIPOS DE FUENTE aquí. Se componen sus páginas existentes (cada una trae su
+// propia cabecera, datos y marca activa); la fusión fina vive en una fase posterior.
+import CajonesDia from "./CajonesDia";
+import AgentesInvestigacion from "./AgentesInvestigacion";
+import EventosCobertura from "./EventosCobertura";
 
 const CLAVE_FUENTES = ["rss", "fuentes"] as const;
 const CLAVE_ITEMS = ["rss", "items"] as const;
@@ -99,8 +107,9 @@ function limpiarMensaje(texto: string): string {
 const CABECERA = {
   titulo: "Fuentes",
   descripcion:
-    "El hub de insumos: vigila TODAS tus fuentes en un sitio y aporta material por tipo " +
-    "(RSS, ideas, enlaces y contenido interno). Lo que aportas llega al pipeline.",
+    "Los canales de los que se alimentan Noticias y Contenidos, todos en un sitio y por " +
+    "marca: RSS y agencias, buzones del día (portal, corresponsales, reporteros, Excel), " +
+    "agentes de investigación, eventos y programas, ideas, enlaces y el banco Green.",
 };
 
 /**
@@ -120,9 +129,14 @@ const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "todas", etiqueta: "Todas" },
   { valor: "rss", etiqueta: "RSS" },
   { valor: "catalogo", etiqueta: "Catálogo" },
+  // Canales que alimentan NOTICIAS, absorbidos del antiguo hub Investigación:
+  { valor: "buzones", etiqueta: "Buzones" },
+  { valor: "agentes", etiqueta: "Agentes" },
+  { valor: "eventos", etiqueta: "Eventos" },
   { valor: "idea", etiqueta: "Ideas" },
   { valor: "enlace", etiqueta: "Enlaces" },
   { valor: "interna", etiqueta: "Interno AMX" },
+  // Canal que alimenta CONTENIDOS (evergreen):
   { valor: "green", etiqueta: "Green" },
 ];
 
@@ -171,6 +185,20 @@ export default function Fuentes() {
         </TabsContent>
         <TabsContent value="catalogo">
           <CatalogoPresets marcas={marcas} />
+        </TabsContent>
+        {/* Buzones del día: portal/SMS, corresponsales, reporteros y Excel Claro.
+            Canales manuales/estructurados que alimentan Noticias. */}
+        <TabsContent value="buzones">
+          <CajonesDia />
+        </TabsContent>
+        {/* Agentes de investigación: briefs reutilizables que buscan en la web y
+            proponen candidatos al pool de Noticias. */}
+        <TabsContent value="agentes">
+          <AgentesInvestigacion />
+        </TabsContent>
+        {/* Eventos y programas de cobertura (agenda editorial → Noticias). */}
+        <TabsContent value="eventos">
+          <EventosCobertura />
         </TabsContent>
         <TabsContent value="idea">
           <AportarManual tipo="idea" marcas={marcas} redes={opcionesRedes} />

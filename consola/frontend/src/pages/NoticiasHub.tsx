@@ -12,8 +12,11 @@
  * propios filtros; aquí solo se conmuta entre ellas. Fases posteriores fusionarán
  * ambas superficies en una sola.
  */
+import { Images } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import Cobertura from "./Cobertura";
@@ -23,19 +26,31 @@ export default function NoticiasHub() {
   const [vista, setVista] = React.useState("pool");
 
   return (
-    <Tabs value={vista} onValueChange={setVista} className="space-y-4">
-      <TabsList>
-        {/* Núcleo: el pool persistente de noticias a publicar. */}
-        <TabsTrigger value="pool">Pool de noticias</TabsTrigger>
-        {/* Descubrimiento + plan del día (el antiguo Investigador). */}
-        <TabsTrigger value="descubrimiento">Descubrimiento</TabsTrigger>
-      </TabsList>
-      <TabsContent value="pool">
-        <Cobertura />
-      </TabsContent>
-      <TabsContent value="descubrimiento">
-        <Investigador />
-      </TabsContent>
-    </Tabs>
+    <div className="space-y-4">
+      {/* Receta de Noticias: armar la galería internacional (el antiguo Termómetro,
+          que dejó de ser pestaña al colapsar el hub a 3 piezas). */}
+      <div className="flex items-center justify-end">
+        <Button asChild variant="outline" size="sm">
+          <Link to="/datos/investigacion/termometro">
+            <Images className="mr-2 h-4 w-4" aria-hidden="true" />
+            Armar galería internacional
+          </Link>
+        </Button>
+      </div>
+      <Tabs value={vista} onValueChange={setVista} className="space-y-4">
+        <TabsList>
+          {/* Núcleo: el pool persistente de noticias a publicar. */}
+          <TabsTrigger value="pool">Pool de noticias</TabsTrigger>
+          {/* Descubrimiento + plan del día (el antiguo Investigador). */}
+          <TabsTrigger value="descubrimiento">Descubrimiento</TabsTrigger>
+        </TabsList>
+        <TabsContent value="pool">
+          <Cobertura />
+        </TabsContent>
+        <TabsContent value="descubrimiento">
+          <Investigador />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
