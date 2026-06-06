@@ -34,6 +34,7 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     preparado_en: "",
     id_post_metricool: "",
     tipo_contenido: "ia",
+    formato: "foto",
     imagen_fuente: "",
     foto: "",
     falta_copy: false,
@@ -82,6 +83,18 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     renderPost(pub({ autor_nombre: "" }));
     expect(screen.getByText("IA")).toBeInTheDocument();
     expect(screen.queryByText(/desconocido/i)).not.toBeInTheDocument();
+  });
+
+  it("muestra el badge «Foto» para una pieza con formato foto (3 redes)", () => {
+    renderPost(pub({ formato: "foto" }));
+    expect(screen.getByText("Foto")).toBeInTheDocument();
+    expect(screen.queryByText("Video")).not.toBeInTheDocument();
+  });
+
+  it("muestra el badge «Video» para una pieza con formato video (5 redes)", () => {
+    renderPost(pub({ formato: "video" }));
+    expect(screen.getByText("Video")).toBeInTheDocument();
+    expect(screen.queryByText("Foto")).not.toBeInTheDocument();
   });
 
   it("pieza posteada por una persona muestra su nombre, no «IA»", () => {

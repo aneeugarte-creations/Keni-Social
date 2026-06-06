@@ -37,6 +37,7 @@ import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
 import { elegibilidadOK } from "./aprobacion";
+import { BadgeFormato } from "./BadgeFormato";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
 import { BadgeEtapa } from "./TarjetaEtapa";
@@ -296,6 +297,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         )}
         <span>·</span>
         <span>{publicacion.marca_nombre}</span>
+        {/* Badge EXPLÍCITO del formato: "Foto" (3 redes) / "Video" (5). El flujo automático crea
+            piezas FOTO, así que el humano ve de un vistazo de qué tipo de post se trata. */}
+        <BadgeFormato formato={publicacion.formato} className="shrink-0" />
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}

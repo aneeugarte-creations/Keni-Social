@@ -46,20 +46,14 @@ _log = logging.getLogger("keni_consola.autofeed_daemon")
 # cuenta sobre este origen; la UI/dedup lo distinguen de lo manual/otro auto.
 ORIGEN_AUTOFEED = "autofeed"
 
-# Redes objetivo por defecto del auto-feed (subconjunto canónico que el piloto AMX usa a
-# diario), intersecado con `redes.ids()` por si el catálogo cambiara. Mismo criterio que el
-# pipeline; no hay configuración de redes por marca todavía.
-_REDES_DEFECTO = ("instagram", "x", "facebook")
+# El auto-feed no sabe de antemano si un ítem será FOTO o VIDEO, así que crea piezas de FOTO
+# (regla del dueño: foto -> 3 redes IG/X/FB). El mapeo formato->redes vive en
+# `redes.redes_de_formato` (fuente única); video -> las 5 queda definido para flujos futuros.
+_FORMATO_AUTOFEED = redes.FORMATO_FOTO
 
 # Cuántos clusters recientes se examinan por marca y barrido (cota de seguridad). El listado
 # viene ordenado por score desc, así que los más relevantes entran primero.
 _REVISAR_MAX = 100
-
-
-def _redes_defecto() -> list[str]:
-    """Redes por defecto del auto-feed, filtradas contra el catálogo. Nunca vacío si el catálogo no lo está."""
-    reds = [r for r in _REDES_DEFECTO if redes.es_red(r)]
-    return reds or redes.ids()
 
 
 # --------------------------------------------------------------------------- #
@@ -182,10 +176,13 @@ def llevar_al_feed(cluster: dict[str, Any]) -> dict[str, Any] | None:
         fecha_objetivo=date.today().isoformat(),
         origen=ORIGEN_AUTOFEED,
         tipo_contenido="fuente",
+        # FOTO explícito: el auto-feed no sabe si el ítem será foto o video, así que crea
+        # un post de FOTO (3 redes IG/X/FB). El humano puede pasarlo a video más adelante.
+        formato=_FORMATO_AUTOFEED,
         fecha_fuente=fecha_fuente,
         url_fuente=url_fuente,
     )
-    for red in _redes_defecto():
+    for red in redes.redes_de_formato(_FORMATO_AUTOFEED):
         repos.crear_contenido_plataforma(
             contenido_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
         )

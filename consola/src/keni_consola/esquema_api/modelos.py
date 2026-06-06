@@ -842,6 +842,10 @@ class Publicacion(TypedDict):
     # Origen de la imagen: "ia"|"galeria"|"fuente". Si es "fuente", `imagen_fuente` trae la
     # URL original del articulo (p.ej. RSS de marca propia); el editor ofrece usarla.
     tipo_contenido: str
+    # FORMATO de la pieza: "foto" (3 redes: IG/X/FB) o "video" (las 5). Lo hereda del
+    # `contenido` padre. Decide a qué redes va (`redes.redes_de_formato`, fuente única). El
+    # flujo automático crea piezas "foto". La UI lo muestra como badge ("Foto"/"Video").
+    formato: str
     imagen_fuente: str
     # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
     # permite al editor inline recomponer la placa en vivo al reabrir la pieza.

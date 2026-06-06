@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { iconoRed, nombreRed } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
+import { BadgeFormato } from "./BadgeFormato";
 import { PostFeed } from "./PostFeed";
 
 /** Una idea agrupada: el tema + la marca + sus piezas (una por red ya generada). */
@@ -76,6 +77,9 @@ export function GrupoIdea({
     return m;
   }, [grupo.piezas]);
   const generadas = redes.filter((r) => porRed.has(r)).length;
+  // El FORMATO es propiedad del tema (todas las piezas de la idea lo comparten): lo tomamos de la
+  // primera. "" -> foto (default del backend). El badge lo hace explícito ("Foto"/"Video").
+  const formato = grupo.piezas[0]?.formato;
 
   return (
     <section className="rounded-xl border border-border/60 bg-muted/20 p-2 sm:p-3">
@@ -83,6 +87,7 @@ export function GrupoIdea({
         <span className="truncate font-medium text-foreground">{grupo.titulo || "Sin título"}</span>
         <span aria-hidden="true">·</span>
         <span className="shrink-0">{grupo.marca_nombre}</span>
+        <BadgeFormato formato={formato} className="shrink-0" />
         <span className="ml-auto shrink-0 tabular-nums">
           {generadas}/{redes.length} redes
         </span>

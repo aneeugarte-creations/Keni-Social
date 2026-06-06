@@ -118,6 +118,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # la URL original del artículo (p.ej. de un RSS de marca propia). El editor ofrece
         # "usar imagen original" tomando esa URL.
         "tipo_contenido": pub.get("tipo_contenido") or "ia",
+        # FORMATO de la pieza (foto|video): decide a qué redes va (`redes.redes_de_formato`).
+        # "" / desconocido -> "foto" (el formato del flujo automático). La UI muestra el badge.
+        "formato": redes.normalizar_formato(pub.get("formato")),
         "imagen_fuente": imagen_fuente,
         # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
         # permite al editor inline recomponer la placa en vivo al reabrir la pieza.

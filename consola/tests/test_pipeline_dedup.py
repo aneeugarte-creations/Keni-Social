@@ -7,6 +7,7 @@ ejercitar SOLO la rama de dedup (saltar duplicado / crear y registrar la clave i
 from __future__ import annotations
 
 from keni_consola import pipeline_contenido as pc
+from keni_consola import redes
 from keni_consola.dominio import dedup
 
 
@@ -39,6 +40,28 @@ def test_crea_si_no_es_duplicado_y_registra_la_clave(monkeypatch):
     assert tema and tema["id"] == "t1"
     # La clave del título recién creado queda registrada (dedup dentro del mismo barrido).
     assert dedup.clave("Noticia totalmente nueva") in vistas
+
+
+def test_crear_tema_marca_formato_foto(monkeypatch):
+    """El pipeline crea el tema como FOTO explícito (3 redes: el flujo automático no sabe si será video)."""
+    capturado: dict = {}
+
+    def _crear(**kw):
+        capturado.update(kw)
+        return {"id": "t9", "titulo": kw["titulo"]}
+
+    monkeypatch.setattr(pc.repos, "crear_contenido", _crear)
+    monkeypatch.setattr(pc.repos, "marcar_item", lambda *a: None)
+    monkeypatch.setattr(pc, "_auto_etiquetar_linea", lambda *a, **k: None)
+    monkeypatch.setattr(pc, "_copy_pendiente_de", lambda *a, **k: "{}")
+    tema = pc.crear_tema_de(_trabajo("Noticia foto"))
+    assert tema and tema["id"] == "t9"
+    assert capturado["formato"] == redes.FORMATO_FOTO
+
+
+def test_redes_de_fuente_por_defecto_son_las_de_foto():
+    """Sin `redes_def` en la fuente, el pipeline cae a las 3 redes de FOTO (instagram, x, facebook)."""
+    assert pc._redes_de_fuente({}) == list(redes.redes_de_formato(redes.FORMATO_FOTO))
 
 
 def test_sin_claves_vistas_no_deduplica(monkeypatch):

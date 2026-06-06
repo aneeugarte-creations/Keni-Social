@@ -2213,6 +2213,9 @@
         "tipo_contenido": {
           "type": "string"
         },
+        "formato": {
+          "type": "string"
+        },
         "imagen_fuente": {
           "type": "string"
         },
@@ -2303,6 +2306,7 @@
         "preparado_en",
         "id_post_metricool",
         "tipo_contenido",
+        "formato",
         "imagen_fuente",
         "foto",
         "falta_copy",

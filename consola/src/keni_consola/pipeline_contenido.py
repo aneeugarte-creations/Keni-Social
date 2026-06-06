@@ -112,9 +112,10 @@ _CD_LANZAR_MAX = 4
 # y el republicado de lo ya salido hace poco. Fuera de la ventana, una noticia recurrente sí entra.
 _DIAS_DEDUP = 60
 
-# Redes objetivo por defecto del pipeline: subconjunto sensato de las canónicas (las que el
-# piloto AMX usa a diario), intersecado con `redes.ids()` por si el catálogo cambiara.
-_REDES_DEFECTO_PIPELINE = ("instagram", "x", "facebook")
+# El pipeline no sabe de antemano si un ítem será FOTO o VIDEO, así que crea piezas de FOTO
+# (regla del dueño: foto -> 3 redes IG/X/FB). El mapeo formato->redes vive en
+# `redes.redes_de_formato` (fuente única); video -> las 5 queda definido para flujos futuros.
+_FORMATO_PIPELINE = redes.FORMATO_FOTO
 
 # --- QA editorial por DOCUMENTO de Biblioteca (no skills) ---------------------------------
 # El equipo NO usa skills: el QA editorial se hace adjuntando un DOCUMENTO de la Biblioteca con
@@ -367,7 +368,7 @@ def _redes_de_fuente(fuente: dict[str, Any]) -> list[str]:
         pedidas = {r for r in datos if isinstance(r, str) and redes.es_red(r)}
     if pedidas:
         return [r for r in redes.ids() if r in pedidas]
-    return [r for r in _REDES_DEFECTO_PIPELINE if redes.es_red(r)]
+    return list(redes.redes_de_formato(_FORMATO_PIPELINE))
 
 
 def _autor_pipeline() -> dict[str, str] | None:
@@ -522,6 +523,9 @@ def crear_tema_de(
             marca=marca,
             origen=ORIGEN_PIPELINE,
             fecha_objetivo=date.today().isoformat(),
+            # FOTO explícito: el pipeline no sabe si el ítem será foto o video, así que crea
+            # un post de FOTO (3 redes IG/X/FB). El humano puede pasarlo a video más adelante.
+            formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
             # Fecha de la FUENTE (pubDate del item), para mostrar en la Consola "Fuente del …"
             # junto a "Generado el …" (`creado`). "" si la fuente no traía fecha.
@@ -669,9 +673,9 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
     if not nota:
         return None
     titulo = (tema.get("titulo") or "").strip()
-    redes_ids = [r for r in (pend.get("redes_ids") or []) if redes.es_red(r)] or [
-        r for r in _REDES_DEFECTO_PIPELINE if redes.es_red(r)
-    ]
+    redes_ids = [r for r in (pend.get("redes_ids") or []) if redes.es_red(r)] or list(
+        redes.redes_de_formato(_FORMATO_PIPELINE)
+    )
     imagen = (pend.get("imagen") or "").strip()
     tipo_contenido = "fuente" if imagen else ""
     fuente_id = (pend.get("fuente_id") or "").strip() or None

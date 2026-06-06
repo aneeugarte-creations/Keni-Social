@@ -64,3 +64,53 @@ def ids() -> list[str]:
 def opciones() -> list[dict[str, object]]:
     """Lista `[{id, nombre, limite}]` para poblar la UI, en orden fijo."""
     return [{"id": r.id, "nombre": r.nombre, "limite": r.limite} for r in REDES]
+
+
+# --------------------------------------------------------------------------- #
+# FORMATO de pieza -> REDES destino (fuente UNICA del mapeo)                   #
+# --------------------------------------------------------------------------- #
+#
+# Regla del dueño: el FORMATO de la pieza decide a qué redes va.
+#   - FOTO  -> 3 redes (instagram, x, facebook).
+#   - VIDEO -> las 5 (instagram, x, facebook, tiktok, youtube).
+#
+# El flujo automático (auto-feed + pipeline) no sabe de antemano si un ítem será
+# foto o video, así que crea piezas de FOTO (3 redes) explícitamente. El mapeo de
+# VIDEO queda definido aquí para que cualquier flujo futuro lo use sin redefinirlo.
+# Las redes se FILTRAN contra `es_red` y se devuelven en el orden de `REDES`.
+
+FORMATO_FOTO = "foto"
+FORMATO_VIDEO = "video"
+
+# Subconjunto de redes por formato (ids canónicos; el orden lo fija `REDES`).
+_REDES_POR_FORMATO: dict[str, tuple[str, ...]] = {
+    FORMATO_FOTO: ("instagram", "x", "facebook"),
+    FORMATO_VIDEO: ("instagram", "x", "facebook", "tiktok", "youtube"),
+}
+
+# Etiquetas humanas del formato para la UI.
+_ETIQUETA_FORMATO: dict[str, str] = {
+    FORMATO_FOTO: "Foto",
+    FORMATO_VIDEO: "Video",
+}
+
+
+def normalizar_formato(formato: str | None) -> str:
+    """Formato canónico (`foto`|`video`); cae a `foto` ante vacío/desconocido (PURO)."""
+    f = (formato or "").strip().lower()
+    return f if f in _REDES_POR_FORMATO else FORMATO_FOTO
+
+
+def redes_de_formato(formato: str | None) -> tuple[str, ...]:
+    """Redes destino de un FORMATO de pieza, en el orden de `REDES` (PURO, testeable).
+
+    `foto` -> (instagram, x, facebook); `video` -> las 5. Vacío/desconocido -> `foto`.
+    Filtra por `es_red` (si el catálogo cambiara, las redes inexistentes se omiten).
+    """
+    pedidas = set(_REDES_POR_FORMATO[normalizar_formato(formato)])
+    return tuple(r for r in ids() if r in pedidas and es_red(r))
+
+
+def etiqueta_formato(formato: str | None) -> str:
+    """Etiqueta humana del formato para la UI ("Foto"/"Video"). Desconocido -> "Foto"."""
+    return _ETIQUETA_FORMATO[normalizar_formato(formato)]

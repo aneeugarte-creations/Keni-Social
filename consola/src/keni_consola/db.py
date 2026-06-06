@@ -71,7 +71,7 @@ from typing import Any
 _log = logging.getLogger("keni_consola.db")
 
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
-from . import config, motor_db
+from . import config, motor_db, redes
 from .estados import (
     CLASE_CONTENIDO,
     DECISION_APROBADO,
@@ -718,6 +718,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         origen              TEXT NOT NULL DEFAULT '',
         notas               TEXT NOT NULL DEFAULT '',
         tipo_contenido      TEXT NOT NULL DEFAULT 'ia',
+        formato             TEXT NOT NULL DEFAULT 'foto',
         id_post_metricool   TEXT NOT NULL DEFAULT '',
         senal_viralidad     INTEGER NOT NULL DEFAULT 0,
         qa_veredicto        TEXT NOT NULL DEFAULT '',
@@ -2449,6 +2450,10 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
 _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen de la pieza.
     ("tipo_contenido", "TEXT NOT NULL DEFAULT 'ia'"),
+    # FORMATO de la pieza (foto|video): decide a qué redes va (regla del dueño). `foto` -> 3
+    # redes (IG/X/FB); `video` -> las 5. El flujo automático crea piezas `foto`. El mapeo
+    # formato->redes vive en `redes.redes_de_formato` (fuente única). BD vieja -> 'foto'.
+    ("formato", "TEXT NOT NULL DEFAULT 'foto'"),
     # id_post_metricool a NIVEL pieza (Item C, métricas↔contenido): el id de Metricool
     # "principal" de la pieza, para enlazar el rendimiento de una pieza de Metricool de
     # vuelta a su `contenido` (y resolver sus etiquetas/tipo en las gráficas por serie).
@@ -4401,6 +4406,8 @@ _COLS_CONTENIDO = (
     "origen",
     "notas",
     "tipo_contenido",
+    # FORMATO de la pieza (foto|video): decide a qué redes va (`redes.redes_de_formato`).
+    "formato",
     "id_post_metricool",
     "senal_viralidad",
     # QA DE LA FUENTE (pre-copy): veredicto del cribado de la nota de origen antes de generar
@@ -4445,6 +4452,8 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     "origen",
     "notas",
     "tipo_contenido",
+    # FORMATO de la pieza (foto|video): editable para poder pasar de foto a video más adelante.
+    "formato",
     # Editable para que el flujo de publicación pueda fijar el id de Metricool a nivel
     # pieza cuando esté disponible (Item C); hoy se rellena solo si el publicador lo pasa.
     "id_post_metricool",
@@ -4503,6 +4512,7 @@ def crear_contenido(
     origen: str = "",
     notas: str = "",
     tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
+    formato: str = redes.FORMATO_FOTO,
     id_post_metricool: str = "",
     senal_viralidad: int = 0,
     qa_veredicto: str = "",
@@ -4544,6 +4554,9 @@ def crear_contenido(
         "origen": origen or "",
         "notas": notas or "",
         "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
+        # FORMATO de la pieza (foto|video): decide las redes destino (`redes.redes_de_formato`).
+        # Se normaliza (vacío/desconocido -> 'foto') para no persistir valores fuera de catálogo.
+        "formato": redes.normalizar_formato(formato),
         # id de Metricool a nivel pieza (Item C): acceso directo opcional para el cruce
         # métricas↔contenido; el id real por red sigue en `contenido_plataforma`. Legado -> "".
         "id_post_metricool": id_post_metricool or "",
@@ -9510,7 +9523,8 @@ _SELECT_PUBLICACION = (
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
     "c.fecha_fuente AS fecha_fuente, "
-    "c.tipo_contenido AS tipo_contenido "
+    "c.tipo_contenido AS tipo_contenido, "
+    "c.formato AS formato "
     "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una publicacion:
     # el muro `es_publicacion` se retiro al fusionar Tablero y Publicaciones (#fusion). La
@@ -9542,6 +9556,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # Origen de la imagen: `tipo_contenido` ('ia'|'galeria'|'fuente') y, si es 'fuente',
         # la URL original del artículo en `imagen_fuente` (el editor ofrece "usar original").
         "tipo_contenido": f["tipo_contenido"] or "ia",
+        # FORMATO de la pieza (foto|video): heredado del `contenido` padre. Decide a qué redes
+        # va (`redes.redes_de_formato`). BD vieja / sin valor -> 'foto' (el flujo automático).
+        "formato": f["formato"] or "foto",
         "imagen_fuente": f["imagen_fuente"] or "",
         # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
         # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
