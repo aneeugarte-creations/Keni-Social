@@ -24,6 +24,7 @@ import {
   setClipPip,
   setReencuadreBase,
   setSubtitulos,
+  tituloBorradorPorDefecto,
 } from "./video";
 
 describe("composicionVacia", () => {
@@ -148,6 +149,20 @@ describe("normalizarSegmentos", () => {
     expect(normalizarSegmentos(null)).toEqual([]);
     expect(normalizarSegmentos(undefined)).toEqual([]);
     expect(normalizarSegmentos("nope")).toEqual([]);
+  });
+});
+
+describe("tituloBorradorPorDefecto", () => {
+  it("incluye el aspecto y la fecha en formato es-MX", () => {
+    const t = tituloBorradorPorDefecto("9:16", new Date("2026-06-07T12:00:00"));
+    expect(t).toContain("Borrador 9:16");
+    expect(t).toContain("07/06/26");
+  });
+
+  it("refleja el aspecto recibido", () => {
+    expect(tituloBorradorPorDefecto("16:9", new Date("2026-01-02T00:00:00"))).toContain(
+      "Borrador 16:9",
+    );
   });
 });
 

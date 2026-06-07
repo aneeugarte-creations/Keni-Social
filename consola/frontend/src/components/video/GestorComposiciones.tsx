@@ -9,15 +9,18 @@
  * Honestidad: el estado de subtítulos sale de `GET /api/video/subtitulos` por composición; el
  * estado de "video adjunto" sale de la pieza ligada (`falta_video`). No publica nada.
  */
-import { useQuery } from "@tanstack/react-query";
-import { Captions, ExternalLink, FilmIcon, PencilLine, VideoOff } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Captions, Check, ExternalLink, FilmIcon, PencilLine, Trash2, VideoOff, X } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import {
+  ETIQUETA_ESTADO_COMPOSICION,
   type ComposicionResumen,
+  type EstadoComposicion,
   type EstadoSubtitulos,
 } from "@/lib/video";
 
@@ -28,6 +31,9 @@ const ETIQUETA_ESTADO_SUBS: Record<EstadoSubtitulos, string> = {
   listo: "Subtítulos listos",
 };
 
+/** Filtro por estado del borrador en el gestor. */
+type FiltroEstado = "todos" | EstadoComposicion;
+
 export interface GestorComposicionesProps {
   /** Marca activa: filtra el listado (multi-tenant). */
   marca: string;
@@ -36,12 +42,28 @@ export interface GestorComposicionesProps {
 }
 
 export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps) {
+  const qc = useQueryClient();
+  const [filtro, setFiltro] = React.useState<FiltroEstado>("todos");
+
   // Composiciones de la marca activa (el `documento` viene ya parseado).
   const compsQ = useQuery({
     queryKey: ["video-composiciones", marca],
     queryFn: ({ signal }) =>
       api.video.listarComposiciones({ marca }, signal).then((r) => r.composiciones),
     enabled: !!marca,
+  });
+
+  // Renombrar / eliminar un borrador. Tras éxito, refresca la lista de la marca.
+  const renombrar = useMutation({
+    mutationFn: ({ id, titulo }: { id: string; titulo: string }) =>
+      api.video.renombrarComposicion(id, titulo),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["video-composiciones", marca] }),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const eliminar = useMutation({
+    mutationFn: (id: string) => api.video.eliminarComposicion(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["video-composiciones", marca] }),
+    onError: (e) => toast.error(mensajeError(e)),
   });
 
   // Piezas de la marca, para mapear `contenido_id -> falta_video` (¿ya tiene su mp4?).
@@ -91,36 +113,79 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
   if (comps.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-        Aún no hay composiciones para esta marca. Empieza una nueva en la sección «Base» (al subir
-        un clip base se crea la composición), o edita una pieza de video desde la lista de contenido.
+        Aún no hay composiciones para esta marca. Empieza una nueva en la sección «Base» (al primer
+        cambio o con «Guardar borrador» se crea la composición), o edita una pieza de video desde la
+        lista de contenido.
       </p>
     );
   }
 
+  const visibles = comps.filter((c) => filtro === "todos" || (c.estado ?? "borrador") === filtro);
+
   return (
-    <ul className="space-y-2" aria-label="Mis composiciones de video">
-      {comps.map((c) => (
-        <FilaComposicion
-          key={c.id}
-          comp={c}
-          faltaVideo={c.contenido_id ? estadoPieza.get(c.contenido_id)?.faltaVideo : undefined}
-          onAbrir={() => onAbrir(c.id)}
-        />
-      ))}
-    </ul>
+    <div className="space-y-3">
+      {/* Filtro Borradores / Listos. */}
+      <div className="flex gap-1" role="tablist" aria-label="Filtrar por estado">
+        {([
+          ["todos", "Todos"],
+          ["borrador", "Borradores"],
+          ["listo", "Listos"],
+        ] as [FiltroEstado, string][]).map(([clave, etiqueta]) => (
+          <button
+            key={clave}
+            type="button"
+            role="tab"
+            aria-selected={filtro === clave}
+            onClick={() => setFiltro(clave)}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              filtro === clave ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {visibles.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+          No hay composiciones {filtro === "borrador" ? "en borrador" : "marcadas como listas"} para
+          esta marca.
+        </p>
+      ) : (
+        <ul className="space-y-2" aria-label="Mis composiciones de video">
+          {visibles.map((c) => (
+            <FilaComposicion
+              key={c.id}
+              comp={c}
+              faltaVideo={c.contenido_id ? estadoPieza.get(c.contenido_id)?.faltaVideo : undefined}
+              onAbrir={() => onAbrir(c.id)}
+              onRenombrar={(titulo) => renombrar.mutate({ id: c.id, titulo })}
+              onEliminar={() => eliminar.mutate(c.id)}
+              eliminando={eliminar.isPending && eliminar.variables === c.id}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
-/** Una fila del gestor: una composición con su formato, estado de subtítulos y enlaces. */
+/** Una fila del gestor: una composición con su título, estado, formato, subtítulos y enlaces. */
 function FilaComposicion({
   comp,
   faltaVideo,
   onAbrir,
+  onRenombrar,
+  onEliminar,
+  eliminando,
 }: {
   comp: ComposicionResumen;
   /** `undefined` si la composición no tiene pieza ligada; si la tiene, ¿le falta el video? */
   faltaVideo: boolean | undefined;
   onAbrir: () => void;
+  onRenombrar: (titulo: string) => void;
+  onEliminar: () => void;
+  eliminando: boolean;
 }) {
   // Estado de subtítulos: una query barata por composición (null si aún no se transcribió).
   const subQ = useQuery({
@@ -134,13 +199,62 @@ function FilaComposicion({
   const tieneBase = (comp.documento?.pistas ?? []).some(
     (p) => p.tipo === "video" && p.id === "base" && "clips" in p && p.clips.length > 0,
   );
+  const estadoComp: EstadoComposicion = comp.estado ?? "borrador";
+  const tituloMostrado = comp.titulo?.trim() || comp.id;
+
+  // Renombrado inline: al confirmar, sólo dispara si cambió y no quedó vacío.
+  const [editando, setEditando] = React.useState(false);
+  const [borrador, setBorrador] = React.useState(comp.titulo ?? "");
+
+  function confirmarRenombre() {
+    const t = borrador.trim();
+    setEditando(false);
+    if (t && t !== (comp.titulo ?? "")) onRenombrar(t);
+    else setBorrador(comp.titulo ?? "");
+  }
+
+  function pedirEliminar() {
+    if (window.confirm(`¿Eliminar «${tituloMostrado}»? Esta acción no se puede deshacer.`)) {
+      onEliminar();
+    }
+  }
 
   return (
     <li className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-card p-3">
       <FilmIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-mono text-xs text-foreground">{comp.id}</span>
+          {editando ? (
+            <input
+              autoFocus
+              type="text"
+              value={borrador}
+              onChange={(e) => setBorrador(e.target.value)}
+              onBlur={confirmarRenombre}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmarRenombre();
+                if (e.key === "Escape") {
+                  setBorrador(comp.titulo ?? "");
+                  setEditando(false);
+                }
+              }}
+              aria-label="Nuevo título"
+              className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          ) : (
+            <span className="truncate text-sm font-medium text-foreground" title={comp.id}>
+              {tituloMostrado}
+            </span>
+          )}
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+              estadoComp === "listo"
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+            }`}
+          >
+            {ETIQUETA_ESTADO_COMPOSICION[estadoComp] ?? estadoComp}
+          </span>
           <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
             {preset}
           </span>
@@ -184,6 +298,44 @@ function FilaComposicion({
             </Link>
           </Button>
         )}
+        {editando ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={confirmarRenombre}
+            aria-label="Confirmar nombre"
+            title="Confirmar nombre"
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setBorrador(comp.titulo ?? "");
+              setEditando(true);
+            }}
+            aria-label="Renombrar"
+            title="Renombrar"
+          >
+            <PencilLine className="h-4 w-4" />
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={pedirEliminar}
+          disabled={eliminando}
+          aria-label="Eliminar"
+          title="Eliminar"
+          className="text-destructive hover:text-destructive"
+        >
+          {eliminando ? <X className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+        </Button>
         <Button type="button" size="sm" variant="outline" onClick={onAbrir}>
           <PencilLine className="mr-1 h-4 w-4" />
           Abrir

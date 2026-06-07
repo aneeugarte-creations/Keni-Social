@@ -140,7 +140,9 @@ describe("EstudioVideo", () => {
   it("carga una composición existente por `?composicion=<id>`", async () => {
     const composicion = vi
       .spyOn(apiMod.api.video, "composicion")
-      .mockResolvedValue({ composicion: { id: "comp-7", documento: docConBase() } });
+      .mockResolvedValue({
+        composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
+      });
     renderEstudioVideo("/contenido/video?composicion=comp-7");
     // Tras cargar, abre la sección Base con el clip ya presente: el reencuadre (que exige base)
     // y las secciones que requieren base quedan habilitadas.
@@ -158,6 +160,8 @@ describe("EstudioVideo", () => {
           contenido_id: "cont-5",
           marca: "unotv",
           marca_nombre: "UnoTV",
+          titulo: "Pieza ligada",
+          estado: "borrador",
           creado: "",
           actualizado: "",
           documento: docConBase(),
@@ -183,7 +187,50 @@ describe("EstudioVideo", () => {
       .mockResolvedValue({ id: "comp-nueva" });
     renderEstudioVideo("/contenido/video?contenido=cont-9");
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
-    // La nueva composición se crea LIGADA a la pieza (contenido_id).
-    expect(crear.mock.calls[0][0]).toMatchObject({ marca: "unotv", contenido_id: "cont-9" });
+    // La nueva composición se crea LIGADA a la pieza (contenido_id) y con título por defecto.
+    expect(crear.mock.calls[0][0]).toMatchObject({
+      marca: "unotv",
+      contenido_id: "cont-9",
+      estado: "borrador",
+    });
+    expect(crear.mock.calls[0][0].titulo).toMatch(/^Borrador/);
+  });
+
+  it("CREA el borrador al PRIMER cambio significativo (cambiar de formato), sin clip base", async () => {
+    const crear = vi
+      .spyOn(apiMod.api.video, "crearComposicion")
+      .mockResolvedValue({ id: "comp-temprana" });
+    renderEstudioVideo();
+    irABase();
+    // Cambiar el formato a 1:1 es una edición real del documento → crea el borrador.
+    fireEvent.click(screen.getByRole("radio", { name: /1:1/i }));
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    // Sin clip base: la creación NO esperó al clip. Título por defecto derivado.
+    expect(crear.mock.calls[0][0].titulo).toMatch(/^Borrador/);
+  });
+
+  it("el botón 'Guardar borrador' crea la composición y muestra 'Guardado'", async () => {
+    const crear = vi
+      .spyOn(apiMod.api.video, "crearComposicion")
+      .mockResolvedValue({ id: "comp-guardada" });
+    renderEstudioVideo();
+    irABase();
+    expect(screen.getByText(/sin guardar/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /guardar borrador/i }));
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/^Guardado$/)).toBeInTheDocument();
+  });
+
+  it("'Marcar listo' hace PUT del estado='listo' sin reenviar documento", async () => {
+    vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
+      composicion: { id: "comp-7", documento: docConBase(), titulo: "T", estado: "borrador" },
+    });
+    const actualizar = vi
+      .spyOn(apiMod.api.video, "actualizarComposicion")
+      .mockResolvedValue({ composicion: { id: "comp-7", titulo: "T", estado: "listo" } });
+    renderEstudioVideo("/contenido/video?composicion=comp-7");
+    const boton = await screen.findByRole("button", { name: /marcar listo/i });
+    fireEvent.click(boton);
+    await waitFor(() => expect(actualizar).toHaveBeenCalledWith("comp-7", { estado: "listo" }));
   });
 });

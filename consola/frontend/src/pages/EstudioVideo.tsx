@@ -11,11 +11,12 @@
  *   - Render  : encola el render y muestra el mp4 resultante.
  *
  * Honestidad: el preview del navegador es APROXIMADO; el render fiel lo produce el servidor.
- * Nada se quema/publica sin criterio humano. La composición se crea en el backend al subir el
- * clip base y se autoguarda al cambiar de sección o antes de renderizar.
+ * Nada se quema/publica sin criterio humano. La composición se persiste como BORRADOR en el
+ * backend al PRIMER cambio significativo (o con el botón "Guardar borrador"), sin esperar al clip
+ * base, y luego se autoguarda. El estado "listo" es organización, NO publicación.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Captions, Clapperboard, Film, FolderOpen, Layers, PictureInPicture2, Video as VideoIcon } from "lucide-react";
+import { Captions, Check, CheckCircle2, Clapperboard, Film, FolderOpen, Layers, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -46,8 +47,10 @@ import {
   setClipBase,
   setClipPip,
   setReencuadreBase,
+  tituloBorradorPorDefecto,
   type AspectoVideo,
   type ComposicionVideo,
+  type EstadoComposicion,
   type SegmentoSub,
 } from "@/lib/video";
 
@@ -88,6 +91,10 @@ export default function EstudioVideo() {
   const [contenidoId, setContenidoId] = React.useState<string | null>(null);
   const [segmentos, setSegmentos] = React.useState<SegmentoSub[]>([]);
 
+  // Metadatos del borrador: título (nombre humano) y estado (borrador/listo, organización ≠ publicar).
+  const [titulo, setTitulo] = React.useState("");
+  const [estado, setEstado] = React.useState<EstadoComposicion>("borrador");
+
   // Presets de formato del servidor (con fallback local dentro del selector).
   const formatosQ = useQuery({
     queryKey: ["video-formatos"],
@@ -96,34 +103,49 @@ export default function EstudioVideo() {
     retry: false,
   });
 
-  // Crea la composición en el backend (una vez por sesión, al fijar el primer clip base).
-  // `marca` es obligatoria en la API: sin marca activa no se puede crear. Si la composición nació
-  // desde una pieza de video, se ENVÍA su `contenido_id` para ligarla (antes se omitía).
+  // Crea la composición en el backend en cuanto hay una edición significativa (NO espera al clip
+  // base): así el borrador no se pierde si el usuario se va antes de subir el clip. `marca` es
+  // obligatoria en la API: sin marca activa no se puede crear. Si la composición nació desde una
+  // pieza de video, se ENVÍA su `contenido_id` para ligarla. Persiste título (derivando uno por
+  // defecto si está vacío) y estado.
   const crear = useMutation({
-    mutationFn: (d: ComposicionVideo) =>
-      api.video.crearComposicion({
+    mutationFn: (d: ComposicionVideo) => {
+      const tit = titulo.trim() || tituloBorradorPorDefecto(d.formato?.preset ?? aspecto);
+      return api.video.crearComposicion({
         marca: d.marca || marca,
         documento: d,
+        titulo: tit,
+        estado,
         ...(contenidoId ? { contenido_id: contenidoId } : {}),
-      }),
-    onSuccess: (r) => setComposicionId(r.id),
+      });
+    },
+    onSuccess: (r, d) => {
+      setComposicionId(r.id);
+      // Refleja en UI el título que realmente se guardó (el derivado por defecto si estaba vacío).
+      if (!titulo.trim()) setTitulo(tituloBorradorPorDefecto(d.formato?.preset ?? aspecto));
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  /** Hidrata el estado local (doc, aspecto, claves/urls de media) desde un documento cargado. */
-  const hidratar = React.useCallback((cargado: ComposicionVideo, id: string) => {
-    setDoc(cargado);
-    setComposicionId(id);
-    setAspecto((cargado.formato?.preset as AspectoVideo) ?? "9:16");
-    const base = pistaBase(cargado)?.clips[0]?.media_id ?? "";
-    setBaseKey(base);
-    setBaseUrl(base ? urlMedia(base) : "");
-    const pip = pistaPip(cargado)?.clips[0]?.media_id ?? "";
-    setPipKey(pip);
-    setPipUrl(pip ? urlMedia(pip) : "");
-    setSegmentos([]);
-    setSeccion("base");
-  }, []);
+  /** Hidrata el estado local (doc, aspecto, claves/urls de media, título/estado) desde una carga. */
+  const hidratar = React.useCallback(
+    (cargado: ComposicionVideo, id: string, meta?: { titulo?: string; estado?: EstadoComposicion }) => {
+      setDoc(cargado);
+      setComposicionId(id);
+      setAspecto((cargado.formato?.preset as AspectoVideo) ?? "9:16");
+      setTitulo(meta?.titulo ?? "");
+      setEstado(meta?.estado ?? "borrador");
+      const base = pistaBase(cargado)?.clips[0]?.media_id ?? "";
+      setBaseKey(base);
+      setBaseUrl(base ? urlMedia(base) : "");
+      const pip = pistaPip(cargado)?.clips[0]?.media_id ?? "";
+      setPipKey(pip);
+      setPipUrl(pip ? urlMedia(pip) : "");
+      setSegmentos([]);
+      setSeccion("base");
+    },
+    [],
+  );
 
   // Carga por deep-link. `?composicion=<id>` reabre; `?contenido=<id>` busca-o-crea por pieza.
   // Tras resolver, limpia el query param para no recargar en cada render. Idempotente: no recarga
@@ -136,7 +158,10 @@ export default function EstudioVideo() {
       cargando.current = true;
       try {
         const { composicion } = await api.video.composicion(id);
-        hidratar(composicion.documento, composicion.id);
+        hidratar(composicion.documento, composicion.id, {
+          titulo: composicion.titulo,
+          estado: composicion.estado,
+        });
       } catch (e) {
         toast.error(mensajeError(e));
       } finally {
@@ -156,17 +181,23 @@ export default function EstudioVideo() {
         if (composiciones.length > 0) {
           // Reabre la composición ya existente de esta pieza (la más reciente).
           const existente = composiciones[0];
-          hidratar(existente.documento, existente.id);
+          hidratar(existente.documento, existente.id, {
+            titulo: existente.titulo,
+            estado: existente.estado,
+          });
         } else {
           // No hay: crea una nueva VACÍA ligada a la pieza y la deja abierta para subir el clip.
           const nueva = composicionVacia(aspecto, marca);
+          const tit = tituloBorradorPorDefecto(nueva.formato?.preset ?? aspecto);
           const { id } = await api.video.crearComposicion({
             marca,
             documento: nueva,
             contenido_id: cid,
+            titulo: tit,
+            estado: "borrador",
           });
           setContenidoId(cid);
-          hidratar(nueva, id);
+          hidratar(nueva, id, { titulo: tit, estado: "borrador" });
         }
       } catch (e) {
         toast.error(mensajeError(e));
@@ -190,18 +221,73 @@ export default function EstudioVideo() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  /** Aplica una mutación pura al documento y, si ya hay composición, la persiste. */
+  // Actualiza SOLO metadatos del borrador (titulo/estado) sin reenviar el documento (PUT parcial).
+  const actualizarMeta = useMutation({
+    mutationFn: (cambios: { titulo?: string; estado?: EstadoComposicion }) =>
+      api.video.actualizarComposicion(composicionId!, cambios),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  /**
+   * Aplica una mutación pura al documento y la PERSISTE. Si aún no hay composición en backend, la
+   * CREA al primer cambio real (persistencia temprana: el borrador no se pierde aunque no haya
+   * clip base). Si ya existe, autoguarda. Sin cambio real (misma referencia) no hace nada.
+   */
   const mutar = React.useCallback(
     (fn: (d: ComposicionVideo) => ComposicionVideo) => {
       setDoc((prev) => {
         const siguiente = fn(prev);
-        // Sin cambio real (misma referencia): no reguardar (evita bucles de autoguardado).
-        if (siguiente !== prev && composicionId) void guardar.mutateAsync(siguiente).catch(() => {});
+        if (siguiente === prev) return prev; // sin cambio real: no reguardar (evita bucles).
+        if (composicionId) {
+          void guardar.mutateAsync(siguiente).catch(() => {});
+        } else if (!crear.isPending) {
+          // Primer cambio significativo sin composición todavía: crearla (necesita marca).
+          const conMarca = { ...siguiente, marca: siguiente.marca || marca };
+          if (!conMarca.marca) {
+            toast.error("Selecciona una marca antes de editar el video.");
+            return conMarca;
+          }
+          crear.mutate(conMarca);
+          return conMarca;
+        }
         return siguiente;
       });
     },
-    [composicionId, guardar],
+    [composicionId, guardar, crear, marca],
   );
+
+  /** Crea explícitamente el borrador (botón "Guardar borrador") si aún no existe. */
+  const guardarBorrador = React.useCallback(() => {
+    if (composicionId || crear.isPending) return;
+    const conMarca = { ...doc, marca: doc.marca || marca };
+    if (!conMarca.marca) {
+      toast.error("Selecciona una marca antes de guardar el borrador.");
+      return;
+    }
+    setDoc(conMarca);
+    crear.mutate(conMarca);
+  }, [composicionId, crear, doc, marca]);
+
+  /** Renombra el borrador (si ya existe en backend; si no, sólo guarda el título local). */
+  const onCambiarTitulo = React.useCallback(
+    (nuevo: string) => {
+      setTitulo(nuevo);
+      if (composicionId) actualizarMeta.mutate({ titulo: nuevo.trim() });
+    },
+    [composicionId, actualizarMeta],
+  );
+
+  /** Cambia el estado borrador↔listo ("listo" NO publica; es organización). */
+  const cambiarEstado = React.useCallback(
+    (nuevo: EstadoComposicion) => {
+      setEstado(nuevo);
+      if (composicionId) actualizarMeta.mutate({ estado: nuevo });
+    },
+    [composicionId, actualizarMeta],
+  );
+
+  // Indicador de guardado: "Guardando…" mientras hay alguna escritura en vuelo; "Guardado" tras crear.
+  const guardando = crear.isPending || guardar.isPending || actualizarMeta.isPending;
 
   // Reabre una composición desde el gestor: navega a `?composicion=<id>` (el efecto la carga).
   const abrirComposicion = React.useCallback(
@@ -218,6 +304,8 @@ export default function EstudioVideo() {
     setPipKey("");
     setPipUrl("");
     setSegmentos([]);
+    setTitulo("");
+    setEstado("borrador");
     setDoc(composicionVacia(aspecto, marca));
     setSeccion("base");
   }, [aspecto, marca]);
@@ -319,6 +407,71 @@ export default function EstudioVideo() {
           );
         })}
       </nav>
+
+      {/* Barra del BORRADOR: título, estado (borrador/listo), indicador de guardado y acciones.
+          Fuera del gestor (en el gestor no se edita un borrador concreto). */}
+      {seccion !== "gestor" && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+          <input
+            type="text"
+            value={titulo}
+            onChange={(e) => onCambiarTitulo(e.target.value)}
+            placeholder={tituloBorradorPorDefecto(aspecto)}
+            aria-label="Título del borrador"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+
+          {/* Badge de estado. */}
+          <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              estado === "listo"
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+            }`}
+          >
+            {estado === "listo" ? <CheckCircle2 className="h-3 w-3" /> : null}
+            {estado === "listo" ? "Listo" : "Borrador"}
+          </span>
+
+          {/* Indicador de guardado para que el usuario confíe en que persiste. */}
+          <span className="shrink-0 text-[11px] text-muted-foreground" aria-live="polite">
+            {guardando ? "Guardando…" : composicionId ? "Guardado" : "Sin guardar"}
+          </span>
+
+          {/* Acciones: guardar borrador (si aún no existe) o marcar listo/volver a borrador. */}
+          {!composicionId ? (
+            <button
+              type="button"
+              onClick={guardarBorrador}
+              disabled={crear.isPending}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
+            >
+              <Save className="h-3.5 w-3.5" />
+              Guardar borrador
+            </button>
+          ) : estado === "borrador" ? (
+            <button
+              type="button"
+              onClick={() => cambiarEstado("listo")}
+              title="Marca el borrador como listo (organización; NO publica)"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Marcar listo
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => cambiarEstado("borrador")}
+              title="Vuelve a borrador para seguir editando"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              Volver a borrador
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Cuerpo: controles (izq) + preview (der). El GESTOR ocupa todo el ancho (sin preview). */}
       <div className="min-h-0 flex-1 overflow-auto">

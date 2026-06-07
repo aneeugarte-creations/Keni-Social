@@ -21,6 +21,8 @@ function comp(over: Partial<ComposicionResumen> = {}): ComposicionResumen {
     contenido_id: "",
     marca: "unotv",
     marca_nombre: "UnoTV",
+    titulo: "",
+    estado: "borrador",
     creado: "2026-06-01T10:00:00Z",
     actualizado: "2026-06-02T12:00:00Z",
     documento: {
@@ -126,5 +128,86 @@ describe("GestorComposiciones", () => {
     await waitFor(() =>
       expect(screen.getByText(/aún no hay composiciones para esta marca/i)).toBeInTheDocument(),
     );
+  });
+
+  it("muestra el TÍTULO del borrador (no el id) y un badge de estado", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-x", titulo: "Mi reel del finde", estado: "listo" })],
+    });
+    renderGestor();
+    expect(await screen.findByText("Mi reel del finde")).toBeInTheDocument();
+    // Badge "Listo" presente.
+    expect(screen.getByText(/^Listo$/)).toBeInTheDocument();
+  });
+
+  it("cae al id cuando el borrador no tiene título", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-sin-titulo", titulo: "" })],
+    });
+    renderGestor();
+    expect(await screen.findByText("comp-sin-titulo")).toBeInTheDocument();
+    // Borrador por defecto.
+    expect(screen.getByText(/^Borrador$/)).toBeInTheDocument();
+  });
+
+  it("RENOMBRA un borrador (PUT solo título) y refresca", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-r", titulo: "Viejo" })],
+    });
+    const renombrar = vi
+      .spyOn(apiMod.api.video, "renombrarComposicion")
+      .mockResolvedValue({ composicion: { id: "comp-r", titulo: "Nuevo", estado: "borrador" } });
+    renderGestor();
+    await screen.findByText("Viejo");
+    fireEvent.click(screen.getByRole("button", { name: /renombrar/i }));
+    const input = screen.getByRole("textbox", { name: /nuevo título/i });
+    fireEvent.change(input, { target: { value: "Nuevo" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(renombrar).toHaveBeenCalledWith("comp-r", "Nuevo"));
+  });
+
+  it("ELIMINA un borrador tras confirmar", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-del", titulo: "Borrar esto" })],
+    });
+    const eliminar = vi
+      .spyOn(apiMod.api.video, "eliminarComposicion")
+      .mockResolvedValue({ ok: true });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderGestor();
+    await screen.findByText("Borrar esto");
+    fireEvent.click(screen.getByRole("button", { name: /^eliminar$/i }));
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => expect(eliminar).toHaveBeenCalledWith("comp-del"));
+    confirmSpy.mockRestore();
+  });
+
+  it("NO elimina si el usuario cancela la confirmación", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-keep", titulo: "Conservar" })],
+    });
+    const eliminar = vi.spyOn(apiMod.api.video, "eliminarComposicion");
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderGestor();
+    await screen.findByText("Conservar");
+    fireEvent.click(screen.getByRole("button", { name: /^eliminar$/i }));
+    expect(eliminar).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("FILTRA por estado (Borradores / Listos)", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [
+        comp({ id: "comp-b", titulo: "Un borrador", estado: "borrador" }),
+        comp({ id: "comp-l", titulo: "Uno listo", estado: "listo" }),
+      ],
+    });
+    renderGestor();
+    await screen.findByText("Un borrador");
+    expect(screen.getByText("Uno listo")).toBeInTheDocument();
+    // Filtra a Listos: el borrador desaparece.
+    fireEvent.click(screen.getByRole("tab", { name: /^listos$/i }));
+    await waitFor(() => expect(screen.queryByText("Un borrador")).not.toBeInTheDocument());
+    expect(screen.getByText("Uno listo")).toBeInTheDocument();
   });
 });

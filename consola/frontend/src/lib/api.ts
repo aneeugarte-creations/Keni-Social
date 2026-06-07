@@ -277,6 +277,7 @@ import type { PlantillaSpec } from "./specPlantilla";
 import type {
   ComposicionResumen,
   ComposicionVideo,
+  EstadoComposicion,
   EstadoSubtitulos,
   PresetFormatoVideo,
   SegmentoSub,
@@ -1122,22 +1123,55 @@ export const api = {
         `/video/composiciones${query({ marca: filtros.marca, contenido_id: filtros.contenido_id })}`,
         { signal },
       ),
-    /** Crea la composición. `marca` es obligatoria (del catálogo). Devuelve `{id}`. */
+    /**
+     * Crea la composición. `marca` es obligatoria (del catálogo). `titulo`/`estado` opcionales
+     * (default backend "" / "borrador"). Devuelve `{id}`.
+     */
     crearComposicion: (cuerpo: {
       marca: string;
       documento: ComposicionVideo;
       contenido_id?: string;
+      titulo?: string;
+      estado?: EstadoComposicion;
     }) => peticion<{ id: string }>("/video/composiciones", { metodo: "POST", json: cuerpo }),
     composicion: (id: string, signal?: AbortSignal) =>
-      peticion<{ composicion: { id: string; documento: ComposicionVideo } }>(
-        `/video/composiciones/${encodeURIComponent(id)}`,
-        { signal },
-      ),
+      peticion<{
+        composicion: {
+          id: string;
+          documento: ComposicionVideo;
+          titulo: string;
+          estado: EstadoComposicion;
+        };
+      }>(`/video/composiciones/${encodeURIComponent(id)}`, { signal }),
+    /** Guarda el `documento` (autosave). Reusa el PUT (que admite documento/titulo/estado). */
     guardarComposicion: (id: string, documento: ComposicionVideo) =>
       peticion<{ composicion: { id: string; documento: ComposicionVideo } }>(
         `/video/composiciones/${encodeURIComponent(id)}`,
         { metodo: "PUT", json: { documento } },
       ),
+    /**
+     * Actualiza SÓLO metadatos del borrador (titulo/estado) sin reenviar el documento. Permite
+     * renombrar o cambiar de estado (borrador↔listo). Todos los campos son opcionales.
+     */
+    actualizarComposicion: (
+      id: string,
+      cambios: { titulo?: string; estado?: EstadoComposicion },
+    ) =>
+      peticion<{ composicion: { id: string; titulo: string; estado: EstadoComposicion } }>(
+        `/video/composiciones/${encodeURIComponent(id)}`,
+        { metodo: "PUT", json: cambios },
+      ),
+    /** Renombra un borrador (azúcar sobre `actualizarComposicion`). */
+    renombrarComposicion: (id: string, titulo: string) =>
+      peticion<{ composicion: { id: string; titulo: string; estado: EstadoComposicion } }>(
+        `/video/composiciones/${encodeURIComponent(id)}`,
+        { metodo: "PUT", json: { titulo } },
+      ),
+    /** Elimina una composición/borrador. `{ok:true}` / 404. */
+    eliminarComposicion: (id: string) =>
+      peticion<{ ok: boolean }>(`/video/composiciones/${encodeURIComponent(id)}`, {
+        metodo: "DELETE",
+      }),
     /** Encola el render FFmpeg. Devuelve `{gen_id}` (sondear con `api.generacion`). */
     render: (id: string) =>
       peticion<{ gen_id: string }>(`/video/composiciones/${encodeURIComponent(id)}/render`, {

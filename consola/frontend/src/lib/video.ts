@@ -362,18 +362,47 @@ export interface SegmentoSub {
 export type EstadoSubtitulos = "pendiente" | "transcrito" | "editado" | "listo";
 
 /**
+ * Estado de un BORRADOR de composición (espejo de `video_composiciones.estado`). Es organización,
+ * NO publicación: "listo" sólo marca que el humano dio por terminada la edición. Default "borrador".
+ */
+export type EstadoComposicion = "borrador" | "listo";
+
+export const ESTADO_COMPOSICION_DEFECTO: EstadoComposicion = "borrador";
+
+export const ETIQUETA_ESTADO_COMPOSICION: Record<EstadoComposicion, string> = {
+  borrador: "Borrador",
+  listo: "Listo",
+};
+
+/**
  * Resumen de una composición tal como lo sirve `GET /api/video/composiciones` (listado).
  * `documento` viene YA parseado a objeto por el backend (`_composicion_a_dict`). `marca_nombre`
- * es la etiqueta legible de la marca. Se usa en el GESTOR de composiciones.
+ * es la etiqueta legible de la marca. `titulo`/`estado` son del borrador (def "" / "borrador").
+ * Se usa en el GESTOR de composiciones.
  */
 export interface ComposicionResumen {
   id: string;
   contenido_id: string;
   marca: string;
   marca_nombre: string;
+  titulo: string;
+  estado: EstadoComposicion;
   documento: ComposicionVideo;
   creado: string;
   actualizado: string;
+}
+
+/**
+ * Deriva un título por defecto para un borrador sin nombre, a partir del aspecto y la fecha.
+ * P.ej. "Borrador 9:16 · 07/06/26".
+ */
+export function tituloBorradorPorDefecto(aspecto: string, fecha = new Date()): string {
+  const f = fecha.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+  return `Borrador ${aspecto} · ${f}`;
 }
 
 /** Recurso de subtítulos tal como lo sirve `GET /api/video/subtitulos/{id}`. */
