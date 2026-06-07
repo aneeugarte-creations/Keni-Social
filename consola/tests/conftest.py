@@ -56,6 +56,18 @@ from keni_consola import db as db_modulo  # noqa: E402 -- tras fijar KENI_DB_POO
 pytest_plugins = ["tests._postgres"]
 
 
+def pytest_sessionfinish(session, exitstatus):  # noqa: ANN001 -- firma de hook pytest
+    """Cierra el pool de Postgres al terminar la sesión (por worker xdist y controlador).
+
+    Con el pool ON en la suite, `psycopg_pool` deja hilos de mantenimiento vivos; sin cerrarlo
+    el proceso del worker tarda en salir tras el último test (finalización lenta -> el pipeline
+    pierde la carrera contra el siguiente push y muere por cancelación). Cerrarlo aquí hace que
+    cada worker salga limpio y rápido. Idempotente y best-effort."""
+    from keni_consola import motor_db
+
+    motor_db.cerrar_pool()
+
+
 @pytest.fixture(autouse=True)
 def _versionado_git_desactivado(monkeypatch):
     """Desactiva por defecto el versionado git de la Biblioteca en la suite.
