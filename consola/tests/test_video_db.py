@@ -24,6 +24,52 @@ def test_crud_composicion(entorno):
     assert repos.listar_video_composiciones(contenido_id="t1")[0]["id"] == c["id"]
 
 
+def test_composicion_drafts_titulo_estado(entorno):
+    # Defaults: titulo vacio, estado borrador.
+    c = repos.crear_video_composicion(marca=_MARCA)
+    assert c["titulo"] == ""
+    assert c["estado"] == "borrador"
+
+    # Crear con titulo/estado explicitos.
+    c2 = repos.crear_video_composicion(marca=_MARCA, titulo="Mi clip", estado="listo")
+    assert c2["titulo"] == "Mi clip"
+    assert c2["estado"] == "listo"
+
+    # estado invalido al crear -> cae a borrador.
+    c3 = db.crear_video_composicion(marca=_MARCA, estado="basura")
+    assert c3["estado"] == "borrador"
+
+    # Actualizar titulo/estado SIN documento.
+    act = repos.actualizar_video_composicion(c["id"], {"titulo": "Renombrada", "estado": "listo"})
+    assert act["titulo"] == "Renombrada"
+    assert act["estado"] == "listo"
+
+    # estado invalido al actualizar -> se descarta (conserva el anterior).
+    act2 = repos.actualizar_video_composicion(c["id"], {"estado": "basura", "titulo": "X"})
+    assert act2["estado"] == "listo"
+    assert act2["titulo"] == "X"
+
+    # Listar/obtener devuelven los campos.
+    leida = repos.obtener_video_composicion(c["id"])
+    assert leida["titulo"] == "X" and leida["estado"] == "listo"
+    listadas = repos.listar_video_composiciones(marca=_MARCA)
+    una = next(x for x in listadas if x["id"] == c["id"])
+    assert una["titulo"] == "X" and una["estado"] == "listo"
+
+
+def test_borrar_composicion_y_subtitulos(entorno):
+    c = repos.crear_video_composicion(marca=_MARCA)
+    repos.crear_video_subtitulo(composicion_id=c["id"])
+    assert repos.listar_video_subtitulos(composicion_id=c["id"])
+
+    assert repos.borrar_video_composicion(c["id"]) is True
+    assert repos.obtener_video_composicion(c["id"]) is None
+    # Los subtitulos asociados tambien se limpian.
+    assert repos.listar_video_subtitulos(composicion_id=c["id"]) == []
+    # Segundo borrado -> False (ya no existe).
+    assert repos.borrar_video_composicion(c["id"]) is False
+
+
 def test_obtener_composicion_inexistente_none(entorno):
     assert repos.obtener_video_composicion("no-existe") is None
     assert repos.actualizar_video_composicion("no-existe", {"marca": "x"}) is None

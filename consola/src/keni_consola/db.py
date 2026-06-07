@@ -1582,6 +1582,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         id           TEXT PRIMARY KEY,
         contenido_id TEXT NOT NULL DEFAULT '',
         marca        TEXT NOT NULL DEFAULT '',
+        titulo       TEXT NOT NULL DEFAULT '',
+        estado       TEXT NOT NULL DEFAULT 'borrador',
         documento    TEXT NOT NULL DEFAULT '{}',
         creado       TEXT NOT NULL DEFAULT '',
         actualizado  TEXT NOT NULL DEFAULT ''
@@ -1664,6 +1666,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_noticias_algoritmo(con)
     _migrar_columnas_etiquetas(con)
     _migrar_columnas_contenido_plataforma(con)
+    _migrar_columnas_video_composiciones(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
     # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
@@ -1783,6 +1786,28 @@ def _migrar_columnas_plantillas_diseno(con: Any) -> None:
     if "tipo" not in _columnas_existentes(con, "plantillas_diseno"):
         con.execute(
             "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'foto'"
+        )
+
+
+def _migrar_columnas_video_composiciones(con: Any) -> None:
+    """Anade `titulo`/`estado` a `video_composiciones` si una BD ya creada no las tuviera.
+
+    Soporta DRAFTS (borradores) del Estudio de Video: `titulo` identifica la composicion en la
+    lista; `estado` ∈ {borrador, listo} marca si esta lista para producir. Las composiciones
+    existentes reciben los DEFAULTs (titulo vacio, estado 'borrador'), que preservan el
+    comportamiento previo. Idempotente; mismo patron que `_migrar_columnas_plantillas_diseno`.
+    """
+    if not _tabla_existe(con, "video_composiciones"):
+        return
+    cols = _columnas_existentes(con, "video_composiciones")
+    if "titulo" not in cols:
+        con.execute(
+            "ALTER TABLE video_composiciones ADD COLUMN IF NOT EXISTS titulo TEXT NOT NULL DEFAULT ''"
+        )
+    if "estado" not in cols:
+        con.execute(
+            "ALTER TABLE video_composiciones "
+            "ADD COLUMN IF NOT EXISTS estado TEXT NOT NULL DEFAULT 'borrador'"
         )
 
 
@@ -5523,10 +5548,15 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
 # Motor de video: composiciones + subtitulos (Ola VIDEO)                        #
 # --------------------------------------------------------------------------- #
 
+# Estados validos de una composicion: 'borrador' (en edicion) | 'listo' (lista para producir).
+ESTADOS_VIDEO_COMPOSICION = ("borrador", "listo")
+
 _COLS_VIDEO_COMPOSICIONES = (
     "id",
     "contenido_id",
     "marca",
+    "titulo",
+    "estado",
     "documento",
     "creado",
     "actualizado",
@@ -5534,13 +5564,21 @@ _COLS_VIDEO_COMPOSICIONES = (
 _SELECT_VIDEO_COMPOSICIONES = (
     f"SELECT {', '.join(_COLS_VIDEO_COMPOSICIONES)} FROM video_composiciones"
 )
-_CAMPOS_EDITABLES_VIDEO_COMPOSICIONES: tuple[str, ...] = ("contenido_id", "marca", "documento")
+_CAMPOS_EDITABLES_VIDEO_COMPOSICIONES: tuple[str, ...] = (
+    "contenido_id",
+    "marca",
+    "titulo",
+    "estado",
+    "documento",
+)
 
 
 def _fila_a_video_composicion(fila: Any) -> dict[str, Any]:
     """Convierte una fila de `video_composiciones` en dict (con defaults defensivos)."""
     item: dict[str, Any] = {col: fila[col] for col in _COLS_VIDEO_COMPOSICIONES}
     item["documento"] = fila["documento"] or "{}"
+    item["titulo"] = fila["titulo"] or ""
+    item["estado"] = fila["estado"] if fila["estado"] in ESTADOS_VIDEO_COMPOSICION else "borrador"
     return item
 
 
@@ -5549,6 +5587,8 @@ def crear_video_composicion(
     marca: str,
     documento: str = "{}",
     contenido_id: str = "",
+    titulo: str = "",
+    estado: str = "borrador",
     id: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -5559,6 +5599,8 @@ def crear_video_composicion(
         "id": id or uuid.uuid4().hex[:12],
         "contenido_id": contenido_id or "",
         "marca": marca or "",
+        "titulo": titulo or "",
+        "estado": estado if estado in ESTADOS_VIDEO_COMPOSICION else "borrador",
         "documento": documento or "{}",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
@@ -5615,6 +5657,9 @@ def obtener_video_composicion(composicion_id: str) -> dict[str, Any] | None:
 def actualizar_video_composicion(composicion_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
     """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_VIDEO_COMPOSICIONES}
+    # `estado` fuera del enum se descarta (no rompe; conserva el anterior), igual que subtitulos.
+    if "estado" in cambios and cambios["estado"] not in ESTADOS_VIDEO_COMPOSICION:
+        del cambios["estado"]
     if not cambios:
         return obtener_video_composicion(composicion_id)
     ahora = datetime.now().isoformat(timespec="seconds")
@@ -5636,6 +5681,24 @@ def actualizar_video_composicion(composicion_id: str, campos: dict[str, Any]) ->
     finally:
         con.close()
     return _fila_a_video_composicion(fila) if fila is not None else None
+
+
+def borrar_video_composicion(composicion_id: str) -> bool:
+    """Borra una composicion de video y sus subtitulos asociados; True si existia, False si no.
+
+    `video_subtitulos` no tiene FK declarada (mismo estilo que el resto del esquema), asi que la
+    limpieza de la pista de subtitulos es explicita, igual que `borrar_publicacion_comercial`.
+    """
+    con = _conectar()
+    try:
+        con.execute(
+            "DELETE FROM video_subtitulos WHERE composicion_id = ?", (composicion_id,)
+        )
+        cur = con.execute("DELETE FROM video_composiciones WHERE id = ?", (composicion_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 # Estados validos de un subtitulo de video (contrato; ver G-video-engine.md).

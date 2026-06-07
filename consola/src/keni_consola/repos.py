@@ -1729,6 +1729,8 @@ def crear_video_composicion(
     marca: str,
     documento: str = "{}",
     contenido_id: str = "",
+    titulo: str = "",
+    estado: str = "borrador",
     id: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -1737,6 +1739,8 @@ def crear_video_composicion(
         marca=marca,
         documento=documento,
         contenido_id=contenido_id,
+        titulo=titulo,
+        estado=estado,
         id=id,
         creado=creado,
         actualizado=actualizado,
@@ -1757,6 +1761,10 @@ def actualizar_video_composicion(
     composicion_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
     return db.actualizar_video_composicion(composicion_id, campos)
+
+
+def borrar_video_composicion(composicion_id: str) -> bool:
+    return db.borrar_video_composicion(composicion_id)
 
 
 def crear_video_subtitulo(

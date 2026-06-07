@@ -11,7 +11,8 @@ QUE VIVE AQUI
   - `GET    /api/video/composiciones?marca=`              lista (filtro por marca).
   - `POST   /api/video/composiciones`                     crea (valida con keni_shared.video).
   - `GET    /api/video/composiciones/{id}`                detalle (404 si no existe).
-  - `PUT    /api/video/composiciones/{id}`                actualiza el documento (valida).
+  - `PUT    /api/video/composiciones/{id}`                actualiza documento/titulo/estado (valida).
+  - `DELETE /api/video/composiciones/{id}`                borra la composicion (+ subtitulos).
   - `POST   /api/video/composiciones/{id}/render`         encola render (gateado por maquina+flag).
   - `POST   /api/video/composiciones/{id}/transcribir`    encola ASR (gateado; crea subtitulo).
   - `GET    /api/video/subtitulos?composicion_id=`        fila de subtitulos.
@@ -66,6 +67,21 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     if not marcas.es_marca(marca):
         return None, "Marca no permitida."
     return marca, None
+
+
+def _validar_estado(
+    estado: object, *, defecto: str | None
+) -> tuple[str | None, str | None]:
+    """Valida el `estado` de una composicion (borrador | listo).
+
+    Devuelve (estado_normalizado, error_o_None). `None`/ausente -> `defecto` (sin error). Un
+    valor presente fuera del enum -> error (400 en el handler).
+    """
+    if estado is None:
+        return defecto, None
+    if not isinstance(estado, str) or estado not in db.ESTADOS_VIDEO_COMPOSICION:
+        return None, "Estado de composición no válido."
+    return estado, None
 
 
 def _composicion_a_dict(item: dict) -> dict:
@@ -164,10 +180,19 @@ async def crear_composicion(request: Request) -> Response:
     contenido_id = datos.get("contenido_id")
     contenido_id = contenido_id.strip() if isinstance(contenido_id, str) else ""
 
+    titulo = datos.get("titulo")
+    titulo = titulo.strip() if isinstance(titulo, str) else ""
+
+    estado, err = _validar_estado(datos.get("estado"), defecto="borrador")
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+
     comp = repos.crear_video_composicion(
         marca=marca,
         documento=json.dumps(doc_norm, ensure_ascii=False),
         contenido_id=contenido_id,
+        titulo=titulo,
+        estado=estado,
     )
     return JSONResponse({"id": comp["id"]})
 
@@ -181,27 +206,60 @@ async def obtener_composicion(request: Request) -> Response:
 
 
 async def actualizar_composicion(request: Request) -> Response:
-    """PUT /api/video/composiciones/{id}: reemplaza el documento (validado). -> `{composicion}` | 400/404."""
+    """PUT /api/video/composiciones/{id}: actualiza documento, titulo y/o estado. -> `{composicion}` | 400/404.
+
+    Cuerpo: `documento` (opcional; si viene se valida con `keni_shared.video.validar_composicion`),
+    `titulo` (opcional, str) y `estado` (opcional, ∈ {borrador, listo}). Todos son opcionales para
+    poder renombrar o cambiar el estado de un borrador SIN reenviar el documento; pero el cuerpo
+    debe traer al menos uno. La validacion del documento solo corre cuando el documento viene.
+    """
     composicion_id = request.path_params["composicion_id"]
     comp = repos.obtener_video_composicion(composicion_id)
     if comp is None:
         return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
 
     datos = await leer_json(request)
-    documento = datos.get("documento")
-    if not isinstance(documento, dict):
-        return JSONResponse({"error": "Falta el documento de la composición."}, status_code=400)
-    try:
-        doc_norm = video_shared.validar_composicion({**documento, "marca": comp["marca"]})
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+    campos: dict[str, object] = {}
 
-    actualizada = repos.actualizar_video_composicion(
-        composicion_id, {"documento": json.dumps(doc_norm, ensure_ascii=False)}
-    )
+    if "documento" in datos:
+        documento = datos.get("documento")
+        if not isinstance(documento, dict):
+            return JSONResponse(
+                {"error": "El documento de la composición debe ser un objeto."}, status_code=400
+            )
+        try:
+            doc_norm = video_shared.validar_composicion({**documento, "marca": comp["marca"]})
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        campos["documento"] = json.dumps(doc_norm, ensure_ascii=False)
+
+    if "titulo" in datos:
+        titulo = datos.get("titulo")
+        if not isinstance(titulo, str):
+            return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
+        campos["titulo"] = titulo.strip()
+
+    if "estado" in datos:
+        estado, err = _validar_estado(datos.get("estado"), defecto=None)
+        if err:
+            return JSONResponse({"error": err}, status_code=400)
+        campos["estado"] = estado
+
+    if not campos:
+        return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
+
+    actualizada = repos.actualizar_video_composicion(composicion_id, campos)
     if actualizada is None:
         return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
     return JSONResponse({"composicion": _composicion_a_dict(actualizada)})
+
+
+async def borrar_composicion(request: Request) -> Response:
+    """DELETE /api/video/composiciones/{id}: borra la composicion y sus subtitulos. -> `{ok}` | 404."""
+    composicion_id = request.path_params["composicion_id"]
+    if not repos.borrar_video_composicion(composicion_id):
+        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
+    return JSONResponse({"ok": True})
 
 
 # --------------------------------------------------------------------------- #
@@ -381,6 +439,7 @@ RUTAS = [
     Route("/api/video/composiciones", crear_composicion, methods=["POST"]),
     Route("/api/video/composiciones/{composicion_id}", obtener_composicion, methods=["GET"]),
     Route("/api/video/composiciones/{composicion_id}", actualizar_composicion, methods=["PUT"]),
+    Route("/api/video/composiciones/{composicion_id}", borrar_composicion, methods=["DELETE"]),
     Route("/api/video/composiciones/{composicion_id}/render", render_composicion, methods=["POST"]),
     Route(
         "/api/video/composiciones/{composicion_id}/transcribir",

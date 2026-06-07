@@ -140,6 +140,86 @@ def test_actualizar_inexistente_404(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# DRAFTS: titulo + estado (borrador/listo)                                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_con_titulo_y_estado(cliente):
+    r = cliente.post(
+        "/api/video/composiciones",
+        json={"marca": "unotv", "documento": _DOC_OK, "titulo": "Mi borrador", "estado": "listo"},
+    )
+    assert r.status_code == 200
+    comp = cliente.get(f"/api/video/composiciones/{r.json()['id']}").json()["composicion"]
+    assert comp["titulo"] == "Mi borrador"
+    assert comp["estado"] == "listo"
+
+
+def test_crear_defaults_titulo_estado(cliente):
+    comp = cliente.get(f"/api/video/composiciones/{_crear(cliente).json()['id']}").json()[
+        "composicion"
+    ]
+    assert comp["titulo"] == ""
+    assert comp["estado"] == "borrador"
+
+
+def test_crear_estado_invalido_400(cliente):
+    r = cliente.post(
+        "/api/video/composiciones",
+        json={"marca": "unotv", "documento": _DOC_OK, "estado": "fantasma"},
+    )
+    assert r.status_code == 400
+
+
+def test_listar_devuelve_titulo_estado(cliente):
+    cid = cliente.post(
+        "/api/video/composiciones",
+        json={"marca": "unotv", "documento": _DOC_OK, "titulo": "T", "estado": "listo"},
+    ).json()["id"]
+    fila = next(
+        c for c in cliente.get("/api/video/composiciones").json()["composiciones"] if c["id"] == cid
+    )
+    assert fila["titulo"] == "T" and fila["estado"] == "listo"
+
+
+def test_put_renombra_y_cambia_estado_sin_documento(cliente):
+    cid = _crear(cliente).json()["id"]
+    r = cliente.put(
+        f"/api/video/composiciones/{cid}", json={"titulo": "Nuevo nombre", "estado": "listo"}
+    )
+    assert r.status_code == 200
+    comp = r.json()["composicion"]
+    assert comp["titulo"] == "Nuevo nombre"
+    assert comp["estado"] == "listo"
+    # El documento previo se conserva (no se perdio por no reenviarlo).
+    assert comp["documento"]["formato"]["w"] == 1080
+
+
+def test_put_estado_invalido_400(cliente):
+    cid = _crear(cliente).json()["id"]
+    r = cliente.put(f"/api/video/composiciones/{cid}", json={"estado": "fantasma"})
+    assert r.status_code == 400
+
+
+def test_put_vacio_400(cliente):
+    cid = _crear(cliente).json()["id"]
+    assert cliente.put(f"/api/video/composiciones/{cid}", json={}).status_code == 400
+
+
+def test_delete_borra_y_luego_404(cliente):
+    cid = _crear(cliente).json()["id"]
+    r = cliente.delete(f"/api/video/composiciones/{cid}")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    # Tras borrar, ya no existe.
+    assert cliente.get(f"/api/video/composiciones/{cid}").status_code == 404
+
+
+def test_delete_inexistente_404(cliente):
+    assert cliente.delete("/api/video/composiciones/noexiste").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
 # render                                                                       #
 # --------------------------------------------------------------------------- #
 
