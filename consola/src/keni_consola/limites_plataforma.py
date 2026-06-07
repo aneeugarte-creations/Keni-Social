@@ -15,8 +15,18 @@ from __future__ import annotations
 
 from keni_shared.limites_plataforma import (  # noqa: F401  (reexport: la fuente es keni_shared)
     LIMITES,
+    VIDEO_SPECS,
     como_lista,
     limite_de,
+    video_specs_como_lista,
+    video_specs_de,
 )
 
-__all__ = ["LIMITES", "como_lista", "limite_de"]
+__all__ = [
+    "LIMITES",
+    "VIDEO_SPECS",
+    "como_lista",
+    "limite_de",
+    "video_specs_como_lista",
+    "video_specs_de",
+]

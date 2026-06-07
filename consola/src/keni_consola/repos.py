@@ -1698,10 +1698,21 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
 
 
 def crear_video_composicion(
-    *, marca: str, documento: str = "{}", contenido_id: str = "", id: str = "",
+    *,
+    marca: str,
+    documento: str = "{}",
+    contenido_id: str = "",
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
 ) -> dict[str, Any]:
     return db.crear_video_composicion(
-        marca=marca, documento=documento, contenido_id=contenido_id, id=id
+        marca=marca,
+        documento=documento,
+        contenido_id=contenido_id,
+        id=id,
+        creado=creado,
+        actualizado=actualizado,
     )
 
 
@@ -1724,10 +1735,12 @@ def actualizar_video_composicion(
 def crear_video_subtitulo(
     *, composicion_id: str, idioma: str = "es-MX", estado: str = "pendiente",
     segmentos: str = "", ass: str = "", transcrito_en: str = "", id: str = "",
+    actualizado: str = "",
 ) -> dict[str, Any]:
     return db.crear_video_subtitulo(
         composicion_id=composicion_id, idioma=idioma, estado=estado,
         segmentos=segmentos, ass=ass, transcrito_en=transcrito_en, id=id,
+        actualizado=actualizado,
     )
 
 
