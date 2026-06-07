@@ -274,6 +274,13 @@ import type {
 
 import { type NombreContrato, validarContrato } from "./contrato";
 import type { PlantillaSpec } from "./specPlantilla";
+import type {
+  ComposicionVideo,
+  EstadoSubtitulos,
+  PresetFormatoVideo,
+  SegmentoSub,
+  Subtitulo,
+} from "./video";
 
 export const BASE_API = "/api";
 
@@ -1092,6 +1099,53 @@ export const api = {
       `/editor/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
       { metodo: "POST", json: { documento, bindings }, timeoutMs: 120_000 },
     ),
+
+  // --- Estudio de video (composición + render FFmpeg + subtítulos ASR) ---
+  // CONTRATO: docs/maquina-contenido/G-video-engine.md. El documento de composición se valida
+  // en el backend (`keni_shared.video.validar_composicion`). El render y la transcripción se
+  // ENCOLAN como jobs de proceso (no-claude) y se SONDEAN con `useGeneracion` (tipos
+  // "render-video" / "transcribir"); al completar dan `resultado` `{media_id, url}`.
+  video: {
+    /** Presets de formato + zonas seguras por aspecto (`GET /api/video/formatos`). */
+    formatos: (signal?: AbortSignal) =>
+      peticion<{ formatos: PresetFormatoVideo[] }>("/video/formatos", { signal }),
+    crearComposicion: (cuerpo: { documento: ComposicionVideo; contenido_id?: string }) =>
+      peticion<{ composicion: { id: string; documento: ComposicionVideo } }>("/video/composiciones", {
+        metodo: "POST",
+        json: cuerpo,
+      }),
+    composicion: (id: string, signal?: AbortSignal) =>
+      peticion<{ composicion: { id: string; documento: ComposicionVideo } }>(
+        `/video/composiciones/${encodeURIComponent(id)}`,
+        { signal },
+      ),
+    guardarComposicion: (id: string, documento: ComposicionVideo) =>
+      peticion<{ composicion: { id: string; documento: ComposicionVideo } }>(
+        `/video/composiciones/${encodeURIComponent(id)}`,
+        { metodo: "PUT", json: { documento } },
+      ),
+    /** Encola el render FFmpeg de la composición. Devuelve la generación a sondear. */
+    render: (id: string) =>
+      peticion<RespuestaGeneracion>(`/video/composiciones/${encodeURIComponent(id)}/render`, {
+        metodo: "POST",
+      }),
+    /** Encola el ASR (subtítulos word-level). Devuelve la generación a sondear. */
+    transcribir: (id: string) =>
+      peticion<RespuestaGeneracion>(`/video/composiciones/${encodeURIComponent(id)}/transcribir`, {
+        metodo: "POST",
+      }),
+    subtitulo: (id: string, signal?: AbortSignal) =>
+      peticion<{ subtitulo: Subtitulo }>(`/video/subtitulos/${encodeURIComponent(id)}`, { signal }),
+    /** Guarda la corrección humana de los segmentos. `estado` opcional ("editado"/"listo"). */
+    guardarSubtitulo: (
+      id: string,
+      cuerpo: { segmentos: SegmentoSub[]; estado?: EstadoSubtitulos },
+    ) =>
+      peticion<{ subtitulo: Subtitulo }>(`/video/subtitulos/${encodeURIComponent(id)}`, {
+        metodo: "PUT",
+        json: cuerpo,
+      }),
+  },
 
   // --- Biblioteca de activos por marca (logos, tipografías, artes, infografías, …) ---
   marcaActivos: (
