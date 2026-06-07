@@ -69,7 +69,7 @@ describe("PanelReciclaje (sugerencias proactivas)", () => {
   it("muestra el panel con el recuento y revela las sugerencias al expandir", async () => {
     stubFetch();
     renderConProviders(
-      <PanelReciclaje filtros={{}} onGestionarFranjas={() => {}} />,
+      <PanelReciclaje filtros={{}} onConfigurarCadencia={() => {}} />,
     );
 
     // Cabecera del panel con su recuento.
@@ -89,7 +89,7 @@ describe("PanelReciclaje (sugerencias proactivas)", () => {
   it("no se renderiza cuando no hay candidatas", async () => {
     stubFetch([]);
     const { container } = renderConProviders(
-      <PanelReciclaje filtros={{}} onGestionarFranjas={() => {}} />,
+      <PanelReciclaje filtros={{}} onConfigurarCadencia={() => {}} />,
     );
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
@@ -97,7 +97,7 @@ describe("PanelReciclaje (sugerencias proactivas)", () => {
   it("lanza el reciclado existente al pulsar «Reciclar»", async () => {
     const fn = stubFetch();
     renderConProviders(
-      <PanelReciclaje filtros={{}} onGestionarFranjas={() => {}} />,
+      <PanelReciclaje filtros={{}} onConfigurarCadencia={() => {}} />,
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /sugerencias para reciclar/i }));

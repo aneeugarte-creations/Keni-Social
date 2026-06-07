@@ -39,10 +39,10 @@ const TAM_PAGINA = 30;
  */
 export function GestionPublicaciones({
   modo,
-  onGestionarFranjas,
+  onConfigurarCadencia,
 }: {
   modo: "lista" | "calendario";
-  onGestionarFranjas?: () => void;
+  onConfigurarCadencia?: () => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const calendario = modo === "calendario";
@@ -78,7 +78,7 @@ export function GestionPublicaciones({
       calendario={calendario}
       opciones={opcionesQuery.data}
       marcaActiva={marcaActiva}
-      onGestionarFranjas={onGestionarFranjas}
+      onConfigurarCadencia={onConfigurarCadencia}
     />
   );
 }
@@ -88,13 +88,13 @@ function Cuerpo({
   calendario,
   opciones,
   marcaActiva,
-  onGestionarFranjas,
+  onConfigurarCadencia,
 }: {
   modo: "lista" | "calendario";
   calendario: boolean;
   opciones: OpcionesPublicaciones;
   marcaActiva: string | null;
-  onGestionarFranjas?: () => void;
+  onConfigurarCadencia?: () => void;
 }) {
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [linea, setLinea] = React.useState(FILTRO_TODOS);
@@ -206,7 +206,7 @@ function Cuerpo({
             publicaciones={publicaciones}
             onEditar={setEditando}
             onDuplicar={setDuplicando}
-            onGestionarFranjas={onGestionarFranjas ?? (() => {})}
+            onConfigurarCadencia={onConfigurarCadencia ?? (() => {})}
           />
           {hayMas && (
             <div className="mt-4 flex flex-col items-center gap-1">

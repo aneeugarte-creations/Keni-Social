@@ -304,9 +304,9 @@ export const router = createBrowserRouter([
       { path: "parrilla/piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
       { path: "parrilla/*", element: <Navigate to="/operacion/feed" replace /> },
       { path: "actividad", element: <Navigate to="/datos/actividad" replace /> },
-      // "Activos" se fusionó como pestaña "Plantillas" dentro de la Biblioteca.
-      { path: "activos", element: <Navigate to="/contenido/biblioteca/plantillas" replace /> },
-      { path: "activos/plantillas", element: <Navigate to="/contenido/biblioteca/plantillas" replace /> },
+      // "Activos"/"Plantillas" quedaron obsoletas; sus rutas redirigen a la Biblioteca.
+      { path: "activos", element: <Navigate to="/contenido/biblioteca/documentos" replace /> },
+      { path: "activos/plantillas", element: <Navigate to="/contenido/biblioteca/documentos" replace /> },
       // Hojas planas antiguas (pre-hub) y fusiones previas:
       { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
       { path: "termometro", element: <Navigate to="/datos/investigacion/termometro" replace /> },

@@ -1,15 +1,17 @@
 /**
- * Gestión de LÍNEAS de contenido (etiquetas clase `vertical`) y de ORÍGENES
- * (etiquetas clase `origen` = interno / externo). Las líneas son POR MARCA; el
- * panel se filtra por marca para no mezclarlas.
+ * Estrategia de marcas: la superficie editorial POR MARCA de la Biblioteca. Reúne
+ *   - LÍNEAS de contenido (etiquetas clase `vertical`) y ORÍGENES (clase `origen` =
+ *     interno / externo), cada una con sus `keywords` (CSV para auto-clasificar);
+ *   - el catálogo de ETIQUETAS editoriales transversales (campaña / tipo) y los
+ *     GRUPOS de HASHTAGS por marca, accesibles desde la cabecera.
  *
- * Es CRUD sobre el catálogo de etiquetas (`/api/etiquetas`) acotado a esas dos clases,
- * con el campo `keywords` (CSV de palabras clave para auto-clasificar) editable. Permite
- * filtrar por marca y crear/editar/borrar tanto líneas como orígenes. El equipo ve aquí
- * las líneas sembradas y afina sus keywords.
+ * Es CRUD sobre `/api/etiquetas` (acotado por clase) y `/api/hashtags`. Permite
+ * filtrar por marca y crear/editar/borrar. Aquí el equipo afina la estrategia
+ * editorial de cada marca; antes estas piezas vivían dispersas en el menú
+ * "Gestionar" del Feed (sitio equivocado).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Leaf, Loader2, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
+import { Check, Hash, Leaf, Loader2, Pencil, Plus, Tag, Tags, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -17,9 +19,17 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +44,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
 import type { Etiqueta } from "@/types";
 
 /** Las dos clases de etiqueta que esta vista gestiona. */
@@ -58,12 +69,59 @@ const GLOBAL = "__global__";
 
 const CLAVE_ETIQUETAS = ["etiquetas"] as const;
 
+/** Etiqueta humana del eje de una etiqueta editorial transversal (campaña / tipo). */
+const CLASE_ETIQUETA_LABEL: Record<string, string> = {
+  campania: "Campaña",
+  tipo: "Tipo",
+};
+
 export function GestionLineas() {
+  const [etiquetasAbierto, setEtiquetasAbierto] = React.useState(false);
+  const [hashtagsAbierto, setHashtagsAbierto] = React.useState(false);
+
+  // Marcas para poblar los diálogos de etiquetas y hashtags (los paneles de
+  // líneas/orígenes traen las suyas desde /api/etiquetas).
+  const catalogosQuery = useQuery({
+    queryKey: ["contenido", "catalogos"],
+    queryFn: ({ signal }) => api.contenido({}, signal),
+  });
+  const marcas = catalogosQuery.data?.catalogos?.marcas ?? [];
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <PanelClase clase="vertical" />
-      <PanelClase clase="origen" />
-    </div>
+    <>
+      <PageHeader
+        titulo="Estrategia de marcas"
+        descripcion="Líneas, orígenes, etiquetas editoriales y grupos de hashtags de cada marca."
+        acciones={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setEtiquetasAbierto(true)}>
+              <Tag className="h-4 w-4" />
+              Etiquetas
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setHashtagsAbierto(true)}>
+              <Hash className="h-4 w-4" />
+              Hashtags
+            </Button>
+          </>
+        }
+      />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PanelClase clase="vertical" />
+        <PanelClase clase="origen" />
+      </div>
+
+      <DialogoEtiquetas
+        abierto={etiquetasAbierto}
+        onCerrar={() => setEtiquetasAbierto(false)}
+        marcas={marcas}
+      />
+      <GestionHashtags
+        abierto={hashtagsAbierto}
+        onCerrar={() => setHashtagsAbierto(false)}
+        marcas={marcas}
+      />
+    </>
   );
 }
 
@@ -533,5 +591,293 @@ function FilaLinea({
         <p className="text-xs text-muted-foreground">Sin palabras clave.</p>
       )}
     </FilaConAcciones>
+  );
+}
+
+/**
+ * Gestión del CATÁLOGO de etiquetas editoriales TRANSVERSALES (ejes `campaña` y
+ * `tipo`). Las líneas (`vertical`) y orígenes (`origen`) NO viven aquí: tienen sus
+ * propios paneles arriba, con keywords/TTL/green, así que este diálogo no los
+ * duplica. Lee/escribe `/api/etiquetas`.
+ */
+function DialogoEtiquetas({
+  abierto,
+  onCerrar,
+  marcas,
+}: {
+  abierto: boolean;
+  onCerrar: () => void;
+  marcas: { id: string; nombre: string }[];
+}) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["etiquetas", "transversales"],
+    queryFn: ({ signal }) => api.etiquetas({}, signal),
+    enabled: abierto,
+  });
+  const [nombre, setNombre] = React.useState("");
+  const [clase, setClase] = React.useState("campania");
+  const [marca, setMarca] = React.useState("");
+
+  // Edición en línea de una etiqueta existente (renombrar / cambiar eje / marca).
+  const [editandoId, setEditandoId] = React.useState<string | null>(null);
+  const [editNombre, setEditNombre] = React.useState("");
+  const [editClase, setEditClase] = React.useState("campania");
+  const [editMarca, setEditMarca] = React.useState("");
+
+  const invalidar = () => {
+    void queryClient.invalidateQueries({ queryKey: CLAVE_ETIQUETAS });
+    // El catálogo de etiquetas viaja también dentro de /api/contenido.
+    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+  };
+
+  const empezarEdicion = (e: Etiqueta) => {
+    setEditandoId(e.id);
+    setEditNombre(e.nombre);
+    setEditClase(e.clase);
+    setEditMarca(e.marca || "");
+  };
+  const cancelarEdicion = () => setEditandoId(null);
+
+  const crear = useMutation({
+    mutationFn: () =>
+      api.crearEtiqueta({ nombre: nombre.trim(), clase: clase as never, marca }),
+    onSuccess: () => {
+      invalidar();
+      setNombre("");
+      toast.success("Etiqueta creada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const actualizar = useMutation({
+    mutationFn: (id: string) =>
+      api.actualizarEtiqueta(id, {
+        nombre: editNombre.trim(),
+        clase: editClase as never,
+        marca: editMarca,
+      }),
+    onSuccess: () => {
+      invalidar();
+      setEditandoId(null);
+      toast.success("Etiqueta actualizada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const borrar = useMutation({
+    mutationFn: (id: string) => api.eliminarEtiqueta(id),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Etiqueta borrada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Solo los ejes transversales (campaña / tipo); líneas y orígenes se gestionan arriba.
+  const etiquetas = (query.data?.etiquetas ?? []).filter(
+    (e) => e.clase in CLASE_ETIQUETA_LABEL,
+  );
+
+  return (
+    <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            Etiquetas editoriales
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Alta de etiqueta. */}
+          <div className="grid grid-cols-[1fr_auto_auto_auto] items-end gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="et-nombre">Nombre</Label>
+              <Input
+                id="et-nombre"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej. Mundial 2026"
+                maxLength={60}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="et-clase">Eje</Label>
+              <Select value={clase} onValueChange={setClase}>
+                <SelectTrigger id="et-clase" aria-label="Eje" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CLASE_ETIQUETA_LABEL).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="et-marca">Marca</Label>
+              <Select value={marca || "__global__"} onValueChange={(v) => setMarca(v === "__global__" ? "" : v)}>
+                <SelectTrigger id="et-marca" aria-label="Marca" className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__global__">Global</SelectItem>
+                  {marcas.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={() => crear.mutate()}
+              disabled={nombre.trim().length === 0 || crear.isPending}
+            >
+              {crear.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Añadir
+            </Button>
+          </div>
+
+          {/* Listado del catálogo. */}
+          {query.isPending ? (
+            <Skeleton className="h-24 w-full rounded-md" />
+          ) : etiquetas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Aún no hay etiquetas. Crea la primera arriba.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {etiquetas.map((e) =>
+                editandoId === e.id ? (
+                  <div
+                    key={e.id}
+                    className="grid grid-cols-[1fr_auto_auto_auto_auto] items-end gap-2 rounded-md border border-border/60 px-2 py-1.5"
+                  >
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`et-edit-nombre-${e.id}`} className="sr-only">
+                        Nombre
+                      </Label>
+                      <Input
+                        id={`et-edit-nombre-${e.id}`}
+                        value={editNombre}
+                        onChange={(ev) => setEditNombre(ev.target.value)}
+                        maxLength={60}
+                      />
+                    </div>
+                    <Select value={editClase} onValueChange={setEditClase}>
+                      <SelectTrigger aria-label="Eje" className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CLASE_ETIQUETA_LABEL).map(([v, l]) => (
+                          <SelectItem key={v} value={v}>
+                            {l}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={editMarca || "__global__"}
+                      onValueChange={(v) => setEditMarca(v === "__global__" ? "" : v)}
+                    >
+                      <SelectTrigger aria-label="Marca" className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__global__">Global</SelectItem>
+                        {marcas.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="icon"
+                      aria-label={`Guardar etiqueta ${e.nombre}`}
+                      className="h-9 w-9"
+                      onClick={() => actualizar.mutate(e.id)}
+                      disabled={editNombre.trim().length === 0 || actualizar.isPending}
+                    >
+                      {actualizar.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Cancelar edición"
+                      className="h-9 w-9"
+                      onClick={cancelarEdicion}
+                      disabled={actualizar.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <FilaConAcciones
+                    key={e.id}
+                    como="div"
+                    onPrimaria={() => empezarEdicion(e)}
+                    etiquetaAcciones={`Acciones de la etiqueta ${e.nombre}`}
+                    kebab="hover"
+                    claseKebab="top-1.5"
+                    acciones={[
+                      {
+                        etiqueta: "Editar",
+                        icono: Pencil,
+                        onClick: () => empezarEdicion(e),
+                      },
+                      { separador: true },
+                      {
+                        etiqueta: "Borrar etiqueta",
+                        icono: Trash2,
+                        destructivo: true,
+                        deshabilitado: borrar.isPending,
+                        onClick: async () => {
+                          if (
+                            await confirmar({
+                              mensaje: `¿Borrar la etiqueta "${e.nombre}"? Esta acción no se puede deshacer.`,
+                              destructivo: true,
+                              textoConfirmar: "Borrar",
+                            })
+                          ) {
+                            borrar.mutate(e.id);
+                          }
+                        },
+                      },
+                    ]}
+                    className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 pr-10 text-sm transition-colors hover:border-foreground/20"
+                  >
+                    <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium">{e.nombre}</span>
+                    <Badge variant="secondary" className="font-normal">
+                      {CLASE_ETIQUETA_LABEL[e.clase] ?? e.clase}
+                    </Badge>
+                    <Badge variant="outline" className="font-normal">
+                      {e.marca_nombre || "Global"}
+                    </Badge>
+                  </FilaConAcciones>
+                ),
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCerrar}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

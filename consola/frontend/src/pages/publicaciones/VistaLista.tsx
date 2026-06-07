@@ -45,12 +45,12 @@ function TarjetaPublicacion({
   publicacion,
   onEditar,
   onDuplicar,
-  onGestionarFranjas,
+  onConfigurarCadencia,
 }: {
   publicacion: Publicacion;
   onEditar: (p: Publicacion) => void;
   onDuplicar: (p: Publicacion) => void;
-  onGestionarFranjas: () => void;
+  onConfigurarCadencia: () => void;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -82,10 +82,10 @@ function TarjetaPublicacion({
       );
     },
     onError: (e) => {
-      // 400 = sin franjas: avisamos y ofrecemos abrir la gestión de franjas.
+      // 400 = sin cadencia/franjas: avisamos y ofrecemos configurar la cadencia.
       if (e instanceof ApiError && e.status === 400) {
         toast.error(e.message, {
-          action: { label: "Gestionar franjas", onClick: onGestionarFranjas },
+          action: { label: "Configurar cadencia", onClick: onConfigurarCadencia },
         });
         return;
       }
@@ -105,10 +105,10 @@ function TarjetaPublicacion({
       );
     },
     onError: (e) => {
-      // 400 = sin franjas para encolar: avisamos y ofrecemos abrir las franjas.
+      // 400 = sin cadencia/franjas para encolar: avisamos y ofrecemos configurar la cadencia.
       if (e instanceof ApiError && e.status === 400) {
         toast.error(e.message, {
-          action: { label: "Gestionar franjas", onClick: onGestionarFranjas },
+          action: { label: "Configurar cadencia", onClick: onConfigurarCadencia },
         });
         return;
       }
@@ -324,12 +324,12 @@ export function VistaLista({
   publicaciones,
   onEditar,
   onDuplicar,
-  onGestionarFranjas,
+  onConfigurarCadencia,
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
   onDuplicar: (p: Publicacion) => void;
-  onGestionarFranjas: () => void;
+  onConfigurarCadencia: () => void;
 }) {
   return (
     <div className="space-y-3">
@@ -339,7 +339,7 @@ export function VistaLista({
           publicacion={p}
           onEditar={onEditar}
           onDuplicar={onDuplicar}
-          onGestionarFranjas={onGestionarFranjas}
+          onConfigurarCadencia={onConfigurarCadencia}
         />
       ))}
     </div>

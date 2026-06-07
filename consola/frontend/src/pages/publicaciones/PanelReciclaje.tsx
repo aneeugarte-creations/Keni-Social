@@ -137,16 +137,16 @@ function FilaSugerencia({
  * backend (efeméride próxima, perenne madurada o tema recurrente) propone
  * retomar, cada una con su motivo explicable. Al pulsar «Reciclar» dispara el
  * reciclado que YA existe (`api.reciclarPublicacion`), sin lógica nueva: encola
- * la copia si hay franjas o la deja como borrador, e invalida la lista.
+ * la copia si hay cadencia/franjas o la deja como borrador, e invalida la lista.
  *
  * No estorba cuando no hay candidatas: se oculta por completo.
  */
 export function PanelReciclaje({
   filtros,
-  onGestionarFranjas,
+  onConfigurarCadencia,
 }: {
   filtros: FiltrosReciclaje;
-  onGestionarFranjas: () => void;
+  onConfigurarCadencia: () => void;
 }) {
   const queryClient = useQueryClient();
   const [abierto, setAbierto] = React.useState(false);
@@ -168,7 +168,7 @@ export function PanelReciclaje({
     onError: (e) => {
       if (e instanceof ApiError && e.status === 400) {
         toast.error(e.message, {
-          action: { label: "Gestionar franjas", onClick: onGestionarFranjas },
+          action: { label: "Configurar cadencia", onClick: onConfigurarCadencia },
         });
         return;
       }
