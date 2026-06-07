@@ -59,13 +59,11 @@ def main() -> int:
     from .eventos_scanner import iniciar_scanner_vencimientos
     from .ingesta_daemon import iniciar_ingesta
     from .investigacion_daemon import iniciar_investigacion
-    from .investigador import iniciar_investigador
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
     from .metricas_refresco import iniciar_refresco_metricas
     from .pipeline_contenido import iniciar_pipeline
     from .programador import iniciar_programador
-    from .radar_auto import iniciar_radar_auto
     from .reaper_generaciones import iniciar_reaper
     from .sugerencias_algoritmo import iniciar_sugerencias_editoriales
 
@@ -75,14 +73,8 @@ def main() -> int:
     iniciar_refresco_metricas()
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
-    iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
-    # Investigador (Fase 1): materializa el snapshot del Radar por marca para que Radar/Parrilla
-    # lean del snapshot (rapido, sin red) en vez de golpear fuentes en cada request. GATEADO y
-    # SAFE BY DEFAULT: el hilo arranca SIEMPRE pero solo materializa con KENI_INVESTIGADOR=1
-    # (def OFF). Sin el flag, los endpoints siguen en vivo (comportamiento de Fase 0 intacto).
-    iniciar_investigador()
     # TUBERIA automatica (Flujo C): los daemons de auto-produccion. Encadenan
-    # entrada -> (radar_auto) -> copy -> arte -> cola de revision. GATEADOS y SAFE BY
+    # entrada -> copy -> arte -> cola de revision. GATEADOS y SAFE BY
     # DEFAULT: el hilo arranca SIEMPRE pero solo barre con su flag ON (KENI_AUTOGEN /
     # KENI_AUTOGEN_ARTE, def OFF). Sin ellos no se auto-genera nada. Antes solo `__main__`
     # los arrancaba; con el split de servicios (NINGUN proceso hosted corre `__main__`) sin

@@ -31,30 +31,60 @@ MAX_ITEMS_BREAKING = 20
 
 
 def items_breaking(marca: str, geo: str) -> list[dict[str, Any]]:
-    """Temas breaking del snapshot del Investigador para `marca` y `geo`, por señal desc.
+    """Historias breaking del POOL de noticias para `marca`, por señal desc.
 
-    Lee `repos.listar_radar_items` (el snapshot materializado por el daemon del Investigador).
-    Sin snapshot (daemon OFF) o si `marca` está vacía → lista vacía (safe-by-default, sin red).
-    Devuelve a lo sumo `MAX_ITEMS_BREAKING` temas. Best-effort: cualquier fallo devuelve `[]`.
+    Lee los clusters del pool persistente (`repos.listar_noticia_clusters`) marcados como
+    `breaking` y en estado `nuevo`, y los mapea a la forma del Carril Rápido (titulo, senal,
+    idioma, fuentes/enlaces corroborantes). Sin marca o sin clusters → lista vacía
+    (safe-by-default). A lo sumo `MAX_ITEMS_BREAKING`. `geo` se ignora: el pool no es
+    geo-scoped; el filtro real es marca + breaking. Best-effort: cualquier fallo → [].
     """
     if not marca:
         return []
     try:
         from .. import repos
 
-        filas = repos.listar_radar_items(marca=marca, geo=geo)
+        clusters, _total = repos.listar_noticia_clusters(
+            marca=marca, estado="nuevo", limite=MAX_ITEMS_BREAKING * 3, desplazamiento=0
+        )
     except Exception:  # noqa: BLE001
-        _log.exception("breaking: no se pudo leer el snapshot (marca=%s, geo=%s)", marca, geo)
+        _log.exception("breaking: no se pudo leer el pool (marca=%s)", marca)
         return []
 
     resultado: list[dict[str, Any]] = []
-    for fila in filas:
-        if not fila.get("breaking"):
+    for c in clusters:
+        if not c.get("breaking"):
             continue
-        titulo = (fila.get("titulo") or "").strip()
+        titulo = (c.get("titulo_es") or c.get("titulo") or "").strip()
         if not titulo:
             continue
-        resultado.append(dict(fila))
+        fuentes: list[str] = []
+        enlaces: list[str] = []
+        try:
+            from .. import repos as _repos
+
+            for it in _repos.items_de_cluster(c["id"], limite=8):
+                fn = (it.get("fuente_nombre") or "").strip()
+                if fn and fn not in fuentes:
+                    fuentes.append(fn)
+                url = (it.get("url") or "").strip()
+                if url and url not in enlaces:
+                    enlaces.append(url)
+        except Exception:  # noqa: BLE001 -- best-effort: sin corroborantes si falla
+            pass
+        resultado.append(
+            {
+                "titulo": titulo,
+                "senal": int(c.get("senal") or 0),
+                "senal_texto": "",
+                "idioma": (c.get("idioma") or "es"),
+                "breaking": True,
+                "fuentes": fuentes,
+                "enlaces": enlaces,
+                "actualizado": (c.get("ultimo_visto") or c.get("actualizado") or "").strip(),
+                "creado": (c.get("creado") or "").strip(),
+            }
+        )
 
     # Ordenar por señal desc (tema que más acelera primero).
     resultado.sort(key=lambda t: -(int(t.get("senal") or 0)))

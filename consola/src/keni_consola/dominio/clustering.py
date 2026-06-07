@@ -31,8 +31,7 @@ from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
 from typing import Any
 
-from .. import radar
-from . import dedup
+from . import dedup, similitud
 
 # Longitud mínima de una clave normalizada para entrar al fuzzy. Títulos muy cortos
 # ("nfl", "f1") disparan ratios altos espurios entre sí: solo casan por url exacta.
@@ -105,8 +104,8 @@ def _ratio_titulos(a: str, b: str) -> float:
     colapsados a su forma canónica) antes de comparar con `SequenceMatcher`. Claves cortas
     devuelven 0.0 (no entran al fuzzy): evita falsos positivos entre títulos triviales.
     """
-    ka = radar._clave_fuzzy(a)
-    kb = radar._clave_fuzzy(b)
+    ka = similitud.clave_fuzzy(a)
+    kb = similitud.clave_fuzzy(b)
     if len(ka) < _MIN_LONGITUD_FUZZY or len(kb) < _MIN_LONGITUD_FUZZY:
         return 0.0
     return SequenceMatcher(None, ka, kb).ratio()
@@ -398,8 +397,8 @@ def _log_norm(valor: int, satura: int) -> float:
 
 
 def _sin_acentos(texto: str) -> str:
-    """Minúsculas sin acentos (delega en el helper del Radar)."""
-    return radar._sin_acentos((texto or "").lower())
+    """Minúsculas sin acentos (delega en el helper de similitud)."""
+    return similitud.sin_acentos((texto or "").lower())
 
 
 def _relevancia_marca(cluster: dict[str, Any], palabras_marca: frozenset[str]) -> float:

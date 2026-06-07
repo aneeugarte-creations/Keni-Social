@@ -81,11 +81,8 @@ import type {
   CuerpoAsistenteContenido,
   CuerpoCrearContenido,
   CuerpoCrearEtiqueta,
-  CuerpoDesdeRadar,
   CuerpoSugerirHora,
   RespuestaSugerirHora,
-  RespuestaBandejaRadarAuto,
-  RespuestaEjecutarRadarAuto,
   CuerpoCrearEventoRota,
   CuerpoDuplicarPublicacion,
   CuerpoGenerarMedia,
@@ -145,8 +142,6 @@ import type {
   RespuestaPlantillaMarca,
   PlantillaMarca,
   RespuestaMensaje,
-  RespuestaRadar,
-  RespuestaParrilla,
   RespuestaProgramarMetricool,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
@@ -1296,14 +1291,6 @@ export const api = {
   activarPresets: (cuerpo: { ids: string[]; marca?: string }) =>
     peticion<RespuestaActivarPresets>("/fuentes/presets/activar", { metodo: "POST", json: cuerpo }),
 
-  // --- Radar de tendencias (lo más viral del momento, multi-red · #147) ---
-  // Solo lectura: consolida tendencias por tema con su estado HONESTO por fuente.
-  radar: (geo?: string, feeds?: boolean, marca?: string, signal?: AbortSignal) =>
-    peticion<RespuestaRadar>(
-      `/radar${query({ geo, feeds: feeds === false ? "0" : undefined, marca })}`,
-      { signal },
-    ),
-
   // --- Algoritmos (inteligencia de plataforma: cambios de algoritmo + tendencias) ---
   // Solo lectura + curación ligera. Las noticias ya vienen clasificadas/ordenadas por
   // importancia; refrescar ingiere los feeds; las fuentes se gestionan como el RSS.
@@ -1364,11 +1351,6 @@ export const api = {
       `/algoritmos/sugerencias/${encodeURIComponent(id)}/descartar`,
       { metodo: "POST" },
     ),
-
-  // --- Parrilla del día (clasifica 13 posteos + 6 editoriales y los jerarquiza) ---
-  // Solo lectura: deriva del Radar. PROPONE el orden; publicar lo decide el humano.
-  parrillaDia: (geo?: string, marca?: string, signal?: AbortSignal) =>
-    peticion<RespuestaParrilla>(`/parrilla-dia${query({ geo, marca })}`, { signal }),
 
   // --- Programar/previsualizar una pieza en Metricool (respeta KENI_PUBLICAR_REAL) ---
   // Con el gate OFF (default) es DRY-RUN: previsualiza el cuerpo, NO publica nada.
@@ -1449,8 +1431,6 @@ export const api = {
       `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
       { metodo: "DELETE" },
     ),
-  contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
-    peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
   // PUERTA CREATIVA (Fase 1 / Flujo A): el equipo "postea" material ORIGINAL (foto/nota/idea/
   // url) con marca. Crea un contenido con origen='equipo' que ENCIENDE la auto-generación de
   // copy automáticamente. Multipart porque puede llevar la foto que el equipo trae de fuera.
@@ -1474,11 +1454,6 @@ export const api = {
   // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).
   sugerirHora: (cuerpo: CuerpoSugerirHora) =>
     peticion<RespuestaSugerirHora>("/planificacion/sugerir-hora", { metodo: "POST", json: cuerpo }),
-  // Fase3 auto-planificación: bandeja revisable + ejecución de la auto-promoción del Radar.
-  bandejaRadarAuto: (signal?: AbortSignal) =>
-    peticion<RespuestaBandejaRadarAuto>("/radar/auto/bandeja", { signal }),
-  ejecutarRadarAuto: () =>
-    peticion<RespuestaEjecutarRadarAuto>("/radar/auto/ejecutar", { metodo: "POST" }),
   asignarEtiquetaContenido: (contenidoId: string, etiqueta_id: string) =>
     peticion<RespuestaEtiquetasContenido>(
       `/contenido/${encodeURIComponent(contenidoId)}/etiquetas`,

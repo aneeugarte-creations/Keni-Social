@@ -53,15 +53,42 @@ def _item_contenido(**kw):
 # Tests de dominio puro (sin DB)
 # --------------------------------------------------------------------------- #
 
+def _cluster(**kw):
+    """Cluster simulado del pool de noticias (`noticias_clusters`)."""
+    base = {
+        "id": "cl-" + str(kw.get("titulo") or "x"),
+        "titulo": "Gol de último minuto",
+        "titulo_es": "",
+        "senal": 80_000,
+        "breaking": 1,
+        "idioma": "es",
+        "estado": "nuevo",
+        "ultimo_visto": "2026-06-05T10:00:00",
+        "creado": "2026-06-05T10:00:00",
+    }
+    base.update(kw)
+    return base
+
+
 class TestItemsBreaking:
-    def test_devuelve_solo_breaking(self, monkeypatch):
-        filas = [
-            _item_radar(titulo="Breaking A", breaking=True, senal=90_000),
-            _item_radar(titulo="No breaking", breaking=False, senal=50_000),
-        ]
+    @staticmethod
+    def _mock_pool(monkeypatch, clusters):
         monkeypatch.setattr(
-            "keni_consola.repos.listar_radar_items",
-            lambda **_: filas,
+            "keni_consola.repos.listar_noticia_clusters",
+            lambda **_: (clusters, len(clusters)),
+        )
+        monkeypatch.setattr(
+            "keni_consola.repos.items_de_cluster",
+            lambda *a, **k: [],
+        )
+
+    def test_devuelve_solo_breaking(self, monkeypatch):
+        self._mock_pool(
+            monkeypatch,
+            [
+                _cluster(titulo="Breaking A", breaking=1, senal=90_000),
+                _cluster(titulo="No breaking", breaking=0, senal=50_000),
+            ],
         )
         items = dom.items_breaking("claro-sports", "MX")
         assert len(items) == 1
@@ -72,22 +99,20 @@ class TestItemsBreaking:
         assert items == []
 
     def test_ordena_por_senal_desc(self, monkeypatch):
-        filas = [
-            _item_radar(titulo="B1", senal=10_000, breaking=True),
-            _item_radar(titulo="B2", senal=50_000, breaking=True),
-        ]
-        monkeypatch.setattr(
-            "keni_consola.repos.listar_radar_items",
-            lambda **_: filas,
+        self._mock_pool(
+            monkeypatch,
+            [
+                _cluster(titulo="B1", senal=10_000, breaking=1),
+                _cluster(titulo="B2", senal=50_000, breaking=1),
+            ],
         )
         items = dom.items_breaking("claro-sports", "MX")
         assert [i["titulo"] for i in items] == ["B2", "B1"]
 
     def test_respeta_maximo(self, monkeypatch):
-        filas = [_item_radar(titulo=f"T{i}", breaking=True, senal=i) for i in range(30)]
-        monkeypatch.setattr(
-            "keni_consola.repos.listar_radar_items",
-            lambda **_: filas,
+        self._mock_pool(
+            monkeypatch,
+            [_cluster(titulo=f"T{i}", breaking=1, senal=i, id=f"cl-{i}") for i in range(60)],
         )
         items = dom.items_breaking("claro-sports", "MX")
         assert len(items) <= dom.MAX_ITEMS_BREAKING
@@ -95,10 +120,8 @@ class TestItemsBreaking:
     def test_best_effort_ante_fallo(self, monkeypatch):
         def explota(**_):
             raise RuntimeError("DB caída")
-        monkeypatch.setattr(
-            "keni_consola.repos.listar_radar_items",
-            explota,
-        )
+
+        monkeypatch.setattr("keni_consola.repos.listar_noticia_clusters", explota)
         items = dom.items_breaking("claro-sports", "MX")
         assert items == []
 
@@ -185,34 +208,36 @@ from .conftest import _cliente  # noqa: F401,E402  (fixture `cliente` se descubr
 
 def test_get_breaking_sin_snapshot(entorno, cliente, monkeypatch):
     """GET /api/breaking?marca=claro-sports devuelve items=[] sin snapshot."""
-    # Sin datos en radar_items → lista vacía.
+    # Sin clusters breaking en el pool → lista vacía.
     datos = cliente.get("/api/breaking?marca=claro-sports").json()
     assert "items" in datos
     assert datos["items"] == []
 
 
 def test_get_breaking_con_snapshot(entorno, cliente, monkeypatch):
-    """GET /api/breaking refleja los items breaking del snapshot."""
+    """GET /api/breaking refleja las historias breaking del pool de noticias."""
     from keni_consola import repos
 
-    # Sembrar un snapshot con un item breaking.
-    repos.upsert_radar_items(
-        "claro-sports",
-        "MX",
-        [
-            {
-                "titulo": "Clásico de última hora",
-                "clave": dom.clave_de_titulo("Clásico de última hora"),
-                "senal": 120_000,
-                "senal_texto": "120K+",
-                "breaking": True,
-                "idioma": "es",
-                "fuentes": ["Google Trends"],
-                "enlaces": [],
-                "por_que": "Trending en búsquedas",
-                "estado": "nuevo",
-            }
-        ],
+    # Sembrar un cluster breaking en el pool.
+    repos.upsert_noticia_cluster(
+        {
+            "id": "cl-clasico",
+            "titulo": "Clásico de última hora",
+            "resumen": "",
+            "marca": "claro-sports",
+            "categoria": "deportes",
+            "geo": "MX",
+            "clave": "t:cl-clasico",
+            "n_items": 0,
+            "n_fuentes": 1,
+            "idiomas": ["es"],
+            "senal": 120_000,
+            "score": 0.9,
+            "breaking": 1,
+            "primer_visto": "2026-06-01T00:00:00+00:00",
+            "ultimo_visto": "2026-06-05T12:00:00+00:00",
+            "estado": "nuevo",
+        }
     )
 
     datos = cliente.get("/api/breaking?marca=claro-sports").json()
@@ -284,24 +309,26 @@ def test_get_breaking_estado_borrador_listo(entorno, cliente, monkeypatch):
     """GET /api/breaking reporta estado_borrador='listo' cuando ya hay un borrador."""
     from keni_consola import autogen_copy, repos
 
-    # Sembrar snapshot breaking.
-    repos.upsert_radar_items(
-        "claro-sports",
-        "MX",
-        [
-            {
-                "titulo": "Remontada histórica",
-                "clave": dom.clave_de_titulo("Remontada histórica"),
-                "senal": 200_000,
-                "senal_texto": "200K+",
-                "breaking": True,
-                "idioma": "es",
-                "fuentes": ["Google Trends"],
-                "enlaces": [],
-                "por_que": "",
-                "estado": "nuevo",
-            }
-        ],
+    # Sembrar un cluster breaking en el pool.
+    repos.upsert_noticia_cluster(
+        {
+            "id": "cl-remontada",
+            "titulo": "Remontada histórica",
+            "resumen": "",
+            "marca": "claro-sports",
+            "categoria": "deportes",
+            "geo": "MX",
+            "clave": "t:cl-remontada",
+            "n_items": 0,
+            "n_fuentes": 1,
+            "idiomas": ["es"],
+            "senal": 200_000,
+            "score": 0.95,
+            "breaking": 1,
+            "primer_visto": "2026-06-01T00:00:00+00:00",
+            "ultimo_visto": "2026-06-05T12:00:00+00:00",
+            "estado": "nuevo",
+        }
     )
 
     # Crear un borrador de breaking para ese título.
