@@ -33,19 +33,18 @@ import os
 import pytest
 from starlette.testclient import TestClient
 
-# Pool de conexiones Postgres ON en la suite, pero PEQUEÑO (`KENI_DB_POOL_MAX=4` por worker).
-# POR QUÉ: sin pool, cada operación abre/cierra su propia conexión TCP -> la suite hace ~16k
-# conexiones; bajo xdist (N procesos comparten el espacio de puertos efímeros del cliente) el
-# churn llena la tabla TIME_WAIT y, con varios pipelines a la vez en el runner, se AGOTAN los
-# puertos efímeros -> `OperationalError: Cannot assign requested address` en masa (CI rojo,
-# ~150 ERROR). El pool REUSA conexiones (medido: TIME_WAIT cae de ~14k a ~0.5k, cannot_assign
-# 0). El default grande (MAX=12/20) SÍ colgaba (`PoolTimeout`, N*MAX > max_connections y
-# `lock_barrido` retiene una conexión entera); MAX=4 por worker (6*4=24 << 100) reutiliza sin
-# agotar ni colgar. DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa).
-# `setdefault` respeta overrides manuales (p.ej. `KENI_DB_POOL=0` para depurar el camino viejo).
-os.environ.setdefault("KENI_DB_POOL", "1")
-os.environ.setdefault("KENI_DB_POOL_MIN", "1")
-os.environ.setdefault("KENI_DB_POOL_MAX", "4")
+# Pool de conexiones Postgres OFF en la suite (camino directo: una conexión por operación).
+# POR QUÉ OFF y NO ON: tener el pool ON parece atractivo (reusa conexiones, evita churn de
+# puertos), pero bajo xdist (N procesos + hilos de fondo) el pool EMBUDA todas las operaciones
+# por su lock/límite y MATA el paralelismo -> la suite pasa de ~4 min a ~12 min (medido; subir
+# MAX no ayuda: el cuello es el embudo, no el nº de conexiones). El camino directo deja a cada
+# hilo abrir su conexión en paralelo -> rápido. El agotamiento de puertos efímeros
+# (`Cannot assign requested address`) que se ve en CI bajo MUCHOS pipelines a la vez es un tema
+# de HOST (TIME_WAIT), se arregla en el runner (`net.ipv4.tcp_tw_reuse=1` / ampliar
+# `ip_local_port_range`), NO forzando el pool en la suite (eso penaliza a todos 3x).
+# DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa). `setdefault` respeta
+# overrides (`KENI_DB_POOL=1` para probar el pool real, p.ej. en `test_motor_db_pool`).
+os.environ.setdefault("KENI_DB_POOL", "0")
 
 from keni_consola import app as app_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL
 from keni_consola import db as db_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL
