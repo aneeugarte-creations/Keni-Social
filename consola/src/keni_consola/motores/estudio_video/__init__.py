@@ -1,74 +1,323 @@
-"""Motor de RENDER de video server-side con FFmpeg (Ola VIDEO) — BASE / stub.
+"""Motor de RENDER de video server-side con FFmpeg (Ola VIDEO).
 
-DUEÑO: este modulo POSEE el render. Un AGENTE posterior (A) lo rellena; en la BASE es un STUB
-que marca la generacion en error con un mensaje claro (NO hace trabajo real). La firma y el
-contrato de abajo son el CONTRATO con el resto del sistema y NO deben cambiar sin actualizar
-el seam (`worker._procesar_job_proceso`) y `docs/maquina-contenido/G-video-engine.md`.
+DUEÑO de este modulo: el RENDER. `ejecutar_render(gen_id, spec)` es el EJECUTOR del job de
+proceso `render-video` (lo despacha `worker._procesar_job_proceso`). La firma es el CONTRATO
+con el seam y NO cambia sin actualizar `worker` + `docs/maquina-contenido/G-video-engine.md`.
 
-QUE DEBE HACER EL EJECUTOR REAL (a implementar)
-================================================
-`ejecutar_render(gen_id, spec)` recibe el `spec` PLANO del job de proceso (lo arma
-`jobspec.construir_proceso(PROC_RENDER_VIDEO, params)` via `generaciones.encolar_job_proceso`):
+QUE HACE
+========
+1. GATEO (kill-switch): si `config.video_render_gateado()` esta OFF, marca la generacion en
+   error claro y termina (respeta la maquina + el toggle `KENI_VIDEO_RENDER`).
+2. Carga la composicion (`repos.obtener_video_composicion`) y valida su `documento`
+   (`keni_shared.video.validar_composicion`).
+3. Baja los clips base/PiP de S3 (`media.leer_objeto`, categoria `videos`) a temporales.
+4. Hornea la pista `overlay` (capas estilo Documento del Estudio de imagen) a un PNG
+   transparente del tamano del formato con `estudio_imagen.renderizar_documento_bytes`
+   (REUTILIZA el Estudio; no reinventa capas).
+5. Materializa el ASS de subtitulos (de `video_subtitulos.ass`) si existe (si no hay ASS aun,
+   OMITE subtitulos: no falla el render).
+6. Construye el filtergraph (`filtros.construir_comando`) y corre ffmpeg SIN shell, con timeout
+   `config.video_render_timeout()`, parseando `-progress pipe:1` para reportar avance.
+7. Guarda el mp4 en media categoria `render` (content-addressed sha256) y marca la generacion
+   `completado` con `resultado = {"media_id": "render/<sha>.mp4", "url": ".../render/<sha>.mp4"}`.
 
-    spec = {
-      "version": 1,
-      "kind": "render-video",
-      "composicion_id": "<id de video_composiciones>",   # de donde leer el documento JSON
-      # ...otros params que el API decida (p. ej. overrides de formato)
-    }
-
-Pasos esperados del render real (decision de arquitectura YA tomada — ver el doc):
-  1. Cargar la composicion (`repos.obtener_video_composicion(composicion_id)`) y validar su
-     `documento` con `keni_shared.video.validar_composicion`.
-  2. Bajar los media base (clips) de S3 (`media.leer_objeto` / categoria `videos`).
-  3. Renderizar la pista `overlay` (capas estilo `Documento` del Estudio de imagen) a PNG
-     transparente con `dominio.estudio_imagen.renderizar_documento_bytes` (REUTILIZAR, no
-     reinventar capas) y los subtitulos a ASS (de `video_subtitulos.ass`).
-  4. Componer con FFmpeg (`config.ffmpeg_bin`): scale/crop/pad (reencuadre por preset),
-     `overlay` (marcos / image-in-video / PNG del estudio), xstack/vstack (doble pista/PiP),
-     `subtitles=...ass` (subtitulos quemados). Timeout = `config.video_render_timeout`.
-  5. Guardar el mp4 de salida en media categoria `render` (content-addressed sha256, igual que
-     `dominio.estudio_imagen` guarda el PNG) y marcar la generacion `completado` con
-     `resultado = {"media_id": "render/<sha>.mp4", "url": "/api/media/render/<sha>.mp4"}`.
-
-REPORTE A ACTIVIDAD IA
-======================
-Usa `generaciones.actualizar(gen_id, {...})` para progreso/estado/errores:
-  - en marcha:   `{"estado": ESTADO_EJECUTANDO, "fase": "...", "salida": "..."}` (opcional).
-  - exito:       `{"estado": ESTADO_COMPLETADO, "resultado": {...}, "fecha_fin": ahora_iso()}`.
-  - error:       `{"estado": ESTADO_ERROR, "error": "<es>", "fecha_fin": ahora_iso()}`.
-El worker (`_procesar_job_proceso`) libera el cupo de admision y saca el job de la cola; si el
-ejecutor revienta sin marcar terminal, el worker lo marca en error como red de seguridad.
-
-GATEO: el encolado solo ocurre si `config.video_render_activo()` (flag `KENI_VIDEO_RENDER`,
-def OFF, gateado por maquina). FFmpeg se instala en la imagen del `worker` (deploy).
+REPORTE A ACTIVIDAD IA: via `generaciones.actualizar(gen_id, {...})` (fase/salida en marcha,
+resultado al exito, error en espanol al fallar). El worker libera el cupo y saca el job.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import re
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Any
 
-from ... import generaciones
+from keni_shared import video as video_shared
+
+from ... import almacen_media, config, generaciones, media, repos
+from ...dominio import estudio_imagen
+from . import filtros
 
 _log = logging.getLogger("keni_consola.motores.estudio_video")
 
+# Categoria de almacen del mp4 de salida (los clips de entrada viven en `videos`).
+_CAT_RENDER = "render"
+
+# Regex para extraer `out_time_ms`/`out_time_us` del stream de progreso de ffmpeg.
+_RE_PROGRESO = re.compile(r"^out_time_(?:ms|us)=(\d+)", re.MULTILINE)
+
+
+class RenderError(RuntimeError):
+    """Error de render con mensaje ya en espanol, listo para Actividad IA."""
+
 
 def ejecutar_render(gen_id: str, spec: dict) -> None:
-    """STUB de la BASE: marca la generacion en error (el motor de render aun no existe).
+    """Ejecuta el render de una composicion de video. Firma del CONTRATO (no cambiar)."""
+    try:
+        _render(gen_id, spec)
+    except RenderError as exc:
+        _marcar_error(gen_id, str(exc))
+    except Exception as exc:  # noqa: BLE001 - cualquier fallo se reporta, no crashea el worker
+        _log.exception("estudio_video.ejecutar_render: fallo inesperado (gen %s)", gen_id)
+        _marcar_error(gen_id, f"Error inesperado en el render: {exc}")
 
-    Firma del CONTRATO (no cambiar): `ejecutar(gen_id: str, spec: dict) -> None`. El agente A
-    reemplaza el cuerpo por el render FFmpeg real (ver el docstring del modulo). En la BASE NO
-    hace trabajo: deja un error honesto para que Actividad IA lo muestre sin romper el worker.
+
+# --------------------------------------------------------------------------- #
+# Cuerpo del render                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def _render(gen_id: str, spec: dict) -> None:
+    # 1) Kill-switch (maquina AND toggle). El worker ejecuta lo que reclama, pero respetamos el
+    #    gate por si el flag se apago entre el encolado y la ejecucion.
+    if not config.video_render_gateado():
+        raise RenderError(
+            "El render de video esta desactivado (KENI_VIDEO_RENDER off o maquina apagada)."
+        )
+
+    composicion_id = str(spec.get("composicion_id") or "").strip()
+    if not composicion_id:
+        raise RenderError("Falta 'composicion_id' en el job de render.")
+
+    _fase(gen_id, "cargando", "Cargando la composicion.")
+    comp = repos.obtener_video_composicion(composicion_id)
+    if comp is None:
+        raise RenderError(f"No existe la composicion '{composicion_id}'.")
+
+    documento = _documento_validado(comp)
+    pistas = documento.get("pistas") or []
+    formato = documento.get("formato") or {}
+
+    base_clip = filtros._clip_base(pistas)
+    if not base_clip or not (base_clip.get("media_id") or "").strip():
+        raise RenderError("La composicion no tiene un clip de video base con 'media_id'.")
+
+    with tempfile.TemporaryDirectory(prefix="keni-render-") as tmp:
+        carpeta = Path(tmp)
+
+        # 2) Clip base.
+        _fase(gen_id, "descargando", "Descargando el clip base.")
+        base_path = _materializar_clip(base_clip["media_id"], carpeta, "base")
+
+        # 3) Clip PiP (si hay segunda pista de video).
+        pip_path: str | None = None
+        pip_clip = filtros._pista_pip(pistas)
+        if pip_clip and (pip_clip.get("media_id") or "").strip():
+            _fase(gen_id, "descargando", "Descargando el clip PiP.")
+            pip_path = _materializar_clip(pip_clip["media_id"], carpeta, "pip")
+
+        # 4) Overlay -> PNG horneado por el Estudio de imagen.
+        overlay_png: str | None = None
+        pista_ovl = filtros.pista_overlay(pistas)
+        if pista_ovl and (pista_ovl.get("capas") or []):
+            _fase(gen_id, "componiendo overlay", "Horneando la pista de overlay a PNG.")
+            overlay_png = _hornear_overlay(pista_ovl, formato, documento.get("marca", ""), carpeta)
+
+        # 5) Subtitulos -> ASS a disco (si hay).
+        ass_path: str | None = None
+        pista_subs = filtros.pista_subtitulos(pistas)
+        if pista_subs is not None:
+            ass = _ass_de_pista(pista_subs, composicion_id)
+            if ass:
+                _fase(gen_id, "quemando subtitulos", "Preparando subtitulos quemados.")
+                ass_path = str(carpeta / "subs.ass")
+                Path(ass_path).write_text(ass, encoding="utf-8")
+            else:
+                _log.info("estudio_video: pista de subtitulos sin ASS aun; se omite (gen %s)", gen_id)
+
+        # 6) Filtergraph + ffmpeg.
+        salida_path = str(carpeta / "salida.mp4")
+        argv = filtros.construir_comando(
+            config.ffmpeg_bin(),
+            documento,
+            base_path=base_path,
+            pip_path=pip_path,
+            overlay_png=overlay_png,
+            ass_path=ass_path,
+            salida_path=salida_path,
+        )
+        _fase(gen_id, "codificando", "Codificando el video con ffmpeg.")
+        _correr_ffmpeg(argv, timeout=config.video_render_timeout(), gen_id=gen_id, documento=documento)
+
+        salida = Path(salida_path)
+        if not salida.is_file() or salida.stat().st_size == 0:
+            raise RenderError("ffmpeg termino sin producir un archivo de salida.")
+
+        # 7) Persistir + completar.
+        _fase(gen_id, "guardando", "Guardando el video renderizado.")
+        clave = _guardar_render(salida.read_bytes())
+        generaciones.actualizar(
+            gen_id,
+            {
+                "estado": generaciones.ESTADO_COMPLETADO,
+                "fase": "completado",
+                "resultado": {"media_id": clave, "url": f"/api/media/{clave}"},
+                "fecha_fin": generaciones.ahora_iso(),
+            },
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Helpers de carga / horneado                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _documento_validado(comp: dict[str, Any]) -> dict[str, Any]:
+    """Parsea y valida el `documento` JSON de la composicion (forma del sobre)."""
+    crudo = comp.get("documento") or "{}"
+    try:
+        doc = json.loads(crudo) if isinstance(crudo, str) else crudo
+    except (ValueError, TypeError) as exc:
+        raise RenderError("El documento de la composicion no es JSON valido.") from exc
+    try:
+        return video_shared.validar_composicion(doc)
+    except ValueError as exc:
+        raise RenderError(f"Composicion invalida: {exc}") from exc
+
+
+def _materializar_clip(media_id: str, carpeta: Path, nombre: str) -> str:
+    """Baja un clip de media (categoria `videos`) a un temporal; devuelve su ruta."""
+    datos = media.leer_objeto(media_id)
+    if datos is None:
+        raise RenderError(f"No se encontro el clip '{media_id}' en el almacen.")
+    ext = Path(media_id).suffix.lower() or ".mp4"
+    ruta = carpeta / f"{nombre}{ext}"
+    ruta.write_bytes(datos)
+    return str(ruta)
+
+
+def _hornear_overlay(
+    pista: dict[str, Any], formato: dict[str, Any], marca: str, carpeta: Path
+) -> str:
+    """Hornea la pista `overlay` (capas) a un PNG transparente del tamano del formato.
+
+    REUTILIZA `estudio_imagen.renderizar_documento_bytes`: arma un Documento con las capas de la
+    pista y el formato de la composicion, sin reimplementar el dibujo de capas.
     """
-    _log.warning("estudio_video.ejecutar_render: stub (gen %s); el motor de render no esta implementado", gen_id)
+    documento_overlay = {
+        "version": 1,
+        "marca": marca or "",
+        "formato": {"w": int(formato.get("w") or 0), "h": int(formato.get("h") or 0)},
+        # Fondo transparente: el overlay solo aporta sus capas sobre el video.
+        "fondo": {"tipo": "color", "color": "#00000000"},
+        "capas": pista.get("capas") or [],
+    }
+    try:
+        png = estudio_imagen.renderizar_documento_bytes(documento_overlay)
+    except estudio_imagen.EstudioError as exc:
+        raise RenderError(f"No se pudo hornear el overlay: {exc}") from exc
+    ruta = carpeta / "overlay.png"
+    ruta.write_bytes(png)
+    return str(ruta)
+
+
+def _ass_de_pista(pista: dict[str, Any], composicion_id: str) -> str:
+    """ASS de la pista de subtitulos: por `subtitulo_id` o, en su defecto, por composicion.
+
+    Si no hay un ASS listo todavia (el agente de ASR aun no transcribio), devuelve "" para que
+    el render OMITA subtitulos en vez de fallar.
+    """
+    sub_id = str(pista.get("subtitulo_id") or "").strip()
+    sub: dict[str, Any] | None = None
+    if sub_id:
+        sub = repos.obtener_video_subtitulo(sub_id)
+    if sub is None:
+        subs = repos.listar_video_subtitulos(composicion_id=composicion_id)
+        sub = subs[0] if subs else None
+    if sub is None:
+        return ""
+    return str(sub.get("ass") or "")
+
+
+def _guardar_render(datos: bytes) -> str:
+    """Guarda el mp4 en media categoria `render` content-addressed (sha256); devuelve la key."""
+    digest = hashlib.sha256(datos).hexdigest()
+    clave = almacen_media.componer_clave(_CAT_RENDER, f"{digest}.mp4")
+    if not almacen_media.objeto_existe(clave):
+        almacen_media.guardar_objeto(clave, datos, content_type="video/mp4")
+    return clave
+
+
+# --------------------------------------------------------------------------- #
+# ffmpeg + progreso                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def _correr_ffmpeg(
+    argv: list[str], *, timeout: int, gen_id: str, documento: dict[str, Any]
+) -> None:
+    """Corre ffmpeg SIN shell, capturando stderr; parsea `-progress pipe:1` para el avance.
+
+    Modulo-nivel para que los tests monkeypatcheen este punto (no ejecuten ffmpeg). Lanza
+    `RenderError` (mensaje en espanol) ante timeout o codigo de salida != 0.
+    """
+    duracion_ms = int(documento.get("duracion_ms") or 0)
+    try:
+        proc = subprocess.run(  # noqa: S603 - argv lista, sin shell; binario de config, rutas del server
+            argv, capture_output=True, text=True, timeout=timeout, check=False
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RenderError(f"El render supero el tiempo limite ({timeout}s).") from exc
+    except FileNotFoundError as exc:
+        raise RenderError("No se encontro el binario de ffmpeg.") from exc
+
+    # Reporte de progreso: ultimo `out_time` visto sobre la duracion declarada (best-effort).
+    _reportar_progreso(gen_id, proc.stdout or "", duracion_ms)
+
+    if proc.returncode != 0:
+        cola = _ultima_linea_error(proc.stderr or "")
+        raise RenderError(f"ffmpeg fallo (codigo {proc.returncode}): {cola}")
+
+
+def _reportar_progreso(gen_id: str, salida_progreso: str, duracion_ms: int) -> None:
+    """Escribe el ultimo avance de ffmpeg a la generacion (porcentaje si hay duracion)."""
+    if not salida_progreso:
+        return
+    coincidencias = _RE_PROGRESO.findall(salida_progreso)
+    if not coincidencias:
+        return
+    # out_time_us son microsegundos; out_time_ms en ffmpeg recientes tambien viene en us.
+    ultimo_us = int(coincidencias[-1])
+    ultimo_ms = ultimo_us // 1000
+    if duracion_ms > 0:
+        pct = min(100, int(ultimo_ms * 100 / duracion_ms))
+        _fase(gen_id, "codificando", f"Codificando: {pct}%")
+    else:
+        _fase(gen_id, "codificando", f"Codificando: {ultimo_ms} ms procesados")
+
+
+def _ultima_linea_error(stderr: str) -> str:
+    """Ultima linea no vacia de stderr de ffmpeg (el mensaje de error mas util)."""
+    lineas = [ln.strip() for ln in stderr.splitlines() if ln.strip()]
+    return lineas[-1] if lineas else "sin detalle"
+
+
+# --------------------------------------------------------------------------- #
+# Reporte a Actividad IA                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def _fase(gen_id: str, fase: str, salida: str) -> None:
+    """Reporta una fase en marcha a la generacion (Actividad IA)."""
+    generaciones.actualizar(
+        gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": fase, "salida": salida}
+    )
+
+
+def _marcar_error(gen_id: str, mensaje: str) -> None:
+    """Marca la generacion en error (estado terminal) con mensaje en espanol."""
     generaciones.actualizar(
         gen_id,
         {
             "estado": generaciones.ESTADO_ERROR,
-            "error": "El motor de render de video aun no esta implementado.",
+            "error": mensaje,
             "fecha_fin": generaciones.ahora_iso(),
         },
     )
 
 
-__all__ = ["ejecutar_render"]
+__all__ = ["RenderError", "ejecutar_render"]
