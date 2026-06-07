@@ -1687,6 +1687,7 @@ def crear_plantilla_diseno(
     marca: str,
     nombre: str = "",
     categoria: str = "post",
+    tipo: str = "foto",
     documento: str = "{}",
     miniatura: str = "",
     lineas: str = "[]",
@@ -1700,6 +1701,7 @@ def crear_plantilla_diseno(
         marca=marca,
         nombre=nombre,
         categoria=categoria,
+        tipo=tipo,
         documento=documento,
         miniatura=miniatura,
         lineas=lineas,
@@ -1712,9 +1714,15 @@ def crear_plantilla_diseno(
 
 
 def listar_plantillas_diseno(
-    *, marca: str | None = None, categoria: str | None = None, solo_activas: bool = False
+    *,
+    marca: str | None = None,
+    categoria: str | None = None,
+    tipo: str | None = None,
+    solo_activas: bool = False,
 ) -> list[dict[str, Any]]:
-    return db.listar_plantillas_diseno(marca=marca, categoria=categoria, solo_activas=solo_activas)
+    return db.listar_plantillas_diseno(
+        marca=marca, categoria=categoria, tipo=tipo, solo_activas=solo_activas
+    )
 
 
 def obtener_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
