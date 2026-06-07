@@ -137,12 +137,49 @@ const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "buzones", etiqueta: "Buzones" },
   { valor: "agentes", etiqueta: "Agentes" },
   { valor: "eventos", etiqueta: "Eventos" },
-  { valor: "idea", etiqueta: "Ideas" },
-  { valor: "enlace", etiqueta: "Enlaces" },
-  { valor: "interna", etiqueta: "Interno AMX" },
+  // Aportaciones manuales (idea/enlace/interno) unificadas en una sola pestaña:
+  { valor: "aportar", etiqueta: "Aportar" },
   // Canal que alimenta CONTENIDOS (evergreen):
   { valor: "green", etiqueta: "Green" },
 ];
+
+/**
+ * Pestaña "Aportar": una sola superficie para las aportaciones manuales (idea,
+ * enlace, contenido interno), con un selector de tipo. Antes eran tres pestañas
+ * sueltas; se unifican para calmar la barra. Reutiliza `AportarManual`.
+ */
+function AportarHub({
+  marcas,
+  redes,
+}: {
+  marcas: MarcaDisponible[];
+  redes: RedPublicacion[];
+}) {
+  const [tipo, setTipo] = React.useState<"idea" | "enlace" | "interna">("idea");
+  const opciones: { valor: "idea" | "enlace" | "interna"; etiqueta: string }[] = [
+    { valor: "idea", etiqueta: "Idea" },
+    { valor: "enlace", etiqueta: "Enlace" },
+    { valor: "interna", etiqueta: "Interno AMX" },
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1">
+        {opciones.map((o) => (
+          <Button
+            key={o.valor}
+            type="button"
+            size="sm"
+            variant={tipo === o.valor ? "default" : "outline"}
+            onClick={() => setTipo(o.valor)}
+          >
+            {o.etiqueta}
+          </Button>
+        ))}
+      </div>
+      <AportarManual tipo={tipo} marcas={marcas} redes={redes} />
+    </div>
+  );
+}
 
 /**
  * Página de Fuentes: HUB multi-tipo de insumos.
@@ -210,20 +247,15 @@ export default function Fuentes() {
         {/* Agentes de investigación: briefs reutilizables que buscan en la web y
             proponen candidatos al pool de Noticias. */}
         <TabsContent value="agentes">
-          <AgentesInvestigacion />
+          <AgentesInvestigacion soloBriefs />
         </TabsContent>
         {/* Eventos y programas de cobertura (agenda editorial → Noticias). */}
         <TabsContent value="eventos">
           <EventosCobertura />
         </TabsContent>
-        <TabsContent value="idea">
-          <AportarManual tipo="idea" marcas={marcas} redes={opcionesRedes} />
-        </TabsContent>
-        <TabsContent value="enlace">
-          <AportarManual tipo="enlace" marcas={marcas} redes={opcionesRedes} />
-        </TabsContent>
-        <TabsContent value="interna">
-          <AportarManual tipo="interna" marcas={marcas} redes={opcionesRedes} />
+        {/* Aportar: una sola superficie para idea/enlace/interno (antes 3 pestañas). */}
+        <TabsContent value="aportar">
+          <AportarHub marcas={marcas} redes={opcionesRedes} />
         </TabsContent>
         <TabsContent value="green">
           <TallerGreen marcas={marcas} redes={opcionesRedes} />

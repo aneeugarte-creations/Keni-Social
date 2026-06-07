@@ -733,17 +733,30 @@ function SeccionCandidatos() {
 
 // ── Página principal ───────────────────────────────────────────────────────────
 
-export default function AgentesInvestigacion() {
+/**
+ * `soloBriefs`: en el hub Fuentes, un agente es una FUENTE — solo se gestionan sus
+ * briefs (la config del canal). Los candidatos que producen ya entran al pool y se
+ * revisan en Noticias, así que no se duplican aquí.
+ */
+export default function AgentesInvestigacion({
+  soloBriefs = false,
+}: {
+  soloBriefs?: boolean;
+}) {
   return (
     <>
       <PageHeader
         titulo="Agentes de investigación"
-        descripcion="Los agentes investigan por marca y tema, y dejan candidatos fechados. Tú decides qué entra al feed."
+        descripcion={
+          soloBriefs
+            ? "Briefs reutilizables que buscan en la web por marca y tema. Los candidatos que proponen entran al pool y se revisan en Noticias."
+            : "Los agentes investigan por marca y tema, y dejan candidatos fechados. Tú decides qué entra al feed."
+        }
       />
 
       <div className="space-y-6">
         <SeccionBriefs />
-        <SeccionCandidatos />
+        {!soloBriefs && <SeccionCandidatos />}
       </div>
     </>
   );
