@@ -15,11 +15,13 @@
  * clip base y se autoguarda al cambiar de sección o antes de renderizar.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Captions, Clapperboard, Film, Layers, PictureInPicture2, Video as VideoIcon } from "lucide-react";
+import { Captions, Clapperboard, Film, FolderOpen, Layers, PictureInPicture2, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { EditorSubtitulos } from "@/components/video/EditorSubtitulos";
+import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 // El editor de capas (Konva) se carga PEREZOSAMENTE: pesa y solo se necesita en la sección
 // Overlay. Así el bundle inicial es menor y los tests/SSR no importan Konva salvo que entren ahí.
 const PanelOverlay = React.lazy(() =>
@@ -31,10 +33,12 @@ import { PistaBase } from "@/components/video/PistaBase";
 import { PreviewComposicion } from "@/components/video/PreviewComposicion";
 import { SelectorFormato } from "@/components/video/SelectorFormato";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, mensajeError } from "@/lib/api";
+import { api, mensajeError, urlMedia } from "@/lib/api";
 import {
   cambiarAspecto,
   composicionVacia,
+  pistaBase,
+  pistaPip,
   pistaSubtitulos,
   quitarPip,
   setCajaPip,
@@ -47,9 +51,10 @@ import {
   type SegmentoSub,
 } from "@/lib/video";
 
-type Seccion = "base" | "overlay" | "pip" | "subs" | "render";
+type Seccion = "gestor" | "base" | "overlay" | "pip" | "subs" | "render";
 
 const SECCIONES: { clave: Seccion; etiqueta: string; Icono: typeof VideoIcon }[] = [
+  { clave: "gestor", etiqueta: "Mis composiciones", Icono: FolderOpen },
   { clave: "base", etiqueta: "Base", Icono: VideoIcon },
   { clave: "overlay", etiqueta: "Overlay", Icono: Layers },
   { clave: "pip", etiqueta: "PiP", Icono: PictureInPicture2 },
@@ -61,7 +66,13 @@ export default function EstudioVideo() {
   const { marcaActiva, marcaPrimaria } = useMarcaActiva();
   const marca = marcaActiva ?? marcaPrimaria ?? "";
 
-  const [seccion, setSeccion] = React.useState<Seccion>("base");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Deep-links: `?composicion=<id>` reabre una composición; `?contenido=<id>` viene de una pieza
+  // (find-or-create por contenido). Se procesan en un efecto y luego se limpian de la URL.
+  const composicionParam = searchParams.get("composicion");
+  const contenidoParam = searchParams.get("contenido");
+
+  const [seccion, setSeccion] = React.useState<Seccion>("gestor");
   const [aspecto, setAspecto] = React.useState<AspectoVideo>("9:16");
   const [doc, setDoc] = React.useState<ComposicionVideo>(() => composicionVacia("9:16", marca));
 
@@ -73,6 +84,8 @@ export default function EstudioVideo() {
 
   // Identidad backend de la composición.
   const [composicionId, setComposicionId] = React.useState<string | null>(null);
+  // Pieza ligada (si la composición nació desde una pieza de video). Se pasa a `crearComposicion`.
+  const [contenidoId, setContenidoId] = React.useState<string | null>(null);
   const [segmentos, setSegmentos] = React.useState<SegmentoSub[]>([]);
 
   // Presets de formato del servidor (con fallback local dentro del selector).
@@ -84,13 +97,93 @@ export default function EstudioVideo() {
   });
 
   // Crea la composición en el backend (una vez por sesión, al fijar el primer clip base).
-  // `marca` es obligatoria en la API: sin marca activa no se puede crear.
+  // `marca` es obligatoria en la API: sin marca activa no se puede crear. Si la composición nació
+  // desde una pieza de video, se ENVÍA su `contenido_id` para ligarla (antes se omitía).
   const crear = useMutation({
     mutationFn: (d: ComposicionVideo) =>
-      api.video.crearComposicion({ marca: d.marca || marca, documento: d }),
+      api.video.crearComposicion({
+        marca: d.marca || marca,
+        documento: d,
+        ...(contenidoId ? { contenido_id: contenidoId } : {}),
+      }),
     onSuccess: (r) => setComposicionId(r.id),
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  /** Hidrata el estado local (doc, aspecto, claves/urls de media) desde un documento cargado. */
+  const hidratar = React.useCallback((cargado: ComposicionVideo, id: string) => {
+    setDoc(cargado);
+    setComposicionId(id);
+    setAspecto((cargado.formato?.preset as AspectoVideo) ?? "9:16");
+    const base = pistaBase(cargado)?.clips[0]?.media_id ?? "";
+    setBaseKey(base);
+    setBaseUrl(base ? urlMedia(base) : "");
+    const pip = pistaPip(cargado)?.clips[0]?.media_id ?? "";
+    setPipKey(pip);
+    setPipUrl(pip ? urlMedia(pip) : "");
+    setSegmentos([]);
+    setSeccion("base");
+  }, []);
+
+  // Carga por deep-link. `?composicion=<id>` reabre; `?contenido=<id>` busca-o-crea por pieza.
+  // Tras resolver, limpia el query param para no recargar en cada render. Idempotente: no recarga
+  // si ya estamos en esa composición.
+  const cargando = React.useRef(false);
+  React.useEffect(() => {
+    if (cargando.current) return;
+
+    async function cargarComposicion(id: string) {
+      cargando.current = true;
+      try {
+        const { composicion } = await api.video.composicion(id);
+        hidratar(composicion.documento, composicion.id);
+      } catch (e) {
+        toast.error(mensajeError(e));
+      } finally {
+        setSearchParams({}, { replace: true });
+        cargando.current = false;
+      }
+    }
+
+    async function abrirPorContenido(cid: string) {
+      if (!marca) return; // sin marca no se puede crear; espera a que cargue la marca activa.
+      cargando.current = true;
+      try {
+        const { composiciones } = await api.video.listarComposiciones({
+          marca,
+          contenido_id: cid,
+        });
+        if (composiciones.length > 0) {
+          // Reabre la composición ya existente de esta pieza (la más reciente).
+          const existente = composiciones[0];
+          hidratar(existente.documento, existente.id);
+        } else {
+          // No hay: crea una nueva VACÍA ligada a la pieza y la deja abierta para subir el clip.
+          const nueva = composicionVacia(aspecto, marca);
+          const { id } = await api.video.crearComposicion({
+            marca,
+            documento: nueva,
+            contenido_id: cid,
+          });
+          setContenidoId(cid);
+          hidratar(nueva, id);
+        }
+      } catch (e) {
+        toast.error(mensajeError(e));
+      } finally {
+        setSearchParams({}, { replace: true });
+        cargando.current = false;
+      }
+    }
+
+    if (composicionParam && composicionParam !== composicionId) {
+      void cargarComposicion(composicionParam);
+    } else if (contenidoParam && contenidoParam !== contenidoId) {
+      setContenidoId(contenidoParam);
+      void abrirPorContenido(contenidoParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composicionParam, contenidoParam, marca]);
 
   const guardar = useMutation({
     mutationFn: (d: ComposicionVideo) => api.video.guardarComposicion(composicionId!, d),
@@ -109,6 +202,25 @@ export default function EstudioVideo() {
     },
     [composicionId, guardar],
   );
+
+  // Reabre una composición desde el gestor: navega a `?composicion=<id>` (el efecto la carga).
+  const abrirComposicion = React.useCallback(
+    (id: string) => setSearchParams({ composicion: id }),
+    [setSearchParams],
+  );
+
+  // Empieza una composición en BLANCO (descarta la pieza ligada y el estado actual).
+  const nuevaComposicion = React.useCallback(() => {
+    setComposicionId(null);
+    setContenidoId(null);
+    setBaseKey("");
+    setBaseUrl("");
+    setPipKey("");
+    setPipUrl("");
+    setSegmentos([]);
+    setDoc(composicionVacia(aspecto, marca));
+    setSeccion("base");
+  }, [aspecto, marca]);
 
   function onCambioFormato(a: AspectoVideo) {
     setAspecto(a);
@@ -188,7 +300,8 @@ export default function EstudioVideo() {
         {SECCIONES.map(({ clave, etiqueta, Icono }) => {
           const activo = seccion === clave;
           // Overlay/PiP/Subs/Render requieren un clip base; se deshabilitan hasta tenerlo.
-          const requiereBase = clave !== "base";
+          // "Mis composiciones" (gestor) y "Base" están siempre disponibles.
+          const requiereBase = clave !== "base" && clave !== "gestor";
           const off = requiereBase && !tieneBase;
           return (
             <button
@@ -207,8 +320,27 @@ export default function EstudioVideo() {
         })}
       </nav>
 
-      {/* Cuerpo: controles (izq) + preview (der) */}
+      {/* Cuerpo: controles (izq) + preview (der). El GESTOR ocupa todo el ancho (sin preview). */}
       <div className="min-h-0 flex-1 overflow-auto">
+        {seccion === "gestor" ? (
+          <div className="mx-auto max-w-4xl space-y-3 p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-foreground">Mis composiciones</h2>
+              <button
+                type="button"
+                onClick={nuevaComposicion}
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent/60"
+              >
+                Nueva composición
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Reabre una composición para seguir editándola o gestionar sus subtítulos. El estado de
+              subtítulos y el video adjunto a la pieza se muestran por fila.
+            </p>
+            <GestorComposiciones marca={marca} onAbrir={abrirComposicion} />
+          </div>
+        ) : (
         <div className="mx-auto grid max-w-6xl gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
           {/* Columna de controles según la sección */}
           <section className="min-w-0 space-y-4">
@@ -317,6 +449,7 @@ export default function EstudioVideo() {
             />
           </aside>
         </div>
+        )}
       </div>
     </div>
   );

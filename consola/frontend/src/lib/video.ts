@@ -361,6 +361,21 @@ export interface SegmentoSub {
 /** Estado del recurso de subtítulos (espejo de `video_subtitulos.estado`). */
 export type EstadoSubtitulos = "pendiente" | "transcrito" | "editado" | "listo";
 
+/**
+ * Resumen de una composición tal como lo sirve `GET /api/video/composiciones` (listado).
+ * `documento` viene YA parseado a objeto por el backend (`_composicion_a_dict`). `marca_nombre`
+ * es la etiqueta legible de la marca. Se usa en el GESTOR de composiciones.
+ */
+export interface ComposicionResumen {
+  id: string;
+  contenido_id: string;
+  marca: string;
+  marca_nombre: string;
+  documento: ComposicionVideo;
+  creado: string;
+  actualizado: string;
+}
+
 /** Recurso de subtítulos tal como lo sirve `GET /api/video/subtitulos/{id}`. */
 export interface Subtitulo {
   id: string;

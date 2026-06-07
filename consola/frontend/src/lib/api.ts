@@ -275,6 +275,7 @@ import type {
 import { type NombreContrato, validarContrato } from "./contrato";
 import type { PlantillaSpec } from "./specPlantilla";
 import type {
+  ComposicionResumen,
   ComposicionVideo,
   EstadoSubtitulos,
   PresetFormatoVideo,
@@ -1109,6 +1110,18 @@ export const api = {
     /** Presets de formato + zonas seguras por preset (`GET /api/video/formatos`). */
     formatos: (signal?: AbortSignal) =>
       peticion<{ formatos: PresetFormatoVideo[] }>("/video/formatos", { signal }),
+    /**
+     * Lista composiciones (filtro por `marca` y/o `contenido_id`). El `documento` viene YA
+     * parseado a objeto. Sirve al GESTOR de composiciones y al puente find-or-create por pieza.
+     */
+    listarComposiciones: (
+      filtros: { marca?: string; contenido_id?: string } = {},
+      signal?: AbortSignal,
+    ) =>
+      peticion<{ composiciones: ComposicionResumen[] }>(
+        `/video/composiciones${query({ marca: filtros.marca, contenido_id: filtros.contenido_id })}`,
+        { signal },
+      ),
     /** Crea la composición. `marca` es obligatoria (del catálogo). Devuelve `{id}`. */
     crearComposicion: (cuerpo: {
       marca: string;

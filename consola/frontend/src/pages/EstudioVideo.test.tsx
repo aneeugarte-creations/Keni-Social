@@ -8,9 +8,12 @@
  * No se ejercita el editor de capas (Konva) ni el render real: eso es preview/server-side.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as apiMod from "@/lib/api";
+import type { ComposicionVideo } from "@/lib/video";
 
 import EstudioVideo from "./EstudioVideo";
 
@@ -22,11 +25,50 @@ vi.mock("@/hooks/marca-activa-contexto", () => ({
 // Stub de red genérico (la query de formatos cae al fallback local con retry:false).
 vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
 
-function renderEstudioVideo() {
+function docConBase(): ComposicionVideo {
+  return {
+    version: 1,
+    marca: "unotv",
+    formato: { w: 1080, h: 1920, fps: 30, preset: "9:16" },
+    duracion_ms: 30000,
+    pistas: [
+      {
+        id: "base",
+        tipo: "video",
+        clips: [
+          {
+            id: "c1",
+            media_id: "videos/abc.mp4",
+            inicio_ms: 0,
+            fin_ms: 30000,
+            recorte_in_ms: 0,
+            recorte_out_ms: 30000,
+            x: 0,
+            y: 0,
+            w: 1080,
+            h: 1920,
+            ajuste: "cover",
+            foco: [0.5, 0.5],
+          },
+        ],
+      },
+      { id: "pip", tipo: "video", clips: [] },
+      { id: "overlay", tipo: "overlay", capas: [] },
+      {
+        id: "subs",
+        tipo: "subtitulos",
+        subtitulo_id: "",
+        estilo: { fuente: "Barlow", tam: 64, color: "#FFF", borde: "#000", posicion: "inferior", karaoke: true },
+      },
+    ],
+  };
+}
+
+function renderEstudioVideo(rutaInicial = "/contenido/video") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[rutaInicial]}>
         <EstudioVideo />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -34,21 +76,46 @@ function renderEstudioVideo() {
 }
 
 describe("EstudioVideo", () => {
+  beforeEach(() => {
+    // El gestor (sección por defecto) lista composiciones + piezas: stubs vacíos por defecto.
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({ composiciones: [] });
+    vi.spyOn(apiMod.api, "publicaciones").mockResolvedValue({
+      publicaciones: [],
+      paginacion: { total: 0, limite: 0, desplazamiento: 0 },
+    } as never);
+    vi.spyOn(apiMod.api.video, "subtitulosDe").mockResolvedValue({ subtitulo: null });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // Lleva del gestor (sección por defecto) a la sección Base.
+  function irABase() {
+    fireEvent.click(screen.getByRole("button", { name: /^base$/i }));
+  }
+
   it("muestra el encabezado 'Editor de video'", () => {
     renderEstudioVideo();
     expect(screen.getByRole("heading", { name: /editor de video/i })).toBeInTheDocument();
   });
 
-  it("muestra el selector de formato con 9:16 seleccionado por defecto", () => {
+  it("arranca en el GESTOR de composiciones ('Mis composiciones')", () => {
     renderEstudioVideo();
+    // El encabezado del gestor (h2) y el botón de nueva composición.
+    expect(screen.getByRole("button", { name: /nueva composición/i })).toBeInTheDocument();
+  });
+
+  it("muestra el selector de formato con 9:16 seleccionado por defecto (sección Base)", async () => {
+    renderEstudioVideo();
+    await irABase();
     const grupo = screen.getByRole("radiogroup", { name: /formato de video/i });
     expect(grupo).toBeInTheDocument();
     const vertical = screen.getByRole("radio", { name: /9:16/i });
     expect(vertical).toHaveAttribute("aria-checked", "true");
   });
 
-  it("muestra la zona de carga del clip base (EditorVideo reutilizado)", () => {
+  it("muestra la zona de carga del clip base (EditorVideo reutilizado)", async () => {
     renderEstudioVideo();
+    await irABase();
     expect(screen.getByText(/subir video/i)).toBeInTheDocument();
   });
 
@@ -59,12 +126,64 @@ describe("EstudioVideo", () => {
     const subs = screen.getByRole("button", { name: /subtítulos/i });
     expect(render).toBeDisabled();
     expect(subs).toBeDisabled();
-    // La sección Base sí está activa.
+    // Las secciones Base y "Mis composiciones" sí están activas.
     expect(screen.getByRole("button", { name: /^base$/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /mis composiciones/i })).not.toBeDisabled();
   });
 
-  it("avisa que el preview es aproximado (render fiel = servidor)", () => {
+  it("avisa que el preview es aproximado (render fiel = servidor)", async () => {
     renderEstudioVideo();
+    await irABase();
     expect(screen.getByText(/preview aproximado/i)).toBeInTheDocument();
+  });
+
+  it("carga una composición existente por `?composicion=<id>`", async () => {
+    const composicion = vi
+      .spyOn(apiMod.api.video, "composicion")
+      .mockResolvedValue({ composicion: { id: "comp-7", documento: docConBase() } });
+    renderEstudioVideo("/contenido/video?composicion=comp-7");
+    // Tras cargar, abre la sección Base con el clip ya presente: el reencuadre (que exige base)
+    // y las secciones que requieren base quedan habilitadas.
+    await waitFor(() => expect(composicion).toHaveBeenCalledWith("comp-7"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^render$/i })).not.toBeDisabled(),
+    );
+  });
+
+  it("por `?contenido=<id>` REABRE la composición de la pieza si ya existe", async () => {
+    const listar = vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [
+        {
+          id: "comp-existente",
+          contenido_id: "cont-5",
+          marca: "unotv",
+          marca_nombre: "UnoTV",
+          creado: "",
+          actualizado: "",
+          documento: docConBase(),
+        },
+      ],
+    });
+    const crear = vi.spyOn(apiMod.api.video, "crearComposicion");
+    renderEstudioVideo("/contenido/video?contenido=cont-5");
+    await waitFor(() =>
+      expect(listar).toHaveBeenCalledWith({ marca: "unotv", contenido_id: "cont-5" }),
+    );
+    // Existía: NO crea una nueva.
+    expect(crear).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^render$/i })).not.toBeDisabled(),
+    );
+  });
+
+  it("por `?contenido=<id>` CREA una composición ligada si no existe (find-or-create)", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({ composiciones: [] });
+    const crear = vi
+      .spyOn(apiMod.api.video, "crearComposicion")
+      .mockResolvedValue({ id: "comp-nueva" });
+    renderEstudioVideo("/contenido/video?contenido=cont-9");
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    // La nueva composición se crea LIGADA a la pieza (contenido_id).
+    expect(crear.mock.calls[0][0]).toMatchObject({ marca: "unotv", contenido_id: "cont-9" });
   });
 });

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Clapperboard } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
@@ -45,6 +47,7 @@ export function DialogoEditar({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [contenido, setContenido] = React.useState("");
   // Texto que va DENTRO de la imagen (copy-in), distinto del contenido que la acompaña.
   const [copyIn, setCopyIn] = React.useState("");
@@ -318,15 +321,31 @@ export function DialogoEditar({
           )}
 
           {publicacion && formato === "video" ? (
-            // Pieza de VIDEO: editor de clip (Ola F).
-            <EditorVideo
-              video={videoKey}
-              videoUrl={videoUrl}
-              onCambio={(clave, url) => guardarVideo.mutate({ clave, url })}
-              disabled={guardarVideo.isPending}
-              idPrefijo="editar"
-              red={publicacion.red}
-            />
+            // Pieza de VIDEO: editor de clip (Ola F) + puente al Estudio de video.
+            <div className="space-y-2">
+              <EditorVideo
+                video={videoKey}
+                videoUrl={videoUrl}
+                onCambio={(clave, url) => guardarVideo.mutate({ clave, url })}
+                disabled={guardarVideo.isPending}
+                idPrefijo="editar"
+                red={publicacion.red}
+              />
+              {/* Puente: abre el Estudio de video con esta pieza (find-or-create por contenido).
+                  Allí se hace el "toque RRSS" (reencuadre, overlay, subtítulos) y el render server. */}
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/contenido/video?contenido=${encodeURIComponent(publicacion.contenido_id)}`,
+                  )
+                }
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent/60"
+              >
+                <Clapperboard className="h-4 w-4" />
+                Editar en Estudio de video
+              </button>
+            </div>
           ) : publicacion?.marca ? (
               // SISTEMA ÚNICO: la plantilla del estudio se renderiza EN VIVO en el lienzo (con tu
               // foto + reencuadre + titular in-place). El selector (galería por marca) y "solo foto"
