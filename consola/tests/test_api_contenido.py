@@ -75,6 +75,87 @@ def test_crear_contenido_con_plataformas(entorno):
     assert all(p["falta_copy"] and p["falta_imagen"] for p in cont["plataformas"])
 
 
+def test_crear_con_formato_video_crea_cinco_redes(entorno):
+    """`formato=video` crea las 5 redes (foto=3 + youtube + tiktok) con falta_video activo."""
+    c = _cli()
+    r = c.post(
+        "/api/contenido",
+        json={"titulo": "Clip", "formato": "video"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    cont = r.json()["contenido"]
+    assert cont["formato"] == "video"
+    assert {p["red"] for p in cont["plataformas"]} == {
+        "instagram", "x", "facebook", "youtube", "tiktok"
+    }
+    assert all(p["falta_video"] for p in cont["plataformas"])
+
+
+def test_crear_con_formato_foto_crea_tres_redes(entorno):
+    c = _cli()
+    cont = c.post(
+        "/api/contenido", json={"titulo": "Foto", "formato": "foto"}, headers=_ORIGIN
+    ).json()["contenido"]
+    assert {p["red"] for p in cont["plataformas"]} == {"instagram", "x", "facebook"}
+    assert all(not p["falta_video"] for p in cont["plataformas"])
+
+
+def test_flip_a_video_via_patch_contenido(entorno):
+    """PATCH /api/contenido con {formato:'video'} añade youtube+tiktok y devuelve el resumen."""
+    c = _cli()
+    cont = c.post(
+        "/api/contenido", json={"titulo": "Pieza", "formato": "foto"}, headers=_ORIGIN
+    ).json()["contenido"]
+    r = c.patch(f"/api/contenido/{cont['id']}", json={"formato": "video"}, headers=_ORIGIN)
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["contenido"]["formato"] == "video"
+    assert set(cuerpo["ajuste_formato"]["creadas"]) == {"youtube", "tiktok"}
+    assert {p["red"] for p in cuerpo["contenido"]["plataformas"]} == {
+        "instagram", "x", "facebook", "youtube", "tiktok"
+    }
+
+
+def test_flip_a_foto_conserva_extra_con_trabajo_y_avisa(entorno):
+    """video->foto con trabajo en youtube: se conserva, se reporta y la API avisa."""
+    c = _cli()
+    cont = c.post(
+        "/api/contenido", json={"titulo": "Pieza", "formato": "video"}, headers=_ORIGIN
+    ).json()["contenido"]
+    yt = next(p for p in cont["plataformas"] if p["red"] == "youtube")
+    c.patch(
+        f"/api/contenido/{cont['id']}/plataformas/{yt['id']}",
+        json={"copy": "Guion"},
+        headers=_ORIGIN,
+    )
+    r = c.patch(f"/api/contenido/{cont['id']}", json={"formato": "foto"}, headers=_ORIGIN)
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert "youtube" in cuerpo["ajuste_formato"]["conservadas"]
+    assert "aviso" in cuerpo
+
+
+def test_patch_plataforma_fija_video_y_limpia_falta_video(entorno):
+    """Adjuntar {video} en una fila limpia falta_video (espejo de imagen/falta_imagen)."""
+    c = _cli()
+    cont = c.post(
+        "/api/contenido", json={"titulo": "Clip", "formato": "video"}, headers=_ORIGIN
+    ).json()["contenido"]
+    plat = next(p for p in cont["plataformas"] if p["red"] == "tiktok")
+    assert plat["falta_video"] is True
+    r = c.patch(
+        f"/api/contenido/{cont['id']}/plataformas/{plat['id']}",
+        json={"video": "videos/abc.mp4"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    actualizado = r.json()["plataforma"]
+    assert actualizado["video"] == "videos/abc.mp4"
+    assert actualizado["video_url"] == "/api/media/videos/abc.mp4"
+    assert actualizado["falta_video"] is False
+
+
 def test_listar_incluye_el_creado(entorno):
     c = _cli()
     c.post("/api/contenido", json={"titulo": "Nota A", "flujo": "evergreen"}, headers=_ORIGIN)

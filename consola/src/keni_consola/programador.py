@@ -184,6 +184,46 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
         return None
 
     texto = (pub.get("contenido") or "").strip()
+
+    # VIDEO (pieza `formato='video'`): se publica el asset de video en vez de la imagen. La capa
+    # Metricool ya distingue foto/video (`TipoMedia.video`). Si no hay asset de video, NO se
+    # publica esta red (queda pendiente; el barrido la reintentará cuando se adjunte) — sin romper.
+    from . import redes
+
+    if redes.normalizar_formato(pub.get("formato")) == redes.FORMATO_VIDEO:
+        nombre_video = (pub.get("video") or "").strip()
+        if not nombre_video:
+            _log.warning(
+                "Pieza %r (video): no hay asset de video; se omite la publicación (pendiente).",
+                pub.get("id"),
+            )
+            return None
+        url_video = _url_media_publica(nombre_video)
+        if not url_video:
+            _log.warning(
+                "Pieza %r (video): hay asset %r pero KENI_CONSOLA_URL_PUBLICA no está "
+                "configurada; no se puede publicar. Configura la variable.",
+                pub.get("id"), nombre_video,
+            )
+            return None
+        media_video: list[MediaRef] = [
+            MediaRef(tipo=TipoMedia.video, url=url_video)
+        ]
+        publicar_en = _parsear_fecha(pub.get("fecha_programada") or "")
+        try:
+            return BorradorMetricool(
+                redes=[plataforma],
+                texto=texto,
+                media=media_video,
+                publicar_en=publicar_en,
+            )
+        except ValidationError as exc:
+            _log.warning(
+                "Pieza %r (video): no se pudo construir BorradorMetricool (%s); se omite.",
+                pub.get("id"), exc.errors()[0]["msg"] if exc.errors() else str(exc),
+            )
+            return None
+
     # Imagen publicable: si está horneada (`imagen`) se usa; si no, se RENDERIZA on-demand
     # desde la receta (placa de marca / plantilla del estudio) y se MATERIALIZA en este momento
     # (content-addressed, una sola vez) para que Metricool la ingiera por una URL estable

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -6,6 +6,7 @@ import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
+import { EditorVideo } from "@/components/media/EditorVideo";
 import type { Documento } from "@/editor/documento";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -17,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
 import { capasFotoDoc, type FotoCollage } from "@/lib/placa/docPieza";
 import {
@@ -58,6 +60,10 @@ export function DialogoEditar({
   // es `[{objeto: foto, foco/zoom de foto_encuadre}]`. La pieza lo persiste como JSON en `fotos`.
   const [fotos, setFotos] = React.useState<FotoCollage[]>([]);
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
+  // Ola F: formato de la pieza ("foto"|"video") + estado del video.
+  const [formato, setFormato] = React.useState("foto");
+  const [videoKey, setVideoKey] = React.useState("");
+  const [videoUrl, setVideoUrl] = React.useState("");
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
@@ -105,6 +111,38 @@ export function DialogoEditar({
     setGaleriaPlantillas(false);
   };
 
+  // Ola F: flip de formato (foto↔video). PATCH /api/contenido/{contenido_id} con {formato}.
+  // El backend ajusta las redes (3↔5) y puede devolver un `aviso` si había redes con contenido.
+  const flipFormato = useMutation({
+    mutationFn: (nuevoFormato: string) => {
+      if (!publicacion) throw new Error("Sin publicación");
+      return api.actualizarContenido(publicacion.contenido_id, { formato: nuevoFormato });
+    },
+    onSuccess: (data) => {
+      const nuevoFmt = data.contenido.formato || "foto";
+      setFormato(nuevoFmt);
+      if (data.aviso) toast(data.aviso);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Ola F: guardar video (PATCH plataforma con {video}).
+  const guardarVideo = useMutation({
+    mutationFn: ({ clave }: { clave: string; url: string }) => {
+      if (!publicacion) throw new Error("Sin publicación");
+      return api.actualizarPlataforma(publicacion.contenido_id, publicacion.id, { video: clave });
+    },
+    onSuccess: (_data, { clave, url }) => {
+      setVideoKey(clave);
+      setVideoUrl(url);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   // Cargamos los valores cada vez que se abre con una publicación nueva.
   React.useEffect(() => {
     if (!publicacion) return;
@@ -115,6 +153,10 @@ export function DialogoEditar({
     setImagenUrl(publicacion.imagen_url ?? "");
     setPlacaOculta(publicacion.placa_oculta ?? false);
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
+    // Ola F: formato y video.
+    setFormato(publicacion.formato || "foto");
+    setVideoKey(publicacion.video ?? "");
+    setVideoUrl("");
     // Carga del collage: si la pieza trae `fotos` (JSON), úsalo; si no, deriva el hueco único del
     // par legado `foto`/`foto_encuadre`.
     const fotosGuardadas = parsearFotos(publicacion.fotos);
@@ -257,10 +299,33 @@ export function DialogoEditar({
           )}
         </DialogHeader>
 
-        {/* Orden de edición: primero la IMAGEN, luego el CONTENIDO (copy) y al final los HASHTAGS. */}
+        {/* Orden de edición: primero la IMAGEN/VIDEO, luego el CONTENIDO (copy) y al final los HASHTAGS. */}
         <div className="space-y-4">
-          {publicacion &&
-            (publicacion.marca ? (
+          {/* Ola F: toggle Foto/Video. Solo disponible cuando la pieza tiene contenido_id (no vacío). */}
+          {publicacion && (
+            <div className="flex items-center gap-3">
+              <Label htmlFor="editar-formato-toggle">Foto</Label>
+              <Switch
+                id="editar-formato-toggle"
+                checked={formato === "video"}
+                onCheckedChange={(v) => flipFormato.mutate(v ? "video" : "foto")}
+                disabled={flipFormato.isPending}
+              />
+              <Label htmlFor="editar-formato-toggle">Video</Label>
+            </div>
+          )}
+
+          {publicacion && formato === "video" ? (
+            // Pieza de VIDEO: editor de clip (Ola F).
+            <EditorVideo
+              video={videoKey}
+              videoUrl={videoUrl}
+              onCambio={(clave, url) => guardarVideo.mutate({ clave, url })}
+              disabled={guardarVideo.isPending}
+              idPrefijo="editar"
+              red={publicacion.red}
+            />
+          ) : publicacion?.marca ? (
               // SISTEMA ÚNICO: la plantilla del estudio se renderiza EN VIVO en el lienzo (con tu
               // foto + reencuadre + titular in-place). El selector (galería por marca) y "solo foto"
               // son nativos en la cabecera del editor.
@@ -277,7 +342,7 @@ export function DialogoEditar({
                 onAlternarSinPlantilla={() => setPlacaOculta((v) => !v)}
                 onAbrirGaleria={() => setGaleriaPlantillas(true)}
               />
-            ) : (
+            ) : publicacion ? (
               // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.
               <EditorImagen
                 imagen={imagen}
@@ -293,7 +358,7 @@ export function DialogoEditar({
                 copyIn={copyIn}
                 imagenFuente={publicacion.imagen_fuente}
               />
-            ))}
+            ) : null}
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

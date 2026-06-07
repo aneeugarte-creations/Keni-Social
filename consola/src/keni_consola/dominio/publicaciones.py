@@ -122,6 +122,10 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # "" / desconocido -> "foto" (el formato del flujo automático). La UI muestra el badge.
         "formato": redes.normalizar_formato(pub.get("formato")),
         "imagen_fuente": imagen_fuente,
+        # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`) y su checklist,
+        # espejo de `imagen`/`falta_imagen`. "" si la pieza no es video o no tiene asset aún.
+        "video": pub.get("video") or "",
+        "falta_video": bool(pub.get("falta_video", False)),
         # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
         # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
         "foto": pub.get("foto") or "",

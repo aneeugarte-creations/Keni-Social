@@ -667,11 +667,13 @@ export interface Publicacion {
   tipo_contenido: string;
   formato: string;
   imagen_fuente: string;
+  video: string;
   foto: string;
   falta_copy: boolean;
   falta_imagen: boolean;
   falta_revision: boolean;
   falta_publicar: boolean;
+  falta_video: boolean;
   etapa_ia: "generando_copy" | "generando_arte" | "lista_para_revisar" | "aprobada" | "programada" | "publicada";
   fecha_creacion: string;
   fecha_actualizacion: string;

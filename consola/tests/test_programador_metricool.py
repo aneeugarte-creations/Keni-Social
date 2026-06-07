@@ -160,6 +160,35 @@ def test_borrador_x_sin_media(monkeypatch):
     assert borrador.media == []
 
 
+def test_borrador_video_construye_media_video(monkeypatch):
+    """Pieza formato=video con asset y URL publica -> MediaRef de tipo video."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    pub = {
+        "id": "v1", "red": "tiktok", "contenido": "clip de prueba",
+        "formato": "video", "video": "videos/abc.mp4",
+        "fecha_programada": "2026-05-30T18:00",
+    }
+    from keni_metricas.publicacion.metricool import BorradorMetricool
+    from keni_metricas.publicacion.modelos import TipoMedia
+
+    borrador = _borrador_de_publicacion(pub)
+    assert isinstance(borrador, BorradorMetricool)
+    assert len(borrador.media) == 1
+    assert borrador.media[0].tipo == TipoMedia.video
+    assert borrador.media[0].url == "https://social.kenitech.io/api/media/videos/abc.mp4"
+
+
+def test_borrador_video_sin_asset_omite(monkeypatch):
+    """Pieza formato=video SIN asset de video -> None (queda pendiente, no rompe)."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    pub = {
+        "id": "v2", "red": "youtube", "contenido": "clip",
+        "formato": "video", "video": "",
+        "fecha_programada": "2026-05-30T18:00",
+    }
+    assert _borrador_de_publicacion(pub) is None
+
+
 def test_borrador_facebook_preserva_fecha_programada(monkeypatch):
     """La fecha programada de la fila se mapea a publicar_en del borrador."""
     monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)

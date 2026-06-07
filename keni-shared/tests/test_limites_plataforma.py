@@ -31,3 +31,25 @@ def test_como_lista_respeta_orden():
     lista = limites_plataforma.como_lista()
     assert [r["id"] for r in lista] == ["x", "instagram", "facebook", "tiktok", "youtube"]
     assert lista[0] == {"id": "x", "limite": 280}
+
+
+def test_video_specs_cubren_las_cinco_redes_en_orden():
+    assert list(limites_plataforma.VIDEO_SPECS) == [
+        "x", "instagram", "facebook", "tiktok", "youtube"
+    ]
+
+
+def test_video_specs_de():
+    spec = limites_plataforma.video_specs_de("tiktok")
+    assert spec is not None
+    # Specs INFORMATIVAS: deben traer los tres campos basicos.
+    assert set(spec) == {"duracion_s", "max_mb", "aspecto"}
+    # red desconocida -> None (defensivo, igual que los limites de caracteres).
+    assert limites_plataforma.video_specs_de("threads") is None
+
+
+def test_video_specs_como_lista_respeta_orden():
+    lista = limites_plataforma.video_specs_como_lista()
+    assert [r["id"] for r in lista] == ["x", "instagram", "facebook", "tiktok", "youtube"]
+    assert lista[0]["id"] == "x"
+    assert "aspecto" in lista[0]

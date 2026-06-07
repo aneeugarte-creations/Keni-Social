@@ -10,10 +10,20 @@
  */
 import { cn } from "@/lib/utils";
 
-import { META_ETAPA, type EtapaIa } from "./etapa";
+import { etiquetaEtapa, META_ETAPA, type EtapaIa } from "./etapa";
 
-export function BadgeEtapa({ etapa, className }: { etapa: EtapaIa; className?: string }) {
+export function BadgeEtapa({
+  etapa,
+  formato,
+  className,
+}: {
+  etapa: EtapaIa;
+  /** Ola F: formato de la pieza ('foto'|'video'); ajusta la etiqueta de 'generando_arte'. */
+  formato?: string;
+  className?: string;
+}) {
   const meta = META_ETAPA[etapa];
+  const etiqueta = etiquetaEtapa(etapa, formato);
   return (
     <span
       className={cn(
@@ -38,7 +48,7 @@ export function BadgeEtapa({ etapa, className }: { etapa: EtapaIa; className?: s
         )}
         aria-hidden="true"
       />
-      {meta.etiqueta}
+      {etiqueta}
     </span>
   );
 }

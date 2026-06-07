@@ -172,6 +172,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // Por qué el "me gusta" está bloqueado (qué falta). Ya NO es un texto fijo en la tarjeta: se
   // muestra como TOAST al intentar darle like cuando no toca. Explica el gate (en revisión: tu
   // pieza / ya diste OK / espera turno) o, antes, qué le falta a la pieza.
+  const esVideo = (publicacion.formato ?? "").trim().toLowerCase() === "video";
   const motivoBloqueo = yaAprobada
     ? publicacion.revisor_nombre
       ? `Ya aprobada · último OK: ${publicacion.revisor_nombre}`
@@ -181,7 +182,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       : etapa === "generando_copy"
         ? "Falta el copy: la IA aún lo está redactando."
         : etapa === "generando_arte"
-          ? "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
+          ? esVideo
+            ? "Falta el video: ábrela y sube el clip."
+            : "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
           : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
 
   // "Me gusta": el like NUNCA quita tu like (eso es trabajo del dislike). Si tienes un dislike,
@@ -325,7 +328,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         className="flex items-center gap-2 px-4 py-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <BadgeEtapa etapa={etapa} />
+        <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant={

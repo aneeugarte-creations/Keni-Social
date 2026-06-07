@@ -1018,6 +1018,12 @@ export const api = {
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
     peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
+  /** Ola F: sube un archivo de video a `POST /api/media/video` y devuelve `{id, url}`. */
+  subirVideo: (archivo: File) => {
+    const form = new FormData();
+    form.set("archivo", archivo);
+    return peticion<RespuestaMedia>("/media/video", { metodo: "POST", form, timeoutMs: 300_000 });
+  },
   /** Descarga una imagen externa (p.ej. la original de un artículo RSS) al almacén y
    *  devuelve su `{id, url}` ya servible/publicable. */
   mediaDesdeUrl: (url: string) =>

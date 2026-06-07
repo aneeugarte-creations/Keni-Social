@@ -64,6 +64,21 @@ _MIME_A_EXT: dict[str, str] = {
 # Limite de tamano de una imagen subida o generada (bytes).
 LIMITE_IMAGEN = 15 * 1024 * 1024  # 15 MB
 
+# VIDEO (piezas de formato video): mimes aceptados -> extension canonica del archivo en el
+# almacen. Misma lista que `transcripcion._MIME_A_EXT` (la parte de video; reusamos el contrato
+# de formatos del equipo). El limite de tamano es alto (un clip de redes pesa decenas/cientos de
+# MB) y configurable por `KENI_VIDEO_MAX_MB` (def 300; ver `config.video_max_mb`).
+_MIME_A_EXT_VIDEO: dict[str, str] = {
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-matroska": "mkv",
+    "video/mpeg": "mpeg",
+    "video/3gpp": "3gp",
+}
+# Extensiones de video aceptadas (subida por nombre cuando no llega content-type fiable).
+_EXT_VIDEO: frozenset[str] = frozenset({*_MIME_A_EXT_VIDEO.values(), "m4v", "mpg"})
+
 # DOCUMENTOS (importacion de parrilla): tipos que un `claude -p` READ-ONLY puede leer del
 # documento subido (PDF, captura, Word, Excel, texto). NO afectan al camino de imagen (mimes
 # de imagen siguen yendo por `_MIME_A_EXT`). El limite es mayor (un PDF/escaneo pesa mas que
@@ -194,10 +209,26 @@ def leer_objeto(nombre: str) -> bytes | None:
     return almacen_media.leer_objeto(nombre)
 
 
+# Extension de VIDEO (sin punto) -> mime al servir (`/api/media/{n}` sirve tambien videos).
+_EXT_A_MIME_VIDEO_SERVIR: dict[str, str] = {
+    "mp4": "video/mp4",
+    "m4v": "video/mp4",
+    "mov": "video/quicktime",
+    "webm": "video/webm",
+    "mkv": "video/x-matroska",
+    "mpeg": "video/mpeg",
+    "3gp": "video/3gpp",
+}
+
+
 def mime_de(nombre: str) -> str:
-    """Mime a partir de la extension del nombre de archivo (octet-stream si no se conoce)."""
+    """Mime a partir de la extension del nombre de archivo (octet-stream si no se conoce).
+
+    Cubre imagenes (`_EXT_A_MIME`) y videos (`_EXT_A_MIME_VIDEO_SERVIR`): el mismo endpoint
+    `/api/media/{n}` sirve ambos, asi que el video se devuelve con su content-type correcto.
+    """
     ext = Path(nombre).suffix.lower().lstrip(".")
-    return _EXT_A_MIME.get(ext, "application/octet-stream")
+    return _EXT_A_MIME.get(ext) or _EXT_A_MIME_VIDEO_SERVIR.get(ext, "application/octet-stream")
 
 
 def _ext_desde_content_type(content_type: str | None) -> str | None:
@@ -360,6 +391,84 @@ async def guardar_documento_subido(
     except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
         raise MediaError("No se pudo guardar el documento subido.") from e
     return clave, ext
+
+
+def _ext_video_desde_content_type(content_type: str | None) -> str | None:
+    """Extension canonica de VIDEO a partir del content-type; None si no es video aceptado."""
+    if not content_type:
+        return None
+    base = content_type.split(";", 1)[0].strip().lower()
+    return _MIME_A_EXT_VIDEO.get(base)
+
+
+def _ext_video_desde_nombre(nombre_cliente: str | None) -> str | None:
+    """Extension de VIDEO a partir del nombre del cliente; None si no es aceptada."""
+    if not nombre_cliente:
+        return None
+    sufijo = Path(nombre_cliente).suffix.lower().lstrip(".")
+    if _RE_EXT.match(sufijo) and sufijo in _EXT_VIDEO:
+        return sufijo
+    return None
+
+
+async def guardar_video_subida(
+    archivo, *, content_type: str | None = None
+) -> str:  # noqa: ANN001
+    """Vuelca un `UploadFile` de VIDEO al almacen de media (disco o S3) de forma segura.
+
+    Camino PARALELO a `guardar_subida` (imagen) para las piezas de formato video:
+    - Acepta SOLO mimes de video (`video/mp4`, `video/quicktime`, `video/webm`,
+      `video/x-matroska`, `video/mpeg`, `video/3gpp`) por content-type o, en su defecto, por la
+      extension del nombre del cliente. El NOMBRE del objeto lo generamos; NUNCA el del cliente.
+    - DEDUP: la key es CONTENT-ADDRESSED (`videos/<sha256>.<ext>`), asi subir el mismo clip dos
+      veces guarda UN solo objeto.
+    - Lee en trozos MIDIENDO el tamano; si supera `config.video_max_mb()` MB (def 300), aborta
+      antes de escribir nada.
+
+    Devuelve la KEY del objeto. Lanza `MediaError` (en espanol) ante mime no permitido, archivo
+    vacio o demasiado grande.
+    """
+    from . import config
+
+    ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
+    ext = _ext_video_desde_content_type(ct) or _ext_video_desde_nombre(
+        getattr(archivo, "filename", None)
+    )
+    if ext is None:
+        raise MediaError("Solo se aceptan videos (MP4, MOV, WEBM, MKV, MPEG o 3GP).")
+
+    limite = config.video_max_mb() * 1024 * 1024
+    limite_mb = config.video_max_mb()
+    trozos: list[bytes] = []
+    total = 0
+    try:
+        while True:
+            trozo = await archivo.read(_TROZO)
+            if not trozo:
+                break
+            total += len(trozo)
+            if total > limite:
+                raise MediaError(
+                    f"El video es demasiado grande (máximo {limite_mb} MB); sube uno más pequeño."
+                )
+            trozos.append(trozo)
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- cualquier fallo de E/S: reporta en espanol
+        raise MediaError("No se pudo guardar el video subido.") from e
+    if total == 0:
+        raise MediaError("El video está vacío.")
+    datos = b"".join(trozos)
+    # Normaliza mpg->mpeg para una sola extension canonica en el almacen (mismo mime).
+    if ext in ("mpg",):
+        ext = "mpeg"
+    mime = next((m for m, e in _MIME_A_EXT_VIDEO.items() if e == ext), "video/mp4")
+    try:
+        return _guardar_contenido(datos, ext=ext, categoria="videos", mime=mime)
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
+        raise MediaError("No se pudo guardar el video subido.") from e
 
 
 def guardar_bytes(datos: bytes, *, ext: str = "png", categoria: str = "generadas") -> str:

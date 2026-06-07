@@ -87,6 +87,31 @@ def test_subir_vacia_400(cliente):
     assert r.status_code == 400
 
 
+def test_subir_video_ok(cliente):
+    """POST /api/media/video guarda un mp4 en `videos/` (content-addressed) -> {id, url}."""
+    r = cliente.post(
+        "/api/media/video", files={"archivo": ("clip.mp4", b"datos-video", "video/mp4")}
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["id"].startswith("videos/")
+    assert cuerpo["id"].endswith(".mp4")
+    assert cuerpo["url"] == f"/api/media/{cuerpo['id']}"
+    assert "clip.mp4" not in cuerpo["id"]  # nombre = hash, no el del cliente
+
+
+def test_subir_video_mime_no_video_400(cliente):
+    r = cliente.post(
+        "/api/media/video", files={"archivo": ("nota.txt", b"hola", "text/plain")}
+    )
+    assert r.status_code == 400
+
+
+def test_subir_video_sin_archivo_400(cliente):
+    r = cliente.post("/api/media/video", data={"otro": "x"})
+    assert r.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # GET /api/media/{nombre} (servir + anti-traversal)                           #
 # --------------------------------------------------------------------------- #

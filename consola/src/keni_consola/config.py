@@ -479,6 +479,11 @@ ENV_S3_BUCKET = "S3_BUCKET"
 ENV_S3_ACCESS_KEY = "S3_ACCESS_KEY"
 ENV_S3_SECRET_KEY = "S3_SECRET_KEY"
 
+# Limite de tamano (MB) de un VIDEO subido a una pieza de formato video. Def 300 MB
+# (`KENI_VIDEO_MAX_MB`); el almacen lo aplica en `media.guardar_video_subida`.
+ENV_VIDEO_MAX_MB = "KENI_VIDEO_MAX_MB"
+VIDEO_MAX_MB_DEF = 300
+
 # Rutas de estado (override especifico de cada recurso; fallback en `rutas.py`).
 ENV_DATA_DIR = "KENI_DATA_DIR"
 ENV_RAIZ = "KENI_CONSOLA_RAIZ"
@@ -1991,6 +1996,14 @@ def db_pool_max() -> int:
     coherente aunque alguien fije un MAX por debajo del MIN.
     """
     return max(db_pool_min(), _entero(ENV_DB_POOL_MAX, DB_POOL_MAX_DEF, minimo=1))
+
+
+def video_max_mb() -> int:
+    """Tamano maximo (MB) de un video subido a una pieza (`KENI_VIDEO_MAX_MB`, def 300).
+
+    Lo aplica `media.guardar_video_subida`. Minimo 1 MB (defensivo ante un valor absurdo).
+    """
+    return _entero(ENV_VIDEO_MAX_MB, VIDEO_MAX_MB_DEF, minimo=1)
 
 
 def s3_endpoint() -> str | None:

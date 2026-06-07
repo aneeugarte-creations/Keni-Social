@@ -323,6 +323,12 @@ async def crear(request: Request) -> Response:
         responsable = auto_responsable.responsable_automatico(marca)
     # --- fin bloque auto-operativa -------------------------------------------------------
 
+    # FORMATO de la pieza (foto|video): si se indica, DECIDE las redes destino
+    # (`redes.redes_de_formato`: foto=3, video=5) en vez de la lista cruda `redes`. Vacío/
+    # desconocido -> "foto" (el flujo automático). Lo normaliza `db.crear_contenido`.
+    formato_in = datos.get("formato")
+    formato = redes.normalizar_formato(formato_in) if isinstance(formato_in, str) else ""
+
     redes_iniciales = datos.get("redes", [])
     if not isinstance(redes_iniciales, list):
         redes_iniciales = []
@@ -356,10 +362,21 @@ async def crear(request: Request) -> Response:
         # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen. `db` coacciona
         # un valor desconocido o vacío al defecto ('ia').
         tipo_contenido=_texto("tipo_contenido"),
+        # FORMATO de la pieza (foto|video): "" -> 'foto' (defecto). Decide las redes destino.
+        formato=formato or "foto",
     )
-    # Quita duplicados conservando el orden de llegada.
-    for red in dict.fromkeys(redes_iniciales):
-        repos.crear_contenido_plataforma(contenido_id=item["id"], red=red)
+    # Redes destino: si se indicó `formato`, las DECIDE `redes.redes_de_formato` (foto=3,
+    # video=5) con el checklist de video activado en piezas video. Si no, se usan las `redes`
+    # crudas que pasó el cliente (compat). Quita duplicados conservando el orden de llegada.
+    if formato:
+        es_video = formato == redes.FORMATO_VIDEO
+        for red in redes.redes_de_formato(formato):
+            repos.crear_contenido_plataforma(
+                contenido_id=item["id"], red=red, falta_video=es_video
+            )
+    else:
+        for red in dict.fromkeys(redes_iniciales):
+            repos.crear_contenido_plataforma(contenido_id=item["id"], red=red)
     for etiqueta_id in dict.fromkeys(etiquetas_iniciales):
         repos.asignar_etiqueta(item["id"], etiqueta_id)
     plataformas = repos.listar_contenido_plataforma(item["id"])
@@ -394,6 +411,13 @@ async def actualizar(request: Request) -> Response:
         if datos["tipo_contenido"] not in TIPOS_CONTENIDO:
             return JSONResponse({"error": "Tipo de contenido inválido."}, status_code=400)
         campos["tipo_contenido"] = datos["tipo_contenido"]
+    # FORMATO de la pieza (foto|video): FLIP. Cambiar de formato reajusta las redes destino
+    # (`redes.redes_de_formato`: foto=3, video=5) sin perder trabajo (ver
+    # `repos.ajustar_plataformas_por_formato`). Se procesa DESPUÉS de persistir el padre.
+    formato_nuevo: str | None = None
+    if "formato" in datos:
+        formato_nuevo = redes.normalizar_formato(datos.get("formato"))
+        campos["formato"] = formato_nuevo
     if "marca" in datos:
         marca, err = _validar_marca(datos.get("marca"))
         if err:
@@ -423,12 +447,31 @@ async def actualizar(request: Request) -> Response:
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
 
+    formato_anterior = redes.normalizar_formato(actual.get("formato"))
     item = repos.actualizar_contenido(contenido_id, campos)
     if item is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+
+    # FLIP de formato: reajusta las redes destino + el checklist (falta_video/falta_imagen) sin
+    # perder trabajo. Solo si el formato CAMBIÓ realmente. El resumen viaja al cliente para avisar.
+    ajuste: dict[str, list[str]] | None = None
+    if formato_nuevo is not None and formato_nuevo != formato_anterior:
+        ajuste = repos.ajustar_plataformas_por_formato(contenido_id, formato_nuevo)
+
     plataformas = repos.listar_contenido_plataforma(contenido_id)
     etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
-    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
+    respuesta: dict[str, object] = {
+        "contenido": _contenido_a_dict(item, plataformas, etiquetas)
+    }
+    if ajuste is not None:
+        respuesta["ajuste_formato"] = ajuste
+        # Aviso si se conservaron redes con trabajo en un flip video->foto (no se borraron).
+        if ajuste.get("conservadas"):
+            nombres = ", ".join(_red_nombre(r) for r in ajuste["conservadas"])
+            respuesta["aviso"] = (
+                f"Se conservaron redes con contenido ({nombres}); revisa si quieres quitarlas."
+            )
+    return JSONResponse(respuesta)
 
 
 async def borrar(request: Request) -> Response:
@@ -476,6 +519,7 @@ async def actualizar_plataforma(request: Request) -> Response:
         "falta_imagen",
         "falta_revision",
         "falta_publicar",
+        "falta_video",
         "evergreen",
         "copy_in_exento",
     ):
@@ -486,6 +530,7 @@ async def actualizar_plataforma(request: Request) -> Response:
         "imagen",
         "imagen_fuente",
         "foto",
+        "video",
         "enlace",
         "fecha_programada",
         "hora_post",
@@ -494,6 +539,11 @@ async def actualizar_plataforma(request: Request) -> Response:
         if clave in datos:
             v = datos.get(clave)
             campos[clave] = v.strip()[:_MAX_TEXTO] if isinstance(v, str) else ""
+    # Adjuntar VIDEO limpia el checklist `falta_video` (espejo de cómo `imagen` limpia
+    # `falta_imagen`): si el cliente fija un asset de video y no envía el flag explícito,
+    # marcamos el paso de video como cubierto.
+    if campos.get("video") and "falta_video" not in datos:
+        campos["falta_video"] = False
 
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)

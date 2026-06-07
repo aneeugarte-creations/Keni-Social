@@ -1,0 +1,94 @@
+"""Tests de VIDEO en el tablero: columnas video/falta_video, flip de formato y checklist.
+
+Usa la fixture `entorno` (Postgres de pruebas o SKIP si no hay). Cubre el contrato F-video:
+  - `crear_contenido_plataforma` persiste video/falta_video.
+  - `ajustar_plataformas_por_formato`: foto->video añade youtube+tiktok; video->foto elimina
+    las extra VACÍAS y CONSERVA (reportando) las que tienen trabajo.
+  - el checklist por formato (falta_video en video, falta_imagen en foto).
+"""
+
+from __future__ import annotations
+
+from keni_consola import db, repos
+
+
+def _crear_pieza_foto():
+    """Crea una pieza formato=foto con sus 3 redes (instagram, x, facebook)."""
+    item = db.crear_contenido(titulo="Pieza", formato="foto")
+    for red in ("instagram", "x", "facebook"):
+        db.crear_contenido_plataforma(contenido_id=item["id"], red=red)
+    return item
+
+
+def test_columnas_video_se_persisten(entorno):
+    item = db.crear_contenido(titulo="Con video", formato="video")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="tiktok", video="videos/abc.mp4", falta_video=False
+    )
+    assert plat["video"] == "videos/abc.mp4"
+    assert plat["falta_video"] is False
+    assert plat["video_url"] == "/api/media/videos/abc.mp4"
+    leido = db.obtener_contenido_plataforma(plat["id"])
+    assert leido["video"] == "videos/abc.mp4"
+
+
+def test_falta_video_default_es_falso(entorno):
+    """Sin pasar falta_video (None), una fila nace con falta_video=False (N/A en foto)."""
+    item = db.crear_contenido(titulo="X", formato="foto")
+    plat = db.crear_contenido_plataforma(contenido_id=item["id"], red="instagram")
+    assert plat["falta_video"] is False
+    assert plat["video"] == ""
+    assert plat["video_url"] == ""
+
+
+def test_flip_foto_a_video_anade_youtube_y_tiktok(entorno):
+    item = _crear_pieza_foto()
+    res = repos.ajustar_plataformas_por_formato(item["id"], "video")
+    assert set(res["creadas"]) == {"youtube", "tiktok"}
+    assert res["eliminadas"] == []
+    assert res["conservadas"] == []
+    redes = {p["red"] for p in db.listar_contenido_plataforma(item["id"])}
+    assert redes == {"instagram", "x", "facebook", "youtube", "tiktok"}
+    # En video, todas las filas sin asset marcan falta_video=1 y falta_imagen=0.
+    for p in db.listar_contenido_plataforma(item["id"]):
+        assert p["falta_video"] is True
+        assert p["falta_imagen"] is False
+
+
+def test_flip_video_a_foto_elimina_extras_vacias(entorno):
+    item = db.crear_contenido(titulo="V", formato="video")
+    for red in ("instagram", "x", "facebook", "youtube", "tiktok"):
+        db.crear_contenido_plataforma(contenido_id=item["id"], red=red, falta_video=True)
+    res = repos.ajustar_plataformas_por_formato(item["id"], "foto")
+    assert set(res["eliminadas"]) == {"youtube", "tiktok"}
+    assert res["conservadas"] == []
+    redes = {p["red"] for p in db.listar_contenido_plataforma(item["id"])}
+    assert redes == {"instagram", "x", "facebook"}
+    # En foto, falta_video pasa a False (N/A) en las filas restantes.
+    for p in db.listar_contenido_plataforma(item["id"]):
+        assert p["falta_video"] is False
+
+
+def test_flip_video_a_foto_conserva_extras_con_trabajo(entorno):
+    """Una red extra con copy o video NO se borra; se conserva y se reporta."""
+    item = db.crear_contenido(titulo="V", formato="video")
+    for red in ("instagram", "x", "facebook"):
+        db.crear_contenido_plataforma(contenido_id=item["id"], red=red)
+    db.crear_contenido_plataforma(contenido_id=item["id"], red="youtube", copy="Guion listo")
+    db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="tiktok", video="videos/x.mp4"
+    )
+    res = repos.ajustar_plataformas_por_formato(item["id"], "foto")
+    assert res["eliminadas"] == []
+    assert set(res["conservadas"]) == {"youtube", "tiktok"}
+    redes = {p["red"] for p in db.listar_contenido_plataforma(item["id"])}
+    assert redes == {"instagram", "x", "facebook", "youtube", "tiktok"}
+
+
+def test_flip_es_idempotente(entorno):
+    """Repetir el ajuste al mismo formato no crea ni borra nada."""
+    item = _crear_pieza_foto()
+    repos.ajustar_plataformas_por_formato(item["id"], "video")
+    res = repos.ajustar_plataformas_por_formato(item["id"], "video")
+    assert res["creadas"] == []
+    assert res["eliminadas"] == []

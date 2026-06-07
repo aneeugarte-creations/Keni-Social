@@ -749,11 +749,18 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         falta_imagen          INTEGER NOT NULL DEFAULT 1,
         falta_revision        INTEGER NOT NULL DEFAULT 1,
         falta_publicar        INTEGER NOT NULL DEFAULT 1,
+        -- `falta_video`: checklist del asset de VIDEO (espejo de `falta_imagen`). Solo cuenta
+        -- cuando la pieza padre es `formato='video'`; en piezas `foto` se mantiene en 0 (N/A).
+        falta_video           INTEGER NOT NULL DEFAULT 0,
         copy                  TEXT NOT NULL DEFAULT '',
         copy_in               TEXT NOT NULL DEFAULT '',
         imagen                TEXT NOT NULL DEFAULT '',
         imagen_fuente         TEXT NOT NULL DEFAULT '',
         foto                  TEXT NOT NULL DEFAULT '',
+        -- `video`: clave del asset de video en el almacen de media (`videos/<sha256>.<ext>`),
+        -- espejo de `imagen`. "" = sin video adjunto. Lo usa el programador para publicar
+        -- `TipoMedia.video` cuando la pieza es `formato='video'`.
+        video                 TEXT NOT NULL DEFAULT '',
         veredicto             TEXT NOT NULL DEFAULT '',
         revisor_id            TEXT NOT NULL DEFAULT '',
         revisor_nombre        TEXT NOT NULL DEFAULT '',
@@ -1852,6 +1859,19 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS fotos TEXT NOT NULL DEFAULT ''"
+        )
+    # `video` / `falta_video` (Ola VIDEO): asset de video y su checklist, espejo de
+    # `imagen`/`falta_imagen`. Una pieza `formato='video'` necesita este asset; en piezas `foto`
+    # el video es N/A (`falta_video` queda en 0). ADD COLUMN IF NOT EXISTS es no-op si ya estan.
+    if "video" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS video TEXT NOT NULL DEFAULT ''"
+        )
+    if "falta_video" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS falta_video INTEGER NOT NULL DEFAULT 0"
         )
     # `marca`: DENORMALIZADA del padre `contenido`. Habilita el indice unico parcial de parrilla
     # POR MARCA (`idx_parrilla_slot_uniq`, en `_INDICES_UNICOS_IDEMPOTENCIA`): dos marcas distintas
@@ -4694,7 +4714,7 @@ def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int
     `creado`); `actualizado` se refresca siempre. Items con `clave` vacia se SALTAN (un tema
     sin clave fiable no se persiste). Devuelve el numero de filas tocadas.
     """
-    ahora = datetime.now(timezone.utc).isoformat()
+    ahora = datetime.now(UTC).isoformat()
     tocadas = 0
     con = _conectar()
     try:
@@ -4815,7 +4835,7 @@ def listar_radar_items(
     items = [_fila_a_radar_item(f) for f in filas]
     if frescas_seg is None:
         return items
-    limite = datetime.now(timezone.utc).timestamp() - float(frescas_seg)
+    limite = datetime.now(UTC).timestamp() - float(frescas_seg)
     frescas: list[dict[str, Any]] = []
     for item in items:
         ts = _epoch_iso(item["snapshot_ts"])
@@ -4837,7 +4857,7 @@ def _epoch_iso(crudo: str) -> float | None:
     except (TypeError, ValueError):
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt.timestamp()
 
 
@@ -4974,11 +4994,13 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "falta_imagen",
     "falta_revision",
     "falta_publicar",
+    "falta_video",
     "copy",
     "copy_in",
     "imagen",
     "imagen_fuente",
     "foto",
+    "video",
     "veredicto",
     "revisor_id",
     "revisor_nombre",
@@ -5008,6 +5030,7 @@ _BOOLS_CONTENIDO_PLATAFORMA = (
     "falta_imagen",
     "falta_revision",
     "falta_publicar",
+    "falta_video",
     "evergreen",
     "es_publicacion",
     "copy_in_exento",
@@ -5055,6 +5078,12 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
         plat["imagen_url"] = f"/api/media/{plat['foto']}"
     else:
         plat["imagen_url"] = fuente
+    # `video` es el NOMBRE/clave del asset de video en el almacen; `video_url` su ruta servible
+    # (`/api/media/{video}`, mismo endpoint que las imagenes). "" si no hay video adjunto. Espejo
+    # del par `imagen`/`imagen_url`: la UI usa SIEMPRE `video_url` en un <video>.
+    video = plat.get("video") or ""
+    plat["video"] = video
+    plat["video_url"] = f"/api/media/{video}" if video else ""
     return plat
 
 
@@ -5068,11 +5097,13 @@ def crear_contenido_plataforma(
     falta_imagen: bool | None = None,
     falta_revision: bool = True,
     falta_publicar: bool = True,
+    falta_video: bool | None = None,
     copy: str = "",
     copy_in: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
     foto: str = "",
+    video: str = "",
     veredicto: str = "",
     revisor_id: str = "",
     revisor_nombre: str = "",
@@ -5110,6 +5141,11 @@ def crear_contenido_plataforma(
     ahora = datetime.now().isoformat(timespec="seconds")
     falta_copy = (not bool(copy)) if falta_copy is None else falta_copy
     falta_imagen = (not bool(imagen)) if falta_imagen is None else falta_imagen
+    # `falta_video` (espejo de `falta_imagen`, pero con default INVERSO): cuando se pasa explicito
+    # se respeta; cuando es None se asume 0 (N/A). El video solo es obligatorio en piezas
+    # `formato='video'`; la creacion por defecto es `foto`, asi que `falta_video` nace en 0 y lo
+    # activa quien sabe el formato (crear con `formato=video` o el flip `ajustar_plataformas_por_formato`).
+    falta_video = False if falta_video is None else bool(falta_video)
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "contenido_id": contenido_id,
@@ -5122,11 +5158,13 @@ def crear_contenido_plataforma(
         "falta_imagen": 1 if falta_imagen else 0,
         "falta_revision": 1 if falta_revision else 0,
         "falta_publicar": 1 if falta_publicar else 0,
+        "falta_video": 1 if falta_video else 0,
         "copy": copy or "",
         "copy_in": copy_in or "",
         "imagen": imagen or "",
         "imagen_fuente": imagen_fuente or "",
         "foto": foto or "",
+        "video": video or "",
         "veredicto": veredicto or "",
         "revisor_id": revisor_id or "",
         "revisor_nombre": revisor_nombre or "",
@@ -6771,7 +6809,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
     candidatos = [it for it in items if (it.get("clave") or "").strip()]
     if not candidatos:
         return 0
-    ahora = datetime.now(timezone.utc).isoformat()
+    ahora = datetime.now(UTC).isoformat()
     marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ITEM)
     insertadas = 0
     con = _conectar()
@@ -6991,7 +7029,7 @@ def resumen_cobertura() -> dict[str, Any]:
     las últimas 24h por categoría, total de items, y el último sondeo registrado. Todo en una
     conexión, sin tocar la red.
     """
-    hace_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    hace_24h = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
     con = _conectar()
     try:
         feeds_activos = int(
@@ -9510,6 +9548,7 @@ _SELECT_PUBLICACION = (
     "SELECT cp.id AS pid, cp.red AS red, cp.estado AS pestado, cp.copy AS copy, "
     "cp.copy_in AS copy_in, "
     "cp.imagen AS imagen, cp.imagen_fuente AS imagen_fuente, cp.foto AS foto, "
+    "cp.video AS video, cp.falta_video AS falta_video, "
     "cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
     "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
@@ -9576,6 +9615,10 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "fecha_fuente": f["fecha_fuente"] or "",
         "origen": f["origen"] or "",
         "imagen": f["imagen"] or "",
+        # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`) y su checklist,
+        # espejo de `imagen`/`falta_imagen`. Lo usa el programador para publicar `TipoMedia.video`.
+        "video": f["video"] or "",
+        "falta_video": bool(f["falta_video"]),
         "evergreen": bool(f["evergreen"]),
         # Auto-avance: exencion de copy-in + hash del copy con QA auto lanzada.
         "copy_in_exento": bool(f["copy_in_exento"]),

@@ -40,6 +40,8 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
     falta_imagen: false,
     falta_revision: false,
     falta_publicar: false,
+    falta_video: false,
+    video: "",
     fecha_creacion: "",
     fecha_actualizacion: "",
     fecha_programada: "",

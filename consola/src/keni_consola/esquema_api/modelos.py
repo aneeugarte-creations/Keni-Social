@@ -847,15 +847,20 @@ class Publicacion(TypedDict):
     # flujo automático crea piezas "foto". La UI lo muestra como badge ("Foto"/"Video").
     formato: str
     imagen_fuente: str
+    # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`), espejo de `imagen`.
+    # "" si la pieza no es video o aún no tiene asset. Lo publica el programador como TipoMedia.video.
+    video: str
     # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
     # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
     foto: str
-    # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar. El
-    # editor unificado los expone como checks marcables (PATCH a la fila por plataforma).
+    # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar/Video. El
+    # editor unificado los expone como checks marcables (PATCH a la fila por plataforma). `falta_video`
+    # solo cuenta en piezas formato=video (espejo de `falta_imagen`); en piezas foto es False (N/A).
     falta_copy: bool
     falta_imagen: bool
     falta_revision: bool
     falta_publicar: bool
+    falta_video: bool
     # Etapa REAL de la tubería IA (Flujo C), derivada de `estado`+checklist por
     # `pipeline_estado.etapa_de_pieza`. La prefiere el Feed (Flujo D) sobre su derivación.
     etapa_ia: EtapaIa

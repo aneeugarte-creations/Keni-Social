@@ -39,12 +39,25 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   generando_copy: { etiqueta: "Generando copy", enCurso: true },
   // "Generando arte" = en realidad la pieza LLEVA imagen pero le falta la FOTO real (la IA solo
   // hace la plantilla; la foto la sube una persona en "Editar"). El label lo dice claro.
+  // Ola F: para piezas video este estado significa "Falta video"; la etiqueta dinámica
+  // la calcula `etiquetaEtapa` a partir del formato; aquí "Falta imagen" es el fallback foto.
   generando_arte: { etiqueta: "Falta imagen", enCurso: true },
   lista_para_revisar: { etiqueta: "Lista para revisar", enCurso: false },
   aprobada: { etiqueta: "Aprobada", enCurso: false },
   programada: { etiqueta: "Programada", enCurso: false },
   publicada: { etiqueta: "Publicada", enCurso: false },
 };
+
+/**
+ * Etiqueta dinámica de la etapa, teniendo en cuenta el formato de la pieza (Ola F).
+ * Para piezas video, "generando_arte" significa "Falta video" en vez de "Falta imagen".
+ */
+export function etiquetaEtapa(etapa: EtapaIa, formato?: string): string {
+  if (etapa === "generando_arte" && (formato ?? "").trim().toLowerCase() === "video") {
+    return "Falta video";
+  }
+  return META_ETAPA[etapa].etiqueta;
+}
 
 /**
  * Deriva la etapa IA de una pieza a partir de su estado + checklist.
@@ -78,10 +91,17 @@ export function etapaDePublicacion(p: Publicacion): EtapaIa {
   if (p.estado === "en_revision") return "lista_para_revisar";
   // ESPEJO del backend. Solo "generando_copy" si DE VERDAD falta el copy.
   if (!p.contenido?.trim()) return "generando_copy";
-  // TODO post necesita una FOTO REAL para estar listo (no se manda a revisión sin foto): la foto
-  // cruda (`foto`), la imagen de fuente (`imagen_fuente`) o —en piezas SIN marca— la imagen subida
-  // bespoke (`imagen`). La placa (`imagen`) de una pieza de MARCA NO cuenta como foto.
-  const hayImagenReal = !!p.foto || !!p.imagen_fuente || (!p.marca && !!p.imagen);
-  if (!hayImagenReal) return "generando_arte";
+  // Ola F: las piezas VIDEO necesitan el asset de video (no una foto).
+  // Las piezas FOTO necesitan una foto real (foto cruda, imagen de fuente o imagen subida bespoke).
+  const esVideo = (p.formato ?? "").trim().toLowerCase() === "video";
+  if (esVideo) {
+    // falta_video es la checklist de video: si falta, la pieza no está lista.
+    const hayVideo = !p.falta_video || !!(p as { video?: string }).video;
+    if (!hayVideo) return "generando_arte";
+  } else {
+    // Foto: la foto cruda (`foto`), imagen de fuente (`imagen_fuente`) o imagen bespoke (`imagen` sin marca).
+    const hayImagenReal = !!p.foto || !!p.imagen_fuente || (!p.marca && !!p.imagen);
+    if (!hayImagenReal) return "generando_arte";
+  }
   return "lista_para_revisar";
 }

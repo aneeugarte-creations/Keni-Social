@@ -41,6 +41,8 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     falta_imagen: true,
     falta_revision: true,
     falta_publicar: true,
+    falta_video: false,
+    video: "",
     fecha_creacion: "",
     fecha_actualizacion: "",
     fecha_programada: "",
@@ -116,6 +118,18 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
     fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Falta la imagen/i));
+  });
+
+  it("pieza VIDEO con falta_video muestra badge 'Falta video' (no 'Falta imagen')", () => {
+    renderPost(pub({ formato: "video", falta_video: true, etapa_ia: "generando_arte" }));
+    expect(screen.getByText("Falta video")).toBeInTheDocument();
+    expect(screen.queryByText("Falta imagen")).not.toBeInTheDocument();
+  });
+
+  it("«Me gusta» en pieza VIDEO con falta_video avisa 'Falta el video'", () => {
+    renderPost(pub({ formato: "video", falta_video: true, etapa_ia: "generando_arte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Falta el video/i));
   });
 
   it("pieza lista pero aún en borrador: el badge dice 'Lista para revisar' y like avisa que entra sola", () => {

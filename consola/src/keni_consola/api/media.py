@@ -31,7 +31,6 @@ from .._http_json import leer_json
 from ..dominio import extraccion_url
 from ..seguridad import autor_de_peticion
 
-
 # Carpetas en las que el CLIENTE puede pedir guardar una subida (allowlist publica). Las demas
 # categorias (logos/biblioteca/render/generadas/documentos) las asigna el server por su flujo;
 # el cliente solo distingue una foto de pieza (`fotos`) de un asset del editor de plantillas.
@@ -55,6 +54,28 @@ async def subir(request: Request) -> Response:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo guardar la imagen."}, status_code=500)
+    return JSONResponse({"id": nombre, "url": f"/api/media/{nombre}"})
+
+
+async def subir_video(request: Request) -> Response:
+    """Guarda un VIDEO subido (multipart `archivo`) -> `{id, url}` (espejo de `POST /api/media`).
+
+    Para piezas de formato video. El asset va a la carpeta `videos/` (content-addressed) y se
+    sirve por el mismo `GET /api/media/{n}`. Mismos errores en espanol que la subida de imagen.
+    """
+    try:
+        form = await request.form()
+    except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro, sin traza
+        return JSONResponse({"error": "No se pudo leer el video subido."}, status_code=400)
+    archivo = form.get("archivo")
+    if not isinstance(archivo, UploadFile):
+        return JSONResponse({"error": "No se recibió ningún video."}, status_code=400)
+    try:
+        nombre = await media.guardar_video_subida(archivo)
+    except media.MediaError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse({"error": "No se pudo guardar el video."}, status_code=500)
     return JSONResponse({"id": nombre, "url": f"/api/media/{nombre}"})
 
 
@@ -141,6 +162,7 @@ async def desde_url(request: Request) -> Response:
 
 RUTAS = [
     Route("/api/media", subir, methods=["POST"]),
+    Route("/api/media/video", subir_video, methods=["POST"]),
     Route("/api/media/desde-url", desde_url, methods=["POST"]),
     Route("/api/media/generar", generar, methods=["POST"]),
     Route("/api/media/{nombre:path}", servir, methods=["GET"]),

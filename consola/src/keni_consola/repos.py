@@ -1392,11 +1392,13 @@ def crear_contenido_plataforma(
     falta_imagen: bool | None = None,
     falta_revision: bool = True,
     falta_publicar: bool = True,
+    falta_video: bool | None = None,
     copy: str = "",
     copy_in: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
     foto: str = "",
+    video: str = "",
     veredicto: str = "",
     revisor_id: str = "",
     revisor_nombre: str = "",
@@ -1429,11 +1431,13 @@ def crear_contenido_plataforma(
         falta_imagen=falta_imagen,
         falta_revision=falta_revision,
         falta_publicar=falta_publicar,
+        falta_video=falta_video,
         copy=copy,
         copy_in=copy_in,
         imagen=imagen,
         imagen_fuente=imagen_fuente,
         foto=foto,
+        video=video,
         veredicto=veredicto,
         revisor_id=revisor_id,
         revisor_nombre=revisor_nombre,
@@ -1476,6 +1480,85 @@ def actualizar_contenido_plataforma(
 
 def borrar_contenido_plataforma(plataforma_id: str) -> bool:
     return db.borrar_contenido_plataforma(plataforma_id)
+
+
+def ajustar_plataformas_por_formato(
+    contenido_id: str, formato: str
+) -> dict[str, list[str]]:
+    """Reconcilia las filas por plataforma de una pieza con su `formato` (FLIP foto<->video).
+
+    El FORMATO de una pieza decide a qué redes va (`redes.redes_de_formato`: foto=3, video=5).
+    Cuando el formato cambia hay que AÑADIR las filas que falten y, en `video->foto`, RETIRAR las
+    redes extra (youtube/tiktok) SIN PERDER trabajo. Reglas (contrato F-video):
+
+      - `foto->video`: crea las filas que falten de las 5 redes (youtube/tiktok) con
+        `falta_copy=1`. En TODAS las filas, si no hay `video`, marca `falta_video=1` (el asset es
+        obligatorio); `falta_imagen=0` (la imagen pasa a opcional: portada/thumbnail).
+      - `video->foto`: deja las 3 redes de foto. Las extra (youtube/tiktok) se ELIMINAN solo si
+        están VACÍAS (sin copy ni video); si tienen contenido, se CONSERVAN (no perder trabajo) y
+        se reportan en `conservadas`. En las filas que quedan, `falta_video=0` (N/A) y, si no hay
+        imagen real, `falta_imagen=1`.
+
+    Idempotente y PURO de side-effects salvo las escrituras descritas. Devuelve un resumen
+    `{creadas, eliminadas, conservadas}` (listas de ids de red) para que la API avise al usuario.
+    """
+    from . import redes
+
+    formato = redes.normalizar_formato(formato)
+    es_video = formato == redes.FORMATO_VIDEO
+    objetivo = set(redes.redes_de_formato(formato))
+    existentes = {
+        p.get("red", ""): p for p in db.listar_contenido_plataforma(contenido_id)
+    }
+
+    creadas: list[str] = []
+    eliminadas: list[str] = []
+    conservadas: list[str] = []
+
+    # 1) AÑADIR las redes del objetivo que aún no existan (orden de `redes.ids`).
+    for red in redes.ids():
+        if red not in objetivo or red in existentes:
+            continue
+        db.crear_contenido_plataforma(
+            contenido_id=contenido_id,
+            red=red,
+            falta_copy=True,
+            falta_video=es_video,
+        )
+        creadas.append(red)
+
+    # 2) En `video->foto`, RETIRAR las redes que sobran (no están en el objetivo) solo si están
+    #    vacías; si tienen copy o video, conservarlas y reportarlas (no perder trabajo).
+    for red, plat in existentes.items():
+        if red in objetivo or not red:
+            continue
+        tiene_trabajo = bool(
+            str(plat.get("copy") or "").strip()
+            or str(plat.get("video") or "").strip()
+        )
+        if tiene_trabajo:
+            conservadas.append(red)
+        else:
+            db.borrar_contenido_plataforma(plat["id"])
+            eliminadas.append(red)
+
+    # 3) Reaplicar el checklist por formato a TODAS las filas que QUEDAN (objetivo + conservadas).
+    #    foto: falta_video=0 (N/A); video: falta_video=1 si no hay asset de video. La imagen es
+    #    obligatoria en foto (falta_imagen=1 si no hay imagen real) y opcional en video (0).
+    for plat in db.listar_contenido_plataforma(contenido_id):
+        tiene_video = bool(str(plat.get("video") or "").strip())
+        tiene_imagen = bool(
+            str(plat.get("imagen") or "").strip()
+            or str(plat.get("foto") or "").strip()
+            or str(plat.get("imagen_fuente") or "").strip()
+        )
+        if es_video:
+            campos = {"falta_video": not tiene_video, "falta_imagen": False}
+        else:
+            campos = {"falta_video": False, "falta_imagen": not tiene_imagen}
+        db.actualizar_contenido_plataforma(plat["id"], campos)
+
+    return {"creadas": creadas, "eliminadas": eliminadas, "conservadas": conservadas}
 
 
 # --------------------------------------------------------------------------- #

@@ -2219,6 +2219,9 @@
         "imagen_fuente": {
           "type": "string"
         },
+        "video": {
+          "type": "string"
+        },
         "foto": {
           "type": "string"
         },
@@ -2232,6 +2235,9 @@
           "type": "boolean"
         },
         "falta_publicar": {
+          "type": "boolean"
+        },
+        "falta_video": {
           "type": "boolean"
         },
         "etapa_ia": {
@@ -2308,11 +2314,13 @@
         "tipo_contenido",
         "formato",
         "imagen_fuente",
+        "video",
         "foto",
         "falta_copy",
         "falta_imagen",
         "falta_revision",
         "falta_publicar",
+        "falta_video",
         "etapa_ia",
         "fecha_creacion",
         "fecha_actualizacion",

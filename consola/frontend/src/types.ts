@@ -1195,6 +1195,8 @@ export interface ContenidoPlataforma {
   falta_imagen: boolean;
   falta_revision: boolean;
   falta_publicar: boolean;
+  /** Ola F: falta el asset de video (solo relevante cuando la pieza es formato='video'). */
+  falta_video: boolean;
   copy: string;
   /** Nombre de archivo de la imagen en el dir de media ("" si no hay). NO es navegable. */
   imagen: string;
@@ -1205,6 +1207,10 @@ export interface ContenidoPlataforma {
    * adjunta; si no, cae a `imagen_fuente` (URL externa ya navegable). "" si no hay ninguna.
    */
   imagen_url: string;
+  /** Clave del asset de video en el almacén ("" si no hay). Ola F. */
+  video: string;
+  /** URL servible del video (análogo a imagen_url). "" si no hay. Ola F. */
+  video_url: string;
   veredicto: string;
   fecha_programada: string;
   hora_post: string;
@@ -1415,6 +1421,8 @@ export interface Contenido {
   notas: string;
   /** De dónde sale la imagen (IA / galería / fuente original). */
   tipo_contenido: TipoContenido;
+  /** Ola F: formato de la pieza — "foto" (3 redes) o "video" (5 redes). */
+  formato: string;
   /** Derivado: deadline pasado y aún sin cerrar. */
   vencido: boolean;
   plataformas: ContenidoPlataforma[];
@@ -1494,6 +1502,8 @@ export interface CuerpoActualizarContenido {
   fecha_entrega?: string;
   responsable_id?: string;
   notas?: string;
+  /** Ola F: flip de formato (foto↔video). El backend ajusta las redes (3↔5) y devuelve `aviso`. */
+  formato?: string;
 }
 
 /** Cambios parciales sobre una fila por plataforma; cada campo es opcional. */
@@ -1512,10 +1522,14 @@ export interface CuerpoActualizarPlataforma {
   veredicto?: string;
   evergreen?: boolean;
   copy_in_exento?: boolean;
+  /** Ola F: clave del asset de video; al enviarlo el backend limpia falta_video. */
+  video?: string;
 }
 
 export interface RespuestaContenidoItem {
   contenido: Contenido;
+  /** Ola F: presente cuando el flip foto↔video conservó redes con contenido (aviso al usuario). */
+  aviso?: string;
 }
 
 export interface RespuestaPlataforma {
