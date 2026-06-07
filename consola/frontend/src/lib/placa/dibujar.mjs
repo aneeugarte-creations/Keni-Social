@@ -754,9 +754,15 @@ function dibujarMarco(ctx, m) {
   if (conSombra) resetSombraCanvas(ctx);
 }
 
-// Dibuja UNA capa (con su opacidad/rotación). `env` = {I: imágenes por objeto/media_id, B: bindings, F: familiaReal}.
+// Dibuja UNA capa (con su opacidad/rotación). `env` = {I: imágenes por objeto/media_id, B: bindings,
+// F: familiaReal, final: boolean}.
+//
+// `visible: false` es una AYUDA DE EDICIÓN (ocultar una capa para ver fondos/transparencias detrás),
+// NO una propiedad de la imagen final. Por eso solo se respeta en la PREVIA de edición (`env.final`
+// falsy); en el render FINAL (`env.final === true`, p.ej. el PNG que hornea el servidor) TODAS las
+// capas se pintan, incluidas las de grupos ocultos (el flag se propaga por `env` en la recursión).
 function dibujarCapa(ctx, capa, env) {
-  if (capa.visible === false) return;
+  if (!env.final && capa.visible === false) return;
   ctx.save();
   const op = capa.opacidad ?? 1;
   if (op < 1) ctx.globalAlpha = op;
@@ -819,9 +825,11 @@ function dibujarCapa(ctx, capa, env) {
 }
 
 // Dibuja un DOCUMENTO completo. `imgs` = mapa {objeto|media_id -> Image cargada (o null)}.
-export function dibujarDocumento(ctx, { documento, imgs, bindings, familiaReal }) {
+// `final: true` => render del PÍXEL FINAL: ignora `visible` y pinta TODAS las capas (el ocultar es
+// solo ayuda de edición). Sin `final` (default) es la PREVIA de edición y respeta `visible`.
+export function dibujarDocumento(ctx, { documento, imgs, bindings, familiaReal, final }) {
   const F = familiaReal || ((l) => (l === "condensada" ? "Barlow Condensed" : "Barlow"));
-  const env = { I: imgs || {}, B: bindings || {}, F };
+  const env = { I: imgs || {}, B: bindings || {}, F, final: final === true };
   const { formato, fondo } = documento;
   const w = formato.w, h = formato.h;
 

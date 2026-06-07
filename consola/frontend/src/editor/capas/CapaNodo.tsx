@@ -419,10 +419,11 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
 
   const props = { ...comun, onTransformEnd };
 
-  // Visibilidad: una capa OCULTA no se dibuja en el editor (igual que el render del servidor, que
-  // hace `if (capa.visible === false) return`). EXCEPCIÓN: en "Vista con muestra" el hueco de foto
-  // oculto SÍ se pinta con la foto de muestra, para diseñar viéndolo. Así el hueco que nace oculto
-  // no ensucia el lienzo con su placeholder gris cuando la muestra está apagada.
+  // Visibilidad: ocultar una capa es solo una AYUDA DE EDICIÓN (ver fondos/transparencias detrás),
+  // así que NO se dibuja en el editor pero SÍ aparece en la imagen FINAL (el render del servidor
+  // ignora `visible`, ver `dibujarDocumento(..., final:true)`). EXCEPCIÓN: en "Vista con muestra" el
+  // hueco de foto oculto SÍ se pinta con la foto de muestra, para diseñar viéndolo. Así el hueco que
+  // nace oculto no ensucia el lienzo con su placeholder gris cuando la muestra está apagada.
   const esHuecoImg = capa.tipo === "imagen" && ((capa as CapaImagen).es_foto || !(capa as CapaImagen).objeto);
   if (capa.visible === false && !(muestra && esHuecoImg)) return null;
 

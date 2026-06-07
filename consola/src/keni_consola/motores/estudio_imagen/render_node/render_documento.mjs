@@ -74,6 +74,9 @@ async function main() {
     imgs,
     bindings: payload.bindings || {},
     familiaReal: (logica) => familiaReal(fuentes, logica),
+    // Render del PÍXEL FINAL: `visible` es solo ayuda de edición; aquí se pintan TODAS las capas
+    // (incluidas las de grupos ocultos). Solo la PREVIA del editor respeta `visible`.
+    final: true,
   });
 
   writeFileSync(salida, canvas.toBuffer("image/png"));

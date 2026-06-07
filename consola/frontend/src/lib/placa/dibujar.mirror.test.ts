@@ -195,6 +195,54 @@ describe("caja de texto y valign en dibujarTexto", () => {
   });
 });
 
+describe("visibilidad: ayuda de edición, NO afecta a la imagen final", () => {
+  it("PREVIA (sin final): una capa visible:false NO se pinta", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({ visible: false }), imgs: {}, bindings: {} } as never);
+    expect(ctx.fills.find((f) => f.texto === "HOLA")).toBeFalsy();
+  });
+
+  it("FINAL (final:true): una capa visible:false SÍ se pinta (el ocultar es solo para editar)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({ visible: false }), imgs: {}, bindings: {}, final: true } as never);
+    expect(ctx.fills.find((f) => f.texto === "HOLA")).toBeTruthy();
+  });
+
+  it("FINAL: una capa GRUPO oculta NO esconde sus hijas en la imagen final", () => {
+    const docGrupoOculto = {
+      version: 1,
+      formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+      fondo: { tipo: "color", color: "#000000" },
+      capas: [
+        {
+          id: "g1",
+          tipo: "grupo",
+          x: 0, y: 0, w: 1080, h: 1080, z: 10,
+          rotacion: 0, opacidad: 1,
+          visible: false, // grupo OCULTO en edición
+          capas: [
+            {
+              id: "t1", tipo: "texto", x: 100, y: 200, w: 800, h: 0, z: 20,
+              rotacion: 0, opacidad: 1, visible: true,
+              texto: "HOLA", binding: null, familia: "Barlow", tamano: 100, peso: 700,
+              color: "#FFFFFF", alineacion: "izquierda", mayusculas: false,
+              interlineado: 1, interletra: 0, auto_ajuste: { max_lineas: 4, tam_min: 20 },
+              sombra: null, contorno: null, chip: null, ancla: "arriba", valign: "centro",
+            },
+          ],
+        },
+      ],
+    };
+    const ctxPrevia = ctxFalso();
+    dibujarDocumento(ctxPrevia as never, { documento: docGrupoOculto as never, imgs: {}, bindings: {} } as never);
+    expect(ctxPrevia.fills.find((f) => f.texto === "HOLA")).toBeFalsy(); // oculto en edición
+
+    const ctxFinal = ctxFalso();
+    dibujarDocumento(ctxFinal as never, { documento: docGrupoOculto as never, imgs: {}, bindings: {}, final: true } as never);
+    expect(ctxFinal.fills.find((f) => f.texto === "HOLA")).toBeTruthy(); // visible en el final
+  });
+});
+
 describe("sombra de texto: legado vs sombra real (blur/opacidad)", () => {
   it("RETROCOMPAT: sombra plana (sin blur ni opacidad) usa el camino legado (fillText desplazado, sin shadowBlur)", () => {
     const ctx = ctxFalso();
