@@ -1622,6 +1622,39 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_inv_candidato_fecha_marca ON inv_candidato (fecha, marca)",
     "CREATE INDEX IF NOT EXISTS idx_inv_candidato_brief ON inv_candidato (brief_id)",
     "CREATE INDEX IF NOT EXISTS idx_inv_candidato_estado ON inv_candidato (estado)",
+    # MOTOR DE VIDEO (Ola VIDEO). `video_composiciones` guarda el JSON de COMPOSICION (pistas/
+    # clips/overlay/subtitulos; esquema en `docs/maquina-contenido/G-video-engine.md`, validado
+    # por `keni_shared.video.validar_composicion`). `documento` es el JSON; `contenido_id` la liga
+    # opcionalmente a una pieza del tablero. Una composicion por video del Estudio de Video.
+    """
+    CREATE TABLE IF NOT EXISTS video_composiciones (
+        id           TEXT PRIMARY KEY,
+        contenido_id TEXT NOT NULL DEFAULT '',
+        marca        TEXT NOT NULL DEFAULT '',
+        documento    TEXT NOT NULL DEFAULT '{}',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_video_composiciones_marca ON video_composiciones (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_video_composiciones_contenido ON video_composiciones (contenido_id)",
+    # `video_subtitulos`: pista de subtitulos de una composicion. `segmentos` = JSON word-level
+    # del ASR (faster-whisper); `ass` = el ASS renderizado para quemar con ffmpeg. `estado` ∈
+    # {pendiente, transcrito, editado, listo}. La rellena el motor de ASR (motores/transcripcion).
+    """
+    CREATE TABLE IF NOT EXISTS video_subtitulos (
+        id            TEXT PRIMARY KEY,
+        composicion_id TEXT NOT NULL DEFAULT '',
+        idioma        TEXT NOT NULL DEFAULT 'es-MX',
+        estado        TEXT NOT NULL DEFAULT 'pendiente',
+        segmentos     TEXT NOT NULL DEFAULT '',
+        ass           TEXT NOT NULL DEFAULT '',
+        transcrito_en TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
+    "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
 )
 
 
@@ -5533,6 +5566,256 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
     finally:
         con.close()
     return item
+
+
+# --------------------------------------------------------------------------- #
+# Motor de video: composiciones + subtitulos (Ola VIDEO)                        #
+# --------------------------------------------------------------------------- #
+
+_COLS_VIDEO_COMPOSICIONES = (
+    "id",
+    "contenido_id",
+    "marca",
+    "documento",
+    "creado",
+    "actualizado",
+)
+_SELECT_VIDEO_COMPOSICIONES = (
+    f"SELECT {', '.join(_COLS_VIDEO_COMPOSICIONES)} FROM video_composiciones"
+)
+_CAMPOS_EDITABLES_VIDEO_COMPOSICIONES: tuple[str, ...] = ("contenido_id", "marca", "documento")
+
+
+def _fila_a_video_composicion(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `video_composiciones` en dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_VIDEO_COMPOSICIONES}
+    item["documento"] = fila["documento"] or "{}"
+    return item
+
+
+def crear_video_composicion(
+    *,
+    marca: str,
+    documento: str = "{}",
+    contenido_id: str = "",
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    """Crea una composicion de video y la devuelve. NO valida el documento (lo hace la API/shared)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "contenido_id": contenido_id or "",
+        "marca": marca or "",
+        "documento": documento or "{}",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_VIDEO_COMPOSICIONES)
+        con.execute(
+            f"INSERT INTO video_composiciones ({', '.join(_COLS_VIDEO_COMPOSICIONES)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_VIDEO_COMPOSICIONES),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_video_composicion(fila)
+
+
+def listar_video_composiciones(
+    *, marca: str | None = None, contenido_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Composiciones de video, filtros combinables (AND). Mas recientes primero."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if contenido_id:
+        clausulas.append("contenido_id = ?")
+        params.append(contenido_id)
+    sql = _SELECT_VIDEO_COMPOSICIONES
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY creado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_video_composicion(f) for f in filas]
+
+
+def obtener_video_composicion(composicion_id: str) -> dict[str, Any] | None:
+    """Una composicion de video por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_VIDEO_COMPOSICIONES} WHERE id = ?", (composicion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_video_composicion(fila) if fila is not None else None
+
+
+def actualizar_video_composicion(composicion_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_VIDEO_COMPOSICIONES}
+    if not cambios:
+        return obtener_video_composicion(composicion_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, composicion_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE video_composiciones SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_VIDEO_COMPOSICIONES} WHERE id = ?", (composicion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_video_composicion(fila) if fila is not None else None
+
+
+# Estados validos de un subtitulo de video (contrato; ver G-video-engine.md).
+ESTADOS_VIDEO_SUBTITULO = ("pendiente", "transcrito", "editado", "listo")
+
+_COLS_VIDEO_SUBTITULOS = (
+    "id",
+    "composicion_id",
+    "idioma",
+    "estado",
+    "segmentos",
+    "ass",
+    "transcrito_en",
+    "actualizado",
+)
+_SELECT_VIDEO_SUBTITULOS = f"SELECT {', '.join(_COLS_VIDEO_SUBTITULOS)} FROM video_subtitulos"
+_CAMPOS_EDITABLES_VIDEO_SUBTITULOS: tuple[str, ...] = (
+    "idioma",
+    "estado",
+    "segmentos",
+    "ass",
+    "transcrito_en",
+)
+
+
+def _fila_a_video_subtitulo(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `video_subtitulos` en dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_VIDEO_SUBTITULOS}
+    item["idioma"] = fila["idioma"] or "es-MX"
+    item["estado"] = fila["estado"] if fila["estado"] in ESTADOS_VIDEO_SUBTITULO else "pendiente"
+    return item
+
+
+def crear_video_subtitulo(
+    *,
+    composicion_id: str,
+    idioma: str = "es-MX",
+    estado: str = "pendiente",
+    segmentos: str = "",
+    ass: str = "",
+    transcrito_en: str = "",
+    id: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    """Crea una fila de subtitulos para una composicion y la devuelve."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "composicion_id": composicion_id or "",
+        "idioma": idioma or "es-MX",
+        "estado": estado if estado in ESTADOS_VIDEO_SUBTITULO else "pendiente",
+        "segmentos": segmentos or "",
+        "ass": ass or "",
+        "transcrito_en": transcrito_en or "",
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_VIDEO_SUBTITULOS)
+        con.execute(
+            f"INSERT INTO video_subtitulos ({', '.join(_COLS_VIDEO_SUBTITULOS)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_VIDEO_SUBTITULOS),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_video_subtitulo(fila)
+
+
+def listar_video_subtitulos(
+    *, composicion_id: str | None = None, estado: str | None = None
+) -> list[dict[str, Any]]:
+    """Subtitulos de video, filtros combinables (AND). Mas recientes primero."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if composicion_id:
+        clausulas.append("composicion_id = ?")
+        params.append(composicion_id)
+    if estado:
+        clausulas.append("estado = ?")
+        params.append(estado)
+    sql = _SELECT_VIDEO_SUBTITULOS
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY actualizado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_video_subtitulo(f) for f in filas]
+
+
+def obtener_video_subtitulo(subtitulo_id: str) -> dict[str, Any] | None:
+    """Un subtitulo de video por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_VIDEO_SUBTITULOS} WHERE id = ?", (subtitulo_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_video_subtitulo(fila) if fila is not None else None
+
+
+def actualizar_video_subtitulo(subtitulo_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_VIDEO_SUBTITULOS}
+    if "estado" in cambios and cambios["estado"] not in ESTADOS_VIDEO_SUBTITULO:
+        cambios.pop("estado")
+    if not cambios:
+        return obtener_video_subtitulo(subtitulo_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, subtitulo_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE video_subtitulos SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_VIDEO_SUBTITULOS} WHERE id = ?", (subtitulo_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_video_subtitulo(fila) if fila is not None else None
 
 
 # --------------------------------------------------------------------------- #

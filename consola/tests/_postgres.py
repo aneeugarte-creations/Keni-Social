@@ -98,6 +98,10 @@ _TABLAS = (
     # de HOY) y rompen el aislamiento del listado por fecha.
     "inv_candidato",
     "inv_brief",
+    # Motor de video (Ola VIDEO): subtitulos antes que composiciones (a la cabeza evita
+    # sorpresas de orden; sin FK declarada). Sin truncar, acumularian filas entre tests.
+    "video_subtitulos",
+    "video_composiciones",
 )
 
 

@@ -55,6 +55,9 @@ modulos_backend = [
   "algoritmos",
   "parrilla",
   "pipelines",
+  # Motor de video (Ola VIDEO): api/video.py (lo crea otro agente). Declarado aqui para que
+  # el lint de fronteras mapee el router a esta app.
+  "video",
 ]
 
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el

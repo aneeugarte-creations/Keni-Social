@@ -173,6 +173,37 @@ def _prefetch_s3(job_id: str, gen_id: str, prefetch: dict[str, str]) -> bool:
     return True
 
 
+def _procesar_job_proceso(job_id: str, gen_id: str, spec: dict) -> None:
+    """Despacha un job de PROCESO (no-claude) a su EJECUTOR y cierra el ciclo (Ola VIDEO).
+
+    SEAM del motor de video: render con ffmpeg / transcripcion ASR. Reutiliza la cola/worker
+    para colgarse de Actividad IA, pero NO usa `claude` ni el slot de concurrencia de claude.
+    El ejecutor (`jobspec.resolver_ejecutor_proceso(kind)`) tiene firma `ejecutar(gen_id, spec)`
+    y reporta progreso/estado/errores via `generaciones.actualizar(...)`; este wrapper SOLO
+    garantiza el cierre ordenado pase lo que pase:
+      - si el ejecutor revienta (excepcion no controlada), marca el registro en error;
+      - SIEMPRE libera el cupo de admision (lo tomo `encolar_job_proceso`) y saca el job de la
+        cola, igual que el camino claude lo hace via `slot`/`cola.terminar`.
+
+    NO arranca el vigia de cancelacion cross-proceso del camino claude (que mata el ARBOL de un
+    subprocess `claude`): cada ejecutor de proceso es responsable de su propia cancelacion/
+    timeout (p. ej. el render pasa su propio `-t`/timeout a ffmpeg). El registro se marca
+    `en curso` para que el apagado del pool lo deje INTERRUMPIDO, igual que un job claude.
+    """
+    kind = spec.get("kind", "")
+    _marcar_job_en_curso({"id": job_id, "gen_id": gen_id})
+    try:
+        ejecutar = jobspec.resolver_ejecutor_proceso(kind)
+        ejecutar(gen_id, spec)
+    except Exception:  # noqa: BLE001 -- fallo del ejecutor: error claro, sin traceback al cliente
+        _log.exception("worker: el ejecutor del job de proceso %s (gen %s) falló", job_id, gen_id)
+        _finalizar_error(gen_id, "No se pudo completar el trabajo.")
+    finally:
+        _desmarcar_job_en_curso(job_id)
+        generaciones.runner.liberar_admision()
+        cola.terminar(job_id)
+
+
 def procesar_job(job: dict, worker_id: str = "") -> None:
     """Ejecuta UN job ya clavado: reconstruye el trabajo y corre `claude -p` (con #137).
 
@@ -195,6 +226,13 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         _finalizar_error(gen_id, "No se pudo iniciar la generación.")
         generaciones.runner.liberar_admision()
         cola.terminar(job_id)
+        return
+
+    # DISPATCH GENERICO (Ola VIDEO): un job de PROCESO (no-claude) — render de video, ASR —
+    # NO reconstruye un `procesar` de claude ni lanza `claude -p`: lo despacha a su EJECUTOR.
+    # El camino claude de abajo queda INTACTO (sus tests siguen verdes).
+    if jobspec.es_kind_proceso(spec):
+        _procesar_job_proceso(job_id, gen_id, spec)
         return
 
     try:

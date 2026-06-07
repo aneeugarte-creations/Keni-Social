@@ -23,9 +23,13 @@ ENV PYTHONUNBUFFERED=1 \
     KENI_SKILLS_CWD=/app
 
 # curl: script de nodesource. git: lo usan algunas skills. Node 20 + Claude Code CLI:
-# AQUI SI (el worker es quien corre `claude -p`).
+# AQUI SI (el worker es quien corre `claude -p`). ffmpeg: motor de RENDER de video (Ola VIDEO)
+# — el worker tambien ejecuta los jobs de proceso `render-video` (filtergraph: scale/crop/pad,
+# overlay, xstack/vstack, subtitles=ASS). NOTA: la dependencia ASR (faster-whisper/torch) NO se
+# bakea aqui (pesado, rompe el build): es OPCIONAL y se instala en el servidor cuando se active
+# la transcripcion (import perezoso en motores/transcripcion; degrada con error claro si falta).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates git \
+ && apt-get install -y --no-install-recommends curl ca-certificates git ffmpeg \
  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && npm install -g @anthropic-ai/claude-code \

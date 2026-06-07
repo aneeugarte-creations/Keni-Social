@@ -19,6 +19,8 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   insumos: "Cajones del día",
   investigacion: "Investigación",
   "import-calendario": "Importar calendario",
+  "render-video": "Render de video",
+  transcribir: "Transcripción",
 };
 
 /**

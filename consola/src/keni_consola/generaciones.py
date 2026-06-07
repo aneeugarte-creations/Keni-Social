@@ -111,6 +111,9 @@ TIPOS = (
     # Taller GREEN / brainstorming: `green-ideas` = la PROPUESTA de ideas evergreen (IA);
     # `green` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
     "green-ideas", "green",
+    # Jobs de PROCESO (no-claude) del motor de video (Ola VIDEO): render con ffmpeg y
+    # transcripcion ASR. Se cuelgan de Actividad IA igual que el resto de generaciones.
+    "render-video", "transcribir",
 )
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
@@ -828,6 +831,51 @@ def encolar_job_claude(
             actualizar(gen_id, {"prompt": prompt})
         except Exception:  # noqa: BLE001 -- best-effort
             pass
+
+
+def encolar_job_proceso(
+    gen_id: str | None = None,
+    *,
+    kind: str,
+    params: dict[str, Any] | None = None,
+    etiqueta: str | None = None,
+    marca: str | None = None,
+) -> dict[str, Any]:
+    """ENCOLA un job de PROCESO (no-claude): render de video / transcripcion ASR (Ola VIDEO).
+
+    Analogo a `encolar_job_claude` pero para los KINDS de proceso (`jobspec.KINDS_PROCESO`): el
+    back/daemon CREA el registro de generacion con `tipo=kind` (asi sale en Actividad IA) y
+    ENCOLA un job con `spec={"version":1, "kind":kind, **params}`. Un WORKER lo reclama y, al ver
+    un kind de proceso, despacha al EJECUTOR correspondiente (`jobspec.resolver_ejecutor_proceso`)
+    en vez de correr `claude` (ver `worker.procesar_job`). El ejecutor reporta progreso/estado/
+    errores via `actualizar(...)`.
+
+    Reutiliza el MISMO cupo de admision que el camino claude (`runner.admitir()` -> 429 si esta
+    saturado; el worker hereda con `slot(ya_admitido=True)`). Si `gen_id` no se pasa, se crea uno.
+    Devuelve el registro publico de la generacion (incluye su `id`).
+    """
+    from .dominio import jobspec
+
+    if kind not in jobspec.KINDS_PROCESO:
+        raise ValueError(f"'{kind}' no es un kind de proceso valido (KINDS_PROCESO).")
+    reg = crear({
+        "id": gen_id or nuevo_id(),
+        "tipo": kind,
+        "marca": marca or "",
+        "etiqueta": etiqueta or kind,
+    })
+    spec = jobspec.construir_proceso(kind, params or {})
+    # Admision SINCRONA (mismo tope que el flujo claude): rechaza con ColaLlenaError ANTES de
+    # encolar si el sistema esta al tope (-> 429). El worker hereda esta admision al clavar.
+    runner.admitir()
+    try:
+        from . import cola
+
+        cola.encolar(reg["id"], spec)
+    except Exception:  # noqa: BLE001 -- si el encolado falla, no fugar el cupo de admision
+        runner.liberar_admision()
+        raise
+    return reg
 
 
 def lanzar_job_claude(

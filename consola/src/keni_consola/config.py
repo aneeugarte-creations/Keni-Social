@@ -427,6 +427,21 @@ ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
+# Motor de VIDEO (Ola VIDEO). TODO apagado por defecto y gateado por la maquina:
+#   - KENI_VIDEO_RENDER       (bool, def OFF): habilita encolar/ejecutar el render con ffmpeg.
+#   - KENI_TRANSCRIPCION      (bool, def OFF): habilita la transcripcion ASR de subtitulos.
+#   - KENI_WHISPER_MODELO     (str, def "medium"): modelo de faster-whisper para el ASR.
+#   - KENI_FFMPEG_BIN         (str, def "ffmpeg"): binario de ffmpeg (path o nombre en PATH).
+#   - KENI_VIDEO_RENDER_TIMEOUT (int, def 1800 s): wall-timeout del render de un video.
+ENV_VIDEO_RENDER = "KENI_VIDEO_RENDER"
+ENV_TRANSCRIPCION = "KENI_TRANSCRIPCION"
+ENV_WHISPER_MODELO = "KENI_WHISPER_MODELO"
+ENV_FFMPEG_BIN = "KENI_FFMPEG_BIN"
+ENV_VIDEO_RENDER_TIMEOUT = "KENI_VIDEO_RENDER_TIMEOUT"
+WHISPER_MODELO_DEF = "medium"
+FFMPEG_BIN_DEF = "ffmpeg"
+VIDEO_RENDER_TIMEOUT_DEF = 1800
+
 # Agencias de noticias (item F): adaptadores de fuente que descargan y normalizan notas a la
 # MISMA forma que los items RSS ({titulo, resumen, enlace, fecha, fuente}). GATEADOS por
 # credencial: sin clave, la fuente aparece como "pendiente/no configurada" y NO rompe el
@@ -2131,3 +2146,51 @@ def investigacion_intervalo_horas() -> int:
 def investigacion_max() -> int:
     """Cap de candidatos a depositar por barrido (`KENI_INVESTIGACION_MAX`, def 5, min 1)."""
     return _entero(ENV_INVESTIGACION_MAX, INVESTIGACION_MAX_DEF, minimo=1)
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: motor de VIDEO (Ola VIDEO)                                         #
+# --------------------------------------------------------------------------- #
+
+
+def video_render_activo() -> bool:
+    """True si el render de video esta habilitado (`KENI_VIDEO_RENDER`).
+
+    Def OFF (conservador). GATEADO por la maquina: solo cuenta si la maquina de contenido
+    esta encendida Y este flag esta ON (`gate_maquina`). El API usa esto para decidir si
+    permite encolar jobs de render; el worker SIEMPRE ejecuta lo que reclama de la cola.
+    """
+    return _crudo(ENV_VIDEO_RENDER).lower() in _VERDADEROS
+
+
+# Gateado por la maquina: el daemon/encolado de render solo corre si la maquina esta ON.
+video_render_gateado = gate_maquina(video_render_activo)
+
+
+def transcripcion_activa() -> bool:
+    """True si la transcripcion ASR de subtitulos esta habilitada (`KENI_TRANSCRIPCION`).
+
+    Def OFF (conservador). GATEADO por la maquina (igual que `video_render_activo`). El ASR
+    importa faster-whisper de forma PEREZOSA y OPCIONAL: si la lib falta, degrada con error
+    claro (no rompe el import). Ver `motores/transcripcion`.
+    """
+    return _crudo(ENV_TRANSCRIPCION).lower() in _VERDADEROS
+
+
+# Gateado por la maquina: el encolado de transcripcion solo corre si la maquina esta ON.
+transcripcion_gateada = gate_maquina(transcripcion_activa)
+
+
+def whisper_modelo() -> str:
+    """Modelo de faster-whisper para el ASR (`KENI_WHISPER_MODELO`, def "medium")."""
+    return _crudo(ENV_WHISPER_MODELO) or WHISPER_MODELO_DEF
+
+
+def ffmpeg_bin() -> str:
+    """Binario de ffmpeg a invocar (`KENI_FFMPEG_BIN`, def "ffmpeg" — se resuelve en PATH)."""
+    return _crudo(ENV_FFMPEG_BIN) or FFMPEG_BIN_DEF
+
+
+def video_render_timeout() -> int:
+    """Wall-timeout (s) del render de un video (`KENI_VIDEO_RENDER_TIMEOUT`, def 1800, min 1)."""
+    return _entero(ENV_VIDEO_RENDER_TIMEOUT, VIDEO_RENDER_TIMEOUT_DEF, minimo=1)

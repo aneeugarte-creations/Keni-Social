@@ -1693,6 +1693,61 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Motor de video: composiciones + subtitulos (Ola VIDEO)                        #
+# --------------------------------------------------------------------------- #
+
+
+def crear_video_composicion(
+    *, marca: str, documento: str = "{}", contenido_id: str = "", id: str = "",
+) -> dict[str, Any]:
+    return db.crear_video_composicion(
+        marca=marca, documento=documento, contenido_id=contenido_id, id=id
+    )
+
+
+def listar_video_composiciones(
+    *, marca: str | None = None, contenido_id: str | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_video_composiciones(marca=marca, contenido_id=contenido_id)
+
+
+def obtener_video_composicion(composicion_id: str) -> dict[str, Any] | None:
+    return db.obtener_video_composicion(composicion_id)
+
+
+def actualizar_video_composicion(
+    composicion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_video_composicion(composicion_id, campos)
+
+
+def crear_video_subtitulo(
+    *, composicion_id: str, idioma: str = "es-MX", estado: str = "pendiente",
+    segmentos: str = "", ass: str = "", transcrito_en: str = "", id: str = "",
+) -> dict[str, Any]:
+    return db.crear_video_subtitulo(
+        composicion_id=composicion_id, idioma=idioma, estado=estado,
+        segmentos=segmentos, ass=ass, transcrito_en=transcrito_en, id=id,
+    )
+
+
+def listar_video_subtitulos(
+    *, composicion_id: str | None = None, estado: str | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_video_subtitulos(composicion_id=composicion_id, estado=estado)
+
+
+def obtener_video_subtitulo(subtitulo_id: str) -> dict[str, Any] | None:
+    return db.obtener_video_subtitulo(subtitulo_id)
+
+
+def actualizar_video_subtitulo(
+    subtitulo_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_video_subtitulo(subtitulo_id, campos)
+
+
+# --------------------------------------------------------------------------- #
 # Bloques (almacén de capas reutilizables)                                       #
 # --------------------------------------------------------------------------- #
 

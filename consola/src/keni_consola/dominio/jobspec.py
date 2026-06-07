@@ -77,6 +77,72 @@ PROC_INVESTIGACION = "investigacion"
 # antes ejecutaba `claude -p` en la peticion, se ENCOLA al worker (el back no tiene claude).
 PROC_IMPORT_CALENDARIO = "import-calendario"
 
+# ------------------------------------------------------------------------------------------- #
+# Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
+# ------------------------------------------------------------------------------------------- #
+# La cola/worker existentes solo corrian `claude -p`. Estos KINDS encolan trabajo GENERICO
+# (render de video con ffmpeg, transcripcion ASR con faster-whisper) que NO usa claude, pero
+# SI reutiliza la infra de `generaciones`/`jobs`/worker para colgarse de Actividad IA +
+# streaming. El worker DESPACHA un job de proceso a su EJECUTOR (ver `EJECUTORES_PROCESO`) en
+# vez de reconstruir un `procesar` de claude. El spec de un job de proceso es PLANO:
+#   {"kind": <PROC_*>, ...params}  (sin `prompt`/`procesar`/`cwd`; el ejecutor lee los params).
+PROC_RENDER_VIDEO = "render-video"
+PROC_TRANSCRIBIR = "transcribir"
+
+# KINDS de proceso (no-claude). El worker, al reclamar un job, mira si su `spec["kind"]` esta
+# aqui; si lo esta, despacha al ejecutor; si no, sigue el camino `claude` de siempre.
+KINDS_PROCESO = frozenset({PROC_RENDER_VIDEO, PROC_TRANSCRIBIR})
+
+# Registro de EJECUTORES por kind de proceso. Valor = "modulo:funcion" (path importable),
+# resuelto por import PEREZOSO en `resolver_ejecutor_proceso` (asi `jobspec` no importa los
+# motores al cargar: el back/CI no necesita ffmpeg/whisper para importar este modulo). Cada
+# ejecutor tiene firma `ejecutar(gen_id: str, spec: dict) -> None` y reporta progreso/estado/
+# errores via `generaciones.actualizar(...)` (igual que el camino claude marca terminal).
+EJECUTORES_PROCESO: dict[str, str] = {
+    PROC_RENDER_VIDEO: "keni_consola.motores.estudio_video:ejecutar_render",
+    PROC_TRANSCRIBIR: "keni_consola.motores.transcripcion:ejecutar_transcripcion",
+}
+
+
+def es_kind_proceso(spec: dict[str, Any]) -> bool:
+    """True si el spec es un job de PROCESO (no-claude) — su `kind` esta en `KINDS_PROCESO`.
+
+    Un job de proceso lleva el `kind` a NIVEL RAIZ del spec (`spec["kind"]`), no en `procesar`
+    (ese es el post-procesado del camino claude). El worker usa esto para elegir el dispatch.
+    """
+    return isinstance(spec, dict) and spec.get("kind") in KINDS_PROCESO
+
+
+def resolver_ejecutor_proceso(kind: str):  # noqa: ANN201 -- Callable[[str, dict], None]
+    """Importa y devuelve el ejecutor de un kind de proceso (import PEREZOSO).
+
+    Resuelve "modulo:funcion" de `EJECUTORES_PROCESO` SOLO al despachar el job, no al importar
+    `jobspec` (asi el back/CI no cargan ffmpeg/whisper de balde). Lanza `ValueError` si el kind
+    no esta registrado (defensa: nunca debe pasar si `es_kind_proceso` filtro antes).
+    """
+    import importlib
+
+    ruta = EJECUTORES_PROCESO.get(kind)
+    if not ruta:
+        raise ValueError(f"kind de proceso desconocido: {kind!r}")
+    modulo_nombre, _, funcion_nombre = ruta.partition(":")
+    modulo = importlib.import_module(modulo_nombre)
+    return getattr(modulo, funcion_nombre)
+
+
+def construir_proceso(kind: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Arma el spec PLANO de un job de proceso: `{"kind": kind, **params}`.
+
+    A diferencia de `construir(...)` (camino claude: prompt + procesar + cwd), un job de proceso
+    no lleva prompt ni post-procesado: solo su `kind` y los params que su ejecutor leera. Lo usa
+    `generaciones.encolar_job_proceso`. Lanza `ValueError` si `kind` no es un kind de proceso.
+    """
+    if kind not in KINDS_PROCESO:
+        raise ValueError(f"'{kind}' no es un kind de proceso valido (KINDS_PROCESO).")
+    spec: dict[str, Any] = {"version": VERSION, "kind": kind}
+    spec.update(params or {})
+    return spec
+
 
 def _autor_spec(autor: dict[str, str] | None) -> dict[str, str] | None:
     """Normaliza el autor a un dict simple serializable (o None)."""
