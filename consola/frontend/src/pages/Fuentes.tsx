@@ -77,6 +77,9 @@ import {
   tiempoRelativo,
 } from "./publicaciones/meta";
 import { TallerGreen } from "./fuentes/TallerGreen";
+// Salud del motor de ingesta de feeds (antes sub-vista de Cobertura/Noticias): la
+// observabilidad de los canales es configuración de Fuentes, no curación del pool.
+import { SaludFeeds } from "./fuentes/SaludFeeds";
 // Canales absorbidos al colapsar el hub Investigación a 3 piezas (Noticias ·
 // Contenidos · Fuentes): los buzones del día, los agentes de investigación y los
 // eventos/programas de cobertura dejan de ser pestañas sueltas del hub y pasan a
@@ -128,6 +131,7 @@ type PestanaTipo = {
 const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "todas", etiqueta: "Todas" },
   { valor: "rss", etiqueta: "RSS" },
+  { valor: "salud", etiqueta: "Salud de feeds" },
   { valor: "catalogo", etiqueta: "Catálogo" },
   // Canales que alimentan NOTICIAS, absorbidos del antiguo hub Investigación:
   { valor: "buzones", etiqueta: "Buzones" },
@@ -190,6 +194,10 @@ export default function Fuentes() {
             <GestionFuentes marcas={marcas} redes={opcionesRedes} />
             <ItemsRecientes marcas={marcas} redes={opcionesRedes} />
           </div>
+        </TabsContent>
+        {/* Salud del motor de ingesta de feeds (antes en Cobertura/Noticias). */}
+        <TabsContent value="salud">
+          <SaludFeeds />
         </TabsContent>
         <TabsContent value="catalogo">
           <CatalogoPresets marcas={marcas} />
