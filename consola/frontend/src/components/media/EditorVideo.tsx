@@ -91,7 +91,6 @@ export function EditorVideo({
       {src ? (
         <div className="space-y-2">
           <div className="relative inline-block w-full max-w-sm">
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               src={src}
               controls
