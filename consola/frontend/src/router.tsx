@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const EditorPro = lazy(() => import("@/pages/EditorPro"));
+const EstudioVideo = lazy(() => import("@/pages/EstudioVideo"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 const EstrategiaMarcas = lazy(() =>
   import("@/pages/biblioteca/GestionLineas").then((m) => ({ default: m.GestionLineas })),
@@ -181,6 +182,8 @@ export const router = createBrowserRouter([
           { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
           // Editor profesional por capas (Konva): diseña/edita el Documento de la pieza.
           { path: "editor", element: <EditorPro /> },
+          // Editor de video: subida + preview (motor de edición próximamente).
+          { path: "video", element: <EstudioVideo /> },
           // Hub Biblioteca: UNA sola Biblioteca (prompts + línea editorial) con filtros.
           {
             path: "biblioteca",

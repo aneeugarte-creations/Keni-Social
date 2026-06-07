@@ -88,9 +88,11 @@ export function DialogoEditar({
     queryFn: ({ signal }) => api.plantillasDiseno({ marca: publicacion?.marca }, signal),
     enabled: !!publicacion?.marca,
   });
+  // Tipo de plantilla según el formato de la pieza: video → miniaturas (portada); foto → fotos.
+  const tipoPlantilla = formato === "video" ? "miniatura" : "foto";
   const plantillas = React.useMemo(
-    () => plantillasQuery.data?.plantillas ?? [],
-    [plantillasQuery.data],
+    () => (plantillasQuery.data?.plantillas ?? []).filter((p) => (p.tipo ?? "foto") === tipoPlantilla),
+    [plantillasQuery.data, tipoPlantilla],
   );
   // Plantilla por defecto de la marca: la "Placa de marca" migrada (o la primera que haya).
   const idPlacaDeMarca =
@@ -400,6 +402,7 @@ export function DialogoEditar({
             plantillas={plantillas}
             onCargar={(p) => elegirPlantilla(p.id)}
             onCerrar={() => setGaleriaPlantillas(false)}
+            tipoFijo={tipoPlantilla}
           />
         )}
       </DialogContent>

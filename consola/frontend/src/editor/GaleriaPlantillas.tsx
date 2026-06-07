@@ -1,10 +1,28 @@
 // Galería visual de plantillas de diseño: rejilla de miniaturas para elegir una de un vistazo
 // (mucho mejor que un desplegable). Filtra por la marca de la pestaña activa (el llamante).
+// Pestaña de tipo: "Fotos" (default) / "Miniaturas" (portadas de video).
 
-import { Copy, Trash2, X } from "lucide-react";
+import { Copy, Image, Trash2, Video, X } from "lucide-react";
 import { useState } from "react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
+
+type FiltroTipo = "foto" | "miniatura";
+
+/** Badge de tipo: pequeña etiqueta visual sobre la tarjeta de plantilla. */
+function BadgeTipo({ tipo }: { tipo: "foto" | "miniatura" }) {
+  return tipo === "miniatura" ? (
+    <span className="inline-flex items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+      <Video className="h-2.5 w-2.5" />
+      Miniatura
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+      <Image className="h-2.5 w-2.5" />
+      Foto
+    </span>
+  );
+}
 
 export function GaleriaPlantillas({
   plantillas,
@@ -13,6 +31,8 @@ export function GaleriaPlantillas({
   onDuplicar,
   onRenombrar,
   onCerrar,
+  /** Si se pasa, el selector de tipo queda fijo y no se puede cambiar (ej: DialogoEditar). */
+  tipoFijo,
 }: {
   plantillas: PlantillaDiseno[];
   onCargar: (p: PlantillaDiseno) => void;
@@ -23,9 +43,15 @@ export function GaleriaPlantillas({
   /** Si se omite, no se ofrece renombrar (modo SELECTOR). */
   onRenombrar?: (p: PlantillaDiseno, nombre: string) => void;
   onCerrar: () => void;
+  tipoFijo?: "foto" | "miniatura";
 }) {
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(tipoFijo ?? "foto");
+
+  const tipoEfectivo = tipoFijo ?? filtroTipo;
+  const plantillasFiltradas = plantillas.filter((p) => (p.tipo ?? "foto") === tipoEfectivo);
+
   const commit = (p: PlantillaDiseno) => {
     const n = editVal.trim();
     if (n && n !== p.nombre) onRenombrar?.(p, n);
@@ -43,14 +69,40 @@ export function GaleriaPlantillas({
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Filtro de tipo (solo si no está fijo) */}
+        {!tipoFijo && (
+          <div className="flex gap-1 border-b border-border px-4 py-2">
+            {(["foto", "miniatura"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setFiltroTipo(t)}
+                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  filtroTipo === t
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                {t === "foto" ? (
+                  <><Image className="h-3 w-3" />Fotos</>
+                ) : (
+                  <><Video className="h-3 w-3" />Miniaturas</>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto p-4">
-          {plantillas.length === 0 ? (
+          {plantillasFiltradas.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Aún no hay plantillas para esta marca. Diseña una y pulsa «Guardar plantilla».
+              {tipoEfectivo === "miniatura"
+                ? "Aún no hay miniaturas para esta marca. Diseña una plantilla de tipo «Miniatura» y pulsa «Guardar plantilla»."
+                : "Aún no hay plantillas para esta marca. Diseña una y pulsa «Guardar plantilla»."}
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {plantillas.map((p) => (
+              {plantillasFiltradas.map((p) => (
                 <div key={p.id} className="group relative">
                   <button
                     onClick={() => onCargar(p)}
@@ -68,6 +120,10 @@ export function GaleriaPlantillas({
                       />
                     </div>
                   </button>
+                  {/* Badge de tipo sobre la tarjeta */}
+                  <div className="absolute left-1.5 top-1.5">
+                    <BadgeTipo tipo={p.tipo ?? "foto"} />
+                  </div>
                   {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
                   {onRenombrar && editId === p.id ? (
                     <input

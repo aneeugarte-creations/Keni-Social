@@ -78,3 +78,81 @@ def test_obtener_actualizar_borrar(cliente):
 
     assert cliente.delete(f"/api/plantillas-diseno/{pid}").status_code == 200
     assert cliente.delete(f"/api/plantillas-diseno/{pid}").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Tests de campo `tipo`                                                        #
+# --------------------------------------------------------------------------- #
+
+def test_tipo_default_foto(cliente):
+    """Sin enviar `tipo`, la plantilla queda como 'foto'."""
+    r = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": _DOC})
+    assert r.status_code == 200, r.text
+    assert r.json()["plantilla"]["tipo"] == "foto"
+
+
+def test_tipo_miniatura_persiste(cliente):
+    """Crear con tipo='miniatura' y verificar que se persiste y devuelve."""
+    r = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "nombre": "Cover YT", "tipo": "miniatura", "documento": _DOC,
+    })
+    assert r.status_code == 200, r.text
+    p = r.json()["plantilla"]
+    assert p["tipo"] == "miniatura"
+
+    # GET por id también lo devuelve.
+    p2 = cliente.get(f"/api/plantillas-diseno/{p['id']}").json()["plantilla"]
+    assert p2["tipo"] == "miniatura"
+
+
+def test_tipo_invalido_normaliza_a_foto(cliente):
+    """Un tipo desconocido en POST se silencia a 'foto'."""
+    r = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "tipo": "raro", "documento": _DOC,
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["plantilla"]["tipo"] == "foto"
+
+
+def test_patch_tipo(cliente):
+    """PATCH puede cambiar tipo de 'foto' a 'miniatura' y viceversa."""
+    pid = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "documento": _DOC,
+    }).json()["plantilla"]["id"]
+
+    r = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"tipo": "miniatura"})
+    assert r.status_code == 200
+    assert r.json()["plantilla"]["tipo"] == "miniatura"
+
+    r2 = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"tipo": "foto"})
+    assert r2.status_code == 200
+    assert r2.json()["plantilla"]["tipo"] == "foto"
+
+
+def test_patch_tipo_invalido_400(cliente):
+    """PATCH con tipo inválido devuelve 400."""
+    pid = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "documento": _DOC,
+    }).json()["plantilla"]["id"]
+
+    r = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"tipo": "gif"})
+    assert r.status_code == 400
+    assert "tipo" in r.json()["error"].lower()
+
+
+def test_listar_filtro_tipo(cliente):
+    """?tipo= filtra correctamente; ?tipo= invalido devuelve 400."""
+    # Crear una de cada tipo.
+    cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "tipo": "foto", "documento": _DOC})
+    cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "tipo": "miniatura", "documento": _DOC})
+
+    fotos = cliente.get("/api/plantillas-diseno?tipo=foto").json()["plantillas"]
+    miniaturas = cliente.get("/api/plantillas-diseno?tipo=miniatura").json()["plantillas"]
+    todas = cliente.get("/api/plantillas-diseno").json()["plantillas"]
+
+    assert all(p["tipo"] == "foto" for p in fotos)
+    assert all(p["tipo"] == "miniatura" for p in miniaturas)
+    assert len(todas) == len(fotos) + len(miniaturas)
+
+    # Tipo inválido -> 400.
+    assert cliente.get("/api/plantillas-diseno?tipo=raro").status_code == 400

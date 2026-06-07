@@ -607,6 +607,8 @@ export interface PlantillaDiseno {
   marca: string;
   nombre: string;
   categoria: string;
+  /** Tipo de plantilla: "foto" (post de imagen) o "miniatura" (portada de video). Def "foto". */
+  tipo: "foto" | "miniatura";
   documento: unknown;
   miniatura: string;
   miniatura_url: string;
@@ -1132,8 +1134,9 @@ export const api = {
     ),
 
   // --- Biblioteca de plantillas de diseño (N por marca, etiquetadas por línea) ---
+  // `tipo` filtra por "foto" (plantillas de imagen) o "miniatura" (portadas de video).
   plantillasDiseno: (
-    filtros: { marca?: string; categoria?: string; linea?: string; q?: string } = {},
+    filtros: { marca?: string; categoria?: string; linea?: string; q?: string; tipo?: "foto" | "miniatura" } = {},
     signal?: AbortSignal,
   ) => {
     const qp = new URLSearchParams();
@@ -1145,6 +1148,8 @@ export const api = {
     marca?: string;
     nombre?: string;
     categoria?: string;
+    /** "foto" (default) | "miniatura" (portada de video). */
+    tipo?: "foto" | "miniatura";
     documento: unknown;
     miniatura?: string;
     lineas?: string[];
@@ -1152,7 +1157,7 @@ export const api = {
   // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.
   actualizarPlantillaDiseno: (
     id: string,
-    cuerpo: { nombre?: string; categoria?: string; documento?: unknown; miniatura?: string; lineas?: string[]; activo?: boolean },
+    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; lineas?: string[]; activo?: boolean },
   ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),

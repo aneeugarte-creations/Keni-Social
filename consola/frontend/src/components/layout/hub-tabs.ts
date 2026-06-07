@@ -4,7 +4,9 @@ import {
   BookText,
   CalendarClock,
   CalendarDays,
+  Clapperboard,
   GitBranch,
+  Image,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -88,6 +90,15 @@ export const TABS_CALENDARIO: ItemTabHub[] = [
   { ruta: "/operacion/calendario/turnos", etiqueta: "Turnos", icono: CalendarClock },
 ];
 
+// Hub Contenido: editor de imágenes, estudio de video y biblioteca.
+// El editor de imágenes (/contenido/editor) comparte prefijo con /contenido/biblioteca,
+// por eso lleva `end: true` para evitar que se marque activo dentro de la biblioteca.
+export const TABS_CONTENIDO: ItemTabHub[] = [
+  { ruta: "/contenido/editor", etiqueta: "Imágenes", icono: Image, end: true },
+  { ruta: "/contenido/video", etiqueta: "Video", icono: Clapperboard },
+  { ruta: "/contenido/biblioteca/documentos", etiqueta: "Biblioteca", icono: BookText },
+];
+
 // Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las
 // plantillas de contenido (antes la página "Activos", absorbida como pestaña).
 export const TABS_BIBLIOTECA: ItemTabHub[] = [
@@ -120,6 +131,10 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
   "/operacion/calendario": TABS_CALENDARIO,
+  // Hub Contenido: incluye /contenido/editor, /contenido/video y /contenido/biblioteca.
+  // Importante: /contenido debe registrarse ANTES de /contenido/biblioteca para que
+  // `pestanasDeRuta` no lo sombree. La búsqueda por prefijo lo maneja correctamente.
+  "/contenido": TABS_CONTENIDO,
   "/contenido/biblioteca": TABS_BIBLIOTECA,
   "/datos/actividad": TABS_ACTIVIDAD,
 };

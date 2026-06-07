@@ -1107,12 +1107,16 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # `lineas` (JSON de ids de `etiquetas` clase=vertical) para filtrar por línea editorial.
     # `miniatura` es el objeto de media (uuid+ext) de una previa, o "". A diferencia de
     # `plantillas_marca` (1 plantilla por defecto por marca), aquí hay MUCHAS.
+    # `tipo` ("foto" | "miniatura") es un eje ORTOGONAL a `categoria`: foto = plantilla para
+    # fotos/imagenes; miniatura = portada/thumbnail de video. Las BDs existentes reciben el
+    # DEFAULT "foto" via `_migrar_columnas_plantillas_diseno`.
     """
     CREATE TABLE IF NOT EXISTS plantillas_diseno (
         id           TEXT PRIMARY KEY,
         marca        TEXT NOT NULL DEFAULT '',
         nombre       TEXT NOT NULL DEFAULT '',
         categoria    TEXT NOT NULL DEFAULT 'post',
+        tipo         TEXT NOT NULL DEFAULT 'foto',
         documento    TEXT NOT NULL DEFAULT '{}',
         miniatura    TEXT NOT NULL DEFAULT '',
         lineas       TEXT NOT NULL DEFAULT '[]',
@@ -1125,6 +1129,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_marca ON plantillas_diseno (marca)",
     "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_categoria ON plantillas_diseno (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_tipo ON plantillas_diseno (tipo)",
     # BLOQUES (almacén de capas reutilizables): un bloque es un GRUPO de capas con sentido propio
     # (lower-third, módulo de infografía, pleca de marca) que se suelta en cualquier documento.
     # `capas` es un JSON con la lista de capas (mismo esquema que `documento.capas`). Se etiqueta
@@ -1737,6 +1742,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_noticias_algoritmo(con)
     _migrar_columnas_etiquetas(con)
     _migrar_columnas_contenido_plataforma(con)
+    _migrar_columnas_plantillas_diseno(con)
     _sembrar_fuentes_hub_desde_rss(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
@@ -1892,6 +1898,21 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "UPDATE contenido_plataforma AS cp SET marca = c.marca "
             "FROM contenido AS c WHERE cp.contenido_id = c.id AND cp.marca <> c.marca"
+        )
+
+
+def _migrar_columnas_plantillas_diseno(con: Any) -> None:
+    """Anade `tipo` a `plantillas_diseno` si una BD ya creada no la tuviera (idempotente).
+
+    `tipo` ("foto" | "miniatura") es un eje ortogonal a `categoria`: foto = plantilla para
+    fotos/imagenes del feed; miniatura = portada/thumbnail de video. Las plantillas
+    existentes reciben el DEFAULT "foto", que preserva el comportamiento previo al campo.
+    """
+    if not _tabla_existe(con, "plantillas_diseno"):
+        return
+    if "tipo" not in _columnas_existentes(con, "plantillas_diseno"):
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'foto'"
         )
 
 
@@ -5649,6 +5670,7 @@ _COLS_PLANTILLAS_DISENO = (
     "marca",
     "nombre",
     "categoria",
+    "tipo",
     "documento",
     "miniatura",
     "lineas",
@@ -5663,6 +5685,7 @@ _SELECT_PLANTILLAS_DISENO = f"SELECT {', '.join(_COLS_PLANTILLAS_DISENO)} FROM p
 _CAMPOS_EDITABLES_PLANTILLAS_DISENO: tuple[str, ...] = (
     "nombre",
     "categoria",
+    "tipo",
     "documento",
     "miniatura",
     "lineas",
@@ -5677,6 +5700,7 @@ def _fila_a_plantilla_diseno(fila: Any) -> dict[str, Any]:
     item["documento"] = fila["documento"] or "{}"
     item["lineas"] = fila["lineas"] or "[]"
     item["categoria"] = fila["categoria"] or "post"
+    item["tipo"] = fila["tipo"] if fila["tipo"] in ("foto", "miniatura") else "foto"
     return item
 
 
@@ -5685,6 +5709,7 @@ def crear_plantilla_diseno(
     marca: str,
     nombre: str = "",
     categoria: str = "post",
+    tipo: str = "foto",
     documento: str = "{}",
     miniatura: str = "",
     lineas: str = "[]",
@@ -5702,6 +5727,7 @@ def crear_plantilla_diseno(
         "marca": marca or "",
         "nombre": nombre or "",
         "categoria": categoria or "post",
+        "tipo": tipo if tipo in ("foto", "miniatura") else "foto",
         "documento": documento or "{}",
         "miniatura": miniatura or "",
         "lineas": lineas or "[]",
@@ -5725,7 +5751,11 @@ def crear_plantilla_diseno(
 
 
 def listar_plantillas_diseno(
-    *, marca: str | None = None, categoria: str | None = None, solo_activas: bool = False
+    *,
+    marca: str | None = None,
+    categoria: str | None = None,
+    tipo: str | None = None,
+    solo_activas: bool = False,
 ) -> list[dict[str, Any]]:
     """Plantillas de diseño, filtros combinables (AND). Mas recientes primero."""
     clausulas: list[str] = []
@@ -5736,6 +5766,9 @@ def listar_plantillas_diseno(
     if categoria:
         clausulas.append("categoria = ?")
         params.append(categoria)
+    if tipo:
+        clausulas.append("tipo = ?")
+        params.append(tipo)
     if solo_activas:
         clausulas.append("activo = 1")
     sql = _SELECT_PLANTILLAS_DISENO

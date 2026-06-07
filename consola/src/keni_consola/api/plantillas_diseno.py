@@ -5,10 +5,10 @@ guarda para reutilizar; se etiqueta por `categoria` (post | historia | reel | in
 por `lineas` (ids de `etiquetas` clase=vertical) para filtrar por línea editorial. A diferencia de
 `plantillas_marca` (1 plantilla POR DEFECTO por marca), aquí hay muchas.
 
-  - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&linea=&q=`).
+  - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&tipo=&linea=&q=`).
   - `POST   /api/plantillas-diseno`        crea una plantilla a partir de un documento (validado).
   - `GET    /api/plantillas-diseno/{id}`   una plantilla (con su documento listo para cargar).
-  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/documento/lineas/miniatura/activo.
+  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/lineas/miniatura/activo.
   - `DELETE /api/plantillas-diseno/{id}`   borra.
 
 SEGURIDAD: `marca` (si llega) del catálogo único; el `documento` se valida en el dominio
@@ -31,6 +31,7 @@ from ..seguridad import autor_de_peticion
 
 _MAX_NOMBRE = 120
 _MAX_LINEAS = 24
+_TIPOS_VALIDOS = frozenset({"foto", "miniatura"})
 
 
 def _validar_marca(marca: object) -> tuple[str | None, str | None]:
@@ -82,11 +83,15 @@ def _coincide(p: dict, q: str) -> bool:
 async def listar(request: Request) -> Response:
     """GET /api/plantillas-diseno: plantillas (mas recientes primero) con filtros opcionales."""
     q = request.query_params
+    tipo_q = (q.get("tipo") or "").strip() or None
+    if tipo_q and tipo_q not in _TIPOS_VALIDOS:
+        return JSONResponse({"error": "tipo debe ser 'foto' o 'miniatura'."}, status_code=400)
     plantillas = [
         _plantilla_a_dict(item)
         for item in repos.listar_plantillas_diseno(
             marca=q.get("marca") or None,
             categoria=q.get("categoria") or None,
+            tipo=tipo_q,
         )
     ]
     linea = (q.get("linea") or "").strip()
@@ -123,6 +128,8 @@ async def crear(request: Request) -> Response:
 
     nombre = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
     categoria = (datos.get("categoria") or "post").strip()[:40] or "post"
+    tipo_raw = (datos.get("tipo") or "").strip()
+    tipo = tipo_raw if tipo_raw in _TIPOS_VALIDOS else "foto"
     miniatura = (datos.get("miniatura") or "").strip() if isinstance(datos.get("miniatura"), str) else ""
     if miniatura:
         # La miniatura es un asset REUSABLE de la plantilla: a la carpeta `plantillas/`.
@@ -133,6 +140,7 @@ async def crear(request: Request) -> Response:
         marca=marca or "",
         nombre=nombre,
         categoria=categoria,
+        tipo=tipo,
         documento=json.dumps(doc_ok, ensure_ascii=False),
         miniatura=miniatura,
         lineas=json.dumps(lineas, ensure_ascii=False),
@@ -161,6 +169,11 @@ async def actualizar(request: Request) -> Response:
         campos["nombre"] = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
     if "categoria" in datos:
         campos["categoria"] = (datos.get("categoria") or "post").strip()[:40] or "post"
+    if "tipo" in datos:
+        tipo_raw = (datos.get("tipo") or "").strip()
+        if tipo_raw and tipo_raw not in _TIPOS_VALIDOS:
+            return JSONResponse({"error": "tipo debe ser 'foto' o 'miniatura'."}, status_code=400)
+        campos["tipo"] = tipo_raw if tipo_raw in _TIPOS_VALIDOS else "foto"
     if "miniatura" in datos:
         campos["miniatura"] = (datos.get("miniatura") or "").strip()
     if "lineas" in datos:

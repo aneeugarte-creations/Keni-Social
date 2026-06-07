@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileUp, Loader2, Plus, Save, SaveAll, X } from "lucide-react";
+import { Check, Copy, FileUp, Image, Loader2, Plus, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -23,6 +23,8 @@ import { documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
+
+type TipoPlantilla = "foto" | "miniatura";
 
 // Todo post es 4:5 (1080×1350). El tamaño se puede ajustar en «Ajustes del lienzo».
 const DIMS_DEFECTO: Documento["formato"] = { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 };
@@ -79,8 +81,8 @@ export default function EditorPro() {
   const stores = useRef<Map<string, StoreEditor>>(new Map());
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [galeria, setGaleria] = useState(false);
-  // Diálogo de «Guardar como» (nombre de plantilla nueva), in-app.
-  const [dialogo, setDialogo] = useState<{ nombre: string } | null>(null);
+  // Diálogo de «Guardar como» (nombre de plantilla nueva + tipo).
+  const [dialogo, setDialogo] = useState<{ nombre: string; tipo: TipoPlantilla } | null>(null);
   // Edición inline del nombre de una pestaña (doble-clic en su título).
   const [editTab, setEditTab] = useState<{ id: string; valor: string } | null>(null);
   // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
@@ -310,7 +312,7 @@ export default function EditorPro() {
     },
     onError: (e: unknown) => {
       if (e instanceof Error && e.message === "__sin_plantilla__") {
-        setDialogo({ nombre: pestanaActiva?.nombre ?? "" });
+        setDialogo({ nombre: pestanaActiva?.nombre ?? "", tipo: "foto" });
         return;
       }
       if (e instanceof Error && e.message === "__sin_hueco__") {
@@ -321,16 +323,16 @@ export default function EditorPro() {
     },
   });
 
-  // GUARDAR COMO: crea una plantilla nueva con el nombre dado y ata la pestaña a ella.
+  // GUARDAR COMO: crea una plantilla nueva con el nombre y tipo dados; ata la pestaña a ella.
   const guardarComo = useMutation({
-    mutationFn: async (nombre: string) => {
+    mutationFn: async ({ nombre, tipo }: { nombre: string; tipo: TipoPlantilla }) => {
       if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
       const documento = storeActivo.getState().documento;
       if (!documento.capas.some((c) => c.tipo === "imagen" && c.es_foto)) throw new Error("__sin_hueco__");
       const miniatura = await miniaturaDe(documento);
-      return api.crearPlantillaDiseno({ marca: pestanaActiva.marca, nombre, categoria: "post", documento, miniatura });
+      return api.crearPlantillaDiseno({ marca: pestanaActiva.marca, nombre, categoria: "post", tipo, documento, miniatura });
     },
-    onSuccess: (res, nombre) => {
+    onSuccess: (res, { nombre }) => {
       if (activa) {
         bindPlantilla(activa, res.plantilla.id, nombre);
         marcarLimpia(activa);
@@ -350,7 +352,7 @@ export default function EditorPro() {
   const confirmarNombre = () => {
     const nombre = dialogo?.nombre.trim();
     if (!nombre) return;
-    guardarComo.mutate(nombre);
+    guardarComo.mutate({ nombre, tipo: dialogo?.tipo ?? "foto" });
     setDialogo(null);
   };
 
@@ -385,6 +387,7 @@ export default function EditorPro() {
         marca: p.marca,
         nombre: `Copia de ${p.nombre || "plantilla"}`,
         categoria: p.categoria || "post",
+        tipo: p.tipo ?? "foto",
         documento: p.documento,
         miniatura: p.miniatura || undefined,
         lineas: p.lineas,
@@ -483,7 +486,7 @@ export default function EditorPro() {
               </span>
               Guardar
             </Button>
-            <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "" })} title="Guardar como… (plantilla nueva)">
+            <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "", tipo: "foto" })} title="Guardar como… (plantilla nueva)">
               <SaveAll className="h-4 w-4" />
             </Button>
           </>
@@ -601,9 +604,27 @@ export default function EditorPro() {
             autoFocus
             placeholder="Nombre de la plantilla"
             value={dialogo?.nombre ?? ""}
-            onChange={(e) => setDialogo((d) => (d ? { nombre: e.target.value } : d))}
+            onChange={(e) => setDialogo((d) => (d ? { ...d, nombre: e.target.value } : d))}
             onKeyDown={(e) => { if (e.key === "Enter") confirmarNombre(); }}
           />
+          {/* Selector de tipo: foto (post de imagen) o miniatura (portada de video) */}
+          <div className="flex gap-2">
+            {(["foto", "miniatura"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setDialogo((d) => (d ? { ...d, tipo: t } : d))}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-2 text-sm transition-colors ${
+                  (dialogo?.tipo ?? "foto") === t
+                    ? "border-primary bg-primary/10 font-medium text-primary"
+                    : "border-border text-muted-foreground hover:border-muted-foreground"
+                }`}
+              >
+                {t === "foto" ? <Image className="h-3.5 w-3.5" /> : <Video className="h-3.5 w-3.5" />}
+                {t === "foto" ? "Foto" : "Miniatura"}
+              </button>
+            ))}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogo(null)}>Cancelar</Button>
             <Button onClick={confirmarNombre} disabled={!dialogo?.nombre.trim()}>Guardar</Button>
@@ -670,6 +691,18 @@ function GaleriaInline({
                   )}
                 </div>
               </button>
+              {/* Badge de tipo */}
+              <div className="absolute left-1.5 top-1.5">
+                {(p.tipo ?? "foto") === "miniatura" ? (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                    <Video className="h-2.5 w-2.5" />Miniatura
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                    <Image className="h-2.5 w-2.5" />Foto
+                  </span>
+                )}
+              </div>
               {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
               {editId === p.id ? (
                 <input
