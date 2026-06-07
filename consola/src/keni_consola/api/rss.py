@@ -1,18 +1,15 @@
-"""API RSS: fuentes RSS/Atom (CRUD + salud + filtros) + items (dedup) + generar copy.
+"""API RSS: gestión de FUENTES RSS/Atom (CRUD + salud + filtros).
 
-El SPA guarda fuentes (un feed por marca, opcional) y lista sus items recientes para
-que la persona elija cuales convertir en publicaciones. Persistencia de las FUENTES y
-de los ITEMS YA USADOS en SQLite (`consola.db`); los ITEMS en si se leen del feed en
-vivo (no se persisten, solo su `clave` cuando se marcan usados).
+El SPA da de alta los feeds (un feed por marca, opcional) en la pestaña RSS de Fuentes.
+Los ITEMS que esos feeds producen NO se sirven aquí: viven en el pool persistente de
+Noticias (`/api/noticias`, motor de ingesta), donde se revisan y se usan. Este router
+solo configura los CANALES; además re-exporta los helpers de parseo/lectura de
+`dominio.http_feed` que reutilizan el Radar, las agencias y el Termómetro.
 
-CAPACIDADES (RSS v2):
+CAPACIDADES:
   - Fuentes: CRUD completo (incl. PUT parcial) + activar/desactivar (`activo`) +
     filtros por palabra clave (`incluir`/`excluir`, CSV) + redes por defecto
     (`redes_def`) + salud (ultima_actualizacion / ultimo_error / ultimo_conteo).
-  - Items: `clave` estable por item (guid/id del feed, fallback al enlace), marcado
-    de usado / dedup (`rss_items_vistos`) y filtros del feed aplicados al listar.
-  - Generar: copy DIRECTO desde un item, reutilizando el AUTO-GUARDADO del post-procesado
-    de copy (`dominio.copy`): crea historial + N publicaciones borrador.
 
 SEGURIDAD / VALIDACION:
   - `nombre` y `url` obligatorios al crear una fuente.
@@ -47,13 +44,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas, redes, repos
+from .. import marcas, redes, repos
 from .._http_json import leer_json
-from ..dominio import dedup
-from ..dominio import generar as gen_dom
 from ..dominio import http_feed
-from ..dominio import stream
-from ..seguridad import autor_de_peticion
 
 # Re-exportes de la infra de feeds (`dominio.http_feed`): la logica vive alli (sin
 # Starlette), y aqui se re-expone para compatibilidad con quien importe `rss.X`. El
@@ -293,210 +286,6 @@ async def borrar_fuente(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-def _flag(request: Request, nombre: str) -> bool:
-    """Lee un query param booleano (`1`/`true`/`si`/`yes` => True; ausente/otro => False)."""
-    return (request.query_params.get(nombre) or "").strip().lower() in ("1", "true", "si", "yes")
-
-
-def _items_de_fuente(
-    fuente: dict[str, Any],
-    *,
-    ocultar_usados: bool,
-    vistas: set[str] | None = None,
-) -> list[dict[str, Any]]:
-    """Lee, filtra (incluir/excluir) y marca `usado` los items de UNA fuente.
-
-    Aplica los filtros del feed sobre titulo+resumen, marca cada item segun
-    `rss_items_vistos`, y con `ocultar_usados` omite los ya usados. Cada item sale
-    como `{titulo, resumen, enlace, fecha, fuente_id, fuente_nombre, clave, usado}`.
-    Propaga `RSSError` (la maneja el llamante para anotar el error y la salud).
-
-    `vistas` (opcional): conjunto de claves ya usadas de ESTA fuente, ya resuelto por el
-    llamante. Permite evitar el N+1 a Postgres (`repos.claves_vistas` por fuente DENTRO de
-    un bucle): el descubrimiento (Radar) pasa `set()` porque NO necesita la marca `usado`
-    (sus consumidores no la leen). Si es `None`, se consulta aqui (compat: feed unico).
-    """
-    crudos = leer_items_fuente(fuente)
-    if vistas is None:
-        vistas = repos.claves_vistas(fuente["id"])
-    incluir = fuente.get("incluir", "")
-    excluir = fuente.get("excluir", "")
-    resultado: list[dict[str, Any]] = []
-    for item in crudos:
-        if not item_pasa_filtros(item, incluir, excluir):
-            continue
-        usado = item["clave"] in vistas if item["clave"] else False
-        if ocultar_usados and usado:
-            continue
-        resultado.append({**item, "usado": usado})
-    return resultado
-
-
-async def listar_items(request: Request) -> Response:
-    """Items recientes `?fuente=&ocultar_usados=0|1&incluir_inactivas=0|1`.
-
-    -> `{items:[{titulo, resumen, enlace, fecha, fuente_id, fuente_nombre, clave,
-    usado}], errores:[..]}`. Aplica los filtros incluir/excluir del feed, marca
-    `usado` segun `rss_items_vistos` (y con `ocultar_usados=1` los omite). Solo lee
-    feeds `activo` salvo `incluir_inactivas=1`. Tras descargar, ACTUALIZA la salud de
-    la fuente (ultima_actualizacion/ultimo_conteo/ultimo_error). Un feed que falla se
-    OMITE con su error sin romper los demas. Fuente concreta inexistente -> 404.
-    """
-    ocultar_usados = _flag(request, "ocultar_usados")
-    incluir_inactivas = _flag(request, "incluir_inactivas")
-
-    fuente_id = request.query_params.get("fuente") or None
-    if fuente_id:
-        fuente = repos.obtener_fuente_rss(fuente_id)
-        if fuente is None:
-            return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-        fuentes = [fuente]
-    else:
-        fuentes = repos.listar_fuentes_rss()
-
-    if not incluir_inactivas:
-        fuentes = [f for f in fuentes if f.get("activo", True)]
-
-    # Descarga EN PARALELO (F0 rendimiento): cada fuente (descarga httpx sincrona + filtros)
-    # corre en su hilo; un feed lento ya no bloquea a los demas. La marca `usado` se resuelve
-    # por fuente DENTRO de cada hilo (`vistas=None`): aqui SI se usa (a diferencia del Radar),
-    # asi que mantenemos la consulta por fuente, pero ahora en paralelo con la descarga (no
-    # un N+1 serial). `mapear_en_paralelo` RECOMPONE el orden de `fuentes`; el resultado de
-    # cada fuente es `(propios, error)` para omitir las caidas sin romper a las demas.
-    def _trabajo(fuente: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
-        try:
-            return _items_de_fuente(fuente, ocultar_usados=ocultar_usados), None
-        except RSSError as e:
-            return [], str(e)
-        except Exception:  # noqa: BLE001 -- nunca un traceback crudo; se omite la fuente
-            return [], "No se pudo leer el feed."
-
-    resultados = http_feed.mapear_en_paralelo(_trabajo, fuentes)
-
-    items: list[dict[str, Any]] = []
-    errores: list[dict[str, str]] = []
-    # Las escrituras de salud a Postgres se hacen SECUENCIALES tras el abanico (evita abrir
-    # muchas conexiones concurrentes); el orden sigue el de `fuentes` (determinista).
-    for fuente, (propios, error) in zip(fuentes, resultados):
-        if error is None:
-            items.extend(propios)
-            repos.registrar_salud_fuente_rss(fuente["id"], conteo=len(propios), error="")
-        else:
-            repos.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=error)
-            errores.append(
-                {"fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"], "error": error}
-            )
-    # Orden cronologico GLOBAL (mas nuevo arriba), no por feed/marca: tras acumular los
-    # items de todas las fuentes se ordenan por su fecha. Los que no traen fecha parseable
-    # caen al final (ver `fecha_a_orden`), nunca arriba por azar del orden de descarga.
-    items = ordenar_items_por_fecha(items)
-    return JSONResponse({"items": items, "errores": errores})
-
-
-async def marcar_item_usado(request: Request) -> Response:
-    """Marca/desmarca un item como usado `{fuente_id, clave, usado?: true}` -> `{mensaje}`.
-
-    Requiere `fuente_id` (existente) y `clave` no vacia. `usado` por defecto True.
-    """
-    datos = await leer_json(request)
-    fuente_id = datos.get("fuente_id")
-    clave = datos.get("clave")
-    if not isinstance(fuente_id, str) or not fuente_id:
-        return JSONResponse({"error": "Falta la fuente del item."}, status_code=400)
-    if not isinstance(clave, str) or not clave.strip():
-        return JSONResponse({"error": "Falta la clave del item."}, status_code=400)
-    if repos.obtener_fuente_rss(fuente_id) is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    usado = datos.get("usado", True)
-    repos.marcar_item(fuente_id, clave.strip(), bool(usado))
-    return JSONResponse({"mensaje": "Item marcado como usado." if usado else "Item desmarcado."})
-
-
-# Prompt por defecto para generar copy desde un item del feed.
-_PROMPT_DEFECTO = "copy-desde-nota"
-
-
-def _nota_desde_item(titulo: str, resumen: str, enlace: str) -> str:
-    """Construye la nota para el prompt: titulo + resumen + enlace (los vacios se omiten)."""
-    partes = [p for p in (titulo.strip(), resumen.strip(), enlace.strip()) if p]
-    return "\n\n".join(partes)
-
-
-async def generar(request: Request) -> Response:
-    """Genera copy DIRECTO desde un item, EN SEGUNDO PLANO -> `{generacion}` (tipo "rss").
-
-    `{titulo, resumen?, enlace?, marca, redes:[..], prompt?, fuente_id?, clave?}`:
-      - Construye la nota (`titulo + "\\n\\n" + resumen + "\\n\\n" + enlace`) y lanza un
-        trabajo de claude en background (no bloquea). El frontend sondea
-        `GET /api/generaciones/{id}` y, al completarse, recoge `resultado` (misma forma
-        que copy: `{resultado, historial_id, verdicto, piezas, publicaciones}`).
-      - El item se marca como USADO solo si la generacion completa con exito (en el
-        post-procesado), no al lanzar.
-      - Prompt por defecto `copy-desde-nota`. Valida marca/redes/prompt contra allowlists.
-    """
-    datos = await leer_json(request)
-    titulo = datos.get("titulo")
-    if not isinstance(titulo, str) or not titulo.strip():
-        return JSONResponse({"error": "El título del item es obligatorio."}, status_code=400)
-    resumen = datos.get("resumen") if isinstance(datos.get("resumen"), str) else ""
-    enlace = datos.get("enlace") if isinstance(datos.get("enlace"), str) else ""
-
-    marca = datos.get("marca")
-    if not gen_dom.marca_valida(marca):
-        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-
-    prompt = datos.get("prompt")
-    if not isinstance(prompt, str) or not prompt.strip():
-        prompt = _PROMPT_DEFECTO
-    # El "tipo de contenido" es ahora un PROMPT de la Biblioteca (store-or-semilla).
-    prompt_id = f"prompt/{prompt.strip()}"
-    cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
-    if cuerpo is None:
-        return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
-
-    crudas = datos.get("redes")
-    redes_ids = stream.normalizar_redes(crudas if isinstance(crudas, list) else None, canonicas=redes.ids())
-    # Defensa en profundidad contra token-flooding del prompt: trunca la nota (titulo +
-    # resumen + enlace) al mismo limite que aplica el dominio de generacion.
-    nota = _nota_desde_item(titulo, resumen, enlace)[: gen_dom.MAX_TEXTO]
-    fuente_id = datos.get("fuente_id")
-    clave = datos.get("clave")
-
-    # Atribucion por usuario (#130 Fase 1): el item lo genera el usuario de la peticion.
-    # ENCOLA y devuelve de inmediato (#130 Fase 2); el worker corre `claude -p`. El post-
-    # procesado de copy (parsear + historial + N borradores) se reutiliza; `fuente_id`/`clave`
-    # marcan el item del feed como usado SOLO si completa con exito.
-    autor = autor_de_peticion(request)
-    fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
-    clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
-
-    # Imagen ORIGINAL del artículo: solo se reutiliza si la fuente es de MARCA PROPIA
-    # (gate server-side; el cliente no puede forzarlo). La pieza nace `tipo_contenido='fuente'`
-    # con esa URL en `imagen_fuente`, lista para usarse en el editor.
-    imagen_item = datos.get("imagen")
-    imagen_item = imagen_item.strip() if isinstance(imagen_item, str) else ""
-    imagen_fuente = ""
-    tipo_contenido = ""
-    if fuente and imagen_item.startswith(("http://", "https://")):
-        f = repos.obtener_fuente_rss(fuente)
-        if f and f.get("propia"):
-            imagen_fuente = imagen_item
-            tipo_contenido = "fuente"
-
-    # URL CANONICA de la nota de origen: el enlace ya viaja como texto en la nota; aquí se
-    # PERSISTE estructurado en `contenido.url_fuente` (trazabilidad + dedup por URL). "" si el
-    # enlace no es http(s) válido (la canonización lo descarta).
-    url_fuente = dedup.url_canonica(enlace) if enlace.strip().startswith(("http://", "https://")) else ""
-
-    gen = gen_dom.lanzar_copy(
-        tipo="rss", prompt_id=prompt_id, origen_historial=prompt.strip(), marca=marca,
-        contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), titulo_dado=titulo.strip(),
-        texto_base=nota, autor=autor,
-        fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
-        imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
-        url_fuente=url_fuente,
-    )
-    return JSONResponse({"generacion": gen})
 
 
 RUTAS = [
@@ -504,7 +293,4 @@ RUTAS = [
     Route("/api/rss/fuentes", crear_fuente, methods=["POST"]),
     Route("/api/rss/fuentes/{fuente_id}", actualizar_fuente, methods=["PUT"]),
     Route("/api/rss/fuentes/{fuente_id}", borrar_fuente, methods=["DELETE"]),
-    Route("/api/rss/items", listar_items, methods=["GET"]),
-    Route("/api/rss/items/usado", marcar_item_usado, methods=["POST"]),
-    Route("/api/rss/generar", generar, methods=["POST"]),
 ]

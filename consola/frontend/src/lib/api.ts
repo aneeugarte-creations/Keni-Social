@@ -88,7 +88,6 @@ import type {
   RespuestaEjecutarRadarAuto,
   CuerpoCrearEventoRota,
   CuerpoDuplicarPublicacion,
-  CuerpoGenerarDesdeItem,
   CuerpoGenerarMedia,
   CuerpoGenerarTermometro,
   CuerpoGuardarHistorial,
@@ -98,7 +97,6 @@ import type {
   CuerpoGuardarModeloImagen,
   CuerpoGuardarConfig,
   CuerpoGuardarEsfuerzo,
-  CuerpoMarcarItemUsado,
   CuerpoRevisarQaEditorial,
   CuerpoSugerirHashtags,
   CuerpoVerificar,
@@ -133,7 +131,6 @@ import type {
   RespuestaGeneraciones,
   RespuestaGrupoHashtags,
   RespuestaHashtags,
-  RespuestaItemsRss,
   RespuestaMedia,
   CuerpoImagenesGenerar,
   CuerpoImagenesEditar,
@@ -1251,7 +1248,7 @@ export const api = {
   sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
     peticion<RespuestaGeneracion>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
 
-  // --- RSS (fuentes + items) ---
+  // --- RSS (solo gestión de fuentes/feeds; los items viven en el pool de Noticias) ---
   fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),
   crearFuenteRss: (cuerpo: CuerpoCrearFuenteRss) =>
     peticion<RespuestaFuenteRss>("/rss/fuentes", { metodo: "POST", json: cuerpo }),
@@ -1262,15 +1259,6 @@ export const api = {
     }),
   eliminarFuenteRss: (id: string) =>
     peticion<RespuestaMensaje>(`/rss/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  itemsRss: (fuente?: string, ocultarUsados?: boolean, signal?: AbortSignal) =>
-    peticion<RespuestaItemsRss>(
-      `/rss/items${query({ fuente, ocultar_usados: ocultarUsados ? "1" : undefined })}`,
-      { signal },
-    ),
-  marcarItemRssUsado: (cuerpo: CuerpoMarcarItemUsado) =>
-    peticion<RespuestaMensaje>("/rss/items/usado", { metodo: "POST", json: cuerpo }),
-  generarDesdeItemRss: (cuerpo: CuerpoGenerarDesdeItem) =>
-    peticion<RespuestaGeneracion>("/rss/generar", { metodo: "POST", json: cuerpo }),
 
   // --- Hub genérico de fuentes (item G): RSS + API + galerías + ideas + internas ---
   // ADITIVO sobre /rss: lista todas las fuentes de cualquier tipo + estado de agencias.

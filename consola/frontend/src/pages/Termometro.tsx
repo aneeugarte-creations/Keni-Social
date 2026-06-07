@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
-import type { ItemRss, RespuestaTermometro } from "@/types";
+import type { NoticiaItem, RespuestaTermometro } from "@/types";
 
 /** Clave de sessionStorage para reanudar la generación en curso al volver a la página. */
 const CLAVE_GEN_TERMOMETRO = "keni:generacion-termometro";
@@ -43,10 +43,10 @@ const CABECERA = {
 const OPCIONES_NUMERO = ["5", "6", "7", "8"] as const;
 
 /** Formatea un item de RSS como una línea de noticia para el textarea. */
-function formatearItem(item: ItemRss): string {
+function formatearItem(item: NoticiaItem): string {
   let linea = `- ${item.titulo}`;
   if (item.fuente_nombre) linea += ` (${item.fuente_nombre})`;
-  if (item.enlace) linea += ` [${item.enlace}]`;
+  if (item.url) linea += ` [${item.url}]`;
   return linea;
 }
 
@@ -266,14 +266,16 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   async function traerDelRss() {
     setTrayendo(true);
     try {
-      const r = await api.itemsRss(undefined, true);
+      // Trae titulares del POOL de Noticias (motor de ingesta), no de una lectura RSS
+      // en vivo: una sola fuente de verdad para las noticias.
+      const r = await api.noticias.listar({ limit: 25 });
       const lineas = r.items.slice(0, 25).map(formatearItem);
       if (lineas.length === 0) {
-        toast.message("No hay noticias en los feeds RSS. Da de alta feeds en Fuentes.");
+        toast.message("No hay noticias en el pool. Da de alta feeds en Fuentes.");
         return;
       }
       setNoticias((prev) => (prev.trim() ? `${prev}\n${lineas.join("\n")}` : lineas.join("\n")));
-      toast.success(`${lineas.length} ${lineas.length === 1 ? "titular traído" : "titulares traídos"} del RSS`);
+      toast.success(`${lineas.length} ${lineas.length === 1 ? "titular traído" : "titulares traídos"} del pool`);
     } catch (e) {
       toast.error(mensajeError(e));
     } finally {
