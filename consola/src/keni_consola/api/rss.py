@@ -77,6 +77,36 @@ def leer_items_fuente(fuente: dict[str, Any]) -> list[dict[str, Any]]:
     return http_feed.leer_items_fuente(fuente, descargador=_DESCARGADOR)
 
 
+def _items_de_fuente(
+    fuente: dict[str, Any],
+    *,
+    ocultar_usados: bool,
+    vistas: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Lee, filtra (incluir/excluir) y marca `usado` los items de UNA fuente.
+
+    Lo consume el descubrimiento (Radar, `api.radar`): aplica los filtros del feed
+    sobre titulo+resumen y devuelve cada item como `{titulo, resumen, enlace, fecha,
+    fuente_id, fuente_nombre, clave, usado}`. Propaga `RSSError`. `vistas` (opcional):
+    claves ya usadas de ESTA fuente; el Radar pasa `set()` porque no lee la marca
+    `usado`. Si es `None`, se consulta aqui.
+    """
+    crudos = leer_items_fuente(fuente)
+    if vistas is None:
+        vistas = repos.claves_vistas(fuente["id"])
+    incluir = fuente.get("incluir", "")
+    excluir = fuente.get("excluir", "")
+    resultado: list[dict[str, Any]] = []
+    for item in crudos:
+        if not item_pasa_filtros(item, incluir, excluir):
+            continue
+        usado = item["clave"] in vistas if item["clave"] else False
+        if ocultar_usados and usado:
+            continue
+        resultado.append({**item, "usado": usado})
+    return resultado
+
+
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
 # que publicaciones.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
