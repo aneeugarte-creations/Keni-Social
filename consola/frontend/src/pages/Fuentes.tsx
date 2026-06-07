@@ -4,10 +4,8 @@ import {
   Building2,
   CheckCircle2,
   CircleSlash,
-  CircleX,
   ExternalLink,
   Globe,
-  Layers,
   Lightbulb,
   Link2,
   Loader2,
@@ -15,10 +13,9 @@ import {
   Rss,
   Send,
   Trash2,
-  TrendingUp,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -68,18 +65,12 @@ import {
   ORDEN_REDES,
   tiempoRelativo,
 } from "./publicaciones/meta";
-import { TallerGreen } from "./fuentes/TallerGreen";
-// Salud del motor de ingesta de feeds (antes sub-vista de Cobertura/Noticias): la
-// observabilidad de los canales es configuración de Fuentes, no curación del pool.
+// Salud del motor de ingesta de feeds: estado de los canales externos (feeds activos/
+// con error, huecos, reactivar). Vive bajo "Externas".
 import { SaludFeeds } from "./fuentes/SaludFeeds";
-// Canales absorbidos al colapsar el hub Investigación a 3 piezas (Noticias ·
-// Contenidos · Fuentes): los buzones del día, los agentes de investigación y los
-// eventos/programas de cobertura dejan de ser pestañas sueltas del hub y pasan a
-// ser TIPOS DE FUENTE aquí. Se componen sus páginas existentes (cada una trae su
-// propia cabecera, datos y marca activa); la fusión fina vive en una fase posterior.
+// Buzones del equipo (listas tipo portal/WhatsApp/corresponsales y Excel): la fuente
+// INTERNA. Compone la página de Cajones del día.
 import CajonesDia from "./CajonesDia";
-import AgentesInvestigacion from "./AgentesInvestigacion";
-import EventosCobertura from "./EventosCobertura";
 
 const CLAVE_FUENTES = ["rss", "fuentes"] as const;
 const CLAVE_ITEMS = ["rss", "items"] as const;
@@ -87,9 +78,9 @@ const CLAVE_ITEMS = ["rss", "items"] as const;
 const CABECERA = {
   titulo: "Fuentes",
   descripcion:
-    "Los canales de los que se alimentan Noticias y Contenidos, todos en un sitio y por " +
-    "marca: RSS y agencias, buzones del día (portal, corresponsales, reporteros, Excel), " +
-    "agentes de investigación, eventos y programas, ideas, enlaces y el banco Green.",
+    "De dónde se alimentan Noticias y Contenidos, por marca. EXTERNAS: feeds RSS (y agencias/" +
+    "Google Trends como señales). INTERNAS: buzones del equipo (listas tipo portal/WhatsApp/" +
+    "corresponsales y Excel) y aportes a mano (idea / enlace / nota interna).",
 };
 
 /**
@@ -105,19 +96,12 @@ type PestanaTipo = {
   etiqueta: string;
 };
 
+// Solo hay DOS clases de fuente, y la barra lo refleja:
+//   • Externas — lo que llega de fuera: feeds RSS (+ catálogo) y el estado del motor.
+//   • Internas — lo que pone el equipo: buzones (listas/WhatsApp/Excel) y aportes a mano.
 const PESTANAS_TIPO: PestanaTipo[] = [
-  { valor: "todas", etiqueta: "Todas" },
-  { valor: "rss", etiqueta: "RSS" },
-  { valor: "salud", etiqueta: "Salud de feeds" },
-  { valor: "catalogo", etiqueta: "Catálogo" },
-  // Canales que alimentan NOTICIAS, absorbidos del antiguo hub Investigación:
-  { valor: "buzones", etiqueta: "Buzones" },
-  { valor: "agentes", etiqueta: "Agentes" },
-  { valor: "eventos", etiqueta: "Eventos" },
-  // Aportaciones manuales (idea/enlace/interno) unificadas en una sola pestaña:
-  { valor: "aportar", etiqueta: "Aportar" },
-  // Canal que alimenta CONTENIDOS (evergreen):
-  { valor: "green", etiqueta: "Green" },
+  { valor: "externas", etiqueta: "Externas" },
+  { valor: "internas", etiqueta: "Internas" },
 ];
 
 /**
@@ -159,12 +143,10 @@ function AportarHub({
 }
 
 /**
- * Página de Fuentes: HUB multi-tipo de insumos.
- *
- * Pestaña por defecto "Todas": vista unificada de todas las fuentes configuradas (de
- * cualquier tipo) + estado de agencias. Luego, una pestaña INDEPENDIENTE por tipo, cada
- * una con su propia alta/edición coherente con el tipo. Los tipos MANUALES (ideas, enlaces,
- * interno) producen ítems reales en el pipeline con su fuente visible.
+ * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Contenidos.
+ * Dos clases, dos pestañas:
+ *   • Externas — feeds RSS (alta/edición con salud inline), catálogo y estado del motor.
+ *   • Internas — buzones del equipo (Cajones) y aportes a mano (idea/enlace/interno).
  */
 export default function Fuentes() {
   // Las marcas y redes viven en el catálogo de opciones de publicaciones.
@@ -187,7 +169,7 @@ export default function Fuentes() {
   const tabParam = searchParams.get("tab");
   const tabInicial = PESTANAS_TIPO.some((p) => p.valor === tabParam)
     ? (tabParam as string)
-    : "todas";
+    : "externas";
 
   return (
     <>
@@ -200,189 +182,22 @@ export default function Fuentes() {
             </TabsTrigger>
           ))}
         </TabsList>
-        <TabsContent value="todas">
-          <HubFuentes />
-        </TabsContent>
-        {/* RSS gestiona solo los FEEDS (config del canal). Los items que producen
-            viven en Noticias (el pool), no se duplican aquí. */}
-        <TabsContent value="rss">
+        {/* EXTERNAS: lo que llega de fuera. Feeds RSS (alta/edición con su salud
+            inline) + catálogo para añadir de un clic + estado del motor de ingesta.
+            (Agencias y Google Trends son señales externas; ver nota en el header.) */}
+        <TabsContent value="externas" className="space-y-8">
           <GestionFuentes marcas={marcas} redes={opcionesRedes} />
-        </TabsContent>
-        {/* Salud del motor de ingesta de feeds (antes en Cobertura/Noticias). */}
-        <TabsContent value="salud">
+          <CatalogoPresets marcas={marcas} />
           <SaludFeeds />
         </TabsContent>
-        <TabsContent value="catalogo">
-          <CatalogoPresets marcas={marcas} />
-        </TabsContent>
-        {/* Buzones del día: portal/SMS, corresponsales, reporteros y Excel Claro.
-            Canales manuales/estructurados que alimentan Noticias. */}
-        <TabsContent value="buzones">
+        {/* INTERNAS: lo que pone el equipo. Buzones (listas tipo portal/WhatsApp/
+            corresponsales y Excel) + aportes a mano (idea / enlace / nota interna). */}
+        <TabsContent value="internas" className="space-y-8">
           <CajonesDia />
-        </TabsContent>
-        {/* Agentes de investigación: briefs reutilizables que buscan en la web y
-            proponen candidatos al pool de Noticias. */}
-        <TabsContent value="agentes">
-          <AgentesInvestigacion soloBriefs />
-        </TabsContent>
-        {/* Eventos y programas de cobertura (agenda editorial → Noticias). */}
-        <TabsContent value="eventos">
-          <EventosCobertura />
-        </TabsContent>
-        {/* Aportar: una sola superficie para idea/enlace/interno (antes 3 pestañas). */}
-        <TabsContent value="aportar">
           <AportarHub marcas={marcas} redes={opcionesRedes} />
-        </TabsContent>
-        <TabsContent value="green">
-          <TallerGreen marcas={marcas} redes={opcionesRedes} />
         </TabsContent>
       </Tabs>
     </>
-  );
-}
-
-// --- Hub de TODAS las fuentes (item G): RSS + API + galerías + ideas + internas ---
-
-/** Etiqueta humana de un tipo de fuente del hub. */
-const ETIQUETA_TIPO: Record<string, string> = {
-  rss: "RSS",
-  api: "API / Agencia",
-  galeria: "Galería",
-  idea: "Idea",
-  interna: "Interna",
-};
-
-/**
- * Panel "Todas las fuentes": vista UNIFICADA del hub genérico (`/api/fuentes`).
- * Muestra todas las fuentes dadas de alta (de cualquier tipo, con su prioridad y
- * etiquetas) y el estado HONESTO de las agencias (Reuters/AFP): disponibles o
- * "pendientes / no configuradas" según haya credencial, sin inventar nada.
- *
- * Esta vista es de LECTURA/visibilidad: el alta/edición de cada tipo vive en su pestaña
- * dedicada (RSS, Google Trends, Ideas, Enlaces, Interno AMX). Los feeds RSS dados de alta
- * se espejan automáticamente al hub y aparecen aquí.
- */
-function HubFuentes() {
-  const { marcaActiva } = useMarcaActiva();
-  const query = useQuery({
-    queryKey: ["fuentes", "hub", marcaActiva ?? ""],
-    queryFn: ({ signal }) => api.fuentesHub(undefined, signal),
-  });
-
-  if (query.isPending) {
-    return <Skeleton className="h-72 w-full rounded-md" />;
-  }
-  if (query.isError) {
-    return (
-      <BloqueError
-        titulo="No se pudieron cargar las fuentes"
-        mensaje={mensajeError(query.error)}
-        onReintentar={() => void query.refetch()}
-        cargando={query.isFetching}
-      />
-    );
-  }
-
-  const { fuentes, agencias, pendientes } = query.data;
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Layers className="h-4 w-4" />
-            Fuentes dadas de alta
-            <Badge variant="secondary" className="ml-1">
-              {fuentes.length}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {fuentes.length === 0 ? (
-            <EstadoVacioTexto
-              texto="Aún no hay fuentes configuradas. Da de alta feeds en la pestaña RSS (se espejan aquí) o configura Google Trends."
-              className="py-4"
-            />
-          ) : (
-            <ul className="space-y-2">
-              {fuentes.map((f) => (
-                <li key={f.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{f.nombre}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge variant="outline">{ETIQUETA_TIPO[f.tipo] ?? f.tipo}</Badge>
-                      {f.marca_nombre && <Badge variant="secondary">{f.marca_nombre}</Badge>}
-                      {f.prioridad !== 0 && <Badge variant="outline">Prioridad {f.prioridad}</Badge>}
-                      {f.etiquetas.map((e) => (
-                        <Badge key={e} variant="secondary">
-                          {e}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  {f.activo ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <CircleSlash className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Agencias de noticias</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <ul className="space-y-2.5">
-            {agencias.map((a) => (
-              <li key={a.red} className="flex items-start gap-2 text-sm">
-                {a.disponible ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                )}
-                <div className="min-w-0">
-                  <p className="font-medium">{a.nombre}</p>
-                  {!a.disponible && a.motivo && (
-                    <p className="text-xs text-muted-foreground">{a.motivo}</p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-          {pendientes.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Las agencias pendientes necesitan credenciales (ver README) para empezar a traer
-              notas. Hasta entonces aparecen aquí en claro, sin inventar contenido.
-            </p>
-          )}
-          {/* Google Trends ya no tiene pestaña propia: era solo lectura de una config no
-              editable. Se resume aquí como la señal built-in que es; su estado real se ve
-              por fuente en el panel del Radar. */}
-          <div className="flex items-start gap-2 border-t pt-3 text-sm">
-            <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0">
-              <p className="font-medium">Google Trends</p>
-              <p className="text-xs text-muted-foreground">
-                Señal built-in del Radar (no se da de alta): se configura por entorno y alimenta
-                el{" "}
-                <Link
-                  to="/datos/investigacion/descubrimiento"
-                  className="underline hover:text-foreground"
-                >
-                  Descubrimiento
-                </Link>{" "}
-                y la auto-promoción. Su disponibilidad real se ve por fuente en el panel del Radar.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   );
 }
 

@@ -216,7 +216,7 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     renderFuentes();
 
     // Navegar a la pestaña Catálogo.
-    const tabCatalogo = await screen.findByRole("tab", { name: "Catálogo" });
+    const tabCatalogo = await screen.findByRole("tab", { name: "Externas" });
     fireEvent.mouseDown(tabCatalogo, { button: 0 });
 
     // Los dos presets deben aparecer.
@@ -224,23 +224,22 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     expect(await screen.findByText("BBC Mundo")).toBeInTheDocument();
   });
 
-  it("expone los canales absorbidos del hub como pestañas (Buzones, Agentes, Eventos)", async () => {
+  it("solo hay dos clases de fuente: Externas e Internas", async () => {
     stubFetch();
     renderFuentes();
 
-    // Al colapsar el hub Investigación a 3 piezas, los buzones del día, los agentes
-    // de investigación y los eventos/programas dejan de ser pestañas sueltas y pasan
-    // a ser tipos de FUENTE dentro de esta página.
-    expect(await screen.findByRole("tab", { name: "Buzones" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Agentes" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Eventos" })).toBeInTheDocument();
+    // Fuentes se compacta a 2 pestañas: lo externo (RSS/agencias/Trends) y lo interno
+    // (buzones del equipo + aportes a mano). No hay más sub-pestañas.
+    expect(await screen.findByRole("tab", { name: "Externas" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Internas" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
   });
 
   it("el preset ya activo muestra badge 'Activo' y su checkbox está deshabilitado", async () => {
     stubFetch();
     renderFuentes();
 
-    const tabCatalogo = await screen.findByRole("tab", { name: "Catálogo" });
+    const tabCatalogo = await screen.findByRole("tab", { name: "Externas" });
     fireEvent.mouseDown(tabCatalogo, { button: 0 });
 
     // Espera a que renderice los presets.
@@ -258,7 +257,7 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     stubFetch();
     renderFuentes();
 
-    const tabCatalogo = await screen.findByRole("tab", { name: "Catálogo" });
+    const tabCatalogo = await screen.findByRole("tab", { name: "Externas" });
     fireEvent.mouseDown(tabCatalogo, { button: 0 });
 
     // Espera a que renderice los presets.
@@ -286,7 +285,7 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     stubFetch();
     renderFuentes();
 
-    const tabCatalogo = await screen.findByRole("tab", { name: "Catálogo" });
+    const tabCatalogo = await screen.findByRole("tab", { name: "Externas" });
     fireEvent.mouseDown(tabCatalogo, { button: 0 });
 
     await screen.findByText("Reuters — World");
@@ -301,7 +300,7 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     // Render con marca activa "unotv" directamente via contexto
     renderFuentesConMarca("unotv");
 
-    const tabCatalogo = await screen.findByRole("tab", { name: "Catálogo" });
+    const tabCatalogo = await screen.findByRole("tab", { name: "Externas" });
     fireEvent.mouseDown(tabCatalogo, { button: 0 });
 
     await screen.findByText("Reuters — World");
@@ -334,13 +333,13 @@ describe("Fuentes — filtrado por marca activa en pestaña RSS", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("la pestaña RSS muestra solo los feeds de la marca activa", async () => {
+  it("Externas muestra solo los feeds de la marca activa", async () => {
     stubFetch({ rssPayload: FUENTES_RSS_UNOTV });
     renderFuentesConMarca("unotv");
 
-    // Navegar a la pestaña RSS
-    const tabRss = await screen.findByRole("tab", { name: "RSS" });
-    fireEvent.mouseDown(tabRss, { button: 0 });
+    // Navegar a la pestaña Externas (los feeds RSS se gestionan ahí)
+    const tabExternas = await screen.findByRole("tab", { name: "Externas" });
+    fireEvent.mouseDown(tabExternas, { button: 0 });
 
     // El feed de UnoTV debe aparecer (misma marca que la activa)
     expect(await screen.findByText("UnoTV Nacional")).toBeInTheDocument();

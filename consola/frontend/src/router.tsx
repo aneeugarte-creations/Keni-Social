@@ -217,21 +217,23 @@ export const router = createBrowserRouter([
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
               // Las hojas del antiguo hub ya viven dentro de Noticias/Fuentes; sus rutas
-              // directas redirigen a su nuevo hogar (la pestaña de Fuentes va deep-linked
-              // vía ?tab=). Cobertura/Investigador → Noticias (índice del hub).
+              // directas redirigen a su nuevo hogar. Fuentes tiene 2 clases (Externas/
+              // Internas), deep-linkadas vía ?tab=. Cobertura/Investigador → Noticias.
               { path: "investigador", element: <Navigate to="/datos/investigacion" replace /> },
               { path: "cobertura", element: <Navigate to="/datos/investigacion" replace /> },
+              // Cajones y eventos son fuentes INTERNAS (buzones/Excel del equipo).
               {
                 path: "cajones",
-                element: <Navigate to="/datos/investigacion/fuentes?tab=buzones" replace />,
+                element: <Navigate to="/datos/investigacion/fuentes?tab=internas" replace />,
               },
               {
                 path: "eventos",
-                element: <Navigate to="/datos/investigacion/fuentes?tab=eventos" replace />,
+                element: <Navigate to="/datos/investigacion/fuentes?tab=internas" replace />,
               },
+              // Agentes de investigación se retiró (no aportaba): cae en Fuentes.
               {
                 path: "agentes",
-                element: <Navigate to="/datos/investigacion/fuentes?tab=agentes" replace />,
+                element: <Navigate to="/datos/investigacion/fuentes" replace />,
               },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (ahora dentro de NoticiasHub); "algoritmos"
