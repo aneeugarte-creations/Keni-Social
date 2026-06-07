@@ -30,8 +30,8 @@ import {
 export interface EditorSubtitulosProps {
   /** Id de la composición a transcribir (debe existir en el backend). */
   composicionId: string | null;
-  /** Id del recurso de subtítulos ya ligado a la composición, si existe. */
-  subtituloId: string | null;
+  /** Clave de media del clip del que extraer el audio (el clip base). */
+  baseMediaId: string;
   /** Avisa al padre del id de subtítulo (para ligarlo a la pista subs de la composición). */
   onSubtituloLigado: (id: string) => void;
   /** Notifica los segmentos corregidos al padre (para el preview). */
@@ -47,7 +47,7 @@ const ETIQUETA_ESTADO: Record<EstadoSubtitulos, string> = {
 
 export function EditorSubtitulos({
   composicionId,
-  subtituloId,
+  baseMediaId,
   onSubtituloLigado,
   onSegmentos,
 }: EditorSubtitulosProps) {
@@ -58,39 +58,48 @@ export function EditorSubtitulos({
   const [segmentos, setSegmentos] = React.useState<SegmentoSub[]>([]);
   const [sucio, setSucio] = React.useState(false);
 
-  // Carga el recurso de subtítulos cuando hay id (tras transcribir o al abrir una composición).
+  // Carga la fila de subtítulos de la composición (puede ser null si aún no se transcribió).
   const subQ = useQuery({
-    queryKey: ["video-subtitulo", subtituloId],
-    queryFn: ({ signal }) => api.video.subtitulo(subtituloId!, signal).then((r) => r.subtitulo),
-    enabled: !!subtituloId,
+    queryKey: ["video-subtitulos-de", composicionId],
+    queryFn: ({ signal }) =>
+      api.video.subtitulosDe(composicionId!, signal).then((r) => r.subtitulo),
+    enabled: !!composicionId,
   });
+  const sub = subQ.data ?? null;
+  const subtituloId = sub?.id ?? null;
 
-  // Cuando llega el recurso (y no hay edición sin guardar), hidrata el borrador local.
+  // Liga el id de subtítulo al padre en cuanto se conoce (lo escribe en la pista subs).
   React.useEffect(() => {
-    if (!subQ.data || sucio) return;
-    const segs = normalizarSegmentos(subQ.data.segmentos);
+    if (subtituloId) onSubtituloLigado(subtituloId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtituloId]);
+
+  // Cuando llega la fila (y no hay edición sin guardar), hidrata el borrador local.
+  React.useEffect(() => {
+    if (!sub || sucio) return;
+    const segs = normalizarSegmentos(sub.segmentos);
     setSegmentos(segs);
     onSegmentos?.(segs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subQ.data]);
+  }, [sub]);
 
-  // Cuando la transcripción completa, su `resultado` trae el id del subtítulo: lo ligamos y
-  // refrescamos. El backend ya escribió los segmentos en `video_subtitulos`.
+  // Al completar la transcripción, el worker ya escribió los segmentos: refrescamos la fila.
   React.useEffect(() => {
     if (generacion?.estado !== "completado") return;
-    const res = generacion.resultado as { subtitulo_id?: string; id?: string } | null;
-    const sid = res?.subtitulo_id ?? res?.id;
-    if (sid && sid !== subtituloId) {
-      onSubtituloLigado(sid);
-    }
-    void qc.invalidateQueries({ queryKey: ["video-subtitulo"] });
+    void qc.invalidateQueries({ queryKey: ["video-subtitulos-de", composicionId] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generacion?.estado]);
 
   const transcribir = useMutation({
-    mutationFn: () => api.video.transcribir(composicionId!),
-    onSuccess: (r) => {
-      iniciar(r.generacion);
+    // El POST devuelve `{gen_id, subtitulo_id}`; pedimos la generación para sondearla en vivo.
+    mutationFn: async () => {
+      const { gen_id } = await api.video.transcribir(composicionId!, baseMediaId);
+      const { generacion: gen } = await api.generacion(gen_id);
+      return gen;
+    },
+    onSuccess: (gen) => {
+      iniciar(gen);
+      void qc.invalidateQueries({ queryKey: ["video-subtitulos-de", composicionId] });
       toast.info("Transcripción en curso. Aparecerá en Actividad IA.");
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -101,7 +110,7 @@ export function EditorSubtitulos({
       api.video.guardarSubtitulo(subtituloId!, { segmentos, estado }),
     onSuccess: (_r, estado) => {
       setSucio(false);
-      void qc.invalidateQueries({ queryKey: ["video-subtitulo", subtituloId] });
+      void qc.invalidateQueries({ queryKey: ["video-subtitulos-de", composicionId] });
       onSegmentos?.(segmentos);
       toast.success(estado === "listo" ? "Subtítulos marcados como listos." : "Subtítulos guardados.");
     },
@@ -113,7 +122,7 @@ export function EditorSubtitulos({
     setSucio(true);
   }
 
-  const estado = (subQ.data?.estado as EstadoSubtitulos) ?? "pendiente";
+  const estado = (sub?.estado as EstadoSubtitulos) ?? "pendiente";
   const transcribiendo = transcribir.isPending || ejecutando;
   const tieneSegmentos = segmentos.length > 0;
 
@@ -134,7 +143,7 @@ export function EditorSubtitulos({
           size="sm"
           variant="outline"
           onClick={() => transcribir.mutate()}
-          disabled={transcribiendo}
+          disabled={transcribiendo || !baseMediaId}
         >
           {transcribiendo ? (
             <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -143,7 +152,7 @@ export function EditorSubtitulos({
           )}
           {tieneSegmentos ? "Re-transcribir" : "Transcribir"}
         </Button>
-        {subQ.data && (
+        {sub && (
           <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
             <Captions className="h-3 w-3" />
             {ETIQUETA_ESTADO[estado] ?? estado}

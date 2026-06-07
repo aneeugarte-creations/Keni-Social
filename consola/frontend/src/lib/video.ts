@@ -19,21 +19,26 @@ export const VERSION_COMPOSICION = 1;
 
 export type AspectoVideo = "9:16" | "1:1" | "16:9";
 
-/** Un preset de formato tal como lo sirve `GET /api/video/formatos`. */
+/**
+ * Un preset de formato tal como lo sirve `GET /api/video/formatos`:
+ * `{preset, w, h, fps, safe_top, safe_bottom, redes}`. El nombre canónico del aspecto viene en
+ * `preset` (9:16/1:1/16:9); `redes` son los ids de red que lo usan (para sugerir formato).
+ */
 export interface PresetFormatoVideo {
-  aspecto: AspectoVideo | string;
+  preset: AspectoVideo | string;
   w: number;
   h: number;
   fps: number;
   safe_top: number;
   safe_bottom: number;
+  redes?: string[];
 }
 
 // Presets locales (fallback si la API no responde). Idénticos a los de keni_shared/video.py.
 export const PRESETS_FORMATO_VIDEO: Record<AspectoVideo, PresetFormatoVideo> = {
-  "9:16": { aspecto: "9:16", w: 1080, h: 1920, fps: 30, safe_top: 220, safe_bottom: 320 },
-  "1:1": { aspecto: "1:1", w: 1080, h: 1080, fps: 30, safe_top: 120, safe_bottom: 120 },
-  "16:9": { aspecto: "16:9", w: 1920, h: 1080, fps: 30, safe_top: 80, safe_bottom: 120 },
+  "9:16": { preset: "9:16", w: 1080, h: 1920, fps: 30, safe_top: 220, safe_bottom: 320 },
+  "1:1": { preset: "1:1", w: 1080, h: 1080, fps: 30, safe_top: 120, safe_bottom: 120 },
+  "16:9": { preset: "16:9", w: 1920, h: 1080, fps: 30, safe_top: 80, safe_bottom: 120 },
 };
 
 export const ASPECTO_VIDEO_DEFECTO: AspectoVideo = "9:16";

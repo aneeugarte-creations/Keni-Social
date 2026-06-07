@@ -1106,14 +1106,15 @@ export const api = {
   // ENCOLAN como jobs de proceso (no-claude) y se SONDEAN con `useGeneracion` (tipos
   // "render-video" / "transcribir"); al completar dan `resultado` `{media_id, url}`.
   video: {
-    /** Presets de formato + zonas seguras por aspecto (`GET /api/video/formatos`). */
+    /** Presets de formato + zonas seguras por preset (`GET /api/video/formatos`). */
     formatos: (signal?: AbortSignal) =>
       peticion<{ formatos: PresetFormatoVideo[] }>("/video/formatos", { signal }),
-    crearComposicion: (cuerpo: { documento: ComposicionVideo; contenido_id?: string }) =>
-      peticion<{ composicion: { id: string; documento: ComposicionVideo } }>("/video/composiciones", {
-        metodo: "POST",
-        json: cuerpo,
-      }),
+    /** Crea la composición. `marca` es obligatoria (del catálogo). Devuelve `{id}`. */
+    crearComposicion: (cuerpo: {
+      marca: string;
+      documento: ComposicionVideo;
+      contenido_id?: string;
+    }) => peticion<{ id: string }>("/video/composiciones", { metodo: "POST", json: cuerpo }),
     composicion: (id: string, signal?: AbortSignal) =>
       peticion<{ composicion: { id: string; documento: ComposicionVideo } }>(
         `/video/composiciones/${encodeURIComponent(id)}`,
@@ -1124,18 +1125,26 @@ export const api = {
         `/video/composiciones/${encodeURIComponent(id)}`,
         { metodo: "PUT", json: { documento } },
       ),
-    /** Encola el render FFmpeg de la composición. Devuelve la generación a sondear. */
+    /** Encola el render FFmpeg. Devuelve `{gen_id}` (sondear con `api.generacion`). */
     render: (id: string) =>
-      peticion<RespuestaGeneracion>(`/video/composiciones/${encodeURIComponent(id)}/render`, {
+      peticion<{ gen_id: string }>(`/video/composiciones/${encodeURIComponent(id)}/render`, {
         metodo: "POST",
       }),
-    /** Encola el ASR (subtítulos word-level). Devuelve la generación a sondear. */
-    transcribir: (id: string) =>
-      peticion<RespuestaGeneracion>(`/video/composiciones/${encodeURIComponent(id)}/transcribir`, {
-        metodo: "POST",
-      }),
-    subtitulo: (id: string, signal?: AbortSignal) =>
-      peticion<{ subtitulo: Subtitulo }>(`/video/subtitulos/${encodeURIComponent(id)}`, { signal }),
+    /**
+     * Encola el ASR (word-level) del `media_id` dado. Crea la fila de subtítulos si no existe.
+     * Devuelve `{gen_id, subtitulo_id}` (sondear con `api.generacion`).
+     */
+    transcribir: (id: string, mediaId: string, idioma = "es-MX") =>
+      peticion<{ gen_id: string; subtitulo_id: string }>(
+        `/video/composiciones/${encodeURIComponent(id)}/transcribir`,
+        { metodo: "POST", json: { media_id: mediaId, idioma } },
+      ),
+    /** Fila de subtítulos de una composición (`null` si aún no hay). */
+    subtitulosDe: (composicionId: string, signal?: AbortSignal) =>
+      peticion<{ subtitulo: Subtitulo | null }>(
+        `/video/subtitulos${query({ composicion_id: composicionId })}`,
+        { signal },
+      ),
     /** Guarda la corrección humana de los segmentos. `estado` opcional ("editado"/"listo"). */
     guardarSubtitulo: (
       id: string,

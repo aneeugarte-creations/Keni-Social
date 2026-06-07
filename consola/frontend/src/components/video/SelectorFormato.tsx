@@ -31,7 +31,7 @@ export interface SelectorFormatoProps {
 
 export function SelectorFormato({ aspecto, onCambio, presets, disabled }: SelectorFormatoProps) {
   const buscar = (a: AspectoVideo): PresetFormatoVideo =>
-    presets?.find((p) => p.aspecto === a) ?? presetParaAspecto(a);
+    presets?.find((p) => p.preset === a) ?? presetParaAspecto(a);
 
   return (
     <div className="space-y-2">

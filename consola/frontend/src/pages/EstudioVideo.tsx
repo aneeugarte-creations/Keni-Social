@@ -71,11 +71,8 @@ export default function EstudioVideo() {
   const [pipKey, setPipKey] = React.useState("");
   const [pipUrl, setPipUrl] = React.useState("");
 
-  // Identidad backend de la composición + subtítulos ligados.
+  // Identidad backend de la composición.
   const [composicionId, setComposicionId] = React.useState<string | null>(null);
-  const [subtituloId, setSubtituloId] = React.useState<string | null>(
-    () => pistaSubtitulos(doc)?.subtitulo_id || null,
-  );
   const [segmentos, setSegmentos] = React.useState<SegmentoSub[]>([]);
 
   // Presets de formato del servidor (con fallback local dentro del selector).
@@ -86,10 +83,12 @@ export default function EstudioVideo() {
     retry: false,
   });
 
-  // Crea la composición en el backend (idempotente por intento: una sola vez por sesión de edición).
+  // Crea la composición en el backend (una vez por sesión, al fijar el primer clip base).
+  // `marca` es obligatoria en la API: sin marca activa no se puede crear.
   const crear = useMutation({
-    mutationFn: (d: ComposicionVideo) => api.video.crearComposicion({ documento: d }),
-    onSuccess: (r) => setComposicionId(r.composicion.id),
+    mutationFn: (d: ComposicionVideo) =>
+      api.video.crearComposicion({ marca: d.marca || marca, documento: d }),
+    onSuccess: (r) => setComposicionId(r.id),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -103,7 +102,8 @@ export default function EstudioVideo() {
     (fn: (d: ComposicionVideo) => ComposicionVideo) => {
       setDoc((prev) => {
         const siguiente = fn(prev);
-        if (composicionId) void guardar.mutateAsync(siguiente).catch(() => {});
+        // Sin cambio real (misma referencia): no reguardar (evita bucles de autoguardado).
+        if (siguiente !== prev && composicionId) void guardar.mutateAsync(siguiente).catch(() => {});
         return siguiente;
       });
     },
@@ -130,9 +130,14 @@ export default function EstudioVideo() {
 
   function fijarBase(clave: string, ms: number) {
     setDoc((prev) => {
-      const siguiente = setClipBase(prev, clave, ms);
+      // Asegura que la composición lleve la marca activa (la API la exige al crear).
+      const siguiente = setClipBase({ ...prev, marca: prev.marca || marca }, clave, ms);
       // La composición se CREA al tener el primer clip base; luego se autoguarda.
       if (!composicionId) {
+        if (!siguiente.marca) {
+          toast.error("Selecciona una marca antes de editar el video.");
+          return siguiente;
+        }
         crear.mutate(siguiente);
       } else {
         void guardar.mutateAsync(siguiente).catch(() => {});
@@ -153,12 +158,16 @@ export default function EstudioVideo() {
       .catch(() => mutar((d) => setClipPip(d, clave, 0)));
   }
 
+  // Escribe el id de subtítulo en la pista subs de la composición (idempotente: si ya coincide,
+  // no muta ni reguarda, para no entrar en bucle de autoguardado).
   function onSubtituloLigado(id: string) {
-    setSubtituloId(id);
-    mutar((d) => ({
-      ...d,
-      pistas: d.pistas.map((p) => (p.tipo === "subtitulos" ? { ...p, subtitulo_id: id } : p)),
-    }));
+    mutar((d) => {
+      if (pistaSubtitulos(d)?.subtitulo_id === id) return d;
+      return {
+        ...d,
+        pistas: d.pistas.map((p) => (p.tipo === "subtitulos" ? { ...p, subtitulo_id: id } : p)),
+      };
+    });
   }
 
   const tieneBase = !!baseKey;
@@ -273,7 +282,7 @@ export default function EstudioVideo() {
                 <h2 className="text-sm font-semibold text-foreground">Subtítulos (es-MX)</h2>
                 <EditorSubtitulos
                   composicionId={composicionId}
-                  subtituloId={subtituloId}
+                  baseMediaId={baseKey}
                   onSubtituloLigado={onSubtituloLigado}
                   onSegmentos={setSegmentos}
                 />

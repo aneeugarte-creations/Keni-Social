@@ -34,13 +34,16 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
   }, [generacion?.estado, generacion?.resultado]);
 
   const render = useMutation({
+    // El POST devuelve `{gen_id}`; pedimos la generación para sondear su progreso en vivo.
     mutationFn: async () => {
       await onAntesDeRenderizar?.();
-      return api.video.render(composicionId!);
+      const { gen_id } = await api.video.render(composicionId!);
+      const { generacion: gen } = await api.generacion(gen_id);
+      return gen;
     },
-    onSuccess: (r) => {
+    onSuccess: (gen) => {
       setUrl("");
-      iniciar(r.generacion);
+      iniciar(gen);
       toast.info("Render encolado. Sigue su avance en Actividad IA.");
     },
     onError: (e) => toast.error(mensajeError(e)),
