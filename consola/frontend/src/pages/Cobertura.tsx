@@ -1,18 +1,11 @@
 /**
- * Cobertura — flujo continuo de noticias.
+ * Cobertura — el pool de Noticias (flujo continuo de historias).
  *
- * Visualiza el archivo persistente del motor de ingesta (Ola A): una lista
- * siempre actualizada de artículos capturados de todas las fuentes RSS, con
- * filtros por categoría/idioma/estado/búsqueda libre y acciones Usar/Descartar
- * por ítem.
- *
- * Ola B: añade una vista «Historias» (clusters corroborados) como modo por
- * defecto, con señal de corroboración (N fuentes), acciones Usar/Descartar y
- * lista expandible de enlaces.
- *
- * Ola D: sub-pestaña «Salud» con resumen de feeds, huecos de cobertura y
- * tabla de feeds con reactivación. Badges de verificación y traducción en
- * las tarjetas de Historias.
+ * Muestra el archivo persistente del motor de ingesta DEDUPLICADO en HISTORIAS
+ * (clusters): una historia = la misma noticia contada por N fuentes, con su señal
+ * de corroboración, badges de verificación/traducción y acciones Usar/Descartar.
+ * Filtros por categoría/estado. El crudo por artículo ya no se muestra (Historias
+ * es la única vista) y la salud de feeds se gestiona en Fuentes.
  *
  * Contrato: docs/maquina-contenido/A-motor-ingesta.md
  *           docs/maquina-contenido/B-clustering-historias.md
@@ -45,7 +38,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -54,11 +46,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
-import type { Historia, NoticiaItem } from "@/types";
+import type { Historia } from "@/types";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -89,15 +80,6 @@ function tiempoRelativo(iso: string): string {
 }
 
 // ── Claves de React Query ─────────────────────────────────────────────────────
-
-const CLAVE_NOTICIAS = (
-  marcaActiva: string | null,
-  categoria: string,
-  idioma: string,
-  q: string,
-  estado: string,
-  offset: number,
-) => ["noticias", "listar", marcaActiva ?? "", categoria, idioma, q, estado, offset] as const;
 
 const CLAVE_HISTORIAS = (
   marcaActiva: string | null,
@@ -184,140 +166,6 @@ function BarraCobertura() {
     </div>
   );
 }
-
-// ── Componente: tarjeta de noticia ────────────────────────────────────────────
-
-interface PropsTarjetaNoticia {
-  item: NoticiaItem;
-  queryKey: readonly unknown[];
-}
-
-function TarjetaNoticia({ item, queryKey }: PropsTarjetaNoticia) {
-  const queryClient = useQueryClient();
-
-  const usarMut = useMutation({
-    mutationFn: () => api.noticias.usar(item.id, { generar: true }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey });
-      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const descartarMut = useMutation({
-    mutationFn: () => api.noticias.descartar(item.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey });
-      toast.success("Noticia descartada.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const enCurso = usarMut.isPending || descartarMut.isPending;
-  const esUsado = item.estado === "usado";
-  const esDescartado = item.estado === "descartado";
-
-  return (
-    <Card
-      className={`text-sm transition-opacity ${esDescartado ? "opacity-50" : ""}`}
-      data-testid="noticia-item"
-    >
-      <CardContent className="pt-3 pb-3 space-y-1.5">
-        {/* Cabecera: título + acciones */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            {item.url ? (
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium leading-snug hover:underline flex items-center gap-1 break-words"
-              >
-                {item.titulo || "(sin título)"}
-                <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-              </a>
-            ) : (
-              <p className="font-medium leading-snug">{item.titulo || "(sin título)"}</p>
-            )}
-          </div>
-
-          {/* Acciones */}
-          <div className="flex shrink-0 items-center gap-1">
-            {esUsado ? (
-              <Badge variant="ok" className="gap-1 text-xs">
-                <CheckCircle2 className="h-3 w-3" />
-                En el feed
-              </Badge>
-            ) : esDescartado ? (
-              <Badge variant="secondary" className="text-xs">Descartada</Badge>
-            ) : (
-              <>
-                <Badge variant="secondary" className="text-xs">En el pool</Badge>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                  onClick={() => usarMut.mutate()}
-                  disabled={enCurso}
-                  aria-label="Empujar ya (fuerza al feed)"
-                  title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
-                >
-                  {usarMut.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Newspaper className="h-3 w-3" />
-                  )}
-                  Empujar ya
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => descartarMut.mutate()}
-                  disabled={enCurso}
-                  aria-label="Descartar noticia"
-                >
-                  {descartarMut.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3 w-3" />
-                  )}
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Resumen */}
-        {item.resumen && (
-          <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">
-            {item.resumen}
-          </p>
-        )}
-
-        {/* Badges de metadatos */}
-        <div className="flex flex-wrap gap-1.5">
-          {item.fuente_nombre && (
-            <Badge variant="secondary" className="text-xs">{item.fuente_nombre}</Badge>
-          )}
-          {item.categoria && (
-            <Badge variant="outline" className="text-xs">{item.categoria}</Badge>
-          )}
-          {item.idioma && item.idioma !== "es" && (
-            <Badge variant="outline" className="text-xs uppercase">{item.idioma}</Badge>
-          )}
-          {item.capturado_en && (
-            <span className="text-xs text-muted-foreground self-center">
-              {tiempoRelativo(item.capturado_en)}
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Componente: tarjeta de historia (cluster) ─────────────────────────────────
 
 interface PropsTarjetaHistoria {
   historia: Historia;
@@ -707,183 +555,6 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
 }
 
 
-// ── Vista: Artículos (Ola A) ──────────────────────────────────────────────────
-
-interface PropsVistaArticulos {
-  marcaActiva: string | null;
-}
-
-function VistaArticulos({ marcaActiva }: PropsVistaArticulos) {
-  const [categoria, setCategoria] = React.useState("");
-  const [idioma, setIdioma] = React.useState("");
-  const [q, setQ] = React.useState("");
-  const [estado, setEstado] = React.useState("");
-  const [offset, setOffset] = React.useState(0);
-
-  React.useEffect(() => {
-    setOffset(0);
-  }, [marcaActiva, categoria, idioma, q, estado]);
-
-  const clave = CLAVE_NOTICIAS(marcaActiva, categoria, idioma, q, estado, offset);
-
-  const noticiasQuery = useQuery({
-    queryKey: clave,
-    queryFn: ({ signal }) =>
-      api.noticias.listar(
-        {
-          marca: marcaActiva ?? undefined,
-          categoria: categoria || undefined,
-          q: q.trim() || undefined,
-          estado: estado || undefined,
-          limit: PAGE_SIZE,
-          offset,
-        },
-        signal,
-      ),
-    staleTime: 20_000,
-    refetchInterval: REFETCH_INTERVAL_MS,
-  });
-
-  const items = noticiasQuery.data?.items ?? [];
-  const total = noticiasQuery.data?.total ?? 0;
-  const hayMas = offset + PAGE_SIZE < total;
-  const hayAnterior = offset > 0;
-
-  return (
-    <>
-      {/* Filtros */}
-      <div className="mb-5 flex flex-wrap items-end gap-3">
-        {/* Búsqueda libre */}
-        <Input
-          placeholder="Buscar por título…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="w-56"
-          aria-label="Buscar noticias"
-          data-testid="filtro-q"
-        />
-
-        {/* Categoría */}
-        <Select value={categoria || "__todas__"} onValueChange={(v) => setCategoria(v === "__todas__" ? "" : v)}>
-          <SelectTrigger className="w-44" aria-label="Filtrar por categoría" data-testid="filtro-categoria">
-            <SelectValue placeholder="Categoría" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__todas__">Todas las categorías</SelectItem>
-            <SelectItem value="mx">MX</SelectItem>
-            <SelectItem value="internacional">Internacional</SelectItem>
-            <SelectItem value="deportes">Deportes</SelectItem>
-            <SelectItem value="ciencia-tech">Ciencia / Tech</SelectItem>
-            <SelectItem value="gaming">Gaming</SelectItem>
-            <SelectItem value="tendencias">Tendencias</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Idioma */}
-        <Select value={idioma || "__todos__"} onValueChange={(v) => setIdioma(v === "__todos__" ? "" : v)}>
-          <SelectTrigger className="w-36" aria-label="Filtrar por idioma" data-testid="filtro-idioma">
-            <SelectValue placeholder="Idioma" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__todos__">Todos los idiomas</SelectItem>
-            <SelectItem value="es">Español</SelectItem>
-            <SelectItem value="en">Inglés</SelectItem>
-            <SelectItem value="pt">Portugués</SelectItem>
-            <SelectItem value="fr">Francés</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Estado */}
-        <Select value={estado || "__todos__"} onValueChange={(v) => setEstado(v === "__todos__" ? "" : v)}>
-          <SelectTrigger className="w-36" aria-label="Filtrar por estado" data-testid="filtro-estado">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__todos__">Todos los estados</SelectItem>
-            <SelectItem value="nuevo">Nuevo</SelectItem>
-            <SelectItem value="usado">Usado</SelectItem>
-            <SelectItem value="descartado">Descartado</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Totales */}
-        {noticiasQuery.data && (
-          <span className="ml-auto text-xs text-muted-foreground self-center">
-            {total.toLocaleString("es-MX")} noticia{total !== 1 ? "s" : ""}
-            {noticiasQuery.isFetching && !noticiasQuery.isPending && (
-              <Loader2 className="inline ml-1 h-3 w-3 animate-spin" />
-            )}
-          </span>
-        )}
-      </div>
-
-      {/* Error */}
-      {noticiasQuery.isError && (
-        <BloqueError
-          titulo="No se pudieron cargar las noticias"
-          mensaje={mensajeError(noticiasQuery.error)}
-          onReintentar={() => void noticiasQuery.refetch()}
-        />
-      )}
-
-      {/* Esqueletos de carga */}
-      {noticiasQuery.isLoading && (
-        <div className="space-y-3">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-lg" />
-          ))}
-        </div>
-      )}
-
-      {/* Lista */}
-      {!noticiasQuery.isLoading && !noticiasQuery.isError && (
-        <>
-          {items.length === 0 ? (
-            <EstadoVacio
-              icono={Newspaper}
-              titulo="Sin noticias por ahora"
-              texto="El motor de ingesta irá llenando el archivo conforme sondee los feeds."
-            />
-          ) : (
-            <div className="space-y-2">
-              {items.map((item) => (
-                <TarjetaNoticia key={item.id} item={item} queryKey={clave} />
-              ))}
-            </div>
-          )}
-
-          {/* Paginación */}
-          {(hayAnterior || hayMas) && (
-            <div className="mt-6 flex items-center justify-between gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!hayAnterior}
-                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                aria-label="Página anterior"
-              >
-                Anterior
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} de {total.toLocaleString("es-MX")}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!hayMas}
-                onClick={() => setOffset(offset + PAGE_SIZE)}
-                aria-label="Página siguiente"
-                data-testid="btn-siguiente"
-              >
-                Siguiente
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </>
-  );
-}
 
 // ── Página principal ──────────────────────────────────────────────────────────
 
@@ -905,26 +576,10 @@ export default function Cobertura() {
         El auto-feed lleva al feed las historias relevantes (tope por marca, configurable). Aquí curas el pool: descarta lo que no sirva o empuja algo concreto con "Empujar ya".
       </p>
 
-      {/* Sub-pestañas: Historias (Ola B, alta señal) vs Artículos (Ola A, raw).
-          La salud de feeds se gestiona en Fuentes (observabilidad de canales). */}
-      <Tabs defaultValue="historias" className="w-full">
-        <TabsList className="mb-4" data-testid="tabs-cobertura">
-          <TabsTrigger value="historias" data-testid="tab-historias">
-            Historias
-          </TabsTrigger>
-          <TabsTrigger value="articulos" data-testid="tab-articulos">
-            Artículos
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="historias">
-          <VistaHistorias marcaActiva={marcaActiva} />
-        </TabsContent>
-
-        <TabsContent value="articulos">
-          <VistaArticulos marcaActiva={marcaActiva} />
-        </TabsContent>
-      </Tabs>
+      {/* Noticias = el pool DEDUPLICADO en historias (una historia = la misma noticia
+          contada por N fuentes). El crudo por artículo ya no se muestra; la salud de
+          feeds se gestiona en Fuentes. */}
+      <VistaHistorias marcaActiva={marcaActiva} />
     </>
   );
 }

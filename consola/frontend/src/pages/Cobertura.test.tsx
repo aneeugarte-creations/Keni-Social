@@ -31,7 +31,7 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
-import type { Historia, NoticiaItem, ResumenCobertura, UsuarioSesion } from "@/types";
+import type { Historia, ResumenCobertura, UsuarioSesion } from "@/types";
 
 import Cobertura from "./Cobertura";
 
@@ -92,31 +92,6 @@ function renderConProviders(
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function noticiaItem(overrides: Partial<NoticiaItem> = {}): NoticiaItem {
-  return {
-    id: "n-1",
-    fuente_id: "fuente-1",
-    fuente_nombre: "Reforma",
-    categoria: "mx",
-    marca: "unotv",
-    marca_nombre: "UnoTV",
-    titulo: "Título de prueba",
-    resumen: "Resumen de la noticia de prueba.",
-    url: "https://example.com/noticia",
-    url_canonica: "https://example.com/noticia",
-    idioma: "es",
-    autor: "Redacción",
-    imagen: "",
-    publicado_en: "2026-06-05T10:00:00",
-    capturado_en: "2026-06-05T10:05:00",
-    senal: 0,
-    geo: "MX",
-    estado: "nuevo",
-    contenido_id: "",
-    ...overrides,
-  };
-}
-
 const RESUMEN_COBERTURA: ResumenCobertura = {
   feeds_activos: 12,
   feeds_con_error: 2,
@@ -125,16 +100,6 @@ const RESUMEN_COBERTURA: ResumenCobertura = {
   ultimo_sondeo: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
 };
 
-const RESPUESTA_VACIA = { items: [], total: 0 };
-const RESPUESTA_UN_ITEM = { items: [noticiaItem()], total: 1 };
-const RESPUESTA_USADO = {
-  items: [noticiaItem({ estado: "usado", contenido_id: "c-99" })],
-  total: 1,
-};
-const RESPUESTA_DESCARTADO = {
-  items: [noticiaItem({ estado: "descartado" })],
-  total: 1,
-};
 
 // ── Fixtures: Historias (Ola B) ───────────────────────────────────────────────
 
@@ -184,12 +149,6 @@ const RESPUESTA_HISTORIA_BREAKING = {
 // ── Stubs de API ──────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockListar: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockUsar: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockDescartar: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockHistorias: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockUsarHistoria: any;
@@ -197,16 +156,7 @@ let mockUsarHistoria: any;
 let mockDescartarHistoria: any;
 
 beforeEach(() => {
-  mockListar = vi
-    .spyOn(apiMod.api.noticias, "listar")
-    .mockResolvedValue(RESPUESTA_VACIA);
   vi.spyOn(apiMod.api.noticias, "cobertura").mockResolvedValue(RESUMEN_COBERTURA);
-  mockUsar = vi
-    .spyOn(apiMod.api.noticias, "usar")
-    .mockResolvedValue({ ok: true, contenido_id: "c-nuevo" });
-  mockDescartar = vi
-    .spyOn(apiMod.api.noticias, "descartar")
-    .mockResolvedValue({ ok: true });
   mockHistorias = vi
     .spyOn(apiMod.api.noticias, "historias")
     .mockResolvedValue(RESPUESTA_HISTORIAS_VACIA);
@@ -245,140 +195,6 @@ describe("Cobertura · barra de cobertura", () => {
   });
 });
 
-/** Helper: cambia a la pestaña Artículos (el default es Historias) y espera el contenido.
- *  Radix Tabs activa con onMouseDown (button 0), no con click. */
-async function irAArticulos() {
-  await waitFor(() => expect(screen.getByTestId("tab-articulos")).toBeTruthy());
-  fireEvent.mouseDown(screen.getByTestId("tab-articulos"), { button: 0 });
-  // Esperamos que el filtro de búsqueda libre aparezca (solo se monta en Artículos activo)
-  await waitFor(() => {
-    expect(screen.getByTestId("filtro-q")).toBeTruthy();
-  }, { timeout: 3000 });
-}
-
-describe("Cobertura · lista de noticias", () => {
-  it("muestra estado vacío cuando no hay ítems (en pestaña Artículos)", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText(/Sin noticias por ahora/i)).toBeTruthy();
-    });
-  });
-
-  it("muestra las tarjetas cuando la API devuelve ítems", async () => {
-    mockListar.mockResolvedValue(RESPUESTA_UN_ITEM);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText("Título de prueba")).toBeTruthy();
-    });
-    expect(screen.getByText("Reforma")).toBeTruthy();
-  });
-
-  it("muestra 'En el feed' en un ítem con estado 'usado'", async () => {
-    mockListar.mockResolvedValue(RESPUESTA_USADO);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText(/En el feed/i)).toBeTruthy();
-    });
-    // El botón "Empujar ya" no debe aparecer para ítems ya en el feed
-    expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
-  });
-
-  it("muestra 'Descartada' en un ítem con estado 'descartado'", async () => {
-    mockListar.mockResolvedValue(RESPUESTA_DESCARTADO);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText(/Descartada/i)).toBeTruthy();
-    });
-  });
-});
-
-describe("Cobertura · acciones Empujar / Descartar", () => {
-  it("el botón 'Empujar ya' llama a api.noticias.usar con el id del ítem", async () => {
-    mockListar.mockResolvedValue(RESPUESTA_UN_ITEM);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText("Título de prueba")).toBeTruthy();
-    });
-    const boton = screen.getByRole("button", { name: /Empujar ya/i });
-    fireEvent.click(boton);
-    await waitFor(() => {
-      expect(mockUsar).toHaveBeenCalledWith("n-1", { generar: true });
-    });
-  });
-
-  it("el botón 'Descartar' llama a api.noticias.descartar con el id del ítem", async () => {
-    mockListar.mockResolvedValue(RESPUESTA_UN_ITEM);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText("Título de prueba")).toBeTruthy();
-    });
-    const boton = screen.getByRole("button", { name: /Descartar noticia/i });
-    fireEvent.click(boton);
-    await waitFor(() => {
-      expect(mockDescartar).toHaveBeenCalledWith("n-1");
-    });
-  });
-});
-
-describe("Cobertura · filtros", () => {
-  it("pasa la marca activa a la query de listar (pestaña Artículos)", async () => {
-    renderConProviders(<Cobertura />, usuario(), "unotv");
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(mockListar).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: "unotv" }),
-        expect.anything(),
-      );
-    });
-  });
-
-  it("con marcaActiva=null pasa undefined como marca (vista admin)", async () => {
-    renderConProviders(<Cobertura />, usuario(), null);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(mockListar).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: undefined }),
-        expect.anything(),
-      );
-    });
-  });
-
-  it("el selector de estado pasa el estado a la query", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    // Esperamos la carga inicial
-    await waitFor(() => {
-      expect(mockListar).toHaveBeenCalled();
-    });
-    // El SelectTrigger tiene data-testid="filtro-estado" y role="combobox" (Radix).
-    const selectEstado = screen.getByTestId("filtro-estado");
-    fireEvent.click(selectEstado);
-    // Elegimos "Nuevo" de las opciones
-    const opcion = await screen.findByRole("option", { name: /^Nuevo$/i });
-    fireEvent.click(opcion);
-    await waitFor(() => {
-      expect(mockListar).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: "nuevo" }),
-        expect.anything(),
-      );
-    });
-  });
-});
 
 describe("Cobertura · marca-aware (query keys)", () => {
   it("rerenderiza la lista de historias cuando cambia la marca activa", async () => {
@@ -422,15 +238,11 @@ describe("Cobertura · marca-aware (query keys)", () => {
 // ── Tests: Vista Historias (Ola B) ────────────────────────────────────────────
 
 describe("Cobertura · Historias — vista por defecto", () => {
-  it("muestra la pestaña Historias activa por defecto", async () => {
+  it("muestra las historias directamente (sin pestañas de modo)", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("tabs-cobertura")).toBeTruthy();
-    });
-    const tabHistorias = screen.getByTestId("tab-historias");
-    expect(tabHistorias).toBeTruthy();
-    // La pestaña Historias está activa (Radix pone data-state=active)
-    expect(tabHistorias.getAttribute("data-state")).toBe("active");
+    // Ya no hay conmutador Historias/Artículos: Noticias = el pool deduplicado en historias.
+    await waitFor(() => expect(mockHistorias).toHaveBeenCalled());
+    expect(screen.queryByTestId("tabs-cobertura")).toBeNull();
   });
 
   it("llama a api.noticias.historias al cargar con la marca activa", async () => {
@@ -558,34 +370,6 @@ describe("Cobertura · Historias — marca-aware", () => {
   });
 });
 
-describe("Cobertura · cambio de modo Historias / Artículos", () => {
-  it("al activar la pestaña Artículos se muestran los filtros de artículos", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("tabs-cobertura")).toBeTruthy();
-    });
-    fireEvent.mouseDown(screen.getByTestId("tab-articulos"), { button: 0 });
-    // El filtro de búsqueda libre solo existe en la vista de Artículos
-    await waitFor(() => {
-      expect(screen.getByTestId("filtro-q")).toBeTruthy();
-    });
-  });
-
-  it("en la pestaña Artículos se llama a api.noticias.listar con la marca activa", async () => {
-    renderConProviders(<Cobertura />, usuario(), "claro-sports");
-    await waitFor(() => {
-      expect(screen.getByTestId("tabs-cobertura")).toBeTruthy();
-    });
-    fireEvent.mouseDown(screen.getByTestId("tab-articulos"), { button: 0 });
-    await waitFor(() => {
-      expect(mockListar).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: "claro-sports" }),
-        expect.anything(),
-      );
-    });
-  });
-});
-
 // ── Tests: Badges de verificación y traducción (Ola D) ───────────────────────
 
 describe("Cobertura · Historias — badge verificación", () => {
@@ -672,17 +456,6 @@ describe("Cobertura · badge de estado del pool", () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => {
       expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    expect(screen.getByText("En el pool")).toBeTruthy();
-  });
-
-  it("noticia nueva en Artículos muestra badge 'En el pool'", async () => {
-    mockListar.mockResolvedValue(RESPUESTA_UN_ITEM);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("tabs-cobertura")).toBeTruthy());
-    await irAArticulos();
-    await waitFor(() => {
-      expect(screen.getByText("Título de prueba")).toBeTruthy();
     });
     expect(screen.getByText("En el pool")).toBeTruthy();
   });
