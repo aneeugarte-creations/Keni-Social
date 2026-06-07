@@ -90,13 +90,14 @@ export const TABS_CALENDARIO: ItemTabHub[] = [
   { ruta: "/operacion/calendario/turnos", etiqueta: "Turnos", icono: CalendarClock },
 ];
 
-// Hub Contenido: editor de imágenes, estudio de video y biblioteca.
+// Hub Estudio (/contenido): SOLO las superficies de creación de arte — imágenes y
+// video. La Biblioteca (prompts + línea editorial) NO va aquí: es CONTEXTO, no arte, y
+// vive como su propia entrada de nav (`/contenido/biblioteca`, hub TABS_BIBLIOTECA).
 // El editor de imágenes (/contenido/editor) comparte prefijo con /contenido/biblioteca,
 // por eso lleva `end: true` para evitar que se marque activo dentro de la biblioteca.
 export const TABS_CONTENIDO: ItemTabHub[] = [
   { ruta: "/contenido/editor", etiqueta: "Imágenes", icono: Image, end: true },
   { ruta: "/contenido/video", etiqueta: "Video", icono: Clapperboard },
-  { ruta: "/contenido/biblioteca/documentos", etiqueta: "Biblioteca", icono: BookText },
 ];
 
 // Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las
@@ -131,11 +132,12 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
   "/operacion/calendario": TABS_CALENDARIO,
-  // Hub Contenido: incluye /contenido/editor, /contenido/video y /contenido/biblioteca.
-  // Importante: /contenido debe registrarse ANTES de /contenido/biblioteca para que
-  // `pestanasDeRuta` no lo sombree. La búsqueda por prefijo lo maneja correctamente.
-  "/contenido": TABS_CONTENIDO,
+  // Estudio y Biblioteca son DOS hubs distintos bajo el prefijo /contenido. El más
+  // específico (/contenido/biblioteca) DEBE ir antes que /contenido: `pestanasDeRuta`
+  // matchea por prefijo y devuelve el primero, así una ruta de biblioteca resuelve a
+  // TABS_BIBLIOTECA y no se la traga el hub Estudio (/contenido → TABS_CONTENIDO).
   "/contenido/biblioteca": TABS_BIBLIOTECA,
+  "/contenido": TABS_CONTENIDO,
   "/datos/actividad": TABS_ACTIVIDAD,
 };
 
