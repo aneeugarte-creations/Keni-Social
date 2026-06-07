@@ -33,14 +33,19 @@ import os
 import pytest
 from starlette.testclient import TestClient
 
-# Pool de conexiones Postgres OFF en la suite (fallback documentado `KENI_DB_POOL=0`). El
-# pool (perf de PROD, URL única estable) NO encaja con el patrón de tests: xdist (N procesos)
-# + muchos tests cortos + hilos de fondo agotan las conexiones y la suite se CUELGA
-# (`PoolTimeout: couldn't get a connection`, de ~4 min a 20+). El camino sin pool (una
-# conexión por operación + memo de esquema) es el que la suite tenía verde antes del pool.
-# DEBE ir antes de importar `db`/`app` (que abren el pool de forma perezosa). `setdefault`
-# respeta un override manual (`KENI_DB_POOL=1`).
-os.environ.setdefault("KENI_DB_POOL", "0")
+# Pool de conexiones Postgres ON en la suite, pero PEQUEÑO (`KENI_DB_POOL_MAX=4` por worker).
+# POR QUÉ: sin pool, cada operación abre/cierra su propia conexión TCP -> la suite hace ~16k
+# conexiones; bajo xdist (N procesos comparten el espacio de puertos efímeros del cliente) el
+# churn llena la tabla TIME_WAIT y, con varios pipelines a la vez en el runner, se AGOTAN los
+# puertos efímeros -> `OperationalError: Cannot assign requested address` en masa (CI rojo,
+# ~150 ERROR). El pool REUSA conexiones (medido: TIME_WAIT cae de ~14k a ~0.5k, cannot_assign
+# 0). El default grande (MAX=12/20) SÍ colgaba (`PoolTimeout`, N*MAX > max_connections y
+# `lock_barrido` retiene una conexión entera); MAX=4 por worker (6*4=24 << 100) reutiliza sin
+# agotar ni colgar. DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa).
+# `setdefault` respeta overrides manuales (p.ej. `KENI_DB_POOL=0` para depurar el camino viejo).
+os.environ.setdefault("KENI_DB_POOL", "1")
+os.environ.setdefault("KENI_DB_POOL_MIN", "1")
+os.environ.setdefault("KENI_DB_POOL_MAX", "4")
 
 from keni_consola import app as app_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL
 from keni_consola import db as db_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL

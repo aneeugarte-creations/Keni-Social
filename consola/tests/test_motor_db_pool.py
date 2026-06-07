@@ -104,7 +104,7 @@ def pool_falso(monkeypatch):
     contaminar otros tests que comparten el proceso.
     """
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@localhost:5432/keni_test")
-    monkeypatch.setenv("KENI_DB_POOL", "1")  # el default es OFF: forzamos ON para probar el pool
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # la suite usa pool pequeño; fijamos ON explícito para aislar este test
 
     falso = _PoolFalso()
     monkeypatch.setattr(motor_db, "_crear_pool", lambda url: falso)
@@ -228,7 +228,7 @@ def test_fallback_flag_off_usa_camino_directo(monkeypatch):
 def test_fallback_si_pool_no_arranca(monkeypatch):
     # Si construir el pool LANZA, `_obtener_pool` cae a None (camino directo) sin propagar.
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@localhost:5432/keni_test")
-    monkeypatch.setenv("KENI_DB_POOL", "1")  # default OFF: forzamos ON para probar el fallback de arranque
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # ON explícito para probar el fallback de arranque del pool
     monkeypatch.setattr(motor_db, "_pool", None)
     monkeypatch.setattr(motor_db, "_pool_url", None)
     monkeypatch.setattr(motor_db, "_modo_logueado", False)
@@ -243,7 +243,7 @@ def test_fallback_si_pool_no_arranca(monkeypatch):
 def test_pool_se_rehace_si_cambia_la_url(monkeypatch):
     # Cambiar `DATABASE_URL` (caso de tests que reapuntan la BD) cierra el pool viejo y crea
     # uno nuevo para la URL nueva.
-    monkeypatch.setenv("KENI_DB_POOL", "1")  # el default es OFF: forzamos ON para probar el pool
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # la suite usa pool pequeño; fijamos ON explícito para aislar este test
     monkeypatch.setattr(motor_db, "_pool", None)
     monkeypatch.setattr(motor_db, "_pool_url", None)
     monkeypatch.setattr(motor_db, "_modo_logueado", False)
@@ -335,7 +335,7 @@ def test_pool_real_pg_patron_de_fuga_no_agota(monkeypatch):
     if not url:
         pytest.skip("sin KENI_TEST_DATABASE_URL: requiere Postgres real")
     monkeypatch.setenv("DATABASE_URL", url)
-    monkeypatch.setenv("KENI_DB_POOL", "1")  # la suite lo pone a 0; aqui probamos el pool REAL
+    monkeypatch.setenv("KENI_DB_POOL", "1")  # MAX pequeño explícito; aqui probamos el pool REAL contra Postgres
     monkeypatch.setenv("KENI_DB_POOL_MIN", "1")
     monkeypatch.setenv("KENI_DB_POOL_MAX", "6")
     monkeypatch.setattr(motor_db, "_pool", None)
