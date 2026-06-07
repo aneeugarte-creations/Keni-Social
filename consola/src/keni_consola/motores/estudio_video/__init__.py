@@ -4,21 +4,23 @@ DUEÑO de este modulo: el RENDER. `ejecutar_render(gen_id, spec)` es el EJECUTOR
 proceso `render-video` (lo despacha `worker._procesar_job_proceso`). La firma es el CONTRATO
 con el seam y NO cambia sin actualizar `worker` + `docs/maquina-contenido/G-video-engine.md`.
 
+El render (ffmpeg) es LOCAL, gratuito y BAJO DEMANDA (lo dispara un humano, no un daemon, y no
+consume tokens), asi que NO tiene kill-switch ni gateo por maquina: el worker ejecuta lo que
+se encolo.
+
 QUE HACE
 ========
-1. GATEO (kill-switch): si `config.video_render_gateado()` esta OFF, marca la generacion en
-   error claro y termina (respeta la maquina + el toggle `KENI_VIDEO_RENDER`).
-2. Carga la composicion (`repos.obtener_video_composicion`) y valida su `documento`
+1. Carga la composicion (`repos.obtener_video_composicion`) y valida su `documento`
    (`keni_shared.video.validar_composicion`).
-3. Baja los clips base/PiP de S3 (`media.leer_objeto`, categoria `videos`) a temporales.
-4. Hornea la pista `overlay` (capas estilo Documento del Estudio de imagen) a un PNG
+2. Baja los clips base/PiP de S3 (`media.leer_objeto`, categoria `videos`) a temporales.
+3. Hornea la pista `overlay` (capas estilo Documento del Estudio de imagen) a un PNG
    transparente del tamano del formato con `estudio_imagen.renderizar_documento_bytes`
    (REUTILIZA el Estudio; no reinventa capas).
-5. Materializa el ASS de subtitulos (de `video_subtitulos.ass`) si existe (si no hay ASS aun,
+4. Materializa el ASS de subtitulos (de `video_subtitulos.ass`) si existe (si no hay ASS aun,
    OMITE subtitulos: no falla el render).
-6. Construye el filtergraph (`filtros.construir_comando`) y corre ffmpeg SIN shell, con timeout
+5. Construye el filtergraph (`filtros.construir_comando`) y corre ffmpeg SIN shell, con timeout
    `config.video_render_timeout()`, parseando `-progress pipe:1` para reportar avance.
-7. Guarda el mp4 en media categoria `render` (content-addressed sha256) y marca la generacion
+6. Guarda el mp4 en media categoria `render` (content-addressed sha256) y marca la generacion
    `completado` con `resultado = {"media_id": "render/<sha>.mp4", "url": ".../render/<sha>.mp4"}`.
 
 REPORTE A ACTIVIDAD IA: via `generaciones.actualizar(gen_id, {...})` (fase/salida en marcha,
@@ -72,13 +74,6 @@ def ejecutar_render(gen_id: str, spec: dict) -> None:
 
 
 def _render(gen_id: str, spec: dict) -> None:
-    # 1) Kill-switch (maquina AND toggle). El worker ejecuta lo que reclama, pero respetamos el
-    #    gate por si el flag se apago entre el encolado y la ejecucion.
-    if not config.video_render_gateado():
-        raise RenderError(
-            "El render de video esta desactivado (KENI_VIDEO_RENDER off o maquina apagada)."
-        )
-
     composicion_id = str(spec.get("composicion_id") or "").strip()
     if not composicion_id:
         raise RenderError("Falta 'composicion_id' en el job de render.")

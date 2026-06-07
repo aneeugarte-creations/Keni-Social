@@ -4,7 +4,7 @@ Cubre:
   - GET /api/video/formatos               presets + redes por formato.
   - CRUD de composiciones                 crear -> obtener -> actualizar -> listar (filtro marca).
   - Validacion                            documento invalido (400), marca invalida (400), 404.
-  - render / transcribir                  flag OFF -> 409; flag ON (monkeypatch) -> encola gen_id.
+  - render / transcribir                  local/bajo-demanda (sin kill-switch): encola gen_id.
   - subtitulos                            GET por composicion, PUT (segmentos + estado, ass).
 
 El encolado real (`generaciones.encolar_job_proceso`) se MONKEYPATCHEA para no ejecutar nada
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import config, generaciones
+from keni_consola import generaciones
 from keni_consola.api import video
 from keni_consola.dominio import jobspec
 
@@ -224,22 +224,13 @@ def test_delete_inexistente_404(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_render_flag_off_409(cliente, monkeypatch):
-    comp_id = _crear(cliente).json()["id"]
-    monkeypatch.setattr(config, "video_render_gateado", lambda: False)
-    r = cliente.post(f"/api/video/composiciones/{comp_id}/render")
-    assert r.status_code == 409
-    assert "apagado" in r.json()["error"].lower()
-
-
-def test_render_inexistente_404(cliente, monkeypatch):
-    monkeypatch.setattr(config, "video_render_gateado", lambda: True)
+def test_render_inexistente_404(cliente):
     assert cliente.post("/api/video/composiciones/noexiste/render").status_code == 404
 
 
-def test_render_flag_on_encola(cliente, monkeypatch):
+def test_render_encola(cliente, monkeypatch):
+    # Render local/gratuito/bajo-demanda: sin kill-switch; con la cola disponible, encola.
     comp_id = _crear(cliente, marca="unotv").json()["id"]
-    monkeypatch.setattr(config, "video_render_gateado", lambda: True)
 
     capturado = {}
 
@@ -262,27 +253,15 @@ def test_render_flag_on_encola(cliente, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_transcribir_flag_off_409(cliente, monkeypatch):
+def test_transcribir_sin_media_400(cliente):
     comp_id = _crear(cliente).json()["id"]
-    monkeypatch.setattr(config, "transcripcion_gateada", lambda: False)
-    r = cliente.post(
-        f"/api/video/composiciones/{comp_id}/transcribir",
-        json={"media_id": "videos/abc.mp4"},
-    )
-    assert r.status_code == 409
-    assert "apagado" in r.json()["error"].lower()
-
-
-def test_transcribir_sin_media_400(cliente, monkeypatch):
-    comp_id = _crear(cliente).json()["id"]
-    monkeypatch.setattr(config, "transcripcion_gateada", lambda: True)
     r = cliente.post(f"/api/video/composiciones/{comp_id}/transcribir", json={})
     assert r.status_code == 400
 
 
-def test_transcribir_flag_on_crea_subtitulo_y_encola(cliente, monkeypatch):
+def test_transcribir_crea_subtitulo_y_encola(cliente, monkeypatch):
+    # ASR local/gratuito/bajo-demanda: sin kill-switch; encola y crea la fila de subtitulos.
     comp_id = _crear(cliente, marca="unotv").json()["id"]
-    monkeypatch.setattr(config, "transcripcion_gateada", lambda: True)
 
     capturado = {}
 
@@ -337,7 +316,6 @@ def test_subtitulos_get_sin_composicion_400(cliente):
 def _crear_subtitulo(cliente, monkeypatch) -> tuple[str, str]:
     """Crea composicion + fila de subtitulos via el endpoint de transcribir. -> (comp_id, sub_id)."""
     comp_id = _crear(cliente, marca="unotv").json()["id"]
-    monkeypatch.setattr(config, "transcripcion_gateada", lambda: True)
     monkeypatch.setattr(
         generaciones, "encolar_job_proceso", lambda **k: {"id": "g"}
     )

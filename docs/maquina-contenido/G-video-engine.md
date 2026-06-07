@@ -191,9 +191,9 @@ Sugerida (el agente la concreta; debe usar `repos.*` y `encolar_job_proceso`):
 - `GET /api/video/composiciones` / `GET /api/video/composiciones/{id}` → listar/obtener.
 - `PUT /api/video/composiciones/{id}` → actualiza el `documento`.
 - `POST /api/video/composiciones/{id}/render` → `encolar_job_proceso(kind="render-video",
-  params={"composicion_id": id}, marca=...)` (gateado por `config.video_render_activo()`).
+  params={"composicion_id": id}, marca=...)` (local/bajo demanda: sin kill-switch).
 - `POST /api/video/subtitulos` + `POST /api/video/subtitulos/{id}/transcribir` →
-  `encolar_job_proceso(kind="transcribir", ...)` (gateado por `config.transcripcion_activa()`).
+  `encolar_job_proceso(kind="transcribir", ...)` (local/bajo demanda: sin kill-switch).
 - `GET/PUT /api/video/subtitulos/{id}` → leer/editar (corrección humana → `estado='editado'`).
 
 Registrar el router en el manifest ya hecho (`apps/produccion.toml` → `modulos_backend` incluye
@@ -209,19 +209,18 @@ Registrar el router en el manifest ya hecho (`apps/produccion.toml` → `modulos
 
 ---
 
-## 7. Config + toggles (todo OFF por defecto, gateado por máquina)
+## 7. Config (sin kill-switch)
 
-`config.py`:
-- `KENI_VIDEO_RENDER` (bool, def False) → `config.video_render_activo()` /
-  `config.video_render_gateado` (AND con la máquina).
-- `KENI_TRANSCRIPCION` (bool, def False) → `config.transcripcion_activa()` /
-  `config.transcripcion_gateada`.
+El render (ffmpeg) y la transcripción (faster-whisper) son **locales, gratuitos y BAJO DEMANDA**
+(los dispara un humano al pulsar "Renderizar"/"Transcribir"; no hay daemon que los lance ni
+consumen tokens). Por eso **NO tienen interruptor de apagado ni están gateados por la máquina**:
+no aparecen como toggles en Configuración. El kill-switch de máquina + los toggles existen solo
+para evitar operación autónoma (daemons) y para no gastar tokens; nada de eso aplica aquí.
+
+`config.py` conserva solo configuración legítima (no kill-switches):
 - `KENI_WHISPER_MODELO` (str, def `"medium"`) → `config.whisper_modelo()`.
 - `KENI_FFMPEG_BIN` (str, def `"ffmpeg"`) → `config.ffmpeg_bin()`.
 - `KENI_VIDEO_RENDER_TIMEOUT` (int, def 1800) → `config.video_render_timeout()`.
-
-`KENI_VIDEO_RENDER` y `KENI_TRANSCRIPCION` aparecen como toggles en Configuración
-(`ajustes_catalogo.py`, grupo `automatismos_generales`).
 
 ---
 

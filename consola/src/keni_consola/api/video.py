@@ -13,8 +13,8 @@ QUE VIVE AQUI
   - `GET    /api/video/composiciones/{id}`                detalle (404 si no existe).
   - `PUT    /api/video/composiciones/{id}`                actualiza documento/titulo/estado (valida).
   - `DELETE /api/video/composiciones/{id}`                borra la composicion (+ subtitulos).
-  - `POST   /api/video/composiciones/{id}/render`         encola render (gateado por maquina+flag).
-  - `POST   /api/video/composiciones/{id}/transcribir`    encola ASR (gateado; crea subtitulo).
+  - `POST   /api/video/composiciones/{id}/render`         encola render (local, bajo demanda).
+  - `POST   /api/video/composiciones/{id}/transcribir`    encola ASR (local; crea subtitulo).
   - `GET    /api/video/subtitulos?composicion_id=`        fila de subtitulos.
   - `PUT    /api/video/subtitulos/{id}`                   edita el texto corregido por el humano.
 
@@ -23,9 +23,10 @@ CONTRATO
   - La validacion del documento la hace `keni_shared.video.validar_composicion` (400 si falla,
     con el mensaje en espanol del ValueError). Solo valida la FORMA del sobre.
   - El encolado usa `generaciones.encolar_job_proceso(kind=..., params=..., marca=...)` con los
-    kinds del seam (`dominio.jobspec.PROC_RENDER_VIDEO` / `PROC_TRANSCRIBIR`). El gateo es por
-    MAQUINA + flag: `config.video_render_gateado()` / `config.transcripcion_gateada()` (OFF =>
-    409 "motor apagado"). Si la cola esta saturada, `ColaLlenaError` => 429.
+    kinds del seam (`dominio.jobspec.PROC_RENDER_VIDEO` / `PROC_TRANSCRIBIR`). Render (ffmpeg) y
+    ASR (faster-whisper) son LOCALES, gratuitos y BAJO DEMANDA (los dispara un humano, no un
+    daemon, y no consumen tokens), asi que NO tienen kill-switch ni gateo por maquina. Si la
+    cola esta saturada, `ColaLlenaError` => 429.
   - Multi-tenant por marca: igual que el resto de la app, la marca de una peticion se valida
     contra el catalogo unico (`consola.marcas`) y el listado se filtra por ella.
 
@@ -43,7 +44,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import config, db, generaciones, marcas, repos
+from .. import db, generaciones, marcas, repos
 from .._http_json import leer_json
 from ..dominio import jobspec
 
@@ -268,20 +269,15 @@ async def borrar_composicion(request: Request) -> Response:
 
 
 async def render_composicion(request: Request) -> Response:
-    """POST /api/video/composiciones/{id}/render: encola el render. -> `{gen_id}` | 404/409/429.
+    """POST /api/video/composiciones/{id}/render: encola el render. -> `{gen_id}` | 404/429.
 
-    Gateado por MAQUINA + flag (`config.video_render_gateado()`): si esta OFF -> 409 "motor de
-    render apagado". Si esta ON, encola `PROC_RENDER_VIDEO` con `params={"composicion_id": id}`.
+    Render local (ffmpeg) bajo demanda: sin kill-switch ni gateo por maquina. Encola
+    `PROC_RENDER_VIDEO` con `params={"composicion_id": id}`.
     """
     composicion_id = request.path_params["composicion_id"]
     comp = repos.obtener_video_composicion(composicion_id)
     if comp is None:
         return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
-
-    if not config.video_render_gateado():
-        return JSONResponse(
-            {"error": "El motor de render de video está apagado."}, status_code=409
-        )
 
     try:
         gen = generaciones.encolar_job_proceso(
@@ -302,9 +298,9 @@ async def transcribir_composicion(request: Request) -> Response:
     """POST /api/video/composiciones/{id}/transcribir: encola la transcripcion ASR.
 
     Cuerpo: `media_id` (clip del que sacar el audio, obligatorio), `idioma` (opcional, def
-    es-MX). Gateado por MAQUINA + flag (`config.transcripcion_gateada()`): OFF -> 409. Si no hay
-    fila `video_subtitulos` para la composicion, se CREA (estado 'pendiente') antes de encolar.
-    -> `{gen_id, subtitulo_id}` | 400/404/409/429.
+    es-MX). ASR local (faster-whisper) bajo demanda: sin kill-switch ni gateo por maquina. Si
+    no hay fila `video_subtitulos` para la composicion, se CREA (estado 'pendiente') antes de
+    encolar. -> `{gen_id, subtitulo_id}` | 400/404/429.
     """
     composicion_id = request.path_params["composicion_id"]
     comp = repos.obtener_video_composicion(composicion_id)
@@ -318,11 +314,6 @@ async def transcribir_composicion(request: Request) -> Response:
     media_id = media_id.strip()
     idioma = datos.get("idioma")
     idioma = idioma.strip() if isinstance(idioma, str) and idioma.strip() else "es-MX"
-
-    if not config.transcripcion_gateada():
-        return JSONResponse(
-            {"error": "El motor de transcripción está apagado."}, status_code=409
-        )
 
     # Reutiliza la fila de subtitulos de la composicion si existe; si no, la crea (pendiente).
     existentes = repos.listar_video_subtitulos(composicion_id=composicion_id)

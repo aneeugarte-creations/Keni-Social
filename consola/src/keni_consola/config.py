@@ -432,14 +432,13 @@ ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
-# Motor de VIDEO (Ola VIDEO). TODO apagado por defecto y gateado por la maquina:
-#   - KENI_VIDEO_RENDER       (bool, def OFF): habilita encolar/ejecutar el render con ffmpeg.
-#   - KENI_TRANSCRIPCION      (bool, def OFF): habilita la transcripcion ASR de subtitulos.
+# Motor de VIDEO (Ola VIDEO). El render (ffmpeg) y la transcripcion (faster-whisper) son
+# locales, gratuitos y BAJO DEMANDA (solo corren cuando un humano pulsa "Renderizar" /
+# "Transcribir"; no hay daemon que los dispare ni consumen tokens), asi que NO tienen
+# kill-switch ni estan gateados por la maquina. Aqui solo queda configuracion legitima:
 #   - KENI_WHISPER_MODELO     (str, def "medium"): modelo de faster-whisper para el ASR.
 #   - KENI_FFMPEG_BIN         (str, def "ffmpeg"): binario de ffmpeg (path o nombre en PATH).
 #   - KENI_VIDEO_RENDER_TIMEOUT (int, def 1800 s): wall-timeout del render de un video.
-ENV_VIDEO_RENDER = "KENI_VIDEO_RENDER"
-ENV_TRANSCRIPCION = "KENI_TRANSCRIPCION"
 ENV_WHISPER_MODELO = "KENI_WHISPER_MODELO"
 ENV_FFMPEG_BIN = "KENI_FFMPEG_BIN"
 ENV_VIDEO_RENDER_TIMEOUT = "KENI_VIDEO_RENDER_TIMEOUT"
@@ -2181,34 +2180,6 @@ def investigacion_max() -> int:
 # --------------------------------------------------------------------------- #
 # Accesores: motor de VIDEO (Ola VIDEO)                                         #
 # --------------------------------------------------------------------------- #
-
-
-def video_render_activo() -> bool:
-    """True si el render de video esta habilitado (`KENI_VIDEO_RENDER`).
-
-    Def OFF (conservador). GATEADO por la maquina: solo cuenta si la maquina de contenido
-    esta encendida Y este flag esta ON (`gate_maquina`). El API usa esto para decidir si
-    permite encolar jobs de render; el worker SIEMPRE ejecuta lo que reclama de la cola.
-    """
-    return _crudo(ENV_VIDEO_RENDER).lower() in _VERDADEROS
-
-
-# Gateado por la maquina: el daemon/encolado de render solo corre si la maquina esta ON.
-video_render_gateado = gate_maquina(video_render_activo)
-
-
-def transcripcion_activa() -> bool:
-    """True si la transcripcion ASR de subtitulos esta habilitada (`KENI_TRANSCRIPCION`).
-
-    Def OFF (conservador). GATEADO por la maquina (igual que `video_render_activo`). El ASR
-    importa faster-whisper de forma PEREZOSA y OPCIONAL: si la lib falta, degrada con error
-    claro (no rompe el import). Ver `motores/transcripcion`.
-    """
-    return _crudo(ENV_TRANSCRIPCION).lower() in _VERDADEROS
-
-
-# Gateado por la maquina: el encolado de transcripcion solo corre si la maquina esta ON.
-transcripcion_gateada = gate_maquina(transcripcion_activa)
 
 
 def whisper_modelo() -> str:

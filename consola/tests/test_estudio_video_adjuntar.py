@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 
-from keni_consola import config, generaciones, redes, repos
+from keni_consola import generaciones, redes, repos
 from keni_consola.motores import estudio_video
 
 _MARCA = "claro-sports"
@@ -28,11 +28,6 @@ _DOC = {
         ]},
     ],
 }
-
-
-def _activar_render(monkeypatch) -> None:
-    monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_VIDEO_RENDER, "1")
 
 
 def _mint_gen() -> str:
@@ -117,7 +112,6 @@ def test_adjuntar_helper_pieza_sin_plataformas(entorno):
 
 
 def test_render_adjunta_a_pieza_con_contenido_id(entorno, monkeypatch):
-    _activar_render(monkeypatch)
     monkeypatch.setattr(estudio_video.media, "leer_objeto", lambda mid: b"clip-bytes")
     monkeypatch.setattr(estudio_video, "_correr_ffmpeg", _fake_ffmpeg)
 
@@ -138,7 +132,6 @@ def test_render_adjunta_a_pieza_con_contenido_id(entorno, monkeypatch):
 
 
 def test_render_sin_contenido_id_no_toca_piezas(entorno, monkeypatch):
-    _activar_render(monkeypatch)
     monkeypatch.setattr(estudio_video.media, "leer_objeto", lambda mid: b"clip-bytes")
     monkeypatch.setattr(estudio_video, "_correr_ffmpeg", _fake_ffmpeg)
 
@@ -158,7 +151,6 @@ def test_render_sin_contenido_id_no_toca_piezas(entorno, monkeypatch):
 
 def test_render_adjuntado_falla_no_degrada_a_error(entorno, monkeypatch):
     """Si el cableado revienta, el render sigue COMPLETADO (el mp4 ya existe)."""
-    _activar_render(monkeypatch)
     monkeypatch.setattr(estudio_video.media, "leer_objeto", lambda mid: b"clip-bytes")
     monkeypatch.setattr(estudio_video, "_correr_ffmpeg", _fake_ffmpeg)
 

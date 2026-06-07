@@ -16,7 +16,7 @@ import json
 import sys
 import types
 
-from keni_consola import config, generaciones, media, repos
+from keni_consola import generaciones, media, repos
 from keni_consola.motores import transcripcion
 
 _MARCA = "claro-sports"
@@ -141,25 +141,13 @@ def test_segmentos_a_ass_escapa_llaves():
 
 
 # --------------------------------------------------------------------------- #
-# Ejecutor: kill-switch, import ausente, happy-path                             #
+# Ejecutor: import ausente, happy-path                                          #
+# (El ASR es local/gratuito/bajo-demanda: NO tiene kill-switch.)               #
 # --------------------------------------------------------------------------- #
-
-
-def test_ejecutor_killswitch_off_marca_error(monkeypatch):
-    """Con la transcripcion apagada (gate), el ejecutor marca error y no toca nada mas."""
-    monkeypatch.setattr(config, "transcripcion_activa", lambda: False)
-    capturas: list[dict] = []
-    monkeypatch.setattr(
-        generaciones, "actualizar", lambda gid, cambios: capturas.append(cambios) or cambios
-    )
-    transcripcion.ejecutar_transcripcion("g1", {"subtitulo_id": "s1", "media_id": "videos/x.mp4"})
-    assert capturas[-1]["estado"] == generaciones.ESTADO_ERROR
-    assert "transcrip" in capturas[-1]["error"].lower()
 
 
 def test_ejecutor_import_ausente_marca_error(entorno, monkeypatch):
     """Sin faster-whisper instalado, el ejecutor degrada con error claro (no rompe)."""
-    monkeypatch.setattr(config, "transcripcion_activa", lambda: True)
     # Subtitulo real para pasar la validacion previa.
     c = repos.crear_video_composicion(marca=_MARCA)
     s = repos.crear_video_subtitulo(composicion_id=c["id"])
@@ -180,7 +168,6 @@ def test_ejecutor_import_ausente_marca_error(entorno, monkeypatch):
 
 
 def test_ejecutor_subtitulo_inexistente_error(monkeypatch):
-    monkeypatch.setattr(config, "transcripcion_activa", lambda: True)
     capturas: list[dict] = []
     monkeypatch.setattr(
         generaciones, "actualizar", lambda gid, cambios: capturas.append(cambios) or cambios
@@ -191,8 +178,6 @@ def test_ejecutor_subtitulo_inexistente_error(monkeypatch):
 
 def test_ejecutor_happy_path_escribe_transcrito(entorno, monkeypatch):
     """Con ffmpeg + faster-whisper mockeados, escribe segmentos+ass y estado='transcrito'."""
-    monkeypatch.setattr(config, "transcripcion_activa", lambda: True)
-
     c = repos.crear_video_composicion(marca=_MARCA)
     s = repos.crear_video_subtitulo(composicion_id=c["id"])
 

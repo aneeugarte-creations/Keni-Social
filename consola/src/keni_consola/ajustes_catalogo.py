@@ -306,30 +306,6 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # --- Motor de video (Ola VIDEO) -------------------------------------------- #
-        # Toque RRSS sobre video ya editado: reencuadre, overlays/marcos, PiP, subtitulos
-        # quemados. Ambos OFF por defecto y gateados por la maquina (el render corre ffmpeg
-        # en el worker; la transcripcion usa faster-whisper, instalado en el servidor).
-        Ajuste(
-            clave=config.ENV_VIDEO_RENDER,
-            tipo="bool",
-            etiqueta="Video · Render (ffmpeg)",
-            ayuda="Habilita encolar y ejecutar el render de video (reencuadre por formato, "
-            "overlays/marcos/PiP, subtítulos quemados) con ffmpeg en el worker. Nunca publica: "
-            "produce el mp4 para revisión + aprobación humana. Apagado por defecto.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_TRANSCRIPCION,
-            tipo="bool",
-            etiqueta="Video · Transcripción de subtítulos (ASR)",
-            ayuda="Habilita la transcripción ASR (faster-whisper, word-level) para generar "
-            "subtítulos es-MX que se queman en el video. Degrada con honestidad si la librería "
-            "no está instalada en el servidor. Apagado por defecto.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,

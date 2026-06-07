@@ -20,17 +20,21 @@ CONTRATO (no cambiar la firma): `ejecutar_transcripcion(gen_id: str, spec: dict)
       "idioma": "es-MX",                             # opcional (def es-MX)
     }
 
+El ASR (faster-whisper) es LOCAL, gratuito y BAJO DEMANDA (lo dispara un humano, no un daemon,
+y no consume tokens), asi que NO tiene kill-switch ni gateo por maquina: el worker ejecuta lo
+que se encolo. (La unica degradacion que queda es por DISPONIBILIDAD de dependencia: si
+faster-whisper no esta instalado, se reporta un error claro; eso no es un kill-switch.)
+
 Pasos del ASR real:
-  1. Gate de maquina (`config.transcripcion_activa`): si OFF -> error claro y termina.
-  2. Bajar el media (`media.leer_objeto`); extraer el audio con ffmpeg (`config.ffmpeg_bin`,
+  1. Bajar el media (`media.leer_objeto`); extraer el audio con ffmpeg (`config.ffmpeg_bin`,
      sin shell) a wav 16 kHz mono temporal.
-  3. Transcribir con faster-whisper (modelo `config.whisper_modelo`, def "medium"), WORD-LEVEL
+  2. Transcribir con faster-whisper (modelo `config.whisper_modelo`, def "medium"), WORD-LEVEL
      (`word_timestamps=True`) para karaoke. IMPORT PEREZOSO Y OPCIONAL: si la lib no esta
      instalada, DEGRADAR con error claro en espanol (NO romper el import de este modulo).
      faster-whisper/torch NO van baked en la imagen (pesado); se instalan en el servidor.
-  4. Escribir en `video_subtitulos`: `segmentos` (JSON word-level), `ass` (ASS karaoke),
+  3. Escribir en `video_subtitulos`: `segmentos` (JSON word-level), `ass` (ASS karaoke),
      `estado='transcrito'`, `transcrito_en=ahora`. Via `repos.actualizar_video_subtitulo`.
-  5. Marcar la generacion `completado` con un resultado minimo.
+  4. Marcar la generacion `completado` con un resultado minimo.
 
 REPORTE A ACTIVIDAD IA: `generaciones.actualizar(...)` para fases/estado/error, emitiendo el
 texto a medida que llegan segmentos (streaming) para que se vea token-a-token.
@@ -307,15 +311,6 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
     humana de ortografia ANTES de quemar) y la generacion en 'completado'.
     """
     try:
-        # 1) Gate de maquina (kill-switch): si la transcripcion esta apagada, no hacemos trabajo.
-        if not config.transcripcion_activa():
-            _terminar_error(
-                gen_id,
-                "La maquina de transcripcion esta apagada (KENI_TRANSCRIPCION). "
-                "Activala para generar subtitulos.",
-            )
-            return
-
         subtitulo_id = (spec.get("subtitulo_id") or "").strip()
         media_id = (spec.get("media_id") or "").strip()
         idioma = (spec.get("idioma") or _IDIOMA_DEF).strip() or _IDIOMA_DEF
@@ -329,7 +324,7 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
             _terminar_error(gen_id, f"No existe el subtitulo {subtitulo_id}.")
             return
 
-        # 2) Import PEREZOSO y OPCIONAL de faster-whisper (no es dependencia dura del paquete).
+        # 1) Import PEREZOSO y OPCIONAL de faster-whisper (no es dependencia dura del paquete).
         try:
             from faster_whisper import WhisperModel  # type: ignore  # noqa: PLC0415
         except ImportError:
@@ -344,7 +339,7 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
             gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "extrayendo audio"}
         )
 
-        # 3) Bajar el media y extraer audio wav 16k mono a un temporal.
+        # 2) Bajar el media y extraer audio wav 16k mono a un temporal.
         datos = media.leer_objeto(media_id)
         if datos is None:
             _terminar_error(gen_id, f"No se encontro el media {media_id} en el almacen.")
@@ -358,7 +353,7 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
             wav = tmp_dir / "audio.wav"
             _extraer_audio_wav(origen, wav)
 
-            # 4) Transcribir word-level (streaming: faster-whisper devuelve un generador).
+            # 3) Transcribir word-level (streaming: faster-whisper devuelve un generador).
             generaciones.actualizar(
                 gen_id,
                 {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "transcribiendo"},
@@ -387,7 +382,7 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
                         },
                     )
 
-        # 5) Mapear a nuestro JSON y generar el ASS karaoke.
+        # 4) Mapear a nuestro JSON y generar el ASS karaoke.
         generaciones.actualizar(
             gen_id,
             {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "generando subtitulos"},
@@ -395,7 +390,7 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
         segmentos = construir_segmentos(crudos)
         ass = segmentos_a_ass(segmentos)
 
-        # 6) Persistir el borrador (estado 'transcrito' -> revision humana antes de quemar).
+        # 5) Persistir el borrador (estado 'transcrito' -> revision humana antes de quemar).
         repos.actualizar_video_subtitulo(
             subtitulo_id,
             {
