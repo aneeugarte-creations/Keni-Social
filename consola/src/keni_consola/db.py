@@ -1726,6 +1726,12 @@ def _crear_esquema(con: Any) -> None:
     # fresca con todo.
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_fuentes_rss(con)
+    # Mismo motivo (columna usada por un ÍNDICE del DDL declarativo, corre ANTES): el DDL crea
+    # `idx_plantillas_diseno_tipo`(tipo) y en una BD vieja `plantillas_diseno` aún no tiene `tipo`,
+    # así que el índice revienta ("column tipo does not exist") y envenena la conexión (fallo real
+    # en deploy). La migración añade `tipo` primero; tras ella el DDL es idempotente. Guard interno:
+    # si la tabla aún no existe, no hace nada y el DDL la crea fresca con `tipo`.
+    _migrar_columnas_plantillas_diseno(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_turnos_rota(con)
@@ -1742,7 +1748,6 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_noticias_algoritmo(con)
     _migrar_columnas_etiquetas(con)
     _migrar_columnas_contenido_plataforma(con)
-    _migrar_columnas_plantillas_diseno(con)
     _sembrar_fuentes_hub_desde_rss(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
