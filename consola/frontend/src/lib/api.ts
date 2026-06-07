@@ -121,7 +121,6 @@ import type {
   RespuestaFuenteRss,
   RespuestaFuentesRss,
   RespuestaFuentesHub,
-  FuenteHub,
   CuerpoAportarFuente,
   RespuestaAportarFuente,
   RespuestaGeneracion,
@@ -1255,25 +1254,10 @@ export const api = {
   eliminarFuenteRss: (id: string) =>
     peticion<RespuestaMensaje>(`/rss/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
-  // --- Hub genérico de fuentes (item G): RSS + API + galerías + ideas + internas ---
-  // ADITIVO sobre /rss: lista todas las fuentes de cualquier tipo + estado de agencias.
+  // --- Catálogo de fuentes: la vista "Todas" lista los feeds (desde fuentes_rss, tipo='rss')
+  // + el estado honesto de agencias (Reuters/AFP). Solo lectura. ---
   fuentesHub: (tipo?: string, signal?: AbortSignal) =>
     peticion<RespuestaFuentesHub>(`/fuentes${query({ tipo })}`, { signal }),
-  crearFuenteHub: (cuerpo: {
-    tipo: string;
-    nombre: string;
-    config?: Record<string, unknown>;
-    marca?: string;
-    prioridad?: number;
-    etiquetas?: string[];
-  }) => peticion<{ fuente: FuenteHub }>("/fuentes", { metodo: "POST", json: cuerpo }),
-  actualizarFuenteHub: (id: string, cuerpo: Partial<{ activo: boolean; prioridad: number }>) =>
-    peticion<{ fuente: FuenteHub }>(`/fuentes/${encodeURIComponent(id)}`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  eliminarFuenteHub: (id: string) =>
-    peticion<RespuestaMensaje>(`/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   // APORTACION MANUAL (idea / enlace pegado / contenido interno): crea un item REAL en el
   // tablero (`flujo='importante'`) con su `origen` y, best-effort, le lanza copy de fondo.
   aportarFuente: (cuerpo: CuerpoAportarFuente) =>
