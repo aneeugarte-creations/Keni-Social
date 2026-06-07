@@ -65,6 +65,7 @@ def main() -> int:
     from .programador import iniciar_programador
     from .reaper_generaciones import iniciar_reaper
     from .sugerencias_algoritmo import iniciar_sugerencias_editoriales
+    from .trends_daemon import iniciar_trends
 
     iniciar_captura_programada()
     iniciar_programador()  # DRY-RUN salvo KENI_PUBLICAR_REAL=1: nunca publica solo.
@@ -103,6 +104,9 @@ def main() -> int:
     # OFF para CI/tests; ACTIVO en producción vía deploy). Escalable: batch + workers acotados,
     # cadencia por feed/categoría y backoff exponencial por feed con error.
     iniciar_ingesta()
+    # Google Trends como fuente externa: ingiere las tendencias (con sus noticias) al pool.
+    # GATEADO: no ingiere salvo KENI_TRENDS=1 (def OFF).
+    iniciar_trends()
     # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las
     # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los huerfanos del

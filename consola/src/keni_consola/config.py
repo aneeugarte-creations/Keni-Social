@@ -288,6 +288,11 @@ ENV_SUGERENCIAS_EDITORIALES_MAX = "KENI_SUGERENCIAS_EDITORIALES_MAX"
 ENV_BREAKING = "KENI_BREAKING"
 ENV_BREAKING_INTERVALO_MIN = "KENI_BREAKING_INTERVALO_MIN"
 ENV_BREAKING_MAX = "KENI_BREAKING_MAX"
+# Google Trends como fuente externa: el daemon ingiere las tendencias (con sus noticias) al
+# pool. GATEADO OFF por defecto (KENI_TRENDS). `KENI_TRENDS_GEOS` = CSV de geos (def "MX").
+ENV_TRENDS = "KENI_TRENDS"
+ENV_TRENDS_INTERVALO_MIN = "KENI_TRENDS_INTERVALO_MIN"
+ENV_TRENDS_GEOS = "KENI_TRENDS_GEOS"
 
 # MOTOR DE INGESTA PERSISTENTE (Ola A): un hilo demonio sondea en background los feeds RSS
 # VENCIDOS (cadencia por feed/categoría) y PERSISTE cada artículo en `noticias_items` (archivo
@@ -589,6 +594,10 @@ ALGORITMOS_INTERVALO_HORAS_DEF = 6
 # cuesta un claude -p). Conservador a proposito.
 SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF = 24
 SUGERENCIAS_EDITORIALES_MAX_DEF = 3
+
+# Google Trends: cadencia holgada (def 30 min; las tendencias no cambian al segundo).
+TRENDS_INTERVALO_MIN_DEF = 30
+TRENDS_GEOS_DEF = ("MX",)
 
 # Carril Rápido de Breaking: barre cada 5 min (def) y cap 3 borradores por barrido.
 BREAKING_INTERVALO_MIN_DEF = 5
@@ -1474,6 +1483,27 @@ def breaking_max() -> int:
     Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
     """
     return _entero(ENV_BREAKING_MAX, BREAKING_MAX_DEF, minimo=1)
+
+
+def trends_activo() -> bool:
+    """True si el daemon de Google Trends debe ingerir al pool (`KENI_TRENDS`, def OFF).
+
+    Conservador: sin el flag el hilo arranca pero NO toca la red ni el pool. Con el flag, cada
+    N min descarga el RSS de tendencias por geo y vuelca sus noticias a `noticias_items`.
+    """
+    return _crudo(ENV_TRENDS).lower() in _VERDADEROS
+
+
+def trends_intervalo_min() -> int:
+    """Cada cuántos minutos ingiere el daemon de Trends (`KENI_TRENDS_INTERVALO_MIN`, def 30, min 5)."""
+    return _entero(ENV_TRENDS_INTERVALO_MIN, TRENDS_INTERVALO_MIN_DEF, minimo=5)
+
+
+def trends_geos() -> tuple[str, ...]:
+    """Geos a ingerir (`KENI_TRENDS_GEOS`, CSV; def `MX`). Vacío/ausente => el default."""
+    crudo = _crudo(ENV_TRENDS_GEOS)
+    geos = tuple(g.strip().upper() for g in crudo.split(",") if g.strip())
+    return geos or TRENDS_GEOS_DEF
 
 
 # --------------------------------------------------------------------------- #
