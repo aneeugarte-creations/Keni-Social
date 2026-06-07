@@ -67,10 +67,6 @@ PROC_GREEN_IDEAS = "green-ideas"
 # INSERTA `insumos_item`, y deja el lote en estado `listo`/`error`. El back ya NO ejecuta
 # `claude -p` (no tiene binario ni token): el WORKER corre el parseo. Mismo patron que copy.
 PROC_INSUMOS = "insumos"
-# Investigacion bajo demanda (boton "Investigar ahora"): parsea el JSON `{"candidatos":[...]}`
-# de claude (Haiku + web) e INSERTA `inv_candidato` en estado `nuevo`. El daemon de fondo ya
-# corre en `daemons` (con claude); este camino MANUAL lo movemos al worker (el back no tiene claude).
-PROC_INVESTIGACION = "investigacion"
 # Importacion de CALENDARIO desde un archivo NO tabular (PDF/Word/imagen/captura): parsea el
 # JSON `{"filas":[...]}` de claude (Haiku) e IMPORTA al tablero (`importar_a_tablero`). El camino
 # tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA, que
@@ -346,21 +342,6 @@ def construir_insumos(
     }
 
 
-def construir_investigacion(
-    *, brief: dict[str, Any], fecha: str
-) -> dict[str, Any]:
-    """Spec del post-procesado de la INVESTIGACION manual: parsea + inserta candidatos.
-
-    `brief` es el brief (guardado o ad-hoc) ya resuelto por el back; `fecha` el dia editorial.
-    El worker parsea `{"candidatos":[...]}`, normaliza con el brief e INSERTA `inv_candidato`.
-    """
-    return {
-        "kind": PROC_INVESTIGACION,
-        "brief": brief,
-        "fecha": fecha,
-    }
-
-
 def construir_import_calendario(
     *, marca_defecto: str = "", autor: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -519,14 +500,6 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
         return insumos_parse.construir_procesar_insumos(
             lote_id=p["lote_id"], cajon=p.get("cajon", ""), fecha=p.get("fecha", ""),
-        )
-
-    if kind == PROC_INVESTIGACION:
-        # Import perezoso: el factory toca BD (`repos`), no cabe en este modulo de dominio puro.
-        from . import investigacion_agente
-
-        return investigacion_agente.construir_procesar_investigacion(
-            brief=p.get("brief") or {}, fecha=p.get("fecha", ""),
         )
 
     if kind == PROC_IMPORT_CALENDARIO:

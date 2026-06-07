@@ -17,6 +17,8 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   run: "Run",
   pipeline: "Pipeline",
   insumos: "Cajones del día",
+  // Etiqueta retenida para registros históricos: ya no se crean generaciones de
+  // investigación (Agentes retirados), pero el historial puede tener tipo='investigacion'.
   investigacion: "Investigación",
   "import-calendario": "Importar calendario",
   "render-video": "Render de video",
