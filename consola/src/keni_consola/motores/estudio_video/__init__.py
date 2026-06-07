@@ -147,9 +147,21 @@ def _render(gen_id: str, spec: dict) -> None:
         if not salida.is_file() or salida.stat().st_size == 0:
             raise RenderError("ffmpeg termino sin producir un archivo de salida.")
 
-        # 7) Persistir + completar.
+        # 7) Persistir el mp4.
         _fase(gen_id, "guardando", "Guardando el video renderizado.")
         clave = _guardar_render(salida.read_bytes())
+
+        # 8) Cablear el mp4 a la pieza ligada (si la hay): sin esto el render es un callejon sin
+        #    salida (no fluye a feed/aprobacion/publicacion). Va ANTES de marcar COMPLETADO porque
+        #    `_adjuntar_a_pieza` reporta su propia fase (`_fase` -> estado EJECUTANDO); si corriera
+        #    DESPUES, pisaria el estado terminal y la generacion quedaria colgada en "ejecutando".
+        #    Es best-effort: un fallo aqui se loggea + se avisa en `salida`, pero NO degrada a
+        #    error (el mp4 ya existe y queda en `resultado`).
+        contenido_id = str(comp.get("contenido_id") or "").strip()
+        if contenido_id:
+            _adjuntar_a_pieza(gen_id, contenido_id, clave)
+
+        # 9) Completar (estado terminal, EL ULTIMO paso para que ninguna fase posterior lo pise).
         generaciones.actualizar(
             gen_id,
             {
@@ -159,14 +171,6 @@ def _render(gen_id: str, spec: dict) -> None:
                 "fecha_fin": generaciones.ahora_iso(),
             },
         )
-
-        # 8) Cablear el mp4 a la pieza ligada (si la hay): sin esto el render es un callejon sin
-        #    salida (no fluye a feed/aprobacion/publicacion). El render YA esta completado; un
-        #    fallo aqui se loggea + se avisa en la generacion, pero NO degrada a error (el mp4
-        #    existe y queda en `resultado`).
-        contenido_id = str(comp.get("contenido_id") or "").strip()
-        if contenido_id:
-            _adjuntar_a_pieza(gen_id, contenido_id, clave)
 
 
 # --------------------------------------------------------------------------- #

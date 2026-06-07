@@ -865,7 +865,10 @@ def test_pool_detener_cancela_todos_los_en_vuelo_y_son_reclamables(entorno, monk
     # Esperar a que los N jobs esten EN VUELO (registrados como en curso en el worker). Que el
     # registro tenga EXACTAMENTE n (ni 1 mas) verifica de paso que ningun pool de un test
     # previo dejo jobs fantasma (la regresion de aislamiento que este fixture cierra).
-    fin = time.monotonic() + 15
+    # Timeout AMPLIO (red de seguridad, no plazo de rendimiento): normalmente los N jobs entran
+    # en vuelo en <1s, pero bajo carga alta (suite -n6 lenta) el hilo worker puede tardar en
+    # reclamar; 60s evita el flake sin enmascarar un cuelgue real.
+    fin = time.monotonic() + 60
     while time.monotonic() < fin and len(worker._jobs_en_curso()) < n:
         time.sleep(0.05)
     assert len(worker._jobs_en_curso()) == n, "los N jobs deberian estar en vuelo"
