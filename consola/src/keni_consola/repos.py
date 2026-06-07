@@ -1516,6 +1516,33 @@ def ajustar_plataformas_por_formato(
     return {"creadas": creadas, "eliminadas": eliminadas, "conservadas": conservadas}
 
 
+def adjuntar_video_a_pieza(contenido_id: str, clave_media: str) -> list[str]:
+    """Adjunta un mp4 renderizado a las plataformas de VIDEO de una pieza (cableado VIDEO).
+
+    El asset de video vive POR PLATAFORMA (`contenido_plataforma.video` + flag `falta_video`).
+    Una pieza de video arranca con `falta_video=1` hasta que se adjunta el asset; aquí cerramos
+    ese hueco: para cada fila de la pieza cuya red sea de FORMATO VIDEO (`redes.redes_de_formato`
+    -> instagram/x/facebook/tiktok/youtube) que EXISTA en la pieza, fija `video=clave_media` y
+    `falta_video=0`. No crea filas (eso lo decide el formato vía `ajustar_plataformas_por_formato`)
+    ni fuerza un flip de formato: solo cablea el asset a las redes de video ya presentes.
+
+    Idempotente: re-adjuntar la misma clave deja el mismo estado. Devuelve la lista de ids de red
+    tocadas (vacía si la pieza no tiene plataformas de video).
+    """
+    from . import redes
+
+    redes_video = set(redes.redes_de_formato(redes.FORMATO_VIDEO))
+    tocadas: list[str] = []
+    for plat in db.listar_contenido_plataforma(contenido_id):
+        if plat.get("red", "") not in redes_video:
+            continue
+        db.actualizar_contenido_plataforma(
+            plat["id"], {"video": clave_media, "falta_video": False}
+        )
+        tocadas.append(plat["red"])
+    return tocadas
+
+
 # --------------------------------------------------------------------------- #
 # Biblioteca de MEDIOS interna (OPERACIONAL: Postgres via db.py)                #
 # --------------------------------------------------------------------------- #

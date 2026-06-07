@@ -160,6 +160,58 @@ def _render(gen_id: str, spec: dict) -> None:
             },
         )
 
+        # 8) Cablear el mp4 a la pieza ligada (si la hay): sin esto el render es un callejon sin
+        #    salida (no fluye a feed/aprobacion/publicacion). El render YA esta completado; un
+        #    fallo aqui se loggea + se avisa en la generacion, pero NO degrada a error (el mp4
+        #    existe y queda en `resultado`).
+        contenido_id = str(comp.get("contenido_id") or "").strip()
+        if contenido_id:
+            _adjuntar_a_pieza(gen_id, contenido_id, clave)
+
+
+# --------------------------------------------------------------------------- #
+# Cableado a la pieza                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def _adjuntar_a_pieza(gen_id: str, contenido_id: str, clave: str) -> None:
+    """Adjunta el mp4 renderizado a las plataformas de video de la pieza ligada.
+
+    Best-effort: el render YA esta completado. Si el adjuntado falla, se loggea y se refleja un
+    aviso en la generacion (campo `salida`), pero NO se marca error (el mp4 vive en `resultado`).
+    """
+    _fase(gen_id, "adjuntando a la pieza", "Adjuntando el video renderizado a la pieza.")
+    try:
+        tocadas = repos.adjuntar_video_a_pieza(contenido_id, clave)
+    except Exception as exc:  # noqa: BLE001 - el render no debe degradarse por el cableado
+        _log.exception(
+            "estudio_video: fallo al adjuntar el render a la pieza %s (gen %s)",
+            contenido_id,
+            gen_id,
+        )
+        generaciones.actualizar(
+            gen_id,
+            {
+                "salida": (
+                    "El video se renderizo pero no se pudo adjuntar a la pieza "
+                    f"({exc}). Adjuntalo manualmente."
+                )
+            },
+        )
+        return
+    if tocadas:
+        _log.info(
+            "estudio_video: video %s adjuntado a la pieza %s (%s redes)",
+            clave,
+            contenido_id,
+            len(tocadas),
+        )
+    else:
+        _log.info(
+            "estudio_video: la pieza %s no tiene plataformas de video; render no adjuntado",
+            contenido_id,
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Helpers de carga / horneado                                                  #
