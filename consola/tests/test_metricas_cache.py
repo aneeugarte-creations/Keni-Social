@@ -75,7 +75,12 @@ def test_disparar_refresco_es_idempotente(entorno, monkeypatch):
 
     def _fake_refrescar_todo(prioritario=None):
         llamadas.append(prioritario)
-        bloqueo.wait(2.0)
+        # Timeout AMPLIO (red de seguridad anti-cuelgue), no un plazo de carrera: el test
+        # libera con `bloqueo.set()` en cuanto hace las 2 llamadas. Con 2.0s, bajo carga alta
+        # (suite -n6 lenta) el hilo podía AGOTAR el wait ANTES de la 2ª llamada -> el 1er
+        # barrido terminaba, `corriendo` volvía a False y la 2ª llamada arrancaba OTRO barrido
+        # -> `llamadas` con 2 -> flake. 30s da margen de sobra sin cambiar la intención.
+        bloqueo.wait(30.0)
         return 1
 
     monkeypatch.setattr(mc, "refrescar_todo", _fake_refrescar_todo)
