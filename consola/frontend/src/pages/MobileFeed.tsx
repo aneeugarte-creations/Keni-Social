@@ -22,6 +22,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  Bot,
   Check,
   Loader2,
   MessageSquare,
@@ -32,6 +33,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Autor } from "@/components/comunes/Autor";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { MARCA_TODAS, marcaParam } from "@/components/comunes/selectores";
@@ -53,7 +55,7 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
-import { EtiquetaRed } from "@/pages/publicaciones/insignias";
+import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { CuerpoCrearContenido, Publicacion } from "@/types";
 
 /** Estados que ve el revisor en el feed: lo pendiente de su revisión y lo ya aprobado. */
@@ -196,11 +198,29 @@ function TarjetaFeed({
 
   return (
     <article className="border-b border-border bg-background pb-3">
+      {/* Cabecera EN UNA LÍNEA: quién posteó · tiempo (igual que el feed de escritorio). La RED ya
+          va como distintivo sobre la imagen y el FORMATO como icono sobre la imagen (lado opuesto),
+          y la marca la fija el selector global de arriba, así que aquí NO se repiten. */}
       <header className="flex items-center gap-2 px-4 pb-2 pt-3 text-xs text-muted-foreground">
-        <EtiquetaRed red={publicacion.red} nombre={publicacion.red_nombre} />
-        <span>· {publicacion.marca_nombre}</span>
-        {publicacion.autor_nombre && (
-          <span className="ml-auto truncate">{publicacion.autor_nombre}</span>
+        {publicacion.autor_nombre?.trim() ? (
+          <Autor
+            nombre={publicacion.autor_nombre}
+            conPrefijo={false}
+            className="text-xs font-medium text-foreground"
+          />
+        ) : (
+          <span
+            className="inline-flex items-center gap-1 text-xs font-medium text-foreground"
+            title="Pieza autogenerada por la IA"
+          >
+            <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+            IA
+          </span>
+        )}
+        {publicacion.enviado_a_revision_en && (
+          <span className="ml-auto tabular-nums">
+            {tiempoRelativo(publicacion.enviado_a_revision_en)}
+          </span>
         )}
       </header>
 
@@ -212,6 +232,7 @@ function TarjetaFeed({
         contenido={publicacion.contenido}
         copy_in={publicacion.copy_in}
         imagen_url={publicacion.imagen_url || publicacion.imagen}
+        formato={publicacion.formato}
         variante="limpia"
       />
 
