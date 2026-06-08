@@ -199,3 +199,39 @@ def noticia_item_de_insumo(insumo: dict[str, Any]) -> dict[str, Any] | None:
         "senal": SENAL_CURADO,
         "estado": "nuevo",
     }
+
+
+def noticia_item_de_agencia(item: dict[str, str], *, agencia: str) -> dict[str, Any] | None:
+    """Fila de `noticias_items` a partir de un item de AGENCIA (Reuters/AFP). None sin identidad.
+
+    El item de agencia tiene la forma `{titulo, resumen, enlace, fecha, fuente, clave}`
+    (`agencias._item`). La `clave` de dedup es la url canónica del enlace o, si no hay url, el
+    hash del título normalizado; sin ninguna de las dos no hay identidad estable y se omite.
+
+    Idempotencia: `fuente_id="agencia-{agencia}"` (estable por agencia) + `clave` casan con el
+    UNIQUE(fuente_id, clave) del pool, así re-ingerir el mismo barrido o entre barridos no
+    duplica (igual que RSS/Trends). Señal NORMAL (no curado): las agencias no son material
+    elegido a mano por el equipo, a diferencia de los cajones. `marca` vacía: las agencias no
+    tienen marca asociada hoy (señal global, como Trends); el clustering la puntúa por
+    vocabulario de marca igual que cualquier otro item.
+    """
+    titulo = (item.get("titulo") or "").strip()
+    url = (item.get("enlace") or "").strip()
+    url_can = url_canonica(url)
+    clave = _clave_dedup(url_can, titulo)
+    if not clave:
+        return None
+    return {
+        "fuente_id": f"agencia-{agencia}",
+        "fuente_nombre": (item.get("fuente") or "").strip() or agencia.upper(),
+        "categoria": "agencias",
+        "marca": "",
+        "titulo": titulo,
+        "resumen": (item.get("resumen") or "").strip(),
+        "url": url,
+        "url_canonica": url_can,
+        "idioma": "",
+        "publicado_en": _publicado_en((item.get("fecha") or "").strip()),
+        "clave": clave,
+        "estado": "nuevo",
+    }

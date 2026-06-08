@@ -8,6 +8,7 @@ monkeypatcheando los accesores de `config` (sin tocar el store de ajustes ni la 
 from __future__ import annotations
 
 from keni_consola import agencias, config
+from keni_consola.dominio import ingesta
 
 
 # --------------------------------------------------------------------------- #
@@ -108,3 +109,56 @@ def test_traer_items_con_credencial_usa_descargador_inyectable(monkeypatch):
     )
     items = agencias.traer_items("reuters")
     assert [i["titulo"] for i in items] == ["N"]
+
+
+# --------------------------------------------------------------------------- #
+# Builder de pool noticia_item_de_agencia (PURO, sin red) — Cambio 1 Fase 2    #
+# --------------------------------------------------------------------------- #
+
+
+def test_noticia_item_de_agencia_mapea_campos_y_fuente_estable():
+    item = {
+        "titulo": "Sismo en México",
+        "resumen": "Resumen",
+        "enlace": "https://reuters.com/a/1?utm_source=x",
+        "fecha": "2025-06-01T10:00:00Z",
+        "fuente": "Reuters",
+        "clave": "https://reuters.com/a/1?utm_source=x",
+    }
+    fila = ingesta.noticia_item_de_agencia(item, agencia="reuters")
+    assert fila is not None
+    assert fila["fuente_id"] == "agencia-reuters"
+    assert fila["fuente_nombre"] == "Reuters"
+    assert fila["categoria"] == "agencias"
+    assert fila["marca"] == ""  # agencias = señal global, sin marca
+    assert fila["titulo"] == "Sismo en México"
+    assert fila["resumen"] == "Resumen"
+    assert fila["url"] == "https://reuters.com/a/1?utm_source=x"
+    # clave = url canónica (sin utm_*): identidad estable cross-barrido.
+    assert fila["url_canonica"] == "reuters.com/a/1"
+    assert fila["clave"] == "reuters.com/a/1"
+    assert fila["publicado_en"]  # fecha ISO parseada
+    assert "senal" not in fila  # señal NORMAL (no curado), default 0 en el sink
+
+
+def test_noticia_item_de_agencia_fuente_nombre_cae_a_agencia_upper():
+    item = {"titulo": "X", "resumen": "", "enlace": "https://a/2", "fecha": "", "fuente": "", "clave": "https://a/2"}
+    fila = ingesta.noticia_item_de_agencia(item, agencia="afp")
+    assert fila is not None
+    assert fila["fuente_id"] == "agencia-afp"
+    assert fila["fuente_nombre"] == "AFP"
+
+
+def test_noticia_item_de_agencia_clave_estable_por_titulo_sin_enlace():
+    item = {"titulo": "Una nota sin enlace", "resumen": "", "enlace": "", "fecha": "", "fuente": "Reuters", "clave": "Una nota sin enlace"}
+    fila = ingesta.noticia_item_de_agencia(item, agencia="reuters")
+    assert fila is not None
+    assert fila["url"] == ""
+    assert fila["url_canonica"] == ""
+    assert fila["clave"].startswith("t:")  # hash del título normalizado
+
+
+def test_noticia_item_de_agencia_none_sin_identidad():
+    # Sin enlace y sin título útil -> sin clave estable -> se omite (None).
+    item = {"titulo": "", "resumen": "solo resumen", "enlace": "", "fecha": "", "fuente": "AFP", "clave": ""}
+    assert ingesta.noticia_item_de_agencia(item, agencia="afp") is None

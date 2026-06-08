@@ -34,7 +34,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from . import config, daemon_util, db, relevancia_marca, repos
+from . import agencias, config, daemon_util, db, relevancia_marca, repos
 from .dominio import clustering, http_feed, ingesta, traduccion
 
 _log = logging.getLogger("keni_consola.ingesta_daemon")
@@ -230,6 +230,38 @@ def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str,
     return {"traducidos": traducidos, "candidatos": len(candidatos)}
 
 
+# Agencias CONFIGURADAS a sondear en cada barrido. Lista fija para el piloto (no hay config
+# per-marca ni env de "qué agencias"); `agencias.traer_items` degrada honesto a `[]` sin
+# credencial, así que sondear una agencia no configurada es un no-op sin red ni coste.
+_AGENCIAS = ("reuters", "afp")
+
+
+def paso_agencias() -> dict[str, Any]:
+    """Ingiere las AGENCIAS configuradas (Reuters/AFP) al pool `noticias_items`. Best-effort.
+
+    Para cada agencia: `agencias.traer_items()` (que devuelve `[]` honesto sin credencial, sin
+    tocar la red), se construye la fila de pool con `ingesta.noticia_item_de_agencia` y se
+    persiste por el MISMO sumidero que el RSS (`repos.crear_noticias_items`, idempotente por
+    UNIQUE(fuente_id, clave)). Una agencia que falla (red/auth/forma) se loguea y NO aborta el
+    barrido ni las demás agencias. Sin credenciales vivas (AFP usa un token placeholder) el
+    paso es un no-op honesto. Devuelve `{items}` con cuántas filas nuevas se insertaron.
+    """
+    nuevos = 0
+    for ag in _AGENCIAS:
+        try:
+            crudos = agencias.traer_items(ag)
+            pool = [
+                fila
+                for it in crudos
+                if (fila := ingesta.noticia_item_de_agencia(it, agencia=ag)) is not None
+            ]
+            if pool:
+                nuevos += repos.crear_noticias_items(pool)
+        except Exception:  # noqa: BLE001 -- una agencia no debe tumbar el barrido
+            _log.exception("ingesta_daemon: fallo ingiriendo la agencia %s.", ag)
+    return {"items": nuevos}
+
+
 def ejecutar_barrido() -> dict[str, Any]:
     """Un barrido: elige feeds vencidos, los sondea en paralelo, persiste y replanifica.
 
@@ -311,6 +343,17 @@ def ejecutar_barrido() -> dict[str, Any]:
                     "ingesta_daemon: fallo al registrar el sondeo de feed %s.", feed.get("id")
                 )
 
+        # Paso de AGENCIAS (Fase 2): vuelca al MISMO pool las notas de Reuters/AFP CONFIGURADAS,
+        # antes del clustering para que se agrupen en el mismo barrido. Gateado por KENI_INGESTA
+        # (este daemon) — sin toggle propio. Best-effort + no-op honesto sin credencial: nunca
+        # rompe el barrido de RSS. Sus items entran al conteo de `items_nuevos`.
+        agencias_resumen: dict[str, Any] = {"items": 0}
+        try:
+            agencias_resumen = paso_agencias()
+        except Exception:  # noqa: BLE001 -- las agencias son aditivas; nunca tumban la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de agencias.")
+        items_nuevos += agencias_resumen["items"]
+
         # Paso de CLUSTERING (Ola B): agrupa en historias los items recién insertados (y
         # cualquier reciente sin cluster), recalcula y puntúa. Best-effort: un fallo del paso
         # se loguea y NO invalida el barrido de ingesta (que ya persistió los artículos).
@@ -330,10 +373,10 @@ def ejecutar_barrido() -> dict[str, Any]:
             _log.exception("ingesta_daemon: fallo en el paso de traducción.")
 
         _log.info(
-            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s), %d error(es), "
-            "%d auto-desactivado(s); clustering: %d item(s), %d historia(s) nueva(s); "
-            "traducción: %d historia(s).",
-            len(feeds), items_nuevos, errores, auto_desactivados,
+            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s) (%d de agencias), "
+            "%d error(es), %d auto-desactivado(s); clustering: %d item(s), %d historia(s) "
+            "nueva(s); traducción: %d historia(s).",
+            len(feeds), items_nuevos, agencias_resumen["items"], errores, auto_desactivados,
             cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
             trad_resumen["traducidos"],
         )
@@ -342,6 +385,7 @@ def ejecutar_barrido() -> dict[str, Any]:
             "items_nuevos": items_nuevos,
             "errores": errores,
             "auto_desactivados": auto_desactivados,
+            "agencias": agencias_resumen,
             "clustering": cluster_resumen,
             "traduccion": trad_resumen,
         }

@@ -276,3 +276,89 @@ def test_paso_traduccion_sin_candidatos_no_hace_nada(monkeypatch):
         raise AssertionError("no debería guardar sin candidatos")
     monkeypatch.setattr(ingesta_daemon.repos, "marcar_cluster_traducido", _no_guardar)
     assert ingesta_daemon.paso_traduccion() == {"traducidos": 0, "candidatos": 0}
+
+
+# --------------------------------------------------------------------------- #
+# Paso de AGENCIAS (Fase 2): vuelca Reuters/AFP al pool (con fakes, sin red)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_agencias_sin_credencial_es_noop(monkeypatch):
+    # traer_items degrada honesto a [] sin credencial -> nada que persistir, sin red.
+    monkeypatch.setattr(ingesta_daemon.agencias, "traer_items", lambda _ag: [])
+    def _no_persistir(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("no debería persistir sin items de agencia")
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", _no_persistir)
+    assert ingesta_daemon.paso_agencias() == {"items": 0}
+
+
+def test_paso_agencias_ingiere_items_al_pool(monkeypatch):
+    crudos = {
+        "reuters": [{"titulo": "Nota R", "resumen": "", "enlace": "https://r/1", "fecha": "", "fuente": "Reuters", "clave": "https://r/1"}],
+        "afp": [{"titulo": "Nota A", "resumen": "", "enlace": "https://a/1", "fecha": "", "fuente": "AFP", "clave": "https://a/1"}],
+    }
+    monkeypatch.setattr(ingesta_daemon.agencias, "traer_items", lambda ag: crudos.get(ag, []))
+    persistidos = []
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items",
+                        lambda items: persistidos.extend(items) or len(items))
+
+    resumen = ingesta_daemon.paso_agencias()
+    assert resumen == {"items": 2}
+    fuentes = {f["fuente_id"] for f in persistidos}
+    assert fuentes == {"agencia-reuters", "agencia-afp"}
+    assert all(f["categoria"] == "agencias" for f in persistidos)
+
+
+def test_paso_agencias_best_effort_una_agencia_que_falla_no_aborta(monkeypatch):
+    # Reuters revienta; AFP debe seguir ingiriendo (best-effort por agencia).
+    def _traer(ag):
+        if ag == "reuters":
+            raise RuntimeError("boom de auth")
+        return [{"titulo": "Nota A", "resumen": "", "enlace": "https://a/1", "fecha": "", "fuente": "AFP", "clave": "https://a/1"}]
+    monkeypatch.setattr(ingesta_daemon.agencias, "traer_items", _traer)
+    persistidos = []
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items",
+                        lambda items: persistidos.extend(items) or len(items))
+
+    resumen = ingesta_daemon.paso_agencias()
+    assert resumen == {"items": 1}
+    assert [f["fuente_id"] for f in persistidos] == ["agencia-afp"]
+
+
+def test_barrido_ingiere_agencias_y_suma_a_items_nuevos(monkeypatch):
+    # El barrido completo: RSS persiste 2 + agencias persisten 1 -> items_nuevos == 3.
+    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
+            "marca": "unotv", "errores_seguidos": 0}
+    persistidos = []
+    _parchear_comun(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_OK)
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items",
+                        lambda items: persistidos.extend(items) or len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon.agencias, "traer_items",
+                        lambda ag: [{"titulo": "Ag", "resumen": "", "enlace": f"https://{ag}/1", "fecha": "", "fuente": ag.upper(), "clave": f"https://{ag}/1"}] if ag == "reuters" else [])
+
+    resumen = ingesta_daemon.ejecutar_barrido()
+    assert resumen["items_nuevos"] == 3  # 2 RSS + 1 agencia
+    assert resumen["agencias"] == {"items": 1}
+    assert any(f.get("fuente_id") == "agencia-reuters" for f in persistidos)
+
+
+def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
+    # Si paso_agencias lanzara, el barrido lo captura y sigue con RSS/clustering.
+    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
+            "marca": "unotv", "errores_seguidos": 0}
+    _parchear_comun(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_OK)
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    def _revienta():
+        raise RuntimeError("boom")
+    monkeypatch.setattr(ingesta_daemon, "paso_agencias", _revienta)
+
+    resumen = ingesta_daemon.ejecutar_barrido()
+    # RSS no se ve afectado; agencias cae a su default sin sumar.
+    assert resumen["items_nuevos"] == 2
+    assert resumen["agencias"] == {"items": 0}
