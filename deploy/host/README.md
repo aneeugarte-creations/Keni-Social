@@ -28,10 +28,11 @@ sudo install -m 0644 deploy/backup/keni-backup.timer   /etc/systemd/system/keni-
 sudo systemctl daemon-reload
 sudo systemctl enable --now keni-backup.timer
 sudo systemctl start keni-backup.service   # primer backup AHORA; revisa el resultado:
-ls -lah /var/backups/keni-social/postgres /var/backups/keni-social/garage
+ls -lah /var/backups/keni-social/postgres /var/backups/keni-social/volumes
 ```
 
-Restore (Postgres): `gunzip -c keni-XXXX.sql.gz | docker exec -i keni-social-db-1 sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'`.
+Restore (Postgres, formato custom): `docker exec -i keni-social-db-1 sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < keni-XXXX.dump`.
+Restore (volumen): `docker run --rm -v keni-social_keni-data:/v -v /var/backups/keni-social/volumes:/b alpine sh -c 'cd /v && tar xzf /b/keni-data-XXXX.tar.gz'` (con el stack parado).
 Offsite (recomendado al escalar): instala `rclone`, configura un remoto y pon
 `BACKUP_RCLONE_REMOTE=remoto:keni-social` en `/etc/keni-backup.conf`. El script lo usa solo.
 
