@@ -25,14 +25,6 @@ Esto es **dry-run puro**: NO publica, NO toca la red. Solo enseña lo que se env
    el conteo de caracteres, los hashtags, si es hilo/carrusel y qué media se
    referencia, junto con cualquier aviso.
 
-3. (Opcional, solo si el usuario quiere ver el payload técnico de Meta) puedes mostrar
-   la petición exacta en dry-run, que tampoco toca la red:
-
-   ```
-   python -m keni_metricas.publicacion --plataforma instagram --cuenta IG_ID \
-       --texto "..." --imagen https://.../foto.jpg --hashtag deporte
-   ```
-
-4. Termina con una checklist humana corta (qué revisar antes de publicar de verdad) y
+3. Termina con una checklist humana corta (qué revisar antes de publicar de verdad) y
    recuerda explícitamente que **no se ha publicado nada**. La publicación real vive
    fuera de este flujo y exige token; aquí jamás se ejecuta.
