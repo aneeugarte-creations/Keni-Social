@@ -1,11 +1,12 @@
 /**
- * Controles del dashboard: selector de rango y re-export del selector de marca
- * compartido.
+ * Controles del dashboard: selector de rango/tiempo y re-export del centinela
+ * `MARCA_TODAS`.
  *
- * El selector de marca vive ahora en `@/components/comunes/SelectorMarca`
- * (un único componente y un único centinela `MARCA_TODAS`). Aquí se re-exporta
- * para no cambiar los imports de Métricas / Comparar periodos. `SelectorRango`
- * es específico de Métricas y se mantiene local.
+ * Métricas NO tiene selector de marca propio: la marca la manda SIEMPRE el switch
+ * global de la barra superior (`useMarcaActiva`). Aquí solo vive el selector de
+ * RANGO/tiempo (`SelectorRango` / `SelectorTiempo`), específico de Métricas, más
+ * el re-export de `MARCA_TODAS` (el centinela de "todas las marcas" que varios
+ * sub-componentes usan para acotar sus consultas).
  */
 import * as React from "react";
 
@@ -28,7 +29,6 @@ import {
   tokenRango,
 } from "./rango";
 
-export { SelectorMarca } from "@/components/comunes/SelectorMarca";
 export { MARCA_TODAS } from "@/components/comunes/selectores";
 
 interface SelectorRangoProps {

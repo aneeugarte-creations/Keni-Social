@@ -10,7 +10,6 @@ import { Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { NINGUNA, ningunaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { Tooltip } from "@/components/ui/tooltip";
+import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { numeroCompacto } from "@/lib/formato";
 import type {
@@ -62,10 +62,9 @@ export function DialogoNueva({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
+  // La marca la manda el switch GLOBAL: no hay selector de marca propio. Si el switch está en
+  // "Todas" (`marcaActiva === null`) la acción se deshabilita (esta acción exige marca concreta).
   const { marcaActiva } = useMarcaActiva();
-  const marcaPorDefecto =
-    marcaActiva && opciones.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : NINGUNA;
-  const [marca, setMarca] = React.useState(marcaPorDefecto);
   const [red, setRed] = React.useState(NINGUNA);
   const [idPost, setIdPost] = React.useState("");
   const [titulo, setTitulo] = React.useState("");
@@ -78,7 +77,6 @@ export function DialogoNueva({
   // Reseteamos el formulario cada vez que se abre.
   React.useEffect(() => {
     if (!abierto) return;
-    setMarca(marcaPorDefecto);
     setRed(NINGUNA);
     setIdPost("");
     setTitulo("");
@@ -89,7 +87,8 @@ export function DialogoNueva({
     setNotas("");
   }, [abierto]);
 
-  const marcaParam = ningunaParam(marca);
+  // La marca = switch global (canónica) o "" si está en "Todas" (acción deshabilitada).
+  const marcaParam = marcaActiva ?? "";
   const redParam = ningunaParam(red);
 
   // Cambiar de marca/red invalida el post elegido (ya no pertenece a la nueva lista).
@@ -139,12 +138,12 @@ export function DialogoNueva({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeGuardar = Boolean(idPost) && !crear.isPending;
+  const puedeGuardar = marcaActiva != null && Boolean(idPost) && !crear.isPending;
 
   // Mensaje contextual bajo el selector de posts (carga / vacío / error / pista).
   function ayudaPosts(): string | null {
-    if (!marcaParam || !redParam)
-      return "Elige una marca y una red para ver sus publicaciones.";
+    if (marcaActiva == null) return MENSAJE_MARCA_REQUERIDA;
+    if (!redParam) return "Elige una red para ver sus publicaciones.";
     if (postsQuery.isPending) return "Cargando publicaciones…";
     if (postsQuery.isError) return "No se pudieron cargar las publicaciones. Reintenta.";
     if (posts.length === 0) return "No hay publicaciones para esa marca y red en el periodo.";
@@ -164,31 +163,17 @@ export function DialogoNueva({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="nueva-marca">Marca *</Label>
-              <SelectorMarca
-                id="nueva-marca"
-                className="w-full"
-                marcas={opciones.marcas}
-                valor={marca}
-                onCambio={setMarca}
-                incluirTodas={false}
-                incluirNinguna
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="nueva-red">Red *</Label>
-              <SelectorRed
-                id="nueva-red"
-                className="w-full"
-                redes={opciones.redes}
-                valor={red}
-                onCambio={setRed}
-                incluirTodas={false}
-                incluirNinguna
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nueva-red">Red *</Label>
+            <SelectorRed
+              id="nueva-red"
+              className="w-full"
+              redes={opciones.redes}
+              valor={red}
+              onCambio={setRed}
+              incluirTodas={false}
+              incluirNinguna
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -288,10 +273,12 @@ export function DialogoNueva({
           <Button variant="outline" onClick={onCerrar} disabled={crear.isPending}>
             Cancelar
           </Button>
-          <Button onClick={() => crear.mutate()} disabled={!puedeGuardar}>
-            {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Empezar seguimiento
-          </Button>
+          <Tooltip label={marcaActiva == null ? MENSAJE_MARCA_REQUERIDA : ""}>
+            <Button onClick={() => crear.mutate()} disabled={!puedeGuardar}>
+              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Empezar seguimiento
+            </Button>
+          </Tooltip>
         </DialogFooter>
       </DialogContent>
     </Dialog>

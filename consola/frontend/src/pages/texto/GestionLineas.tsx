@@ -5,10 +5,11 @@
  *   - el catálogo de ETIQUETAS editoriales transversales (campaña / tipo) y los
  *     GRUPOS de HASHTAGS por marca, accesibles desde la cabecera.
  *
- * Es CRUD sobre `/api/etiquetas` (acotado por clase) y `/api/hashtags`. Permite
- * filtrar por marca y crear/editar/borrar. Aquí el equipo afina la estrategia
- * editorial de cada marca; antes estas piezas vivían dispersas en el menú
- * "Gestionar" del Feed (sitio equivocado).
+ * Es CRUD sobre `/api/etiquetas` (acotado por clase) y `/api/hashtags`. El filtro
+ * por marca lo manda SIEMPRE el switch global de la barra superior
+ * (`useMarcaActiva`): no hay selector de marca propio. Aquí el equipo afina la
+ * estrategia editorial de cada marca; antes estas piezas vivían dispersas en el
+ * menú "Gestionar" del Feed (sitio equivocado).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Hash, Leaf, Loader2, Pencil, Plus, Tag, Tags, Trash2, X } from "lucide-react";
@@ -135,20 +136,17 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
 
   const { marcaActiva } = useMarcaActiva();
   const [creando, setCreando] = React.useState(false);
-  const [filtroMarca, setFiltroMarca] = React.useState<string>(
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "todas",
-  );
 
+  // El filtro de marca lo manda SIEMPRE el switch global de la barra superior
+  // (`useMarcaActiva`); esta vista no tiene selector propio. Con una marca activa
+  // concreta se muestran sus etiquetas + las globales (`marca === ""`); con la vista
+  // agregada (`marcaActiva == null`, "Todas") se muestran todas.
   const visibles = React.useMemo(
     () =>
-      etiquetas.filter((e) =>
-        filtroMarca === "todas"
-          ? true
-          : filtroMarca === GLOBAL
-            ? !e.marca
-            : e.marca === filtroMarca,
+      etiquetas.filter(
+        (e) => !e.marca || marcaActiva == null || e.marca === marcaActiva,
       ),
-    [etiquetas, filtroMarca],
+    [etiquetas, marcaActiva],
   );
 
   return (
@@ -173,31 +171,6 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">{CLASE_AYUDA[clase]}</p>
-
-        {marcas.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Label
-              htmlFor={`filtro-marca-${clase}`}
-              className="text-xs text-muted-foreground"
-            >
-              Marca
-            </Label>
-            <Select value={filtroMarca} onValueChange={setFiltroMarca}>
-              <SelectTrigger id={`filtro-marca-${clase}`} className="h-8 w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas las marcas</SelectItem>
-                <SelectItem value={GLOBAL}>Global</SelectItem>
-                {marcas.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {creando && (
           <FormularioLinea
@@ -227,7 +200,7 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
                 ? `Aún no hay ${
                     clase === "vertical" ? "líneas" : "orígenes"
                   }. Crea el primero con el botón de arriba.`
-                : "No hay nada para esta marca. Cambia el filtro o crea una."
+                : "No hay nada para esta marca. Cambia de marca en el selector de arriba o crea una."
             }
             className="py-4"
           />

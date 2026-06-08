@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { MARCA_TODAS, marcaParam, RED_TODAS, redParam } from "@/components/comunes/selectores";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -64,9 +63,10 @@ function FormularioCadencia({
 }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
-  const [marca, setMarca] = React.useState(
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : MARCA_TODAS,
-  );
+  // Marca de la cadencia = switch global (si es una marca válida del catálogo);
+  // si no, todas/sin marca. Es opcional: la cadencia puede ser global.
+  const marca =
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : MARCA_TODAS;
   const [red, setRed] = React.useState(RED_TODAS);
   const [margen, setMargen] = React.useState("60");
   const [horaInicio, setHoraInicio] = React.useState("09:00");
@@ -107,19 +107,6 @@ function FormularioCadencia({
   return (
     <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="cadencia-marca">
-            Marca <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <SelectorMarca
-            id="cadencia-marca"
-            marcas={marcas}
-            valor={marca}
-            onCambio={setMarca}
-            ariaLabel="Marca"
-            className="w-full"
-          />
-        </div>
         <div className="space-y-1.5">
           <Label htmlFor="cadencia-red">
             Red <span className="font-normal text-muted-foreground">(opcional)</span>

@@ -180,6 +180,22 @@ describe("Termometro", () => {
     expect(chips.map((c) => c.getAttribute("aria-label"))).toContain("X");
   });
 
+  it("deshabilita Generar cuando no hay marca resoluble (switch en Todas, sin config ni catálogo)", async () => {
+    // Admin sin marcas asignadas → switch global en "Todas" (marcaActiva = null). Sin marca por
+    // defecto guardada y sin catálogo, la generación EXIGE marca: el botón queda deshabilitado
+    // y el tooltip compartido explica que hay que elegir una marca arriba.
+    stubFetch({ ...PAYLOAD_BASE, marcas: [], config: { ...PAYLOAD_BASE.config, marca: "" } });
+    renderConProviders(<Termometro />);
+
+    const noticias = await screen.findByLabelText(/noticias internacionales del día/i);
+    fireEvent.change(noticias, { target: { value: "China: algo grande." } });
+    // Sin marca, el botón Generar (su nombre accesible pasa a ser el tooltip de marca
+    // requerida) queda deshabilitado, y el mensaje compartido aparece en el tooltip.
+    expect(
+      screen.getByRole("button", { name: /elige una marca concreta en el selector de arriba/i }),
+    ).toBeDisabled();
+  });
+
   it("avisa cuando falta el prompt base en la Texto", async () => {
     stubFetch({ ...PAYLOAD_BASE, prompt_disponible: false });
     renderConProviders(<Termometro />);

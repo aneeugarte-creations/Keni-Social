@@ -17,15 +17,19 @@ import { BadgeDelta, type DeltaType } from "@tremor/react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import * as React from "react";
 
-import { marcaParam } from "@/components/comunes/selectores";
+import {
+  marcaMetricasDesdeCanonica,
+  marcaParam,
+} from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { nombreMarca, numeroCompleto, variacion } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
 
-import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./Controles";
+import { MARCA_TODAS, SelectorTiempo } from "./Controles";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { METRICAS } from "./metricas-meta";
 
@@ -87,12 +91,9 @@ function deltaType(variacionPct: number): DeltaType {
 
 export function CompararPeriodos({
   opciones,
-  marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
   opciones: OpcionesMetricas;
-  /** Marca seleccionada arriba en el dashboard: se hereda como punto de partida. */
-  marcaActual?: string;
   /** Rango seleccionado arriba: se usa como rango B (comparado) por defecto. */
   rangoActual?: string;
 }) {
@@ -104,14 +105,17 @@ export function CompararPeriodos({
     rangos.find((r) => r.id !== rangoBInicial)?.id ?? rangos[0]?.id ?? "";
   const [rangoA, setRangoA] = React.useState(rangoAInicial);
   const [rangoB, setRangoB] = React.useState(rangoBInicial);
-  // La marca hereda la selección del dashboard; el usuario puede cambiarla aquí.
-  const [marca, setMarca] = React.useState(marcaActual);
 
-  // Si arriba cambia la marca, la comparativa la sigue (sin perder los rangos A/B
-  // que el usuario haya ajustado a mano).
-  React.useEffect(() => {
-    setMarca(marcaActual);
-  }, [marcaActual]);
+  // La MARCA la manda SIEMPRE el switch global de la barra superior (`useMarcaActiva`):
+  // la comparativa no tiene selector propio. `marcaActiva` es el id canónico (o null =
+  // "Todas"); esta frontera habla en `id_metricas`, así que lo traducimos y validamos
+  // contra el catálogo (fuera de catálogo → agregado "Todas").
+  const { marcaActiva } = useMarcaActiva();
+  const marca = React.useMemo(() => {
+    if (!marcaActiva) return MARCA_TODAS;
+    const idMetricas = marcaMetricasDesdeCanonica(marcaActiva);
+    return opciones.marcas.some((m) => m.id === idMetricas) ? idMetricas : MARCA_TODAS;
+  }, [marcaActiva, opciones.marcas]);
 
   // Si arriba cambia el rango visible, lo reflejamos como rango B (comparado).
   React.useEffect(() => {
@@ -147,7 +151,6 @@ export function CompararPeriodos({
             </span>
             <SelectorTiempo rangos={rangos} valor={rangoB} onCambio={setRangoB} />
           </div>
-          <SelectorMarca marcas={opciones.marcas} valor={marca} onCambio={setMarca} />
         </div>
       }
       contentClassName="space-y-6"

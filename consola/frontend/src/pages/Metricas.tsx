@@ -227,7 +227,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               marca/rango global como el resto del dashboard. */}
           <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
 
-          <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
+          <CompararPeriodos opciones={opciones} rangoActual={rango} />
         </div>
       )}
     </>

@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Badge } from "@/components/ui/badge";
@@ -47,13 +46,13 @@ function FormularioGrupo({
 }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
-  // Al CREAR (sin grupo) arrancamos en la marca activa si es una opción válida;
-  // al editar conservamos la marca del grupo.
-  const marcaInicial =
+  // Marca del grupo (opcional): al EDITAR conservamos la del grupo; al CREAR usamos
+  // el switch global si es una marca válida del catálogo, si no, sin marca.
+  const marca = desdeMarca(
     grupo?.marca ??
-    (marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined);
+      (marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined),
+  );
   const [nombre, setNombre] = React.useState(grupo?.nombre ?? "");
-  const [marca, setMarca] = React.useState(desdeMarca(marcaInicial));
   const [texto, setTexto] = React.useState((grupo?.hashtags ?? []).join(" "));
 
   const hashtags = React.useMemo(() => parsearHashtags(texto), [texto]);
@@ -82,30 +81,15 @@ function FormularioGrupo({
 
   return (
     <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="grupo-nombre">Nombre</Label>
-          <Input
-            id="grupo-nombre"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            placeholder="Ej. Deportes"
-            maxLength={80}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="grupo-marca">
-            Marca <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <SelectorMarca
-            id="grupo-marca"
-            marcas={marcas}
-            valor={marca}
-            onCambio={setMarca}
-            ariaLabel="Marca"
-            className="w-full"
-          />
-        </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="grupo-nombre">Nombre</Label>
+        <Input
+          id="grupo-nombre"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Ej. Deportes"
+          maxLength={80}
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="grupo-hashtags">Hashtags</Label>

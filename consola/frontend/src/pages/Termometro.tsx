@@ -7,8 +7,6 @@ import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion
 import { TermometroPreview } from "@/components/generaciones/TermometroPreview";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
-import { desdeNinguna, ningunaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { Tooltip } from "@/components/ui/tooltip";
+import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
 import type { NoticiaItem, RespuestaTermometro } from "@/types";
@@ -89,9 +88,12 @@ function PanelConfig({ datos }: { datos: RespuestaTermometro }) {
   const [numero, setNumero] = React.useState(String(datos.config.numero));
   const [regiones, setRegiones] = React.useState(datos.config.regiones);
   const [hora, setHora] = React.useState(datos.config.hora);
-  const [marca, setMarca] = React.useState(
-    marcaActiva && datos.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : datos.config.marca,
-  );
+  // La marca por defecto del termómetro la manda el switch GLOBAL: usamos `marcaActiva`
+  // cuando el catálogo la cubre; si está en "Todas" (null) o fuera del catálogo, se cae a
+  // la config guardada como antes (`config.marca`, que puede quedar "" = sin fijar).
+  const marca =
+    marcaActiva && datos.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : datos.config.marca;
+  const nombreMarca = datos.marcas.find((m) => m.id === marca)?.nombre ?? null;
 
   const guardar = useMutation({
     mutationFn: () =>
@@ -118,21 +120,12 @@ function PanelConfig({ datos }: { datos: RespuestaTermometro }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="term-marca">Marca por defecto</Label>
-          {/* Marca OPCIONAL ("" = sin fijar): el centinela NINGUNA se traduce a
-              "" en el estado con `ningunaParam`/`desdeNinguna`. Sin "Todas". */}
-          <SelectorMarca
-            id="term-marca"
-            marcas={datos.marcas}
-            valor={desdeNinguna(marca)}
-            onCambio={(v) => setMarca(ningunaParam(v))}
-            incluirTodas={false}
-            incluirNinguna
-            etiquetaNinguna="Sin fijar"
-            placeholder="Elige una marca"
-            ariaLabel="Marca por defecto"
-            className="w-full"
-          />
+          <Label>Marca por defecto</Label>
+          {/* La marca por defecto la fija el switch GLOBAL de marca (arriba), no un
+              selector propio. Si está en "Todas" queda sin fijar (la del cron auto). */}
+          <p className="text-sm text-muted-foreground">
+            {nombreMarca ?? "Sin fijar (elige una marca en el selector de arriba)"}
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="term-numero">Número de slides</Label>
@@ -230,15 +223,16 @@ function PasosTermometro({ generando, completado }: { generando: boolean; comple
 
 function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   const queryClient = useQueryClient();
-  // Por defecto la marca activa global (si la cubre el catálogo); si no, la marca
-  // por defecto guardada del termómetro y, en último término, la primera disponible.
+  // La marca la manda el switch GLOBAL (si la cubre el catálogo); si está en "Todas" se cae a
+  // la marca por defecto guardada del termómetro y, en último término, a la primera disponible.
+  // Sin selector propio: la generación exige marca, así que si no hay ninguna válida el botón
+  // queda deshabilitado con el tooltip compartido.
   const { marcaActiva } = useMarcaActiva();
-  const marcaInicial =
+  const marca =
     (marcaActiva && datos.marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "") ||
     datos.config.marca ||
     datos.marcas[0]?.id ||
     "";
-  const [marca, setMarca] = React.useState(marcaInicial);
   const [numero, setNumero] = React.useState(String(datos.config.numero));
   const [regiones] = React.useState(datos.config.regiones);
   const [fecha, setFecha] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -305,21 +299,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="gen-marca">Marca</Label>
-              {/* Marca OBLIGATORIA: sin "Todas" ni "Sin marca". */}
-              <SelectorMarca
-                id="gen-marca"
-                marcas={datos.marcas}
-                valor={marca}
-                onCambio={setMarca}
-                incluirTodas={false}
-                placeholder="Elige una marca"
-                ariaLabel="Marca"
-                className="w-full"
-              />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="gen-numero">Slides</Label>
               <Select value={numero} onValueChange={setNumero}>
@@ -363,10 +343,12 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => generar.mutate()} disabled={!puedeGenerar}>
-              {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
-              {generando ? "Generando…" : completado ? "Regenerar termómetro" : "Generar termómetro"}
-            </Button>
+            <Tooltip label={marca === "" ? MENSAJE_MARCA_REQUERIDA : ""}>
+              <Button onClick={() => generar.mutate()} disabled={!puedeGenerar}>
+                {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
+                {generando ? "Generando…" : completado ? "Regenerar termómetro" : "Generar termómetro"}
+              </Button>
+            </Tooltip>
             <PasosTermometro generando={generando} completado={completado} />
           </div>
         </CardContent>

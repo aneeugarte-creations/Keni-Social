@@ -1,6 +1,5 @@
 import { Sprout } from "lucide-react";
 
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { MARCA_TODAS } from "@/components/comunes/selectores";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,38 +20,31 @@ import type { OpcionesPublicaciones } from "@/types";
  */
 export const FILTRO_TODOS = MARCA_TODAS;
 
-/** Filtros de marca, red, estado y "solo evergreens". Notifica los cambios hacia arriba. */
+/**
+ * Filtros de red, estado y "solo evergreens". Notifica los cambios hacia arriba.
+ *
+ * La MARCA NO se filtra aquí: la manda SIEMPRE el switch global de la barra
+ * superior (`useMarcaActiva`), así que esta barra no tiene selector de marca.
+ */
 export function FiltrosPublicaciones({
   opciones,
-  marca,
   red,
   estado,
   soloEvergreens,
-  onMarca,
   onRed,
   onEstado,
   onSoloEvergreens,
 }: {
   opciones: OpcionesPublicaciones;
-  marca: string;
   red: string;
   estado: string;
   soloEvergreens: boolean;
-  onMarca: (v: string) => void;
   onRed: (v: string) => void;
   onEstado: (v: string) => void;
   onSoloEvergreens: (v: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-      <SelectorMarca
-        marcas={opciones.marcas}
-        valor={marca}
-        onCambio={onMarca}
-        ariaLabel="Filtrar por marca"
-        className="w-full sm:w-[180px]"
-      />
-
       <SelectorRed
         redes={opciones.redes}
         valor={red}

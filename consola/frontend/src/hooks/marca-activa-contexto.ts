@@ -73,3 +73,13 @@ export const MARCA_ACTIVA_TODAS = "__todas__";
 export function claveMarcaActiva(usuarioId: string): string {
   return `keni:marca-activa:${usuarioId}`;
 }
+
+/**
+ * Mensaje único para acciones que EXIGEN una marca concreta cuando el switch global está en
+ * "Todas" (`marcaActiva === null`, solo admin). Ya no hay selectores de marca por página: la
+ * marca la manda SIEMPRE el switch global. Si está en "Todas", la acción se deshabilita y este
+ * texto va en su tooltip. (Los editores siempre tienen una marca concreta, así que solo afecta
+ * a admins en la vista agregada.)
+ */
+export const MENSAJE_MARCA_REQUERIDA =
+  "Elige una marca concreta en el selector de arriba para esta acción.";

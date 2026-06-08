@@ -28,7 +28,6 @@ import * as React from "react";
 
 import { confirmar } from "@/components/comunes/confirmar";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { EditorWysiwyg } from "@/components/editor/EditorWysiwyg";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -51,7 +50,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { Tooltip } from "@/components/ui/tooltip";
+import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
 import type { DocumentoTexto, TargetLanzamiento } from "@/types";
@@ -718,10 +718,11 @@ function PanelLanzar({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  // La marca la manda el switch GLOBAL: no hay selector de marca propio. Lanzar EXIGE marca
+  // concreta, así que si el switch está en "Todas" (`marcaActiva === null`) el botón se
+  // deshabilita con el tooltip compartido. Solo lanzamos contra marcas del catálogo.
   const { marcaActiva } = useMarcaActiva();
-  const [marca, setMarca] = React.useState(
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
-  );
+  const marca = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "";
   const [adjuntos, setAdjuntos] = React.useState<Set<string>>(new Set());
   const [tipoTarget, setTipoTarget] = React.useState<TipoTarget>("contenido");
   const [valorTarget, setValorTarget] = React.useState("");
@@ -824,11 +825,6 @@ function PanelLanzar({
           </DialogTitle>
         </DialogHeader>
 
-      <div className="space-y-1">
-        <Label>Marca</Label>
-        <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} incluirTodas={false} />
-      </div>
-
       {marca && validacion ? (
         validacion.completa ? (
           <div className="flex items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
@@ -929,23 +925,21 @@ function PanelLanzar({
         <Input type="file" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
       ) : null}
 
-      <Button
-        variant="brand"
-        onClick={() => lanzarMut.mutate()}
-        disabled={!marca || ejecutando || lanzarMut.isPending}
-      >
-        {ejecutando || lanzarMut.isPending ? (
-          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-        ) : (
-          <MarcaIA className="mr-1" />
-        )}
-        Lanzar
-      </Button>
-      {!marca ? (
-        <p className="text-xs text-muted-foreground">
-          Elige una marca para lanzar: la generación necesita su línea editorial.
-        </p>
-      ) : null}
+      <Tooltip label={!marca ? MENSAJE_MARCA_REQUERIDA : ""} className="w-full">
+        <Button
+          variant="brand"
+          className="w-full"
+          onClick={() => lanzarMut.mutate()}
+          disabled={!marca || ejecutando || lanzarMut.isPending}
+        >
+          {ejecutando || lanzarMut.isPending ? (
+            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+          ) : (
+            <MarcaIA className="mr-1" />
+          )}
+          Lanzar
+        </Button>
+      </Tooltip>
       {lanzarMut.isError ? (
         <p className="text-xs text-destructive">{(lanzarMut.error as Error).message}</p>
       ) : null}

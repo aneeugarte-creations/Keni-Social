@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import * as React from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import { api } from "@/lib/api";
-import type { CompararMetricas, OpcionesMetricas } from "@/types";
+import type { CompararMetricas, OpcionesMetricas, UsuarioSesion } from "@/types";
 
 import { CompararPeriodos } from "./CompararPeriodos";
 
@@ -54,9 +56,48 @@ const RESP: CompararMetricas = {
   ],
 };
 
+// La marca ahora la manda el switch global (`useMarcaActiva`), así que el componente
+// debe renderizarse bajo `MarcaActivaProvider` (y su sesión). Usamos un usuario admin
+// sin marcas asignadas → marca activa = null ("Todas"), que es el valor agregado por
+// defecto que la comparativa usaba antes (`MARCA_TODAS`).
+beforeEach(() => {
+  // El provider resuelve el catálogo de marcas vía `publicacionesOpciones`; lo mockeamos
+  // para no hacer fetch real. No afecta a la marca activa (deriva de la sesión).
+  vi.spyOn(api, "publicacionesOpciones").mockResolvedValue({
+    marcas: [
+      { id: "unotv", nombre: "UnoTV" },
+      { id: "claro-sports", nombre: "Claro Sports" },
+    ],
+    redes: [],
+    estados: [],
+    lineas: [],
+  } as never);
+});
+
 function renderConProviders(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const sesion: ValorSesion = {
+    usuario: {
+      id: "u-admin",
+      usuario: "admin",
+      rol: "admin",
+      debe_cambiar_password: false,
+      marcas: [],
+    } as UsuarioSesion,
+    cargando: false,
+    iniciarSesion: vi.fn(),
+    verificarConPasskey: vi.fn(),
+    verificarConCodigo: vi.fn(),
+    cerrarSesion: vi.fn(),
+    refrescar: vi.fn(),
+  };
+  return render(
+    <QueryClientProvider client={client}>
+      <SesionContexto.Provider value={sesion}>
+        <MarcaActivaProvider>{ui}</MarcaActivaProvider>
+      </SesionContexto.Provider>
+    </QueryClientProvider>,
+  );
 }
 
 describe("CompararPeriodos", () => {

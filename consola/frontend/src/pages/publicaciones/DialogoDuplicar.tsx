@@ -1,6 +1,7 @@
 /**
- * Diálogo para duplicar una publicación, con opción de elegir red/marca/título
- * destino. Por defecto reutiliza los de la publicación origen.
+ * Diálogo para duplicar una publicación, con opción de elegir red/título
+ * destino. La marca destino la fija el switch global `marcaActiva`; si no hay
+ * marca activa, cae a la marca de la publicación origen.
  * `POST /api/publicaciones/{id}/duplicar`; toast + invalidación.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +9,6 @@ import { Copy, Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,14 +42,11 @@ export function DialogoDuplicar({
   const { marcaActiva } = useMarcaActiva();
   const marcaValida = Boolean(marcaActiva && marcas.some((m) => m.id === marcaActiva));
   const [red, setRed] = React.useState("");
-  const [marca, setMarca] = React.useState(marcaValida ? (marcaActiva as string) : "");
   const [titulo, setTitulo] = React.useState("");
 
   React.useEffect(() => {
     if (!publicacion) return;
     setRed(publicacion.red);
-    // Por defecto la marca activa del switch global (si es válida); si no, la de origen.
-    setMarca(marcaValida ? (marcaActiva as string) : publicacion.marca);
     setTitulo(`${publicacion.titulo} (copia)`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicacion]);
@@ -57,6 +54,8 @@ export function DialogoDuplicar({
   const duplicar = useMutation({
     mutationFn: () => {
       if (!publicacion) throw new Error("Sin publicación");
+      // Marca destino = switch global si es válido; si no, la de la publicación origen.
+      const marca = marcaValida ? (marcaActiva as string) : publicacion.marca;
       return api.duplicarPublicacion(publicacion.id, {
         red: red || undefined,
         marca: marca || undefined,
@@ -80,7 +79,7 @@ export function DialogoDuplicar({
             Duplicar publicación
           </DialogTitle>
           <DialogDescription>
-            Crea una copia. Puedes cambiar la red, la marca o el título de destino.
+            Crea una copia. Puedes cambiar la red o el título de destino.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,31 +93,17 @@ export function DialogoDuplicar({
               maxLength={200}
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="dup-red">Red destino</Label>
-              <SelectorRed
-                id="dup-red"
-                redes={redes}
-                valor={red}
-                onCambio={setRed}
-                incluirTodas={false}
-                ariaLabel="Red destino"
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dup-marca">Marca destino</Label>
-              <SelectorMarca
-                id="dup-marca"
-                marcas={marcas}
-                valor={marca}
-                onCambio={setMarca}
-                incluirTodas={false}
-                ariaLabel="Marca destino"
-                className="w-full"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dup-red">Red destino</Label>
+            <SelectorRed
+              id="dup-red"
+              redes={redes}
+              valor={red}
+              onCambio={setRed}
+              incluirTodas={false}
+              ariaLabel="Red destino"
+              className="w-full"
+            />
           </div>
         </div>
 

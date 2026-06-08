@@ -16,8 +16,6 @@ import { useMutation } from "@tanstack/react-query";
 import { Loader2, Upload } from "lucide-react";
 import * as React from "react";
 
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
-import { NINGUNA, ningunaParam } from "@/components/comunes/selectores";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -66,14 +64,14 @@ export function DialogoImportarCalendario({
   onImportado: (creados: number) => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
-  const marcaPorDefecto =
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : NINGUNA;
   const [archivo, setArchivo] = React.useState<File | null>(null);
-  const [marca, setMarca] = React.useState<string>(marcaPorDefecto);
   const [preview, setPreview] = React.useState<RespuestaImportPreview | null>(null);
   const [error, setError] = React.useState<string>("");
 
-  const marcaParam = ningunaParam(marca) || undefined;
+  // Marca por defecto para las filas sin marca propia = switch global (si es una
+  // marca válida del catálogo); si no, sin marca.
+  const marcaParam =
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined;
 
   // Camino IA (PDF/Word/imagen): el back encola un job al worker; sondeamos la generación.
   const { generacion, ejecutando, iniciar, limpiar: limpiarGen, cancelar, cancelando } =
@@ -81,7 +79,6 @@ export function DialogoImportarCalendario({
 
   function limpiar() {
     setArchivo(null);
-    setMarca(marcaPorDefecto);
     setPreview(null);
     setError("");
     limpiarGen();
@@ -161,19 +158,6 @@ export function DialogoImportarCalendario({
 
         <div className="space-y-3">
           <Input type="file" onChange={onArchivo} aria-label="Archivo a importar" />
-          <div>
-            <p className="mb-1 text-xs text-muted-foreground">
-              Marca por defecto (para las filas sin marca propia):
-            </p>
-            <SelectorMarca
-              marcas={marcas}
-              valor={marca}
-              onCambio={setMarca}
-              incluirTodas={false}
-              incluirNinguna
-              etiquetaNinguna="Ninguna"
-            />
-          </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
