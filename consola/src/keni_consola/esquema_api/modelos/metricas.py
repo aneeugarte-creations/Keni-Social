@@ -1,97 +1,59 @@
-"""Modelos (`TypedDict`) del subconjunto estable del contrato `/api/*`.
+"""Metricas — api/metricas.py.
 
-Cada `TypedDict` describe la forma EXACTA del JSON que emite el handler asociado
-(verificado contra el handler y sus tests). Son solo tipos: no se instancian ni
-validan en runtime; existen para derivar el TypeScript del frontend y para que el
-guard detecte divergencias. Ver el docstring del paquete.
-
-Convencion de campos OPCIONALES: se modelan con `NotRequired[...]` (clave que
-puede no venir). Convencion de NULABLES: `X | None` (la clave viene pero su valor
-puede ser `null`). Las dos cosas son distintas y se respetan tal cual en el TS.
-
-El orden de `MODELOS` (abajo) fija el orden en que aparecen las interfaces en el
-`types.gen.ts`, para que la generacion sea estable y el diff sea minimo.
+Incluye el reporte/comparativa, el analisis diario narrativo, la analitica de
+piezas (estadisticas + top/peores + distribucion), tendencia, drill-down por pieza,
+listado e historico, y las analiticas R2 (seguidores, desglose, crosstab,
+correlacion).
 """
 
 from __future__ import annotations
 
-from typing import Literal, NotRequired, TypedDict
+from typing import TypedDict
 
-# --------------------------------------------------------------------------- #
-# Estado (autodiagnostico del sistema) — api/estado.py                         #
-# --------------------------------------------------------------------------- #
+from ._base import MarcaDisponible
 
-NivelEstado = Literal["ok", "aviso", "error"]
-
-
-class ResultadoEstado(TypedDict):
-    estado: NivelEstado
-    nombre: str
-    detalle: str
-    icono: str
-
-
-class RespuestaEstado(TypedDict):
-    resultados: list[ResultadoEstado]
-    resumen: str
-    siguiente_paso: str
-
-
-# --------------------------------------------------------------------------- #
-# Configuracion — api/config.py                                                #
-# --------------------------------------------------------------------------- #
-
-
-class MarcaDisponible(TypedDict):
-    id: str
-    nombre: str
-
-
-class CredencialesPresentes(TypedDict):
-    meta: bool
-    youtube: bool
-    x: bool
-    tiktok: bool
-
-
-class RespuestaConfig(TypedDict):
-    fuente: str
-    fuentes_validas: list[str]
-    marcas: list[str]
-    marcas_disponibles: list[MarcaDisponible]
-    credenciales_presentes: CredencialesPresentes
-
-
-class CuerpoGuardarConfig(TypedDict):
-    fuente: str
-    marcas: list[str]
-
-
-# --------------------------------------------------------------------------- #
-# Limites de caracteres por red — api/limites.py / limites_plataforma.py       #
-# --------------------------------------------------------------------------- #
-
-
-class LimiteRed(TypedDict):
-    """Limite de caracteres canonico de una red (fuente unica, `GET /api/limites`).
-
-    `limite` es `null` si la red no tiene tope tecnico practico (Facebook/YouTube).
-    """
-
-    id: str
-    nombre: str
-    limite: int | None
-
-
-class RespuestaLimites(TypedDict):
-    """Respuesta de `GET /api/limites`: los limites por red, en orden fijo."""
-
-    limites: list[LimiteRed]
-
-
-# --------------------------------------------------------------------------- #
-# Metricas — api/metricas.py                                                   #
-# --------------------------------------------------------------------------- #
+__all__ = [
+    "RangoMetrica",
+    "OpcionesMetricas",
+    "TotalMetricas",
+    "CuentaMetrica",
+    "RedMetrica",
+    "RedCobertura",
+    "MarcaCobertura",
+    "ReporteMetricas",
+    "ComparativaMetrica",
+    "ComparativaPorMarca",
+    "TotalComparativa",
+    "CompararMetricas",
+    "PiezaAnalisis",
+    "MovimientoAnalisis",
+    "SiguientePasoAnalisis",
+    "AnalisisDiario",
+    "EstadoMetricas",
+    "PeriodoMetricas",
+    "EstadisticasNumericas",
+    "PiezaMetrica",
+    "DistribucionBucket",
+    "AnaliticaPiezas",
+    "PuntoSerie",
+    "TendenciaDiaria",
+    "PiezaRendimiento",
+    "PiezasRendimiento",
+    "PiezaListado",
+    "PiezasListado",
+    "PuntoHistorico",
+    "VelocidadPieza",
+    "HistoricoPieza",
+    "PuntoSeguidores",
+    "SerieSeguidores",
+    "CeldaDesglose",
+    "DesgloseInteracciones",
+    "CeldaCrosstab",
+    "Crosstab",
+    "PostEstrella",
+    "ItemCorrelacion",
+    "CorrelacionSeguidores",
+]
 
 
 class RangoMetrica(TypedDict):
@@ -728,421 +690,3 @@ class CorrelacionSeguidores(TypedDict):
     items: list[ItemCorrelacion]
     nota: str
     generado_en: str
-
-
-# --------------------------------------------------------------------------- #
-# Paginacion — envelope aditivo comun a los listados pesados (#121)            #
-# --------------------------------------------------------------------------- #
-
-
-class Paginacion(TypedDict):
-    """Envelope ADITIVO de paginacion (offset-based, #121).
-
-    Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
-    clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
-    pagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.
-
-    `cursor_siguiente` (KEYSET, feed de scroll infinito): clave `"<creado>|<id>"` para
-    pedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay
-    mas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).
-    """
-
-    total: int
-    limite: int
-    desplazamiento: int
-    cursor_siguiente: NotRequired[str]
-
-
-# --------------------------------------------------------------------------- #
-# Metricas de un run/generacion — emitidas por el CLI cuando devuelve JSON     #
-# --------------------------------------------------------------------------- #
-
-
-class MetricasRun(TypedDict):
-    """Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).
-
-    El handler las omite (clave a `null`) si el run no produjo metricas (interactivo
-    o CLI sin JSON). Cuando vienen, traen estos seis campos.
-    """
-
-    tokens_in: int
-    tokens_out: int
-    num_turns: int
-    total_cost_usd: float
-    duration_ms: int
-    modelo: str
-
-
-# --------------------------------------------------------------------------- #
-# Publicaciones — dominio/publicaciones.py (publicacion_a_dict) + api          #
-# --------------------------------------------------------------------------- #
-
-# El flujo de aprobacion de equipo (#9, Fase 3) intercala `en_revision` entre el
-# borrador y el aprobado.
-EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado", "publicado"]
-# Etapa REAL de la tubería IA de una pieza (Flujo C), derivada por
-# `pipeline_estado.etapa_de_pieza`. La consume el Feed de ideación (Flujo D): es el
-# estado-por-etapa "en vivo" de la pieza, más rico que `estado` (incluye el gate humano).
-# Mantener en sincronía con `pipeline_estado.ETAPAS_PIEZA` y con `EtapaIa` del front.
-EtapaIa = Literal[
-    "generando_copy",
-    "generando_arte",
-    "lista_para_revisar",
-    "aprobada",
-    "programada",
-    "publicada",
-]
-# Veredicto editorial de una pieza: TEXTO LIBRE. El auto-verificador (prompts de copy)
-# escribe veredictos legibles y matizados ("ok — confirmar marcador con el equipo",
-# "marcar claramente como rumor", "pendiente resultado real del partido"), no un enum
-# cerrado. La UI deriva la insignia (Listo/Revisar/No publicar) de un prefijo normalizado
-# (`meta.metaVeredicto`). "" = sin veredicto. Era un `Literal` cerrado y eso rompía el
-# contrato `RespuestaPublicaciones` en cada pieza con veredicto real (drift del calendario).
-Veredicto = str
-
-
-class Publicacion(TypedDict):
-    """Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).
-
-    `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
-    archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
-    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
-    creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
-
-    Flujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/
-    `revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; "" mientras
-    no haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca
-    DRY-RUN del programador (instante en que quedo "lista para publicar"; el posteo real
-    via Metricool esta gated por `KENI_PUBLICAR_REAL`); "" hasta que vence su `fecha_programada`.
-    """
-
-    id: str
-    # Id del `contenido` padre (tema). La UI lo usa para colgar los comentarios del item,
-    # que son del tema y no de la fila por red. "" en piezas legadas sin padre.
-    contenido_id: str
-    titulo: str
-    marca: str
-    marca_nombre: str
-    red: str
-    red_nombre: str
-    contenido: str
-    # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto del
-    # `contenido` que acompana a la publicacion. "" en piezas legadas o si no se genero.
-    copy_in: str
-    estado: EstadoPublicacion
-    veredicto: Veredicto
-    autor_id: str
-    autor_nombre: str
-    enviado_a_revision_en: str
-    revisor_id: str
-    revisor_nombre: str
-    revisado_en: str
-    preparado_en: str
-    id_post_metricool: str
-    # Origen de la imagen: "ia"|"galeria"|"fuente". Si es "fuente", `imagen_fuente` trae la
-    # URL original del articulo (p.ej. RSS de marca propia); el editor ofrece usarla.
-    tipo_contenido: str
-    # FORMATO de la pieza: "foto" (3 redes: IG/X/FB) o "video" (las 5). Lo hereda del
-    # `contenido` padre. Decide a qué redes va (`redes.redes_de_formato`, fuente única). El
-    # flujo automático crea piezas "foto". La UI lo muestra como badge ("Foto"/"Video").
-    formato: str
-    imagen_fuente: str
-    # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`), espejo de `imagen`.
-    # "" si la pieza no es video o aún no tiene asset. Lo publica el programador como TipoMedia.video.
-    video: str
-    # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
-    # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
-    foto: str
-    # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar/Video. El
-    # editor unificado los expone como checks marcables (PATCH a la fila por plataforma). `falta_video`
-    # solo cuenta en piezas formato=video (espejo de `falta_imagen`); en piezas foto es False (N/A).
-    falta_copy: bool
-    falta_imagen: bool
-    falta_revision: bool
-    falta_publicar: bool
-    falta_video: bool
-    # Etapa REAL de la tubería IA (Flujo C), derivada de `estado`+checklist por
-    # `pipeline_estado.etapa_de_pieza`. La prefiere el Feed (Flujo D) sobre su derivación.
-    etapa_ia: EtapaIa
-    fecha_creacion: str
-    fecha_actualizacion: str
-    fecha_programada: str
-    # Fecha de la FUENTE de origen (pipeline automático): pubDate/updated del item de RSS/
-    # noticia, normalizado a ISO UTC. La consola muestra "Fuente del …" junto a "Generado el
-    # …" (`fecha_creacion`). "" si la pieza no nació de una fuente con fecha (alta manual).
-    fecha_fuente: str
-    origen: str
-    imagen: str
-    imagen_url: str
-    evergreen: bool
-    # Auto-avance: la pieza esta EXENTA de copy-in (imagen dramatica/autoexplicativa que no lo
-    # necesita). Opcional: las piezas legadas no lo traen y el feed lo lee como False.
-    copy_in_exento: NotRequired[bool]
-    # "Quitar plantilla": publicar SOLO la foto, sin la placa de marca encima. Opcional: las
-    # piezas legadas no lo traen y se lee como False (con plantilla).
-    placa_oculta: NotRequired[bool]
-    # Plantilla del estudio (PlantillaDiseno) elegida para esta pieza; "" = ninguna. Opcional.
-    plantilla_diseno_id: NotRequired[str]
-    # Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`; "" = sin
-    # reencuadre). Persiste la elección humana del recorte. Opcional (piezas legadas no lo traen).
-    foto_encuadre: NotRequired[str]
-    # COLLAGE multi-hueco: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco de la plantilla.
-    # "" = sin collage (hueco único derivado de `foto`). Opcional. Frontera API->frontend.
-    fotos: NotRequired[str]
-
-
-class RespuestaPublicaciones(TypedDict):
-    """Listado de `GET /api/publicaciones` con el envelope de paginacion (#121)."""
-
-    publicaciones: list[Publicacion]
-    paginacion: Paginacion
-
-
-class RespuestaPublicacion(TypedDict):
-    """Respuesta de los endpoints que devuelven UNA publicacion (`{publicacion}`)."""
-
-    publicacion: Publicacion
-
-
-# --------------------------------------------------------------------------- #
-# Aprobacion de equipo — api/aprobacion.py (#9)                               #
-# --------------------------------------------------------------------------- #
-
-
-class RespuestaColaAprobacion(TypedDict):
-    """Cola de aprobacion (`GET /api/aprobacion/cola`): piezas en revision, FIFO.
-
-    Cada item es una `Publicacion` completa (incluye `autor_nombre`/
-    `enviado_a_revision_en`: quien la envio y desde cuando espera). `total` = nº en cola.
-    """
-
-    cola: list[Publicacion]
-    total: int
-
-
-# --------------------------------------------------------------------------- #
-# Generaciones — DEFERIDO del subconjunto generado (#120).                     #
-#                                                                              #
-# `Generacion` y sus envelopes NO se modelan aqui a proposito: su campo        #
-# `resultado` es un dict LIBRE cuya forma depende del `tipo` (copy/rss/        #
-# hashtags/imagen/verificacion) y el frontend lo tipa de forma RICA            #
-# (`ResultadoGeneracion`, con `piezas`/`publicaciones`/`verificacion`...). Un  #
-# `$def` con `resultado: object` regresaria ese tipado a `{}`, perdiendo       #
-# seguridad de tipos en ~14 consumidores. Mejor mantener `Generacion` a mano   #
-# en `types.ts` (rico) que forzar un contrato generado mas pobre. El sondeo    #
-# de generaciones tampoco se valida en runtime por la misma razon.            #
-# --------------------------------------------------------------------------- #
-
-
-# --------------------------------------------------------------------------- #
-# Comercial — api/comercial.py (_a_dict) + comercial.py. Procedencia (#124):   #
-# `fuente`/`es_muestra` marcan cifras de muestra (sinteticas) vs reales.       #
-# --------------------------------------------------------------------------- #
-
-EstadoComercial = Literal["activa", "pausada", "cerrada"]
-MetricaComercial = Literal["interacciones", "visualizaciones", "alcance"]
-
-
-class ActualComercial(TypedDict):
-    """Valor actual de una pieza comercial (del ultimo snapshot)."""
-
-    ts: str
-    interacciones: int
-    visualizaciones: int
-    alcance: int
-    engagement_pct: float
-
-
-class SnapshotComercial(TypedDict):
-    """Un punto de la serie temporal de una pieza comercial (acumulado).
-
-    Ademas de las metricas "base" (interacciones/visualizaciones/alcance) lleva el
-    desglose GRANULAR por pieza; cada uno es 0 cuando la fuente no lo expone (no se
-    inventa), igual que `alcance` por pieza.
-    """
-
-    ts: str
-    interacciones: int
-    visualizaciones: int
-    alcance: int
-    likes: int
-    comentarios: int
-    compartidos: int
-    guardados: int
-    video_views: int
-    tiempo_medio_vis_s: int
-    clics_enlace: int
-    seguidores_netos_atribuidos: int
-
-
-class PostSeleccionableComercial(TypedDict):
-    """Un post real de Metricool elegible para monitorizar (`GET /api/comercial/posts`)."""
-
-    id: str
-    red: str
-    titulo: str
-    publicado: str
-    visualizaciones: int
-    interacciones: int
-    engagement_pct: float
-    url: NotRequired[str | None]
-
-
-class RespuestaPostsComercial(TypedDict):
-    """Listado de posts seleccionables + procedencia (muestra vs real)."""
-
-    posts: list[PostSeleccionableComercial]
-    fuente: str
-    es_muestra: bool
-
-
-class PublicacionComercial(TypedDict):
-    """Una pieza comercial monitoreada (`api/comercial._a_dict`).
-
-    `fuente`/`es_muestra` (#124) marcan la procedencia de las cifras. `serie` solo
-    viene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.
-    """
-
-    id: str
-    url: str
-    id_post_metricool: str
-    titulo: str
-    marca: str
-    marca_nombre: str
-    cliente: str
-    campania: str
-    red: str
-    red_nombre: str
-    formato: str
-    metrica_objetivo: MetricaComercial
-    objetivo: int
-    estado: EstadoComercial
-    publicado: str
-    notas: str
-    aviso_en: str
-    fecha_creacion: str
-    fecha_actualizacion: str
-    actual: ActualComercial
-    progreso_pct: float
-    alcanzado: bool
-    fuente: str
-    es_muestra: bool
-    serie: NotRequired[list[SnapshotComercial]]
-
-
-class RespuestaPublicacionesComercial(TypedDict):
-    """Listado de `GET /api/comercial/publicaciones` con procedencia comun (#124)."""
-
-    publicaciones: list[PublicacionComercial]
-    fuente: str
-    es_muestra: bool
-
-
-class RespuestaPublicacionComercial(TypedDict):
-    """Respuesta de los endpoints que devuelven UNA pieza comercial (`{publicacion}`)."""
-
-    publicacion: PublicacionComercial
-
-
-class RespuestaRefrescarComercial(TypedDict):
-    """Respuesta de `POST /api/comercial/refrescar`: nº de piezas actualizadas."""
-
-    actualizadas: int
-
-
-# --------------------------------------------------------------------------- #
-# Respuestas genericas comunes                                                 #
-# --------------------------------------------------------------------------- #
-
-
-class RespuestaMensaje(TypedDict):
-    mensaje: str
-
-
-class ErrorApi(TypedDict):
-    """Forma de error que devuelve el backend (uno u otro campo, en espanol)."""
-
-    error: NotRequired[str]
-    mensaje: NotRequired[str]
-
-
-# Orden estable de las interfaces en el `types.gen.ts` generado. Cada `TypedDict`
-# se exporta como `interface`; los `Literal` (p. ej. `NivelEstado`) viajan inline
-# en los campos que los usan y NO necesitan listarse aqui.
-MODELOS = [
-    ResultadoEstado,
-    RespuestaEstado,
-    MarcaDisponible,
-    CredencialesPresentes,
-    RespuestaConfig,
-    CuerpoGuardarConfig,
-    LimiteRed,
-    RespuestaLimites,
-    RangoMetrica,
-    OpcionesMetricas,
-    TotalMetricas,
-    CuentaMetrica,
-    RedMetrica,
-    RedCobertura,
-    MarcaCobertura,
-    ReporteMetricas,
-    ComparativaMetrica,
-    ComparativaPorMarca,
-    TotalComparativa,
-    CompararMetricas,
-    # Análisis diario con narrativa (F6/#146).
-    PiezaAnalisis,
-    MovimientoAnalisis,
-    SiguientePasoAnalisis,
-    AnalisisDiario,
-    # Estado del refresco de la cache de métricas (botón Actualizar + polling).
-    EstadoMetricas,
-    # Analítica de piezas (estadísticas + top/peores + distribución) y tendencia diaria.
-    PeriodoMetricas,
-    EstadisticasNumericas,
-    PiezaMetrica,
-    DistribucionBucket,
-    AnaliticaPiezas,
-    PuntoSerie,
-    TendenciaDiaria,
-    # Drill-down marca -> pieza (rendimiento por pieza publicada).
-    PiezaRendimiento,
-    PiezasRendimiento,
-    # Listado completo de piezas del periodo + histórico por pieza + velocidad.
-    PiezaListado,
-    PiezasListado,
-    PuntoHistorico,
-    VelocidadPieza,
-    HistoricoPieza,
-    # Analíticas R2: seguidores, desglose, crosstab, correlación.
-    PuntoSeguidores,
-    SerieSeguidores,
-    CeldaDesglose,
-    DesgloseInteracciones,
-    CeldaCrosstab,
-    Crosstab,
-    PostEstrella,
-    ItemCorrelacion,
-    CorrelacionSeguidores,
-    # Envelope/auxiliares compartidos.
-    Paginacion,
-    MetricasRun,
-    # Publicaciones (#101 ampliacion churn).
-    Publicacion,
-    RespuestaPublicaciones,
-    RespuestaPublicacion,
-    # Aprobacion de equipo (#9, Fase 3).
-    RespuestaColaAprobacion,
-    # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
-    # Comercial (#124: fuente/es_muestra).
-    ActualComercial,
-    SnapshotComercial,
-    PostSeleccionableComercial,
-    RespuestaPostsComercial,
-    PublicacionComercial,
-    RespuestaPublicacionesComercial,
-    RespuestaPublicacionComercial,
-    RespuestaRefrescarComercial,
-    RespuestaMensaje,
-    ErrorApi,
-]
