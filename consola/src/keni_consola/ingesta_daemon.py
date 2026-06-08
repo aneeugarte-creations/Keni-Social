@@ -35,7 +35,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import agencias, config, daemon_util, db, relevancia_marca, repos
-from .dominio import clustering, http_feed, ingesta, traduccion
+from .dominio import clustering, http_feed, ingesta, perfil_editorial, traduccion
 
 _log = logging.getLogger("keni_consola.ingesta_daemon")
 
@@ -106,6 +106,16 @@ def _sondear_feed(
     return feed, items, salud
 
 
+def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
+    """Keywords de relevancia de la marca: perfil editorial (Haiku) si está activo y existe; si no,
+    el vocabulario semilla de `relevancia_marca`. Centraliza la elección perfil-vs-semilla."""
+    if perfil_activo and marca:
+        perfil = perfil_editorial.palabras(marca)
+        if perfil:
+            return perfil
+    return relevancia_marca.palabras_de_marca(marca or None)
+
+
 def paso_clustering() -> dict[str, Any]:
     """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
 
@@ -124,6 +134,9 @@ def paso_clustering() -> dict[str, Any]:
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
     pesos = config.score_pesos()  # pesos editables del algoritmo de ponderación
+    perfil_activo = config.perfil_editorial_activo()  # relevancia desde la línea editorial (Haiku)
+    perfil_ttl = config.perfil_editorial_ttl_horas()
+    perfil_refrescadas: set[str] = set()  # 1 refresco por marca por barrido (Haiku acotado)
 
     ahora = datetime.now(UTC)
     desde = (ahora - timedelta(hours=ventana_h)).isoformat()
@@ -172,7 +185,12 @@ def paso_clustering() -> dict[str, Any]:
                 breaking_ventana_h=breaking_ventana_h,
                 fuentes_baja_confianza=fuentes_baja,
             )
-            palabras = relevancia_marca.palabras_de_marca(recalc.get("marca") or None)
+            marca_c = recalc.get("marca") or ""
+            # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa; si no, semilla.
+            if perfil_activo and marca_c and marca_c not in perfil_refrescadas:
+                perfil_refrescadas.add(marca_c)
+                perfil_editorial.refrescar_si_corresponde(marca_c, ttl_horas=perfil_ttl, ahora=ahora)
+            palabras = _palabras_relevancia(marca_c, perfil_activo)
             score, _razon = clustering.puntuar(
                 recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
             )

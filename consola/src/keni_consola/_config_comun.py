@@ -277,6 +277,13 @@ ENV_NOTICIAS_GC_INTERVALO_HORAS = "KENI_NOTICIAS_GC_INTERVALO_HORAS"
 ENV_NOTICIAS_GC_SCORE_UMBRAL = "KENI_NOTICIAS_GC_SCORE_UMBRAL"
 ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 
+# Perfil editorial por marca (Fase 2): un agente Haiku extrae las keywords/temas de la línea
+# editorial (página texto) y el ranking las usa como relevancia de marca (reemplaza el diccionario
+# hardcodeado). GATEADO por `KENI_PERFIL_EDITORIAL` (def OFF): sin el flag se usa el vocabulario
+# semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de ingesta.
+ENV_PERFIL_EDITORIAL = "KENI_PERFIL_EDITORIAL"
+ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
+
 # Insumos del día (cajones): modelo de parseo que usa `claude -p` para extraer los ítems
 # del material diario (portal/corresponsales/reporteros/eventos_claro). Por defecto "haiku"
 # (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
@@ -535,6 +542,9 @@ NOTICIAS_GC_INTERVALO_HORAS_DEF = 6
 NOTICIAS_GC_SCORE_UMBRAL_DEF = 0.15
 NOTICIAS_GC_INACTIVIDAD_HORAS_DEF = 48
 
+# Perfil editorial: se re-extrae con Haiku cada 24h (o si cambia la línea editorial).
+PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
+
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
 S3_REGION_DEF = "garage"
@@ -731,6 +741,8 @@ __all__ = [
     'ENV_NOTICIAS_GC_INTERVALO_HORAS',
     'ENV_NOTICIAS_GC_SCORE_UMBRAL',
     'ENV_ORIGENES',
+    'ENV_PERFIL_EDITORIAL',
+    'ENV_PERFIL_EDITORIAL_TTL_HORAS',
     'ENV_PG_DB',
     'ENV_PG_HOST',
     'ENV_PG_PASSWORD',
@@ -815,6 +827,7 @@ __all__ = [
     'NOTICIAS_GC_INACTIVIDAD_HORAS_DEF',
     'NOTICIAS_GC_INTERVALO_HORAS_DEF',
     'NOTICIAS_GC_SCORE_UMBRAL_DEF',
+    'PERFIL_EDITORIAL_TTL_HORAS_DEF',
     'PIPELINE_INTERVALO_HORAS_DEF',
     'PIPELINE_MAX_DEF',
     'PORT_DEF',

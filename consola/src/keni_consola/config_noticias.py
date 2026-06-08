@@ -41,6 +41,8 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
     ENV_NOTICIAS_GC_INTERVALO_HORAS,
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
+    ENV_PERFIL_EDITORIAL,
+    ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_SCORE_BONUS_BREAKING,
     ENV_SCORE_PESO_CORROBORACION,
     ENV_SCORE_PESO_FRESCURA,
@@ -67,6 +69,7 @@ from ._config_comun import (
     NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
     NOTICIAS_GC_INTERVALO_HORAS_DEF,
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
+    PERFIL_EDITORIAL_TTL_HORAS_DEF,
     PIPELINE_INTERVALO_HORAS_DEF,
     PIPELINE_MAX_DEF,
     SCORE_BONUS_BREAKING_DEF,
@@ -235,6 +238,27 @@ def noticias_gc_inactividad_horas() -> int:
     return _entero(
         ENV_NOTICIAS_GC_INACTIVIDAD_HORAS, NOTICIAS_GC_INACTIVIDAD_HORAS_DEF, minimo=1
     )
+
+
+# --------------------------------------------------------------------------- #
+# Perfil editorial por marca (Haiku desde libtexto) — Fase 2                    #
+# --------------------------------------------------------------------------- #
+
+
+def perfil_editorial_activo() -> bool:
+    """True si el ranking usa el perfil editorial extraído con Haiku (`KENI_PERFIL_EDITORIAL`).
+
+    Def OFF (conservador, IA en prod): sin el flag el ranking usa el vocabulario semilla
+    (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
+    score usa esas keywords derivadas de la línea editorial de la página texto.
+    """
+    return _crudo(ENV_PERFIL_EDITORIAL).lower() in _VERDADEROS
+
+
+def perfil_editorial_ttl_horas() -> int:
+    """Cada cuántas horas se re-extrae el perfil editorial con Haiku
+    (`KENI_PERFIL_EDITORIAL_TTL_HORAS`, def 24, min 1). También se refresca si cambia la editorial."""
+    return _entero(ENV_PERFIL_EDITORIAL_TTL_HORAS, PERFIL_EDITORIAL_TTL_HORAS_DEF, minimo=1)
 
 
 

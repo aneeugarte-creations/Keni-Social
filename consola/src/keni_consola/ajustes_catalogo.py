@@ -207,6 +207,16 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        Ajuste(
+            clave=config.ENV_PERFIL_EDITORIAL,
+            tipo="bool",
+            etiqueta="Relevancia por línea editorial (IA)",
+            ayuda="Un agente (Haiku) lee la línea editorial de cada marca (página Texto) y extrae "
+            "sus temas/keywords; el ranking de noticias los usa como relevancia de marca en vez "
+            "del vocabulario fijo. Se refresca por marca cada cierto tiempo o si cambia la línea.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -303,6 +313,16 @@ def _construir_catalogo() -> list[Ajuste]:
             "(protege lo recién visto que aún podría agrupar más fuentes).",
             grupo="tuning",
             defecto=config.NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
+            tipo="int",
+            etiqueta="Perfil editorial: refresco (horas)",
+            ayuda="Cada cuántas horas se re-extrae con IA el perfil editorial de cada marca "
+            "(también se refresca antes si cambia la línea editorial).",
+            grupo="tuning",
+            defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
             minimo=1,
         ),
         # --- Ingesta (Ola A) ------------------------------------------------------ #
