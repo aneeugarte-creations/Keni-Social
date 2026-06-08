@@ -1,9 +1,9 @@
 /**
- * Galería para elegir un ARTE ya guardado en la texto (objeto de media catalogado).
+ * Galería para elegir un ARTE ya guardado en la galería (objeto de media catalogado).
  *
  * Lista las artes (`GET /api/artes`) acotadas a la `marca` de la pieza y con búsqueda por
  * título/etiqueta. Al elegir una, devuelve su `{objeto, url}` al padre (el editor de imagen
- * la usa como FONDO y compone la placa encima). Permite quitar un arte de la texto.
+ * la usa como FONDO y compone la placa encima). Permite quitar un arte de la galería.
  *
  * No persiste nada por sí mismo: solo selecciona. Guardar artes se hace desde el Estudio o
  * tras componer en el editor de imagen.
@@ -50,7 +50,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
     mutationFn: (id: string) => api.borrarArte(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["artes"] });
-      toast.success("Arte quitado de la texto");
+      toast.success("Arte quitado de la galería");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -61,7 +61,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
     <Dialog open={open} onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Texto de artes</DialogTitle>
+          <DialogTitle>Galería de artes</DialogTitle>
           <DialogDescription>
             Elige una imagen guardada como fondo. La placa de marca y el copy-in se aplican
             encima automáticamente.
@@ -113,7 +113,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                   >
                     <img
                       src={urlMedia(arte.objeto)}
-                      alt={arte.titulo || "Arte de la texto"}
+                      alt={arte.titulo || "Arte de la galería"}
                       loading="lazy"
                       className="aspect-square w-full object-cover"
                     />
@@ -130,8 +130,8 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                     className="absolute right-1.5 top-1.5 h-7 w-7 opacity-0 transition group-hover:opacity-100"
                     onClick={() => borrar.mutate(arte.id)}
                     disabled={borrar.isPending}
-                    aria-label="Quitar arte de la texto"
-                    title="Quitar de la texto"
+                    aria-label="Quitar arte de la galería"
+                    title="Quitar de la galería"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

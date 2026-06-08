@@ -216,7 +216,7 @@ async def borrar(request: Request) -> Response:
     activo_id = request.path_params["activo_id"]
     item = repos.borrar_marca_activo(activo_id)
     if item is None:
-        return JSONResponse({"error": "Ese activo ya no está en la texto."}, status_code=404)
+        return JSONResponse({"error": "Ese activo ya no está catalogado."}, status_code=404)
 
     if request.query_params.get("purgar") == "1" and item.get("objeto"):
         try:
@@ -224,7 +224,7 @@ async def borrar(request: Request) -> Response:
         except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
             _log.exception("No se pudo purgar el binario del activo %r.", item.get("objeto"))
 
-    return JSONResponse({"mensaje": "Activo quitado de la texto."})
+    return JSONResponse({"mensaje": "Activo quitado."})
 
 
 RUTAS = [

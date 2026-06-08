@@ -1,4 +1,4 @@
-"""Tests de la API Texto de ARTES (/api/artes). OFFLINE: NUNCA se toca la red.
+"""Tests de la API Galería de ARTES (/api/artes). OFFLINE: NUNCA se toca la red.
 
 Cubre: catalogar un objeto de media existente, idempotencia por `objeto` UNIQUE,
 validaciones (objeto inexistente, marca desconocida, tipo invalido), filtros de listado
@@ -46,8 +46,8 @@ def test_crear_arte_ok(cliente):
     )
     assert r.status_code == 200
     arte = r.json()["arte"]
-    # Catalogar PROMUEVE el objeto a la carpeta texto/ (reusable); conserva el basename.
-    assert arte["objeto"] == "texto/" + objeto.rsplit("/", 1)[-1]
+    # Catalogar PROMUEVE el objeto a la carpeta artes/ (reusable); conserva el basename.
+    assert arte["objeto"] == "artes/" + objeto.rsplit("/", 1)[-1]
     assert arte["url"] == f"/api/media/{arte['objeto']}"
     assert arte["marca"] == "unotv"
     assert arte["marca_nombre"]  # nombre legible resuelto en servidor
@@ -60,7 +60,7 @@ def test_crear_arte_idempotente(cliente):
     a = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
     b = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
     assert a["id"] == b["id"]  # no duplica: el objeto (ya promovido) es UNIQUE
-    # Y en el listado aparece una sola vez (por su key catalogada en texto/).
+    # Y en el listado aparece una sola vez (por su key catalogada en artes/).
     artes = cliente.get("/api/artes").json()["artes"]
     assert sum(1 for x in artes if x["objeto"] == a["objeto"]) == 1
 
@@ -132,7 +132,7 @@ def test_borrar_purgar_borra_el_binario(cliente):
     objeto = _subir_objeto(cliente)
     arte = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
     assert cliente.delete(f"/api/artes/{arte['id']}", params={"purgar": "1"}).status_code == 200
-    # Con purgar=1 el binario catalogado (la copia en texto/) desaparece del almacen.
+    # Con purgar=1 el binario catalogado (la copia en artes/) desaparece del almacen.
     assert cliente.get(f"/api/media/{arte['objeto']}").status_code == 404
 
 
@@ -146,5 +146,5 @@ def test_arte_catalogado_es_referencia_viva(cliente):
     objeto = _subir_objeto(cliente)
     assert objeto not in media_gc.referencias_vivas()
     arte = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
-    # El arte se cataloga por su key PROMOVIDA (texto/...): esa es la referencia viva.
+    # El arte se cataloga por su key PROMOVIDA (artes/...): esa es la referencia viva.
     assert arte["objeto"] in media_gc.referencias_vivas()

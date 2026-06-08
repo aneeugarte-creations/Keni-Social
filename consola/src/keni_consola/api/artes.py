@@ -1,4 +1,4 @@
-"""API Texto de ARTES: cataloga objetos de media para reutilizarlos (durables).
+"""API Galería de ARTES: cataloga objetos de media para reutilizarlos (durables).
 
 Un ARTE es una imagen del almacen de media (subida, generada con IA o trabajada en el
 Estudio) que el equipo decide CONSERVAR para reutilizar en publicaciones. Catalogarla:
@@ -70,7 +70,7 @@ def _normalizar_etiquetas(valor: object) -> list[str]:
 
 
 def _arte_a_dict(item: dict) -> dict:
-    """Serializa un item de texto como ARTE: etiquetas como lista, url y nombre de marca."""
+    """Serializa un item del catálogo como ARTE: etiquetas como lista, url y nombre de marca."""
     crudas = item.get("etiquetas") or "[]"
     try:
         tags = json.loads(crudas) if isinstance(crudas, str) else crudas
@@ -129,9 +129,9 @@ async def crear(request: Request) -> Response:
     objeto = objeto.strip()
     if media.leer_media(objeto) is None:
         return JSONResponse({"error": "Esa imagen no existe en el almacén."}, status_code=400)
-    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `texto/` ANTES
+    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `artes/` ANTES
     # de la idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta protegida.
-    objeto = almacen_media.promover_objeto(objeto, "texto")
+    objeto = almacen_media.promover_objeto(objeto, "artes")
 
     marca, err = _validar_marca(datos.get("marca"))
     if err:
@@ -173,7 +173,7 @@ async def borrar(request: Request) -> Response:
     arte_id = request.path_params["arte_id"]
     item = repos.borrar_media_catalogo(arte_id)
     if item is None:
-        return JSONResponse({"error": "Ese arte ya no está en la texto."}, status_code=404)
+        return JSONResponse({"error": "Ese arte ya no está en la galería."}, status_code=404)
 
     if request.query_params.get("purgar") == "1":
         try:
@@ -181,7 +181,7 @@ async def borrar(request: Request) -> Response:
         except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
             _log.exception("No se pudo purgar el binario del arte %r.", item.get("objeto"))
 
-    return JSONResponse({"mensaje": "Arte quitado de la texto."})
+    return JSONResponse({"mensaje": "Arte quitado de la galería."})
 
 
 RUTAS = [

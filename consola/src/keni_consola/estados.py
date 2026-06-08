@@ -246,7 +246,7 @@ ORIGENES_EVERGREEN_IDEA_MANUAL: tuple[str, ...] = ("manual", "idea", "interna")
 
 # Tipo de contenido: de DÓNDE sale la imagen de la pieza.
 #   - `ia`:      se genera con IA (texto -> imagen).
-#   - `galeria`: se sube/elige de la texto de medios.
+#   - `galeria`: se sube/elige de la galería de medios.
 #   - `fuente`:  se usa la imagen de la FUENTE original (nota/clip), vía su URL.
 # Es una pista para la UI (qué afordancia de imagen resaltar), no una restricción dura.
 TIPOS_CONTENIDO: tuple[str, ...] = ("ia", "galeria", "fuente")

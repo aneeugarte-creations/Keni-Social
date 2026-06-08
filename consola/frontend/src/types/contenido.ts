@@ -235,7 +235,7 @@ export interface MetricasLineas {
 /**
  * Tipo de contenido: de DÓNDE sale la imagen de la pieza.
  *   - `ia`:      se genera con IA (texto → imagen).
- *   - `galeria`: se sube/elige de la texto de medios.
+ *   - `galeria`: se sube/elige de la galería de medios.
  *   - `fuente`:  se usa la imagen de la FUENTE original (nota/clip), vía su URL.
  */
 export type TipoContenido = "ia" | "galeria" | "fuente";

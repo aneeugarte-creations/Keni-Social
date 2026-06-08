@@ -10,12 +10,12 @@
  * Tras obtener el fondo por cualquiera de las tres vías, si hay `marca` se AUTO-COMPONE la
  * placa (`POST /api/imagenes/componer`, sondeada con `useGeneracion`) usando el copy-in como
  * titular, y se muestra la preview; el usuario puede reajustar titular/etiqueta y re-componer,
- * o **guardar el fondo en la texto** para reutilizarlo. Sin `marca` (uso suelto, p. ej.
+ * o **guardar el fondo en la galería** para reutilizarlo. Sin `marca` (uso suelto, p. ej.
  * en el tablero) el fondo se adjunta tal cual, sin componer.
  *
  * El componente es controlado: el padre guarda el `nombre` de la imagen final (vacío = sin
  * imagen) y lo incluye al guardar la pieza. El FONDO limpio se recuerda solo en esta sesión
- * (para re-componer y para guardarlo en la texto sin la placa estampada).
+ * (para re-componer y para guardarlo en la galería sin la placa estampada).
  */
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -236,13 +236,13 @@ export function EditorImagen({
     }
   }, [genIA, aplicarFondo]);
 
-  // --- Guardar el fondo en la texto (durable + reutilizable) --- //
+  // --- Guardar el fondo en la galería (durable + reutilizable) --- //
   const guardar = useMutation({
     mutationFn: () => {
       if (!fondo) throw new Error("Elige primero un fondo.");
       return api.guardarArte({ objeto: fondo.id, marca: marca || undefined, tipo: fondo.tipo });
     },
-    onSuccess: () => toast.success("Fondo guardado en la texto"),
+    onSuccess: () => toast.success("Fondo guardado en la galería"),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -516,7 +516,7 @@ function FuenteFondo({
     <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
       {!compacto && (
         <p className="text-xs text-muted-foreground">
-          Elige de dónde sale la foto/fondo (puedes subir una foto real, elegir de la texto
+          Elige de dónde sale la foto/fondo (puedes subir una foto real, elegir de la galería
           o generarla con IA):
         </p>
       )}

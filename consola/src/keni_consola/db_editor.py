@@ -73,7 +73,7 @@ def crear_media_catalogo(
     creado: str = "",
     actualizado: str = "",
 ) -> dict[str, Any]:
-    """Cataloga un objeto de media en la texto y lo devuelve. NO valida (lo hace la API)."""
+    """Cataloga un objeto de media en la galería y lo devuelve. NO valida (lo hace la API)."""
     autor = autor or {}
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
@@ -111,7 +111,7 @@ def listar_media_catalogo(
     tipo: str | None = None,
     solo_aprobados: bool = False,
 ) -> list[dict[str, Any]]:
-    """Items de la texto de medios, filtros combinables (AND). Mas recientes primero."""
+    """Items de la galería de medios, filtros combinables (AND). Mas recientes primero."""
     clausulas: list[str] = []
     params: list[Any] = []
     if marca:
@@ -135,7 +135,7 @@ def listar_media_catalogo(
 
 
 def obtener_media_catalogo(media_id: str) -> dict[str, Any] | None:
-    """Un item de la texto por id (None si no existe)."""
+    """Un item del catálogo de medios por id (None si no existe)."""
     con = _conectar()
     try:
         fila = con.execute(
@@ -147,7 +147,7 @@ def obtener_media_catalogo(media_id: str) -> dict[str, Any] | None:
 
 
 def existe_media_objeto(objeto: str) -> bool:
-    """True si ya hay un item de texto catalogando ese `objeto` (UNIQUE)."""
+    """True si ya hay un item del catálogo catalogando ese `objeto` (UNIQUE)."""
     con = _conectar()
     try:
         fila = con.execute(
@@ -191,7 +191,7 @@ def actualizar_media_catalogo(
 
 
 def borrar_media_catalogo(media_id: str) -> dict[str, Any] | None:
-    """Borra un item de la texto; devuelve el item borrado (para limpiar el binario) o None."""
+    """Borra un item del catálogo de medios; devuelve el item borrado (para limpiar el binario) o None."""
     item = obtener_media_catalogo(media_id)
     if item is None:
         return None

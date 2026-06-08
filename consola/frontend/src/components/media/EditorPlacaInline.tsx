@@ -747,7 +747,7 @@ export function EditorPlacaInline({
               {esCollage ? `Foto del hueco ${slotActivo + 1} de ${nHuecos}` : "Imagen de la pieza"}
             </DialogTitle>
             <DialogDescription>
-              Elígela de la texto, súbela o genérala con IA.
+              Elígela de la galería, súbela o genérala con IA.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

@@ -156,7 +156,7 @@ export interface CuerpoImagenesComponer {
   etiqueta?: string;
 }
 
-// --- Texto de artes (objetos de media catalogados para reutilizar) ---
+// --- Galería de artes (objetos de media catalogados para reutilizar) ---
 
 /** Origen de un arte: trabajado en el Estudio, subido por el usuario o generado con IA. */
 export type TipoArte = "estudio" | "subida" | "ia";
@@ -166,7 +166,7 @@ export type TipoArte = "estudio" | "subida" | "ia";
  * Catalogarla la protege del GC de media huérfana y la hace seleccionable por marca.
  */
 export interface Arte {
-  /** Id del item de texto (no del objeto de media). */
+  /** Id del item del catálogo (no del objeto de media). */
   id: string;
   /** Nombre del objeto de media (lo que se persiste en la pieza y resuelve `urlMedia`). */
   objeto: string;
