@@ -41,6 +41,8 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
     ENV_NOTICIAS_GC_INTERVALO_HORAS,
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
+    ENV_FUSION_SEMANTICA,
+    ENV_FUSION_SEMANTICA_MAX,
     ENV_PERFIL_EDITORIAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_SCORE_BONUS_BREAKING,
@@ -66,6 +68,7 @@ from ._config_comun import (
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
+    FUSION_SEMANTICA_MAX_DEF,
     NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
     NOTICIAS_GC_INTERVALO_HORAS_DEF,
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
@@ -259,6 +262,27 @@ def perfil_editorial_ttl_horas() -> int:
     """Cada cuántas horas se re-extrae el perfil editorial con Haiku
     (`KENI_PERFIL_EDITORIAL_TTL_HORAS`, def 24, min 1). También se refresca si cambia la editorial."""
     return _entero(ENV_PERFIL_EDITORIAL_TTL_HORAS, PERFIL_EDITORIAL_TTL_HORAS_DEF, minimo=1)
+
+
+# --------------------------------------------------------------------------- #
+# Fusión semántica de historias (Haiku) — Fase 2b                              #
+# --------------------------------------------------------------------------- #
+
+
+def fusion_semantica_activa() -> bool:
+    """True si se funden con IA las historias del mismo evento (`KENI_FUSION_SEMANTICA`, def OFF).
+
+    Def OFF (IA que MUTA el pool en prod): sin el flag, el clustering se queda en el léxico. Con el
+    flag, el daemon manda a Haiku las historias recientes por marca y funde los grupos del mismo
+    acontecimiento (conservador: ante duda no fusiona).
+    """
+    return _crudo(ENV_FUSION_SEMANTICA).lower() in _VERDADEROS
+
+
+def fusion_semantica_max() -> int:
+    """Máx. historias por marca y barrido que se mandan a Haiku a agrupar
+    (`KENI_FUSION_SEMANTICA_MAX`, def 40, min 2). Acota coste y tamaño de contexto."""
+    return _entero(ENV_FUSION_SEMANTICA_MAX, FUSION_SEMANTICA_MAX_DEF, minimo=2)
 
 
 

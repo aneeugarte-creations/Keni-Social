@@ -293,6 +293,22 @@ def purgar_pool_irrelevante(
         con.close()
 
 
+def borrar_noticia_cluster(cluster_id: str) -> bool:
+    """Borra la fila de un cluster (historia). True si existía. Best-effort, sin cascada.
+
+    Pensado para la FUSIÓN semántica: tras reasignar los items del cluster absorbido al canónico
+    (`asignar_cluster_item`), se borra la fila vacía. NO toca `noticias_items` (sus items ya
+    apuntan a otro cluster); si quedara alguno apuntando aquí, el clustering/GC lo recoloca.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM noticias_clusters WHERE id = ?", (cluster_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     """Marca/desmarca un item de una fuente como usado (idempotente).
 

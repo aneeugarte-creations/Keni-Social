@@ -74,6 +74,10 @@ def borrar_fuente_rss(fuente_id: str) -> bool:
     return db.borrar_fuente_rss(fuente_id)
 
 
+def borrar_noticia_cluster(cluster_id: str) -> bool:
+    return db.borrar_noticia_cluster(cluster_id)
+
+
 def purgar_pool_irrelevante(
     *, score_umbral: float, inactividad_horas: int, dry_run: bool = False
 ) -> dict[str, int]:

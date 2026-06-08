@@ -284,6 +284,13 @@ ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 ENV_PERFIL_EDITORIAL = "KENI_PERFIL_EDITORIAL"
 ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 
+# Fusión SEMÁNTICA de historias del mismo evento (Fase 2b): un agente Haiku agrupa las historias
+# recientes de una marca que cubren el mismo acontecimiento (titulares distintos) y el daemon las
+# funde en una sola (n_fuentes real). GATEADO por `KENI_FUSION_SEMANTICA` (def OFF). `_MAX` acota
+# cuántas historias por marca se mandan a Haiku por barrido (coste/contexto).
+ENV_FUSION_SEMANTICA = "KENI_FUSION_SEMANTICA"
+ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
+
 # Insumos del día (cajones): modelo de parseo que usa `claude -p` para extraer los ítems
 # del material diario (portal/corresponsales/reporteros/eventos_claro). Por defecto "haiku"
 # (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
@@ -545,6 +552,9 @@ NOTICIAS_GC_INACTIVIDAD_HORAS_DEF = 48
 # Perfil editorial: se re-extrae con Haiku cada 24h (o si cambia la línea editorial).
 PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
 
+# Fusión semántica: hasta 40 historias por marca y barrido se mandan a Haiku a agrupar.
+FUSION_SEMANTICA_MAX_DEF = 40
+
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
 S3_REGION_DEF = "garage"
@@ -695,6 +705,8 @@ __all__ = [
     'ENV_EVENTOS_INTERVALO_SEGUNDOS',
     'ENV_EVENTOS_VENCIMIENTOS',
     'ENV_FEED_SLA_MIN',
+    'ENV_FUSION_SEMANTICA',
+    'ENV_FUSION_SEMANTICA_MAX',
     'ENV_FFMPEG_BIN',
     'ENV_FUENTES_BAJA_CONFIANZA',
     'ENV_GENERACIONES',
@@ -799,6 +811,7 @@ __all__ = [
     'FEED_SLA_MIN_DEF',
     'FFMPEG_BIN_DEF',
     'FUENTES_BAJA_CONFIANZA_DEF',
+    'FUSION_SEMANTICA_MAX_DEF',
     'GENERACIONES_TTL_HORAS_DEF',
     'HOST_DEF',
     'INGESTA_BACKOFF_TOPE_SEG',

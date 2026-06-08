@@ -217,6 +217,16 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        Ajuste(
+            clave=config.ENV_FUSION_SEMANTICA,
+            tipo="bool",
+            etiqueta="Fusión de historias del mismo evento (IA)",
+            ayuda="Un agente (Haiku) agrupa las historias recientes de cada marca que cubren el "
+            "MISMO acontecimiento con titulares distintos y las funde en una sola (cuenta de "
+            "fuentes real → mejor señal de tendencia). Conservador: ante duda no fusiona.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -324,6 +334,16 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="tuning",
             defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
             minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_FUSION_SEMANTICA_MAX,
+            tipo="int",
+            etiqueta="Fusión semántica: historias por marca/barrido",
+            ayuda="Máximo de historias por marca que se mandan a la IA a agrupar en cada barrido "
+            "(acota coste y tamaño de contexto).",
+            grupo="tuning",
+            defecto=config.FUSION_SEMANTICA_MAX_DEF,
+            minimo=2,
         ),
         # --- Ingesta (Ola A) ------------------------------------------------------ #
         Ajuste(

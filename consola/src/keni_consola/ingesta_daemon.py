@@ -35,7 +35,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import agencias, config, daemon_util, db, relevancia_marca, repos
-from .dominio import clustering, http_feed, ingesta, perfil_editorial, traduccion
+from .dominio import (
+    clustering,
+    fusion_semantica,
+    http_feed,
+    ingesta,
+    perfil_editorial,
+    traduccion,
+)
 
 _log = logging.getLogger("keni_consola.ingesta_daemon")
 
@@ -200,6 +207,110 @@ def paso_clustering() -> dict[str, Any]:
             _log.exception("ingesta_daemon: fallo al recalcular el cluster %s.", cid)
 
     return {"items": len(pendientes), "clusters_nuevos": nuevos, "clusters_tocados": len(tocados)}
+
+
+def _fusionar_grupo(
+    ids: list[str],
+    por_id: dict[str, dict[str, Any]],
+    *,
+    pesos: Any,
+    breaking_fuentes: int,
+    breaking_ventana_h: int,
+    fuentes_baja: frozenset[str],
+    perfil_activo: bool,
+    ahora: datetime,
+) -> bool:
+    """Funde un grupo de historias en la CANÓNICA (más fuentes, desempate por score).
+
+    Reasigna los items de las absorbidas a la canónica, borra las absorbidas (vacías) y recalcula
+    + repuntúa la canónica (n_fuentes/score reales). Devuelve True si fusionó (≥2 historias).
+    """
+    clusters = [por_id[i] for i in ids if i in por_id]
+    if len(clusters) < 2:
+        return False
+    canon = max(clusters, key=lambda c: (int(c.get("n_fuentes") or 0), float(c.get("score") or 0.0)))
+    canon_id = str(canon["id"])
+    for c in clusters:
+        cid = str(c["id"])
+        if cid == canon_id:
+            continue
+        for it in repos.items_de_cluster(cid, limite=500):
+            repos.asignar_cluster_item(it["id"], canon_id)
+        repos.borrar_noticia_cluster(cid)
+    items = repos.items_de_cluster(canon_id, limite=500)
+    if not items:
+        return False
+    base = repos.obtener_noticia_cluster(canon_id) or canon
+    recalc = clustering.recalcular(
+        base, items,
+        breaking_fuentes=breaking_fuentes,
+        breaking_ventana_h=breaking_ventana_h,
+        fuentes_baja_confianza=fuentes_baja,
+    )
+    palabras = _palabras_relevancia(recalc.get("marca") or "", perfil_activo)
+    recalc["score"], _razon = clustering.puntuar(recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos)
+    repos.upsert_noticia_cluster(recalc)
+    return True
+
+
+def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) -> dict[str, Any]:
+    """Funde con IA (Haiku) las historias del MISMO evento, por marca. Gateado `KENI_FUSION_SEMANTICA`.
+
+    Por marca, manda hasta `KENI_FUSION_SEMANTICA_MAX` historias `nuevo` recientes a Haiku para que
+    agrupe las del mismo acontecimiento, y funde cada grupo (`_fusionar_grupo`). Best-effort: un
+    fallo por marca/grupo se loguea y no aborta el paso. Devuelve `{grupos, fusionadas}`.
+    """
+    if not config.fusion_semantica_activa():
+        return {"grupos": 0, "fusionadas": 0}
+    ventana_h = config.cluster_ventana_h()
+    maximo = config.fusion_semantica_max()
+    pesos = config.score_pesos()
+    breaking_fuentes = config.cluster_breaking_fuentes()
+    breaking_ventana_h = config.cluster_breaking_ventana_h()
+    fuentes_baja = config.fuentes_baja_confianza()
+    perfil_activo = config.perfil_editorial_activo()
+    ahora = datetime.now(UTC)
+
+    try:
+        recientes_todas = repos.clusters_recientes(ventana_h)
+    except Exception:  # noqa: BLE001 -- sin pool legible, no se funde nada
+        _log.exception("ingesta_daemon: no se pudieron leer historias para fusión.")
+        return {"grupos": 0, "fusionadas": 0}
+
+    por_marca: dict[str, list[dict[str, Any]]] = {}
+    for c in recientes_todas:
+        if (c.get("estado") or "nuevo") == "nuevo":
+            por_marca.setdefault(c.get("marca") or "", []).append(c)
+
+    grupos_total = 0
+    fusionadas_total = 0
+    for recientes in por_marca.values():
+        if len(recientes) < 2:
+            continue
+        lote = recientes[:maximo]
+        por_id = {str(c["id"]): c for c in lote}
+        try:
+            grupos = fusion_semantica.proponer_fusiones(lote, ejecutor=ejecutor)
+        except Exception:  # noqa: BLE001 -- un fallo de Haiku por marca no aborta el paso
+            _log.exception("ingesta_daemon: fallo proponiendo fusiones de una marca.")
+            continue
+        for grupo in grupos:
+            try:
+                if _fusionar_grupo(
+                    grupo, por_id, pesos=pesos, breaking_fuentes=breaking_fuentes,
+                    breaking_ventana_h=breaking_ventana_h, fuentes_baja=fuentes_baja,
+                    perfil_activo=perfil_activo, ahora=ahora,
+                ):
+                    grupos_total += 1
+                    fusionadas_total += len(grupo) - 1
+            except Exception:  # noqa: BLE001 -- una fusión problemática no aborta el paso
+                _log.exception("ingesta_daemon: fallo al fundir un grupo de historias.")
+    if grupos_total:
+        _log.info(
+            "ingesta_daemon: fusión semántica: %d grupo(s), %d historia(s) absorbida(s).",
+            grupos_total, fusionadas_total,
+        )
+    return {"grupos": grupos_total, "fusionadas": fusionadas_total}
 
 
 def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str, Any]:
@@ -387,6 +498,13 @@ def ejecutar_barrido() -> dict[str, Any]:
             cluster_resumen = paso_clustering()
         except Exception:  # noqa: BLE001 -- el clustering es aditivo; nunca tumba la ingesta
             _log.exception("ingesta_daemon: fallo en el paso de clustering.")
+
+        # Paso de FUSIÓN SEMÁNTICA (Fase 2b): funde con Haiku las historias del mismo evento que el
+        # léxico no unió (titulares distintos). Gateado `KENI_FUSION_SEMANTICA` (def OFF). Best-effort.
+        try:
+            paso_fusion_semantica()
+        except Exception:  # noqa: BLE001 -- la fusión es aditiva; nunca tumba la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de fusión semántica.")
 
         # Paso de TRADUCCIÓN (Ola D): traduce a ES, por lotes, los clusters EXTRANJEROS recientes
         # aún sin traducir. Best-effort: un fallo (subproceso, JSON, etc.) se loguea y NO invalida
