@@ -1,0 +1,163 @@
+"""Persistencia — dominio editor (barrel del paquete). Implementación de db.py (ver barrel `db.py`).
+
+Este paquete reemplaza al antiguo módulo `db_editor.py`. Re-exporta TODA su superficie
+pública Y privada para que tanto `from .db_editor import X` (incluidos símbolos `_privados`)
+como `import keni_consola.db_editor` sigan resolviendo sin tocar a los consumidores ni a `db.py`.
+"""
+from __future__ import annotations
+
+# Compartidos (preservan la superficie del módulo original: estaban en su namespace).
+from ._comun import Any, IntegrityError, _conectar, datetime, uuid
+from .bloques import (
+    _CAMPOS_EDITABLES_BLOQUES,
+    _COLS_BLOQUES,
+    _SELECT_BLOQUES,
+    _fila_a_bloque,
+    actualizar_bloque,
+    borrar_bloque,
+    crear_bloque,
+    listar_bloques,
+    obtener_bloque,
+)
+from .doc_versiones import (
+    _COLS_DOC_VERSIONES,
+    _MAX_REINTENTOS_VERSION,
+    _SELECT_DOC_VERSIONES,
+    _fila_a_doc_version,
+    crear_documento_version,
+    listar_documento_versiones,
+    ultima_documento_version,
+)
+from .marca_activos import (
+    _CAMPOS_EDITABLES_MARCA_ACTIVOS,
+    _COLS_MARCA_ACTIVOS,
+    _SELECT_MARCA_ACTIVOS,
+    _fila_a_marca_activo,
+    actualizar_marca_activo,
+    borrar_marca_activo,
+    crear_marca_activo,
+    listar_marca_activos,
+    obtener_marca_activo,
+)
+from .media_catalogo import (
+    _CAMPOS_EDITABLES_CATALOGO_MEDIA,
+    _COLS_CATALOGO_MEDIA,
+    _SELECT_CATALOGO_MEDIA,
+    _fila_a_media_catalogo,
+    actualizar_media_catalogo,
+    borrar_media_catalogo,
+    crear_media_catalogo,
+    existe_media_objeto,
+    listar_media_catalogo,
+    obtener_media_catalogo,
+)
+from .plantillas_diseno import (
+    _CAMPOS_EDITABLES_PLANTILLAS_DISENO,
+    _COLS_PLANTILLAS_DISENO,
+    _SELECT_PLANTILLAS_DISENO,
+    _fila_a_plantilla_diseno,
+    actualizar_plantilla_diseno,
+    borrar_plantilla_diseno,
+    crear_plantilla_diseno,
+    listar_plantillas_diseno,
+    obtener_plantilla_diseno,
+)
+from .video import (
+    _CAMPOS_EDITABLES_VIDEO_COMPOSICIONES,
+    _CAMPOS_EDITABLES_VIDEO_SUBTITULOS,
+    _COLS_VIDEO_COMPOSICIONES,
+    _COLS_VIDEO_SUBTITULOS,
+    _SELECT_VIDEO_COMPOSICIONES,
+    _SELECT_VIDEO_SUBTITULOS,
+    ESTADOS_VIDEO_COMPOSICION,
+    ESTADOS_VIDEO_SUBTITULO,
+    _fila_a_video_composicion,
+    _fila_a_video_subtitulo,
+    actualizar_video_composicion,
+    actualizar_video_subtitulo,
+    borrar_video_composicion,
+    crear_video_composicion,
+    crear_video_subtitulo,
+    listar_video_composiciones,
+    listar_video_subtitulos,
+    obtener_video_composicion,
+    obtener_video_subtitulo,
+)
+
+__all__ = [
+    # Compartidos
+    "Any",
+    "IntegrityError",
+    "_conectar",
+    "datetime",
+    "uuid",
+    # media_catalogo
+    "_CAMPOS_EDITABLES_CATALOGO_MEDIA",
+    "_COLS_CATALOGO_MEDIA",
+    "_SELECT_CATALOGO_MEDIA",
+    "_fila_a_media_catalogo",
+    "actualizar_media_catalogo",
+    "borrar_media_catalogo",
+    "crear_media_catalogo",
+    "existe_media_objeto",
+    "listar_media_catalogo",
+    "obtener_media_catalogo",
+    # marca_activos
+    "_CAMPOS_EDITABLES_MARCA_ACTIVOS",
+    "_COLS_MARCA_ACTIVOS",
+    "_SELECT_MARCA_ACTIVOS",
+    "_fila_a_marca_activo",
+    "actualizar_marca_activo",
+    "borrar_marca_activo",
+    "crear_marca_activo",
+    "listar_marca_activos",
+    "obtener_marca_activo",
+    # plantillas_diseno
+    "_CAMPOS_EDITABLES_PLANTILLAS_DISENO",
+    "_COLS_PLANTILLAS_DISENO",
+    "_SELECT_PLANTILLAS_DISENO",
+    "_fila_a_plantilla_diseno",
+    "actualizar_plantilla_diseno",
+    "borrar_plantilla_diseno",
+    "crear_plantilla_diseno",
+    "listar_plantillas_diseno",
+    "obtener_plantilla_diseno",
+    # video
+    "ESTADOS_VIDEO_COMPOSICION",
+    "ESTADOS_VIDEO_SUBTITULO",
+    "_CAMPOS_EDITABLES_VIDEO_COMPOSICIONES",
+    "_CAMPOS_EDITABLES_VIDEO_SUBTITULOS",
+    "_COLS_VIDEO_COMPOSICIONES",
+    "_COLS_VIDEO_SUBTITULOS",
+    "_SELECT_VIDEO_COMPOSICIONES",
+    "_SELECT_VIDEO_SUBTITULOS",
+    "_fila_a_video_composicion",
+    "_fila_a_video_subtitulo",
+    "actualizar_video_composicion",
+    "actualizar_video_subtitulo",
+    "borrar_video_composicion",
+    "crear_video_composicion",
+    "crear_video_subtitulo",
+    "listar_video_composiciones",
+    "listar_video_subtitulos",
+    "obtener_video_composicion",
+    "obtener_video_subtitulo",
+    # bloques
+    "_CAMPOS_EDITABLES_BLOQUES",
+    "_COLS_BLOQUES",
+    "_SELECT_BLOQUES",
+    "_fila_a_bloque",
+    "actualizar_bloque",
+    "borrar_bloque",
+    "crear_bloque",
+    "listar_bloques",
+    "obtener_bloque",
+    # doc_versiones
+    "_COLS_DOC_VERSIONES",
+    "_MAX_REINTENTOS_VERSION",
+    "_SELECT_DOC_VERSIONES",
+    "_fila_a_doc_version",
+    "crear_documento_version",
+    "listar_documento_versiones",
+    "ultima_documento_version",
+]
