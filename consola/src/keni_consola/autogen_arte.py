@@ -164,8 +164,9 @@ def topics_sin_arte(
 def prompt_arte(item: dict[str, Any]) -> str:
     """Prompt de imagen a partir del titulo + descripcion del tema (sin inventar datos).
 
-    Pide una ilustracion editorial limpia, apta para redes, evitando texto incrustado
-    (que los modelos de imagen renderizan mal) y sin datos sensibles inventados.
+    Pide UNA sola fotografia cruda (sin marcos, placas ni texto editorial: eso lo
+    compone la consola despues), apta para el feed de una marca de TV, que represente
+    la noticia. Evita texto incrustado (que los modelos renderizan mal) y datos falsos.
     """
     titulo = (item.get("titulo") or "").strip()
     descripcion = (item.get("descripcion") or "").strip()
@@ -173,10 +174,15 @@ def prompt_arte(item: dict[str, Any]) -> str:
     if not base:
         return ""
     return (
-        "Crea una imagen editorial para redes sociales que ilustre este tema: "
+        "Genera UNA sola fotografia realista para el feed de redes sociales de un canal "
+        "de television, que represente de forma directa esta noticia: "
         f"{base}. "
-        "Estilo limpio y profesional, composicion clara, sin texto incrustado ni "
-        "logotipos. No inventes datos, rostros reconocibles ni cifras."
+        "Debe ser una foto cruda y limpia, estilo imagen de archivo periodistica: un "
+        "unico encuadre fotografico, NADA de collage, marcos, plantillas, placas, "
+        "titulares, logotipos ni texto incrustado de ningun tipo (la marca y el titular "
+        "se anaden despues, fuera del modelo). No inventes rostros reconocibles de "
+        "personas reales, ni cifras o datos que no aparezcan en la noticia. "
+        "Devuelve unicamente la imagen, no texto."
     )
 
 

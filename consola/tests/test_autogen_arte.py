@@ -172,9 +172,14 @@ def test_orden_por_defecto_conserva_entrada():
 
 def test_prompt_incluye_titulo_y_descripcion():
     prompt = aa.prompt_arte(_item(titulo="Final de copa", descripcion="Juega Mexico"))
+    bajo = prompt.lower()
     assert "Final de copa" in prompt
     assert "Juega Mexico" in prompt
-    assert "sin texto incrustado" in prompt.lower()
+    # Pide UNA foto cruda, sin marcos/placas/collage ni texto editorial (eso lo compone
+    # la consola despues): nada de diseno editorial dentro de la imagen.
+    assert "una sola fotografia" in bajo or "una sola foto" in bajo
+    assert "collage" in bajo and "placas" in bajo
+    assert "texto incrustado" in bajo
 
 
 def test_prompt_vacio_si_no_hay_titulo():
