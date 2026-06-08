@@ -44,7 +44,6 @@ modulos_backend = [
   "reciclaje",
   "rss",
   "termometro",
-  "radar_auto",
   "breaking",
   "noticias",
   "fuentes",

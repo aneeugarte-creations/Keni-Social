@@ -41,13 +41,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_MAQUINA,
         # Maestros de etapa (uno por etapa de auto-producción).
         config.ENV_PIPELINE, config.ENV_AUTOGEN, config.ENV_AUTOGEN_ARTE, config.ENV_AUTO_AVANCE,
-        config.ENV_RADAR_AUTO,
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_PUBLICAR_REAL,
         config.ENV_AUTOGEN_INTERVALO_HORAS, config.ENV_AUTOGEN_MAX,
         config.ENV_AUTOGEN_ARTE_INTERVALO_HORAS, config.ENV_AUTOGEN_ARTE_MAX,
-        config.ENV_RADAR_AUTO_UMBRAL, config.ENV_RADAR_AUTO_INTERVALO_HORAS,
-        config.ENV_RADAR_AUTO_MAX, config.ENV_RADAR_AUTO_GEO, config.ENV_RADAR_AUTO_MARCA,
+        config.ENV_RADAR_AUTO_GEO,
         config.ENV_ALERTAS_INTERVALO_HORAS, config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
         config.ENV_MAX_JOBS,
         config.ENV_MEDIA_GC, config.ENV_MEDIA_GC_INTERVALO_HORAS,
@@ -220,12 +218,6 @@ def test_a_dict_select_tiene_opciones(store):
     assert "min" not in d
 
 
-def test_a_dict_marca_incluye_ninguna(store):
-    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_RADAR_AUTO_MARCA))
-    ids = [o["id"] for o in d["opciones"]]
-    assert ids[0] == "" and d["opciones"][0]["etiqueta"] == "(ninguna)"
-
-
 def test_a_dict_bool_sin_min_ni_opciones(store):
     d = ajustes_catalogo.a_dict(_ajuste(config.ENV_AUTOGEN))
     assert d["tipo"] == "bool" and "min" not in d and "opciones" not in d
@@ -300,12 +292,6 @@ def test_validar_select_normaliza_geo(store):
 def test_validar_select_invalido(store):
     val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_RADAR_AUTO_GEO), "ZZ")
     assert val is None and err is not None
-
-
-def test_validar_marca_vacia_ok(store):
-    # "(ninguna)" = id "" debe ser un valor valido para la marca del Radar.
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_RADAR_AUTO_MARCA), "")
-    assert err is None and val == ""
 
 
 # --------------------------------------------------------------------------- #

@@ -159,13 +159,6 @@ class Ajuste:
     maximo: float | None = None  # solo int/float
 
 
-def _opciones_radar_marca() -> tuple[dict[str, str], ...]:
-    """Opciones del select de marca del Radar: `(ninguna)` + las marcas del catalogo."""
-    items = [{"id": "", "etiqueta": "(ninguna)"}]
-    items.extend({"id": mid, "etiqueta": etiqueta} for mid, etiqueta in marcas.opciones())
-    return tuple(items)
-
-
 _GEO_OPCIONES: tuple[dict[str, str], ...] = (
     {"id": "MX", "etiqueta": "México"},
     {"id": "US", "etiqueta": "Estados Unidos"},
@@ -199,15 +192,6 @@ def _construir_catalogo() -> list[Ajuste]:
         # --- Automatismos generales (barridos del sistema, sin dimensión por marca) ----- #
         # Las etapas de auto-producción (Auto-copy, Auto-arte, Auto-producción, Auto-avance) NO
         # están aquí: su maestro vive en `_maestros_etapa()` y sus excepciones en `_ajustes_por_marca()`.
-        Ajuste(
-            clave=config.ENV_RADAR_AUTO,
-            tipo="bool",
-            etiqueta="Radar automático",
-            ayuda="Promueve periódicamente los temas del Radar que superan el umbral de señal "
-            "a 'lo importante del día'.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
         Ajuste(
             clave=config.ENV_PIPELINE_LINEAS,
             tipo="bool",
@@ -386,50 +370,13 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
         ),
         Ajuste(
-            clave=config.ENV_RADAR_AUTO_UMBRAL,
-            tipo="int",
-            etiqueta="Radar: umbral de señal",
-            ayuda="Señal mínima de un tema para que el Radar lo auto-promueva. Alto = solo lo muy viral entra solo.",
-            grupo="tuning",
-            defecto=config.RADAR_AUTO_UMBRAL_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_RADAR_AUTO_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Radar: intervalo (horas)",
-            ayuda="Cada cuántas horas barre el daemon de auto-promoción del Radar.",
-            grupo="tuning",
-            defecto=config.RADAR_AUTO_INTERVALO_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_RADAR_AUTO_MAX,
-            tipo="int",
-            etiqueta="Radar: máximo por barrido",
-            ayuda="Máximo de temas a auto-promover por barrido (los de mayor señal).",
-            grupo="tuning",
-            defecto=config.RADAR_AUTO_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
             clave=config.ENV_RADAR_AUTO_GEO,
             tipo="select",
             etiqueta="Radar: geografía",
-            ayuda="País del Radar de tendencias para la auto-promoción.",
+            ayuda="País del Radar de tendencias (lo usa el daemon de breaking).",
             grupo="tuning",
             defecto=config.RADAR_AUTO_GEO_DEF,
             opciones=_GEO_OPCIONES,
-        ),
-        Ajuste(
-            clave=config.ENV_RADAR_AUTO_MARCA,
-            tipo="select",
-            etiqueta="Radar: marca por defecto",
-            ayuda="Marca a asignar a las piezas auto-promovidas por el Radar. '(ninguna)' deja "
-            "que el equipo la asigne luego.",
-            grupo="tuning",
-            defecto="",
-            opciones=_opciones_radar_marca(),
         ),
         Ajuste(
             clave=config.ENV_ALERTAS_INTERVALO_HORAS,

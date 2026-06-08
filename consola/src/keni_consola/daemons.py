@@ -12,7 +12,6 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
   - alertas de rendimiento / reciclaje (solo leen + emiten eventos internos),
-  - auto-promocion del Radar (solo barre con `KENI_RADAR_AUTO=1`),
   - auto-produccion (Flujo C): auto-copy (`KENI_AUTOGEN=1`) y auto-arte
     (`KENI_AUTOGEN_ARTE=1`) que llevan los temas de entrada a borrador en la cola de
     revision; el resultado para en el gate humano (nada se publica solo),
@@ -22,7 +21,7 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
 
 SAFE BY DEFAULT: este proceso NO publica nada ni crea/aprueba contenido por su
 cuenta. Los unicos caminos que lo harian estan gated por env y vienen AUSENTES por
-defecto (`KENI_PUBLICAR_REAL`, `KENI_RADAR_AUTO`, `KENI_AUTOGEN`, `KENI_AUTOGEN_ARTE`).
+defecto (`KENI_PUBLICAR_REAL`, `KENI_AUTOGEN`, `KENI_AUTOGEN_ARTE`).
 La auto-produccion (autogen) PRODUCE hasta el borrador, pero NUNCA publica: el posteo
 real sigue gated por `KENI_PUBLICAR_REAL` (OFF). Es el mismo conjunto de daemons que
 `python -m keni_consola` arranca junto al servidor; aqui van sin uvicorn.
