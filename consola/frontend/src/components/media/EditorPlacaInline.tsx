@@ -188,6 +188,7 @@ export function EditorPlacaInline({
         const hueco0 = capasFotoDoc(doc)[0];
         if (hueco0) {
           hueco0.objeto = "__respaldo0__";
+          hueco0.visible = true; // hueco relleno: visible aunque la plantilla lo traiga oculto
           imgs["__respaldo0__"] = imgRespaldo;
         }
       }

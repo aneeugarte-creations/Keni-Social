@@ -64,4 +64,16 @@ describe("docPieza", () => {
     expect(hueco?.zoom).toBe(1.5);
     expect(capaFotoDoc(d)?.objeto).toBe("muestra"); // original intacto
   });
+
+  it("prepararDocumento HACE VISIBLE el hueco relleno (plantillas lo traen oculto)", () => {
+    // El hueco de foto de una plantilla suele venir `visible:false` (no enseñar placeholder en el
+    // diseño). Al meterle una foto real debe pasar a visible, o el render no-final lo saltaría.
+    const d = doc([img({ objeto: "", es_foto: true, visible: false })]);
+    const conFoto = prepararDocumento(d, { fotos: [{ objeto: "real.png", foco: null, zoom: 0 }] });
+    expect(capaFotoDoc(conFoto)?.visible).toBe(true);
+    // Sin foto (objeto vacío) el hueco sigue oculto (no se enseña un placeholder).
+    const sinFoto = prepararDocumento(d, { fotos: [{ objeto: "", foco: null, zoom: 0 }] });
+    expect(capaFotoDoc(sinFoto)?.visible).toBe(false);
+    expect(capaFotoDoc(d)?.visible).toBe(false); // original intacto
+  });
 });

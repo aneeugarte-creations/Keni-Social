@@ -93,6 +93,11 @@ export function prepararDocumento(
     const spec = fotos[i];
     if (!spec) return;
     hueco.objeto = spec.objeto || "";
+    // Un hueco RELLENO debe verse. Las plantillas suelen traer el hueco de foto OCULTO
+    // (`visible:false`) para no enseñar un placeholder gris en el diseño; al meterle la foto de la
+    // pieza hay que MOSTRARLO o el render no-final (editor de pieza, `dibujarDocumento` sin
+    // `final`) lo saltaría y la pieza saldría sin foto en el lienzo.
+    if (hueco.objeto) hueco.visible = true;
     if (spec.foco) hueco.foco = [spec.foco[0], spec.foco[1]];
     if (spec.zoom && spec.zoom > 0) hueco.zoom = spec.zoom;
   });
