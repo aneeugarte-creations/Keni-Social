@@ -771,7 +771,14 @@ function dibujarCapa(ctx, capa, env) {
   if (gco !== "source-over") ctx.globalCompositeOperation = gco;
   const rot = capa.rotacion || 0;
   if (rot) {
-    const cx = capa.x + capa.w / 2, cy = capa.y + capa.h / 2;
+    // Pivote de rotación IGUAL que el editor (Konva/CapaNodo): la esquina superior izquierda
+    // (x,y) de la capa. EXCEPCIÓN: el marco ELIPSE, que Konva posiciona por su CENTRO y por tanto
+    // rota alrededor del centro. Sin esto, una capa rotada (p. ej. una línea horizontal a 90°)
+    // caía en otro sitio en el render final que en el lienzo: el pivote central mandaba la línea
+    // vertical al centro del lienzo (de ahí el marco que salía como una "+").
+    const elipse = capa.tipo === "marco" && capa.forma === "elipse";
+    const cx = elipse ? capa.x + capa.w / 2 : capa.x;
+    const cy = elipse ? capa.y + capa.h / 2 : capa.y;
     ctx.translate(cx, cy);
     ctx.rotate((rot * Math.PI) / 180);
     ctx.translate(-cx, -cy);

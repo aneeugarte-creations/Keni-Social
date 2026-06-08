@@ -43,6 +43,8 @@ function ctxFalso() {
   const ops: { op: "stroke" | "fill"; texto: string; blur: number; sombra: string; estilo: string }[] = [];
   // `globalCompositeOperation` activo en cada `fill()` (para verificar el modo de fusión por capa).
   const gcos: string[] = [];
+  // Llamadas a translate (para verificar el PIVOTE de rotación de cada capa).
+  const translates: { x: number; y: number }[] = [];
   let tamActual = 64;
   const ctx = {
     fills,
@@ -52,6 +54,7 @@ function ctxFalso() {
     fillRects,
     ops,
     gcos,
+    translates,
     canvas: { width: 1080, height: 1080 },
     shadowColor: "transparent",
     shadowBlur: 0,
@@ -84,7 +87,7 @@ function ctxFalso() {
     },
     save: () => {},
     restore: () => {},
-    translate: () => {},
+    translate: (x: number, y: number) => translates.push({ x, y }),
     rotate: () => {},
     scale: () => {},
     beginPath: () => {},
@@ -713,5 +716,36 @@ describe("modo de fusión (mezcla) por capa", () => {
     const ctx = ctxFalso();
     dibujarDocumento(ctx as never, { documento: docConMarco({ mezcla: "normal" }), imgs: {}, bindings: {} } as never);
     expect(ctx.gcos.every((g) => g === "source-over")).toBe(true);
+  });
+});
+
+// El PIVOTE de rotación debe coincidir con el editor (Konva/CapaNodo): esquina superior izquierda
+// (x,y) para todas las capas, salvo el marco ELIPSE (Konva lo posiciona por su centro). Antes el
+// render usaba SIEMPRE el centro: una línea horizontal rotada 90° aterrizaba en el centro del
+// lienzo en vez de a un lado (el marco salía como una "+").
+describe("pivote de rotación (espejo de Konva)", () => {
+  it("capa NO-elipse rota alrededor de su esquina superior izquierda (x,y)", () => {
+    const ctx = ctxFalso();
+    // Marco en (100,100) 400×200, rotado 90°. Pivote esperado = (x,y) = (100,100).
+    dibujarDocumento(ctx as never, { documento: docConMarco({ rotacion: 90 }), imgs: {}, bindings: {} } as never);
+    expect(ctx.translates[0]).toEqual({ x: 100, y: 100 });
+    expect(ctx.translates[1]).toEqual({ x: -100, y: -100 });
+  });
+
+  it("marco ELIPSE rota alrededor de su centro (como Konva, que lo posiciona por el centro)", () => {
+    const ctx = ctxFalso();
+    // Elipse en (100,100) 400×200, rotada 45°. Pivote esperado = centro = (300,200).
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConMarco({ forma: "elipse", rotacion: 45 }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.translates[0]).toEqual({ x: 300, y: 200 });
+    expect(ctx.translates[1]).toEqual({ x: -300, y: -200 });
+  });
+
+  it("sin rotación no toca translate (no hay cambio de pivote)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConMarco({ rotacion: 0 }), imgs: {}, bindings: {} } as never);
+    expect(ctx.translates).toHaveLength(0);
   });
 });
