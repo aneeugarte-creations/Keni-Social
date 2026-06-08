@@ -41,6 +41,9 @@ keni-consola
 
 - [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan la Biblioteca de prompts, el MCP de métricas y la Consola.
 - [`docs/estado-producto.md`](docs/estado-producto.md) — panorama honesto: qué está listo, qué está pausado por gating externo.
+- [`docs/mapa-codigo.md`](docs/mapa-codigo.md) — índice de los módulos de `keni_consola` (dónde vive cada cosa).
+- [`docs/maquina-contenido/`](docs/maquina-contenido/README.md) — specs de los motores de contenido (ingesta, clustering, verificación, auto-feed, video).
+- [`docs/adr/`](docs/adr/) — decisiones de arquitectura (ADR 0001–0007).
 
 ## Instalación como plugin
 
@@ -70,7 +73,6 @@ Listo. Cierra y vuelve a abrir Claude Code (o ejecuta `/reload-plugins`). El plu
 El plugin trae **comandos `/`** que envuelven los flujos de métricas más comunes para que sean fáciles de descubrir y lanzar (escríbelos con `/` dentro de Claude Code). Son **seguros**: solo lectura o dry-run, nunca publican ni borran nada.
 
 - `/keni-social:keni-reporte` — genera y **explica en claro** el reporte consolidado multi-marca con picos/anomalías (acepta rango, p. ej. `mes` o `semana`).
-- `/keni-social:keni-dashboard` — genera el **dashboard HTML** autocontenido (reporte + picos) y te dice dónde quedó y qué contiene.
 - `/keni-social:keni-doctor` — corre el **autodiagnóstico** del entorno de métricas y explica cada ❌ con el paso para arreglarlo.
 - `/keni-social:keni-preview` — guía el **pre-vuelo (dry-run)** de una publicación con la skill `publica-meta`: muestra exacto qué se publicaría, sin publicar.
 

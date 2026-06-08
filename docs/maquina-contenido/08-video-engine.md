@@ -17,20 +17,21 @@ Decisión de arquitectura (tomada):
 - Los jobs de render/transcripción **reutilizan la infra de `generaciones`/`jobs`/worker** para
   colgarse de Actividad IA + streaming, vía un **camino de job genérico (no-claude)**.
 
-Esta Ola G es la **BASE COMPARTIDA**. Sobre ella construyen cuatro agentes en paralelo. Este
-documento es el **CONTRATO** entre ellos: el esquema JSON, las tablas, los job kinds, la
-superficie API, las convenciones S3, los presets de formato y **quién posee qué**.
+Esta Ola G nació como **BASE COMPARTIDA / CONTRATO** entre cuatro agentes en paralelo.
+**Ya está toda construida** (render FFmpeg, ASR, `api/video.py`, UI `EstudioVideo`). Lo que
+sigue describe el esquema JSON, las tablas, los job kinds, la superficie API, las
+convenciones S3 y los presets de formato — sigue siendo la referencia vigente del motor.
 
 ---
 
-## 0. Quién posee qué (dueños de módulo)
+## 0. Quién posee qué (dueños de módulo) — todo construido
 
-| Pieza | Dueño | Estado en la BASE |
+| Pieza | Dueño | Estado |
 |---|---|---|
-| Render FFmpeg | `consola/src/keni_consola/motores/estudio_video/` | **stub** (`ejecutar_render`) |
-| ASR subtítulos | `consola/src/keni_consola/motores/transcripcion/` | **stub** (`ejecutar_transcripcion`) |
-| API HTTP | `consola/src/keni_consola/api/video.py` (a crear) | declarado en `apps/produccion.toml` |
-| UI Estudio de Video | `consola/frontend/src/.../EstudioVideo` (a crear) | labels en `lib/generaciones.ts` |
+| Render FFmpeg | `consola/src/keni_consola/motores/estudio_video/` (`ejecutar_render`) | **listo** |
+| ASR subtítulos | `consola/src/keni_consola/motores/transcripcion/` (`ejecutar_transcripcion`) | **listo** |
+| API HTTP | `consola/src/keni_consola/api/video.py` | **listo** (declarado en `apps/produccion.toml`) |
+| UI Estudio de Video | `consola/frontend/src/pages/EstudioVideo.tsx` | **listo** |
 | Presets + validador | `keni-shared/src/keni_shared/video.py` | **listo** |
 | Tablas + CRUD | `db.py` / `repos.py` | **listo** |
 | Seam job genérico | `dominio/jobspec.py` + `generaciones.py` + `worker.py` | **listo** |
@@ -184,7 +185,7 @@ Debe: extraer audio con ffmpeg (wav 16 kHz mono), transcribir con faster-whisper
 
 ---
 
-## 5. Superficie API (`api/video.py`, a crear por el agente de API)
+## 5. Superficie API (`api/video.py`)
 
 Sugerida (el agente la concreta; debe usar `repos.*` y `encolar_job_proceso`):
 - `POST /api/video/composiciones` → crea (valida con `keni_shared.video.validar_composicion`).
