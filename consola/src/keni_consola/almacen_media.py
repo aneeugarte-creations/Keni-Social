@@ -49,7 +49,9 @@ CATEGORIAS: frozenset[str] = frozenset(
         "render",       # composites horneados / cache de render (reciclable, regenerable)
         "plantillas",   # assets del editor de plantillas + miniaturas (reusable)
         "logos",        # activos de marca: logos, tipografias, plecas (reusable)
-        "texto",   # artes catalogadas para reutilizar (reusable)
+        "artes",        # artes catalogadas (galeria) para reutilizar (reusable)
+        "texto",        # LEGADO: artes catalogadas antes de renombrar la carpeta a `artes/`;
+                        # se mantiene SOLO para poder leer/servir objetos ya promovidos a `texto/`.
     }
 )
 
