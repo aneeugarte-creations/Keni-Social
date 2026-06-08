@@ -37,7 +37,6 @@ import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
 import { elegibilidadOK } from "./aprobacion";
-import { BadgeFormato } from "./BadgeFormato";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
 import { BadgeEtapa } from "./TarjetaEtapa";
@@ -283,9 +282,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       aria-label="Abrir para editar"
       className="cursor-pointer rounded-xl border border-border bg-background text-left shadow-sm transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · marca · tiempo. La RED ya va como label sobre la
-          imagen (VistaPreviaRed limpia) y la etapa baja a la fila de acciones, así que aquí NO se
-          repiten ni la red ni el formato. */}
+      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · tiempo. La MARCA y el FORMATO ya van en el
+          titular del grupo (cabecera de la idea), la RED como distintivo sobre la imagen y el
+          formato como icono sobre la imagen (lado opuesto a la red), así que aquí NO se repiten. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         {generadaPorIA ? (
           <span
@@ -296,13 +295,12 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             IA
           </span>
         ) : (
-          <Autor nombre={publicacion.autor_nombre} className="text-xs font-medium text-foreground" />
+          <Autor
+            nombre={publicacion.autor_nombre}
+            conPrefijo={false}
+            className="text-xs font-medium text-foreground"
+          />
         )}
-        <span>·</span>
-        <span>{publicacion.marca_nombre}</span>
-        {/* Badge EXPLÍCITO del formato: "Foto" (3 redes) / "Video" (5). El flujo automático crea
-            piezas FOTO, así que el humano ve de un vistazo de qué tipo de post se trata. */}
-        <BadgeFormato formato={publicacion.formato} className="shrink-0" />
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}
@@ -318,6 +316,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         contenido={cuerpo}
         copy_in={publicacion.copy_in}
         imagen_url={imagen || undefined}
+        formato={publicacion.formato}
         variante="limpia"
       />
 

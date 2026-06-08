@@ -35,4 +35,16 @@ describe("Autor", () => {
     const { container } = render(<Autor nombre="" />);
     expect(container.textContent).toContain(`por ${AUTOR_DESCONOCIDO}`);
   });
+
+  it("sin prefijo (conPrefijo=false) muestra solo el nombre, sin 'por' (p. ej. el feed)", () => {
+    const { container } = render(<Autor nombre="ane" conPrefijo={false} />);
+    expect(container.textContent).toContain("ane");
+    expect(container.textContent).not.toContain("por");
+  });
+
+  it("sin prefijo y sin autor cae a 'desconocido' (sin 'por')", () => {
+    const { container } = render(<Autor nombre="" conPrefijo={false} />);
+    expect(container.textContent).toContain(AUTOR_DESCONOCIDO);
+    expect(container.textContent).not.toContain("por");
+  });
 });

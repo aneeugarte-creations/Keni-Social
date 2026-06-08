@@ -13,6 +13,7 @@
  */
 import {
   Bookmark,
+  Camera,
   Heart,
   ImageIcon,
   MessageCircle,
@@ -23,6 +24,7 @@ import {
   Send,
   Share2,
   ThumbsUp,
+  Video,
 } from "lucide-react";
 import * as React from "react";
 
@@ -39,6 +41,12 @@ export interface VistaPreviaRedProps {
   copy_in?: string;
   /** Nombre del archivo o URL de la imagen; vacío = sin imagen. */
   imagen_url?: string;
+  /**
+   * Formato de la pieza (`foto`|`video`; "" -> foto). En la variante `"limpia"` se muestra como
+   * un icono sobre la imagen (cámara/vídeo), en el lado opuesto al distintivo de la red. Sin
+   * valor, no se pinta el icono.
+   */
+  formato?: string | null;
   /**
    * `"completa"` (default): mockup fiel con su chrome social (como en "Generar copy" y el
    * diálogo de edición). `"limpia"`: feed de trabajo — conserva el logo/marca, el copy real
@@ -387,10 +395,15 @@ export function VistaPreviaRed({
   contenido,
   copy_in,
   imagen_url,
+  formato,
   variante = "completa",
 }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
   const Icono = iconoRed(red);
+  // Icono de formato sobre la imagen (solo si se pasa `formato`): vídeo o cámara (foto, el default).
+  const tieneFormato = formato != null && formato !== "";
+  const esVideo = (formato ?? "").trim().toLowerCase() === "video";
+  const IconoFormato = esVideo ? Video : Camera;
 
   // FEED (variante limpia): tarjeta UNIFORME para TODAS las redes — misma caja, imagen a
   // 4:5 a ancho completo y un distintivo de plataforma (icono + nombre) sobre la imagen.
@@ -412,6 +425,16 @@ export function VistaPreviaRed({
             <Icono className="h-3.5 w-3.5" aria-hidden="true" />
             {nombreRed(red)}
           </span>
+          {/* Formato (foto/vídeo) como icono, a la altura del distintivo de la red pero en el lado
+              opuesto: el icono basta, sin texto. */}
+          {tieneFormato && (
+            <span
+              className="absolute right-2.5 top-2.5 inline-flex items-center rounded-full bg-black/65 p-1.5 text-white backdrop-blur-sm"
+              title={esVideo ? "Video" : "Foto"}
+            >
+              <IconoFormato className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+          )}
         </div>
         {/* Copy (caption) bajo la imagen, idéntico para toda red. */}
         <div className="px-4 py-3">

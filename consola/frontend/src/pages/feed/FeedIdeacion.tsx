@@ -52,7 +52,9 @@ import { PostFeed } from "./PostFeed";
 //  - Zoom (60%-140%): escala cada caja ENTERA del feed (imagen + texto a la vez, vía `FeedZoom`),
 //    en cualquier pantalla y por encima de las columnas (ampliar sin tocar el nº de posts por fila).
 const COLUMNAS_MIN = 1;
-const COLUMNAS_MAX = 4;
+// Hasta 5 columnas: una pieza VIDEO va a las 5 redes, así que en "Todas las redes" se puede ver
+// la idea entera (sus 5 redes) en UNA fila.
+const COLUMNAS_MAX = 5;
 const ESCALA_MIN = 0.6;
 const ESCALA_MAX = 1.4;
 // Clases estáticas (Tailwind las detecta) por nº de columnas. Sin prefijo: aplican en TODOS los
@@ -62,6 +64,7 @@ const GRID_COLS: Record<number, string> = {
   2: "grid-cols-2",
   3: "grid-cols-3",
   4: "grid-cols-4",
+  5: "grid-cols-5",
 };
 
 /**

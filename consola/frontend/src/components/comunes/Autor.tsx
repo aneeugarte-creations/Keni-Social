@@ -13,23 +13,27 @@ import { User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import { etiquetaAutor } from "./atribucion";
+import { AUTOR_DESCONOCIDO, etiquetaAutor } from "./atribucion";
 
 export function Autor({
   nombre,
   className,
+  conPrefijo = true,
 }: {
   /** Nombre del autor (`autor_nombre`). "" / undefined => "desconocido". */
   nombre: string | null | undefined;
   className?: string;
+  /** `true` (def.): "por <usuario>". `false`: solo el nombre (sin el "por", p. ej. en el feed). */
+  conPrefijo?: boolean;
 }) {
+  const etiqueta = conPrefijo ? etiquetaAutor(nombre) : (nombre ?? "").trim() || AUTOR_DESCONOCIDO;
   return (
     <span
       className={cn("inline-flex items-center gap-1 text-muted-foreground", className)}
       title="Quién creó este registro"
     >
       <User className="h-3.5 w-3.5" />
-      {etiquetaAutor(nombre)}
+      {etiqueta}
     </span>
   );
 }
