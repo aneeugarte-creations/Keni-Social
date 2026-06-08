@@ -29,7 +29,7 @@ import { apiMetricool } from "./metricool";
 import { apiFranjas } from "./franjas";
 import { apiContenido } from "./contenido";
 import { apiEtiquetas } from "./etiquetas";
-import { apiGreen } from "./green";
+import { apiEvergreen } from "./evergreen";
 import { apiWebhooks } from "./webhooks";
 import { apiColaboracion } from "./colaboracion";
 import { apiRota } from "./rota";
@@ -74,7 +74,7 @@ export const api = {
   ...apiFranjas,
   ...apiContenido,
   ...apiEtiquetas,
-  ...apiGreen,
+  ...apiEvergreen,
   ...apiWebhooks,
   ...apiColaboracion,
   ...apiRota,

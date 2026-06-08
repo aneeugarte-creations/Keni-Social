@@ -86,9 +86,9 @@ _TABLAS = (
     "noticias_clusters",
     # Sugerencias editoriales generadas por el job diario.
     "sugerencias_editoriales",
-    # Taller Green: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,
+    # Taller Evergreen: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,
     # las ideas se acumulan entre tests del mismo worker y rompen el aislamiento.
-    "green_ideas",
+    "evergreen_ideas",
     # Insumos del día (cajones): ítems antes que lotes. Sin esto, los ítems se acumulan entre
     # tests del mismo worker (misma fecha+cajón) y rompen el aislamiento del listado por día.
     "insumos_item",

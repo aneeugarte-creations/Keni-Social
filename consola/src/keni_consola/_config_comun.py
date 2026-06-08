@@ -251,7 +251,7 @@ ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 
 # Auto-feed (Ola E): pool único -> dedup -> feed automático. Un hilo demonio que, cada N
 # minutos y por marca activa, toma las HISTORIAS (clusters) relevantes del pool (score >=
-# umbral), descarta las caducas para líneas no-green, respeta un TOPE DIARIO POR MARCA y crea
+# umbral), descarta las caducas para líneas no-evergreen, respeta un TOPE DIARIO POR MARCA y crea
 # en el feed una pieza borrador con copy+QA encolados (1 agente, mismo camino que el botón
 # manual). NUNCA publica (todo cae en el feed para imagen + aprobación humana). CONSERVADOR por
 # defecto (OFF): sin `KENI_AUTOFEED` nada fluye solo. El tope por marca admite override por-marca

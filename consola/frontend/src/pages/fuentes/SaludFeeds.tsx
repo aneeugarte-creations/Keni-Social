@@ -106,7 +106,7 @@ export function SaludFeeds() {
     if (feed.errores_seguidos > 0) {
       return { label: "Con error", className: "border-amber-400 text-amber-600" };
     }
-    return { label: "Activo", className: "border-green-500 text-green-700" };
+    return { label: "Activo", className: "border-evergreen-500 text-evergreen-700" };
   }
 
   return (
@@ -114,7 +114,7 @@ export function SaludFeeds() {
       {/* Chips de resumen */}
       {resumen && (
         <div className="flex flex-wrap items-center gap-2" data-testid="salud-resumen">
-          <Badge variant="outline" className="gap-1 text-xs border-green-500 text-green-700">
+          <Badge variant="outline" className="gap-1 text-xs border-evergreen-500 text-evergreen-700">
             <Radio className="h-3 w-3" />
             {resumen.activos} activo{resumen.activos !== 1 ? "s" : ""}
           </Badge>

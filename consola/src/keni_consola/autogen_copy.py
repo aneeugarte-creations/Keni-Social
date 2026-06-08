@@ -96,7 +96,7 @@ def ids_ya_generados() -> set[str]:
 def _etiquetas_por_item() -> dict[str, list[str]]:
     """id de contenido -> NOMBRES de etiqueta resueltos (para el score). Best-effort: {}.
 
-    `priorizacion.score_contenido` resuelve compromiso/green por NOMBRE de etiqueta, asi que
+    `priorizacion.score_contenido` resuelve compromiso/evergreen por NOMBRE de etiqueta, asi que
     traducimos los ids a nombres. Un fallo de lectura deja el mapa vacio (el score cae a sus
     pesos base: prioridad/flujo/fecha/frescura), nunca rompe el barrido.
     """

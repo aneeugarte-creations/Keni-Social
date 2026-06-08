@@ -1,4 +1,4 @@
-"""Taller GREEN / brainstorming: lanzar la PROPUESTA de ideas evergreen + su post-procesado.
+"""Taller EVERGREEN / brainstorming: lanzar la PROPUESTA de ideas evergreen + su post-procesado.
 
 CONCEPTO: la IA NO genera contenido evergreen a ciegas. PROPONE una lista de IDEAS; una
 persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
@@ -7,13 +7,13 @@ persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
   - `parsear_ideas`: dominio PURO. Saca las ideas del `{"ideas":[{"titulo","descripcion"}]}`
     que devuelve `claude -p` (tolera bloques ```json cercados y razonamiento alrededor), las
     sanea (titulo obligatorio, recortes, sin duplicados por titulo) y las devuelve como dicts.
-  - `lanzar_propuesta`: compone el prompt (semilla `brainstorming-green` + editorial de marca +
+  - `lanzar_propuesta`: compone el prompt (semilla `brainstorming-evergreen` + editorial de marca +
     contexto opcional) y ENCOLA el job con el lanzador NEUTRO (`generar.lanzar`).
-  - `construir_procesar_green_ideas`: el callback que corre en el WORKER al terminar: parsea la
-    salida y crea las filas `green_ideas` (estado `propuesta`, origen `ia`), enlazadas al
+  - `construir_procesar_evergreen_ideas`: el callback que corre en el WORKER al terminar: parsea la
+    salida y crea las filas `evergreen_ideas` (estado `propuesta`, origen `ia`), enlazadas al
     `generacion_id` del lote para trazabilidad.
 
-La generacion de la PIEZA de una idea aprobada NO vive aqui: la dispara `api/green` con el
+La generacion de la PIEZA de una idea aprobada NO vive aqui: la dispara `api/evergreen` con el
 lanzador de copy existente (`generar.lanzar_copy`, `flujo='evergreen'`).
 """
 
@@ -25,13 +25,13 @@ import re
 from typing import Any
 
 from .. import biblioteca, repos
-from ..estados import ESTADO_GREEN_PROPUESTA
+from ..estados import ESTADO_EVERGREEN_PROPUESTA
 from . import generar
 
-_log = logging.getLogger("keni_consola.green")
+_log = logging.getLogger("keni_consola.evergreen")
 
 # Prompt semilla que pide N ideas evergreen como JSON. Viaja en la biblioteca semilla.
-PROMPT_BRAINSTORMING = "prompt/brainstorming-green"
+PROMPT_BRAINSTORMING = "prompt/brainstorming-evergreen"
 
 # Topes defensivos: cuantas ideas importamos de una salida y longitudes maximas por campo.
 MAX_IDEAS = 10
@@ -118,46 +118,46 @@ def lanzar_propuesta(
 ) -> dict[str, Any]:
     """Compone el prompt de brainstorming y ENCOLA el job que PROPONE ideas evergreen.
 
-    El post-procesado (crear las filas `green_ideas`) corre en el worker via el spec
-    `PROC_GREEN_IDEAS`. Devuelve el registro de generacion (para sondeo). `contexto` (opcional)
+    El post-procesado (crear las filas `evergreen_ideas`) corre en el worker via el spec
+    `PROC_EVERGREEN_IDEAS`. Devuelve el registro de generacion (para sondeo). `contexto` (opcional)
     es material del usuario (tono, temas a evitar, etc.) que se adjunta envuelto y anti-inyeccion.
 
-    NOTA: el `generacion_id` que se enlaza en cada fila `green_ideas` queda "" en este camino:
+    NOTA: el `generacion_id` que se enlaza en cada fila `evergreen_ideas` queda "" en este camino:
     el id real lo crea `generar.lanzar` DESPUES de construir el spec, y el worker reconstruye el
     `procesar` solo desde el spec (no recibe el id). Es un enlace de trazabilidad opcional; las
     ideas se crean igual. Wirearlo requeriria que el worker inyecte el gen_id al `procesar`.
     """
-    cuerpo = biblioteca.cuerpo_efectivo(biblioteca.prompt_base_de("green"))
+    cuerpo = biblioteca.cuerpo_efectivo(biblioteca.prompt_base_de("evergreen"))
     if cuerpo is None:
         raise biblioteca.BibliotecaError(
             "No está disponible el prompt de brainstorming. Reinstala la Consola."
         )
     prompt = generar.componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca, pipeline="green"), contexto, sin_emojis=True
+        cuerpo, biblioteca.editoriales_de_marca(marca, pipeline="evergreen"), contexto, sin_emojis=True
     )
     # Import perezoso del jobspec para no acoplar; el spec NO lleva la generacion_id real (la
     # crea `generar.lanzar`), pero el worker la inyecta al reconstruir el procesar.
     from . import jobspec
 
-    procesar_spec = jobspec.construir_green_ideas(marca=marca, autor=autor)
+    procesar_spec = jobspec.construir_evergreen_ideas(marca=marca, autor=autor)
     return generar.lanzar(
-        tipo="green-ideas",
+        tipo="evergreen-ideas",
         titulo="Ideas evergreen",
         marca=marca,
         prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec,
         autor=autor,
-        # Brainstorming = SALIDA ESTRUCTURADA (se parsea a filas `green_ideas`; el usuario no ve
+        # Brainstorming = SALIDA ESTRUCTURADA (se parsea a filas `evergreen_ideas`; el usuario no ve
         # la salida cruda): bajo riesgo de exfiltración por el canal de salida. No se veta la web
         # por-callsite; queda la veta global `Bash Write Edit`.
     )
 
 
-def construir_procesar_green_ideas(*, marca: str, generacion_id: str = ""):  # noqa: ANN201
-    """Devuelve el callback `procesar(salida, metricas) -> dict` del taller GREEN (worker).
+def construir_procesar_evergreen_ideas(*, marca: str, generacion_id: str = ""):  # noqa: ANN201
+    """Devuelve el callback `procesar(salida, metricas) -> dict` del taller EVERGREEN (worker).
 
-    Parsea la salida de claude y crea una fila `green_ideas` por cada idea (estado `propuesta`,
+    Parsea la salida de claude y crea una fila `evergreen_ideas` por cada idea (estado `propuesta`,
     origen `ia`, enlazada a `generacion_id`). Devuelve un resumen `{ideas, ids}` para el registro.
     Si no hay ideas legibles, no crea nada (no es un error duro: el equipo puede reintentar).
     """
@@ -166,17 +166,17 @@ def construir_procesar_green_ideas(*, marca: str, generacion_id: str = ""):  # n
         ideas = parsear_ideas(salida or "")
         ids: list[str] = []
         for idea in ideas:
-            fila = repos.crear_green_idea(
+            fila = repos.crear_evergreen_idea(
                 marca=marca,
                 titulo=idea["titulo"],
                 descripcion=idea["descripcion"],
-                estado=ESTADO_GREEN_PROPUESTA,
+                estado=ESTADO_EVERGREEN_PROPUESTA,
                 origen="ia",
                 generacion_id=generacion_id,
             )
             ids.append(fila["id"])
         if not ids:
-            _log.info("taller green: claude no devolvió ideas legibles (marca=%s)", marca)
+            _log.info("taller evergreen: claude no devolvió ideas legibles (marca=%s)", marca)
         return {"ideas": len(ids), "ids": ids}
 
     return procesar
@@ -184,7 +184,7 @@ def construir_procesar_green_ideas(*, marca: str, generacion_id: str = ""):  # n
 
 __all__ = [
     "PROMPT_BRAINSTORMING",
-    "construir_procesar_green_ideas",
+    "construir_procesar_evergreen_ideas",
     "lanzar_propuesta",
     "parsear_ideas",
 ]

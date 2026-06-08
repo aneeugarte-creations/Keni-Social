@@ -6,7 +6,7 @@ Todas las notas (cajones del equipo, investigación, feeds RSS) caen al MISMO po
 (`noticias_items`) y el clustering las deduplica en HISTORIAS (`noticias_clusters`). Hasta
 ahora, llevar una historia al feed era MANUAL (botón "usar/empujar"). Este daemon (espejo de
 `pipeline_contenido` / `autogen_copy`) lo automatiza: cada N minutos y POR MARCA, toma las
-historias RELEVANTES del pool (score >= umbral), descarta las caducas para líneas no-green,
+historias RELEVANTES del pool (score >= umbral), descarta las caducas para líneas no-evergreen,
 respeta un TOPE DIARIO POR MARCA, y por cada una crea la pieza del feed (borrador) y encola su
 copy+QA por el MISMO camino de 1 agente que el botón manual (`autogen_copy.lanzar_para_topic`).
 El borrador cae en el feed para imagen + aprobación humana.
@@ -19,7 +19,7 @@ SEGURO POR DISEÑO (CONSERVADOR)
   - TOPE DIARIO POR MARCA (`KENI_AUTOFEED_CAP`, def 20; override `::marca`): resta lo ya
     draftado HOY (`origen='autofeed'`) y toma hasta el cupo restante. Evita avalanchas.
   - UMBRAL DE RELEVANCIA (`KENI_AUTOFEED_UMBRAL`, def 0.5): solo historias por encima entran.
-  - FRESCURA: descarta historias caducas para líneas no-green (reusa `dominio/frescura`).
+  - FRESCURA: descarta historias caducas para líneas no-evergreen (reusa `dominio/frescura`).
   - DEDUP: solo clusters `estado='nuevo'` y sin `contenido_id`; tras draftar se marca el
     cluster `estado='usado'` + `contenido_id` (no se re-draftan). Idempotente.
   - NO PUBLICA: el borrador nace en el feed; la publicación real sigue gated por
@@ -74,8 +74,8 @@ def historias_para_feed(
       - estado 'nuevo' (no usadas/descartadas),
       - SIN `contenido_id` (no ya draftadas: dedup),
       - `score >= umbral` (relevancia),
-      - FRESCA según `es_fresca(cluster)` si se pasa (líneas no-green caducas se descartan;
-        green nunca caduca). Sin `es_fresca`, no se filtra por frescura.
+      - FRESCA según `es_fresca(cluster)` si se pasa (líneas no-evergreen caducas se descartan;
+        evergreen nunca caduca). Sin `es_fresca`, no se filtra por frescura.
       - se RECORTA a `cupo` (tope diario por marca menos lo ya draftado hoy).
 
     Conserva el orden de entrada (el listado ya viene por score desc). Determinista: depende
@@ -105,7 +105,7 @@ def cupo_restante(cap: int, ya_hoy: int) -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Frescura (I/O: resuelve línea → TTL/green; envuelve la lógica pura)          #
+# Frescura (I/O: resuelve línea → TTL/evergreen; envuelve la lógica pura)          #
 # --------------------------------------------------------------------------- #
 
 
@@ -113,7 +113,7 @@ def _es_fresca(cluster: dict[str, Any], *, hoy: str) -> bool:
     """True si la historia está FRESCA para su línea (best-effort; reusa `dominio/frescura`).
 
     La línea de la historia es su `categoria` (el pool guarda la línea editorial ahí). La fecha
-    del ítem es su `ultimo_visto` (o `primer_visto`), recortada a día. Resuelve (ttl, green) de
+    del ítem es su `ultimo_visto` (o `primer_visto`), recortada a día. Resuelve (ttl, evergreen) de
     la línea en la marca de la historia y aplica `estado_frescura`. Ante cualquier fallo (línea
     desconocida, BD ilegible) → True (nunca ocultar por dato malo / no romper el barrido).
     """
@@ -122,8 +122,8 @@ def _es_fresca(cluster: dict[str, Any], *, hoy: str) -> bool:
         return True  # sin línea no hay TTL aplicable: se considera fresca (evergreen por defecto)
     fecha = (cluster.get("ultimo_visto") or cluster.get("primer_visto") or "").strip()[:10]
     try:
-        ttl, green = frescura.resolver_linea(linea, cluster.get("marca") or "")
-        return frescura.estado_frescura(fecha, ttl, green, hoy=hoy) == "fresco"
+        ttl, evergreen = frescura.resolver_linea(linea, cluster.get("marca") or "")
+        return frescura.estado_frescura(fecha, ttl, evergreen, hoy=hoy) == "fresco"
     except Exception:  # noqa: BLE001 -- la frescura es un filtro; un fallo no descarta ni rompe
         _log.warning("autofeed: no se pudo resolver la frescura de un cluster", exc_info=True)
         return True

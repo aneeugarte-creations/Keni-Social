@@ -1,5 +1,5 @@
 ---
-titulo: "Brainstorming evergreen (green)"
+titulo: "Brainstorming evergreen (evergreen)"
 tipo: prompt
 carpeta: ""
 creado: 2026-06-02T00:00:00+00:00

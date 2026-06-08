@@ -11,7 +11,7 @@
 
 Frescura (TTL) por línea editorial:
 - `ttl_dias=0` significa sin caducidad / evergreen.
-- `es_green=True` marca líneas evergreen reutilizables en fines de semana.
+- `es_evergreen=True` marca líneas evergreen reutilizables en fines de semana.
 - Los valores por defecto se aplican SOLO al crear la etiqueta (nunca sobreescriben
   ediciones del equipo). Para UnoTV se aplica además una actualización guarded de
   backfill que solo toca filas que aún estén en los defaults (0/0).
@@ -30,9 +30,9 @@ from .dominio import fuentes_presets
 _log = logging.getLogger(__name__)
 
 # Líneas (clase 'vertical') por marca. SOLO las reales dadas por el equipo. El resto vacío.
-# Formato: (nombre, ttl_dias, es_green)
+# Formato: (nombre, ttl_dias, es_evergreen)
 #   ttl_dias=0 -> sin caducidad
-#   es_green=True -> evergreen, reutilizable en fines de semana
+#   es_evergreen=True -> evergreen, reutilizable en fines de semana
 LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool]]] = {
     "unotv": [
         ("Virales",                   2,  False),
@@ -93,7 +93,7 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool]]] = {
 ORIGENES_GLOBALES: list[str] = ["Interno", "Externo"]
 
 
-def _crear_si_falta(*, nombre: str, clase: str, marca: str, ttl_dias: int = 0, es_green: bool = False) -> bool:
+def _crear_si_falta(*, nombre: str, clase: str, marca: str, ttl_dias: int = 0, es_evergreen: bool = False) -> bool:
     """Crea la etiqueta (sin keywords) si no existe (nombre+clase+marca). True si la creó."""
     if repos.existe_etiqueta_nombre(nombre, clase, marca):
         return False
@@ -103,23 +103,23 @@ def _crear_si_falta(*, nombre: str, clase: str, marca: str, ttl_dias: int = 0, e
         marca=marca,
         keywords="",
         ttl_dias=ttl_dias,
-        es_green=es_green,
+        es_evergreen=es_evergreen,
     )
     return True
 
 
-def _backfill_ttl_si_defaults(*, nombre: str, clase: str, marca: str, ttl_dias: int, es_green: bool) -> bool:
-    """Actualiza ttl_dias/es_green en una línea existente SOLO si aún está en defaults (0/False).
+def _backfill_ttl_si_defaults(*, nombre: str, clase: str, marca: str, ttl_dias: int, es_evergreen: bool) -> bool:
+    """Actualiza ttl_dias/es_evergreen en una línea existente SOLO si aún está en defaults (0/False).
 
     Guarded: nunca sobreescribe si el equipo ya editó los valores. True si actualizó.
     """
     et = repos.obtener_etiqueta_por_nombre(nombre, clase, marca)
     if et is None:
         return False
-    if et.get("ttl_dias", 0) == 0 and not et.get("es_green", False):
+    if et.get("ttl_dias", 0) == 0 and not et.get("es_evergreen", False):
         # Solo backfill si los valores objetivo son no-default (evita writes inútiles)
-        if ttl_dias != 0 or es_green:
-            repos.actualizar_etiqueta(et["id"], {"ttl_dias": ttl_dias, "es_green": es_green})
+        if ttl_dias != 0 or es_evergreen:
+            repos.actualizar_etiqueta(et["id"], {"ttl_dias": ttl_dias, "es_evergreen": es_evergreen})
             return True
     return False
 
@@ -133,15 +133,15 @@ def sembrar_lineas() -> int:
     creadas = 0
     actualizadas = 0
     for marca, lineas in LINEAS_POR_MARCA.items():
-        for nombre, ttl_dias, es_green in lineas:
+        for nombre, ttl_dias, es_evergreen in lineas:
             try:
-                if _crear_si_falta(nombre=nombre, clase="vertical", marca=marca, ttl_dias=ttl_dias, es_green=es_green):
+                if _crear_si_falta(nombre=nombre, clase="vertical", marca=marca, ttl_dias=ttl_dias, es_evergreen=es_evergreen):
                     creadas += 1
                 else:
                     # Línea ya existe: backfill guarded (solo si aún en defaults)
                     if _backfill_ttl_si_defaults(
                         nombre=nombre, clase="vertical", marca=marca,
-                        ttl_dias=ttl_dias, es_green=es_green,
+                        ttl_dias=ttl_dias, es_evergreen=es_evergreen,
                     ):
                         actualizadas += 1
             except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto

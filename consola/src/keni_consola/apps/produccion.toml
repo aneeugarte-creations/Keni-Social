@@ -32,7 +32,7 @@ modulos_backend = [
   "bloques",
   "imagen",
   "generaciones",
-  "green",
+  "evergreen",
   "hashtags",
   "historial",
   "imagenes",

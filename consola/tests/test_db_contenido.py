@@ -52,7 +52,7 @@ def test_crear_tarea_libre(entorno):
 
 def test_listar_contenido_filtra_y_ordena_por_prioridad(entorno):
     """Filtra por flujo y ordena prioridad alta primero."""
-    db.crear_contenido(flujo="evergreen", titulo="Evergreen", prioridad="baja")
+    db.crear_contenido(flujo="evergreen", titulo="Everevergreen", prioridad="baja")
     db.crear_contenido(flujo="importante", titulo="Media", prioridad="media")
     db.crear_contenido(flujo="importante", titulo="Alta", prioridad="alta")
 

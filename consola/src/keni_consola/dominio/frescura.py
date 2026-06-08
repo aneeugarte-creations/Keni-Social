@@ -4,7 +4,7 @@ Módulo PURO (sin dependencias de BD en las funciones de lógica); las funciones
 resolución de línea sí tocan `repos` pero están claramente separadas.
 
 Regla de negocio:
-- Una línea con `es_green=True` o `ttl_dias <= 0` NUNCA caduca → "fresco".
+- Una línea con `es_evergreen=True` o `ttl_dias <= 0` NUNCA caduca → "fresco".
 - En cualquier otro caso, un ítem está "fresco" mientras `hoy - fecha_item <= ttl_dias`.
 - Fechas vacías o malformadas → "fresco" (nunca ocultar por dato malo).
 """
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 def estado_frescura(
     fecha_item: str,
     ttl_dias: int,
-    es_green: bool,
+    es_evergreen: bool,
     *,
     hoy: str,
 ) -> str:
@@ -38,7 +38,7 @@ def estado_frescura(
         Fecha editorial del ítem (ISO YYYY-MM-DD). Vacía o inválida → "fresco".
     ttl_dias : int
         Días de vida de la línea. 0 (o negativo) = sin caducidad / evergreen.
-    es_green : bool
+    es_evergreen : bool
         True = línea evergreen reutilizable en fines de semana; nunca caduca.
     hoy : str
         Fecha de referencia ISO YYYY-MM-DD (normalmente el día del servidor).
@@ -47,8 +47,8 @@ def estado_frescura(
     -------
     "fresco" | "caduco"
     """
-    # Evergreen: nunca caduca independientemente de la fecha.
-    if es_green or ttl_dias <= 0:
+    # Everevergreen: nunca caduca independientemente de la fecha.
+    if es_evergreen or ttl_dias <= 0:
         return "fresco"
 
     # Fecha inválida o vacía → tratamos como "fresco" (nunca ocultar por dato malo).
@@ -69,12 +69,12 @@ def estado_frescura(
 
 
 # --------------------------------------------------------------------------- #
-# Resolución de línea → (ttl_dias, es_green) desde la BD                     #
+# Resolución de línea → (ttl_dias, es_evergreen) desde la BD                     #
 # --------------------------------------------------------------------------- #
 
 
 def resolver_linea(nombre_linea: str, marca: str) -> tuple[int, bool]:
-    """Devuelve (ttl_dias, es_green) para la línea indicada en la marca dada.
+    """Devuelve (ttl_dias, es_evergreen) para la línea indicada en la marca dada.
 
     Busca en `etiquetas` clase='vertical' por nombre case-insensitive.
     Si no encuentra la línea devuelve (0, False) = evergreen por defecto
@@ -87,4 +87,4 @@ def resolver_linea(nombre_linea: str, marca: str) -> tuple[int, bool]:
     et = repos.obtener_etiqueta_por_nombre(nombre_linea, "vertical", marca)
     if et is None:
         return (0, False)
-    return (int(et.get("ttl_dias") or 0), bool(et.get("es_green", False)))
+    return (int(et.get("ttl_dias") or 0), bool(et.get("es_evergreen", False)))

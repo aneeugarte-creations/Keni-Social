@@ -108,9 +108,9 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 TIPOS = (
     "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
     "parrilla-import", "insumos", "investigacion", "import-calendario",
-    # Taller GREEN / brainstorming: `green-ideas` = la PROPUESTA de ideas evergreen (IA);
-    # `green` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
-    "green-ideas", "green",
+    # Taller EVERGREEN / brainstorming: `evergreen-ideas` = la PROPUESTA de ideas evergreen (IA);
+    # `evergreen` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
+    "evergreen-ideas", "evergreen",
     # Jobs de PROCESO (no-claude) del motor de video (Ola VIDEO): render con ffmpeg y
     # transcripcion ASR. Se cuelgan de Actividad IA igual que el resto de generaciones.
     "render-video", "transcribir",

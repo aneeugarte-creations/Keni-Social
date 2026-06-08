@@ -75,14 +75,14 @@ def _item_a_dict(item: dict[str, Any], hoy: str | None = None) -> dict[str, Any]
     fecha del día en el servidor. La frescura se resuelve por la línea+marca del ítem.
     """
     _hoy = hoy or date.today().isoformat()
-    ttl_dias, es_green = resolver_linea(
+    ttl_dias, es_evergreen = resolver_linea(
         item.get("linea") or "",
         item.get("marca") or "",
     )
     frescura = estado_frescura(
         item.get("fecha") or "",
         ttl_dias,
-        es_green,
+        es_evergreen,
         hoy=_hoy,
     )
     return {

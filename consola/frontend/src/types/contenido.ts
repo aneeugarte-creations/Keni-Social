@@ -106,7 +106,7 @@ export interface Etiqueta {
   /** Días que un ítem de esta línea se considera fresco. 0 = sin caducidad / evergreen. */
   ttl_dias: number;
   /** True = línea evergreen reutilizable en fines de semana; nunca caduca. */
-  es_green: boolean;
+  es_evergreen: boolean;
 }
 
 /** Forma reducida de una etiqueta en los catálogos del tablero (chips/selector). */
@@ -134,7 +134,7 @@ export interface CuerpoCrearEtiqueta {
   /** Días de vida del ítem (0 = sin caducidad / evergreen). */
   ttl_dias?: number;
   /** True = línea evergreen, nunca caduca. */
-  es_green?: boolean;
+  es_evergreen?: boolean;
 }
 
 export interface CuerpoActualizarEtiqueta {
@@ -147,25 +147,25 @@ export interface CuerpoActualizarEtiqueta {
   /** Días de vida del ítem (0 = sin caducidad / evergreen). */
   ttl_dias?: number;
   /** True = línea evergreen, nunca caduca. */
-  es_green?: boolean;
+  es_evergreen?: boolean;
 }
 
 export interface RespuestaEtiqueta {
   etiqueta: Etiqueta;
 }
 
-// --- Green: ideas de contenido evergreen (perenne) ---------------------------
+// --- Evergreen: ideas de contenido evergreen (perenne) ---------------------------
 
-/** Estado de una idea Green: propuesta → aprobada / descartada. */
-export type EstadoIdeaGreen = "propuesta" | "aprobada" | "descartada" | string;
+/** Estado de una idea Evergreen: propuesta → aprobada / descartada. */
+export type EstadoIdeaEvergreen = "propuesta" | "aprobada" | "descartada" | string;
 
 /** Una idea de contenido evergreen (banco de ideas perennes por marca). */
-export interface IdeaGreen {
+export interface IdeaEvergreen {
   id: string;
   marca: string;
   titulo: string;
   descripcion: string;
-  estado: EstadoIdeaGreen;
+  estado: EstadoIdeaEvergreen;
   /** De dónde salió la idea (p. ej. "ia" cuando la propuso el asistente, "manual"). */
   origen: string;
   /** Id del contenido generado a partir de la idea (vacío si aún no se generó). */
@@ -173,35 +173,35 @@ export interface IdeaGreen {
   creado: string;
 }
 
-export interface RespuestaIdeasGreen {
-  ideas: IdeaGreen[];
-  estados: EstadoIdeaGreen[];
+export interface RespuestaIdeasEvergreen {
+  ideas: IdeaEvergreen[];
+  estados: EstadoIdeaEvergreen[];
   marcas: { id: string; nombre: string }[];
 }
 
-export interface CuerpoCrearIdeaGreen {
+export interface CuerpoCrearIdeaEvergreen {
   marca: string;
   titulo: string;
   descripcion?: string;
 }
 
-export interface CuerpoActualizarIdeaGreen {
-  estado?: EstadoIdeaGreen;
+export interface CuerpoActualizarIdeaEvergreen {
+  estado?: EstadoIdeaEvergreen;
   titulo?: string;
   descripcion?: string;
 }
 
-export interface CuerpoProponerGreen {
+export interface CuerpoProponerEvergreen {
   marca: string;
   contexto?: string;
 }
 
-export interface CuerpoGenerarIdeaGreen {
+export interface CuerpoGenerarIdeaEvergreen {
   redes?: string[];
 }
 
-export interface RespuestaIdeaGreen {
-  idea: IdeaGreen;
+export interface RespuestaIdeaEvergreen {
+  idea: IdeaEvergreen;
 }
 
 // --- Métrica por línea (vertical) y por origen -------------------------------

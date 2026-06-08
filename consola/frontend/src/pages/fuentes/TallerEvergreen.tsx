@@ -1,12 +1,12 @@
 /**
- * Taller GREEN: banco de ideas de contenido evergreen (perenne) por marca.
+ * Taller EVERGREEN: banco de ideas de contenido evergreen (perenne) por marca.
  *
  * Dos bloques:
- *   1. "Proponer ideas": elige marca + contexto opcional y lanza la IA (`/green/proponer`),
+ *   1. "Proponer ideas": elige marca + contexto opcional y lanza la IA (`/evergreen/proponer`),
  *      que propone ideas en segundo plano. Se sigue con `useGeneracion` (igual que el resto
  *      de generaciones de la consola) y al terminar se refresca la lista.
  *   2. Lista de ideas con filtro por estado y acciones: Aprobar / Descartar y, cuando una
- *      idea está aprobada, Generar la pieza evergreen (`/green/ideas/{id}/generar`).
+ *      idea está aprobada, Generar la pieza evergreen (`/evergreen/ideas/{id}/generar`).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -48,13 +48,13 @@ import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
-  EstadoIdeaGreen,
-  IdeaGreen,
+  EstadoIdeaEvergreen,
+  IdeaEvergreen,
   MarcaDisponible,
   RedPublicacion,
 } from "@/types";
 
-const CLAVE_IDEAS = ["green", "ideas"] as const;
+const CLAVE_IDEAS = ["evergreen", "ideas"] as const;
 
 /** Centinela "todos los estados" del filtro. */
 const ESTADO_TODOS = "__todos__";
@@ -65,7 +65,7 @@ const ESTADO_LABEL: Record<string, string> = {
   descartada: "Descartada",
 };
 
-export function TallerGreen({
+export function TallerEvergreen({
   marcas,
   redes,
 }: {
@@ -77,7 +77,7 @@ export function TallerGreen({
   const query = useQuery({
     queryKey: [...CLAVE_IDEAS, estadoFiltro],
     queryFn: ({ signal }) =>
-      api.ideasGreen(
+      api.ideasEvergreen(
         { estado: estadoFiltro === ESTADO_TODOS ? undefined : estadoFiltro },
         signal,
       ),
@@ -158,19 +158,19 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   const [tituloManual, setTituloManual] = React.useState("");
 
   const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion(
-    "green-proponer",
+    "evergreen-proponer",
   );
 
   const proponer = useMutation({
     mutationFn: () =>
-      api.proponerGreen({ marca, contexto: contexto.trim() || undefined }),
+      api.proponerEvergreen({ marca, contexto: contexto.trim() || undefined }),
     onSuccess: (data) => iniciar(data.generacion),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
   const crearManual = useMutation({
     mutationFn: () =>
-      api.crearIdeaGreen({ marca, titulo: tituloManual.trim() }),
+      api.crearIdeaEvergreen({ marca, titulo: tituloManual.trim() }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_IDEAS });
       setTituloManual("");
@@ -212,9 +212,9 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           </p>
 
           <div className="space-y-1.5">
-            <Label htmlFor="green-marca">Marca</Label>
+            <Label htmlFor="evergreen-marca">Marca</Label>
             <Select value={marca} onValueChange={setMarca}>
-              <SelectTrigger id="green-marca">
+              <SelectTrigger id="evergreen-marca">
                 <SelectValue placeholder="Elige una marca" />
               </SelectTrigger>
               <SelectContent>
@@ -228,11 +228,11 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="green-contexto">
+            <Label htmlFor="evergreen-contexto">
               Contexto <span className="font-normal text-muted-foreground">(opcional)</span>
             </Label>
             <Textarea
-              id="green-contexto"
+              id="evergreen-contexto"
               value={contexto}
               onChange={(e) => setContexto(e.target.value)}
               placeholder="Ej. enfoque en efemérides deportivas y datos curiosos para llenar huecos de parrilla…"
@@ -261,9 +261,9 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="green-titulo-manual">Título de la idea</Label>
+            <Label htmlFor="evergreen-titulo-manual">Título de la idea</Label>
             <Input
-              id="green-titulo-manual"
+              id="evergreen-titulo-manual"
               value={tituloManual}
               onChange={(e) => setTituloManual(e.target.value)}
               placeholder="Ej. 5 récords históricos de la liga"
@@ -301,7 +301,7 @@ function FilaIdea({
   marcas,
   redes,
 }: {
-  idea: IdeaGreen;
+  idea: IdeaEvergreen;
   marcas: MarcaDisponible[];
   redes: RedPublicacion[];
 }) {
@@ -315,8 +315,8 @@ function FilaIdea({
     void queryClient.invalidateQueries({ queryKey: CLAVE_IDEAS });
 
   const cambiarEstado = useMutation({
-    mutationFn: (estado: EstadoIdeaGreen) =>
-      api.actualizarIdeaGreen(idea.id, { estado }),
+    mutationFn: (estado: EstadoIdeaEvergreen) =>
+      api.actualizarIdeaEvergreen(idea.id, { estado }),
     onSuccess: (_d, estado) => {
       invalidar();
       toast.success(
@@ -331,7 +331,7 @@ function FilaIdea({
   });
 
   const borrar = useMutation({
-    mutationFn: () => api.eliminarIdeaGreen(idea.id),
+    mutationFn: () => api.eliminarIdeaEvergreen(idea.id),
     onSuccess: (res) => {
       invalidar();
       toast.success(res?.mensaje ?? "Idea borrada.");
@@ -344,7 +344,7 @@ function FilaIdea({
 
   const generar = useMutation({
     mutationFn: () =>
-      api.generarIdeaGreen(idea.id, {
+      api.generarIdeaEvergreen(idea.id, {
         redes: redes.length > 0 ? redes.map((r) => r.id) : undefined,
       }),
     onSuccess: (data) => iniciar(data.generacion),

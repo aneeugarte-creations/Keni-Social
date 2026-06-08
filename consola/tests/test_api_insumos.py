@@ -495,7 +495,7 @@ def test_items_sin_linea_son_siempre_frescos():
 def test_solo_frescos_no_devuelve_caducados():
     """Con solo_frescos=1, ítems de líneas con TTL y fecha vieja no aparecen."""
     import keni_consola.repos as repos
-    repos.crear_etiqueta(nombre="Nacional-test-ttl", clase="vertical", marca="unotv", ttl_dias=1, es_green=False)
+    repos.crear_etiqueta(nombre="Nacional-test-ttl", clase="vertical", marca="unotv", ttl_dias=1, es_evergreen=False)
 
     fecha_vieja = "2020-01-01"
     cli = _cliente_con_items([
@@ -522,7 +522,7 @@ def test_solo_frescos_mantiene_items_sin_ttl():
     """Con solo_frescos=1, ítems de líneas sin TTL (0) o sin línea siguen apareciendo."""
     fecha_vieja = "2020-01-01"
     cli = _cliente_con_items([
-        {"titulo": "Evergreen item", "marca": "unotv", "linea": ""},
+        {"titulo": "Everevergreen item", "marca": "unotv", "linea": ""},
     ])
     cli.post(
         "/api/insumos/aportar",
@@ -533,4 +533,4 @@ def test_solo_frescos_mantiene_items_sin_ttl():
     assert r.status_code == 200
     portal = next(c for c in r.json()["cajones"] if c["cajon"] == "portal")
     titulos = [i["titulo"] for i in portal["items"]]
-    assert "Evergreen item" in titulos
+    assert "Everevergreen item" in titulos

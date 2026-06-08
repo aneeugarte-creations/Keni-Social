@@ -26,7 +26,7 @@ const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
 // Hub Investigación colapsado a 3 PIEZAS (Noticias · Contenidos · Fuentes).
 // NoticiasHub es el índice del hub (compone el pool persistente de cobertura +
-// el descubrimiento del Investigador); ContenidosHub es el banco evergreen (GREEN).
+// el descubrimiento del Investigador); ContenidosHub es el banco evergreen (EVERGREEN).
 const NoticiasHub = lazy(() => import("@/pages/NoticiasHub"));
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
 // Las antiguas hojas del hub (Investigador, Cajones, Eventos, Agentes, Cobertura) ya

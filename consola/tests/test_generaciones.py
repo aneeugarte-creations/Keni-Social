@@ -24,8 +24,7 @@ from pathlib import Path
 import pytest
 
 from keni_consola import generaciones, preferencias
-from keni_consola.dominio import runner
-from keni_consola.dominio import stream
+from keni_consola.dominio import runner, stream
 
 from .conftest import _cliente
 
@@ -160,7 +159,7 @@ def test_argv_un_endurecer_de_red_seguiria_uniendose_a_lo_global(entorno, monkey
 
 
 def test_argv_flujos_de_generacion_conservan_la_web(entorno, monkeypatch):
-    # Los flujos de generación (copy/QA/hashtags/green/sugerencias) NO pasan ya `endurecer`:
+    # Los flujos de generación (copy/QA/hashtags/evergreen/sugerencias) NO pasan ya `endurecer`:
     # comparten este constructor de argv SIN veto de red, así que la web sigue disponible
     # (Bash/Write/Edit vetadas por defecto, Web NO).
     monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)

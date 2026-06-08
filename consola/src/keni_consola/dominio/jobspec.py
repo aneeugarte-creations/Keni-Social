@@ -59,10 +59,10 @@ PROC_PROMPT = "prompt"
 # de la semana desde la BD, valida con `dominio.parrilla_import` y guarda las operaciones +
 # resumen en la fila `parrilla_propuesta` (estado pendiente | error). NO toca el calendario.
 PROC_PARRILLA_IMPORT = "parrilla-import"
-# Taller GREEN / brainstorming: parsea el JSON `{"ideas":[...]}` de claude y crea filas
-# `green_ideas` en estado `propuesta` (origen `ia`) para que el equipo las apruebe/descarte.
+# Taller EVERGREEN / brainstorming: parsea el JSON `{"ideas":[...]}` de claude y crea filas
+# `evergreen_ideas` en estado `propuesta` (origen `ia`) para que el equipo las apruebe/descarte.
 # NO genera contenido todavia: solo PROPONE ideas (la generacion ocurre al aprobar+generar).
-PROC_GREEN_IDEAS = "green-ideas"
+PROC_EVERGREEN_IDEAS = "evergreen-ideas"
 # Insumos del dia (cajones): parsea el JSON `{"items":[...]}` de claude (Haiku), normaliza e
 # INSERTA `insumos_item`, y deja el lote en estado `listo`/`error`. El back ya NO ejecuta
 # `claude -p` (no tiene binario ni token): el WORKER corre el parseo. Mismo patron que copy.
@@ -309,16 +309,16 @@ def construir_parrilla_import(*, propuesta_id: str) -> dict[str, Any]:
     }
 
 
-def construir_green_ideas(
+def construir_evergreen_ideas(
     *, marca: str, generacion_id: str = "", autor: dict[str, str] | None = None
 ) -> dict[str, Any]:
-    """Spec del post-procesado del taller GREEN: crea filas `green_ideas` en estado propuesta.
+    """Spec del post-procesado del taller EVERGREEN: crea filas `evergreen_ideas` en estado propuesta.
 
     `marca` es la marca de las ideas; `generacion_id` (opcional) traza el lote a su generacion
-    IA. El worker parsea `{"ideas":[...]}` y llama a `repos.crear_green_idea` por cada idea.
+    IA. El worker parsea `{"ideas":[...]}` y llama a `repos.crear_evergreen_idea` por cada idea.
     """
     return {
-        "kind": PROC_GREEN_IDEAS,
+        "kind": PROC_EVERGREEN_IDEAS,
         "marca": marca,
         "generacion_id": generacion_id or "",
         "autor": _autor_spec(autor),
@@ -489,11 +489,11 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             propuesta_id=p["propuesta_id"]
         )
 
-    if kind == PROC_GREEN_IDEAS:
+    if kind == PROC_EVERGREEN_IDEAS:
         # Import perezoso: el factory toca BD (`repos`), no cabe en este modulo de dominio puro.
-        from . import green as dom_green
+        from . import evergreen as dom_evergreen
 
-        return dom_green.construir_procesar_green_ideas(
+        return dom_evergreen.construir_procesar_evergreen_ideas(
             marca=p.get("marca", "") or "",
             generacion_id=p.get("generacion_id", "") or "",
         )

@@ -124,7 +124,7 @@ function BarraCobertura() {
       {/* Feeds activos */}
       {d?.feeds_activos != null && (
         <Badge variant="outline" className="gap-1 text-xs">
-          <Radio className="h-3 w-3 text-green-500" />
+          <Radio className="h-3 w-3 text-evergreen-500" />
           {d.feeds_activos} feed{d.feeds_activos !== 1 ? "s" : ""} activo{d.feeds_activos !== 1 ? "s" : ""}
         </Badge>
       )}
@@ -281,7 +281,7 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
           {historia.verificacion === "corroborada" && (
             <Badge
               variant="outline"
-              className="gap-1 text-xs border-green-500 text-green-700"
+              className="gap-1 text-xs border-evergreen-500 text-evergreen-700"
               data-testid="badge-verificacion"
             >
               <ShieldCheck className="h-3 w-3" />

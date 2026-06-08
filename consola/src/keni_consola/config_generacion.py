@@ -67,7 +67,7 @@ def claude_skip_permisos() -> bool:
 #   - `Bash` —el vector de MAYOR impacto: ejecucion de comandos arbitrarios, lectura/
 #     exfiltracion de secretos de `/data` y del entorno—.
 #   - `Write` y `Edit` —escritura/edicion de ficheros en disco—. NINGUN flujo de generacion
-#     (copy-desde-nota, QA, hashtags, termometro, green, sugerencias, NI los prompts de
+#     (copy-desde-nota, QA, hashtags, termometro, evergreen, sugerencias, NI los prompts de
 #     investigacion `brief-tendencias`/`termometro-mundial`) escribe ficheros: su salida es
 #     SIEMPRE texto que parsea el post-procesado. Vetarlas cierra un vector de persistencia/
 #     manipulacion del cwd sin afectar a ningun flujo legitimo (defensa en profundidad).
@@ -77,7 +77,7 @@ def claude_skip_permisos() -> bool:
 # residual de Web en el flujo copy-desde-nota lo cubre el delimitador con NONCE
 # `<contenido_usuario_…>` (ver `dominio.generar.envolver_contenido_usuario`). Vetar Web SOLO
 # en los flujos de copy/RSS/autogen/QA (que no la necesitan) exige `endurecer` por-callsite en
-# cada lanzador (`api/hashtags`, `api/qa_editorial`, `api/termometro`, `dominio/green`,
+# cada lanzador (`api/hashtags`, `api/qa_editorial`, `api/termometro`, `dominio/evergreen`,
 # `autogen_copy`, `pipeline_contenido`, `dominio/biblioteca_lanzar`...): queda PENDIENTE de
 # revision humana, porque esos lanzadores son de otros modulos (no de este endurecimiento).
 # Configurable con `KENI_CLAUDE_DISALLOWED_TOOLS` (lista coma/espacio): un operador puede

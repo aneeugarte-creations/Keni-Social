@@ -2,8 +2,8 @@
  * ContenidosHub — pieza «Contenidos» del hub Investigación (Fase 1).
  *
  * Banco de piezas EVERGREEN (educativas/curiosas/atemporales): reportajes
- * internos y producciones propias que no caducan. Compone el banco GREEN
- * existente (`TallerGreen`) sin reescribir su lógica; aquí solo le inyecta el
+ * internos y producciones propias que no caducan. Compone el banco EVERGREEN
+ * existente (`TallerEvergreen`) sin reescribir su lógica; aquí solo le inyecta el
  * catálogo de marcas/redes (igual que hace hoy la página de Fuentes) y la
  * cabecera del hub.
  *
@@ -18,7 +18,7 @@ import { api } from "@/lib/api";
 import type { RedPublicacion } from "@/types";
 
 import { ORDEN_REDES } from "./publicaciones/meta";
-import { TallerGreen } from "./fuentes/TallerGreen";
+import { TallerEvergreen } from "./fuentes/TallerEvergreen";
 
 const CABECERA = {
   titulo: "Contenidos",
@@ -30,7 +30,7 @@ const CABECERA = {
 
 export default function ContenidosHub() {
   // Las marcas y redes viven en el catálogo de opciones de publicaciones (mismo
-  // origen que usa la página de Fuentes para alimentar el banco GREEN).
+  // origen que usa la página de Fuentes para alimentar el banco EVERGREEN).
   const opcionesQuery = useQuery({
     queryKey: ["publicaciones", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
@@ -47,7 +47,7 @@ export default function ContenidosHub() {
   return (
     <>
       <PageHeader {...CABECERA} />
-      <TallerGreen marcas={marcas} redes={opcionesRedes} />
+      <TallerEvergreen marcas={marcas} redes={opcionesRedes} />
     </>
   );
 }

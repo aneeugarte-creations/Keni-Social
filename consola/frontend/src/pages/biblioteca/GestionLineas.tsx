@@ -266,7 +266,7 @@ function FormularioLinea({
   );
   const [keywords, setKeywords] = React.useState("");
   const [ttlDias, setTtlDias] = React.useState(0);
-  const [esGreen, setEsGreen] = React.useState(false);
+  const [esEvergreen, setEsEvergreen] = React.useState(false);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -276,7 +276,7 @@ function FormularioLinea({
         marca: marca === GLOBAL ? "" : marca,
         keywords: keywords.trim(),
         ttl_dias: ttlDias,
-        es_green: esGreen,
+        es_evergreen: esEvergreen,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_ETIQUETAS });
@@ -332,17 +332,17 @@ function FormularioLinea({
               onChange={(e) => setTtlDias(Math.max(0, parseInt(e.target.value) || 0))}
               className="w-24"
             />
-            <p className="text-xs text-muted-foreground">0 días = sin caducidad / green</p>
+            <p className="text-xs text-muted-foreground">0 días = sin caducidad / evergreen</p>
           </div>
           <div className="flex items-center gap-3 pt-5">
             <Switch
-              id={`linea-green-${clase}`}
-              checked={esGreen}
-              onCheckedChange={setEsGreen}
+              id={`linea-evergreen-${clase}`}
+              checked={esEvergreen}
+              onCheckedChange={setEsEvergreen}
             />
-            <Label htmlFor={`linea-green-${clase}`} className="flex items-center gap-1 cursor-pointer">
-              <Leaf className="h-3.5 w-3.5 text-green-600" />
-              Evergreen
+            <Label htmlFor={`linea-evergreen-${clase}`} className="flex items-center gap-1 cursor-pointer">
+              <Leaf className="h-3.5 w-3.5 text-evergreen-600" />
+              Everevergreen
             </Label>
           </div>
         </div>
@@ -377,7 +377,7 @@ function FormularioLinea({
   );
 }
 
-/** Una fila con edición en línea (nombre · marca · keywords · ttl · green) y borrado. */
+/** Una fila con edición en línea (nombre · marca · keywords · ttl · evergreen) y borrado. */
 function FilaLinea({
   etiqueta,
   clase,
@@ -393,7 +393,7 @@ function FilaLinea({
   const [marca, setMarca] = React.useState(etiqueta.marca || GLOBAL);
   const [keywords, setKeywords] = React.useState(etiqueta.keywords ?? "");
   const [ttlDias, setTtlDias] = React.useState(etiqueta.ttl_dias ?? 0);
-  const [esGreen, setEsGreen] = React.useState(etiqueta.es_green ?? false);
+  const [esEvergreen, setEsEvergreen] = React.useState(etiqueta.es_evergreen ?? false);
 
   const invalidar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_ETIQUETAS });
@@ -403,7 +403,7 @@ function FilaLinea({
     setMarca(etiqueta.marca || GLOBAL);
     setKeywords(etiqueta.keywords ?? "");
     setTtlDias(etiqueta.ttl_dias ?? 0);
-    setEsGreen(etiqueta.es_green ?? false);
+    setEsEvergreen(etiqueta.es_evergreen ?? false);
     setEditando(true);
   };
 
@@ -414,7 +414,7 @@ function FilaLinea({
         marca: marca === GLOBAL ? "" : marca,
         keywords: keywords.trim(),
         ttl_dias: ttlDias,
-        es_green: esGreen,
+        es_evergreen: esEvergreen,
       }),
     onSuccess: () => {
       invalidar();
@@ -474,17 +474,17 @@ function FilaLinea({
                 onChange={(e) => setTtlDias(Math.max(0, parseInt(e.target.value) || 0))}
                 className="w-24"
               />
-              <p className="text-xs text-muted-foreground">0 días = sin caducidad / green</p>
+              <p className="text-xs text-muted-foreground">0 días = sin caducidad / evergreen</p>
             </div>
             <div className="flex items-center gap-3 pt-5">
               <Switch
-                id={`edit-green-${etiqueta.id}`}
-                checked={esGreen}
-                onCheckedChange={setEsGreen}
+                id={`edit-evergreen-${etiqueta.id}`}
+                checked={esEvergreen}
+                onCheckedChange={setEsEvergreen}
               />
-              <Label htmlFor={`edit-green-${etiqueta.id}`} className="flex items-center gap-1 cursor-pointer">
-                <Leaf className="h-3.5 w-3.5 text-green-600" />
-                Evergreen
+              <Label htmlFor={`edit-evergreen-${etiqueta.id}`} className="flex items-center gap-1 cursor-pointer">
+                <Leaf className="h-3.5 w-3.5 text-evergreen-600" />
+                Everevergreen
               </Label>
             </div>
           </div>
@@ -567,13 +567,13 @@ function FilaLinea({
         <Badge variant="outline" className="font-normal">
           {etiqueta.marca_nombre || "Global"}
         </Badge>
-        {clase === "vertical" && etiqueta.es_green && (
-          <Badge variant="secondary" className="gap-1 font-normal text-green-700">
+        {clase === "vertical" && etiqueta.es_evergreen && (
+          <Badge variant="secondary" className="gap-1 font-normal text-evergreen-700">
             <Leaf className="h-3 w-3" />
-            Evergreen
+            Everevergreen
           </Badge>
         )}
-        {clase === "vertical" && !etiqueta.es_green && etiqueta.ttl_dias > 0 && (
+        {clase === "vertical" && !etiqueta.es_evergreen && etiqueta.ttl_dias > 0 && (
           <Badge variant="outline" className="font-normal text-amber-600">
             {etiqueta.ttl_dias}d TTL
           </Badge>
@@ -597,7 +597,7 @@ function FilaLinea({
 /**
  * Gestión del CATÁLOGO de etiquetas editoriales TRANSVERSALES (ejes `campaña` y
  * `tipo`). Las líneas (`vertical`) y orígenes (`origen`) NO viven aquí: tienen sus
- * propios paneles arriba, con keywords/TTL/green, así que este diálogo no los
+ * propios paneles arriba, con keywords/TTL/evergreen, así que este diálogo no los
  * duplica. Lee/escribe `/api/etiquetas`.
  */
 function DialogoEtiquetas({

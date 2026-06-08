@@ -356,7 +356,7 @@ def crear_etiqueta(
     keywords: str = "",
     activo: bool = True,
     ttl_dias: int = 0,
-    es_green: bool = False,
+    es_evergreen: bool = False,
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -370,7 +370,7 @@ def crear_etiqueta(
         keywords=keywords,
         activo=activo,
         ttl_dias=ttl_dias,
-        es_green=es_green,
+        es_evergreen=es_evergreen,
         creado=creado,
         actualizado=actualizado,
         id=id,
@@ -426,12 +426,12 @@ def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
 
 
 # --------------------------------------------------------------------------- #
-# Taller GREEN / brainstorming: ideas evergreen. La fachada delega 1:1 en db; #
-# la validacion vive en `api/green`.                                          #
+# Taller EVERGREEN / brainstorming: ideas evergreen. La fachada delega 1:1 en db; #
+# la validacion vive en `api/evergreen`.                                          #
 # --------------------------------------------------------------------------- #
 
 
-def crear_green_idea(
+def crear_evergreen_idea(
     *,
     marca: str = "",
     titulo: str = "",
@@ -445,7 +445,7 @@ def crear_green_idea(
     id: str = "",
 ) -> dict[str, Any]:
     """Crea una idea de contenido evergreen. Delegado en `db.py`."""
-    return db.crear_green_idea(
+    return db.crear_evergreen_idea(
         marca=marca,
         titulo=titulo,
         descripcion=descripcion,
@@ -459,25 +459,25 @@ def crear_green_idea(
     )
 
 
-def listar_green_ideas(
+def listar_evergreen_ideas(
     *, marca: str | None = None, estado: str | None = None
 ) -> list[dict[str, Any]]:
     """Lista ideas evergreen (recientes primero). Delegado en `db.py`."""
-    return db.listar_green_ideas(marca=marca, estado=estado)
+    return db.listar_evergreen_ideas(marca=marca, estado=estado)
 
 
-def obtener_green_idea(idea_id: str) -> dict[str, Any] | None:
-    return db.obtener_green_idea(idea_id)
+def obtener_evergreen_idea(idea_id: str) -> dict[str, Any] | None:
+    return db.obtener_evergreen_idea(idea_id)
 
 
-def actualizar_green_idea(
+def actualizar_evergreen_idea(
     idea_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return db.actualizar_green_idea(idea_id, campos)
+    return db.actualizar_evergreen_idea(idea_id, campos)
 
 
-def borrar_green_idea(idea_id: str) -> bool:
-    return db.borrar_green_idea(idea_id)
+def borrar_evergreen_idea(idea_id: str) -> bool:
+    return db.borrar_evergreen_idea(idea_id)
 
 
 

@@ -73,7 +73,7 @@ def test_pipelines_listar(cliente):
     r = cliente.get("/api/texto/pipelines")
     assert r.status_code == 200
     ids = {p["id"] for p in r.json()["pipelines"]}
-    assert {"copy", "qa", "green"} <= ids
+    assert {"copy", "qa", "evergreen"} <= ids
     copy = next(p for p in r.json()["pipelines"] if p["id"] == "copy")
     assert copy["prompt_base_id"] == "prompt/copy-desde-nota"
 

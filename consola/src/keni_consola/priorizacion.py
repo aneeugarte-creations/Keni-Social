@@ -5,7 +5,7 @@ PROBLEMA QUE RESUELVE
 El tablero kanban ordena por prioridad fija (alta/media/baja) + fecha. La "lista viva" que pide
 Angel debe RE-ORDENARSE sola cada vez que entra algo: un tema obligatorio con fecha encima debe
 subir; uno evergreen sin fecha, bajar. Aqui un SCORE determinista combina las senales que el
-contenido YA tiene (compromiso, green list, prioridad, cercania de la fecha objetivo, flujo,
+contenido YA tiene (compromiso, evergreen list, prioridad, cercania de la fecha objetivo, flujo,
 frescura).
 
 DECISION (documentada): el score se aplica en la VISTA DEL DIA (Panel-9am), NO cambia el orden
@@ -25,15 +25,15 @@ from typing import Any
 # Etiqueta que marca un contenido "obligatorio por compromiso" (la pone el importador / a mano).
 ETIQUETA_COMPROMISO = "compromiso"
 
-# Etiqueta de la "green list" del equipo (lo que el equipo quiere postear). La pone el importador.
-ETIQUETA_GREEN = "green"
+# Etiqueta de la "evergreen list" del equipo (lo que el equipo quiere postear). La pone el importador.
+ETIQUETA_EVERGREEN = "evergreen"
 
 # Pesos por defecto (explicitos y afinables). El compromiso DOMINA: un must-do siempre arriba.
 PESO_PRIORIDAD: dict[str, int] = {"alta": 100, "media": 50, "baja": 10}
 PESO_FLUJO: dict[str, int] = {"importante": 60, "evento": 40, "evergreen": 5}
 BONUS_COMPROMISO = 200
-# Bonus moderado para la green list: por DEBAJO del compromiso, por encima de lo normal.
-BONUS_GREEN = 80
+# Bonus moderado para la evergreen list: por DEBAJO del compromiso, por encima de lo normal.
+BONUS_EVERGREEN = 80
 
 # --------------------------------------------------------------------------- #
 # Señal de VIRALIDAD del Radar (Fase 5, loop de aprendizaje)                    #
@@ -125,7 +125,7 @@ def peso_frescura(creado: object, hoy: date) -> int:
 
 
 # Tope del bonus por rendimiento historico de la marca (Fase 5). Acotado al MISMO orden que
-# la green list / flujo: empuja lo que historicamente rinde, sin pisar al compromiso humano.
+# la evergreen list / flujo: empuja lo que historicamente rinde, sin pisar al compromiso humano.
 BONUS_METRICAS_MAX = 80
 
 
@@ -172,8 +172,8 @@ def score_contenido(
     score += peso_metricas(bonus_metricas)
     if any(_norm(e) == ETIQUETA_COMPROMISO for e in etiquetas):
         score += BONUS_COMPROMISO
-    if any(_norm(e) == ETIQUETA_GREEN for e in etiquetas):
-        score += BONUS_GREEN
+    if any(_norm(e) == ETIQUETA_EVERGREEN for e in etiquetas):
+        score += BONUS_EVERGREEN
     return score
 
 

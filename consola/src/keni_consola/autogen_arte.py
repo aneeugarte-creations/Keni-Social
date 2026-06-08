@@ -91,7 +91,7 @@ def _le_falta_imagen(plataforma: dict[str, Any]) -> bool:
 def _etiquetas_por_item() -> dict[str, list[str]]:
     """id de contenido -> NOMBRES de etiqueta resueltos (para el score). Best-effort: {}.
 
-    `priorizacion.score_contenido` resuelve compromiso/green por NOMBRE de etiqueta, asi que
+    `priorizacion.score_contenido` resuelve compromiso/evergreen por NOMBRE de etiqueta, asi que
     traducimos los ids a nombres. Un fallo de lectura deja el mapa vacio (el score cae a sus
     pesos base), nunca rompe el barrido.
     """

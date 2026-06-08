@@ -64,10 +64,10 @@ SALIDAS = ("", "documento", "piezas")
 ESTADOS = ("activo", "borrador", "archivado")
 ESTADO_DEFECTO = "activo"
 
-# ROL de un PROMPT base: ata un prompt al rol que un pipeline espera (copy/qa/green/...).
+# ROL de un PROMPT base: ata un prompt al rol que un pipeline espera (copy/qa/evergreen/...).
 # "" = prompt generico (lanzable a mano, no es base de ningun pipeline). Permite re-bindear
 # que prompt alimenta un pipeline SIN tocar codigo (gana el doc con ese rol+pipeline).
-ROLES_PROMPT = ("", "copy", "qa", "green", "arte")
+ROLES_PROMPT = ("", "copy", "qa", "evergreen", "arte")
 
 # --------------------------------------------------------------------------- #
 # Registro de PIPELINES                                                        #
@@ -95,11 +95,11 @@ PIPELINES: dict[str, dict[str, str]] = {
         "prompt_defecto": "prompt/qa-editorial",
         "rol": "qa",
     },
-    "green": {
-        "titulo": "Ideas evergreen (GREEN)",
+    "evergreen": {
+        "titulo": "Ideas evergreen (EVERGREEN)",
         "descripcion": "Propone ideas de contenido perenne para la marca.",
-        "prompt_defecto": "prompt/brainstorming-green",
-        "rol": "green",
+        "prompt_defecto": "prompt/brainstorming-evergreen",
+        "rol": "evergreen",
     },
 }
 
@@ -157,7 +157,7 @@ class Documento:
     # auto-adjunto por pipeline ([] = aplica a TODOS, retrocompat). Para PROMPTS marca de que
     # pipelines es la base (junto con `rol`).
     pipelines: list[str] = field(default_factory=list)
-    rol: str = ""  # solo prompt: copy | qa | green | arte | "" (ver ROLES_PROMPT)
+    rol: str = ""  # solo prompt: copy | qa | evergreen | arte | "" (ver ROLES_PROMPT)
     prioridad: int = 0  # orden de ensamblaje del auto-adjunto (menor = antes); empata por pilar/id
 
     def a_dict(self) -> dict[str, object]:

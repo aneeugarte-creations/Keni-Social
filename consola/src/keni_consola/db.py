@@ -241,15 +241,15 @@ from .db_editor import (  # noqa: F401
     obtener_video_subtitulo,
     ultima_documento_version,
 )
-from .db_green import (  # noqa: F401
-    actualizar_green_idea,
+from .db_evergreen import (  # noqa: F401
+    actualizar_evergreen_idea,
     asignar_etiqueta,
-    borrar_green_idea,
-    crear_green_idea,
+    borrar_evergreen_idea,
+    crear_evergreen_idea,
     etiquetas_por_contenido,
     ids_contenido_con_etiqueta,
-    listar_green_ideas,
-    obtener_green_idea,
+    listar_evergreen_ideas,
+    obtener_evergreen_idea,
     quitar_etiqueta,
 )
 from .db_hashtags_franjas import (  # noqa: F401

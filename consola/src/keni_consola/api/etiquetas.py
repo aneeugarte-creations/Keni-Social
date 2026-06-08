@@ -110,7 +110,7 @@ def _validar_ttl_dias(valor: object) -> int:
 
 async def crear(request: Request) -> Response:
     """POST /api/etiquetas: crea una etiqueta. Cuerpo: `nombre` (obligatorio), `clase`,
-    `marca` ('' = global), `color`, `ttl_dias` (int, def 0), `es_green` (bool, def false)."""
+    `marca` ('' = global), `color`, `ttl_dias` (int, def 0), `es_evergreen` (bool, def false)."""
     datos = await leer_json(request)
     nombre = datos.get("nombre")
     if not isinstance(nombre, str) or not nombre.strip():
@@ -135,7 +135,7 @@ async def crear(request: Request) -> Response:
         color=_validar_color(datos.get("color")),
         keywords=_normalizar_keywords(datos.get("keywords")),
         ttl_dias=_validar_ttl_dias(datos.get("ttl_dias", 0)),
-        es_green=bool(datos.get("es_green", False)),
+        es_evergreen=bool(datos.get("es_evergreen", False)),
     )
     return JSONResponse({"etiqueta": _etiqueta_a_dict(etiqueta)})
 
@@ -171,8 +171,8 @@ async def actualizar(request: Request) -> Response:
         campos["activo"] = bool(datos["activo"])
     if "ttl_dias" in datos:
         campos["ttl_dias"] = _validar_ttl_dias(datos.get("ttl_dias"))
-    if "es_green" in datos:
-        campos["es_green"] = bool(datos["es_green"])
+    if "es_evergreen" in datos:
+        campos["es_evergreen"] = bool(datos["es_evergreen"])
 
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)

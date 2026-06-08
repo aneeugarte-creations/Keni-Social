@@ -13,8 +13,8 @@ DOS CAPAS (como `radar_auto`):
     normalizadas + lista de errores honesta (una fila mala se reporta, NO rompe la importacion).
   - ESCRITURA (`importar_a_tablero`) reutiliza el MISMO camino que `desde_radar` /
     `radar_auto.promover_temas`: `repos.crear_contenido(origen='import-calendario', ...)`. Los
-    contenidos marcados "obligatorio" se etiquetan `compromiso` y los de la "green list" del
-    equipo se etiquetan `green` (sin tocar el enum de `flujo`).
+    contenidos marcados "obligatorio" se etiquetan `compromiso` y los de la "evergreen list" del
+    equipo se etiquetan `evergreen` (sin tocar el enum de `flujo`).
 
 CONSERVADOR:
   - Mapeo de cabeceras flexible (sinonimos es/en) y tolerante a acentos/espacios.
@@ -51,8 +51,8 @@ ORIGEN = "import-calendario"
 # Etiqueta con la que se marca un contenido "obligatorio por compromiso".
 ETIQUETA_COMPROMISO = "compromiso"
 
-# Etiqueta con la que se marca un contenido de la "green list" (lista del equipo).
-ETIQUETA_GREEN = "green"
+# Etiqueta con la que se marca un contenido de la "evergreen list" (lista del equipo).
+ETIQUETA_EVERGREEN = "evergreen"
 
 # Limites defensivos (un calendario real no tiene millones de filas).
 _MAX_FILAS = 5000
@@ -76,8 +76,11 @@ _SINONIMOS: dict[str, set[str]] = {
     "compromiso": {
         "compromiso", "obligatorio", "obligatoria", "mandatory", "commitment", "fijo",
     },
-    "green": {
-        "green", "verde", "green list", "lista green", "lista verde", "greenlist",
+    "evergreen": {
+        # Nueva terminología (evergreen/perenne) + sinónimos ES/EN…
+        "evergreen", "evergreen list", "lista evergreen", "perenne", "verde", "lista verde",
+        # …y RETROCOMPAT: el equipo de AMX ya escribe "green"/"green list" en sus calendarios.
+        "green", "green list", "lista green", "greenlist",
     },
     "notas": {"notas", "nota", "detalle", "descripcion", "comentarios", "notes", "comment"},
 }
@@ -100,7 +103,7 @@ class FilaCalendario:
     redes: list[str] = field(default_factory=list)  # ids canonicos de red
     prioridad: str = "media"
     compromiso: bool = False
-    green: bool = False
+    evergreen: bool = False
     notas: str = ""
 
 
@@ -308,7 +311,7 @@ def _filas_desde_tabla(
             errores.append({"fila": desplazamiento, "motivo": "Fila sin título; se omitió."})
             continue
         compromiso = _es_verdadero(celda(fila, "compromiso"))
-        green = _es_verdadero(celda(fila, "green"))
+        evergreen = _es_verdadero(celda(fila, "evergreen"))
         marca_norm = _normaliza(celda(fila, "marca"))
         notas = ("" if celda(fila, "notas") is None else str(celda(fila, "notas"))).strip()
         filas.append(
@@ -319,7 +322,7 @@ def _filas_desde_tabla(
                 redes=_parse_redes(celda(fila, "redes"), idx_redes),
                 prioridad=_parse_prioridad(celda(fila, "prioridad"), compromiso=compromiso),
                 compromiso=compromiso,
-                green=green,
+                evergreen=evergreen,
                 notas=notas[:_MAX_TEXTO],
             )
         )
@@ -358,7 +361,7 @@ def _filas_desde_registros(
     """Lista de dicts (de Claude) -> (filas válidas, errores). PURO.
 
     Cada registro lleva las MISMAS claves que una columna del Excel
-    (titulo/fecha/marca/redes/prioridad/compromiso/green/notas) y pasa por los mismos
+    (titulo/fecha/marca/redes/prioridad/compromiso/evergreen/notas) y pasa por los mismos
     normalizadores. Un registro sin título se reporta como error, no rompe el resto.
     """
     errores: list[dict[str, Any]] = []
@@ -377,7 +380,7 @@ def _filas_desde_registros(
             errores.append({"fila": i, "motivo": "Registro sin título; se omitió."})
             continue
         compromiso = _es_verdadero(reg.get("compromiso"))
-        green = _es_verdadero(reg.get("green"))
+        evergreen = _es_verdadero(reg.get("evergreen"))
         redes_val = reg.get("redes")
         if isinstance(redes_val, list):
             redes_val = ",".join(str(x) for x in redes_val)
@@ -390,7 +393,7 @@ def _filas_desde_registros(
                 redes=_parse_redes(redes_val, idx_redes),
                 prioridad=_parse_prioridad(reg.get("prioridad"), compromiso=compromiso),
                 compromiso=compromiso,
-                green=green,
+                evergreen=evergreen,
                 notas=notas[:_MAX_TEXTO],
             )
         )
@@ -448,7 +451,7 @@ def _prompt_extraccion(ruta: str) -> str:
         f'- "redes": lista de redes (subconjunto de): {lista_redes}.\n'
         '- "prioridad": "alta", "media" o "baja".\n'
         '- "compromiso": true si la fila está marcada como obligatoria/comprometida.\n'
-        '- "green": true si está marcada como green/verde.\n'
+        '- "evergreen": true si está marcada como evergreen/verde.\n'
         '- "notas": cualquier detalle adicional, o "".\n'
         "Si el archivo no contiene un calendario, devuelve {\"filas\": []}."
     )
@@ -587,9 +590,9 @@ def _id_etiqueta_compromiso() -> str:
     return _id_etiqueta(ETIQUETA_COMPROMISO)
 
 
-def _id_etiqueta_green() -> str:
-    """Id de la etiqueta 'green' (la crea si no existe). Best-effort idempotente."""
-    return _id_etiqueta(ETIQUETA_GREEN)
+def _id_etiqueta_evergreen() -> str:
+    """Id de la etiqueta 'evergreen' (la crea si no existe). Best-effort idempotente."""
+    return _id_etiqueta(ETIQUETA_EVERGREEN)
 
 
 def importar_a_tablero(
@@ -607,7 +610,7 @@ def importar_a_tablero(
     ya = claves_ya_importadas()
     defecto = marca_defecto if marcas.es_marca(marca_defecto) else ""
     etiqueta_compromiso_id = ""
-    etiqueta_green_id = ""
+    etiqueta_evergreen_id = ""
     creados: list[dict[str, Any]] = []
     omitidos: list[dict[str, Any]] = []
 
@@ -635,11 +638,11 @@ def importar_a_tablero(
                 etiqueta_compromiso_id = _id_etiqueta_compromiso()
             if etiqueta_compromiso_id:
                 repos.asignar_etiqueta(item["id"], etiqueta_compromiso_id)
-        if fila.green:
-            if not etiqueta_green_id:
-                etiqueta_green_id = _id_etiqueta_green()
-            if etiqueta_green_id:
-                repos.asignar_etiqueta(item["id"], etiqueta_green_id)
+        if fila.evergreen:
+            if not etiqueta_evergreen_id:
+                etiqueta_evergreen_id = _id_etiqueta_evergreen()
+            if etiqueta_evergreen_id:
+                repos.asignar_etiqueta(item["id"], etiqueta_evergreen_id)
         creados.append(item)
 
     if creados:

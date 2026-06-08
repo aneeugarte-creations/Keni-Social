@@ -50,7 +50,7 @@ function BadgeEstadoBorrador({ estado }: { estado: BreakingItem["estado_borrador
   }
   if (estado === "listo") {
     return (
-      <Badge variant="outline" className="gap-1 border-green-500 text-green-600">
+      <Badge variant="outline" className="gap-1 border-evergreen-500 text-evergreen-600">
         <CheckCircle2 className="h-3 w-3" />
         Borrador listo
       </Badge>
@@ -153,7 +153,7 @@ function TarjetaBreaking({ item, marca }: { item: BreakingItem; marca: string })
           {hayBorrador && item.contenido_id ? (
             <Button variant="outline" size="sm" asChild>
               <a href={`/operacion/feed/lista`} className="gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <CheckCircle2 className="h-4 w-4 text-evergreen-500" />
                 Ver borrador
               </a>
             </Button>

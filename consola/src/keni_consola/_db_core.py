@@ -1015,7 +1015,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         keywords     TEXT NOT NULL DEFAULT '',
         activo       INTEGER NOT NULL DEFAULT 1,
         ttl_dias     INTEGER NOT NULL DEFAULT 0,
-        es_green     INTEGER NOT NULL DEFAULT 0,
+        es_evergreen     INTEGER NOT NULL DEFAULT 0,
         creado       TEXT NOT NULL DEFAULT '',
         actualizado  TEXT NOT NULL DEFAULT ''
     )
@@ -1086,14 +1086,14 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         PRIMARY KEY (fuente_id, clave)
     )
     """,
-    # TALLER GREEN / BRAINSTORMING: ideas de contenido EVERGREEN propuestas (por IA o a mano)
+    # TALLER EVERGREEN / BRAINSTORMING: ideas de contenido EVERGREEN propuestas (por IA o a mano)
     # que el equipo aprueba o descarta ANTES de generar nada. La IA NO redacta a ciegas: primero
     # PROPONE ideas (`origen='ia'`, `estado='propuesta'`); una persona las marca `aprobada` o
     # `descartada`; solo para las APROBADAS se genera la pieza (`flujo='evergreen'` en el tablero)
     # y se enlaza en `contenido_id`. `generacion_id` apunta a la generacion IA que las propuso
     # (para trazar el lote). `creado` preserva el orden "recientes primero".
     """
-    CREATE TABLE IF NOT EXISTS green_ideas (
+    CREATE TABLE IF NOT EXISTS evergreen_ideas (
         id            TEXT PRIMARY KEY,
         marca         TEXT NOT NULL DEFAULT '',
         titulo        TEXT NOT NULL DEFAULT '',
@@ -1106,9 +1106,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         actualizado   TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_green_ideas_marca ON green_ideas (marca)",
-    "CREATE INDEX IF NOT EXISTS idx_green_ideas_estado ON green_ideas (estado)",
-    "CREATE INDEX IF NOT EXISTS idx_green_ideas_creado ON green_ideas (creado)",
+    "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_marca ON evergreen_ideas (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_estado ON evergreen_ideas (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_creado ON evergreen_ideas (creado)",
     # Grupos de hashtags reutilizables (nombre + lista de tags JSON) por marca. `hashtags`
     # es un JSON serializado de strings (igual patron que `biblioteca_media.etiquetas`).
     # `creado` preserva el orden "recientes primero".
@@ -1429,6 +1429,11 @@ def _crear_esquema(con: Any) -> None:
     # en deploy). La migración añade `tipo` primero; tras ella el DDL es idempotente. Guard interno:
     # si la tabla aún no existe, no hace nada y el DDL la crea fresca con `tipo`.
     _migrar_columnas_plantillas_diseno(con)
+    # Rebrand GREEN -> EVERGREEN: la tabla/columna/tag se llamaban `green*`. Corre ANTES del
+    # DDL declarativo (que hoy declara `evergreen_ideas` y `etiquetas.es_evergreen`): si no
+    # renombrásemos primero, `CREATE TABLE IF NOT EXISTS evergreen_ideas` crearía una tabla
+    # NUEVA vacía y huérfanaría los datos de `green_ideas`. Idempotente.
+    _migrar_green_a_evergreen(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_turnos_rota(con)
@@ -1596,7 +1601,7 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
       orígenes (clase `origen`) en la ingesta.
     - `ttl_dias` (INTEGER, def 0): días que un ítem de esta línea se considera fresco.
       0 = sin caducidad / evergreen.
-    - `es_green` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
+    - `es_evergreen` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
 
     Solo aplica si la tabla ya existe (un primer arranque la crea con las columnas).
     """
@@ -1611,9 +1616,9 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
         con.execute(
             "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS ttl_dias INTEGER NOT NULL DEFAULT 0"
         )
-    if "es_green" not in cols:
+    if "es_evergreen" not in cols:
         con.execute(
-            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS es_green INTEGER NOT NULL DEFAULT 0"
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS es_evergreen INTEGER NOT NULL DEFAULT 0"
         )
 
 
@@ -1637,6 +1642,34 @@ def _tabla_existe(con: Any, tabla: str) -> bool:
         (tabla,),
     ).fetchone()
     return fila is not None
+
+
+def _migrar_green_a_evergreen(con: Any) -> None:
+    """Rebrand GREEN -> EVERGREEN sobre una BD productiva (idempotente, preserva datos).
+
+    El código pasó a `evergreen*`; este paso renombra el esquema/datos viejos para que NO
+    se huérfanen. Todo guardado: en una BD fresca (sin `green*`) cada paso es no-op y el DDL
+    crea ya `evergreen_ideas`/`es_evergreen`. Corre ANTES del DDL declarativo.
+    """
+    # Tabla green_ideas -> evergreen_ideas (+ sus índices). RENAME solo si la vieja existe y
+    # la nueva no (re-ejecuciones seguras).
+    if _tabla_existe(con, "green_ideas") and not _tabla_existe(con, "evergreen_ideas"):
+        con.execute("ALTER TABLE green_ideas RENAME TO evergreen_ideas")
+        con.execute("ALTER INDEX IF EXISTS idx_green_ideas_marca RENAME TO idx_evergreen_ideas_marca")
+        con.execute("ALTER INDEX IF EXISTS idx_green_ideas_estado RENAME TO idx_evergreen_ideas_estado")
+        con.execute("ALTER INDEX IF EXISTS idx_green_ideas_creado RENAME TO idx_evergreen_ideas_creado")
+    # Columna etiquetas.es_green -> es_evergreen (preserva los flags ya marcados por el equipo).
+    if _tabla_existe(con, "etiquetas"):
+        cols = _columnas_existentes(con, "etiquetas")
+        if "es_green" in cols and "es_evergreen" not in cols:
+            con.execute("ALTER TABLE etiquetas RENAME COLUMN es_green TO es_evergreen")
+        # Tag canónico 'green' -> 'evergreen' (contenido que el equipo ya etiquetó). Evita
+        # colisión si por algún motivo ya existiera el tag 'evergreen' para esa marca.
+        con.execute(
+            "UPDATE etiquetas SET nombre = 'evergreen' WHERE nombre = 'green' "
+            "AND NOT EXISTS (SELECT 1 FROM etiquetas e2 WHERE e2.nombre = 'evergreen' "
+            "AND e2.marca = etiquetas.marca AND e2.id <> etiquetas.id)"
+        )
 
 
 # Defaults de franjas para la migracion (mismos que `rota.py`; los hardcodeamos aqui para

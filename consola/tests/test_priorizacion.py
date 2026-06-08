@@ -21,17 +21,17 @@ def test_compromiso_domina_sobre_prioridad():
     assert con > sin
 
 
-def test_green_suma_bonus_pero_por_debajo_de_compromiso():
+def test_evergreen_suma_bonus_pero_por_debajo_de_compromiso():
     base = pr.score_contenido(_item(), etiquetas=[], hoy=HOY)
-    green = pr.score_contenido(_item(), etiquetas=["green"], hoy=HOY)
+    evergreen = pr.score_contenido(_item(), etiquetas=["evergreen"], hoy=HOY)
     compromiso = pr.score_contenido(_item(), etiquetas=["compromiso"], hoy=HOY)
-    assert base < green < compromiso
+    assert base < evergreen < compromiso
 
 
-def test_green_acumula_con_compromiso():
-    ambos = pr.score_contenido(_item(), etiquetas=["green", "compromiso"], hoy=HOY)
+def test_evergreen_acumula_con_compromiso():
+    ambos = pr.score_contenido(_item(), etiquetas=["evergreen", "compromiso"], hoy=HOY)
     solo = pr.score_contenido(_item(), etiquetas=["compromiso"], hoy=HOY)
-    assert ambos == solo + pr.BONUS_GREEN
+    assert ambos == solo + pr.BONUS_EVERGREEN
 
 
 def test_prioridad_ordena_cuando_resto_igual():

@@ -777,7 +777,7 @@ _COLS_ETIQUETA = (
     "keywords",
     "activo",
     "ttl_dias",
-    "es_green",
+    "es_evergreen",
     "creado",
     "actualizado",
 )
@@ -790,16 +790,16 @@ _CAMPOS_EDITABLES_ETIQUETA: tuple[str, ...] = (
     "keywords",
     "activo",
     "ttl_dias",
-    "es_green",
+    "es_evergreen",
 )
 
 
 def _fila_a_etiqueta(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `etiquetas` en dict (con `activo`/`es_green` como bool)."""
+    """Convierte una fila de `etiquetas` en dict (con `activo`/`es_evergreen` como bool)."""
     et: dict[str, Any] = {col: fila[col] for col in _COLS_ETIQUETA}
     et["activo"] = bool(fila["activo"])
     et["ttl_dias"] = int(fila["ttl_dias"] or 0)
-    et["es_green"] = bool(fila["es_green"])
+    et["es_evergreen"] = bool(fila["es_evergreen"])
     return et
 
 
@@ -812,7 +812,7 @@ def crear_etiqueta(
     keywords: str = "",
     activo: bool = True,
     ttl_dias: int = 0,
-    es_green: bool = False,
+    es_evergreen: bool = False,
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -828,7 +828,7 @@ def crear_etiqueta(
         "keywords": keywords or "",
         "activo": 1 if activo else 0,
         "ttl_dias": max(0, int(ttl_dias or 0)),
-        "es_green": 1 if es_green else 0,
+        "es_evergreen": 1 if es_evergreen else 0,
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -921,8 +921,8 @@ def actualizar_etiqueta(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_ETIQUETA}
     if "activo" in cambios:
         cambios["activo"] = 1 if cambios["activo"] else 0
-    if "es_green" in cambios:
-        cambios["es_green"] = 1 if cambios["es_green"] else 0
+    if "es_evergreen" in cambios:
+        cambios["es_evergreen"] = 1 if cambios["es_evergreen"] else 0
     if "ttl_dias" in cambios:
         cambios["ttl_dias"] = max(0, int(cambios["ttl_dias"] or 0))
     if not cambios:

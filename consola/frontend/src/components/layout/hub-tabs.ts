@@ -47,9 +47,9 @@ export interface ItemTabHub {
 //     (agencias, RSS ajenos, reporteros, corresponsales). Caducan. Su núcleo es el
 //     pool persistente de cobertura + el descubrimiento/plan del Investigador.
 //   - CONTENIDOS: piezas educativas/curiosas/atemporales (reportajes internos,
-//     producciones propias). Evergreen (banco GREEN).
+//     producciones propias). Everevergreen (banco EVERGREEN).
 //   - FUENTES: ajustes de TODOS los canales que alimentan Noticias y Contenidos
-//     (RSS, buzones, agentes de investigación, eventos/programas, cajón green,
+//     (RSS, buzones, agentes de investigación, eventos/programas, cajón evergreen,
 //     agencias, Trends). Cada fuente declara si alimenta Noticias o Contenidos.
 // (Termómetro, Cajones, Eventos, Agentes y Cobertura siguen vivos como rutas
 // durante la transición, pero ya NO son pestañas de la subnav; se fusionarán y
