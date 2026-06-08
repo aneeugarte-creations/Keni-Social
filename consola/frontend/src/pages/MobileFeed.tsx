@@ -233,6 +233,7 @@ function TarjetaFeed({
         copy_in={publicacion.copy_in}
         imagen_url={publicacion.imagen_url || publicacion.imagen}
         formato={publicacion.formato}
+        onAbrir={() => onComentar(publicacion)}
         variante="limpia"
       />
 

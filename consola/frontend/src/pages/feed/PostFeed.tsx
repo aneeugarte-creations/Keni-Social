@@ -46,13 +46,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
-  // La tarjeta es clicable, pero el editor (`DialogoEditar`) se monta como HIJO React de ella.
-  // Aunque Radix lo portalea a `body`, los eventos sintéticos de React BURBUJEAN por el árbol de
-  // componentes, no por el DOM: un clic en "Cerrar"/"X" del diálogo llegaría al `onClick` de la
-  // tarjeta y la reabriría; una tecla (espacio) escrita en un comentario dispararía el editor. Por
-  // eso delimitamos el área activa al DOM real de la tarjeta (`cardRef.contains`) y, en teclado,
-  // solo cuando la tarjeta EN SÍ tiene el foco (`target === currentTarget`).
-  const cardRef = React.useRef<HTMLDivElement>(null);
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
@@ -257,31 +250,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const imagen = publicacion.imagen_url || publicacion.imagen || publicacion.imagen_fuente;
 
   return (
-    // Toda la tarjeta abre el editor al hacer clic (cabecera + previa + panel de estado); la zona
-    // de botones y el hilo de comentarios NO (paran la propagación). Teclado: Enter/Espacio.
-    <div
-      ref={cardRef}
-      role="button"
-      tabIndex={0}
-      onClick={(e) => {
-        // Ignora clics que NO nacen del DOM real de la tarjeta (p. ej. el diálogo de edición, que
-        // se portalea a `body` pero burbujea por el árbol React). Así "Cerrar"/"X" no reabren.
-        if (!cardRef.current?.contains(e.target as Node)) return;
-        void abrirEditor();
-      }}
-      onKeyDown={(e) => {
-        // Solo activa cuando la TARJETA en sí tiene el foco (no un input/comentario/diálogo hijo):
-        // escribir un espacio en un comentario ya no abre el editor.
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          void abrirEditor();
-        }
-      }}
-      title="Abrir para editar"
-      aria-label="Abrir para editar"
-      className="cursor-pointer rounded-xl border border-border bg-background text-left shadow-sm transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
+    // El editor se abre SOLO al pulsar la imagen (área interactiva de la pieza). La cabecera, el
+    // copy (con su "leer más"), las acciones y los comentarios NO abren el editor.
+    <div className="rounded-xl border border-border bg-background text-left shadow-sm">
       {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · tiempo. La MARCA y el FORMATO ya van en el
           titular del grupo (cabecera de la idea), la RED como distintivo sobre la imagen y el
           formato como icono sobre la imagen (lado opuesto a la red), así que aquí NO se repiten. */}
@@ -317,6 +288,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         copy_in={publicacion.copy_in}
         imagen_url={imagen || undefined}
         formato={publicacion.formato}
+        onAbrir={() => void abrirEditor()}
         variante="limpia"
       />
 

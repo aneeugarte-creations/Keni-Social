@@ -96,7 +96,13 @@ export function GrupoIdea({
       <div className={cn("grid items-start gap-3", GRID_COLS[columnas])}>
         {redes.map((r) => {
           const p = porRed.get(r);
-          return p ? <PostFeed key={r} publicacion={p} /> : <PlaceholderRed key={r} red={r} />;
+          // Cada celda (post o hueco) es un punto de snap: en móvil a 1 columna el scroll encaja
+          // pieza a pieza dentro de la idea (estilo Shorts), no solo de idea a idea.
+          return (
+            <div key={r} className="snap-start">
+              {p ? <PostFeed publicacion={p} /> : <PlaceholderRed red={r} />}
+            </div>
+          );
         })}
       </div>
     </section>

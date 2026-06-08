@@ -208,17 +208,26 @@ export default function FeedIdeacion() {
     guardarPref("keni_feed_escala", escala);
   }, [escala]);
 
-  // SCROLL MAGNÉTICO POR FILA (solo móvil): el contenedor que hace scroll es el <main> del
-  // AppShell. Le activamos scroll-snap mientras el feed está montado (variantes `max-sm:`, así solo
-  // por debajo de 640px) y lo revertimos al salir, sin que el AppShell tenga que conocer esta ruta.
-  // Cada fila lleva `snap-start` (inerte si el contenedor no tiene snap-type, p. ej. en escritorio).
+  // SCROLL MAGNÉTICO POR POST (solo móvil, estilo YouTube Shorts): el contenedor que hace scroll es
+  // el <main> del AppShell. Le ponemos `scroll-snap-type: y mandatory` por estilo en línea (más
+  // fiable que clases dinámicas que el JIT de Tailwind podría no generar) SOLO por debajo de 640px,
+  // vía `matchMedia`, y lo revertimos al salir o al pasar a escritorio. Cada POST lleva `snap-start`
+  // (inerte si el contenedor no tiene snap-type, p. ej. en escritorio): así encaja entre piezas, no
+  // entre ideas, aunque varias piezas compartan idea (1 columna en móvil).
   const rootRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    const scroller = rootRef.current?.closest("main");
+    const scroller = rootRef.current?.closest("main") as HTMLElement | null;
     if (!scroller) return;
-    const clases = ["max-sm:snap-y", "max-sm:snap-mandatory"];
-    scroller.classList.add(...clases);
-    return () => scroller.classList.remove(...clases);
+    const mq = window.matchMedia("(max-width: 639px)");
+    const aplicar = () => {
+      scroller.style.scrollSnapType = mq.matches ? "y mandatory" : "";
+    };
+    aplicar();
+    mq.addEventListener("change", aplicar);
+    return () => {
+      mq.removeEventListener("change", aplicar);
+      scroller.style.scrollSnapType = "";
+    };
   }, []);
 
   const ajustarColumnas = (delta: number) =>
@@ -509,7 +518,8 @@ export default function FeedIdeacion() {
                 key={g.id}
                 id={anclaFeed(g.id)}
                 className={cn(
-                  "scroll-mt-20 snap-start rounded-xl transition-shadow",
+                  // NO snap aquí: el snap va por POST (dentro de GrupoIdea), no por idea.
+                  "scroll-mt-20 rounded-xl transition-shadow",
                   g.id === piezaDestacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
                 )}
               >
@@ -532,7 +542,8 @@ export default function FeedIdeacion() {
                   key={g.id}
                   id={anclaFeed(g.id)}
                   className={cn(
-                    "scroll-mt-20 snap-start rounded-xl transition-shadow",
+                    // Cada pieza es un punto de snap (sin margen superior: encaja arriba del todo).
+                    "snap-start rounded-xl transition-shadow",
                     g.id === piezaDestacada &&
                       "ring-2 ring-primary ring-offset-2 ring-offset-background",
                   )}
