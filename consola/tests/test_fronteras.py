@@ -69,11 +69,13 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # estado del job. Mismo acoplamiento que el Seam #4 de `media`, ahora app→app.
         # T-futura puede moverlo tras la fachada de jobs del gateway. (ADR 0005 §Seams.)
         ("parrilla_import", "generaciones"),
-        # Seam #7 (mismo patrón, otra operación C): `api/contenido.py` (operacion) importa un
+        # Seam #7 (mismo patrón, otra operación C): el router `contenido` (operacion) importa un
         # CALENDARIO editorial desde un documento con un `claude -p` en SEGUNDO PLANO, y para ello
         # usa la infraestructura de jobs `generaciones` (A) — encolar y leer el estado del job.
         # Idéntico acoplamiento app→app que `parrilla_import`/`media`. T-futura puede moverlo tras
-        # la fachada de jobs del gateway. (ADR 0005 §Seams.)
+        # la fachada de jobs del gateway. (ADR 0005 §Seams.) NOTA: `contenido` se partió de
+        # `api/contenido.py` a un PAQUETE `api/contenido/`; el cruce vive hoy en `contenido/_comun.py`
+        # (`from ... import generaciones`) y el lint lo escanea recorriendo todos los `.py` del paquete.
         ("contenido", "generaciones"),
         # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2 / borra-panel):
         #   ("reciclaje", "publicaciones")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
@@ -122,6 +124,24 @@ def _routers() -> dict[str, str]:
     return routers
 
 
+def _fuentes_router(nombre: str) -> list[Path]:
+    """Ficheros fuente de un router (módulo de un fichero o PAQUETE).
+
+    Un router es `api/<X>.py` o, tras partir un router grande en submódulos, un
+    PAQUETE `api/<X>/` con `RUTAS` en su `__init__`. En el caso paquete escaneamos
+    TODOS sus `.py` (p.ej. `_comun.py`) para no perder los cruces de frontera que
+    se mudaron a submódulos: si solo miráramos `<X>.py`, el cruce dejaría de
+    vigilarse al refactorizar el router a paquete.
+    """
+    fichero = _RAIZ_API / f"{nombre}.py"
+    if fichero.is_file():
+        return [fichero]
+    paquete = _RAIZ_API / nombre
+    if paquete.is_dir():
+        return sorted(paquete.rglob("*.py"))
+    return []
+
+
 def _modulos_destino(node: ast.ImportFrom) -> set[str]:
     """Devuelve los nombres de módulo base referenciados por un import relativo.
 
@@ -166,23 +186,31 @@ def _cruces() -> list[tuple[str, str, str, str]]:
     routers = _routers()
     cruces: list[tuple[str, str, str, str]] = []
     for nombre, app_origen in routers.items():
-        ruta = _RAIZ_API / f"{nombre}.py"
-        try:
-            fuente = ruta.read_text(encoding="utf-8")
-        except OSError:
-            continue  # el fichero pudo desaparecer (carrera xdist con test_app)
-        arbol = ast.parse(fuente)
-        for node in ast.walk(arbol):
-            if not isinstance(node, ast.ImportFrom):
-                continue
-            for destino in _modulos_destino(node):
-                app_destino = mapa_modulos.get(destino)
-                if app_destino is None or app_destino == app_origen:
-                    continue  # infra compartida o mismo dueño: permitido
-                # app -> shell: la base transversal, siempre permitido.
-                if app_destino == "shell":
+        for ruta in _fuentes_router(nombre):
+            try:
+                fuente = ruta.read_text(encoding="utf-8")
+            except OSError:
+                continue  # el fichero pudo desaparecer (carrera xdist con test_app)
+            # Un router-PAQUETE (`api/<X>/...`) importa sus propios submódulos con
+            # nivel 1 (`from .sub import` / `from . import sub`). Eso es intra-paquete
+            # (misma app) y NO un cruce, aunque un submódulo se llame igual que un
+            # módulo de otra app (p.ej. `contenido/metricas.py` ≠ la app `metricas`).
+            # Los cruces reales escapan el paquete con nivel ≥ 2 (`from ..`, `from ...`).
+            es_subpaquete = ruta.parent != _RAIZ_API
+            arbol = ast.parse(fuente)
+            for node in ast.walk(arbol):
+                if not isinstance(node, ast.ImportFrom):
                     continue
-                cruces.append((nombre, app_origen, destino, app_destino))
+                if es_subpaquete and node.level == 1:
+                    continue  # hermano del propio paquete-router: misma app
+                for destino in _modulos_destino(node):
+                    app_destino = mapa_modulos.get(destino)
+                    if app_destino is None or app_destino == app_origen:
+                        continue  # infra compartida o mismo dueño: permitido
+                    # app -> shell: la base transversal, siempre permitido.
+                    if app_destino == "shell":
+                        continue
+                    cruces.append((nombre, app_origen, destino, app_destino))
     return cruces
 
 
@@ -238,8 +266,12 @@ def test_allowlist_no_tiene_seams_muertos():
     mapa = registro.modulo_a_app()
     routers = _routers()
     for origen, destino in SEAMS_PERMITIDOS:
-        # El origen debe ser un módulo de api/ conocido (router o helper como historial).
-        existe_origen = (_RAIZ_API / f"{origen}.py").is_file()
+        # El origen debe ser un módulo de api/ conocido: un fichero (`api/<X>.py`,
+        # router o helper como historial) o un PAQUETE (`api/<X>/`, router partido
+        # en submódulos).
+        existe_origen = (_RAIZ_API / f"{origen}.py").is_file() or (
+            _RAIZ_API / origen
+        ).is_dir()
         assert existe_origen, f"Seam con origen inexistente en api/: {origen}"
         assert destino in mapa, f"Seam con destino que no es de ninguna app: {destino}"
 
