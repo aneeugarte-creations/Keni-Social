@@ -1,6 +1,6 @@
 # keni-social
 
-**Suite de producción de contenido para equipos de redes sociales.** Convierte una nota, varios cables o un video en copy publicable —en **español de México**, con **auto-verificación** que dice cuándo creerle— y lee las **métricas de tus marcas conversando**, sin abrir cinco pestañas. La **generación de copy y de imagen** se trabaja desde la **Consola** (Biblioteca de prompts + Estudio de imagen); el **plugin de Claude Code** aporta los **MCP** (métricas y tablero) y comandos `/` de apoyo. El audio se transcribe **en tu máquina** y las métricas se leen con **credenciales locales**: privacidad por diseño.
+**Suite de producción de contenido para equipos de redes sociales.** Convierte una nota, varios cables o un video en copy publicable —en **español de México**, con **auto-verificación** que dice cuándo creerle— y lee las **métricas de tus marcas conversando**, sin abrir cinco pestañas. La **generación de copy y de imagen** se trabaja desde la **Consola** (Texto (prompts) + Estudio de imagen); el **plugin de Claude Code** aporta los **MCP** (métricas y tablero) y comandos `/` de apoyo. El audio se transcribe **en tu máquina** y las métricas se leen con **credenciales locales**: privacidad por diseño.
 
 **Para quién:** community managers y su responsable. Diseñado primero para el equipo de **AMX Contenido** (UnoTV / Claro Sports / Nación Gamer / Piso 15 / Fundación) y reutilizable para otros clientes de Keni.
 
@@ -12,12 +12,12 @@ Componentes principales:
 
 | Pieza | Qué es | Estado |
 |---|---|---|
-| [`consola/`](consola/) | La **Consola Keni** (app web local/alojada): **Biblioteca de prompts + línea editorial** (documentos markdown editables) para convertir una nota, varios cables o un clip en copy publicable (voz de marca + tropicalización mexicana + formato por plataforma + auto-verificación), y el **Estudio de imagen**. La generación se lanza con `claude -p`. | En uso (beta). |
+| [`consola/`](consola/) | La **Consola Keni** (app web local/alojada): **Texto (prompts) + línea editorial** (documentos markdown editables) para convertir una nota, varios cables o un clip en copy publicable (voz de marca + tropicalización mexicana + formato por plataforma + auto-verificación), y el **Estudio de imagen**. La generación se lanza con `claude -p`. | En uso (beta). |
 | [`mcp-metricas/`](mcp-metricas/) | Servidor **MCP** que lee métricas de redes (Meta FB/IG, YouTube, X, TikTok), multi-marca, y las expone a Claude. Corre **local por persona** con sus propias credenciales. | Núcleo + fuente `muestra` listos; adaptadores reales vía Metricool (lectura y publicación). |
 | [`mcp-tablero/`](mcp-tablero/) | Servidor **MCP** que crea/mueve/lista contenido del tablero de la Consola desde Claude Code (necesita `KENI_CONSOLA_URL`/`KENI_CONSOLA_TOKEN`). | En uso (beta). |
 | [`keni-shared/`](keni-shared/) | **Capa base** común a la Consola y al MCP de métricas: catálogo de marca, límites de plataforma y utilidades canónicas. | En uso. |
 
-> **Nota.** La generación de copy y la imagen viven en la **Consola** (Biblioteca de prompts + Estudio de imagen).
+> **Nota.** La generación de copy y la imagen viven en la **Consola** (Texto (prompts) + Estudio de imagen).
 
 ## Consola (interfaz)
 
@@ -33,13 +33,13 @@ keni-consola
 
 ## Por dónde empezar
 
-- **Generar copy:** desde la Consola (Biblioteca de prompts). Ver [`docs/consola.md`](docs/consola.md) y [`consola/README.md`](consola/README.md).
+- **Generar copy:** desde la Consola (Texto (prompts)). Ver [`docs/consola.md`](docs/consola.md) y [`consola/README.md`](consola/README.md).
 - **Conectar métricas a Claude:** ver [`mcp-metricas/README.md`](mcp-metricas/README.md).
 - **Credenciales y despliegue local:** ver [`docs/`](docs/).
 
 ### Documentación clave
 
-- [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan la Biblioteca de prompts, el MCP de métricas y la Consola.
+- [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan la Texto (prompts), el MCP de métricas y la Consola.
 - [`docs/estado-producto.md`](docs/estado-producto.md) — panorama honesto: qué está listo, qué está pausado por gating externo.
 - [`docs/mapa-codigo.md`](docs/mapa-codigo.md) — índice de los módulos de `keni_consola` (dónde vive cada cosa).
 - [`docs/maquina-contenido/`](docs/maquina-contenido/README.md) — specs de los motores de contenido (ingesta, clustering, verificación, auto-feed, video).
@@ -47,7 +47,7 @@ keni-consola
 
 ## Instalación como plugin
 
-El plugin `keni-social` aporta a Claude Code los **servidores MCP** (métricas y tablero) y unos **comandos `/`** de apoyo. **La generación de copy y de imagen NO va en el plugin: vive en la Consola** (Biblioteca de prompts + Estudio de imagen). Se instala desde el marketplace privado de Keni en **dos comandos**, sin permisos de administrador.
+El plugin `keni-social` aporta a Claude Code los **servidores MCP** (métricas y tablero) y unos **comandos `/`** de apoyo. **La generación de copy y de imagen NO va en el plugin: vive en la Consola** (Texto (prompts) + Estudio de imagen). Se instala desde el marketplace privado de Keni en **dos comandos**, sin permisos de administrador.
 
 1. Añade el marketplace de Keni (solo la primera vez):
 

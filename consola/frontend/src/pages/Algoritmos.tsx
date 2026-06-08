@@ -109,8 +109,8 @@ function TarjetaNoticia({
           </Badge>
         )}
         {noticia.aplicada && (
-          <Badge variant="ok" title="Ya propuesta a la biblioteca editorial.">
-            En biblioteca
+          <Badge variant="ok" title="Ya propuesta a la texto editorial.">
+            En texto
           </Badge>
         )}
       </div>
@@ -160,7 +160,7 @@ function TarjetaNoticia({
             title="Proponer esta noticia a la ficha editorial de la plataforma"
           >
             <Library className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            A biblioteca
+            A texto
           </Button>
           <Button
             variant="ghost"
@@ -350,7 +350,7 @@ function DialogoNuevaFuente({
 }
 
 // --------------------------------------------------------------------------- //
-// Diálogo: propuesta para la biblioteca                                         //
+// Diálogo: propuesta para la texto                                         //
 // --------------------------------------------------------------------------- //
 
 function DialogoPropuesta({
@@ -364,10 +364,10 @@ function DialogoPropuesta({
     <Dialog open={propuesta !== null} onOpenChange={(v) => !v && onCerrar()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Propuesta para la biblioteca</DialogTitle>
+          <DialogTitle>Propuesta para la texto</DialogTitle>
           <DialogDescription>
             Borrador listo para pegar en la ficha editorial de la plataforma. La línea
-            editorial la decide el equipo: cópialo y confírmalo en la Biblioteca.
+            editorial la decide el equipo: cópialo y confírmalo en la Texto.
           </DialogDescription>
         </DialogHeader>
         {propuesta && (
@@ -389,7 +389,7 @@ function DialogoPropuesta({
             Copiar
           </Button>
           <Button asChild>
-            <Link to="/contenido/texto">Abrir Biblioteca</Link>
+            <Link to="/contenido/texto">Abrir Texto</Link>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -537,7 +537,7 @@ export default function Algoritmos() {
   });
 
   const proponer = useMutation({
-    mutationFn: (n: NoticiaAlgoritmo) => api.algoritmoABiblioteca(n.id),
+    mutationFn: (n: NoticiaAlgoritmo) => api.algoritmoATexto(n.id),
     onSuccess: (r) => {
       setPropuesta(r.propuesta);
       void invalidar();

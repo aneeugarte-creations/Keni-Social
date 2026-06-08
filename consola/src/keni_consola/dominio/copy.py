@@ -6,7 +6,7 @@ PURO: dependen de `stream` (parseo), `repos` (historial), `dominio.publicaciones
 A→C de borradores), `redes` y `media`. NO dependen del catálogo de skills.
 
 Viven aquí (y ya no en `dominio.skills`) porque son el post-procesado de CUALQUIER
-generación de copy, venga de la Biblioteca de prompts o de donde sea: al retirar el sistema
+generación de copy, venga de la Texto de prompts o de donde sea: al retirar el sistema
 de skills, este módulo es su hogar estable. `jobspec.reconstruir_procesar` los reconstruye
 en el worker desde el `spec`.
 """

@@ -12,7 +12,7 @@ Un objeto del almacen es huerfano si y SOLO si cumple las DOS condiciones:
   1. NO es una REFERENCIA VIVA: ni el `imagen` (composite horneado) ni la `foto` cruda de
      ninguna publicacion (normales — TODOS los estados/marcas — ni comerciales), ni un recurso
      que alimente el render on-demand (miniatura/media_id de plantillas del estudio, activos de
-     marca: logos, tipografías), ni un arte catalogado en la biblioteca, Y
+     marca: logos, tipografías), ni un arte catalogado en la texto, Y
   2. es mas VIEJO que `antiguedad_horas` (def 24h): asi NO se borran las variantes recien
      generadas por el Estudio que el usuario aun esta revisando.
 
@@ -24,14 +24,14 @@ tipografías, plantillas), no los composites.
 Las referencias vivas se calculan SIEMPRE sobre el catalogo completo (sin filtros de
 estado/marca): un objeto referenciado por CUALQUIER pieza, en cualquier estado, se conserva.
 
-BIBLIOTECA DE ARTES (catalogo) — referencia viva (comprobacion DEFENSIVA y OPCIONAL)
+TEXTO DE ARTES (catalogo) — referencia viva (comprobacion DEFENSIVA y OPCIONAL)
 ====================================================================================
-La biblioteca de ARTES (`api/artes.py` / `repos.listar_media_biblioteca`) cataloga objetos
+La texto de ARTES (`api/artes.py` / `repos.listar_media_catalogo`) cataloga objetos
 que el equipo decide CONSERVAR para reutilizar en publicaciones. Un arte catalogado es una
 referencia viva: el GC NO lo borra aunque ninguna publicacion lo use todavia. El GC NO
 depende de forma DURA de ese repo: si existe en runtime sus objetos se anaden a las
 referencias vivas; si la funcion se eliminara, el GC sigue funcionando sin tocar esa fuente
-(no se importa a nivel de modulo nada propio de la biblioteca; se consulta via `hasattr`).
+(no se importa a nivel de modulo nada propio de la texto; se consulta via `hasattr`).
 
 SEGURO POR DISENO
 =================
@@ -110,7 +110,7 @@ def _refs_documento(doc: Any, acc: set[str]) -> None:
 def _objetos_recursos_marca() -> set[str]:
     """Originales que alimentan el render on-demand: plantillas del estudio y activos de marca.
 
-    DEFENSIVO y OPCIONAL (igual patrón que la biblioteca de artes): si alguna fuente no existe
+    DEFENSIVO y OPCIONAL (igual patrón que la texto de artes): si alguna fuente no existe
     en runtime, se omite sin fallar. Protege de borrado:
       - las MINIATURAS y los media_id (logo/fondo/foto de muestra) de las plantillas del estudio,
       - los `objeto` de los activos de marca (logos oficiales, tipografías).
@@ -148,15 +148,15 @@ def _objetos_recursos_marca() -> set[str]:
     return refs
 
 
-def _objetos_biblioteca_media() -> set[str]:
-    """Objetos catalogados en la biblioteca de artes, SI ese repo existe (comprobacion OPCIONAL).
+def _objetos_catalogo_media() -> set[str]:
+    """Objetos catalogados en la texto de artes, SI ese repo existe (comprobacion OPCIONAL).
 
-    La biblioteca de artes (`api/artes.py`) NO es una dependencia dura del GC. Si
-    `repos.listar_media_biblioteca` no existe en runtime, devuelve set vacio sin fallar. Si
+    La texto de artes (`api/artes.py`) NO es una dependencia dura del GC. Si
+    `repos.listar_media_catalogo` no existe en runtime, devuelve set vacio sin fallar. Si
     existe, sus `objeto` se suman a las referencias vivas. `hasattr` evita importar nada
-    propio de la biblioteca a nivel de modulo.
+    propio de la texto a nivel de modulo.
     """
-    listar = getattr(repos, "listar_media_biblioteca", None)
+    listar = getattr(repos, "listar_media_catalogo", None)
     if listar is None:
         return set()
     return {
@@ -173,10 +173,10 @@ def referencias_vivas() -> set[str]:
       - el `imagen` de TODAS las publicaciones normales (sin filtro de estado/marca),
       - el `imagen` de las publicaciones comerciales (HOY no tienen ese campo: el `.get`
         devuelve None y no aporta nada; se incluye por si se anade en el futuro),
-      - DEFENSIVO Y OPCIONAL: el `objeto` de la biblioteca de artes SOLO si ese repo existe
-        en runtime (ver `_objetos_biblioteca_media`).
+      - DEFENSIVO Y OPCIONAL: el `objeto` de la texto de artes SOLO si ese repo existe
+        en runtime (ver `_objetos_catalogo_media`).
 
-    Las publicaciones son la fuente de verdad de "media en uso"; la biblioteca de artes anade
+    Las publicaciones son la fuente de verdad de "media en uso"; la texto de artes anade
     los objetos que el equipo decidio conservar para reutilizar.
     """
     vivas: set[str] = set()
@@ -191,7 +191,7 @@ def referencias_vivas() -> set[str]:
     # Originales que alimentan el render: plantillas del estudio (miniatura + media_id) y
     # activos de marca (logos, tipografías). Defensivo y opcional.
     vivas |= _objetos_recursos_marca()
-    vivas |= _objetos_biblioteca_media()
+    vivas |= _objetos_catalogo_media()
     return vivas
 
 

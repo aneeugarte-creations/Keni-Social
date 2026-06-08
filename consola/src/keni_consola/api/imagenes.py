@@ -231,7 +231,7 @@ async def componer(request: Request) -> Response:
 async def revisar(request: Request) -> Response:
     """Revision legal/editorial de una imagen (gate humano, `claude` la VE) -> `{generacion}`.
 
-    NO bloquea publicar: lanza un job `claude` que aplica las reglas de imagen de la Biblioteca
+    NO bloquea publicar: lanza un job `claude` que aplica las reglas de imagen de la Texto
     y devuelve un checklist ✅/⚠️/❌; el frontend SONDEA `GET /api/generaciones/{id}` y muestra
     el texto en vivo (`salida`). El registro es de tipo "qa-editorial" (revision editorial).
     """

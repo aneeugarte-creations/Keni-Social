@@ -161,7 +161,7 @@ async def aportar(request: Request) -> Response:
 
       - `idea`    usa `texto` (texto libre del equipo) como nota de partida.
       - `enlace`  usa `url`: se valida (SSRF) y se EXTRAE la nota (titular + cuerpo) con
-                  `extraccion_url`, reutilizando el mismo flujo URL->copy de la Biblioteca.
+                  `extraccion_url`, reutilizando el mismo flujo URL->copy de la Texto.
       - `interna` usa `texto` (contenido interno de AMX pegado a mano). El conector
                   automatico de AMX queda PENDIENTE; esta es la ingestion manual entretanto.
 

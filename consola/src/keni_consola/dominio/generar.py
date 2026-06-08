@@ -18,7 +18,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from .. import biblioteca, generaciones, marcas, redes
+from .. import libtexto, generaciones, marcas, redes
 from . import jobspec
 
 _log = logging.getLogger("keni_consola.generar")
@@ -133,7 +133,7 @@ def instruccion_redes(redes_ids: list[str]) -> str:
 
 def componer(
     cuerpo_prompt: str,
-    adjuntos: list[biblioteca.Documento],
+    adjuntos: list[libtexto.Documento],
     bloque_contexto: str,
     *,
     sin_emojis: bool = False,
@@ -142,7 +142,7 @@ def componer(
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
     `sin_emojis`/`redes_ids` son ADITIVOS y OPT-IN (específicos de copy): por defecto NO se
-    añaden, para que un prompt cualquiera de la Biblioteca no quede forzado a "sin emojis"
+    añaden, para que un prompt cualquiera de la Texto no quede forzado a "sin emojis"
     ni al bloque de piezas por red. Las features de copy los activan.
     """
     partes: list[str] = [cuerpo_prompt.strip()]
@@ -292,7 +292,7 @@ def lanzar_copy(
     al completar. El `procesar` se reconstruye del MISMO `spec` que usa el worker (sin duplicar).
 
     `titulo` es la ETIQUETA del lanzamiento (lista de actividad); `titulo_dado` es el título
-    fijo del HISTORIAL/borradores. Son distintos: para la Biblioteca `titulo` es el nombre del
+    fijo del HISTORIAL/borradores. Son distintos: para la Texto `titulo` es el nombre del
     prompt ("Copy desde nota"), que NO debe ser el título del historial; pasa `titulo_dado=""`
     para que se derive de la nota. RSS/asistente pasan el título del ítem como `titulo_dado`.
 
@@ -305,14 +305,14 @@ def lanzar_copy(
     URL). "" = no se toca (comportamiento de hoy).
     """
     # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
-    # "copy" decide su prompt base (que puede haberse re-bindeado en la Biblioteca sin tocar
+    # "copy" decide su prompt base (que puede haberse re-bindeado en la Texto sin tocar
     # codigo). Si el caller pasa un prompt_id distinto, se respeta tal cual.
-    prompt_efectivo = biblioteca.prompt_base_de("copy") if prompt_id == PROMPT_COPY else prompt_id
-    cuerpo = biblioteca.cuerpo_efectivo(prompt_efectivo)
+    prompt_efectivo = libtexto.prompt_base_de("copy") if prompt_id == PROMPT_COPY else prompt_id
+    cuerpo = libtexto.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
-        raise biblioteca.BibliotecaError("No está disponible el prompt de copy. Reinstala la Consola.")
+        raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")
     prompt = componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca, pipeline="copy"), contexto,
+        cuerpo, libtexto.editoriales_de_marca(marca, pipeline="copy"), contexto,
         sin_emojis=True, redes_ids=redes_ids,
     )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe

@@ -55,8 +55,8 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CLAUDE_MAX_TURNS       tope de turnos (--max-turns)       def sin tope
     - KENI_CLAUDE_SKIP_PERMISSIONS  saltar permisos (--dangerously-skip-permissions)  def ON
 
-  Biblioteca de prompts + linea editorial (`biblioteca`, `dominio.biblioteca_lanzar`):
-    - KENI_BIBLIOTECA_DIR         almacen de documentos markdown     def <dir_config>/biblioteca
+  Texto de prompts + linea editorial (`texto`, `dominio.texto_lanzar`):
+    - KENI_TEXTO_DIR         almacen de documentos markdown     def <dir_config>/texto
 
   Programadores en segundo plano (`comercial`, `programador`):
     - KENI_COMERCIAL_INTERVALO_SEGUNDOS  intervalo captura (s)       prioridad sobre horas
@@ -151,7 +151,7 @@ from ._config_comun import (  # noqa: F401
     ENV_AUTOGEN_ARTE_MAX,
     ENV_AUTOGEN_INTERVALO_HORAS,
     ENV_AUTOGEN_MAX,
-    ENV_BIBLIOTECA_DIR,
+    ENV_TEXTO_DIR,
     ENV_BREAKING,
     ENV_BREAKING_INTERVALO_MIN,
     ENV_BREAKING_MAX,
@@ -353,8 +353,8 @@ from .config_auth import (  # noqa: F401
     sesion_max_horas,
     token,
 )
-from .config_biblioteca import (  # noqa: F401
-    biblioteca_dir,
+from .config_texto import (  # noqa: F401
+    texto_dir,
 )
 from .config_contenido import (  # noqa: F401
     insumos_modelo,

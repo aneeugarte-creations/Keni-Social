@@ -67,14 +67,14 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `motor_db.py` — motor de persistencia operacional: Postgres, un solo backend.
 - `migracion.py` — migración one-shot del cutover hosted: media disco → S3/Garage.
 - `migrar_contenido.py` — migración de datos legados al tablero de CONTENIDO unificado.
-- `versionado.py` — versionado de la Biblioteca con git (historial · diff · rollback).
+- `versionado.py` — versionado de la Texto con git (historial · diff · rollback).
 
 > Capas de DB: `api/` → `repos.py` (fachada) → `db.py` (barrel) → `db_<dominio>.py` (CRUD) → `_db_core.py` (cimientos) ← `motor_db.py` (conexión Postgres). El plumbing común de los `db_<dominio>` está en `_db_comun.py`.
 
 ## Ficheros-como-verdad (prosa editorial en disco)
 - `ficheros.py` — backend de FICHEROS YAML: el historial de prompts vive en disco.
 - `indice.py` — índice REGENERABLE del backend de ficheros (NO es la fuente de verdad).
-- `biblioteca.py` — almacén ÚNICO: PROMPTS + LÍNEA EDITORIAL (files-as-truth).
+- `texto.py` — almacén ÚNICO: PROMPTS + LÍNEA EDITORIAL (files-as-truth).
 - `plantillas_marca.py` — store EDITABLE de la "Plantilla de marca" del Estudio.
 - `io_atomico.py` — escritura atómica de texto (REEXPORTA `keni_shared.io_atomico`).
 

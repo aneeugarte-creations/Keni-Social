@@ -3,19 +3,19 @@
  * tiene marca con plantilla, la placa de marca + el copy-in se componen ENCIMA casi solos.
  *
  * Tres orígenes de fondo:
- *   - **Biblioteca (S3)**: elegir un arte ya guardado (`SelectorArtes`).
+ *   - **Texto (S3)**: elegir un arte ya guardado (`SelectorArtes`).
  *   - **Subir**: un archivo del equipo (`POST /api/media`).
  *   - **Generar con IA**: a partir de un prompt (`POST /api/media/generar`).
  *
  * Tras obtener el fondo por cualquiera de las tres vías, si hay `marca` se AUTO-COMPONE la
  * placa (`POST /api/imagenes/componer`, sondeada con `useGeneracion`) usando el copy-in como
  * titular, y se muestra la preview; el usuario puede reajustar titular/etiqueta y re-componer,
- * o **guardar el fondo en la biblioteca** para reutilizarlo. Sin `marca` (uso suelto, p. ej.
+ * o **guardar el fondo en la texto** para reutilizarlo. Sin `marca` (uso suelto, p. ej.
  * en el tablero) el fondo se adjunta tal cual, sin componer.
  *
  * El componente es controlado: el padre guarda el `nombre` de la imagen final (vacío = sin
  * imagen) y lo incluye al guardar la pieza. El FONDO limpio se recuerda solo en esta sesión
- * (para re-componer y para guardarlo en la biblioteca sin la placa estampada).
+ * (para re-componer y para guardarlo en la texto sin la placa estampada).
  */
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -112,7 +112,7 @@ export function EditorImagen({
   const [prompt, setPrompt] = React.useState("");
   // Aviso amable cuando la generación no está configurada (400).
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
-  // Galería de artes (biblioteca S3).
+  // Galería de artes (texto S3).
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
   // Fondo limpio de ESTA sesión (lo que se compone y lo que se puede guardar sin placa).
   const [fondo, setFondo] = React.useState<Fondo | null>(null);
@@ -136,7 +136,7 @@ export function EditorImagen({
   }, [src]);
   const tamRed = red ? tamanoRed(red) : null;
   const ratioRec = tamRed ? ratioDe(tamRed.ratio) : null;
-  // El warning de recorte es SOLO para fotos crudas (subir/biblioteca) en piezas SIN placa de
+  // El warning de recorte es SOLO para fotos crudas (subir/texto) en piezas SIN placa de
   // marca: cuando hay marca, la placa ya se compone en el formato propio de la red, así que la
   // plantilla auto-compuesta no debe avisar de "recorte" (su ratio es el correcto por diseño).
   const aspectoFueraDeEstandar =
@@ -236,13 +236,13 @@ export function EditorImagen({
     }
   }, [genIA, aplicarFondo]);
 
-  // --- Guardar el fondo en la biblioteca (durable + reutilizable) --- //
+  // --- Guardar el fondo en la texto (durable + reutilizable) --- //
   const guardar = useMutation({
     mutationFn: () => {
       if (!fondo) throw new Error("Elige primero un fondo.");
       return api.guardarArte({ objeto: fondo.id, marca: marca || undefined, tipo: fondo.tipo });
     },
-    onSuccess: () => toast.success("Fondo guardado en la biblioteca"),
+    onSuccess: () => toast.success("Fondo guardado en la texto"),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -297,7 +297,7 @@ export function EditorImagen({
       prompt={prompt}
       onPrompt={setPrompt}
       onSubir={() => inputRef.current?.click()}
-      onBiblioteca={() => setGaleriaAbierta(true)}
+      onTexto={() => setGaleriaAbierta(true)}
       onGenerar={() => generar.mutate()}
       avisoGenerar={avisoGenerar}
       mostrarOriginal={!!imagenFuente}
@@ -438,7 +438,7 @@ export function EditorImagen({
                   ) : (
                     <Save className="h-3.5 w-3.5" />
                   )}
-                  Guardar fondo en biblioteca
+                  Guardar fondo en texto
                 </Button>
               </div>
             </div>
@@ -458,7 +458,7 @@ export function EditorImagen({
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              Guardar en biblioteca
+              Guardar en texto
             </Button>
           )}
 
@@ -479,7 +479,7 @@ export function EditorImagen({
   );
 }
 
-/** Selector de origen del fondo: biblioteca · subir · generar con IA. */
+/** Selector de origen del fondo: texto · subir · generar con IA. */
 function FuenteFondo({
   idPrefijo,
   compacto,
@@ -489,7 +489,7 @@ function FuenteFondo({
   prompt,
   onPrompt,
   onSubir,
-  onBiblioteca,
+  onTexto,
   onGenerar,
   avisoGenerar,
   mostrarOriginal,
@@ -504,7 +504,7 @@ function FuenteFondo({
   prompt: string;
   onPrompt: (v: string) => void;
   onSubir: () => void;
-  onBiblioteca: () => void;
+  onTexto: () => void;
   onGenerar: () => void;
   avisoGenerar: string;
   /** La pieza trae imagen original (RSS de marca propia): se ofrece descargarla y usarla. */
@@ -516,7 +516,7 @@ function FuenteFondo({
     <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
       {!compacto && (
         <p className="text-xs text-muted-foreground">
-          Elige de dónde sale la foto/fondo (puedes subir una foto real, elegir de la biblioteca
+          Elige de dónde sale la foto/fondo (puedes subir una foto real, elegir de la texto
           o generarla con IA):
         </p>
       )}
@@ -531,9 +531,9 @@ function FuenteFondo({
             Usar imagen original
           </Button>
         )}
-        <Button type="button" variant="outline" size="sm" onClick={onBiblioteca} disabled={ocupado}>
+        <Button type="button" variant="outline" size="sm" onClick={onTexto} disabled={ocupado}>
           <Library className="h-4 w-4" />
-          Biblioteca
+          Texto
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onSubir} disabled={ocupado}>
           {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}

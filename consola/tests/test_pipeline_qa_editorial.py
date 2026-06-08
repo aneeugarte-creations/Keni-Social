@@ -1,6 +1,6 @@
-"""Tests de la QA de la FUENTE (pre-copy) por DOCUMENTO de Biblioteca del pipeline (rediseño QPC).
+"""Tests de la QA de la FUENTE (pre-copy) por DOCUMENTO de Texto del pipeline (rediseño QPC).
 
-El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Biblioteca con los criterios.
+El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Texto con los criterios.
 Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA se
 movió a ANTES del copy y por TEMA (fuente): criba la NOTA de origen y persiste un veredicto
 ESTRUCTURADO (`no_verificado`/`problema`) sobre el TEMA. Aquí cubrimos, OFFLINE (mock de claude):
@@ -8,13 +8,13 @@ ESTRUCTURADO (`no_verificado`/`problema`) sobre el TEMA. Aquí cubrimos, OFFLINE
   - `lanzar_qa_fuente` enlaza una generación a la etapa QA (`gen_id`) y deja el tema `en_curso`.
   - el `procesar` (vía lanzador completo) persiste el veredicto estructurado sobre el tema.
 
-Usa la fixture `entorno` (Postgres aislado + Biblioteca en tmp) y construye el cliente con un
+Usa la fixture `entorno` (Postgres aislado + Texto en tmp) y construye el cliente con un
 lanzador de generación inyectado (NUNCA se llama a `claude`).
 """
 
 from __future__ import annotations
 
-from keni_consola import biblioteca, generaciones, repos
+from keni_consola import libtexto, generaciones, repos
 from keni_consola import pipeline_contenido as pc
 from keni_consola.pipeline_contenido import ORIGEN_PIPELINE
 
@@ -31,15 +31,15 @@ def _tema(titulo: str = "Tema QA", marca: str = "unotv") -> dict:
 
 def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     """El documento de criterios se CREA si no está en el store (idempotente)."""
-    assert biblioteca.obtener(pc.PROMPT_QA_ID) is None
+    assert libtexto.obtener(pc.PROMPT_QA_ID) is None
     devuelto = pc.asegurar_documento_qa()
     assert devuelto == pc.PROMPT_QA_ID
-    doc = biblioteca.obtener(pc.PROMPT_QA_ID)
+    doc = libtexto.obtener(pc.PROMPT_QA_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
     # Idempotente: una segunda llamada no duplica.
     pc.asegurar_documento_qa()
-    docs = [d for d in biblioteca.listar(tipo="prompt") if d.id == pc.PROMPT_QA_ID]
+    docs = [d for d in libtexto.listar(tipo="prompt") if d.id == pc.PROMPT_QA_ID]
     assert len(docs) == 1
 
 

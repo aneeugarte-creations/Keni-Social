@@ -186,7 +186,7 @@ async def aportar(request: Request) -> Response:
     ASÍNCRONO: crea el lote en estado `parseando` y ENCOLA un job de generación (Haiku) que
     el WORKER ejecuta (el back no tiene `claude`); su post-procesado parsea la salida, inserta
     los ítems y deja el lote `listo`/`error`. Devuelve `{lote, generacion}` para que el SPA
-    sondee. Mismo patrón que la generación de copy y la subida de archivos de la Biblioteca.
+    sondee. Mismo patrón que la generación de copy y la subida de archivos de la Texto.
     """
     content_type = request.headers.get("content-type", "")
     archivo_bytes: bytes = b""

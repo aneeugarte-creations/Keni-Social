@@ -49,7 +49,7 @@ CATEGORIAS: frozenset[str] = frozenset(
         "render",       # composites horneados / cache de render (reciclable, regenerable)
         "plantillas",   # assets del editor de plantillas + miniaturas (reusable)
         "logos",        # activos de marca: logos, tipografias, plecas (reusable)
-        "biblioteca",   # artes catalogadas para reutilizar (reusable)
+        "texto",   # artes catalogadas para reutilizar (reusable)
     }
 )
 
@@ -336,13 +336,13 @@ def promover_objeto(clave: str, categoria: str) -> str:
     """Promueve (COPIA) el objeto `clave` a la subcarpeta `categoria` y devuelve su nueva key.
 
     Para llevar un objeto a su carpeta por tipo cuando su rol se decide DESPUES de subirlo (un
-    upload generico que se cataloga como logo de marca, arte de biblioteca o miniatura de
+    upload generico que se cataloga como logo de marca, arte de texto o miniatura de
     plantilla: no se re-sube, solo se referencia). Conserva el nombre plano (uuid/sha256+ext) y
     solo cambia el prefijo. Idempotente: si `clave` ya esta en `categoria`, no hace nada.
 
     COPIA, no mueve: NO borra el origen. Razon -> el mismo objeto puede seguir referenciado por
     una pieza desde `fotos/`; borrar el origen romperia esa pieza. Con limpieza manual, la copia
-    vive en su carpeta protegida (logos/biblioteca/plantillas) y el origen efimero en `fotos/` se
+    vive en su carpeta protegida (logos/texto/plantillas) y el origen efimero en `fotos/` se
     elimina cuando el equipo vacia esa carpeta a mano. Devuelve la `clave` original sin tocar si
     el objeto no existe (no perdemos la referencia existente).
     """

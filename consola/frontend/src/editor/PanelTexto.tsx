@@ -1,4 +1,4 @@
-// Panel de biblioteca de activos de la marca DENTRO del editor: logos, tipografías, artes,
+// Panel de texto de activos de la marca DENTRO del editor: logos, tipografías, artes,
 // infografías, iconos, paletas y fondos. Click en un activo lo inserta como capa; también
 // permite subir un activo nuevo. Cierra el Frente C (los activos del backend, ya en S3).
 
@@ -26,7 +26,7 @@ function tipoDeArchivo(nombre: string): string {
   return "arte";
 }
 
-export function PanelBiblioteca({
+export function PanelTexto({
   marca,
   reemplazarId = null,
   onReemplazado,
@@ -60,7 +60,7 @@ export function PanelBiblioteca({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["marca-activos", marca] });
-      toast.success("Activo añadido a la biblioteca.");
+      toast.success("Activo añadido a la texto.");
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo subir."),
   });
@@ -147,7 +147,7 @@ export function PanelBiblioteca({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-1 border-b border-border px-3 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Biblioteca</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Texto</span>
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="outline"

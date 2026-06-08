@@ -30,7 +30,7 @@ export interface NoticiaAlgoritmo {
   senales: string[];
   /** `true` si parece un cambio de algoritmo confirmado (candidato a la ficha). */
   es_cambio: boolean;
-  /** `true` si ya se propuso a la biblioteca editorial. */
+  /** `true` si ya se propuso a la texto editorial. */
   aplicada: boolean;
   archivada: boolean;
 }
@@ -101,10 +101,10 @@ export interface RespuestaFuenteAlgoritmo {
   fuente: FuenteAlgoritmo;
 }
 
-/** Respuesta de POST /api/algoritmos/{id}/biblioteca: borrador para la ficha. */
-export interface RespuestaABibliotecaAlgoritmo {
+/** Respuesta de POST /api/algoritmos/{id}/texto: borrador para la ficha. */
+export interface RespuestaATextoAlgoritmo {
   noticia: NoticiaAlgoritmo;
-  /** Bloque markdown listo para pegar/confirmar en la Biblioteca. */
+  /** Bloque markdown listo para pegar/confirmar en la Texto. */
   propuesta: string;
   plataforma: string;
 }
@@ -144,7 +144,7 @@ export interface SugerenciaEditorial {
   titulo: string;
   /** Markdown: qué cambiar y por qué, con referencia a las noticias. */
   detalle: string;
-  /** Doc de biblioteca destino (p. ej. "editorial/plataformas/instagram"). */
+  /** Doc de texto destino (p. ej. "editorial/plataformas/instagram"). */
   ficha_id: string;
   /** Ids de las noticias que motivaron la sugerencia. */
   noticia_ids: string[];
@@ -163,7 +163,7 @@ export interface RespuestaSugerenciasAlgoritmo {
 /** Respuesta de aplicar una sugerencia. */
 export interface RespuestaAplicarSugerencia {
   sugerencia: SugerenciaEditorial;
-  /** Doc de biblioteca afectado (vacío para sugerencias de límite). */
+  /** Doc de texto afectado (vacío para sugerencias de límite). */
   ficha_id: string;
   /** Nota (p. ej. para límites, que son cambio de código). */
   nota: string;

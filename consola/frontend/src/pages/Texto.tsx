@@ -1,5 +1,5 @@
 /**
- * Biblioteca: almacén único de PROMPTS + LÍNEA EDITORIAL con editor markdown a pantalla
+ * Texto: almacén único de PROMPTS + LÍNEA EDITORIAL con editor markdown a pantalla
  * completa (toggle editar/vista) y un panel para LANZAR un prompt sobre un target
  * (contenido pegado / URL / sección de la Consola / archivo), adjuntando la línea editorial
  * de la marca. El resultado llega por streaming (sondeo de la generación).
@@ -54,7 +54,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
-import type { DocumentoBiblioteca, TargetLanzamiento } from "@/types";
+import type { DocumentoTexto, TargetLanzamiento } from "@/types";
 
 type TipoTarget = TargetLanzamiento["tipo"] | "archivo";
 
@@ -80,11 +80,11 @@ function separarFrontmatter(cuerpo: string): { oculto: string; visible: string }
 export default function Texto() {
   const qc = useQueryClient();
   // Marca activa del workspace: default del filtro (con "Todas" disponible: la
-  // biblioteca es editorial y consultar otras marcas es legítimo).
+  // texto es editorial y consultar otras marcas es legítimo).
   const { marcaActiva } = useMarcaActiva();
 
   // --- Navegación / lista ---
-  // La Biblioteca es CONTEXTO: una sola lista de documentos (sin distinguir prompt/editorial
+  // La Texto es CONTEXTO: una sola lista de documentos (sin distinguir prompt/editorial
   // en la navegación). El filtro por marca lo manda el selector GLOBAL del workspace
   // (`marcaActiva`); aquí no hay filtro de marca propio.
   const [q, setQ] = React.useState("");
@@ -109,21 +109,21 @@ export default function Texto() {
   // Documentos de la marca activa global (sin "Todas" -> sin filtro de marca). La búsqueda y
   // la jerarquía de carpetas son la única navegación.
   const docsQuery = useQuery({
-    queryKey: ["biblioteca", q, marcaActiva],
+    queryKey: ["texto", q, marcaActiva],
     queryFn: ({ signal }) =>
       api.texto({ q: q || undefined, marca: marcaActiva ?? undefined }, signal),
   });
   const papeleraQuery = useQuery({
-    queryKey: ["biblioteca-papelera"],
+    queryKey: ["texto-papelera"],
     queryFn: ({ signal }) => api.papeleraTexto(signal),
     enabled: enPapelera,
   });
   const marcasQuery = useQuery({
-    queryKey: ["biblioteca-marcas"],
+    queryKey: ["texto-marcas"],
     queryFn: ({ signal }) => api.marcasTexto(signal),
   });
   const areasQuery = useQuery({
-    queryKey: ["biblioteca-areas"],
+    queryKey: ["texto-areas"],
     queryFn: ({ signal }) => api.areasTexto(signal),
   });
 
@@ -132,7 +132,7 @@ export default function Texto() {
 
   // Agrupa por carpeta: la jerarquía ES la navegación. Raíz ("") primero, resto alfabético.
   const grupos = React.useMemo(() => {
-    const m = new Map<string, DocumentoBiblioteca[]>();
+    const m = new Map<string, DocumentoTexto[]>();
     for (const d of documentos) {
       const k = d.carpeta || "";
       const arr = m.get(k);
@@ -154,7 +154,7 @@ export default function Texto() {
     });
   }
 
-  function filaDoc(d: DocumentoBiblioteca, mostrarCarpeta: boolean) {
+  function filaDoc(d: DocumentoTexto, mostrarCarpeta: boolean) {
     // Todo es contexto: un solo icono, sin distinguir prompt/editorial en la navegación.
     const icono = <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />;
     const renom = renombrando?.tipo === "doc" && renombrando.clave === d.id;
@@ -198,7 +198,7 @@ export default function Texto() {
   const seleccion = documentos.find((d) => d.id === seleccionId) ?? null;
 
   // --- Borrador del editor (copia de trabajo, sincronizada al cambiar de documento) ---
-  const [borrador, setBorrador] = React.useState<DocumentoBiblioteca | null>(null);
+  const [borrador, setBorrador] = React.useState<DocumentoTexto | null>(null);
   React.useEffect(() => {
     if (seleccion) {
       // Oculta el bloque de frontmatter del cuerpo al editar; se readjunta al guardar.
@@ -216,12 +216,12 @@ export default function Texto() {
   const guardarTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const guardarMut = useMutation({
-    mutationFn: ({ id, cuerpo }: { id: string; cuerpo: Partial<DocumentoBiblioteca> }) =>
+    mutationFn: ({ id, cuerpo }: { id: string; cuerpo: Partial<DocumentoTexto> }) =>
       api.guardarDocumento(id, cuerpo),
     onSuccess: (r) => {
       // El id puede cambiar (renombrado/carpeta): re-sincroniza la selección.
       if (r.documento.id !== seleccionId) setSeleccionId(r.documento.id);
-      qc.invalidateQueries({ queryKey: ["biblioteca"] });
+      qc.invalidateQueries({ queryKey: ["texto"] });
     },
   });
 
@@ -231,7 +231,7 @@ export default function Texto() {
       api.guardarDocumento(id, { carpeta }),
     onSuccess: (r, vars) => {
       if (vars.id === seleccionId) setSeleccionId(r.documento.id);
-      qc.invalidateQueries({ queryKey: ["biblioteca"] });
+      qc.invalidateQueries({ queryKey: ["texto"] });
     },
   });
   function moverDoc(id: string, carpeta: string) {
@@ -248,7 +248,7 @@ export default function Texto() {
         await api.guardarDocumento(d.id, { carpeta: a + d.carpeta.slice(de.length) });
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["biblioteca"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["texto"] }),
   });
   // --- Renombrar en sitio (doble clic) ---
   function iniciarRen(tipo: "doc" | "carpeta", clave: string, valor: string) {
@@ -298,7 +298,7 @@ export default function Texto() {
     );
   }
 
-  function editar(parcial: Partial<DocumentoBiblioteca>) {
+  function editar(parcial: Partial<DocumentoTexto>) {
     if (!borrador) return;
     const siguiente = { ...borrador, ...parcial };
     setBorrador(siguiente);
@@ -327,7 +327,7 @@ export default function Texto() {
     mutationFn: (tipo: "prompt" | "editorial") =>
       api.crearDocumento({ titulo: tipo === "prompt" ? "Nuevo prompt" : "Nuevo editorial", tipo }),
     onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["biblioteca"] });
+      qc.invalidateQueries({ queryKey: ["texto"] });
       setSeleccionId(r.documento.id);
     },
   });
@@ -335,15 +335,15 @@ export default function Texto() {
     mutationFn: (id: string) => api.eliminarDocumento(id),
     onSuccess: () => {
       if (seleccionId) setSeleccionId(null);
-      qc.invalidateQueries({ queryKey: ["biblioteca"] });
-      qc.invalidateQueries({ queryKey: ["biblioteca-papelera"] });
+      qc.invalidateQueries({ queryKey: ["texto"] });
+      qc.invalidateQueries({ queryKey: ["texto-papelera"] });
     },
   });
   const restaurarMut = useMutation({
     mutationFn: (id: string) => api.restaurarDocumento(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["biblioteca"] });
-      qc.invalidateQueries({ queryKey: ["biblioteca-papelera"] });
+      qc.invalidateQueries({ queryKey: ["texto"] });
+      qc.invalidateQueries({ queryKey: ["texto-papelera"] });
     },
   });
 
@@ -483,7 +483,7 @@ export default function Texto() {
         {!borrador ? (
           <div className="flex flex-1 items-center justify-center text-center text-muted-foreground">
             <div>
-              <p className="text-lg font-medium">Biblioteca de prompts y línea editorial</p>
+              <p className="text-lg font-medium">Texto de prompts y línea editorial</p>
               <p className="text-sm">Selecciona un documento o crea uno nuevo.</p>
             </div>
           </div>
@@ -574,7 +574,7 @@ export default function Texto() {
           open={historialAbierto}
           onOpenChange={setHistorialAbierto}
           onRevertido={() => {
-            qc.invalidateQueries({ queryKey: ["biblioteca"] });
+            qc.invalidateQueries({ queryKey: ["texto"] });
             setHistorialAbierto(false);
           }}
         />
@@ -604,12 +604,12 @@ function DialogHistorial({
   }, [open]);
 
   const histQuery = useQuery({
-    queryKey: ["biblioteca-historial", docId],
+    queryKey: ["texto-historial", docId],
     queryFn: ({ signal }) => api.historialTexto(docId, signal),
     enabled: open,
   });
   const versionQuery = useQuery({
-    queryKey: ["biblioteca-version", docId, verSha],
+    queryKey: ["texto-version", docId, verSha],
     queryFn: ({ signal }) => api.versionTexto(docId, verSha as string, signal),
     enabled: open && !!verSha,
   });
@@ -732,7 +732,7 @@ function PanelLanzar({
   const esPiezas = salida === "piezas";
   const [redes, setRedes] = React.useState<Set<string>>(new Set());
 
-  const { generacion, ejecutando, cancelando, iniciar, cancelar } = useGeneracion("keni:biblioteca-lanzar");
+  const { generacion, ejecutando, cancelando, iniciar, cancelar } = useGeneracion("keni:texto-lanzar");
 
   // "Pensando…" con cronómetro: el modelo puede tardar ~1-2 min en RAZONAR antes de emitir
   // el primer token (la fase de thinking NO se transmite a `salida`), así que mientras corre
@@ -748,14 +748,14 @@ function PanelLanzar({
 
   // Línea editorial auto-resuelta por marca (selección inicial = todas).
   const editorialesQuery = useQuery({
-    queryKey: ["biblioteca-editoriales", marca],
+    queryKey: ["texto-editoriales", marca],
     queryFn: ({ signal }) => api.editorialesTexto(marca, undefined, signal),
     enabled: !!marca,
   });
   // Diagnóstico de los 4 pilares editoriales de la marca elegida: avisa si la línea
   // editorial está incompleta ANTES de lanzar (no bloquea, solo advierte).
   const validacionQuery = useQuery({
-    queryKey: ["biblioteca-validacion", marca],
+    queryKey: ["texto-validacion", marca],
     queryFn: ({ signal }) => api.validacionTexto(marca, signal),
     enabled: !!marca,
   });

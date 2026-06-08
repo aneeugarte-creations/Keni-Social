@@ -1,9 +1,9 @@
-"""API de la BIBLIOTECA: documentos (prompts + linea editorial) + lanzar generacion.
+"""API de la TEXTO: documentos (prompts + linea editorial) + lanzar generacion.
 
-CRUD del almacen unico de documentos markdown (`biblioteca`) + el endpoint de LANZAR un
+CRUD del almacen unico de documentos markdown (`texto`) + el endpoint de LANZAR un
 prompt sobre un target (contenido pegado / archivo / url / area de la Consola), que compone
 el prompt (prompt + linea editorial adjunta + contexto) y ENCOLA un trabajo de `claude -p`
-reutilizando la infra de generaciones (`dominio.biblioteca_lanzar`). El frontend sondea
+reutilizando la infra de generaciones (`dominio.texto_lanzar`). El frontend sondea
 `GET /api/generaciones/{id}` hasta el estado terminal.
 
 La app descubre este modulo por su variable `RUTAS` (ver `api/__init__.py`); no se toca
@@ -28,9 +28,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas, redes
+from .. import libtexto, marcas, redes
 from .._http_json import leer_json
-from ..dominio import biblioteca_lanzar, extraccion_url
+from ..dominio import texto_lanzar, extraccion_url
 from ..seguridad import autor_de_peticion
 
 # Tope de tamano del bloque de contexto (texto pegado / leido de archivo / url) en chars.
@@ -48,7 +48,7 @@ _RE_EXT = re.compile(r"^\.[a-z0-9]{1,8}$")
 # --------------------------------------------------------------------------- #
 
 
-def _facetas(docs: list[biblioteca.Documento]) -> dict[str, object]:
+def _facetas(docs: list[libtexto.Documento]) -> dict[str, object]:
     """Resumen de facetas (conteos) para poblar los filtros de navegacion del SPA."""
     etiquetas: dict[str, int] = {}
     estados: dict[str, int] = {}
@@ -74,7 +74,7 @@ async def listar(request: Request) -> Response:
     poblar los filtros de la nueva navegacion.
     """
     qp = request.query_params
-    docs = biblioteca.listar(
+    docs = libtexto.listar(
         tipo=qp.get("tipo") or None,
         carpeta=qp.get("carpeta") or None,
         q=qp.get("q") or None,
@@ -86,7 +86,7 @@ async def listar(request: Request) -> Response:
     )
     return JSONResponse({
         "documentos": [d.a_dict() for d in docs],
-        "carpetas": biblioteca.listar_carpetas(tipo=qp.get("tipo") or None),
+        "carpetas": libtexto.listar_carpetas(tipo=qp.get("tipo") or None),
         "facetas": _facetas(docs),
     })
 
@@ -108,15 +108,15 @@ async def crear(request: Request) -> Response:
     if isinstance(datos.get("prioridad"), int) and not isinstance(datos.get("prioridad"), bool):
         kwargs["prioridad"] = datos["prioridad"]
     try:
-        doc = biblioteca.crear(titulo, **kwargs)
-    except biblioteca.BibliotecaError as e:
+        doc = libtexto.crear(titulo, **kwargs)
+    except libtexto.TextoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"documento": doc.a_dict()})
 
 
 async def obtener(request: Request) -> Response:
     """`GET /api/texto/{doc_id}` -> `{documento}` (404 si no existe)."""
-    doc = biblioteca.obtener(request.path_params["doc_id"])
+    doc = libtexto.obtener(request.path_params["doc_id"])
     if doc is None:
         return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
     return JSONResponse({"documento": doc.a_dict()})
@@ -137,8 +137,8 @@ async def guardar(request: Request) -> Response:
     if isinstance(datos.get("prioridad"), int) and not isinstance(datos.get("prioridad"), bool):
         kwargs["prioridad"] = datos["prioridad"]
     try:
-        doc = biblioteca.guardar(doc_id, **kwargs)
-    except biblioteca.BibliotecaError as e:
+        doc = libtexto.guardar(doc_id, **kwargs)
+    except libtexto.TextoError as e:
         # "no existe" -> 404; el resto (validacion) -> 400.
         codigo = 404 if "no existe" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
@@ -148,8 +148,8 @@ async def guardar(request: Request) -> Response:
 async def borrar(request: Request) -> Response:
     """`DELETE /api/texto/{doc_id}` -> a papelera -> `{mensaje}` (404)."""
     try:
-        biblioteca.borrar(request.path_params["doc_id"])
-    except biblioteca.BibliotecaError as e:
+        libtexto.borrar(request.path_params["doc_id"])
+    except libtexto.TextoError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     return JSONResponse({"mensaje": "Documento movido a la papelera."})
 
@@ -161,14 +161,14 @@ async def borrar(request: Request) -> Response:
 
 async def papelera_listar(request: Request) -> Response:
     """`GET /api/texto/papelera` -> `{papelera: [...]}`."""
-    return JSONResponse({"papelera": biblioteca.listar_papelera()})
+    return JSONResponse({"papelera": libtexto.listar_papelera()})
 
 
 async def papelera_restaurar(request: Request) -> Response:
     """`POST /api/texto/papelera/{pid}/restaurar` -> `{documento}` (400/404)."""
     try:
-        doc = biblioteca.restaurar(request.path_params["pid"])
-    except biblioteca.BibliotecaError as e:
+        doc = libtexto.restaurar(request.path_params["pid"])
+    except libtexto.TextoError as e:
         codigo = 404 if "no está en la papelera" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
     return JSONResponse({"documento": doc.a_dict()})
@@ -186,32 +186,32 @@ async def editoriales(request: Request) -> Response:
     """
     marca = request.query_params.get("marca") or ""
     pipeline = request.query_params.get("pipeline") or None
-    if pipeline is not None and pipeline not in biblioteca.PIPELINES:
+    if pipeline is not None and pipeline not in libtexto.PIPELINES:
         return JSONResponse({"error": "Pipeline desconocido."}, status_code=404)
-    docs = biblioteca.editoriales_de_marca(marca, pipeline=pipeline)
+    docs = libtexto.editoriales_de_marca(marca, pipeline=pipeline)
     return JSONResponse({"editoriales": [d.a_dict() for d in docs]})
 
 
 async def validacion(request: Request) -> Response:
     """`GET /api/texto/validacion?marca=` -> diagnostico de los 4 pilares editoriales.
 
-    Devuelve `{completa, faltan, recomendacion, pilares}` (ver `biblioteca.validacion_editorial`).
+    Devuelve `{completa, faltan, recomendacion, pilares}` (ver `libtexto.validacion_editorial`).
     Lo consume el SPA para avisar si la linea editorial de la marca esta incompleta ANTES de
     lanzar una generacion.
     """
     marca = request.query_params.get("marca") or ""
-    return JSONResponse(biblioteca.validacion_editorial(marca))
+    return JSONResponse(libtexto.validacion_editorial(marca))
 
 
 async def areas(request: Request) -> Response:
     """`GET /api/texto/areas` -> `{areas: [{id, nombre}]}` (secciones como contexto)."""
-    return JSONResponse({"areas": biblioteca_lanzar.areas_disponibles()})
+    return JSONResponse({"areas": texto_lanzar.areas_disponibles()})
 
 
 async def marcas_disponibles(request: Request) -> Response:
     """`GET /api/texto/marcas` -> `{marcas: [{id, nombre}]}` (catalogo de marcas).
 
-    La Biblioteca es autosuficiente: expone su propio catalogo de marcas (en vez de
+    La Texto es autosuficiente: expone su propio catalogo de marcas (en vez de
     depender del endpoint de skills, que se retira) para poblar el selector del SPA.
     """
     return JSONResponse({"marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()]})
@@ -226,13 +226,13 @@ async def pipelines_listar(request: Request) -> Response:
     """`GET /api/texto/pipelines` -> `{pipelines: [{id, titulo, descripcion, rol, prompt_base_id}]}`.
 
     Es el catalogo de procesos de generacion: para cada uno, su prompt base EFECTIVO (resuelto
-    por el registro, considerando rebindeos en la Biblioteca). Sostiene la vista de atribucion.
+    por el registro, considerando rebindeos en la Texto). Sostiene la vista de atribucion.
     """
     items = []
-    for pid, spec in biblioteca.PIPELINES.items():
+    for pid, spec in libtexto.PIPELINES.items():
         try:
-            base = biblioteca.prompt_base_de(pid)
-        except biblioteca.BibliotecaError:
+            base = libtexto.prompt_base_de(pid)
+        except libtexto.TextoError:
             base = spec.get("prompt_defecto", "")
         items.append({
             "id": pid,
@@ -251,11 +251,11 @@ async def pipeline_preview(request: Request) -> Response:
     que recibiria `claude -p`, SIN lanzar nada. Resuelve de raiz "no se que se inyecta donde".
     """
     pid = request.path_params["pid"]
-    if pid not in biblioteca.PIPELINES:
+    if pid not in libtexto.PIPELINES:
         return JSONResponse({"error": "Pipeline desconocido."}, status_code=404)
     marca = request.query_params.get("marca") or ""
     contexto = request.query_params.get("contexto") or ""
-    return JSONResponse(biblioteca.previsualizar_pipeline(pid, marca, contexto[:_MAX_TEXTO]))
+    return JSONResponse(libtexto.previsualizar_pipeline(pid, marca, contexto[:_MAX_TEXTO]))
 
 
 # --------------------------------------------------------------------------- #
@@ -266,15 +266,15 @@ async def pipeline_preview(request: Request) -> Response:
 async def historial(request: Request) -> Response:
     """`GET /api/texto/{doc_id}/historial` -> `{historial: [{sha, fecha, autor, mensaje}]}`."""
     try:
-        items = biblioteca.historial(request.path_params["doc_id"])
-    except biblioteca.BibliotecaError as e:
+        items = libtexto.historial(request.path_params["doc_id"])
+    except libtexto.TextoError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     return JSONResponse({"historial": items})
 
 
 async def version(request: Request) -> Response:
     """`GET /api/texto/{doc_id}/version/{sha}` -> `{documento}` de esa version (404)."""
-    doc = biblioteca.version(request.path_params["doc_id"], request.path_params["sha"])
+    doc = libtexto.version(request.path_params["doc_id"], request.path_params["sha"])
     if doc is None:
         return JSONResponse({"error": "No se encontró esa versión."}, status_code=404)
     return JSONResponse({"documento": doc.a_dict()})
@@ -283,11 +283,11 @@ async def version(request: Request) -> Response:
 async def revertir(request: Request) -> Response:
     """`POST /api/texto/{doc_id}/revertir/{sha}` -> revierte (commit nuevo) -> `{documento}`."""
     try:
-        doc = biblioteca.restaurar_version(
+        doc = libtexto.restaurar_version(
             request.path_params["doc_id"], request.path_params["sha"],
             autor=autor_de_peticion(request),
         )
-    except biblioteca.BibliotecaError as e:
+    except libtexto.TextoError as e:
         codigo = 404 if ("no existe" in str(e) or "esa versión" in str(e)) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
     return JSONResponse({"documento": doc.a_dict()})
@@ -334,8 +334,8 @@ def _bloque_de_target(target: dict, marca: str) -> tuple[str, str, Response | No
         return (valor if isinstance(valor, str) else "")[:_MAX_TEXTO], "", None
     if tipo == "area":
         try:
-            return biblioteca_lanzar.area_contexto(valor if isinstance(valor, str) else "", marca), "", None
-        except biblioteca.BibliotecaError as e:
+            return texto_lanzar.area_contexto(valor if isinstance(valor, str) else "", marca), "", None
+        except libtexto.TextoError as e:
             return "", "", JSONResponse({"error": str(e)}, status_code=400)
     if tipo == "url":
         url_limpia, error = extraccion_url.validar_url(valor)
@@ -366,7 +366,7 @@ async def lanzar(request: Request) -> Response:
         return error
 
     try:
-        gen = biblioteca_lanzar.lanzar(
+        gen = texto_lanzar.lanzar(
             prompt_id=datos.get("prompt_id") if isinstance(datos.get("prompt_id"), str) else None,
             texto=datos.get("texto") if isinstance(datos.get("texto"), str) else None,
             titulo=datos.get("titulo") if isinstance(datos.get("titulo"), str) else "",
@@ -377,7 +377,7 @@ async def lanzar(request: Request) -> Response:
             redes_ids=_redes_lista(datos.get("redes")),
             autor=autor_de_peticion(request),
         )
-    except biblioteca.BibliotecaError as e:
+    except libtexto.TextoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"generacion": gen})
 
@@ -392,7 +392,7 @@ def _extension_segura(nombre: str | None) -> str:
 
 async def _guardar_subida(archivo: UploadFile) -> tuple[Path, Path, str]:
     """Vuelca un `UploadFile` a un temporal saneado. Devuelve (ruta, dir_temporal, extension)."""
-    dir_temporal = Path(tempfile.mkdtemp(prefix="keni-biblioteca-"))
+    dir_temporal = Path(tempfile.mkdtemp(prefix="keni-texto-"))
     ext = _extension_segura(archivo.filename)
     destino = dir_temporal / f"{uuid.uuid4().hex}{ext}"
     total = 0
@@ -404,17 +404,17 @@ async def _guardar_subida(archivo: UploadFile) -> tuple[Path, Path, str]:
                     break
                 total += len(trozo)
                 if total > _MAX_SUBIDA:
-                    raise biblioteca.BibliotecaError("El archivo es demasiado grande.")
+                    raise libtexto.TextoError("El archivo es demasiado grande.")
                 salida.write(trozo)
-    except biblioteca.BibliotecaError:
+    except libtexto.TextoError:
         shutil.rmtree(dir_temporal, ignore_errors=True)
         raise
     except Exception as e:  # noqa: BLE001
         shutil.rmtree(dir_temporal, ignore_errors=True)
-        raise biblioteca.BibliotecaError("No se pudo guardar el archivo subido.") from e
+        raise libtexto.TextoError("No se pudo guardar el archivo subido.") from e
     if total == 0:
         shutil.rmtree(dir_temporal, ignore_errors=True)
-        raise biblioteca.BibliotecaError("El archivo está vacío.")
+        raise libtexto.TextoError("El archivo está vacío.")
     return destino, dir_temporal, ext
 
 
@@ -450,7 +450,7 @@ async def lanzar_archivo(request: Request) -> Response:
 
     try:
         ruta, dir_temporal, ext = await _guardar_subida(archivo)
-    except biblioteca.BibliotecaError as e:
+    except libtexto.TextoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
     bloque = ""
@@ -472,7 +472,7 @@ async def lanzar_archivo(request: Request) -> Response:
         return v if isinstance(v, str) and v else None
 
     try:
-        gen = biblioteca_lanzar.lanzar(
+        gen = texto_lanzar.lanzar(
             prompt_id=_campo("prompt_id"),
             texto=_campo("texto"),
             titulo=_campo("titulo") or "",
@@ -483,7 +483,7 @@ async def lanzar_archivo(request: Request) -> Response:
             dir_temporal=dir_para_lanzar,
             autor=autor_de_peticion(request),
         )
-    except biblioteca.BibliotecaError as e:
+    except libtexto.TextoError as e:
         if dir_para_lanzar is not None:
             shutil.rmtree(dir_para_lanzar, ignore_errors=True)
         return JSONResponse({"error": str(e)}, status_code=400)

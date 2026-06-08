@@ -76,7 +76,7 @@ def media_gc_activo() -> bool:
 
     Def OFF (conservador): sin el flag NO se borra ningun objeto del almacen. Con el flag,
     un hilo demonio barre cada N horas y borra los objetos HUERFANOS (no referenciados por
-    ninguna publicacion ni catalogados en biblioteca-media) y mas viejos que el umbral. El
+    ninguna publicacion ni catalogados en catalogo-media) y mas viejos que el umbral. El
     hilo arranca SIEMPRE pero, gateado, solo actua cuando el flag esta activo.
     """
     return _crudo(ENV_MEDIA_GC).lower() in _VERDADEROS

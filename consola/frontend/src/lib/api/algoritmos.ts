@@ -5,7 +5,7 @@ import type {
   CuerpoFuenteAlgoritmo,
   EstadoSugerenciaEditorial,
   FiltrosAlgoritmos,
-  RespuestaABibliotecaAlgoritmo,
+  RespuestaATextoAlgoritmo,
   RespuestaAlgoritmos,
   RespuestaAplicarSugerencia,
   RespuestaArchivarAlgoritmo,
@@ -50,8 +50,8 @@ export const apiAlgoritmos = {
     peticion<RespuestaMensaje>(`/algoritmos/fuentes/${encodeURIComponent(id)}`, {
       metodo: "DELETE",
     }),
-  algoritmoABiblioteca: (id: string) =>
-    peticion<RespuestaABibliotecaAlgoritmo>(`/algoritmos/${encodeURIComponent(id)}/biblioteca`, {
+  algoritmoATexto: (id: string) =>
+    peticion<RespuestaATextoAlgoritmo>(`/algoritmos/${encodeURIComponent(id)}/texto`, {
       metodo: "POST",
     }),
   archivarAlgoritmo: (id: string, archivada = true) =>

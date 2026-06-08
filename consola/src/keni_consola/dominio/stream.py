@@ -131,7 +131,7 @@ def arg_skip_permisos() -> list[str]:
     datos en investigación/QA, o Read de un fichero pasado por `--add-dir`), `claude` se
     cuelga pidiendo un permiso que nadie puede conceder. NO tiene NADA que ver con "skills":
     NO usamos el motor de skills de Claude Code (`.claude/skills`) —el contexto se inyecta
-    EXPLÍCITAMENTE en el prompt desde la Biblioteca de Prompts— y el cwd de generación es
+    EXPLÍCITAMENTE en el prompt desde la Texto de Prompts— y el cwd de generación es
     NEUTRO (sin `.claude/skills` ni `CLAUDE.md`). El subproceso corre ACOTADO (tope de
     turnos/coste/wall-timeout y, en hosted, dentro del contenedor). Desactivable con
     `KENI_CLAUDE_SKIP_PERMISSIONS=0` (p.ej. para depurar qué permiso falta). La decision

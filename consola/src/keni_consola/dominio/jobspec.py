@@ -37,7 +37,7 @@ from . import qa_editorial as dom_qa
 # Versiona el spec por si su forma cambia (un worker viejo no debe malinterpretar uno nuevo).
 VERSION = 1
 
-# cwd NEUTRO para prompts AUTOCONTENIDOS (Biblioteca y TODAS las generaciones de texto): un
+# cwd NEUTRO para prompts AUTOCONTENIDOS (Texto y TODAS las generaciones de texto): un
 # dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).
 # Tras retirar el sistema de skills es el ÚNICO cwd de `claude`; ya no hay cwd "de skills".
 CWD_GENERACION = "generacion"
@@ -52,7 +52,7 @@ PROC_QA = "qa"
 # de generar copy. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
 PROC_QA_FUENTE = "qa-fuente"
-# Biblioteca de prompts: post-procesado IDENTIDAD. Un prompt de la biblioteca devuelve el
+# Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
 # texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
 PROC_PROMPT = "prompt"
 # Importacion de PARRILLA desde documento: parsea el JSON de claude, re-construye el contexto
@@ -292,7 +292,7 @@ def construir_qa_fuente(
 
 
 def construir_prompt_lib() -> dict[str, Any]:
-    """Spec del post-procesado de un PROMPT de la biblioteca (identidad: solo el texto)."""
+    """Spec del post-procesado de un PROMPT de la texto (identidad: solo el texto)."""
     return {"kind": PROC_PROMPT}
 
 

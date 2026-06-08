@@ -4,7 +4,7 @@ import { peticion } from "./_core";
 import type { ActivoMarca } from "./_core";
 
 export const apiMarcaActivos = {
-  // --- Biblioteca de activos por marca (logos, tipografías, artes, infografías, …) ---
+  // --- Texto de activos por marca (logos, tipografías, artes, infografías, …) ---
   marcaActivos: (
     filtros: { marca?: string; tipo?: string; linea?: string; q?: string } = {},
     signal?: AbortSignal,

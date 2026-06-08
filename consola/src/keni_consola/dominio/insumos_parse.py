@@ -348,7 +348,7 @@ def parsear_respuesta_haiku(
 # --------------------------------------------------------------------------- #
 #
 # El back NO ejecuta `claude -p` (no tiene binario ni token; solo el worker/daemons). El
-# parseo de cajones se ENCOLA como un job de generacion (mismo patron que copy/biblioteca);
+# parseo de cajones se ENCOLA como un job de generacion (mismo patron que copy/texto);
 # el WORKER corre Haiku y luego este `procesar(salida, metricas)` parsea su salida, INSERTA
 # los `insumos_item` y deja el lote `listo` (o `error` con mensaje). Es la factory que
 # `jobspec.reconstruir_procesar` arma a partir del spec `PROC_INSUMOS`.

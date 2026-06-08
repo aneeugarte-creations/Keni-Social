@@ -35,7 +35,7 @@ lado del índice de rutas.
 - `fuentes_rss` (con `creado` para el orden "recientes primero") + `rss_items_vistos`
   (una fila por `(fuente_id, clave)`, PK compuesta, sin FK ⇒ `marcar_item` no exige fuente
   existente, paridad con el file-backed).
-- `grupos_hashtags` (tags como JSON serializado, igual patrón que `biblioteca_media`).
+- `grupos_hashtags` (tags como JSON serializado, igual patrón que `catalogo_media`).
 - `franjas_editoriales` — nombre DISTINTO de `rota_franjas`/`rota_config_franjas` (franjas
   horarias del equipo, otra cosa) para no colisionar.
 

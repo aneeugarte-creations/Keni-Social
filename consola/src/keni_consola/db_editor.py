@@ -10,13 +10,13 @@ from ._db_comun import (
 )
 
 # --------------------------------------------------------------------------- #
-# Biblioteca de MEDIOS interna (ola "activos")                                  #
+# Texto de MEDIOS interna (ola "activos")                                  #
 # --------------------------------------------------------------------------- #
-# Tabla `biblioteca_media`: cataloga objetos del almacen de media (`media.py`) por su
+# Tabla `catalogo_media`: cataloga objetos del almacen de media (`media.py`) por su
 # nombre (`objeto`, uuid+ext del servidor) con metadatos editoriales y etiquetas (JSON de
 # strings). El binario lo guarda/sirve `media.py`; aqui solo el catalogo reutilizable.
 
-_COLS_BIBLIOTECA_MEDIA = (
+_COLS_CATALOGO_MEDIA = (
     "id",
     "objeto",
     "tipo",
@@ -31,14 +31,14 @@ _COLS_BIBLIOTECA_MEDIA = (
     "creado",
     "actualizado",
 )
-_SELECT_BIBLIOTECA_MEDIA = (
-    f"SELECT {', '.join(_COLS_BIBLIOTECA_MEDIA)} FROM biblioteca_media"
+_SELECT_CATALOGO_MEDIA = (
+    f"SELECT {', '.join(_COLS_CATALOGO_MEDIA)} FROM catalogo_media"
 )
 
-# Campos editables via `actualizar_media_biblioteca` (lista blanca). `id`, `objeto`,
+# Campos editables via `actualizar_media_catalogo` (lista blanca). `id`, `objeto`,
 # `autor_*`, `creado` y `actualizado` no son editables (el objeto NO se reasigna; se
 # cataloga uno nuevo si cambia el binario).
-_CAMPOS_EDITABLES_BIBLIOTECA_MEDIA: tuple[str, ...] = (
+_CAMPOS_EDITABLES_CATALOGO_MEDIA: tuple[str, ...] = (
     "tipo",
     "titulo",
     "descripcion",
@@ -49,16 +49,16 @@ _CAMPOS_EDITABLES_BIBLIOTECA_MEDIA: tuple[str, ...] = (
 )
 
 
-def _fila_a_media_biblioteca(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `biblioteca_media` en dict (con defaults defensivos)."""
-    item: dict[str, Any] = {col: fila[col] for col in _COLS_BIBLIOTECA_MEDIA}
+def _fila_a_media_catalogo(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `catalogo_media` en dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_CATALOGO_MEDIA}
     item["aprobado"] = bool(fila["aprobado"])
     item["etiquetas"] = fila["etiquetas"] or "[]"
     item["tipo"] = fila["tipo"] or "imagen"
     return item
 
 
-def crear_media_biblioteca(
+def crear_media_catalogo(
     *,
     objeto: str,
     tipo: str = "imagen",
@@ -73,7 +73,7 @@ def crear_media_biblioteca(
     creado: str = "",
     actualizado: str = "",
 ) -> dict[str, Any]:
-    """Cataloga un objeto de media en la biblioteca y lo devuelve. NO valida (lo hace la API)."""
+    """Cataloga un objeto de media en la texto y lo devuelve. NO valida (lo hace la API)."""
     autor = autor or {}
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
@@ -93,25 +93,25 @@ def crear_media_biblioteca(
     }
     con = _conectar()
     try:
-        marcadores = ", ".join("?" for _ in _COLS_BIBLIOTECA_MEDIA)
+        marcadores = ", ".join("?" for _ in _COLS_CATALOGO_MEDIA)
         con.execute(
-            f"INSERT INTO biblioteca_media ({', '.join(_COLS_BIBLIOTECA_MEDIA)}) "
+            f"INSERT INTO catalogo_media ({', '.join(_COLS_CATALOGO_MEDIA)}) "
             f"VALUES ({marcadores})",
-            tuple(fila[col] for col in _COLS_BIBLIOTECA_MEDIA),
+            tuple(fila[col] for col in _COLS_CATALOGO_MEDIA),
         )
         con.commit()
     finally:
         con.close()
-    return _fila_a_media_biblioteca(fila)
+    return _fila_a_media_catalogo(fila)
 
 
-def listar_media_biblioteca(
+def listar_media_catalogo(
     *,
     marca: str | None = None,
     tipo: str | None = None,
     solo_aprobados: bool = False,
 ) -> list[dict[str, Any]]:
-    """Items de la biblioteca de medios, filtros combinables (AND). Mas recientes primero."""
+    """Items de la texto de medios, filtros combinables (AND). Mas recientes primero."""
     clausulas: list[str] = []
     params: list[Any] = []
     if marca:
@@ -122,7 +122,7 @@ def listar_media_biblioteca(
         params.append(tipo)
     if solo_aprobados:
         clausulas.append("aprobado = 1")
-    sql = _SELECT_BIBLIOTECA_MEDIA
+    sql = _SELECT_CATALOGO_MEDIA
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)
     sql += " ORDER BY creado DESC, id DESC"
@@ -131,44 +131,44 @@ def listar_media_biblioteca(
         filas = con.execute(sql, tuple(params)).fetchall()
     finally:
         con.close()
-    return [_fila_a_media_biblioteca(f) for f in filas]
+    return [_fila_a_media_catalogo(f) for f in filas]
 
 
-def obtener_media_biblioteca(media_id: str) -> dict[str, Any] | None:
-    """Un item de la biblioteca por id (None si no existe)."""
+def obtener_media_catalogo(media_id: str) -> dict[str, Any] | None:
+    """Un item de la texto por id (None si no existe)."""
     con = _conectar()
     try:
         fila = con.execute(
-            f"{_SELECT_BIBLIOTECA_MEDIA} WHERE id = ?", (media_id,)
+            f"{_SELECT_CATALOGO_MEDIA} WHERE id = ?", (media_id,)
         ).fetchone()
     finally:
         con.close()
-    return _fila_a_media_biblioteca(fila) if fila is not None else None
+    return _fila_a_media_catalogo(fila) if fila is not None else None
 
 
 def existe_media_objeto(objeto: str) -> bool:
-    """True si ya hay un item de biblioteca catalogando ese `objeto` (UNIQUE)."""
+    """True si ya hay un item de texto catalogando ese `objeto` (UNIQUE)."""
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT 1 FROM biblioteca_media WHERE objeto = ?", (objeto,)
+            "SELECT 1 FROM catalogo_media WHERE objeto = ?", (objeto,)
         ).fetchone()
     finally:
         con.close()
     return fila is not None
 
 
-def actualizar_media_biblioteca(
+def actualizar_media_catalogo(
     media_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
     cambios = {
-        k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_BIBLIOTECA_MEDIA
+        k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CATALOGO_MEDIA
     }
     if "aprobado" in cambios:
         cambios["aprobado"] = 1 if cambios["aprobado"] else 0
     if not cambios:
-        return obtener_media_biblioteca(media_id)
+        return obtener_media_catalogo(media_id)
     ahora = datetime.now().isoformat(timespec="seconds")
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
@@ -176,28 +176,28 @@ def actualizar_media_biblioteca(
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE biblioteca_media SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            f"UPDATE catalogo_media SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
             tuple(params),
         )
         con.commit()
         if cur.rowcount == 0:
             return None
         fila = con.execute(
-            f"{_SELECT_BIBLIOTECA_MEDIA} WHERE id = ?", (media_id,)
+            f"{_SELECT_CATALOGO_MEDIA} WHERE id = ?", (media_id,)
         ).fetchone()
     finally:
         con.close()
-    return _fila_a_media_biblioteca(fila) if fila is not None else None
+    return _fila_a_media_catalogo(fila) if fila is not None else None
 
 
-def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
-    """Borra un item de la biblioteca; devuelve el item borrado (para limpiar el binario) o None."""
-    item = obtener_media_biblioteca(media_id)
+def borrar_media_catalogo(media_id: str) -> dict[str, Any] | None:
+    """Borra un item de la texto; devuelve el item borrado (para limpiar el binario) o None."""
+    item = obtener_media_catalogo(media_id)
     if item is None:
         return None
     con = _conectar()
     try:
-        con.execute("DELETE FROM biblioteca_media WHERE id = ?", (media_id,))
+        con.execute("DELETE FROM catalogo_media WHERE id = ?", (media_id,))
         con.commit()
     finally:
         con.close()

@@ -88,7 +88,7 @@ export default function Imagen() {
   // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
 
-  // Marca que filtra la GALERÍA y la BIBLIOTECA del estado vacío: la del selector global. «Todas»
+  // Marca que filtra la GALERÍA y la TEXTO del estado vacío: la del selector global. «Todas»
   // (marcaActiva null) => "" => se muestra TODO (plantillas/logos de todas las marcas).
   const marcaEfectiva = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "";
 

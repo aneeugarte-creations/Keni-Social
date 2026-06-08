@@ -15,7 +15,7 @@ const Imagen = lazy(() => import("@/pages/Imagen"));
 const Video = lazy(() => import("@/pages/Video"));
 const Texto = lazy(() => import("@/pages/Texto"));
 const EstrategiaMarcas = lazy(() =>
-  import("@/pages/biblioteca/GestionLineas").then((m) => ({ default: m.GestionLineas })),
+  import("@/pages/texto/GestionLineas").then((m) => ({ default: m.GestionLineas })),
 );
 
 // Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la
@@ -31,7 +31,7 @@ const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
 // Las antiguas hojas del hub (Investigador, Cajones, Eventos, Agentes, Cobertura) ya
 // viven COMPUESTAS dentro de NoticiasHub (pool + descubrimiento) y de Fuentes
 // (buzones/agentes/eventos); sus rutas directas redirigen a su nuevo hogar (abajo).
-// Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
+// Algoritmos: inteligencia de plataforma; ahora pestaña de la Texto.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
@@ -67,7 +67,7 @@ const Sistema = lazy(() => import("@/pages/Sistema"));
  * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
  * (herramientas de creación) y `/datos/*` (entradas y señales). La home es el
  * feed del equipo (`/operacion/feed`). Los hubs que quedan (Feed, Investigación,
- * Analíticas, Biblioteca, Actividad IA) son una ruta-layout sin componente:
+ * Analíticas, Texto, Actividad IA) son una ruta-layout sin componente:
  * react-router renderiza `<Outlet/>` y la subnav entre sub-rutas vive in-page
  * (SubnavHub, via HUB_TABS). Programación y Turnos (antes pestañas del hub
  * Calendario) son ya páginas planas; Revisión se retiró por obsoleta.
@@ -170,7 +170,7 @@ export const router = createBrowserRouter([
           { path: "imagen", element: <Imagen /> },
           // Página VIDEO: subida + preview (motor de edición próximamente).
           { path: "video", element: <Video /> },
-          // Página TEXTO (antes "Biblioteca"): prompts + línea editorial con filtros.
+          // Página TEXTO (antes "Texto"): prompts + línea editorial con filtros.
           {
             path: "texto",
             children: [
@@ -181,11 +181,11 @@ export const router = createBrowserRouter([
               { path: "algoritmos", element: <Algoritmos /> },
             ],
           },
-          // Compatibilidad: los paths antiguos (estudio/editor/biblioteca) redirigen a los nuevos.
+          // Compatibilidad: los paths antiguos (estudio/editor/texto) redirigen a los nuevos.
           { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
           { path: "editor", element: <Navigate to="/contenido/imagen" replace /> },
-          { path: "biblioteca", element: <RedirigirPrefijo a="/contenido/texto" /> },
-          { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
+          { path: "texto", element: <RedirigirPrefijo a="/contenido/texto" /> },
+          { path: "texto/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
         ],
       },
 
@@ -228,7 +228,7 @@ export const router = createBrowserRouter([
               },
               // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
               // se fusionaron en el Investigador (ahora dentro de NoticiasHub); "algoritmos"
-              // se mudó a la Biblioteca.
+              // se mudó a la Texto.
               { path: "plan", element: <Navigate to="/datos/investigacion" replace /> },
               { path: "descubrimiento", element: <Navigate to="/datos/investigacion" replace /> },
               { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
@@ -281,7 +281,7 @@ export const router = createBrowserRouter([
       // la pestaña con `RedirigirPrefijo` donde aplica).
       { path: "imagenes", element: <Navigate to="/contenido/imagen" replace /> },
       { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
-      { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
+      { path: "texto/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
       { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
       // La página "Revisión" se retiró (obsoleta): sus rutas planas legacy caen en el Feed.
@@ -296,7 +296,7 @@ export const router = createBrowserRouter([
       { path: "parrilla/piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
       { path: "parrilla/*", element: <Navigate to="/operacion/feed" replace /> },
       { path: "actividad", element: <Navigate to="/datos/actividad" replace /> },
-      // "Activos"/"Plantillas" quedaron obsoletas; sus rutas redirigen a la Biblioteca.
+      // "Activos"/"Plantillas" quedaron obsoletas; sus rutas redirigen a la Texto.
       { path: "activos", element: <Navigate to="/contenido/texto/documentos" replace /> },
       { path: "activos/plantillas", element: <Navigate to="/contenido/texto/documentos" replace /> },
       // Hojas planas antiguas (pre-hub) y fusiones previas:
@@ -317,7 +317,7 @@ export const router = createBrowserRouter([
       { path: "agentes", element: <Navigate to="/datos/actividad" replace /> },
       { path: "agentes/actividad", element: <Navigate to="/datos/actividad" replace /> },
       // El copy se generaba en /generacion (motor antiguo, retirado): ahora vive en
-      // la Biblioteca; el catálogo de prompts también vive en la Biblioteca.
+      // la Texto; el catálogo de prompts también vive en la Texto.
       { path: "generar-copy", element: <Navigate to="/contenido/texto" replace /> },
       { path: "generacion", element: <Navigate to="/contenido/texto" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },

@@ -18,7 +18,7 @@ const CATALOGO = {
       rutas_frontend: ["/generacion"],
       nav: [
         { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 10 },
-        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Wand2", descripcion: "", grupo: "op", grupo_orden: 30, orden: 20 },
+        { ruta: "/texto", etiqueta: "Texto", icono: "Wand2", descripcion: "", grupo: "op", grupo_orden: 30, orden: 20 },
       ],
     },
     {

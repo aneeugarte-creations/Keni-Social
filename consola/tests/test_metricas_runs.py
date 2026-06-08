@@ -245,18 +245,18 @@ _SALIDA_PROMPT = """✅ Copy listo.
 
 
 def test_historial_prompt_guarda_y_expone_metricas(entorno):
-    """Una generacion de COPY (Biblioteca, prompt salida=piezas) registra historial+metricas.
+    """Una generacion de COPY (Texto, prompt salida=piezas) registra historial+metricas.
 
-    Tras retirar el motor de skills, el copy se lanza desde la Biblioteca: un prompt con
+    Tras retirar el motor de skills, el copy se lanza desde la Texto: un prompt con
     `salida: piezas` lanzado con redes usa el post-procesado de COPY (mismo `procesar` que la
     prompt antiguo: parsea piezas, registra historial con sus metricas, crea borradores). El
     historial sigue vivo en `/api/prompts/historial` (modulo NEUTRO).
     """
-    from keni_consola import biblioteca
+    from keni_consola import libtexto
 
     # Prompt de copy (salida=piezas) en el store.
-    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota en copy.")
-    ruta = biblioteca._ruta_de_id(prompt.id)
+    prompt = libtexto.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota en copy.")
+    ruta = libtexto._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",

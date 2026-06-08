@@ -139,13 +139,13 @@ _SALIDA_COPY = """✅ Copy listo.
 def _crear_prompt_piezas() -> str:
     """Crea en el store un prompt de copy con `salida=piezas` y devuelve su id.
 
-    El copy ya no se lanza por el motor de skills (retirado): se lanza desde la Biblioteca
+    El copy ya no se lanza por el motor de skills (retirado): se lanza desde la Texto
     con un prompt `salida=piezas` + redes. Devuelve el id para `POST /api/texto/lanzar`.
     """
-    from keni_consola import biblioteca
+    from keni_consola import libtexto
 
-    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
-    ruta = biblioteca._ruta_de_id(prompt.id)
+    prompt = libtexto.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
+    ruta = libtexto._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",

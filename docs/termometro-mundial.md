@@ -9,7 +9,7 @@ entrega el **copy del posteo** ya tropicalizado a México, listo para revisar y 
 
 Tres piezas, una sola idea:
 
-1. **El prompt** `termometro-mundial` (en la **Biblioteca**) — el cerebro: jerarquiza y arma la galería + copy.
+1. **El prompt** `termometro-mundial` (en la **Texto**) — el cerebro: jerarquiza y arma la galería + copy.
 2. **La página de la Consola** — para armarlo a mano cuando quieras.
 3. **El cron `keni-termometro`** — para que a las 7:00 ya esté hecho, sin abrir nada.
 
@@ -18,8 +18,8 @@ verificado (abre con el veredicto ✅/⚠️/❌), nunca una publicación autom�
 
 ## El prompt `termometro-mundial`
 
-Es un documento de la **Biblioteca de Prompts** (`prompt/termometro-mundial`; semilla en
-`consola/src/keni_consola/biblioteca_semilla/prompt/termometro-mundial.md`), lanzado con el
+Es un documento de la **Texto de Prompts** (`prompt/termometro-mundial`; semilla en
+`consola/src/keni_consola/texto_semilla/prompt/termometro-mundial.md`), lanzado con el
 lanzador neutro (`claude -p`).
 Salida tipo **documento** (una galería + caption, no una variante por red). Entradas:
 
@@ -29,7 +29,7 @@ Salida tipo **documento** (una galería + caption, no una variante por red). Ent
 - **Regiones** (`regiones`): CSV; vacío = reparto por defecto priorizando la diversidad.
 - **Fecha** (`fecha`): para la portada; vacío = hoy.
 
-Se le adjunta la **línea editorial** de la Biblioteca (reglas legales, plataformas,
+Se le adjunta la **línea editorial** de la Texto (reglas legales, plataformas,
 tropicalización, la ficha de marca) para angular el tono, tropicalizar y marcar riesgos por slide.
 
 ## En la Consola
@@ -45,7 +45,7 @@ tropicalización, la ficha de marca) para angular el tono, tropicalizar y marcar
 
 ### Endpoints
 
-- `GET  /api/termometro` — config guardada + si el prompt base está disponible en la Biblioteca + marcas + regiones.
+- `GET  /api/termometro` — config guardada + si el prompt base está disponible en la Texto + marcas + regiones.
 - `PUT  /api/termometro/config` — guarda `{numero, regiones, hora, marca}`.
 - `POST /api/termometro/generar` — lanza la generación (`{marca, noticias, numero?, regiones?,
   fecha?}`) reutilizando el lanzador neutro (`dominio/generar`); responde con `{generacion}` y se sondea en

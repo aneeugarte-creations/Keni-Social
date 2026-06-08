@@ -32,7 +32,7 @@ ASPECTOS = {
 }
 
 # Nota de estilo por marca (referencia corta; la guía completa de cada marca vive como
-# documento editorial en la Biblioteca de la Consola).
+# documento editorial en la Texto de la Consola).
 ESTILO_MARCA = {
     "unotv": "Estilo UnoTV: noticias, sobrio, creíble, alto contraste, rojo #E30613 como acento puntual.",
     "claro-sports": "Estilo Claro Sports: deportivo, energía, alto contraste, rojo #CF2E2E de marca.",

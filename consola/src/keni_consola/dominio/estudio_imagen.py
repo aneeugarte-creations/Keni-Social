@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import (
-    biblioteca,
+    libtexto,
     formatos_red,
     generaciones,
     marca_assets,
@@ -43,7 +43,7 @@ from ..motores.estudio_imagen import documento as doc_capas
 from ..motores.estudio_imagen import spec_plantilla
 from . import generar, jobspec
 
-# Reglas de imagen (Biblioteca) que se adjuntan a la revision legal/editorial.
+# Reglas de imagen (Texto) que se adjuntan a la revision legal/editorial.
 REGLAS_IMAGEN = "editorial/reglas/imagen"
 
 # Formatos de red soportados (espejo de `motores/estudio_imagen/editar.py:FORMATOS`).
@@ -53,7 +53,7 @@ ASPECTOS = {"vertical": "9:16", "feed": "4:5", "cuadrado": "1:1", "horizontal": 
 # Operaciones DETERMINISTAS del motor `editar.py` (sin IA, sin coste).
 OPS_EDITAR = ("recortar", "redimensionar", "comprimir", "extender", "placa")
 
-# Prompt base de imagen en la Biblioteca (editable por el equipo; cae a "" si falta).
+# Prompt base de imagen en la Texto (editable por el equipo; cae a "" si falta).
 PROMPT_IMAGEN_DEFECTO = "prompt/imagen/ilustracion-fondo"
 
 # Marcas con tokens de diseno PRECARGADOS en `motores/estudio_imagen/marcas.json`
@@ -64,7 +64,7 @@ PROMPT_IMAGEN_DEFECTO = "prompt/imagen/ilustracion-fondo"
 _MARCAS_VISUALES = ("unotv", "claro-sports", "fundacion")
 
 # Nota de estilo por marca para el prompt generativo (referencia corta; la guia completa
-# vive como documento editorial en la Biblioteca). Replica `motores/.../generar.ESTILO_MARCA`.
+# vive como documento editorial en la Texto). Replica `motores/.../generar.ESTILO_MARCA`.
 _ESTILO_MARCA = {
     "unotv": "Estilo UnoTV: noticias, sobrio, creible, alto contraste, rojo #E30613 como acento puntual.",
     "claro-sports": "Estilo Claro Sports: deportivo, energia, alto contraste, rojo #CF2E2E de marca.",
@@ -133,14 +133,14 @@ def formato_por_red(red: str) -> str:
 def componer_prompt(
     prompt: str, marca: str = "", formato: str = "feed", prompt_id: str = PROMPT_IMAGEN_DEFECTO
 ) -> str:
-    """Arma el prompt de imagen: base de la Biblioteca + lo pedido + estilo de marca + aspecto.
+    """Arma el prompt de imagen: base de la Texto + lo pedido + estilo de marca + aspecto.
 
-    El estilo de marca (hoy una constante) pasa a ser editable: si la Biblioteca tiene el
+    El estilo de marca (hoy una constante) pasa a ser editable: si la Texto tiene el
     prompt base (`prompt/imagen/...`) gana esa version; la nota de marca es un complemento
     corto. NO volcamos la linea editorial de copy (voz) en un prompt de imagen: seria ruido.
     """
     formato = formato if formato in FORMATOS else "feed"
-    base = biblioteca.cuerpo_efectivo(prompt_id) or ""
+    base = libtexto.cuerpo_efectivo(prompt_id) or ""
     estilo = _ESTILO_MARCA.get(marca, "")
     aspecto = ASPECTOS[formato]
     partes = [
@@ -973,7 +973,7 @@ def revisar(imagen: str, *, marca: str = "", autor: dict[str, str] | None = None
 
     Es el gate humano (opcion §3.5.a del diseno): NO bloquea publicar. `claude` VE la imagen
     via `--add-dir` (materializada en un temporal) y aplica las reglas de imagen de la
-    Biblioteca (`editorial/reglas/imagen`); devuelve un checklist ✅/⚠️/❌. El texto en vivo
+    Texto (`editorial/reglas/imagen`); devuelve un checklist ✅/⚠️/❌. El texto en vivo
     queda en `salida` del registro (el frontend lo sondea). El post-procesado es IDENTIDAD
     (`PROC_PROMPT`): no crea piezas ni artefactos.
 
@@ -991,7 +991,7 @@ def revisar(imagen: str, *, marca: str = "", autor: dict[str, str] | None = None
     archivo = f"imagen{ext}"
     (carpeta / archivo).write_bytes(datos)
 
-    reglas = biblioteca.cuerpo_efectivo(REGLAS_IMAGEN) or ""
+    reglas = libtexto.cuerpo_efectivo(REGLAS_IMAGEN) or ""
     prompt = generar.componer(
         _instruccion_revision(archivo),
         [],

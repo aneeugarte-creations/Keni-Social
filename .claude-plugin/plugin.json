@@ -1,7 +1,7 @@
 {
   "name": "keni-social",
   "version": "0.3.0",
-  "description": "Sistemas de producción de Keni para equipos de redes sociales: el servidor MCP de métricas multi-marca (Meta, YouTube, X, TikTok) y el MCP de tablero para crear/mover/listar contenido de la Consola desde Claude Code. La generación de copy/imagen vive en la Consola (Biblioteca de prompts + Estudio de imagen), no como skills del plugin.",
+  "description": "Sistemas de producción de Keni para equipos de redes sociales: el servidor MCP de métricas multi-marca (Meta, YouTube, X, TikTok) y el MCP de tablero para crear/mover/listar contenido de la Consola desde Claude Code. La generación de copy/imagen vive en la Consola (Texto de prompts + Estudio de imagen), no como skills del plugin.",
   "author": {
     "name": "Keni Engineering"
   },

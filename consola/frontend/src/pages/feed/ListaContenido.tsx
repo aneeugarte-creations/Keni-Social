@@ -19,7 +19,7 @@ const WORKSPACE_TODAS = "__todas__";
  *
  * Solo pinta el contenido (panel de reciclaje + `GestionPublicaciones` en modo lista). La
  * configuración editorial que antes colgaba del menú "Gestionar" se mudó a su sitio: la
- * CADENCIA al hub Calendario (Programación) y las ETIQUETAS / HASHTAGS a Biblioteca ›
+ * CADENCIA al hub Calendario (Programación) y las ETIQUETAS / HASHTAGS a Texto ›
  * Estrategia de marcas; las franjas y las plantillas quedaron obsoletas. Por eso esta
  * pestaña ya no lleva acciones de cabecera. La marca del workspace ES la marca activa
  * global (sin selector local).

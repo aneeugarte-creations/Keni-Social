@@ -1,4 +1,4 @@
-"""API Biblioteca de ARTES: cataloga objetos de media para reutilizarlos (durables).
+"""API Texto de ARTES: cataloga objetos de media para reutilizarlos (durables).
 
 Un ARTE es una imagen del almacen de media (subida, generada con IA o trabajada en el
 Estudio) que el equipo decide CONSERVAR para reutilizar en publicaciones. Catalogarla:
@@ -6,7 +6,7 @@ Estudio) que el equipo decide CONSERVAR para reutilizar en publicaciones. Catalo
     catalogados como referencias vivas: un arte no se borra a las 24h), y
   - la hace SELECCIONABLE desde el editor de imagen de una pieza (galeria por marca).
 
-Persistencia: tabla `biblioteca_media` via `repos.*_media_biblioteca`. El `objeto` es UNIQUE
+Persistencia: tabla `catalogo_media` via `repos.*_media_catalogo`. El `objeto` es UNIQUE
 (un objeto se cataloga una sola vez): re-catalogar el mismo objeto es IDEMPOTENTE (devuelve
 el item ya existente, no duplica ni falla).
 
@@ -70,7 +70,7 @@ def _normalizar_etiquetas(valor: object) -> list[str]:
 
 
 def _arte_a_dict(item: dict) -> dict:
-    """Serializa un item de biblioteca como ARTE: etiquetas como lista, url y nombre de marca."""
+    """Serializa un item de texto como ARTE: etiquetas como lista, url y nombre de marca."""
     crudas = item.get("etiquetas") or "[]"
     try:
         tags = json.loads(crudas) if isinstance(crudas, str) else crudas
@@ -103,7 +103,7 @@ async def listar(request: Request) -> Response:
     q = request.query_params
     artes = [
         _arte_a_dict(item)
-        for item in repos.listar_media_biblioteca(
+        for item in repos.listar_media_catalogo(
             marca=q.get("marca") or None,
             tipo=q.get("tipo") or None,
         )
@@ -129,9 +129,9 @@ async def crear(request: Request) -> Response:
     objeto = objeto.strip()
     if media.leer_media(objeto) is None:
         return JSONResponse({"error": "Esa imagen no existe en el almacén."}, status_code=400)
-    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `biblioteca/` ANTES
+    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `texto/` ANTES
     # de la idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta protegida.
-    objeto = almacen_media.promover_objeto(objeto, "biblioteca")
+    objeto = almacen_media.promover_objeto(objeto, "texto")
 
     marca, err = _validar_marca(datos.get("marca"))
     if err:
@@ -144,14 +144,14 @@ async def crear(request: Request) -> Response:
     # Idempotente: el `objeto` es UNIQUE en la tabla. Si ya esta catalogado, devolvemos el
     # item existente (no duplicamos ni dejamos que el INSERT falle por la restriccion).
     if repos.existe_media_objeto(objeto):
-        for item in repos.listar_media_biblioteca():
+        for item in repos.listar_media_catalogo():
             if item.get("objeto") == objeto:
                 return JSONResponse({"arte": _arte_a_dict(item)})
 
     titulo = (datos.get("titulo") or "").strip()[:_MAX_TITULO]
     etiquetas = _normalizar_etiquetas(datos.get("etiquetas"))
 
-    arte = repos.crear_media_biblioteca(
+    arte = repos.crear_media_catalogo(
         objeto=objeto,
         tipo=tipo,
         marca=marca or "",
@@ -171,9 +171,9 @@ async def borrar(request: Request) -> Response:
     -> `{mensaje}` | 404.
     """
     arte_id = request.path_params["arte_id"]
-    item = repos.borrar_media_biblioteca(arte_id)
+    item = repos.borrar_media_catalogo(arte_id)
     if item is None:
-        return JSONResponse({"error": "Ese arte ya no está en la biblioteca."}, status_code=404)
+        return JSONResponse({"error": "Ese arte ya no está en la texto."}, status_code=404)
 
     if request.query_params.get("purgar") == "1":
         try:
@@ -181,7 +181,7 @@ async def borrar(request: Request) -> Response:
         except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
             _log.exception("No se pudo purgar el binario del arte %r.", item.get("objeto"))
 
-    return JSONResponse({"mensaje": "Arte quitado de la biblioteca."})
+    return JSONResponse({"mensaje": "Arte quitado de la texto."})
 
 
 RUTAS = [

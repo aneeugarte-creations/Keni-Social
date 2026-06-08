@@ -4,7 +4,7 @@
 //                    [          LIENZO            ]
 //
 // - RAIL de herramientas: tira vertical de iconos (izquierda en escritorio, barra inferior en
-//   móvil). Cada icono abre/cierra un FLYOUT con su panel (Elementos, Biblioteca, IA, Capas).
+//   móvil). Cada icono abre/cierra un FLYOUT con su panel (Elementos, Texto, IA, Capas).
 // - BARRA CONTEXTUAL: controles rápidos de la capa seleccionada; a su derecha, deshacer/rehacer y
 //   exportar (siempre visibles).
 // - INSPECTOR: panel de ajustes profundos, se abre desde «Ajustes» (columna derecha en escritorio,
@@ -36,7 +36,7 @@ import { Button } from "@/components/ui/button";
 
 import { BarraContextual } from "./BarraContextual";
 import { Lienzo } from "./Lienzo";
-import { PanelBiblioteca } from "./PanelBiblioteca";
+import { PanelTexto } from "./PanelTexto";
 import { PanelElementos } from "./PanelElementos";
 import { PanelIA } from "./PanelIA";
 import { Inspector, PanelCapas } from "./Paneles";
@@ -53,7 +53,7 @@ import {
 import type { StoreEditor } from "./store";
 import { useFuentesMarca } from "./useFuentesMarca";
 
-type Herramienta = "elementos" | "biblioteca" | "ia" | "capas";
+type Herramienta = "elementos" | "texto" | "ia" | "capas";
 
 // Preferencia de "Vista con muestra" (toggle de PRESENTACIÓN del editor) en localStorage. Por
 // defecto ENCENDIDO: al abrir una plantilla se ve de inmediato cómo cae la foto y un titular real.
@@ -69,7 +69,7 @@ function leerMuestra(): boolean {
 
 const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
-  { clave: "biblioteca", etiqueta: "Biblioteca", Icono: ImageIcon },
+  { clave: "texto", etiqueta: "Texto", Icono: ImageIcon },
   { clave: "ia", etiqueta: "IA", Icono: Sparkles, costo: true },
   { clave: "capas", etiqueta: "Capas", Icono: Layers },
 ];
@@ -150,7 +150,7 @@ export function EditorDocumento({
     const sel = store.getState().seleccion;
     if (sel) {
       setReemplazarId(sel);
-      setTool("biblioteca");
+      setTool("texto");
     }
   };
 
@@ -200,7 +200,7 @@ export function EditorDocumento({
   const panel = (() => {
     switch (tool) {
       case "elementos": return <PanelElementos />;
-      case "biblioteca": return <PanelBiblioteca marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
+      case "texto": return <PanelTexto marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
       case "ia": return <PanelIA marca={marca} />;
       case "capas": return <PanelCapas />;
       default: return null;

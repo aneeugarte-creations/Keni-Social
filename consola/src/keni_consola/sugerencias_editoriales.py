@@ -17,7 +17,7 @@ AGENDAN, el `worker` EJECUTA). Asi que el barrido ENCOLA una generacion de tipo 
 (post-procesado IDENTIDAD: el texto queda en `salida`), el worker corre `claude -p`, y este
 barrido SONDEA el registro de la generacion (vive en el volumen `/data` compartido) hasta
 que completa, parsea la salida y persiste las sugerencias. Mismo patron de encolado que la
-Biblioteca; el unico anadido es el sondeo del resultado desde el daemon.
+Texto; el unico anadido es el sondeo del resultado desde el daemon.
 
 HONESTIDAD: el prompt pide proponer SOLO cambios que las noticias justifiquen; si una
 noticia no implica un cambio editorial real, no se inventa. Una plataforma sin cambios
@@ -33,7 +33,7 @@ import threading
 import time
 from typing import Any
 
-from . import biblioteca, config, daemon_util, limites_plataforma, repos
+from . import libtexto, config, daemon_util, limites_plataforma, repos
 from .dominio import generar, jobspec
 
 _log = logging.getLogger("keni_consola.sugerencias_editoriales")
@@ -49,7 +49,7 @@ _SONDEO_SEG = 4.0
 
 
 def ficha_id_de(plataforma: str) -> str:
-    """Id del documento de biblioteca de la ficha editorial de una plataforma."""
+    """Id del documento de texto de la ficha editorial de una plataforma."""
     return f"editorial/plataformas/{plataforma}"
 
 
@@ -200,7 +200,7 @@ def procesar_plataforma(plataforma: str, noticias: list[dict[str, Any]]) -> int:
     """
     from . import generaciones
 
-    ficha_doc = biblioteca.obtener(ficha_id_de(plataforma))
+    ficha_doc = libtexto.obtener(ficha_id_de(plataforma))
     ficha = ficha_doc.cuerpo if ficha_doc is not None else ""
     limite = limites_plataforma.limite_de(plataforma)
     prompt = componer_prompt(plataforma, noticias, ficha=ficha, limite=limite)

@@ -9,7 +9,7 @@
  *  - Interacción POR HUECO: clic en un hueco lo selecciona y abre su origen de foto; arrastrar
  *    dentro de un hueco reencuadra ESE hueco; el zoom y "Centrar" actúan sobre el hueco activo.
  *  - Titular: clic para reescribir in place. Contador "Faltan X de N fotos" bajo el lienzo.
- *  - Origen de la FOTO (por hueco): Subir · Biblioteca · IA · Usar imagen original.
+ *  - Origen de la FOTO (por hueco): Subir · Texto · IA · Usar imagen original.
  *  - El canvas es SOLO previa en vivo: al guardar NO se hornea ningún PNG. La pieza guarda su
  *    RECETA (fotos + copy_in + plantilla) y la imagen publicable se renderiza on-demand en el
  *    servidor (`/api/publicaciones/{id}/compuesta`).
@@ -126,7 +126,7 @@ export function EditorPlacaInline({
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
-  // Opciones de ORIGEN de la foto (Biblioteca / Subir / Generar con IA): se abren al TOCAR un hueco
+  // Opciones de ORIGEN de la foto (Texto / Subir / Generar con IA): se abren al TOCAR un hueco
   // (fuera del titular), no como bloque permanente en el panel de edición. El origen elegido se
   // escribe en el HUECO ACTIVO (`slotActivo`).
   const [fuenteAbierta, setFuenteAbierta] = React.useState(false);
@@ -513,7 +513,7 @@ export function EditorPlacaInline({
         return;
       }
     }
-    // Clic en un HUECO -> seleccionarlo y abrir su origen de foto (Biblioteca/Subir/IA). Sin
+    // Clic en un HUECO -> seleccionarlo y abrir su origen de foto (Texto/Subir/IA). Sin
     // plantilla siempre es el hueco 0; con plantilla, solo si el clic cayó dentro de un hueco.
     const i = activo ? huecoEnPunto(p.cx, p.cy) : 0;
     if (i >= 0) {
@@ -673,7 +673,7 @@ export function EditorPlacaInline({
             ? "Toca un hueco para elegir su foto · arrástralo para encuadrarlo."
             : titularEditable
               ? "Toca el titular para reescribirlo · toca la imagen para cambiar la foto."
-              : "Toca la imagen para añadir o cambiar la foto (biblioteca, subir o generar con IA)."}
+              : "Toca la imagen para añadir o cambiar la foto (texto, subir o generar con IA)."}
         </p>
         {/* Contador "Faltan X de N fotos" (solo útil en collage de varios huecos). */}
         {esCollage && (
@@ -747,7 +747,7 @@ export function EditorPlacaInline({
               {esCollage ? `Foto del hueco ${slotActivo + 1} de ${nHuecos}` : "Imagen de la pieza"}
             </DialogTitle>
             <DialogDescription>
-              Elígela de la biblioteca, súbela o genérala con IA.
+              Elígela de la texto, súbela o genérala con IA.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -779,7 +779,7 @@ export function EditorPlacaInline({
                 disabled={ocupado}
               >
                 <Library className="h-4 w-4" />
-                Biblioteca
+                Texto
               </Button>
               <Button
                 type="button"

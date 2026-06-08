@@ -178,7 +178,7 @@ describe("Termometro", () => {
     expect(chips.map((c) => c.getAttribute("aria-label"))).toContain("X");
   });
 
-  it("avisa cuando falta el prompt base en la Biblioteca", async () => {
+  it("avisa cuando falta el prompt base en la Texto", async () => {
     stubFetch({ ...PAYLOAD_BASE, prompt_disponible: false });
     renderConProviders(<Termometro />);
 

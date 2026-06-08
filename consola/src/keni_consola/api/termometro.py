@@ -28,14 +28,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas, redes, repos, termometro
+from .. import libtexto, marcas, redes, repos, termometro
 from .._http_json import leer_json
 from ..dominio import copy as dom_copy
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec
 from ..seguridad import autor_de_peticion
 
-# Prompt base (Biblioteca) que arma el termometro + etiqueta de origen del historial.
+# Prompt base (Texto) que arma el termometro + etiqueta de origen del historial.
 PROMPT_ID = "prompt/termometro-mundial"
 ORIGEN_HISTORIAL = "termometro-mundial"
 
@@ -88,7 +88,7 @@ async def obtener_config(request: Request) -> Response:
     return JSONResponse(
         {
             "config": termometro.obtener(),
-            "prompt_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
+            "prompt_disponible": libtexto.cuerpo_efectivo(PROMPT_ID) is not None,
             "marcas": _marcas_lista(),
             "regiones_sugeridas": list(REGIONES_SUGERIDAS),
             "ultimo": _ultimo_resultado(),
@@ -153,7 +153,7 @@ async def generar(request: Request) -> Response:
             {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."}, status_code=400
         )
 
-    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
+    cuerpo = libtexto.cuerpo_efectivo(PROMPT_ID)
     if cuerpo is None:
         return JSONResponse(
             {"error": "No está disponible el prompt del termómetro. Reinstala la Consola."},
@@ -168,7 +168,7 @@ async def generar(request: Request) -> Response:
     # tablero y la elección de redes ocurre al guardar.
     redes_ids = redes.ids()
     prompt = gen_dom.componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores),
+        cuerpo, libtexto.editoriales_de_marca(marca), _contexto(valores),
         sin_emojis=True, redes_ids=redes_ids,
     )
     procesar_spec = jobspec.construir_galeria(

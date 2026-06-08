@@ -8,7 +8,7 @@ Tercera superficie de descubrimiento, DISTINTA de:
 Aqui seguimos los BLOGS OFICIALES de las plataformas (Meta, YouTube, ...) y agregadores
 de industria (Social Media Today, ...) para saber QUE cambia en los algoritmos y que
 tendencias funcionan, con dos usos: (1) ir actualizando la ficha editorial de cada
-plataforma en la Biblioteca y (2) destacar en el panel las noticias mas importantes
+plataforma en la Texto y (2) destacar en el panel las noticias mas importantes
 sobre algoritmos para decisiones de marca.
 
 PRINCIPIO CRITICO — HONESTIDAD / SIN INVENTAR
@@ -381,14 +381,14 @@ def sembrar() -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- #
-# Propuesta para la Biblioteca (la decide el equipo: NO escribe la ficha sola)  #
+# Propuesta para la Texto (la decide el equipo: NO escribe la ficha sola)  #
 # --------------------------------------------------------------------------- #
 
 
 def texto_propuesta_ficha(noticia: dict[str, Any]) -> str:
     """Borrador markdown para añadir a la ficha editorial de una plataforma.
 
-    Devuelve un bloque listo para pegar/confirmar en la Biblioteca. NO escribe la ficha:
+    Devuelve un bloque listo para pegar/confirmar en la Texto. NO escribe la ficha:
     la linea editorial es verdad CURADA por humanos (mismo principio que el Radar: el
     sistema PROPONE, el equipo decide).
     """

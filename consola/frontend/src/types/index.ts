@@ -109,5 +109,5 @@ export * from "./buzon";
 export * from "./comercial";
 export * from "./auth";
 export * from "./catalogo";
-export * from "./biblioteca";
+export * from "./texto";
 export * from "./noticias";

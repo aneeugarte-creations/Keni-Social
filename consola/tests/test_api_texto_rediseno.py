@@ -1,4 +1,4 @@
-"""Tests HTTP de los endpoints NUEVOS de la Biblioteca (rediseno): facetas, registro de
+"""Tests HTTP de los endpoints NUEVOS de la Texto (rediseno): facetas, registro de
 pipelines, preview del prompt ensamblado y versionado git.
 
 Misma estrategia que `test_api_texto`: monta solo `api.texto.RUTAS` con un
@@ -23,7 +23,7 @@ _MARCA = marcas.opciones()[0][0]
 @pytest.fixture
 def cliente(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
+    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     monkeypatch.setattr(generaciones, "encolar_job_claude", lambda *a, **k: None)
     return TestClient(Starlette(routes=list(api_texto.RUTAS)))
@@ -113,7 +113,7 @@ def test_editoriales_filtra_por_pipeline(cliente):
 def test_historial_y_revertir(cliente, monkeypatch):
     if shutil.which("git") is None:
         pytest.skip("git no disponible")
-    monkeypatch.setenv("KENI_BIBLIOTECA_GIT", "1")
+    monkeypatch.setenv("KENI_TEXTO_GIT", "1")
     doc = cliente.post("/api/texto", json={"titulo": "Doc", "tipo": "prompt", "cuerpo": "V1"}).json()["documento"]
     cliente.put(f"/api/texto/{doc['id']}", json={"cuerpo": "V2"})
 
@@ -133,6 +133,6 @@ def test_historial_y_revertir(cliente, monkeypatch):
 
 
 def test_historial_doc_inexistente_404(cliente, monkeypatch):
-    monkeypatch.setenv("KENI_BIBLIOTECA_GIT", "1")
+    monkeypatch.setenv("KENI_TEXTO_GIT", "1")
     r = cliente.get("/api/texto/prompt/no-existe/historial")
     assert r.status_code == 404

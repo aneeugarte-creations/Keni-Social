@@ -4,7 +4,7 @@ import { peticion } from "./_core";
 import type { PlantillaDiseno } from "./_core";
 
 export const apiPlantillasDiseno = {
-  // --- Biblioteca de plantillas de diseño (N por marca, etiquetadas por línea) ---
+  // --- Texto de plantillas de diseño (N por marca, etiquetadas por línea) ---
   // `tipo` filtra por "foto" (plantillas de imagen) o "miniatura" (portadas de video).
   plantillasDiseno: (
     filtros: { marca?: string; categoria?: string; linea?: string; q?: string; tipo?: "foto" | "miniatura" } = {},

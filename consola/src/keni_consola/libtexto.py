@@ -1,4 +1,4 @@
-"""Almacen UNICO de la Biblioteca: PROMPTS + LINEA EDITORIAL (files-as-truth).
+"""Almacen UNICO de la Texto: PROMPTS + LINEA EDITORIAL (files-as-truth).
 
 Reemplaza la autoria de "skills" (carpetas `SKILL.md` + `keni.yaml` con formularios) por un
 almacen plano de DOCUMENTOS markdown editables con el mismo editor a pantalla completa. Cada
@@ -27,7 +27,7 @@ SEGURIDAD: el id se sanea contra traversal (segmentos `[a-z0-9-]`, primer segmen
 valido, sin `..`); las rutas se resuelven y se comprueba que caen ESTRICTAMENTE dentro de
 `raiz()`; las escrituras son ATOMICAS (`io_atomico`). Todo error sale en espanol.
 
-La raiz se sobreescribe con `KENI_BIBLIOTECA_DIR` (los tests lo apuntan a un tmp).
+La raiz se sobreescribe con `KENI_TEXTO_DIR` (los tests lo apuntan a un tmp).
 """
 
 from __future__ import annotations
@@ -126,8 +126,8 @@ _PAPELERA = ".papelera"
 _RE_SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
-class BibliotecaError(RuntimeError):
-    """Error de la biblioteca con mensaje ya en espanol, apto para mostrar al usuario."""
+class TextoError(RuntimeError):
+    """Error de la texto con mensaje ya en espanol, apto para mostrar al usuario."""
 
 
 # --------------------------------------------------------------------------- #
@@ -137,7 +137,7 @@ class BibliotecaError(RuntimeError):
 
 @dataclass
 class Documento:
-    """Un documento de la biblioteca (prompt o editorial)."""
+    """Un documento de la texto (prompt o editorial)."""
 
     id: str  # ruta relativa posix sin extension, p.ej. "prompts/investigacion/resumen"
     titulo: str
@@ -186,16 +186,16 @@ class Documento:
 
 
 def raiz() -> Path:
-    """Dir raiz del almacen de la biblioteca.
+    """Dir raiz del almacen de la texto.
 
-    Preferencia: env `KENI_BIBLIOTECA_DIR` (lo usan los tests con un tmp) ->
-    `rutas.dir_config()/biblioteca` (bajo `KENI_DATA_DIR` en contenedor; `~/.config/
-    keni-social/biblioteca` en local).
+    Preferencia: env `KENI_TEXTO_DIR` (lo usan los tests con un tmp) ->
+    `rutas.dir_config()/texto` (bajo `KENI_DATA_DIR` en contenedor; `~/.config/
+    keni-social/texto` en local).
     """
-    override = config.biblioteca_dir()
+    override = config.texto_dir()
     if override is not None:
         return override
-    return rutas.dir_config() / "biblioteca"
+    return rutas.dir_config() / "texto"
 
 
 def _ahora_iso() -> str:
@@ -212,7 +212,7 @@ def _slug(texto: str) -> str:
         base = base.replace(a, b)
     base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
     if not base:
-        raise BibliotecaError("El título no produce un identificador válido.")
+        raise TextoError("El título no produce un identificador válido.")
     return base
 
 
@@ -225,18 +225,18 @@ def _ruta_de_id(doc_id: str) -> Path:
     """Resuelve `<raiz>/<id>.md` garantizando que cae ESTRICTAMENTE dentro de la raiz.
 
     El id debe ser una ruta POSIX relativa cuyo PRIMER segmento es un `tipo` valido y el
-    resto son slugs. Lanza `BibliotecaError` si el id es invalido o se escapa de la raiz.
+    resto son slugs. Lanza `TextoError` si el id es invalido o se escapa de la raiz.
     """
     if not isinstance(doc_id, str) or not doc_id.strip():
-        raise BibliotecaError("Identificador de documento no válido.")
+        raise TextoError("Identificador de documento no válido.")
     partes = doc_id.strip().strip("/").split("/")
     if len(partes) < 2 or partes[0] not in TIPOS or not _segmentos_validos(partes):
-        raise BibliotecaError("Identificador de documento no válido.")
+        raise TextoError("Identificador de documento no válido.")
     base = raiz().resolve()
     destino = base.joinpath(*partes).with_suffix(".md").resolve()
     # Defensa en profundidad: el destino debe colgar de la raiz (nunca de `..`).
     if base not in destino.parents:
-        raise BibliotecaError("Ruta de documento fuera del almacén.")
+        raise TextoError("Ruta de documento fuera del almacén.")
     return destino
 
 
@@ -253,7 +253,7 @@ def _carpeta_relativa(tipo: str, carpeta: str) -> list[str]:
         return []
     partes = carpeta.split("/")
     if not _segmentos_validos(partes):
-        raise BibliotecaError("Nombre de carpeta no válido (usa minúsculas, dígitos y guiones).")
+        raise TextoError("Nombre de carpeta no válido (usa minúsculas, dígitos y guiones).")
     return partes
 
 
@@ -324,7 +324,7 @@ def _leer(ruta: Path) -> Documento | None:
     meta, cuerpo = _parsear(texto)
     try:
         doc_id = _id_de_ruta(ruta)
-    except (ValueError, BibliotecaError):
+    except (ValueError, TextoError):
         return None
     partes = doc_id.split("/")
     tipo = partes[0]
@@ -449,7 +449,7 @@ def obtener(doc_id: str) -> Documento | None:
     """Un documento por id, o None si no existe / id invalido / corrupto."""
     try:
         ruta = _ruta_de_id(doc_id)
-    except BibliotecaError:
+    except TextoError:
         return None
     if not ruta.is_file():
         return None
@@ -512,9 +512,9 @@ def crear(
 ) -> Documento:
     """Crea un documento nuevo (prompt o editorial) y lo escribe (atomico). Devuelve el doc."""
     if not isinstance(titulo, str) or not titulo.strip():
-        raise BibliotecaError("El título no puede estar vacío.")
+        raise TextoError("El título no puede estar vacío.")
     if tipo not in TIPOS:
-        raise BibliotecaError("El tipo debe ser 'prompt' o 'editorial'.")
+        raise TextoError("El tipo debe ser 'prompt' o 'editorial'.")
     clase = _validar_clase(tipo, clase)
     partes = _carpeta_relativa(tipo, carpeta)
     slug = _slug(titulo)
@@ -555,7 +555,7 @@ def guardar(
     """
     actual = obtener(doc_id)
     if actual is None:
-        raise BibliotecaError("Ese documento no existe.")
+        raise TextoError("Ese documento no existe.")
 
     nuevo_titulo = titulo.strip() if isinstance(titulo, str) and titulo.strip() else actual.titulo
     nuevo_cuerpo = cuerpo if isinstance(cuerpo, str) else actual.cuerpo
@@ -596,10 +596,10 @@ def borrar(doc_id: str) -> None:
     """Mueve un documento a la papelera (NO borra en duro; restaurable)."""
     ruta = _ruta_de_id(doc_id)
     if not ruta.is_file():
-        raise BibliotecaError("Ese documento no existe.")
+        raise TextoError("Ese documento no existe.")
     doc = _leer(ruta)
     if doc is None:
-        raise BibliotecaError("Ese documento no se puede leer.")
+        raise TextoError("Ese documento no se puede leer.")
     papelera = raiz() / _PAPELERA
     papelera.mkdir(parents=True, exist_ok=True)
     aplanado = doc_id.replace("/", "__")
@@ -638,18 +638,18 @@ def restaurar(papelera_id: str) -> Documento:
     """Restaura un documento de la papelera a su id de origen. Lanza si no existe / choca."""
     nombre = Path(papelera_id).name
     if not nombre or nombre != papelera_id:
-        raise BibliotecaError("Identificador de papelera no válido.")
+        raise TextoError("Identificador de papelera no válido.")
     ruta = raiz() / _PAPELERA / f"{nombre}.md"
     if not ruta.is_file():
-        raise BibliotecaError("Ese elemento no está en la papelera.")
+        raise TextoError("Ese elemento no está en la papelera.")
     texto = ruta.read_text(encoding="utf-8")
     meta, _ = _parsear(texto)
     origen = meta.get("papelera_origen")
     if not isinstance(origen, str) or not origen:
-        raise BibliotecaError("No se conoce el origen de este elemento.")
+        raise TextoError("No se conoce el origen de este elemento.")
     destino = _ruta_de_id(origen)
     if destino.exists():
-        raise BibliotecaError("Ya existe un documento en la ubicación original.")
+        raise TextoError("Ya existe un documento en la ubicación original.")
     # Quita la marca de papelera al restaurar.
     limpio = re.sub(r"^papelera_origen:.*\n", "", texto, count=1, flags=re.MULTILINE)
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -657,7 +657,7 @@ def restaurar(papelera_id: str) -> Documento:
     ruta.unlink(missing_ok=True)
     doc = _leer(destino)
     if doc is None:  # pragma: no cover -- recien escrito, deberia leerse
-        raise BibliotecaError("No se pudo restaurar el documento.")
+        raise TextoError("No se pudo restaurar el documento.")
     versionado.registrar(destino, f"restaurar {origen}")
     return doc
 
@@ -670,7 +670,7 @@ def restaurar(papelera_id: str) -> Documento:
 def historial(doc_id: str, *, limite: int = 50) -> list[dict[str, str]]:
     """Historial de versiones de un documento (recientes primero). Delega en `versionado`."""
     if obtener(doc_id) is None:
-        raise BibliotecaError("Ese documento no existe.")
+        raise TextoError("Ese documento no existe.")
     return versionado.historial(doc_id, limite=limite)
 
 
@@ -706,10 +706,10 @@ def restaurar_version(doc_id: str, sha: str, *, autor: dict[str, str] | None = N
     """
     texto = versionado.version(doc_id, sha)
     if texto is None:
-        raise BibliotecaError("No se encontró esa versión del documento.")
+        raise TextoError("No se encontró esa versión del documento.")
     ruta = _ruta_de_id(doc_id)
     if not ruta.is_file():
-        raise BibliotecaError("Ese documento no existe.")
+        raise TextoError("Ese documento no existe.")
     # Conserva el `actualizado` fresco (es un cambio nuevo) pero el resto del cuerpo/meta viene
     # de la version antigua. Releemos via _parsear y reserializamos para normalizar.
     meta, cuerpo = _parsear(texto)
@@ -796,7 +796,7 @@ def prompt_base_de(pipeline: str) -> str:
     """
     spec = PIPELINES.get(pipeline)
     if spec is None:
-        raise BibliotecaError(f"Pipeline desconocido: {pipeline}.")
+        raise TextoError(f"Pipeline desconocido: {pipeline}.")
     rol = spec.get("rol", "")
     candidatos = [
         d for d in listar(tipo="prompt")
@@ -820,7 +820,7 @@ def previsualizar_pipeline(pipeline: str, marca: str, contexto: str = "") -> dic
     lanzar nada. Devuelve `{pipeline, prompt_base_id, prompt_efectivo, adjuntos, falta_base}`.
     `adjuntos` es la lista (id/titulo/clase) de editoriales que se adjuntarian, en orden.
     """
-    from .dominio import generar  # perezoso: generar importa biblioteca
+    from .dominio import generar  # perezoso: generar importa texto
 
     base_id = prompt_base_de(pipeline)
     cuerpo = cuerpo_efectivo(base_id) if base_id else None
@@ -869,7 +869,7 @@ def validacion_editorial(marca: str) -> dict[str, object]:
         nombres = ", ".join(faltan)
         recomendacion = (
             f"La línea editorial de esta marca está incompleta: falta(n) {nombres}. "
-            "Crea o completa esos documentos en la Biblioteca (sección Editorial) para "
+            "Crea o completa esos documentos en la Texto (sección Editorial) para "
             "que la generación tenga contexto suficiente."
         )
     return {
@@ -893,7 +893,7 @@ def _validar_clase(tipo: str, clase: str) -> str:
     if not clase:
         return ""
     if clase not in CLASES:
-        raise BibliotecaError(f"La clase editorial debe ser una de: {', '.join(CLASES)}.")
+        raise TextoError(f"La clase editorial debe ser una de: {', '.join(CLASES)}.")
     return clase
 
 
@@ -905,7 +905,7 @@ def _validar_estado(estado: str | None) -> str:
     if not estado:
         return ESTADO_DEFECTO
     if estado not in ESTADOS:
-        raise BibliotecaError(f"El estado debe ser uno de: {', '.join(ESTADOS)}.")
+        raise TextoError(f"El estado debe ser uno de: {', '.join(ESTADOS)}.")
     return estado
 
 
@@ -914,11 +914,11 @@ def _validar_etiquetas(etiquetas: list[str] | None) -> list[str]:
     if not etiquetas:
         return []
     if not isinstance(etiquetas, list):
-        raise BibliotecaError("Las etiquetas deben ser una lista de textos.")
+        raise TextoError("Las etiquetas deben ser una lista de textos.")
     vistas: list[str] = []
     for e in etiquetas:
         if not isinstance(e, str):
-            raise BibliotecaError("Cada etiqueta debe ser un texto.")
+            raise TextoError("Cada etiqueta debe ser un texto.")
         norm = re.sub(r"[^a-z0-9]+", "-", e.strip().lower()).strip("-")
         if norm and norm not in vistas:
             vistas.append(norm)
@@ -930,14 +930,14 @@ def _validar_pipelines(pipelines: list[str] | None) -> list[str]:
     if not pipelines:
         return []
     if not isinstance(pipelines, list):
-        raise BibliotecaError("Los pipelines deben ser una lista de identificadores.")
+        raise TextoError("Los pipelines deben ser una lista de identificadores.")
     vistas: list[str] = []
     for p in pipelines:
         if not isinstance(p, str):
-            raise BibliotecaError("Cada pipeline debe ser un identificador.")
+            raise TextoError("Cada pipeline debe ser un identificador.")
         p = p.strip()
         if p and p not in PIPELINES:
-            raise BibliotecaError(f"Pipeline desconocido: {p}.")
+            raise TextoError(f"Pipeline desconocido: {p}.")
         if p and p not in vistas:
             vistas.append(p)
     return vistas
@@ -951,7 +951,7 @@ def _validar_rol(tipo: str, rol: str | None) -> str:
     if not rol:
         return ""
     if rol not in ROLES_PROMPT:
-        raise BibliotecaError(f"El rol debe ser uno de: {', '.join(r for r in ROLES_PROMPT if r)}.")
+        raise TextoError(f"El rol debe ser uno de: {', '.join(r for r in ROLES_PROMPT if r)}.")
     return rol
 
 
@@ -960,22 +960,22 @@ def _validar_prioridad(prioridad: int | None) -> int:
     if prioridad is None:
         return 0
     if isinstance(prioridad, bool) or not isinstance(prioridad, int):
-        raise BibliotecaError("La prioridad debe ser un número entero.")
+        raise TextoError("La prioridad debe ser un número entero.")
     return prioridad
 
 
 def dir_semilla() -> Path:
     """Dir de la SEMILLA (documentos por defecto que se copian al store en el 1er arranque).
 
-    Vive DENTRO del paquete (`biblioteca_semilla/`) para viajar con el código (a diferencia
-    del store, que es estado de usuario). Override por `KENI_BIBLIOTECA_SEMILLA` (tests).
+    Vive DENTRO del paquete (`texto_semilla/`) para viajar con el código (a diferencia
+    del store, que es estado de usuario). Override por `KENI_TEXTO_SEMILLA` (tests).
     """
     import os
 
-    env = os.environ.get("KENI_BIBLIOTECA_SEMILLA")
+    env = os.environ.get("KENI_TEXTO_SEMILLA")
     if env:
         return Path(env).expanduser()
-    return Path(__file__).resolve().parent / "biblioteca_semilla"
+    return Path(__file__).resolve().parent / "texto_semilla"
 
 
 def obtener_semilla(doc_id: str) -> Documento | None:
@@ -1016,7 +1016,7 @@ def cuerpo_efectivo(prompt_id: str) -> str | None:
     """Cuerpo de un prompt: la versión del STORE si el equipo la editó, si no la SEMILLA.
 
     Es la fuente de verdad para las features que se apoyan en un prompt base: el equipo
-    puede editarlo en la Biblioteca (gana el store) y, si no, se usa el que viaja en el
+    puede editarlo en la Texto (gana el store) y, si no, se usa el que viaja en el
     paquete (semilla). None si no existe ni en uno ni en otro.
     """
     doc = obtener(prompt_id)
@@ -1029,7 +1029,7 @@ def cuerpo_efectivo(prompt_id: str) -> str | None:
 def importar_semilla(origen: Path | None = None) -> int:
     """Copia los documentos de la semilla al store que AÚN NO existan. Idempotente.
 
-    Pensado para el PRIMER arranque (poblar la Biblioteca con la línea editorial y los
+    Pensado para el PRIMER arranque (poblar la Texto con la línea editorial y los
     prompts base). No pisa nada: un documento ya presente en el store se respeta. Devuelve
     cuántos documentos se importaron. Los ficheros de la semilla ya vienen en formato de
     store (frontmatter + cuerpo, ruta `tipo/.../slug.md`).
@@ -1062,7 +1062,7 @@ def _validar_marcas(marcas: list[str] | None) -> list[str]:
     if not marcas:
         return []
     if not isinstance(marcas, list) or not all(isinstance(m, str) for m in marcas):
-        raise BibliotecaError("Las marcas deben ser una lista de identificadores.")
+        raise TextoError("Las marcas deben ser una lista de identificadores.")
     # De-dup preservando orden.
     vistas: list[str] = []
     for m in marcas:

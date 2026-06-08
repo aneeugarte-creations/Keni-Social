@@ -38,7 +38,7 @@ _VALORES_OFF = frozenset({"0", "false", "no", "off"})
 # Etiqueta humana de cada bloque del sidebar (encabezado visible). El sidebar agrupa por
 # MOMENTO DEL FLUJO, no por dueño de app: `operacion` = checkpoints diarios (tablero,
 # revisión); `contenido` = herramientas para crear/editar a mano (estudio,
-# biblioteca, plantillas); `datos` = entradas que alimentan o reflejan la automatización
+# texto, plantillas); `datos` = entradas que alimentan o reflejan la automatización
 # (investigación, analíticas, actividad). Un `grupo` sin etiqueta aquí cae a "" (bloque
 # sin encabezado), así un manifest nuevo no rompe aunque estrene un bloque.
 ETIQUETAS_BLOQUE: dict[str, str] = {

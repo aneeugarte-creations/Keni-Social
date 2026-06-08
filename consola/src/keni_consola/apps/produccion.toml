@@ -86,7 +86,7 @@ rutas_frontend = [
 # para crear/editar a mano · datos(30) = entradas que alimentan o reflejan la automatización.
 
 # El bloque CONTENIDO son TRES páginas planas por tipo de contenido (sin hub con pestañas):
-# Imagen (estudio de imagen por capas), Video (estudio de video) y Texto (la Biblioteca).
+# Imagen (estudio de imagen por capas), Video (estudio de video) y Texto (prompts + editorial).
 [[nav]]
 ruta = "/contenido/imagen"
 etiqueta = "Imagen"
@@ -135,4 +135,4 @@ orden = 30
 # `/datos/actividad/pipelines` del hub Actividad IA (ver `hub-tabs.ts`).
 
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
-# de la Biblioteca y dejó de ser una entrada de nav.)
+# de la página Texto y dejó de ser una entrada de nav.)

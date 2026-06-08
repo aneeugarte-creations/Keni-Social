@@ -3,7 +3,7 @@
 La ingesta descarga via `rss._DESCARGADOR` (mismo punto inyectable del RSS); aquí lo
 parcheamos para no tocar la red, y usamos una URL con IP pública LITERAL para pasar el
 guard SSRF sin resolver DNS. Cubre: alta de fuente, ingesta + clasificación, filtros,
-propuesta a biblioteca, archivar y la siembra de fuentes recomendadas.
+propuesta a texto, archivar y la siembra de fuentes recomendadas.
 """
 
 from __future__ import annotations
@@ -100,13 +100,13 @@ def test_filtros_por_plataforma_nivel_y_solo_cambios(cliente, monkeypatch):
     assert cambios and all(n["es_cambio"] for n in cambios)
 
 
-def test_proponer_a_biblioteca_marca_aplicada_y_devuelve_borrador(cliente, monkeypatch):
+def test_proponer_a_texto_marca_aplicada_y_devuelve_borrador(cliente, monkeypatch):
     _alta_fuente(cliente)
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _FEED_ALGO)
     cliente.post("/api/algoritmos/refrescar", json={})
     noticia = cliente.get("/api/algoritmos").json()["noticias"][0]
 
-    r = cliente.post(f"/api/algoritmos/{noticia['id']}/biblioteca", json={}).json()
+    r = cliente.post(f"/api/algoritmos/{noticia['id']}/texto", json={}).json()
     assert r["propuesta"]  # borrador markdown no vacío
     assert noticia["titulo"] in r["propuesta"]
     assert r["noticia"]["aplicada"] is True

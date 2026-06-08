@@ -1,4 +1,4 @@
-"""Tests HTTP del API de la Biblioteca, montando solo sus RUTAS (sin auth/Postgres).
+"""Tests HTTP del API de la Texto, montando solo sus RUTAS (sin auth/Postgres).
 
 Construye una app Starlette minima con `api.texto.RUTAS` y un TestClient, e intercepta
 `encolar_job_claude` (no toca cola ni `claude`). Cubre el CRUD, papelera, editoriales, areas
@@ -12,7 +12,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from keni_consola import biblioteca, generaciones, marcas
+from keni_consola import libtexto, generaciones, marcas
 from keni_consola.api import texto as api_texto
 
 _MARCA = marcas.opciones()[0][0]
@@ -21,7 +21,7 @@ _MARCA = marcas.opciones()[0][0]
 @pytest.fixture
 def cliente(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))  # aisla dir_config() (cwd_generacion)
-    monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
+    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     monkeypatch.setattr(generaciones, "encolar_job_claude", lambda *a, **k: None)
     return TestClient(Starlette(routes=list(api_texto.RUTAS)))
@@ -181,7 +181,7 @@ def test_lanzar_area_invalida_400(cliente):
 def test_lanzar_prompt_piezas_con_redes(monkeypatch, tmp_path):
     """Un prompt salida=piezas + `redes` en el body crea el spec de COPY (borradores)."""
     monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
+    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     capturado: dict = {}
     monkeypatch.setattr(
@@ -193,8 +193,8 @@ def test_lanzar_prompt_piezas_con_redes(monkeypatch, tmp_path):
         "titulo": "Copy por red", "tipo": "prompt", "cuerpo": "haz copy por red",
     })
     doc_id = creado.json()["documento"]["id"]
-    # Marca el prompt como salida=piezas (como haria el editor de la Biblioteca).
-    ruta = biblioteca._ruta_de_id(doc_id)
+    # Marca el prompt como salida=piezas (como haria el editor de la Texto).
+    ruta = libtexto._ruta_de_id(doc_id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",

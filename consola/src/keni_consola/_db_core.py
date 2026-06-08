@@ -805,13 +805,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_metricas_cache_combo "
     "ON metricas_cache (tipo, rango, marca)",
     # ----------------------------------------------------------------------- #
-    # ACTIVOS REUTILIZABLES (ola "activos"): biblioteca de medios interna.     #
+    # ACTIVOS REUTILIZABLES (ola "activos"): texto de medios interna.     #
     # (Las "plantillas de contenido" se retiraron por completo.)               #
     # ----------------------------------------------------------------------- #
     # Limpieza one-shot: elimina la tabla retirada `plantilla_contenido` (y sus datos) si una
     # BD vieja aun la tiene. Idempotente (IF EXISTS); no afecta a plantillas de MARCA/diseno.
     "DROP TABLE IF EXISTS plantilla_contenido CASCADE",
-    # BIBLIOTECA DE MEDIOS interna (ola "activos"): catalogo editorial de imagenes/clips
+    # TEXTO DE MEDIOS interna (ola "activos"): catalogo editorial de imagenes/clips
     # APROBADOS y reutilizables al armar una pieza. NO publica a redes (eso es Metricool); es
     # un repositorio interno. Cada fila CATALOGA un objeto del almacen de media (`media.py` /
     # `almacen_media.py`) por su nombre (`objeto`, un uuid+ext que SIEMPRE genera el servidor)
@@ -820,7 +820,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # mismo binario se cataloga una sola vez. Borrar una entrada NO borra el binario por
     # defecto (puede estar referenciado por una pieza ya armada); la API decide.
     """
-    CREATE TABLE IF NOT EXISTS biblioteca_media (
+    CREATE TABLE IF NOT EXISTS catalogo_media (
         id           TEXT PRIMARY KEY,
         objeto       TEXT NOT NULL UNIQUE,
         tipo         TEXT NOT NULL DEFAULT 'imagen',
@@ -836,9 +836,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         actualizado  TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_marca ON biblioteca_media (marca)",
-    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_tipo ON biblioteca_media (tipo)",
-    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_aprobado ON biblioteca_media (aprobado)",
+    "CREATE INDEX IF NOT EXISTS idx_catalogo_media_marca ON catalogo_media (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_catalogo_media_tipo ON catalogo_media (tipo)",
+    "CREATE INDEX IF NOT EXISTS idx_catalogo_media_aprobado ON catalogo_media (aprobado)",
     # ACTIVOS DE MARCA (editor profesional): el kit visual reutilizable de cada marca, agrupado
     # por `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo). Generaliza
     # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en
@@ -1110,7 +1110,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_estado ON evergreen_ideas (estado)",
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_creado ON evergreen_ideas (creado)",
     # Grupos de hashtags reutilizables (nombre + lista de tags JSON) por marca. `hashtags`
-    # es un JSON serializado de strings (igual patron que `biblioteca_media.etiquetas`).
+    # es un JSON serializado de strings (igual patron que `catalogo_media.etiquetas`).
     # `creado` preserva el orden "recientes primero".
     """
     CREATE TABLE IF NOT EXISTS grupos_hashtags (
@@ -1178,7 +1178,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_fuentes_algoritmo_creado ON fuentes_algoritmo (creado)",
     # Noticias de algoritmo ya INGERIDAS y CLASIFICADAS (a diferencia de los items RSS, que se
     # leen en vivo y no se persisten): aqui SI se persisten para poder ordenarlas por
-    # importancia, mostrarlas en el panel y enlazarlas a la biblioteca. `importancia` es un
+    # importancia, mostrarlas en el panel y enlazarlas a la texto. `importancia` es un
     # score HEURISTICO (entero comparable) y `nivel` su tramo (alta/media/baja); `senales` son
     # las palabras clave que dispararon el score (JSON, para el "por que" honesto, sin inventar).
     # `es_cambio` marca lo que parece un cambio de algoritmo confirmado (candidato a la ficha).
@@ -1289,7 +1289,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # propuestas de cambio a la ficha editorial de una plataforma (`tipo='editorial'`) o a sus
     # limites (`tipo='limite'`). PROPUESTAS, no aplicadas: el equipo revisa y decide (estado
     # nueva/aplicada/descartada). `noticia_ids` (JSON) son las noticias que la motivaron;
-    # `ficha_id` el doc de biblioteca destino (p. ej. `editorial/plataformas/instagram`).
+    # `ficha_id` el doc de texto destino (p. ej. `editorial/plataformas/instagram`).
     """
     CREATE TABLE IF NOT EXISTS sugerencias_editoriales (
         id           TEXT PRIMARY KEY,
@@ -1434,6 +1434,11 @@ def _crear_esquema(con: Any) -> None:
     # renombrásemos primero, `CREATE TABLE IF NOT EXISTS evergreen_ideas` crearía una tabla
     # NUEVA vacía y huérfanaría los datos de `green_ideas`. Idempotente.
     _migrar_green_a_evergreen(con)
+    # Renombre `biblioteca_media` → `catalogo_media` (catálogo de medios aprobados). Corre ANTES
+    # del DDL declarativo, que ya declara `catalogo_media`; si no, `CREATE TABLE IF NOT EXISTS
+    # catalogo_media` crearía una tabla nueva vacía y la vieja quedaría huérfana con los datos.
+    # Idempotente: solo actúa si existe la vieja y no la nueva.
+    _migrar_renombre_catalogo_media(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_turnos_rota(con)
@@ -1454,6 +1459,24 @@ def _crear_esquema(con: Any) -> None:
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
     # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
     _crear_indices_unicos_idempotencia(con)
+
+
+def _migrar_renombre_catalogo_media(con: Any) -> None:
+    """Renombra la tabla `biblioteca_media` (nombre viejo) a `catalogo_media` y sus índices.
+
+    El catálogo de medios aprobados se llamaba `biblioteca_media`; se renombró a `catalogo_media`
+    al purgar "biblioteca" del repo. Idempotente: solo actúa si existe la tabla vieja y aún no la
+    nueva. Es el ÚNICO sitio que aún nombra la tabla vieja (la fuente del renombre).
+    """
+    if not _tabla_existe(con, "biblioteca_media") or _tabla_existe(con, "catalogo_media"):
+        return
+    con.execute("ALTER TABLE biblioteca_media RENAME TO catalogo_media")
+    for viejo, nuevo in (
+        ("idx_biblioteca_media_marca", "idx_catalogo_media_marca"),
+        ("idx_biblioteca_media_tipo", "idx_catalogo_media_tipo"),
+        ("idx_biblioteca_media_aprobado", "idx_catalogo_media_aprobado"),
+    ):
+        con.execute(f"ALTER INDEX IF EXISTS {viejo} RENAME TO {nuevo}")
 
 
 def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
@@ -2229,7 +2252,7 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
     # URL de la imagen de la FUENTE original (cuando tipo_contenido='fuente'): se
-    # previsualiza tal cual sin tener que descargarla a la biblioteca de media.
+    # previsualiza tal cual sin tener que descargarla a la texto de media.
     ("imagen_fuente", "TEXT NOT NULL DEFAULT ''"),
     # Media id de la FOTO CRUDA de fondo (la que el usuario sube/elige), separada de
     # `imagen` (la placa ya compuesta y publicable). Permite recomponer la placa en vivo.

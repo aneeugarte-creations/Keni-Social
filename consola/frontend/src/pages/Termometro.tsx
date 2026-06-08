@@ -53,7 +53,7 @@ function formatearItem(item: NoticiaItem): string {
 /**
  * Termómetro mundial. Página dedicada: configura el termómetro (número de slides,
  * regiones, hora del cron de las 7:00 y marca) y genera el posteo de galería con el
- * prompt base del Termómetro (Biblioteca). Reutiliza el motor de generación en segundo plano
+ * prompt base del Termómetro (Texto). Reutiliza el motor de generación en segundo plano
  * (`useGeneracion` + `ProgresoGeneracion`) y muestra el resultado como PORTADA + SLIDES
  * en miniatura con `TermometroPreview` (máquina de estados: armar → generando → revisar →
  * guardar). El guardado multi-red sigue el mismo contrato neutro `{ redes: [...] }`.
@@ -308,7 +308,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
         <CardContent className="space-y-4">
           {!datos.prompt_disponible && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-              Falta el prompt base del Termómetro en la Biblioteca, así que ahora mismo no se puede
+              Falta el prompt base del Termómetro en la Texto, así que ahora mismo no se puede
               generar. Restáuralo desde la semilla para volver a habilitarlo.
             </div>
           )}

@@ -24,13 +24,13 @@ import logging
 import re
 from typing import Any
 
-from .. import biblioteca, repos
+from .. import libtexto, repos
 from ..estados import ESTADO_EVERGREEN_PROPUESTA
 from . import generar
 
 _log = logging.getLogger("keni_consola.evergreen")
 
-# Prompt semilla que pide N ideas evergreen como JSON. Viaja en la biblioteca semilla.
+# Prompt semilla que pide N ideas evergreen como JSON. Viaja en la texto semilla.
 PROMPT_BRAINSTORMING = "prompt/brainstorming-evergreen"
 
 # Topes defensivos: cuantas ideas importamos de una salida y longitudes maximas por campo.
@@ -127,13 +127,13 @@ def lanzar_propuesta(
     `procesar` solo desde el spec (no recibe el id). Es un enlace de trazabilidad opcional; las
     ideas se crean igual. Wirearlo requeriria que el worker inyecte el gen_id al `procesar`.
     """
-    cuerpo = biblioteca.cuerpo_efectivo(biblioteca.prompt_base_de("evergreen"))
+    cuerpo = libtexto.cuerpo_efectivo(libtexto.prompt_base_de("evergreen"))
     if cuerpo is None:
-        raise biblioteca.BibliotecaError(
+        raise libtexto.TextoError(
             "No está disponible el prompt de brainstorming. Reinstala la Consola."
         )
     prompt = generar.componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca, pipeline="evergreen"), contexto, sin_emojis=True
+        cuerpo, libtexto.editoriales_de_marca(marca, pipeline="evergreen"), contexto, sin_emojis=True
     )
     # Import perezoso del jobspec para no acoplar; el spec NO lleva la generacion_id real (la
     # crea `generar.lanzar`), pero el worker la inyecta al reconstruir el procesar.

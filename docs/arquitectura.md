@@ -1,17 +1,17 @@
 # Arquitectura
 
-Tres piezas independientes que se complementan: la **Biblioteca de Prompts** + lanzador neutro,
+Tres piezas independientes que se complementan: la **Texto de Prompts** + lanzador neutro,
 el **MCP de métricas**, y la **Consola** (UI que orquesta ambos). Cada una funciona por su cuenta.
 
 Para el **estado** de cada pieza (qué está listo, qué está pausado por gating externo) la fuente
 única es [`estado-producto.md`](estado-producto.md); aquí se describe **cómo** encajan, no el
 estado.
 
-## 1. Biblioteca de Prompts + lanzador neutro
+## 1. Texto de Prompts + lanzador neutro
 
 Reemplaza al antiguo "sistema de skills" (carpetas `SKILL.md` + `keni.yaml` con formularios) por
-un **almacén único de documentos markdown** editables (`biblioteca.py`, files-as-truth bajo
-`KENI_BIBLIOTECA_DIR`) y un **lanzador NEUTRO** (`dominio/generar.py`) que es el único punto de
+un **almacén único de documentos markdown** editables (`texto.py`, files-as-truth bajo
+`KENI_TEXTO_DIR`) y un **lanzador NEUTRO** (`dominio/generar.py`) que es el único punto de
 arranque de `claude -p`.
 
 Cada documento es un `.md` con frontmatter YAML + cuerpo; conviven dos `tipo`:
@@ -21,7 +21,7 @@ Cada documento es un `.md` con frontmatter YAML + cuerpo; conviven dos `tipo`:
   Se ADJUNTA a un prompt al lanzarlo (auto por marca + ajustable).
 
 ```
-documento prompt (Biblioteca)        fuente (nota | video | audio | url | área)
+documento prompt (Texto)        fuente (nota | video | audio | url | área)
    └─ lanzar (dominio/generar)            ├─ video/audio: transcribe en LOCAL (whisper.cpp; no sale de la máquina)
         │                                 └─ ↓
         ├─ compone: cuerpo del prompt + línea editorial adjunta (por marca) + contexto + redes
@@ -71,7 +71,7 @@ Distribución: el MCP se instala y actualiza como **plugin de Claude Code** desd
 ## 3. Consola (`consola/`)
 
 Capa de gestión opcional para máquinas no técnicas (community managers): una UI web local que
-**orquesta** la generación de copy/imagen (Biblioteca + lanzador) y el MCP de métricas, sin
+**orquesta** la generación de copy/imagen (Texto + lanzador) y el MCP de métricas, sin
 reemplazarlos. Backend Starlette
 (Python) + frontend React/TS/Vite/shadcn (bundle vendorizado en
 `consola/src/keni_consola/webapp/`). La generación corre **en segundo plano con `claude -p`**
@@ -79,7 +79,7 @@ reemplazarlos. Backend Starlette
 
 ```
 Consola (Starlette + React, local 127.0.0.1)
-   ├─ páginas de Trabajo: Biblioteca · Generar copy · Imágenes · Reporte deportes · Termómetro mundial …
+   ├─ páginas de Trabajo: Texto · Generar copy · Imágenes · Reporte deportes · Termómetro mundial …
    │    └─ lanzan `claude -p` con el MISMO prompt autocontenido que un usuario técnico invocaría a mano
    ├─ páginas de métricas: dashboard / reporte sobre el MCP `keni-metricas`
    └─ Ajustes: credenciales (`secretos.toml`, 0600), buzón de sugerencias
@@ -106,7 +106,7 @@ La Consola es un **catálogo de apps** (no un monolito enmarañado ni microservi
 **verificadas en CI**. Decisión en [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md)
 sobre el mecanismo de [ADR 0002](adr/0002-descomposicion-monolito-modular-catalogo-apps.md).
 
-- **A · Producción** (el moat): generación de copy/imagen, Biblioteca de Prompts, investigación,
+- **A · Producción** (el moat): generación de copy/imagen, Texto de Prompts, investigación,
   revisión, agentes. Asíncrona + worker (`claude -p`) + whisper local.
 - **B · Métricas**: lectura/insight/reporte. **Consumidora de Metricool** (`FuenteMetricol`),
   no ingesta propia por red; read-through con caché e histórico.

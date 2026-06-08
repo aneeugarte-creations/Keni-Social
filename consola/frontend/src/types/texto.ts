@@ -1,13 +1,13 @@
 import type { MarcaDisponible } from "../types.gen";
 
 // --------------------------------------------------------------------------- //
-// Biblioteca de documentos (prompts + línea editorial)                         //
+// Texto de documentos (prompts + línea editorial)                         //
 // --------------------------------------------------------------------------- //
 
 export type TipoDocumento = "prompt" | "editorial";
 
-/** Un documento de la biblioteca (prompt o pieza editorial). */
-export interface DocumentoBiblioteca {
+/** Un documento de la texto (prompt o pieza editorial). */
+export interface DocumentoTexto {
   id: string;
   titulo: string;
   tipo: TipoDocumento | string;
@@ -34,14 +34,14 @@ export interface DocumentoBiblioteca {
 }
 
 /** Resumen de facetas para poblar los filtros de navegación. */
-export interface FacetasBiblioteca {
+export interface FacetasTexto {
   etiquetas: { valor: string; total: number }[];
   estados: Record<string, number>;
   pipelines: Record<string, number>;
 }
 
 /** Un pipeline de generación (registro): su prompt base efectivo y rol esperado. */
-export interface PipelineBiblioteca {
+export interface PipelineTexto {
   id: string;
   titulo: string;
   descripcion: string;
@@ -49,8 +49,8 @@ export interface PipelineBiblioteca {
   prompt_base_id: string;
 }
 
-export interface RespuestaPipelinesBiblioteca {
-  pipelines: PipelineBiblioteca[];
+export interface RespuestaPipelinesTexto {
+  pipelines: PipelineTexto[];
 }
 
 /** Preview del prompt ENSAMBLADO de un pipeline (lo que recibiría claude -p). */
@@ -63,7 +63,7 @@ export interface PreviewPipeline {
 }
 
 /** Una entrada del historial de versiones (git) de un documento. */
-export interface VersionBiblioteca {
+export interface VersionTexto {
   sha: string;
   sha_corto: string;
   fecha: string;
@@ -71,19 +71,19 @@ export interface VersionBiblioteca {
   mensaje: string;
 }
 
-export interface RespuestaHistorialBiblioteca {
-  historial: VersionBiblioteca[];
+export interface RespuestaHistorialTexto {
+  historial: VersionTexto[];
 }
 
 /** `GET /api/texto`: documentos filtrados + carpetas existentes + facetas. */
-export interface RespuestaBiblioteca {
-  documentos: DocumentoBiblioteca[];
+export interface RespuestaTexto {
+  documentos: DocumentoTexto[];
   carpetas: string[];
-  facetas?: FacetasBiblioteca;
+  facetas?: FacetasTexto;
 }
 
 export interface RespuestaDocumento {
-  documento: DocumentoBiblioteca;
+  documento: DocumentoTexto;
 }
 
 export interface ItemPapelera {
@@ -99,10 +99,10 @@ export interface RespuestaPapelera {
 }
 
 export interface RespuestaEditoriales {
-  editoriales: DocumentoBiblioteca[];
+  editoriales: DocumentoTexto[];
 }
 
-/** Diagnóstico de los 4 pilares de la línea editorial de una marca (GET /biblioteca/validacion). */
+/** Diagnóstico de los 4 pilares de la línea editorial de una marca (GET /texto/validacion). */
 export interface ValidacionEditorial {
   completa: boolean;
   faltan: string[];
@@ -110,16 +110,16 @@ export interface ValidacionEditorial {
   pilares: Record<string, boolean>;
 }
 
-export interface AreaBiblioteca {
+export interface AreaTexto {
   id: string;
   nombre: string;
 }
 
 export interface RespuestaAreas {
-  areas: AreaBiblioteca[];
+  areas: AreaTexto[];
 }
 
-export interface RespuestaMarcasBiblioteca {
+export interface RespuestaMarcasTexto {
   marcas: MarcaDisponible[];
 }
 
@@ -156,7 +156,7 @@ export interface TargetLanzamiento {
   valor?: string;
 }
 
-export interface CuerpoLanzarBiblioteca {
+export interface CuerpoLanzarTexto {
   prompt_id?: string;
   texto?: string;
   titulo?: string;

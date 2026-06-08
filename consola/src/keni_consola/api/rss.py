@@ -19,7 +19,7 @@ SEGURIDAD / VALIDACION:
     (defensa en profundidad: una IP puede cambiar de resolucion entre el alta y la
     lectura).
   - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`, por su id canonico);
-    `redes_def`/`redes` solo redes canonicas; `prompt` solo de la allowlist de la Biblioteca.
+    `redes_def`/`redes` solo redes canonicas; `prompt` solo de la allowlist de la Texto.
   - SQL parametrizado en `consola.db`; errores en espanol, sin tracebacks crudos.
 
 DESCARGA Y PARSEO:

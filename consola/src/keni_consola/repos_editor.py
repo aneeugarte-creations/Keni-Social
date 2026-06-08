@@ -7,13 +7,13 @@ from ._repos_comun import (
 )
 
 # --------------------------------------------------------------------------- #
-# Biblioteca de MEDIOS interna (OPERACIONAL: Postgres via db.py)                #
+# Texto de MEDIOS interna (OPERACIONAL: Postgres via db.py)                #
 # --------------------------------------------------------------------------- #
 # Catalogo editorial de medios APROBADOS y etiquetables. El binario lo guarda/sirve
 # `media.py`; aqui solo el catalogo reutilizable. La fachada delega 1:1 en `db.py`.
 
 
-def crear_media_biblioteca(
+def crear_media_catalogo(
     *,
     objeto: str,
     tipo: str = "imagen",
@@ -28,7 +28,7 @@ def crear_media_biblioteca(
     creado: str = "",
     actualizado: str = "",
 ) -> dict[str, Any]:
-    return db.crear_media_biblioteca(
+    return db.crear_media_catalogo(
         objeto=objeto,
         tipo=tipo,
         titulo=titulo,
@@ -44,30 +44,30 @@ def crear_media_biblioteca(
     )
 
 
-def listar_media_biblioteca(
+def listar_media_catalogo(
     *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
 ) -> list[dict[str, Any]]:
-    return db.listar_media_biblioteca(
+    return db.listar_media_catalogo(
         marca=marca, tipo=tipo, solo_aprobados=solo_aprobados
     )
 
 
-def obtener_media_biblioteca(media_id: str) -> dict[str, Any] | None:
-    return db.obtener_media_biblioteca(media_id)
+def obtener_media_catalogo(media_id: str) -> dict[str, Any] | None:
+    return db.obtener_media_catalogo(media_id)
 
 
 def existe_media_objeto(objeto: str) -> bool:
     return db.existe_media_objeto(objeto)
 
 
-def actualizar_media_biblioteca(
+def actualizar_media_catalogo(
     media_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return db.actualizar_media_biblioteca(media_id, campos)
+    return db.actualizar_media_catalogo(media_id, campos)
 
 
-def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
-    return db.borrar_media_biblioteca(media_id)
+def borrar_media_catalogo(media_id: str) -> dict[str, Any] | None:
+    return db.borrar_media_catalogo(media_id)
 
 
 

@@ -32,7 +32,7 @@ from ..dominio import extraccion_url
 from ..seguridad import autor_de_peticion
 
 # Carpetas en las que el CLIENTE puede pedir guardar una subida (allowlist publica). Las demas
-# categorias (logos/biblioteca/render/generadas/documentos) las asigna el server por su flujo;
+# categorias (logos/texto/render/generadas/documentos) las asigna el server por su flujo;
 # el cliente solo distingue una foto de pieza (`fotos`) de un asset del editor de plantillas.
 _CATEGORIAS_SUBIDA = {"fotos", "plantillas"}
 

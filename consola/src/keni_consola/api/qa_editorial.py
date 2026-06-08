@@ -17,11 +17,11 @@ inventa.
     al completar, recoge `resultado = {informe: <reporte>}`.
 
 Reutiliza la infra de generaciones en background (mismo sondeo que copy/verificacion) y la
-Biblioteca de Prompts (el prompt `qa-editorial` con su contexto editorial versionado).
+Texto de Prompts (el prompt `qa-editorial` con su contexto editorial versionado).
 El POST-PROCESADO parsea el bloque ```json de hallazgos que emite el prompt en un reporte
 estructurado para la UI; cae con elegancia a un informe de solo-texto si no hay JSON valido.
 
-SEGURIDAD: marca∈catalogo unico; prompt∈Biblioteca; el texto viaja como argumento
+SEGURIDAD: marca∈catalogo unico; prompt∈Texto; el texto viaja como argumento
 de subprocess (sin shell). Errores en espanol, sin tracebacks.
 """
 
@@ -31,14 +31,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas, repos
+from .. import libtexto, marcas, repos
 from .._http_json import leer_json
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec, stream
 from ..dominio import qa_editorial as dom_qa
 from ..seguridad import autor_de_peticion
 
-# Prompt base (Biblioteca) que hace el QA + etiqueta de origen del historial.
+# Prompt base (Texto) que hace el QA + etiqueta de origen del historial.
 PROMPT_ID = "prompt/qa-editorial"
 ORIGEN_HISTORIAL = dom_qa.PROMPT_ID
 
@@ -78,7 +78,7 @@ async def opciones(request: Request) -> Response:
         {
             "marcas": _marcas_lista(),
             "plataformas": list(PLATAFORMAS),
-            "prompt_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
+            "prompt_disponible": libtexto.cuerpo_efectivo(PROMPT_ID) is not None,
         }
     )
 
@@ -133,7 +133,7 @@ async def revisar(request: Request) -> Response:
             contenido_id = pieza.get("contenido_id", "") or ""
     copy_hash = dom_qa.hash_copy(texto)
 
-    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
+    cuerpo = libtexto.cuerpo_efectivo(PROMPT_ID)
     if cuerpo is None:
         return JSONResponse(
             {"error": "No está disponible el prompt de QA editorial. Reinstala la Consola."},
@@ -149,7 +149,7 @@ async def revisar(request: Request) -> Response:
         titulo="QA editorial",
         marca=marca,
         prompt=gen_dom.componer(
-            cuerpo, biblioteca.editoriales_de_marca(marca), _contexto_qa(texto, plataforma, contexto)
+            cuerpo, libtexto.editoriales_de_marca(marca), _contexto_qa(texto, plataforma, contexto)
         ),
         procesar=_construir_procesar(
             marca, titulo, autor,

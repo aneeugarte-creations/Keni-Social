@@ -724,7 +724,7 @@ export function Lienzo({
   // 1/baseFit (acotado al rango permitido).
   const zoomReal = () => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, 1 / baseFit)));
 
-  // Soltar un activo arrastrado desde la Biblioteca: lo inserta como capa DONDE se suelta.
+  // Soltar un activo arrastrado desde la Texto: lo inserta como capa DONDE se suelta.
   const onDrop = (e: DragEventReact<HTMLDivElement>) => {
     const raw = e.dataTransfer.getData("application/x-keni-activo");
     if (!raw) return;

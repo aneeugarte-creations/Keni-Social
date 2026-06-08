@@ -35,7 +35,7 @@ from typing import Any
 
 from . import config, daemon_util, media, repos
 from .api.colaboracion import montar_cadena_aprobacion
-from .biblioteca import cuerpo_efectivo, editoriales_de_marca
+from .libtexto import cuerpo_efectivo, editoriales_de_marca
 from .dominio import colaboracion, formato_imagen
 from .dominio import generar as gen_dom
 from .dominio import jobspec
@@ -44,7 +44,7 @@ from .estados import ESTADO_EN_REVISION
 
 _log = logging.getLogger("keni_consola.auto_avance")
 
-# Prompt de QA editorial en la Biblioteca (mismo que usa `api/qa_editorial`).
+# Prompt de QA editorial en la Texto (mismo que usa `api/qa_editorial`).
 PROMPT_QA_ID = "prompt/qa-editorial"
 
 # Veredictos de QA que DEJAN avanzar (la "aprobación de IA"). 🔴 "no_publicar" no avanza.

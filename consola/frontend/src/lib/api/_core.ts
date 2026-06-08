@@ -308,7 +308,7 @@ export function descargar(ruta: string): void {
   window.open(`${BASE_API}${ruta}`, "_blank", "noopener,noreferrer");
 }
 
-// Activo de marca (biblioteca del editor): logo, tipografía, arte, infografía, icono, paleta o
+// Activo de marca (texto del editor): logo, tipografía, arte, infografía, icono, paleta o
 // fondo, con sus metadatos y líneas. Espejo de `api/marca_activos.py::_activo_a_dict`.
 export interface ActivoMarca {
   id: string;

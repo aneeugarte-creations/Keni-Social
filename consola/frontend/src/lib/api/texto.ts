@@ -4,23 +4,23 @@ import { peticion, query } from "./_core";
 import type {
   CuerpoCrearDocumento,
   CuerpoGuardarDocumento,
-  CuerpoLanzarBiblioteca,
+  CuerpoLanzarTexto,
   PreviewPipeline,
   RespuestaAreas,
-  RespuestaBiblioteca,
+  RespuestaTexto,
   RespuestaDocumento,
   RespuestaEditoriales,
   RespuestaGeneracion,
-  RespuestaHistorialBiblioteca,
-  RespuestaMarcasBiblioteca,
+  RespuestaHistorialTexto,
+  RespuestaMarcasTexto,
   RespuestaMensaje,
   RespuestaPapelera,
-  RespuestaPipelinesBiblioteca,
+  RespuestaPipelinesTexto,
   ValidacionEditorial,
 } from "@/types";
 
 export const apiTexto = {
-  // --- Biblioteca de documentos (prompts + línea editorial) ---
+  // --- Texto de documentos (prompts + línea editorial) ---
   texto: (
     filtros?: {
       tipo?: string;
@@ -34,7 +34,7 @@ export const apiTexto = {
     },
     signal?: AbortSignal,
   ) =>
-    peticion<RespuestaBiblioteca>(
+    peticion<RespuestaTexto>(
       `/texto${query({
         tipo: filtros?.tipo,
         carpeta: filtros?.carpeta,
@@ -67,7 +67,7 @@ export const apiTexto = {
     peticion<RespuestaEditoriales>(`/texto/editoriales${query({ marca, pipeline })}`, { signal }),
   // --- Pipelines: registro + preview del prompt ensamblado (atribución) ---
   pipelinesTexto: (signal?: AbortSignal) =>
-    peticion<RespuestaPipelinesBiblioteca>("/texto/pipelines", { signal }),
+    peticion<RespuestaPipelinesTexto>("/texto/pipelines", { signal }),
   previewPipeline: (pipeline: string, marca: string, contexto?: string, signal?: AbortSignal) =>
     peticion<PreviewPipeline>(
       `/texto/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
@@ -75,7 +75,7 @@ export const apiTexto = {
     ),
   // --- Versionado git: historial, una versión y rollback no destructivo ---
   historialTexto: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaHistorialBiblioteca>(`/texto/${id}/historial`, { signal }),
+    peticion<RespuestaHistorialTexto>(`/texto/${id}/historial`, { signal }),
   versionTexto: (id: string, sha: string, signal?: AbortSignal) =>
     peticion<RespuestaDocumento>(`/texto/${id}/version/${sha}`, { signal }),
   revertirTexto: (id: string, sha: string) =>
@@ -85,8 +85,8 @@ export const apiTexto = {
   areasTexto: (signal?: AbortSignal) =>
     peticion<RespuestaAreas>("/texto/areas", { signal }),
   marcasTexto: (signal?: AbortSignal) =>
-    peticion<RespuestaMarcasBiblioteca>("/texto/marcas", { signal }),
-  lanzarTexto: (cuerpo: CuerpoLanzarBiblioteca) =>
+    peticion<RespuestaMarcasTexto>("/texto/marcas", { signal }),
+  lanzarTexto: (cuerpo: CuerpoLanzarTexto) =>
     peticion<RespuestaGeneracion>("/texto/lanzar", { metodo: "POST", json: cuerpo }),
   lanzarTextoArchivo: (
     archivo: File,

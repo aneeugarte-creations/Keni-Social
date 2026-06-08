@@ -1,15 +1,15 @@
-"""Versionado de la Biblioteca con git (historial · diff · rollback · atribucion).
+"""Versionado de la Texto con git (historial · diff · rollback · atribucion).
 
-La Biblioteca es files-as-truth: cada documento es un `.md` bajo `biblioteca.raiz()`. Este
+La Texto es files-as-truth: cada documento es un `.md` bajo `libtexto.raiz()`. Este
 modulo envuelve cada escritura con un commit en un repo git DEDICADO a esa raiz, de modo que
 el historial, el diff y el rollback salen gratis y `git log` da la ATRIBUCION (quien/cuando
 cambio que). Es la opcion acordada en el rediseno: ligera y coherente con files-as-truth.
 
 PRINCIPIO: es BEST-EFFORT y NO CRITICO. El guardado del documento ya ocurrio (atomico) ANTES
 de llamar aqui; si git no esta disponible o un comando falla, solo se deja rastro en el log y
-la operacion del usuario NUNCA se rompe. Se puede desactivar con `KENI_BIBLIOTECA_GIT=0`.
+la operacion del usuario NUNCA se rompe. Se puede desactivar con `KENI_TEXTO_GIT=0`.
 
-El repo se inicializa de forma perezosa en la raiz de la biblioteca (no en `/data` entero),
+El repo se inicializa de forma perezosa en la raiz de la texto (no en `/data` entero),
 asi que solo versiona documentos. La papelera (`.papelera/`) queda fuera (`.gitignore`).
 """
 
@@ -31,8 +31,8 @@ _AUTOR_DEFECTO = ("Consola Keni", "consola@keni.local")
 
 
 def _habilitado() -> bool:
-    """True si el versionado git esta activo (env `KENI_BIBLIOTECA_GIT` != '0') y git existe."""
-    if os.environ.get("KENI_BIBLIOTECA_GIT", "1").strip() == "0":
+    """True si el versionado git esta activo (env `KENI_TEXTO_GIT` != '0') y git existe."""
+    if os.environ.get("KENI_TEXTO_GIT", "1").strip() == "0":
         return False
     return _git_disponible()
 
@@ -48,10 +48,10 @@ def _git_disponible() -> bool:
 
 
 def _base() -> Path:
-    """Raiz del repo git = raiz de la biblioteca (import perezoso para evitar ciclo)."""
-    from . import biblioteca
+    """Raiz del repo git = raiz de la texto (import perezoso para evitar ciclo)."""
+    from . import libtexto
 
-    return biblioteca.raiz()
+    return libtexto.raiz()
 
 
 def _git(base: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -129,7 +129,7 @@ def registrar(
         res = _git(base, "commit", "-q", "-m", mensaje, env=env)
         # returncode != 0 con "nothing to commit" es normal (guardado sin cambios reales).
         if res.returncode != 0 and "nothing to commit" not in (res.stdout + res.stderr):
-            _log.debug("commit biblioteca fallo: %s", (res.stdout + res.stderr).strip())
+            _log.debug("commit texto fallo: %s", (res.stdout + res.stderr).strip())
     except (OSError, subprocess.SubprocessError) as exc:
         _log.debug("versionado best-effort fallo (%s): %s", mensaje, exc)
 

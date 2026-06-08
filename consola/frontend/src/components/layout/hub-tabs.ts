@@ -30,7 +30,7 @@ export interface ItemTabHub {
 /**
  * Registro COMPARTIDO de las sub-pestañas de cada hub de la consola.
  *
- * Cada hub (Investigación, Revisión, Analíticas, Feed, Calendario, Biblioteca) declara
+ * Cada hub (Investigación, Revisión, Analíticas, Feed, Calendario, Texto) declara
  * aquí sus pestañas, una sola vez, para que las consuman tanto la página del hub
  * como la barra de pestañas in-page (`SubnavHub`). El mapa de abajo las indexa por
  * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
@@ -48,7 +48,7 @@ export interface ItemTabHub {
 //     agencias, Trends). Cada fuente declara si alimenta Noticias o Contenidos.
 // (Termómetro, Cajones, Eventos, Agentes y Cobertura siguen vivos como rutas
 // durante la transición, pero ya NO son pestañas de la subnav; se fusionarán y
-// redirigirán en fases posteriores. Algoritmos pasó a la Biblioteca.)
+// redirigirán en fases posteriores. Algoritmos pasó a la Texto.)
 export const TABS_INVESTIGACION: ItemTabHub[] = [
   // `end: true`: comparte prefijo con `/contenidos` y `/fuentes`, así que el tab
   // raíz (Noticias) solo se marca activo en la coincidencia exacta del índice.
@@ -73,9 +73,9 @@ export const TABS_FEED: ItemTabHub[] = [
 // El bloque CONTENIDO ya no agrupa un hub "Estudio" con pestañas: Imagen, Video y Texto
 // son TRES entradas planas del sidebar (sin sub-navegación por pestañas). Imagen
 // (`/contenido/imagen`) y Video (`/contenido/video`) son páginas sueltas; Texto sigue
-// siendo el hub de la Biblioteca (abajo).
+// siendo el hub de la Texto (abajo).
 
-// La página TEXTO (antes "Biblioteca") es un hub: documentos (prompts + línea editorial),
+// La página TEXTO (antes "Texto") es un hub: documentos (prompts + línea editorial),
 // estrategia de marcas e inteligencia de plataforma (algoritmos).
 export const TABS_TEXTO: ItemTabHub[] = [
   // Documentos: prompts + línea editorial + plantillas, con filtros.

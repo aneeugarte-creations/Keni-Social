@@ -1382,7 +1382,7 @@ def marcar_noticia_algoritmo(
     archivada: bool | None = None,
     sugerida: bool | None = None,
 ) -> dict[str, Any] | None:
-    """Marca una noticia como aplicada-a-biblioteca / archivada / ya-sugerida (None si no existe)."""
+    """Marca una noticia como aplicada-a-texto / archivada / ya-sugerida (None si no existe)."""
     cambios: dict[str, Any] = {}
     if aplicada is not None:
         cambios["aplicada"] = 1 if aplicada else 0

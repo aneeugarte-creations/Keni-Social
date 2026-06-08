@@ -1,5 +1,5 @@
 /**
- * Estrategia de marcas: la superficie editorial POR MARCA de la Biblioteca. Reúne
+ * Estrategia de marcas: la superficie editorial POR MARCA de la Texto. Reúne
  *   - LÍNEAS de contenido (etiquetas clase `vertical`) y ORÍGENES (clase `origen` =
  *     interno / externo), cada una con sus `keywords` (CSV para auto-clasificar);
  *   - el catálogo de ETIQUETAS editoriales transversales (campaña / tipo) y los

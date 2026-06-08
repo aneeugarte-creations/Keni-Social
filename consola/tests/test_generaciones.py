@@ -415,13 +415,13 @@ def test_get_y_listar_generaciones(entorno):
 def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
     """Con el lanzador por defecto (noop) la generacion queda `ejecutando`, sondeable.
 
-    El copy ya no se lanza por el motor de skills (retirado), sino desde la Biblioteca: un
+    El copy ya no se lanza por el motor de skills (retirado), sino desde la Texto: un
     prompt `salida=piezas` lanzado con redes encola un trabajo de COPY en background.
     """
-    from keni_consola import biblioteca
+    from keni_consola import libtexto
 
-    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
-    ruta = biblioteca._ruta_de_id(prompt.id)
+    prompt = libtexto.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
+    ruta = libtexto._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",

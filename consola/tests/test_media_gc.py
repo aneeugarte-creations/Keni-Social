@@ -1,7 +1,7 @@
 """Tests OFFLINE de la GC de media huerfana (`dominio.media_gc` + daemon).
 
 Mockean `almacen_media.listar_objetos`/`borrar_objeto` y los repos de referencias
-(`listar_publicaciones`, `listar_publicaciones_comerciales`, `listar_media_biblioteca`),
+(`listar_publicaciones`, `listar_publicaciones_comerciales`, `listar_media_catalogo`),
 asi NO necesitan Postgres ni almacen real. Verifican la definicion CONSERVADORA de huerfano:
 no borra referenciados, ni catalogados, ni recientes (umbral); SI borra el huerfano viejo; y
 `dry_run` no toca nada. Mas un test de que el daemon respeta el gate (`KENI_MEDIA_GC` off).
@@ -44,12 +44,12 @@ _NUEVO = _AHORA - 1 * 3600.0
 
 @pytest.fixture
 def repos_vacios(monkeypatch):
-    """Por defecto: sin publicaciones, sin comerciales, sin biblioteca (todo huerfano)."""
+    """Por defecto: sin publicaciones, sin comerciales, sin texto (todo huerfano)."""
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
-    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
 
 
 def _objetos(monkeypatch, objetos):
@@ -80,34 +80,34 @@ def test_referencias_unen_publicaciones_y_comerciales(monkeypatch):
         media_gc.repos, "listar_publicaciones_comerciales",
         lambda *a, **k: [{"imagen": "com.png"}, {"url": "https://x"}],  # url no aporta
     )
-    # Sin biblioteca-media: solo cuentan las publicaciones.
-    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    # Sin catalogo-media: solo cuentan las publicaciones.
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     assert media_gc.referencias_vivas() == {"pub.png", "com.png"}
 
 
-def test_biblioteca_media_es_red_de_seguridad_opcional_si_existe(monkeypatch):
-    # Si el repo de biblioteca-media existe, sus objetos se suman (red de seguridad).
+def test_catalogo_media_es_red_de_seguridad_opcional_si_existe(monkeypatch):
+    # Si el repo de catalogo-media existe, sus objetos se suman (red de seguridad).
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
     monkeypatch.setattr(
-        media_gc.repos, "listar_media_biblioteca",
+        media_gc.repos, "listar_media_catalogo",
         lambda *a, **k: [{"objeto": "cat.png"}, {"objeto": ""}],
     )
     assert media_gc.referencias_vivas() == {"cat.png"}
 
 
-def test_gc_no_falla_si_biblioteca_media_no_existe(monkeypatch):
-    # Cuando se elimine `api/biblioteca_media.py`, el repo perdera la funcion: el GC NO debe
+def test_gc_no_falla_si_catalogo_media_no_existe(monkeypatch):
+    # Cuando se elimine `api/catalogo_media.py`, el repo perdera la funcion: el GC NO debe
     # fallar; simplemente no consulta esa fuente (se basa solo en publicaciones).
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
-    monkeypatch.delattr(media_gc.repos, "listar_media_biblioteca", raising=False)
+    monkeypatch.delattr(media_gc.repos, "listar_media_catalogo", raising=False)
     assert media_gc.referencias_vivas() == set()
-    # Y un huerfano viejo se borra igual (sin la red de seguridad de biblioteca-media).
+    # Y un huerfano viejo se borra igual (sin la red de seguridad de catalogo-media).
     _objetos(monkeypatch, [("huerfano.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
     res = media_gc.limpiar(antiguedad_horas=24)
@@ -121,7 +121,7 @@ def test_protege_foto_cruda_de_publicacion(monkeypatch):
         lambda *a, **k: [{"imagen": "", "foto": "foto-cruda.jpg"}],
     )
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
-    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     assert "foto-cruda.jpg" in media_gc.referencias_vivas()
     # Y un GC viejo NO la borra aunque `imagen` esté vacío.
     _objetos(monkeypatch, [("foto-cruda.jpg", _VIEJO)])
@@ -135,7 +135,7 @@ def test_protege_recursos_de_marca_y_plantillas(monkeypatch):
     # del render: no se borran.
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
-    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.setattr(
         media_gc.repos, "listar_marca_activos",
         lambda *a, **k: [{"objeto": "logo-oficial.png"}, {"objeto": ""}],
@@ -165,7 +165,7 @@ def test_no_borra_referenciado_por_publicacion(monkeypatch):
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
-    monkeypatch.setattr(media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     # "viva.png" es VIEJA pero referenciada: NO debe borrarse.
     _objetos(monkeypatch, [("viva.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
@@ -175,9 +175,9 @@ def test_no_borra_referenciado_por_publicacion(monkeypatch):
     assert res["borrados"] == 0 and res["conservados"] == 1
 
 
-def test_no_borra_catalogado_en_biblioteca(monkeypatch, repos_vacios):
+def test_no_borra_catalogado_en_texto(monkeypatch, repos_vacios):
     monkeypatch.setattr(
-        media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [{"objeto": "cat.png"}]
+        media_gc.repos, "listar_media_catalogo", lambda *a, **k: [{"objeto": "cat.png"}]
     )
     _objetos(monkeypatch, [("cat.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
@@ -215,7 +215,7 @@ def test_mezcla_solo_borra_el_huerfano_viejo(monkeypatch):
         media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
     monkeypatch.setattr(
-        media_gc.repos, "listar_media_biblioteca", lambda *a, **k: [{"objeto": "cat.png"}]
+        media_gc.repos, "listar_media_catalogo", lambda *a, **k: [{"objeto": "cat.png"}]
     )
     _objetos(
         monkeypatch,

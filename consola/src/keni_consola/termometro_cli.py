@@ -32,7 +32,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from . import biblioteca, preferencias, redes, repos, termometro
+from . import libtexto, preferencias, redes, repos, termometro
 from .api import rss
 from .api.termometro import ORIGEN_HISTORIAL, PROMPT_ID, _contexto, titulo_termometro
 from .dominio import copy as dom_copy
@@ -154,7 +154,7 @@ def generar_termometro(
     que la generación web, para que el termómetro del cron sea igual de "guardable".
     Lanza `TermometroCronError` si el prompt no esta instalado o si la generacion falla.
     """
-    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
+    cuerpo = libtexto.cuerpo_efectivo(PROMPT_ID)
     if cuerpo is None:
         raise TermometroCronError(
             "No está disponible el prompt del termómetro. Reinstala la Consola."
@@ -162,7 +162,7 @@ def generar_termometro(
     valores = {"noticias": noticias, "numero": numero, "regiones": regiones, "fecha": fecha}
     redes_ids = redes.ids()
     prompt = gen_dom.componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores),
+        cuerpo, libtexto.editoriales_de_marca(marca), _contexto(valores),
         sin_emojis=True, redes_ids=redes_ids,
     )
     if dry_run:

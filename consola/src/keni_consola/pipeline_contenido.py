@@ -16,7 +16,7 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
     parámetros que la fase CD necesitará para lanzar el copy. Marca el item del feed como USADO
     (dedup). Registra UNA entrada de actividad etapa="CI".
   - QA — CRIBA DE LA FUENTE (pre-copy): por cada TEMA nuevo sin veredicto, lanza un `claude -p`
-    que evalúa la NOTA DE ORIGEN (no el copy: aún no existe) contra el DOCUMENTO de Biblioteca
+    que evalúa la NOTA DE ORIGEN (no el copy: aún no existe) contra el DOCUMENTO de Texto
     de criterios. Es PERMISIVO y devuelve un veredicto ESTRUCTURADO con dos salidas:
     `no_verificado` (nada de peso en contra: seguir; la pieza llevará ⚠️ "no verificado") o
     `problema` (algo de peso: NO se genera copy; el tema se marca ❗ con los hallazgos). Por
@@ -65,7 +65,7 @@ import re
 import threading
 from typing import Any
 
-from . import biblioteca, config, daemon_util, generaciones, marcas, redes, repos
+from . import libtexto, config, daemon_util, generaciones, marcas, redes, repos
 from .dominio import dedup
 from .dominio import generar as gen_dom
 from .dominio import jobspec
@@ -117,8 +117,8 @@ _DIAS_DEDUP = 60
 # `redes.redes_de_formato` (fuente única); video -> las 5 queda definido para flujos futuros.
 _FORMATO_PIPELINE = redes.FORMATO_FOTO
 
-# --- QA editorial por DOCUMENTO de Biblioteca (no skills) ---------------------------------
-# El equipo NO usa skills: el QA editorial se hace adjuntando un DOCUMENTO de la Biblioteca con
+# --- QA editorial por DOCUMENTO de Texto (no skills) ---------------------------------
+# El equipo NO usa skills: el QA editorial se hace adjuntando un DOCUMENTO de la Texto con
 # los criterios de revisión. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
 # créalo y adjúntalo." Este es el id (prompt) de ese documento de criterios.
 PROMPT_QA_ID = "prompt/qa-editorial"
@@ -792,11 +792,11 @@ def qa_lexico(publicacion: dict[str, Any]) -> dict[str, Any]:
 
 
 def asegurar_documento_qa() -> str:
-    """Garantiza que el DOCUMENTO de criterios de QA existe en la Biblioteca.
+    """Garantiza que el DOCUMENTO de criterios de QA existe en la Texto.
 
     Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." El
     equipo NO usa skills: el QA se hace con un documento adjunto. Aquí:
-      - si el documento (`PROMPT_QA_ID`) ya está en el STORE de la Biblioteca, lo respeta;
+      - si el documento (`PROMPT_QA_ID`) ya está en el STORE de la Texto, lo respeta;
       - si no, lo CREA con `_DEFAULT_QA_CRITERIOS` (criba pre-copy de la fuente). IDEMPOTENTE.
     Devuelve `PROMPT_QA_ID` si el documento queda disponible (creado o ya presente), o "" si no
     se pudo asegurar (best-effort: sin documento, la QA de la fuente no corre y el tema queda sin
@@ -807,15 +807,15 @@ def asegurar_documento_qa() -> str:
     por el equipo (la regla pide un documento real, adjuntable y versionado).
     """
     try:
-        if biblioteca.obtener(PROMPT_QA_ID) is not None:
+        if libtexto.obtener(PROMPT_QA_ID) is not None:
             return PROMPT_QA_ID
         # No está en el store: si la semilla lo trae, ya hay cuerpo efectivo; aun así CREAMOS el
         # documento del store para que sea editable/adjuntable (la regla pide un doc real).
-        cuerpo_semilla = biblioteca.cuerpo_efectivo(PROMPT_QA_ID)
+        cuerpo_semilla = libtexto.cuerpo_efectivo(PROMPT_QA_ID)
         cuerpo = cuerpo_semilla if cuerpo_semilla else _DEFAULT_QA_CRITERIOS
-        doc = biblioteca.crear(_TITULO_QA, tipo="prompt", cuerpo=cuerpo)
+        doc = libtexto.crear(_TITULO_QA, tipo="prompt", cuerpo=cuerpo)
         # `crear` deriva el id del slug del título: "QA editorial" -> "prompt/qa-editorial".
-        return doc.id if doc.id == PROMPT_QA_ID else (PROMPT_QA_ID if biblioteca.obtener(PROMPT_QA_ID) else doc.id)
+        return doc.id if doc.id == PROMPT_QA_ID else (PROMPT_QA_ID if libtexto.obtener(PROMPT_QA_ID) else doc.id)
     except Exception:  # noqa: BLE001 -- asegurar el doc es best-effort
         _log.warning("pipeline: no se pudo asegurar el documento de QA", exc_info=True)
         return ""
@@ -839,7 +839,7 @@ def _contexto_qa_fuente(nota: str) -> str:
 def lanzar_qa_fuente(
     tema: dict[str, Any], *, autor: dict[str, str] | None
 ) -> dict[str, Any] | None:
-    """QA de la FUENTE via `claude -p`: criba la NOTA de origen de un TEMA contra el doc de Biblioteca.
+    """QA de la FUENTE via `claude -p`: criba la NOTA de origen de un TEMA contra el doc de Texto.
 
     Rediseño QPC (pre-copy, por TEMA): evalúa el material de origen (no el copy: aún no existe) y
     persiste un veredicto ESTRUCTURADO (`no_verificado`/`problema`) + hallazgos sobre el TEMA
@@ -865,14 +865,14 @@ def lanzar_qa_fuente(
 
     # Regla del dueño: asegura (crea si falta) el documento de criterios y adjúntalo.
     doc_id = asegurar_documento_qa()
-    cuerpo = biblioteca.cuerpo_efectivo(doc_id) if doc_id else None
+    cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
     if not cuerpo:
         return None  # sin documento de QA no hay criba: el tema queda sin veredicto (sin copy).
 
     titulo = (tema.get("titulo") or "").strip() or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
         cuerpo,
-        biblioteca.editoriales_de_marca(marca, pipeline="qa"),
+        libtexto.editoriales_de_marca(marca, pipeline="qa"),
         _contexto_qa_fuente(nota),
     )
     # Marca el tema en curso ANTES de lanzar (para que la fase QA no lo re-lance). CLAVE con el

@@ -1,6 +1,6 @@
 # Consola Keni (interfaz)
 
-La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y te da una **interfaz** para las tareas del día a día, sin teclear comandos. Es una **capa de gestión**: por debajo, el motor que hace el trabajo de verdad sigue siendo **Claude Code** (los prompts de la Biblioteca lanzados con `claude -p` y el servidor de métricas). La consola solo te lo pone fácil de lanzar y de ver.
+La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y te da una **interfaz** para las tareas del día a día, sin teclear comandos. Es una **capa de gestión**: por debajo, el motor que hace el trabajo de verdad sigue siendo **Claude Code** (los prompts de la Texto lanzados con `claude -p` y el servidor de métricas). La consola solo te lo pone fácil de lanzar y de ver.
 
 > **No reemplaza a Claude Code, lo envuelve.** Si prefieres escribirle a Claude directamente, puedes seguir haciéndolo; la consola es la opción para quien quiere botones en vez de comandos.
 
@@ -34,7 +34,7 @@ La consola intenta abrir el navegador sola; si no lo hace, copia esa dirección.
 
 La consola es una **capa de gestión** sobre Claude Code: no hace el trabajo, lo
 **lanza y lo muestra**. El motor sigue siendo Claude Code (los prompts de la
-Biblioteca, lanzados con `claude -p`) y el servidor de métricas; la consola solo da
+Texto, lanzados con `claude -p`) y el servidor de métricas; la consola solo da
 botones a quien no quiere teclear comandos.
 Dos ideas de diseño la rigen:
 
@@ -54,7 +54,7 @@ código, `consola/frontend/src/components/layout/navegacion.ts`.
 
 ## Qué hay por debajo (arquitectura)
 
-- La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), la **Biblioteca de Prompts** (`biblioteca.py`) y el **lanzador neutro** (`dominio/generar.py`, que arranca `claude -p`).
+- La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), la **Texto de Prompts** (`texto.py`) y el **lanzador neutro** (`dominio/generar.py`, que arranca `claude -p`).
 - El **contenido editorial estructurado** (publicaciones, plantillas, fuentes RSS, hashtags, franjas y el historial de copy) y lo **operacional** (tus tareas, el seguimiento Comercial con su serie temporal, la rota, usuarios/sesiones y la cola de jobs) viven en **Postgres** (`DATABASE_URL`, ADR 0004/0006): un único almacén operacional, sin índices ni SQLite paralelos que se desincronicen. Solo la **prosa editorial por marca** (`marca.yaml`, `CLAUDE.md`, voces) sigue como ficheros versionados editables a mano. La configuración de marcas/fuente sigue en los `.toml` de siempre.
 - El frontend viaja **ya compilado** dentro del paquete, así que para **usar** la consola **no hace falta Node** ni instalar nada de JavaScript.
 

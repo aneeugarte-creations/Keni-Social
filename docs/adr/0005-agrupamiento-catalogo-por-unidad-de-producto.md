@@ -11,7 +11,7 @@
 > **[Nota de estado]** La **decisión de fronteras A/B/C + shell sigue vigente**. El inventario de
 > módulos de abajo refleja el estado del 2026-05-29: el **sistema de skills** (`skills`,
 > `skills_catalogo_api`, `skills_generacion_api`, ruta `/skills`) de la app **A · Producción** se
-> **retiró** después y se reemplazó por la **Biblioteca de prompts** (`biblioteca.py`, `/biblioteca`) +
+> **retiró** después y se reemplazó por la **Texto de prompts** (`texto.py`, `/texto`) +
 > lanzador neutro (`dominio/generar.py`) y el **Estudio** de imagen (`/estudio`). El agrupamiento por
 > unidad de producto no cambia.
 

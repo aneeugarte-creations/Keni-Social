@@ -1,7 +1,7 @@
-"""Lanzamiento de un PROMPT de la biblioteca como trabajo de `claude -p` (segundo plano).
+"""Lanzamiento de un PROMPT de la texto como trabajo de `claude -p` (segundo plano).
 
 Es la UNICA primitiva de generacion del producto tras retirar el motor de skills: toma un
-prompt (de la biblioteca o ad-hoc), le ADJUNTA la linea editorial elegida (auto por marca +
+prompt (de la texto o ad-hoc), le ADJUNTA la linea editorial elegida (auto por marca +
 ajustable) y un BLOQUE DE CONTEXTO del target (contenido pegado / archivo / url / area de la
 consola), compone el prompt final y lo ENCOLA reutilizando la infra de generaciones
 (`encolar_job_claude` + worker + sondeo). El post-procesado es IDENTIDAD (`jobspec.PROC_PROMPT`):
@@ -19,7 +19,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .. import biblioteca
+from .. import libtexto
 from . import generar, jobspec
 
 # --------------------------------------------------------------------------- #
@@ -81,17 +81,17 @@ def areas_disponibles() -> list[dict[str, str]]:
 
 
 def area_contexto(area: str, marca: str) -> str:
-    """Texto de contexto de un area. Lanza `BibliotecaError` si el area no existe."""
+    """Texto de contexto de un area. Lanza `TextoError` si el area no existe."""
     entrada = AREAS.get(area)
     if entrada is None:
-        raise biblioteca.BibliotecaError("Área no válida.")
+        raise libtexto.TextoError("Área no válida.")
     try:
         return entrada[1](marca)
     except Exception:  # noqa: BLE001 -- degradacion honesta: el area no debe romper el lanzamiento
         return "(No se pudo leer el contexto de esta área.)"
 
 
-def componer(cuerpo_prompt: str, adjuntos: list[biblioteca.Documento], bloque_contexto: str) -> str:
+def componer(cuerpo_prompt: str, adjuntos: list[libtexto.Documento], bloque_contexto: str) -> str:
     """Arma el prompt final autocontenido (delega en el lanzador neutro `generar`)."""
     return generar.componer(cuerpo_prompt, adjuntos, bloque_contexto)
 
@@ -109,11 +109,11 @@ def lanzar(
     dir_temporal: Path | None = None,
     autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Lanza un prompt de la biblioteca. Devuelve el registro de generacion (para sondeo).
+    """Lanza un prompt de la texto. Devuelve el registro de generacion (para sondeo).
 
-    `prompt_id` (de la biblioteca) o `texto` (prompt ad-hoc pegado): uno de los dos. `marca`
+    `prompt_id` (de la texto) o `texto` (prompt ad-hoc pegado): uno de los dos. `marca`
     debe ser una marca del catalogo. `adjuntos_ids` son documentos editoriales a adjuntar
-    (ya resueltos en la UI a partir de `biblioteca.editoriales_de_marca`, ajustables).
+    (ya resueltos en la UI a partir de `libtexto.editoriales_de_marca`, ajustables).
     `bloque_contexto` es el texto del target ya resuelto por el llamante. `titulo_contenido`
     es un título del CONTENIDO sugerido por el llamante (p. ej. el titular real de una URL):
     en MODO PIEZAS titula los borradores, evitando que se derive de la 1ª línea del bloque
@@ -126,13 +126,13 @@ def lanzar(
     resultado es el texto markdown y no se crean artefactos.
     """
     if not generar.marca_valida(marca):
-        raise biblioteca.BibliotecaError("Marca no válida.")
+        raise libtexto.TextoError("Marca no válida.")
 
     salida = ""
     if prompt_id:
-        doc = biblioteca.obtener(prompt_id)
+        doc = libtexto.obtener(prompt_id)
         if doc is None or doc.tipo != "prompt":
-            raise biblioteca.BibliotecaError("Ese prompt no existe.")
+            raise libtexto.TextoError("Ese prompt no existe.")
         cuerpo_prompt = doc.cuerpo
         titulo = titulo.strip() or doc.titulo
         salida = doc.salida
@@ -142,11 +142,11 @@ def lanzar(
         titulo = titulo.strip() or "Prompt"
         origen_historial = "prompt"
     else:
-        raise biblioteca.BibliotecaError("Hace falta un prompt (de la biblioteca o pegado).")
+        raise libtexto.TextoError("Hace falta un prompt (de la texto o pegado).")
 
-    adjuntos: list[biblioteca.Documento] = []
+    adjuntos: list[libtexto.Documento] = []
     for aid in adjuntos_ids or []:
-        d = biblioteca.obtener(aid)
+        d = libtexto.obtener(aid)
         if d is not None and d.tipo == "editorial":
             adjuntos.append(d)
 

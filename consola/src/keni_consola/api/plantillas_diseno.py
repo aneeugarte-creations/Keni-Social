@@ -1,4 +1,4 @@
-"""API Biblioteca de PLANTILLAS DE DISEÑO: N plantillas reutilizables por marca (editor).
+"""API Texto de PLANTILLAS DE DISEÑO: N plantillas reutilizables por marca (editor).
 
 Cada plantilla es un DOCUMENTO de capas completo (logo + textos + marcos + …) que el equipo
 guarda para reutilizar; se etiqueta por `categoria` (post | historia | reel | infografia | …) y

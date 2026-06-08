@@ -81,8 +81,8 @@ ENV_CLAUDE_SKIP_PERMISSIONS = "KENI_CLAUDE_SKIP_PERMISSIONS"
 # prompt-injection: la generacion de copy no necesita ejecutar comandos ni navegar.
 ENV_CLAUDE_DISALLOWED_TOOLS = "KENI_CLAUDE_DISALLOWED_TOOLS"
 
-# Biblioteca de prompts + linea editorial (almacen unico de documentos markdown).
-ENV_BIBLIOTECA_DIR = "KENI_BIBLIOTECA_DIR"
+# Texto de prompts + linea editorial (almacen unico de documentos markdown).
+ENV_TEXTO_DIR = "KENI_TEXTO_DIR"
 
 # Programadores en segundo plano.
 ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
@@ -295,7 +295,7 @@ ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
 # Recoleccion de basura (GC) de MEDIA HUERFANA (Estudio de imagen, diseno §5). El Estudio
 # genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
 # nadie borra. Un hilo demonio barre periodicamente el almacen y borra SOLO los objetos
-# HUERFANOS: ni referenciados por una publicacion (`imagen`) ni catalogados en biblioteca-media
+# HUERFANOS: ni referenciados por una publicacion (`imagen`) ni catalogados en catalogo-media
 # y mas VIEJOS que un umbral (def 24h, para no tocar variantes recien generadas que el usuario
 # aun revisa). CONSERVADOR por defecto (OFF): sin `KENI_MEDIA_GC` no se borra nada.
 ENV_MEDIA_GC = "KENI_MEDIA_GC"
@@ -737,7 +737,7 @@ __all__ = [
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
     'ENV_AUTO_QA_EDITORIAL',
-    'ENV_BIBLIOTECA_DIR',
+    'ENV_TEXTO_DIR',
     'ENV_BREAKING',
     'ENV_BREAKING_INTERVALO_MIN',
     'ENV_BREAKING_MAX',

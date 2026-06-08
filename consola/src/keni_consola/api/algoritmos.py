@@ -12,7 +12,7 @@ las mas importantes.
   - `POST /api/algoritmos/fuentes`         -> alta de fuente `{nombre,url,plataforma,tipo}`.
   - `PUT  /api/algoritmos/fuentes/{id}`    -> edicion parcial.
   - `DELETE /api/algoritmos/fuentes/{id}`  -> baja (borra tambien sus noticias).
-  - `POST /api/algoritmos/{id}/biblioteca` -> marca aplicada + devuelve el borrador de ficha.
+  - `POST /api/algoritmos/{id}/texto` -> marca aplicada + devuelve el borrador de ficha.
   - `POST /api/algoritmos/{id}/archivar`   -> archiva/desarchiva una noticia.
   - `GET  /api/algoritmos/sugerencias`     -> sugerencias editoriales del digest + nº nuevas.
   - `POST /api/algoritmos/sugerencias/generar`          -> lanza el digest AHORA (background).
@@ -34,7 +34,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import algoritmos, biblioteca, repos, sugerencias_editoriales
+from .. import algoritmos, libtexto, repos, sugerencias_editoriales
 from .._http_json import leer_json
 from . import rss
 
@@ -216,11 +216,11 @@ async def borrar_fuente(request: Request) -> Response:
     return JSONResponse({"mensaje": "Fuente borrada."})
 
 
-async def a_biblioteca(request: Request) -> Response:
-    """POST /api/algoritmos/{id}/biblioteca: marca aplicada + devuelve el borrador de ficha.
+async def a_texto(request: Request) -> Response:
+    """POST /api/algoritmos/{id}/texto: marca aplicada + devuelve el borrador de ficha.
 
     NO escribe la ficha editorial (verdad curada por humanos): devuelve un bloque markdown
-    listo para pegar/confirmar en la Biblioteca y marca la noticia como aplicada para no
+    listo para pegar/confirmar en la Texto y marca la noticia como aplicada para no
     re-proponerla. Devuelve `{noticia, propuesta, plataforma}`.
     """
     noticia_id = request.path_params["noticia_id"]
@@ -280,21 +280,21 @@ def _sugerencia_a_dict(s: dict[str, Any]) -> dict[str, Any]:
 def _aplicar_a_ficha(plataforma: str, detalle: str) -> str:
     """Anade el detalle de la sugerencia a la ficha editorial de la plataforma (crea si falta).
 
-    Devuelve el id del documento de biblioteca afectado. La escritura es la MISMA que hace el
-    editor a mano (modulo `biblioteca`): un humano la dispara con su clic; nunca el sistema solo.
+    Devuelve el id del documento de texto afectado. La escritura es la MISMA que hace el
+    editor a mano (modulo `texto`): un humano la dispara con su clic; nunca el sistema solo.
     """
     fid = sugerencias_editoriales.ficha_id_de(plataforma)
     seccion = (
         f"## Actualización editorial ({date.today().isoformat()}) — desde noticias de algoritmo\n\n"
         f"{detalle.strip()}\n"
     )
-    doc = biblioteca.obtener(fid)
+    doc = libtexto.obtener(fid)
     if doc is not None:
         cuerpo = (doc.cuerpo or "").rstrip()
         nuevo = f"{cuerpo}\n\n{seccion}" if cuerpo else seccion
-        biblioteca.guardar(fid, cuerpo=nuevo)
+        libtexto.guardar(fid, cuerpo=nuevo)
         return fid
-    creado = biblioteca.crear(
+    creado = libtexto.crear(
         titulo=plataforma.capitalize(), tipo="editorial", carpeta="plataformas",
         clase="plataforma", cuerpo=seccion,
     )
@@ -321,7 +321,7 @@ async def aplicar_sugerencia(request: Request) -> Response:
     if sug["tipo"] == "editorial":
         try:
             ficha_id = _aplicar_a_ficha(sug["plataforma"], sug["detalle"])
-        except biblioteca.BibliotecaError as e:
+        except libtexto.TextoError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
     else:
         nota = (
@@ -370,6 +370,6 @@ RUTAS = [
     Route("/api/algoritmos/fuentes", crear_fuente, methods=["POST"]),
     Route("/api/algoritmos/fuentes/{fuente_id}", actualizar_fuente, methods=["PUT"]),
     Route("/api/algoritmos/fuentes/{fuente_id}", borrar_fuente, methods=["DELETE"]),
-    Route("/api/algoritmos/{noticia_id}/biblioteca", a_biblioteca, methods=["POST"]),
+    Route("/api/algoritmos/{noticia_id}/texto", a_texto, methods=["POST"]),
     Route("/api/algoritmos/{noticia_id}/archivar", archivar, methods=["POST"]),
 ]

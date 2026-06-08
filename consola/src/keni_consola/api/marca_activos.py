@@ -1,4 +1,4 @@
-"""API Biblioteca de ACTIVOS DE MARCA: el kit visual reutilizable de cada marca.
+"""API Texto de ACTIVOS DE MARCA: el kit visual reutilizable de cada marca.
 
 Generaliza `marca_assets.py` (que solo conocia logo/marca-agua/pleca como PNGs en disco) a un
 catalogo en Postgres (`marca_activos`) + objetos en el almacen (S3/disco). Cada activo tiene un
@@ -216,7 +216,7 @@ async def borrar(request: Request) -> Response:
     activo_id = request.path_params["activo_id"]
     item = repos.borrar_marca_activo(activo_id)
     if item is None:
-        return JSONResponse({"error": "Ese activo ya no está en la biblioteca."}, status_code=404)
+        return JSONResponse({"error": "Ese activo ya no está en la texto."}, status_code=404)
 
     if request.query_params.get("purgar") == "1" and item.get("objeto"):
         try:
@@ -224,7 +224,7 @@ async def borrar(request: Request) -> Response:
         except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
             _log.exception("No se pudo purgar el binario del activo %r.", item.get("objeto"))
 
-    return JSONResponse({"mensaje": "Activo quitado de la biblioteca."})
+    return JSONResponse({"mensaje": "Activo quitado de la texto."})
 
 
 RUTAS = [

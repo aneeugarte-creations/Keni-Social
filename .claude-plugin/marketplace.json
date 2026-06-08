@@ -9,7 +9,7 @@
     {
       "name": "keni-social",
       "source": "./",
-      "description": "MCP de métricas multi-marca (solo lectura) y MCP de tablero (crear/mover/listar contenido de la Consola) para Claude Code, del equipo de AMX Contenido (UnoTV / Claro Sports). La generación de copy/imagen vive en la Consola (Biblioteca de prompts + Estudio de imagen), no como skills del plugin.",
+      "description": "MCP de métricas multi-marca (solo lectura) y MCP de tablero (crear/mover/listar contenido de la Consola) para Claude Code, del equipo de AMX Contenido (UnoTV / Claro Sports). La generación de copy/imagen vive en la Consola (Texto de prompts + Estudio de imagen), no como skills del plugin.",
       "version": "0.3.0",
       "author": {
         "name": "Keni Engineering"

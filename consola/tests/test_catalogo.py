@@ -26,7 +26,7 @@ _SIDEBAR_BLOQUES = [
     ["Feed", "Programación", "Turnos"],
     # "Contenido": TRES páginas planas por tipo de contenido (sin hub con pestañas) —
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
-    # Biblioteca: prompts + línea editorial + plantillas).
+    # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
     # Analíticas (medición que cierra el loop) y Actividad IA (qué hizo la IA). Pipelines
