@@ -16,7 +16,7 @@ import type { AppCatalogo, RolUsuario } from "@/types";
 /**
  * Catálogo de prueba. `navegacion` es lo que pinta el sidebar (bloques de flujo ya
  * agrupados y etiquetados por el backend); `apps` se conserva para los helpers de
- * `apps-scope` (breadcrumb, paleta) que siguen consumiéndolo.
+ * `apps-scope` (paleta de comandos) que siguen consumiéndolo.
  */
 const CATALOGO = {
   apps: [

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,14 +29,6 @@ const CATALOGO = {
       etiqueta: "Operación",
       items: [
         { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "" },
-      ],
-    },
-    {
-      // Un hub (Investigación) como entrada única: su sub-nav son pestañas in-page,
-      // y el breadcrumb en una de sus hojas debe leer "Investigación › Pestaña".
-      etiqueta: "Datos",
-      items: [
-        { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "" },
       ],
     },
   ],
@@ -115,10 +107,6 @@ function renderShell(ruta: string) {
               <Route index element={<Navigate to="/generacion" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
               <Route path="configuracion" element={<div>contenido config</div>} />
-              <Route
-                path="datos/investigacion/fuentes"
-                element={<div>contenido fuentes</div>}
-              />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -151,41 +139,11 @@ describe("AppShell · sidebar siempre presente", () => {
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
   });
 
-  it("breadcrumb de una página suelta: solo su nombre, sin el nombre de app viejo", async () => {
+  it("ya no hay breadcrumb de ruta en la topbar (la nav es por pestañas)", async () => {
     renderShell("/generacion");
     await screen.findByText("contenido app");
-    const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
-    // Espera a que el catálogo (async) hidrate el breadcrumb: la página es el único
-    // segmento, marcado actual.
-    await waitFor(() =>
-      expect(within(ruta).getByText("Generación")).toHaveAttribute("aria-current", "page"),
-    );
-    // Ya NO se muestra el nombre de app A/B/C ("Producción"), ni hay "›"/enlaces.
-    expect(within(ruta).queryByText("Producción")).not.toBeInTheDocument();
-    expect(ruta.querySelector("a")).toBeNull();
-  });
-
-  it("breadcrumb en una hoja de hub: 'Hub › Pestaña' con el hub enlazable", async () => {
-    renderShell("/datos/investigacion/fuentes");
-    await screen.findByText("contenido fuentes");
-    const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
-    // El hub es un enlace a su ruta; la pestaña activa es el segmento actual.
-    await waitFor(() =>
-      expect(within(ruta).getByRole("link", { name: /^investigación$/i })).toHaveAttribute(
-        "href",
-        "/datos/investigacion",
-      ),
-    );
-    expect(within(ruta).getByText("Fuentes")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("fuera de apps (Configuración) muestra solo su nombre, sin '›' ni enlace", async () => {
-    renderShell("/configuracion");
-    await screen.findByText("contenido config");
-    const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
-    expect(ruta).toHaveTextContent("Configuración");
-    // En el breadcrumb, el nombre de la pantalla de shell va como TEXTO (no enlace) y sin "›".
-    expect(ruta.querySelector("a")).toBeNull();
+    // El breadcrumb "Hub › Pestaña" se eliminó: no existe la región de navegación "Ruta".
+    expect(screen.queryByRole("navigation", { name: /^ruta$/i })).not.toBeInTheDocument();
   });
 
   it("persiste el estado colapsado del rail en localStorage", async () => {
