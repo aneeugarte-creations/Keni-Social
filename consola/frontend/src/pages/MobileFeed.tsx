@@ -54,7 +54,7 @@ import { api, mensajeError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
-import type { CuerpoCrearContenido, MarcaDisponible, Publicacion } from "@/types";
+import type { CuerpoCrearContenido, Publicacion } from "@/types";
 
 /** Estados que ve el revisor en el feed: lo pendiente de su revisión y lo ya aprobado. */
 type Bandeja = "en_revision" | "aprobado";
@@ -65,40 +65,40 @@ const BANDEJAS: { id: Bandeja; etiqueta: string }[] = [
 ];
 
 /**
- * Diálogo de creación RÁPIDA (a pantalla completa en móvil): título + marca + nota.
+ * Diálogo de creación RÁPIDA (a pantalla completa en móvil): título + nota.
  * Reusa `POST /api/contenido`; el equipo afina el copy luego en el editor. Mantenemos
  * el alta mínima a propósito (el flujo completo vive en la consola de escritorio).
+ *
+ * La MARCA NO se elige aquí (ya no hay selector duplicado): la pieza nace en la marca
+ * ACTIVA de la superficie (la del filtro de marca de la cabecera, `marcaInicial`); en
+ * "todas" nace sin marca y se asigna luego en el editor.
  */
 function DialogoCrear({
   abierto,
-  marcas,
   marcaInicial,
   onCerrar,
 }: {
   abierto: boolean;
-  marcas: MarcaDisponible[];
   marcaInicial: string;
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
   const [titulo, setTitulo] = React.useState("");
-  const [marca, setMarca] = React.useState(marcaInicial);
   const [descripcion, setDescripcion] = React.useState("");
 
   React.useEffect(() => {
     if (abierto) {
       setTitulo("");
       setDescripcion("");
-      setMarca(marcaInicial);
     }
-  }, [abierto, marcaInicial]);
+  }, [abierto]);
 
   const crear = useMutation({
     mutationFn: () => {
       const cuerpo: CuerpoCrearContenido = {
         titulo: titulo.trim(),
         clase: "contenido",
-        marca: marca === MARCA_TODAS ? "" : marca,
+        marca: marcaInicial === MARCA_TODAS ? "" : marcaInicial,
         descripcion: descripcion.trim(),
       };
       return api.crearContenido(cuerpo);
@@ -133,17 +133,6 @@ function DialogoCrear({
               maxLength={200}
               autoFocus
               placeholder="¿De qué trata la pieza?"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Marca</Label>
-            <SelectorMarca
-              marcas={marcas}
-              valor={marca}
-              onCambio={setMarca}
-              incluirTodas
-              etiquetaTodas="Sin marca"
-              className="w-full"
             />
           </div>
           <div className="space-y-1.5">
@@ -468,7 +457,6 @@ export default function MobileFeed() {
 
       <DialogoCrear
         abierto={crearAbierto}
-        marcas={marcas}
         marcaInicial={marca}
         onCerrar={() => setCrearAbierto(false)}
       />
