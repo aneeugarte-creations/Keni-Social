@@ -811,7 +811,6 @@ function GaleriaInline({
         <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
       ) : agruparPorMarca ? (
         <div className="space-y-8">
-          <div className={REJILLA}>{tarjetaBlanco}</div>
           {agruparPlantillasPorMarca(plantillas).map((grupo) => (
             <section key={grupo[0].marca}>
               <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
@@ -820,11 +819,14 @@ function GaleriaInline({
               <div className={REJILLA}>{grupo.map(tarjeta)}</div>
             </section>
           ))}
+          {/* «Lienzo en blanco» va al FINAL de la galería (no el primero). */}
+          <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       ) : (
         <div className={REJILLA}>
-          {tarjetaBlanco}
           {plantillas.map(tarjeta)}
+          {/* «Lienzo en blanco» va al FINAL de la lista (no el primero). */}
+          {tarjetaBlanco}
         </div>
       )}
     </div>

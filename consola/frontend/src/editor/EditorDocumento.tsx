@@ -69,7 +69,9 @@ function leerMuestra(): boolean {
 
 const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
-  { clave: "texto", etiqueta: "Texto", Icono: ImageIcon },
+  // `clave: "texto"` es el id INTERNO histórico del panel (antes «Biblioteca»); la etiqueta visible
+  // es «Galería» (galería de imágenes/activos de la marca), que es lo que de verdad es este panel.
+  { clave: "texto", etiqueta: "Galería", Icono: ImageIcon },
   { clave: "ia", etiqueta: "IA", Icono: Sparkles, costo: true },
   { clave: "capas", etiqueta: "Capas", Icono: Layers },
 ];

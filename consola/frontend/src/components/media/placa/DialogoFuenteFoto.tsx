@@ -1,5 +1,5 @@
 /**
- * Diálogo de ORIGEN de la foto del hueco activo: usar imagen original · Texto (galería) · Subir ·
+ * Diálogo de ORIGEN de la foto del hueco activo: usar imagen original · Galería · Subir ·
  * generar con IA. Se abre al TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO
  * ACTIVO (lo gobierna el componente padre vía callbacks).
  */
@@ -42,7 +42,7 @@ export interface DialogoFuenteFotoProps {
   avisoGenerar: string;
   /** "Usar imagen original". */
   onUsarOriginal: () => void;
-  /** Abre la galería de artes ("Texto"). */
+  /** Abre la galería de artes. */
   onAbrirGaleria: () => void;
   /** Abre el selector de archivo ("Subir"). */
   onSubir: () => void;
@@ -104,7 +104,7 @@ export function DialogoFuenteFoto({
               disabled={ocupado}
             >
               <Library className="h-4 w-4" />
-              Texto
+              Galería
             </Button>
             <Button
               type="button"
