@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileUp, Image, Loader2, Plus, Save, SaveAll, Video, X } from "lucide-react";
+import { Check, Copy, FileUp, Image, Loader2, Plus, Repeat, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -409,6 +409,19 @@ export default function Imagen() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo duplicar."),
   });
 
+  // ROTACIÓN: marca/desmarca una plantilla para el grupo en rotación de la marca. Con ≥2 marcadas,
+  // cada post nuevo de la marca se lleva automáticamente la siguiente del grupo (mismo color en
+  // todas las redes). Persiste al instante (PATCH) y refresca la galería.
+  const rotarPlantilla = useMutation({
+    mutationFn: ({ id, rotar }: { id: string; rotar: boolean }) =>
+      api.actualizarPlantillaDiseno(id, { rotar }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+      toast.success(res.plantilla.rotar ? "Añadida a la rotación." : "Quitada de la rotación.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo cambiar la rotación."),
+  });
+
   // RENOMBRAR una plantilla ya guardada (desde la galería). Persiste y refleja el nombre en
   // cualquier pestaña atada a ella.
   const renombrarPlantilla = useMutation({
@@ -596,6 +609,7 @@ export default function Imagen() {
             onBorrar={(p) => borrarPlantilla.mutate(p.id)}
             onDuplicar={(p) => duplicarPlantilla.mutate(p)}
             onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
+            onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
             onBlanco={() => abrirPestana()}
           />
         )}
@@ -609,6 +623,7 @@ export default function Imagen() {
           onBorrar={(p) => borrarPlantilla.mutate(p.id)}
           onDuplicar={(p) => duplicarPlantilla.mutate(p)}
           onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
+          onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
           onCerrar={() => setGaleria(false)}
         />
       )}
@@ -663,6 +678,7 @@ function GaleriaInline({
   onBorrar,
   onDuplicar,
   onRenombrar,
+  onRotar,
   onBlanco,
 }: {
   plantillas: PlantillaDiseno[];
@@ -671,6 +687,7 @@ function GaleriaInline({
   onBorrar: (p: PlantillaDiseno) => void;
   onDuplicar: (p: PlantillaDiseno) => void;
   onRenombrar: (p: PlantillaDiseno, nombre: string) => void;
+  onRotar: (p: PlantillaDiseno, rotar: boolean) => void;
   onBlanco: () => void;
 }) {
   const [editId, setEditId] = useState<string | null>(null);
@@ -742,6 +759,18 @@ function GaleriaInline({
                   {p.nombre || "(sin nombre)"}
                 </button>
               )}
+              {/* Rotación: incluir la plantilla en el grupo que rota automáticamente por la marca
+                  (cada post nuevo se lleva la siguiente; necesita ≥2 marcadas). */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
+                title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
+                className={`flex w-full items-center justify-center gap-1 px-1.5 pb-1 text-[11px] font-medium transition-colors ${
+                  p.rotar ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Repeat className="h-3 w-3" />
+                {p.rotar ? "En rotación" : "Rotación"}
+              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
                 title="Duplicar plantilla"

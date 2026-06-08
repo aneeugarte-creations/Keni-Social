@@ -22,6 +22,7 @@ const FOTO: PlantillaDiseno = {
   miniatura_url: "",
   lineas: [],
   activo: true,
+  rotar: false,
   marca_nombre: "UnoTV",
   autor_id: "u1",
   autor_nombre: "Ana",
@@ -105,5 +106,29 @@ describe("GaleriaPlantillas — filtro de tipo", () => {
       />,
     );
     expect(screen.getByText(/miniaturas para esta marca/i)).toBeInTheDocument();
+  });
+
+  it("con onRotar: refleja el estado de rotación y lo alterna al pulsar", () => {
+    const onRotar = vi.fn();
+    const EN_ROTACION: PlantillaDiseno = { ...FOTO, id: "rot-1", nombre: "Azul", rotar: true };
+    render(
+      <GaleriaPlantillas
+        plantillas={[FOTO, EN_ROTACION]}
+        onCargar={vi.fn()}
+        onRotar={onRotar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    // FOTO no está en rotación -> "Rotación"; la otra sí -> "En rotación".
+    expect(screen.getByText("Rotación")).toBeInTheDocument();
+    expect(screen.getByText("En rotación")).toBeInTheDocument();
+    // Pulsar la de FOTO la AÑADE a la rotación (rotar -> true).
+    fireEvent.click(screen.getByText("Rotación"));
+    expect(onRotar).toHaveBeenCalledWith(expect.objectContaining({ id: "foto-1" }), true);
+  });
+
+  it("sin onRotar (modo selector) no muestra el control de rotación", () => {
+    render(<GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    expect(screen.queryByText("Rotación")).not.toBeInTheDocument();
   });
 });

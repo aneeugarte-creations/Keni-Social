@@ -28,7 +28,7 @@ export const apiPlantillasDiseno = {
   // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.
   actualizarPlantillaDiseno: (
     id: string,
-    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; lineas?: string[]; activo?: boolean },
+    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; lineas?: string[]; activo?: boolean; rotar?: boolean },
   ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),

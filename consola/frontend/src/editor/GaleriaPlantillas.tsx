@@ -2,7 +2,7 @@
 // (mucho mejor que un desplegable). Filtra por la marca de la pestaña activa (el llamante).
 // Pestaña de tipo: "Fotos" (default) / "Miniaturas" (portadas de video).
 
-import { Copy, Image, Trash2, Video, X } from "lucide-react";
+import { Copy, Image, Repeat, Trash2, Video, X } from "lucide-react";
 import { useState } from "react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
@@ -30,6 +30,7 @@ export function GaleriaPlantillas({
   onBorrar,
   onDuplicar,
   onRenombrar,
+  onRotar,
   onCerrar,
   /** Si se pasa, el selector de tipo queda fijo y no se puede cambiar (ej: DialogoEditar). */
   tipoFijo,
@@ -42,6 +43,8 @@ export function GaleriaPlantillas({
   onDuplicar?: (p: PlantillaDiseno) => void;
   /** Si se omite, no se ofrece renombrar (modo SELECTOR). */
   onRenombrar?: (p: PlantillaDiseno, nombre: string) => void;
+  /** Si se omite, no se ofrece marcar/desmarcar la plantilla para la ROTACIÓN (modo SELECTOR). */
+  onRotar?: (p: PlantillaDiseno, rotar: boolean) => void;
   onCerrar: () => void;
   tipoFijo?: "foto" | "miniatura";
 }) {
@@ -147,6 +150,23 @@ export function GaleriaPlantillas({
                     </button>
                   ) : (
                     <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
+                  )}
+                  {/* Rotación: marca la plantilla para entrar en la ROTACIÓN automática de la marca
+                      (cada post nuevo se lleva la siguiente del grupo; mismo color en todas las redes).
+                      Necesita ≥2 plantillas marcadas para activarse. */}
+                  {onRotar && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
+                      title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
+                      className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] font-medium transition-colors ${
+                        p.rotar
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Repeat className="h-3 w-3" />
+                      {p.rotar ? "En rotación" : "Rotación"}
+                    </button>
                   )}
                   {onDuplicar && (
                     <button

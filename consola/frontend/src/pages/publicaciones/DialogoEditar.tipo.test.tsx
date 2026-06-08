@@ -27,6 +27,7 @@ function plantilla(overrides: Partial<PlantillaDiseno>): PlantillaDiseno {
     miniatura_url: "",
     lineas: [],
     activo: true,
+    rotar: false,
     marca_nombre: "Marca",
     autor_id: "u1",
     autor_nombre: "Ana",

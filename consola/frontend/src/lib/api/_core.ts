@@ -342,6 +342,8 @@ export interface PlantillaDiseno {
   miniatura_url: string;
   lineas: string[];
   activo: boolean;
+  /** Entra en la ROTACIÓN automática de la marca (cada post nuevo se lleva la siguiente del grupo). */
+  rotar: boolean;
   marca_nombre: string;
   autor_id: string;
   autor_nombre: string;
