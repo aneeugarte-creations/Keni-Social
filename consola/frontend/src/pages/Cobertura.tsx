@@ -34,7 +34,6 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -563,10 +562,8 @@ export default function Cobertura() {
 
   return (
     <>
-      <PageHeader
-        titulo="Cobertura — flujo continuo de noticias"
-        descripcion="Archivo persistente del motor de ingesta. Todo lo que los feeds capturan, en tiempo real."
-      />
+      {/* Contenido del índice del hub (pestaña Noticias): encabezado ligero, no una página. */}
+      <h2 className="mb-1 text-base font-semibold tracking-tight">Cobertura</h2>
 
       {/* Barra de salud del motor */}
       <BarraCobertura />

@@ -235,8 +235,14 @@ ESTADO_EVERGREEN_PROPUESTA = "propuesta"
 ESTADO_EVERGREEN_APROBADA = "aprobada"
 ESTADO_EVERGREEN_DESCARTADA = "descartada"
 
-# Origen de una idea evergreen: propuesta por la IA en el taller, o tecleada a mano.
-ORIGENES_EVERGREEN_IDEA: tuple[str, ...] = ("ia", "manual")
+# Origen de una idea evergreen, todas en el MISMO banco (Contenidos):
+#   - `ia`:      propuesta por la IA en el taller.
+#   - `manual`:  tecleada a mano (alta rápida en el banco).
+#   - `idea`:    aportación de "Idea del equipo" (antes en Fuentes-Internas).
+#   - `interna`: aportación de "Interno AMX" (briefs/material de programa; antes en Fuentes).
+ORIGENES_EVERGREEN_IDEA: tuple[str, ...] = ("ia", "manual", "idea", "interna")
+# Orígenes que puede declarar una aportación MANUAL al crear (la IA usa su propio camino).
+ORIGENES_EVERGREEN_IDEA_MANUAL: tuple[str, ...] = ("manual", "idea", "interna")
 
 # Tipo de contenido: de DÓNDE sale la imagen de la pieza.
 #   - `ia`:      se genera con IA (texto -> imagen).

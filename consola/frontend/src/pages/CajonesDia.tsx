@@ -28,7 +28,6 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -692,10 +691,8 @@ export default function CajonesDia() {
 
   return (
     <>
-      <PageHeader
-        titulo="Cajones del día"
-        descripcion="Vuelca el material diario en cada cajón y Haiku lo parsea y ordena."
-      />
+      {/* Sección embebida en Fuentes → Internas: encabezado ligero (no es una página). */}
+      <h2 className="mb-1 text-base font-semibold tracking-tight">Cajones del día</h2>
 
       {/* Explainer del pool */}
       <p className="mb-4 text-xs text-muted-foreground">

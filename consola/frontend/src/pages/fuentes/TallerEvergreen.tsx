@@ -10,9 +10,11 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Building2,
   CheckCircle2,
   CircleSlash,
   Leaf,
+  Lightbulb,
   Loader2,
   Plus,
   RotateCcw,
@@ -63,6 +65,13 @@ const ESTADO_LABEL: Record<string, string> = {
   propuesta: "Propuesta",
   aprobada: "Aprobada",
   descartada: "Descartada",
+};
+
+/** Etiqueta del origen de la idea (badge). `manual` no lleva badge (alta rápida sin matiz). */
+const ORIGEN_LABEL: Record<string, string> = {
+  ia: "IA",
+  idea: "Idea del equipo",
+  interna: "Interno AMX",
 };
 
 export function TallerEvergreen({
@@ -154,8 +163,12 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   );
   const [contexto, setContexto] = React.useState("");
 
-  // Alta manual de una idea.
+  // Aportación manual al MISMO banco (antes vivían en Fuentes-Internas como "Idea" e
+  // "Interno AMX"): un tipo, un título y una nota/contenido. Entra como idea en estado
+  // "propuesta" (se aprueba y se genera igual que una idea de la IA).
+  const [tipoManual, setTipoManual] = React.useState<"idea" | "interna">("idea");
   const [tituloManual, setTituloManual] = React.useState("");
+  const [descManual, setDescManual] = React.useState("");
 
   const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion(
     "evergreen-proponer",
@@ -170,11 +183,19 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
 
   const crearManual = useMutation({
     mutationFn: () =>
-      api.crearIdeaEvergreen({ marca, titulo: tituloManual.trim() }),
+      api.crearIdeaEvergreen({
+        marca,
+        titulo: tituloManual.trim(),
+        descripcion: descManual.trim() || undefined,
+        origen: tipoManual,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_IDEAS });
       setTituloManual("");
-      toast.success("Idea añadida al banco.");
+      setDescManual("");
+      toast.success(
+        tipoManual === "interna" ? "Contenido interno añadido al banco." : "Idea añadida al banco.",
+      );
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -257,19 +278,69 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
 
       <Card className="h-fit">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Añadir idea a mano</CardTitle>
+          <CardTitle className="text-base">Aportar a mano</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Tipo de aportación: una idea suelta del equipo, o contenido interno de AMX
+              (briefs, material de programa). Ambos entran al MISMO banco. */}
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                { valor: "idea", etiqueta: "Idea", icono: Lightbulb },
+                { valor: "interna", etiqueta: "Interno AMX", icono: Building2 },
+              ] as const
+            ).map((o) => {
+              const Icono = o.icono;
+              return (
+                <Button
+                  key={o.valor}
+                  type="button"
+                  size="sm"
+                  variant={tipoManual === o.valor ? "default" : "outline"}
+                  onClick={() => setTipoManual(o.valor)}
+                >
+                  <Icono className="h-4 w-4" />
+                  {o.etiqueta}
+                </Button>
+              );
+            })}
+          </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="evergreen-titulo-manual">Título de la idea</Label>
+            <Label htmlFor="evergreen-titulo-manual">Título</Label>
             <Input
               id="evergreen-titulo-manual"
               value={tituloManual}
               onChange={(e) => setTituloManual(e.target.value)}
-              placeholder="Ej. 5 récords históricos de la liga"
+              placeholder={
+                tipoManual === "interna"
+                  ? "Ej. Brief del especial de fin de año"
+                  : "Ej. 5 récords históricos de la liga"
+              }
               maxLength={140}
             />
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="evergreen-desc-manual">
+              {tipoManual === "interna" ? "Contenido interno" : "Nota"}{" "}
+              <span className="font-normal text-muted-foreground">
+                {tipoManual === "interna" ? "" : "(opcional)"}
+              </span>
+            </Label>
+            <Textarea
+              id="evergreen-desc-manual"
+              value={descManual}
+              onChange={(e) => setDescManual(e.target.value)}
+              placeholder={
+                tipoManual === "interna"
+                  ? "Pega aquí el contenido interno (brief, material de programa, transcripción)…"
+                  : "Detalle o ángulo de la idea…"
+              }
+              rows={3}
+            />
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -282,11 +353,11 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
             ) : (
               <Plus className="h-4 w-4" />
             )}
-            Añadir idea
+            Añadir al banco
           </Button>
           {marca === "" && (
             <p className="text-xs text-muted-foreground">
-              Elige una marca arriba para añadir o proponer ideas.
+              Elige una marca arriba para aportar o proponer ideas.
             </p>
           )}
         </CardContent>
@@ -415,9 +486,9 @@ function FilaIdea({
         >
           {ESTADO_LABEL[idea.estado] ?? idea.estado}
         </Badge>
-        {idea.origen === "ia" && (
+        {ORIGEN_LABEL[idea.origen] && (
           <Badge variant="outline" className="font-normal">
-            IA
+            {ORIGEN_LABEL[idea.origen]}
           </Badge>
         )}
         {idea.contenido_id && (

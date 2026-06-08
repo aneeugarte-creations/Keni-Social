@@ -1,20 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
-  Building2,
   CheckCircle2,
   CircleSlash,
   ExternalLink,
   Globe,
-  Lightbulb,
   Loader2,
   Plus,
   Rss,
-  Send,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -22,7 +19,6 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +43,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -93,43 +88,6 @@ const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "externas", etiqueta: "Externas" },
   { valor: "internas", etiqueta: "Internas" },
 ];
-
-/**
- * Pestaña "Aportar": una sola superficie para las aportaciones manuales (idea,
- * contenido interno), con un selector de tipo. Antes eran pestañas
- * sueltas; se unifican para calmar la barra. Reutiliza `AportarManual`.
- */
-function AportarHub({
-  marcas,
-  redes,
-}: {
-  marcas: MarcaDisponible[];
-  redes: RedPublicacion[];
-}) {
-  const [tipo, setTipo] = React.useState<"idea" | "interna">("idea");
-  const opciones: { valor: "idea" | "interna"; etiqueta: string }[] = [
-    { valor: "idea", etiqueta: "Idea" },
-    { valor: "interna", etiqueta: "Interno AMX" },
-  ];
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1">
-        {opciones.map((o) => (
-          <Button
-            key={o.valor}
-            type="button"
-            size="sm"
-            variant={tipo === o.valor ? "default" : "outline"}
-            onClick={() => setTipo(o.valor)}
-          >
-            {o.etiqueta}
-          </Button>
-        ))}
-      </div>
-      <AportarManual tipo={tipo} marcas={marcas} redes={redes} />
-    </div>
-  );
-}
 
 /**
  * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Contenidos.
@@ -178,11 +136,11 @@ export default function Fuentes() {
           <CatalogoPresets marcas={marcas} />
           <SaludFeeds />
         </TabsContent>
-        {/* INTERNAS: lo que pone el equipo. Buzones (listas tipo portal/WhatsApp/
-            corresponsales y Excel) + aportes a mano (idea / nota interna). */}
+        {/* INTERNAS: lo que pone el equipo. Buzones del día (listas tipo portal/WhatsApp/
+            corresponsales y Excel), filtrados por la marca activa. Las aportaciones a mano
+            ("Idea" e "Interno AMX") se mudaron a Contenidos, fusionadas con el generador de ideas. */}
         <TabsContent value="internas" className="space-y-8">
           <CajonesDia />
-          <AportarHub marcas={marcas} redes={opcionesRedes} />
         </TabsContent>
       </Tabs>
     </>
@@ -445,214 +403,6 @@ function FilaPreset({
         <ExternalLink className="h-4 w-4" />
       </a>
     </li>
-  );
-}
-
-// --- Aportación MANUAL (idea / interno) -------------------------------------
-
-/** Copys por tipo de aportación manual (taxonomía centralizada). */
-const APORTAR_UI: Record<
-  string,
-  {
-    icono: typeof Lightbulb;
-    titulo: string;
-    descripcion: string;
-    placeholder: string;
-    etiquetaCampo: string;
-    boton: string;
-    nota?: string;
-  }
-> = {
-  idea: {
-    icono: Lightbulb,
-    titulo: "Ideas del equipo",
-    descripcion:
-      "Escribe una idea en texto libre. Al enviarla se crea un ítem real en Pendientes " +
-      "(etiquetado como “Idea”) y, si eliges marca, se le genera copy en segundo plano.",
-    placeholder:
-      "Ej. Hilo sobre los 5 momentazos de la jornada con datos curiosos de cada equipo…",
-    etiquetaCampo: "Tu idea",
-    boton: "Enviar idea",
-  },
-  interna: {
-    icono: Building2,
-    titulo: "Contenido interno de AMX",
-    descripcion:
-      "Registra a mano contenido interno de AMX (briefs, material de programa, avisos). Crea " +
-      "un ítem real en Pendientes (etiquetado como “Interno AMX”) con copy en segundo plano.",
-    placeholder: "Pega aquí el contenido interno (texto, brief, transcripción)…",
-    etiquetaCampo: "Contenido interno",
-    boton: "Registrar contenido",
-    nota: "El conector automático con los sistemas internos de AMX queda PENDIENTE; por ahora la ingestión es manual.",
-  },
-};
-
-/**
- * Formulario de aportación MANUAL. Reusa `POST /api/fuentes/aportar`: el backend crea un
- * `contenido` `flujo='importante'` con su `origen` (idea/interna) y, best-effort,
- * lanza copy en segundo plano. No es UI decorativa: produce un ítem real en el pipeline.
- */
-function AportarManual({
-  tipo,
-  marcas,
-  redes,
-}: {
-  tipo: "idea" | "interna";
-  marcas: MarcaDisponible[];
-  redes: RedPublicacion[];
-}) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const ui = APORTAR_UI[tipo];
-  const Icono = ui.icono;
-
-  // Por defecto la marca activa global (si la cubre el catálogo); si no hay marca
-  // activa ("Todas"), queda sin preseleccionar. El usuario puede cambiarla.
-  const { marcaActiva } = useMarcaActiva();
-  const [texto, setTexto] = React.useState("");
-  const [marca, setMarca] = React.useState(
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
-  );
-  const [generar, setGenerar] = React.useState(true);
-  const [redesDef, setRedesDef] = React.useState<Set<string>>(() => new Set());
-
-  const opcionesRedes = React.useMemo(
-    () => redes.map((r) => ({ id: r.id, nombre: r.nombre })),
-    [redes],
-  );
-
-  function alternarRed(red: string, marcada: boolean) {
-    setRedesDef((prev) => {
-      const siguiente = new Set(prev);
-      if (marcada) siguiente.add(red);
-      else siguiente.delete(red);
-      return siguiente;
-    });
-  }
-
-  const aportar = useMutation({
-    mutationFn: () =>
-      api.aportarFuente({
-        tipo,
-        marca: marca || undefined,
-        redes: redesDef.size > 0 ? [...redesDef] : undefined,
-        generar,
-        texto: texto.trim(),
-      }),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
-      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      setTexto("");
-      toast.success(
-        data.copy_en_proceso
-          ? "Copy en marcha — aparecerá en el Feed para imagen y aprobación."
-          : "Aportación creada en Pendientes",
-        {
-          action: {
-            label: "Ver feed",
-            onClick: () => navigate("/operacion/feed/lista"),
-          },
-        },
-      );
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  // Si se quiere copy automático hace falta marca (sin voz no hay copy). Sin generar, la
-  // marca es opcional (el ítem entra a Pendientes y la marca/copy se completan a mano).
-  const puedeEnviar =
-    texto.trim().length > 0 && !aportar.isPending && (!generar || marca !== "");
-
-  return (
-    <div className="mx-auto grid max-w-2xl gap-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Icono className="h-4 w-4" />
-            {ui.titulo}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">{ui.descripcion}</p>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="aportar-texto">{ui.etiquetaCampo}</Label>
-            <Textarea
-              id="aportar-texto"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder={ui.placeholder}
-              rows={6}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="aportar-marca">
-              Marca{" "}
-              {!generar && (
-                <span className="font-normal text-muted-foreground">(opcional)</span>
-              )}
-            </Label>
-            <Select value={marca} onValueChange={setMarca}>
-              <SelectTrigger id="aportar-marca">
-                <SelectValue placeholder="Elige una marca" />
-              </SelectTrigger>
-              <SelectContent>
-                {marcas.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <Checkbox
-              id="aportar-generar"
-              checked={generar}
-              onCheckedChange={(v) => setGenerar(!!v)}
-              className="mt-0.5"
-              aria-label="Generar copy en segundo plano"
-            />
-            <div className="space-y-0.5">
-              <Label htmlFor="aportar-generar" className="cursor-pointer font-normal">
-                Generar copy en segundo plano
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Crea borradores por red en el tablero. Si lo desmarcas, el ítem entra a
-                Pendientes y completas copy a mano.
-              </p>
-            </div>
-          </div>
-
-          {generar && (
-            <SelectorRedMultiple
-              opciones={opcionesRedes}
-              seleccionadas={redesDef}
-              onCambio={alternarRed}
-            />
-          )}
-
-          {ui.nota && (
-            <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-              {ui.nota}
-            </p>
-          )}
-
-          <div className="flex justify-end">
-            <Button onClick={() => aportar.mutate()} disabled={!puedeEnviar}>
-              {aportar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              {ui.boton}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   );
 }
 
@@ -929,13 +679,13 @@ function FormularioFuente({
   const { marcaActiva } = useMarcaActiva();
   const [nombre, setNombre] = React.useState(fuente?.nombre ?? "");
   const [url, setUrl] = React.useState(fuente?.url ?? "");
-  const [marca, setMarca] = React.useState(
-    fuente
-      ? desdeMarca(fuente.marca)
-      : desdeMarca(
-          marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined,
-        ),
-  );
+  // La marca la fija el switch global (ya no hay selector propio): un feed NUEVO es de la marca
+  // activa (o compartido cuando el global está en "Todas"); al EDITAR se conserva la del feed.
+  const marca = fuente
+    ? desdeMarca(fuente.marca)
+    : desdeMarca(marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined);
+  const nombreMarcaFuente =
+    marcas.find((m) => m.id === marcaParam(marca))?.nombre ?? "Compartida (todas las marcas)";
   const [incluir, setIncluir] = React.useState(fuente?.incluir ?? "");
   const [excluir, setExcluir] = React.useState(fuente?.excluir ?? "");
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
@@ -1021,17 +771,8 @@ function FormularioFuente({
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="fuente-marca">
-          Marca <span className="font-normal text-muted-foreground">(opcional)</span>
-        </Label>
-        <SelectorMarca
-          id="fuente-marca"
-          marcas={marcas}
-          valor={marca}
-          onCambio={setMarca}
-          ariaLabel="Marca"
-          className="w-full"
-        />
+        <Label>Marca</Label>
+        <p className="text-sm text-muted-foreground">{nombreMarcaFuente}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">

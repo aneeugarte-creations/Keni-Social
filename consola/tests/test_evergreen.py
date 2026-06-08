@@ -78,6 +78,23 @@ def test_crear_listar_obtener_evergreen_idea(entorno):
     assert any(x["id"] == idea["id"] for x in db.listar_evergreen_ideas())
 
 
+def test_crear_evergreen_idea_origen_aportacion(entorno):
+    # Las aportaciones "Idea del equipo" e "Interno AMX" viven en el MISMO banco que la IA,
+    # distinguidas por `origen` ('idea'/'interna'). Una aportación interna lleva su nota larga
+    # en `descripcion` y nace en 'propuesta', igual que el resto.
+    idea = db.crear_evergreen_idea(
+        marca="unotv",
+        titulo="Brief de programa",
+        descripcion="material interno pegado por el equipo",
+        origen="interna",
+    )
+    assert idea["origen"] == "interna"
+    assert idea["estado"] == "propuesta"
+    leida = db.obtener_evergreen_idea(idea["id"])
+    assert leida["origen"] == "interna"
+    assert leida["descripcion"] == "material interno pegado por el equipo"
+
+
 def test_listar_evergreen_ideas_filtra_marca_y_estado(entorno):
     a = db.crear_evergreen_idea(marca="unotv", titulo="A", estado="propuesta")
     b = db.crear_evergreen_idea(marca="unotv", titulo="B", estado="aprobada")

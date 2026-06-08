@@ -183,6 +183,11 @@ export interface CuerpoCrearIdeaEvergreen {
   marca: string;
   titulo: string;
   descripcion?: string;
+  /**
+   * Origen de la aportación dentro del banco único: `manual` (alta rápida), `idea` ("Idea del
+   * equipo") o `interna` ("Interno AMX"). Por defecto el backend asume `manual`.
+   */
+  origen?: "manual" | "idea" | "interna";
 }
 
 export interface CuerpoActualizarIdeaEvergreen {

@@ -43,6 +43,7 @@ from ..estados import (
     ESTADO_EVERGREEN_PROPUESTA,
     ESTADOS_EVERGREEN_IDEA,
     FLUJO_EVERGREEN,
+    ORIGENES_EVERGREEN_IDEA_MANUAL,
 )
 from ..seguridad import autor_de_peticion
 
@@ -94,10 +95,12 @@ async def listar(request: Request) -> Response:
 
 
 async def crear(request: Request) -> Response:
-    """POST /api/evergreen/ideas: crea una idea MANUAL `{marca, titulo, descripcion?}` -> `{idea}`.
+    """POST /api/evergreen/ideas: crea una idea MANUAL `{marca, titulo, descripcion?, origen?}` -> `{idea}`.
 
-    Nace en estado `propuesta`, origen `manual` (igual que una idea de la IA: hay que aprobarla
-    antes de generar nada).
+    Nace en estado `propuesta` (igual que una idea de la IA: hay que aprobarla antes de generar
+    nada). `origen` distingue la aportación dentro del MISMO banco: `manual` (alta rápida), `idea`
+    ("Idea del equipo") o `interna` ("Interno AMX"). Por defecto `manual`; `ia` no es válido aquí
+    (la IA tiene su propio camino, `proponer`).
     """
     datos = await leer_json(request)
     marca, error = _validar_marca(datos.get("marca"))
@@ -108,13 +111,16 @@ async def crear(request: Request) -> Response:
         return JSONResponse({"error": "La idea necesita un título."}, status_code=400)
     descripcion = datos.get("descripcion")
     descripcion = descripcion.strip()[:_MAX_DESCRIPCION] if isinstance(descripcion, str) else ""
+    origen = datos.get("origen") or "manual"
+    if origen not in ORIGENES_EVERGREEN_IDEA_MANUAL:
+        return JSONResponse({"error": "Origen de aportación no permitido."}, status_code=400)
 
     idea = repos.crear_evergreen_idea(
         marca=marca,
         titulo=titulo.strip()[:_MAX_TITULO],
         descripcion=descripcion,
         estado=ESTADO_EVERGREEN_PROPUESTA,
-        origen="manual",
+        origen=origen,
     )
     return JSONResponse({"idea": _idea_a_dict(idea)})
 
