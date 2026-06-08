@@ -179,6 +179,10 @@ export interface FranjaSemana {
   orden: number;
   /** Si `true`, esta franja NO es laboral: el turno marca "descanso explicito". */
   es_descanso: boolean;
+  /** GRID POR MARCA: id canónico de la marca (rejilla) dueña de esta columna ("" = sin marca). */
+  marca: string;
+  /** Nombre legible de la marca (derivado del catálogo; "" si sin marca). */
+  marca_nombre: string;
 }
 
 /**
@@ -208,6 +212,9 @@ export interface TurnoRota {
   /** Reporte de fin de turno: qué queda pendiente para el siguiente. */
   nota_relevo: string;
   es_sabado: boolean;
+  /** GRID POR MARCA: rejilla (marca) a la que pertenece el turno; la UI lo etiqueta en "Todas". */
+  marca: string;
+  marca_nombre: string;
 }
 
 /** La rota (horario) de una semana: turnos + rango + si está publicada. */
@@ -256,6 +263,8 @@ export interface CuerpoActualizarFranjaSemana {
 export interface CuerpoAprobarRota {
   /** Lunes (o cualquier día) de la semana a aprobar. */
   lunes: string;
+  /** GRID POR MARCA: marca concreta cuya rejilla se aprueba/despublica (no "Todas"). */
+  marca: string;
 }
 
 /**
@@ -351,6 +360,9 @@ export interface CoordinacionTurno {
   coordinador_id: string;
   /** Nombre legible resuelto por el backend (puede quedar vacío si el usuario desapareció). */
   coordinador_nombre: string;
+  /** GRID POR MARCA: rejilla (marca) de la celda; la UI la etiqueta en "Todas". */
+  marca: string;
+  marca_nombre: string;
 }
 
 export interface RespuestaCoordinacionSemana {
@@ -439,6 +451,9 @@ export interface SwapTurno {
   decidido_admin: string;
   /** Timestamp ISO cuando el swap se aplicó sobre el horario. "" si no. */
   aplicado: string;
+  /** GRID POR MARCA: rejilla (marca) del swap; la UI la etiqueta en "Todas". */
+  marca: string;
+  marca_nombre: string;
 }
 
 /** Cuerpo de `POST /api/rota/swaps`: A pide un cambio con B. `franja_a`/`franja_b` son
@@ -464,6 +479,8 @@ export interface FiltrosSwaps {
   destinatario_id?: string;
   /** Si `true` y hay sesión, filtra a swaps donde el usuario es A o B. */
   mio?: boolean;
+  /** GRID POR MARCA: acota a la rejilla de esa marca; ausente = todas. */
+  marca?: string;
 }
 
 export interface RespuestaSwap {
@@ -595,6 +612,8 @@ export interface CuerpoCopiarSemana {
   a_lunes: string;
   /** Si `true`, primero borra los turnos existentes de `a_lunes`. */
   reemplazar?: boolean;
+  /** GRID POR MARCA: marca concreta cuya rejilla se copia (no "Todas"). */
+  marca: string;
 }
 
 export interface RespuestaCopiarSemana {

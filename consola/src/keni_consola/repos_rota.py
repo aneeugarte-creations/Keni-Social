@@ -80,8 +80,11 @@ def crear_turno_rota(
     motivo: str = "",
     nota_relevo: str = "",
     franja: str | None = None,
+    marca: str = "",
 ) -> dict[str, Any]:
     """Crea un turno (horario `(fecha, franja_id)` para un miembro). Delegado en `db.py`.
+
+    GRID POR MARCA: `marca` ata el turno a la rejilla de esa marca.
 
     Retrocompat para tests legados: acepta `franja` (literal 'matutino'/'vespertino'/
     'descanso'). El shim vive en `db.crear_turno_rota` (la traduccion necesita conexion BD
@@ -98,6 +101,7 @@ def crear_turno_rota(
         motivo=motivo,
         nota_relevo=nota_relevo,
         franja=franja,
+        marca=marca,
     )
 
 
@@ -106,8 +110,10 @@ def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]
     return db.crear_turnos_rota_lote(turnos)
 
 
-def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
-    return db.listar_turnos_rota(semana=semana)
+def listar_turnos_rota(
+    semana: str | None = None, marca: str | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_turnos_rota(semana=semana, marca=marca)
 
 
 def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
@@ -133,10 +139,10 @@ def actualizar_turnos_rota_lote(
 
 
 def copiar_turnos_rota(
-    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
+    de_lunes: str, a_lunes: str, *, reemplazar: bool = False, marca: str | None = None
 ) -> int:
-    """Copia los turnos de una semana a otra (offset +N dias por fila)."""
-    return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
+    """Copia los turnos de una semana a otra (offset +N dias por fila). `marca` acota la rejilla."""
+    return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar, marca=marca)
 
 
 def borrar_turnos_semana_rota(semana: str) -> int:
@@ -151,12 +157,12 @@ def borrar_turnos_rota_lote(ids: list[str]) -> int:
     return db.borrar_turnos_rota_lote(ids)
 
 
-def aprobar_semana_rota(semana: str) -> int:
-    return db.aprobar_semana_rota(semana)
+def aprobar_semana_rota(semana: str, marca: str | None = None) -> int:
+    return db.aprobar_semana_rota(semana, marca)
 
 
-def desaprobar_semana_rota(semana: str) -> int:
-    return db.desaprobar_semana_rota(semana)
+def desaprobar_semana_rota(semana: str, marca: str | None = None) -> int:
+    return db.desaprobar_semana_rota(semana, marca)
 
 
 def duplicar_turno_rota(
@@ -168,7 +174,7 @@ def duplicar_turno_rota(
     franja_id: str | None = None,
     semana: str | None = None,
 ) -> dict[str, Any] | None:
-    """Clona un turno con overrides (delegado en `db.py`)."""
+    """Clona un turno con overrides (delegado en `db.py`). El clon hereda la marca del original."""
     return db.duplicar_turno_rota(
         turno_id,
         fecha=fecha,
@@ -287,6 +293,7 @@ def crear_swap_turno(
     solicitante_nombre: str = "",
     destinatario_nombre: str = "",
     motivo: str = "",
+    marca: str = "",
 ) -> dict[str, Any]:
     return db.crear_swap_turno(
         solicitante_id,
@@ -298,6 +305,7 @@ def crear_swap_turno(
         solicitante_nombre=solicitante_nombre,
         destinatario_nombre=destinatario_nombre,
         motivo=motivo,
+        marca=marca,
     )
 
 
@@ -307,12 +315,14 @@ def listar_swaps_turno(
     destinatario_id: str | None = None,
     *,
     mio_id: str | None = None,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
     return db.listar_swaps_turno(
         estado=estado,
         solicitante_id=solicitante_id,
         destinatario_id=destinatario_id,
         mio_id=mio_id,
+        marca=marca,
     )
 
 
@@ -369,9 +379,11 @@ def aplicar_swap_turno(
 # --------------------------------------------------------------------------- #
 
 
-def listar_franjas_semana(lunes: str) -> list[dict[str, Any]]:
-    """Franjas vivas de la semana cuyo lunes es `lunes` (delegado en `db.py`)."""
-    return db.listar_franjas_semana(lunes)
+def listar_franjas_semana(
+    lunes: str, marca: str | None = None
+) -> list[dict[str, Any]]:
+    """Franjas vivas de la semana `lunes` (delegado en `db.py`). `marca` acota la rejilla."""
+    return db.listar_franjas_semana(lunes, marca)
 
 
 def obtener_franja_semana(franja_id: str) -> dict[str, Any] | None:
@@ -386,9 +398,10 @@ def crear_franja_semana(
     *,
     orden: int = 0,
     es_descanso: bool = False,
+    marca: str = "",
 ) -> dict[str, Any] | None:
     return db.crear_franja_semana(
-        lunes, nombre, inicio, fin, orden=orden, es_descanso=es_descanso
+        lunes, nombre, inicio, fin, orden=orden, es_descanso=es_descanso, marca=marca
     )
 
 
@@ -406,8 +419,8 @@ def contar_turnos_de_franja(franja_id: str) -> int:
     return db.contar_turnos_de_franja(franja_id)
 
 
-def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
-    return db.sembrar_franjas_por_defecto(lunes)
+def sembrar_franjas_por_defecto(lunes: str, marca: str = "") -> list[dict[str, Any]]:
+    return db.sembrar_franjas_por_defecto(lunes, marca)
 
 
 
@@ -416,16 +429,18 @@ def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 
 
-def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
-    """Coordinaciones de la semana (delegado en `db.py`)."""
-    return db.listar_coordinacion_semana(lunes)
+def listar_coordinacion_semana(
+    lunes: str, marca: str | None = None
+) -> list[dict[str, Any]]:
+    """Coordinaciones de la semana (delegado en `db.py`). `marca` acota la rejilla."""
+    return db.listar_coordinacion_semana(lunes, marca)
 
 
 def actualizar_coordinador_rota(
-    lunes: str, fecha: str, franja_id: str, coordinador_id: str
+    lunes: str, fecha: str, franja_id: str, coordinador_id: str, marca: str = ""
 ) -> dict[str, Any]:
     """UPSERT por (fecha, franja_id) del coordinador asignado a la celda."""
-    return db.actualizar_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
+    return db.actualizar_coordinador_rota(lunes, fecha, franja_id, coordinador_id, marca)
 
 
 def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:
@@ -433,8 +448,8 @@ def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:
     return db.quitar_coordinador_rota(fecha, franja_id)
 
 
-def obtener_franjas_config() -> dict[str, str]:
-    return db.obtener_franjas_config()
+def obtener_franjas_config(marca: str = "") -> dict[str, str]:
+    return db.obtener_franjas_config(marca)
 
 
 def guardar_franjas_config(
@@ -442,7 +457,8 @@ def guardar_franjas_config(
     matutino_fin: str,
     vespertino_inicio: str,
     vespertino_fin: str,
+    marca: str = "",
 ) -> dict[str, str]:
     return db.guardar_franjas_config(
-        matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin
+        matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin, marca
     )

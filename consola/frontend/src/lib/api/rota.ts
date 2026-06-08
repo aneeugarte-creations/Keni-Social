@@ -94,7 +94,8 @@ export const apiRota = {
   // --- Turnos (modelo nuevo: persona × día × franja, ola back3) ---
   // CRUD primario sobre los turnos. La cobertura de eventos es derivada (ver más
   // abajo). `listarTurnos` admite `?lunes=` para acotar a una semana (recomendado).
-  listarTurnos: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+  // GRID POR MARCA: `marca` acota a la rejilla de esa marca; ausente = "Todas" (apila todas).
+  listarTurnos: (params: { lunes?: string; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<RotaSemana>(`/rota/turnos${query(params)}`, { signal }),
   crearTurno: (cuerpo: CuerpoCrearTurnoRota) =>
     peticion<RespuestaTurnoRota>("/rota/turnos", { metodo: "POST", json: cuerpo }),
@@ -130,9 +131,9 @@ export const apiRota = {
   /** Revierte la semana publicada a borrador (solo admin). */
   despublicarTurnos: (cuerpo: CuerpoAprobarRota) =>
     peticion<RotaSemana>("/rota/turnos/despublicar", { metodo: "POST", json: cuerpo }),
-  misTurnos: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+  misTurnos: (params: { lunes?: string; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<MisTurnosRota>(`/rota/mis-turnos${query(params)}`, { signal }),
-  exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string } = {}) =>
+  exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string; marca?: string } = {}) =>
     descargar(`/rota/export.${formato}${query(params)}`),
 
   // --- Cobertura DERIVADA (no persistida): eventos × turnos ---
@@ -149,9 +150,9 @@ export const apiRota = {
   // --- Coordinador por turno (ola "coord") ---
   // Una celda (fecha, franja_id) puede tener UN coordinador entre los usuarios con
   // `puede_coordinar=true`. La coordinación es independiente del turno de CM.
-  listarCoordinacionSemana: (lunes: string, signal?: AbortSignal) =>
+  listarCoordinacionSemana: (lunes: string, marca?: string, signal?: AbortSignal) =>
     peticion<RespuestaCoordinacionSemana>(
-      `/rota/semana/${encodeURIComponent(lunes)}/coordinacion`,
+      `/rota/semana/${encodeURIComponent(lunes)}/coordinacion${query({ marca })}`,
       { signal },
     ),
   setCoordinador: (cuerpo: CuerpoSetCoordinador) =>
@@ -207,10 +208,11 @@ export const apiRota = {
     peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
 
   // --- Configuración editorial de franjas (#185) ---
-  obtenerConfigFranjas: (signal?: AbortSignal) =>
-    peticion<RespuestaConfigFranjas>("/rota/config/franjas", { signal }),
-  guardarConfigFranjas: (cuerpo: CuerpoGuardarConfigFranjas) =>
-    peticion<RespuestaConfigFranjas>("/rota/config/franjas", {
+  // GRID POR MARCA: la config de franjas es por marca; `marca` viaja como `?marca=`.
+  obtenerConfigFranjas: (marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaConfigFranjas>(`/rota/config/franjas${query({ marca })}`, { signal }),
+  guardarConfigFranjas: (cuerpo: CuerpoGuardarConfigFranjas, marca?: string) =>
+    peticion<RespuestaConfigFranjas>(`/rota/config/franjas${query({ marca })}`, {
       metodo: "PATCH",
       json: cuerpo,
     }),
@@ -219,14 +221,15 @@ export const apiRota = {
   // CRUD de `rota_franjas` (N franjas por semana, solapes permitidos, soporte cruce de
   // medianoche, franja Descanso explicita con `es_descanso=true`). GET siembra defaults
   // (Mañana/Tarde/Descanso) si la semana esta vacia. POST/PATCH/DELETE exigen admin.
-  listarFranjasSemana: (lunes: string, signal?: AbortSignal) =>
+  // GRID POR MARCA: `marca` (query) acota la rejilla; al crear, exige una marca concreta.
+  listarFranjasSemana: (lunes: string, marca?: string, signal?: AbortSignal) =>
     peticion<RespuestaFranjasSemana>(
-      `/rota/semana/${encodeURIComponent(lunes)}/franjas`,
+      `/rota/semana/${encodeURIComponent(lunes)}/franjas${query({ marca })}`,
       { signal },
     ),
-  crearFranjaSemana: (lunes: string, cuerpo: CuerpoCrearFranjaSemana) =>
+  crearFranjaSemana: (lunes: string, cuerpo: CuerpoCrearFranjaSemana, marca?: string) =>
     peticion<FranjaSemana>(
-      `/rota/semana/${encodeURIComponent(lunes)}/franjas`,
+      `/rota/semana/${encodeURIComponent(lunes)}/franjas${query({ marca })}`,
       { metodo: "POST", json: cuerpo },
     ),
   actualizarFranjaSemana: (id: string, cuerpo: CuerpoActualizarFranjaSemana) =>
@@ -252,6 +255,7 @@ export const apiRota = {
         solicitante_id: filtros.solicitante_id,
         destinatario_id: filtros.destinatario_id,
         mio: filtros.mio ? "true" : undefined,
+        marca: filtros.marca,
       })}`,
       { signal },
     ),

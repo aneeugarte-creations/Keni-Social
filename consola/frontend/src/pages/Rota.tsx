@@ -694,7 +694,9 @@ function Calendario({
 }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
-  const claveTurnos = ["rota", "turnos", lunes] as const;
+  // GRID POR MARCA: la marca activa entra en las queryKeys (refresca al cambiar de workspace)
+  // y en cada lectura/escritura del grid (turnos, franjas, coordinación, aprobar, copiar...).
+  const claveTurnos = ["rota", "turnos", lunes, marcaActiva] as const;
   // El rango (lun→dom) de la semana en vista para acotar las consultas.
   const desde = lunes;
   const hasta = lunesSiguiente(lunes, 1); // exclusivo
@@ -708,7 +710,8 @@ function Calendario({
   });
   const turnosQ = useQuery({
     queryKey: claveTurnos,
-    queryFn: ({ signal }) => api.listarTurnos({ lunes }, signal),
+    queryFn: ({ signal }) =>
+      api.listarTurnos({ lunes, marca: marcaActiva ?? undefined }, signal),
   });
   const equipoQ = useQuery({
     queryKey: ["rota", "equipo"],
@@ -726,8 +729,9 @@ function Calendario({
   });
   // Coordinador por celda (ola "coord"): un PUT por celda, lista por semana.
   const coordinacionQ = useQuery({
-    queryKey: ["rota", "coordinacion", lunes] as const,
-    queryFn: ({ signal }) => api.listarCoordinacionSemana(lunes, signal),
+    queryKey: ["rota", "coordinacion", lunes, marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.listarCoordinacionSemana(lunes, marcaActiva ?? undefined, signal),
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
@@ -784,8 +788,11 @@ function Calendario({
 
   // Mutaciones de cabecera (de la antigua pestaña Turnos): aprobar / despublicar /
   // copiar semana anterior. Sin cambios funcionales — sólo migradas aquí.
+  // GRID POR MARCA: aprobar/despublicar/copiar mutan UNA rejilla -> exigen marca concreta.
+  // En "Todas" (marcaActiva null) mandamos "" y el backend responde 400 accionable.
+  const marcaRejilla = marcaActiva ?? "";
   const aprobar = useMutation({
-    mutationFn: () => api.aprobarTurnos({ lunes }),
+    mutationFn: () => api.aprobarTurnos({ lunes, marca: marcaRejilla }),
     onSuccess: (res) => {
       queryClient.setQueryData(claveTurnos, res);
       toast.success(res.mensaje ?? "Turnos publicados al equipo.");
@@ -794,7 +801,7 @@ function Calendario({
   });
 
   const despublicar = useMutation({
-    mutationFn: () => api.despublicarTurnos({ lunes }),
+    mutationFn: () => api.despublicarTurnos({ lunes, marca: marcaRejilla }),
     onSuccess: (res) => {
       queryClient.setQueryData(claveTurnos, res);
       toast.success(res.mensaje ?? "Semana despublicada: vuelve a borrador.");
@@ -808,6 +815,7 @@ function Calendario({
         de_lunes: lunesSiguiente(lunes, -1),
         a_lunes: lunes,
         reemplazar: false,
+        marca: marcaRejilla,
       }),
     onSuccess: (res) => {
       toast.success(`Copiados ${res.copiados ?? 0} turnos de la semana anterior.`);
@@ -1053,8 +1061,8 @@ function Calendario({
             onAbrirFranjasSemana={() => setAbrirFranjasSemana(true)}
             onAbrirPlantillaFranjas={() => setAbrirPlantillaFranjas(true)}
             onAbrirCarga={() => setAbrirCarga(true)}
-            onExportExcel={() => api.exportarRota("xlsx", { lunes })}
-            onExportCsv={() => api.exportarRota("csv", { lunes })}
+            onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
+            onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
           />
         </div>
       </div>
@@ -1164,6 +1172,16 @@ function Calendario({
                               ? "(descanso)"
                               : `${franja.inicio}–${franja.fin}`}
                           </span>
+                          {/* GRID POR MARCA: en "Todas" (marcaActiva null) se apilan las rejillas
+                              de varias marcas; etiquetamos cada franja (columna) con su marca. */}
+                          {marcaActiva === null && franja.marca_nombre ? (
+                            <Badge
+                              variant="outline"
+                              className="mt-1 w-fit px-1.5 py-0 text-[10px] font-normal"
+                            >
+                              {franja.marca_nombre}
+                            </Badge>
+                          ) : null}
                         </div>
                         {dias.map((fecha) => {
                           const recuadros =
@@ -2383,9 +2401,11 @@ function MisTurnos({
   lunes: string;
   setLunes: (l: string) => void;
 }) {
+  const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
-    queryKey: ["rota", "mis-turnos", lunes],
-    queryFn: ({ signal }) => api.misTurnos({ lunes }, signal),
+    queryKey: ["rota", "mis-turnos", lunes, marcaActiva],
+    queryFn: ({ signal }) =>
+      api.misTurnos({ lunes, marca: marcaActiva ?? undefined }, signal),
   });
   const datos = q.data;
   const mios = datos?.mis_turnos ?? [];
@@ -2506,10 +2526,12 @@ function DialogFranjasDeSemana({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
-  const claveLista = ["rota", "franjas", lunes] as const;
+  const { marcaActiva } = useMarcaActiva();
+  const claveLista = ["rota", "franjas", lunes, marcaActiva] as const;
   const q = useQuery({
     queryKey: claveLista,
-    queryFn: ({ signal }) => api.listarFranjasSemana(lunes, signal),
+    queryFn: ({ signal }) =>
+      api.listarFranjasSemana(lunes, marcaActiva ?? undefined, signal),
   });
   const franjas = (q.data?.franjas ?? []).slice().sort((a, b) => a.orden - b.orden);
 
@@ -2519,7 +2541,9 @@ function DialogFranjasDeSemana({
   };
 
   const crear = useMutation({
-    mutationFn: (cuerpo: CuerpoCrearFranjaSemana) => api.crearFranjaSemana(lunes, cuerpo),
+    // GRID POR MARCA: crear franja exige marca concreta; en "Todas" el backend responde 400.
+    mutationFn: (cuerpo: CuerpoCrearFranjaSemana) =>
+      api.crearFranjaSemana(lunes, cuerpo, marcaActiva ?? undefined),
     onSuccess: () => {
       invalidar();
       toast.success("Franja añadida.");
@@ -2771,9 +2795,10 @@ function FormCrearFranjaSemana({
 
 function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
-    queryKey: ["rota", "config", "franjas"] as const,
-    queryFn: ({ signal }) => api.obtenerConfigFranjas(signal),
+    queryKey: ["rota", "config", "franjas", marcaActiva] as const,
+    queryFn: ({ signal }) => api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
   });
   const inicial = q.data?.franjas;
   const [matIni, setMatIni] = React.useState("");
@@ -2791,13 +2816,17 @@ function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
   }, [inicial]);
 
   const guardar = useMutation({
+    // GRID POR MARCA: la config es por marca; en "Todas" el backend responde 400 accionable.
     mutationFn: () =>
-      api.guardarConfigFranjas({
-        matutino_inicio: matIni,
-        matutino_fin: matFin,
-        vespertino_inicio: vesIni,
-        vespertino_fin: vesFin,
-      }),
+      api.guardarConfigFranjas(
+        {
+          matutino_inicio: matIni,
+          matutino_fin: matFin,
+          vespertino_inicio: vesIni,
+          vespertino_fin: vesFin,
+        },
+        marcaActiva ?? undefined,
+      ),
     onSuccess: () => {
       toast.success("Franjas guardadas.");
       void queryClient.invalidateQueries({ queryKey: ["rota"] });
@@ -3296,7 +3325,11 @@ function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
 
   // El usuario admin ve todos los swaps (incluyendo "Para aprobar" donde no es
   // parte). El resto solo ve los swaps en los que participa (`mio=true`).
-  const filtrosSwaps: FiltrosSwaps = esAdmin ? {} : { mio: true };
+  // GRID POR MARCA: los swaps se acotan a la rejilla activa; "Todas" (null) muestra todos.
+  const filtrosSwaps: FiltrosSwaps = {
+    ...(esAdmin ? {} : { mio: true }),
+    ...(marcaActiva ? { marca: marcaActiva } : {}),
+  };
   const swapsQ = useQuery({
     enabled: usuario !== null,
     queryKey: ["rota", "swaps", filtrosSwaps] as const,
@@ -3561,17 +3594,21 @@ function FormularioNuevoSwap({
   onCreado?: () => void;
 }) {
   // Semana actual y la siguiente: dos consultas, una por semana, para reusar el
-  // cache compartido con la pestaña Calendario.
+  // cache compartido con la pestaña Calendario. GRID POR MARCA: acotadas a la rejilla activa
+  // (un swap vive dentro de la rejilla de una marca); la marca entra en la queryKey.
+  const { marcaActiva } = useMarcaActiva();
   const lunesActual = React.useMemo(() => lunesDeSemana(new Date()), []);
   const lunesProxima = React.useMemo(() => lunesSiguiente(lunesActual, 1), [lunesActual]);
 
   const semana1Q = useQuery({
-    queryKey: ["rota", "turnos", lunesActual] as const,
-    queryFn: ({ signal }) => api.listarTurnos({ lunes: lunesActual }, signal),
+    queryKey: ["rota", "turnos", lunesActual, marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.listarTurnos({ lunes: lunesActual, marca: marcaActiva ?? undefined }, signal),
   });
   const semana2Q = useQuery({
-    queryKey: ["rota", "turnos", lunesProxima] as const,
-    queryFn: ({ signal }) => api.listarTurnos({ lunes: lunesProxima }, signal),
+    queryKey: ["rota", "turnos", lunesProxima, marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.listarTurnos({ lunes: lunesProxima, marca: marcaActiva ?? undefined }, signal),
   });
 
   const turnos: TurnoRota[] = React.useMemo(

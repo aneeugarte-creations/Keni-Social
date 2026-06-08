@@ -25,6 +25,8 @@ CLAVE = "clave-de-prueba"
 LUNES = "2026-06-08"
 FECHA = "2026-06-10"
 OTRA_FECHA = "2026-06-11"
+# GRID POR MARCA: la rejilla de franjas solo se siembra para una marca concreta.
+MARCA = "claro-sports"
 
 
 def _cli_admin(app) -> TestClient:
@@ -41,9 +43,9 @@ def _cli_admin(app) -> TestClient:
 
 
 def _franja_manana(cli: TestClient, lunes: str = LUNES) -> dict:
-    """Siembra defaults y devuelve la franja "Mañana" de esa semana."""
-    cli.get(f"/api/rota/semana/{lunes}/franjas")
-    franjas = cli.get(f"/api/rota/semana/{lunes}/franjas").json()["franjas"]
+    """Siembra defaults de la marca piloto y devuelve la franja "Mañana" de esa semana."""
+    cli.get(f"/api/rota/semana/{lunes}/franjas?marca={MARCA}")
+    franjas = cli.get(f"/api/rota/semana/{lunes}/franjas?marca={MARCA}").json()["franjas"]
     return next(f for f in franjas if f["nombre"] == "Mañana")
 
 

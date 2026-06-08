@@ -364,10 +364,17 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         fin          TEXT NOT NULL,
         orden        INTEGER NOT NULL DEFAULT 0,
         es_descanso  BOOLEAN NOT NULL DEFAULT FALSE,
-        UNIQUE (lunes, nombre)
+        marca        TEXT NOT NULL DEFAULT ''
     )
     """,
+    # GRID POR MARCA: cada marca tiene su propia rejilla (franjas, turnos, coordinacion). La
+    # `marca` la sembramos/filtramos en toda lectura/escritura del grid; "" = sin marca (solo
+    # filas legadas antes de la migracion, backfilled a 'claro-sports'). La unicidad del NOMBRE
+    # de franja es POR (marca, lunes, nombre) — dos marcas pueden tener su propia "Mañana" la
+    # misma semana — y vive como indice unico idempotente (`idx_rota_franjas_uniq`), no inline
+    # (la BD vieja trae UNIQUE(lunes,nombre), que `_asegurar_marca_grid_rota` dropa).
     "CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_franjas_marca ON rota_franjas (marca)",
     # TURNO = horario del miembro en (fecha, franja_id). NO esta atado a un evento concreto.
     # Cambio de modelo (#XYZ "franjas por semana"): el `franja` literal de tres valores
     # ('matutino'/'vespertino'/'descanso') desaparece. Ahora cada turno apunta a una
@@ -393,13 +400,18 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         creado         TEXT NOT NULL DEFAULT '',
         actualizado    TEXT NOT NULL DEFAULT '',
         origen         TEXT NOT NULL DEFAULT '',
-        origen_ref     TEXT NOT NULL DEFAULT ''
+        origen_ref     TEXT NOT NULL DEFAULT '',
+        marca          TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_fecha ON rota_turnos (fecha)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_franja_id ON rota_turnos (franja_id)",
+    # GRID POR MARCA: el turno pertenece a la rejilla de UNA marca. `listar_turnos_rota`
+    # filtra por (semana, marca?); en "Todas" (marca None) NO filtra y devuelve todas, que la
+    # UI apila etiquetando cada turno con su marca.
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_marca ON rota_turnos (marca)",
     # Ausencias/vacaciones del horario (F4 · #144): un rango de fechas (inclusivo) en que un
     # miembro NO esta disponible. El proponedor del horario las RESPETA (excluye al miembro
     # esos dias). `tipo` es vacaciones|descanso|baja|otro.
@@ -668,8 +680,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_programas_activo ON rota_programas (activo)",
     # Configuracion de FRANJAS (#185): los rangos horarios de matutino/vespertino son
-    # editoriales del equipo y se editan desde la UI. Singleton: una sola fila con
-    # `id='default'`. Si no existe, los endpoints devuelven los defaults del dominio.
+    # editoriales del equipo y se editan desde la UI. GRID POR MARCA: una fila POR MARCA —
+    # `id` guarda el id de la marca (antes era el singleton `id='default'`, reclavado a
+    # 'claro-sports' por `_asegurar_marca_grid_rota`). Si no existe, los endpoints devuelven
+    # los defaults del dominio.
     # Aplica al endpoint `POST /api/rota/cobertura/asignar-franja` (que llama a
     # `dominio.mapear_franja` con estos valores). Inicios INCLUSIVOS, finales EXCLUSIVOS.
     """
@@ -707,9 +721,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         actualizado              TEXT NOT NULL DEFAULT '',
         decidido_destinatario    TEXT NOT NULL DEFAULT '',
         decidido_admin           TEXT NOT NULL DEFAULT '',
-        aplicado                 TEXT NOT NULL DEFAULT ''
+        aplicado                 TEXT NOT NULL DEFAULT '',
+        marca                    TEXT NOT NULL DEFAULT ''
     )
     """,
+    # GRID POR MARCA: el swap es entre turnos de la rejilla de UNA marca. `marca` se
+    # DENORMALIZA al crear (del turno A) para poder filtrar las solicitudes por marca.
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_marca ON rota_swaps_turno (marca)",
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_solicitante ON rota_swaps_turno (solicitante_id)",
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_destinatario ON rota_swaps_turno (destinatario_id)",
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_estado ON rota_swaps_turno (estado)",
@@ -728,11 +746,16 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         coordinador_id  TEXT NOT NULL,
         creado          TEXT NOT NULL DEFAULT '',
         actualizado     TEXT NOT NULL DEFAULT '',
+        marca           TEXT NOT NULL DEFAULT '',
         UNIQUE (fecha, franja_id)
     )
     """,
+    # GRID POR MARCA: la `franja_id` ya es propia de una marca (cada franja lleva su marca),
+    # asi que UNIQUE(fecha, franja_id) ya separa por marca de hecho; `marca` se denormaliza
+    # para filtrar/etiquetar la coordinacion sin join.
     "CREATE INDEX IF NOT EXISTS idx_rota_coord_lunes ON rota_coordinacion (lunes)",
     "CREATE INDEX IF NOT EXISTS idx_rota_coord_franja ON rota_coordinacion (franja_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_coord_marca ON rota_coordinacion (marca)",
     # PROPUESTA de importacion de la parrilla desde un documento (PDF/imagen/docx/xlsx/txt).
     # El usuario suelta un documento; un `claude -p` READ-ONLY lo lee y PROPONE operaciones
     # (eventos/turnos nuevos, modificaciones) como JSON. La propuesta se ESTACIONA aqui (NO se
@@ -1455,6 +1478,9 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_etiquetas(con)
     _migrar_columnas_contenido_plataforma(con)
     _migrar_columnas_video_composiciones(con)
+    # GRID POR MARCA: añade `marca` al grid de rota + backfill del piloto a 'claro-sports' +
+    # retira el UNIQUE(lunes,nombre) inline de franjas (lo sustituye `idx_rota_franjas_uniq`).
+    _asegurar_marca_grid_rota(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
     # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
@@ -1925,12 +1951,14 @@ _NOMBRE_FRANJA_MANANA = NOMBRE_FRANJA_MANANA_DEFAULT
 _NOMBRE_FRANJA_TARDE = NOMBRE_FRANJA_TARDE_DEFAULT
 
 
-def _config_franjas_template(con: Any) -> tuple[str, str, str, str]:
+def _config_franjas_template(con: Any, marca: str = "") -> tuple[str, str, str, str]:
     """Devuelve `(matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin)` para
     sembrar las 2 franjas por defecto de una semana nueva.
 
-    Si `rota_config_franjas` tiene una fila con `id='default'`, usamos sus rangos
-    (configuracion editorial #185). Si no, defaults del dominio (08-16 / 16-24).
+    GRID POR MARCA: la config de franjas es POR MARCA — `rota_config_franjas.id` guarda el id
+    de la marca (antes era el singleton `'default'`). Con `marca` leemos la fila de esa marca;
+    sin marca (legado / siembra pre-migracion) caemos al singleton `'default'`. Si no hay fila,
+    defaults del dominio (08-16 / 16-24).
     """
     mat_ini, mat_fin = "08:00", "16:00"
     ves_ini, ves_fin = "16:00", "24:00"
@@ -1939,7 +1967,7 @@ def _config_franjas_template(con: Any) -> tuple[str, str, str, str]:
     fila = con.execute(
         "SELECT matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin "
         "FROM rota_config_franjas WHERE id = ?",
-        ("default",),
+        (marca or "default",),
     ).fetchone()
     if fila is None:
         return mat_ini, mat_fin, ves_ini, ves_fin
@@ -1954,20 +1982,33 @@ def _config_franjas_template(con: Any) -> tuple[str, str, str, str]:
 _NOMBRE_FRANJA_DESCANSO = "Descanso"
 
 
-def _sembrar_franjas_por_defecto_en(con: Any, lunes: str) -> dict[str, str]:
-    """Inserta (Mañana, Tarde, Descanso) en `rota_franjas` para `lunes` si no existen.
+def _sembrar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -> dict[str, str]:
+    """Inserta (Mañana, Tarde, Descanso) en `rota_franjas` para `(marca, lunes)` si no existen.
 
-    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (sembradas o ya existentes).
-    La franja "Descanso" se siembra con `es_descanso=true`, `inicio='00:00'`/`fin='00:00'`
-    (sin rango horario real: nadie cubre eventos en descanso) y un `orden` alto (999) para
-    que la UI la pinte siempre al final.
+    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (sembradas o ya existentes) de
+    ESA marca. La franja "Descanso" se siembra con `es_descanso=true`, `inicio='00:00'`/
+    `fin='00:00'` (sin rango horario real: nadie cubre eventos en descanso) y un `orden` alto
+    (999) para que la UI la pinte siempre al final.
+
+    GRID POR MARCA: cada marca tiene su propia rejilla. Detectamos si la columna `marca` ya
+    existe (la migracion del modelo de turnos siembra ANTES de que exista; entonces caemos al
+    camino legado sin marca y `_asegurar_marca_grid_rota` backfillea esas filas a 'claro-sports').
+    Con la columna presente filtramos/insertamos por marca y el ON CONFLICT va por (marca, lunes,
+    nombre) (indice `idx_rota_franjas_uniq`).
     """
     if not lunes:
         return {}
-    existentes = con.execute(
-        "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
-        (lunes,),
-    ).fetchall()
+    tiene_marca = "marca" in _columnas_existentes(con, "rota_franjas")
+    if tiene_marca:
+        existentes = con.execute(
+            "SELECT id, nombre FROM rota_franjas WHERE lunes = ? AND marca = ?",
+            (lunes, marca),
+        ).fetchall()
+    else:
+        existentes = con.execute(
+            "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+            (lunes,),
+        ).fetchall()
     por_nombre = {f["nombre"]: f["id"] for f in existentes}
     if (
         _NOMBRE_FRANJA_MANANA in por_nombre
@@ -1975,7 +2016,7 @@ def _sembrar_franjas_por_defecto_en(con: Any, lunes: str) -> dict[str, str]:
         and _NOMBRE_FRANJA_DESCANSO in por_nombre
     ):
         return por_nombre
-    mat_ini, mat_fin, ves_ini, ves_fin = _config_franjas_template(con)
+    mat_ini, mat_fin, ves_ini, ves_fin = _config_franjas_template(con, marca)
     # (nombre, inicio, fin, orden, es_descanso)
     semilla = [
         (_NOMBRE_FRANJA_MANANA, mat_ini, mat_fin, 0, False),
@@ -1986,18 +2027,31 @@ def _sembrar_franjas_por_defecto_en(con: Any, lunes: str) -> dict[str, str]:
         if nombre in por_nombre:
             continue
         nuevo_id = uuid.uuid4().hex[:12]
-        con.execute(
-            "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lunes, nombre) DO NOTHING",
-            (nuevo_id, lunes, nombre, inicio, fin, orden, es_descanso),
-        )
+        if tiene_marca:
+            con.execute(
+                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso, marca) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (marca, lunes, nombre) DO NOTHING",
+                (nuevo_id, lunes, nombre, inicio, fin, orden, es_descanso, marca),
+            )
+        else:
+            con.execute(
+                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lunes, nombre) DO NOTHING",
+                (nuevo_id, lunes, nombre, inicio, fin, orden, es_descanso),
+            )
         por_nombre[nombre] = nuevo_id
     # Releemos para coger los `id` reales (el ON CONFLICT pudo descartar el INSERT si otra
     # transaccion sembro a la vez): el dict en memoria puede traer un id que no esta.
-    filas = con.execute(
-        "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
-        (lunes,),
-    ).fetchall()
+    if tiene_marca:
+        filas = con.execute(
+            "SELECT id, nombre FROM rota_franjas WHERE lunes = ? AND marca = ?",
+            (lunes, marca),
+        ).fetchall()
+    else:
+        filas = con.execute(
+            "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+            (lunes,),
+        ).fetchall()
     return {f["nombre"]: f["id"] for f in filas}
 
 
@@ -2154,6 +2208,56 @@ def _migrar_columnas_turnos_rota(con: Any) -> None:
     for columna, tipo in _COLUMNAS_TURNO_ROTA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_turnos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# GRID POR MARCA: tablas del grid de rota que reciben la columna `marca`. Cada marca tiene su
+# propia rejilla (franjas=columnas, turnos=celdas, coordinacion=coordinador por celda, swaps).
+_TABLAS_GRID_ROTA_MARCA: tuple[str, ...] = (
+    "rota_franjas",
+    "rota_turnos",
+    "rota_coordinacion",
+    "rota_swaps_turno",
+)
+
+# Marca del piloto: el grid que existia antes de "grid por marca" era de Claro Sports, asi que
+# las filas legadas (marca='') se backfillean a esta marca al introducir la columna.
+_MARCA_PILOTO_ROTA = "claro-sports"
+
+
+def _asegurar_marca_grid_rota(con: Any) -> None:
+    """Añade `marca` al grid de rota y backfillea el grid legado a 'claro-sports' (idempotente).
+
+    GRID POR MARCA: cada marca tiene su propia rejilla. Una BD nueva ya trae `marca` por el DDL;
+    una vieja la recibe con DEFAULT '' y, SOLO cuando la columna no existia (= todas las filas
+    son legadas), backfillea TODAS sus filas a 'claro-sports' (el piloto). Ademas:
+      - retira el viejo UNIQUE(lunes,nombre) de `rota_franjas` (la unicidad pasa a
+        (marca,lunes,nombre) via `idx_rota_franjas_uniq`, en los indices idempotentes),
+      - reclava la config singleton `rota_config_franjas.id='default'` como la de 'claro-sports'
+        (la config de franjas pasa a ser POR MARCA: `id` guarda el id de la marca).
+    """
+    for tabla in _TABLAS_GRID_ROTA_MARCA:
+        if not _tabla_existe(con, tabla):
+            continue
+        if "marca" not in _columnas_existentes(con, tabla):
+            con.execute(f"ALTER TABLE {tabla} ADD COLUMN marca TEXT NOT NULL DEFAULT ''")
+            # Backfill one-shot (solo al crear la columna): el grid existente era del piloto.
+            con.execute(f"UPDATE {tabla} SET marca = ?", (_MARCA_PILOTO_ROTA,))  # noqa: S608 -- tabla de allowlist fija
+    if _tabla_existe(con, "rota_franjas"):
+        # Postgres nombra el UNIQUE inline `<tabla>_<cols>_key`; IF EXISTS lo hace no-op donde
+        # no aplique (BD nueva sin ese constraint). La unicidad nueva la da el indice idempotente.
+        con.execute(
+            "ALTER TABLE rota_franjas DROP CONSTRAINT IF EXISTS rota_franjas_lunes_nombre_key"
+        )
+    if _tabla_existe(con, "rota_config_franjas"):
+        # Solo si 'claro-sports' aun no tiene su fila (no pisar una config nueva por marca).
+        ya = con.execute(
+            "SELECT 1 FROM rota_config_franjas WHERE id = ?", (_MARCA_PILOTO_ROTA,)
+        ).fetchone()
+        if ya is None:
+            con.execute(
+                "UPDATE rota_config_franjas SET id = ? WHERE id = 'default'",
+                (_MARCA_PILOTO_ROTA,),
+            )
 
 
 def _migrar_columnas_eventos_rota(con: Any) -> None:
@@ -2522,6 +2626,11 @@ def _migrar_columnas_noticias_clusters(con: Any) -> None:
 _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
     ("idx_franjas_editoriales_uniq", "franjas_editoriales (marca, red, dia_semana, hora)"),
+    # GRID POR MARCA: el NOMBRE de una franja es unico por (marca, lunes) — dos marcas pueden
+    # tener su propia "Mañana" la misma semana. Sustituye al viejo UNIQUE(lunes,nombre) inline
+    # (que `_asegurar_marca_grid_rota` dropa). El ON CONFLICT (marca,lunes,nombre) de la siembra
+    # se apoya en este indice.
+    ("idx_rota_franjas_uniq", "rota_franjas (marca, lunes, nombre)"),
     # Contador de versiones POR PIEZA: dos ediciones concurrentes calculaban `MAX(version)+1`
     # y, sin unicidad, insertaban la MISMA version (historial duplicado/roto). El indice unico
     # convierte ese choque en una UniqueViolation que el INSERT REINTENTA con el numero siguiente

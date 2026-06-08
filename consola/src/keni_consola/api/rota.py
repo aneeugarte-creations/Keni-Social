@@ -177,6 +177,24 @@ def _marca_param(request: Request) -> tuple[str | None, Response | None]:
     return marca, None
 
 
+def _marca_cuerpo(datos: dict[str, Any]) -> tuple[str, Response | None]:
+    """Marca OBLIGATORIA del cuerpo de una escritura del grid (aprobar/copiar/lote).
+
+    GRID POR MARCA: las operaciones que MUTAN una rejilla exigen una marca concreta — no
+    tienen sentido en "Todas". Devuelve `(marca, None)` con el id canonico, o `("", 400)` si
+    falta o no existe (el handler propaga la respuesta tal cual).
+    """
+    marca = str(datos.get("marca") or "").strip()
+    if not marca:
+        return "", JSONResponse(
+            {"error": "Elige una marca concreta (no «Todas») para esta operación."},
+            status_code=400,
+        )
+    if not marcas.es_marca(marca):
+        return "", JSONResponse({"error": "Marca no reconocida."}, status_code=400)
+    return marca, None
+
+
 # --------------------------------------------------------------------------- #
 # Serializacion                                                                #
 # --------------------------------------------------------------------------- #
@@ -246,11 +264,15 @@ def _turno_a_dict(
         "motivo": turno["motivo"],
         "nota_relevo": turno["nota_relevo"],
         "es_sabado": dominio.es_sabado(turno["fecha"]),
+        # GRID POR MARCA: la rejilla a la que pertenece el turno (la UI etiqueta en "Todas").
+        "marca": turno.get("marca", "") or "",
+        "marca_nombre": marcas.etiqueta_de(turno["marca"]) if turno.get("marca") else "",
     }
 
 
 def _franja_semana_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
     """Serializa una `FranjaDef` al contrato HTTP."""
+    marca_id = franja.get("marca", "") or ""
     return {
         "id": franja["id"],
         "lunes": franja["lunes"],
@@ -259,6 +281,9 @@ def _franja_semana_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
         "fin": franja["fin"],
         "orden": int(franja.get("orden", 0)),
         "es_descanso": bool(franja.get("es_descanso", False)),
+        # GRID POR MARCA: la rejilla (marca) a la que pertenece esta columna.
+        "marca": marca_id,
+        "marca_nombre": marcas.etiqueta_de(marca_id) if marca_id else "",
     }
 
 
@@ -281,11 +306,18 @@ def _hhmm_valido(valor: Any) -> bool:
     return True
 
 
-def _franjas_de_semana(lunes_iso: str) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Devuelve `(franjas_lista, franjas_por_id)` de la semana. Siembra por defecto si vacio."""
-    franjas = repos.listar_franjas_semana(lunes_iso) if lunes_iso else []
-    if not franjas and lunes_iso:
-        franjas = repos.sembrar_franjas_por_defecto(lunes_iso)
+def _franjas_de_semana(
+    lunes_iso: str, marca: str | None = None
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Devuelve `(franjas_lista, franjas_por_id)` de la semana, acotadas a la rejilla `marca`.
+
+    GRID POR MARCA: con `marca` concreta lista (y SIEMBRA por defecto si vacio) la rejilla de
+    esa marca. En "Todas" (`marca` None) lista las franjas de TODAS las marcas (union, columnas
+    etiquetadas) y NO siembra (sin una marca concreta no hay rejilla que sembrar).
+    """
+    franjas = repos.listar_franjas_semana(lunes_iso, marca) if lunes_iso else []
+    if not franjas and lunes_iso and marca:
+        franjas = repos.sembrar_franjas_por_defecto(lunes_iso, marca)
     return franjas, {f["id"]: f for f in franjas}
 
 
@@ -682,18 +714,22 @@ def _semana_de_turno(lunes_param: str, fecha: str) -> str:
     return dominio.lunes_de_semana_iso(fecha)
 
 
-def _turnos_semana(lunes_iso: str) -> dict[str, Any]:
+def _turnos_semana(lunes_iso: str, marca: str | None = None) -> dict[str, Any]:
     """Construye el payload de los turnos de una semana (incluye las franjas vivas).
 
     Las franjas viajan en la respuesta (`franjas`) para que el frontend renderice la
     rejilla NxDIAS sin un fetch extra. Si la semana no tiene franjas todavia, las
     siembra por defecto (Mañana, Tarde) y las devuelve.
+
+    GRID POR MARCA: `marca` acota turnos y franjas a la rejilla de esa marca; en "Todas"
+    (`marca` None) devuelve los de TODAS las marcas (la UI los apila etiquetados). `aprobada`
+    se calcula sobre lo devuelto (en "Todas" exige que TODO lo apilado este aprobado).
     """
     nombres = _nombres_equipo()
-    franjas_lista, franjas_por_id = _franjas_de_semana(lunes_iso)
+    franjas_lista, franjas_por_id = _franjas_de_semana(lunes_iso, marca)
     turnos = [
         _turno_a_dict(t, nombres, franjas_por_id)
-        for t in repos.listar_turnos_rota(semana=lunes_iso)
+        for t in repos.listar_turnos_rota(semana=lunes_iso, marca=marca)
     ]
     inicio, fin = dominio.rango_semana(lunes_iso) if lunes_iso else ("", "")
     aprobada = bool(turnos) and all(t["estado"] == "aprobado" for t in turnos)
@@ -710,9 +746,15 @@ def _turnos_semana(lunes_iso: str) -> dict[str, Any]:
 
 
 async def turnos_semana(request: Request) -> Response:
-    """GET /api/rota/turnos[?lunes]: los turnos (horario) de una semana."""
+    """GET /api/rota/turnos[?lunes&marca]: los turnos (horario) de una semana.
+
+    GRID POR MARCA: `?marca=` acota a la rejilla de esa marca; ausente = "Todas" (apila todas).
+    """
     lunes = _lunes_param(request)
-    return JSONResponse(_turnos_semana(lunes))
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    return JSONResponse(_turnos_semana(lunes, marca))
 
 
 def _validar_y_resolver_turno(
@@ -826,6 +868,10 @@ def _validar_y_resolver_turno(
                 status_code=400,
             )
         campos["franja_id"] = franja_id
+        # GRID POR MARCA: el turno hereda la marca de su franja (la rejilla a la que pertenece).
+        # Es la fuente de verdad de la marca del turno (no un campo de body aparte), asi nunca
+        # cae un turno en una rejilla que no es la de su columna.
+        campos["marca"] = franja_def.get("marca", "") or ""
     elif legacy_franja is not None and "franja_id" in campos:
         # ya resuelto via legacy; nada que hacer.
         pass
@@ -981,6 +1027,8 @@ async def crear_turno(request: Request) -> Response:
         override=override,
         motivo=campos.get("motivo", ""),
         nota_relevo=campos.get("nota_relevo", ""),
+        # GRID POR MARCA: la marca la fija la franja elegida (ver `_validar_y_resolver_turno`).
+        marca=campos.get("marca", ""),
     )
     return JSONResponse({"turno": _turno_a_dict(turno, nombres, franjas_por_id)}, status_code=201)
 
@@ -1145,6 +1193,8 @@ async def crear_turnos_lote(request: Request) -> Response:
                 "override": override,
                 "motivo": campos.get("motivo", ""),
                 "nota_relevo": campos.get("nota_relevo", ""),
+                # GRID POR MARCA: cada turno hereda la marca de su franja (ver validacion).
+                "marca": campos.get("marca", ""),
             }
         )
 
@@ -1409,13 +1459,17 @@ async def aprobar_turnos(request: Request) -> Response:
             {"error": "Indica el lunes de la semana a aprobar (AAAA-MM-DD)."},
             status_code=400,
         )
-    n = repos.aprobar_semana_rota(lunes)
+    # GRID POR MARCA: aprobar una rejilla exige una marca concreta (no "Todas").
+    marca, error = _marca_cuerpo(datos)
+    if error is not None:
+        return error
+    n = repos.aprobar_semana_rota(lunes, marca)
     if n == 0:
         return JSONResponse(
             {"error": "No hay turnos en esa semana para aprobar. Asigna los turnos primero."},
             status_code=400,
         )
-    payload = _turnos_semana(lunes)
+    payload = _turnos_semana(lunes, marca)
     payload["mensaje"] = f"Turnos aprobados y publicados al equipo ({n} turnos)."
     return JSONResponse(payload)
 
@@ -1436,22 +1490,32 @@ async def despublicar_turnos(request: Request) -> Response:
             {"error": "Indica el lunes de la semana a despublicar (AAAA-MM-DD)."},
             status_code=400,
         )
-    n = repos.desaprobar_semana_rota(lunes)
+    # GRID POR MARCA: despublicar una rejilla exige una marca concreta (no "Todas").
+    marca, error = _marca_cuerpo(datos)
+    if error is not None:
+        return error
+    n = repos.desaprobar_semana_rota(lunes, marca)
     if n == 0:
         return JSONResponse(
             {"error": "No hay turnos en esa semana para despublicar."},
             status_code=400,
         )
-    payload = _turnos_semana(lunes)
+    payload = _turnos_semana(lunes, marca)
     payload["mensaje"] = f"Semana despublicada: vuelve a borrador ({n} turnos editables)."
     return JSONResponse(payload)
 
 
 async def mis_turnos(request: Request) -> Response:
-    """GET /api/rota/mis-turnos[?lunes]: los turnos del USUARIO actual en esa semana."""
+    """GET /api/rota/mis-turnos[?lunes&marca]: los turnos del USUARIO actual en esa semana.
+
+    GRID POR MARCA: `?marca=` acota a la rejilla de esa marca; ausente = todas las marcas.
+    """
     lunes = _lunes_param(request)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
     usuario = _usuario_actual(request)
-    base = _turnos_semana(lunes)
+    base = _turnos_semana(lunes, marca)
     if usuario is None:
         return JSONResponse(
             {
@@ -1518,9 +1582,10 @@ async def cobertura_semana(request: Request) -> Response:
     franja_id, franja_nombre, turno_id, override}, ...]}], franjas}`. NO persiste nada;
     cruza turnos x eventos x franjas vivas de la semana. Sin `lunes` valido -> 400.
 
-    `?marca=` acota los eventos a una marca (multi-tenant por `rota_eventos.marca`);
-    ausente/vacio -> "Todas" (todas las marcas agregadas). Los turnos/franjas del equipo
-    son compartidos: la marca solo filtra QUE se cubre, no QUIEN trabaja.
+    GRID POR MARCA: `?marca=` acota la rejilla ENTERA (eventos, turnos y franjas) a esa marca;
+    ausente/vacio -> "Todas" (todas las marcas agregadas: la UI apila las columnas/turnos
+    etiquetando cada uno con su marca). `franjas_config` se devuelve para la marca activa (o
+    los defaults en "Todas").
     """
     lunes = _lunes_param(request)
     if not lunes:
@@ -1534,10 +1599,10 @@ async def cobertura_semana(request: Request) -> Response:
     eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin, marca=marca)
     # Filtra los `no_cubrir` por defecto (no se cubren por convencion editorial).
     eventos = [e for e in eventos if (e.get("tipo_cobertura") or "transmision") != TIPO_COBERTURA_NO_CUBRIR]
-    turnos = repos.listar_turnos_rota(semana=lunes)
+    turnos = repos.listar_turnos_rota(semana=lunes, marca=marca)
     nombres = _nombres_equipo()
-    franjas_cfg = repos.obtener_franjas_config()
-    franjas_lista, franjas_por_id = _franjas_de_semana(lunes)
+    franjas_cfg = repos.obtener_franjas_config(marca or "")
+    franjas_lista, franjas_por_id = _franjas_de_semana(lunes, marca)
     return JSONResponse(
         {
             "lunes": lunes,
@@ -1560,10 +1625,13 @@ async def cobertura_evento(request: Request) -> Response:
     if evento is None:
         return JSONResponse({"error": "El evento no existe."}, status_code=404)
     semana = dominio.lunes_de_semana_iso(evento.get("fecha", ""))
-    turnos = repos.listar_turnos_rota(semana=semana) if semana else []
+    # GRID POR MARCA: la cobertura del evento se cruza con la rejilla de SU marca (turnos y
+    # franjas de esa marca); sin marca (evento legado) cae al comportamiento agregado.
+    marca_ev = evento.get("marca", "") or None
+    turnos = repos.listar_turnos_rota(semana=semana, marca=marca_ev) if semana else []
     nombres = _nombres_equipo()
-    franjas_cfg = repos.obtener_franjas_config()
-    franjas_lista, franjas_por_id = _franjas_de_semana(semana) if semana else ([], {})
+    franjas_cfg = repos.obtener_franjas_config(marca_ev or "")
+    franjas_lista, franjas_por_id = _franjas_de_semana(semana, marca_ev) if semana else ([], {})
     return JSONResponse(
         {
             "evento": _cobertura_para_evento(
@@ -1583,9 +1651,11 @@ async def cobertura_evento(request: Request) -> Response:
 async def copiar_semana(request: Request) -> Response:
     """POST /api/rota/copiar-semana: replica los turnos de una semana a otra (offset +N dias).
 
-    Cuerpo: `{de_lunes, a_lunes, reemplazar?: bool}`. NO copia eventos (cada semana tiene los
-    suyos); copia EXCLUSIVAMENTE turnos del horario. Con `reemplazar=true`, primero borra los
-    turnos existentes de `a_lunes`. Devuelve `{copiados: N}`.
+    Cuerpo: `{de_lunes, a_lunes, marca, reemplazar?: bool}`. NO copia eventos (cada semana tiene
+    los suyos); copia EXCLUSIVAMENTE la rejilla (franjas + turnos) de UNA marca. Con
+    `reemplazar=true`, primero borra los turnos de esa marca en `a_lunes`. Devuelve `{copiados: N}`.
+
+    GRID POR MARCA: copiar exige una marca concreta (no "Todas": cada rejilla se copia aparte).
     """
     datos = await leer_json(request)
     de_lunes = dominio.lunes_de_semana_iso(str(datos.get("de_lunes", "")).strip())
@@ -1601,8 +1671,11 @@ async def copiar_semana(request: Request) -> Response:
             {"error": "La semana origen y la destino no pueden ser la misma."},
             status_code=400,
         )
+    marca, error = _marca_cuerpo(datos)
+    if error is not None:
+        return error
 
-    n = repos.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
+    n = repos.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar, marca=marca)
     return JSONResponse({"copiados": n})
 
 
@@ -1625,10 +1698,10 @@ async def carga_semana(request: Request) -> Response:
     if error is not None:
         return error
     equipo = _equipo()
-    turnos = repos.listar_turnos_rota(semana=lunes)
+    turnos = repos.listar_turnos_rota(semana=lunes, marca=marca)
     inicio, fin = dominio.rango_semana(lunes)
     eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin, marca=marca)
-    franjas_lista, _por_id = _franjas_de_semana(lunes)
+    franjas_lista, _por_id = _franjas_de_semana(lunes, marca)
     cargas = dominio.resumen_carga(
         equipo,
         turnos,
@@ -1663,24 +1736,26 @@ _CABECERAS_EXPORT = ("Fecha", "Día", "Hora", "Evento / transmisión", "Qué sac
 _DIAS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
 
-def _filas_export(lunes_iso: str) -> tuple[list[str], list[list[str]]]:
+def _filas_export(
+    lunes_iso: str, marca: str | None = None
+) -> tuple[list[str], list[list[str]]]:
     """Devuelve `(titulo, filas)` de la cobertura DERIVADA de la semana, lista para xlsx/CSV.
 
     Una fila por (evento, miembro cubridor). Eventos sin cubridores aparecen con `Persona`
     vacia (Elias detecta huecos al exportar). Cobertura DERIVADA: cruza eventos × turnos ×
-    franjas vivas de la semana.
+    franjas vivas de la semana. GRID POR MARCA: `marca` acota a esa rejilla (None = todas).
     """
     if not lunes_iso:
         return "Rota", []
     inicio, fin = dominio.rango_semana(lunes_iso)
-    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
+    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin, marca=marca)
     eventos = [
         e for e in eventos
         if (e.get("tipo_cobertura") or "transmision") != TIPO_COBERTURA_NO_CUBRIR
     ]
-    turnos = repos.listar_turnos_rota(semana=lunes_iso)
+    turnos = repos.listar_turnos_rota(semana=lunes_iso, marca=marca)
     nombres = _nombres_equipo()
-    franjas_lista, _por_id = _franjas_de_semana(lunes_iso)
+    franjas_lista, _por_id = _franjas_de_semana(lunes_iso, marca)
     filas: list[list[str]] = []
     from datetime import date as _date
 
@@ -1726,15 +1801,17 @@ def _nombre_descarga(lunes_iso: str, ext: str) -> str:
     return f"rota-{sufijo}.{ext}"
 
 
-def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
+def _grid_horario(
+    lunes_iso: str, marca: str | None = None
+) -> tuple[str, list[str], list[list[str]]]:
     """Construye `(titulo, cabeceras, filas)` del horario persona×día de la semana.
 
     Cabeceras = ["Persona", Lun..Dom]; cada fila es un miembro con su franja por día
     (el `nombre` de la franja viva, "Ausente" si una ausencia cubre ese día, "—" si no
     hay turno asignado). Reutiliza `_turnos_semana` y las ausencias para marcar la
-    indisponibilidad.
+    indisponibilidad. GRID POR MARCA: `marca` acota a esa rejilla (None = todas).
     """
-    turnos_payload = _turnos_semana(lunes_iso)
+    turnos_payload = _turnos_semana(lunes_iso, marca)
     dias = turnos_payload["dias"]
     equipo = _equipo()
     ausencias = _ausencias_dominio()
@@ -1768,9 +1845,12 @@ def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
 
 
 async def export_csv(request: Request) -> Response:
-    """GET /api/rota/export.csv[?lunes]: descarga la rota de la semana en CSV."""
+    """GET /api/rota/export.csv[?lunes&marca]: descarga la rota de la semana en CSV."""
     lunes = _lunes_param(request)
-    _, filas = _filas_export(lunes)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    _, filas = _filas_export(lunes, marca)
     buffer = io.StringIO()
     escritor = csv.writer(buffer)
     escritor.writerow(_CABECERAS_EXPORT)
@@ -1791,7 +1871,10 @@ async def export_xlsx(request: Request) -> Response:
     estuviera disponible, degrada con un 500 accionable (sin traceback crudo).
     """
     lunes = _lunes_param(request)
-    titulo, filas = _filas_export(lunes)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    titulo, filas = _filas_export(lunes, marca)
     try:
         import xlsxwriter
     except ImportError:
@@ -1818,7 +1901,7 @@ async def export_xlsx(request: Request) -> Response:
         hoja.set_column(col, col, ancho)
 
     # Hoja 2: horario de trabajo del equipo (grid persona×día) — gestión de turnos.
-    titulo_h, cabeceras_h, filas_h = _grid_horario(lunes)
+    titulo_h, cabeceras_h, filas_h = _grid_horario(lunes, marca)
     hoja_h = libro.add_worksheet("Horario equipo")
     hoja_h.write(0, 0, titulo_h, fmt_titulo)
     for col, encabezado in enumerate(cabeceras_h):
@@ -1898,6 +1981,9 @@ def _swap_a_dict(swap: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any
         "decidido_destinatario": swap["decidido_destinatario"],
         "decidido_admin": swap["decidido_admin"],
         "aplicado": swap["aplicado"],
+        # GRID POR MARCA: la rejilla del swap (la UI la etiqueta en "Todas").
+        "marca": swap.get("marca", "") or "",
+        "marca_nombre": marcas.etiqueta_de(swap["marca"]) if swap.get("marca") else "",
     }
 
 
@@ -1939,6 +2025,9 @@ async def listar_swaps(request: Request) -> Response:
     estado = _estado_param(request)
     solicitante_id = (request.query_params.get("solicitante_id") or "").strip() or None
     destinatario_id = (request.query_params.get("destinatario_id") or "").strip() or None
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
     mio_id: str | None = None
     if _mio_param(request):
         usuario = _usuario_actual(request)
@@ -1952,6 +2041,7 @@ async def listar_swaps(request: Request) -> Response:
         solicitante_id=solicitante_id,
         destinatario_id=destinatario_id,
         mio_id=mio_id,
+        marca=marca,
     )
     nombres = _nombres_equipo()
     return JSONResponse({"swaps": [_swap_a_dict(s, nombres) for s in swaps]})
@@ -2002,13 +2092,13 @@ async def crear_swap(request: Request) -> Response:
             {"error": "Indica `franja_a` y `franja_b` (franja_id de la semana de cada turno)."},
             status_code=400,
         )
-    if (
-        repos.obtener_franja_semana(franja_a) is None
-        or repos.obtener_franja_semana(franja_b) is None
-    ):
+    franja_a_def = repos.obtener_franja_semana(franja_a)
+    if franja_a_def is None or repos.obtener_franja_semana(franja_b) is None:
         return JSONResponse(
             {"error": "Alguna de las franjas indicadas no existe."}, status_code=400
         )
+    # GRID POR MARCA: el swap pertenece a la rejilla del turno A (denormalizamos su marca).
+    marca_swap = franja_a_def.get("marca", "") or ""
 
     # Los turnos DEBEN existir en el horario: si no, no hay nada que cambiar.
     if not _existe_turno(usuario["id"], fecha_a, franja_a):
@@ -2044,6 +2134,7 @@ async def crear_swap(request: Request) -> Response:
         solicitante_nombre=nombres.get(usuario["id"], usuario.get("usuario", "")),
         destinatario_nombre=nombres.get(destinatario_id, ""),
         motivo=motivo,
+        marca=marca_swap,
     )
     return JSONResponse({"swap": _swap_a_dict(swap, nombres)}, status_code=201)
 
@@ -2521,9 +2612,15 @@ def _minutos_de(hhmm: str) -> int:
 
 
 async def obtener_config_franjas(request: Request) -> Response:
-    """GET /api/rota/config/franjas: devuelve los rangos vigentes (defaults si no hay)."""
-    del request
-    return JSONResponse({"franjas": repos.obtener_franjas_config()})
+    """GET /api/rota/config/franjas[?marca]: rangos vigentes de la marca (defaults si no hay).
+
+    GRID POR MARCA: la config de franjas es por marca; `?marca=` elige cuál. En "Todas"
+    (sin marca) devuelve los defaults del dominio.
+    """
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    return JSONResponse({"franjas": repos.obtener_franjas_config(marca or "")})
 
 
 async def guardar_config_franjas(request: Request) -> Response:
@@ -2539,6 +2636,15 @@ async def guardar_config_franjas(request: Request) -> Response:
         return JSONResponse(
             {"error": "Solo un admin puede editar la configuración de franjas."},
             status_code=403,
+        )
+    # GRID POR MARCA: la config es por marca; editar exige una marca concreta (no "Todas").
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    if not marca:
+        return JSONResponse(
+            {"error": "Elige una marca concreta para editar su configuración de franjas."},
+            status_code=400,
         )
     datos = await leer_json(request)
     campos = (
@@ -2575,6 +2681,7 @@ async def guardar_config_franjas(request: Request) -> Response:
         datos["matutino_fin"],
         datos["vespertino_inicio"],
         datos["vespertino_fin"],
+        marca,
     )
     return JSONResponse({"franjas": franjas})
 
@@ -2585,16 +2692,20 @@ async def guardar_config_franjas(request: Request) -> Response:
 
 
 async def listar_franjas_de_semana(request: Request) -> Response:
-    """GET /api/rota/semana/{lunes}/franjas: las franjas vivas de esa semana.
+    """GET /api/rota/semana/{lunes}/franjas[?marca]: las franjas vivas de esa semana.
 
-    Siembra por defecto (Mañana, Tarde, Descanso) si la semana aun no tiene franjas.
+    GRID POR MARCA: `?marca=` acota a la rejilla de esa marca (y siembra por defecto si vacía).
+    En "Todas" (sin marca) devuelve las franjas de TODAS las marcas (no siembra).
     """
     lunes = dominio.lunes_de_semana_iso(request.path_params["lunes"])
     if not lunes:
         return JSONResponse(
             {"error": "Indica un lunes válido (AAAA-MM-DD)."}, status_code=400
         )
-    franjas, _por_id = _franjas_de_semana(lunes)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    franjas, _por_id = _franjas_de_semana(lunes, marca)
     return JSONResponse({"franjas": [_franja_semana_a_dict(f) for f in franjas]})
 
 
@@ -2613,6 +2724,14 @@ async def crear_franja_de_semana(request: Request) -> Response:
     if not lunes:
         return JSONResponse(
             {"error": "Indica un lunes válido (AAAA-MM-DD)."}, status_code=400
+        )
+    # GRID POR MARCA: crear una franja (columna) exige una marca concreta (no "Todas").
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    if not marca:
+        return JSONResponse(
+            {"error": "Elige una marca concreta para crear su franja."}, status_code=400
         )
     datos = await leer_json(request)
     nombre = str(datos.get("nombre", "")).strip()
@@ -2636,11 +2755,11 @@ async def crear_franja_de_semana(request: Request) -> Response:
             {"error": "`orden` debe ser un entero."}, status_code=400
         )
     creada = repos.crear_franja_semana(
-        lunes, nombre, inicio, fin, orden=orden_int, es_descanso=es_descanso
+        lunes, nombre, inicio, fin, orden=orden_int, es_descanso=es_descanso, marca=marca
     )
     if creada is None:
         return JSONResponse(
-            {"error": f"Ya hay una franja llamada «{nombre}» en esa semana."},
+            {"error": f"Ya hay una franja llamada «{nombre}» en esa marca esa semana."},
             status_code=409,
         )
     return JSONResponse(_franja_semana_a_dict(creada), status_code=201)
@@ -2718,8 +2837,11 @@ async def listar_coordinacion_de_semana(request: Request) -> Response:
         return JSONResponse(
             {"error": "Indica un lunes válido (AAAA-MM-DD)."}, status_code=400
         )
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
     nombres = _nombres_equipo()
-    coordinacion = repos.listar_coordinacion_semana(lunes)
+    coordinacion = repos.listar_coordinacion_semana(lunes, marca)
     return JSONResponse(
         {
             "lunes": lunes,
@@ -2729,6 +2851,11 @@ async def listar_coordinacion_de_semana(request: Request) -> Response:
                     "franja_id": c["franja_id"],
                     "coordinador_id": c["coordinador_id"],
                     "coordinador_nombre": nombres.get(c["coordinador_id"], ""),
+                    # GRID POR MARCA: la rejilla de la celda (la UI etiqueta en "Todas").
+                    "marca": c.get("marca", "") or "",
+                    "marca_nombre": (
+                        marcas.etiqueta_de(c["marca"]) if c.get("marca") else ""
+                    ),
                 }
                 for c in coordinacion
             ],
@@ -2785,7 +2912,12 @@ async def set_coordinador_de_celda(request: Request) -> Response:
             },
             status_code=400,
         )
-    registro = repos.actualizar_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
+    # GRID POR MARCA: la celda hereda la marca de su franja (fuente de verdad de la rejilla).
+    franja_def = repos.obtener_franja_semana(franja_id)
+    marca_celda = (franja_def or {}).get("marca", "") or ""
+    registro = repos.actualizar_coordinador_rota(
+        lunes, fecha, franja_id, coordinador_id, marca_celda
+    )
     nombres = _nombres_equipo()
     return JSONResponse(
         {
@@ -2793,6 +2925,10 @@ async def set_coordinador_de_celda(request: Request) -> Response:
             "franja_id": registro["franja_id"],
             "coordinador_id": registro["coordinador_id"],
             "coordinador_nombre": nombres.get(registro["coordinador_id"], ""),
+            "marca": registro.get("marca", "") or "",
+            "marca_nombre": (
+                marcas.etiqueta_de(registro["marca"]) if registro.get("marca") else ""
+            ),
         }
     )
 

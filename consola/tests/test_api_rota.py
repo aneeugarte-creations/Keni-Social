@@ -35,6 +35,9 @@ SAB2 = "2026-06-06"
 LUNES1 = "2026-05-25"
 LUNES2 = "2026-06-01"
 
+# Marca canonica del piloto (la rejilla por defecto del grid por marca).
+MARCA = "claro-sports"
+
 
 def _crear_equipo(n: int = 2, *, cobertura: bool = True) -> list[dict]:
     """Crea n usuarios (miembros del equipo) directos en la BD; devuelve su forma pública.
@@ -67,10 +70,15 @@ def _crear_turno(
     override: bool = False,
     motivo: str = "",
     nota_relevo: str = "",
+    marca: str = "",
 ) -> dict:
     """Siembra un TURNO en la BD (Elias asigna a mano; el backend solo persiste).
 
     El turno es el horario del miembro en `(fecha, franja)`. NO va atado a un evento.
+
+    GRID POR MARCA: por defecto `marca=""` (rejilla legada, visible en "Todas"). Pasa
+    `marca="claro-sports"` cuando el test ejerce una rejilla concreta (aprobar/copiar): el
+    literal `franja` siembra las franjas por defecto DE ESA marca y el turno queda en ella.
     """
     return repos.crear_turno_rota(
         semana,
@@ -81,6 +89,7 @@ def _crear_turno(
         override=override,
         motivo=motivo,
         nota_relevo=nota_relevo,
+        marca=marca,
     )
 
 
@@ -763,10 +772,16 @@ def test_aprobar_turnos_marca_semana_publicada(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     equipo = _crear_equipo(1)
-    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino")
-    assert token_cli.get(f"/api/rota/turnos?lunes={LUNES1}").json()["aprobada"] is False
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino", marca=MARCA)
+    assert (
+        token_cli.get(f"/api/rota/turnos?lunes={LUNES1}&marca={MARCA}").json()["aprobada"]
+        is False
+    )
     admin = _cli_admin_sesion(app)
-    r = admin.post("/api/rota/turnos/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    # GRID POR MARCA: aprobar exige una marca concreta (no "Todas").
+    r = admin.post(
+        "/api/rota/turnos/aprobar", json={"lunes": LUNES1, "marca": MARCA}, headers=_ORIGIN
+    )
     assert r.status_code == 200, r.text
     assert r.json()["aprobada"] is True
     assert all(t["estado"] == "aprobado" for t in r.json()["turnos"])
@@ -774,6 +789,18 @@ def test_aprobar_turnos_marca_semana_publicada(entorno):
 
 def test_aprobar_turnos_sin_turnos_400(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    admin = _cli_admin_sesion(app)
+    r = admin.post(
+        "/api/rota/turnos/aprobar", json={"lunes": LUNES1, "marca": MARCA}, headers=_ORIGIN
+    )
+    assert r.status_code == 400
+
+
+def test_aprobar_turnos_sin_marca_400(entorno):
+    """GRID POR MARCA: aprobar SIN una marca concreta (vista "Todas") -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(1)
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino", marca=MARCA)
     admin = _cli_admin_sesion(app)
     r = admin.post("/api/rota/turnos/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
     assert r.status_code == 400
@@ -797,10 +824,16 @@ def test_despublicar_turnos_revierte_a_borrador(entorno):
     """Tras aprobar, el admin puede despublicar la semana para volver a editarla."""
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     equipo = _crear_equipo(1)
-    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino")
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino", marca=MARCA)
     admin = _cli_admin_sesion(app)
-    admin.post("/api/rota/turnos/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
-    r = admin.post("/api/rota/turnos/despublicar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    admin.post(
+        "/api/rota/turnos/aprobar", json={"lunes": LUNES1, "marca": MARCA}, headers=_ORIGIN
+    )
+    r = admin.post(
+        "/api/rota/turnos/despublicar",
+        json={"lunes": LUNES1, "marca": MARCA},
+        headers=_ORIGIN,
+    )
     assert r.status_code == 200, r.text
     assert r.json()["aprobada"] is False
     assert all(t["estado"] == "propuesto" for t in r.json()["turnos"])
@@ -809,6 +842,23 @@ def test_despublicar_turnos_revierte_a_borrador(entorno):
 def test_despublicar_sin_turnos_400(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     admin = _cli_admin_sesion(app)
+    r = admin.post(
+        "/api/rota/turnos/despublicar",
+        json={"lunes": LUNES1, "marca": MARCA},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_despublicar_sin_marca_400(entorno):
+    """GRID POR MARCA: despublicar SIN una marca concreta (vista "Todas") -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(1)
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino", marca=MARCA)
+    admin = _cli_admin_sesion(app)
+    admin.post(
+        "/api/rota/turnos/aprobar", json={"lunes": LUNES1, "marca": MARCA}, headers=_ORIGIN
+    )
     r = admin.post("/api/rota/turnos/despublicar", json={"lunes": LUNES1}, headers=_ORIGIN)
     assert r.status_code == 400
 
@@ -1027,17 +1077,18 @@ def test_export_xlsx_incluye_hoja_horario(cliente):
 def test_copiar_semana_replica_turnos_con_offset(cliente):
     equipo = _crear_equipo(2)
     luis, tescu = equipo[0], equipo[1]
-    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino")
-    _crear_turno(LUNES1, "2026-05-25", tescu, franja="vespertino")
-    _crear_turno(LUNES1, SAB1, luis, franja="descanso")
-    _crear_turno(LUNES1, SAB1, tescu, franja="matutino")
+    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino", marca=MARCA)
+    _crear_turno(LUNES1, "2026-05-25", tescu, franja="vespertino", marca=MARCA)
+    _crear_turno(LUNES1, SAB1, luis, franja="descanso", marca=MARCA)
+    _crear_turno(LUNES1, SAB1, tescu, franja="matutino", marca=MARCA)
+    # GRID POR MARCA: copiar exige una marca concreta (copia solo esa rejilla).
     r = cliente.post(
         "/api/rota/copiar-semana",
-        json={"de_lunes": LUNES1, "a_lunes": LUNES2},
+        json={"de_lunes": LUNES1, "a_lunes": LUNES2, "marca": MARCA},
     )
     assert r.status_code == 200, r.text
     assert r.json()["copiados"] == 4
-    semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}").json()
+    semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()
     fechas_franjas = {(t["fecha"], t["miembro_id"], t["franja"]) for t in semana2["turnos"]}
     assert (LUNES2, luis["id"], "matutino") in fechas_franjas
     assert (LUNES2, tescu["id"], "vespertino") in fechas_franjas
@@ -1049,7 +1100,18 @@ def test_copiar_semana_replica_turnos_con_offset(cliente):
 def test_copiar_semana_misma_origen_destino_400(cliente):
     r = cliente.post(
         "/api/rota/copiar-semana",
-        json={"de_lunes": LUNES1, "a_lunes": LUNES1},
+        json={"de_lunes": LUNES1, "a_lunes": LUNES1, "marca": MARCA},
+    )
+    assert r.status_code == 400
+
+
+def test_copiar_semana_sin_marca_400(cliente):
+    """GRID POR MARCA: copiar SIN una marca concreta (vista "Todas") -> 400."""
+    equipo = _crear_equipo(1)
+    _crear_turno(LUNES1, "2026-05-25", equipo[0], franja="matutino", marca=MARCA)
+    r = cliente.post(
+        "/api/rota/copiar-semana",
+        json={"de_lunes": LUNES1, "a_lunes": LUNES2},
     )
     assert r.status_code == 400
 
@@ -1057,15 +1119,15 @@ def test_copiar_semana_misma_origen_destino_400(cliente):
 def test_copiar_semana_reemplazar(cliente):
     equipo = _crear_equipo(1)
     luis = equipo[0]
-    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino")
-    _crear_turno(LUNES2, LUNES2, luis, franja="descanso")
+    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino", marca=MARCA)
+    _crear_turno(LUNES2, LUNES2, luis, franja="descanso", marca=MARCA)
     r = cliente.post(
         "/api/rota/copiar-semana",
-        json={"de_lunes": LUNES1, "a_lunes": LUNES2, "reemplazar": True},
+        json={"de_lunes": LUNES1, "a_lunes": LUNES2, "reemplazar": True, "marca": MARCA},
     )
     assert r.status_code == 200, r.text
     assert r.json()["copiados"] == 1
-    semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}").json()
+    semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()
     assert semana2["total"] == 1
     assert semana2["turnos"][0]["franja"] == "matutino"
 
@@ -1107,3 +1169,155 @@ def test_carga_resumen_por_persona(cliente):
 def test_carga_sin_lunes_400(cliente):
     r = cliente.get("/api/rota/carga")
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# GRID POR MARCA: aislamiento de rejillas entre marcas                          #
+# --------------------------------------------------------------------------- #
+
+
+def _cli_admin(app) -> TestClient:
+    """TestClient autenticado como admin (sesion); para los endpoints solo-admin."""
+    auth.crear_usuario("elias", CLAVE, "admin")
+    cli = TestClient(app)
+    r = cli.post(
+        "/api/auth/login", json={"usuario": "elias", "password": CLAVE}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+    return cli
+
+
+def test_franjas_independientes_por_marca_misma_semana(cliente):
+    """(a) Dos marcas tienen franjas INDEPENDIENTES la misma semana (sembrado por marca).
+
+    GET con `?marca=` siembra y devuelve SOLO la rejilla de esa marca; cada marca recibe sus
+    propias franjas por defecto (la "Mañana" de una NO es la "Mañana" de la otra).
+    """
+    cs = cliente.get(f"/api/rota/semana/{LUNES1}/franjas?marca=claro-sports").json()[
+        "franjas"
+    ]
+    uv = cliente.get(f"/api/rota/semana/{LUNES1}/franjas?marca=unotv").json()["franjas"]
+    # Ambas reciben "Mañana" (mismo nombre permitido en marcas distintas).
+    assert "Mañana" in {f["nombre"] for f in cs}
+    assert "Mañana" in {f["nombre"] for f in uv}
+    # Pero son franjas DISTINTAS (ids disjuntos) y cada una etiquetada con su marca.
+    ids_cs = {f["id"] for f in cs}
+    ids_uv = {f["id"] for f in uv}
+    assert ids_cs.isdisjoint(ids_uv)
+    assert all(f["marca"] == "claro-sports" for f in cs)
+    assert all(f["marca"] == "unotv" for f in uv)
+
+
+def test_crear_franja_mismo_nombre_en_dos_marcas_ok(entorno):
+    """(a) Crear una franja "Cobertura" en DOS marcas la misma semana NO choca (unicidad por
+    `(marca, lunes, nombre)`)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    for marca in ("claro-sports", "unotv"):
+        r = cli.post(
+            f"/api/rota/semana/{LUNES1}/franjas?marca={marca}",
+            json={"nombre": "Cobertura", "inicio": "17:00", "fin": "21:00"},
+            headers=_ORIGIN,
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["marca"] == marca
+
+
+def test_turnos_aislados_por_marca(cliente):
+    """(b) Un turno creado en la rejilla de la marca A NO aparece al listar la marca B."""
+    equipo = _crear_equipo(1)
+    ana = equipo[0]
+    _crear_turno(LUNES1, LUNES1, ana, franja="matutino", marca="claro-sports")
+    # Listando claro-sports: aparece.
+    cs = cliente.get(f"/api/rota/turnos?lunes={LUNES1}&marca=claro-sports").json()
+    assert cs["total"] == 1
+    assert cs["turnos"][0]["marca"] == "claro-sports"
+    # Listando unotv: NO aparece (otra rejilla).
+    uv = cliente.get(f"/api/rota/turnos?lunes={LUNES1}&marca=unotv").json()
+    assert uv["total"] == 0
+
+
+def test_vista_todas_agrega_ambas_marcas(cliente):
+    """(c) La vista "Todas" (sin `?marca`) agrega los turnos Y franjas de ambas marcas."""
+    equipo = _crear_equipo(2)
+    ana, beto = equipo[0], equipo[1]
+    _crear_turno(LUNES1, LUNES1, ana, franja="matutino", marca="claro-sports")
+    _crear_turno(LUNES1, LUNES1, beto, franja="vespertino", marca="unotv")
+    todas = cliente.get(f"/api/rota/turnos?lunes={LUNES1}").json()
+    # Los dos turnos, cada uno etiquetado con su marca.
+    assert todas["total"] == 2
+    marcas_turnos = {t["marca"] for t in todas["turnos"]}
+    assert marcas_turnos == {"claro-sports", "unotv"}
+    # Las franjas sembradas de ambas rejillas tambien se apilan en "Todas".
+    marcas_franjas = {f["marca"] for f in todas["franjas"]}
+    assert {"claro-sports", "unotv"} <= marcas_franjas
+
+
+def test_turno_hereda_marca_de_su_franja(cliente):
+    """POST /api/rota/turnos con `franja_id` de una rejilla -> el turno hereda esa marca."""
+    equipo = _crear_equipo(1)
+    ana = equipo[0]
+    franjas = cliente.get(
+        f"/api/rota/semana/{LUNES1}/franjas?marca=claro-sports"
+    ).json()["franjas"]
+    manana = next(f for f in franjas if f["nombre"] == "Mañana")
+    r = cliente.post(
+        "/api/rota/turnos",
+        json={"fecha": LUNES1, "miembro_id": ana["id"], "franja_id": manana["id"]},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["turno"]["marca"] == "claro-sports"
+
+
+def test_franjas_vacias_sin_marca_no_siembra(cliente):
+    """(d-bis) Sin `?marca`, una semana fresca NO siembra: devuelve [] (no hay rejilla)."""
+    r = cliente.get(f"/api/rota/semana/{LUNES1}/franjas")
+    assert r.status_code == 200, r.text
+    assert r.json()["franjas"] == []
+
+
+def test_post_franja_sin_marca_400(entorno):
+    """(d) POST franja SIN una marca concreta -> 400 (no hay rejilla que crear)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.post(
+        f"/api/rota/semana/{LUNES1}/franjas",
+        json={"nombre": "Cobertura", "inicio": "17:00", "fin": "21:00"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_patch_config_franjas_sin_marca_400(entorno):
+    """(d) PATCH config de franjas SIN una marca concreta -> 400 (config es por marca)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        "/api/rota/config/franjas",
+        json={
+            "matutino_inicio": "08:00",
+            "matutino_fin": "16:00",
+            "vespertino_inicio": "16:00",
+            "vespertino_fin": "24:00",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_patch_config_franjas_con_marca_ok(entorno):
+    """PATCH config con una marca concreta guarda la rejilla de esa marca."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        "/api/rota/config/franjas?marca=claro-sports",
+        json={
+            "matutino_inicio": "09:00",
+            "matutino_fin": "15:00",
+            "vespertino_inicio": "15:00",
+            "vespertino_fin": "23:00",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["franjas"]["matutino_inicio"] == "09:00"

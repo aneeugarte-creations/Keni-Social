@@ -275,6 +275,8 @@ _COLS_TURNO_ROTA = (
     "nota_relevo",
     "creado",
     "actualizado",
+    # GRID POR MARCA: el turno pertenece a la rejilla de UNA marca.
+    "marca",
 )
 _SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
 
@@ -290,6 +292,10 @@ _CAMPOS_EDITABLES_TURNO_ROTA: tuple[str, ...] = (
     "override",
     "motivo",
     "nota_relevo",
+    # GRID POR MARCA: `marca` sigue a `franja_id` (la API la deriva de la franja) para que
+    # mover un turno a otra franja mantenga turno.marca == franja.marca. La API no la acepta
+    # como campo suelto del body; la fija desde la franja en `_validar_y_resolver_turno`.
+    "marca",
 )
 
 
@@ -311,22 +317,25 @@ def crear_turno_rota(
     motivo: str = "",
     nota_relevo: str = "",
     franja: str | None = None,
+    marca: str = "",
 ) -> dict[str, Any]:
     """Inserta un TURNO (horario en `(fecha, franja_id)` para `miembro_id`) y lo devuelve.
 
     NO valida (lo hace la API). NO comprueba unicidad (semana, fecha, miembro_id,
     franja_id); eso es responsabilidad del endpoint POST (que devuelve 409 si choca).
 
+    GRID POR MARCA: `marca` ata el turno a la rejilla de esa marca.
+
     RETROCOMPAT: acepta `franja` (literal 'matutino'/'vespertino'/'descanso') traduciendolo
-    a `franja_id` via las franjas por defecto de la semana. Mismo contrato que el shim de
-    `repos.crear_turno_rota`; codigo NUEVO debe pasar `franja_id` directamente.
+    a `franja_id` via las franjas por defecto de la semana DE ESA MARCA. Mismo contrato que el
+    shim de `repos.crear_turno_rota`; codigo NUEVO debe pasar `franja_id` directamente.
     """
     if franja_id == "" and franja is not None:
         franja_norm = (franja or "").strip().lower()
         # Sembramos en la conexion local (sin pasar por `repos` para evitar ciclos).
         con_t = _conectar()
         try:
-            mapa = _sembrar_franjas_por_defecto_en(con_t, semana)
+            mapa = _sembrar_franjas_por_defecto_en(con_t, semana, marca)
             con_t.commit()
         finally:
             con_t.close()
@@ -350,6 +359,7 @@ def crear_turno_rota(
         "nota_relevo": nota_relevo or "",
         "creado": ahora,
         "actualizado": ahora,
+        "marca": marca or "",
     }
     con = _conectar()
     try:
@@ -365,17 +375,29 @@ def crear_turno_rota(
     return fila
 
 
-def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
-    """Turnos del horario; filtro opcional por `semana` (lunes ISO)."""
+def listar_turnos_rota(
+    semana: str | None = None, marca: str | None = None
+) -> list[dict[str, Any]]:
+    """Turnos del horario; filtros opcionales por `semana` (lunes ISO) y `marca`.
+
+    GRID POR MARCA: `marca` acota a la rejilla de esa marca; `None` ("Todas") NO filtra y
+    devuelve todas (la UI las apila etiquetando cada turno con su marca).
+    """
     sql = _SELECT_TURNO_ROTA
-    params: tuple[Any, ...] = ()
+    clausulas: list[str] = []
+    params: list[Any] = []
     if semana:
-        sql += " WHERE semana = ?"
-        params = (semana,)
+        clausulas.append("semana = ?")
+        params.append(semana)
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
     sql += " ORDER BY semana ASC, fecha ASC, franja_id ASC, creado ASC, id ASC"
     con = _conectar()
     try:
-        filas = con.execute(sql, params).fetchall()
+        filas = con.execute(sql, tuple(params)).fetchall()
     finally:
         con.close()
     return [_fila_a_turno_rota(f) for f in filas]
@@ -478,17 +500,23 @@ def borrar_turnos_rota_lote(ids: list[str]) -> int:
         con.close()
 
 
-def aprobar_semana_rota(semana: str) -> int:
-    """Marca TODOS los turnos de una semana como `aprobado` (publica al equipo).
+def aprobar_semana_rota(semana: str, marca: str | None = None) -> int:
+    """Marca los turnos de una semana como `aprobado` (publica al equipo).
 
-    Devuelve cuantos turnos quedaron aprobados. Idempotente: re-aprobar no rompe.
+    GRID POR MARCA: con `marca` aprueba SOLO la rejilla de esa marca; `None` aprueba todas
+    (la API exige marca concreta — aprobar en "Todas" no tiene sentido). Idempotente.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
+    clausulas = ["semana = ?"]
+    params: list[Any] = [ESTADO_ROTA_APROBADO, ahora, semana]
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE semana = ?",
-            (ESTADO_ROTA_APROBADO, ahora, semana),
+            f"UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE {' AND '.join(clausulas)}",  # noqa: S608 -- allowlist
+            tuple(params),
         )
         con.commit()
         return cur.rowcount
@@ -496,18 +524,23 @@ def aprobar_semana_rota(semana: str) -> int:
         con.close()
 
 
-def desaprobar_semana_rota(semana: str) -> int:
-    """Marca TODOS los turnos de una semana como `propuesto` (vuelve a borrador).
+def desaprobar_semana_rota(semana: str, marca: str | None = None) -> int:
+    """Marca los turnos de una semana como `propuesto` (vuelve a borrador).
 
-    Inverso de `aprobar_semana_rota`. Devuelve cuantos turnos quedaron en borrador.
+    Inverso de `aprobar_semana_rota`. GRID POR MARCA: con `marca` revierte SOLO esa rejilla.
     Idempotente.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
+    clausulas = ["semana = ?"]
+    params: list[Any] = [ESTADO_ROTA_PROPUESTO, ahora, semana]
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE semana = ?",
-            (ESTADO_ROTA_PROPUESTO, ahora, semana),
+            f"UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE {' AND '.join(clausulas)}",  # noqa: S608 -- allowlist
+            tuple(params),
         )
         con.commit()
         return cur.rowcount
@@ -545,6 +578,7 @@ def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "nota_relevo": entrada.get("nota_relevo", "") or "",
                 "creado": ahora,
                 "actualizado": ahora,
+                "marca": entrada.get("marca", "") or "",
             }
         )
     marcadores = ", ".join("?" for _ in _COLS_TURNO_ROTA)
@@ -592,6 +626,8 @@ def duplicar_turno_rota(
         override=bool(original.get("override", False)),
         motivo="",
         nota_relevo="",
+        # GRID POR MARCA: el clon hereda la marca de la rejilla del turno original.
+        marca=original.get("marca", "") or "",
     )
 
 
@@ -969,7 +1005,8 @@ def borrar_programa_rota(programa_id: str) -> bool:
 # soporte a franjas que cruzan medianoche). Se siembran 2 por defecto ("Mañana", "Tarde")
 # la primera vez que la API lee la semana; admin puede anadir, editar o borrar mas.
 
-_COLS_FRANJA_SEMANA = ("id", "lunes", "nombre", "inicio", "fin", "orden", "es_descanso")
+# GRID POR MARCA: `marca` es la rejilla a la que pertenece la franja (columna del grid).
+_COLS_FRANJA_SEMANA = ("id", "lunes", "nombre", "inicio", "fin", "orden", "es_descanso", "marca")
 _SELECT_FRANJA_SEMANA = (
     f"SELECT {', '.join(_COLS_FRANJA_SEMANA)} FROM rota_franjas"
 )
@@ -982,15 +1019,27 @@ def _fila_a_franja_semana(fila: Any) -> dict[str, Any]:
     return fila_dict
 
 
-def listar_franjas_semana(lunes: str) -> list[dict[str, Any]]:
-    """Franjas de la semana cuyo lunes es `lunes`, ordenadas por `orden` ASC."""
+def listar_franjas_semana(
+    lunes: str, marca: str | None = None
+) -> list[dict[str, Any]]:
+    """Franjas de la semana cuyo lunes es `lunes`, ordenadas por `orden` ASC.
+
+    GRID POR MARCA: `marca` acota a la rejilla de esa marca; `None` ("Todas") devuelve las de
+    TODAS las marcas (la UI las apila como columnas etiquetadas por marca).
+    """
     if not lunes:
         return []
+    clausulas = ["lunes = ?"]
+    params: list[Any] = [lunes]
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_FRANJA_SEMANA} WHERE lunes = ? ORDER BY orden ASC, nombre ASC",
-            (lunes,),
+            f"{_SELECT_FRANJA_SEMANA} WHERE {' AND '.join(clausulas)} "
+            "ORDER BY orden ASC, nombre ASC",
+            tuple(params),
         ).fetchall()
     finally:
         con.close()
@@ -1019,13 +1068,16 @@ def crear_franja_semana(
     *,
     orden: int = 0,
     es_descanso: bool = False,
+    marca: str = "",
 ) -> dict[str, Any] | None:
     """Inserta una franja en `rota_franjas`. Devuelve la franja creada o None si
-    ya existe una con el mismo `(lunes, nombre)` (UNIQUE).
+    ya existe una con el mismo `(marca, lunes, nombre)` (UNIQUE por marca).
 
     NO valida formato (lo hace la API): aqui solo persistimos lo que llega. La franja con
     `es_descanso=true` se trata como "no laboral": no cubre eventos (ver
     `rota.franjas_activas_en`), pero el turno existe (y puede asignarse a un miembro).
+
+    GRID POR MARCA: `marca` ata la franja (columna) a la rejilla de esa marca.
     """
     fila = {
         "id": uuid.uuid4().hex[:12],
@@ -1035,13 +1087,14 @@ def crear_franja_semana(
         "fin": fin,
         "orden": int(orden),
         "es_descanso": bool(es_descanso),
+        "marca": marca or "",
     }
     con = _conectar()
     try:
         try:
             con.execute(
-                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso, marca) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     fila["id"],
                     fila["lunes"],
@@ -1050,11 +1103,12 @@ def crear_franja_semana(
                     fila["fin"],
                     fila["orden"],
                     fila["es_descanso"],
+                    fila["marca"],
                 ),
             )
             con.commit()
         except IntegrityError:
-            # UNIQUE violation (lunes, nombre) -> ya existe. `_ConexionPg` ya hizo rollback.
+            # UNIQUE violation (marca, lunes, nombre) -> ya existe. `_ConexionPg` ya hizo rollback.
             return None
     finally:
         con.close()
@@ -1153,21 +1207,24 @@ def borrar_franja_semana(franja_id: str, *, forzar: bool = False) -> dict[str, A
         con.close()
 
 
-def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
-    """Idempotente: siembra ("Mañana", "Tarde") en `rota_franjas` para `lunes` si faltan.
+def sembrar_franjas_por_defecto(lunes: str, marca: str = "") -> list[dict[str, Any]]:
+    """Idempotente: siembra ("Mañana", "Tarde", "Descanso") para `(marca, lunes)` si faltan.
 
-    Devuelve la lista de franjas de la semana tras el sembrado (orden ASC). Si ya hay 2 o
-    mas y "Mañana"/"Tarde" estan presentes, no toca nada.
+    Devuelve la lista de franjas de ESA marca tras el sembrado (orden ASC). Si ya estan las
+    tres, no toca nada.
+
+    GRID POR MARCA: siembra la rejilla de UNA marca. La API NO siembra en "Todas" (sin marca
+    concreta no hay rejilla que sembrar).
     """
     if not lunes:
         return []
     con = _conectar()
     try:
-        _sembrar_franjas_por_defecto_en(con, lunes)
+        _sembrar_franjas_por_defecto_en(con, lunes, marca)
         con.commit()
     finally:
         con.close()
-    return listar_franjas_semana(lunes)
+    return listar_franjas_semana(lunes, marca or None)
 
 
 
@@ -1205,6 +1262,8 @@ _COLS_SWAP_TURNO = (
     "decidido_destinatario",
     "decidido_admin",
     "aplicado",
+    # GRID POR MARCA: marca de la rejilla del swap (denormalizada del turno A al crear).
+    "marca",
 )
 _SELECT_SWAP_TURNO = f"SELECT {', '.join(_COLS_SWAP_TURNO)} FROM rota_swaps_turno"
 
@@ -1240,18 +1299,19 @@ _COLS_CONFIG_FRANJAS = (
 )
 
 
-def obtener_franjas_config() -> dict[str, str]:
-    """Lee la config singleton de franjas. Si no existe, devuelve los DEFAULTS del dominio.
+def obtener_franjas_config(marca: str = "") -> dict[str, str]:
+    """Lee la config de franjas DE UNA MARCA. Si no existe, devuelve los DEFAULTS del dominio.
 
-    No SELECT-INSERT race: si la fila aun no esta, la app no la crea aqui; la crea el
-    PATCH del admin. Mientras tanto, `mapear_franja` usa los defaults de rota.py.
+    GRID POR MARCA: la config es por marca — `rota_config_franjas.id` guarda el id de la marca.
+    Sin marca (vista "Todas" / legado) cae al singleton `'default'`. No SELECT-INSERT race: si
+    la fila aun no esta, la crea el PATCH del admin; mientras, `mapear_franja` usa los defaults.
     """
     con = _conectar()
     try:
         fila = con.execute(
             f"SELECT {', '.join(_COLS_CONFIG_FRANJAS)} FROM rota_config_franjas "
             "WHERE id = ?",
-            ("default",),
+            (marca or "default",),
         ).fetchone()
     finally:
         con.close()
@@ -1271,9 +1331,15 @@ def guardar_franjas_config(
     matutino_fin: str,
     vespertino_inicio: str,
     vespertino_fin: str,
+    marca: str = "",
 ) -> dict[str, str]:
-    """Hace UPSERT del singleton de franjas. Devuelve la fila resultante."""
+    """Hace UPSERT de la config de franjas DE UNA MARCA. Devuelve la fila resultante.
+
+    GRID POR MARCA: `rota_config_franjas.id` guarda el id de la marca; sin marca cae al
+    singleton `'default'`. Cada marca define los rangos por defecto de su rejilla.
+    """
     ahora = datetime.now().isoformat(timespec="seconds")
+    clave = marca or "default"
     con = _conectar()
     try:
         # INSERT ... ON CONFLICT DO UPDATE (Postgres): si la fila existe, actualiza.
@@ -1288,7 +1354,7 @@ def guardar_franjas_config(
             "vespertino_fin = EXCLUDED.vespertino_fin, "
             "actualizado = EXCLUDED.actualizado",
             (
-                "default",
+                clave,
                 matutino_inicio,
                 matutino_fin,
                 vespertino_inicio,
@@ -1299,7 +1365,7 @@ def guardar_franjas_config(
         con.commit()
     finally:
         con.close()
-    return obtener_franjas_config()
+    return obtener_franjas_config(marca)
 
 
 def crear_swap_turno(
@@ -1313,6 +1379,7 @@ def crear_swap_turno(
     solicitante_nombre: str = "",
     destinatario_nombre: str = "",
     motivo: str = "",
+    marca: str = "",
 ) -> dict[str, Any]:
     """Inserta una solicitud de swap (estado `propuesto`) y la devuelve.
 
@@ -1320,6 +1387,8 @@ def crear_swap_turno(
     fechas sean ISO y que las franjas pertenezcan a `FRANJAS_TURNO`. La validacion de
     que existen turnos reales en `rota_turnos` que coinciden con (A, fecha_a,
     franja_a) y (B, fecha_b, franja_b) tambien la hace la API.
+
+    GRID POR MARCA: `marca` es la rejilla del swap (denormalizada del turno A por la API).
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
@@ -1341,6 +1410,7 @@ def crear_swap_turno(
         "decidido_destinatario": "",
         "decidido_admin": "",
         "aplicado": "",
+        "marca": marca or "",
     }
     con = _conectar()
     try:
@@ -1362,12 +1432,15 @@ def listar_swaps_turno(
     destinatario_id: str | None = None,
     *,
     mio_id: str | None = None,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
     """Solicitudes de swap, mas recientes primero. Filtros opcionales combinables.
 
     `mio_id` es un atajo para "swaps que me involucran": filas en las que `mio_id` es
     solicitante O destinatario. La API lo usa cuando el cliente pide `?mio=true` y hay
     sesion activa.
+
+    GRID POR MARCA: `marca` acota a la rejilla de esa marca; `None` ("Todas") no filtra.
     """
     clausulas: list[str] = []
     params: list[Any] = []
@@ -1380,6 +1453,9 @@ def listar_swaps_turno(
     if destinatario_id:
         clausulas.append("destinatario_id = ?")
         params.append(destinatario_id)
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
     if mio_id:
         clausulas.append("(solicitante_id = ? OR destinatario_id = ?)")
         params.append(mio_id)
@@ -1637,7 +1713,7 @@ def actualizar_turnos_rota_lote(
 
 
 def copiar_turnos_rota(
-    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
+    de_lunes: str, a_lunes: str, *, reemplazar: bool = False, marca: str | None = None
 ) -> int:
     """Copia los turnos (horario persona×dia×franja) de `de_lunes` a `a_lunes`.
 
@@ -1649,6 +1725,9 @@ def copiar_turnos_rota(
     como `propuesto` (Elias re-aprueba antes de publicar). Si `reemplazar=True`, primero
     borra los turnos existentes de `a_lunes` (las franjas NO se borran: no son turnos).
 
+    GRID POR MARCA: con `marca` copia SOLO la rejilla de esa marca (franjas y turnos); el
+    clon (franjas y turnos destino) hereda esa marca. La API exige marca concreta para copiar.
+
     Devuelve cuantas filas de turnos se crearon. Si `de_lunes` o `a_lunes` no son fechas
     validas, devuelve 0 sin tocar BD.
     """
@@ -1658,20 +1737,22 @@ def copiar_turnos_rota(
     except (ValueError, TypeError):
         return 0
     delta = (d_a - d_de).days
+    marca_val = marca or ""
     con = _conectar()
     try:
         # PASO 1: clonar las definiciones de franjas a la semana destino (si no estan ya).
         # Las franjas son "plantilla" de cobertura por semana; al copiar la semana entera,
         # las franjas viajan tambien con su nombre/inicio/fin/orden. El mapeo es por
-        # NOMBRE: si la semana destino ya tiene "Mañana", reusamos su id.
+        # NOMBRE: si la semana destino ya tiene "Mañana", reusamos su id. Acotado a la marca.
+        clausula_marca = " AND marca = ?" if marca else ""
         franjas_origen = con.execute(
             "SELECT id, nombre, inicio, fin, orden, es_descanso FROM rota_franjas "
-            "WHERE lunes = ? ORDER BY orden ASC, nombre ASC",
-            (de_lunes,),
+            f"WHERE lunes = ?{clausula_marca} ORDER BY orden ASC, nombre ASC",  # noqa: S608 -- fragmento fijo
+            (de_lunes, marca) if marca else (de_lunes,),
         ).fetchall()
         franjas_destino = con.execute(
-            "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
-            (a_lunes,),
+            f"SELECT id, nombre FROM rota_franjas WHERE lunes = ?{clausula_marca}",  # noqa: S608 -- fragmento fijo
+            (a_lunes, marca) if marca else (a_lunes,),
         ).fetchall()
         id_destino_por_nombre = {f["nombre"]: f["id"] for f in franjas_destino}
         # Mapeo id_origen -> id_destino (insertando las que falten).
@@ -1682,8 +1763,8 @@ def copiar_turnos_rota(
                 continue
             nuevo_id = uuid.uuid4().hex[:12]
             con.execute(
-                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lunes, nombre) DO NOTHING",
+                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso, marca) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (marca, lunes, nombre) DO NOTHING",
                 (
                     nuevo_id,
                     a_lunes,
@@ -1692,6 +1773,7 @@ def copiar_turnos_rota(
                     fo["fin"],
                     fo["orden"],
                     bool(fo["es_descanso"]),
+                    marca_val,
                 ),
             )
             id_dest_por_origen[fo["id"]] = nuevo_id
@@ -1699,11 +1781,12 @@ def copiar_turnos_rota(
 
         if reemplazar:
             con.execute(
-                "DELETE FROM rota_turnos WHERE semana = ?", (a_lunes,)
+                f"DELETE FROM rota_turnos WHERE semana = ?{clausula_marca}",  # noqa: S608 -- fragmento fijo
+                (a_lunes, marca) if marca else (a_lunes,),
             )
         filas = con.execute(
-            f"{_SELECT_TURNO_ROTA} WHERE semana = ? ORDER BY fecha ASC, franja_id ASC",
-            (de_lunes,),
+            f"{_SELECT_TURNO_ROTA} WHERE semana = ?{clausula_marca} ORDER BY fecha ASC, franja_id ASC",  # noqa: S608 -- fragmento fijo
+            (de_lunes, marca) if marca else (de_lunes,),
         ).fetchall()
         creadas = 0
         ahora = datetime.now().isoformat(timespec="seconds")
@@ -1732,6 +1815,8 @@ def copiar_turnos_rota(
                 "nota_relevo": fila["nota_relevo"],
                 "creado": ahora,
                 "actualizado": ahora,
+                # GRID POR MARCA: el clon hereda la marca de la rejilla copiada (o la del origen).
+                "marca": marca_val or fila.get("marca", ""),
             }
             con.execute(
                 f"INSERT INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) "
@@ -1756,8 +1841,9 @@ def copiar_turnos_rota(
 # La coordinacion es INDEPENDIENTE del turno de CM: borrar un turno o cambiar franja NO
 # borra la coordinacion (el admin la mantiene aparte).
 
+# GRID POR MARCA: `marca` es la rejilla de la celda coordinada (denormalizada de la franja).
 _COLS_COORDINACION = (
-    "id", "lunes", "fecha", "franja_id", "coordinador_id", "creado", "actualizado",
+    "id", "lunes", "fecha", "franja_id", "coordinador_id", "creado", "actualizado", "marca",
 )
 _SELECT_COORDINACION = f"SELECT {', '.join(_COLS_COORDINACION)} FROM rota_coordinacion"
 
@@ -1766,15 +1852,26 @@ def _fila_a_coordinacion(fila: Any) -> dict[str, Any]:
     return {col: fila[col] for col in _COLS_COORDINACION}
 
 
-def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
-    """Coordinaciones de la semana cuyo lunes es `lunes`, ordenadas por fecha y franja."""
+def listar_coordinacion_semana(
+    lunes: str, marca: str | None = None
+) -> list[dict[str, Any]]:
+    """Coordinaciones de la semana cuyo lunes es `lunes`, ordenadas por fecha y franja.
+
+    GRID POR MARCA: `marca` acota a la rejilla de esa marca; `None` ("Todas") no filtra.
+    """
     if not lunes:
         return []
+    clausulas = ["lunes = ?"]
+    params: list[Any] = [lunes]
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_COORDINACION} WHERE lunes = ? ORDER BY fecha ASC, franja_id ASC",
-            (lunes,),
+            f"{_SELECT_COORDINACION} WHERE {' AND '.join(clausulas)} "
+            "ORDER BY fecha ASC, franja_id ASC",
+            tuple(params),
         ).fetchall()
     finally:
         con.close()
@@ -1782,13 +1879,16 @@ def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
 
 
 def actualizar_coordinador_rota(
-    lunes: str, fecha: str, franja_id: str, coordinador_id: str
+    lunes: str, fecha: str, franja_id: str, coordinador_id: str, marca: str = ""
 ) -> dict[str, Any]:
     """UPSERT por (fecha, franja_id): asigna `coordinador_id` a la celda; devuelve la fila.
 
     Si ya hay coordinador en esa celda, se REEMPLAZA (actualiza `coordinador_id` y
     `actualizado`). Si no hay, se crea con `creado` = `actualizado` = ahora. La capa API
     valida que `coordinador_id` corresponda a un usuario con `puede_coordinar=true`.
+
+    GRID POR MARCA: `marca` es la rejilla de la celda (la `franja_id` ya es propia de una
+    marca; `marca` se denormaliza para filtrar/etiquetar sin join).
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     con = _conectar()
@@ -1799,9 +1899,9 @@ def actualizar_coordinador_rota(
         ).fetchone()
         if fila_existente is not None:
             con.execute(
-                "UPDATE rota_coordinacion SET coordinador_id = ?, lunes = ?, "
+                "UPDATE rota_coordinacion SET coordinador_id = ?, lunes = ?, marca = ?, "
                 "actualizado = ? WHERE id = ?",
-                (coordinador_id, lunes, ahora, fila_existente["id"]),
+                (coordinador_id, lunes, marca or "", ahora, fila_existente["id"]),
             )
             con.commit()
             fila = con.execute(
@@ -1811,9 +1911,9 @@ def actualizar_coordinador_rota(
         nuevo_id = uuid.uuid4().hex[:12]
         con.execute(
             "INSERT INTO rota_coordinacion "
-            "(id, lunes, fecha, franja_id, coordinador_id, creado, actualizado) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (nuevo_id, lunes, fecha, franja_id, coordinador_id, ahora, ahora),
+            "(id, lunes, fecha, franja_id, coordinador_id, creado, actualizado, marca) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (nuevo_id, lunes, fecha, franja_id, coordinador_id, ahora, ahora, marca or ""),
         )
         con.commit()
         fila = con.execute(

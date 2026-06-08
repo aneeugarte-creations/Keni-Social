@@ -24,6 +24,8 @@ from .conftest import TOKEN_PRUEBA
 _ORIGIN = {"Origin": "http://testserver"}
 CLAVE = "clave-de-prueba"
 LUNES = "2026-06-08"  # semana del Mundial (caso real)
+# GRID POR MARCA: la rejilla solo se siembra para una marca concreta; usamos el piloto.
+MARCA = "claro-sports"
 
 
 def _cli_admin(app) -> TestClient:
@@ -45,8 +47,8 @@ def _cli_admin(app) -> TestClient:
 
 
 def test_listar_franjas_siembra_por_defecto(cliente):
-    """Si la semana no tiene franjas, GET las siembra: Mañana, Tarde, Descanso (3 filas)."""
-    r = cliente.get(f"/api/rota/semana/{LUNES}/franjas")
+    """Si la semana no tiene franjas, GET con `?marca=` siembra: Mañana, Tarde, Descanso."""
+    r = cliente.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     assert r.status_code == 200, r.text
     franjas = r.json()["franjas"]
     nombres = [f["nombre"] for f in franjas]
@@ -75,9 +77,9 @@ def test_crear_franja_extra(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
     # Siembra defaults primero.
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     r = cli.post(
-        f"/api/rota/semana/{LUNES}/franjas",
+        f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}",
         json={
             "nombre": "Cobertura nocturna",
             "inicio": "17:00",
@@ -92,7 +94,7 @@ def test_crear_franja_extra(entorno):
     assert creada["inicio"] == "17:00" and creada["fin"] == "01:00"
     assert creada["es_descanso"] is False
     # Ahora la lista tiene 4 franjas.
-    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     nombres = {f["nombre"] for f in franjas}
     assert {"Mañana", "Tarde", "Descanso", "Cobertura nocturna"} <= nombres
 
@@ -100,9 +102,9 @@ def test_crear_franja_extra(entorno):
 def test_crear_franja_nombre_duplicado_409(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")  # siembra Mañana/Tarde/Descanso
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")  # siembra Mañana/Tarde/Descanso
     r = cli.post(
-        f"/api/rota/semana/{LUNES}/franjas",
+        f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}",
         json={"nombre": "Mañana", "inicio": "07:00", "fin": "10:00"},
         headers=_ORIGIN,
     )
@@ -111,9 +113,9 @@ def test_crear_franja_nombre_duplicado_409(entorno):
 
 def test_crear_franja_no_admin_403(cliente):
     """El cliente por defecto (token de mantenimiento) NO es admin con sesion."""
-    cliente.get(f"/api/rota/semana/{LUNES}/franjas")
+    cliente.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     r = cliente.post(
-        f"/api/rota/semana/{LUNES}/franjas",
+        f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}",
         json={"nombre": "Cobertura", "inicio": "17:00", "fin": "01:00"},
     )
     assert r.status_code == 403
@@ -122,9 +124,9 @@ def test_crear_franja_no_admin_403(cliente):
 def test_crear_franja_hora_invalida_400(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     r = cli.post(
-        f"/api/rota/semana/{LUNES}/franjas",
+        f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}",
         json={"nombre": "Mala", "inicio": "25:00", "fin": "26:00"},
         headers=_ORIGIN,
     )
@@ -139,8 +141,8 @@ def test_crear_franja_hora_invalida_400(entorno):
 def test_actualizar_franja(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")
-    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
+    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     manana = next(f for f in franjas if f["nombre"] == "Mañana")
     r = cli.patch(
         f"/api/rota/franjas/{manana['id']}",
@@ -169,22 +171,22 @@ def test_actualizar_franja_inexistente_404(entorno):
 def test_borrar_franja_sin_turnos(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     # Anade una extra para borrarla (no la Mañana/Tarde/Descanso por costumbre).
     cli.post(
-        f"/api/rota/semana/{LUNES}/franjas",
+        f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}",
         json={"nombre": "Extra", "inicio": "12:00", "fin": "14:00"},
         headers=_ORIGIN,
     )
     extra = next(
-        f for f in cli.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+        f for f in cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
         if f["nombre"] == "Extra"
     )
     r = cli.delete(f"/api/rota/franjas/{extra['id']}", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     nombres = {
         f["nombre"]
-        for f in cli.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+        for f in cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     }
     assert "Extra" not in nombres
 
@@ -194,8 +196,8 @@ def test_borrar_franja_con_turnos_409(entorno):
     cli = _cli_admin(app)
     ana = auth.crear_usuario("ana", CLAVE, "editor", cobertura=True)
     # Siembra defaults y consigue id de Mañana.
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")
-    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
+    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     manana = next(f for f in franjas if f["nombre"] == "Mañana")
     # Crea un turno asignado a la franja Mañana.
     repos.crear_turno_rota(
@@ -231,8 +233,8 @@ def test_crear_turno_descanso_explicito_y_no_cubre(cliente):
     ningun evento de ese dia."""
     ana = auth.crear_usuario("ana", CLAVE, "editor", cobertura=True)
     # Asegura defaults sembrados (Mañana, Tarde, Descanso).
-    cliente.get(f"/api/rota/semana/{LUNES}/franjas")
-    franjas = cliente.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+    cliente.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
+    franjas = cliente.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     descanso = next(f for f in franjas if f["es_descanso"])
     # Crea un evento al mediodia.
     ev = cliente.post(
@@ -269,8 +271,8 @@ def test_cobertura_evento_con_solape_es_union(entorno):
     c = auth.crear_usuario("c", CLAVE, "editor", cobertura=True)
 
     # Sembrar las 3 franjas en la semana del Mundial (Mañana, Tarde, Descanso).
-    cli.get(f"/api/rota/semana/{LUNES}/franjas")
-    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas").json()["franjas"]
+    cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
+    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     manana = next(f for f in franjas if f["nombre"] == "Mañana")
     tarde = next(f for f in franjas if f["nombre"] == "Tarde")
     # Ajusta Mañana a 09-17, Tarde a 13-21 (el solape).
@@ -286,7 +288,7 @@ def test_cobertura_evento_con_solape_es_union(entorno):
     ).status_code == 200
     # Anade una Noche 17:00-01:00 que cruza medianoche.
     r_noche = cli.post(
-        f"/api/rota/semana/{LUNES}/franjas",
+        f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}",
         json={"nombre": "Noche", "inicio": "17:00", "fin": "01:00", "orden": 2},
         headers=_ORIGIN,
     )
