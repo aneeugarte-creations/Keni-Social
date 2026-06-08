@@ -12,7 +12,7 @@
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, Sparkles, ThumbsDown } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
@@ -84,12 +84,13 @@ export function CadenaAprobacion({
         )}
       </div>
 
-      {/* Los dislikes acumulados (solo si hay alguno): dos rechazan la pieza. */}
+      {/* Los dislikes acumulados (solo si hay alguno): dos rechazan la pieza. MISMO estilo que el
+          conteo de OK (solo "x/total" + de quién), pero en ROJO para distinguirlos; sin etiqueta
+          "Dislikes" ni icono. */}
       {disDados.length > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-          <span className="inline-flex items-center gap-1 font-medium text-red-600 dark:text-red-400">
-            <ThumbsDown className="h-4 w-4" />
-            Dislikes {disDados.length}/{umbralDislike}
+          <span className="font-medium tabular-nums text-red-600 dark:text-red-400">
+            {disDados.length}/{umbralDislike}
           </span>
           <span className="text-muted-foreground">
             · {disDados.map((n) => n.decisor_nombre || "alguien").join(", ")}
