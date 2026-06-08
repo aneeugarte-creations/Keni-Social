@@ -186,7 +186,7 @@ def main() -> int:
     # de algoritmo importantes en PROPUESTAS de cambio a las fichas de plataforma y limites
     # (encola un claude -p por plataforma; el worker lo ejecuta). Las propuestas son revisables;
     # nunca se aplican solas. SAFE BY DEFAULT: sin el flag no encola nada.
-    from .sugerencias_algoritmo import iniciar_sugerencias_editoriales
+    from .sugerencias_editoriales import iniciar_sugerencias_editoriales
 
     iniciar_sugerencias_editoriales()
 

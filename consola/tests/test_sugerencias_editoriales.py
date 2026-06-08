@@ -8,7 +8,7 @@ end-to-end (encolar -> sondear -> persistir) se prueba mockeando el SEAM de gene
 from __future__ import annotations
 
 import keni_consola.generaciones as generaciones
-from keni_consola import repos, sugerencias_algoritmo as sa
+from keni_consola import repos, sugerencias_editoriales as sa
 
 from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 

@@ -36,7 +36,7 @@ from typing import Any
 from . import biblioteca, config, daemon_util, limites_plataforma, repos
 from .dominio import generar, jobspec
 
-_log = logging.getLogger("keni_consola.sugerencias_algoritmo")
+_log = logging.getLogger("keni_consola.sugerencias_editoriales")
 
 # Importancia minima para entrar al digest: nivel alto O marcada como cambio de algoritmo.
 _NIVEL_IMPORTANTE = "alta"

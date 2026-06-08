@@ -34,7 +34,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import algoritmos, biblioteca, repos, sugerencias_algoritmo
+from .. import algoritmos, biblioteca, repos, sugerencias_editoriales
 from .._http_json import leer_json
 from . import rss
 
@@ -283,7 +283,7 @@ def _aplicar_a_ficha(plataforma: str, detalle: str) -> str:
     Devuelve el id del documento de biblioteca afectado. La escritura es la MISMA que hace el
     editor a mano (modulo `biblioteca`): un humano la dispara con su clic; nunca el sistema solo.
     """
-    fid = sugerencias_algoritmo.ficha_id_de(plataforma)
+    fid = sugerencias_editoriales.ficha_id_de(plataforma)
     seccion = (
         f"## Actualización editorial ({date.today().isoformat()}) — desde noticias de algoritmo\n\n"
         f"{detalle.strip()}\n"
@@ -350,7 +350,7 @@ async def generar_sugerencias(request: Request) -> Response:
     ejecuta) y persiste las propuestas. Responde de inmediato; el front refresca para verlas.
     """
     threading.Thread(
-        target=sugerencias_algoritmo.ejecutar_barrido,
+        target=sugerencias_editoriales.ejecutar_barrido,
         name="sugerencias-editoriales-manual",
         daemon=True,
     ).start()

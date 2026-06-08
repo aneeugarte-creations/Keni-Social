@@ -63,7 +63,7 @@ def main() -> int:
     from .pipeline_contenido import iniciar_pipeline
     from .programador import iniciar_programador
     from .reaper_generaciones import iniciar_reaper
-    from .sugerencias_algoritmo import iniciar_sugerencias_editoriales
+    from .sugerencias_editoriales import iniciar_sugerencias_editoriales
     from .trends_daemon import iniciar_trends
 
     iniciar_captura_programada()
