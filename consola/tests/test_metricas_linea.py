@@ -22,13 +22,13 @@ def _pieza(id_post, titulo, vis, inter, eng):
     }
 
 
-def test_agregar_por_eje_suma_y_engagement_medio():
+def test_agrupar_por_eje_suma_y_engagement_medio():
     """Dos piezas de la misma línea: suma vis/inter y promedia engagement."""
     piezas = [
         _pieza("M1", "Gol de último minuto", 1000, 100, 10.0),
         _pieza("M2", "Resumen jornada", 3000, 150, 5.0),
     ]
-    cubos = metricas_linea.agregar_por_eje(
+    cubos = metricas_linea.agrupar_por_eje(
         piezas,
         valor_por_contenido={"c1": "Futbol", "c2": "Futbol"},
         enlace_por_id={"M1": "c1", "M2": "c2"},
@@ -50,7 +50,7 @@ def test_agregar_por_eje_suma_y_engagement_medio():
 def test_piezas_sin_linea_caen_en_cubo_sin_linea():
     """Pieza enlazada a contenido sin etiqueta vertical -> cubo 'Sin línea'."""
     piezas = [_pieza("M9", "Nota suelta", 500, 20, 4.0)]
-    cubos = metricas_linea.agregar_por_eje(
+    cubos = metricas_linea.agrupar_por_eje(
         piezas,
         valor_por_contenido={},  # c desconocido / sin valor
         enlace_por_id={"M9": "c9"},
@@ -69,7 +69,7 @@ def test_piezas_sin_linea_caen_en_cubo_sin_linea():
 def test_pieza_no_enlazada_tambien_cae_en_sin_linea():
     """Pieza sin enlace por id ni por título -> 'Sin línea' (no rompe)."""
     piezas = [_pieza("M-DESCONOCIDA", "Pieza fuera de la consola", 100, 5, 5.0)]
-    cubos = metricas_linea.agregar_por_eje(
+    cubos = metricas_linea.agrupar_por_eje(
         piezas,
         valor_por_contenido={"c1": "Futbol"},
         enlace_por_id={},
@@ -86,7 +86,7 @@ def test_fallback_por_titulo_normalizado():
     """Sin enlace por id, casa por título normalizado (acentos/mayúsculas)."""
     piezas = [_pieza("SIN-ID", "  Presidencia HOY  ", 800, 80, 10.0)]
     titulo_norm = metricas_linea._normalizar_titulo("Presidencia hoy")
-    cubos = metricas_linea.agregar_por_eje(
+    cubos = metricas_linea.agrupar_por_eje(
         piezas,
         valor_por_contenido={"c5": "Presidencia"},
         enlace_por_id={},
@@ -101,7 +101,7 @@ def test_fallback_por_titulo_normalizado():
 
 def test_linea_definida_sin_piezas_aparece_con_ceros():
     """Una LÍNEA definida de la marca sin piezas en el periodo sale igualmente (0)."""
-    cubos = metricas_linea.agregar_por_eje(
+    cubos = metricas_linea.agrupar_por_eje(
         [],
         valor_por_contenido={},
         enlace_por_id={},
@@ -123,7 +123,7 @@ def test_orden_por_piezas_desc_y_sin_linea_al_final():
         _pieza("C", "tres", 100, 10, 1.0),  # Presidencia
         _pieza("D", "cuatro", 100, 10, 1.0),  # sin línea
     ]
-    cubos = metricas_linea.agregar_por_eje(
+    cubos = metricas_linea.agrupar_por_eje(
         piezas,
         valor_por_contenido={"cA": "Futbol", "cB": "Futbol", "cC": "Presidencia"},
         enlace_por_id={"A": "cA", "B": "cB", "C": "cC"},  # D no enlaza
@@ -140,13 +140,13 @@ def test_orden_por_piezas_desc_y_sin_linea_al_final():
     assert nombres[-1] == metricas_linea.SIN_LINEA  # siempre al final
 
 
-def test_agregar_lineas_y_origenes_combina_los_dos_ejes():
-    """`agregar_lineas_y_origenes` agrega el MISMO listado por línea y por origen."""
+def test_agrupar_lineas_y_origenes_combina_los_dos_ejes():
+    """`agrupar_lineas_y_origenes` agrega el MISMO listado por línea y por origen."""
     piezas = [
         _pieza("M1", "Gol", 1000, 100, 10.0),  # c1: Futbol / interno
         _pieza("M2", "Petición club", 2000, 100, 5.0),  # c2: Futbol / peticion_externa
     ]
-    out = metricas_linea.agregar_lineas_y_origenes(
+    out = metricas_linea.agrupar_lineas_y_origenes(
         piezas,
         linea_por_contenido={"c1": "Futbol", "c2": "Futbol"},
         origen_por_contenido={"c1": "interno", "c2": "peticion_externa"},

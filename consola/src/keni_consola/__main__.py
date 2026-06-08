@@ -195,9 +195,9 @@ def main() -> int:
     # fuentes (import/radar/rss) meten al tablero y aun no tienen borrador. El resultado cae
     # en la cola de revision; NO publica solo (sigue gated). SAFE BY DEFAULT: sin el flag no
     # arranca. Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .autogen_copy import iniciar_autogen
+    from .autogen_copy import iniciar_autogen_copy
 
-    iniciar_autogen()
+    iniciar_autogen_copy()
 
     # Auto-generacion de ARTE (fase3 auto-produccion, H2-b): un hilo demonio que, si
     # `KENI_AUTOGEN_ARTE` esta activo (def OFF), genera cada N horas un arte por IA para los

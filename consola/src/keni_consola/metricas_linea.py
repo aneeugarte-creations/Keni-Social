@@ -16,8 +16,8 @@ Reusa EXACTAMENTE el mismo cruce pieza↔contenido que `analitica_por_etiqueta`
 las enlaza a su `contenido` de la BD por `id_post_metricool` (fallback fuzzy por título)
 y lee sus etiquetas por clase. NO duplica la conexión a Metricool ni toca `repos`/`db`.
 
-La agregación es PURA y separada de la lectura de BD (`agregar_por_eje` /
-`agregar_lineas_y_origenes`): recibe datos en memoria y es testeable sin BD, igual que el
+La agregación es PURA y separada de la lectura de BD (`agrupar_por_eje` /
+`agrupar_lineas_y_origenes`): recibe datos en memoria y es testeable sin BD, igual que el
 resto de agregaciones del módulo. El orquestador `lineas_y_origenes` hace las lecturas
 (repos + fachada de métricas) y delega en la función pura.
 
@@ -48,7 +48,7 @@ SIN_LINEA = "Sin línea"
 SIN_ORIGEN = "Sin origen"
 
 
-def agregar_por_eje(
+def agrupar_por_eje(
     piezas: list[dict[str, Any]],
     *,
     valor_por_contenido: dict[str, str],
@@ -124,7 +124,7 @@ def agregar_por_eje(
     return salida
 
 
-def agregar_lineas_y_origenes(
+def agrupar_lineas_y_origenes(
     piezas: list[dict[str, Any]],
     *,
     linea_por_contenido: dict[str, str],
@@ -136,10 +136,10 @@ def agregar_lineas_y_origenes(
 ) -> dict[str, Any]:
     """Agrega el periodo por LÍNEA y por ORIGEN a la vez. PURA (sin BD).
 
-    Combina dos llamadas a `agregar_por_eje` (una por eje) sobre el MISMO listado de piezas.
+    Combina dos llamadas a `agrupar_por_eje` (una por eje) sobre el MISMO listado de piezas.
     Devuelve `{"lineas": [...], "origenes": [...]}` con la forma del contrato del endpoint.
     """
-    lineas = agregar_por_eje(
+    lineas = agrupar_por_eje(
         piezas,
         valor_por_contenido=linea_por_contenido,
         enlace_por_id=enlace_por_id,
@@ -147,7 +147,7 @@ def agregar_lineas_y_origenes(
         etiquetas_definidas=lineas_definidas,
         sin_valor=SIN_LINEA,
     )
-    origenes = agregar_por_eje(
+    origenes = agrupar_por_eje(
         piezas,
         valor_por_contenido=origen_por_contenido,
         enlace_por_id=enlace_por_id,
@@ -219,7 +219,7 @@ def lineas_y_origenes(
     """Rendimiento del periodo por LÍNEA (clase `vertical`) y por ORIGEN (clase `origen`).
 
     Orquesta las lecturas (BD via `repos` + piezas del periodo via la fachada única de
-    métricas) y delega la agregación en la función PURA `agregar_lineas_y_origenes`. Reusa
+    métricas) y delega la agregación en la función PURA `agrupar_lineas_y_origenes`. Reusa
     el MISMO cruce pieza↔contenido que `analitica_por_etiqueta` (enlace por
     `id_post_metricool`; fallback fuzzy por título). No duplica la conexión a Metricool.
 
@@ -252,7 +252,7 @@ def lineas_y_origenes(
     linea_por_contenido = _valor_por_contenido(asignaciones, vertical_por_id)
     origen_por_contenido = _valor_por_contenido(asignaciones, origen_por_id)
 
-    agregados = agregar_lineas_y_origenes(
+    agregados = agrupar_lineas_y_origenes(
         piezas,
         linea_por_contenido=linea_por_contenido,
         origen_por_contenido=origen_por_contenido,

@@ -2758,7 +2758,7 @@ async def set_coordinador_de_celda(request: Request) -> Response:
             },
             status_code=400,
         )
-    registro = repos.set_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
+    registro = repos.actualizar_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
     nombres = _nombres_equipo()
     return JSONResponse(
         {

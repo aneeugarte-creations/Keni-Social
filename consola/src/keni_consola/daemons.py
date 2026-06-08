@@ -52,7 +52,7 @@ def main() -> int:
     from .auto_avance import iniciar_auto_avance
     from .autofeed_daemon import iniciar_autofeed
     from .autogen_arte import iniciar_autogen_arte
-    from .autogen_copy import iniciar_autogen
+    from .autogen_copy import iniciar_autogen_copy
     from .breaking_daemon import iniciar_breaking
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
@@ -78,7 +78,7 @@ def main() -> int:
     # KENI_AUTOGEN_ARTE, def OFF). Sin ellos no se auto-genera nada. Antes solo `__main__`
     # los arrancaba; con el split de servicios (NINGUN proceso hosted corre `__main__`) sin
     # esto la auto-produccion NO correria en produccion aunque se encendieran los flags.
-    iniciar_autogen()  # auto-copy; no barre salvo KENI_AUTOGEN=1 (def OFF).
+    iniciar_autogen_copy()  # auto-copy; no barre salvo KENI_AUTOGEN=1 (def OFF).
     iniciar_breaking()  # Carril Rápido de Breaking (Claro Sports); no barre salvo KENI_BREAKING=1 (def OFF).
     iniciar_autogen_arte()  # auto-arte; no barre salvo KENI_AUTOGEN_ARTE=1 (def OFF) ni sin proveedor de imagen.
     # Pipeline de contenido CI→CD→QA por marca (ADITIVO, SAFE BY DEFAULT): ingiere RSS, genera

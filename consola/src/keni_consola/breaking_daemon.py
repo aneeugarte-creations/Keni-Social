@@ -149,7 +149,7 @@ def _intervalo_segundos() -> float:
 def iniciar_breaking(intervalo_segundos: float | None = None) -> threading.Thread:
     """Arranca el hilo demonio del Carril Rápido de Breaking (GATEADO EN VIVO).
 
-    Espejo de `iniciar_autogen`: el hilo arranca SIEMPRE y comprueba `KENI_BREAKING` en
+    Espejo de `iniciar_autogen_copy`: el hilo arranca SIEMPRE y comprueba `KENI_BREAKING` en
     cada ciclo, así que encender/apagar en runtime aplica sin reiniciar. El hilo es daemon;
     un fallo de barrido se loguea y NO lo mata. Pensado para el servidor real (`daemons.py`),
     NO para `crear_app` (los tests no lo arrancan).

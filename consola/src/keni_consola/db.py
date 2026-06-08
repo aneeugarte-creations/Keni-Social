@@ -431,7 +431,7 @@ from .db_rota import (  # noqa: F401
     obtener_turno_rota,
     quitar_coordinador_rota,
     sembrar_franjas_por_defecto,
-    set_coordinador_rota,
+    actualizar_coordinador_rota,
 )
 from .db_webhooks import (  # noqa: F401
     actualizar_webhook,
@@ -566,7 +566,7 @@ __all__ = [
     "actualizar_swap_turno",
     "aplicar_swap_turno",
     "listar_coordinacion_semana",
-    "set_coordinador_rota",
+    "actualizar_coordinador_rota",
     "quitar_coordinador_rota",
     # Motor de ingesta persistente (Ola A).
     "crear_noticias_items",

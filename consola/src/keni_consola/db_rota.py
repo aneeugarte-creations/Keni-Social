@@ -1781,7 +1781,7 @@ def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
     return [_fila_a_coordinacion(f) for f in filas]
 
 
-def set_coordinador_rota(
+def actualizar_coordinador_rota(
     lunes: str, fecha: str, franja_id: str, coordinador_id: str
 ) -> dict[str, Any]:
     """UPSERT por (fecha, franja_id): asigna `coordinador_id` a la celda; devuelve la fila.

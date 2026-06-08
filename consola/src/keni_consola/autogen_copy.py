@@ -279,7 +279,7 @@ def _intervalo_segundos() -> float:
     return config.autogen_intervalo_horas() * 3600.0
 
 
-def iniciar_autogen(intervalo_segundos: float | None = None) -> threading.Thread:
+def iniciar_autogen_copy(intervalo_segundos: float | None = None) -> threading.Thread:
     """Arranca el hilo demonio de auto-generacion de copy (GATEADO EN VIVO).
 
     Pensado para el servidor real (`__main__`), NO para `crear_app` (los tests no lo arrancan,

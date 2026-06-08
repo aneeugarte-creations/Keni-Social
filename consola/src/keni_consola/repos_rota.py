@@ -421,11 +421,11 @@ def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
     return db.listar_coordinacion_semana(lunes)
 
 
-def set_coordinador_rota(
+def actualizar_coordinador_rota(
     lunes: str, fecha: str, franja_id: str, coordinador_id: str
 ) -> dict[str, Any]:
     """UPSERT por (fecha, franja_id) del coordinador asignado a la celda."""
-    return db.set_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
+    return db.actualizar_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
 
 
 def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:

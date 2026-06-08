@@ -327,7 +327,7 @@ from .repos_rota import (  # noqa: F401
     obtener_turno_rota,
     quitar_coordinador_rota,
     sembrar_franjas_por_defecto,
-    set_coordinador_rota,
+    actualizar_coordinador_rota,
 )
 from .repos_webhooks import (  # noqa: F401
     actualizar_webhook,
