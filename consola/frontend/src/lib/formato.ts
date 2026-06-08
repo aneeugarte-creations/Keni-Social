@@ -175,6 +175,11 @@ export function nombreRed(red: string): string {
 export const REDES_CANONICAS = ["facebook", "instagram", "tiktok", "youtube", "x"] as const;
 export type RedCanonica = (typeof REDES_CANONICAS)[number];
 
+/** Normaliza un id de red a su forma canónica (minúsculas, `twitter`→`x`). Fuente única. */
+export function redCanonica(red: string): string {
+  return red.toLowerCase() === "twitter" ? "x" : red.toLowerCase();
+}
+
 /**
  * Alinea unas filas "por red" a la lista canónica completa: por cada red de
  * `REDES_CANONICAS` devuelve la fila existente (casada por su id de red, normalizado a
@@ -189,10 +194,9 @@ export function alinearPorRedCanonica<T>(
   filas: ReadonlyArray<T>,
   redDe: (fila: T) => string,
 ): Array<{ red: RedCanonica; fila: T | undefined }> {
-  const norm = (r: string) => (r.toLowerCase() === "twitter" ? "x" : r.toLowerCase());
   const porRed = new Map<string, T>();
   for (const f of filas) {
-    const red = norm(redDe(f) || "");
+    const red = redCanonica(redDe(f) || "");
     if (red && !porRed.has(red)) porRed.set(red, f);
   }
   return REDES_CANONICAS.map((red) => ({ red, fila: porRed.get(red) }));

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
+import { formatearFechaHora } from "@/lib/fecha";
 import {
   ETIQUETA_ESTADO_COMPOSICION,
   type ComposicionResumen,
@@ -266,7 +267,7 @@ function FilaComposicion({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <span title={comp.actualizado}>
-            Última edición: {formatearFecha(comp.actualizado)}
+            Última edición: {formatearFechaHora(comp.actualizado) || "—"}
           </span>
           <span className="inline-flex items-center gap-1">
             <Captions className="h-3 w-3" />
@@ -346,15 +347,3 @@ function FilaComposicion({
 }
 
 /** Fecha ISO → `dd/mm/aa hh:mm` (es-MX); vacío si no hay dato. */
-function formatearFecha(iso: string | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("es-MX", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}

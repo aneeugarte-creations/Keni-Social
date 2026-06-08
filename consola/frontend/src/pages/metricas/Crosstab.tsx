@@ -30,6 +30,7 @@ import {
   nombreRed,
   numeroCompacto,
   porcentaje,
+  redCanonica,
   REDES_CANONICAS,
 } from "@/lib/formato";
 import type { CeldaCrosstab, MarcaDisponible } from "@/types";
@@ -129,12 +130,11 @@ function TablaCrosstab({
   // redes canónicas (facebook, instagram, tiktok, youtube, x) por cada marca presente.
   // Por cada marca×red sin ninguna celda en el periodo añadimos una fila placeholder con
   // "—" (no inventamos ceros ni la omitimos —incluida X, no contratada en el piloto—).
-  const norm = (red: string) => (red.toLowerCase() === "twitter" ? "x" : red.toLowerCase());
   const marcasPresentes: string[] = [];
   const combosConDatos = new Set<string>();
   for (const c of celdas) {
     if (!marcasPresentes.includes(c.marca)) marcasPresentes.push(c.marca);
-    combosConDatos.add(`${c.marca}::${norm(c.red)}`);
+    combosConDatos.add(`${c.marca}::${redCanonica(c.red)}`);
   }
   const filasVacias: Array<{ marca: string; red: string }> = [];
   for (const marca of marcasPresentes) {

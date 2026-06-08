@@ -29,6 +29,7 @@ import asyncio
 import logging
 
 from keni_metricas import servicio
+from keni_shared.metricas import engagement_pct
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
@@ -304,7 +305,7 @@ def _agregar_por_red(rep: dict) -> list[dict]:
                 "visualizaciones": vis,
                 "alcance": d["alcance"],
                 "interacciones": inter,
-                "engagement_pct": round(inter / vis * 100, 1) if vis else 0.0,
+                "engagement_pct": _engagement_pct(inter, vis),
             }
         )
     por_red.sort(key=lambda x: x["visualizaciones"], reverse=True)
@@ -431,10 +432,10 @@ def _engagement_pct(interacciones, visualizaciones) -> float:
     (denominadores heterogéneos, ADR/#138). Para el reporte que pinta la UI lo derivamos
     siempre como un número (int/vis), igual que ya hacían las tablas en cliente: así nunca
     llega `null` (que reventaba el comparador) y el engagement deja de salir "—" en todo.
+
+    Coacciona `None`→0 y delega en la fórmula única del monorepo (`keni_shared`, #97).
     """
-    vis = visualizaciones or 0
-    inter = interacciones or 0
-    return round(inter / vis * 100, 1) if vis else 0.0
+    return engagement_pct(interacciones or 0, visualizaciones or 0)
 
 
 def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:

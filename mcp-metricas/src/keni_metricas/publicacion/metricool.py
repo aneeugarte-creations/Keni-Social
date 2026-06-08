@@ -72,7 +72,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # NO se modifica `_http.py`: se importa de solo lectura.
 from ..fuentes._http import cliente_http, log, post_json
 from ..schema import Plataforma
-from .modelos import MediaRef  # reutiliza la ref de media (solo URL), no el Borrador (Meta-only)
+from .modelos import (  # reutiliza la ref de media (solo URL) y el normalizador de hashtags
+    MediaRef,
+    normaliza_hashtags,
+)
 
 BASE = "https://app.metricool.com/api"
 ENDPOINT_PROGRAMAR = "/v2/scheduler/posts"
@@ -143,15 +146,7 @@ class BorradorMetricool(BaseModel):
     @field_validator("hashtags", mode="before")
     @classmethod
     def _normaliza_hashtags(cls, v: object) -> object:
-        """Quita el '#' inicial, espacios y duplicados; preserva el orden."""
-        if not isinstance(v, list):
-            return v
-        vistos: list[str] = []
-        for h in v:
-            h = str(h).strip().lstrip("#").strip()
-            if h and h not in vistos:
-                vistos.append(h)
-        return vistos
+        return normaliza_hashtags(v)
 
     @model_validator(mode="after")
     def _coherencia(self) -> BorradorMetricool:

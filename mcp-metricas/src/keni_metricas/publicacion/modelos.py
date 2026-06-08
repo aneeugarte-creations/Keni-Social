@@ -19,6 +19,21 @@ PLATAFORMAS_META: frozenset[Plataforma] = frozenset(
 )
 
 
+def normaliza_hashtags(v: object) -> object:
+    """Quita el `#` inicial, espacios y duplicados; preserva el orden.
+
+    Fuente unica del validador `hashtags` (lo reusan este modelo y `metricool.py`).
+    """
+    if not isinstance(v, list):
+        return v
+    vistos: list[str] = []
+    for h in v:
+        h = str(h).strip().lstrip("#").strip()
+        if h and h not in vistos:
+            vistos.append(h)
+    return vistos
+
+
 class TipoMedia(StrEnum):
     """Tipo de un asset referenciado por el borrador."""
 
@@ -87,15 +102,7 @@ class Borrador(BaseModel):
     @field_validator("hashtags", mode="before")
     @classmethod
     def _normaliza_hashtags(cls, v: object) -> object:
-        """Quita el `#` inicial, espacios y duplicados; preserva el orden."""
-        if not isinstance(v, list):
-            return v
-        vistos: list[str] = []
-        for h in v:
-            h = str(h).strip().lstrip("#").strip()
-            if h and h not in vistos:
-                vistos.append(h)
-        return vistos
+        return normaliza_hashtags(v)
 
     def texto_final(self) -> str:
         """Texto + hashtags como saldria publicado (lo que se previsualiza)."""
