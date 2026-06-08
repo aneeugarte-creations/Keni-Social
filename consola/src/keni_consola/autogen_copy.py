@@ -1,45 +1,34 @@
-"""Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2).
+"""Generacion de COPY para un tema del tablero (lanzador reutilizable).
 
 PROBLEMA QUE RESUELVE
-=====================
-Las fuentes (import de calendario, radar-auto, radar, RSS) meten TEMAS al tablero, pero el
-copy solo se genera si ALGUIEN pulsa "generar" para cada uno. Objetivo de producto (peticion
-de Angel): que el copy "se vaya generando a medida que entran los temas", para que el equipo
-llegue por la manana y tenga BORRADORES listos para revisar, no temas en crudo. Aqui un daemon
-(espejo de `radar_auto`) barre el tablero cada N horas y, para cada tema alimentado por una
-fuente que AUN no tiene copy y SI tiene marca, ENCOLA una generacion de copy por el MISMO
-camino que el boton manual del asistente (el lanzador NEUTRO `dominio.generar.lanzar_copy`).
-El borrador resultante cae en el Feed (aprobación en línea) como cualquier otro.
+Varios caminos del producto necesitan ENCOLAR la generacion de copy de un tema del tablero
+por el MISMO camino que el boton manual del asistente (el lanzador NEUTRO
+`dominio.generar.lanzar_copy`): los endpoints manuales (api/fuentes, api/noticias,
+api/contenido, api/breaking, api/insumos) y la ETAPA DE COPY del pipeline, que es el ÚNICO
+motor de copy automático (ver `pipeline_contenido.ejecutar_cd`). Este módulo expone esa
+función única (`lanzar_para_topic`) + su dedup por etiqueta (`autogen`).
 
-SEGURO POR DISENO (CONSERVADOR)
-===============================
-  - GATEADO: el daemon solo arranca con `KENI_AUTOGEN=1` (def OFF). Sin el flag, nada se
-    auto-genera (el equipo genera a mano, como hasta ahora).
-  - SOLO FUENTES: solo procesa temas cuyo `origen` es de una FUENTE (`ORIGENES_TOPIC`); el
-    contenido manual del equipo NO se toca (lo genera quien lo crea, si quiere).
-  - REQUIERE MARCA: sin marca no hay voz/tropicalizacion; esos temas se omiten (el equipo
-    asigna marca y entran al siguiente barrido).
-  - CAP por barrido (`KENI_AUTOGEN_MAX`, def 3): cada item lanza un `claude -p`; el cap evita
-    avalanchas. El cap del worker (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
-  - DEDUP: tras encolar, el tema se ETIQUETA `autogen` para no re-generarlo barrido tras
-    barrido. La seleccion lee esa etiqueta para saltarse lo ya hecho.
+Antes existía además un DAEMON suelto (`KENI_AUTOGEN`) que barría el tablero y auto-generaba
+copy; se RETIRÓ: la selección de temas del news-pool sin copy vive ahora dentro de la etapa de
+copy del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KENI_PIPELINE`.
+
+  - SOLO FUENTES: la etapa de copy solo procesa temas cuyo `origen` es de una FUENTE
+    (`estados.ORIGENES_AUTOGEN`); el contenido manual del equipo NO se toca.
+  - REQUIERE MARCA: sin marca no hay voz/tropicalizacion; esos temas se omiten.
+  - DEDUP: tras encolar, el tema se ETIQUETA `autogen` para no re-generarlo. La selección lee
+    esa etiqueta para saltarse lo ya hecho.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revision/aprobacion humana;
     la publicacion real (vía Metricool) sigue gated por `KENI_PUBLICAR_REAL`.
-
-La SELECCION (`topics_pendientes`) es PURA y testeable. El LANZAMIENTO reutiliza el pipeline
-existente sin tocar el contrato de borradores ni el jobspec: por eso es de bajo riesgo.
 """
 
 from __future__ import annotations
 
 import logging
-import threading
-from datetime import date
 from typing import Any
 
-from . import config, daemon_util, generaciones, marcas, priorizacion, redes, repos
+from . import marcas, redes, repos
 from .dominio import generar as dom_generar
-from .estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
+from .estados import ORIGENES_AUTOGEN
 
 _log = logging.getLogger("keni_consola.autogen_copy")
 
@@ -59,9 +48,6 @@ ORIGEN_HISTORIAL = "copy-desde-nota"
 
 # Etiqueta-marca de dedup: un tema ya encolado para auto-generacion la lleva.
 ETIQUETA_AUTOGEN = "autogen"
-
-# Estado terminal del contenido padre: ya no tiene sentido generarle copy.
-_ESTADO_CERRADO = "hecha"
 
 
 def _normaliza(texto: object) -> str:
@@ -91,78 +77,6 @@ def ids_ya_generados() -> set[str]:
         return repos.ids_contenido_con_etiqueta(et_id)
     except Exception:  # noqa: BLE001 -- un fallo de lectura no debe abortar el barrido
         return set()
-
-
-def _etiquetas_por_item() -> dict[str, list[str]]:
-    """id de contenido -> NOMBRES de etiqueta resueltos (para el score). Best-effort: {}.
-
-    `priorizacion.score_contenido` resuelve compromiso/evergreen por NOMBRE de etiqueta, asi que
-    traducimos los ids a nombres. Un fallo de lectura deja el mapa vacio (el score cae a sus
-    pesos base: prioridad/flujo/fecha/frescura), nunca rompe el barrido.
-    """
-    try:
-        nombres = {e.get("id", ""): e.get("nombre", "") for e in repos.listar_etiquetas()}
-        return {
-            cid: [nombres.get(eid, "") for eid in eids]
-            for cid, eids in repos.etiquetas_por_contenido().items()
-        }
-    except Exception:  # noqa: BLE001 -- sin etiquetas legibles, el score usa sus pesos base
-        return {}
-
-
-def topics_pendientes(
-    items: list[dict[str, Any]],
-    *,
-    ya_generados: set[str],
-    maximo: int,
-    etiquetas_por_item: dict[str, list[str]] | None = None,
-    hoy: date | None = None,
-) -> list[dict[str, Any]]:
-    """Subconjunto de `items` del tablero que se debe auto-generar (PURA, testeable).
-
-    Reglas, en orden:
-      - clase 'contenido' (no 'tarea'),
-      - `origen` de una FUENTE (`ORIGENES_TOPIC`),
-      - estado distinto de 'hecha' (cerrado),
-      - con marca valida (sin marca no hay voz),
-      - con titulo no vacio,
-      - no ya generados (dedup por id),
-      - se RECORTA a `maximo` (cap de seguridad por barrido).
-
-    ORDEN (Flujo C): el SCORE de priorizacion ordena la COLA DE TRABAJO de la IA (que se
-    auto-genera primero), no solo la vista Panel-9am. Si se pasan `etiquetas_por_item` (id ->
-    NOMBRES) y `hoy`, se CONSUME `priorizacion.ordenar_por_score` ANTES de filtrar+capar, de
-    modo que con cap entran los temas de MAYOR score. Es un WRAPPER que solo CONSUME esa
-    funcion: no toca la firma de `score_contenido` (compatible con que el Flujo E la enriquezca
-    despues). Si no se pasan, conserva el ORDEN de entrada (el tablero ya viene por
-    prioridad+fecha). Determinista en ambos casos.
-    """
-    if etiquetas_por_item is not None and hoy is not None:
-        items = priorizacion.ordenar_por_score(
-            items, etiquetas_por_item=etiquetas_por_item, hoy=hoy
-        )
-    elegidos: list[dict[str, Any]] = []
-    for item in items:
-        if len(elegidos) >= maximo:
-            break
-        if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
-            continue
-        if (item.get("origen") or "") not in ORIGENES_TOPIC:
-            continue
-        if (item.get("estado") or "") == _ESTADO_CERRADO:
-            continue
-        marca = item.get("marca") or ""
-        if not marca or not marcas.es_marca(marca):
-            continue
-        # Exclusión por marca: no auto-generamos copy de una marca apagada a mano para auto-copy.
-        if config.marca_apagada(config.ENV_AUTOGEN, marca):
-            continue
-        if not (item.get("titulo") or "").strip():
-            continue
-        if item.get("id") in ya_generados:
-            continue
-        elegidos.append(item)
-    return elegidos
 
 
 def _nota_de(item: dict[str, Any]) -> str:
@@ -220,89 +134,3 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         repos.asignar_etiqueta(item["id"], et_id)
     return gen
 
-
-def ejecutar_barrido() -> list[dict[str, Any]]:
-    """Un barrido: lee el tablero, elige temas pendientes y encola copy. Devuelve lo lanzado.
-
-    Best-effort: un fallo por item se loguea y se sigue; si la cola esta llena, se corta el
-    barrido (reintenta el siguiente, sin marcar los no lanzados).
-
-    SINGLE-FLIGHT cross-proceso (advisory lock de Postgres): el daemon y el endpoint a demanda
-    comparten este barrido; su dedup (`ids_ya_generados`) es leer-luego-escribir en Python, asi
-    que dos barridos solapados podrian lanzar `claude -p` para el MISMO tema dos veces. El lock
-    hace que un segundo barrido concurrente salga de inmediato con lista vacia (no lanza nada).
-    """
-    from . import db
-
-    with db.lock_barrido("autogen_copy") as ok:
-        if not ok:
-            _log.debug("Auto-generacion: otro barrido en curso; se omite este.")
-            return []
-        return _ejecutar_barrido()
-
-
-def _ejecutar_barrido() -> list[dict[str, Any]]:
-    """Cuerpo del barrido de auto-generacion (ya bajo el single-flight de `ejecutar_barrido`)."""
-    try:
-        items = repos.listar_contenido()
-    except Exception:  # noqa: BLE001 -- el tablero no disponible no debe romper el barrido
-        _log.exception("No se pudo leer el tablero para la auto-generacion.")
-        return []
-    elegidos = topics_pendientes(
-        items,
-        ya_generados=ids_ya_generados(),
-        maximo=config.autogen_max(),
-        # El SCORE ordena que se auto-genera primero (la cola de trabajo de la IA, no solo
-        # el Panel-9am). Best-effort: si no se pueden resolver las etiquetas, cae al orden
-        # del tablero (prioridad+fecha) sin romper el barrido.
-        etiquetas_por_item=_etiquetas_por_item(),
-        hoy=date.today(),
-    )
-    lanzados: list[dict[str, Any]] = []
-    for item in elegidos:
-        try:
-            gen = lanzar_para_topic(item)
-        except generaciones.ColaLlenaError:
-            _log.info("Auto-generacion: cola llena; el resto entra en el proximo barrido.")
-            break
-        except Exception:  # noqa: BLE001 -- un fallo por item no debe matar el barrido
-            _log.exception("Fallo al auto-generar copy para un tema del tablero.")
-            continue
-        if gen:
-            lanzados.append(gen)
-    if lanzados:
-        _log.info("Auto-generacion: %d tema(s) encolado(s) para copy.", len(lanzados))
-    return lanzados
-
-
-def _intervalo_segundos() -> float:
-    return config.autogen_intervalo_horas() * 3600.0
-
-
-def iniciar_autogen_copy(intervalo_segundos: float | None = None) -> threading.Thread:
-    """Arranca el hilo demonio de auto-generacion de copy (GATEADO EN VIVO).
-
-    Pensado para el servidor real (`__main__`), NO para `crear_app` (los tests no lo arrancan,
-    igual que el resto de daemons). El hilo arranca SIEMPRE y comprueba `KENI_AUTOGEN` en cada
-    ciclo: apagar/encender en runtime aplica sin reiniciar (apagar en <= ~1 min; encender tras
-    estar apagado dispara un barrido de inmediato). El hilo es daemon; un fallo de barrido se
-    loguea y NO lo mata.
-    """
-    intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
-
-    def bucle() -> None:
-        daemon_util.bucle_gateado(
-            activo_fn=config.gate_maquina(config.autogen_activo),
-            intervalo_seg_fn=lambda: intervalo,
-            sweep_fn=ejecutar_barrido,
-            log=_log,
-        )
-
-    hilo = threading.Thread(target=bucle, name="autogen-copy-daemon", daemon=True)
-    hilo.start()
-    estado = "ACTIVA" if config.autogen_activo() else "EN ESPERA (KENI_AUTOGEN off)"
-    _log.info(
-        "Auto-generacion de copy %s, cada %.0f h (max/barrido=%d).",
-        estado, intervalo / 3600.0, config.autogen_max(),
-    )
-    return hilo

@@ -1,12 +1,12 @@
 """¿La imagen de una pieza tiene un FORMATO (aspecto) de social válido? — lógica PURA.
 
-El auto-avance "dale el OK" exige que la pieza tenga "imagen con formato correcto" antes de
+La validación editorial exige que la pieza tenga "imagen con formato correcto" antes de
 abrir los OK del equipo. "Formato correcto" = la imagen es uno de los LIENZOS CANÓNICOS de
 social (`formatos_red.ASPECTOS`): vertical 9:16, feed 4:5, cuadrado 1:1, horizontal 16:9. Es
 decir: una placa bien formateada, no un recorte raro (un thumbnail apaisado de la fuente, un
 banner). Aquí, sin I/O ni Pillow, decidimos si unas dimensiones `(ancho, alto)` encajan en
 ALGUNO de esos aspectos, con tolerancia (las exportaciones reales rara vez dan el ratio exacto
-al píxel). El llamante (`auto_avance`) lee las dimensiones de la imagen y nos las pasa.
+al píxel). El llamante lee las dimensiones de la imagen y nos las pasa.
 
 NO se exige el formato POR RED: el equipo cruza formatos (postea 1:1 y 4:5 indistintamente en
 IG/FB/X), así que atar cada red a un único lienzo bloqueaba imágenes perfectamente válidas. La

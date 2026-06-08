@@ -54,11 +54,12 @@ Ejecutor inyectable (tests). Best-effort: si falla, devuelve los originales.
 ### Integración en el Radar (radar.py / api/radar.py) — ADITIVA y acotada
 - Detectar idioma del item/preset (usa el `idioma` del preset; heurística simple
   si no se sabe). Marcar `idioma` en cada tema.
-- Flag `KENI_TRADUCCION` (config.py) **por defecto ON**. Cuando ON: tras
-  consolidar, toma los temas extranjeros del **top N** (cap, p.ej.
-  `KENI_TRADUCCION_MAX=15`), llama UNA vez a `traducir_items`, y sustituye
-  `titulo`/`por_que` por la versión ES, guardando `titulo_original`. Con timeout
-  y fallback al original (no degradar el Radar si Haiku tarda/falla).
+- La traducción es **SIEMPRE ON** (no tiene toggle propio: corre dentro de la etapa
+  «Crear noticias», gateada por `KENI_INGESTA` + `KENI_MAQUINA`). Tras consolidar,
+  toma los temas extranjeros del **top N** (cap, p.ej. `KENI_TRADUCCION_MAX=15`),
+  llama UNA vez a `traducir_items`, y sustituye `titulo`/`por_que` por la versión ES,
+  guardando `titulo_original`. Con timeout y fallback al original (no degradar el
+  Radar si Haiku tarda/falla).
 - Tema del Radar gana campos opcionales: `idioma?: str`, `traducido?: bool`,
   `titulo_original?: str`. Sin tocar el resto del scoring.
 

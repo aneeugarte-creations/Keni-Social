@@ -3,11 +3,7 @@ from __future__ import annotations
 
 from ._config_comun import (
     _VERDADEROS,
-    AUTO_AVANCE_INTERVALO_HORAS_DEF,
-    AUTO_AVANCE_MAX_DEF,
     AUTOGEN_ARTE_MAX_DEF,
-    ENV_AUTO_AVANCE_INTERVALO_HORAS,
-    ENV_AUTO_AVANCE_MAX,
     ENV_AUTOGEN_ARTE_MAX,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_GENERACIONES_TTL_HORAS,
@@ -57,18 +53,6 @@ def marca_apagada(env_flag: str, marca: str) -> bool:
     if crudo is None or not crudo.strip():
         return False  # sin override explícito: la marca NO está apagada
     return crudo.strip().lower() not in _VERDADEROS
-
-
-def auto_avance_intervalo_horas() -> int:
-    """Cada cuantas horas barre el daemon de auto-avance (`KENI_AUTO_AVANCE_INTERVALO_HORAS`, def 1, min 1)."""
-    return _entero(
-        ENV_AUTO_AVANCE_INTERVALO_HORAS, AUTO_AVANCE_INTERVALO_HORAS_DEF, minimo=1
-    )
-
-
-def auto_avance_max() -> int:
-    """Máximo de QA editoriales a lanzar por barrido de auto-avance (`KENI_AUTO_AVANCE_MAX`, def 4, min 1)."""
-    return _entero(ENV_AUTO_AVANCE_MAX, AUTO_AVANCE_MAX_DEF, minimo=1)
 
 
 def media_gc_activo() -> bool:

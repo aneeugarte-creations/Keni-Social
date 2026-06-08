@@ -236,27 +236,28 @@ el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
 
 ## Encender la tubería automática para VALIDACIÓN (Flujo C, Fase 2)
 
-La "máquina automática" lleva cada tema de entrada a **borrador completo en la cola de
-revisión** encadenando los daemons: `entrada → (radar_auto) → autogen_copy → autogen_arte →
-cola de revisión`. Los cuatro flags vienen **OFF por defecto** (conservador). Para validar la
-cadena end-to-end en el hosted del piloto, la decisión de dirección (2026-06-01) es **encender
-los tres de producción y dejar el de publicar OFF**:
+La "máquina de contenido" lleva cada tema de entrada a **borrador completo en la cola de
+revisión** a través del **pipeline** (un único espinazo): `news-pool → etapa de copy → etapa de
+arte → cola de revisión`. El modelo es **1 master + 3 etapas**, todo colgando del pipeline.
+Vienen **OFF por defecto** (conservador). Para validar la cadena end-to-end en el hosted del
+piloto, la decisión de dirección es **encender el master + las 3 etapas y dejar el de publicar
+OFF**:
 
 | Flag | Qué hace | Validación |
 |---|---|---|
-| `KENI_RADAR_AUTO` | Auto-promueve temas virales del Radar al tablero | **ON** |
-| `KENI_AUTOGEN` | Auto-genera COPY de los temas (borrador a la cola) | **ON** |
-| `KENI_AUTOGEN_ARTE` | Auto-genera ARTE de los temas con copy sin imagen | **ON** |
+| `KENI_MAQUINA` | Interruptor general (kill-switch); sin él nada automático corre | **ON** |
+| `KENI_INGESTA` | «Crear noticias»: ingesta + clustering + traducción/tropicalización MX | **ON** |
+| `KENI_PIPELINE` | «Generar copy»: etapa de copy (único motor de copy) | **ON** |
+| `KENI_AUTOGEN_ARTE` | «Generar arte»: etapa de arte (temas con copy sin imagen) | **ON** |
 | `KENI_PUBLICAR_REAL` | Publica de verdad a Metricool | **OFF** (queda en dry-run) |
 
-**Por qué es SEGURO encender los tres primeros:** la auto-producción solo PRODUCE hasta el
-borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de revisión**
+**Por qué es SEGURO encender el master + las 3 etapas:** la máquina de contenido solo PRODUCE
+hasta el borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de revisión**
 (`/api/aprobacion/cola`, UI `/operacion/revision/editorial`); el **gate humano** (aprobación
-multinivel) sigue intacto. **Nada sale a
-redes** sin que el humano lo autorice: el posteo real va por Metricool y está gated por
-`KENI_PUBLICAR_REAL`, que se queda **OFF**. Además todos los daemons tienen cap por barrido
-(`KENI_AUTOGEN_MAX`, `KENI_AUTOGEN_ARTE_MAX`, `KENI_RADAR_AUTO_MAX`, def 3) y dedup por
-etiqueta, así que no hay avalanchas. El auto-arte **degrada** si no hay proveedor de imagen
+multinivel) sigue intacto. **Nada sale a redes** sin que el humano lo autorice: el posteo real
+va por Metricool y está gated por `KENI_PUBLICAR_REAL`, que se queda **OFF**. Además el pipeline
+tiene cap por barrido (`KENI_PIPELINE_MAX`, `KENI_AUTOGEN_ARTE_MAX`, def 3) y dedup por
+etiqueta, así que no hay avalanchas. La etapa de arte **degrada** si no hay proveedor de imagen
 configurado (no hace nada). Los **defaults siguen OFF en código**: encender es una decisión de
 operación, no un cambio de fuente.
 
@@ -276,8 +277,9 @@ default**.
    `daemons`) y recrea el servicio:
 
    ```yaml
-   #   KENI_RADAR_AUTO:    "1"
-   #   KENI_AUTOGEN:       "1"
+   #   KENI_MAQUINA:       "1"
+   #   KENI_INGESTA:       "1"
+   #   KENI_PIPELINE:      "1"
    #   KENI_AUTOGEN_ARTE:  "1"
    #   KENI_PUBLICAR_REAL deliberadamente NO se pone (sigue OFF = dry-run).
    ```

@@ -380,3 +380,104 @@ def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     lanzados = pc.ejecutar_cd(autor=None)
     assert len(lanzados) == 2
     assert len(llamadas) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Fundido de la selección de autogen_copy en la etapa de copy (news-pool)      #
+# --------------------------------------------------------------------------- #
+
+
+def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
+    """La etapa de copy también redacta los temas del news-pool (orígenes de noticias) sin copy.
+
+    Un tema con origen en `ORIGENES_AUTOGEN`, con marca y sin copy entra; el de origen "" no.
+    """
+    bueno = repos.crear_contenido(
+        clase="contenido", titulo="Noticia rss", marca="unotv", origen="rss",
+    )
+    repos.crear_contenido(
+        clase="contenido", titulo="Tecleado a mano", marca="unotv", origen="",
+    )
+    ids = {t["id"] for t in pc.temas_autogen_sin_copy()}
+    assert bueno["id"] in ids
+    # El tecleado (origen "") NO entra.
+    assert len(ids) == 1
+
+
+def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
+    """`ejecutar_cd` lanza copy de los temas del pool vía `autogen_copy.lanzar_para_topic`."""
+    from keni_consola import autogen_copy
+
+    lanzadas: list[str] = []
+    monkeypatch.setattr(
+        autogen_copy, "lanzar_para_topic",
+        lambda item: lanzadas.append(item["id"]) or {"id": f"g-{item['id']}"},
+    )
+    repos.crear_contenido(
+        clase="contenido", titulo="Noticia pool", marca="unotv", origen="rss",
+    )
+    lanzados = pc.ejecutar_cd(autor=None)
+    assert len(lanzadas) == 1
+    assert len(lanzados) == 1
+
+
+def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
+    """La exclusión por marca de «Generar copy» (ENV_PIPELINE) también aplica al pool."""
+    from keni_consola import autogen_copy
+
+    monkeypatch.setattr(pc.config, "marca_apagada", lambda env, marca: marca == "unotv")
+    lanzadas: list[str] = []
+    monkeypatch.setattr(
+        autogen_copy, "lanzar_para_topic",
+        lambda item: lanzadas.append(item["id"]) or {"id": "g"},
+    )
+    repos.crear_contenido(
+        clase="contenido", titulo="Apagada", marca="unotv", origen="rss",
+    )
+    pc.ejecutar_cd(autor=None)
+    assert lanzadas == []
+
+
+# --------------------------------------------------------------------------- #
+# Etapa de ARTE del pipeline (toggle "Generar arte", KENI_AUTOGEN_ARTE)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_ejecutar_arte_off_por_defecto_no_hace_nada(entorno, monkeypatch):
+    """Sin `KENI_AUTOGEN_ARTE`, la etapa de arte no ilustra (devuelve [])."""
+    monkeypatch.delenv(config.ENV_AUTOGEN_ARTE, raising=False)
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    assert pc.ejecutar_arte() == []
+
+
+def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatch):
+    """Con el toggle + máquina ON y proveedor configurado, ilustra vía autogen_arte."""
+    from keni_consola import autogen_arte
+
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    monkeypatch.setenv(config.ENV_AUTOGEN_ARTE, "1")
+    monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
+    item = {"id": "t1", "titulo": "Tema", "marca": "unotv"}
+    monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: [item])
+    monkeypatch.setattr(autogen_arte, "_plataformas_por_item", lambda items: {})
+    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_arte, "_etiquetas_por_item", lambda: {})
+    monkeypatch.setattr(autogen_arte, "topics_sin_arte", lambda *a, **k: [item])
+    adjuntados: list[str] = []
+    monkeypatch.setattr(
+        autogen_arte, "lanzar_para_topic",
+        lambda it: adjuntados.append(it["id"]) or {"contenido_id": it["id"]},
+    )
+    res = pc.ejecutar_arte()
+    assert adjuntados == ["t1"]
+    assert len(res) == 1
+
+
+def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
+    """Con el toggle ON pero sin proveedor de imagen, la etapa de arte no hace nada."""
+    from keni_consola import media
+
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    monkeypatch.setenv(config.ENV_AUTOGEN_ARTE, "1")
+    monkeypatch.setattr(media, "proveedor_configurado", lambda: False)
+    assert pc.ejecutar_arte() == []

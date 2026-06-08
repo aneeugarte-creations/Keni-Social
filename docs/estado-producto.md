@@ -44,9 +44,9 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   priorizada que se alimenta de varias fuentes y deja el trabajo operativo adelantado hasta el
   punto de validación humana. Ya construido y probado: el
   **importador de calendario Excel/CSV** (H1) que sube los temas al tablero con prioridad, fecha y
-  etiqueta de compromiso; la **auto-generación de copy** al entrar un tema de una fuente (H2, por
-  el mismo pipeline que el botón manual, dejando el borrador en la cola de revisión; gated por
-  `KENI_AUTOGEN`, **OFF por defecto**); y el **score de prioridad dinámico** que re-ordena la vista
+  etiqueta de compromiso; la **generación de copy** al entrar un tema de una fuente (la etapa de
+  copy del pipeline, por el mismo camino que el botón manual, dejando el borrador en la cola de
+  revisión; gated por `KENI_PIPELINE`, **OFF por defecto**); y el **score de prioridad dinámico** que re-ordena la vista
   del día sin alterar el orden del kanban compartido (H3). La lista curada del día vive en el
   propio **tablero** (`/operacion/parrilla/pendientes`), ordenado por score (el dashboard "Panel"
   de un vistazo se retiró por no aportar sobre el tablero). El humano sigue validando los checkpoints

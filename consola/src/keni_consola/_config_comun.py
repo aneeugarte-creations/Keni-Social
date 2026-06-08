@@ -137,11 +137,6 @@ ENV_AUTO_QA_EDITORIAL = "KENI_AUTO_QA_EDITORIAL"
 # de mantenimiento (metricas, alertas, vencimientos, reaper, GC de media) ni a la publicacion.
 ENV_MAQUINA = "KENI_MAQUINA"
 
-# Geo del Radar de tendencias (`KENI_RADAR_AUTO_GEO`, def MX). Lo consume `breaking_daemon`
-# para acotar la señal por país. (El daemon de auto-promoción "radar-auto" y su endpoint
-# `/api/radar/auto/*` se retiraron; solo sobrevive este parámetro de geo.)
-ENV_RADAR_AUTO_GEO = "KENI_RADAR_AUTO_GEO"
-
 # Investigador (Fase 1): daemon que MATERIALIZA por marca un snapshot del Radar (temas
 # consolidados + score/razon/estado) en Postgres, para que la Parrilla y el Radar lean del
 # snapshot (rapido, sin re-descargar fuentes) en vez de golpear Trends/feeds en cada request.
@@ -149,13 +144,6 @@ ENV_RADAR_AUTO_GEO = "KENI_RADAR_AUTO_GEO"
 # en vivo, comportamiento de Fase 0 intacto) y el daemon arranca pero no materializa nada.
 ENV_INVESTIGADOR = "KENI_INVESTIGADOR"
 ENV_INVESTIGADOR_INTERVALO_HORAS = "KENI_INVESTIGADOR_INTERVALO_HORAS"
-
-# `KENI_PIPELINE_LINEAS=1` activa el auto-etiquetado de la ingesta: cada pieza nueva se
-# clasifica en su LÍNEA (etiqueta clase 'vertical') y su ORIGEN (clase 'origen') por
-# palabras clave. CONSERVADOR por defecto (OFF): sin el flag, la ingesta no etiqueta nada
-# (comportamiento previo intacto). Una pieza sin línea NO se descarta: queda marcada con
-# un aviso para que el equipo la clasifique o la deseche a mano.
-ENV_PIPELINE_LINEAS = "KENI_PIPELINE_LINEAS"
 
 # Loop de aprendizaje (Fase 5): el score de priorizacion tiene en cuenta lo que
 # HISTORICAMENTE rinde por marca (engagement de la fachada de metricas). Gateado OFF por
@@ -176,13 +164,6 @@ ENV_SUGERENCIAS_EDITORIALES = "KENI_SUGERENCIAS_EDITORIALES"
 ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS = "KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS"
 ENV_SUGERENCIAS_EDITORIALES_MAX = "KENI_SUGERENCIAS_EDITORIALES_MAX"
 
-# Carril Rápido de Breaking (Claro Sports): un hilo demonio barre el snapshot del Investigador
-# cada N minutos y, para los temas breaking de Claro Sports sin borrador aún, crea un DRAFT y
-# encola la generación de copy (mismo camino que /api/breaking/preparar). SÓLO BORRADORES; nunca
-# publica. CONSERVADOR por defecto (OFF): sin `KENI_BREAKING` el equipo lo hace a mano con el tap.
-ENV_BREAKING = "KENI_BREAKING"
-ENV_BREAKING_INTERVALO_MIN = "KENI_BREAKING_INTERVALO_MIN"
-ENV_BREAKING_MAX = "KENI_BREAKING_MAX"
 # Google Trends como fuente externa: el daemon ingiere las tendencias (con sus noticias) al
 # pool. GATEADO OFF por defecto (KENI_TRENDS). `KENI_TRENDS_GEOS` = CSV de geos (def "MX").
 ENV_TRENDS = "KENI_TRENDS"
@@ -230,15 +211,6 @@ ENV_TRAD_MIN_SCORE = "KENI_TRAD_MIN_SCORE"
 ENV_TRAD_LOTE = "KENI_TRAD_LOTE"
 ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 
-# Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
-# demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
-# radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
-# generacion de copy (mismo pipeline que el boton manual). El borrador resultante cae en la
-# cola de revision. CONSERVADOR por defecto (OFF): sin `KENI_AUTOGEN` el equipo genera a mano.
-ENV_AUTOGEN = "KENI_AUTOGEN"
-ENV_AUTOGEN_INTERVALO_HORAS = "KENI_AUTOGEN_INTERVALO_HORAS"
-ENV_AUTOGEN_MAX = "KENI_AUTOGEN_MAX"
-
 # Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion, Flujo "tubería"). Un hilo
 # demonio que, cada N horas y por marca con feeds RSS activos, ingiere temas frescos (CI),
 # lanza la generacion de copy+arte de marca (CD, mismo camino que el boton manual) y valida
@@ -249,35 +221,13 @@ ENV_PIPELINE = "KENI_PIPELINE"
 ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 
-# Auto-feed (Ola E): pool único -> dedup -> feed automático. Un hilo demonio que, cada N
-# minutos y por marca activa, toma las HISTORIAS (clusters) relevantes del pool (score >=
-# umbral), descarta las caducas para líneas no-evergreen, respeta un TOPE DIARIO POR MARCA y crea
-# en el feed una pieza borrador con copy+QA encolados (1 agente, mismo camino que el botón
-# manual). NUNCA publica (todo cae en el feed para imagen + aprobación humana). CONSERVADOR por
-# defecto (OFF): sin `KENI_AUTOFEED` nada fluye solo. El tope por marca admite override por-marca
-# `KENI_AUTOFEED_CAP::<marca>` (mismo mecanismo `clave_por_marca` que `marca_apagada`).
-ENV_AUTOFEED = "KENI_AUTOFEED"
-ENV_AUTOFEED_UMBRAL = "KENI_AUTOFEED_UMBRAL"
-ENV_AUTOFEED_CAP = "KENI_AUTOFEED_CAP"
-ENV_AUTOFEED_INTERVALO_MIN = "KENI_AUTOFEED_INTERVALO_MIN"
-
-# Auto-generacion de ARTE (imagen) para temas con copy pero sin imagen (fase3 auto-produccion,
-# H2-b). Un hilo demonio barre el tablero y, para los temas con borrador/copy en alguna
-# plataforma a la que le FALTA imagen, genera UN arte por IA (mismo proveedor que
-# `/api/media/generar`) y lo adjunta. CONSERVADOR por defecto (OFF): sin `KENI_AUTOGEN_ARTE`
-# el equipo hace el arte a mano. Sin proveedor de imagen configurado, no hace nada.
+# Etapa de ARTE del pipeline: "Generar arte" (`KENI_AUTOGEN_ARTE`, toggle de etapa). Tras la
+# etapa de copy, el pipeline genera UN arte por IA (mismo proveedor que `/api/media/generar`)
+# para los temas con copy pero sin imagen y lo adjunta. CONSERVADOR por defecto (OFF): sin
+# `KENI_AUTOGEN_ARTE` no se ilustra. Sin proveedor de imagen configurado, no hace nada.
+# `KENI_AUTOGEN_ARTE_MAX` acota cuántos temas se ilustran por barrido (cada uno cuesta).
 ENV_AUTOGEN_ARTE = "KENI_AUTOGEN_ARTE"
-ENV_AUTOGEN_ARTE_INTERVALO_HORAS = "KENI_AUTOGEN_ARTE_INTERVALO_HORAS"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
-
-# Auto-avance "dale el OK" (Flujo D): un hilo demonio lleva SOLO a `en_revision` (abre los OK
-# del equipo) las piezas en borrador que ya tienen copy out, copy in (o exención), imagen con
-# formato correcto y QA pasado (🟢/🟡). De paso, lanza la QA editorial por pieza de las que aún
-# no la tienen, para que el veredicto exista. CONSERVADOR por defecto (OFF): sin el flag, mandar
-# a revisión sigue siendo manual. `KENI_AUTO_AVANCE_MAX` acota los lanzamientos de QA por barrido.
-ENV_AUTO_AVANCE = "KENI_AUTO_AVANCE"
-ENV_AUTO_AVANCE_INTERVALO_HORAS = "KENI_AUTO_AVANCE_INTERVALO_HORAS"
-ENV_AUTO_AVANCE_MAX = "KENI_AUTO_AVANCE_MAX"
 
 # Auto-programación: una pieza APROBADA (cerrada toda su cadena humana) pasa SOLA a `programado`
 # en su próximo hueco de franja. A diferencia del resto de etapas de auto-producción (que gastan
@@ -308,19 +258,10 @@ ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
 # `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
 ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 
-# Agentes de investigacion (Ola 6): briefs reutilizables que proponen candidatos fechados.
-# GATEADO OFF por defecto: sin el flag, el daemon no barre. El endpoint /api/investigacion/correr
-# funciona a demanda independientemente del flag del daemon.
-ENV_INVESTIGACION = "KENI_INVESTIGACION_AUTO"
-ENV_INVESTIGACION_INTERVALO_HORAS = "KENI_INVESTIGACION_INTERVALO_HORAS"
-ENV_INVESTIGACION_MAX = "KENI_INVESTIGACION_MAX"
-
-# Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4).
-# `KENI_TRADUCCION=0` apaga la traducción (def ON: ahorra pedir explicitamente activarla).
-# `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top se traducen por request
-# (def 15). Se usa el mismo modelo de `KENI_INSUMOS_MODELO` (Haiku). Ver
-# `dominio/traduccion.py` y la integración en `api/radar.py`.
-ENV_TRADUCCION = "KENI_TRADUCCION"
+# Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4). La traducción es
+# SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de ingesta, gateada por
+# KENI_INGESTA + KENI_MAQUINA). `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top
+# se traducen por request (def 15). Se usa el mismo modelo de `KENI_INSUMOS_MODELO` (Haiku).
 ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
 
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
@@ -463,18 +404,10 @@ ALERTAS_UMBRAL_ENGAGEMENT_DEF = 1.0
 # vencimiento es por DIA (`fecha_entrega`), no hace falta granularidad fina.
 EVENTOS_INTERVALO_SEGUNDOS_DEF = 300.0
 
-# Geo por defecto del Radar (consumido por `breaking_daemon`).
-RADAR_AUTO_GEO_DEF = "MX"
-
 # Cadencia del barrido del Investigador (Fase 1): materializa el snapshot del Radar por marca
 # cada N horas. Intervalo holgado (def 6h, igual que radar-auto): el snapshot vive con un TTL
 # de ~2 intervalos, asi que con 6h las lecturas sirven datos de a lo sumo medio dia.
 INVESTIGADOR_INTERVALO_HORAS_DEF = 6
-
-# Agentes de investigacion (Ola 6): cadencia holgada (def 6h, cada barrido lanza claude -p
-# por brief activo). Cap bajo por barrido (def 5) para no disparar costes.
-INVESTIGACION_INTERVALO_HORAS_DEF = 6
-INVESTIGACION_MAX_DEF = 5
 
 # Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
 # cambian a cada minuto y no conviene martillear los feeds.
@@ -488,10 +421,6 @@ SUGERENCIAS_EDITORIALES_MAX_DEF = 3
 # Google Trends: cadencia holgada (def 30 min; las tendencias no cambian al segundo).
 TRENDS_INTERVALO_MIN_DEF = 30
 TRENDS_GEOS_DEF = ("MX",)
-
-# Carril Rápido de Breaking: barre cada 5 min (def) y cap 3 borradores por barrido.
-BREAKING_INTERVALO_MIN_DEF = 5
-BREAKING_MAX_DEF = 3
 
 # Motor de ingesta persistente (Ola A): tope de feeds por barrido, descargas en paralelo y
 # artículos por feed. Defaults escalables (concurrencia ACOTADA para no abrir cientos de
@@ -546,22 +475,9 @@ FUENTES_BAJA_CONFIANZA_DEF: tuple[str, ...] = (
     "substack.com",
 )
 
-# Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
-# porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
-# aplicando aguas abajo.
-AUTOGEN_INTERVALO_HORAS_DEF = 1
-AUTOGEN_MAX_DEF = 3
-
-# Auto-generacion de ARTE (H2-b): mismos defaults conservadores que el auto-copy (barre
-# seguido, cap bajo por barrido), porque cada item llama al proveedor de imagen (coste).
-AUTOGEN_ARTE_INTERVALO_HORAS_DEF = 1
+# Etapa de ARTE del pipeline: cap bajo por barrido (def 3), porque cada item llama al
+# proveedor de imagen (coste).
 AUTOGEN_ARTE_MAX_DEF = 3
-
-# Auto-avance "dale el OK": barre seguido (def 1h) y acota cuántas QA editoriales lanza por
-# barrido (def 4), porque cada una es un `claude -p` (coste). Avanzar a en_revisión no tiene
-# coste de IA; el cap solo limita los lanzamientos de QA pendiente.
-AUTO_AVANCE_INTERVALO_HORAS_DEF = 1
-AUTO_AVANCE_MAX_DEF = 4
 
 # Pipeline de contenido CI→CD→QA: barrido HORARIO (def 1h) por marca y cap bajo por barrido
 # (def 3), porque cada item ingerido lanza un `claude -p` (coste). El cap del worker
@@ -569,13 +485,6 @@ AUTO_AVANCE_MAX_DEF = 4
 PIPELINE_INTERVALO_HORAS_DEF = 1
 PIPELINE_MAX_DEF = 3
 
-# Auto-feed (Ola E): barrido frecuente en MINUTOS (def 10) — toma historias ya cribadas del
-# pool, sin coste de ingesta. Umbral de relevancia 0.5 (el score del cluster vive en [0,1];
-# las notas curadas del equipo lo superan de sobra). Tope diario por marca def 20 (cada pieza
-# encola un copy+QA: el cap acota cuántas piezas auto-fluyen al feed por marca y día).
-AUTOFEED_UMBRAL_DEF = 0.5
-AUTOFEED_CAP_DEF = 20
-AUTOFEED_INTERVALO_MIN_DEF = 10
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
 # barrido cada 10 min. El barrido tambien corre al arrancar (limpia los huerfanos del crash
@@ -691,17 +600,7 @@ __all__ = [
     'ALERTAS_INTERVALO_HORAS_DEF',
     'ALERTAS_UMBRAL_ENGAGEMENT_DEF',
     'ALGORITMOS_INTERVALO_HORAS_DEF',
-    'AUTOFEED_CAP_DEF',
-    'AUTOFEED_INTERVALO_MIN_DEF',
-    'AUTOFEED_UMBRAL_DEF',
-    'AUTOGEN_ARTE_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
-    'AUTOGEN_INTERVALO_HORAS_DEF',
-    'AUTOGEN_MAX_DEF',
-    'AUTO_AVANCE_INTERVALO_HORAS_DEF',
-    'AUTO_AVANCE_MAX_DEF',
-    'BREAKING_INTERVALO_MIN_DEF',
-    'BREAKING_MAX_DEF',
     'CLAUDE_TIMEOUT_DEF',
     'CLUSTER_BREAKING_FUENTES_DEF',
     'CLUSTER_BREAKING_VENTANA_H_DEF',
@@ -721,26 +620,12 @@ __all__ = [
     'ENV_ALERTAS_UMBRAL_ENGAGEMENT',
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
-    'ENV_AUTOFEED',
-    'ENV_AUTOFEED_CAP',
-    'ENV_AUTOFEED_INTERVALO_MIN',
-    'ENV_AUTOFEED_UMBRAL',
-    'ENV_AUTOGEN',
     'ENV_AUTOGEN_ARTE',
-    'ENV_AUTOGEN_ARTE_INTERVALO_HORAS',
     'ENV_AUTOGEN_ARTE_MAX',
-    'ENV_AUTOGEN_INTERVALO_HORAS',
-    'ENV_AUTOGEN_MAX',
-    'ENV_AUTO_AVANCE',
-    'ENV_AUTO_AVANCE_INTERVALO_HORAS',
-    'ENV_AUTO_AVANCE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
     'ENV_AUTO_QA_EDITORIAL',
     'ENV_TEXTO_DIR',
-    'ENV_BREAKING',
-    'ENV_BREAKING_INTERVALO_MIN',
-    'ENV_BREAKING_MAX',
     'ENV_CLAUDE_DISALLOWED_TOOLS',
     'ENV_CLAUDE_MAX_TURNS',
     'ENV_CLAUDE_MAX_USD',
@@ -786,9 +671,6 @@ __all__ = [
     'ENV_INGESTA_MAX_ITEMS',
     'ENV_INGESTA_WORKERS',
     'ENV_INSUMOS_MODELO',
-    'ENV_INVESTIGACION',
-    'ENV_INVESTIGACION_INTERVALO_HORAS',
-    'ENV_INVESTIGACION_MAX',
     'ENV_INVESTIGADOR',
     'ENV_INVESTIGADOR_INTERVALO_HORAS',
     'ENV_LOG_LEVEL',
@@ -815,7 +697,6 @@ __all__ = [
     'ENV_PG_USER',
     'ENV_PIPELINE',
     'ENV_PIPELINE_INTERVALO_HORAS',
-    'ENV_PIPELINE_LINEAS',
     'ENV_PIPELINE_MAX',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
@@ -823,7 +704,6 @@ __all__ = [
     'ENV_PRIORIZA_METRICAS_RANGO',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
-    'ENV_RADAR_AUTO_GEO',
     'ENV_RAIZ',
     'ENV_REAPER_INTERVALO_MIN',
     'ENV_REUTERS_API_KEY',
@@ -845,7 +725,6 @@ __all__ = [
     'ENV_SUGERENCIAS_EDITORIALES_MAX',
     'ENV_TERMOMETRO',
     'ENV_TOKEN',
-    'ENV_TRADUCCION',
     'ENV_TRADUCCION_MAX',
     'ENV_TRAD_LOTE',
     'ENV_TRAD_MIN_SCORE',
@@ -876,8 +755,6 @@ __all__ = [
     'INGESTA_MAX_ERRORES_DEF',
     'INGESTA_MAX_ITEMS_DEF',
     'INGESTA_WORKERS_DEF',
-    'INVESTIGACION_INTERVALO_HORAS_DEF',
-    'INVESTIGACION_MAX_DEF',
     'INVESTIGADOR_INTERVALO_HORAS_DEF',
     'LOG_LEVEL_DEF',
     'MAX_COLA_DEF',
@@ -892,7 +769,6 @@ __all__ = [
     'PIPELINE_MAX_DEF',
     'PORT_DEF',
     'Path',
-    'RADAR_AUTO_GEO_DEF',
     'REAPER_INTERVALO_MIN_DEF',
     'S3_BUCKET_DEF',
     'S3_REGION_DEF',

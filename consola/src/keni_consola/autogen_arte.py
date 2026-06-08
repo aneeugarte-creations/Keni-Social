@@ -1,27 +1,28 @@
-"""Auto-generacion de ARTE (imagen) para temas del tablero con copy pero sin imagen (H2-b).
+"""Generacion de ARTE (imagen) para temas con copy pero sin imagen — ETAPA del pipeline.
 
 PROBLEMA QUE RESUELVE
 =====================
-El auto-copy (`autogen_copy.py`) deja BORRADORES de texto listos para revisar, pero el
-equipo aun tiene que generar un arte a mano para cada uno. Objetivo de producto (peticion
-de Angel): que tambien "se vaya generando parte del arte a medida que entran los temas".
-Aqui un daemon (espejo de `autogen_copy`/`radar_auto`) barre el tablero cada N horas y, para
-cada TEMA que YA tiene copy/borrador en alguna plataforma pero le FALTA imagen, genera UN
-arte por IA (reutilizando el MISMO proveedor que el boton `/api/media/generar`) y lo ADJUNTA
-a esa plataforma. La pieza sigue su flujo normal de revision/aprobacion humana.
+La etapa de copy del pipeline deja BORRADORES de texto listos para revisar, pero el equipo
+aun tiene que generar un arte a mano para cada uno. La ETAPA DE ARTE del pipeline (toggle
+"Generar arte", `KENI_AUTOGEN_ARTE`) corre TRAS la de copy y, para cada TEMA que YA tiene
+copy/borrador en alguna plataforma pero le FALTA imagen, genera UN arte por IA (reutilizando
+el MISMO proveedor que el boton `/api/media/generar`) y lo ADJUNTA a esa plataforma. La pieza
+sigue su flujo normal de revision/aprobacion humana.
+
+Antes existía un DAEMON suelto que barría el tablero; se RETIRÓ: la etapa vive ahora dentro
+del barrido del pipeline (`pipeline_contenido.ejecutar_arte`), que reutiliza la SELECCIÓN
+(`topics_sin_arte`) y el LANZAMIENTO (`lanzar_para_topic`) de este módulo.
 
 SEGURO POR DISENO (CONSERVADOR)
 ===============================
-  - GATEADO: el daemon solo arranca con `KENI_AUTOGEN_ARTE=1` (def OFF). Sin el flag, nada
-    se auto-genera (el equipo hace el arte a mano, como hasta ahora).
+  - GATEADO: la etapa solo ilustra con `KENI_AUTOGEN_ARTE=1` (def OFF) + `KENI_MAQUINA=1`.
   - SOLO TEMAS CON COPY Y SIN IMAGEN: solo procesa contenido 'contenido' no cerrado que
     tenga alguna `contenido_plataforma` con copy pero sin imagen. No inventa piezas.
-  - SIN CREDENCIALES, NO HACE NADA: si no hay proveedor de imagen configurado, loguea y
-    sigue (degrada con elegancia; no rompe el barrido).
+  - SIN CREDENCIALES, NO HACE NADA: si no hay proveedor de imagen configurado, no ilustra.
   - CAP por barrido (`KENI_AUTOGEN_ARTE_MAX`, def 3): cada item llama al proveedor de
     imagen (coste); el cap evita avalanchas.
-  - DEDUP: tras procesar, el tema se ETIQUETA `autogen-arte` para no re-generarlo barrido
-    tras barrido. La seleccion lee esa etiqueta para saltarse lo ya hecho.
+  - DEDUP: tras procesar, el tema se ETIQUETA `autogen-arte` para no re-generarlo. La
+    seleccion lee esa etiqueta para saltarse lo ya hecho.
   - NO PUBLICA: solo adjunta el arte al borrador; la revision/aprobacion humana y la
     publicacion real (`KENI_PUBLICAR_REAL`) siguen gated, igual que siempre.
 
@@ -33,11 +34,10 @@ inyectable/mockeable) sin reinventar la generacion de imagen: bajo riesgo.
 from __future__ import annotations
 
 import logging
-import threading
 from datetime import date
 from typing import Any
 
-from . import config, daemon_util, marcas, media, priorizacion, repos
+from . import config, marcas, media, priorizacion, repos
 from .estados import CLASE_CONTENIDO
 
 _log = logging.getLogger("keni_consola.autogen_arte")
@@ -245,72 +245,3 @@ def _plataformas_por_item(items: list[dict[str, Any]]) -> dict[str, list[dict[st
             mapa[item_id] = []
     return mapa
 
-
-def ejecutar_barrido() -> list[dict[str, Any]]:
-    """Un barrido: lee el tablero, elige temas sin arte y los ilustra. Devuelve lo adjuntado.
-
-    Si no hay proveedor de imagen, no hace nada (degrada con elegancia). Best-effort: un
-    fallo por item se loguea y se sigue; no rompe el hilo.
-    """
-    if not media.proveedor_configurado():
-        _log.info("Auto-arte: sin proveedor de imagen configurado; barrido omitido.")
-        return []
-    try:
-        items = repos.listar_contenido()
-    except Exception:  # noqa: BLE001 -- el tablero no disponible no debe romper el barrido
-        _log.exception("No se pudo leer el tablero para la auto-generacion de arte.")
-        return []
-    elegidos = topics_sin_arte(
-        items,
-        plataformas_por_item=_plataformas_por_item(items),
-        ya_procesados=ids_ya_procesados(),
-        maximo=config.autogen_arte_max(),
-        # El SCORE ordena que se auto-ilustra primero (la cola de trabajo de la IA).
-        etiquetas_por_item=_etiquetas_por_item(),
-        hoy=date.today(),
-    )
-    adjuntados: list[dict[str, Any]] = []
-    for item in elegidos:
-        try:
-            res = lanzar_para_topic(item)
-        except Exception:  # noqa: BLE001 -- un fallo por item no debe matar el barrido
-            _log.exception("Fallo al auto-generar arte para un tema del tablero.")
-            continue
-        if res:
-            adjuntados.append(res)
-    if adjuntados:
-        _log.info("Auto-arte: %d tema(s) ilustrado(s).", len(adjuntados))
-    return adjuntados
-
-
-def _intervalo_segundos() -> float:
-    return config.autogen_arte_intervalo_horas() * 3600.0
-
-
-def iniciar_autogen_arte(intervalo_segundos: float | None = None) -> threading.Thread:
-    """Arranca el hilo demonio de auto-generacion de arte (GATEADO EN VIVO).
-
-    Pensado para el servidor real (`__main__`), NO para `crear_app` (los tests no lo
-    arrancan, igual que el resto de daemons). El hilo arranca SIEMPRE y comprueba
-    `KENI_AUTOGEN_ARTE` en cada ciclo: apagar/encender en runtime aplica sin reiniciar
-    (apagar en <= ~1 min; encender tras estar apagado dispara un barrido de inmediato). El
-    hilo es daemon; un fallo de barrido se loguea y NO lo mata.
-    """
-    intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
-
-    def bucle() -> None:
-        daemon_util.bucle_gateado(
-            activo_fn=config.gate_maquina(config.autogen_arte_activo),
-            intervalo_seg_fn=lambda: intervalo,
-            sweep_fn=ejecutar_barrido,
-            log=_log,
-        )
-
-    hilo = threading.Thread(target=bucle, name="autogen-arte-daemon", daemon=True)
-    hilo.start()
-    estado = "ACTIVA" if config.autogen_arte_activo() else "EN ESPERA (KENI_AUTOGEN_ARTE off)"
-    _log.info(
-        "Auto-generacion de arte %s, cada %.0f h (max/barrido=%d).",
-        estado, intervalo / 3600.0, config.autogen_arte_max(),
-    )
-    return hilo

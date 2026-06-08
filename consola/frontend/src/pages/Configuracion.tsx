@@ -1067,7 +1067,7 @@ function FilaAjuste({
   );
 }
 
-/** Toggles de auto-producción por MARCA, en una pestaña por marca (en vez de lista plana).
+/** Toggles de generación por MARCA (copy + arte), en una pestaña por marca (en vez de lista plana).
  *
  * Cada ajuste del grupo "Automatización por marca" tiene clave `ENV::marca` y etiqueta
  * "Nombre · Etapa"; agrupamos por marca (orden de aparición) y, dentro de su pestaña, la fila
@@ -1081,8 +1081,8 @@ function AjustesPorMarca({
   ajustes: AjusteAdmin[];
   onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
   guardando: boolean;
-  /** Valor de cada maestro de etapa por su clave ENV (p. ej. `KENI_AUTOGEN`). Si el maestro de
-   *  la etapa está OFF, su excepción por marca se muestra apagada y deshabilitada. */
+  /** Valor de cada maestro de etapa por su clave ENV (p. ej. `KENI_PIPELINE`). Si el maestro de
+   *  la etapa está OFF, su excepción por marca se OCULTA (no se gestiona hasta encender la etapa). */
   maestros: Record<string, boolean>;
 }) {
   const porMarca = React.useMemo(() => {
@@ -1123,41 +1123,41 @@ function AjustesPorMarca({
           </TabsTrigger>
         ))}
       </TabsList>
-      {porMarca.map((m) => (
-        <TabsContent key={m.id} value={m.id}>
-          {m.ajustes.map((a) => {
-            // Etapa = clave ENV antes de "::". Si su maestro está OFF, la excepción no aplica.
-            const etapaEnv = a.clave.split("::")[0];
-            const maestroOff = maestros[etapaEnv] === false;
-            return (
-              <FilaAjuste
-                key={a.clave}
-                ajuste={a}
-                onGuardar={onGuardar}
-                guardando={guardando}
-                bloqueado={maestroOff}
-                notaBloqueo="maestro apagado"
-              />
-            );
-          })}
-        </TabsContent>
-      ))}
+      {porMarca.map((m) => {
+        // Etapa = clave ENV antes de "::". Solo gestionamos excepciones de etapas ENCENDIDAS:
+        // con el maestro OFF la excepción no aplica, así que ocultamos la fila (no la atenuamos).
+        const visibles = m.ajustes.filter((a) => maestros[a.clave.split("::")[0]] !== false);
+        return (
+          <TabsContent key={m.id} value={m.id}>
+            {visibles.length > 0 ? (
+              visibles.map((a) => (
+                <FilaAjuste key={a.clave} ajuste={a} onGuardar={onGuardar} guardando={guardando} />
+              ))
+            ) : (
+              <p className="py-3 text-xs text-muted-foreground">
+                Enciende el maestro de la etapa para gestionar excepciones por marca.
+              </p>
+            )}
+          </TabsContent>
+        );
+      })}
     </Tabs>
   );
 }
 
 
-/** Grupos de ajustes que viven en la pestaña «Avanzada»: la granularidad fina (intervalos,
- *  máximos por barrido, umbrales, jobs simultáneos…) que rara vez se toca y funciona en sus
- *  valores por defecto. El resto de grupos (toggles on/off, por-marca, Publicación real) son
- *  los controles clave y van en «Básica». Coincide con la `id` de grupo del backend. */
-const GRUPOS_AVANZADOS = new Set(["tuning"]);
+/** Grupos de ajustes que viven en la pestaña «Básica»: el master de la máquina, los tres maestros
+ *  de etapa (Crear noticias / Generar copy / Generar arte) y las excepciones de copy+arte por
+ *  marca. Son los controles clave del día a día. Todo grupo que NO esté aquí (publicación,
+ *  publicación por marca, automatismos generales, ajustes finos) va a «Avanzada». Coincide con la
+ *  `id` de grupo del backend; un grupo ausente en la respuesta simplemente no pinta nada. */
+const GRUPOS_BASICOS = new Set(["maquina_global", "maestros_etapa", "automatizacion_marca"]);
 
 /** Sección admin: toggles + ajustes finos de funcionalidad (aplican en caliente).
  *
- * `nivel` decide qué grupos pinta: «basica» muestra los toggles clave (todo grupo que NO esté
- * en `GRUPOS_AVANZADOS`); «avanzada» muestra solo la granularidad fina. Si tras filtrar no queda
- * ningún grupo, la tarjeta no se renderiza (no deja un hueco vacío en la pestaña). */
+ * `nivel` decide qué grupos pinta: «basica» muestra los grupos de `GRUPOS_BASICOS`; «avanzada»
+ * muestra todo lo demás. Si tras filtrar no queda ningún grupo, la tarjeta no se renderiza (no
+ * deja un hueco vacío en la pestaña). */
 function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
   const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
@@ -1166,9 +1166,9 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
   });
 
   const avanzada = nivel === "avanzada";
-  // Grupos que tocan a esta pestaña (basica: los no-avanzados; avanzada: los avanzados).
+  // Grupos que tocan a esta pestaña (basica: los de GRUPOS_BASICOS; avanzada: el resto).
   const grupos = (data?.grupos ?? []).filter((g) =>
-    avanzada ? GRUPOS_AVANZADOS.has(g.id) : !GRUPOS_AVANZADOS.has(g.id),
+    avanzada ? !GRUPOS_BASICOS.has(g.id) : GRUPOS_BASICOS.has(g.id),
   );
   const guardar = useMutation({
     mutationFn: (cuerpo: { clave: string; valor?: boolean | number | string }) =>
@@ -1190,23 +1190,11 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Confirmación del botón «Apagar toda la generación» (maestros de etapa a OFF de golpe).
-  const [confirmarApagarTodo, setConfirmarApagarTodo] = React.useState(false);
-
-  // Maestros de etapa por su clave ENV (p. ej. `KENI_AUTOGEN` -> bool). Se usa para atenuar las
-  // excepciones por marca cuyo maestro está OFF, y para el botón de apagar todo.
+  // Maestros de etapa por su clave ENV (p. ej. `KENI_PIPELINE` -> bool). Se usa para atenuar las
+  // excepciones por marca cuyo maestro está OFF.
   const ajustesMaestros = grupos.find((g) => g.id === "maestros_etapa")?.ajustes ?? [];
   const maestros: Record<string, boolean> = {};
   for (const m of ajustesMaestros) maestros[m.clave] = Boolean(m.valor);
-
-  // Apaga TODOS los maestros de etapa (Auto-producción, Auto-copy, Auto-arte, Auto-avance) de una
-  // vez: ninguna marca producirá nada hasta reactivarlos. Las excepciones por marca se conservan.
-  const apagarTodaGeneracion = () => {
-    for (const m of ajustesMaestros) {
-      if (m.valor) guardar.mutate({ clave: m.clave, valor: false });
-    }
-    setConfirmarApagarTodo(false);
-  };
 
   // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
   // Va DESPUÉS de los hooks (useQuery/useMutation) para no llamarlos condicionalmente.
@@ -1258,27 +1246,16 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
               />
             ));
 
-            // Maestros de etapa: cabecera con el botón «Apagar toda la generación» + filas.
+            // Maestros de etapa (Crear noticias / Generar copy / Generar arte): título + filas.
             if (grupo.id === "maestros_etapa") {
               return (
                 <div key={grupo.id} className="space-y-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {grupo.titulo}
-                    </h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setConfirmarApagarTodo(true)}
-                      disabled={guardar.isPending || ajustesMaestros.every((m) => !m.valor)}
-                    >
-                      Apagar toda la generación
-                    </Button>
-                  </div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {grupo.titulo}
+                  </h4>
                   <p className="text-xs text-muted-foreground">
-                    Cada maestro enciende/apaga su etapa para <strong>todas las marcas</strong>. Con
-                    el maestro apagado, su excepción por marca queda inactiva.
+                    Cada etapa de la máquina se enciende/apaga para <strong>todas las marcas</strong>.
+                    Con la etapa apagada, su excepción por marca queda inactiva.
                   </p>
                   <div>{filas}</div>
                 </div>
@@ -1356,7 +1333,7 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
             if (grupo.id === "publicacion_marca") return null;
 
             // Automatismos generales: barridos del sistema; van en un colapsible para no confundir
-            // con los controles de auto-producción de arriba.
+            // con los controles de las etapas de la máquina de arriba.
             if (grupo.id === "automatismos_generales") {
               return (
                 <TarjetaColapsable
@@ -1380,28 +1357,6 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
             );
           })
         )}
-
-      <Dialog open={confirmarApagarTodo} onOpenChange={setConfirmarApagarTodo}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Apagar toda la generación</DialogTitle>
-            <DialogDescription>
-              Apaga los maestros de <strong>todas las etapas</strong> (Auto-producción, Auto-copy,
-              Auto-arte y Auto-avance) para <strong>todas las marcas</strong>: el sistema dejará de
-              producir nada automáticamente hasta que los reactives. Las excepciones por marca se
-              conservan. ¿Continuar?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmarApagarTodo(false)}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={apagarTodaGeneracion}>
-              Sí, apagar todo
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </TarjetaColapsable>
   );
 }

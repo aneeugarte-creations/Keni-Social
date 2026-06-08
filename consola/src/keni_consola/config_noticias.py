@@ -4,12 +4,6 @@ from __future__ import annotations
 from ._config_comun import (
     _FALSOS,
     _VERDADEROS,
-    AUTOFEED_CAP_DEF,
-    AUTOFEED_INTERVALO_MIN_DEF,
-    AUTOFEED_UMBRAL_DEF,
-    AUTOGEN_ARTE_INTERVALO_HORAS_DEF,
-    AUTOGEN_INTERVALO_HORAS_DEF,
-    AUTOGEN_MAX_DEF,
     CLUSTER_BREAKING_FUENTES_DEF,
     CLUSTER_BREAKING_VENTANA_H_DEF,
     CLUSTER_UMBRAL_DEF,
@@ -17,17 +11,8 @@ from ._config_comun import (
     ENV_AFP_BASE_URL,
     ENV_AFP_CLIENT_ID,
     ENV_AFP_CLIENT_SECRET,
-    ENV_AUTO_AVANCE,
     ENV_AUTO_PROGRAMAR,
-    ENV_AUTOFEED,
-    ENV_AUTOFEED_CAP,
-    ENV_AUTOFEED_INTERVALO_MIN,
-    ENV_AUTOFEED_UMBRAL,
-    ENV_AUTOGEN,
     ENV_AUTOGEN_ARTE,
-    ENV_AUTOGEN_ARTE_INTERVALO_HORAS,
-    ENV_AUTOGEN_INTERVALO_HORAS,
-    ENV_AUTOGEN_MAX,
     ENV_CLUSTER_BREAKING_FUENTES,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_UMBRAL,
@@ -47,9 +32,6 @@ from ._config_comun import (
     ENV_INGESTA_MAX_ERRORES,
     ENV_INGESTA_MAX_ITEMS,
     ENV_INGESTA_WORKERS,
-    ENV_INVESTIGACION,
-    ENV_INVESTIGACION_INTERVALO_HORAS,
-    ENV_INVESTIGACION_MAX,
     ENV_PIPELINE,
     ENV_PIPELINE_INTERVALO_HORAS,
     ENV_PIPELINE_MAX,
@@ -57,7 +39,6 @@ from ._config_comun import (
     ENV_REUTERS_BASE_URL,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
-    ENV_TRADUCCION,
     ENV_TRADUCCION_MAX,
     FEED_SLA_MIN_DEF,
     FUENTES_BAJA_CONFIANZA_DEF,
@@ -73,8 +54,6 @@ from ._config_comun import (
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
-    INVESTIGACION_INTERVALO_HORAS_DEF,
-    INVESTIGACION_MAX_DEF,
     PIPELINE_INTERVALO_HORAS_DEF,
     PIPELINE_MAX_DEF,
     TRAD_LOTE_DEF,
@@ -82,9 +61,6 @@ from ._config_comun import (
     _crudo,
     _entero,
     os,
-)
-from .config_produccion import (
-    clave_por_marca,
 )
 
 # --------------------------------------------------------------------------- #
@@ -242,29 +218,6 @@ def fuentes_baja_confianza() -> frozenset[str]:
     return frozenset(partes) if partes else frozenset(FUENTES_BAJA_CONFIANZA_DEF)
 
 
-def autogen_activo() -> bool:
-    """True si el daemon de auto-generacion de copy debe arrancar (`KENI_AUTOGEN`).
-
-    Def OFF (conservador): los temas entran al tablero sin copy y el equipo lo genera a mano.
-    Con el flag, un hilo demonio encola copy para los temas alimentados por fuentes que aun
-    no lo tienen (revisable en la cola de revision). Nada se publica solo (sigue gated).
-    """
-    return _crudo(ENV_AUTOGEN).lower() in _VERDADEROS
-
-
-def autogen_intervalo_horas() -> int:
-    """Cada cuantas horas barre el daemon de auto-generacion (`KENI_AUTOGEN_INTERVALO_HORAS`, def 1, min 1)."""
-    return _entero(ENV_AUTOGEN_INTERVALO_HORAS, AUTOGEN_INTERVALO_HORAS_DEF, minimo=1)
-
-
-def autogen_max() -> int:
-    """Maximo de temas a auto-generar por barrido (`KENI_AUTOGEN_MAX`, def 3, min 1).
-
-    Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
-    """
-    return _entero(ENV_AUTOGEN_MAX, AUTOGEN_MAX_DEF, minimo=1)
-
-
 def pipeline_activo() -> bool:
     """True si el daemon del pipeline de contenido debe BARRER (`KENI_PIPELINE`).
 
@@ -289,73 +242,14 @@ def pipeline_max() -> int:
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
 
 
-def autofeed_activo() -> bool:
-    """True si el daemon de auto-feed debe BARRER (`KENI_AUTOFEED`).
-
-    Def OFF (conservador): sin el flag, nada del pool fluye solo al feed (el equipo empuja a
-    mano con el override "empujar ya"). Con el flag, un hilo demonio lleva las historias
-    relevantes del pool al feed como borradores con copy+QA. Gateado además por el maestro
-    `KENI_MAQUINA`. NUNCA publica (todo cae en el feed para imagen + aprobación humana).
-    """
-    return _crudo(ENV_AUTOFEED).lower() in _VERDADEROS
-
-
-def autofeed_umbral() -> float:
-    """Umbral de relevancia (score de cluster) para auto-fluir al feed (`KENI_AUTOFEED_UMBRAL`, def 0.5).
-
-    Score mínimo (en [0,1]) que una historia debe alcanzar para entrar al feed sola. Valor
-    inválido o fuera de [0,1] → def. Subirlo deja entrar solo lo más relevante.
-    """
-    crudo = _crudo(ENV_AUTOFEED_UMBRAL)
-    if not crudo:
-        return AUTOFEED_UMBRAL_DEF
-    try:
-        valor = float(crudo)
-    except ValueError:
-        return AUTOFEED_UMBRAL_DEF
-    if valor < 0.0 or valor > 1.0:
-        return AUTOFEED_UMBRAL_DEF
-    return valor
-
-
-def autofeed_cap(marca: str | None = None) -> int:
-    """Tope DIARIO de piezas auto-fluidas al feed por marca (`KENI_AUTOFEED_CAP`, def 20, min 0).
-
-    Con `marca`, primero mira el override por-marca `KENI_AUTOFEED_CAP::<marca>` (mismo mecanismo
-    `clave_por_marca` que `marca_apagada`/`_ETAPAS_MARCA`); si existe y parsea, manda. Si no, cae
-    al global. El override permite que una marca tenga un tope distinto (p. ej. 0 = no auto-feed
-    para esa marca) sin tocar el global. min 0: un cap 0 desactiva el auto-feed de esa marca.
-    """
-    if marca:
-        crudo_marca = _crudo(clave_por_marca(ENV_AUTOFEED_CAP, marca))
-        if crudo_marca:
-            try:
-                return max(0, int(crudo_marca))
-            except ValueError:
-                pass  # override ilegible: cae al global
-    return _entero(ENV_AUTOFEED_CAP, AUTOFEED_CAP_DEF, minimo=0)
-
-
-def autofeed_intervalo_min() -> int:
-    """Cada cuántos MINUTOS barre el daemon de auto-feed (`KENI_AUTOFEED_INTERVALO_MIN`, def 10, min 1)."""
-    return _entero(ENV_AUTOFEED_INTERVALO_MIN, AUTOFEED_INTERVALO_MIN_DEF, minimo=1)
-
-
 def autogen_arte_activo() -> bool:
-    """True si el daemon de auto-generacion de arte debe arrancar (`KENI_AUTOGEN_ARTE`).
+    """True si la ETAPA de arte del pipeline debe ilustrar (`KENI_AUTOGEN_ARTE`, "Generar arte").
 
-    Def OFF (conservador): el equipo hace el arte a mano. Con el flag, un hilo demonio
-    genera imagen por IA para los temas con copy pero sin imagen y la adjunta. Sin
-    proveedor de imagen configurado, el daemon arranca pero no hace nada (degrada).
+    Def OFF (conservador): el equipo hace el arte a mano. Con el flag, la etapa de arte del
+    pipeline (tras la de copy) genera imagen por IA para los temas con copy pero sin imagen y
+    la adjunta. Sin proveedor de imagen configurado, no hace nada (degrada).
     """
     return _crudo(ENV_AUTOGEN_ARTE).lower() in _VERDADEROS
-
-
-def autogen_arte_intervalo_horas() -> int:
-    """Cada cuantas horas barre el daemon de auto-arte (`KENI_AUTOGEN_ARTE_INTERVALO_HORAS`, def 1, min 1)."""
-    return _entero(
-        ENV_AUTOGEN_ARTE_INTERVALO_HORAS, AUTOGEN_ARTE_INTERVALO_HORAS_DEF, minimo=1
-    )
 
 
 def auto_programar_activo() -> bool:
@@ -369,17 +263,6 @@ def auto_programar_activo() -> bool:
     if not crudo:
         return True
     return crudo not in _FALSOS
-
-
-def auto_avance_activo() -> bool:
-    """True si el daemon de auto-avance "dale el OK" debe arrancar (`KENI_AUTO_AVANCE`).
-
-    Def OFF (conservador): mandar una pieza a revisión sigue siendo manual. Con el flag, un
-    hilo demonio lleva a `en_revision` las piezas listas (copy out + copy in/exención + imagen
-    con formato correcto + QA 🟢/🟡) y lanza la QA editorial de las que aún no la tienen.
-    """
-    return _crudo(ENV_AUTO_AVANCE).lower() in _VERDADEROS
-
 
 
 # --------------------------------------------------------------------------- #
@@ -435,42 +318,6 @@ def afp_configurado() -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def traduccion_activa() -> bool:
-    """¿Traducir temas/noticias extranjeras? (`KENI_TRADUCCION`, def OFF).
-
-    Def OFF: forma parte de la máquina de contenido, que arranca apagada; se enciende
-    en caliente desde el panel admin (toggle) o con `KENI_TRADUCCION=1`. La traduccion
-    usa Haiku, es best-effort (si falla, el Radar no se rompe) y se acota a
-    `traduccion_max()` temas del top en el Radar en vivo.
-    """
-    return _crudo(ENV_TRADUCCION).lower() in _VERDADEROS
-
-
 def traduccion_max() -> int:
     """Cap de temas extranjeros a traducir por request del Radar (`KENI_TRADUCCION_MAX`, def 15, min 1)."""
     return _entero(ENV_TRADUCCION_MAX, 15, minimo=1)
-
-
-
-# --------------------------------------------------------------------------- #
-# Accesores: agentes de investigacion (Ola 6)                                  #
-# --------------------------------------------------------------------------- #
-
-
-def investigacion_auto_activa() -> bool:
-    """True si el daemon de investigacion debe barrer briefs activos (`KENI_INVESTIGACION_AUTO`).
-
-    Def OFF (conservador): el daemon arranca pero no barre. Con el flag ON corre cada
-    N horas y deposita candidatos para revision humana; NUNCA crea tablero solo.
-    """
-    return _crudo(ENV_INVESTIGACION).lower() in _VERDADEROS
-
-
-def investigacion_intervalo_horas() -> int:
-    """Cada cuantas horas barre el daemon de investigacion (`KENI_INVESTIGACION_INTERVALO_HORAS`, def 6, min 1)."""
-    return _entero(ENV_INVESTIGACION_INTERVALO_HORAS, INVESTIGACION_INTERVALO_HORAS_DEF, minimo=1)
-
-
-def investigacion_max() -> int:
-    """Cap de candidatos a depositar por barrido (`KENI_INVESTIGACION_MAX`, def 5, min 1)."""
-    return _entero(ENV_INVESTIGACION_MAX, INVESTIGACION_MAX_DEF, minimo=1)

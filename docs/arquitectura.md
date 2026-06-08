@@ -165,11 +165,14 @@ vigentes (verificados en código):
 
 - **Flags de automatización** (todos default OFF / conservador; accesores en `config.py`):
 
+  Modelo de máquina de contenido: **1 master + 3 etapas**, todo colgando del pipeline.
+
   | Flag (env) | Accesor | Semántica |
   |---|---|---|
-  | `KENI_RADAR_AUTO` | `radar_auto_activo()` | Promueve temas virales del Radar al tablero (`origen='radar-auto'`). |
-  | `KENI_AUTOGEN` | `autogen_activo()` | Encola COPY para temas de fuente sin copy y con marca. Nada se publica solo. |
-  | `KENI_AUTOGEN_ARTE` | `autogen_arte_activo()` | Genera ARTE por IA para temas con copy pero sin imagen (degrada sin proveedor). |
+  | `KENI_MAQUINA` | `maquina_activa()` | Master / kill-switch global. Sin él, NINGÚN daemon de contenido corre. |
+  | `KENI_INGESTA` | `ingesta_activa()` | «Crear noticias»: ingesta + clustering + traducción/tropicalización MX (siempre on, global). |
+  | `KENI_PIPELINE` | `pipeline_activo()` | «Generar copy»: etapa de copy del pipeline (único motor de copy; funde la selección de autogen). |
+  | `KENI_AUTOGEN_ARTE` | `autogen_arte_activo()` | «Generar arte»: etapa de arte del pipeline (degrada sin proveedor). |
   | `KENI_PUBLICAR_REAL` | `publicar_real()` | Gate de publicación REAL vía Metricool. OFF = dry-run. |
 
 - **`origen='equipo'`** (`estados.ORIGEN_EQUIPO`): el origen con que nace un alta CREATIVA del

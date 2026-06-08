@@ -6,8 +6,6 @@ from ._config_comun import (
     ALERTAS_INTERVALO_HORAS_DEF,
     ALERTAS_UMBRAL_ENGAGEMENT_DEF,
     ALGORITMOS_INTERVALO_HORAS_DEF,
-    BREAKING_INTERVALO_MIN_DEF,
-    BREAKING_MAX_DEF,
     ENV_ALERTAS_ACTIVAS,
     ENV_ALERTAS_INTERVALO_HORAS,
     ENV_ALERTAS_UMBRAL_ENGAGEMENT,
@@ -15,9 +13,6 @@ from ._config_comun import (
     ENV_ALGORITMOS_INTERVALO_HORAS,
     ENV_AUTO_PREAPROBACION,
     ENV_AUTO_QA_EDITORIAL,
-    ENV_BREAKING,
-    ENV_BREAKING_INTERVALO_MIN,
-    ENV_BREAKING_MAX,
     ENV_COMERCIAL_INTERVALO_HORAS,
     ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     ENV_EVENTOS_INTERVALO_SEGUNDOS,
@@ -28,12 +23,10 @@ from ._config_comun import (
     ENV_METRICAS_PIEZAS_REFRESCO_HORAS,
     ENV_METRICAS_REFRESCO_HORAS,
     ENV_MIN_APROBACIONES,
-    ENV_PIPELINE_LINEAS,
     ENV_PRIORIZA_METRICAS,
     ENV_PRIORIZA_METRICAS_RANGO,
     ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
-    ENV_RADAR_AUTO_GEO,
     ENV_SUGERENCIAS_EDITORIALES,
     ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS,
     ENV_SUGERENCIAS_EDITORIALES_MAX,
@@ -46,7 +39,6 @@ from ._config_comun import (
     METRICAS_PIEZAS_REFRESCO_HORAS_DEF,
     METRICAS_REFRESCO_HORAS_DEF,
     MIN_APROBACIONES_DEF,
-    RADAR_AUTO_GEO_DEF,
     SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF,
     SUGERENCIAS_EDITORIALES_MAX_DEF,
     TRENDS_GEOS_DEF,
@@ -246,20 +238,6 @@ def auto_qa_editorial() -> bool:
     return _crudo(ENV_AUTO_QA_EDITORIAL).lower() in _VERDADEROS
 
 
-def pipeline_lineas_activo() -> bool:
-    """True si la ingesta debe auto-etiquetar línea (vertical) y origen (`KENI_PIPELINE_LINEAS`).
-
-    Def OFF (conservador): sin el flag, la ingesta no toca etiquetas (comportamiento previo).
-    Con el flag, cada pieza nueva se clasifica por palabras clave; sin línea queda con aviso.
-    """
-    return _crudo(ENV_PIPELINE_LINEAS).lower() in _VERDADEROS
-
-
-def radar_auto_geo() -> str:
-    """Geo del Radar (`KENI_RADAR_AUTO_GEO`, def MX, mayusculas). Lo usa `breaking_daemon`."""
-    return _crudo(ENV_RADAR_AUTO_GEO).upper() or RADAR_AUTO_GEO_DEF
-
-
 def investigador_activo() -> bool:
     """True si el Investigador (snapshot del Radar por marca) debe materializar (`KENI_INVESTIGADOR`).
 
@@ -335,30 +313,6 @@ def sugerencias_editoriales_max() -> int:
     Cada plataforma cuesta un `claude -p`: el tope acota el gasto por dia.
     """
     return _entero(ENV_SUGERENCIAS_EDITORIALES_MAX, SUGERENCIAS_EDITORIALES_MAX_DEF, minimo=1)
-
-
-def breaking_auto_activo() -> bool:
-    """True si el daemon del Carril Rápido de Breaking debe barrer (`KENI_BREAKING`).
-
-    Def OFF (conservador): el equipo prepara borradores de breaking a mano (tap en la UI).
-    Con el flag a un valor afirmativo, un hilo demonio barre el snapshot del Investigador
-    cada N min y pre-genera borradores para los temas breaking de Claro Sports sin draft.
-    SÓLO BORRADORES: nunca publica; el aprobador humano sigue siendo obligatorio.
-    """
-    return _crudo(ENV_BREAKING).lower() in _VERDADEROS
-
-
-def breaking_intervalo_min() -> int:
-    """Cada cuantos minutos barre el daemon de breaking (`KENI_BREAKING_INTERVALO_MIN`, def 5, min 1)."""
-    return _entero(ENV_BREAKING_INTERVALO_MIN, BREAKING_INTERVALO_MIN_DEF, minimo=1)
-
-
-def breaking_max() -> int:
-    """Maximo de borradores breaking a preparar por barrido (`KENI_BREAKING_MAX`, def 3, min 1).
-
-    Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
-    """
-    return _entero(ENV_BREAKING_MAX, BREAKING_MAX_DEF, minimo=1)
 
 
 def trends_activo() -> bool:

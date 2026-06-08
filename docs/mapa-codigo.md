@@ -20,14 +20,12 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `daemons.py` — arranca SOLO los hilos demonio de fondo (sin servidor web). La lista canónica.
 - `daemon_util.py` — bucle de demonio GATEADO y RESPONSIVO en caliente (toggle on/off sin reiniciar).
 - `programador.py` — programador de publicaciones (#9, Fase 3): prepara/publica las piezas vencidas.
-- `auto_avance.py` — Flujo D: lleva SOLO a `en_revision` las piezas ya listas.
 - `auto_programar.py` — una pieza APROBADA pasa SOLA a `programado` en su próximo hueco.
 - `auto_responsable.py` — auto-asignación de responsable desde la rota.
-- `autogen_copy.py` — auto-generación de COPY al entrar un tema al tablero (H2).
-- `autogen_arte.py` — auto-generación de ARTE para temas con copy pero sin imagen (H2-b).
-- `autofeed_daemon.py` — Ola E: pool único → dedup → feed automático.
-- `breaking_daemon.py` — Carril Rápido de Breaking (Claro Sports).
-- `ingesta_daemon.py` — motor de ingesta persistente (Ola A).
+- `pipeline_contenido.py` — MÁQUINA DE CONTENIDO: espinazo CI→QA→copy→arte (etapas «Generar copy»/«Generar arte»).
+- `autogen_copy.py` — lanzador reutilizable de COPY de un tema (`lanzar_para_topic`); usado por la etapa de copy del pipeline y por endpoints manuales.
+- `autogen_arte.py` — selección + lanzador de ARTE (`topics_sin_arte`/`lanzar_para_topic`); los usa la etapa de arte del pipeline.
+- `ingesta_daemon.py` — motor de ingesta persistente (Ola A), etapa «Crear noticias».
 - `trends_daemon.py` — vuelca Google Trends (con sus noticias) al pool de Noticias.
 - `eventos_scanner.py` — barrido de vencimientos del tablero: emite `contenido.vencido`.
 - `alertas_rendimiento.py` — barrido de alertas de rendimiento / reciclaje proactivo.

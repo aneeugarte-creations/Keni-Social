@@ -17,7 +17,7 @@ def _store(monkeypatch, datos: dict[str, str]):
 def test_sin_override_no_esta_apagada(monkeypatch):
     _store(monkeypatch, {})
     assert config.marca_apagada(config.ENV_PIPELINE, "claro-sports") is False
-    assert config.marca_apagada(config.ENV_AUTO_AVANCE, "nacion-gamer") is False
+    assert config.marca_apagada(config.ENV_AUTOGEN_ARTE, "nacion-gamer") is False
 
 
 def test_override_falsy_apaga_la_marca(monkeypatch):
@@ -27,29 +27,27 @@ def test_override_falsy_apaga_la_marca(monkeypatch):
 
 
 def test_override_truthy_no_apaga(monkeypatch):
-    _store(monkeypatch, {config.clave_por_marca(config.ENV_AUTOGEN, "claro-sports"): "1"})
-    assert config.marca_apagada(config.ENV_AUTOGEN, "claro-sports") is False
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_AUTOGEN_ARTE, "claro-sports"): "1"})
+    assert config.marca_apagada(config.ENV_AUTOGEN_ARTE, "claro-sports") is False
 
 
 def test_clave_por_marca_formato():
-    assert config.clave_por_marca("KENI_AUTO_AVANCE", "unotv") == "KENI_AUTO_AVANCE::unotv"
+    assert config.clave_por_marca("KENI_PIPELINE", "unotv") == "KENI_PIPELINE::unotv"
 
 
 def test_catalogo_expone_toggles_por_marca():
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
     assert config.clave_por_marca(config.ENV_PIPELINE, "nacion-gamer") in claves
-    assert config.clave_por_marca(config.ENV_AUTO_AVANCE, "claro-sports") in claves
     assert config.clave_por_marca(config.ENV_AUTOGEN_ARTE, "unotv") in claves
-    # Las etapas de auto-producción y el tope de auto-feed por marca van en `automatizacion_marca`;
-    # la publicación, en su propio grupo `publicacion_marca`. Los toggles de etapa son `bool`; la
-    # excepción del tope de auto-feed por marca es `int` (un tope diario, no un on/off).
+    # "Crear noticias" (KENI_INGESTA) es GLOBAL: no tiene fila por marca.
+    assert config.clave_por_marca(config.ENV_INGESTA, "unotv") not in claves
+    # Las etapas con per-marca (copy + arte) van en `automatizacion_marca`; la publicación, en
+    # su propio grupo `publicacion_marca`. Todos los toggles por marca son `bool`.
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
     assert por_marca and all(
-        a.tipo in {"bool", "int"} and a.grupo in {"automatizacion_marca", "publicacion_marca"}
+        a.tipo == "bool" and a.grupo in {"automatizacion_marca", "publicacion_marca"}
         for a in por_marca
     )
-    # El cap de auto-feed por marca es el único por-marca de tipo `int`; el resto, `bool`.
-    assert any(a.tipo == "int" and config.ENV_AUTOFEED_CAP in a.clave for a in por_marca)
 
 
 def test_catalogo_expone_publicacion_por_marca():

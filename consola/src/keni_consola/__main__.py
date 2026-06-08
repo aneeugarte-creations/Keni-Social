@@ -190,31 +190,12 @@ def main() -> int:
 
     iniciar_sugerencias_editoriales()
 
-    # Auto-generacion de COPY (fase3 auto-produccion, H2): un hilo demonio que, si
-    # `KENI_AUTOGEN` esta activo (def OFF), encola cada N horas copy para los temas que las
-    # fuentes (import/radar/rss) meten al tablero y aun no tienen borrador. El resultado cae
-    # en la cola de revision; NO publica solo (sigue gated). SAFE BY DEFAULT: sin el flag no
-    # arranca. Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .autogen_copy import iniciar_autogen_copy
-
-    iniciar_autogen_copy()
-
-    # Auto-generacion de ARTE (fase3 auto-produccion, H2-b): un hilo demonio que, si
-    # `KENI_AUTOGEN_ARTE` esta activo (def OFF), genera cada N horas un arte por IA para los
-    # temas con copy pero sin imagen y lo adjunta a la pieza. Reutiliza el proveedor de imagen
-    # de `/api/media/generar`; sin proveedor configurado no hace nada. El resultado sigue su
-    # revision/aprobacion humana; NO publica solo. SAFE BY DEFAULT: sin el flag no arranca.
-    # Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .autogen_arte import iniciar_autogen_arte
-
-    iniciar_autogen_arte()
-
-    # Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion, Flujo "tubería"): un
-    # hilo demonio que, si `KENI_PIPELINE` esta activo (def OFF), cada N horas ingiere los feeds
-    # RSS de cada marca (CI), lanza copy+arte de marca (CD) y valida los borradores recientes
-    # (QA), registrando cada etapa en "Actividad IA". Deja borradores en la cola de revision; NO
-    # publica solo. SAFE BY DEFAULT: sin el flag no barre. Vive aqui (servidor real), NO en
-    # `crear_app`, para no arrancarlo en los tests.
+    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el espinazo de la auto-producción. Si está
+    # activo (`KENI_PIPELINE`, bajo el maestro `KENI_MAQUINA`), cada N horas ingiere del news-pool,
+    # genera copy (etapa de copy) y arte (etapa de arte, `KENI_AUTOGEN_ARTE`) y valida los
+    # borradores recientes (QA), registrando cada etapa en "Actividad IA". Deja borradores en la
+    # cola de revision; NO publica solo. SAFE BY DEFAULT: sin el flag no barre. Vive aqui (servidor
+    # real), NO en `crear_app`, para no arrancarlo en los tests.
     from .pipeline_contenido import iniciar_pipeline
 
     iniciar_pipeline()

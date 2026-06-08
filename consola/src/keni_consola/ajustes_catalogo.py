@@ -40,24 +40,29 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("tuning", "Ajustes finos"),
 )
 
-# Etapas de auto-producción. Cada etapa tiene DOS controles que comparten NOMBRE (match 1:1):
-#   - un MAESTRO global (clave `ENV`), grupo `maestros_etapa`: apagarlo deja la etapa EN ESPERA
-#     para TODAS las marcas (el daemon no barre);
-#   - una EXCEPCIÓN por marca (clave `ENV::marca`), grupo `automatizacion_marca`: solo puede APAGAR
-#     marcas sueltas con el maestro encendido (sin override, la marca sigue al maestro).
-# La tupla es (env, etiqueta, descripción genérica) y alimenta AMBOS controles.
-_ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = (
-    (config.ENV_PIPELINE, "Auto-producción", "ingiere fuentes, hace QA y genera copy automático"),
-    (config.ENV_AUTOGEN, "Auto-copy", "genera copy automático de los temas que aún no lo tienen"),
-    (config.ENV_AUTOGEN_ARTE, "Auto-arte", "genera imagen por IA para los temas con copy y sin imagen"),
-    (config.ENV_AUTO_AVANCE, "Auto-avance", "lleva solas a revisión las piezas listas"),
-)
+# Las 3 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), todas colgadas del espinazo
+# pipeline/máquina. Cada una reutiliza una env var existente (NO se renombra) y solo cambia label,
+# agrupación y cableado:
+#   - KENI_INGESTA      → "Crear noticias" (GLOBAL, sin excepción por marca),
+#   - KENI_PIPELINE     → "Generar copy"  (per-marca),
+#   - KENI_AUTOGEN_ARTE → "Generar arte"  (per-marca).
+# La tupla es (env, etiqueta, descripción genérica). El maestro vive en `maestros_etapa`; las
+# excepciones por marca (solo para las etapas con per-marca) en `automatizacion_marca`.
+_ETAPA_INGESTA = (config.ENV_INGESTA, "Crear noticias", "ingiere fuentes, agrupa historias y traduce/tropicaliza MX")
+_ETAPA_COPY = (config.ENV_PIPELINE, "Generar copy", "genera copy automático de los temas que aún no lo tienen")
+_ETAPA_ARTE = (config.ENV_AUTOGEN_ARTE, "Generar arte", "genera imagen por IA para los temas con copy y sin imagen")
+
+# Las 3 etapas en orden, para el grupo `maestros_etapa` (maestros globales).
+_ETAPAS: tuple[tuple[str, str, str], ...] = (_ETAPA_INGESTA, _ETAPA_COPY, _ETAPA_ARTE)
+
+# Etapas CON excepción por marca (`_ajustes_por_marca`). "Crear noticias" es GLOBAL: no tiene
+# filas por marca (la ingesta del news-pool no se acota por marca; copy/arte sí).
+_ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = (_ETAPA_COPY, _ETAPA_ARTE)
 
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Maestro GLOBAL de cada etapa (uno por entrada de `_ETAPAS_MARCA`). Mismo NOMBRE que su
-    excepción por marca (match 1:1). Apagar el maestro deja la etapa en espera para TODAS las
-    marcas; las excepciones por marca solo restan (apagan marcas sueltas) con el maestro encendido."""
+    """Maestro GLOBAL de cada una de las 3 etapas. Apagar el maestro deja la etapa en espera para
+    TODAS las marcas; las excepciones por marca (copy/arte) solo restan con el maestro encendido."""
     return [
         Ajuste(
             clave=env_flag,
@@ -68,7 +73,7 @@ def _maestros_etapa() -> list[Ajuste]:
             grupo="maestros_etapa",
             defecto=False,
         )
-        for env_flag, etiqueta, desc in _ETAPAS_MARCA
+        for env_flag, etiqueta, desc in _ETAPAS
     ]
 
 
@@ -76,15 +81,14 @@ def _global_de_etapa(env_flag: str) -> bool:
     """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca)."""
     return {
         config.ENV_PIPELINE: config.pipeline_activo,
-        config.ENV_AUTOGEN: config.autogen_activo,
         config.ENV_AUTOGEN_ARTE: config.autogen_arte_activo,
-        config.ENV_AUTO_AVANCE: config.auto_avance_activo,
     }[env_flag]()
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por (marca × etapa) para la auto-producción. Se generan en caliente
-    desde el catálogo de marcas, así que añadir una marca añade sus toggles sin tocar código."""
+    """Toggles `bool` por (marca × etapa) para las etapas con per-marca (copy + arte). Se generan
+    en caliente desde el catálogo de marcas, así que añadir una marca añade sus toggles sin código.
+    "Crear noticias" (KENI_INGESTA) es global: no genera filas por marca."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
         for env_flag, etiqueta_etapa, desc in _ETAPAS_MARCA:
@@ -121,28 +125,6 @@ def _publicacion_por_marca() -> list[Ajuste]:
     ]
 
 
-def _autofeed_cap_por_marca() -> list[Ajuste]:
-    """Excepción del TOPE DIARIO del auto-feed por marca (clave `KENI_AUTOFEED_CAP::marca`).
-
-    A diferencia de las etapas (toggle bool), el override del auto-feed es un ENTERO: cada marca
-    puede tener su propio tope (incl. 0 = sin auto-feed para esa marca) mientras el resto sigue
-    al global. Mismo mecanismo `clave_por_marca` que `marca_apagada`/`_ETAPAS_MARCA`; sin override
-    la marca cae al cap global (`config.autofeed_cap`). Se generan desde el catálogo de marcas."""
-    return [
-        Ajuste(
-            clave=config.clave_por_marca(config.ENV_AUTOFEED_CAP, mid),
-            tipo="int",
-            etiqueta=f"{nombre} · Auto-feed: tope diario",
-            ayuda="Tope diario de auto-feed solo para esta marca (0 = desactiva el auto-feed de "
-            "esta marca). Sin tocarla, sigue al tope global.",
-            grupo="automatizacion_marca",
-            defecto=config.autofeed_cap(),
-            minimo=0,
-        )
-        for mid, nombre in marcas.opciones()
-    ]
-
-
 @dataclass(frozen=True)
 class Ajuste:
     """Un ajuste editable del catalogo (declarativo)."""
@@ -157,16 +139,6 @@ class Ajuste:
     opciones: tuple[dict[str, str], ...] = ()  # solo 'select': [{id, etiqueta}, ...]
     minimo: float | None = None  # solo int/float
     maximo: float | None = None  # solo int/float
-
-
-_GEO_OPCIONES: tuple[dict[str, str], ...] = (
-    {"id": "MX", "etiqueta": "México"},
-    {"id": "US", "etiqueta": "Estados Unidos"},
-    {"id": "ES", "etiqueta": "España"},
-    {"id": "AR", "etiqueta": "Argentina"},
-    {"id": "CO", "etiqueta": "Colombia"},
-    {"id": "CL", "etiqueta": "Chile"},
-)
 
 
 def _construir_catalogo() -> list[Ajuste]:
@@ -190,18 +162,8 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         # --- Automatismos generales (barridos del sistema, sin dimensión por marca) ----- #
-        # Las etapas de auto-producción (Auto-copy, Auto-arte, Auto-producción, Auto-avance) NO
-        # están aquí: su maestro vive en `_maestros_etapa()` y sus excepciones en `_ajustes_por_marca()`.
-        Ajuste(
-            clave=config.ENV_PIPELINE_LINEAS,
-            tipo="bool",
-            etiqueta="Auto-etiquetar líneas",
-            ayuda="Al ingerir, clasifica cada pieza en su línea (vertical) y su origen "
-            "(interno / petición externa) por palabras clave. Sin línea queda con un aviso; "
-            "nunca se descarta.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
+        # Las 3 etapas de la máquina (Crear noticias, Generar copy, Generar arte) NO están aquí:
+        # su maestro vive en `_maestros_etapa()` y las excepciones por marca en `_ajustes_por_marca()`.
         Ajuste(
             clave=config.ENV_ALERTAS_ACTIVAS,
             tipo="bool",
@@ -237,59 +199,6 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # --- Motor de noticias (Olas A–D + Ola 6) -------------------------------- #
-        # Todos arrancan OFF: la máquina entera se activa desde aquí; ninguno publica.
-        Ajuste(
-            clave=config.ENV_INGESTA,
-            tipo="bool",
-            etiqueta="Noticias · Motor de ingesta",
-            ayuda="Sondea en background los feeds RSS y persiste artículos en el archivo "
-            "de noticias (Ola A). Solo lee fuentes públicas; no genera ni publica nada. "
-            "Seguro: la producción lo necesita activo.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_TRADUCCION,
-            tipo="bool",
-            etiqueta="Noticias · Traducción/tropicalización MX",
-            ayuda="Traduce y tropicaliza al español MX las noticias extranjeras (Radar + "
-            "historias). Usa Haiku, best-effort: si falla, el Radar sigue funcionando. "
-            "Apagado por defecto (forma parte de la máquina de contenido).",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_BREAKING,
-            tipo="bool",
-            etiqueta="Noticias · Carril rápido de breaking (Claro)",
-            ayuda="Hilo demonio que barre el snapshot del Investigador y pre-genera "
-            "borradores de breaking para Claro Sports sin draft (Ola C). Solo crea "
-            "borradores; nunca publica. Seguro.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_AUTOFEED,
-            tipo="bool",
-            etiqueta="Auto-feed · pool → feed automático",
-            ayuda="Lleva solas al feed las historias relevantes del pool (cajones, "
-            "investigación, RSS, ya deduplicadas) como borradores con copy+QA, respetando un "
-            "tope diario por marca (Ola E). Nunca publica: todo cae en el feed para imagen + "
-            "aprobación humana. Conservador por defecto (OFF).",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_INVESTIGACION,
-            tipo="bool",
-            etiqueta="Noticias · Agentes de investigación (background)",
-            ayuda="Daemon que ejecuta los briefs de investigación activos y deposita "
-            "candidatos fechados para revisión humana (Ola 6). Cada barrido lanza "
-            "claude -p por brief: conservador por defecto (OFF).",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -303,80 +212,14 @@ def _construir_catalogo() -> list[Ajuste]:
         ),
         # --- Tuning (int/float/select) --------------------------------------------- #
         Ajuste(
-            clave=config.ENV_AUTOGEN_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Auto-copy: intervalo (horas)",
-            ayuda="Cada cuántas horas barre el daemon de auto-generación de copy.",
-            grupo="tuning",
-            defecto=config.AUTOGEN_INTERVALO_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_AUTOGEN_MAX,
-            tipo="int",
-            etiqueta="Auto-copy: máximo por barrido",
-            ayuda="Máximo de temas a auto-generar por barrido (cada uno lanza una generación).",
-            grupo="tuning",
-            defecto=config.AUTOGEN_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_AUTOGEN_ARTE_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Auto-arte: intervalo (horas)",
-            ayuda="Cada cuántas horas barre el daemon de auto-generación de arte.",
-            grupo="tuning",
-            defecto=config.AUTOGEN_ARTE_INTERVALO_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
             clave=config.ENV_AUTOGEN_ARTE_MAX,
             tipo="int",
-            etiqueta="Auto-arte: máximo por barrido",
-            ayuda="Máximo de temas a auto-ilustrar por barrido (cada uno llama al proveedor de imagen).",
+            etiqueta="Generar arte: máximo por barrido",
+            ayuda="Máximo de temas a ilustrar por barrido de la etapa de arte (cada uno llama "
+            "al proveedor de imagen).",
             grupo="tuning",
             defecto=config.AUTOGEN_ARTE_MAX_DEF,
             minimo=1,
-        ),
-        # --- Auto-feed (Ola E) --------------------------------------------------- #
-        Ajuste(
-            clave=config.ENV_AUTOFEED_INTERVALO_MIN,
-            tipo="int",
-            etiqueta="Auto-feed: intervalo (minutos)",
-            ayuda="Cada cuántos minutos barre el daemon de auto-feed el pool de historias.",
-            grupo="tuning",
-            defecto=config.AUTOFEED_INTERVALO_MIN_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_AUTOFEED_UMBRAL,
-            tipo="float",
-            etiqueta="Auto-feed: umbral de relevancia",
-            ayuda="Score mínimo (0–1) de una historia para entrar sola al feed. "
-            "Sube el valor para dejar entrar solo lo más relevante.",
-            grupo="tuning",
-            defecto=config.AUTOFEED_UMBRAL_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_AUTOFEED_CAP,
-            tipo="int",
-            etiqueta="Auto-feed: tope diario por marca",
-            ayuda="Máximo de piezas que el auto-feed crea por marca y día (cada una encola un "
-            "copy+QA). Admite excepción por marca (abajo); 0 = desactiva el auto-feed.",
-            grupo="tuning",
-            defecto=config.AUTOFEED_CAP_DEF,
-            minimo=0,
-        ),
-        Ajuste(
-            clave=config.ENV_RADAR_AUTO_GEO,
-            tipo="select",
-            etiqueta="Radar: geografía",
-            ayuda="País del Radar de tendencias (lo usa el daemon de breaking).",
-            grupo="tuning",
-            defecto=config.RADAR_AUTO_GEO_DEF,
-            opciones=_GEO_OPCIONES,
         ),
         Ajuste(
             clave=config.ENV_ALERTAS_INTERVALO_HORAS,
@@ -493,26 +336,6 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=config.CLUSTER_BREAKING_VENTANA_H_DEF,
             minimo=1,
         ),
-        # --- Carril breaking (Ola C) --------------------------------------------- #
-        Ajuste(
-            clave=config.ENV_BREAKING_INTERVALO_MIN,
-            tipo="int",
-            etiqueta="Breaking: intervalo de barrido (minutos)",
-            ayuda="Cada cuántos minutos barre el daemon del carril rápido de breaking.",
-            grupo="tuning",
-            defecto=config.BREAKING_INTERVALO_MIN_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_BREAKING_MAX,
-            tipo="int",
-            etiqueta="Breaking: borradores por barrido",
-            ayuda="Máximo de borradores breaking a preparar por barrido "
-            "(cada uno lanza claude -p).",
-            grupo="tuning",
-            defecto=config.BREAKING_MAX_DEF,
-            minimo=1,
-        ),
         # --- Traducción (Ola D) -------------------------------------------------- #
         Ajuste(
             clave=config.ENV_TRAD_MIN_SCORE,
@@ -545,25 +368,6 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=config.FEED_SLA_MIN_DEF,
             minimo=1,
         ),
-        # --- Agentes de investigación (Ola 6) ------------------------------------ #
-        Ajuste(
-            clave=config.ENV_INVESTIGACION_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Investigación: intervalo (horas)",
-            ayuda="Cada cuántas horas barre el daemon de investigación los briefs activos.",
-            grupo="tuning",
-            defecto=config.INVESTIGACION_INTERVALO_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_INVESTIGACION_MAX,
-            tipo="int",
-            etiqueta="Investigación: máximo de briefs por barrido",
-            ayuda="Máximo de briefs activos a ejecutar por barrido (cada uno lanza claude -p).",
-            grupo="tuning",
-            defecto=config.INVESTIGACION_MAX_DEF,
-            minimo=1,
-        ),
     ]
 
 
@@ -574,7 +378,6 @@ def catalogo() -> list[Ajuste]:
         _maestros_etapa()
         + _construir_catalogo()
         + _ajustes_por_marca()
-        + _autofeed_cap_por_marca()
         + _publicacion_por_marca()
     )
 
@@ -617,10 +420,8 @@ def _castea(ajuste: Ajuste, crudo: str) -> Any:
         if ajuste.maximo is not None and valor > ajuste.maximo:
             return float(ajuste.maximo)
         return valor
-    # select: el id se reporta tal cual (mayusculas para geo, igual que `config.radar_auto_geo`)
+    # select: el id se reporta tal cual; debe estar en `opciones` o cae al defecto.
     valor = crudo.strip()
-    if ajuste.clave == config.ENV_RADAR_AUTO_GEO:
-        valor = valor.upper()
     ids = {o["id"] for o in ajuste.opciones}
     return valor if valor in ids else ajuste.defecto
 
@@ -722,8 +523,6 @@ def validar_valor(ajuste: Ajuste, valor: Any) -> tuple[str | None, str | None]:
     if not isinstance(valor, str):
         return None, f"'{ajuste.clave}' espera uno de los valores permitidos."
     v = valor.strip()
-    if ajuste.clave == config.ENV_RADAR_AUTO_GEO:
-        v = v.upper()
     ids = {o["id"] for o in ajuste.opciones}
     if v not in ids:
         permitidos = ", ".join(repr(o["id"]) for o in ajuste.opciones)

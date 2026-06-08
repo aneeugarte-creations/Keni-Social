@@ -70,6 +70,7 @@ from .dominio import dedup
 from .dominio import generar as gen_dom
 from .dominio import jobspec
 from .dominio import qa_editorial as dom_qa
+from .estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 
 _log = logging.getLogger("keni_consola.pipeline_contenido")
 
@@ -454,13 +455,11 @@ _AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
 def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> None:
-    """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN si `KENI_PIPELINE_LINEAS`.
+    """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN (siempre, dentro de la etapa de copy).
 
-    Sin el flag no hace nada (comportamiento previo). Sin línea → deja un aviso en `notas`
-    (la pieza NO se descarta). Best-effort: un fallo no rompe la ingesta.
+    Sin línea → deja un aviso en `notas` (la pieza NO se descarta). Best-effort: un fallo no
+    rompe la ingesta.
     """
-    if not config.pipeline_lineas_activo():
-        return
     try:
         from .dominio import clasificador_lineas
 
@@ -757,6 +756,58 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
     return listos
 
 
+# Tope de temas del news-pool (origen autogen) a los que la etapa de copy genera copy por
+# barrido. Mismo motivo anti-ráfaga que `_CD_LANZAR_MAX`: cada uno encola un `claude -p`.
+_AUTOGEN_LANZAR_MAX = 4
+
+
+def temas_autogen_sin_copy() -> list[dict[str, Any]]:
+    """Temas del news-pool/tablero sin copy que la etapa de copy debe redactar (FUNDE autogen_copy).
+
+    La etapa de copy del pipeline es el ÚNICO motor de copy: además de los temas que el propio
+    pipeline ingiere (origen `pipeline`, vía QA→CD), también redacta los temas que las FUENTES
+    de noticias meten al tablero (`estados.ORIGENES_AUTOGEN`: import-calendario, radar-auto,
+    radar, rss, equipo) y que aún no tienen copy. Reglas (espejo de `autogen_copy.topics_pendientes`):
+      - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
+      - con marca válida y título no vacío,
+      - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE`),
+      - dedup: salta los ya encolados (etiqueta `autogen`) y los que ya tienen copy,
+      - cap `_AUTOGEN_LANZAR_MAX` por barrido.
+    Best-effort: una lectura fallida devuelve []. Import diferido de `autogen_copy` para reusar su
+    dedup por etiqueta sin acoplar la carga del módulo.
+    """
+    from . import autogen_copy
+
+    try:
+        items = repos.listar_contenido()
+    except Exception:  # noqa: BLE001 -- sin tablero legible, la etapa no actúa sobre el pool
+        return []
+    ya_generados = autogen_copy.ids_ya_generados()
+    elegidos: list[dict[str, Any]] = []
+    for item in items:
+        if len(elegidos) >= _AUTOGEN_LANZAR_MAX:
+            break
+        if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
+            continue
+        if (item.get("origen") or "") not in ORIGENES_AUTOGEN:
+            continue
+        if (item.get("estado") or "") == "hecha":
+            continue
+        marca = item.get("marca") or ""
+        if not marca or not marcas.es_marca(marca):
+            continue
+        if config.marca_apagada(config.ENV_PIPELINE, marca):
+            continue
+        if not (item.get("titulo") or "").strip():
+            continue
+        if item.get("id") in ya_generados:
+            continue
+        if _tiene_copy(item.get("id", "") or ""):
+            continue
+        elegidos.append(item)
+    return elegidos
+
+
 # --------------------------------------------------------------------------- #
 # QA — criba de la FUENTE (pre-copy) + helper léxico (vista/detalle)           #
 # --------------------------------------------------------------------------- #
@@ -949,7 +1000,7 @@ def ejecutar_barrido() -> dict[str, Any]:
     with db.lock_barrido("pipeline_contenido") as ok:
         if not ok:
             _log.debug("pipeline: otro barrido en curso; se omite este.")
-            return {"temas": [], "cribados": [], "lanzados": []}
+            return {"temas": [], "cribados": [], "lanzados": [], "artes": []}
         return _ejecutar_barrido()
 
 
@@ -981,15 +1032,19 @@ def _ejecutar_barrido() -> dict[str, Any]:
                 continue
             if tema:
                 temas_nuevos.append(tema)
-    # --- Fase QA (criba de la fuente) + Fase CD (copy de los OK). ----------------------------
+    # --- Fase QA (criba de la fuente) + Fase CD (copy) + Etapa ARTE. -------------------------
     cribados = ejecutar_qa(autor=autor)
     lanzados = ejecutar_cd(autor=autor)
-    if temas_nuevos or cribados or lanzados:
+    # Etapa de arte (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
+    # toggle "Generar arte" (KENI_AUTOGEN_ARTE) + máquina; si está OFF, devuelve [].
+    artes = ejecutar_arte()
+    if temas_nuevos or cribados or lanzados or artes:
         _log.info(
-            "pipeline: %d tema(s) ingerido(s) (CI), %d cribado(s) (QA), %d copy encolado(s) (CD).",
-            len(temas_nuevos), len(cribados), len(lanzados),
+            "pipeline: %d tema(s) ingerido(s) (CI), %d cribado(s) (QA), %d copy encolado(s) (CD), "
+            "%d arte(s) (etapa arte).",
+            len(temas_nuevos), len(cribados), len(lanzados), len(artes),
         )
-    return {"temas": temas_nuevos, "cribados": cribados, "lanzados": lanzados}
+    return {"temas": temas_nuevos, "cribados": cribados, "lanzados": lanzados, "artes": artes}
 
 
 def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
@@ -1022,11 +1077,18 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
 
 
 def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase CD del barrido: genera copy SOLO de los temas con QA `no_verificado` y sin copy aún.
+    """Fase CD (etapa de copy): genera copy de los temas con QA `no_verificado` y sin copy aún,
+    Y de los temas del news-pool (orígenes de noticias) que aún no tienen copy.
 
-    Con TOPE por barrido (`_CD_LANZAR_MAX`): mismo motivo anti-ráfaga que la QA. Un tema cuyo
-    copy ya se lanzó (o `problema`) no entra (lo decide `temas_para_copy`). Si la cola se llena,
-    corta la fase (reintenta luego). Best-effort por tema. Devuelve las generaciones de copy.
+    DOS fuentes de temas, una sola ruta de copy (la etapa de copy es el ÚNICO motor):
+      1) temas del propio pipeline (origen `pipeline`) cuya QA salió `no_verificado`
+         (`temas_para_copy` → `lanzar_copy_de_tema`),
+      2) temas que las FUENTES de noticias metieron al tablero sin copy
+         (`temas_autogen_sin_copy` → `autogen_copy.lanzar_para_topic`), FUNDIENDO aquí la
+         selección del antiguo daemon suelto `autogen_copy`.
+    Con TOPE por barrido (`_CD_LANZAR_MAX` para 1, `_AUTOGEN_LANZAR_MAX` dentro de la selección
+    para 2). Si la cola se llena, corta la fase (reintenta luego). Best-effort por tema.
+    Devuelve las generaciones de copy lanzadas.
     """
     if autor is None:
         autor = _autor_pipeline()
@@ -1043,14 +1105,80 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             gen = lanzar_copy_de_tema(tema, autor=autor)
         except generaciones.ColaLlenaError:
             _log.info("pipeline: cola llena en CD; el resto entra en el próximo barrido.")
-            break
+            return lanzados
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
             _log.exception("pipeline: fallo la generación de copy (CD) de un tema.")
             continue
         if gen:
             lanzados.append(gen)
             contador += 1
+    # Fundido de la selección de autogen_copy: la etapa de copy también redacta los temas del
+    # news-pool/tablero (orígenes de noticias) que aún no tienen copy, vía el lanzador NEUTRO.
+    from . import autogen_copy
+
+    for item in temas_autogen_sin_copy():
+        try:
+            gen = autogen_copy.lanzar_para_topic(item)
+        except generaciones.ColaLlenaError:
+            _log.info("pipeline: cola llena en CD (pool); el resto entra en el próximo barrido.")
+            break
+        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
+            _log.exception("pipeline: fallo la generación de copy (CD) de un tema del pool.")
+            continue
+        if gen:
+            lanzados.append(gen)
     return lanzados
+
+
+def ejecutar_arte() -> list[dict[str, Any]]:
+    """Etapa de ARTE del pipeline (tras copy): ilustra los temas con copy y sin imagen.
+
+    Toggle "Generar arte" (`KENI_AUTOGEN_ARTE`, gateado además por el maestro `KENI_MAQUINA`).
+    FUNDE el antiguo daemon suelto `autogen_arte`: reutiliza su selección
+    (`autogen_arte.topics_sin_arte`) y su lanzador (`autogen_arte.lanzar_para_topic` →
+    `media.generar_imagen`), con cap por barrido (`KENI_AUTOGEN_ARTE_MAX`). Per-marca: salta las
+    marcas apagadas a mano (lo hace la propia selección, gateada por `ENV_AUTOGEN_ARTE`). Sin
+    proveedor de imagen configurado, no hace nada. Best-effort: un fallo por tema se loguea y se
+    sigue. Devuelve los artes adjuntados.
+
+    GATEADO EN VIVO: solo actúa con `KENI_AUTOGEN_ARTE=1` Y `KENI_MAQUINA=1`. Sin el toggle, la
+    etapa no ilustra (el equipo hace el arte a mano).
+    """
+    from . import autogen_arte
+    from datetime import date
+
+    if not config.gate_maquina(config.autogen_arte_activo)():
+        return []
+    from . import media
+
+    if not media.proveedor_configurado():
+        _log.info("pipeline: etapa de arte sin proveedor de imagen configurado; se omite.")
+        return []
+    try:
+        items = repos.listar_contenido()
+    except Exception:  # noqa: BLE001 -- sin tablero, la etapa de arte no actúa
+        _log.exception("pipeline: no se pudo leer el tablero para la etapa de arte.")
+        return []
+    elegidos = autogen_arte.topics_sin_arte(
+        items,
+        plataformas_por_item=autogen_arte._plataformas_por_item(items),
+        ya_procesados=autogen_arte.ids_ya_procesados(),
+        maximo=config.autogen_arte_max(),
+        etiquetas_por_item=autogen_arte._etiquetas_por_item(),
+        hoy=date.today(),
+    )
+    adjuntados: list[dict[str, Any]] = []
+    for item in elegidos:
+        try:
+            res = autogen_arte.lanzar_para_topic(item)
+        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la etapa de arte
+            _log.exception("pipeline: fallo la generación de arte de un tema.")
+            continue
+        if res:
+            adjuntados.append(res)
+    if adjuntados:
+        _log.info("pipeline: %d tema(s) ilustrado(s) (etapa arte).", len(adjuntados))
+    return adjuntados
 
 
 def _intervalo_segundos() -> float:

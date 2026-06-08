@@ -12,17 +12,16 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
   - alertas de rendimiento / reciclaje (solo leen + emiten eventos internos),
-  - auto-produccion (Flujo C): auto-copy (`KENI_AUTOGEN=1`) y auto-arte
-    (`KENI_AUTOGEN_ARTE=1`) que llevan los temas de entrada a borrador en la cola de
-    revision; el resultado para en el gate humano (nada se publica solo),
-  - Carril Rápido de Breaking (`KENI_BREAKING=1`): pre-genera borradores de copy para
-    los temas breaking de Claro Sports sin draft aún; el equipo solo aprueba con un tap.
+  - MÁQUINA DE CONTENIDO (Flujo C): el pipeline (`KENI_PIPELINE`/`KENI_INGESTA`/
+    `KENI_AUTOGEN_ARTE`, bajo el maestro `KENI_MAQUINA`) ingiere del news-pool y lleva los
+    temas a borrador (copy + arte) en la cola de revision; el resultado para en el gate
+    humano (nada se publica solo),
   - reaper de generaciones zombi (cierra como `error` las `ejecutando` huerfanas).
 
 SAFE BY DEFAULT: este proceso NO publica nada ni crea/aprueba contenido por su
 cuenta. Los unicos caminos que lo harian estan gated por env y vienen AUSENTES por
-defecto (`KENI_PUBLICAR_REAL`, `KENI_AUTOGEN`, `KENI_AUTOGEN_ARTE`).
-La auto-produccion (autogen) PRODUCE hasta el borrador, pero NUNCA publica: el posteo
+defecto (`KENI_PUBLICAR_REAL`, `KENI_MAQUINA`, `KENI_PIPELINE`, `KENI_AUTOGEN_ARTE`).
+La máquina de contenido PRODUCE hasta el borrador, pero NUNCA publica: el posteo
 real sigue gated por `KENI_PUBLICAR_REAL` (OFF). Es el mismo conjunto de daemons que
 `python -m keni_consola` arranca junto al servidor; aqui van sin uvicorn.
 """
@@ -49,11 +48,6 @@ def main() -> int:
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
-    from .auto_avance import iniciar_auto_avance
-    from .autofeed_daemon import iniciar_autofeed
-    from .autogen_arte import iniciar_autogen_arte
-    from .autogen_copy import iniciar_autogen_copy
-    from .breaking_daemon import iniciar_breaking
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
     from .ingesta_daemon import iniciar_ingesta
@@ -72,28 +66,12 @@ def main() -> int:
     iniciar_refresco_metricas()
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
-    # TUBERIA automatica (Flujo C): los daemons de auto-produccion. Encadenan
-    # entrada -> copy -> arte -> cola de revision. GATEADOS y SAFE BY
-    # DEFAULT: el hilo arranca SIEMPRE pero solo barre con su flag ON (KENI_AUTOGEN /
-    # KENI_AUTOGEN_ARTE, def OFF). Sin ellos no se auto-genera nada. Antes solo `__main__`
-    # los arrancaba; con el split de servicios (NINGUN proceso hosted corre `__main__`) sin
-    # esto la auto-produccion NO correria en produccion aunque se encendieran los flags.
-    iniciar_autogen_copy()  # auto-copy; no barre salvo KENI_AUTOGEN=1 (def OFF).
-    iniciar_breaking()  # Carril Rápido de Breaking (Claro Sports); no barre salvo KENI_BREAKING=1 (def OFF).
-    iniciar_autogen_arte()  # auto-arte; no barre salvo KENI_AUTOGEN_ARTE=1 (def OFF) ni sin proveedor de imagen.
-    # Pipeline de contenido CI→CD→QA por marca (ADITIVO, SAFE BY DEFAULT): ingiere RSS, genera
-    # copy+arte y valida, registrando cada etapa en "Actividad IA"; deja borradores en revision.
-    # No barre salvo KENI_PIPELINE=1 (def OFF); nunca publica.
+    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el espinazo de la auto-producción. Sus
+    # etapas —ingesta (crear noticias, KENI_INGESTA), copy (generar copy, KENI_PIPELINE) y arte
+    # (generar arte, KENI_AUTOGEN_ARTE)— corren bajo el maestro KENI_MAQUINA. El pipeline ingiere
+    # del news-pool, genera copy+arte y valida, registrando cada etapa en "Actividad IA"; deja
+    # borradores en revisión. SAFE BY DEFAULT: no barre salvo su toggle ON; nunca publica.
     iniciar_pipeline()
-    # Auto-feed (Ola E): pool único → dedup → feed automático. Lleva las historias relevantes
-    # del pool al feed como borradores con copy+QA encolados, respetando un tope diario por
-    # marca. GATEADO y SAFE BY DEFAULT: no barre salvo KENI_MAQUINA=1 Y KENI_AUTOFEED=1 (def
-    # OFF). Nunca publica (todo cae en el feed para imagen + aprobación humana).
-    iniciar_autofeed()
-    # Auto-avance "dale el OK" (Flujo D): lleva SOLO a en_revision las piezas listas (copy out +
-    # copy in/exención + imagen con formato + QA 🟢/🟡) y lanza la QA de las que falte. GATEADO:
-    # no barre salvo KENI_AUTO_AVANCE=1 (def OFF). Abre los OK del equipo; nunca aprueba ni publica.
-    iniciar_auto_avance()
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
