@@ -43,11 +43,11 @@ GRUPOS: tuple[tuple[str, str], ...] = (
 # Las 3 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), todas colgadas del espinazo
 # pipeline/máquina. Cada una reutiliza una env var existente (NO se renombra) y solo cambia label,
 # agrupación y cableado:
-#   - KENI_INGESTA      → "Crear noticias" (GLOBAL, sin excepción por marca),
+#   - KENI_INGESTA      → "Crear noticias" (per-marca),
 #   - KENI_PIPELINE     → "Generar copy"  (per-marca),
 #   - KENI_AUTOGEN_ARTE → "Generar arte"  (per-marca).
 # La tupla es (env, etiqueta, descripción genérica). El maestro vive en `maestros_etapa`; las
-# excepciones por marca (solo para las etapas con per-marca) en `automatizacion_marca`.
+# excepciones por marca (las tres etapas) en `automatizacion_marca`.
 _ETAPA_INGESTA = (config.ENV_INGESTA, "Crear noticias", "ingiere fuentes, agrupa historias y traduce/tropicaliza MX")
 _ETAPA_COPY = (config.ENV_PIPELINE, "Generar copy", "genera copy automático de los temas que aún no lo tienen")
 _ETAPA_ARTE = (config.ENV_AUTOGEN_ARTE, "Generar arte", "genera imagen por IA para los temas con copy y sin imagen")
@@ -55,9 +55,9 @@ _ETAPA_ARTE = (config.ENV_AUTOGEN_ARTE, "Generar arte", "genera imagen por IA pa
 # Las 3 etapas en orden, para el grupo `maestros_etapa` (maestros globales).
 _ETAPAS: tuple[tuple[str, str, str], ...] = (_ETAPA_INGESTA, _ETAPA_COPY, _ETAPA_ARTE)
 
-# Etapas CON excepción por marca (`_ajustes_por_marca`). "Crear noticias" es GLOBAL: no tiene
-# filas por marca (la ingesta del news-pool no se acota por marca; copy/arte sí).
-_ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = (_ETAPA_COPY, _ETAPA_ARTE)
+# Etapas CON excepción por marca (`_ajustes_por_marca`). Las TRES tienen excepción por marca
+# (Crear noticias incluida): apagar una marca la excluye de esa etapa, las demás siguen.
+_ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = _ETAPAS
 
 
 def _maestros_etapa() -> list[Ajuste]:
@@ -68,8 +68,7 @@ def _maestros_etapa() -> list[Ajuste]:
             clave=env_flag,
             tipo="bool",
             etiqueta=etiqueta,
-            ayuda=f"Maestro de TODAS las marcas: {desc}. Si lo apagas, ninguna marca corre esta "
-            "etapa; las excepciones por marca solo pueden apagar marcas concretas.",
+            ayuda=f"Para todas las marcas: {desc}.",
             grupo="maestros_etapa",
             defecto=False,
         )
@@ -80,15 +79,16 @@ def _maestros_etapa() -> list[Ajuste]:
 def _global_de_etapa(env_flag: str) -> bool:
     """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca)."""
     return {
+        config.ENV_INGESTA: config.ingesta_activa,
         config.ENV_PIPELINE: config.pipeline_activo,
         config.ENV_AUTOGEN_ARTE: config.autogen_arte_activo,
     }[env_flag]()
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por (marca × etapa) para las etapas con per-marca (copy + arte). Se generan
-    en caliente desde el catálogo de marcas, así que añadir una marca añade sus toggles sin código.
-    "Crear noticias" (KENI_INGESTA) es global: no genera filas por marca."""
+    """Toggles `bool` por (marca × etapa) para las tres etapas (Crear noticias + copy + arte). Se
+    generan en caliente desde el catálogo de marcas, así que añadir una marca añade sus toggles sin
+    código."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
         for env_flag, etiqueta_etapa, desc in _ETAPAS_MARCA:
@@ -97,8 +97,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                     clave=config.clave_por_marca(env_flag, mid),
                     tipo="bool",
                     etiqueta=f"{nombre} · {etiqueta_etapa}",
-                    ayuda=f"Excepción de «{etiqueta_etapa}» para esta marca ({desc}). Apágala para "
-                    "excluir solo a esta marca; sin tocarla, sigue al maestro de la etapa.",
+                    ayuda=f"Apaga «{etiqueta_etapa}» solo para esta marca.",
                     grupo="automatizacion_marca",
                     defecto=_global_de_etapa(env_flag),
                 )
@@ -153,11 +152,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_MAQUINA,
             tipo="bool",
             etiqueta="Máquina de contenido: encendida/apagada",
-            ayuda="Interruptor general de toda la automatización de contenido. APAGADO (por "
-            "defecto): nada automático corre —ni ingesta, ni auto-copy/arte, ni breaking, ni "
-            "investigación, ni radar, ni avances— aunque los toggles individuales estén "
-            "encendidos. ENCENDIDO: cada subsistema sigue su propio toggle. No afecta a la "
-            "publicación ni a los barridos de mantenimiento (métricas, alertas, limpieza).",
+            ayuda="Interruptor general de toda la automatización.",
             grupo="maquina_global",
             defecto=False,
         ),

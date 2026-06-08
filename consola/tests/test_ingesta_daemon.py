@@ -166,6 +166,35 @@ def test_barrido_respeta_single_flight(monkeypatch):
     assert resumen == {"feeds": 0, "items_nuevos": 0, "errores": 0}
 
 
+def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
+    """Excepción por marca de KENI_INGESTA: el feed de una marca apagada se salta; el feed
+    COMPARTIDO (marca vacía) y el de una marca permitida sí se sondean."""
+    feed_apagado = {"id": "off", "nombre": "Off", "url": "https://93.184.216.34/a",
+                    "categoria": "mx", "marca": "nacion-gamer", "errores_seguidos": 0}
+    feed_permitido = {"id": "on", "nombre": "On", "url": "https://93.184.216.34/b",
+                      "categoria": "mx", "marca": "claro-sports", "errores_seguidos": 0}
+    feed_compartido = {"id": "shared", "nombre": "Shared", "url": "https://93.184.216.34/c",
+                       "categoria": "mx", "marca": "", "errores_seguidos": 0}
+    # Override falsy de KENI_INGESTA solo para nacion-gamer -> esa marca queda apagada.
+    overrides = {config.clave_por_marca(config.ENV_INGESTA, "nacion-gamer"): "0"}
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
+
+    registrados = []
+    _parchear_comun(monkeypatch, feeds=[feed_apagado, feed_permitido, feed_compartido],
+                    fetcher=lambda _u: _FEED_OK)
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
+                        lambda fid, **kw: registrados.append(fid))
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+
+    resumen = ingesta_daemon.ejecutar_barrido()
+    # El feed apagado NO se sondea; el permitido y el compartido sí.
+    assert resumen["feeds"] == 2
+    assert set(registrados) == {"on", "shared"}
+    assert "off" not in registrados
+
+
 # --------------------------------------------------------------------------- #
 # AUTO-DESACTIVADO de feeds muertos (Ola D)                                    #
 # --------------------------------------------------------------------------- #

@@ -5,8 +5,8 @@ por tipo/min/max, y la precedencia STORE > ENV > DEFECTO via `config._crudo`. To
 aislado con monkeypatch de env y del store (sin DB ni red).
 
 Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 3 etapas (KENI_INGESTA "Crear
-noticias", KENI_PIPELINE "Generar copy", KENI_AUTOGEN_ARTE "Generar arte"). Copy/arte tienen
-excepción por marca; "Crear noticias" es global.
+noticias", KENI_PIPELINE "Generar copy", KENI_AUTOGEN_ARTE "Generar arte"). Las tres tienen
+excepción por marca.
 """
 
 from __future__ import annotations
@@ -82,15 +82,15 @@ def test_maestros_etapa_son_las_tres(store):
     assert etiquetas[config.ENV_AUTOGEN_ARTE] == "Generar arte"
 
 
-def test_crear_noticias_es_global_sin_filas_por_marca(store):
-    """"Crear noticias" (KENI_INGESTA) NO genera excepciones por marca; copy y arte SÍ."""
+def test_etapas_tienen_excepcion_por_marca(store):
+    """Las TRES etapas (Crear noticias + copy + arte) generan excepciones por marca."""
     por_marca = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo == "automatizacion_marca" and config.SEP_MARCA in a.clave
     ]
     bases = {a.clave.split(config.SEP_MARCA, 1)[0] for a in por_marca}
-    assert config.ENV_INGESTA not in bases
-    assert bases == {config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
+    assert config.ENV_INGESTA in bases
+    assert bases == {config.ENV_INGESTA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
 
 
 def test_maquina_global_kill_switch(store):

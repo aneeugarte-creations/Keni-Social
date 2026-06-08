@@ -1147,8 +1147,8 @@ function AjustesPorMarca({
 
 
 /** Grupos de ajustes que viven en la pestaña «Básica»: el master de la máquina, los tres maestros
- *  de etapa (Crear noticias / Generar copy / Generar arte) y las excepciones de copy+arte por
- *  marca. Son los controles clave del día a día. Todo grupo que NO esté aquí (publicación,
+ *  de etapa (Crear noticias / Generar copy / Generar arte) y sus excepciones por marca (las tres
+ *  etapas). Son los controles clave del día a día. Todo grupo que NO esté aquí (publicación,
  *  publicación por marca, automatismos generales, ajustes finos) va a «Avanzada». Coincide con la
  *  `id` de grupo del backend; un grupo ausente en la respuesta simplemente no pinta nada. */
 const GRUPOS_BASICOS = new Set(["maquina_global", "maestros_etapa", "automatizacion_marca"]);
@@ -1214,8 +1214,7 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
           </>
         ) : (
           <>
-            Activa o desactiva la automatización. Los cambios aplican <strong>en caliente</strong>{" "}
-            (sin reiniciar; tardan hasta ~1 minuto). El humano sigue aprobando antes de publicar.
+            Activa o desactiva la automatización (aplica <strong>en caliente</strong>).
           </>
         )
       }
@@ -1253,10 +1252,6 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {grupo.titulo}
                   </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Cada etapa de la máquina se enciende/apaga para <strong>todas las marcas</strong>.
-                    Con la etapa apagada, su excepción por marca queda inactiva.
-                  </p>
                   <div>{filas}</div>
                 </div>
               );
@@ -1269,10 +1264,6 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {grupo.titulo}
                   </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Apaga marcas concretas de una etapa. Atenuada = su maestro está apagado (no
-                    aplica).
-                  </p>
                   <AjustesPorMarca
                     ajustes={grupo.ajustes}
                     onGuardar={onGuardar}
@@ -1301,9 +1292,7 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
                       {grupo.titulo} · publica de verdad
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      El maestro autoriza el posteo <strong>REAL</strong> a Metricool para todas las
-                      marcas. Con él encendido, apaga marcas concretas abajo para dejarlas en
-                      dry-run.
+                      Autoriza el posteo <strong>REAL</strong> a Metricool.
                     </p>
                   </div>
                   <div>{filas}</div>

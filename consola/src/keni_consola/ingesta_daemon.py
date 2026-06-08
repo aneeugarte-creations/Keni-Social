@@ -277,6 +277,10 @@ def ejecutar_barrido() -> dict[str, Any]:
 
         ahora = datetime.now(UTC)
         feeds = repos.feeds_vencidos(ahora.isoformat(), config.ingesta_batch())
+        # Excepción por marca de "Crear noticias" (KENI_INGESTA::<marca>): salta los feeds de
+        # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
+        # con marca vacía es False. Best-effort: no toca clustering/traducción (pasos globales).
+        feeds = [f for f in feeds if not config.marca_apagada(config.ENV_INGESTA, str(f.get("marca") or ""))]
         if not feeds:
             return {"feeds": 0, "items_nuevos": 0, "errores": 0}
 
