@@ -49,7 +49,15 @@ def test_reexporta_funciones_de_contenido_de_ficheros():
         "crear_plantilla", "actualizar_plantilla", "borrar_plantilla",
     }
     funcs_ficheros = _funciones_publicas(ficheros) - utilidades - plano_legado
-    funcs_repos = _funciones_publicas(repos)
+    # `repos` es una FACHADA (barrel) que RE-EXPORTA: una función re-exportada conserva el
+    # `__module__` de su submódulo, así que `_funciones_publicas(repos)` (que filtra por
+    # __module__) no la ve. Aquí basta con que el NOMBRE esté accesible en la fachada
+    # (`vars(repos)`), que es justo el contrato "repos re-exporta X".
+    funcs_repos = {
+        nombre
+        for nombre, obj in vars(repos).items()
+        if inspect.isfunction(obj) and not nombre.startswith("_")
+    }
     faltan = funcs_ficheros - funcs_repos
     assert not faltan, f"repos no reexporta de ficheros: {sorted(faltan)}"
 

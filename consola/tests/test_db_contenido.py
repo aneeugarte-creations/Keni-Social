@@ -9,7 +9,7 @@ y que `actualizado` se refresca. Reutiliza la fixture `entorno` (Postgres de pru
 
 from __future__ import annotations
 
-from keni_consola import db
+from keni_consola import db, db_contenido
 
 
 def test_crear_contenido_minimal(entorno):
@@ -175,18 +175,18 @@ def test_fila_a_contenido_plataforma_deriva_imagen_url():
     Pura (sin DB): la UI (feed/preview) debe usar `imagen_url` en un <img>; `imagen`
     a secas no es navegable. Antes de esto el feed pintaba `src={imagen}` y salía rota.
     """
-    fila = {c: "" for c in db._COLS_CONTENIDO_PLATAFORMA}
-    for b in db._BOOLS_CONTENIDO_PLATAFORMA:
+    fila = {c: "" for c in db_contenido._COLS_CONTENIDO_PLATAFORMA}
+    for b in db_contenido._BOOLS_CONTENIDO_PLATAFORMA:
         fila[b] = 0
     fila["estado"] = "pendiente"
     fila["imagen"] = "abc123.png"
 
-    plat = db._fila_a_contenido_plataforma(fila)
+    plat = db_contenido._fila_a_contenido_plataforma(fila)
     assert plat["imagen"] == "abc123.png"
     assert plat["imagen_url"] == "/api/media/abc123.png"
 
     fila["imagen"] = ""
-    sin = db._fila_a_contenido_plataforma(fila)
+    sin = db_contenido._fila_a_contenido_plataforma(fila)
     assert sin["imagen"] == ""
     assert sin["imagen_url"] == ""
 
@@ -197,17 +197,17 @@ def test_fila_a_contenido_plataforma_imagen_fuente_fallback():
     La imagen de la FUENTE original ya es navegable (URL externa): se expone tal cual en
     `imagen_url`. Si además hay media adjunta, la media manda sobre la fuente.
     """
-    fila = {c: "" for c in db._COLS_CONTENIDO_PLATAFORMA}
-    for b in db._BOOLS_CONTENIDO_PLATAFORMA:
+    fila = {c: "" for c in db_contenido._COLS_CONTENIDO_PLATAFORMA}
+    for b in db_contenido._BOOLS_CONTENIDO_PLATAFORMA:
         fila[b] = 0
     fila["estado"] = "pendiente"
     fila["imagen_fuente"] = "https://cdn.example/orig.jpg"
 
-    plat = db._fila_a_contenido_plataforma(fila)
+    plat = db_contenido._fila_a_contenido_plataforma(fila)
     assert plat["imagen_fuente"] == "https://cdn.example/orig.jpg"
     assert plat["imagen_url"] == "https://cdn.example/orig.jpg"
 
     # La media adjunta gana a la fuente.
     fila["imagen"] = "m.png"
-    con_media = db._fila_a_contenido_plataforma(fila)
+    con_media = db_contenido._fila_a_contenido_plataforma(fila)
     assert con_media["imagen_url"] == "/api/media/m.png"

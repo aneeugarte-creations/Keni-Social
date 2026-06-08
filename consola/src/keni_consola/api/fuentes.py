@@ -38,7 +38,7 @@ from starlette.routing import Route
 
 from .. import agencias, autogen_copy, marcas, redes, repos
 from .._http_json import leer_json
-from ..db import _TIPOS_FUENTE
+from ..db_noticias import _TIPOS_FUENTE
 from ..dominio import extraccion_url, fuentes_presets, http_feed
 from ..seguridad import autor_de_peticion
 
