@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Globe,
   Lightbulb,
-  Link2,
   Loader2,
   Plus,
   Rss,
@@ -80,7 +79,7 @@ const CABECERA = {
   descripcion:
     "De dónde se alimentan Noticias y Contenidos, por marca. EXTERNAS: feeds RSS (y agencias/" +
     "Google Trends como señales). INTERNAS: buzones del equipo (listas tipo portal/WhatsApp/" +
-    "corresponsales y Excel) y aportes a mano (idea / enlace / nota interna).",
+    "corresponsales y Excel) y aportes a mano (idea / nota interna).",
 };
 
 /**
@@ -89,7 +88,7 @@ const CABECERA = {
  *
  *   - `standing`: fuentes CONFIGURABLES que se quedan dadas de alta (RSS, Trends, agencias).
  *   - `manual`:   APORTACIONES puntuales que producen un item REAL en Pendientes (ideas,
- *                 enlaces pegados, contenido interno), reusando `POST /api/fuentes/aportar`.
+ *                 contenido interno), reusando `POST /api/fuentes/aportar`.
  */
 type PestanaTipo = {
   valor: string;
@@ -106,7 +105,7 @@ const PESTANAS_TIPO: PestanaTipo[] = [
 
 /**
  * Pestaña "Aportar": una sola superficie para las aportaciones manuales (idea,
- * enlace, contenido interno), con un selector de tipo. Antes eran tres pestañas
+ * contenido interno), con un selector de tipo. Antes eran pestañas
  * sueltas; se unifican para calmar la barra. Reutiliza `AportarManual`.
  */
 function AportarHub({
@@ -116,10 +115,9 @@ function AportarHub({
   marcas: MarcaDisponible[];
   redes: RedPublicacion[];
 }) {
-  const [tipo, setTipo] = React.useState<"idea" | "enlace" | "interna">("idea");
-  const opciones: { valor: "idea" | "enlace" | "interna"; etiqueta: string }[] = [
+  const [tipo, setTipo] = React.useState<"idea" | "interna">("idea");
+  const opciones: { valor: "idea" | "interna"; etiqueta: string }[] = [
     { valor: "idea", etiqueta: "Idea" },
-    { valor: "enlace", etiqueta: "Enlace" },
     { valor: "interna", etiqueta: "Interno AMX" },
   ];
   return (
@@ -146,7 +144,7 @@ function AportarHub({
  * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Contenidos.
  * Dos clases, dos pestañas:
  *   • Externas — feeds RSS (alta/edición con salud inline), catálogo y estado del motor.
- *   • Internas — buzones del equipo (Cajones) y aportes a mano (idea/enlace/interno).
+ *   • Internas — buzones del equipo (Cajones) y aportes a mano (idea/interno).
  */
 export default function Fuentes() {
   // Las marcas y redes viven en el catálogo de opciones de publicaciones.
@@ -191,7 +189,7 @@ export default function Fuentes() {
           <SaludFeeds />
         </TabsContent>
         {/* INTERNAS: lo que pone el equipo. Buzones (listas tipo portal/WhatsApp/
-            corresponsales y Excel) + aportes a mano (idea / enlace / nota interna). */}
+            corresponsales y Excel) + aportes a mano (idea / nota interna). */}
         <TabsContent value="internas" className="space-y-8">
           <CajonesDia />
           <AportarHub marcas={marcas} redes={opcionesRedes} />
@@ -460,7 +458,7 @@ function FilaPreset({
   );
 }
 
-// --- Aportación MANUAL (idea / enlace / interno) ----------------------------
+// --- Aportación MANUAL (idea / interno) -------------------------------------
 
 /** Copys por tipo de aportación manual (taxonomía centralizada). */
 const APORTAR_UI: Record<
@@ -471,7 +469,6 @@ const APORTAR_UI: Record<
     descripcion: string;
     placeholder: string;
     etiquetaCampo: string;
-    multilinea: boolean;
     boton: string;
     nota?: string;
   }
@@ -485,19 +482,7 @@ const APORTAR_UI: Record<
     placeholder:
       "Ej. Hilo sobre los 5 momentazos de la jornada con datos curiosos de cada equipo…",
     etiquetaCampo: "Tu idea",
-    multilinea: true,
     boton: "Enviar idea",
-  },
-  enlace: {
-    icono: Link2,
-    titulo: "Enlaces de redes / internet",
-    descripcion:
-      "Pega un enlace (nota, post, video). Se extrae su contenido y se crea un ítem real en " +
-      "Pendientes (etiquetado como “Enlace”) con copy en segundo plano si eliges marca.",
-    placeholder: "https://…",
-    etiquetaCampo: "URL",
-    multilinea: false,
-    boton: "Procesar enlace",
   },
   interna: {
     icono: Building2,
@@ -507,7 +492,6 @@ const APORTAR_UI: Record<
       "un ítem real en Pendientes (etiquetado como “Interno AMX”) con copy en segundo plano.",
     placeholder: "Pega aquí el contenido interno (texto, brief, transcripción)…",
     etiquetaCampo: "Contenido interno",
-    multilinea: true,
     boton: "Registrar contenido",
     nota: "El conector automático con los sistemas internos de AMX queda PENDIENTE; por ahora la ingestión es manual.",
   },
@@ -515,7 +499,7 @@ const APORTAR_UI: Record<
 
 /**
  * Formulario de aportación MANUAL. Reusa `POST /api/fuentes/aportar`: el backend crea un
- * `contenido` `flujo='importante'` con su `origen` (idea/enlace/interna) y, best-effort,
+ * `contenido` `flujo='importante'` con su `origen` (idea/interna) y, best-effort,
  * lanza copy en segundo plano. No es UI decorativa: produce un ítem real en el pipeline.
  */
 function AportarManual({
@@ -523,7 +507,7 @@ function AportarManual({
   marcas,
   redes,
 }: {
-  tipo: "idea" | "enlace" | "interna";
+  tipo: "idea" | "interna";
   marcas: MarcaDisponible[];
   redes: RedPublicacion[];
 }) {
@@ -563,7 +547,7 @@ function AportarManual({
         marca: marca || undefined,
         redes: redesDef.size > 0 ? [...redesDef] : undefined,
         generar,
-        ...(tipo === "enlace" ? { url: texto.trim() } : { texto: texto.trim() }),
+        texto: texto.trim(),
       }),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
@@ -603,24 +587,13 @@ function AportarManual({
 
           <div className="space-y-1.5">
             <Label htmlFor="aportar-texto">{ui.etiquetaCampo}</Label>
-            {ui.multilinea ? (
-              <Textarea
-                id="aportar-texto"
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                placeholder={ui.placeholder}
-                rows={6}
-              />
-            ) : (
-              <Input
-                id="aportar-texto"
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                placeholder={ui.placeholder}
-                type="url"
-                inputMode="url"
-              />
-            )}
+            <Textarea
+              id="aportar-texto"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder={ui.placeholder}
+              rows={6}
+            />
           </div>
 
           <div className="space-y-1.5">

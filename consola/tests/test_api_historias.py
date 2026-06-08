@@ -1,9 +1,9 @@
 """Tests de la API de HISTORIAS (/api/noticias/historias). OFFLINE: nunca se toca la red.
 
 Sembramos `noticias_clusters` + sus `noticias_items` directo en `repos` (el daemon de ingesta
-no corre en la suite) y ejercitamos: listado por score desc + filtros (marca/categoria/estado)
-+ total, detalle con items, `usar` (lleva al tablero con origen='historia', marca cluster + sus
-items usados) y `descartar`.
+no corre en la suite) y ejercitamos: listado por recencia (`ultimo_visto` desc, `score` desempate)
++ filtros (marca/categoria/estado) + total, detalle con items, `usar` (lleva al tablero con
+origen='historia', marca cluster + sus items usados) y `descartar`.
 """
 
 from __future__ import annotations
@@ -67,13 +67,26 @@ def test_historias_vacio(cliente):
     assert datos == {"historias": [], "total": 0}
 
 
-def test_historias_orden_por_score_desc_y_total(cliente):
-    _sembrar_cluster("baja", score=0.2, titulo="Historia con baja")
-    _sembrar_cluster("alta", score=0.9, titulo="Historia con alta")
+def test_historias_orden_por_recencia_desc_y_total(cliente):
+    # La más NUEVA va primero aunque tenga menor `score` (recencia es el criterio primario).
+    _sembrar_cluster("vieja", score=0.9, titulo="Historia vieja con score alto",
+                     ultimo_visto="2026-06-01T12:00:00+00:00")
+    _sembrar_cluster("nueva", score=0.2, titulo="Historia nueva con score bajo",
+                     ultimo_visto="2026-06-05T12:00:00+00:00")
     datos = cliente.get("/api/noticias/historias").json()
     assert datos["total"] == 2
-    assert [h["id"] for h in datos["historias"]] == ["alta", "baja"]
+    assert [h["id"] for h in datos["historias"]] == ["nueva", "vieja"]
     assert datos["historias"][0]["marca_nombre"]  # marca-aware
+
+
+def test_historias_score_desempata_misma_recencia(cliente):
+    # Con el mismo `ultimo_visto`, el `score` mayor desempata primero.
+    _sembrar_cluster("baja", score=0.2, titulo="Misma fecha, score bajo",
+                     ultimo_visto="2026-06-05T12:00:00+00:00")
+    _sembrar_cluster("alta", score=0.9, titulo="Misma fecha, score alto",
+                     ultimo_visto="2026-06-05T12:00:00+00:00")
+    datos = cliente.get("/api/noticias/historias").json()
+    assert [h["id"] for h in datos["historias"]] == ["alta", "baja"]
 
 
 def test_historias_incluye_enlaces_corroborantes(cliente):

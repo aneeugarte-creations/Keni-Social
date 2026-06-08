@@ -142,11 +142,11 @@ export interface RespuestaFuentesHub {
 }
 
 /** Tipo de aportación manual al pipeline desde Fuentes. */
-export type TipoAportacion = "idea" | "enlace" | "interna";
+export type TipoAportacion = "idea" | "interna";
 
 /**
  * Cuerpo de `POST /api/fuentes/aportar`: una aportación MANUAL que produce un item REAL
- * en el tablero (Pendientes) con su `origen`. `texto` para idea/interna; `url` para enlace.
+ * en el tablero (Pendientes) con su `origen`. `texto` para idea/interna.
  */
 export interface CuerpoAportarFuente {
   tipo: TipoAportacion;
@@ -156,8 +156,6 @@ export interface CuerpoAportarFuente {
   generar?: boolean;
   /** Texto libre (idea / contenido interno). */
   texto?: string;
-  /** URL pegada (tipo enlace). */
-  url?: string;
   titulo?: string;
 }
 

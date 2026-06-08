@@ -2,7 +2,7 @@
 
 `/api/fuentes` presenta el catálogo de feeds desde `fuentes_rss` (la única tabla de fuentes,
 fuente de verdad del motor de ingesta) como tipo='rss', más el estado de agencias (Reuters/
-AFP) y la aportación manual (idea/enlace/interna). Requiere el Postgres de pruebas (fixture
+AFP) y la aportación manual (idea/interna). Requiere el Postgres de pruebas (fixture
 `cliente`); en CI corre con el service postgres, en local se salta.
 """
 
@@ -38,6 +38,17 @@ def test_listar_fuentes_filtra_por_tipo(cliente):
 
 def test_listar_fuentes_tipo_invalido_400(cliente):
     assert cliente.get("/api/fuentes?tipo=loquesea").status_code == 400
+    # `api`/`galeria` eran tipos MUERTOS: ya no están en el catálogo y se rechazan.
+    assert cliente.get("/api/fuentes?tipo=api").status_code == 400
+    assert cliente.get("/api/fuentes?tipo=galeria").status_code == 400
+
+
+def test_catalogo_tipos_sin_tipos_muertos(cliente):
+    # El catálogo expuesto a la UI ya no ofrece los tipos muertos `api`/`galeria`.
+    tipos = cliente.get("/api/fuentes").json()["tipos"]
+    assert "api" not in tipos
+    assert "galeria" not in tipos
+    assert "rss" in tipos
 
 
 def test_listar_fuentes_filtra_por_marca(cliente):
@@ -68,7 +79,7 @@ def test_listar_fuentes_filtra_por_marca(cliente):
     assert cliente.get("/api/fuentes?marca=marca_falsa").status_code == 400
 
 
-# --- Aportacion MANUAL (idea / enlace / interna) -> item REAL en el tablero --- #
+# --- Aportacion MANUAL (idea / interna) -> item REAL en el tablero --- #
 
 
 def test_aportar_idea_crea_item_en_pendientes(cliente):
@@ -105,29 +116,11 @@ def test_aportar_idea_vacia_400(cliente):
 
 def test_aportar_tipo_invalido_400(cliente):
     assert cliente.post("/api/fuentes/aportar", json={"tipo": "rss", "texto": "x"}).status_code == 400
-
-
-def test_aportar_enlace_extrae_y_crea_item(cliente, monkeypatch):
-    # Mockeamos la descarga de la URL: el enlace pegado dispara el flujo URL->item.
-    from keni_consola.dominio import extraccion_url
-
-    html = "<html><head><title>Gol histórico</title></head><body><p>Una nota de prueba.</p></body></html>"
-    monkeypatch.setattr(extraccion_url, "_DESCARGADOR", lambda _url: html)
-    r = cliente.post(
-        "/api/fuentes/aportar",
-        json={"tipo": "enlace", "url": "https://93.184.216.34/nota"},
-    )
-    assert r.status_code == 200, r.text
-    cont = r.json()["contenido"]
-    assert cont["origen"] == "enlace"
-    # El titular extraido titula el item; la URL queda en la descripcion (nota no verificada).
-    assert "Gol histórico" in cont["titulo"]
-    assert "93.184.216.34" in cont["descripcion"]
-
-
-def test_aportar_enlace_url_invalida_400(cliente):
+    # El tipo `enlace` fue ELIMINADO: ahora también se rechaza (guard de la regresión).
     assert (
-        cliente.post("/api/fuentes/aportar", json={"tipo": "enlace", "url": "no-es-url"}).status_code
+        cliente.post(
+            "/api/fuentes/aportar", json={"tipo": "enlace", "url": "https://93.184.216.34/nota"}
+        ).status_code
         == 400
     )
 

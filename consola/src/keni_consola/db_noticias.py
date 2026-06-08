@@ -844,10 +844,11 @@ def listar_noticia_clusters(
     limite: int = 50,
     desplazamiento: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Historias filtrables, MÁS RELEVANTES primero (`score` desc) + total.
+    """Historias filtrables, MÁS NUEVAS primero (`ultimo_visto` desc) + total.
 
     Filtros: `marca` ('' / None = todas), `categoria`, `desde` (ISO; `ultimo_visto >= desde`),
-    `estado`. Orden `score DESC, ultimo_visto DESC`. Devuelve `(clusters, total)`.
+    `estado`. Orden `ultimo_visto DESC, score DESC` (recencia primaria, score desempate).
+    Devuelve `(clusters, total)`.
     """
     condiciones: list[str] = []
     params: list[Any] = []
@@ -866,7 +867,7 @@ def listar_noticia_clusters(
     where = (" WHERE " + " AND ".join(condiciones)) if condiciones else ""
     sql = (
         f"{_SELECT_NOTICIA_CLUSTER}{where} "
-        "ORDER BY score DESC, ultimo_visto DESC, id DESC LIMIT ? OFFSET ?"
+        "ORDER BY ultimo_visto DESC, score DESC, id DESC LIMIT ? OFFSET ?"
     )
     con = _conectar()
     try:
@@ -1071,9 +1072,9 @@ def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
 
 # --- Tipos de fuente (catálogo) ------------------------------------------- #
 # `fuentes_rss` es la ÚNICA tabla de fuentes (la fuente de verdad del motor de ingesta); la
-# API la presenta como catálogo de tipo 'rss'. Esta allowlist deja la puerta a otros tipos de
-# aportación (idea/enlace/...) que hoy producen items del tablero, no filas de fuente.
-_TIPOS_FUENTE: tuple[str, ...] = ("rss", "api", "galeria", "idea", "interna")
+# API la presenta como catálogo de tipo 'rss'. Esta allowlist deja la puerta a los tipos de
+# aportación (idea/interna) que hoy producen items del tablero, no filas de fuente.
+_TIPOS_FUENTE: tuple[str, ...] = ("rss", "idea", "interna")
 
 
 

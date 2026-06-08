@@ -404,11 +404,12 @@ async def salud(request: Request) -> Response:
 
 
 async def listar_historias(request: Request) -> Response:
-    """GET /api/noticias/historias: historias filtrables + paginadas, MÁS RELEVANTES primero.
+    """GET /api/noticias/historias: historias filtrables + paginadas, MÁS NUEVAS primero.
 
     Query: `marca` ('' / ausente = todas), `categoria`, `desde` (ISO; `ultimo_visto >= desde`),
-    `estado` (nuevo|usado|descartado), `limit`, `offset`. Orden: `score` desc. Devuelve
-    `{historias, total}`. Cada historia trae sus enlaces corroborantes (hasta ~8).
+    `estado` (nuevo|usado|descartado), `limit`, `offset`. Orden: `ultimo_visto` desc (recencia),
+    `score` desc como desempate. Devuelve `{historias, total}`. Cada historia trae sus enlaces
+    corroborantes (hasta ~8).
     """
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:

@@ -1,7 +1,7 @@
 """API del HUB de fuentes (item G): TODAS las fuentes de insumo, no solo RSS.
 
 Convierte "Fuentes" en el lugar donde se dan de alta fuentes de cualquier `tipo`
-(rss/api/galeria/idea/interna), cada una con su `config` (JSON especifico del tipo),
+(rss/idea/interna), cada una con su `config` (JSON especifico del tipo),
 `prioridad` y `etiquetas`. Es ADITIVO: `fuentes_rss` sigue siendo la fuente de verdad del
 Radar v1; este hub se siembra de ella (migracion idempotente en `db._sembrar_fuentes_hub_
 desde_rss`) y NO la sustituye.
@@ -11,12 +11,12 @@ desde_rss`) y NO la sustituye.
                                        prioridad?, etiquetas?}
   - PUT  /api/fuentes/{id}          -> edita parcialmente
   - DELETE /api/fuentes/{id}        -> borra
-  - POST /api/fuentes/aportar       -> APORTACION MANUAL (idea / enlace / interna): crea un
+  - POST /api/fuentes/aportar       -> APORTACION MANUAL (idea / interna): crea un
                                        item REAL en el tablero (`flujo='importante'`) con su
                                        `origen` y, best-effort, le lanza copy en segundo plano.
 
-Las fuentes "standing" (rss/api/galeria/interna configurada) son CONFIGURABLES y se guardan
-en el hub. Los tipos MANUALES (idea / enlace / interna) producen APORTACIONES: no se guardan
+Las fuentes "standing" (rss/interna configurada) son CONFIGURABLES y se guardan
+en el hub. Los tipos MANUALES (idea / interna) producen APORTACIONES: no se guardan
 como fuente, sino que entran al PIPELINE como un item del tablero con su `origen` visible,
 reutilizando el mismo camino que `desde-radar` (crear contenido + auto-copy). Asi nada es UI
 decorativa: cada aportacion llega a Pendientes con su fuente.
@@ -39,7 +39,7 @@ from starlette.routing import Route
 from .. import agencias, autogen_copy, marcas, redes, repos
 from .._http_json import leer_json
 from ..db_noticias import _TIPOS_FUENTE
-from ..dominio import extraccion_url, fuentes_presets, http_feed
+from ..dominio import fuentes_presets, http_feed
 from ..seguridad import autor_de_peticion
 
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}
@@ -47,11 +47,9 @@ _MARCAS_IDS = {m[0] for m in marcas.opciones()}
 # Tipos de APORTACION MANUAL: producen items del tablero (no fuentes "standing"). El valor de
 # cada uno es el `origen` con que nace el item, asi su fuente queda VISIBLE en Radar/Plan.
 #   idea    -> texto libre del equipo (caja de ideas verde)
-#   enlace  -> URL de redes/internet pegada (extrae la nota y dispara URL->copy)
 #   interna -> contenido interno de AMX registrado a mano (conector automatico PENDIENTE)
 _ORIGEN_APORTACION: dict[str, str] = {
     "idea": "idea",
-    "enlace": "enlace",
     "interna": "interna",
 }
 _MAX_TITULO = 300
@@ -156,12 +154,10 @@ def _redes_iniciales(crudo: Any) -> list[str]:
 async def aportar(request: Request) -> Response:
     """`POST /api/fuentes/aportar` -> APORTACION MANUAL al pipeline -> `{contenido, copy_en_proceso}`.
 
-    Cuerpo: `{tipo: idea|enlace|interna, marca?, redes?: [ids], generar?: bool,`
-            ` texto?: str, url?: str, titulo?: str}`.
+    Cuerpo: `{tipo: idea|interna, marca?, redes?: [ids], generar?: bool,`
+            ` texto?: str, titulo?: str}`.
 
       - `idea`    usa `texto` (texto libre del equipo) como nota de partida.
-      - `enlace`  usa `url`: se valida (SSRF) y se EXTRAE la nota (titular + cuerpo) con
-                  `extraccion_url`, reutilizando el mismo flujo URL->copy de la Texto.
       - `interna` usa `texto` (contenido interno de AMX pegado a mano). El conector
                   automatico de AMX queda PENDIENTE; esta es la ingestion manual entretanto.
 
@@ -186,25 +182,14 @@ async def aportar(request: Request) -> Response:
     titulo = titulo.strip()
     descripcion = ""
 
-    if tipo == "enlace":
-        url_limpia, err = extraccion_url.validar_url(datos.get("url"))
-        if err is not None:
-            return JSONResponse({"error": err}, status_code=400)
-        try:
-            titulo_url, cuerpo = extraccion_url.extraer_texto(url_limpia)
-        except extraccion_url.ExtraccionError as e:
-            return JSONResponse({"error": str(e)}, status_code=502)
-        descripcion = extraccion_url.componer_nota_no_verificada(url_limpia, titulo_url, cuerpo)
-        titulo = titulo or titulo_url.strip() or url_limpia
-    else:
-        texto = datos.get("texto")
-        if not isinstance(texto, str) or not texto.strip():
-            campo = "la idea" if tipo == "idea" else "el contenido interno"
-            return JSONResponse({"error": f"Escribe {campo} antes de enviarla."}, status_code=400)
-        descripcion = texto.strip()
-        # Titulo por defecto: la primera linea del texto (recortada).
-        if not titulo:
-            titulo = descripcion.splitlines()[0]
+    texto = datos.get("texto")
+    if not isinstance(texto, str) or not texto.strip():
+        campo = "la idea" if tipo == "idea" else "el contenido interno"
+        return JSONResponse({"error": f"Escribe {campo} antes de enviarla."}, status_code=400)
+    descripcion = texto.strip()
+    # Titulo por defecto: la primera linea del texto (recortada).
+    if not titulo:
+        titulo = descripcion.splitlines()[0]
 
     if not titulo:
         return JSONResponse({"error": "La aportación necesita un título."}, status_code=400)
