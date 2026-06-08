@@ -2,6 +2,11 @@
 // Transformer con aspect-ratio (imágenes/logos), zoom (+/−/ajustar, ctrl+rueda, pinch), barra de
 // acciones FLOTANTE sobre la capa seleccionada (alinear/orden/duplicar/borrar), edición de texto
 // EN LÍNEA (doble clic) y atajos de teclado. Táctil de serie (Konva). El estado vive en el store.
+//
+// Este fichero es el componente PRINCIPAL: mantiene el estado/refs/efectos sensibles al orden y los
+// manejadores de interacción (drag/resize/zoom), y COMPONE los sub-componentes extraídos a
+// `editor/lienzo/`: FondoNodo, ReframeOverlay, CropOverlay, banners de modo, barra de acciones y
+// controles de encuadre. Helpers de geometría/preferencias y constantes viven en `lienzo/lib`.
 
 import Konva from "konva";
 import {
@@ -14,319 +19,40 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   BringToFront,
-  Check,
   Copy,
-  Crop as CropIcon,
-  Frame,
-  Grid3x3,
-  Magnet,
-  Maximize,
-  Minus,
-  Move,
-  Plus,
   SendToBack,
   Trash2,
 } from "lucide-react";
 import {
   type DragEvent as DragEventReact,
-  type PointerEvent as PointerEventReact,
-  type WheelEvent as WheelEventReact,
   useEffect,
   useRef,
   useState,
 } from "react";
 import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
 
-import { CapaNodo, puntosGradiente } from "./capas/CapaNodo";
-import type { Capa, CapaImagen, CapaTexto, Crop, Documento } from "./documento";
+import { CapaNodo } from "./capas/CapaNodo";
+import type { Capa, CapaImagen, CapaTexto } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo } from "./documento";
-import { aplicarEstilo } from "./estilo";
-import { copiarEstiloPortapapeles, estiloPortapapeles } from "./estilos-guardados";
-import { type AsaRecorte, moverAsa } from "./recorte";
-import type { StoreEditor } from "./store";
 import { useEditor, useStoreEditor } from "./usarEditor";
-import { useImagen } from "./useImagen";
 
-const RATIO_FIJO = new Set<Capa["tipo"]>(["imagen", "logo"]);
-const ZOOM_MIN = 0.2;
-const ZOOM_MAX = 4;
-
-// Portapapeles de capas (módulo, para copiar/pegar incluso entre pestañas del workspace). Guarda
-// TODA la selección múltiple, no solo la capa primaria.
-let _portapapeles: Capa[] = [];
-
-// Tamaños de celda de la rejilla ofrecidos en los controles (px del documento). "Fina" por defecto.
-const CELDAS: { px: number; etiqueta: string }[] = [
-  { px: 8, etiqueta: "8" },
-  { px: 16, etiqueta: "16" },
-  { px: 24, etiqueta: "24" },
-  { px: 32, etiqueta: "32" },
-  { px: 48, etiqueta: "48" },
-];
-
-// Preferencias de los toggles de encuadre (imán/rejilla/tamaño/dentro-del-marco) en localStorage.
-// Tolerante: si no hay localStorage o el valor es inválido, cae al default.
-function prefBool(clave: string, def: boolean): boolean {
-  try {
-    const v = localStorage.getItem(clave);
-    return v === null ? def : v === "1";
-  } catch {
-    return def;
-  }
-}
-function prefNum(clave: string, def: number): number {
-  try {
-    const v = localStorage.getItem(clave);
-    const n = v === null ? NaN : Number(v);
-    return Number.isFinite(n) ? n : def;
-  } catch {
-    return def;
-  }
-}
-function guardarPref(clave: string, valor: boolean | number): void {
-  try {
-    localStorage.setItem(clave, typeof valor === "boolean" ? (valor ? "1" : "0") : String(valor));
-  } catch {
-    /* almacenamiento no disponible: las preferencias no se persisten, sin romper. */
-  }
-}
-
-// Acota una posición de un eje para que la caja [pos, pos+tam] quede dentro de [0, total]. Si la
-// caja es MAYOR que el lienzo (tam > total) no se fuerzan negativos absurdos: se permite el rango
-// [total - tam, 0] (la capa puede sobresalir por igual a ambos lados, centrable a mano).
-function clampMarco(pos: number, tam: number, total: number): number {
-  const min = Math.min(0, total - tam);
-  const max = Math.max(0, total - tam);
-  return Math.max(min, Math.min(max, pos));
-}
-
-function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: number; h: number }) {
-  const img = useImagen(fondo.tipo === "imagen" ? fondo.imagen?.media_id : null);
-  if (fondo.tipo === "color") return <Rect x={0} y={0} width={w} height={h} fill={fondo.color} listening={false} />;
-  if (fondo.tipo === "degradado" && fondo.degradado) {
-    // Soporta lineal/radial y multi-stop (mismo helper/convención que el render y las capas):
-    // default lineal 180 = vertical (↓), sin cambio visual respecto al comportamiento previo.
-    const deg = fondo.degradado;
-    const stops: (number | string)[] =
-      deg.stops && deg.stops.length >= 2
-        ? [...deg.stops]
-            .map((s) => ({ pos: Math.max(0, Math.min(1, s.pos || 0)), color: s.color }))
-            .sort((a, b) => a.pos - b.pos)
-            .flatMap((s) => [s.pos, s.color])
-        : [0, deg.desde, 1, deg.hasta];
-    if (deg.tipo === "radial") {
-      const r = Math.sqrt(w * w + h * h) / 2;
-      return (
-        <Rect
-          x={0} y={0} width={w} height={h} listening={false}
-          fillRadialGradientStartPoint={{ x: w / 2, y: h / 2 }}
-          fillRadialGradientEndPoint={{ x: w / 2, y: h / 2 }}
-          fillRadialGradientStartRadius={0}
-          fillRadialGradientEndRadius={r}
-          fillRadialGradientColorStops={stops}
-        />
-      );
-    }
-    const g = puntosGradiente(w, h, deg.angulo);
-    return (
-      <Rect
-        x={0} y={0} width={w} height={h} listening={false}
-        fillLinearGradientStartPoint={g.start}
-        fillLinearGradientEndPoint={g.end}
-        fillLinearGradientColorStops={stops}
-      />
-    );
-  }
-  if (fondo.tipo === "imagen" && img) {
-    return <Rect x={0} y={0} width={w} height={h} listening={false} fillPatternImage={img} fillPatternScale={{ x: w / img.width, y: h / img.height }} />;
-  }
-  return <Rect x={0} y={0} width={w} height={h} fill="#111315" listening={false} />;
-}
-
-// Capa HTML transparente sobre la imagen en reencuadre. Arrastrar mueve el FOCO (qué parte de la
-// foto se ve en el marco) y la rueda ajusta el ZOOM. Todo el gesto cuenta como un paso de
-// deshacer. El mapeo de arrastre es "una anchura de marco = recorrido completo del foco": natural
-// y acotado (arrastrar a la derecha muestra más del lado izquierdo).
-function ReframeOverlay({
-  capa,
-  escala,
-  store,
-}: {
-  capa: CapaImagen;
-  escala: number;
-  store: StoreEditor;
-}) {
-  const drag = useRef<{ fx: number; fy: number; px: number; py: number } | null>(null);
-  const gestoActivo = useRef(false);
-  const finZoom = useRef<number | undefined>(undefined);
-
-  const comenzar = () => {
-    if (!gestoActivo.current) {
-      store.getState().comenzarGesto();
-      gestoActivo.current = true;
-    }
-  };
-  const actual = () => store.getState().documento.capas.find((c) => c.id === capa.id) as CapaImagen | undefined;
-
-  const onPointerDown = (e: PointerEventReact) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    comenzar();
-    const c = actual();
-    if (!c) return;
-    drag.current = { fx: c.foco[0] ?? 0.5, fy: c.foco[1] ?? 0.5, px: e.clientX, py: e.clientY };
-  };
-  const onPointerMove = (e: PointerEventReact) => {
-    if (!drag.current) return;
-    const dx = (e.clientX - drag.current.px) / (capa.w * escala);
-    const dy = (e.clientY - drag.current.py) / (capa.h * escala);
-    const fx = Math.max(0, Math.min(1, drag.current.fx - dx));
-    const fy = Math.max(0, Math.min(1, drag.current.fy - dy));
-    store.getState().actualizar(capa.id, { foco: [fx, fy] } as Partial<Capa>, false);
-  };
-  const onPointerUp = () => {
-    drag.current = null;
-    gestoActivo.current = false;
-  };
-  const onWheel = (e: WheelEventReact) => {
-    e.preventDefault();
-    comenzar();
-    const c = actual();
-    if (!c) return;
-    const z = Math.max(1, Math.min(6, (c.zoom || 1) * (e.deltaY < 0 ? 1.06 : 0.94)));
-    store.getState().actualizar(capa.id, { zoom: z } as Partial<Capa>, false);
-    // Cierra el gesto (un paso de deshacer) tras una ráfaga de rueda.
-    window.clearTimeout(finZoom.current);
-    finZoom.current = window.setTimeout(() => { gestoActivo.current = false; }, 350);
-  };
-
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onWheel={onWheel}
-      className="absolute cursor-move touch-none ring-2 ring-primary"
-      style={{ left: capa.x * escala, top: capa.y * escala, width: capa.w * escala, height: capa.h * escala }}
-    />
-  );
-}
-
-// Capa HTML sobre la imagen en MODO RECORTE (crop visual). Muestra la imagen COMPLETA dentro de la
-// caja (object-contain), atenúa lo que queda FUERA del recorte y dibuja un rectángulo con 8
-// tiradores (4 esquinas + 4 lados) + área central para mover. Arrastrar actualiza `capa.crop` en
-// fracciones 0..1 de la FUENTE (= fracciones de la imagen mostrada, que se ve entera). Todo el
-// gesto cuenta como UN paso de deshacer (como el reencuadre).
-function CropOverlay({
-  capa,
-  escala,
-  store,
-}: {
-  capa: CapaImagen;
-  escala: number;
-  store: StoreEditor;
-}) {
-  const img = useImagen(capa.objeto || null);
-  const drag = useRef<{ asa: AsaRecorte; crop: Crop; px: number; py: number } | null>(null);
-  const gestoActivo = useRef(false);
-
-  const W = capa.w * escala;
-  const H = capa.h * escala;
-  // La imagen completa se muestra con `contain` dentro de la caja: rect mostrado (letterbox) en px.
-  let imgW = W, imgH = H, imgL = 0, imgT = 0;
-  if (img && img.width > 0 && img.height > 0) {
-    const k = Math.min(W / img.width, H / img.height);
-    imgW = img.width * k;
-    imgH = img.height * k;
-    imgL = (W - imgW) / 2;
-    imgT = (H - imgH) / 2;
-  }
-  const crop: Crop = capa.crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 };
-  // Rectángulo de recorte en px DENTRO de la imagen mostrada.
-  const rx = imgL + crop.cx * imgW;
-  const ry = imgT + crop.cy * imgH;
-  const rw = crop.cw * imgW;
-  const rh = crop.ch * imgH;
-
-  const comenzar = () => {
-    if (!gestoActivo.current) {
-      store.getState().comenzarGesto();
-      gestoActivo.current = true;
-    }
-  };
-  const actual = () => store.getState().documento.capas.find((c) => c.id === capa.id) as CapaImagen | undefined;
-
-  const onDown = (asa: AsaRecorte) => (e: PointerEventReact) => {
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    comenzar();
-    const c = actual();
-    if (!c) return;
-    drag.current = { asa, crop: c.crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 }, px: e.clientX, py: e.clientY };
-  };
-  const onMove = (e: PointerEventReact) => {
-    if (!drag.current || imgW <= 0 || imgH <= 0) return;
-    const dfx = (e.clientX - drag.current.px) / imgW;
-    const dfy = (e.clientY - drag.current.py) / imgH;
-    const next = moverAsa(drag.current.crop, drag.current.asa, dfx, dfy);
-    store.getState().actualizar(capa.id, { crop: next } as Partial<Capa>, false);
-  };
-  const onUp = () => {
-    drag.current = null;
-    gestoActivo.current = false;
-  };
-
-  // Definición de los 8 tiradores: posición (en px relativos a la caja) y cursor.
-  const asas: { asa: AsaRecorte; x: number; y: number; cursor: string }[] = [
-    { asa: "nw", x: rx, y: ry, cursor: "nwse-resize" },
-    { asa: "n", x: rx + rw / 2, y: ry, cursor: "ns-resize" },
-    { asa: "ne", x: rx + rw, y: ry, cursor: "nesw-resize" },
-    { asa: "e", x: rx + rw, y: ry + rh / 2, cursor: "ew-resize" },
-    { asa: "se", x: rx + rw, y: ry + rh, cursor: "nwse-resize" },
-    { asa: "s", x: rx + rw / 2, y: ry + rh, cursor: "ns-resize" },
-    { asa: "sw", x: rx, y: ry + rh, cursor: "nesw-resize" },
-    { asa: "w", x: rx, y: ry + rh / 2, cursor: "ew-resize" },
-  ];
-
-  return (
-    <div
-      onPointerMove={onMove}
-      onPointerUp={onUp}
-      className="absolute touch-none"
-      style={{ left: capa.x * escala, top: capa.y * escala, width: W, height: H }}
-    >
-      {/* Imagen COMPLETA (sin recortar) de referencia. */}
-      {img && (
-        <img
-          src={img.src}
-          alt=""
-          draggable={false}
-          className="pointer-events-none absolute select-none"
-          style={{ left: imgL, top: imgT, width: imgW, height: imgH }}
-        />
-      )}
-      {/* Atenuación del exterior del recorte: 4 bandas translúcidas (arriba/abajo/izq/der). */}
-      <div className="pointer-events-none absolute bg-black/55" style={{ left: 0, top: 0, width: W, height: Math.max(0, ry) }} />
-      <div className="pointer-events-none absolute bg-black/55" style={{ left: 0, top: ry + rh, width: W, height: Math.max(0, H - (ry + rh)) }} />
-      <div className="pointer-events-none absolute bg-black/55" style={{ left: 0, top: ry, width: Math.max(0, rx), height: rh }} />
-      <div className="pointer-events-none absolute bg-black/55" style={{ left: rx + rw, top: ry, width: Math.max(0, W - (rx + rw)), height: rh }} />
-      {/* Rectángulo de recorte: marco + área de arrastre (mover todo). */}
-      <div
-        onPointerDown={onDown("mover")}
-        className="absolute cursor-move ring-2 ring-primary"
-        style={{ left: rx, top: ry, width: rw, height: rh }}
-      />
-      {/* Tiradores. */}
-      {asas.map((a) => (
-        <div
-          key={a.asa}
-          onPointerDown={onDown(a.asa)}
-          className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-primary bg-background shadow"
-          style={{ left: a.x, top: a.y, cursor: a.cursor }}
-        />
-      ))}
-    </div>
-  );
-}
+import { BannerRecorte, BannerReencuadre } from "./lienzo/BannersModo";
+import { type AccionLienzo, BarraAcciones } from "./lienzo/BarraAcciones";
+import { ControlesEncuadre } from "./lienzo/ControlesEncuadre";
+import { CropOverlay } from "./lienzo/CropOverlay";
+import { FondoNodo } from "./lienzo/FondoNodo";
+import {
+  RATIO_FIJO,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  clampMarco,
+  guardarPref,
+  prefBool,
+  prefNum,
+} from "./lienzo/lib";
+import { ReframeOverlay } from "./lienzo/ReframeOverlay";
+import { useArrastreCapas } from "./lienzo/useArrastreCapas";
+import { useAtajosTeclado } from "./lienzo/useAtajosTeclado";
 
 export function Lienzo({
   maxAncho = 620,
@@ -413,10 +139,23 @@ export function Lienzo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escala, documento, onStage]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // Arrastre múltiple: posiciones iniciales de todas las capas seleccionadas al empezar a mover.
-  const multiDrag = useRef<{ dragId: string; ini: Map<string, { x: number; y: number }> } | null>(null);
-  const [guias, setGuias] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
-  const [arrastrando, setArrastrando] = useState(false);
+  // Arrastre de capas con SMART GUIDES y movimiento en grupo: hook extraído (owns el ref multiDrag).
+  const { arrastrando, guias, onDragStart, onDragMove, onDragEnd } = useArrastreCapas({
+    store,
+    stageRef,
+    documento,
+    escala,
+    iman,
+    grid,
+    paso,
+    dentroMarco,
+    w,
+    h,
+    safeTop,
+    safeBottom,
+    safeLeft,
+    safeRight,
+  });
   const [rectSel, setRectSel] = useState<{ x: number; y: number; w: number } | null>(null);
   const [editando, setEditando] = useState<{ id: string; x: number; y: number; w: number; fontPx: number } | null>(null);
   const [textoEdit, setTextoEdit] = useState("");
@@ -477,226 +216,14 @@ export function Lienzo({
     setRectSel({ x: minX, y: minY, w: maxX - minX });
   }, [seleccionMulti, documento, zoom]);
 
-  // Atajos de teclado (ignora si se está escribiendo en un input/textarea).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      // No dispares atajos si el foco está en un campo editable o un <select> (con un select
-      // enfocado, las flechas cambian la opción y Backspace no debe borrar la capa).
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable || t.closest("[contenteditable]"))) return;
-      const st = store.getState();
-      const sel = st.seleccion;
-      const meta = e.metaKey || e.ctrlKey;
-      if (meta && (e.key === "z" || e.key === "Z")) {
-        e.preventDefault();
-        if (e.shiftKey) st.rehacer();
-        else st.deshacer();
-        return;
-      }
-      // Zoom: ⌘0 ajusta a pantalla (escala = baseFit => zoom 1), ⌘+ acerca, ⌘− aleja.
-      if (meta && e.key === "0") { e.preventDefault(); return setZoom(1); }
-      if (meta && (e.key === "+" || e.key === "=")) {
-        e.preventDefault();
-        return setZoom((z) => Math.min(ZOOM_MAX, z * 1.1));
-      }
-      if (meta && (e.key === "-" || e.key === "_")) {
-        e.preventDefault();
-        return setZoom((z) => Math.max(ZOOM_MIN, z * 0.9));
-      }
-      if (e.key === "Escape") {
-        if (recorteId) return onSalirRecorte?.();
-        if (reencuadreId) return onSalirReencuadre?.();
-        return st.seleccionar(null);
-      }
-      // Copiar/pegar ESTILO (⌘⌥C / ⌘⌥V): subconjunto de estilo de la capa, no la capa entera.
-      // Va ANTES de ⌘C/⌘V (que copian capas) porque añade Alt.
-      if (meta && e.altKey && (e.key === "c" || e.key === "C" || e.code === "KeyC")) {
-        e.preventDefault();
-        const capa = st.documento.capas.find((c) => c.id === st.seleccion);
-        if (capa) copiarEstiloPortapapeles(capa);
-        return;
-      }
-      if (meta && e.altKey && (e.key === "v" || e.key === "V" || e.code === "KeyV")) {
-        e.preventDefault();
-        const estilo = estiloPortapapeles();
-        if (!estilo) return;
-        const ids = st.seleccionMulti.length ? st.seleccionMulti : st.seleccion ? [st.seleccion] : [];
-        const objetivos = st.documento.capas.filter((c) => ids.includes(c.id));
-        if (!objetivos.length) return;
-        st.comenzarGesto();
-        for (const c of objetivos) {
-          const cambios = aplicarEstilo(c, estilo);
-          if (Object.keys(cambios).length) st.actualizar(c.id, cambios, false);
-        }
-        return;
-      }
-      if (meta && (e.key === "a" || e.key === "A")) {
-        e.preventDefault();
-        return st.seleccionarMuchas(st.documento.capas.map((c) => c.id));
-      }
-      if (meta && (e.key === "g" || e.key === "G")) {
-        e.preventDefault();
-        if (e.shiftKey) {
-          const c = st.documento.capas.find((x) => x.id === st.seleccion);
-          if (c?.tipo === "grupo") st.desagrupar(c.id);
-        } else {
-          st.agrupar();
-        }
-        return;
-      }
-      if (!sel) return;
-      const capa = st.documento.capas.find((c) => c.id === sel);
-      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); return st.quitarMulti(); }
-      if (meta && (e.key === "c" || e.key === "C")) {
-        // Copia TODA la selección múltiple (alineado con ⌘D duplicarMulti), no solo la primaria.
-        const ids = st.seleccionMulti.length ? st.seleccionMulti : sel ? [sel] : [];
-        const capas = st.documento.capas.filter((c) => ids.includes(c.id));
-        if (capas.length) _portapapeles = capas.map((c) => structuredClone(c));
-        return;
-      }
-      if (meta && (e.key === "v" || e.key === "V")) {
-        if (!_portapapeles.length) return;
-        e.preventDefault();
-        let z = Math.max(0, ...st.documento.capas.map((c) => c.z));
-        const t0 = Date.now().toString(36);
-        const copias = _portapapeles.map((c, i) => ({
-          ...structuredClone(c),
-          id: `${c.tipo}-${t0}-${i}-${Math.floor(performance.now())}`,
-          x: c.x + 24,
-          y: c.y + 24,
-          z: ++z,
-        })) as Capa[];
-        for (const copia of copias) st.agregar(copia);
-        st.seleccionarMuchas(copias.map((c) => c.id));
-        return;
-      }
-      if (meta && (e.key === "d" || e.key === "D")) { e.preventDefault(); return st.duplicarMulti(); }
-      if (meta && e.key === "]") { e.preventDefault(); return st.traerAlFrente(sel); }
-      if (meta && e.key === "[") { e.preventDefault(); return st.enviarAlFondo(sel); }
-      if (capa && e.key.startsWith("Arrow")) {
-        e.preventDefault();
-        const d = e.shiftKey ? 10 : 1;
-        const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
-        const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
-        const ids = st.seleccionMulti.length > 1 ? st.seleccionMulti : [sel];
-        st.aplicarPosiciones(
-          ids
-            .map((id) => st.documento.capas.find((c) => c.id === id))
-            .filter((c): c is Capa => !!c)
-            .map((c) => ({ id: c.id, x: c.x + dx, y: c.y + dy })),
-        );
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [store, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte]);
+  // Atajos de teclado (ignora si se está escribiendo en un input/textarea). Hook extraído.
+  useAtajosTeclado({ store, setZoom, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte });
 
   // Zoom con ctrl/cmd + rueda (centrado en el cursor no es crítico aquí: ajustamos el factor).
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     if (!(e.evt.ctrlKey || e.evt.metaKey)) return;
     e.evt.preventDefault();
     setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * (e.evt.deltaY < 0 ? 1.1 : 0.9))));
-  };
-
-  const onDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
-    setArrastrando(true);
-    const id = e.target.id();
-    const st = store.getState();
-    if (st.seleccionMulti.length > 1 && st.seleccionMulti.includes(id)) {
-      const ini = new Map<string, { x: number; y: number }>();
-      for (const sid of st.seleccionMulti) {
-        const n = stageRef.current?.findOne<Konva.Node>(`#${sid}`);
-        if (n) ini.set(sid, { x: n.x(), y: n.y() });
-      }
-      multiDrag.current = { dragId: id, ini };
-    } else {
-      multiDrag.current = null;
-    }
-  };
-
-  const onDragEnd = () => {
-    setArrastrando(false);
-    setGuias({ x: null, y: null });
-    const md = multiDrag.current;
-    if (md) {
-      const stage = stageRef.current;
-      const pos: { id: string; x: number; y: number }[] = [];
-      md.ini.forEach((_p, sid) => {
-        const n = stage?.findOne<Konva.Node>(`#${sid}`);
-        if (n) pos.push({ id: sid, x: n.x(), y: n.y() });
-      });
-      store.getState().aplicarPosiciones(pos);
-      multiDrag.current = null;
-    }
-  };
-
-  // SMART GUIDES al arrastrar (y MOVER en grupo si hay selección múltiple).
-  const onDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
-    const nodo = e.target;
-    const md = multiDrag.current;
-    if (md && md.dragId === nodo.id()) {
-      const start = md.ini.get(nodo.id());
-      if (start) {
-        const dx = nodo.x() - start.x;
-        const dy = nodo.y() - start.y;
-        const stage = stageRef.current;
-        md.ini.forEach((p, sid) => {
-          if (sid === nodo.id()) return;
-          const n = stage?.findOne<Konva.Node>(`#${sid}`);
-          if (n) {
-            n.x(p.x + dx);
-            n.y(p.y + dy);
-          }
-        });
-      }
-      setGuias({ x: null, y: null });
-      return;
-    }
-    const capa = documento.capas.find((c) => c.id === nodo.id());
-    if (!capa) return;
-    const umbral = 6 / escala;
-    let lx: number | null = null, ly: number | null = null;
-    // IMÁN (si está activo): snap a objetos + bordes/centro del lienzo + 4 líneas de margen. Tiene
-    // PRIORIDAD sobre la rejilla. Apagado => sin guías ni ajuste magnético.
-    if (iman) {
-      const objX: number[] = [0, w / 2, w];
-      const objY: number[] = [0, h / 2, h];
-      // Líneas de margen como objetivos de snap (x = safe_left y w - safe_right; y análogo).
-      if (safeLeft > 0) objX.push(safeLeft);
-      if (safeRight > 0) objX.push(w - safeRight);
-      if (safeTop > 0) objY.push(safeTop);
-      if (safeBottom > 0) objY.push(h - safeBottom);
-      for (const c of documento.capas) {
-        if (c.id === capa.id) continue;
-        objX.push(c.x, c.x + c.w / 2, c.x + c.w);
-        objY.push(c.y, c.y + c.h / 2, c.y + c.h);
-      }
-      const x = nodo.x(), y = nodo.y();
-      const bx = [x, x + capa.w / 2, x + capa.w];
-      const by = [y, y + capa.h / 2, y + capa.h];
-      for (let i = 0; i < 3 && lx === null; i++) for (const t of objX) if (Math.abs(bx[i] - t) <= umbral) { nodo.x(x + (t - bx[i])); lx = t; break; }
-      for (let i = 0; i < 3 && ly === null; i++) for (const t of objY) if (Math.abs(by[i] - t) <= umbral) { nodo.y(y + (t - by[i])); ly = t; break; }
-    }
-    // Snap a la rejilla POR UMBRAL (no redondeo duro): solo cuando el borde superior-izquierdo está
-    // cerca de una línea de rejilla, y en los ejes que el imán NO haya fijado. Entre líneas el
-    // movimiento es libre y no pelea con el imán.
-    if (grid) {
-      if (lx === null) {
-        const linea = Math.round(nodo.x() / paso) * paso;
-        if (Math.abs(nodo.x() - linea) <= umbral) nodo.x(linea);
-      }
-      if (ly === null) {
-        const linea = Math.round(nodo.y() / paso) * paso;
-        if (Math.abs(nodo.y() - linea) <= umbral) nodo.y(linea);
-      }
-    }
-    // MANTENER DENTRO DEL MARCO: acota la caja al lienzo. Si la capa es mayor que el lienzo en un
-    // eje, no se fuerzan negativos absurdos (se permite el rango [w - cw, 0], que queda invertido).
-    if (dentroMarco) {
-      nodo.x(clampMarco(nodo.x(), capa.w, w));
-      nodo.y(clampMarco(nodo.y(), capa.h, h));
-    }
-    setGuias({ x: lx, y: ly });
   };
 
   // Doble clic en una capa de texto -> edición en línea.
@@ -772,7 +299,7 @@ export function Lienzo({
     if (multi) st.alinearMulti(modo);
     else if (seleccion) st.alinear(seleccion, modo);
   };
-  const acciones: { icono: typeof Trash2; titulo: string; onClick: () => void }[] =
+  const acciones: AccionLienzo[] =
     seleccionMulti.length > 0
       ? [
           { icono: AlignStartVertical, titulo: "Alinear izquierda", onClick: () => alinearFn("izq") },
@@ -909,45 +436,14 @@ export function Lienzo({
       </div>
 
       {/* Banner de reencuadre. */}
-      {capaReencuadre && (
-        <div className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
-          <Move className="h-3.5 w-3.5 text-muted-foreground" />
-          <span>Arrastra la foto · rueda para zoom</span>
-          <button
-            onClick={() => onSalirReencuadre?.()}
-            className="ml-1 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-primary-foreground"
-          >
-            <Check className="h-3.5 w-3.5" /> Listo
-          </button>
-        </div>
-      )}
+      {capaReencuadre && <BannerReencuadre onListo={onSalirReencuadre} />}
 
       {/* Banner de recorte (crop visual). */}
-      {capaRecorte && (
-        <div className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
-          <CropIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span>Arrastra los tiradores para recortar</span>
-          <button
-            onClick={() => onSalirRecorte?.()}
-            className="ml-1 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-primary-foreground"
-          >
-            <Check className="h-3.5 w-3.5" /> Listo
-          </button>
-        </div>
-      )}
+      {capaRecorte && <BannerRecorte onListo={onSalirRecorte} />}
 
       {/* Barra de acciones flotante sobre la capa seleccionada. */}
       {rectSel && !arrastrando && !editando && !modoImagen && (
-        <div
-          className="absolute z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover p-1 shadow-md"
-          style={{ left: Math.max(0, rectSel.x), top: Math.max(0, rectSel.y - 38) }}
-        >
-          {acciones.map((a, i) => (
-            <button key={i} title={a.titulo} onClick={a.onClick} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
-              <a.icono className="h-4 w-4" />
-            </button>
-          ))}
-        </div>
+        <BarraAcciones acciones={acciones} rectSel={rectSel} />
       )}
 
       {/* Edición de texto en línea. */}
@@ -968,54 +464,21 @@ export function Lienzo({
 
       {/* Controles de ENCUADRE + zoom. Imán, rejilla (+ tamaño de celda) y "dentro del marco" son
           toggles INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
-      <div className="absolute bottom-2 right-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 shadow">
-        <button
-          title="Imán: ajustar a objetos, bordes y márgenes"
-          onClick={() => setIman((v) => !v)}
-          className={`rounded p-1 hover:bg-accent ${iman ? "bg-accent text-foreground" : "text-muted-foreground"}`}
-        >
-          <Magnet className="h-3.5 w-3.5" />
-        </button>
-        <button
-          title="Rejilla y ajuste a rejilla"
-          onClick={() => setGrid((g) => !g)}
-          className={`rounded p-1 hover:bg-accent ${grid ? "bg-accent text-foreground" : "text-muted-foreground"}`}
-        >
-          <Grid3x3 className="h-3.5 w-3.5" />
-        </button>
-        {grid && (
-          <select
-            title="Tamaño de celda de la rejilla (px)"
-            value={tamCelda}
-            onChange={(e) => setTamCelda(Number(e.target.value))}
-            className="rounded bg-transparent px-0.5 text-xs tabular-nums outline-none hover:bg-accent"
-          >
-            {CELDAS.map((c) => (
-              <option key={c.px} value={c.px}>{c.etiqueta}px</option>
-            ))}
-          </select>
-        )}
-        <button
-          title="Mantener las capas dentro del marco"
-          onClick={() => setDentroMarco((v) => !v)}
-          className={`rounded p-1 hover:bg-accent ${dentroMarco ? "bg-accent text-foreground" : "text-muted-foreground"}`}
-        >
-          <Frame className="h-3.5 w-3.5" />
-        </button>
-        <div className="mx-0.5 h-4 w-px bg-border" />
-        <button title="Alejar" onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))} className="rounded p-1 hover:bg-accent">
-          <Minus className="h-3.5 w-3.5" />
-        </button>
-        <button title="100% (tamaño real, ⌘0 ajusta a pantalla)" onClick={zoomReal} className="rounded px-1 text-xs tabular-nums hover:bg-accent">
-          {Math.round(escala * 100)}%
-        </button>
-        <button title="Acercar (⌘+)" onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))} className="rounded p-1 hover:bg-accent">
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-        <button title="Ajustar a la pantalla (⌘0)" onClick={ajustarPantalla} className="rounded p-1 hover:bg-accent">
-          <Maximize className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      <ControlesEncuadre
+        iman={iman}
+        setIman={setIman}
+        grid={grid}
+        setGrid={setGrid}
+        tamCelda={tamCelda}
+        setTamCelda={setTamCelda}
+        dentroMarco={dentroMarco}
+        setDentroMarco={setDentroMarco}
+        escala={escala}
+        alejar={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))}
+        acercar={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))}
+        zoomReal={zoomReal}
+        ajustarPantalla={ajustarPantalla}
+      />
     </div>
     </div>
   );
