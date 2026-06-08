@@ -464,11 +464,16 @@ export default function Imagen() {
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Imagen" icono={Image} />
       {/* Barra superior del editor: acciones (guardar / guardar como / pieza) + estado + export.
-          La MARCA la manda el selector global del workspace; aquí solo se muestra cuál está activa. */}
+          La MARCA la manda el selector global del workspace. Con una marca concreta activa la
+          etiqueta es redundante (la dice el switch global) y se omite; solo en la vista «Todas»
+          (admin, `marcaActiva === null`) se muestra, y entonces refleja la marca REAL de la pieza
+          abierta (`marcaPanel`), para poder distinguir piezas de marcas distintas. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-        <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="La marca la define el selector global del workspace">
-          {marcas.find((m) => m.id === marcaPanel)?.nombre ?? "Todas las marcas"}
-        </span>
+        {marcaActiva === null && (
+          <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {marcas.find((m) => m.id === marcaPanel)?.nombre ?? "Todas las marcas"}
+          </span>
+        )}
         {pestanaActiva && (
           <>
             <div className="mx-1 h-5 w-px bg-border" />

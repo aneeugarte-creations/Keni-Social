@@ -32,9 +32,6 @@ import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
 
-/** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
-const ETIQUETA_TODAS = "Todas las marcas";
-
 /**
  * Dashboard de Métricas multi-marca.
  *
@@ -158,14 +155,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         />
       ) : (
         <div className="space-y-8">
+          {/* La marca la manda el switch global de la topbar: no se repite aquí. Solo se
+              conserva el rango temporal del corte, como texto sutil junto a las descargas. */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Mostrando{" "}
-              <span className="font-medium text-foreground">
-                {reporteQuery.data.marca || ETIQUETA_TODAS}
-              </span>{" "}
-              · {reporteQuery.data.etiqueta_rango}
-            </p>
+            <p className="text-sm text-muted-foreground">{reporteQuery.data.etiqueta_rango}</p>
             <Descargas rango={rango} marca={marca_} />
           </div>
 

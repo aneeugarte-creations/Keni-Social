@@ -42,7 +42,7 @@ import {
   MenuContextual,
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -201,7 +201,6 @@ function formatearFechaCorta(s: string): string {
 
 export default function Rota() {
   const { usuario } = useSesion();
-  const { nombreActiva } = useMarcaActiva();
   const esAdmin = usuario?.rol === "admin";
   // Por defecto: la próxima semana (la que más le importa al equipo, B4).
   const [lunes, setLunes] = React.useState(() => lunesSiguiente(lunesDeSemana(new Date()), 1));
@@ -213,26 +212,6 @@ export default function Rota() {
   return (
     <>
       <TituloPagina titulo="Turnos" icono={CalendarClock} />
-      <AccionesPagina>
-        {/* La rota es por marca: el calendario muestra los eventos de la marca activa
-            del workspace (switch global de la topbar). El badge recuerda el alcance;
-            "Todas las marcas" (admin) agrega todos los eventos. Control siempre visible. */}
-        <Tooltip
-          label={
-            nombreActiva
-              ? `Esta rota muestra los turnos y eventos de ${nombreActiva}.`
-              : "Vista agregada: turnos y eventos de todas las marcas."
-          }
-        >
-          <Badge
-            variant="outline"
-            className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
-            data-testid="banner-marca-rota"
-          >
-            {nombreActiva ?? "Todas las marcas"}
-          </Badge>
-        </Tooltip>
-      </AccionesPagina>
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>

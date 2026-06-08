@@ -63,7 +63,7 @@ export function GestionFuentes({
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Rss className="h-4 w-4" />
-          Feeds{marcaActiva && nombreActiva ? ` de ${nombreActiva}` : ""}
+          Feeds
         </CardTitle>
         <Button size="sm" variant="outline" onClick={() => setEditando("nuevo")}>
           <Plus className="h-4 w-4" />
