@@ -21,18 +21,10 @@ Uso en las features:
     repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> Postgres
     repos.registrar_historial_prompt(prompt_id, marca, resultado)   # -> ficheros
 """
+# repos.py es un BARREL: la implementación vive en `_repos_comun` + `repos_<dominio>`.
+# `repos.<algo>` / `from .repos import X` siguen funcionando sin cambios.
 
-from __future__ import annotations
-
-from collections.abc import Iterator
-from pathlib import Path
-from typing import Any
-
-from . import db, ficheros
-
-# Re-export de las constantes neutras de dominio (los `api/*.py` las leen via `repos`,
-# p. ej. `repos.ESTADOS_PUBLICACION`). Viven en `estados.py`, fuera de los almacenes.
-from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publica
+from ._repos_comun import (  # noqa: F401
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
@@ -47,2617 +39,304 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
     NOMBRE_FRANJA_MANANA_DEFAULT,
     NOMBRE_FRANJA_TARDE_DEFAULT,
     TIPOS_AUSENCIA,
+    Any,
+    Iterator,
+    Path,
+    annotations,
+    arrancar_persistencia,
+    conectar,
+    db,
+    ficheros,
+    raiz_datos,
 )
-
-
-def conectar() -> Any:
-    """Conexion al backend operacional (delega en `db.conectar`; Postgres).
-
-    La usa la capa de auth (`auth/`) para operar sobre `usuarios`/`sesiones`, igual que el
-    resto de funciones de `db` se consumen via esta fachada. `motor_db` abre Postgres con
-    `DATABASE_URL` (obligatoria, ADR 0004).
-    """
-    return db.conectar()
-
-
-def arrancar_persistencia() -> None:
-    """Arranque de la persistencia operacional (delega en `db.arrancar_persistencia`).
-
-    Crea/migra el esquema Postgres on-demand (ADR 0004). Lo llama `crear_app`. Ver `db.py`.
-    """
-    return db.arrancar_persistencia()
-
-
-def raiz_datos() -> Path:
-    """Raiz de datos de ficheros (delega en `ficheros.raiz_datos`; CONTENIDO editorial vive ahi)."""
-    return ficheros.raiz_datos()
-
-
-# --------------------------------------------------------------------------- #
-# Historial de prompts (CONTENIDO: ficheros YAML via ficheros.py)              #
-# --------------------------------------------------------------------------- #
-
-
-def registrar_historial_prompt(
-    prompt_id: str,
-    marca: str,
-    resultado: str,
-    *,
-    piezas: list[dict[str, Any]] | None = None,
-    titulo: str = "",
-    metricas: dict[str, Any] | None = None,
-    autor: dict[str, str] | None = None,
-) -> str:
-    return ficheros.registrar_historial_prompt(
-        prompt_id, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas, autor=autor
-    )
-
-
-def listar_historial_prompts(
-    *, limite: int | None = None, desplazamiento: int | None = None
-) -> list[dict[str, Any]]:
-    return ficheros.listar_historial_prompts(limite=limite, desplazamiento=desplazamiento)
-
-
-def contar_historial_prompts() -> int:
-    return ficheros.contar_historial_prompts()
-
-
-def obtener_historial_prompt(historial_id: str) -> dict[str, Any] | None:
-    return ficheros.obtener_historial_prompt(historial_id)
-
-
-def registrar_veredicto_qa(
-    *,
-    plataforma_id: str,
-    contenido_id: str,
-    verdicto: str,
-    resumen: str = "",
-    copy_hash: str = "",
-    historial_id: str = "",
-) -> str:
-    """Persiste un veredicto del QA editorial ATADO a una pieza (item A). Devuelve su id."""
-    return db.registrar_veredicto_qa(
-        plataforma_id=plataforma_id,
-        contenido_id=contenido_id,
-        verdicto=verdicto,
-        resumen=resumen,
-        copy_hash=copy_hash,
-        historial_id=historial_id,
-    )
-
-
-def ultimo_veredicto_qa(
-    plataforma_id: str, contenido_id: str = ""
-) -> dict[str, Any] | None:
-    """Ultimo veredicto del QA editorial VIGENTE de una pieza, o None si no hay/expiro (item B/D).
-
-    Lee el ultimo veredicto persistido para `plataforma_id` (`db.ultimo_veredicto_qa`) y lo
-    INVALIDA si el copy de la pieza cambio despues del QA: compara el `copy_hash` del veredicto
-    con el hash del copy ACTUAL de la fila. Si no coinciden (el copy se reescribio tras la
-    revision), devuelve None -> el nivel automatico de QA queda `pendiente` (lo decide un humano),
-    que es el comportamiento CONSERVADOR y seguro. Si coinciden (o el veredicto no guardo hash,
-    p. ej. registros viejos), devuelve `{"verdicto", "resumen"}` para resolver el nivel.
-    """
-    if not plataforma_id:
-        return None
-    registro = db.ultimo_veredicto_qa(plataforma_id)
-    if not registro:
-        return None
-    copy_hash_qa = (registro.get("copy_hash") or "").strip()
-    if copy_hash_qa:
-        # Import local: `dominio.qa_editorial` importa `repos` (evita ciclo en carga).
-        from .dominio import qa_editorial as dom_qa
-
-        plat = db.obtener_contenido_plataforma(plataforma_id)
-        copy_actual = (plat or {}).get("copy", "") or ""
-        if dom_qa.hash_copy(copy_actual) != copy_hash_qa:
-            return None  # el copy cambio tras el QA: veredicto invalido, lo decide un humano.
-    return {
-        "verdicto": registro.get("verdicto", "") or "",
-        "resumen": registro.get("resumen", "") or "",
-    }
-
-
-# --------------------------------------------------------------------------- #
-# Publicaciones (OPERACIONAL: Postgres via db.py; fusión sobre `contenido`, paso 3)    #
-# --------------------------------------------------------------------------- #
-# Una publicacion = una fila `contenido_plataforma` (es_publicacion=1) + su padre. Misma
-# forma de dict que antes (YAML); el resto del sistema (API/aprobación/Metricool/prompts)
-# no cambia. `id`/`fecha_creacion` permiten preservar identidad al migrar desde YAML.
-
-
-def crear_publicacion(
-    marca: str,
-    red: str,
-    *,
-    titulo: str = "",
-    contenido: str = "",
-    copy_in: str = "",
-    estado: str = "borrador",
-    veredicto: str = "",
-    fecha_programada: str = "",
-    origen: str = "",
-    imagen: str = "",
-    imagen_fuente: str = "",
-    tipo_contenido: str = "",
-    evergreen: bool = False,
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    fecha_creacion: str = "",
-) -> dict[str, Any]:
-    return db.crear_publicacion(
-        marca,
-        red,
-        titulo=titulo,
-        contenido=contenido,
-        copy_in=copy_in,
-        estado=estado,
-        veredicto=veredicto,
-        fecha_programada=fecha_programada,
-        origen=origen,
-        imagen=imagen,
-        imagen_fuente=imagen_fuente,
-        tipo_contenido=tipo_contenido,
-        evergreen=evergreen,
-        autor=autor,
-        id=id,
-        fecha_creacion=fecha_creacion,
-    )
-
-
-def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return db.crear_publicaciones(lista)
-
-
-def listar_publicaciones(
-    marca: str | None = None,
-    red: str | None = None,
-    estado: str | None = None,
-    evergreen: bool | None = None,
-    linea: str | None = None,
-    *,
-    limite: int | None = None,
-    desplazamiento: int | None = None,
-    cursor: tuple[str, str] | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_publicaciones(
-        marca=marca,
-        red=red,
-        estado=estado,
-        evergreen=evergreen,
-        linea=linea,
-        limite=limite,
-        desplazamiento=desplazamiento,
-        cursor=cursor,
-    )
-
-
-def contar_publicaciones(
-    marca: str | None = None,
-    red: str | None = None,
-    estado: str | None = None,
-    evergreen: bool | None = None,
-    linea: str | None = None,
-) -> int:
-    return db.contar_publicaciones(
-        marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea
-    )
-
-
-def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
-    return db.obtener_publicacion(publicacion_id)
-
-
-def actualizar_publicacion(
-    publicacion_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_publicacion(publicacion_id, campos)
-
-
-def borrar_publicacion(publicacion_id: str) -> bool:
-    return db.borrar_publicacion(publicacion_id)
-
-
-def reclamar_preparacion(publicacion_id: str, ts: str) -> bool:
-    return db.reclamar_preparacion(publicacion_id, ts)
-
-
-def transicionar_estado_publicacion(
-    publicacion_id: str,
-    estado_origen: str,
-    estado_destino: str,
-    campos_extra: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    # CAS de transicion de estado (cierra el TOCTOU de enviar-a-revision/programar). None si
-    # el estado origen ya cambió (el caller lo traduce a 409).
-    return db.transicionar_estado_publicacion(
-        publicacion_id, estado_origen, estado_destino, campos_extra
-    )
-
-
-def existe_cadena_aprobacion(plataforma_id: str) -> bool:
-    return db.existe_cadena_aprobacion(plataforma_id)
-
-
-def decidir_nivel_aprobacion_tx(
-    plataforma_id: str,
-    nivel_id: str,
-    validar: Any,
-) -> tuple[dict[str, Any] | None, str | None]:
-    return db.decidir_nivel_aprobacion_tx(plataforma_id, nivel_id, validar)
-
-
-def lock_barrido(nombre: str) -> Iterator[bool]:
-    # Passthrough del single-flight cross-proceso (advisory lock). `with repos.lock_barrido(x) as ok:`
-    return db.lock_barrido(nombre)
-
-
-# --------------------------------------------------------------------------- #
-# Grupos de hashtags (OPERACIONAL: Postgres via db.py; rezago cerrado, ADR 0006) #
-# --------------------------------------------------------------------------- #
-# CONTENIDO editorial reutilizable que vivia file-backed (YAML + indice SQLite de rutas
-# absolutas). El indice se desincronizaba al recrear contenedores; ahora vive en Postgres
-# (ADR 0006). El dict devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
-
-
-def listar_grupos_hashtags(
-    *, limite: int | None = None, desplazamiento: int | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_grupos_hashtags(limite=limite, desplazamiento=desplazamiento)
-
-
-def contar_grupos_hashtags() -> int:
-    return db.contar_grupos_hashtags()
-
-
-def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
-    return db.obtener_grupo_hashtags(grupo_id)
-
-
-def crear_grupo_hashtags(
-    nombre: str, marca: str = "", hashtags: list[str] | None = None
-) -> dict[str, Any]:
-    return db.crear_grupo_hashtags(nombre, marca=marca, hashtags=hashtags)
-
-
-def actualizar_grupo_hashtags(
-    grupo_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_grupo_hashtags(grupo_id, campos)
-
-
-def borrar_grupo_hashtags(grupo_id: str) -> bool:
-    return db.borrar_grupo_hashtags(grupo_id)
-
-
-# --------------------------------------------------------------------------- #
-# Franjas editoriales (OPERACIONAL: Postgres via db.py; rezago cerrado, ADR 0006) #
-# --------------------------------------------------------------------------- #
-
-
-def listar_franjas() -> list[dict[str, Any]]:
-    return db.listar_franjas()
-
-
-def crear_franja(
-    dia_semana: int, hora: str, marca: str = "", red: str = ""
-) -> dict[str, Any]:
-    return db.crear_franja(dia_semana, hora, marca=marca, red=red)
-
-
-def borrar_franja(franja_id: str) -> bool:
-    return db.borrar_franja(franja_id)
-
-
-def listar_cadencias() -> list[dict[str, Any]]:
-    return db.listar_cadencias()
-
-
-def guardar_cadencia(
-    *,
-    marca: str,
-    red: str,
-    margen_min: int,
-    hora_inicio: str,
-    hora_fin: str,
-    dias: list[int],
-    activo: bool,
-) -> dict[str, Any]:
-    return db.guardar_cadencia(
-        marca=marca,
-        red=red,
-        margen_min=margen_min,
-        hora_inicio=hora_inicio,
-        hora_fin=hora_fin,
-        dias=dias,
-        activo=activo,
-    )
-
-
-def borrar_cadencia(cadencia_id: str) -> bool:
-    return db.borrar_cadencia(cadencia_id)
-
-
-# --------------------------------------------------------------------------- #
-# Fuentes RSS + items vistos + salud (OPERACIONAL: Postgres via db.py; ADR 0006) #
-# --------------------------------------------------------------------------- #
-# Ultimo rezago file-backed cerrado: el indice SQLite de rutas absolutas dejaba la pagina de
-# Fuentes RSS vacia tras recrear contenedores. Ahora vive en Postgres (ADR 0006). El dict
-# devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
-
-
-def listar_fuentes_rss(
-    *, limite: int | None = None, desplazamiento: int | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_fuentes_rss(limite=limite, desplazamiento=desplazamiento)
-
-
-def contar_fuentes_rss() -> int:
-    return db.contar_fuentes_rss()
-
-
-def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
-    return db.obtener_fuente_rss(fuente_id)
-
-
-def crear_fuente_rss(
-    nombre: str,
-    url: str,
-    marca: str = "",
-    *,
-    incluir: str = "",
-    excluir: str = "",
-    redes_def: str = "",
-    propia: bool = False,
-    categoria: str = "",
-    prioridad: int = 0,
-    intervalo_min: int = 0,
-) -> dict[str, Any]:
-    return db.crear_fuente_rss(
-        nombre,
-        url,
-        marca=marca,
-        incluir=incluir,
-        excluir=excluir,
-        redes_def=redes_def,
-        propia=propia,
-        categoria=categoria,
-        prioridad=prioridad,
-        intervalo_min=intervalo_min,
-    )
-
-
-def actualizar_fuente_rss(
-    fuente_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_fuente_rss(fuente_id, campos)
-
-
-def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
-    return db.registrar_salud_fuente_rss(fuente_id, conteo=conteo, error=error)
-
-
-def borrar_fuente_rss(fuente_id: str) -> bool:
-    return db.borrar_fuente_rss(fuente_id)
-
-
-def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
-    return db.marcar_item(fuente_id, clave, usado)
-
-
-# --- Motor de ingesta persistente (Ola A): delega 1:1 en db.py ------------- #
-
-ESTADOS_NOTICIA_ITEM = db.ESTADOS_NOTICIA_ITEM
-
-
-def crear_noticias_items(items: list[dict[str, Any]]) -> int:
-    return db.crear_noticias_items(items)
-
-
-def listar_noticias_items(
-    *,
-    marca: str | None = None,
-    categoria: str | None = None,
-    desde: str | None = None,
-    q: str | None = None,
-    estado: str | None = None,
-    limite: int = 50,
-    desplazamiento: int = 0,
-) -> tuple[list[dict[str, Any]], int]:
-    return db.listar_noticias_items(
-        marca=marca,
-        categoria=categoria,
-        desde=desde,
-        q=q,
-        estado=estado,
-        limite=limite,
-        desplazamiento=desplazamiento,
-    )
-
-
-def obtener_noticia_item(item_id: str) -> dict[str, Any] | None:
-    return db.obtener_noticia_item(item_id)
-
-
-def actualizar_noticia_item(
-    item_id: str,
-    *,
-    estado: str | None = None,
-    contenido_id: str | None = None,
-    cluster_id: str | None = None,
-) -> dict[str, Any] | None:
-    return db.actualizar_noticia_item(
-        item_id, estado=estado, contenido_id=contenido_id, cluster_id=cluster_id
-    )
-
-
-def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:
-    return db.feeds_vencidos(ahora, limite)
-
-
-def registrar_sondeo_feed(
-    feed_id: str,
-    *,
-    conteo: int = 0,
-    error: str = "",
-    proximo_sondeo: str = "",
-    errores_seguidos: int = 0,
-    pausado_hasta: str = "",
-    activo: bool | None = None,
-    desactivado_auto: bool | None = None,
-) -> None:
-    return db.registrar_sondeo_feed(
-        feed_id,
-        conteo=conteo,
-        error=error,
-        proximo_sondeo=proximo_sondeo,
-        errores_seguidos=errores_seguidos,
-        pausado_hasta=pausado_hasta,
-        activo=activo,
-        desactivado_auto=desactivado_auto,
-    )
-
-
-def resumen_cobertura() -> dict[str, Any]:
-    return db.resumen_cobertura()
-
-
-# --- Monitor de cobertura / salud (Ola D): delega 1:1 en db.py ------------- #
-
-
-def salud_feeds(marca: str | None = None) -> list[dict[str, Any]]:
-    return db.salud_feeds(marca)
-
-
-def conteos_items_recientes(
-    marca: str | None = None, *, horas: int = 24
-) -> dict[str, dict[str, int]]:
-    return db.conteos_items_recientes(marca, horas=horas)
-
-
-# --- Clustering de historias (Ola B): delega 1:1 en db.py ------------------ #
-
-ESTADOS_NOTICIA_CLUSTER = db.ESTADOS_NOTICIA_CLUSTER
-VERIFICACIONES_CLUSTER = db.VERIFICACIONES_CLUSTER
-
-
-def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
-    return db.upsert_noticia_cluster(cluster)
-
-
-def listar_noticia_clusters(
-    *,
-    marca: str | None = None,
-    categoria: str | None = None,
-    desde: str | None = None,
-    estado: str | None = None,
-    limite: int = 50,
-    desplazamiento: int = 0,
-) -> tuple[list[dict[str, Any]], int]:
-    return db.listar_noticia_clusters(
-        marca=marca,
-        categoria=categoria,
-        desde=desde,
-        estado=estado,
-        limite=limite,
-        desplazamiento=desplazamiento,
-    )
-
-
-def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
-    return db.obtener_noticia_cluster(cluster_id)
-
-
-def actualizar_noticia_cluster(
-    cluster_id: str,
-    *,
-    estado: str | None = None,
-    contenido_id: str | None = None,
-) -> dict[str, Any] | None:
-    return db.actualizar_noticia_cluster(
-        cluster_id, estado=estado, contenido_id=contenido_id
-    )
-
-
-def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[str, Any]]:
-    return db.clusters_recientes(ventana_h, marca)
-
-
-def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
-    return db.items_de_cluster(cluster_id, limite=limite)
-
-
-def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
-    return db.items_sin_cluster(desde, limite)
-
-
-def clusters_extranjeros_sin_traducir(
-    ventana_h: int, *, min_score: float = 0.0, limite: int = 40
-) -> list[dict[str, Any]]:
-    return db.clusters_extranjeros_sin_traducir(
-        ventana_h, min_score=min_score, limite=limite
-    )
-
-
-def marcar_cluster_traducido(
-    cluster_id: str,
-    *,
-    titulo_es: str,
-    resumen_es: str,
-    titulo_original: str = "",
-) -> dict[str, Any] | None:
-    return db.marcar_cluster_traducido(
-        cluster_id,
-        titulo_es=titulo_es,
-        resumen_es=resumen_es,
-        titulo_original=titulo_original,
-    )
-
-
-def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
-    return db.asignar_cluster_item(item_id, cluster_id)
-
-
-def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
-    return db.marcar_items_cluster_usados(cluster_id, contenido_id)
-
-
-def claves_vistas(fuente_id: str) -> set[str]:
-    return db.claves_vistas(fuente_id)
-
-
-# --------------------------------------------------------------------------- #
-# Algoritmo: fuentes de industria + noticias clasificadas (OPERACIONAL: Postgres) #
-# --------------------------------------------------------------------------- #
-#
-# Inteligencia de plataforma (cambios de algoritmo + tendencias), distinta del RSS de
-# marca: alimenta la pagina Algoritmos y el panel. La clasificacion vive en `algoritmos.py`;
-# la fachada solo delega la persistencia 1:1 en db.py.
-
-
-def listar_fuentes_algoritmo() -> list[dict[str, Any]]:
-    return db.listar_fuentes_algoritmo()
-
-
-def contar_fuentes_algoritmo() -> int:
-    return db.contar_fuentes_algoritmo()
-
-
-def obtener_fuente_algoritmo(fuente_id: str) -> dict[str, Any] | None:
-    return db.obtener_fuente_algoritmo(fuente_id)
-
-
-def crear_fuente_algoritmo(
-    nombre: str, url: str, *, plataforma: str = "general", tipo: str = "agregador"
-) -> dict[str, Any]:
-    return db.crear_fuente_algoritmo(nombre, url, plataforma=plataforma, tipo=tipo)
-
-
-def actualizar_fuente_algoritmo(
-    fuente_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_fuente_algoritmo(fuente_id, campos)
-
-
-def registrar_salud_fuente_algoritmo(fuente_id: str, *, conteo: int, error: str = "") -> None:
-    return db.registrar_salud_fuente_algoritmo(fuente_id, conteo=conteo, error=error)
-
-
-def borrar_fuente_algoritmo(fuente_id: str) -> bool:
-    return db.borrar_fuente_algoritmo(fuente_id)
-
-
-def guardar_noticia_algoritmo(noticia: dict[str, Any]) -> str:
-    return db.guardar_noticia_algoritmo(noticia)
-
-
-def listar_noticias_algoritmo(
-    *,
-    plataforma: str | None = None,
-    nivel: str | None = None,
-    solo_cambios: bool = False,
-    solo_no_sugeridas: bool = False,
-    incluir_archivadas: bool = False,
-    limite: int | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_noticias_algoritmo(
-        plataforma=plataforma,
-        nivel=nivel,
-        solo_cambios=solo_cambios,
-        solo_no_sugeridas=solo_no_sugeridas,
-        incluir_archivadas=incluir_archivadas,
-        limite=limite,
-    )
-
-
-def obtener_noticia_algoritmo(noticia_id: str) -> dict[str, Any] | None:
-    return db.obtener_noticia_algoritmo(noticia_id)
-
-
-def marcar_noticia_algoritmo(
-    noticia_id: str,
-    *,
-    aplicada: bool | None = None,
-    archivada: bool | None = None,
-    sugerida: bool | None = None,
-) -> dict[str, Any] | None:
-    return db.marcar_noticia_algoritmo(
-        noticia_id, aplicada=aplicada, archivada=archivada, sugerida=sugerida
-    )
-
-
-# Estados validos de una sugerencia editorial (re-export para los `api/*.py`).
-ESTADOS_SUGERENCIA_EDITORIAL = db.ESTADOS_SUGERENCIA_EDITORIAL
-
-
-def crear_sugerencia_editorial(
-    *,
-    plataforma: str,
-    tipo: str,
-    titulo: str,
-    detalle: str,
-    ficha_id: str = "",
-    noticia_ids: list[str] | None = None,
-) -> dict[str, Any]:
-    return db.crear_sugerencia_editorial(
-        plataforma=plataforma, tipo=tipo, titulo=titulo, detalle=detalle,
-        ficha_id=ficha_id, noticia_ids=noticia_ids,
-    )
-
-
-def listar_sugerencias_editoriales(
-    *, estado: str | None = None, limite: int | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_sugerencias_editoriales(estado=estado, limite=limite)
-
-
-def contar_sugerencias_editoriales(*, estado: str | None = None) -> int:
-    return db.contar_sugerencias_editoriales(estado=estado)
-
-
-def obtener_sugerencia_editorial(sugerencia_id: str) -> dict[str, Any] | None:
-    return db.obtener_sugerencia_editorial(sugerencia_id)
-
-
-def actualizar_estado_sugerencia_editorial(
-    sugerencia_id: str, estado: str
-) -> dict[str, Any] | None:
-    return db.actualizar_estado_sugerencia_editorial(sugerencia_id, estado)
-
-
-# --------------------------------------------------------------------------- #
-# Publicaciones comerciales (OPERACIONAL: Postgres via db.py; serie temporal)    #
-# --------------------------------------------------------------------------- #
-#
-# El apartado comercial es una serie temporal append-only (snapshots de
-# interacciones/alcance); no encaja en un fichero por entidad. La fachada delega 1:1
-# en db.py.
-
-
-def crear_publicacion_comercial(
-    url: str = "",
-    *,
-    id_post_metricool: str = "",
-    titulo: str = "",
-    marca: str = "",
-    cliente: str = "",
-    campania: str = "",
-    red: str = "",
-    formato: str = "",
-    metrica_objetivo: str = "interacciones",
-    objetivo: int = 0,
-    estado: str = "activa",
-    publicado: str = "",
-    notas: str = "",
-) -> dict[str, Any]:
-    return db.crear_publicacion_comercial(
-        url,
-        id_post_metricool=id_post_metricool,
-        titulo=titulo,
-        marca=marca,
-        cliente=cliente,
-        campania=campania,
-        red=red,
-        formato=formato,
-        metrica_objetivo=metrica_objetivo,
-        objetivo=objetivo,
-        estado=estado,
-        publicado=publicado,
-        notas=notas,
-    )
-
-
-def listar_publicaciones_comerciales(
-    estado: str | None = None,
-    cliente: str | None = None,
-    campania: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_publicaciones_comerciales(estado=estado, cliente=cliente, campania=campania)
-
-
-def obtener_publicacion_comercial(publicacion_id: str) -> dict[str, Any] | None:
-    return db.obtener_publicacion_comercial(publicacion_id)
-
-
-def actualizar_publicacion_comercial(
-    publicacion_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_publicacion_comercial(publicacion_id, campos)
-
-
-def marcar_aviso_comercial(publicacion_id: str, ts: str) -> None:
-    return db.marcar_aviso_comercial(publicacion_id, ts)
-
-
-def borrar_publicacion_comercial(publicacion_id: str) -> bool:
-    return db.borrar_publicacion_comercial(publicacion_id)
-
-
-def registrar_snapshot_comercial(
-    publicacion_id: str,
-    ts: str,
-    interacciones: int,
-    alcance: int,
-    visualizaciones: int = 0,
-    *,
-    granulares: dict[str, Any] | None = None,
-) -> bool:
-    return db.registrar_snapshot_comercial(
-        publicacion_id, ts, interacciones, alcance, visualizaciones, granulares=granulares
-    )
-
-
-def listar_snapshots_comerciales(
-    publicacion_id: str, *, limite: int | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_snapshots_comerciales(publicacion_id, limite=limite)
-
-
-def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
-    return db.ultimo_snapshot_comercial(publicacion_id)
-
-
-# --------------------------------------------------------------------------- #
-# Histórico de metricas POR PIEZA (serie temporal general; ADR 0007)            #
-# --------------------------------------------------------------------------- #
-
-
-def registrar_snapshot_pieza(
-    pieza_id: str,
-    marca: str,
-    red: str,
-    formato: str,
-    ts: str,
-    metricas: dict[str, Any],
-) -> bool:
-    return db.registrar_snapshot_pieza(pieza_id, marca, red, formato, ts, metricas)
-
-
-def serie_pieza(pieza_id: str, *, limite: int | None = None) -> list[dict[str, Any]]:
-    return db.serie_pieza(pieza_id, limite=limite)
-
-
-def listar_snapshots_piezas(
-    marca: str | None = None,
-    red: str | None = None,
-    desde: str | None = None,
-    hasta: str | None = None,
-    *,
-    limite: int | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_snapshots_piezas(
-        marca=marca, red=red, desde=desde, hasta=hasta, limite=limite
-    )
-
-
-def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
-    return db.podar_snapshots_piezas(retencion_dias, ahora_iso)
-
-
-# --------------------------------------------------------------------------- #
-# Cache de metricas (OPERACIONAL: Postgres via db.py; lo orquesta metricas_cache.py) #
-# --------------------------------------------------------------------------- #
-
-
-def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
-    return db.leer_metricas_cache(clave)
-
-
-def guardar_metricas_cache(
-    clave: str,
-    tipo: str,
-    rango: str,
-    marca: str,
-    payload: dict[str, Any],
-    fuente: str,
-    generado_en: str,
-) -> None:
-    return db.guardar_metricas_cache(
-        clave, tipo, rango, marca, payload, fuente, generado_en
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Rota de horarios del equipo (OPERACIONAL: Postgres via db.py)                  #
-# --------------------------------------------------------------------------- #
-#
-# Eventos/transmisiones + turnos (asignaciones) de la parrilla del equipo (F4 · #144).
-# No es contenido editorial por marca: es dato operacional de coordinacion interna,
-# por eso vive en Postgres. La fachada delega 1:1 en db.py.
-
-
-def crear_evento_rota(
-    titulo: str,
-    *,
-    fecha: str = "",
-    hora: str = "",
-    contenido: str = "",
-    nota: str = "",
-    tipo_cobertura: str = "transmision",
-    prioridad: str = "media",
-    marca: str = "",
-) -> dict[str, Any]:
-    return db.crear_evento_rota(
-        titulo,
-        fecha=fecha,
-        hora=hora,
-        contenido=contenido,
-        nota=nota,
-        tipo_cobertura=tipo_cobertura,
-        prioridad=prioridad,
-        marca=marca,
-    )
-
-
-def listar_eventos_rota(
-    desde: str | None = None,
-    hasta: str | None = None,
-    *,
-    solo_cambiados: bool = False,
-    tipo_cobertura: str | None = None,
-    marca: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_eventos_rota(
-        desde=desde,
-        hasta=hasta,
-        solo_cambiados=solo_cambiados,
-        tipo_cobertura=tipo_cobertura,
-        marca=marca,
-    )
-
-
-def obtener_evento_rota(evento_id: str) -> dict[str, Any] | None:
-    return db.obtener_evento_rota(evento_id)
-
-
-def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_evento_rota(evento_id, campos)
-
-
-def borrar_evento_rota(evento_id: str) -> bool:
-    return db.borrar_evento_rota(evento_id)
-
-
-def crear_turno_rota(
-    semana: str,
-    fecha: str,
-    *,
-    miembro_id: str = "",
-    miembro_nombre: str = "",
-    franja_id: str = "",
-    estado: str = ESTADO_ROTA_PROPUESTO,
-    override: bool = False,
-    motivo: str = "",
-    nota_relevo: str = "",
-    franja: str | None = None,
-) -> dict[str, Any]:
-    """Crea un turno (horario `(fecha, franja_id)` para un miembro). Delegado en `db.py`.
-
-    Retrocompat para tests legados: acepta `franja` (literal 'matutino'/'vespertino'/
-    'descanso'). El shim vive en `db.crear_turno_rota` (la traduccion necesita conexion BD
-    para sembrar franjas por defecto). Codigo NUEVO debe pasar `franja_id` directamente.
-    """
-    return db.crear_turno_rota(
-        semana,
-        fecha,
-        miembro_id=miembro_id,
-        miembro_nombre=miembro_nombre,
-        franja_id=franja_id,
-        estado=estado,
-        override=override,
-        motivo=motivo,
-        nota_relevo=nota_relevo,
-        franja=franja,
-    )
-
-
-def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Crea varios turnos en lote (delegado en `db.py`)."""
-    return db.crear_turnos_rota_lote(turnos)
-
-
-def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
-    return db.listar_turnos_rota(semana=semana)
-
-
-def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
-    return db.obtener_turno_rota(turno_id)
-
-
-def existe_turno_para(
-    miembro_id: str, fecha: str, franja_id: str
-) -> dict[str, Any] | None:
-    """True si existe un turno para `(miembro_id, fecha, franja_id)` (delegado en `db.py`)."""
-    return db.existe_turno_para(miembro_id, fecha, franja_id)
-
-
-def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_turno_rota(turno_id, campos)
-
-
-def actualizar_turnos_rota_lote(
-    ids: list[str], campos: dict[str, Any]
-) -> tuple[int, list[dict[str, Any]]]:
-    """UPDATE masivo sobre `rota_turnos` por lista de ids (delega en `db.py`)."""
-    return db.actualizar_turnos_rota_lote(ids, campos)
-
-
-def copiar_turnos_rota(
-    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
-) -> int:
-    """Copia los turnos de una semana a otra (offset +N dias por fila)."""
-    return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
-
-
-def borrar_turnos_semana_rota(semana: str) -> int:
-    return db.borrar_turnos_semana_rota(semana)
-
-
-def borrar_turno_rota(turno_id: str) -> bool:
-    return db.borrar_turno_rota(turno_id)
-
-
-def borrar_turnos_rota_lote(ids: list[str]) -> int:
-    return db.borrar_turnos_rota_lote(ids)
-
-
-def aprobar_semana_rota(semana: str) -> int:
-    return db.aprobar_semana_rota(semana)
-
-
-def desaprobar_semana_rota(semana: str) -> int:
-    return db.desaprobar_semana_rota(semana)
-
-
-def duplicar_turno_rota(
-    turno_id: str,
-    *,
-    fecha: str | None = None,
-    miembro_id: str | None = None,
-    miembro_nombre: str | None = None,
-    franja_id: str | None = None,
-    semana: str | None = None,
-) -> dict[str, Any] | None:
-    """Clona un turno con overrides (delegado en `db.py`)."""
-    return db.duplicar_turno_rota(
-        turno_id,
-        fecha=fecha,
-        miembro_id=miembro_id,
-        miembro_nombre=miembro_nombre,
-        franja_id=franja_id,
-        semana=semana,
-    )
-
-
-def crear_ausencia_rota(
-    miembro_id: str,
-    desde: str,
-    hasta: str,
-    *,
-    miembro_nombre: str = "",
-    tipo: str = "otro",
-    motivo: str = "",
-) -> dict[str, Any]:
-    return db.crear_ausencia_rota(
-        miembro_id, desde, hasta, miembro_nombre=miembro_nombre, tipo=tipo, motivo=motivo
-    )
-
-
-def listar_ausencias_rota(
-    miembro_id: str | None = None,
-    desde: str | None = None,
-    hasta: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_ausencias_rota(miembro_id=miembro_id, desde=desde, hasta=hasta)
-
-
-def obtener_ausencia_rota(ausencia_id: str) -> dict[str, Any] | None:
-    return db.obtener_ausencia_rota(ausencia_id)
-
-
-def actualizar_ausencia_rota(
-    ausencia_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_ausencia_rota(ausencia_id, campos)
-
-
-def borrar_ausencia_rota(ausencia_id: str) -> bool:
-    return db.borrar_ausencia_rota(ausencia_id)
-
-
-# --------------------------------------------------------------------------- #
-# Piezas de la parrilla (OPERACIONAL: Postgres via db.py; #150 PARRILLA 2026)   #
-# --------------------------------------------------------------------------- #
-#
-# Una pieza = un POST individual (no un evento). Un evento puede generar varias piezas;
-# tambien hay piezas SUELTAS (campanas evergreen sin evento). La fachada delega 1:1 en
-# db.py.
-
-
-def crear_pieza_rota(
-    *,
-    evento_id: str = "",
-    programa: str = "",
-    red_social: str = "",
-    tipo_pieza: str = "",
-    contenido_sugerido: str = "",
-    dia: str = "",
-    hora_post: str = "",
-    estado: str = "pendiente",
-    material_entregado: bool = False,
-    contenido_entregado: bool = False,
-    publicado: bool = False,
-    enlace: str = "",
-    responsable_id: str = "",
-    responsable_nombre: str = "",
-    notas: str = "",
-    salida: str = "",
-    comentarios: str = "",
-    fecha_entrega_material: str = "",
-    always_on: bool = False,
-) -> dict[str, Any]:
-    return db.crear_pieza_rota(
-        evento_id=evento_id,
-        programa=programa,
-        red_social=red_social,
-        tipo_pieza=tipo_pieza,
-        contenido_sugerido=contenido_sugerido,
-        dia=dia,
-        hora_post=hora_post,
-        estado=estado,
-        material_entregado=material_entregado,
-        contenido_entregado=contenido_entregado,
-        publicado=publicado,
-        enlace=enlace,
-        responsable_id=responsable_id,
-        responsable_nombre=responsable_nombre,
-        notas=notas,
-        salida=salida,
-        comentarios=comentarios,
-        fecha_entrega_material=fecha_entrega_material,
-        always_on=always_on,
-    )
-
-
-def listar_piezas_rota(
-    *,
-    evento_id: str | None = None,
-    desde: str | None = None,
-    hasta: str | None = None,
-    red: str | None = None,
-    tipo: str | None = None,
-    estado: str | None = None,
-    responsable_id: str | None = None,
-    programa: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_piezas_rota(
-        evento_id=evento_id,
-        desde=desde,
-        hasta=hasta,
-        red=red,
-        tipo=tipo,
-        estado=estado,
-        responsable_id=responsable_id,
-        programa=programa,
-    )
-
-
-def obtener_pieza_rota(pieza_id: str) -> dict[str, Any] | None:
-    return db.obtener_pieza_rota(pieza_id)
-
-
-def actualizar_pieza_rota(
-    pieza_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_pieza_rota(pieza_id, campos)
-
-
-def borrar_pieza_rota(pieza_id: str) -> bool:
-    return db.borrar_pieza_rota(pieza_id)
-
-
-def borrar_piezas_rota_lote(ids: list[str]) -> int:
-    """Borra varias piezas a la vez (delegado en `db.py`)."""
-    return db.borrar_piezas_rota_lote(ids)
-
-
-def duplicar_pieza_rota(
-    pieza_id: str, *, dia: str | None = None, evento_id: str | None = None
-) -> dict[str, Any] | None:
-    """Clona una pieza (workflow reset; delegado en `db.py`)."""
-    return db.duplicar_pieza_rota(pieza_id, dia=dia, evento_id=evento_id)
-
-
-# --------------------------------------------------------------------------- #
-# Tablero de CONTENIDO unificado (OPERACIONAL: Postgres via db.py)              #
-# --------------------------------------------------------------------------- #
-# Padre `contenido` (item del tablero: importante/evergreen/evento, o tarea libre) +
-# hijos `contenido_plataforma` (una fila por red con estado y checklist). La fachada
-# delega 1:1 en `db.py`.
-
-
-def crear_contenido(
-    *,
-    clase: str = "contenido",
-    flujo: str = "",
-    titulo: str = "",
-    descripcion: str = "",
-    marca: str = "",
-    evento_id: str = "",
-    programa: str = "",
-    prioridad: str = "media",
-    estado: str = "pendiente",
-    fecha_objetivo: str = "",
-    hora_objetivo: str = "",
-    fecha_entrega: str = "",
-    autor: dict[str, str] | None = None,
-    responsable: dict[str, str] | None = None,
-    origen: str = "",
-    notas: str = "",
-    tipo_contenido: str = "ia",
-    formato: str = "foto",
-    id_post_metricool: str = "",
-    senal_viralidad: int = 0,
-    qa_veredicto: str = "",
-    qa_hallazgos: str = "",
-    copy_pendiente: str = "",
-    fecha_fuente: str = "",
-    url_fuente: str = "",
-    creado: str = "",
-    actualizado: str = "",
-    id: str = "",
-) -> dict[str, Any]:
-    """Crea un item del tablero (padre). Delegado en `db.py`."""
-    return db.crear_contenido(
-        clase=clase,
-        flujo=flujo,
-        titulo=titulo,
-        descripcion=descripcion,
-        marca=marca,
-        evento_id=evento_id,
-        programa=programa,
-        prioridad=prioridad,
-        estado=estado,
-        fecha_objetivo=fecha_objetivo,
-        hora_objetivo=hora_objetivo,
-        fecha_entrega=fecha_entrega,
-        autor=autor,
-        responsable=responsable,
-        origen=origen,
-        notas=notas,
-        tipo_contenido=tipo_contenido,
-        formato=formato,
-        id_post_metricool=id_post_metricool,
-        senal_viralidad=senal_viralidad,
-        qa_veredicto=qa_veredicto,
-        qa_hallazgos=qa_hallazgos,
-        copy_pendiente=copy_pendiente,
-        fecha_fuente=fecha_fuente,
-        url_fuente=url_fuente,
-        creado=creado,
-        actualizado=actualizado,
-        id=id,
-    )
-
-
-def listar_contenido(
-    *,
-    clase: str | None = None,
-    flujo: str | None = None,
-    marca: str | None = None,
-    evento_id: str | None = None,
-    responsable_id: str | None = None,
-    estado: str | None = None,
-    desde: str | None = None,
-    hasta: str | None = None,
-) -> list[dict[str, Any]]:
-    """Lista items del tablero (padres), filtros combinables. Delegado en `db.py`."""
-    return db.listar_contenido(
-        clase=clase,
-        flujo=flujo,
-        marca=marca,
-        evento_id=evento_id,
-        responsable_id=responsable_id,
-        estado=estado,
-        desde=desde,
-        hasta=hasta,
-    )
-
-
-def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
-    """Títulos del contenido reciente de una marca (dedup del pipeline). Delegado en `db.py`."""
-    return db.titulos_recientes_marca(marca, desde_iso)
-
-
-def contar_contenido_origen_desde(marca: str, origen: str, desde_iso: str) -> int:
-    """Nº de items del tablero de `marca` con `origen` creados desde `desde_iso`. Delegado en `db.py`."""
-    return db.contar_contenido_origen_desde(marca, origen, desde_iso)
-
-
-def existe_publicado_similar(
-    marca: str, titulo: str, url: str = "", *, umbral: float = 0.85
-) -> bool:
-    """True si la marca ya publicó algo equivalente (título/URL). Delegado en `db.py`."""
-    return db.existe_publicado_similar(marca, titulo, url, umbral=umbral)
-
-
-def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
-    return db.obtener_contenido(contenido_id)
-
-
-def actualizar_contenido(
-    contenido_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_contenido(contenido_id, campos)
-
-
-def borrar_contenido(contenido_id: str) -> bool:
-    return db.borrar_contenido(contenido_id)
-
-
-def crear_contenido_plataforma(
-    *,
-    contenido_id: str,
-    red: str,
-    marca: str | None = None,
-    estado: str = "pendiente",
-    falta_copy: bool | None = None,
-    falta_imagen: bool | None = None,
-    falta_revision: bool = True,
-    falta_publicar: bool = True,
-    falta_video: bool | None = None,
-    copy: str = "",
-    copy_in: str = "",
-    imagen: str = "",
-    imagen_fuente: str = "",
-    foto: str = "",
-    video: str = "",
-    veredicto: str = "",
-    revisor_id: str = "",
-    revisor_nombre: str = "",
-    revisado_en: str = "",
-    enviado_a_revision_en: str = "",
-    fecha_programada: str = "",
-    preparado_en: str = "",
-    id_post_metricool: str = "",
-    enlace: str = "",
-    evergreen: bool = False,
-    es_publicacion: bool = False,
-    copy_in_exento: bool = False,
-    placa_oculta: bool = False,
-    plantilla_diseno_id: str = "",
-    foto_encuadre: str = "",
-    fotos: str = "",
-    qa_auto_hash: str = "",
-    hora_post: str = "",
-    creado: str = "",
-    actualizado: str = "",
-    id: str = "",
-) -> dict[str, Any]:
-    """Crea una fila por plataforma de un contenido. Delegado en `db.py`."""
-    return db.crear_contenido_plataforma(
-        contenido_id=contenido_id,
-        red=red,
-        marca=marca,
-        estado=estado,
-        falta_copy=falta_copy,
-        falta_imagen=falta_imagen,
-        falta_revision=falta_revision,
-        falta_publicar=falta_publicar,
-        falta_video=falta_video,
-        copy=copy,
-        copy_in=copy_in,
-        imagen=imagen,
-        imagen_fuente=imagen_fuente,
-        foto=foto,
-        video=video,
-        veredicto=veredicto,
-        revisor_id=revisor_id,
-        revisor_nombre=revisor_nombre,
-        revisado_en=revisado_en,
-        enviado_a_revision_en=enviado_a_revision_en,
-        fecha_programada=fecha_programada,
-        preparado_en=preparado_en,
-        id_post_metricool=id_post_metricool,
-        enlace=enlace,
-        evergreen=evergreen,
-        es_publicacion=es_publicacion,
-        copy_in_exento=copy_in_exento,
-        placa_oculta=placa_oculta,
-        plantilla_diseno_id=plantilla_diseno_id,
-        foto_encuadre=foto_encuadre,
-        fotos=fotos,
-        qa_auto_hash=qa_auto_hash,
-        hora_post=hora_post,
-        creado=creado,
-        actualizado=actualizado,
-        id=id,
-    )
-
-
-def listar_contenido_plataforma(
-    contenido_id: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_contenido_plataforma(contenido_id)
-
-
-def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:
-    return db.obtener_contenido_plataforma(plataforma_id)
-
-
-def actualizar_contenido_plataforma(
-    plataforma_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_contenido_plataforma(plataforma_id, campos)
-
-
-def borrar_contenido_plataforma(plataforma_id: str) -> bool:
-    return db.borrar_contenido_plataforma(plataforma_id)
-
-
-def ajustar_plataformas_por_formato(
-    contenido_id: str, formato: str
-) -> dict[str, list[str]]:
-    """Reconcilia las filas por plataforma de una pieza con su `formato` (FLIP foto<->video).
-
-    El FORMATO de una pieza decide a qué redes va (`redes.redes_de_formato`: foto=3, video=5).
-    Cuando el formato cambia hay que AÑADIR las filas que falten y, en `video->foto`, RETIRAR las
-    redes extra (youtube/tiktok) SIN PERDER trabajo. Reglas (contrato F-video):
-
-      - `foto->video`: crea las filas que falten de las 5 redes (youtube/tiktok) con
-        `falta_copy=1`. En TODAS las filas, si no hay `video`, marca `falta_video=1` (el asset es
-        obligatorio); `falta_imagen=0` (la imagen pasa a opcional: portada/thumbnail).
-      - `video->foto`: deja las 3 redes de foto. Las extra (youtube/tiktok) se ELIMINAN solo si
-        están VACÍAS (sin copy ni video); si tienen contenido, se CONSERVAN (no perder trabajo) y
-        se reportan en `conservadas`. En las filas que quedan, `falta_video=0` (N/A) y, si no hay
-        imagen real, `falta_imagen=1`.
-
-    Idempotente y PURO de side-effects salvo las escrituras descritas. Devuelve un resumen
-    `{creadas, eliminadas, conservadas}` (listas de ids de red) para que la API avise al usuario.
-    """
-    from . import redes
-
-    formato = redes.normalizar_formato(formato)
-    es_video = formato == redes.FORMATO_VIDEO
-    objetivo = set(redes.redes_de_formato(formato))
-    existentes = {
-        p.get("red", ""): p for p in db.listar_contenido_plataforma(contenido_id)
-    }
-
-    creadas: list[str] = []
-    eliminadas: list[str] = []
-    conservadas: list[str] = []
-
-    # 1) AÑADIR las redes del objetivo que aún no existan (orden de `redes.ids`).
-    for red in redes.ids():
-        if red not in objetivo or red in existentes:
-            continue
-        db.crear_contenido_plataforma(
-            contenido_id=contenido_id,
-            red=red,
-            falta_copy=True,
-            falta_video=es_video,
-        )
-        creadas.append(red)
-
-    # 2) En `video->foto`, RETIRAR las redes que sobran (no están en el objetivo) solo si están
-    #    vacías; si tienen copy o video, conservarlas y reportarlas (no perder trabajo).
-    for red, plat in existentes.items():
-        if red in objetivo or not red:
-            continue
-        tiene_trabajo = bool(
-            str(plat.get("copy") or "").strip()
-            or str(plat.get("video") or "").strip()
-        )
-        if tiene_trabajo:
-            conservadas.append(red)
-        else:
-            db.borrar_contenido_plataforma(plat["id"])
-            eliminadas.append(red)
-
-    # 3) Reaplicar el checklist por formato a TODAS las filas que QUEDAN (objetivo + conservadas).
-    #    foto: falta_video=0 (N/A); video: falta_video=1 si no hay asset de video. La imagen es
-    #    obligatoria en foto (falta_imagen=1 si no hay imagen real) y opcional en video (0).
-    for plat in db.listar_contenido_plataforma(contenido_id):
-        tiene_video = bool(str(plat.get("video") or "").strip())
-        tiene_imagen = bool(
-            str(plat.get("imagen") or "").strip()
-            or str(plat.get("foto") or "").strip()
-            or str(plat.get("imagen_fuente") or "").strip()
-        )
-        if es_video:
-            campos = {"falta_video": not tiene_video, "falta_imagen": False}
-        else:
-            campos = {"falta_video": False, "falta_imagen": not tiene_imagen}
-        db.actualizar_contenido_plataforma(plat["id"], campos)
-
-    return {"creadas": creadas, "eliminadas": eliminadas, "conservadas": conservadas}
-
-
-def adjuntar_video_a_pieza(contenido_id: str, clave_media: str) -> list[str]:
-    """Adjunta un mp4 renderizado a las plataformas de VIDEO de una pieza (cableado VIDEO).
-
-    El asset de video vive POR PLATAFORMA (`contenido_plataforma.video` + flag `falta_video`).
-    Una pieza de video arranca con `falta_video=1` hasta que se adjunta el asset; aquí cerramos
-    ese hueco: para cada fila de la pieza cuya red sea de FORMATO VIDEO (`redes.redes_de_formato`
-    -> instagram/x/facebook/tiktok/youtube) que EXISTA en la pieza, fija `video=clave_media` y
-    `falta_video=0`. No crea filas (eso lo decide el formato vía `ajustar_plataformas_por_formato`)
-    ni fuerza un flip de formato: solo cablea el asset a las redes de video ya presentes.
-
-    Idempotente: re-adjuntar la misma clave deja el mismo estado. Devuelve la lista de ids de red
-    tocadas (vacía si la pieza no tiene plataformas de video).
-    """
-    from . import redes
-
-    redes_video = set(redes.redes_de_formato(redes.FORMATO_VIDEO))
-    tocadas: list[str] = []
-    for plat in db.listar_contenido_plataforma(contenido_id):
-        if plat.get("red", "") not in redes_video:
-            continue
-        db.actualizar_contenido_plataforma(
-            plat["id"], {"video": clave_media, "falta_video": False}
-        )
-        tocadas.append(plat["red"])
-    return tocadas
-
-
-# --------------------------------------------------------------------------- #
-# Biblioteca de MEDIOS interna (OPERACIONAL: Postgres via db.py)                #
-# --------------------------------------------------------------------------- #
-# Catalogo editorial de medios APROBADOS y etiquetables. El binario lo guarda/sirve
-# `media.py`; aqui solo el catalogo reutilizable. La fachada delega 1:1 en `db.py`.
-
-
-def crear_media_biblioteca(
-    *,
-    objeto: str,
-    tipo: str = "imagen",
-    titulo: str = "",
-    descripcion: str = "",
-    marca: str = "",
-    etiquetas: str = "[]",
-    credito: str = "",
-    aprobado: bool = True,
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_media_biblioteca(
-        objeto=objeto,
-        tipo=tipo,
-        titulo=titulo,
-        descripcion=descripcion,
-        marca=marca,
-        etiquetas=etiquetas,
-        credito=credito,
-        aprobado=aprobado,
-        autor=autor,
-        id=id,
-        creado=creado,
-        actualizado=actualizado,
-    )
-
-
-def listar_media_biblioteca(
-    *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
-) -> list[dict[str, Any]]:
-    return db.listar_media_biblioteca(
-        marca=marca, tipo=tipo, solo_aprobados=solo_aprobados
-    )
-
-
-def obtener_media_biblioteca(media_id: str) -> dict[str, Any] | None:
-    return db.obtener_media_biblioteca(media_id)
-
-
-def existe_media_objeto(objeto: str) -> bool:
-    return db.existe_media_objeto(objeto)
-
-
-def actualizar_media_biblioteca(
-    media_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_media_biblioteca(media_id, campos)
-
-
-def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
-    return db.borrar_media_biblioteca(media_id)
-
-
-# --------------------------------------------------------------------------- #
-# Activos de marca (editor profesional)                                          #
-# --------------------------------------------------------------------------- #
-
-
-def crear_marca_activo(
-    *,
-    marca: str,
-    tipo: str = "arte",
-    nombre: str = "",
-    objeto: str = "",
-    metadatos: str = "{}",
-    lineas: str = "[]",
-    aprobado: bool = True,
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_marca_activo(
-        marca=marca,
-        tipo=tipo,
-        nombre=nombre,
-        objeto=objeto,
-        metadatos=metadatos,
-        lineas=lineas,
-        aprobado=aprobado,
-        autor=autor,
-        id=id,
-        creado=creado,
-        actualizado=actualizado,
-    )
-
-
-def listar_marca_activos(
-    *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
-) -> list[dict[str, Any]]:
-    return db.listar_marca_activos(marca=marca, tipo=tipo, solo_aprobados=solo_aprobados)
-
-
-def obtener_marca_activo(activo_id: str) -> dict[str, Any] | None:
-    return db.obtener_marca_activo(activo_id)
-
-
-def actualizar_marca_activo(activo_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_marca_activo(activo_id, campos)
-
-
-def borrar_marca_activo(activo_id: str) -> dict[str, Any] | None:
-    return db.borrar_marca_activo(activo_id)
-
-
-# --------------------------------------------------------------------------- #
-# Plantillas de diseño (editor profesional)                                      #
-# --------------------------------------------------------------------------- #
-
-
-def crear_plantilla_diseno(
-    *,
-    marca: str,
-    nombre: str = "",
-    categoria: str = "post",
-    tipo: str = "foto",
-    documento: str = "{}",
-    miniatura: str = "",
-    lineas: str = "[]",
-    activo: bool = True,
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_plantilla_diseno(
-        marca=marca,
-        nombre=nombre,
-        categoria=categoria,
-        tipo=tipo,
-        documento=documento,
-        miniatura=miniatura,
-        lineas=lineas,
-        activo=activo,
-        autor=autor,
-        id=id,
-        creado=creado,
-        actualizado=actualizado,
-    )
-
-
-def listar_plantillas_diseno(
-    *,
-    marca: str | None = None,
-    categoria: str | None = None,
-    tipo: str | None = None,
-    solo_activas: bool = False,
-) -> list[dict[str, Any]]:
-    return db.listar_plantillas_diseno(
-        marca=marca, categoria=categoria, tipo=tipo, solo_activas=solo_activas
-    )
-
-
-def obtener_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
-    return db.obtener_plantilla_diseno(plantilla_id)
-
-
-def actualizar_plantilla_diseno(plantilla_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_plantilla_diseno(plantilla_id, campos)
-
-
-def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
-    return db.borrar_plantilla_diseno(plantilla_id)
-
-
-# --------------------------------------------------------------------------- #
-# Motor de video: composiciones + subtitulos (Ola VIDEO)                        #
-# --------------------------------------------------------------------------- #
-
-
-def crear_video_composicion(
-    *,
-    marca: str,
-    documento: str = "{}",
-    contenido_id: str = "",
-    titulo: str = "",
-    estado: str = "borrador",
-    id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_video_composicion(
-        marca=marca,
-        documento=documento,
-        contenido_id=contenido_id,
-        titulo=titulo,
-        estado=estado,
-        id=id,
-        creado=creado,
-        actualizado=actualizado,
-    )
-
-
-def listar_video_composiciones(
-    *, marca: str | None = None, contenido_id: str | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_video_composiciones(marca=marca, contenido_id=contenido_id)
-
-
-def obtener_video_composicion(composicion_id: str) -> dict[str, Any] | None:
-    return db.obtener_video_composicion(composicion_id)
-
-
-def actualizar_video_composicion(
-    composicion_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_video_composicion(composicion_id, campos)
-
-
-def borrar_video_composicion(composicion_id: str) -> bool:
-    return db.borrar_video_composicion(composicion_id)
-
-
-def crear_video_subtitulo(
-    *, composicion_id: str, idioma: str = "es-MX", estado: str = "pendiente",
-    segmentos: str = "", ass: str = "", transcrito_en: str = "", id: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_video_subtitulo(
-        composicion_id=composicion_id, idioma=idioma, estado=estado,
-        segmentos=segmentos, ass=ass, transcrito_en=transcrito_en, id=id,
-        actualizado=actualizado,
-    )
-
-
-def listar_video_subtitulos(
-    *, composicion_id: str | None = None, estado: str | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_video_subtitulos(composicion_id=composicion_id, estado=estado)
-
-
-def obtener_video_subtitulo(subtitulo_id: str) -> dict[str, Any] | None:
-    return db.obtener_video_subtitulo(subtitulo_id)
-
-
-def actualizar_video_subtitulo(
-    subtitulo_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_video_subtitulo(subtitulo_id, campos)
-
-
-# --------------------------------------------------------------------------- #
-# Bloques (almacén de capas reutilizables)                                       #
-# --------------------------------------------------------------------------- #
-
-
-def crear_bloque(
-    *,
-    marca: str = "",
-    nombre: str = "",
-    capas: str = "[]",
-    lineas: str = "[]",
-    miniatura: str = "",
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_bloque(
-        marca=marca,
-        nombre=nombre,
-        capas=capas,
-        lineas=lineas,
-        miniatura=miniatura,
-        autor=autor,
-        id=id,
-        creado=creado,
-        actualizado=actualizado,
-    )
-
-
-def listar_bloques(*, marca: str | None = None) -> list[dict[str, Any]]:
-    return db.listar_bloques(marca=marca)
-
-
-def obtener_bloque(bloque_id: str) -> dict[str, Any] | None:
-    return db.obtener_bloque(bloque_id)
-
-
-def actualizar_bloque(bloque_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_bloque(bloque_id, campos)
-
-
-def borrar_bloque(bloque_id: str) -> dict[str, Any] | None:
-    return db.borrar_bloque(bloque_id)
-
-
-# --------------------------------------------------------------------------- #
-# Versiones de documento (historial del editor por pieza)                        #
-# --------------------------------------------------------------------------- #
-
-
-def crear_documento_version(
-    *,
-    contenido_id: str,
-    plataforma_id: str,
-    documento: str,
-    render_objeto: str = "",
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    creado: str = "",
-) -> dict[str, Any]:
-    return db.crear_documento_version(
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
-        documento=documento,
-        render_objeto=render_objeto,
-        autor=autor,
-        id=id,
-        creado=creado,
-    )
-
-
-def listar_documento_versiones(contenido_id: str, plataforma_id: str) -> list[dict[str, Any]]:
-    return db.listar_documento_versiones(contenido_id, plataforma_id)
-
-
-def ultima_documento_version(contenido_id: str, plataforma_id: str) -> dict[str, Any] | None:
-    return db.ultima_documento_version(contenido_id, plataforma_id)
-
-
-# --------------------------------------------------------------------------- #
-# Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
-# --------------------------------------------------------------------------- #
-
-
-def crear_webhook(
-    *,
-    nombre: str = "",
-    url: str = "",
-    eventos: list[str] | None = None,
-    formato: str = "generico",
-    secreto: str = "",
-    activo: bool = True,
-    autor: dict[str, str] | None = None,
-    id: str = "",
-) -> dict[str, Any]:
-    return db.crear_webhook(
-        nombre=nombre,
-        url=url,
-        eventos=eventos,
-        formato=formato,
-        secreto=secreto,
-        activo=activo,
-        autor=autor,
-        id=id,
-    )
-
-
-def listar_webhooks(*, solo_activos: bool = False) -> list[dict[str, Any]]:
-    return db.listar_webhooks(solo_activos=solo_activos)
-
-
-def listar_webhooks_para(evento: str) -> list[dict[str, Any]]:
-    """Webhooks activos suscritos a `evento` (CON secreto; uso interno del repartidor)."""
-    return db.listar_webhooks_para(evento)
-
-
-def obtener_webhook(webhook_id: str) -> dict[str, Any] | None:
-    return db.obtener_webhook(webhook_id)
-
-
-def obtener_webhook_con_secreto(webhook_id: str) -> dict[str, Any] | None:
-    """Suscripcion por id CON el secreto crudo (uso interno: probar/repartir)."""
-    return db.obtener_webhook_con_secreto(webhook_id)
-
-
-def actualizar_webhook(
-    webhook_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_webhook(webhook_id, campos)
-
-
-def borrar_webhook(webhook_id: str) -> bool:
-    return db.borrar_webhook(webhook_id)
-
-
-def registrar_evento_interno(
-    *,
-    tipo: str,
-    contenido_id: str = "",
-    plataforma_id: str = "",
-    clave_idempotencia: str = "",
-    payload: dict[str, Any] | None = None,
-) -> bool:
-    """Registra un evento interno (False si su clave de idempotencia ya existia)."""
-    return db.registrar_evento_interno(
-        tipo=tipo,
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
-        clave_idempotencia=clave_idempotencia,
-        payload=payload,
-    )
-
-
-def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
-    return db.listar_eventos_internos(limite=limite)
-
-
-# --------------------------------------------------------------------------- #
-# Etiquetas editoriales (campaña / vertical / tipo) y su N:M con `contenido`     #
-# --------------------------------------------------------------------------- #
-# Clasifican transversalmente las piezas del tablero. `marca=''` = etiqueta global.
-# La fachada delega 1:1 en `db.py`; la validacion vive en `api/etiquetas`.
-
-
-def crear_etiqueta(
-    *,
-    nombre: str,
-    clase: str = "campania",
-    marca: str = "",
-    color: str = "",
-    keywords: str = "",
-    activo: bool = True,
-    ttl_dias: int = 0,
-    es_green: bool = False,
-    creado: str = "",
-    actualizado: str = "",
-    id: str = "",
-) -> dict[str, Any]:
-    """Crea una etiqueta editorial. Delegado en `db.py`."""
-    return db.crear_etiqueta(
-        nombre=nombre,
-        clase=clase,
-        marca=marca,
-        color=color,
-        keywords=keywords,
-        activo=activo,
-        ttl_dias=ttl_dias,
-        es_green=es_green,
-        creado=creado,
-        actualizado=actualizado,
-        id=id,
-    )
-
-
-def listar_etiquetas(
-    *, marca: str | None = None, clase: str | None = None, solo_activas: bool = False
-) -> list[dict[str, Any]]:
-    """Lista etiquetas (`marca` incluye las globales). Delegado en `db.py`."""
-    return db.listar_etiquetas(marca=marca, clase=clase, solo_activas=solo_activas)
-
-
-def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:
-    return db.obtener_etiqueta(etiqueta_id)
-
-
-def obtener_etiqueta_por_nombre(nombre: str, clase: str, marca: str) -> dict[str, Any] | None:
-    """Devuelve la etiqueta por (nombre, clase, marca). None si no existe."""
-    return db.obtener_etiqueta_por_nombre(nombre, clase, marca)
-
-
-def existe_etiqueta_nombre(
-    nombre: str, clase: str, marca: str, *, excluir_id: str = ""
-) -> bool:
-    return db.existe_etiqueta_nombre(nombre, clase, marca, excluir_id=excluir_id)
-
-
-def actualizar_etiqueta(
-    etiqueta_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_etiqueta(etiqueta_id, campos)
-
-
-def borrar_etiqueta(etiqueta_id: str) -> bool:
-    return db.borrar_etiqueta(etiqueta_id)
-
-
-def asignar_etiqueta(contenido_id: str, etiqueta_id: str) -> None:
-    db.asignar_etiqueta(contenido_id, etiqueta_id)
-
-
-def quitar_etiqueta(contenido_id: str, etiqueta_id: str) -> bool:
-    return db.quitar_etiqueta(contenido_id, etiqueta_id)
-
-
-def etiquetas_por_contenido() -> dict[str, list[str]]:
-    return db.etiquetas_por_contenido()
-
-
-def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
-    return db.ids_contenido_con_etiqueta(etiqueta_id)
-
-
-# --------------------------------------------------------------------------- #
-# Taller GREEN / brainstorming: ideas evergreen. La fachada delega 1:1 en db; #
-# la validacion vive en `api/green`.                                          #
-# --------------------------------------------------------------------------- #
-
-
-def crear_green_idea(
-    *,
-    marca: str = "",
-    titulo: str = "",
-    descripcion: str = "",
-    estado: str = "propuesta",
-    origen: str = "ia",
-    generacion_id: str = "",
-    contenido_id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-    id: str = "",
-) -> dict[str, Any]:
-    """Crea una idea de contenido evergreen. Delegado en `db.py`."""
-    return db.crear_green_idea(
-        marca=marca,
-        titulo=titulo,
-        descripcion=descripcion,
-        estado=estado,
-        origen=origen,
-        generacion_id=generacion_id,
-        contenido_id=contenido_id,
-        creado=creado,
-        actualizado=actualizado,
-        id=id,
-    )
-
-
-def listar_green_ideas(
-    *, marca: str | None = None, estado: str | None = None
-) -> list[dict[str, Any]]:
-    """Lista ideas evergreen (recientes primero). Delegado en `db.py`."""
-    return db.listar_green_ideas(marca=marca, estado=estado)
-
-
-def obtener_green_idea(idea_id: str) -> dict[str, Any] | None:
-    return db.obtener_green_idea(idea_id)
-
-
-def actualizar_green_idea(
-    idea_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_green_idea(idea_id, campos)
-
-
-def borrar_green_idea(idea_id: str) -> bool:
-    return db.borrar_green_idea(idea_id)
-
-
-# --------------------------------------------------------------------------- #
-# Ola COLABORACION: comentarios + versiones de copy + aprobacion multinivel    #
-# --------------------------------------------------------------------------- #
-# Tres familias APENDIDAS al tablero de contenido (Planable-style). La fachada solo
-# delega en `db.py`; la validacion y la logica de cadena viven en la API/dominio.
-
-
-def crear_comentario(
-    *,
-    contenido_id: str,
-    plataforma_id: str = "",
-    texto: str,
-    autor: dict[str, str] | None = None,
-    menciones: list[str] | None = None,
-) -> dict[str, Any]:
-    return db.crear_comentario(
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
-        texto=texto,
-        autor=autor,
-        menciones=menciones,
-    )
-
-
-def listar_comentarios(
-    contenido_id: str, plataforma_id: str | None = None
-) -> list[dict[str, Any]]:
-    return db.listar_comentarios(contenido_id, plataforma_id)
-
-
-def obtener_comentario(comentario_id: str) -> dict[str, Any] | None:
-    return db.obtener_comentario(comentario_id)
-
-
-def comentarios_sin_resolver(contenido_id: str, plataforma_id: str = "") -> int:
-    """Cuenta los comentarios SIN resolver que afectan a una pieza (item B).
-
-    Un comentario afecta a la pieza si es del item entero (`plataforma_id`="") o de ESTA
-    plataforma concreta. Un hilo sin resolver es una objecion editorial pendiente: bloquea
-    publicar (gate en `api/aprobacion.programar`) y la UI lo muestra como contador. Lectura
-    sobre `contenido_comentarios` (sin esquema nuevo).
-    """
-    if not contenido_id:
-        return 0
-    sin_resolver = 0
-    for c in db.listar_comentarios(contenido_id):
-        if c.get("resuelto"):
-            continue
-        pid = (c.get("plataforma_id") or "").strip()
-        if not pid or (plataforma_id and pid == plataforma_id):
-            sin_resolver += 1
-    return sin_resolver
-
-
-def actualizar_comentario(
-    comentario_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_comentario(comentario_id, campos)
-
-
-def borrar_comentario(comentario_id: str) -> bool:
-    return db.borrar_comentario(comentario_id)
-
-
-# --------------------------------------------------------------------------- #
-# Notificaciones IN-APP (el "cajon" de la campana; reparto en dominio/notificaciones) #
-# --------------------------------------------------------------------------- #
-
-
-def crear_notificacion(
-    *,
-    usuario_id: str,
-    marca_id: str,
-    tipo: str,
-    contenido_id: str = "",
-    plataforma_id: str = "",
-    actor: dict[str, str] | None = None,
-    resumen: str = "",
-    enlace: str = "",
-) -> dict[str, Any]:
-    return db.crear_notificacion(
-        usuario_id=usuario_id,
-        marca_id=marca_id,
-        tipo=tipo,
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
-        actor=actor,
-        resumen=resumen,
-        enlace=enlace,
-    )
-
-
-def listar_notificaciones(
-    usuario_id: str, marca_id: str | None = None, limite: int = 50
-) -> list[dict[str, Any]]:
-    return db.listar_notificaciones(usuario_id, marca_id, limite)
-
-
-def contar_notificaciones_no_leidas(
-    usuario_id: str, marca_id: str | None = None
-) -> int:
-    return db.contar_notificaciones_no_leidas(usuario_id, marca_id)
-
-
-def marcar_notificacion_leida(notificacion_id: str, usuario_id: str) -> bool:
-    return db.marcar_notificacion_leida(notificacion_id, usuario_id)
-
-
-def marcar_notificaciones_leidas(
-    usuario_id: str, marca_id: str | None = None
-) -> int:
-    return db.marcar_notificaciones_leidas(usuario_id, marca_id)
-
-
-def registrar_copy_version(
-    *,
-    plataforma_id: str,
-    contenido_id: str,
-    copy: str,
-    autor: dict[str, str] | None = None,
-    nota: str = "",
-) -> dict[str, Any]:
-    return db.registrar_copy_version(
-        plataforma_id=plataforma_id,
-        contenido_id=contenido_id,
-        copy=copy,
-        autor=autor,
-        nota=nota,
-    )
-
-
-def listar_copy_versiones(plataforma_id: str) -> list[dict[str, Any]]:
-    return db.listar_copy_versiones(plataforma_id)
-
-
-def obtener_copy_version(version_id: str) -> dict[str, Any] | None:
-    return db.obtener_copy_version(version_id)
-
-
-def crear_cadena_aprobacion(
-    *,
-    plataforma_id: str,
-    contenido_id: str,
-    etiquetas: list[str],
-    cargos: list[str] | None = None,
-) -> list[dict[str, Any]]:
-    return db.crear_cadena_aprobacion(
-        plataforma_id=plataforma_id,
-        contenido_id=contenido_id,
-        etiquetas=etiquetas,
-        cargos=cargos,
-    )
-
-
-def listar_aprobaciones(plataforma_id: str) -> list[dict[str, Any]]:
-    return db.listar_aprobaciones(plataforma_id)
-
-
-def obtener_aprobacion(aprobacion_id: str) -> dict[str, Any] | None:
-    return db.obtener_aprobacion(aprobacion_id)
-
-
-def actualizar_aprobacion(
-    aprobacion_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_aprobacion(aprobacion_id, campos)
-
-
-def duplicar_evento_rota(
-    evento_id: str,
-    *,
-    fecha: str | None = None,
-    hora: str | None = None,
-    titulo: str | None = None,
-) -> dict[str, Any] | None:
-    """Clona un evento (sin turnos, `cambiado` reset; delegado en `db.py`)."""
-    return db.duplicar_evento_rota(evento_id, fecha=fecha, hora=hora, titulo=titulo)
-
-
-# --------------------------------------------------------------------------- #
-# Catalogo de programas (OPERACIONAL: Postgres via db.py; #150)                #
-# --------------------------------------------------------------------------- #
-
-
-def crear_programa_rota(
-    nombre: str,
-    *,
-    descripcion: str = "",
-    color: str = "",
-    inicio: str = "",
-    fin: str = "",
-    activo: bool = True,
-) -> dict[str, Any]:
-    return db.crear_programa_rota(
-        nombre,
-        descripcion=descripcion,
-        color=color,
-        inicio=inicio,
-        fin=fin,
-        activo=activo,
-    )
-
-
-def listar_programas_rota(*, activo: bool | None = None) -> list[dict[str, Any]]:
-    return db.listar_programas_rota(activo=activo)
-
-
-def obtener_programa_rota(programa_id: str) -> dict[str, Any] | None:
-    return db.obtener_programa_rota(programa_id)
-
-
-def actualizar_programa_rota(
-    programa_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_programa_rota(programa_id, campos)
-
-
-def borrar_programa_rota(programa_id: str) -> bool:
-    return db.borrar_programa_rota(programa_id)
-
-
-def existe_programa_por_nombre(nombre: str) -> bool:
-    return db.existe_programa_por_nombre(nombre)
-
-
-def contar_piezas_por_programa(nombre: str) -> int:
-    return db.contar_piezas_por_programa(nombre)
-
-
-# --------------------------------------------------------------------------- #
-# Solicitudes de cambio de turno entre companeros (OPERACIONAL; #175)          #
-# --------------------------------------------------------------------------- #
-#
-# Cuando un CM (A) le pide a otro (B) intercambiar turnos por un asunto personal y
-# Elias (admin) lo aprueba, se aplica el swap sobre `rota_turnos_trabajo`. Las ausencias
-# REALES (vacaciones/baja) viven en SAP, no aqui. La fachada delega 1:1 en db.py.
-
-
-def crear_swap_turno(
-    solicitante_id: str,
-    destinatario_id: str,
-    fecha_a: str,
-    franja_a: str,
-    fecha_b: str,
-    franja_b: str,
-    *,
-    solicitante_nombre: str = "",
-    destinatario_nombre: str = "",
-    motivo: str = "",
-) -> dict[str, Any]:
-    return db.crear_swap_turno(
-        solicitante_id,
-        destinatario_id,
-        fecha_a,
-        franja_a,
-        fecha_b,
-        franja_b,
-        solicitante_nombre=solicitante_nombre,
-        destinatario_nombre=destinatario_nombre,
-        motivo=motivo,
-    )
-
-
-def listar_swaps_turno(
-    estado: str | None = None,
-    solicitante_id: str | None = None,
-    destinatario_id: str | None = None,
-    *,
-    mio_id: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_swaps_turno(
-        estado=estado,
-        solicitante_id=solicitante_id,
-        destinatario_id=destinatario_id,
-        mio_id=mio_id,
-    )
-
-
-def obtener_swap_turno(swap_id: str) -> dict[str, Any] | None:
-    return db.obtener_swap_turno(swap_id)
-
-
-def actualizar_swap_turno(
-    swap_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_swap_turno(swap_id, campos)
-
-
-def borrar_swap_turno(swap_id: str) -> bool:
-    return db.borrar_swap_turno(swap_id)
-
-
-def aplicar_swap_turno(
-    swap_id: str,
-    *,
-    solicitante_id: str,
-    solicitante_nombre: str,
-    destinatario_id: str,
-    destinatario_nombre: str,
-    fecha_a: str,
-    franja_a: str,
-    fecha_b: str,
-    franja_b: str,
-    respuesta_admin: str = "",
-) -> dict[str, Any] | None:
-    return db.aplicar_swap_turno(
-        swap_id,
-        solicitante_id=solicitante_id,
-        solicitante_nombre=solicitante_nombre,
-        destinatario_id=destinatario_id,
-        destinatario_nombre=destinatario_nombre,
-        fecha_a=fecha_a,
-        franja_a=franja_a,
-        fecha_b=fecha_b,
-        franja_b=franja_b,
-        respuesta_admin=respuesta_admin,
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Cola de jobs de generacion (OPERACIONAL: persistencia via db.py; #130 Fase 2) #
-# --------------------------------------------------------------------------- #
-#
-# El back ENCOLA y un WORKER (in-proceso en local, servicio aparte en hosted) clava y
-# ejecuta `claude -p`. La fachada delega 1:1 en db.py (Postgres).
-
-
-def encolar_job(gen_id: str, spec: str) -> str:
-    return db.encolar_job(gen_id, spec)
-
-
-def reclamar_job(worker: str = "") -> dict[str, Any] | None:
-    return db.reclamar_job(worker)
-
-
-def terminar_job(job_id: str) -> None:
-    return db.terminar_job(job_id)
-
-
-def cancelar_job(gen_id: str) -> bool:
-    return db.cancelar_job(gen_id)
-
-
-def job_cancelado(job_id: str) -> bool:
-    return db.job_cancelado(job_id)
-
-
-# --------------------------------------------------------------------------- #
-# Config de franjas (#185)                                                     #
-# --------------------------------------------------------------------------- #
-
-
-# --------------------------------------------------------------------------- #
-# Franjas POR SEMANA (modelo "Mundial": N franjas/semana, solapes permitidos)   #
-# --------------------------------------------------------------------------- #
-
-
-def listar_franjas_semana(lunes: str) -> list[dict[str, Any]]:
-    """Franjas vivas de la semana cuyo lunes es `lunes` (delegado en `db.py`)."""
-    return db.listar_franjas_semana(lunes)
-
-
-def obtener_franja_semana(franja_id: str) -> dict[str, Any] | None:
-    return db.obtener_franja_semana(franja_id)
-
-
-def crear_franja_semana(
-    lunes: str,
-    nombre: str,
-    inicio: str,
-    fin: str,
-    *,
-    orden: int = 0,
-    es_descanso: bool = False,
-) -> dict[str, Any] | None:
-    return db.crear_franja_semana(
-        lunes, nombre, inicio, fin, orden=orden, es_descanso=es_descanso
-    )
-
-
-def actualizar_franja_semana(
-    franja_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_franja_semana(franja_id, campos)
-
-
-def borrar_franja_semana(franja_id: str, *, forzar: bool = False) -> dict[str, Any]:
-    return db.borrar_franja_semana(franja_id, forzar=forzar)
-
-
-def contar_turnos_de_franja(franja_id: str) -> int:
-    return db.contar_turnos_de_franja(franja_id)
-
-
-def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
-    return db.sembrar_franjas_por_defecto(lunes)
-
-
-# --------------------------------------------------------------------------- #
-# Coordinador por turno (ola "coord")                                          #
-# --------------------------------------------------------------------------- #
-
-
-def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
-    """Coordinaciones de la semana (delegado en `db.py`)."""
-    return db.listar_coordinacion_semana(lunes)
-
-
-def set_coordinador_rota(
-    lunes: str, fecha: str, franja_id: str, coordinador_id: str
-) -> dict[str, Any]:
-    """UPSERT por (fecha, franja_id) del coordinador asignado a la celda."""
-    return db.set_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
-
-
-def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:
-    """Borra la coordinacion de la celda (fecha, franja_id)."""
-    return db.quitar_coordinador_rota(fecha, franja_id)
-
-
-def obtener_franjas_config() -> dict[str, str]:
-    return db.obtener_franjas_config()
-
-
-def guardar_franjas_config(
-    matutino_inicio: str,
-    matutino_fin: str,
-    vespertino_inicio: str,
-    vespertino_fin: str,
-) -> dict[str, str]:
-    return db.guardar_franjas_config(
-        matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin
-    )
-
-
-# --------------------------------------------------------------------------- #
-# PARRILLA: propuestas de importacion desde documento                          #
-# --------------------------------------------------------------------------- #
-
-
-def crear_propuesta_parrilla(
-    *,
-    semana: str,
-    doc_nombre: str,
-    doc_tipo: str = "",
-    gen_id: str = "",
-    autor_id: str = "",
-    autor_nombre: str = "",
-    estado: str = "generando",
-) -> dict[str, Any]:
-    return db.crear_propuesta_parrilla(
-        semana=semana,
-        doc_nombre=doc_nombre,
-        doc_tipo=doc_tipo,
-        gen_id=gen_id,
-        autor_id=autor_id,
-        autor_nombre=autor_nombre,
-        estado=estado,
-    )
-
-
-def obtener_propuesta_parrilla(propuesta_id: str) -> dict[str, Any] | None:
-    return db.obtener_propuesta_parrilla(propuesta_id)
-
-
-def listar_propuestas_parrilla(
-    *, estado: str | None = None, limite: int = 100
-) -> list[dict[str, Any]]:
-    return db.listar_propuestas_parrilla(estado=estado, limite=limite)
-
-
-def actualizar_propuesta_parrilla(
-    propuesta_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_propuesta_parrilla(propuesta_id, campos)
-
-
-def aplicar_propuesta_parrilla(
-    propuesta_id: str,
-    operaciones: list[dict[str, Any]],
-    *,
-    nombres_miembros: dict[str, str],
-    origen: str = "import-doc",
-) -> dict[str, Any]:
-    return db.aplicar_propuesta_parrilla(
-        propuesta_id, operaciones, nombres_miembros=nombres_miembros, origen=origen
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Insumos del día (cajones): delega 1:1 en db.py                               #
-# --------------------------------------------------------------------------- #
-
-
-def crear_insumo_lote(
-    *,
-    fecha: str,
-    cajon: str,
-    marca: str = "",
-    origen_texto: str = "",
-    origen_archivo: str = "",
-    estado: str = "listo",
-    error: str = "",
-    total_items: int = 0,
-    creado_por: str = "",
-) -> dict[str, Any]:
-    return db.crear_insumo_lote(
-        fecha=fecha,
-        cajon=cajon,
-        marca=marca,
-        origen_texto=origen_texto,
-        origen_archivo=origen_archivo,
-        estado=estado,
-        error=error,
-        total_items=total_items,
-        creado_por=creado_por,
-    )
-
-
-def actualizar_insumo_lote(lote_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_insumo_lote(lote_id, campos)
-
-
-def obtener_insumo_lote(lote_id: str) -> dict[str, Any] | None:
-    return db.obtener_insumo_lote(lote_id)
-
-
-def borrar_insumo_lote(lote_id: str) -> bool:
-    return db.borrar_insumo_lote(lote_id)
-
-
-def crear_insumo_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return db.crear_insumo_items(items)
-
-
-def listar_insumo_items(
-    *,
-    fecha: str | None = None,
-    cajon: str | None = None,
-    marca: str | None = None,
-    lote_id: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_insumo_items(fecha=fecha, cajon=cajon, marca=marca, lote_id=lote_id)
-
-
-def obtener_insumo_item(item_id: str) -> dict[str, Any] | None:
-    return db.obtener_insumo_item(item_id)
-
-
-def actualizar_insumo_item(item_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_insumo_item(item_id, campos)
-
-
-def marcar_insumo_item_usado(item_id: str, *, contenido_id: str) -> dict[str, Any] | None:
-    return db.marcar_insumo_item_usado(item_id, contenido_id=contenido_id)
-
-
-def listar_lotes(
-    *,
-    fecha: str | None = None,
-    cajon: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_lotes(fecha=fecha, cajon=cajon)
-
-
-def dias_con_insumos() -> list[dict[str, Any]]:
-    return db.dias_con_insumos()
-
-
+from .repos_colaboracion import (  # noqa: F401
+    actualizar_comentario,
+    borrar_comentario,
+    comentarios_sin_resolver,
+    crear_comentario,
+    listar_comentarios,
+    obtener_comentario,
+)
+from .repos_comercial import (  # noqa: F401
+    actualizar_publicacion_comercial,
+    borrar_publicacion_comercial,
+    crear_publicacion_comercial,
+    listar_publicaciones_comerciales,
+    listar_snapshots_comerciales,
+    marcar_aviso_comercial,
+    obtener_publicacion_comercial,
+    registrar_snapshot_comercial,
+    ultimo_snapshot_comercial,
+)
+from .repos_contenido import (  # noqa: F401
+    actualizar_contenido,
+    actualizar_contenido_plataforma,
+    actualizar_etiqueta,
+    actualizar_green_idea,
+    actualizar_insumo_item,
+    actualizar_insumo_lote,
+    adjuntar_video_a_pieza,
+    ajustar_plataformas_por_formato,
+    asignar_etiqueta,
+    borrar_contenido,
+    borrar_contenido_plataforma,
+    borrar_etiqueta,
+    borrar_green_idea,
+    borrar_insumo_lote,
+    contar_contenido_origen_desde,
+    crear_contenido,
+    crear_contenido_plataforma,
+    crear_etiqueta,
+    crear_green_idea,
+    crear_insumo_items,
+    crear_insumo_lote,
+    dias_con_insumos,
+    etiquetas_por_contenido,
+    existe_etiqueta_nombre,
+    existe_publicado_similar,
+    ids_contenido_con_etiqueta,
+    listar_contenido,
+    listar_contenido_plataforma,
+    listar_etiquetas,
+    listar_green_ideas,
+    listar_insumo_items,
+    listar_lotes,
+    marcar_insumo_item_usado,
+    obtener_contenido,
+    obtener_contenido_plataforma,
+    obtener_etiqueta,
+    obtener_etiqueta_por_nombre,
+    obtener_green_idea,
+    obtener_insumo_item,
+    obtener_insumo_lote,
+    quitar_etiqueta,
+    titulos_recientes_marca,
+)
+from .repos_editor import (  # noqa: F401
+    actualizar_bloque,
+    actualizar_marca_activo,
+    actualizar_media_biblioteca,
+    actualizar_plantilla_diseno,
+    actualizar_video_composicion,
+    actualizar_video_subtitulo,
+    borrar_bloque,
+    borrar_marca_activo,
+    borrar_media_biblioteca,
+    borrar_plantilla_diseno,
+    borrar_video_composicion,
+    crear_bloque,
+    crear_documento_version,
+    crear_marca_activo,
+    crear_media_biblioteca,
+    crear_plantilla_diseno,
+    crear_video_composicion,
+    crear_video_subtitulo,
+    existe_media_objeto,
+    listar_bloques,
+    listar_documento_versiones,
+    listar_marca_activos,
+    listar_media_biblioteca,
+    listar_plantillas_diseno,
+    listar_video_composiciones,
+    listar_video_subtitulos,
+    obtener_bloque,
+    obtener_marca_activo,
+    obtener_media_biblioteca,
+    obtener_plantilla_diseno,
+    obtener_video_composicion,
+    obtener_video_subtitulo,
+    ultima_documento_version,
+)
+from .repos_hashtags_franjas import (  # noqa: F401
+    actualizar_grupo_hashtags,
+    borrar_cadencia,
+    borrar_franja,
+    borrar_grupo_hashtags,
+    contar_grupos_hashtags,
+    crear_franja,
+    crear_grupo_hashtags,
+    guardar_cadencia,
+    listar_cadencias,
+    listar_franjas,
+    listar_grupos_hashtags,
+    obtener_grupo_hashtags,
+)
+from .repos_historial import (  # noqa: F401
+    contar_historial_prompts,
+    listar_historial_prompts,
+    obtener_historial_prompt,
+    registrar_historial_prompt,
+    registrar_veredicto_qa,
+    ultimo_veredicto_qa,
+)
+from .repos_jobs import (  # noqa: F401
+    cancelar_job,
+    encolar_job,
+    job_cancelado,
+    reclamar_job,
+    terminar_job,
+)
+from .repos_metricas import (  # noqa: F401
+    guardar_metricas_cache,
+    leer_metricas_cache,
+    listar_snapshots_piezas,
+    podar_snapshots_piezas,
+    registrar_snapshot_pieza,
+    serie_pieza,
+)
+from .repos_noticias import (  # noqa: F401
+    ESTADOS_NOTICIA_CLUSTER,
+    ESTADOS_NOTICIA_ITEM,
+    ESTADOS_SUGERENCIA_EDITORIAL,
+    VERIFICACIONES_CLUSTER,
+    actualizar_estado_sugerencia_editorial,
+    actualizar_fuente_algoritmo,
+    actualizar_fuente_rss,
+    actualizar_noticia_cluster,
+    actualizar_noticia_item,
+    asignar_cluster_item,
+    borrar_fuente_algoritmo,
+    borrar_fuente_rss,
+    claves_vistas,
+    clusters_extranjeros_sin_traducir,
+    clusters_recientes,
+    contar_fuentes_algoritmo,
+    contar_fuentes_rss,
+    contar_sugerencias_editoriales,
+    conteos_items_recientes,
+    crear_fuente_algoritmo,
+    crear_fuente_rss,
+    crear_noticias_items,
+    crear_sugerencia_editorial,
+    feeds_vencidos,
+    guardar_noticia_algoritmo,
+    items_de_cluster,
+    items_sin_cluster,
+    listar_fuentes_algoritmo,
+    listar_fuentes_rss,
+    listar_noticia_clusters,
+    listar_noticias_algoritmo,
+    listar_noticias_items,
+    listar_sugerencias_editoriales,
+    marcar_cluster_traducido,
+    marcar_item,
+    marcar_items_cluster_usados,
+    marcar_noticia_algoritmo,
+    obtener_fuente_algoritmo,
+    obtener_fuente_rss,
+    obtener_noticia_algoritmo,
+    obtener_noticia_cluster,
+    obtener_noticia_item,
+    obtener_sugerencia_editorial,
+    registrar_salud_fuente_algoritmo,
+    registrar_salud_fuente_rss,
+    registrar_sondeo_feed,
+    resumen_cobertura,
+    salud_feeds,
+    upsert_noticia_cluster,
+)
+from .repos_notificaciones import (  # noqa: F401
+    actualizar_aprobacion,
+    contar_notificaciones_no_leidas,
+    crear_cadena_aprobacion,
+    crear_notificacion,
+    duplicar_evento_rota,
+    listar_aprobaciones,
+    listar_copy_versiones,
+    listar_notificaciones,
+    marcar_notificacion_leida,
+    marcar_notificaciones_leidas,
+    obtener_aprobacion,
+    obtener_copy_version,
+    registrar_copy_version,
+)
+from .repos_parrilla import (  # noqa: F401
+    actualizar_pieza_rota,
+    actualizar_propuesta_parrilla,
+    aplicar_propuesta_parrilla,
+    borrar_pieza_rota,
+    borrar_piezas_rota_lote,
+    crear_pieza_rota,
+    crear_propuesta_parrilla,
+    duplicar_pieza_rota,
+    listar_piezas_rota,
+    listar_propuestas_parrilla,
+    obtener_pieza_rota,
+    obtener_propuesta_parrilla,
+)
+from .repos_publicaciones import (  # noqa: F401
+    actualizar_publicacion,
+    borrar_publicacion,
+    contar_publicaciones,
+    crear_publicacion,
+    crear_publicaciones,
+    decidir_nivel_aprobacion_tx,
+    existe_cadena_aprobacion,
+    listar_publicaciones,
+    lock_barrido,
+    obtener_publicacion,
+    reclamar_preparacion,
+    transicionar_estado_publicacion,
+)
+from .repos_rota import (  # noqa: F401
+    actualizar_ausencia_rota,
+    actualizar_evento_rota,
+    actualizar_franja_semana,
+    actualizar_programa_rota,
+    actualizar_swap_turno,
+    actualizar_turno_rota,
+    actualizar_turnos_rota_lote,
+    aplicar_swap_turno,
+    aprobar_semana_rota,
+    borrar_ausencia_rota,
+    borrar_evento_rota,
+    borrar_franja_semana,
+    borrar_programa_rota,
+    borrar_swap_turno,
+    borrar_turno_rota,
+    borrar_turnos_rota_lote,
+    borrar_turnos_semana_rota,
+    contar_piezas_por_programa,
+    contar_turnos_de_franja,
+    copiar_turnos_rota,
+    crear_ausencia_rota,
+    crear_evento_rota,
+    crear_franja_semana,
+    crear_programa_rota,
+    crear_swap_turno,
+    crear_turno_rota,
+    crear_turnos_rota_lote,
+    desaprobar_semana_rota,
+    duplicar_turno_rota,
+    existe_programa_por_nombre,
+    existe_turno_para,
+    guardar_franjas_config,
+    listar_ausencias_rota,
+    listar_coordinacion_semana,
+    listar_eventos_rota,
+    listar_franjas_semana,
+    listar_programas_rota,
+    listar_swaps_turno,
+    listar_turnos_rota,
+    obtener_ausencia_rota,
+    obtener_evento_rota,
+    obtener_franja_semana,
+    obtener_franjas_config,
+    obtener_programa_rota,
+    obtener_swap_turno,
+    obtener_turno_rota,
+    quitar_coordinador_rota,
+    sembrar_franjas_por_defecto,
+    set_coordinador_rota,
+)
+from .repos_webhooks import (  # noqa: F401
+    actualizar_webhook,
+    borrar_webhook,
+    crear_webhook,
+    listar_eventos_internos,
+    listar_webhooks,
+    listar_webhooks_para,
+    obtener_webhook,
+    obtener_webhook_con_secreto,
+    registrar_evento_interno,
+)
