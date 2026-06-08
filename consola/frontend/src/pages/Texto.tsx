@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import type { DocumentoTexto } from "@/types";
@@ -43,6 +44,17 @@ import { separarFrontmatter } from "./texto/lib";
 import { PanelLanzar } from "./texto/PanelLanzar";
 
 const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
+
+// Pestañas del estudio: PROMPTS (los que inyectamos en los agentes) separados de los
+// documentos editoriales, y estos a su vez en MARCA (marca/voz: la cara de cada marca) y
+// REGLAS (reglas/plataforma/tropicalización: lo transversal). Catch-all: cualquier editorial
+// que no sea marca/voz cae en "reglas", así ningún documento queda oculto.
+type Pestana = "prompts" | "marca" | "reglas";
+const CLASES_MARCA = new Set(["marca", "voz"]);
+function pestanaDeDoc(d: DocumentoTexto): Pestana {
+  if (d.tipo === "prompt") return "prompts";
+  return CLASES_MARCA.has(d.clase || "") ? "marca" : "reglas";
+}
 
 export default function Texto() {
   const qc = useQueryClient();
@@ -55,6 +67,7 @@ export default function Texto() {
   // en la navegación). El filtro por marca lo manda el selector GLOBAL del workspace
   // (`marcaActiva`); aquí no hay filtro de marca propio.
   const [q, setQ] = React.useState("");
+  const [pestana, setPestana] = React.useState<Pestana>("prompts");
   const [enPapelera, setEnPapelera] = React.useState(false);
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
   // Config avanzada (estado, etiquetas, clase/marcas, atribución) plegada tras el engranaje.
@@ -96,11 +109,17 @@ export default function Texto() {
 
   const documentos = React.useMemo(() => docsQuery.data?.documentos ?? [], [docsQuery.data]);
   const buscando = q.trim().length > 0;
+  // Documentos VISIBLES en la pestaña activa (las búsquedas/lookups del editor siguen sobre
+  // `documentos`, la lista completa, para no perder la selección al cambiar de pestaña).
+  const docsVista = React.useMemo(
+    () => documentos.filter((d) => pestanaDeDoc(d) === pestana),
+    [documentos, pestana],
+  );
 
   // Agrupa por carpeta: la jerarquía ES la navegación. Raíz ("") primero, resto alfabético.
   const grupos = React.useMemo(() => {
     const m = new Map<string, DocumentoTexto[]>();
-    for (const d of documentos) {
+    for (const d of docsVista) {
       const k = d.carpeta || "";
       const arr = m.get(k);
       if (arr) arr.push(d);
@@ -109,7 +128,7 @@ export default function Texto() {
     return [...m.entries()].sort(([a], [b]) =>
       a === "" ? -1 : b === "" ? 1 : a.localeCompare(b, "es"),
     );
-  }, [documentos]);
+  }, [docsVista]);
 
   // Carpetas existentes para el autocompletado del editor (mover un doc a una carpeta).
   function alternarCarpeta(c: string) {
@@ -320,9 +339,27 @@ export default function Texto() {
       {/* En móvil el explorador se apila arriba (ancho completo) con su lista
           acotada; en escritorio es una columna fija a la izquierda. */}
       <aside className="flex w-full shrink-0 flex-col gap-3 md:w-64">
+        <Tabs value={pestana} onValueChange={(v) => setPestana(v as Pestana)}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="prompts" title="Prompts que inyectamos en los agentes">
+              Prompts
+            </TabsTrigger>
+            <TabsTrigger value="marca" title="Documentos de marca (marca y voz)">
+              Marca
+            </TabsTrigger>
+            <TabsTrigger value="reglas" title="Reglas, plataforma y tropicalización">
+              Reglas
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <Button size="sm" variant="outline" onClick={() => crearMut.mutate("editorial")}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Nuevo documento
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => crearMut.mutate(pestana === "prompts" ? "prompt" : "editorial")}
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          {pestana === "prompts" ? "Nuevo prompt" : "Nuevo documento"}
         </Button>
 
         <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border max-md:max-h-[45vh]">
@@ -331,13 +368,13 @@ export default function Texto() {
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
             </div>
-          ) : documentos.length === 0 ? (
+          ) : docsVista.length === 0 ? (
             <p className="p-3 text-sm text-muted-foreground">
-              {buscando ? "Sin resultados." : "No hay documentos. Crea uno arriba."}
+              {buscando ? "Sin resultados." : "No hay documentos en esta pestaña. Crea uno arriba."}
             </p>
           ) : buscando ? (
             // Buscando: lista plana (resultados de todas las carpetas), con la carpeta como pista.
-            <ul className="divide-y divide-border">{documentos.map((d) => filaDoc(d, true))}</ul>
+            <ul className="divide-y divide-border">{docsVista.map((d) => filaDoc(d, true))}</ul>
           ) : (
             // Navegación por carpetas: raíz suelta arriba, luego cada carpeta plegable.
             // Arrastra un documento sobre una carpeta para moverlo; el lápiz la renombra.
