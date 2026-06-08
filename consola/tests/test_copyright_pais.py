@@ -7,9 +7,7 @@ Funciones bajo prueba (PURAS: no tocan red ni disco):
   - _detectar_idioma_unicode(texto)
 
 Ejecutar con:
-  pytest consola/src/keni_consola/motores/verifica_video/test_copyright_pais.py -v
-  # o directamente:
-  python3 consola/src/keni_consola/motores/verifica_video/test_copyright_pais.py
+  pytest consola/tests/test_copyright_pais.py -v
 """
 
 from __future__ import annotations
@@ -17,14 +15,15 @@ from __future__ import annotations
 from pathlib import Path
 
 # analiza-video.py usa guion en el nombre (no es un modulo Python valido directamente).
-# Importamos con importlib para no renombrar el archivo original.
+# Importamos con importlib desde su sitio en motores/ (este test vive ahora en tests/).
 import importlib.util as _ilu
 
-_spec = _ilu.spec_from_file_location(
-    "analiza_video",
-    Path(__file__).resolve().parent / "analiza-video.py",
+_MOTOR = (
+    Path(__file__).resolve().parent.parent
+    / "src/keni_consola/motores/verifica_video/analiza-video.py"
 )
-assert _spec is not None, "No se encontro analiza-video.py junto a este test"
+_spec = _ilu.spec_from_file_location("analiza_video", _MOTOR)
+assert _spec is not None, "No se encontro analiza-video.py"
 _mod = _ilu.module_from_spec(_spec)
 assert _spec.loader is not None
 _spec.loader.exec_module(_mod)  # type: ignore[union-attr]

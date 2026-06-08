@@ -133,7 +133,7 @@ def peso_metricas(bonus_marca: object) -> int:
     """Bonus por rendimiento historico de la marca, ya resuelto por el llamante. 0 si no hay.
 
     El llamante pasa un numero (0..`BONUS_METRICAS_MAX`) que mide cuanto rinde la marca de la
-    pieza frente al resto (lo calcula `metricas_priorizacion` desde la fachada de metricas, o
+    pieza frente al resto (lo resuelve el llamante desde la fachada de metricas, o
     None/0 si las metricas no estan). PURA: aqui solo se acota. Negativo/invalido => 0.
     """
     try:
