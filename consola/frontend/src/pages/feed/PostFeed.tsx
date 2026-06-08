@@ -302,13 +302,16 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
         <div className="ml-auto flex items-center gap-1">
           <Button
-            variant={
-              miReaccion === "like" || yaAprobada || (puedeDar && sinResolver === 0)
-                ? "positive"
-                : "ghost"
-            }
+            variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            // Minimalista: el OK no es un botón verde relleno (demasiado), solo el icono en verde
+            // cuando aplica (tu OK / ya aprobada / te toca y sin comentarios pendientes).
+            className={
+              "h-8 w-8" +
+              (miReaccion === "like" || yaAprobada || (puedeDar && sinResolver === 0)
+                ? " text-emerald-600 hover:text-emerald-600 dark:text-emerald-400"
+                : "")
+            }
             onClick={onLike}
             disabled={ocupado}
             title={

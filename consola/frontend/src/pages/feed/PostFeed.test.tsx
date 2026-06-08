@@ -133,9 +133,9 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Falta el video/i));
   });
 
-  it("pieza lista pero aún en borrador: el badge dice 'Lista para revisar' y like avisa que entra sola", () => {
+  it("pieza lista pero aún en borrador: el badge dice 'Lista' y like avisa que entra sola", () => {
     renderPost(pub({ etapa_ia: "lista_para_revisar" }));
-    expect(screen.getByText(/Lista para revisar/i)).toBeInTheDocument();
+    expect(screen.getByText("Lista")).toBeInTheDocument();
     expect(screen.queryByText(/Falta el copy/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/no está en revisión|entra sola/i));

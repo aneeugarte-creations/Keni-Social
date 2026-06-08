@@ -12,9 +12,8 @@
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Sparkles, ThumbsDown } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
 /** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada. */
@@ -72,11 +71,11 @@ export function CadenaAprobacion({
         </p>
       )}
 
-      {/* Los OK del equipo como "likes": cuántos y de quién. */}
+      {/* Los OK del equipo: solo el conteo (auto-explicativo) y de quién. Sin etiqueta "OK" ni
+          icono: el "x/total" basta. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <span className="inline-flex items-center gap-1 font-medium">
-          <ThumbsUp className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-          OK {okDados.length}/{totalOK}
+        <span className="font-medium tabular-nums">
+          {okDados.length}/{totalOK}
         </span>
         {okDados.length > 0 && (
           <span className="text-muted-foreground">
@@ -108,13 +107,7 @@ export function CadenaAprobacion({
         <p className="mt-2 text-sm text-red-600 dark:text-red-400">
           Rechazada; la pieza vuelve a la redacción.
         </p>
-      ) : (
-        okDados.length < totalOK && (
-          <Badge variant="aviso" className="mt-2 w-fit">
-            Faltan {totalOK - okDados.length} OK para que quede lista
-          </Badge>
-        )
-      )}
+      ) : null}
     </section>
   );
 }

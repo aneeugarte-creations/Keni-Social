@@ -42,7 +42,7 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   // Ola F: para piezas video este estado significa "Falta video"; la etiqueta dinámica
   // la calcula `etiquetaEtapa` a partir del formato; aquí "Falta imagen" es el fallback foto.
   generando_arte: { etiqueta: "Falta imagen", enCurso: true },
-  lista_para_revisar: { etiqueta: "Lista para revisar", enCurso: false },
+  lista_para_revisar: { etiqueta: "Lista", enCurso: false },
   aprobada: { etiqueta: "Aprobada", enCurso: false },
   programada: { etiqueta: "Programada", enCurso: false },
   publicada: { etiqueta: "Publicada", enCurso: false },

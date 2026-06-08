@@ -45,11 +45,12 @@ function renderCadena(cadena: TCadena, veredictoIA?: string) {
 }
 
 describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
-  it("muestra cuántos OK van y de quién + lo que falta", () => {
+  it("muestra cuántos OK van (solo el conteo) y de quién, sin texto de 'faltan'", () => {
     renderCadena(cadenaOK());
-    expect(screen.getByText("OK 1/2")).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
     expect(screen.getByText(/Ana/)).toBeInTheDocument();
-    expect(screen.getByText(/Faltan 1 OK/i)).toBeInTheDocument();
+    // La explicación "Faltan X OK…" se quitó (el conteo basta).
+    expect(screen.queryByText(/Faltan/i)).not.toBeInTheDocument();
   });
 
   it("pinta el veredicto de IA cuando hay (🟢 lista)", () => {
@@ -75,7 +76,7 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.getByText(/vuelve a la redacción/i)).toBeInTheDocument();
   });
 
-  it("cadena TOTALMENTE aprobada: «Lista para publicar» y OK 2/2", () => {
+  it("cadena TOTALMENTE aprobada: «Lista para publicar» y 2/2", () => {
     const c = cadenaOK({
       niveles: [
         nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
@@ -86,6 +87,6 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     });
     renderCadena(c);
     expect(screen.getByText(/lista para publicar/i)).toBeInTheDocument();
-    expect(screen.getByText("OK 2/2")).toBeInTheDocument();
+    expect(screen.getByText("2/2")).toBeInTheDocument();
   });
 });
