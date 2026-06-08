@@ -1462,6 +1462,13 @@ def _crear_esquema(con: Any) -> None:
     # catalogo_media` crearía una tabla nueva vacía y la vieja quedaría huérfana con los datos.
     # Idempotente: solo actúa si existe la vieja y no la nueva.
     _migrar_renombre_catalogo_media(con)
+    # GRID POR MARCA: añade `marca` al grid de rota (franjas/turnos/coordinacion/swaps) ANTES
+    # del DDL, por el mismo motivo que las migraciones de arriba: el DDL declara índices
+    # `idx_rota_*_marca` sobre esa columna y, en una BD que ya tiene esas tablas sin `marca`
+    # (incluida `rota_franjas`, que `_migrar_modelo_franjas` materializa arriba sin `marca`),
+    # crear el índice ANTES de añadir la columna revienta y envenena la conexión. Guard interno:
+    # si una tabla aún no existe (BD virgen), no la toca y el DDL la crea fresca con `marca`.
+    _asegurar_marca_grid_rota(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_turnos_rota(con)
@@ -1478,9 +1485,6 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_etiquetas(con)
     _migrar_columnas_contenido_plataforma(con)
     _migrar_columnas_video_composiciones(con)
-    # GRID POR MARCA: añade `marca` al grid de rota + backfill del piloto a 'claro-sports' +
-    # retira el UNIQUE(lunes,nombre) inline de franjas (lo sustituye `idx_rota_franjas_uniq`).
-    _asegurar_marca_grid_rota(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
     # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
