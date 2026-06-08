@@ -87,16 +87,17 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByText(/desconocido/i)).not.toBeInTheDocument();
   });
 
-  it("muestra el badge «Foto» para una pieza con formato foto (3 redes)", () => {
+  it("muestra el icono de formato «Foto» para una pieza con formato foto (3 redes)", () => {
+    // El formato se muestra como ICONO sobre la imagen (con `title`), no como texto.
     renderPost(pub({ formato: "foto" }));
-    expect(screen.getByText("Foto")).toBeInTheDocument();
-    expect(screen.queryByText("Video")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Foto")).toBeInTheDocument();
+    expect(screen.queryByTitle("Video")).not.toBeInTheDocument();
   });
 
-  it("muestra el badge «Video» para una pieza con formato video (5 redes)", () => {
+  it("muestra el icono de formato «Video» para una pieza con formato video (5 redes)", () => {
     renderPost(pub({ formato: "video" }));
-    expect(screen.getByText("Video")).toBeInTheDocument();
-    expect(screen.queryByText("Foto")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Video")).toBeInTheDocument();
+    expect(screen.queryByTitle("Foto")).not.toBeInTheDocument();
   });
 
   it("pieza posteada por una persona muestra su nombre, no «IA»", () => {
