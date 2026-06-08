@@ -13,32 +13,31 @@
  *  - El canvas es SOLO previa en vivo: al guardar NO se hornea ningún PNG. La pieza guarda su
  *    RECETA (fotos + copy_in + plantilla) y la imagen publicable se renderiza on-demand en el
  *    servidor (`/api/publicaciones/{id}/compuesta`).
+ *
+ * Composición: la cabecera (`CabeceraPlaca`), la barra de reencuadre (`BarraReencuadre`) y el
+ * diálogo de origen de la foto (`DialogoFuenteFoto`) viven en `components/media/placa/`; los
+ * helpers puros y los tipos en `placa/lib.ts` y `placa/tipos.ts`.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Crop, ImagePlus, LayoutTemplate, Library, Loader2, Move, Slash, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import type { CapaImagen, CapaTexto, Documento } from "@/editor/documento";
+import { BarraReencuadre } from "@/components/media/placa/BarraReencuadre";
+import { CabeceraPlaca } from "@/components/media/placa/CabeceraPlaca";
+import { DialogoFuenteFoto } from "@/components/media/placa/DialogoFuenteFoto";
+import { LienzoPlaca } from "@/components/media/placa/LienzoPlaca";
+import { cajaTitularLienzo, familiasDeDocumento } from "@/components/media/placa/lib";
+import { LIENZO_4_5, type EditorPlacaInlineProps } from "@/components/media/placa/tipos";
+import { useImagenesPlaca } from "@/components/media/placa/useImagenesPlaca";
+import type { CapaImagen } from "@/editor/documento";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { dibujarDocumento } from "@/lib/placa/dibujar.mjs";
 import {
   capasFotoDoc,
   capaTitularDoc,
   type FotoCollage,
-  mediaIdsDe,
   prepararDocumento,
 } from "@/lib/placa/docPieza";
 import { ENCUADRE_DEFECTO, normalizarEncuadre } from "@/lib/placa/encuadre";
@@ -46,69 +45,7 @@ import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
 import { familiaRealDe } from "@/lib/placa/render";
 import type { Arte } from "@/types";
 
-/** Lienzo por defecto del post de foto (4:5) cuando no hay plantilla (foto cruda). */
-const LIENZO_4_5 = { w: 1080, h: 1350, safe_top: 0, safe_bottom: 0 };
-
-/**
- * Caja (en px de lienzo) que ocupa la capa del titular, para situar el editor in place encima.
- * Modo CAJA (la capa trae `h>0`): la caja es ESA, fija e inamovible (`[y, y+h]`); el render
- * encoge el texto para caber. Modo LEGADO (`h<=0`, plantillas antiguas sin alto): se estima por
- * nº de líneas × interlineado, y con `ancla:"abajo"` el bloque crece hacia arriba desde `y`.
- */
-function cajaTitularLienzo(c: CapaTexto): { x: number; y: number; w: number; h: number } {
-  if (c.h > 0) return { x: c.x, y: c.y, w: c.w, h: c.h };
-  const interlineado = c.interlineado || 1.14;
-  const maxLineas = Math.max(1, c.auto_ajuste?.max_lineas ?? 2);
-  const h = Math.round(c.tamano * interlineado * maxLineas);
-  return { x: c.x, y: c.ancla === "abajo" ? c.y - h : c.y, w: c.w, h };
-}
-
-/** Familias (reales) que usa un documento, para precargar solo esas fuentes. */
-function familiasDeDocumento(doc: Documento): string[] {
-  const fr = familiaRealDe(doc.fuentes);
-  const reales = new Set<string>([doc.fuentes.sans, doc.fuentes.condensada]);
-  for (const c of doc.capas) {
-    if (c.tipo === "texto") reales.add(fr(c.familia));
-    else if (c.tipo === "logo" && c.tipo_logo === "wordmark") reales.add(fr(c.wordmark.familia));
-  }
-  return [...reales].filter(Boolean);
-}
-
-/** Carga una URL como `HTMLImageElement` (o null si falla/está vacía). */
-function cargarImagen(url: string | null): Promise<HTMLImageElement | null> {
-  if (!url) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-}
-
-export interface EditorPlacaInlineProps {
-  marca: string;
-  /** Plantilla del estudio elegida (documento de capas). `null` = sin plantilla = foto cruda. */
-  documento: Documento | null;
-  /** Titular en vivo (texto DENTRO de la imagen / copy-in de la pieza). */
-  copyIn: string;
-  /** Edita el titular: el copy-in es clicable y reescribible IN PLACE sobre la plantilla. */
-  onCopyInCambio?: (valor: string) => void;
-  /** Copy de la pieza (contenido del post): se usa como SUGERENCIA del prompt al generar con IA. */
-  copy?: string;
-  /** Una foto por HUECO (collage), en orden de `capas`. `fotos[i]` va al hueco `es_foto` i. */
-  fotos: FotoCollage[];
-  /** Notifica un cambio en el array de fotos (foto/reencuadre de algún hueco). */
-  onFotosCambio: (fotos: FotoCollage[]) => void;
-  /** URL de la imagen original (RSS de marca propia), si la pieza la trae. */
-  imagenFuente?: string;
-  /** "Sin plantilla": publicar solo la foto cruda (sin la plantilla encima). */
-  sinPlantilla: boolean;
-  /** Alterna "sin plantilla" (icono de plantilla tachada). */
-  onAlternarSinPlantilla: () => void;
-  /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
-  onAbrirGaleria?: () => void;
-}
+export type { EditorPlacaInlineProps } from "@/components/media/placa/tipos";
 
 export function EditorPlacaInline({
   marca,
@@ -210,61 +147,15 @@ export function EditorPlacaInline({
     };
   }, [activo, documento]);
 
-  // Imágenes del documento (logos, fondos, fotos de muestra de otras capas) por media id.
-  const [assets, setAssets] = React.useState<Record<string, HTMLImageElement | null>>({});
-  React.useEffect(() => {
-    if (!activo || !documento) {
-      setAssets({});
-      return;
-    }
-    let vivo = true;
-    const ids = mediaIdsDe(documento);
-    void Promise.all(
-      ids.map((id) => cargarImagen(urlMedia(id)).then((img) => [id, img] as const)),
-    ).then((pares) => {
-      if (vivo) setAssets(Object.fromEntries(pares));
-    });
-    return () => {
-      vivo = false;
-    };
-  }, [activo, documento]);
-
-  // Fotos de la pieza POR HUECO (mapa media_id -> imagen). Cargamos cada `objeto` no vacío. El
-  // hueco 0 sin foto cae a la imagen original (respaldo legado) si la pieza la trae.
+  // El hueco 0 sin foto cae a la imagen original (respaldo legado) si la pieza la trae.
   const respaldoHueco0 = !fotos[0]?.objeto && imagenFuente ? imagenFuente : "";
-  const idsFotos = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const f of fotos) if (f.objeto) set.add(f.objeto);
-    return [...set];
-  }, [fotos]);
-  // Clave estable por CONTENIDO del set de ids: el reencuadre crea un `fotos` nuevo en cada tick de
-  // arrastre, pero el SET de ids no cambia; así no recargamos las imágenes en cada `pointermove`,
-  // solo cuando se asigna/quita una foto (el set cambia).
-  const claveFotos = idsFotos.join("|");
-  const [mapaFotos, setMapaFotos] = React.useState<Record<string, HTMLImageElement | null>>({});
-  React.useEffect(() => {
-    let vivo = true;
-    const ids = claveFotos ? claveFotos.split("|") : [];
-    void Promise.all(
-      ids.map((id) => cargarImagen(urlMedia(id)).then((img) => [id, img] as const)),
-    ).then((pares) => {
-      if (vivo) setMapaFotos(Object.fromEntries(pares));
-    });
-    return () => {
-      vivo = false;
-    };
-  }, [claveFotos]);
-  // Imagen del respaldo (original) para el hueco 0 cuando aún no tiene foto propia.
-  const [imgRespaldo, setImgRespaldo] = React.useState<HTMLImageElement | null>(null);
-  React.useEffect(() => {
-    let vivo = true;
-    void cargarImagen(respaldoHueco0 || null).then((img) => {
-      if (vivo) setImgRespaldo(img);
-    });
-    return () => {
-      vivo = false;
-    };
-  }, [respaldoHueco0]);
+  // Bitmaps que necesita el render: assets del documento + foto por hueco + respaldo del hueco 0.
+  const { assets, mapaFotos, imgRespaldo } = useImagenesPlaca(
+    activo,
+    documento,
+    fotos,
+    respaldoHueco0,
+  );
 
   // Imagen efectiva de un hueco i (su foto cargada, o el respaldo si es el hueco 0 sin foto).
   const imagenDeHueco = React.useCallback(
@@ -577,156 +468,41 @@ export function EditorPlacaInline({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          <ImagePlus className="h-4 w-4 text-muted-foreground" />
-          Imagen
-          {sinPlantilla && <span className="font-normal text-muted-foreground">· solo foto</span>}
-        </span>
-        {/* Selector nativo de plantilla: quitar plantilla (publicar solo la foto) · elegir plantilla
-            del estudio (galería por marca). Todo es 4:5, así que la plantilla la dicta la MARCA. */}
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant={sinPlantilla ? "secondary" : "outline"}
-            size="icon"
-            className="h-7 w-7"
-            onClick={onAlternarSinPlantilla}
-            title={
-              sinPlantilla
-                ? "Solo foto (sin plantilla). Toca para volver a aplicar la plantilla"
-                : "Quitar la plantilla: publicar solo la foto, sin nada encima"
-            }
-            aria-pressed={sinPlantilla}
-          >
-            <span className="relative inline-flex">
-              <LayoutTemplate className="h-3.5 w-3.5" />
-              <Slash className="absolute inset-0 h-3.5 w-3.5 text-destructive" />
-            </span>
-          </Button>
-          {onAbrirGaleria && (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onAbrirGaleria}
-              title="Elegir una plantilla del estudio (por marca)"
-            >
-              <LayoutTemplate className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
+      <CabeceraPlaca
+        sinPlantilla={sinPlantilla}
+        onAlternarSinPlantilla={onAlternarSinPlantilla}
+        onAbrirGaleria={onAbrirGaleria}
+      />
 
-      {/* Lienzo en vivo: resolución real, escalado por CSS. Arrastrable para reencuadrar el hueco
-          tocado; el titular es clicable y reescribible in place. */}
-      <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
-        {!fuentesListas ? (
-          <div className="flex h-56 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="relative">
-            <canvas
-              ref={canvasRef}
-              className="max-h-[22rem] w-auto rounded-md"
-              style={{
-                aspectRatio: `${lienzo.w} / ${lienzo.h}`,
-                cursor: hayFotoActiva ? "move" : "pointer",
-                touchAction: "none",
-              }}
-              onPointerDown={onPointerDownFoto}
-              onPointerMove={onPointerMoveFoto}
-              onPointerUp={onPointerUpFoto}
-              onPointerCancel={onPointerUpFoto}
-            />
-            {editandoTitular && cajaTitular && (
-              <textarea
-                autoFocus
-                value={copyIn}
-                onChange={(e) => onCopyInCambio?.(e.target.value)}
-                onBlur={() => setEditandoTitular(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setEditandoTitular(false);
-                  }
-                }}
-                placeholder="Escribe el titular…"
-                className="absolute resize-none overflow-hidden rounded-sm bg-black/55 p-1 text-center font-bold uppercase leading-tight text-white shadow-lg outline-none ring-2 ring-primary placeholder:text-white/60"
-                style={{
-                  left: cajaTitular.left,
-                  top: cajaTitular.top,
-                  width: cajaTitular.width,
-                  height: cajaTitular.height,
-                  fontSize: Math.max(11, cajaTitular.height * 0.16),
-                }}
-              />
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          {esCollage
-            ? "Toca un hueco para elegir su foto · arrástralo para encuadrarlo."
-            : titularEditable
-              ? "Toca el titular para reescribirlo · toca la imagen para cambiar la foto."
-              : "Toca la imagen para añadir o cambiar la foto (texto, subir o generar con IA)."}
-        </p>
-        {/* Contador "Faltan X de N fotos" (solo útil en collage de varios huecos). */}
-        {esCollage && (
-          <span
-            className={
-              faltan > 0
-                ? "shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
-                : "shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
-            }
-          >
-            {faltan > 0 ? `Faltan ${faltan} de ${nHuecos} fotos` : `${nHuecos} de ${nHuecos} fotos`}
-          </span>
-        )}
-      </div>
+      <LienzoPlaca
+        canvasRef={canvasRef}
+        lienzo={lienzo}
+        fuentesListas={fuentesListas}
+        hayFotoActiva={hayFotoActiva}
+        onPointerDown={onPointerDownFoto}
+        onPointerMove={onPointerMoveFoto}
+        onPointerUp={onPointerUpFoto}
+        copyIn={copyIn}
+        onCopyInCambio={onCopyInCambio}
+        editandoTitular={editandoTitular}
+        onTerminarTitular={() => setEditandoTitular(false)}
+        cajaTitular={cajaTitular}
+        esCollage={esCollage}
+        titularEditable={titularEditable}
+        faltan={faltan}
+        nHuecos={nHuecos}
+      />
 
       {/* Reencuadre: arrastra la foto del hueco activo + zoom. Solo si ese hueco tiene foto. */}
       {hayFotoActiva && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          {esCollage && (
-            <span className="font-medium text-foreground">
-              Hueco {slotActivo + 1} de {nHuecos}
-            </span>
-          )}
-          <span className="flex items-center gap-1.5">
-            <Move className="h-3.5 w-3.5" />
-            Arrastra la foto para encuadrarla
-          </span>
-          <span className="flex flex-1 items-center gap-2">
-            <Crop className="h-3.5 w-3.5 shrink-0" />
-            <input
-              type="range"
-              min={1}
-              max={3}
-              step={0.02}
-              value={encActivo.zoom}
-              onChange={(e) => onZoom(Number(e.target.value))}
-              aria-label="Zoom de la foto"
-              className="h-1.5 w-full min-w-[6rem] max-w-[16rem] cursor-pointer accent-primary"
-            />
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            disabled={
-              encActivo.foco[0] === 0.5 && encActivo.foco[1] === 0.5 && encActivo.zoom === 1
-            }
-            onClick={() => cambiarHueco(slotActivo, { foco: [0.5, 0.5], zoom: 1 })}
-          >
-            Centrar
-          </Button>
-        </div>
+        <BarraReencuadre
+          esCollage={esCollage}
+          slotActivo={slotActivo}
+          nHuecos={nHuecos}
+          encActivo={encActivo}
+          onZoom={onZoom}
+          onCentrar={() => cambiarHueco(slotActivo, { foco: [0.5, 0.5], zoom: 1 })}
+        />
       )}
 
       <input
@@ -740,95 +516,28 @@ export function EditorPlacaInline({
 
       {/* Origen de la foto: se abre al TOCAR un hueco (no es un bloque fijo del panel). Escribe en
           el HUECO ACTIVO. */}
-      <Dialog open={fuenteAbierta} onOpenChange={setFuenteAbierta}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {esCollage ? `Foto del hueco ${slotActivo + 1} de ${nHuecos}` : "Imagen de la pieza"}
-            </DialogTitle>
-            <DialogDescription>
-              Elígela de la galería, súbela o genérala con IA.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {imagenFuente && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => usarOriginal.mutate()}
-                  disabled={ocupado}
-                >
-                  {usarOriginal.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ImagePlus className="h-4 w-4" />
-                  )}
-                  Usar imagen original
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setFuenteAbierta(false);
-                  setGaleriaAbierta(true);
-                }}
-                disabled={ocupado}
-              >
-                <Library className="h-4 w-4" />
-                Texto
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => inputRef.current?.click()}
-                disabled={ocupado}
-              >
-                {subir.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Subir
-              </Button>
-            </div>
-            <div className="space-y-1.5">
-              <span className="text-xs text-muted-foreground">
-                o genera con IA (sugerencia: el copy del post):
-              </span>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
-                  disabled={ocupado}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && prompt.trim() && !ocupado) {
-                      e.preventDefault();
-                      generar.mutate();
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => generar.mutate()}
-                  disabled={ocupado || prompt.trim().length === 0}
-                  className="shrink-0"
-                >
-                  {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
-                  {generandoIA ? "Generando…" : "Generar con IA"}
-                </Button>
-              </div>
-            </div>
-            {avisoGenerar && (
-              <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
-                {avisoGenerar}
-              </p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DialogoFuenteFoto
+        open={fuenteAbierta}
+        onOpenChange={setFuenteAbierta}
+        esCollage={esCollage}
+        slotActivo={slotActivo}
+        nHuecos={nHuecos}
+        imagenFuente={imagenFuente}
+        ocupado={ocupado}
+        subiendo={subir.isPending}
+        usandoOriginal={usarOriginal.isPending}
+        generandoIA={generandoIA}
+        prompt={prompt}
+        onPromptCambio={setPrompt}
+        avisoGenerar={avisoGenerar}
+        onUsarOriginal={() => usarOriginal.mutate()}
+        onAbrirGaleria={() => {
+          setFuenteAbierta(false);
+          setGaleriaAbierta(true);
+        }}
+        onSubir={() => inputRef.current?.click()}
+        onGenerar={() => generar.mutate()}
+      />
 
       <SelectorArtes
         open={galeriaAbierta}
