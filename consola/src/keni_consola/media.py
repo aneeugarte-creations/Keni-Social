@@ -126,6 +126,18 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # alternativas tipo Nano Banana (Gemini) son aun mas baratas pero BLOQUEAN personas.
 _MODELO_DEFECTO = "openai/gpt-5-image-mini"
 
+# Mensaje de SISTEMA que fuerza salida de imagen. Los modelos de imagen de OpenAI (GPT-5
+# Image / Mini) son chat-based: si el prompt "suena" a noticia, articulo o instruccion de
+# redaccion, RESPONDEN TEXTO (p.ej. "¿Quieres que redacte un titular?") en vez de generar
+# la imagen. Este system los obliga a interpretar SIEMPRE la peticion como la descripcion de
+# la imagen a crear. Los generadores puros (Nano Banana/Gemini) lo ignoran sin efecto adverso.
+_SISTEMA_IMAGEN = (
+    "Eres un generador de imagenes. Tu UNICA salida es una imagen generada a partir de la "
+    "peticion del usuario. NUNCA respondas con texto, preguntas ni ofertas de ayuda, aunque "
+    "la peticion parezca una noticia, un articulo o una instruccion de redaccion: interpretala "
+    "siempre como la descripcion de la imagen que debes crear y devuelve unicamente la imagen."
+)
+
 # Lista curada de modelos de imagen ofrecidos en la UI (FUENTE UNICA de verdad: alimenta
 # tanto el dropdown de Ajustes como la validacion del PUT en `api/conexiones.py`). El
 # orden es el orden de presentacion; el primero es el por defecto.
@@ -620,6 +632,8 @@ def _proveedor_openrouter(prompt: str) -> bytes:
 
     Mismo camino que el estudio de imagen: endpoint chat/completions con
     `modalities:["image","text"]`; el modelo se elige por id (`OPENROUTER_IMAGE_MODEL`).
+    Antepone un mensaje de SISTEMA (`_SISTEMA_IMAGEN`) que fuerza salida de imagen: sin el,
+    los modelos GPT-5 Image responden TEXTO ante prompts noticiosos en vez de la imagen.
     `follow_redirects=False`: un 3xx a otro host no debe reenviar el Bearer (anti-SSRF).
     Importacion diferida de httpx; los tests NUNCA llegan aqui (parchean `_PROVEEDOR`).
     """
@@ -641,7 +655,10 @@ def _proveedor_openrouter(prompt: str) -> bytes:
             headers={"Authorization": f"Bearer {clave}", "Content-Type": "application/json"},
             json={
                 "model": modelo,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {"role": "system", "content": _SISTEMA_IMAGEN},
+                    {"role": "user", "content": prompt},
+                ],
                 "modalities": ["image", "text"],
             },
             timeout=_TIMEOUT_GEN,

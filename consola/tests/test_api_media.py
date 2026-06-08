@@ -356,6 +356,30 @@ def test_proveedor_openrouter_no_reenvio_bearer_en_redirect(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
+def test_proveedor_openrouter_fuerza_imagen_con_system(monkeypatch):
+    """La petición DEBE anteponer un mensaje de sistema que fuerce salida de imagen.
+
+    Los modelos GPT-5 Image son chat-based: sin esta directiva responden TEXTO ante
+    prompts noticiosos (p. ej. "¿Quieres que redacte un titular?") en vez de la imagen.
+    Verificamos que el body lleva `system` (la directiva) ANTES del `user` (el prompt),
+    sin perder el prompt ni las `modalities`.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-1234")
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "choices": [{"message": {"images": [{"image_url": {"url": "data:image/png;base64,eA=="}}]}}]
+    }
+    with patch("httpx.post", return_value=resp) as mock_post:
+        media._proveedor_openrouter("Un sismo en Cuba perceptible en Quintana Roo")
+
+    cuerpo = mock_post.call_args.kwargs["json"]
+    mensajes = cuerpo["messages"]
+    assert mensajes[0]["role"] == "system" and mensajes[0]["content"] == media._SISTEMA_IMAGEN
+    assert mensajes[-1] == {"role": "user", "content": "Un sismo en Cuba perceptible en Quintana Roo"}
+    assert cuerpo["modalities"] == ["image", "text"]
+
+
 def test_proveedor_openrouter_200_sin_imagen_muestra_el_texto(monkeypatch):
     """200 pero sin imagen: el modelo respondió TEXTO (rechazo/aclaración). El error
     debe MOSTRAR ese texto en vez del genérico 'respuesta inesperada'."""
