@@ -1,0 +1,96 @@
+// Barrel del cliente API. Conserva la superficie `@/lib/api` (api + helpers + tipos).
+// Cada dominio vive en su propio fichero (./<dominio>.ts); aquí se componen.
+
+import { apiCatalogo } from "./catalogo";
+import { apiAuth } from "./auth";
+import { apiUsuarios } from "./usuarios";
+import { apiSistema } from "./sistema";
+import { apiConfig } from "./config";
+import { apiActividad } from "./actividad";
+import { apiPipelines } from "./pipelines";
+import { apiGeneraciones } from "./generaciones";
+import { apiTermometro } from "./termometro";
+import { apiBiblioteca } from "./biblioteca";
+import { apiLimites } from "./limites";
+import { apiPublicaciones } from "./publicaciones";
+import { apiMedia } from "./media";
+import { apiImagenes } from "./imagenes";
+import { apiEditor } from "./editor";
+import { apiVideo } from "./video";
+import { apiMarcaActivos } from "./marcaActivos";
+import { apiPlantillasDiseno } from "./plantillasDiseno";
+import { apiBloques } from "./bloques";
+import { apiPlantillasMarca } from "./plantillasMarca";
+import { apiQa } from "./qa";
+import { apiHashtags } from "./hashtags";
+import { apiFuentes } from "./fuentes";
+import { apiAlgoritmos } from "./algoritmos";
+import { apiMetricool } from "./metricool";
+import { apiFranjas } from "./franjas";
+import { apiContenido } from "./contenido";
+import { apiEtiquetas } from "./etiquetas";
+import { apiGreen } from "./green";
+import { apiWebhooks } from "./webhooks";
+import { apiColaboracion } from "./colaboracion";
+import { apiRota } from "./rota";
+import { apiParrilla } from "./parrilla";
+import { apiMetricas } from "./metricas";
+import { apiConexiones } from "./conexiones";
+import { apiSugerencias } from "./sugerencias";
+import { apiComercial } from "./comercial";
+import { apiNotificaciones } from "./notificaciones";
+import { apiInsumos } from "./insumos";
+import { apiBreaking } from "./breaking";
+import { apiNoticias } from "./noticias";
+import { apiFuentesAcciones } from "./fuentesAcciones";
+
+/** Cliente fetch tipado de la Consola Keni: composición de todos los fragmentos. */
+export const api = {
+  ...apiCatalogo,
+  ...apiAuth,
+  ...apiUsuarios,
+  ...apiSistema,
+  ...apiConfig,
+  ...apiActividad,
+  ...apiPipelines,
+  ...apiGeneraciones,
+  ...apiTermometro,
+  ...apiBiblioteca,
+  ...apiLimites,
+  ...apiPublicaciones,
+  ...apiMedia,
+  ...apiImagenes,
+  ...apiEditor,
+  ...apiVideo,
+  ...apiMarcaActivos,
+  ...apiPlantillasDiseno,
+  ...apiBloques,
+  ...apiPlantillasMarca,
+  ...apiQa,
+  ...apiHashtags,
+  ...apiFuentes,
+  ...apiAlgoritmos,
+  ...apiMetricool,
+  ...apiFranjas,
+  ...apiContenido,
+  ...apiEtiquetas,
+  ...apiGreen,
+  ...apiWebhooks,
+  ...apiColaboracion,
+  ...apiRota,
+  ...apiParrilla,
+  ...apiMetricas,
+  ...apiConexiones,
+  ...apiSugerencias,
+  ...apiComercial,
+  ...apiNotificaciones,
+  ...apiInsumos,
+  ...apiBreaking,
+  ...apiNoticias,
+  ...apiFuentesAcciones,
+};
+
+// Helpers + clase de error que consumen páginas/componentes vía `@/lib/api`.
+export { mensajeError, BASE_API, urlMedia, urlS3Objeto, ApiError } from "./_core";
+// Tipos públicos re-exportados (los consumen el editor y tests).
+export type { ActivoMarca, PlantillaDiseno, Bloque } from "./_core";
