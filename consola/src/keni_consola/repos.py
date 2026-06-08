@@ -4,14 +4,13 @@ Esta capa existe para DESACOPLAR los `api/*.py` del almacen concreto. Cada
 `api/*.py` consume SIEMPRE a traves de `repos`, sin saber que hay debajo. La fachada
 enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
 
-  - CONTENIDO editorial (editable a mano, fuente de verdad) -> ficheros YAML por
-    marca (`ficheros.py`), con un indice SQLite regenerable (`indice.py`):
-    publicaciones, plantillas e historial de prompts.
-  - OPERACIONAL + editorial reutilizable -> Postgres (`db.py`, via `motor_db`; ADR
-    0004/0006): `comercial` (piezas + serie temporal de snapshots), `rota`,
-    `usuarios`/`sesiones` (via `auth/`), la cola de `jobs`, y las 3 entidades editoriales
-    que cerraron su rezago file->pg (ADR 0006): `fuentes_rss` + items vistos + salud,
-    `grupos_hashtags` y `franjas` editoriales.
+  - POSTGRES (`db.py`, via `motor_db`; ADR 0004/0006) es hoy el almacen de casi todo:
+    publicaciones y plantillas (editoriales), `comercial` (piezas + serie temporal de
+    snapshots), `rota`, `usuarios`/`sesiones` (via `auth/`), la cola de `jobs`, y las
+    entidades que cerraron su rezago file->pg (ADR 0006): `fuentes_rss` + items vistos +
+    salud, `grupos_hashtags` y `franjas` editoriales.
+  - FICHEROS (`ficheros.py`) ya solo respaldan el HISTORIAL DE PROMPTS (file-backed bajo
+    `KENI_DATA_DIR`). Todo lo demas migro a Postgres.
 
 Las firmas publicas son ESTABLES: ningun `api/*.py` cambia aunque cambie el almacen.
 
@@ -19,8 +18,8 @@ Uso en las features:
 
     from .. import repos
 
-    repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> YAML
-    repos.crear_publicacion_comercial(url="https://…", titulo="Promo")  # -> Postgres
+    repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> Postgres
+    repos.registrar_historial_prompt(prompt_id, marca, resultado)   # -> ficheros
 """
 
 from __future__ import annotations

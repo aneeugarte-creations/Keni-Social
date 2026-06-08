@@ -1,27 +1,22 @@
-"""Backend de FICHEROS YAML de la Consola Keni: el contenido vive en disco.
+"""Backend de FICHEROS YAML de la Consola Keni: el HISTORIAL DE PROMPTS vive en disco.
 
-FUENTE DE VERDAD = los ficheros YAML, organizados POR MARCA (agente = marca =
-carpeta). Este modulo expone las MISMAS funciones publicas que `db.py` para las
-entidades de CONTENIDO, de modo que la fachada `repos.py` pueda delegar aqui sin
-que ningun `api/*.py` cambie. `tareas` NO vive aqui (sigue en SQLite via `db.py`).
+Tras la migracion a Postgres (ADR 0004/0006), este modulo ya solo respalda el
+HISTORIAL DE PROMPTS: publicaciones, plantillas, fuentes-rss, hashtags y franjas
+viven en Postgres (`db.py`), y `tareas` tambien. La fachada `repos.py` delega aqui
+unicamente las funciones de historial (`*_historial_prompt`); el resto va a `db.py`.
 
-LAYOUT (raiz = `KENI_CONSOLA_RAIZ`, def `~/keni-proyectos`):
+Los YAML estan organizados POR MARCA (agente = marca = carpeta), raiz =
+`KENI_CONSOLA_RAIZ` (def `~/keni-proyectos`):
 
     <raiz>/<marca>/
-        marca.yaml                  # id, etiqueta, id_metricas
+        marca.yaml                  # id, etiqueta, id_metricas (al sembrar la marca)
         CLAUDE.md                   # minimo, si falta
-        publicaciones/<id>.yaml
-        plantillas/<id>.yaml
-        fuentes-rss/<id>.yaml
-        hashtags/<id>.yaml
-        franjas.yaml                # UN fichero, lista de franjas de la marca
         historial/<YYYY>/<MM>/<id>.yaml
-        .keni/rss-vistos.yaml       # {fuente_id: [clave, ...]}
 
-ESQUEMA YAML por entidad: legible; el `id` es IMPLICITO (= nombre de fichero) y la
-`marca` la da la CARPETA (no se repiten como campos dentro del YAML). Cuerpos
-largos (`contenido`, `resultado`) salen en bloque `|`. Listas YAML nativas (no
-JSON embebido). Booleans nativos. SIEMPRE `yaml.safe_load` al leer.
+ESQUEMA YAML: legible; el `id` es IMPLICITO (= nombre de fichero) y la `marca` la da
+la CARPETA (no se repiten como campos dentro del YAML). Cuerpos largos (`resultado`)
+salen en bloque `|`. Listas YAML nativas (no JSON embebido). Booleans nativos.
+SIEMPRE `yaml.safe_load` al leer.
 
 ESCRITURA ATOMICA: temporal en el mismo dir + `os.replace` (patron de
 `secretos.py`). VALIDACION al leer: una entrada con YAML invalido, o con `estado` /
