@@ -26,10 +26,10 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/contenido/estudio", "/datos/investigacion", "/operacion/revision", "/datos/actividad"],
+      rutas_frontend: ["/contenido/imagen", "/datos/investigacion", "/operacion/revision", "/datos/actividad"],
       nav: [
-        { ruta: "/contenido/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
-        { ruta: "/contenido/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
+        { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
+        { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
         { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
         { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 30 },
         { ruta: "/datos/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
@@ -74,8 +74,8 @@ const CATALOGO = {
     {
       etiqueta: "Contenido",
       items: [
-        { ruta: "/contenido/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "Lienzo de imagen" },
-        { ruta: "/contenido/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "Prompts, editorial y plantillas" },
+        { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "Lienzo de imagen" },
+        { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "Prompts, editorial y plantillas" },
       ],
     },
     {
@@ -227,8 +227,8 @@ describe("Sidebar · bloques de flujo", () => {
     expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
     expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/operacion/revision");
     // Bloque "Contenido".
-    expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/contenido/estudio");
-    expect(screen.getByRole("link", { name: /biblioteca/i })).toHaveAttribute("href", "/contenido/biblioteca");
+    expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/contenido/imagen");
+    expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/contenido/texto");
     // Bloque "Datos": los hubs son una entrada, no sus pestañas.
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
     expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/datos/actividad");
@@ -245,7 +245,7 @@ describe("Sidebar · bloques de flujo", () => {
     // NavLink marca `aria-current=page` por prefijo (/datos/investigacion ⊇ …/fuentes).
     expect(investigacion).toHaveAttribute("aria-current", "page");
     // Y una entrada de otro bloque NO está activa.
-    expect(screen.getByRole("link", { name: /estudio/i })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /imagen/i })).not.toHaveAttribute("aria-current");
   });
 
   it("las entradas llevan icono (no son texto plano)", async () => {
@@ -307,8 +307,8 @@ describe("apps-scope · helpers", () => {
   const apps = CATALOGO.apps as AppCatalogo[];
 
   it("rutaPrimaria es la PRIMERA HOJA (aplana hubs a su 1ª sub-pestaña)", () => {
-    // Producción: 1ª entrada /contenido/estudio no es hub → se queda igual.
-    expect(rutaPrimaria(apps[0])).toBe("/contenido/estudio");
+    // Producción: 1ª entrada /contenido/imagen no es hub → se queda igual.
+    expect(rutaPrimaria(apps[0])).toBe("/contenido/imagen");
     // Métricas: 1ª entrada /datos/analiticas ES hub → resuelve a su 1ª sub-pestaña.
     expect(rutaPrimaria(apps[1])).toBe("/datos/analiticas/metricas");
     // Operación: 1ª entrada /operacion/feed ES hub → resuelve a su 1ª sub-pestaña.
@@ -318,11 +318,11 @@ describe("apps-scope · helpers", () => {
   it("hojasDeApp aplana hubs a sub-pestañas y conserva las no-hub", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
-      "/contenido/estudio",
-      // /contenido/biblioteca (hub) → sus sub-pestañas (Algoritmos se mudó aquí)
-      "/contenido/biblioteca/documentos",
-      "/contenido/biblioteca/estrategia",
-      "/contenido/biblioteca/algoritmos",
+      "/contenido/imagen",
+      // /contenido/texto (hub) → sus sub-pestañas (Algoritmos se mudó aquí)
+      "/contenido/texto/documentos",
+      "/contenido/texto/estrategia",
+      "/contenido/texto/algoritmos",
       // /datos/investigacion (hub) → sus 3 piezas: Noticias (índice) + Contenidos + Fuentes
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
@@ -338,7 +338,7 @@ describe("apps-scope · helpers", () => {
   });
 
   it("appDeRuta resuelve por prefijo más largo", () => {
-    expect(appDeRuta(apps, "/contenido/estudio")?.id).toBe("produccion");
+    expect(appDeRuta(apps, "/contenido/imagen")?.id).toBe("produccion");
     expect(appDeRuta(apps, "/operacion/calendario/turnos")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
@@ -348,11 +348,11 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    // Ordenado por (grupo_orden, orden): operacion(/revision) · contenido(/estudio,/biblioteca) · datos(/investigacion,/actividad).
+    // Ordenado por (grupo_orden, orden): operacion(/revision) · contenido(/imagen,/texto) · datos(/investigacion,/actividad).
     expect(rutas).toEqual([
       "/operacion/revision",
-      "/contenido/estudio",
-      "/contenido/biblioteca",
+      "/contenido/imagen",
+      "/contenido/texto",
       "/datos/investigacion",
       "/datos/actividad",
     ]);

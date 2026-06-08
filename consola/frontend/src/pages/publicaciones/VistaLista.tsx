@@ -21,6 +21,7 @@ import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -319,7 +320,14 @@ function TarjetaPublicacion({
   );
 }
 
-/** Vista de lista: tarjetas de publicación. */
+/**
+ * Vista de lista: tarjetas de publicación con SELECCIÓN MÚLTIPLE para borrar en masa.
+ *
+ * Cada tarjeta lleva un checkbox a la izquierda; al marcar una o más aparece una barra de
+ * acciones (pegajosa arriba) con "seleccionar todo" y "borrar". El borrado en lote se hace
+ * en cliente (un DELETE por pieza, en paralelo) porque no hay endpoint de lote; se resume el
+ * resultado y se podan las selecciones que ya no estén en la lista (cambió el filtro/página).
+ */
 export function VistaLista({
   publicaciones,
   onEditar,
@@ -331,17 +339,140 @@ export function VistaLista({
   onDuplicar: (p: Publicacion) => void;
   onConfigurarCadencia: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const [seleccionadas, setSeleccionadas] = React.useState<Set<string>>(() => new Set());
+  const [confirmar, setConfirmar] = React.useState(false);
+
+  // Poda las ids seleccionadas que ya no aparecen en la lista (cambió el filtro o la página).
+  React.useEffect(() => {
+    setSeleccionadas((prev) => {
+      if (prev.size === 0) return prev;
+      const presentes = new Set(publicaciones.map((p) => p.id));
+      const siguiente = new Set([...prev].filter((id) => presentes.has(id)));
+      return siguiente.size === prev.size ? prev : siguiente;
+    });
+  }, [publicaciones]);
+
+  const alternar = (id: string) =>
+    setSeleccionadas((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      return s;
+    });
+
+  const todasSeleccionadas =
+    publicaciones.length > 0 && publicaciones.every((p) => seleccionadas.has(p.id));
+  const alternarTodas = () =>
+    setSeleccionadas(todasSeleccionadas ? new Set() : new Set(publicaciones.map((p) => p.id)));
+
+  // Borrado en lote: un DELETE por pieza en paralelo (no hay endpoint de lote). Cuenta fallos
+  // para resumir sin abortar el resto.
+  const borrarLote = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await Promise.allSettled(ids.map((id) => api.eliminarPublicacion(id)));
+      return { total: ids.length, fallos: res.filter((r) => r.status === "rejected").length };
+    },
+    onSuccess: ({ total, fallos }) => {
+      setConfirmar(false);
+      setSeleccionadas(new Set());
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      const ok = total - fallos;
+      if (fallos === 0) {
+        toast.success(`${ok} ${ok === 1 ? "publicación borrada" : "publicaciones borradas"}.`);
+      } else {
+        toast.error(`Borradas ${ok} de ${total}; ${fallos} no se pudieron borrar.`);
+      }
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const n = seleccionadas.size;
+
   return (
     <div className="space-y-3">
+      {n > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-sm backdrop-blur">
+          <span className="text-sm font-medium">
+            {n} seleccionada{n === 1 ? "" : "s"}
+          </span>
+          <button
+            type="button"
+            onClick={alternarTodas}
+            className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+          >
+            {todasSeleccionadas ? "Quitar selección" : "Seleccionar todo"}
+          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSeleccionadas(new Set())}
+              disabled={borrarLote.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirmar(true)}
+              disabled={borrarLote.isPending}
+            >
+              <Trash2 className="mr-1 h-4 w-4" />
+              Borrar {n}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {publicaciones.map((p) => (
-        <TarjetaPublicacion
-          key={p.id}
-          publicacion={p}
-          onEditar={onEditar}
-          onDuplicar={onDuplicar}
-          onConfigurarCadencia={onConfigurarCadencia}
-        />
+        <div key={p.id} className="flex items-start gap-2">
+          <Checkbox
+            checked={seleccionadas.has(p.id)}
+            onCheckedChange={() => alternar(p.id)}
+            aria-label={`Seleccionar "${p.titulo}"`}
+            className="mt-4 shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <TarjetaPublicacion
+              publicacion={p}
+              onEditar={onEditar}
+              onDuplicar={onDuplicar}
+              onConfigurarCadencia={onConfigurarCadencia}
+            />
+          </div>
+        </div>
       ))}
+
+      <Dialog open={confirmar} onOpenChange={(o) => !o && setConfirmar(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Borrar {n} {n === 1 ? "publicación" : "publicaciones"}
+            </DialogTitle>
+            <DialogDescription>
+              Vas a borrar {n} {n === 1 ? "publicación seleccionada" : "publicaciones seleccionadas"}.
+              Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmar(false)}
+              disabled={borrarLote.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => borrarLote.mutate([...seleccionadas])}
+              disabled={borrarLote.isPending}
+            >
+              {borrarLote.isPending ? "Borrando…" : `Borrar ${n}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

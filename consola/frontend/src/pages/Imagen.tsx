@@ -60,7 +60,7 @@ function leerAuto(clave: string): Documento | null {
   }
 }
 
-export default function EditorPro() {
+export default function Imagen() {
   const opciones = useQuery({
     queryKey: ["publicaciones", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
@@ -140,7 +140,7 @@ export default function EditorPro() {
     // Aunque restauremos un borrador local, pedimos los bindings reales (copy/pleca) para el render.
     const guardado = leerAuto(claveAuto({ id: "", marca, contenido: cid, plataforma: pid }));
     try {
-      const pieza = await api.editorPieza(cid, pid);
+      const pieza = await api.imagenPieza(cid, pid);
       setBindings(id, pieza.bindings ?? {});
       if (guardado) {
         store.getState().cargar(guardado);
@@ -149,7 +149,7 @@ export default function EditorPro() {
       if (pieza.documento) {
         store.getState().cargar(pieza.documento as Documento);
       } else {
-        const res = await api.editorPlantilla(marca, "feed");
+        const res = await api.imagenPlantilla(marca, "feed");
         store.getState().cargar(res.documento as Documento);
       }
     } catch (e) {
@@ -219,7 +219,7 @@ export default function EditorPro() {
       if (!store) throw new Error("No hay pestaña activa.");
       // Pieza: inyecta el titular/pleca REAL (binding). Plantilla suelta: sin bindings → texto de muestra.
       const bindings = pestanaActiva?.contenido ? pestanaActiva.bindings : undefined;
-      return api.editorRender(store.getState().documento, bindings);
+      return api.imagenRender(store.getState().documento, bindings);
     },
     onSuccess: (res) => {
       const url = `/api/media/${res.id}`;
@@ -288,7 +288,7 @@ export default function EditorPro() {
   // miniatura de la galería sale SIN titular, porque su texto sale del binding, no del literal).
   const miniaturaDe = async (documento: Documento): Promise<string> => {
     try {
-      return (await api.editorRender(documento, { copy_in: "TITULAR", etiqueta_default: "" })).id;
+      return (await api.imagenRender(documento, { copy_in: "TITULAR", etiqueta_default: "" })).id;
     } catch {
       return "";
     }
@@ -431,7 +431,7 @@ export default function EditorPro() {
       if (!storeActivo || !pestanaActiva?.contenido || !pestanaActiva?.plataforma) {
         throw new Error("Esta pestaña no está anclada a una publicación.");
       }
-      return api.editorPiezaGuardar(
+      return api.imagenPiezaGuardar(
         pestanaActiva.contenido,
         pestanaActiva.plataforma,
         storeActivo.getState().documento,
@@ -570,7 +570,6 @@ export default function EditorPro() {
           />
         ) : (
           <GaleriaInline
-            marca={marcas.find((m) => m.id === marcaPanel)?.nombre ?? marcaPanel}
             plantillas={plantillas}
             cargando={plantillasQ.isLoading}
             onAbrir={abrirPlantilla}
@@ -636,8 +635,8 @@ export default function EditorPro() {
 }
 
 // Galería del estado vacío: rejilla de plantillas de la marca + tarjeta de «lienzo en blanco».
+// La marca y «Plantillas» no se rotulan aquí: la barra superior del editor ya muestra ambos.
 function GaleriaInline({
-  marca,
   plantillas,
   cargando,
   onAbrir,
@@ -646,7 +645,6 @@ function GaleriaInline({
   onRenombrar,
   onBlanco,
 }: {
-  marca: string;
   plantillas: PlantillaDiseno[];
   cargando: boolean;
   onAbrir: (p: PlantillaDiseno) => void;
@@ -664,7 +662,6 @@ function GaleriaInline({
   };
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h2 className="mb-3 text-sm font-semibold">Plantillas{marca ? ` · ${marca}` : ""}</h2>
       {cargando ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
       ) : (

@@ -1,5 +1,5 @@
 /**
- * Tests de EstudioVideo (editor REAL del "toque RRSS"):
+ * Tests de Video (editor REAL del "toque RRSS"):
  *  - Renderiza el header "Editor de video" y la sub-navegación de secciones.
  *  - La sección Base muestra el selector de formato (9:16/1:1/16:9) y la zona de subida.
  *  - Las secciones Overlay/PiP/Subtítulos/Render están deshabilitadas hasta subir un clip base.
@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as apiMod from "@/lib/api";
 import type { ComposicionVideo } from "@/lib/video";
 
-import EstudioVideo from "./EstudioVideo";
+import Video from "./Video";
 
 // Marca activa: la página solo lee `marcaActiva`/`marcaPrimaria`.
 vi.mock("@/hooks/marca-activa-contexto", () => ({
@@ -64,18 +64,18 @@ function docConBase(): ComposicionVideo {
   };
 }
 
-function renderEstudioVideo(rutaInicial = "/contenido/video") {
+function renderVideo(rutaInicial = "/contenido/video") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[rutaInicial]}>
-        <EstudioVideo />
+        <Video />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe("EstudioVideo", () => {
+describe("Video", () => {
   beforeEach(() => {
     // El gestor (sección por defecto) lista composiciones + piezas: stubs vacíos por defecto.
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({ composiciones: [] });
@@ -94,18 +94,18 @@ describe("EstudioVideo", () => {
   }
 
   it("muestra el encabezado 'Editor de video'", () => {
-    renderEstudioVideo();
+    renderVideo();
     expect(screen.getByRole("heading", { name: /editor de video/i })).toBeInTheDocument();
   });
 
   it("arranca en el GESTOR de composiciones ('Mis composiciones')", () => {
-    renderEstudioVideo();
+    renderVideo();
     // El encabezado del gestor (h2) y el botón de nueva composición.
     expect(screen.getByRole("button", { name: /nueva composición/i })).toBeInTheDocument();
   });
 
   it("muestra el selector de formato con 9:16 seleccionado por defecto (sección Base)", async () => {
-    renderEstudioVideo();
+    renderVideo();
     await irABase();
     const grupo = screen.getByRole("radiogroup", { name: /formato de video/i });
     expect(grupo).toBeInTheDocument();
@@ -114,13 +114,13 @@ describe("EstudioVideo", () => {
   });
 
   it("muestra la zona de carga del clip base (EditorVideo reutilizado)", async () => {
-    renderEstudioVideo();
+    renderVideo();
     await irABase();
     expect(screen.getByText(/subir video/i)).toBeInTheDocument();
   });
 
   it("deshabilita las secciones que requieren clip base (Render, Subtítulos)", () => {
-    renderEstudioVideo();
+    renderVideo();
     // Las pestañas son botones; sin clip base, Render/Subtítulos están deshabilitadas.
     const render = screen.getByRole("button", { name: /^render$/i });
     const subs = screen.getByRole("button", { name: /subtítulos/i });
@@ -132,7 +132,7 @@ describe("EstudioVideo", () => {
   });
 
   it("avisa que el preview es aproximado (render fiel = servidor)", async () => {
-    renderEstudioVideo();
+    renderVideo();
     await irABase();
     expect(screen.getByText(/preview aproximado/i)).toBeInTheDocument();
   });
@@ -143,7 +143,7 @@ describe("EstudioVideo", () => {
       .mockResolvedValue({
         composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
       });
-    renderEstudioVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     // Tras cargar, abre la sección Base con el clip ya presente: el reencuadre (que exige base)
     // y las secciones que requieren base quedan habilitadas.
     await waitFor(() => expect(composicion).toHaveBeenCalledWith("comp-7"));
@@ -169,7 +169,7 @@ describe("EstudioVideo", () => {
       ],
     });
     const crear = vi.spyOn(apiMod.api.video, "crearComposicion");
-    renderEstudioVideo("/contenido/video?contenido=cont-5");
+    renderVideo("/contenido/video?contenido=cont-5");
     await waitFor(() =>
       expect(listar).toHaveBeenCalledWith({ marca: "unotv", contenido_id: "cont-5" }),
     );
@@ -185,7 +185,7 @@ describe("EstudioVideo", () => {
     const crear = vi
       .spyOn(apiMod.api.video, "crearComposicion")
       .mockResolvedValue({ id: "comp-nueva" });
-    renderEstudioVideo("/contenido/video?contenido=cont-9");
+    renderVideo("/contenido/video?contenido=cont-9");
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
     // La nueva composición se crea LIGADA a la pieza (contenido_id) y con título por defecto.
     expect(crear.mock.calls[0][0]).toMatchObject({
@@ -200,7 +200,7 @@ describe("EstudioVideo", () => {
     const crear = vi
       .spyOn(apiMod.api.video, "crearComposicion")
       .mockResolvedValue({ id: "comp-temprana" });
-    renderEstudioVideo();
+    renderVideo();
     irABase();
     // Cambiar el formato a 1:1 es una edición real del documento → crea el borrador.
     fireEvent.click(screen.getByRole("radio", { name: /1:1/i }));
@@ -213,7 +213,7 @@ describe("EstudioVideo", () => {
     const crear = vi
       .spyOn(apiMod.api.video, "crearComposicion")
       .mockResolvedValue({ id: "comp-guardada" });
-    renderEstudioVideo();
+    renderVideo();
     irABase();
     expect(screen.getByText(/sin guardar/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /guardar borrador/i }));
@@ -228,7 +228,7 @@ describe("EstudioVideo", () => {
     const actualizar = vi
       .spyOn(apiMod.api.video, "actualizarComposicion")
       .mockResolvedValue({ composicion: { id: "comp-7", titulo: "T", estado: "listo" } });
-    renderEstudioVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     const boton = await screen.findByRole("button", { name: /marcar listo/i });
     fireEvent.click(boton);
     await waitFor(() => expect(actualizar).toHaveBeenCalledWith("comp-7", { estado: "listo" }));

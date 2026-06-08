@@ -10,12 +10,12 @@ import { apiActividad } from "./actividad";
 import { apiPipelines } from "./pipelines";
 import { apiGeneraciones } from "./generaciones";
 import { apiTermometro } from "./termometro";
-import { apiBiblioteca } from "./biblioteca";
+import { apiTexto } from "./texto";
 import { apiLimites } from "./limites";
 import { apiPublicaciones } from "./publicaciones";
 import { apiMedia } from "./media";
 import { apiImagenes } from "./imagenes";
-import { apiEditor } from "./editor";
+import { apiImagen } from "./imagen";
 import { apiVideo } from "./video";
 import { apiMarcaActivos } from "./marcaActivos";
 import { apiPlantillasDiseno } from "./plantillasDiseno";
@@ -55,12 +55,12 @@ export const api = {
   ...apiPipelines,
   ...apiGeneraciones,
   ...apiTermometro,
-  ...apiBiblioteca,
+  ...apiTexto,
   ...apiLimites,
   ...apiPublicaciones,
   ...apiMedia,
   ...apiImagenes,
-  ...apiEditor,
+  ...apiImagen,
   ...apiVideo,
   ...apiMarcaActivos,
   ...apiPlantillasDiseno,

@@ -75,7 +75,7 @@ export interface RespuestaHistorialBiblioteca {
   historial: VersionBiblioteca[];
 }
 
-/** `GET /api/biblioteca`: documentos filtrados + carpetas existentes + facetas. */
+/** `GET /api/texto`: documentos filtrados + carpetas existentes + facetas. */
 export interface RespuestaBiblioteca {
   documentos: DocumentoBiblioteca[];
   carpetas: string[];

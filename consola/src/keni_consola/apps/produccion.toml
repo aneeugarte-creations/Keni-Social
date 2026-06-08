@@ -28,9 +28,9 @@ permisos = ["editor", "admin"]
 # para mapear cada router a su app.
 modulos_backend = [
   "actividad",
-  "biblioteca",
+  "texto",
   "bloques",
-  "editor",
+  "imagen",
   "generaciones",
   "green",
   "hashtags",
@@ -58,13 +58,13 @@ modulos_backend = [
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
 # test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
 rutas_frontend = [
-  "/contenido/estudio",
-  "/contenido/editor",
-  "/contenido/biblioteca",
-  "/contenido/biblioteca/documentos",
-  "/contenido/biblioteca/estrategia",
-  # Algoritmos (inteligencia de plataforma) pasó de Investigación a la Biblioteca.
-  "/contenido/biblioteca/algoritmos",
+  "/contenido/imagen",
+  "/contenido/video",
+  "/contenido/texto",
+  "/contenido/texto/documentos",
+  "/contenido/texto/estrategia",
+  # Algoritmos (inteligencia de plataforma) pasó de Investigación a la página de Texto.
+  "/contenido/texto/algoritmos",
   "/datos/investigacion",
   "/datos/investigacion/plan",
   "/datos/investigacion/descubrimiento",
@@ -88,23 +88,34 @@ rutas_frontend = [
 # humano. Bloques: operacion(10) = checkpoints diarios · contenido(20) = herramientas
 # para crear/editar a mano · datos(30) = entradas que alimentan o reflejan la automatización.
 
+# El bloque CONTENIDO son TRES páginas planas por tipo de contenido (sin hub con pestañas):
+# Imagen (estudio de imagen por capas), Video (estudio de video) y Texto (la Biblioteca).
 [[nav]]
-ruta = "/contenido/editor"
-etiqueta = "Estudio"
-icono = "Palette"
+ruta = "/contenido/imagen"
+etiqueta = "Imagen"
+icono = "Image"
 descripcion = "Estudio de imagen por capas: texto, logos, marcos, plantillas y bloques por marca; genera/expande/retoca con IA y exporta el arte de la pieza."
 grupo = "contenido"
 grupo_orden = 20
 orden = 10
 
 [[nav]]
-ruta = "/contenido/biblioteca"
-etiqueta = "Biblioteca"
-icono = "Library"
-descripcion = "Prompts y línea editorial, estrategia de marcas e inteligencia de plataforma. Pestañas Biblioteca / Estrategia / Algoritmos."
+ruta = "/contenido/video"
+etiqueta = "Video"
+icono = "Clapperboard"
+descripcion = "Estudio de video: el toque RRSS sobre un clip ya editado — formato, overlay, PiP y subtítulos; el render fiel lo produce el servidor."
 grupo = "contenido"
 grupo_orden = 20
 orden = 20
+
+[[nav]]
+ruta = "/contenido/texto"
+etiqueta = "Texto"
+icono = "Type"
+descripcion = "Prompts y línea editorial, estrategia de marcas e inteligencia de plataforma. Pestañas Documentos / Estrategia / Algoritmos."
+grupo = "contenido"
+grupo_orden = 20
+orden = 30
 
 [[nav]]
 ruta = "/datos/investigacion"

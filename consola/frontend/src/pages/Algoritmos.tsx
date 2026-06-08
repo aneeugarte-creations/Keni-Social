@@ -389,7 +389,7 @@ function DialogoPropuesta({
             Copiar
           </Button>
           <Button asChild>
-            <Link to="/contenido/biblioteca">Abrir Biblioteca</Link>
+            <Link to="/contenido/texto">Abrir Biblioteca</Link>
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -22,10 +22,10 @@ _SIDEBAR_BLOQUES = [
     # "Operación": los checkpoints que el equipo toca cada día — el Feed (red social interna
     # + lista de contenido), el Calendario (turnos + publicaciones) y la cola de Revisión.
     ["Feed", "Calendario", "Revisión"],
-    # "Contenido": herramientas para crear/editar a mano una pieza (consumidas por el
-    # pipeline cuando es automático). Estudio (editor de imagen por capas + IA; el antiguo
-    # "Estudio" y el "Editor" se fusionaron en uno) y Biblioteca (prompts + plantillas).
-    ["Estudio", "Biblioteca"],
+    # "Contenido": TRES páginas planas por tipo de contenido (sin hub con pestañas) —
+    # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
+    # Biblioteca: prompts + línea editorial + plantillas).
+    ["Imagen", "Video", "Texto"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
     # Analíticas (medición que cierra el loop) y Actividad IA (qué hizo la IA). Pipelines
     # (CI/CD) ya no es entrada de sidebar: vive como pestaña del hub Actividad IA.
@@ -89,7 +89,8 @@ def test_catalogo_agrupa_la_nav_por_flujo():
 def test_iconos_de_nav_son_strings_lucide():
     cat = registro.catalogo(_entorno())
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
-    assert iconos["/contenido/editor"] == "Palette"
+    assert iconos["/contenido/imagen"] == "Image"
+    assert iconos["/contenido/video"] == "Clapperboard"
     assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/operacion/revision"] == "ShieldCheck"
     assert iconos["/datos/analiticas"] == "BarChart3"
@@ -107,7 +108,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/datos/analiticas" not in rutas
     # Las demás siguen.
-    assert "/contenido/editor" in rutas and "/operacion/feed" in rutas
+    assert "/contenido/imagen" in rutas and "/operacion/feed" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():

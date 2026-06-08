@@ -15,7 +15,7 @@
  * backend al PRIMER cambio significativo (o con el botón "Guardar borrador"), sin esperar al clip
  * base, y luego se autoguarda. El estado "listo" es organización, NO publicación.
  */
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Captions, Check, CheckCircle2, Clapperboard, Film, FolderOpen, Layers, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
@@ -65,7 +65,7 @@ const SECCIONES: { clave: Seccion; etiqueta: string; Icono: typeof VideoIcon }[]
   { clave: "render", etiqueta: "Render", Icono: Film },
 ];
 
-export default function EstudioVideo() {
+export default function Video() {
   const { marcaActiva, marcaPrimaria } = useMarcaActiva();
   const marca = marcaActiva ?? marcaPrimaria ?? "";
 
@@ -94,14 +94,6 @@ export default function EstudioVideo() {
   // Metadatos del borrador: título (nombre humano) y estado (borrador/listo, organización ≠ publicar).
   const [titulo, setTitulo] = React.useState("");
   const [estado, setEstado] = React.useState<EstadoComposicion>("borrador");
-
-  // Presets de formato del servidor (con fallback local dentro del selector).
-  const formatosQ = useQuery({
-    queryKey: ["video-formatos"],
-    queryFn: ({ signal }) => api.video.formatos(signal).then((r) => r.formatos),
-    // Si la API aún no está desplegada, el selector usa el fallback local: no bloquear.
-    retry: false,
-  });
 
   // Crea la composición en el backend en cuanto hay una edición significativa (NO espera al clip
   // base): así el borrador no se pierde si el usuario se va antes de subir el clip. `marca` es
@@ -378,9 +370,6 @@ export default function EstudioVideo() {
       <div className="flex items-center gap-2 border-b border-border p-3">
         <Clapperboard className="h-4 w-4 text-muted-foreground" />
         <h1 className="text-base font-semibold">Editor de video</h1>
-        <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-          Toque RRSS · render server-side
-        </span>
       </div>
 
       {/* Sub-navegación de secciones */}
@@ -501,11 +490,7 @@ export default function EstudioVideo() {
               <>
                 <div>
                   <h2 className="mb-2 text-sm font-semibold text-foreground">Formato</h2>
-                  <SelectorFormato
-                    aspecto={aspecto}
-                    onCambio={onCambioFormato}
-                    presets={formatosQ.data}
-                  />
+                  <SelectorFormato aspecto={aspecto} onCambio={onCambioFormato} />
                 </div>
                 <div>
                   <h2 className="mb-2 text-sm font-semibold text-foreground">Pista base</h2>

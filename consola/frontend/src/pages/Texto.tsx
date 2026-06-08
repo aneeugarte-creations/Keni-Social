@@ -77,7 +77,7 @@ function separarFrontmatter(cuerpo: string): { oculto: string; visible: string }
   return { oculto: m[0], visible: cuerpo.slice(m[0].length) };
 }
 
-export default function Biblioteca() {
+export default function Texto() {
   const qc = useQueryClient();
   // Marca activa del workspace: default del filtro (con "Todas" disponible: la
   // biblioteca es editorial y consultar otras marcas es legítimo).
@@ -111,20 +111,20 @@ export default function Biblioteca() {
   const docsQuery = useQuery({
     queryKey: ["biblioteca", q, marcaActiva],
     queryFn: ({ signal }) =>
-      api.biblioteca({ q: q || undefined, marca: marcaActiva ?? undefined }, signal),
+      api.texto({ q: q || undefined, marca: marcaActiva ?? undefined }, signal),
   });
   const papeleraQuery = useQuery({
     queryKey: ["biblioteca-papelera"],
-    queryFn: ({ signal }) => api.papeleraBiblioteca(signal),
+    queryFn: ({ signal }) => api.papeleraTexto(signal),
     enabled: enPapelera,
   });
   const marcasQuery = useQuery({
     queryKey: ["biblioteca-marcas"],
-    queryFn: ({ signal }) => api.marcasBiblioteca(signal),
+    queryFn: ({ signal }) => api.marcasTexto(signal),
   });
   const areasQuery = useQuery({
     queryKey: ["biblioteca-areas"],
-    queryFn: ({ signal }) => api.areasBiblioteca(signal),
+    queryFn: ({ signal }) => api.areasTexto(signal),
   });
 
   const documentos = React.useMemo(() => docsQuery.data?.documentos ?? [], [docsQuery.data]);
@@ -605,16 +605,16 @@ function DialogHistorial({
 
   const histQuery = useQuery({
     queryKey: ["biblioteca-historial", docId],
-    queryFn: ({ signal }) => api.historialBiblioteca(docId, signal),
+    queryFn: ({ signal }) => api.historialTexto(docId, signal),
     enabled: open,
   });
   const versionQuery = useQuery({
     queryKey: ["biblioteca-version", docId, verSha],
-    queryFn: ({ signal }) => api.versionBiblioteca(docId, verSha as string, signal),
+    queryFn: ({ signal }) => api.versionTexto(docId, verSha as string, signal),
     enabled: open && !!verSha,
   });
   const revertirMut = useMutation({
-    mutationFn: (sha: string) => api.revertirBiblioteca(docId, sha),
+    mutationFn: (sha: string) => api.revertirTexto(docId, sha),
     onSuccess: onRevertido,
   });
 
@@ -749,14 +749,14 @@ function PanelLanzar({
   // Línea editorial auto-resuelta por marca (selección inicial = todas).
   const editorialesQuery = useQuery({
     queryKey: ["biblioteca-editoriales", marca],
-    queryFn: ({ signal }) => api.editorialesBiblioteca(marca, undefined, signal),
+    queryFn: ({ signal }) => api.editorialesTexto(marca, undefined, signal),
     enabled: !!marca,
   });
   // Diagnóstico de los 4 pilares editoriales de la marca elegida: avisa si la línea
   // editorial está incompleta ANTES de lanzar (no bloquea, solo advierte).
   const validacionQuery = useQuery({
     queryKey: ["biblioteca-validacion", marca],
-    queryFn: ({ signal }) => api.validacionBiblioteca(marca, signal),
+    queryFn: ({ signal }) => api.validacionTexto(marca, signal),
     enabled: !!marca,
   });
   const validacion = validacionQuery.data;
@@ -788,7 +788,7 @@ function PanelLanzar({
       }
       if (tipoTarget === "archivo") {
         if (!archivo) throw new Error("Adjunta un archivo o cambia de target.");
-        return api.lanzarBibliotecaArchivo(archivo, marca, {
+        return api.lanzarTextoArchivo(archivo, marca, {
           prompt_id: promptId,
           adjuntos: adj,
           redes: redesArr,
@@ -802,7 +802,7 @@ function PanelLanzar({
             : tipoTarget === "area"
               ? { tipo: "area", valor: valorTarget }
               : { tipo: "ninguno" };
-      return api.lanzarBiblioteca({
+      return api.lanzarTexto({
         prompt_id: promptId,
         marca,
         adjuntos: adj,

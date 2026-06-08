@@ -12,9 +12,9 @@ import { Loader2 } from "lucide-react";
 // y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
-const EditorPro = lazy(() => import("@/pages/EditorPro"));
-const EstudioVideo = lazy(() => import("@/pages/EstudioVideo"));
-const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
+const Imagen = lazy(() => import("@/pages/Imagen"));
+const Video = lazy(() => import("@/pages/Video"));
+const Texto = lazy(() => import("@/pages/Texto"));
 const EstrategiaMarcas = lazy(() =>
   import("@/pages/biblioteca/GestionLineas").then((m) => ({ default: m.GestionLineas })),
 );
@@ -177,24 +177,29 @@ export const router = createBrowserRouter([
       {
         path: "contenido",
         children: [
-          { index: true, element: <Navigate to="/contenido/editor" replace /> },
-          // "Estudio" se fusionó en el "Editor" (la IA es ahora un panel del editor): redirige.
-          { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
-          // Editor profesional por capas (Konva): diseña/edita el Documento de la pieza.
-          { path: "editor", element: <EditorPro /> },
-          // Editor de video: subida + preview (motor de edición próximamente).
-          { path: "video", element: <EstudioVideo /> },
-          // Hub Biblioteca: UNA sola Biblioteca (prompts + línea editorial) con filtros.
+          { index: true, element: <Navigate to="/contenido/imagen" replace /> },
+          // CONTENIDO = TRES páginas planas por tipo: Imagen · Video · Texto. El nombre de la
+          // página coincide con su ruta y con su API (`/api/imagen`, `/api/video`, `/api/texto`).
+          // Página IMAGEN: editor profesional por capas (Konva); diseña/edita el Documento.
+          { path: "imagen", element: <Imagen /> },
+          // Página VIDEO: subida + preview (motor de edición próximamente).
+          { path: "video", element: <Video /> },
+          // Página TEXTO (antes "Biblioteca"): prompts + línea editorial con filtros.
           {
-            path: "biblioteca",
+            path: "texto",
             children: [
               { index: true, element: <Navigate to="documentos" replace /> },
-              { path: "documentos", element: <Biblioteca /> },
+              { path: "documentos", element: <Texto /> },
               { path: "estrategia", element: <EstrategiaMarcas /> },
               // Algoritmos: inteligencia de plataforma (alimenta las fichas editoriales).
               { path: "algoritmos", element: <Algoritmos /> },
             ],
           },
+          // Compatibilidad: los paths antiguos (estudio/editor/biblioteca) redirigen a los nuevos.
+          { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
+          { path: "editor", element: <Navigate to="/contenido/imagen" replace /> },
+          { path: "biblioteca", element: <RedirigirPrefijo a="/contenido/texto" /> },
+          { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
         ],
       },
 
@@ -243,7 +248,7 @@ export const router = createBrowserRouter([
               { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
               {
                 path: "algoritmos",
-                element: <Navigate to="/contenido/biblioteca/algoritmos" replace />,
+                element: <Navigate to="/contenido/texto/algoritmos" replace />,
               },
             ],
           },
@@ -288,9 +293,9 @@ export const router = createBrowserRouter([
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando
       // la pestaña con `RedirigirPrefijo` donde aplica).
-      { path: "imagenes", element: <Navigate to="/contenido/editor" replace /> },
-      { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
-      { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/biblioteca" /> },
+      { path: "imagenes", element: <Navigate to="/contenido/imagen" replace /> },
+      { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
+      { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
       { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
       { path: "revision/*", element: <RedirigirPrefijo a="/operacion/revision" /> },
@@ -305,8 +310,8 @@ export const router = createBrowserRouter([
       { path: "parrilla/*", element: <Navigate to="/operacion/feed" replace /> },
       { path: "actividad", element: <Navigate to="/datos/actividad" replace /> },
       // "Activos"/"Plantillas" quedaron obsoletas; sus rutas redirigen a la Biblioteca.
-      { path: "activos", element: <Navigate to="/contenido/biblioteca/documentos" replace /> },
-      { path: "activos/plantillas", element: <Navigate to="/contenido/biblioteca/documentos" replace /> },
+      { path: "activos", element: <Navigate to="/contenido/texto/documentos" replace /> },
+      { path: "activos/plantillas", element: <Navigate to="/contenido/texto/documentos" replace /> },
       // Hojas planas antiguas (pre-hub) y fusiones previas:
       { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
       { path: "termometro", element: <Navigate to="/datos/investigacion/termometro" replace /> },
@@ -325,8 +330,8 @@ export const router = createBrowserRouter([
       { path: "agentes/actividad", element: <Navigate to="/datos/actividad" replace /> },
       // El copy se generaba en /generacion (motor antiguo, retirado): ahora vive en
       // la Biblioteca; el catálogo de prompts también vive en la Biblioteca.
-      { path: "generar-copy", element: <Navigate to="/contenido/biblioteca" replace /> },
-      { path: "generacion", element: <Navigate to="/contenido/biblioteca" replace /> },
+      { path: "generar-copy", element: <Navigate to="/contenido/texto" replace /> },
+      { path: "generacion", element: <Navigate to="/contenido/texto" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
       { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },

@@ -6,8 +6,8 @@ El editor (navegador, react-konva) edita un DOCUMENTO de capas en local y, para 
 embebidas y un PNG reproducible.
 
 Endpoints:
-  - `POST /api/editor/render`                      {documento, bindings?} -> {id, url}
-  - `GET  /api/editor/plantilla/{marca}/{formato}`                        -> {documento}
+  - `POST /api/imagen/render`                      {documento, bindings?} -> {id, url}
+  - `GET  /api/imagen/plantilla/{marca}/{formato}`                        -> {documento}
 
 Bindings (titular/pleca): las capas de texto con `binding:"copy_in"`/`"etiqueta_default"` se
 renderizan con el TEXTO REAL de la publicación, no con el texto de muestra, cuando el cliente pasa
@@ -90,7 +90,7 @@ def _doc_de_version(version: dict[str, Any] | None) -> Any:
 
 
 async def pieza_documento(request: Request) -> Response:
-    """GET /api/editor/pieza/{contenido_id}/{plataforma_id}: documento editable de la pieza.
+    """GET /api/imagen/pieza/{contenido_id}/{plataforma_id}: documento editable de la pieza.
 
     Devuelve la ÚLTIMA versión guardada del documento (o `null` si aún no se editó con el editor),
     más el número de versiones. El frontend, si es `null`, arranca de la plantilla de la marca.
@@ -111,7 +111,7 @@ async def pieza_documento(request: Request) -> Response:
 
 
 async def pieza_guardar(request: Request) -> Response:
-    """POST /api/editor/pieza/{contenido_id}/{plataforma_id} {documento}: guarda el documento en la pieza.
+    """POST /api/imagen/pieza/{contenido_id}/{plataforma_id} {documento}: guarda el documento en la pieza.
 
     Valida y renderiza el documento (PNG fiel), APENDE una versión al historial y fija la `imagen`
     de la publicación al PNG renderizado. -> `{id, url, version}` | 400 | 404.
@@ -150,7 +150,7 @@ async def pieza_guardar(request: Request) -> Response:
 
 
 async def pieza_versiones(request: Request) -> Response:
-    """GET /api/editor/pieza/{contenido_id}/{plataforma_id}/versiones: historial (sin el documento)."""
+    """GET /api/imagen/pieza/{contenido_id}/{plataforma_id}/versiones: historial (sin el documento)."""
     cid = request.path_params["contenido_id"]
     pid = request.path_params["plataforma_id"]
     versiones = [
@@ -169,9 +169,9 @@ async def pieza_versiones(request: Request) -> Response:
 
 
 RUTAS = [
-    Route("/api/editor/render", render, methods=["POST"]),
-    Route("/api/editor/plantilla/{marca}/{formato}", plantilla, methods=["GET"]),
-    Route("/api/editor/pieza/{contenido_id}/{plataforma_id}", pieza_documento, methods=["GET"]),
-    Route("/api/editor/pieza/{contenido_id}/{plataforma_id}", pieza_guardar, methods=["POST"]),
-    Route("/api/editor/pieza/{contenido_id}/{plataforma_id}/versiones", pieza_versiones, methods=["GET"]),
+    Route("/api/imagen/render", render, methods=["POST"]),
+    Route("/api/imagen/plantilla/{marca}/{formato}", plantilla, methods=["GET"]),
+    Route("/api/imagen/pieza/{contenido_id}/{plataforma_id}", pieza_documento, methods=["GET"]),
+    Route("/api/imagen/pieza/{contenido_id}/{plataforma_id}", pieza_guardar, methods=["POST"]),
+    Route("/api/imagen/pieza/{contenido_id}/{plataforma_id}/versiones", pieza_versiones, methods=["GET"]),
 ]

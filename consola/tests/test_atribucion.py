@@ -140,7 +140,7 @@ def _crear_prompt_piezas() -> str:
     """Crea en el store un prompt de copy con `salida=piezas` y devuelve su id.
 
     El copy ya no se lanza por el motor de skills (retirado): se lanza desde la Biblioteca
-    con un prompt `salida=piezas` + redes. Devuelve el id para `POST /api/biblioteca/lanzar`.
+    con un prompt `salida=piezas` + redes. Devuelve el id para `POST /api/texto/lanzar`.
     """
     from keni_consola import biblioteca
 
@@ -159,7 +159,7 @@ def test_generacion_atribuye_registro_historial_y_publicaciones(entorno):
     c = _cli_con_usuario("ana", lanzar_generacion=lanzador_generacion_completa(_SALIDA_COPY))
     prompt_id = _crear_prompt_piezas()
     gen = c.post(
-        "/api/biblioteca/lanzar",
+        "/api/texto/lanzar",
         json={"prompt_id": prompt_id, "marca": _MARCA, "redes": ["x"],
               "target": {"tipo": "contenido", "valor": "una nota"}},
         headers=_ORIGIN,
@@ -192,7 +192,7 @@ def test_generacion_por_token_sin_autor(entorno):
     c = _cli_por_token(lanzar_generacion=lanzador_generacion_completa(_SALIDA_COPY))
     prompt_id = _crear_prompt_piezas()
     gen = c.post(
-        "/api/biblioteca/lanzar",
+        "/api/texto/lanzar",
         json={"prompt_id": prompt_id, "marca": _MARCA, "redes": ["x"],
               "target": {"tipo": "contenido", "valor": "una nota"}},
         headers=_ORIGIN,

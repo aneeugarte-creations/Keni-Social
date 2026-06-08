@@ -67,7 +67,7 @@ def _facetas(docs: list[biblioteca.Documento]) -> dict[str, object]:
 
 
 async def listar(request: Request) -> Response:
-    """`GET /api/biblioteca` -> `{documentos, carpetas, facetas}` con facetas opcionales.
+    """`GET /api/texto` -> `{documentos, carpetas, facetas}` con facetas opcionales.
 
     Filtros (query, todos opcionales): `tipo`, `carpeta`, `q`, `estado`, `etiqueta`, `marca`,
     `clase`, `pipeline`. Las `facetas` resumen etiquetas/estados/pipelines del resultado para
@@ -92,7 +92,7 @@ async def listar(request: Request) -> Response:
 
 
 async def crear(request: Request) -> Response:
-    """`POST /api/biblioteca` -> crea un documento `{titulo, tipo, ...}` -> `{documento}`."""
+    """`POST /api/texto` -> crea un documento `{titulo, tipo, ...}` -> `{documento}`."""
     datos = await leer_json(request)
     titulo = datos.get("titulo")
     if not isinstance(titulo, str) or not titulo.strip():
@@ -115,7 +115,7 @@ async def crear(request: Request) -> Response:
 
 
 async def obtener(request: Request) -> Response:
-    """`GET /api/biblioteca/{doc_id}` -> `{documento}` (404 si no existe)."""
+    """`GET /api/texto/{doc_id}` -> `{documento}` (404 si no existe)."""
     doc = biblioteca.obtener(request.path_params["doc_id"])
     if doc is None:
         return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
@@ -123,7 +123,7 @@ async def obtener(request: Request) -> Response:
 
 
 async def guardar(request: Request) -> Response:
-    """`PUT /api/biblioteca/{doc_id}` -> actualiza -> `{documento}` (puede cambiar el id)."""
+    """`PUT /api/texto/{doc_id}` -> actualiza -> `{documento}` (puede cambiar el id)."""
     doc_id = request.path_params["doc_id"]
     datos = await leer_json(request)
     kwargs: dict[str, object] = {}
@@ -146,7 +146,7 @@ async def guardar(request: Request) -> Response:
 
 
 async def borrar(request: Request) -> Response:
-    """`DELETE /api/biblioteca/{doc_id}` -> a papelera -> `{mensaje}` (404)."""
+    """`DELETE /api/texto/{doc_id}` -> a papelera -> `{mensaje}` (404)."""
     try:
         biblioteca.borrar(request.path_params["doc_id"])
     except biblioteca.BibliotecaError as e:
@@ -160,12 +160,12 @@ async def borrar(request: Request) -> Response:
 
 
 async def papelera_listar(request: Request) -> Response:
-    """`GET /api/biblioteca/papelera` -> `{papelera: [...]}`."""
+    """`GET /api/texto/papelera` -> `{papelera: [...]}`."""
     return JSONResponse({"papelera": biblioteca.listar_papelera()})
 
 
 async def papelera_restaurar(request: Request) -> Response:
-    """`POST /api/biblioteca/papelera/{pid}/restaurar` -> `{documento}` (400/404)."""
+    """`POST /api/texto/papelera/{pid}/restaurar` -> `{documento}` (400/404)."""
     try:
         doc = biblioteca.restaurar(request.path_params["pid"])
     except biblioteca.BibliotecaError as e:
@@ -180,7 +180,7 @@ async def papelera_restaurar(request: Request) -> Response:
 
 
 async def editoriales(request: Request) -> Response:
-    """`GET /api/biblioteca/editoriales?marca=&pipeline=` -> `{editoriales: [...]}` (auto-adjunto).
+    """`GET /api/texto/editoriales?marca=&pipeline=` -> `{editoriales: [...]}` (auto-adjunto).
 
     `pipeline` (opcional) acota el auto-adjunto al conjunto que entra en ese proceso.
     """
@@ -193,7 +193,7 @@ async def editoriales(request: Request) -> Response:
 
 
 async def validacion(request: Request) -> Response:
-    """`GET /api/biblioteca/validacion?marca=` -> diagnostico de los 4 pilares editoriales.
+    """`GET /api/texto/validacion?marca=` -> diagnostico de los 4 pilares editoriales.
 
     Devuelve `{completa, faltan, recomendacion, pilares}` (ver `biblioteca.validacion_editorial`).
     Lo consume el SPA para avisar si la linea editorial de la marca esta incompleta ANTES de
@@ -204,12 +204,12 @@ async def validacion(request: Request) -> Response:
 
 
 async def areas(request: Request) -> Response:
-    """`GET /api/biblioteca/areas` -> `{areas: [{id, nombre}]}` (secciones como contexto)."""
+    """`GET /api/texto/areas` -> `{areas: [{id, nombre}]}` (secciones como contexto)."""
     return JSONResponse({"areas": biblioteca_lanzar.areas_disponibles()})
 
 
 async def marcas_disponibles(request: Request) -> Response:
-    """`GET /api/biblioteca/marcas` -> `{marcas: [{id, nombre}]}` (catalogo de marcas).
+    """`GET /api/texto/marcas` -> `{marcas: [{id, nombre}]}` (catalogo de marcas).
 
     La Biblioteca es autosuficiente: expone su propio catalogo de marcas (en vez de
     depender del endpoint de skills, que se retira) para poblar el selector del SPA.
@@ -223,7 +223,7 @@ async def marcas_disponibles(request: Request) -> Response:
 
 
 async def pipelines_listar(request: Request) -> Response:
-    """`GET /api/biblioteca/pipelines` -> `{pipelines: [{id, titulo, descripcion, rol, prompt_base_id}]}`.
+    """`GET /api/texto/pipelines` -> `{pipelines: [{id, titulo, descripcion, rol, prompt_base_id}]}`.
 
     Es el catalogo de procesos de generacion: para cada uno, su prompt base EFECTIVO (resuelto
     por el registro, considerando rebindeos en la Biblioteca). Sostiene la vista de atribucion.
@@ -245,7 +245,7 @@ async def pipelines_listar(request: Request) -> Response:
 
 
 async def pipeline_preview(request: Request) -> Response:
-    """`GET /api/biblioteca/pipelines/{pid}/preview?marca=&contexto=` -> prompt ENSAMBLADO.
+    """`GET /api/texto/pipelines/{pid}/preview?marca=&contexto=` -> prompt ENSAMBLADO.
 
     "Lo que inyectas es lo que ves": muestra el prompt final (base + editoriales + contexto)
     que recibiria `claude -p`, SIN lanzar nada. Resuelve de raiz "no se que se inyecta donde".
@@ -264,7 +264,7 @@ async def pipeline_preview(request: Request) -> Response:
 
 
 async def historial(request: Request) -> Response:
-    """`GET /api/biblioteca/{doc_id}/historial` -> `{historial: [{sha, fecha, autor, mensaje}]}`."""
+    """`GET /api/texto/{doc_id}/historial` -> `{historial: [{sha, fecha, autor, mensaje}]}`."""
     try:
         items = biblioteca.historial(request.path_params["doc_id"])
     except biblioteca.BibliotecaError as e:
@@ -273,7 +273,7 @@ async def historial(request: Request) -> Response:
 
 
 async def version(request: Request) -> Response:
-    """`GET /api/biblioteca/{doc_id}/version/{sha}` -> `{documento}` de esa version (404)."""
+    """`GET /api/texto/{doc_id}/version/{sha}` -> `{documento}` de esa version (404)."""
     doc = biblioteca.version(request.path_params["doc_id"], request.path_params["sha"])
     if doc is None:
         return JSONResponse({"error": "No se encontró esa versión."}, status_code=404)
@@ -281,7 +281,7 @@ async def version(request: Request) -> Response:
 
 
 async def revertir(request: Request) -> Response:
-    """`POST /api/biblioteca/{doc_id}/revertir/{sha}` -> revierte (commit nuevo) -> `{documento}`."""
+    """`POST /api/texto/{doc_id}/revertir/{sha}` -> revierte (commit nuevo) -> `{documento}`."""
     try:
         doc = biblioteca.restaurar_version(
             request.path_params["doc_id"], request.path_params["sha"],
@@ -351,7 +351,7 @@ def _bloque_de_target(target: dict, marca: str) -> tuple[str, str, Response | No
 
 
 async def lanzar(request: Request) -> Response:
-    """`POST /api/biblioteca/lanzar` -> compone y ENCOLA -> `{generacion}`.
+    """`POST /api/texto/lanzar` -> compone y ENCOLA -> `{generacion}`.
 
     Cuerpo JSON: `{prompt_id?|texto?, titulo?, marca, adjuntos?: [ids], target: {tipo, valor}}`.
     `target.tipo ∈ {ninguno, contenido, url, area}`. Marca/prompt los valida el dominio.
@@ -419,7 +419,7 @@ async def _guardar_subida(archivo: UploadFile) -> tuple[Path, Path, str]:
 
 
 async def lanzar_archivo(request: Request) -> Response:
-    """`POST /api/biblioteca/lanzar-archivo` (multipart) -> compone con el archivo -> `{generacion}`.
+    """`POST /api/texto/lanzar-archivo` (multipart) -> compone con el archivo -> `{generacion}`.
 
     Form: `archivo`, `marca`, `prompt_id?`/`texto?`, `titulo?`, `adjuntos` (repetido o CSV).
     Texto (.txt/.md/...) se LEE e incrusta; media (imagen/video) se pasa por RUTA temporal
@@ -492,23 +492,23 @@ async def lanzar_archivo(request: Request) -> Response:
 
 # Rutas: estaticas y multi-segmento ANTES que la parametrica `/{doc_id:path}` (captura barras).
 RUTAS = [
-    Route("/api/biblioteca", listar, methods=["GET"]),
-    Route("/api/biblioteca", crear, methods=["POST"]),
-    Route("/api/biblioteca/papelera", papelera_listar, methods=["GET"]),
-    Route("/api/biblioteca/papelera/{pid}/restaurar", papelera_restaurar, methods=["POST"]),
-    Route("/api/biblioteca/editoriales", editoriales, methods=["GET"]),
-    Route("/api/biblioteca/validacion", validacion, methods=["GET"]),
-    Route("/api/biblioteca/areas", areas, methods=["GET"]),
-    Route("/api/biblioteca/marcas", marcas_disponibles, methods=["GET"]),
-    Route("/api/biblioteca/pipelines", pipelines_listar, methods=["GET"]),
-    Route("/api/biblioteca/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
-    Route("/api/biblioteca/lanzar", lanzar, methods=["POST"]),
-    Route("/api/biblioteca/lanzar-archivo", lanzar_archivo, methods=["POST"]),
+    Route("/api/texto", listar, methods=["GET"]),
+    Route("/api/texto", crear, methods=["POST"]),
+    Route("/api/texto/papelera", papelera_listar, methods=["GET"]),
+    Route("/api/texto/papelera/{pid}/restaurar", papelera_restaurar, methods=["POST"]),
+    Route("/api/texto/editoriales", editoriales, methods=["GET"]),
+    Route("/api/texto/validacion", validacion, methods=["GET"]),
+    Route("/api/texto/areas", areas, methods=["GET"]),
+    Route("/api/texto/marcas", marcas_disponibles, methods=["GET"]),
+    Route("/api/texto/pipelines", pipelines_listar, methods=["GET"]),
+    Route("/api/texto/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
+    Route("/api/texto/lanzar", lanzar, methods=["POST"]),
+    Route("/api/texto/lanzar-archivo", lanzar_archivo, methods=["POST"]),
     # Multi-segmento de versionado: el sufijo literal ancla la captura del `doc_id:path`.
-    Route("/api/biblioteca/{doc_id:path}/historial", historial, methods=["GET"]),
-    Route("/api/biblioteca/{doc_id:path}/version/{sha}", version, methods=["GET"]),
-    Route("/api/biblioteca/{doc_id:path}/revertir/{sha}", revertir, methods=["POST"]),
-    Route("/api/biblioteca/{doc_id:path}", obtener, methods=["GET"]),
-    Route("/api/biblioteca/{doc_id:path}", guardar, methods=["PUT"]),
-    Route("/api/biblioteca/{doc_id:path}", borrar, methods=["DELETE"]),
+    Route("/api/texto/{doc_id:path}/historial", historial, methods=["GET"]),
+    Route("/api/texto/{doc_id:path}/version/{sha}", version, methods=["GET"]),
+    Route("/api/texto/{doc_id:path}/revertir/{sha}", revertir, methods=["POST"]),
+    Route("/api/texto/{doc_id:path}", obtener, methods=["GET"]),
+    Route("/api/texto/{doc_id:path}", guardar, methods=["PUT"]),
+    Route("/api/texto/{doc_id:path}", borrar, methods=["DELETE"]),
 ]

@@ -7,7 +7,7 @@ Cubre:
     token (`text_delta`), turnos por `message_start`, `thinking` ignorado.
   - Store de generaciones (crear/obtener/actualizar/listar) aislado en tmp.
   - Endpoints `GET /api/generaciones` y `GET /api/generaciones/{id}`.
-  - El POST a `/api/biblioteca/lanzar` (prompt salida=piezas) con el lanzador por defecto
+  - El POST a `/api/texto/lanzar` (prompt salida=piezas) con el lanzador por defecto
     (noop) deja la generacion en `ejecutando` (no bloquea, sin resultado todavia) y sondeable.
   - El lanzador de imagen completa la generacion con su `resultado`.
 """
@@ -430,7 +430,7 @@ def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
 
     cli = _cliente()  # lanzador de generacion por defecto = noop (no claude)
     r = cli.post(
-        "/api/biblioteca/lanzar",
+        "/api/texto/lanzar",
         json={"prompt_id": prompt.id, "marca": _MARCA, "redes": ["x"],
               "target": {"tipo": "contenido", "valor": "una nota"}},
     )

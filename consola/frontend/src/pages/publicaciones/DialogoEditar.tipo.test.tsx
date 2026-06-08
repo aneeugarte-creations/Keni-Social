@@ -89,17 +89,17 @@ describe("DialogoEditar — lógica de tipo de plantilla", () => {
 
 // --- Puente al Estudio de video ---
 /** Espejo del destino de navegación del botón "Editar en Estudio de video". */
-function rutaEstudioVideo(contenidoId: string): string {
+function rutaVideo(contenidoId: string): string {
   return `/contenido/video?contenido=${encodeURIComponent(contenidoId)}`;
 }
 
 describe("DialogoEditar — puente al Estudio de video", () => {
   it("navega a /contenido/video con el contenido_id de la pieza", () => {
-    expect(rutaEstudioVideo("cont-42")).toBe("/contenido/video?contenido=cont-42");
+    expect(rutaVideo("cont-42")).toBe("/contenido/video?contenido=cont-42");
   });
 
   it("escapa ids con caracteres especiales en el query param", () => {
-    expect(rutaEstudioVideo("a/b c")).toBe("/contenido/video?contenido=a%2Fb%20c");
+    expect(rutaVideo("a/b c")).toBe("/contenido/video?contenido=a%2Fb%20c");
   });
 });
 

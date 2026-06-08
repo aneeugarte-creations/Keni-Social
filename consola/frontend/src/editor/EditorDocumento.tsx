@@ -90,7 +90,7 @@ export function EditorDocumento({
   onPlantillas?: () => void;
   // Si la pestaña está atada a plantilla, avisa cuando NO hay capa marcada como hueco de foto.
   avisaHueco?: boolean;
-  // «Adaptar a…»: abre el documento reencuadrado en una pestaña nueva (lo cablea EditorPro).
+  // «Adaptar a…»: abre el documento reencuadrado en una pestaña nueva (lo cablea Imagen).
   onAbrirAdaptado?: (doc: Documento, nombre: string) => void;
 }) {
   const fuentesExtra = useFuentesMarca(marca);

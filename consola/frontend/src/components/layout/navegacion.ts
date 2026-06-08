@@ -4,7 +4,9 @@ import {
   Bot,
   CalendarClock,
   CalendarDays,
+  Clapperboard,
   GitBranch,
+  Image,
   ImagePlus,
   Layers,
   LayoutDashboard,
@@ -15,6 +17,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Type,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,7 +54,9 @@ export const ICONOS: Record<string, LucideIcon> = {
   Bot,
   CalendarClock,
   CalendarDays,
+  Clapperboard,
   GitBranch,
+  Image,
   ImagePlus,
   Layers,
   LayoutDashboard,
@@ -62,6 +67,7 @@ export const ICONOS: Record<string, LucideIcon> = {
   Send,
   ShieldCheck,
   Sparkles,
+  Type,
 };
 
 /** Resuelve un nombre de icono del catálogo a su componente (fallback Sparkles). */

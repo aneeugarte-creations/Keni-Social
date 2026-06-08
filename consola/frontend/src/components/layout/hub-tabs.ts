@@ -4,9 +4,7 @@ import {
   BookText,
   CalendarClock,
   CalendarDays,
-  Clapperboard,
   GitBranch,
-  Image,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -90,25 +88,20 @@ export const TABS_CALENDARIO: ItemTabHub[] = [
   { ruta: "/operacion/calendario/turnos", etiqueta: "Turnos", icono: CalendarClock },
 ];
 
-// Hub Estudio (/contenido): SOLO las superficies de creación de arte — imágenes y
-// video. La Biblioteca (prompts + línea editorial) NO va aquí: es CONTEXTO, no arte, y
-// vive como su propia entrada de nav (`/contenido/biblioteca`, hub TABS_BIBLIOTECA).
-// El editor de imágenes (/contenido/editor) comparte prefijo con /contenido/biblioteca,
-// por eso lleva `end: true` para evitar que se marque activo dentro de la biblioteca.
-export const TABS_CONTENIDO: ItemTabHub[] = [
-  { ruta: "/contenido/editor", etiqueta: "Imágenes", icono: Image, end: true },
-  { ruta: "/contenido/video", etiqueta: "Video", icono: Clapperboard },
-];
+// El bloque CONTENIDO ya no agrupa un hub "Estudio" con pestañas: Imagen, Video y Texto
+// son TRES entradas planas del sidebar (sin sub-navegación por pestañas). Imagen
+// (`/contenido/imagen`) y Video (`/contenido/video`) son páginas sueltas; Texto sigue
+// siendo el hub de la Biblioteca (abajo).
 
-// Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las
-// plantillas de contenido (antes la página "Activos", absorbida como pestaña).
-export const TABS_BIBLIOTECA: ItemTabHub[] = [
-  // Una sola Biblioteca: prompts + línea editorial + plantillas, con filtros (sin sub-pestañas).
-  { ruta: "/contenido/biblioteca/documentos", etiqueta: "Biblioteca", icono: BookText },
-  { ruta: "/contenido/biblioteca/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
+// La página TEXTO (antes "Biblioteca") es un hub: documentos (prompts + línea editorial),
+// estrategia de marcas e inteligencia de plataforma (algoritmos).
+export const TABS_TEXTO: ItemTabHub[] = [
+  // Documentos: prompts + línea editorial + plantillas, con filtros.
+  { ruta: "/contenido/texto/documentos", etiqueta: "Documentos", icono: BookText },
+  { ruta: "/contenido/texto/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
   // Algoritmos: inteligencia de plataforma (cambios de algoritmo por red). Vive en
-  // la Biblioteca porque su salida son las fichas editoriales de cada plataforma.
-  { ruta: "/contenido/biblioteca/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
+  // Texto porque su salida son las fichas editoriales de cada plataforma.
+  { ruta: "/contenido/texto/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
 // Actividad IA es un hub: el feed de actividad (índice del hub) y los Pipelines (vista
@@ -132,12 +125,9 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
   "/operacion/calendario": TABS_CALENDARIO,
-  // Estudio y Biblioteca son DOS hubs distintos bajo el prefijo /contenido. El más
-  // específico (/contenido/biblioteca) DEBE ir antes que /contenido: `pestanasDeRuta`
-  // matchea por prefijo y devuelve el primero, así una ruta de biblioteca resuelve a
-  // TABS_BIBLIOTECA y no se la traga el hub Estudio (/contenido → TABS_CONTENIDO).
-  "/contenido/biblioteca": TABS_BIBLIOTECA,
-  "/contenido": TABS_CONTENIDO,
+  // Bajo /contenido solo Texto es un hub con pestañas; Imagen y Video son páginas planas
+  // (sin entrada aquí), por eso /contenido ya no figura en el mapa.
+  "/contenido/texto": TABS_TEXTO,
   "/datos/actividad": TABS_ACTIVIDAD,
 };
 

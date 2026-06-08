@@ -33,45 +33,45 @@ def cliente(monkeypatch, tmp_path):
 
 
 def test_crear_listar_obtener(cliente):
-    r = cliente.post("/api/biblioteca", json={"titulo": "Mi prompt", "tipo": "prompt", "cuerpo": "haz algo"})
+    r = cliente.post("/api/texto", json={"titulo": "Mi prompt", "tipo": "prompt", "cuerpo": "haz algo"})
     assert r.status_code == 200
     doc = r.json()["documento"]
     assert doc["id"] == "prompt/mi-prompt"
 
-    r = cliente.get("/api/biblioteca", params={"tipo": "prompt"})
+    r = cliente.get("/api/texto", params={"tipo": "prompt"})
     assert [d["id"] for d in r.json()["documentos"]] == ["prompt/mi-prompt"]
 
-    r = cliente.get(f"/api/biblioteca/{doc['id']}")
+    r = cliente.get(f"/api/texto/{doc['id']}")
     assert r.status_code == 200
     assert r.json()["documento"]["cuerpo"].strip() == "haz algo"
 
 
 def test_crear_sin_titulo_400(cliente):
-    r = cliente.post("/api/biblioteca", json={"tipo": "prompt"})
+    r = cliente.post("/api/texto", json={"tipo": "prompt"})
     assert r.status_code == 400
 
 
 def test_obtener_inexistente_404(cliente):
-    r = cliente.get("/api/biblioteca/prompt/no-existe")
+    r = cliente.get("/api/texto/prompt/no-existe")
     assert r.status_code == 404
 
 
 def test_guardar_renombra(cliente):
-    doc = cliente.post("/api/biblioteca", json={"titulo": "Uno", "tipo": "prompt"}).json()["documento"]
-    r = cliente.put(f"/api/biblioteca/{doc['id']}", json={"titulo": "Dos"})
+    doc = cliente.post("/api/texto", json={"titulo": "Uno", "tipo": "prompt"}).json()["documento"]
+    r = cliente.put(f"/api/texto/{doc['id']}", json={"titulo": "Dos"})
     assert r.status_code == 200
     assert r.json()["documento"]["id"] == "prompt/dos"
-    assert cliente.get("/api/biblioteca/prompt/uno").status_code == 404
+    assert cliente.get("/api/texto/prompt/uno").status_code == 404
 
 
 def test_borrar_papelera_restaurar(cliente):
-    doc = cliente.post("/api/biblioteca", json={"titulo": "Tmp", "tipo": "prompt"}).json()["documento"]
-    assert cliente.delete(f"/api/biblioteca/{doc['id']}").status_code == 200
+    doc = cliente.post("/api/texto", json={"titulo": "Tmp", "tipo": "prompt"}).json()["documento"]
+    assert cliente.delete(f"/api/texto/{doc['id']}").status_code == 200
 
-    papelera = cliente.get("/api/biblioteca/papelera").json()["papelera"]
+    papelera = cliente.get("/api/texto/papelera").json()["papelera"]
     assert len(papelera) == 1 and papelera[0]["origen"] == doc["id"]
 
-    r = cliente.post(f"/api/biblioteca/papelera/{papelera[0]['id']}/restaurar")
+    r = cliente.post(f"/api/texto/papelera/{papelera[0]['id']}/restaurar")
     assert r.status_code == 200
     assert r.json()["documento"]["id"] == doc["id"]
 
@@ -82,9 +82,9 @@ def test_borrar_papelera_restaurar(cliente):
 
 
 def test_editoriales_por_marca(cliente):
-    cliente.post("/api/biblioteca", json={"titulo": "Plataformas", "tipo": "editorial", "clase": "plataforma"})
-    cliente.post("/api/biblioteca", json={"titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA]})
-    r = cliente.get("/api/biblioteca/editoriales", params={"marca": _MARCA})
+    cliente.post("/api/texto", json={"titulo": "Plataformas", "tipo": "editorial", "clase": "plataforma"})
+    cliente.post("/api/texto", json={"titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA]})
+    r = cliente.get("/api/texto/editoriales", params={"marca": _MARCA})
     ids = {d["id"] for d in r.json()["editoriales"]}
     assert ids == {"editorial/plataformas", "editorial/voz"}
 
@@ -92,10 +92,10 @@ def test_editoriales_por_marca(cliente):
 def test_validacion_marca_incompleta(cliente):
     # Solo plataforma (con cuerpo): faltan marca, voz y tropicalizacion -> incompleta.
     cliente.post(
-        "/api/biblioteca",
+        "/api/texto",
         json={"titulo": "Plataformas", "tipo": "editorial", "clase": "plataforma", "cuerpo": "reglas de red"},
     )
-    r = cliente.get("/api/biblioteca/validacion", params={"marca": _MARCA})
+    r = cliente.get("/api/texto/validacion", params={"marca": _MARCA})
     datos = r.json()
     assert datos["completa"] is False
     assert set(datos["faltan"]) == {"marca", "voz", "tropicalizacion"}
@@ -113,8 +113,8 @@ def test_validacion_marca_completa(cliente):
         cuerpo = {"titulo": clase, "tipo": "editorial", "clase": clase, "cuerpo": f"contenido {clase}"}
         if marcas_doc:
             cuerpo["marcas"] = marcas_doc
-        cliente.post("/api/biblioteca", json=cuerpo)
-    r = cliente.get("/api/biblioteca/validacion", params={"marca": _MARCA})
+        cliente.post("/api/texto", json=cuerpo)
+    r = cliente.get("/api/texto/validacion", params={"marca": _MARCA})
     datos = r.json()
     assert datos["completa"] is True
     assert datos["faltan"] == []
@@ -122,7 +122,7 @@ def test_validacion_marca_completa(cliente):
 
 
 def test_validacion_sin_marca_pide_marca(cliente):
-    r = cliente.get("/api/biblioteca/validacion")
+    r = cliente.get("/api/texto/validacion")
     datos = r.json()
     assert datos["completa"] is False
     assert "marca" in datos["faltan"] and "voz" in datos["faltan"]
@@ -131,13 +131,13 @@ def test_validacion_sin_marca_pide_marca(cliente):
 
 def test_validacion_cuerpo_vacio_no_cubre_pilar(cliente):
     # Un editorial SIN cuerpo no cuenta como pilar cubierto.
-    cliente.post("/api/biblioteca", json={"titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA]})
-    r = cliente.get("/api/biblioteca/validacion", params={"marca": _MARCA})
+    cliente.post("/api/texto", json={"titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA]})
+    r = cliente.get("/api/texto/validacion", params={"marca": _MARCA})
     assert "voz" in r.json()["faltan"]
 
 
 def test_areas_disponibles(cliente):
-    r = cliente.get("/api/biblioteca/areas")
+    r = cliente.get("/api/texto/areas")
     ids = {a["id"] for a in r.json()["areas"]}
     assert {"parrilla", "pendientes"} <= ids
 
@@ -148,9 +148,9 @@ def test_areas_disponibles(cliente):
 
 
 def test_lanzar_contenido(cliente):
-    creado = cliente.post("/api/biblioteca", json={"titulo": "P", "tipo": "prompt", "cuerpo": "resume"})
+    creado = cliente.post("/api/texto", json={"titulo": "P", "tipo": "prompt", "cuerpo": "resume"})
     doc = creado.json()["documento"]
-    r = cliente.post("/api/biblioteca/lanzar", json={
+    r = cliente.post("/api/texto/lanzar", json={
         "prompt_id": doc["id"], "marca": _MARCA,
         "target": {"tipo": "contenido", "valor": "una nota larga"},
     })
@@ -160,19 +160,19 @@ def test_lanzar_contenido(cliente):
 
 def test_lanzar_area_degrada_sin_bd(cliente):
     # El proveedor de area lee la BD; sin BD degrada con gracia (no rompe el lanzamiento).
-    r = cliente.post("/api/biblioteca/lanzar", json={
+    r = cliente.post("/api/texto/lanzar", json={
         "texto": "redacta", "marca": _MARCA, "target": {"tipo": "area", "valor": "parrilla"},
     })
     assert r.status_code == 200
 
 
 def test_lanzar_sin_marca_400(cliente):
-    r = cliente.post("/api/biblioteca/lanzar", json={"texto": "x", "target": {"tipo": "ninguno"}})
+    r = cliente.post("/api/texto/lanzar", json={"texto": "x", "target": {"tipo": "ninguno"}})
     assert r.status_code == 400
 
 
 def test_lanzar_area_invalida_400(cliente):
-    r = cliente.post("/api/biblioteca/lanzar", json={
+    r = cliente.post("/api/texto/lanzar", json={
         "texto": "x", "marca": _MARCA, "target": {"tipo": "area", "valor": "inexistente"},
     })
     assert r.status_code == 400
@@ -189,7 +189,7 @@ def test_lanzar_prompt_piezas_con_redes(monkeypatch, tmp_path):
         lambda *a, **k: capturado.update(k),
     )
     cli = TestClient(Starlette(routes=list(api_bib.RUTAS)))
-    creado = cli.post("/api/biblioteca", json={
+    creado = cli.post("/api/texto", json={
         "titulo": "Copy por red", "tipo": "prompt", "cuerpo": "haz copy por red",
     })
     doc_id = creado.json()["documento"]["id"]
@@ -200,7 +200,7 @@ def test_lanzar_prompt_piezas_con_redes(monkeypatch, tmp_path):
         encoding="utf-8",
     )
 
-    r = cli.post("/api/biblioteca/lanzar", json={
+    r = cli.post("/api/texto/lanzar", json={
         "prompt_id": doc_id, "marca": _MARCA, "redes": ["instagram", "x"],
         "target": {"tipo": "contenido", "valor": "una nota"},
     })

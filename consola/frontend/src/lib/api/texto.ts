@@ -1,4 +1,4 @@
-// Fragmento del cliente API: dominio «biblioteca». Generado al partir lib/api.ts.
+// Fragmento del cliente API: dominio «texto». Generado al partir lib/api.ts.
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion, query } from "./_core";
 import type {
@@ -19,9 +19,9 @@ import type {
   ValidacionEditorial,
 } from "@/types";
 
-export const apiBiblioteca = {
+export const apiTexto = {
   // --- Biblioteca de documentos (prompts + línea editorial) ---
-  biblioteca: (
+  texto: (
     filtros?: {
       tipo?: string;
       carpeta?: string;
@@ -35,7 +35,7 @@ export const apiBiblioteca = {
     signal?: AbortSignal,
   ) =>
     peticion<RespuestaBiblioteca>(
-      `/biblioteca${query({
+      `/texto${query({
         tipo: filtros?.tipo,
         carpeta: filtros?.carpeta,
         q: filtros?.q,
@@ -48,47 +48,47 @@ export const apiBiblioteca = {
       { signal },
     ),
   crearDocumento: (cuerpo: CuerpoCrearDocumento) =>
-    peticion<RespuestaDocumento>("/biblioteca", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaDocumento>("/texto", { metodo: "POST", json: cuerpo }),
   // El id es una ruta con barras (p. ej. `prompt/x/y`); el backend lo casa con `{doc_id:path}`,
   // así que NO se codifica (los segmentos son slugs seguros [a-z0-9-]).
   documento: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaDocumento>(`/biblioteca/${id}`, { signal }),
+    peticion<RespuestaDocumento>(`/texto/${id}`, { signal }),
   guardarDocumento: (id: string, cuerpo: CuerpoGuardarDocumento) =>
-    peticion<RespuestaDocumento>(`/biblioteca/${id}`, { metodo: "PUT", json: cuerpo }),
+    peticion<RespuestaDocumento>(`/texto/${id}`, { metodo: "PUT", json: cuerpo }),
   eliminarDocumento: (id: string) =>
-    peticion<RespuestaMensaje>(`/biblioteca/${id}`, { metodo: "DELETE" }),
-  papeleraBiblioteca: (signal?: AbortSignal) =>
-    peticion<RespuestaPapelera>("/biblioteca/papelera", { signal }),
+    peticion<RespuestaMensaje>(`/texto/${id}`, { metodo: "DELETE" }),
+  papeleraTexto: (signal?: AbortSignal) =>
+    peticion<RespuestaPapelera>("/texto/papelera", { signal }),
   restaurarDocumento: (id: string) =>
-    peticion<RespuestaDocumento>(`/biblioteca/papelera/${encodeURIComponent(id)}/restaurar`, {
+    peticion<RespuestaDocumento>(`/texto/papelera/${encodeURIComponent(id)}/restaurar`, {
       metodo: "POST",
     }),
-  editorialesBiblioteca: (marca: string, pipeline?: string, signal?: AbortSignal) =>
-    peticion<RespuestaEditoriales>(`/biblioteca/editoriales${query({ marca, pipeline })}`, { signal }),
+  editorialesTexto: (marca: string, pipeline?: string, signal?: AbortSignal) =>
+    peticion<RespuestaEditoriales>(`/texto/editoriales${query({ marca, pipeline })}`, { signal }),
   // --- Pipelines: registro + preview del prompt ensamblado (atribución) ---
-  pipelinesBiblioteca: (signal?: AbortSignal) =>
-    peticion<RespuestaPipelinesBiblioteca>("/biblioteca/pipelines", { signal }),
+  pipelinesTexto: (signal?: AbortSignal) =>
+    peticion<RespuestaPipelinesBiblioteca>("/texto/pipelines", { signal }),
   previewPipeline: (pipeline: string, marca: string, contexto?: string, signal?: AbortSignal) =>
     peticion<PreviewPipeline>(
-      `/biblioteca/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
+      `/texto/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
       { signal },
     ),
   // --- Versionado git: historial, una versión y rollback no destructivo ---
-  historialBiblioteca: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaHistorialBiblioteca>(`/biblioteca/${id}/historial`, { signal }),
-  versionBiblioteca: (id: string, sha: string, signal?: AbortSignal) =>
-    peticion<RespuestaDocumento>(`/biblioteca/${id}/version/${sha}`, { signal }),
-  revertirBiblioteca: (id: string, sha: string) =>
-    peticion<RespuestaDocumento>(`/biblioteca/${id}/revertir/${sha}`, { metodo: "POST" }),
-  validacionBiblioteca: (marca: string, signal?: AbortSignal) =>
-    peticion<ValidacionEditorial>(`/biblioteca/validacion${query({ marca })}`, { signal }),
-  areasBiblioteca: (signal?: AbortSignal) =>
-    peticion<RespuestaAreas>("/biblioteca/areas", { signal }),
-  marcasBiblioteca: (signal?: AbortSignal) =>
-    peticion<RespuestaMarcasBiblioteca>("/biblioteca/marcas", { signal }),
-  lanzarBiblioteca: (cuerpo: CuerpoLanzarBiblioteca) =>
-    peticion<RespuestaGeneracion>("/biblioteca/lanzar", { metodo: "POST", json: cuerpo }),
-  lanzarBibliotecaArchivo: (
+  historialTexto: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaHistorialBiblioteca>(`/texto/${id}/historial`, { signal }),
+  versionTexto: (id: string, sha: string, signal?: AbortSignal) =>
+    peticion<RespuestaDocumento>(`/texto/${id}/version/${sha}`, { signal }),
+  revertirTexto: (id: string, sha: string) =>
+    peticion<RespuestaDocumento>(`/texto/${id}/revertir/${sha}`, { metodo: "POST" }),
+  validacionTexto: (marca: string, signal?: AbortSignal) =>
+    peticion<ValidacionEditorial>(`/texto/validacion${query({ marca })}`, { signal }),
+  areasTexto: (signal?: AbortSignal) =>
+    peticion<RespuestaAreas>("/texto/areas", { signal }),
+  marcasTexto: (signal?: AbortSignal) =>
+    peticion<RespuestaMarcasBiblioteca>("/texto/marcas", { signal }),
+  lanzarTexto: (cuerpo: CuerpoLanzarBiblioteca) =>
+    peticion<RespuestaGeneracion>("/texto/lanzar", { metodo: "POST", json: cuerpo }),
+  lanzarTextoArchivo: (
     archivo: File,
     marca: string,
     opts: {
@@ -107,7 +107,7 @@ export const apiBiblioteca = {
     if (opts.titulo) form.set("titulo", opts.titulo);
     for (const a of opts.adjuntos ?? []) form.append("adjuntos", a);
     for (const r of opts.redes ?? []) form.append("redes", r);
-    return peticion<RespuestaGeneracion>("/biblioteca/lanzar-archivo", {
+    return peticion<RespuestaGeneracion>("/texto/lanzar-archivo", {
       metodo: "POST",
       form,
       timeoutMs: 120_000,

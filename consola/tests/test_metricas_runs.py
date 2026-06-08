@@ -264,7 +264,7 @@ def test_historial_prompt_guarda_y_expone_metricas(entorno):
 
     c = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_PROMPT, _METRICAS_DEMO))
     gen = c.post(
-        "/api/biblioteca/lanzar",
+        "/api/texto/lanzar",
         json={"prompt_id": prompt.id, "marca": _MARCA, "redes": ["x"],
               "target": {"tipo": "contenido", "valor": "una nota"}},
     ).json()
