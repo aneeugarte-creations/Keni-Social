@@ -1,0 +1,14 @@
+[Unit]
+Description=keni-social DOCKER-USER firewall (cierra el bypass Docker<->UFW)
+After=docker.service
+Requires=docker.service
+# Re-aplica si Docker se reinicia (Docker preserva DOCKER-USER, pero por si acaso).
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/keni-docker-firewall
+
+[Install]
+WantedBy=multi-user.target

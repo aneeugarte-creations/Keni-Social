@@ -1,0 +1,29 @@
+## Reglas auditd de keni-social. Se instala en /etc/audit/rules.d/keni.rules y se carga
+## con `sudo augenrules --load` (o reinicio de auditd). Baseline DELIBERADAMENTE acotado:
+## cubre identidad, auth, sudo, config de SSH/Docker y el .env de secretos, SIN vigilar
+## /var/lib/docker (generaria un diluvio de eventos por la E/S normal de los contenedores).
+
+## Identidad y credenciales locales
+-w /etc/passwd  -p wa -k identity
+-w /etc/shadow  -p wa -k identity
+-w /etc/group   -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+
+## Escalada de privilegios
+-w /etc/sudoers   -p wa -k priv
+-w /etc/sudoers.d -p wa -k priv
+-w /usr/bin/sudo  -p x  -k priv_exec
+-w /usr/bin/su    -p x  -k priv_exec
+
+## Configuracion de SSH
+-w /etc/ssh/sshd_config   -p wa -k sshd
+-w /etc/ssh/sshd_config.d -p wa -k sshd
+
+## Configuracion del demonio Docker (NO el data-root, que es ruidoso)
+-w /etc/docker          -p wa -k docker
+-w /usr/bin/dockerd     -p wa -k docker
+-w /usr/bin/docker      -p x  -k docker_exec
+
+## Secretos del stack
+-w /home/ubuntu/keni-social/deploy/.env           -p wa -k keni_secrets
+-w /home/ubuntu/keni-social/deploy/woodpecker/.env -p wa -k keni_secrets

@@ -1,0 +1,11 @@
+[Unit]
+Description=keni-social backup local (Postgres dump + snapshot media Garage)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Overrides opcionales (BACKUP_DIR, BACKUP_KEEP, BACKUP_RCLONE_REMOTE). El `-` hace que
+# falte el fichero sin error.
+EnvironmentFile=-/etc/keni-backup.conf
+ExecStart=/usr/local/bin/keni-backup

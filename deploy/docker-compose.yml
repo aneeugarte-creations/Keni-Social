@@ -51,10 +51,11 @@ name: keni-social
 
 services:
   traefik:
-    # v3 (movil): Traefik v3.1 trae un cliente Docker que negocia API 1.24 y falla
-    # contra Docker Engine 29 ("client version 1.24 is too old", API min >=1.40).
-    # El v3 al dia negocia la version con el daemon. (Conviene fijar tag exacto.)
-    image: traefik:v3
+    # Tag FIJADO (antes `traefik:v3` movil): un tag flotante se actualiza solo en cada
+    # `docker pull` del deploy, metiendo cambios de comportamiento sin querer. Fijamos la
+    # version EXACTA que corre hoy (3.7.1) para builds reproducibles; subela a conciencia.
+    # (v3 ya negocia la API con el daemon; el DOCKER_API_VERSION de abajo cubre Engine 29.)
+    image: traefik:v3.7.1
     restart: unless-stopped
     environment:
       - DOCKER_API_VERSION=1.44
@@ -117,12 +118,25 @@ services:
       - traefik.http.routers.front.priority=1
       - traefik.http.routers.front.entrypoints=websecure
       - traefik.http.routers.front.tls.certresolver=le
-      - traefik.http.services.front.loadbalancer.server.port=80
+      # nginx no-root (nginxinc/nginx-unprivileged) escucha en 8080, no en 80.
+      - traefik.http.services.front.loadbalancer.server.port=8080
+      - traefik.http.routers.front.middlewares=keni-sec
       - autoheal=true  # vigilado por el sidecar autoheal
-    # nginx estatico: huella minima. 127.0.0.1 (no `localhost`): el busybox wget de
+      # Cabeceras de seguridad para TODO social.kenitech.io (front Y back, ver router back):
+      # HSTS (fuerza HTTPS en visitas siguientes), nosniff, X-Frame-Options: DENY (anti
+      # clickjacking) y Referrer-Policy. CSP se deja como follow-up: requiere validar el SPA
+      # (inline scripts/estilos, origen de la media) para no romperlo. Mismo patron que el
+      # middleware `sec-headers@file` de traefik/dynamic/legacy-sites.yml, definido aqui por
+      # labels para vivir junto al servicio.
+      - traefik.http.middlewares.keni-sec.headers.stsSeconds=31536000
+      - traefik.http.middlewares.keni-sec.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.keni-sec.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.keni-sec.headers.frameDeny=true
+      - traefik.http.middlewares.keni-sec.headers.referrerPolicy=strict-origin-when-cross-origin
+    # nginx estatico no-root: huella minima. 127.0.0.1 (no `localhost`): el busybox wget de
     # alpine intenta ::1 (IPv6) primero y nginx solo escucha IPv4 (ver front/Dockerfile).
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -243,6 +257,7 @@ services:
       - traefik.http.routers.back.entrypoints=websecure
       - traefik.http.routers.back.tls.certresolver=le
       - traefik.http.services.back.loadbalancer.server.port=8765
+      - traefik.http.routers.back.middlewares=keni-sec  # mismas cabeceras de seguridad que el front
       - autoheal=true  # el sidecar autoheal lo reinicia si /healthz queda unhealthy (cuelgue)
 
   daemons:
@@ -483,7 +498,9 @@ services:
     # basicauth y un subdominio (p.ej. mcp.kenitech.io). Ver README.
 
   db:
-    image: postgres:16
+    # Tag FIJADO (antes `postgres:16` movil): evita que un `docker pull` del deploy salte
+    # de version menor sin querer. 16.13 = la que corre hoy. Subir de minor a conciencia.
+    image: postgres:16.13
     restart: unless-stopped
     # Tuning para el VPS real (61 GiB, db mem_limit 8g). La app abre MUCHAS conexiones
     # cortas (back + daemons + worker escalable); el techo por defecto (max_connections=100)

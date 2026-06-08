@@ -17,12 +17,16 @@ COPY consola/frontend/ ./
 # en el orden de los pipelines de CI (elimina la posible condicion de carrera).
 RUN npx tsc -b && npx vite build --outDir /spa --emptyOutDir
 
-# --- runtime estatico ---
-FROM nginx:1.27-alpine
+# --- runtime estatico (nginx NO-ROOT) ---
+# nginxinc/nginx-unprivileged corre como uid 101 (sin root) y escucha en 8080, no en 80:
+# el master de nginx ya no necesita root para bind <1024. Endurece la cara publica (un
+# fallo en nginx/SPA ya no se ejecuta como root del contenedor). Traefik enruta a :8080
+# (ver loadbalancer.server.port en docker-compose.yml) y nginx.conf hace `listen 8080`.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY deploy/front/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /spa /usr/share/nginx/html
 # 127.0.0.1 (no `localhost`): el busybox wget de alpine intenta ::1 (IPv6) primero
 # y nginx solo escucha IPv4 -> falso "connection refused" -> unhealthy -> Traefik
 # (que ignora contenedores no-sanos) no enrutaria al front.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1:80/ || exit 1
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1

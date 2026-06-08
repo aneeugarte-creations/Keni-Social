@@ -1,0 +1,10 @@
+[Unit]
+Description=Ejecuta keni-backup a diario (03:30 UTC, antes de la ventana de auto-reboot 04:00)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target
