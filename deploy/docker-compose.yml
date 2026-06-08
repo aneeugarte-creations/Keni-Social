@@ -161,7 +161,6 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
-      KENI_SKILLS_CWD: /app
       # Store EDITABLE de ajustes (flags + tuning) cambiados desde la UI por el admin. En el
       # volumen COMPARTIDO (back, daemons, worker) para que un cambio en caliente lo vean
       # todos los procesos (precedencia store > env > defecto en config._crudo).
@@ -288,7 +287,6 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
-      KENI_SKILLS_CWD: /app
       IS_SANDBOX: "1"
       # Store EDITABLE de ajustes compartido con back/worker (mismo volumen keni-data): los
       # daemons leen aqui los flags/tuning cambiados en caliente (store > env > defecto).
@@ -368,7 +366,6 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
-      KENI_SKILLS_CWD: /app
       # Store EDITABLE de ajustes compartido con back/daemons (mismo volumen keni-data): el
       # worker ve los flags/tuning cambiados en caliente (store > env > defecto).
       KENI_CONSOLA_AJUSTES: /data/ajustes.toml

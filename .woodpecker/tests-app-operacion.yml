@@ -13,7 +13,7 @@ when:
         - "consola/src/keni_consola/api/franjas.py"
         - "consola/src/keni_consola/api/rota.py"
         - "consola/src/keni_consola/rota.py"
-        - "consola/src/keni_consola/dominio/{publicaciones,aprobacion}.py"
+        - "consola/src/keni_consola/dominio/publicaciones.py"
         - "consola/src/keni_consola/apps/operacion.toml"
 
 services:

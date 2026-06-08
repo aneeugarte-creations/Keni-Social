@@ -15,9 +15,6 @@ ENV PYTHONUNBUFFERED=1 \
     # Todo el estado de la app (consola.db SQLite, secretos.toml 0600, media,
     # tareas.json) cuelga de XDG_CONFIG_HOME -> volumen montado en /data.
     XDG_CONFIG_HOME=/data \
-    # Descubrimiento de skills DENTRO del contenedor (cierra #133 aqui): el repo
-    # vive en /app.
-    KENI_SKILLS_CWD=/app \
     # El back NO ejecuta `claude -p`: solo ENCOLA. El servicio `worker` consume la cola.
     KENI_WORKER_EXTERNO=1
 
