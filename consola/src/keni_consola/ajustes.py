@@ -126,7 +126,11 @@ def _toml_str(valor: str) -> str:
 def _escribir(datos: dict[str, str]) -> None:
     """Escribe los ajustes como TOML de forma atomica (temp + os.replace) e invalida cache."""
     global _CACHE_MTIME
-    lineas = [f"{clave} = {_toml_str(valor)}" for clave, valor in sorted(datos.items())]
+    # La clave TAMBIEN va entrecomillada: las claves por-marca (`KENI_PIPELINE::unotv`)
+    # llevan `::`, invalido en una clave TOML desnuda -> el fichero entero se vuelve
+    # imparseable y `_leer_disco` devolveria {} (perdiendo TODAS las claves en el siguiente
+    # guardado). Una basic-string key es valida y los nombres simples siguen parseando igual.
+    lineas = [f"{_toml_str(clave)} = {_toml_str(valor)}" for clave, valor in sorted(datos.items())]
     contenido = _CABECERA + ("\n".join(lineas) + "\n" if lineas else "")
     escribir_atomico(
         ruta_ajustes(), contenido, prefijo=".ajustes-", sufijo=".toml.tmp"

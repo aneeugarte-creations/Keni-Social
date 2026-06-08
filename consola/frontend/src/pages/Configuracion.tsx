@@ -905,16 +905,6 @@ function SeccionApariencia() {
  * Página de Ajustes: fuente de datos, alcance de marcas, métricas (Metricool) e
  * imagen IA. El botón "Actualizar" refresca las cachés de las queries.
  */
-/** Etiqueta corta del origen del valor actual de un ajuste. */
-function FuenteAjuste({ fuente }: { fuente: AjusteAdmin["fuente"] }) {
-  const texto = fuente === "store" ? "Guardado" : fuente === "env" ? "Entorno" : "Por defecto";
-  return (
-    <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
-      {texto}
-    </Badge>
-  );
-}
-
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
  *
  * `bloqueado` (solo bool): la fila se muestra APAGADA y deshabilitada porque otro control la
@@ -953,7 +943,6 @@ function FilaAjuste({
             · {notaBloqueo}
           </span>
         )}
-        {!bloqueado && <FuenteAjuste fuente={ajuste.fuente} />}
       </div>
       <p className="text-xs text-muted-foreground">{ajuste.ayuda}</p>
     </div>
@@ -1212,11 +1201,7 @@ function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
             Funcionan bien en sus <strong>valores por defecto</strong>; tócalos solo para afinar.
             Los cambios aplican <strong>en caliente</strong> (hasta ~1 minuto).
           </>
-        ) : (
-          <>
-            Activa o desactiva la automatización (aplica <strong>en caliente</strong>).
-          </>
-        )
+        ) : undefined
       }
     >
         {isPending ? (
