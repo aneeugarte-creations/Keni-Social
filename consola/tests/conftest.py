@@ -33,18 +33,16 @@ import os
 import pytest
 from starlette.testclient import TestClient
 
-# Pool de conexiones Postgres OFF en la suite (camino directo: una conexión por operación).
-# POR QUÉ OFF y NO ON: tener el pool ON parece atractivo (reusa conexiones, evita churn de
-# puertos), pero bajo xdist (N procesos + hilos de fondo) el pool EMBUDA todas las operaciones
-# por su lock/límite y MATA el paralelismo -> la suite pasa de ~4 min a ~12 min (medido; subir
-# MAX no ayuda: el cuello es el embudo, no el nº de conexiones). El camino directo deja a cada
-# hilo abrir su conexión en paralelo -> rápido. El agotamiento de puertos efímeros
-# (`Cannot assign requested address`) que se ve en CI bajo MUCHOS pipelines a la vez es un tema
-# de HOST (TIME_WAIT), se arregla en el runner (`net.ipv4.tcp_tw_reuse=1` / ampliar
-# `ip_local_port_range`), NO forzando el pool en la suite (eso penaliza a todos 3x).
-# DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa). `setdefault` respeta
-# overrides (`KENI_DB_POOL=1` para probar el pool real, p.ej. en `test_motor_db_pool`).
-os.environ.setdefault("KENI_DB_POOL", "0")
+# Pool de conexiones Postgres ON en la suite. REUSA conexiones (cada operación NO abre/cierra
+# su propia conexión TCP), así NO hay ~16k conexiones efímeras que agoten los puertos del CI
+# (`Cannot assign requested address`). Y además es MÁS RÁPIDO que sin pool (medido -n6 vs
+# Postgres real: 124 s con pool vs 211 s sin pool) — siempre que NO se pague el backoff de
+# reconexión: ver `_postgres.limpiar_postgres`, que cierra el pool del proceso ANTES del
+# `pg_terminate_backend`/TRUNCATE (si no, el pool descubre sus conexiones muertas server-side y
+# psycopg_pool las reconstruye con ~1 s de backoff cada una -> esa era la causa del 3x, no un
+# "embudo de lock"). DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa).
+# `setdefault` respeta overrides (`KENI_DB_POOL=0` para el camino directo, p.ej. depurar).
+os.environ.setdefault("KENI_DB_POOL", "1")
 
 from keni_consola import app as app_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL
 from keni_consola import db as db_modulo  # noqa: E402 -- tras fijar KENI_DB_POOL

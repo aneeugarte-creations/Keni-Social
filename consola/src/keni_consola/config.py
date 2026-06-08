@@ -2015,10 +2015,11 @@ def db_pool_activado() -> bool:
     normales, ruta de error, y el PATRON DE FUGA exacto (raise sin close) — incluso 6 hilos en
     paralelo con max_size=8 — sin agotar el pool. NO hay fuga en produccion.
 
-    OJO (por eso esta OFF en la SUITE, no en prod): el pool global persiste entre tests mientras
-    `pytest-postgresql` RECREA la BD por test -> incompatibilidad de TEST-INFRA (conexiones a
-    una BD recreada), NO una fuga. `conftest` fija `KENI_DB_POOL=0` para la suite; el camino con
-    pool se cubre aparte en `test_motor_db_pool` (pool falso + un test real contra la BD de CI).
+    En la SUITE tambien va ON (reusa conexiones -> sin agotar puertos efimeros del CI, y mas
+    rapido: medido -n6 124 s vs 211 s sin pool). Requiere que `tests/_postgres.limpiar_postgres`
+    cierre el pool del proceso ANTES de su `pg_terminate_backend`/TRUNCATE: si no, el pool
+    descubre sus conexiones muertas server-side y psycopg_pool las reconstruye con ~1 s de backoff
+    cada una (esa era la causa de que la suite con pool fuese 3x mas lenta, ya arreglada).
     """
     crudo = _crudo(ENV_DB_POOL)
     if not crudo:

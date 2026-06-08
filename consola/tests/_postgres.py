@@ -171,6 +171,23 @@ def limpiar_postgres(url: str) -> None:
     """
     import psycopg
 
+    # Cierra el pool de conexiones de ESTE proceso (cliente) ANTES de tocar el servidor. POR QUE
+    # (medido, root-cause de la lentitud del pool en la suite): el `pg_terminate_backend` de abajo
+    # mata las conexiones del pool DESDE EL SERVIDOR; en el siguiente `getconn` el pool las
+    # encuentra muertas, las descarta y reconstruye, pero psycopg_pool reconstruye una conexion
+    # CAIDA con un BACKOFF de ~1 s (un connect limpio son ~8 ms). Con el pool ON eso es ~22
+    # reconexiones x ~1 s por test -> la suite -n6 saltaba de ~4 a ~12 min. Cerrarlo aqui suelta
+    # los sockets LIMPIAMENTE: el pool se reabre perezoso en la siguiente `conectar_cruda` con una
+    # conexion fresca (~8 ms), sin backoff. Con el pool OFF (camino directo) es un no-op barato.
+    # Asi el pool puede ir ON en la suite (reusa conexiones -> sin agotar puertos efimeros del CI)
+    # y ademas MAS rapido que sin pool (medido: 124 s vs 211 s, -n6).
+    try:
+        from keni_consola import motor_db
+
+        motor_db.cerrar_pool()
+    except Exception:  # noqa: BLE001 -- best-effort; sin pool/import seguimos igual.
+        pass
+
     # UN solo TRUNCATE multi-tabla (Postgres lo permite) en vez de N round-trips: esta
     # funcion corre 2x por test sobre ~1000 tests, asi que pasar de ~30 sentencias a 1
     # recorta el coste dominante de la suite en CI. Fallback per-tabla SOLO en el primer
@@ -178,10 +195,10 @@ def limpiar_postgres(url: str) -> None:
     # existe; el loop tolerante lo absorbe). Tras ese primer uso siempre va el camino rapido.
     lista = ", ".join(_TABLAS)
     with psycopg.connect(url, autocommit=True) as con:
-        # Mata conexiones rezagadas a ESTA BD antes de truncar: la app del test anterior puede
-        # dejar un hilo de fondo "idle in transaction" reteniendo locks. Bajo xdist (workers bajo
-        # presion de CPU) su cierre se solapa con este TRUNCATE -> deadlock. En una BD de test
-        # desechable y aislada por worker, terminar esas conexiones rezagadas es seguro.
+        # Mata conexiones rezagadas a ESTA BD antes de truncar (hilos daemon stray). Tras cerrar
+        # el pool arriba, esto ya NO mata el pool sano del proceso (esa era la causa del 3x), solo
+        # strays reales: un hilo de fondo "idle in transaction" reteniendo locks cuyo cierre, bajo
+        # xdist, se solaparia con este TRUNCATE -> deadlock. BD de test desechable: es seguro.
         con.execute(
             "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             "WHERE datname = current_database() AND pid <> pg_backend_pid()"
