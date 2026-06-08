@@ -107,13 +107,20 @@ const RE_URL = /(https?:\/\/[^\s]+)/g;
  * Texto del post tal y como lo vería la red: conserva saltos de línea y enlaza
  * URLs, pero NO interpreta Markdown (las redes no lo hacen). Vacío => guía.
  */
-function TextoRed({ contenido, className }: { contenido: string; className?: string }) {
+const TextoRed = React.forwardRef<
+  HTMLParagraphElement,
+  { contenido: string; className?: string }
+>(function TextoRed({ contenido, className }, ref) {
   if (!contenido.trim()) {
-    return <p className={cn("italic text-muted-foreground", className)}>Sin texto…</p>;
+    return (
+      <p ref={ref} className={cn("italic text-muted-foreground", className)}>
+        Sin texto…
+      </p>
+    );
   }
   const partes = contenido.split(RE_URL);
   return (
-    <p className={cn("whitespace-pre-wrap break-words", className)}>
+    <p ref={ref} className={cn("whitespace-pre-wrap break-words", className)}>
       {partes.map((parte, i) =>
         RE_URL.test(parte) ? (
           <a
@@ -131,6 +138,57 @@ function TextoRed({ contenido, className }: { contenido: string; className?: str
         ),
       )}
     </p>
+  );
+});
+
+/**
+ * Copy del feed estilo red social real: recortado a 2 líneas con un enlace "más" cuando el texto
+ * desborda (y "menos" para volver a plegarlo). El bloque RESERVA siempre el alto de 2 líneas + la
+ * fila del enlace, así TODAS las tarjetas miden lo mismo plegadas (rejilla uniforme), tengan o no
+ * "más". Re-mide al cambiar el ancho (cambio de columnas) vía `ResizeObserver`.
+ */
+function CopyConLeerMas({ contenido }: { contenido: string }) {
+  const [expandido, setExpandido] = React.useState(false);
+  const [hayMas, setHayMas] = React.useState(false);
+  const ref = React.useRef<HTMLParagraphElement>(null);
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Mide el desbordamiento SOLO plegado (con el clamp puesto): si el texto real es más alto que
+    // las 2 líneas visibles, hay "más". Expandido no se mide (se conserva el botón para "menos").
+    const medir = () => {
+      if (expandido) return;
+      setHayMas(el.scrollHeight - el.clientHeight > 1);
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [contenido, expandido]);
+  return (
+    <div>
+      <TextoRed
+        ref={ref}
+        contenido={contenido}
+        className={cn("text-sm leading-normal", !expandido && "line-clamp-2 min-h-[2.625rem]")}
+      />
+      {/* Fila del enlace SIEMPRE reservada (alto fijo) para que las tarjetas midan igual aunque
+          unas tengan "más" y otras no. */}
+      <div className="h-5">
+        {hayMas && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpandido((v) => !v);
+            }}
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            {expandido ? "menos" : "más"}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -436,9 +494,10 @@ export function VistaPreviaRed({
             </span>
           )}
         </div>
-        {/* Copy (caption) bajo la imagen, idéntico para toda red. */}
+        {/* Copy (caption) bajo la imagen, idéntico para toda red: recortado a 2 líneas con "leer
+            más" estilo red social, y alto reservado para que todas las tarjetas midan igual. */}
         <div className="px-4 py-3">
-          <TextoRed contenido={contenido} className="text-sm leading-normal" />
+          <CopyConLeerMas contenido={contenido} />
         </div>
       </div>
     );

@@ -197,7 +197,7 @@ function TarjetaFeed({
   const ocupado = aprobar.isPending || rechazar.isPending;
 
   return (
-    <article className="border-b border-border bg-background pb-3">
+    <article className="snap-start border-b border-border bg-background pb-3">
       {/* Cabecera EN UNA LÍNEA: quién posteó · tiempo (igual que el feed de escritorio). La RED ya
           va como distintivo sobre la imagen y el FORMATO como icono sobre la imagen (lado opuesto),
           y la marca la fija el selector global de arriba, así que aquí NO se repiten. */}
@@ -361,6 +361,21 @@ export default function MobileFeed() {
     obs.observe(nodo);
     return () => obs.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // SCROLL MAGNÉTICO POR PIEZA (feed estilo red social): activa scroll-snap en el documento (el
+  // que hace scroll en esta pantalla) mientras está montada y lo revierte al salir. `scrollPadding`
+  // superior deja sitio a la cabecera sticky para que la pieza no quede tapada al encajar.
+  React.useEffect(() => {
+    const el = document.documentElement;
+    const prevTipo = el.style.scrollSnapType;
+    const prevPad = el.style.scrollPaddingTop;
+    el.style.scrollSnapType = "y mandatory";
+    el.style.scrollPaddingTop = "8rem";
+    return () => {
+      el.style.scrollSnapType = prevTipo;
+      el.style.scrollPaddingTop = prevPad;
+    };
+  }, []);
 
   const refrescar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });

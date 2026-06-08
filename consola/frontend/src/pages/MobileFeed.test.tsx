@@ -138,4 +138,13 @@ describe("MobileFeed · feed móvil de revisión", () => {
     expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /comentar/i })).toBeInTheDocument();
   });
+
+  it("activa el scroll magnético por pieza mientras está montado y lo revierte al salir", async () => {
+    stubFetch();
+    const { unmount } = renderFeed();
+    await screen.findByText("Feed de revisión");
+    expect(document.documentElement.style.scrollSnapType).toBe("y mandatory");
+    unmount();
+    expect(document.documentElement.style.scrollSnapType).toBe("");
+  });
 });

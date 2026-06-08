@@ -207,6 +207,20 @@ export default function FeedIdeacion() {
   React.useEffect(() => {
     guardarPref("keni_feed_escala", escala);
   }, [escala]);
+
+  // SCROLL MAGNÉTICO POR FILA (solo móvil): el contenedor que hace scroll es el <main> del
+  // AppShell. Le activamos scroll-snap mientras el feed está montado (variantes `max-sm:`, así solo
+  // por debajo de 640px) y lo revertimos al salir, sin que el AppShell tenga que conocer esta ruta.
+  // Cada fila lleva `snap-start` (inerte si el contenedor no tiene snap-type, p. ej. en escritorio).
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const scroller = rootRef.current?.closest("main");
+    if (!scroller) return;
+    const clases = ["max-sm:snap-y", "max-sm:snap-mandatory"];
+    scroller.classList.add(...clases);
+    return () => scroller.classList.remove(...clases);
+  }, []);
+
   const ajustarColumnas = (delta: number) =>
     setColumnas((c) => Math.min(COLUMNAS_MAX, Math.max(COLUMNAS_MIN, c + delta)));
   const ajustarEscala = (delta: number) =>
@@ -373,7 +387,7 @@ export default function FeedIdeacion() {
   const refrescar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
 
   return (
-    <div>
+    <div ref={rootRef}>
       <AccionesPagina>
         <MenuAcciones>
           <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={feedQuery.isFetching}>
@@ -495,7 +509,7 @@ export default function FeedIdeacion() {
                 key={g.id}
                 id={anclaFeed(g.id)}
                 className={cn(
-                  "scroll-mt-20 rounded-xl transition-shadow",
+                  "scroll-mt-20 snap-start rounded-xl transition-shadow",
                   g.id === piezaDestacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
                 )}
               >
@@ -518,7 +532,7 @@ export default function FeedIdeacion() {
                   key={g.id}
                   id={anclaFeed(g.id)}
                   className={cn(
-                    "scroll-mt-20 rounded-xl transition-shadow",
+                    "scroll-mt-20 snap-start rounded-xl transition-shadow",
                     g.id === piezaDestacada &&
                       "ring-2 ring-primary ring-offset-2 ring-offset-background",
                   )}

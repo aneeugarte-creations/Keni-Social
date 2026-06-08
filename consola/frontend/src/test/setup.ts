@@ -16,6 +16,16 @@ if (!Element.prototype.releasePointerCapture) {
   Element.prototype.releasePointerCapture = () => {};
 }
 
+// jsdom tampoco implementa ResizeObserver, que el feed usa para medir el copy (recorte "leer más"
+// en VistaPreviaRed) y el zoom (FeedZoom). Stub no-op para que montar esos componentes no casque.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 // Desmonta el arbol de React tras cada test para evitar fugas entre casos.
 afterEach(() => {
   cleanup();
