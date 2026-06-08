@@ -185,13 +185,15 @@ describe("Cobertura · barra de cobertura", () => {
     expect(screen.getByText(/340/)).toBeTruthy();
   });
 
-  it("muestra las categorías del breakdown", async () => {
+  it("muestra el conteo de items 24h y NO el breakdown por categoría", async () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => {
       expect(screen.getByTestId("barra-cobertura")).toBeTruthy();
     });
-    // Al menos una categoría del breakdown debe aparecer
-    expect(screen.getByText(/mx: 120/i)).toBeTruthy();
+    // El conteo de items 24h sigue (informativo); el eje pasa a marca/línea editorial.
+    expect(screen.getByText(/340/)).toBeTruthy();
+    // El breakdown por categoría se eliminó (ya no se filtra/desglosa por categoría).
+    expect(screen.queryByText(/mx: 120/i)).toBeNull();
   });
 });
 
