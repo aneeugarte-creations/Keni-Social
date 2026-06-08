@@ -1,8 +1,8 @@
 /**
  * Vista previa VISUAL del Termómetro mundial.
  *
- * En vez del Card genérico de Markdown (`ResultadoDocumento`, compartido con otras
- * superficies), este componente renderiza el documento de la galería como lo que es:
+ * En vez de un Card genérico de Markdown, este componente renderiza el
+ * documento de la galería como lo que es:
  * una PORTADA + N SLIDES en miniatura (carrusel/grid de tarjetas), más el veredicto
  * destacado arriba y el detalle editorial (fuentes, auto-verificación) plegable abajo.
  *

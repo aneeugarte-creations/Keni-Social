@@ -3184,9 +3184,7 @@ function DialogoEditarAusencia({
 
 // --- Helper compartido: chip toggle ----------------------------------------
 //
-// La gestión de EVENTOS se mudó al hub de Fuentes (ola "Calendario = turnos / Fuentes =
-// eventos"): su panel completo vive en `components/eventos/PanelEventos.tsx`. Aquí solo
-// sobrevive `ChipToggle`, que reusan los filtros de la pestaña Cambios y ausencias.
+// `ChipToggle` lo reusan los filtros de la pestaña Cambios y ausencias.
 
 /** Botón toggle de chip (multi-select). Reutiliza `Button` con dos variantes. */
 function ChipToggle({
