@@ -468,6 +468,9 @@ export default function Imagen() {
           etiqueta es redundante (la dice el switch global) y se omite; solo en la vista «Todas»
           (admin, `marcaActiva === null`) se muestra, y entonces refleja la marca REAL de la pieza
           abierta (`marcaPanel`), para poder distinguir piezas de marcas distintas. */}
+      {/* Solo se pinta si tiene algo que mostrar; si no, no dejes una barra vacía con borde
+          (línea horizontal huérfana) entre el título y las pestañas. */}
+      {(marcaActiva === null || !!pestanaActiva || !!exportUrl) && (
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
         {marcaActiva === null && (
           <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -514,6 +517,7 @@ export default function Imagen() {
           </a>
         )}
       </div>
+      )}
 
       {/* Pestañas abiertas. El «+» (lienzo nuevo) solo aparece cuando ya hay alguna pestaña. */}
       {pestanas.length > 0 && (
