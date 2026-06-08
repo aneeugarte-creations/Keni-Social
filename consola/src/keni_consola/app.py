@@ -6,11 +6,13 @@ contrato en `consola/api/__init__.py`). Esta app NO conoce los modulos concretos
 los descubre y monta sus rutas `/api/...`. Anadir un area = soltar UN archivo en
 `api/`, sin tocar este `app.py`.
 
-El resto (todo lo que NO empieza por `/api`) sirve el SPA React que construye otra
-persona: `/assets/*` desde `webapp/assets/`, los favicons/recursos sueltos de
-`webapp/`, y cualquier otra ruta devuelve `webapp/index.html` (fallback SPA). Si
-`webapp/index.html` no existe todavia (caso normal en este worktree), devuelve un
-placeholder amable en espanol (200).
+El resto (todo lo que NO empieza por `/api`) sirve el SPA React desde `webapp/`
+(`/assets/*` desde `webapp/assets/`, favicons/recursos sueltos, y el resto cae a
+`webapp/index.html`, fallback SPA). `webapp/` es la salida de `vite build` (outDir),
+GITIGNORED: NO se versiona. En producción el SPA lo sirve nginx (`deploy/front`), no
+este back (Traefik enruta solo `/api`+`/mcp` aquí); este servido es para
+`python -m keni_consola` en local. Si `webapp/index.html` no existe (no se compiló
+en local), devuelve un placeholder amable en espanol (200).
 
 Bind SOLO a 127.0.0.1 (ver `__main__.py`).
 

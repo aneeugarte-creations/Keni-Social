@@ -28,3 +28,7 @@ deploy/secrets/
 # Claude Code / temporales locales (worktrees y artefactos de demo, NUNCA se versionan)
 .claude/
 .keni-tmp/
+
+# SPA build output (vite outDir). NO se versiona: prod compila desde fuente
+# (deploy/front), y `python -m keni_consola` lo sirve si lo compilas en local.
+consola/src/keni_consola/webapp/

@@ -46,7 +46,7 @@ sin necesidad de Node: el paquete Python lo sirve desde el mismo origen.
 | Script              | Qué hace                                            |
 | ------------------- | --------------------------------------------------- |
 | `npm run dev`       | Servidor de desarrollo (HMR) con proxy a `/api`.    |
-| `npm run build`     | `tsc -b` + `vite build` → bundle en `webapp/`.      |
+| `npm run build`     | `tsc -b` + `vite build` → `webapp/` (gitignored).   |
 | `npm run lint`      | ESLint sobre `src/`.                                |
 | `npm run typecheck` | `tsc --noEmit` (chequeo de tipos).                  |
 | `npm run preview`   | Sirve el bundle compilado localmente.               |
