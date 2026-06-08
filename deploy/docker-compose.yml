@@ -207,8 +207,10 @@ services:
       # Estado de la app: consola.db (SQLite), secretos.toml (0600), media, tareas.
       - keni-data:/data
     networks:
+      # `data` (internal) para alcanzar db/files; `internal`/`edge` conservan egress (NAT).
       - edge
       - internal
+      - data
     # Arranque en frio ordenado: no levantar el back antes de que Postgres acepte
     # conexiones (si no, crash-loop al boot). `files` (S3/Garage) tambien sano: el
     # back consume S3_* al arrancar. `mcp` no expone condicion -> service_started.
@@ -314,7 +316,9 @@ services:
     volumes:
       - keni-data:/data
     networks:
+      # `data` para alcanzar db/files; `internal` conserva egress (Metricool, noticias).
       - internal
+      - data
     # Arranque ordenado: Postgres sano (lee la cola/estado) y Garage sano (el
     # auto-arte importa media a S3). Evita crash-loop en cold start.
     depends_on:
@@ -386,7 +390,9 @@ services:
       # disco si no hay S3, y el contenido editorial YAML que el post-procesado escribe.
       - keni-data:/data
     networks:
+      # `data` para alcanzar db/files; `internal` conserva egress (Anthropic, OpenRouter).
       - internal
+      - data
     # Arranque ordenado: el worker LEE la cola de Postgres y ESCRIBE media en S3/Garage,
     # ambos deben estar sanos antes de arrancar (evita crash-loop en cold start).
     depends_on:
@@ -448,7 +454,9 @@ services:
     # volumes:
     #   - ./config:/config:ro   # monta aqui el config.toml real (fuente=real)
     networks:
+      # `data` para alcanzar db/files (lectura de metricas); `internal` conserva egress.
       - internal
+      - data
     # El endpoint /mcp (streamable-http) no responde 200 a un GET simple; comprobamos
     # que el puerto 8000 acepta conexiones con el python que ya trae la imagen (mismo
     # criterio que el HEALTHCHECK del Dockerfile, explicitado aqui).
@@ -502,7 +510,9 @@ services:
       # una unica vez). En un volumen ya poblado no corre. Ver el script para detalles.
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
     networks:
-      - internal
+      # SOLO `data` (internal): Postgres no necesita egress a internet. Sus consumidores
+      # (back/daemons/worker) comparten esta red, asi que el DNS `db` sigue resolviendo.
+      - data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 15s
@@ -536,7 +546,9 @@ services:
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
     networks:
-      - internal
+      # SOLO `data` (internal): Garage no necesita egress a internet. Sus consumidores
+      # (back/daemons/worker) comparten esta red, asi que el DNS `files` sigue resolviendo.
+      - data
     # La imagen de Garage es minima (sin shell, ni curl/wget, ni python): no podemos usar
     # CMD-SHELL. Usamos su PROPIO binario `/garage status` (forma exec, sin shell), que se
     # conecta por RPC al daemon local leyendo /etc/garage.toml y sale !=0 si el nodo no
@@ -592,6 +604,12 @@ services:
 networks:
   edge:
   internal:
+  # Red de DATOS interna (sin egress a internet): db (Postgres) y files (Garage) viven
+  # SOLO aqui, de modo que no pueden salir a internet. Sus consumidores (back/daemons/
+  # worker/mcp) la comparten ademas de `internal`/`edge`, asi que mantienen el DNS de
+  # db/files Y conservan egress (Anthropic/OpenRouter/Metricool/noticias) por las otras.
+  data:
+    internal: true
 
 volumes:
   traefik-acme:
