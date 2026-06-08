@@ -8,6 +8,7 @@ import { PuertaSesion } from "@/components/auth/PuertaSesion";
 import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { Toaster } from "@/components/ui/sonner";
+import { FiltrosContenidoProvider } from "@/hooks/use-filtros-contenido";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import { marcarSesionExpirada, SesionProvider } from "@/hooks/use-sesion";
 import { TemaProvider } from "@/hooks/use-tema";
@@ -62,7 +63,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <SesionProvider>
             <PuertaSesion>
               <MarcaActivaProvider>
-                <RouterProvider router={router} />
+                <FiltrosContenidoProvider>
+                  <RouterProvider router={router} />
+                </FiltrosContenidoProvider>
               </MarcaActivaProvider>
             </PuertaSesion>
           </SesionProvider>

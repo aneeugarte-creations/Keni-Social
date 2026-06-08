@@ -9,6 +9,7 @@ import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { EncabezadoSeccion } from "@/components/layout/EncabezadoSeccion";
 import { ProveedorEncabezado, type EncabezadoCtx } from "@/components/layout/encabezado";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { SwitchFiltrosContenido } from "@/components/layout/SwitchFiltrosContenido";
 import { SwitchMarca } from "@/components/layout/SwitchMarca";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { Button } from "@/components/ui/button";
@@ -141,10 +142,12 @@ export function AppShell() {
             <Wordmark />
           </div>
 
-          {/* Marca activa (workspace) a la derecha de la topbar. El switch de marca
-              manda en toda la consola: la marca activa filtra implícitamente lo que
-              se ve (deriva del perfil, ver SwitchMarca). */}
+          {/* Filtros y workspace a la derecha de la topbar. Los switches GLOBALES mandan
+              en toda la consola: la MARCA filtra implícitamente lo que se ve (deriva del
+              perfil, ver SwitchMarca); RED y LÍNEA filtran la superficie de contenido/feed
+              y solo se pintan en sus rutas (SwitchFiltrosContenido decide su visibilidad). */}
           <div className="ml-auto flex items-center gap-3">
+            <SwitchFiltrosContenido />
             <CampanaNotificaciones />
             <SwitchMarca />
           </div>
