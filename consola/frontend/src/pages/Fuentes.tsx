@@ -25,7 +25,6 @@ import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual"
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,14 +72,6 @@ import CajonesDia from "./CajonesDia";
 
 const CLAVE_FUENTES = ["rss", "fuentes"] as const;
 const CLAVE_ITEMS = ["rss", "items"] as const;
-
-const CABECERA = {
-  titulo: "Fuentes",
-  descripcion:
-    "De dónde se alimentan Noticias y Contenidos, por marca. EXTERNAS: feeds RSS (y agencias/" +
-    "Google Trends como señales). INTERNAS: buzones del equipo (listas tipo portal/WhatsApp/" +
-    "corresponsales y Excel) y aportes a mano (idea / nota interna).",
-};
 
 /**
  * Taxonomía de TIPOS de fuente en UN SOLO sitio (item G): añadir un tipo nuevo es declarar
@@ -171,7 +162,6 @@ export default function Fuentes() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
       <Tabs defaultValue={tabInicial} className="space-y-4">
         <TabsList>
           {PESTANAS_TIPO.map((p) => (

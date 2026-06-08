@@ -5,7 +5,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,16 +39,6 @@ import { numeroCompacto, numeroCompleto } from "./metricas/formato";
 
 const ESTADO_TODAS = "__todas__";
 
-function Cabecera({ acciones }: { acciones?: React.ReactNode }) {
-  return (
-    <PageHeader
-      titulo="Comercial"
-      descripcion="Monitorea publicaciones comerciales por su enlace, vigila su objetivo y entrega su reporte al llegar el KPI. Aparte del rendimiento diario de Métricas."
-      acciones={acciones}
-    />
-  );
-}
-
 export default function Comercial() {
   const opcionesQuery = useQuery({
     queryKey: [...CLAVE_COMERCIAL, "opciones"],
@@ -57,7 +48,6 @@ export default function Comercial() {
   if (opcionesQuery.isPending) {
     return (
       <>
-        <Cabecera />
         <Esqueleto />
       </>
     );
@@ -65,7 +55,6 @@ export default function Comercial() {
   if (opcionesQuery.isError) {
     return (
       <>
-        <Cabecera />
         <BloqueError
           titulo="No se pudo cargar el apartado comercial"
           mensaje={opcionesQuery.error instanceof Error ? opcionesQuery.error.message : undefined}
@@ -115,10 +104,11 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
         <RefreshCw className={cn("h-4 w-4", refrescando && "animate-spin")} />
         Refrescar datos
       </Button>
-      <Button onClick={() => setNuevaAbierta(true)}>
-        <Plus className="h-4 w-4" />
-        Monitorear publicación
-      </Button>
+      <MenuAcciones>
+        <ItemMenu icono={Plus} onClick={() => setNuevaAbierta(true)}>
+          Monitorear publicación
+        </ItemMenu>
+      </MenuAcciones>
     </div>
   );
 
@@ -132,7 +122,7 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
 
   return (
     <>
-      <Cabecera acciones={acciones} />
+      <AccionesPagina>{acciones}</AccionesPagina>
 
       {listaQuery.isPending ? (
         <Esqueleto />

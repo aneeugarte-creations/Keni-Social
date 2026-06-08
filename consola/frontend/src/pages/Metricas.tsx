@@ -8,7 +8,7 @@ import {
   marcaMetricasDesdeCanonica,
   marcaParam,
 } from "@/components/comunes/selectores";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina } from "@/components/layout/encabezado";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
@@ -52,7 +52,6 @@ export default function Metricas() {
   if (opcionesQuery.isPending) {
     return (
       <>
-        <CabeceraMetricas />
         <EsqueletoDashboard />
       </>
     );
@@ -61,7 +60,6 @@ export default function Metricas() {
   if (opcionesQuery.isError) {
     return (
       <>
-        <CabeceraMetricas />
         <BloqueError
           titulo="No se pudieron cargar las métricas"
           mensaje={
@@ -75,12 +73,6 @@ export default function Metricas() {
   }
 
   return <DashboardMetricas opciones={opcionesQuery.data} />;
-}
-
-function CabeceraMetricas({ acciones }: { acciones?: React.ReactNode }) {
-  return (
-    <PageHeader titulo="Métricas" acciones={acciones} />
-  );
 }
 
 /** Cuerpo del dashboard una vez que tenemos las opciones disponibles. */
@@ -151,7 +143,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   return (
     <>
-      <CabeceraMetricas acciones={acciones} />
+      <AccionesPagina>{acciones}</AccionesPagina>
 
       {reporteQuery.isPending ? (
         <EsqueletoDashboard />

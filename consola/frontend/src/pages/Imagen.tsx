@@ -12,6 +12,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, FileUp, Image, Loader2, Plus, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+
+import { TituloPagina } from "@/components/layout/encabezado";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -450,11 +452,12 @@ export default function Imagen() {
   const guardando = guardar.isPending || guardarComo.isPending;
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
-      {/* Barra superior: acciones (guardar / guardar como / pieza) + estado + export. La MARCA la
-          manda el selector global del workspace; aquí solo se muestra cuál está activa. */}
+    <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
+      {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
+      <TituloPagina titulo="Imagen" icono={Image} />
+      {/* Barra superior del editor: acciones (guardar / guardar como / pieza) + estado + export.
+          La MARCA la manda el selector global del workspace; aquí solo se muestra cuál está activa. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-        <h1 className="mr-1 text-base font-semibold">Editor</h1>
         <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="La marca la define el selector global del workspace">
           {marcas.find((m) => m.id === marcaPanel)?.nombre ?? "Todas las marcas"}
         </span>

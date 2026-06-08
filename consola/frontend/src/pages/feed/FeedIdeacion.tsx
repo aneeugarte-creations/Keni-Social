@@ -32,8 +32,8 @@ import { useSearchParams } from "react-router-dom";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import {
   Select,
   SelectContent,
@@ -392,21 +392,13 @@ export default function FeedIdeacion() {
 
   return (
     <div>
-      <PageHeader
-        titulo="Feed de ideación"
-        descripcion="Una sola línea por fecha: la IA genera y verifica, tú das tu OK en línea, y la pieza sigue a programada y publicada."
-        acciones={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refrescar}
-            disabled={feedQuery.isFetching}
-          >
-            <RefreshCw className={feedQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={feedQuery.isFetching}>
             Refrescar
-          </Button>
-        }
-      />
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       {/* Pestañas (formato tab, no bubble) + filtros. Las pestañas son VISTAS del MISMO feed
           (filtran por estado en cliente); Red y Línea filtran en servidor. La marca la fija el

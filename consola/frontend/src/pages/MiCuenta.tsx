@@ -13,12 +13,12 @@
  */
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, KeyRound, Loader2, ShieldOff, Trash2 } from "lucide-react";
+import { Fingerprint, KeyRound, Loader2, ShieldOff, Trash2, User } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -429,7 +429,7 @@ function ContenidoMiCuenta() {
 export default function MiCuenta() {
   return (
     <>
-      <PageHeader titulo="Mi cuenta" descripcion="Consulta tus datos y cambia tu contraseña." />
+      <TituloPagina titulo="Mi cuenta" icono={User} />
       <ContenidoMiCuenta />
     </>
   );

@@ -7,7 +7,8 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -472,20 +473,15 @@ export default function Actividad() {
     [agregadosQuery.data],
   );
 
-  const acciones = (
-    <Button variant="outline" onClick={refrescar} disabled={refrescando}>
-      <RefreshCw className={cn("h-4 w-4", refrescando && "animate-spin")} />
-      Actualizar
-    </Button>
-  );
-
   return (
     <>
-      <PageHeader
-        titulo="Actividad IA"
-        descripcion="Generaciones en segundo plano de la IA: copy, imágenes, cajones, investigación, importaciones, verificación…"
-        acciones={acciones}
-      />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={refrescando}>
+            Actualizar
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
         <Select

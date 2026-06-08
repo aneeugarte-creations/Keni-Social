@@ -13,20 +13,11 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
-import { PageHeader } from "@/components/layout/PageHeader";
 import { api } from "@/lib/api";
 import type { RedPublicacion } from "@/types";
 
 import { ORDEN_REDES } from "./publicaciones/meta";
 import { TallerEvergreen } from "./fuentes/TallerEvergreen";
-
-const CABECERA = {
-  titulo: "Contenidos",
-  descripcion:
-    "El banco de piezas EVERGREEN (evergreens) de la marca: reportajes, producciones " +
-    "propias e ideas atemporales que no caducan. Propón ideas con IA y conviértelas " +
-    "en piezas cuando estén aprobadas.",
-};
 
 export default function ContenidosHub() {
   // Las marcas y redes viven en el catálogo de opciones de publicaciones (mismo
@@ -46,7 +37,6 @@ export default function ContenidosHub() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
       <TallerEvergreen marcas={marcas} redes={opcionesRedes} />
     </>
   );

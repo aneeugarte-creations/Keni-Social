@@ -163,7 +163,9 @@ describe("Organigrama · administración", () => {
     stubFetch({ capturas });
     renderUsuarios();
 
-    fireEvent.click(await screen.findByRole("button", { name: /nueva persona/i }));
+    // "Nueva persona" vive ahora en el menú "⋯" de la cabecera: ábrelo primero.
+    fireEvent.click(await screen.findByRole("button", { name: "Acciones" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /nueva persona/i }));
     fireEvent.change(screen.getByLabelText("Usuario (login)"), { target: { value: "nuevo" } });
     fireEvent.change(screen.getByLabelText("Contraseña inicial"), {
       target: { value: "contrasena1" },

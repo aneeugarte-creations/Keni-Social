@@ -4,10 +4,10 @@ import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeProps } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -482,16 +482,13 @@ export default function Pipelines() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        titulo="Pipelines"
-        descripcion="Cada pieza del pipeline de contenido, etapa a etapa (Ingesta → Criba de la fuente → Copy → Aprobación), estilo CI/CD. Haz clic en una tarjeta para ver el detalle de cada paso."
-        acciones={
-          <Button variant="outline" size="sm" onClick={() => q.refetch()} disabled={q.isFetching}>
-            <RefreshCw className={cn("mr-2 h-4 w-4", q.isFetching && "animate-spin")} />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={RefreshCw} onClick={() => q.refetch()} disabled={q.isFetching}>
             Actualizar
-          </Button>
-        }
-      />
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       {q.isPending ? (
         <div className="space-y-3">

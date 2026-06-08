@@ -16,7 +16,8 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +34,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,13 +56,6 @@ import type {
 
 const CLAVE = ["webhooks"] as const;
 
-const CABECERA = {
-  titulo: "Webhooks",
-  descripcion:
-    "Avisa a un canal (Slack u otro endpoint) cuando pasa algo en el tablero: una pieza " +
-    "se aprueba, se publica o un contenido vence. Solo para administradores.",
-};
-
 /** Etiqueta humana de cada tipo de evento. */
 const ETIQUETA_EVENTO: Record<TipoEventoInterno, string> = {
   "pieza.aprobada": "Pieza aprobada",
@@ -81,6 +74,7 @@ const ETIQUETA_FORMATO: Record<FormatoWebhook, string> = {
 const formatearFechaHora = (iso: string): string => formatearFechaHoraCorta(iso);
 
 export default function Webhooks() {
+  const [crearAbierto, setCrearAbierto] = React.useState(false);
   const query = useQuery({
     queryKey: CLAVE,
     queryFn: ({ signal }) => api.webhooks(signal),
@@ -90,20 +84,28 @@ export default function Webhooks() {
     query.isError && query.error instanceof ApiError && query.error.status === 403;
 
   const catalogo = query.data?.catalogo;
+  const puedeCrear = !esProhibido && !query.isError && !!catalogo;
 
   return (
     <>
-      <PageHeader
-        {...CABECERA}
-        acciones={
-          !esProhibido && !query.isError && catalogo ? (
-            <DialogoCrearWebhook
-              eventos={catalogo.eventos}
-              formatos={catalogo.formatos}
-            />
-          ) : undefined
-        }
-      />
+      <TituloPagina titulo="Webhooks" icono={WebhookIcon} />
+      {puedeCrear && (
+        <AccionesPagina>
+          <MenuAcciones>
+            <ItemMenu icono={Plus} onClick={() => setCrearAbierto(true)}>
+              Nuevo webhook
+            </ItemMenu>
+          </MenuAcciones>
+        </AccionesPagina>
+      )}
+      {catalogo && (
+        <DialogoCrearWebhook
+          abierto={crearAbierto}
+          onAbierto={setCrearAbierto}
+          eventos={catalogo.eventos}
+          formatos={catalogo.formatos}
+        />
+      )}
 
       {esProhibido ? (
         <EstadoVacio
@@ -271,14 +273,17 @@ function TarjetaWebhook({ webhook }: { webhook: Webhook }) {
 }
 
 function DialogoCrearWebhook({
+  abierto,
+  onAbierto,
   eventos,
   formatos,
 }: {
+  abierto: boolean;
+  onAbierto: (v: boolean) => void;
   eventos: TipoEventoInterno[];
   formatos: FormatoWebhook[];
 }) {
   const queryClient = useQueryClient();
-  const [abierto, setAbierto] = React.useState(false);
   const [nombre, setNombre] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [secreto, setSecreto] = React.useState("");
@@ -309,7 +314,7 @@ function DialogoCrearWebhook({
       toast.success("Webhook creado.");
       void queryClient.invalidateQueries({ queryKey: CLAVE });
       reset();
-      setAbierto(false);
+      onAbierto(false);
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -321,13 +326,7 @@ function DialogoCrearWebhook({
   };
 
   return (
-    <Dialog open={abierto} onOpenChange={setAbierto}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4" />
-          Nuevo webhook
-        </Button>
-      </DialogTrigger>
+    <Dialog open={abierto} onOpenChange={onAbierto}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nuevo webhook</DialogTitle>

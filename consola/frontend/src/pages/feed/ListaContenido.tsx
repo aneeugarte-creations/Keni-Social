@@ -1,15 +1,8 @@
 import { useNavigate } from "react-router-dom";
 
-import { PageHeader } from "@/components/layout/PageHeader";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
 import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
-
-const CABECERA = {
-  titulo: "Contenido",
-  descripcion:
-    "El contenido del equipo en lista: cada pieza con su estado y checklist por plataforma.",
-};
 
 /** Workspace "todas las marcas" (sin aislar): coincide con el centinela global de marca. */
 const WORKSPACE_TODAS = "__todas__";
@@ -38,8 +31,6 @@ export default function ListaContenido() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
-
       {/* Sugerencias proactivas de reciclaje (#110): se ocultan solas si no hay candidatas.
           Respetan el workspace activo. */}
       <PanelReciclaje

@@ -14,13 +14,12 @@
  * compone, controla permisos (admin) y cablea el botón «Actualizar».
  */
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { cn } from "@/lib/utils";
 
 import {
   CLAVE_AJUSTES,
@@ -45,31 +44,25 @@ export default function Configuracion() {
   // ¿Hay alguna query (de cualquier sección) en vuelo? (para el spinner del botón).
   const refrescando = useIsFetching() > 0;
 
-  const acciones = (
-    <Button
-      variant="outline"
-      onClick={() => {
-        void queryClient.invalidateQueries({ queryKey: CLAVE_ESFUERZO });
-        if (puedeVerConexiones) {
-          void queryClient.invalidateQueries({ queryKey: CLAVE_AJUSTES });
-          void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
-          void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
-        }
-      }}
-      disabled={refrescando}
-    >
-      <RefreshCw className={cn("h-4 w-4", refrescando && "animate-spin")} />
-      Actualizar
-    </Button>
-  );
+  const refrescar = () => {
+    void queryClient.invalidateQueries({ queryKey: CLAVE_ESFUERZO });
+    if (puedeVerConexiones) {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_AJUSTES });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
+    }
+  };
 
   return (
     <>
-      <PageHeader
-        titulo="Configuración"
-        descripcion="Automatización, Metricool y clave de imagen IA. Los secretos se guardan solo en esta máquina."
-        acciones={acciones}
-      />
+      <TituloPagina titulo="Configuración" icono={Settings} />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={refrescando}>
+            Actualizar
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       {/* Orden por frecuencia/criticidad, no por tema. Arriba del todo y SIEMPRE visible: el
           tema (preferencia personal, instantánea). Debajo, dos pestañas que doman una página

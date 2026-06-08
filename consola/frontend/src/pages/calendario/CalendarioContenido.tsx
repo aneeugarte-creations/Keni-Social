@@ -1,22 +1,16 @@
-import { Gauge, Upload } from "lucide-react";
+import { CalendarDays, Gauge, Upload } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { useQuery } from "@tanstack/react-query";
 
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { api } from "@/lib/api";
 import { DialogoImportarCalendario } from "@/pages/publicaciones/DialogoImportarCalendario";
 import { GestionCadencia } from "@/pages/publicaciones/GestionCadencia";
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
-
-const CABECERA = {
-  titulo: "Programación",
-  descripcion:
-    "Las publicaciones programadas en una rejilla mensual. Respeta la marca activa del workspace.",
-};
 
 /**
  * Página "Programación" (`/operacion/programacion`): la rejilla mensual de publicaciones
@@ -54,31 +48,17 @@ export default function CalendarioContenido() {
 
   return (
     <>
-      <PageHeader
-        {...CABECERA}
-        acciones={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCadenciaAbierto(true)}
-              title="Define cada cuántos minutos puede salir un post por red (alimenta este calendario)"
-            >
-              <Gauge className="h-4 w-4" />
-              Cadencia
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setImportarAbierto(true)}
-              title="Importa publicaciones desde un calendario externo (CSV/ICS)"
-            >
-              <Upload className="h-4 w-4" />
-              Importar calendario…
-            </Button>
-          </>
-        }
-      />
+      <TituloPagina titulo="Programación" icono={CalendarDays} />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={Gauge} onClick={() => setCadenciaAbierto(true)}>
+            Cadencia
+          </ItemMenu>
+          <ItemMenu icono={Upload} onClick={() => setImportarAbierto(true)}>
+            Importar calendario…
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       <GestionPublicaciones modo="calendario" />
 

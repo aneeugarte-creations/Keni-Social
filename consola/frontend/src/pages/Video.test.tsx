@@ -93,9 +93,11 @@ describe("Video", () => {
     fireEvent.click(screen.getByRole("button", { name: /^base$/i }));
   }
 
-  it("muestra el encabezado 'Editor de video'", () => {
+  it("muestra el título de sección 'Video'", () => {
     renderVideo();
-    expect(screen.getByRole("heading", { name: /editor de video/i })).toBeInTheDocument();
+    // El título vive en la cabecera unificada (`TituloPagina`); en tests sin AppShell
+    // cae a render inline, así que el texto "Video" está presente.
+    expect(screen.getAllByText("Video").length).toBeGreaterThan(0);
   });
 
   it("arranca en el GESTOR de composiciones ('Mis composiciones')", () => {

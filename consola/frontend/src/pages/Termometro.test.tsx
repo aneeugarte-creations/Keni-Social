@@ -90,7 +90,9 @@ describe("Termometro", () => {
     stubFetch(PAYLOAD_BASE);
     renderConProviders(<Termometro />);
 
-    expect(await screen.findByRole("heading", { name: "Termómetro mundial" })).toBeInTheDocument();
+    // Página HUB-leaf: sin título de cabecera propio (lo pinta la barra de pestañas del shell).
+    // Tras cargar la config aparece la tarjeta de armado del termómetro.
+    expect(await screen.findByText("Armar el termómetro de hoy")).toBeInTheDocument();
     // El formulario de generación aparece tras cargar la config.
     expect(await screen.findByLabelText(/noticias internacionales del día/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generar termómetro/i })).toBeInTheDocument();

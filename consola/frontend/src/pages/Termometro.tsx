@@ -9,7 +9,6 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { desdeNinguna, ningunaParam } from "@/components/comunes/selectores";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,12 +31,6 @@ import type { NoticiaItem, RespuestaTermometro } from "@/types";
 const CLAVE_GEN_TERMOMETRO = "keni:generacion-termometro";
 
 const CLAVE_TERMOMETRO = ["termometro"] as const;
-
-const CABECERA = {
-  titulo: "Termómetro mundial",
-  descripcion:
-    "El posteo de galería con las 5–8 noticias internacionales más importantes del día, una por región. Pega las notas, jerarquízalas y arma el copy del posteo listo para revisar.",
-};
 
 /** Opciones del número de slides (coinciden con el backend). */
 const OPCIONES_NUMERO = ["5", "6", "7", "8"] as const;
@@ -66,7 +59,6 @@ export default function Termometro() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
       {query.isPending ? (
         <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
           <Skeleton className="h-72 w-full rounded-md" />

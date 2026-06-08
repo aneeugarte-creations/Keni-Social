@@ -154,12 +154,12 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera y 3 pestañas-vista del mismo feed (todo / por aprobar / publicado)", async () => {
+  it("muestra 3 pestañas-vista del mismo feed (todo / por aprobar / publicado)", async () => {
     stubFetch();
     renderFeed();
-    expect(await screen.findByText("Feed de ideación")).toBeInTheDocument();
-    // 3 vistas del mismo listado (no las bandejas viejas por estado).
-    expect(screen.getByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
+    // 3 vistas del mismo listado (no las bandejas viejas por estado). Es un hub: la barra
+    // son las PESTAÑAS, sin título de página propio.
+    expect(await screen.findByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Por aprobar/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Publicado y programado/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "En proceso" })).not.toBeInTheDocument();

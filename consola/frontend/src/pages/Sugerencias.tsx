@@ -8,7 +8,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,12 +30,6 @@ import { cn } from "@/lib/utils";
 import type { Sugerencia } from "@/types";
 
 const CLAVE_SUGERENCIAS = ["sugerencias"] as const;
-
-const CABECERA = {
-  titulo: "Feedback",
-  descripcion:
-    "Deja ideas y mejoras del producto. Se guardan en tu máquina; nada sale a la red.",
-};
 
 const CATEGORIA_LABEL: Record<string, string> = {
   idea: "Idea",
@@ -83,7 +77,7 @@ export default function Sugerencias() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
+      <TituloPagina titulo="Feedback" icono={Lightbulb} />
       <div className="mt-6 grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <NuevaSugerencia categorias={categorias} />
         <ListaSugerencias

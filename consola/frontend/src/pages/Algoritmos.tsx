@@ -22,7 +22,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,14 +56,6 @@ import type {
   OpcionAlgoritmo,
   SugerenciaEditorial,
 } from "@/types";
-
-const CABECERA = {
-  titulo: "Algoritmos",
-  descripcion:
-    "Cambios de algoritmo y tendencias por plataforma, de los blogs oficiales y agregadores. " +
-    "Ordenado por importancia para decisiones de marca y para actualizar la ficha editorial de cada red. " +
-    "No inventa nada: solo muestra lo que devuelven las fuentes reales.",
-};
 
 const TODAS = "__todas__";
 
@@ -593,36 +586,24 @@ export default function Algoritmos() {
 
   return (
     <div>
-      <PageHeader
-        titulo={CABECERA.titulo}
-        descripcion={CABECERA.descripcion}
-        acciones={
-          <>
-            <Button
-              onClick={() => generarSugerencias.mutate()}
-              disabled={generarSugerencias.isPending}
-              variant="outline"
-              size="sm"
-              title="Generar ahora las sugerencias editoriales a partir de las noticias importantes"
-            >
-              <Wand2 className="mr-1 h-4 w-4" aria-hidden="true" />
-              Generar sugerencias
-            </Button>
-            <Button
-              onClick={() => refrescar.mutate()}
-              disabled={refrescar.isPending}
-              variant="outline"
-              size="sm"
-            >
-              <RefreshCw
-                className={`mr-1 h-4 w-4 ${refrescar.isPending ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
-              Refrescar
-            </Button>
-          </>
-        }
-      />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu
+            icono={Wand2}
+            onClick={() => generarSugerencias.mutate()}
+            disabled={generarSugerencias.isPending}
+          >
+            Generar sugerencias
+          </ItemMenu>
+          <ItemMenu
+            icono={RefreshCw}
+            onClick={() => refrescar.mutate()}
+            disabled={refrescar.isPending}
+          >
+            Refrescar
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       {isLoading && (
         <div className="space-y-4">

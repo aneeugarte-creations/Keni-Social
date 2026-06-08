@@ -19,7 +19,8 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,22 +90,16 @@ export function GestionLineas() {
 
   return (
     <>
-      <PageHeader
-        titulo="Estrategia de marcas"
-        descripcion="Líneas, orígenes, etiquetas editoriales y grupos de hashtags de cada marca."
-        acciones={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setEtiquetasAbierto(true)}>
-              <Tag className="h-4 w-4" />
-              Etiquetas
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setHashtagsAbierto(true)}>
-              <Hash className="h-4 w-4" />
-              Hashtags
-            </Button>
-          </>
-        }
-      />
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={Tag} onClick={() => setEtiquetasAbierto(true)}>
+            Etiquetas
+          </ItemMenu>
+          <ItemMenu icono={Hash} onClick={() => setHashtagsAbierto(true)}>
+            Hashtags
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <PanelClase clase="vertical" />

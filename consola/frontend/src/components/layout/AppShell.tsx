@@ -6,8 +6,9 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { CampanaNotificaciones } from "@/components/layout/CampanaNotificaciones";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
+import { EncabezadoSeccion } from "@/components/layout/EncabezadoSeccion";
+import { ProveedorEncabezado, type EncabezadoCtx } from "@/components/layout/encabezado";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { SubnavHub } from "@/components/layout/SubnavHub";
 import { SwitchMarca } from "@/components/layout/SwitchMarca";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { pestanasDeRuta } from "@/components/layout/hub-tabs";
@@ -107,6 +108,22 @@ export function AppShell() {
     }
   }, [colapsado]);
   const alternarColapsado = React.useCallback(() => setColapsado((v) => !v), []);
+
+  // Huecos de la barra de cabecera unificada (`EncabezadoSeccion`): inicio (título de página
+  // plana) y acciones (menú "⋯"). Las páginas portalizan ahí su título/acciones vía contexto,
+  // así caen siempre en la misma barra y quedan alineados. `tituloCount` cuenta los títulos
+  // montados para que la barra tome su borde solo cuando hay título (o pestañas).
+  const [slotInicio, setSlotInicio] = React.useState<HTMLElement | null>(null);
+  const [slotAcciones, setSlotAcciones] = React.useState<HTMLElement | null>(null);
+  const [tituloCount, setTituloCount] = React.useState(0);
+  const registrarTitulo = React.useCallback(() => {
+    setTituloCount((n) => n + 1);
+    return () => setTituloCount((n) => n - 1);
+  }, []);
+  const ctxEncabezado = React.useMemo<EncabezadoCtx>(
+    () => ({ slotInicio, slotAcciones, registrarTitulo }),
+    [slotInicio, slotAcciones, registrarTitulo],
+  );
 
   // Hidrata la caché de límites de caracteres desde la fuente única del backend
   // (`GET /api/limites`, #112). Mientras carga, `metaRed().limite` usa la semilla
@@ -231,18 +248,23 @@ export function AppShell() {
         <main className={cn("flex-1 overflow-y-auto")}>
           {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
           <div className="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-            {/* Frontera de error por ruta: aísla un fallo de página (TypeError,
-                chunk lazy de un deploy nuevo) en vez de tumbar toda la app. La
-                `key` por pathname la remonta al navegar, limpiando el estado. */}
-            {/* Pestañas del hub actual (Investigación, Revisión, …): los hubs son
-                UNA entrada en el sidebar y su sub-nav vive aquí, sobre el contenido.
-                Fuera del boundary: un fallo de página no debe tumbar la sub-nav. */}
-            <SubnavHub />
-            <FronteraError key={location.pathname}>
-              <React.Suspense fallback={<CargandoPagina />}>
-                <Outlet />
-              </React.Suspense>
-            </FronteraError>
+            {/* Cabecera de sección UNIFICADA (misma altura/ancho/posición en todas las
+                páginas): pestañas del hub, o el título de la página plana, más las acciones
+                a la derecha. Las páginas portalizan título/acciones a sus huecos vía el
+                proveedor de contexto (envuelve también al `<Outlet/>`). Vive FUERA del
+                boundary: un fallo de página no debe tumbar la barra de navegación. */}
+            <ProveedorEncabezado value={ctxEncabezado}>
+              <EncabezadoSeccion
+                refInicio={setSlotInicio}
+                refAcciones={setSlotAcciones}
+                tituloPresente={tituloCount > 0}
+              />
+              <FronteraError key={location.pathname}>
+                <React.Suspense fallback={<CargandoPagina />}>
+                  <Outlet />
+                </React.Suspense>
+              </FronteraError>
+            </ProveedorEncabezado>
           </div>
         </main>
       </div>

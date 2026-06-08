@@ -12,7 +12,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import "@/components/organigrama/org-tree.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,13 +67,6 @@ import {
 const CLAVE_USUARIOS = ["usuarios"] as const;
 const CLAVE_OPCIONES_MARCAS = ["usuarios", "opciones", "marcas"] as const;
 
-const CABECERA = {
-  titulo: "Organigrama",
-  descripcion:
-    "El equipo como árbol jerárquico, con cada área definida por marca. Edita una persona " +
-    "para cambiar su nombre, cargo, marcas y a quién reporta. Solo para administradores.",
-};
-
 const ROL_LABEL: Record<RolUsuario, string> = {
   admin: "Administrador",
   editor: "Editor",
@@ -97,6 +91,7 @@ const formatearFecha = (iso: string | null): string => fmtFechaCdmx(iso) || "—
  * quien entra no es admin (el nav ya oculta la página, pero avisamos si se llega por URL).
  */
 export default function Usuarios() {
+  const [crearAbierto, setCrearAbierto] = React.useState(false);
   const { usuario: actual } = useSesion();
   const query = useQuery({
     queryKey: CLAVE_USUARIOS,
@@ -114,17 +109,21 @@ export default function Usuarios() {
 
   const esProhibido =
     query.isError && query.error instanceof ApiError && query.error.status === 403;
+  const puedeCrear = !esProhibido && !query.isError;
 
   return (
     <>
-      <PageHeader
-        {...CABECERA}
-        acciones={
-          !esProhibido && !query.isError ? (
-            <DialogoCrearUsuario />
-          ) : undefined
-        }
-      />
+      <TituloPagina titulo="Organigrama" icono={Users} />
+      {puedeCrear && (
+        <AccionesPagina>
+          <MenuAcciones>
+            <ItemMenu icono={UserPlus} onClick={() => setCrearAbierto(true)}>
+              Nueva persona
+            </ItemMenu>
+          </MenuAcciones>
+        </AccionesPagina>
+      )}
+      <DialogoCrearUsuario abierto={crearAbierto} onAbierto={setCrearAbierto} />
 
       {esProhibido ? (
         <EstadoVacio
@@ -726,9 +725,14 @@ function DialogoMiembro({
 
 // --- Crear usuario ----------------------------------------------------------
 
-function DialogoCrearUsuario() {
+function DialogoCrearUsuario({
+  abierto,
+  onAbierto,
+}: {
+  abierto: boolean;
+  onAbierto: (v: boolean) => void;
+}) {
   const queryClient = useQueryClient();
-  const [abierto, setAbierto] = React.useState(false);
   const [usuario, setUsuario] = React.useState("");
   const [nombre, setNombre] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -752,7 +756,7 @@ function DialogoCrearUsuario() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
       toast.success("Usuario creado");
-      setAbierto(false);
+      onAbierto(false);
       reiniciar();
     },
     onError: (e) => {
@@ -771,14 +775,10 @@ function DialogoCrearUsuario() {
     <Dialog
       open={abierto}
       onOpenChange={(v) => {
-        setAbierto(v);
+        onAbierto(v);
         if (!v) reiniciar();
       }}
     >
-      <Button onClick={() => setAbierto(true)}>
-        <UserPlus className="h-4 w-4" />
-        Nueva persona
-      </Button>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nueva persona</DialogTitle>

@@ -16,11 +16,12 @@
  * base, y luego se autoguarda. El estado "listo" es organización, NO publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Captions, Check, CheckCircle2, Clapperboard, Film, FolderOpen, Layers, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
+import { Captions, Check, CheckCircle2, Film, FolderOpen, Layers, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { TituloPagina } from "@/components/layout/encabezado";
 import { EditorSubtitulos } from "@/components/video/EditorSubtitulos";
 import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 // El editor de capas (Konva) se carga PEREZOSAMENTE: pesa y solo se necesita en la sección
@@ -365,12 +366,9 @@ export default function Video() {
   const tieneBase = !!baseKey;
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
-      {/* Cabecera */}
-      <div className="flex items-center gap-2 border-b border-border p-3">
-        <Clapperboard className="h-4 w-4 text-muted-foreground" />
-        <h1 className="text-base font-semibold">Editor de video</h1>
-      </div>
+    <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
+      {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
+      <TituloPagina titulo="Video" icono={VideoIcon} />
 
       {/* Sub-navegación de secciones */}
       <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-1.5" aria-label="Secciones del editor de video">

@@ -15,6 +15,7 @@ import {
   Loader2,
   MemoryStick,
   RefreshCw,
+  Server,
   ShieldAlert,
   Trash2,
 } from "lucide-react";
@@ -23,7 +24,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,13 +48,6 @@ import { ApiError, api, mensajeError, urlS3Objeto } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { DiscoSistema, MigaS3, ObjetoS3, RespuestaProbarS3, RespuestaS3 } from "@/types";
-
-const CABECERA = {
-  titulo: "Sistema",
-  descripcion:
-    "Estado del servidor (CPU, memoria y disco) y del almacenamiento de objetos (S3/Garage). " +
-    "Solo para administradores.",
-};
 
 // Auto-refresco de los recursos: cada 8 s da un pulso vivo sin martillear el back.
 const INTERVALO_RECURSOS_MS = 8000;
@@ -984,7 +978,7 @@ export default function Sistema() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
+      <TituloPagina titulo="Sistema" icono={Server} />
       {esProhibido ? (
         <EstadoVacio
           icono={ShieldAlert}

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   BellRing,
+  CalendarClock,
   CalendarDays,
   CalendarOff,
   Check,
@@ -41,7 +42,7 @@ import {
   MenuContextual,
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,13 +108,6 @@ import type {
   TurnoCobertura,
   TurnoRota,
 } from "@/types";
-
-const CABECERA = {
-  titulo: "Turnos",
-  // Descripcion corta. La explicacion larga vivia aqui antes y comia mucho espacio
-  // visual; ahora se ofrece bajo demanda con el icono "?" del calendario.
-  descripcion: "Turnos y cobertura, semana a semana. (Los eventos a cubrir viven en Fuentes › Eventos.)",
-};
 
 /**
  * Filtra el equipo devuelto por `/api/rota/equipo` a los miembros que cubren la marca
@@ -218,29 +212,27 @@ export default function Rota() {
 
   return (
     <>
-      <PageHeader
-        {...CABECERA}
-        acciones={
-          // La rota es por marca: el calendario muestra los eventos de la marca activa
-          // del workspace (switch global de la topbar). El badge recuerda el alcance;
-          // "Todas las marcas" (admin) agrega todos los eventos.
-          <Tooltip
-            label={
-              nombreActiva
-                ? `Esta rota muestra los turnos y eventos de ${nombreActiva}.`
-                : "Vista agregada: turnos y eventos de todas las marcas."
-            }
+      <TituloPagina titulo="Turnos" icono={CalendarClock} />
+      <AccionesPagina>
+        {/* La rota es por marca: el calendario muestra los eventos de la marca activa
+            del workspace (switch global de la topbar). El badge recuerda el alcance;
+            "Todas las marcas" (admin) agrega todos los eventos. Control siempre visible. */}
+        <Tooltip
+          label={
+            nombreActiva
+              ? `Esta rota muestra los turnos y eventos de ${nombreActiva}.`
+              : "Vista agregada: turnos y eventos de todas las marcas."
+          }
+        >
+          <Badge
+            variant="outline"
+            className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+            data-testid="banner-marca-rota"
           >
-            <Badge
-              variant="outline"
-              className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
-              data-testid="banner-marca-rota"
-            >
-              {nombreActiva ?? "Todas las marcas"}
-            </Badge>
-          </Tooltip>
-        }
-      />
+            {nombreActiva ?? "Todas las marcas"}
+          </Badge>
+        </Tooltip>
+      </AccionesPagina>
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
