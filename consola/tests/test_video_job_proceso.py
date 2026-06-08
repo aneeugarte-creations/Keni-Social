@@ -77,7 +77,7 @@ def test_worker_despacha_job_proceso_al_ejecutor(entorno, monkeypatch):
 
 
 def test_stub_render_marca_error(entorno):
-    """El STUB de render marca la generacion en error (no hace trabajo real, no crashea)."""
+    """El render marca la generacion en error ante una composicion inexistente (no crashea)."""
     reg = generaciones.encolar_job_proceso(
         kind=jobspec.PROC_RENDER_VIDEO, params={"composicion_id": "c1"}, marca=_MARCA,
     )
@@ -85,12 +85,13 @@ def test_stub_render_marca_error(entorno):
     worker.procesar_job(job, "w")
     g = generaciones.obtener(reg["id"])
     assert g["estado"] == generaciones.ESTADO_ERROR
-    assert "render" in g["error"].lower()
+    # Ejecutor real (ya no es stub): valida y reporta en español que la composicion no existe.
+    assert "composicion" in g["error"].lower()
     assert generaciones.runner.admitidos() == 0
 
 
 def test_stub_transcripcion_marca_error(entorno):
-    """El STUB de transcripcion marca la generacion en error."""
+    """La transcripcion marca la generacion en error ante un job sin media_id (no crashea)."""
     reg = generaciones.encolar_job_proceso(
         kind=jobspec.PROC_TRANSCRIBIR, params={"subtitulo_id": "s1"}, marca=_MARCA,
     )
@@ -98,7 +99,8 @@ def test_stub_transcripcion_marca_error(entorno):
     worker.procesar_job(job, "w")
     g = generaciones.obtener(reg["id"])
     assert g["estado"] == generaciones.ESTADO_ERROR
-    assert "transcrip" in g["error"].lower()
+    # Ejecutor real: el job de transcripcion exige `media_id` (el video a transcribir).
+    assert "media_id" in g["error"].lower()
 
 
 def test_worker_ejecutor_que_revienta_marca_error(entorno, monkeypatch):
