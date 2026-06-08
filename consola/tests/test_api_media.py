@@ -375,7 +375,11 @@ def test_proveedor_openrouter_fuerza_imagen_con_system(monkeypatch):
 
     cuerpo = mock_post.call_args.kwargs["json"]
     mensajes = cuerpo["messages"]
-    assert mensajes[0]["role"] == "system" and mensajes[0]["content"] == media._SISTEMA_IMAGEN
+    # El system es el cuerpo EFECTIVO del prompt editable de la Biblioteca (semilla del paquete),
+    # no una constante: exige una sola foto y prohibe texto/infografia.
+    assert mensajes[0]["role"] == "system"
+    assert mensajes[0]["content"] == media._sistema_imagen()
+    assert "fotograf" in mensajes[0]["content"].lower()
     assert mensajes[-1] == {"role": "user", "content": "Un sismo en Cuba perceptible en Quintana Roo"}
     assert cuerpo["modalities"] == ["image", "text"]
 

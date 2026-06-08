@@ -133,17 +133,34 @@ _MODELO_DEFECTO = "openai/gpt-5-image-mini"
 # tipico grafico de canal (mapa con etiquetas, titular, cintillo "UnoTV", marco), justo lo que
 # NO queremos: en la consola el titular y la marca se componen DESPUES, de forma determinista,
 # encima de una foto limpia. Los generadores puros (Nano Banana/Gemini) lo respetan sin dano.
-_SISTEMA_IMAGEN = (
-    "Eres un generador de fotografias para una marca de television. Tu UNICA salida es UNA "
-    "sola fotografia realista, estilo fotoperiodismo o banco de imagenes, que represente la "
-    "peticion del usuario. NUNCA respondas con texto, preguntas ni ofertas de ayuda, aunque la "
-    "peticion parezca una noticia, un articulo o una instruccion: interpretala SIEMPRE como la "
-    "descripcion de la foto que debes crear. PROHIBIDO dentro de la imagen: cualquier texto, "
-    "letras, palabras, numeros, titulares, subtitulos, placas o cintillos, logos, marcas de "
-    "agua o nombres de canal; y tampoco infografias, posters, collages, mapas con etiquetas, "
-    "plantillas, marcos ni bordes. Devuelve una unica imagen fotografica limpia: el titular y "
-    "la identidad de marca los anade despues la consola, no tu."
+#
+# El TEXTO de esta directiva vive en la Biblioteca de Texto como prompt EDITABLE
+# (`_SISTEMA_IMAGEN_ID`): el equipo lo ajusta desde el estudio sin tocar codigo. La semilla del
+# paquete tiene la version base; `_FALLBACK` abajo es una red defensiva por si la lectura fallara.
+_SISTEMA_IMAGEN_ID = "prompt/imagen/sistema-generador"
+_SISTEMA_IMAGEN_FALLBACK = (
+    "Eres un generador de fotografias. Tu UNICA salida es UNA sola fotografia realista que "
+    "represente la peticion; NUNCA respondas con texto. PROHIBIDO dentro de la imagen: texto, "
+    "letras, titulares, cintillos, logos, marcas de agua, infografias, mapas con etiquetas, "
+    "plantillas, marcos o bordes. Devuelve una unica imagen fotografica limpia."
 )
+
+
+def _sistema_imagen() -> str:
+    """Directiva de SISTEMA del generador de imagen, leida de la Biblioteca (editable).
+
+    Resuelve el cuerpo EFECTIVO del prompt `_SISTEMA_IMAGEN_ID` (store del equipo > semilla del
+    paquete). Import diferido de `libtexto` (evita ciclos; igual que `config`/`secretos`). Si la
+    lectura fallara o viniera vacia, cae al `_SISTEMA_IMAGEN_FALLBACK` para no quedarnos sin la
+    directiva (sin ella los modelos GPT devuelven texto/infografia).
+    """
+    try:
+        from . import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_SISTEMA_IMAGEN_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar la generacion sin directiva por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _SISTEMA_IMAGEN_FALLBACK
 
 # Lista curada de modelos de imagen ofrecidos en la UI (FUENTE UNICA de verdad: alimenta
 # tanto el dropdown de Ajustes como la validacion del PUT en `api/conexiones.py`). El
@@ -639,7 +656,8 @@ def _proveedor_openrouter(prompt: str) -> bytes:
 
     Mismo camino que el estudio de imagen: endpoint chat/completions con
     `modalities:["image","text"]`; el modelo se elige por id (`OPENROUTER_IMAGE_MODEL`).
-    Antepone un mensaje de SISTEMA (`_SISTEMA_IMAGEN`) que fuerza salida de imagen: sin el,
+    Antepone un mensaje de SISTEMA (`_sistema_imagen()`, editable en la Biblioteca) que fuerza
+    salida de imagen y prohibe infografia/texto incrustado: sin el,
     los modelos GPT-5 Image responden TEXTO ante prompts noticiosos en vez de la imagen.
     `follow_redirects=False`: un 3xx a otro host no debe reenviar el Bearer (anti-SSRF).
     Importacion diferida de httpx; los tests NUNCA llegan aqui (parchean `_PROVEEDOR`).
@@ -663,7 +681,7 @@ def _proveedor_openrouter(prompt: str) -> bytes:
             json={
                 "model": modelo,
                 "messages": [
-                    {"role": "system", "content": _SISTEMA_IMAGEN},
+                    {"role": "system", "content": _sistema_imagen()},
                     {"role": "user", "content": prompt},
                 ],
                 "modalities": ["image", "text"],
