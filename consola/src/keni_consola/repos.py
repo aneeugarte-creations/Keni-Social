@@ -228,6 +228,7 @@ from .repos_noticias import (  # noqa: F401
     obtener_noticia_cluster,
     obtener_noticia_item,
     obtener_sugerencia_editorial,
+    purgar_pool_irrelevante,
     registrar_salud_fuente_algoritmo,
     registrar_salud_fuente_rss,
     registrar_sondeo_feed,

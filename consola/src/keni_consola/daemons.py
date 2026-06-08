@@ -52,6 +52,7 @@ def main() -> int:
     from .eventos_scanner import iniciar_scanner_vencimientos
     from .ingesta_daemon import iniciar_ingesta
     from .media_gc_daemon import iniciar_media_gc
+    from .noticias_gc_daemon import iniciar_noticias_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
     from .metricas_refresco import iniciar_refresco_metricas
     from .pipeline_contenido import iniciar_pipeline
@@ -75,6 +76,7 @@ def main() -> int:
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
+    iniciar_noticias_gc()  # GC del pool de noticias por relevancia; no borra salvo KENI_NOTICIAS_GC=1 (def OFF).
     # MOTOR DE INGESTA PERSISTENTE (Ola A): sondea en background los feeds RSS vencidos y
     # PERSISTE cada artículo en `noticias_items` (archivo a nivel de artículo). SOLO LEE feeds
     # públicos y persiste; no genera ni publica. GATEADO: no sondea salvo KENI_INGESTA=1 (def

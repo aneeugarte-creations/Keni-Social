@@ -197,6 +197,16 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        Ajuste(
+            clave=config.ENV_NOTICIAS_GC,
+            tipo="bool",
+            etiqueta="Limpieza del pool de noticias",
+            ayuda="Purga periódicamente el RUIDO del pool: historias no llevadas al tablero, de "
+            "una sola fuente, con score bajo y sin actividad reciente (+ items huérfanos viejos). "
+            "Conserva lo usado, corroborado, de score alto o reciente. No borra por edad sola.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -263,6 +273,36 @@ def _construir_catalogo() -> list[Ajuste]:
             "huérfano (protege las variantes del Estudio que aún se revisan).",
             grupo="tuning",
             defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_NOTICIAS_GC_INTERVALO_HORAS,
+            tipo="int",
+            etiqueta="Limpieza noticias: intervalo (horas)",
+            ayuda="Cada cuántas horas barre el daemon de limpieza del pool de noticias.",
+            grupo="tuning",
+            defecto=config.NOTICIAS_GC_INTERVALO_HORAS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
+            tipo="float",
+            etiqueta="Limpieza noticias: umbral de score",
+            ayuda="Una historia de UNA sola fuente con score por debajo de esto (y sin actividad "
+            "reciente) se considera ruido y se purga. 0 = no purgar por score. [0-1].",
+            grupo="tuning",
+            defecto=config.NOTICIAS_GC_SCORE_UMBRAL_DEF,
+            minimo=0,
+            maximo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
+            tipo="int",
+            etiqueta="Limpieza noticias: inactividad mínima (horas)",
+            ayuda="Una historia más nueva que esto nunca se purga, aunque sea de baja relevancia "
+            "(protege lo recién visto que aún podría agrupar más fuentes).",
+            grupo="tuning",
+            defecto=config.NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
             minimo=1,
         ),
         # --- Ingesta (Ola A) ------------------------------------------------------ #

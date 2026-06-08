@@ -74,6 +74,14 @@ def borrar_fuente_rss(fuente_id: str) -> bool:
     return db.borrar_fuente_rss(fuente_id)
 
 
+def purgar_pool_irrelevante(
+    *, score_umbral: float, inactividad_horas: int, dry_run: bool = False
+) -> dict[str, int]:
+    return db.purgar_pool_irrelevante(
+        score_umbral=score_umbral, inactividad_horas=inactividad_horas, dry_run=dry_run
+    )
+
+
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     return db.marcar_item(fuente_id, clave, usado)
 

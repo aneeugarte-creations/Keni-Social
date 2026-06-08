@@ -243,6 +243,56 @@ def borrar_fuente_rss(fuente_id: str) -> bool:
         con.close()
 
 
+def purgar_pool_irrelevante(
+    *, score_umbral: float, inactividad_horas: int, dry_run: bool = False
+) -> dict[str, int]:
+    """GC del pool por RELEVANCIA (no por edad sola): borra el ruido de baja relevancia.
+
+    CONSERVADOR. Borra SOLO lo que no aporta y nadie va a trabajar:
+      - clusters `estado='nuevo'`, SIN `contenido_id` (no llevados al tablero), de UNA sola fuente
+        (`n_fuentes <= 1`), con `score < score_umbral` Y sin actividad reciente
+        (`ultimo_visto < ahora - inactividad_horas`). Se CONSERVAN: usados/ligados a contenido,
+        corroborados (multi-fuente), de score alto, o recientes.
+      - items `estado='nuevo'`, SIN `contenido_id`, viejos (`capturado_en < cutoff`) y
+        HUÉRFANOS (sin cluster o cuyo cluster ya no existe — p. ej. recién purgado). Los items de
+        clusters que SOBREVIVEN se conservan.
+    NO es un TTL: la antigüedad es solo UNA condición junto a la baja relevancia. `dry_run=True`
+    cuenta sin borrar. Devuelve `{clusters, items, dry_run}`.
+    """
+    cutoff = (datetime.now(UTC) - timedelta(hours=max(1, int(inactividad_horas)))).isoformat()
+    cond_clusters = (
+        "estado = 'nuevo' AND (contenido_id IS NULL OR contenido_id = '') "
+        "AND n_fuentes <= 1 AND score < ? AND ultimo_visto <> '' AND ultimo_visto < ?"
+    )
+    cond_items = (
+        "estado = 'nuevo' AND (contenido_id IS NULL OR contenido_id = '') "
+        "AND capturado_en <> '' AND capturado_en < ? "
+        "AND (cluster_id = '' OR cluster_id NOT IN (SELECT id FROM noticias_clusters))"
+    )
+    con = _conectar()
+    try:
+        if dry_run:
+            n_cl = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
+                f"SELECT COUNT(*) AS n FROM noticias_clusters WHERE {cond_clusters}",
+                (score_umbral, cutoff),
+            ).fetchone()["n"]
+            n_it = con.execute(  # noqa: S608 -- idem
+                f"SELECT COUNT(*) AS n FROM noticias_items WHERE {cond_items}", (cutoff,)
+            ).fetchone()["n"]
+            return {"clusters": int(n_cl or 0), "items": int(n_it or 0), "dry_run": 1}
+        cur_cl = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
+            f"DELETE FROM noticias_clusters WHERE {cond_clusters}", (score_umbral, cutoff)
+        )
+        # Tras borrar clusters, los items huérfanos (cluster inexistente) caen en `cond_items`.
+        cur_it = con.execute(  # noqa: S608 -- idem
+            f"DELETE FROM noticias_items WHERE {cond_items}", (cutoff,)
+        )
+        con.commit()
+        return {"clusters": cur_cl.rowcount, "items": cur_it.rowcount, "dry_run": 0}
+    finally:
+        con.close()
+
+
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     """Marca/desmarca un item de una fuente como usado (idempotente).
 

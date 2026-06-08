@@ -48,12 +48,15 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Automatismos generales (barridos de mantenimiento).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
+        config.ENV_NOTICIAS_GC,
         config.ENV_PUBLICAR_REAL,
         # Tuning.
         config.ENV_AUTOGEN_ARTE_MAX,
         config.ENV_ALERTAS_INTERVALO_HORAS, config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
         config.ENV_MAX_JOBS,
         config.ENV_MEDIA_GC_INTERVALO_HORAS, config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
+        config.ENV_NOTICIAS_GC_INTERVALO_HORAS, config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
+        config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
         config.ENV_INGESTA_BATCH, config.ENV_INGESTA_WORKERS,
         config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
         config.ENV_CLUSTER_VENTANA_H, config.ENV_CLUSTER_BREAKING_FUENTES,

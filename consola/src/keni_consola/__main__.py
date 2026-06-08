@@ -209,6 +209,14 @@ def main() -> int:
 
     iniciar_media_gc()
 
+    # GC del POOL DE NOTICIAS por relevancia (no por edad): un hilo demonio gateado por
+    # `KENI_NOTICIAS_GC` (def OFF) que purga el ruido de baja relevancia (historias `nuevo` de una
+    # fuente, score bajo e inactivas + items huérfanos viejos), conservando lo usado/corroborado/
+    # reciente. SAFE BY DEFAULT: sin el flag no borra nada. Vive aquí (servidor real), no en tests.
+    from .noticias_gc_daemon import iniciar_noticias_gc
+
+    iniciar_noticias_gc()
+
     # Reaper de GENERACIONES zombi: un hilo demonio (SIEMPRE activo) que cierra como `error`
     # las generaciones colgadas en `ejecutando` cuyo proceso murio (reinicio/OOM/cuelgue), para
     # que el Monitor de Actividad no las muestre "Ejecutando…" indefinidamente. Barre al

@@ -37,6 +37,10 @@ from ._config_comun import (
     ENV_PIPELINE_MAX,
     ENV_QA,
     ENV_REUTERS_API_KEY,
+    ENV_NOTICIAS_GC,
+    ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
+    ENV_NOTICIAS_GC_INTERVALO_HORAS,
+    ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_SCORE_BONUS_BREAKING,
     ENV_SCORE_PESO_CORROBORACION,
     ENV_SCORE_PESO_FRESCURA,
@@ -60,6 +64,9 @@ from ._config_comun import (
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
+    NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
+    NOTICIAS_GC_INTERVALO_HORAS_DEF,
+    NOTICIAS_GC_SCORE_UMBRAL_DEF,
     PIPELINE_INTERVALO_HORAS_DEF,
     PIPELINE_MAX_DEF,
     SCORE_BONUS_BREAKING_DEF,
@@ -194,6 +201,39 @@ def score_pesos():
         viralidad=_peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF),
         marca=_peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF),
         breaking=_peso01(ENV_SCORE_BONUS_BREAKING, SCORE_BONUS_BREAKING_DEF),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# GC del pool de noticias por relevancia (no por edad sola)                     #
+# --------------------------------------------------------------------------- #
+
+
+def noticias_gc_activo() -> bool:
+    """True si el GC del pool de noticias debe BARRER (`KENI_NOTICIAS_GC`, def OFF).
+
+    Conservador: sin el flag NO se borra ninguna noticia. Con el flag, un hilo demonio purga el
+    ruido de baja relevancia (ver `db_noticias.purgar_pool_irrelevante`) cada N horas.
+    """
+    return _crudo(ENV_NOTICIAS_GC).lower() in _VERDADEROS
+
+
+def noticias_gc_intervalo_horas() -> int:
+    """Cada cuántas horas barre el GC del pool (`KENI_NOTICIAS_GC_INTERVALO_HORAS`, def 6, min 1)."""
+    return _entero(ENV_NOTICIAS_GC_INTERVALO_HORAS, NOTICIAS_GC_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def noticias_gc_score_umbral() -> float:
+    """Score por debajo del cual una historia de UNA fuente es "ruido" purgable
+    (`KENI_NOTICIAS_GC_SCORE_UMBRAL`, def 0.15, clamp [0,1]). 0 = no purgar por score."""
+    return _peso01(ENV_NOTICIAS_GC_SCORE_UMBRAL, NOTICIAS_GC_SCORE_UMBRAL_DEF)
+
+
+def noticias_gc_inactividad_horas() -> int:
+    """Horas SIN actividad para que una historia de baja relevancia sea purgable
+    (`KENI_NOTICIAS_GC_INACTIVIDAD_HORAS`, def 48, min 1). Guarda contra purgar lo recién visto."""
+    return _entero(
+        ENV_NOTICIAS_GC_INACTIVIDAD_HORAS, NOTICIAS_GC_INACTIVIDAD_HORAS_DEF, minimo=1
     )
 
 
