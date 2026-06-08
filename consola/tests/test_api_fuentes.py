@@ -79,52 +79,6 @@ def test_listar_fuentes_filtra_por_marca(cliente):
     assert cliente.get("/api/fuentes?marca=marca_falsa").status_code == 400
 
 
-# --- Aportacion MANUAL (idea / interna) -> item REAL en el tablero --- #
-
-
-def test_aportar_idea_crea_item_en_pendientes(cliente):
-    # Sin marca -> NO se lanza copy (gateado), pero el item REAL entra al tablero con su origen.
-    r = cliente.post(
-        "/api/fuentes/aportar",
-        json={"tipo": "idea", "texto": "Hilo con los momentazos de la jornada"},
-    )
-    assert r.status_code == 200, r.text
-    cont = r.json()["contenido"]
-    assert cont["flujo"] == "importante"
-    assert cont["origen"] == "idea"
-    assert cont["titulo"] == "Hilo con los momentazos de la jornada"
-    assert r.json()["copy_en_proceso"] is False
-    # El item aparece en el tablero (clase contenido, flujo importante).
-    tablero = cliente.get("/api/contenido").json()["contenidos"]
-    assert any(c["origen"] == "idea" for c in tablero)
-
-
-def test_aportar_interna_crea_item_con_redes(cliente):
-    r = cliente.post(
-        "/api/fuentes/aportar",
-        json={"tipo": "interna", "texto": "Brief interno de AMX", "redes": ["x", "instagram"]},
-    )
-    assert r.status_code == 200, r.text
-    cont = r.json()["contenido"]
-    assert cont["origen"] == "interna"
-    assert len(cont["plataformas"]) == 2
-
-
-def test_aportar_idea_vacia_400(cliente):
-    assert cliente.post("/api/fuentes/aportar", json={"tipo": "idea", "texto": "   "}).status_code == 400
-
-
-def test_aportar_tipo_invalido_400(cliente):
-    assert cliente.post("/api/fuentes/aportar", json={"tipo": "rss", "texto": "x"}).status_code == 400
-    # El tipo `enlace` fue ELIMINADO: ahora también se rechaza (guard de la regresión).
-    assert (
-        cliente.post(
-            "/api/fuentes/aportar", json={"tipo": "enlace", "url": "https://93.184.216.34/nota"}
-        ).status_code
-        == 400
-    )
-
-
 # --------------------------------------------------------------------------- #
 # Reactivar feed auto-desactivado (Ola D)                                      #
 # --------------------------------------------------------------------------- #

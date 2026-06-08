@@ -68,14 +68,7 @@ import CajonesDia from "./CajonesDia";
 const CLAVE_FUENTES = ["rss", "fuentes"] as const;
 const CLAVE_ITEMS = ["rss", "items"] as const;
 
-/**
- * Taxonomía de TIPOS de fuente en UN SOLO sitio (item G): añadir un tipo nuevo es declarar
- * una entrada aquí + su componente de pestaña. Cada tipo decide su propia alta/edición.
- *
- *   - `standing`: fuentes CONFIGURABLES que se quedan dadas de alta (RSS, Trends, agencias).
- *   - `manual`:   APORTACIONES puntuales que producen un item REAL en Pendientes (ideas,
- *                 contenido interno), reusando `POST /api/fuentes/aportar`.
- */
+/** Una clase de fuente (pestaña): Externas o Internas. */
 type PestanaTipo = {
   valor: string;
   etiqueta: string;
@@ -83,7 +76,8 @@ type PestanaTipo = {
 
 // Solo hay DOS clases de fuente, y la barra lo refleja:
 //   • Externas — lo que llega de fuera: feeds RSS (+ catálogo) y el estado del motor.
-//   • Internas — lo que pone el equipo: buzones (listas/WhatsApp/Excel) y aportes a mano.
+//   • Internas — lo que pone el equipo: buzones del día (Cajones). (Las aportaciones manuales
+//     "Idea" e "Interno AMX" se mudaron a Contenidos, al banco de ideas evergreen.)
 const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "externas", etiqueta: "Externas" },
   { valor: "internas", etiqueta: "Internas" },

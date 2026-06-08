@@ -3,10 +3,8 @@
 import { peticion, query } from "./_core";
 import type {
   CuerpoActualizarFuenteRss,
-  CuerpoAportarFuente,
   CuerpoCrearFuenteRss,
   RespuestaActivarPresets,
-  RespuestaAportarFuente,
   RespuestaFuenteRss,
   RespuestaFuentesHub,
   RespuestaFuentesRss,
@@ -32,10 +30,6 @@ export const apiFuentes = {
   // + el estado honesto de agencias (Reuters/AFP). Solo lectura. ---
   fuentesHub: (tipo?: string, marca?: string, signal?: AbortSignal) =>
     peticion<RespuestaFuentesHub>(`/fuentes${query({ tipo, marca })}`, { signal }),
-  // APORTACION MANUAL (idea / enlace pegado / contenido interno): crea un item REAL en el
-  // tablero (`flujo='importante'`) con su `origen` y, best-effort, le lanza copy de fondo.
-  aportarFuente: (cuerpo: CuerpoAportarFuente) =>
-    peticion<RespuestaAportarFuente>("/fuentes/aportar", { metodo: "POST", json: cuerpo }),
 
   // --- Catálogo de presets (Ola 4: Fuentes externas + idiomas) ---
   // Lista el catálogo curado de feeds listos para activar, opcionalmente filtrado por categoría.
