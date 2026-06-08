@@ -15,8 +15,9 @@ scripts CLI invocables por subproceso con el python de la consola, sin depender 
 - `fuentes/` — tipografías embebidas (SIL OFL) del catálogo de la plantilla.
 - `marcas.json` — tokens de marca (semilla del spec por defecto y geometría de formatos).
 
-Estos motores se PRESERVAN intactos como cimiento del futuro **Estudio de imagen** descrito
-en `docs/diseno-estudio-imagen.md` (Fases 1-4: `api/imagenes.py` + UI propia). Mientras tanto,
-la generación de imagen del producto sigue por el camino directo NEUTRO
-`POST /api/media/generar` (`api/media.py` → `media.generar_imagen`). Tests:
-`consola/tests/motores/`.
+Estos motores son el cimiento del **Estudio de imagen**, ya EN PRODUCCIÓN: la API
+`api/imagenes.py` (`POST /api/imagenes/{generar,editar,expandir,retocar,componer,revisar,set}`
++ `GET /api/imagenes/matriz`) orquesta los jobs sobre `dominio/estudio_imagen.py`, y la UI los
+consume desde `components/media/EditorImagen.tsx` y `editor/PanelIA.tsx`. El camino directo
+NEUTRO `POST /api/media/generar` (`api/media.py`) sigue existiendo para generación rápida sin
+marca. Diseño y fases en `docs/diseno-estudio-imagen.md`. Tests: `consola/tests/motores/`.

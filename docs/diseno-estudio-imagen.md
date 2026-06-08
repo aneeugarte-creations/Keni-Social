@@ -8,13 +8,14 @@
   `marcas.json`), el dominio en `dominio/estudio_imagen.py` (compone prompt, corre los motores por
   subproceso, importa salidas), la API en `api/imagenes.py`
   (`POST /api/imagenes/{generar,editar,expandir,retocar,componer,set,revisar}` + `GET .../matriz`),
-  y la UI en `frontend/src/pages/Estudio.tsx` (ruta `/estudio`, nav), con enlace "Abrir en Estudio"
-  desde `EditorImagen`. "Usar en la pieza" reutiliza el seam `PUT /api/publicaciones/{id}` (`imagen`);
+  y la UI integrada en el editor de imagen (`frontend/src/components/media/EditorImagen.tsx` +
+  `frontend/src/editor/PanelIA.tsx`), no como página/ruta propia. "Usar en la pieza" reutiliza el
+  seam `PUT /api/publicaciones/{id}` (`imagen`);
   "Guardar en biblioteca" usa `/api/biblioteca-media/catalogar`. La revisión legal (`POST
   /api/imagenes/revisar`, `claude -p`) está implementada como cierre opcional; la aprobación sigue
   siendo un gate humano antes de "Usar en la pieza".
 - **Editor visual de plantillas por marca:** además del motor determinista/generativo, el Estudio
-  tiene un editor de plantillas de marca (`api/plantillas_marca.py` + `dominio/plantillas_marca.py`):
+  tiene un editor de plantillas de marca (`api/plantillas_marca.py` + `keni_consola/plantillas_marca.py`):
   el equipo diseña y guarda un *spec* por marca (logo, pleca, titular, geometría por lienzo) que el
   motor estampa con `render_node/` (renderizador Node). `componer`/`set`/`marca_tiene_plantilla`
   (`dominio/estudio_imagen.py:88`) materializan ese spec sobre la foto.
@@ -241,14 +242,13 @@ La migración descrita por este documento ya se completó. Resumen del estado ac
   el CI del back. El origen ya no existe (el sistema de skills se retiró).
 - **API de primera clase** `api/imagenes.py` con `generar/editar/expandir/retocar/componer/set/revisar`
   + `matriz` (ver §3.4).
-- **UI** `frontend/src/pages/Estudio.tsx` (ruta `/estudio`), abrible desde una pieza con
-  `copy/marca/red/titulo`; "Usar en la pieza" (`PUT /api/publicaciones/{id}`) y "Guardar en biblioteca"
-  (`/api/biblioteca-media/catalogar`). `EditorImagen.tsx` sigue como editor inline simple con enlace
-  "Abrir en Estudio".
+- **UI** integrada en el editor de imagen (`frontend/src/components/media/EditorImagen.tsx` +
+  `frontend/src/editor/PanelIA.tsx`), no como página/ruta propia; "Usar en la pieza"
+  (`PUT /api/publicaciones/{id}`) y "Guardar en biblioteca" (`/api/biblioteca-media/catalogar`).
 - **Biblioteca cableada:** el prompt generativo compone con `biblioteca.cuerpo_efectivo` +
   `editoriales_de_marca` (sustituye el `ESTILO_MARCA` hard-coded); las reglas legales van como
   `editorial/reglas/imagen` adjuntas a la revisión.
-- **Editor visual de plantillas por marca** (`api/plantillas_marca.py` + `dominio/plantillas_marca.py`):
+- **Editor visual de plantillas por marca** (`api/plantillas_marca.py` + `keni_consola/plantillas_marca.py`):
   el equipo diseña el *spec* de marca; `render_node/` lo estampa.
 - El camino directo `/api/media/generar` + `EditorImagen.tsx` sigue intacto.
 
@@ -271,9 +271,9 @@ La migración descrita por este documento ya se completó. Resumen del estado ac
 - `consola/src/keni_consola/api/imagenes.py` — la API del Estudio (endpoints de §3.4).
 - `consola/src/keni_consola/dominio/estudio_imagen.py` — compone el prompt, corre los motores por subproceso, importa salidas; `componer`/`set`/`marca_tiene_plantilla`/`revisar`.
 - `consola/src/keni_consola/motores/estudio_imagen/` — los motores: `editar.py`, `expandir.py`, `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`, `marcas.json`.
-- `consola/src/keni_consola/api/plantillas_marca.py` + `dominio/plantillas_marca.py` — editor visual de plantillas de marca (el *spec* que estampa `render_node/`).
+- `consola/src/keni_consola/api/plantillas_marca.py` + `keni_consola/plantillas_marca.py` — editor visual de plantillas de marca (el *spec* que estampa `render_node/`).
 - `consola/src/keni_consola/api/verificaciones.py` — el patrón "motor en `motores/` + API que lo corre por subproceso y reusa `lanzar_job_imagen`" que sigue `api/imagenes.py`.
 - `consola/src/keni_consola/media.py` — corazón generativo (proveedor, `generar_imagen`, `guardar_bytes`, `importar_imagen`, `MODELOS_IMAGEN`).
 - `consola/src/keni_consola/generaciones.py` — `lanzar_job_imagen` (runner del Estudio) y `_entorno_skill`/`_argv_claude` (clave al subproceso, `--add-dir` para la revisión).
 - `consola/src/keni_consola/dominio/generar.py` — patrón de composición de prompt (`componer()` = prompt + editorial + contexto) que replica el prompt de imagen con la Biblioteca.
-- `consola/frontend/src/pages/Estudio.tsx` — la UI del Estudio (ruta `/estudio`).
+- `consola/frontend/src/components/media/EditorImagen.tsx` + `consola/frontend/src/editor/PanelIA.tsx` — la UI del Estudio, integrada en el editor de imagen (no hay página/ruta propia).

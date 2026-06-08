@@ -95,7 +95,7 @@ alineadas al estado real:
 1. **Fase 0 — vender lo listo (hoy).** Copy desde texto, clip→copy local, **métricas-insight con
    dato real vía Metricool (Advanced)**, preview dry-run y la **lista viva multi-fuente**
    (tablero priorizado + importador de calendario H1 + auto-generación de copy H2 gated OFF +
-   score dinámico H3 + Panel-9am H5; ver §1). No depende de aprobaciones externas: es lo que se
+   score dinámico H3; ver §1). No depende de aprobaciones externas: es lo que se
    demuestra y se cobra. Lo único que sigue pendiente es **validar en producción** la
    **publicación real** vía Metricool (ya construida y gateada OFF, Fase 1/2), no la lista ni la
    generación del borrador.

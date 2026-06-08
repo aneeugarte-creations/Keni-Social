@@ -75,8 +75,9 @@ monta el `docker.sock`, el step construye las imagenes desde el checkout del pip
   pipelines de test (via `depends_on`); tambien disparable como *manual*. Un push con
   tests en rojo NO despliega; NO despliega en PRs ni otras ramas.
 - **Hace:** `docker compose build` -> `stop back` -> chown del volumen a uid 10001 (los
-  contenedores corren no-root) -> `migracion --solo-db` (cutover SQLite->Postgres,
-  idempotente y no destructivo) -> `up -d`. Detalle en `deploy/deploy.sh`.
+  contenedores corren no-root) -> `migracion --solo-db` (aserto de esquema idempotente
+  sobre Postgres; no-op tras ADR 0004, no destructivo) -> `up -d`. Detalle en
+  `deploy/deploy.sh`.
 
 ### Requisitos (una vez) para que el deploy funcione
 
@@ -95,6 +96,6 @@ monta el `docker.sock`, el step construye las imagenes desde el checkout del pip
    crear bucket+clave y poner las `S3_*` reales en `.env`, corre
    `migracion --solo-media` (o el deploy completo) para subir la media existente.
 
-> El primer deploy migra `consola.db` (SQLite) a Postgres. Es idempotente: si algo
-> falla, el SQLite sigue intacto y puedes reintentar. La guarda de arranque del back
-> impide arrancar contra un Postgres vacio teniendo datos en SQLite.
+> La operacional vive en Postgres (ADR 0004); SQLite ya no existe. `migracion --solo-db`
+> es un aserto de esquema idempotente (no-op cuando el esquema ya esta al dia), no un
+> cutover de datos.

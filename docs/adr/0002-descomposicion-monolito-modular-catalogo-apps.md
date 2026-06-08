@@ -100,7 +100,8 @@ Adoptar un **monolito modular organizado como un catálogo de apps**, y extraer 
    **object storage** (media), y **whisper** (transcripción en el sandbox del usuario en hosted, o en
    su máquina en local; nunca a una API de terceros — ver [ADR 0001](0001-runtime-servicio-compartido.md)).
    La persistencia operacional del gateway ya **consume Postgres** (`DATABASE_URL`) y la media
-   **object storage S3/Garage** (`S3_*`) en hosted, cayendo a SQLite+disco en local (#130); el
+   **object storage S3/Garage** (`S3_*`) en hosted, cayendo a SQLite+disco en local (#130)
+   _(superseded por [ADR 0004](0004-persistencia-operacional-postgres-unico.md): Postgres-only, SQLite eliminado)_; el
    contenido editorial YAML por marca sigue en el volumen (migrarlo es trabajo futuro).
 
 4. **Docker/compose con dos perfiles**, no un enjambre: perfil **local/privacidad** (un contenedor
