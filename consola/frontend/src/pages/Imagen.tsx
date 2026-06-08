@@ -483,11 +483,13 @@ export default function Imagen() {
           abierta (`marcaPanel`), para poder distinguir piezas de marcas distintas. */}
       {/* Solo se pinta si tiene algo que mostrar; si no, no dejes una barra vacía con borde
           (línea horizontal huérfana) entre el título y las pestañas. */}
-      {(marcaActiva === null || !!pestanaActiva || !!exportUrl) && (
+      {(!!pestanaActiva || !!exportUrl) && (
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-        {marcaActiva === null && (
+        {/* En «Todas», la marca de la PIEZA abierta (no una etiqueta general: la galería vacía
+            ya se divide por marca en secciones aparte). */}
+        {marcaActiva === null && !!marcaPanel && (
           <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {marcas.find((m) => m.id === marcaPanel)?.nombre ?? "Todas las marcas"}
+            {marcas.find((m) => m.id === marcaPanel)?.nombre ?? marcaPanel}
           </span>
         )}
         {pestanaActiva && (
@@ -604,6 +606,7 @@ export default function Imagen() {
         ) : (
           <GaleriaInline
             plantillas={plantillas}
+            agruparPorMarca={marcaActiva === null}
             cargando={plantillasQ.isLoading}
             onAbrir={abrirPlantilla}
             onBorrar={(p) => borrarPlantilla.mutate(p.id)}
@@ -669,10 +672,27 @@ export default function Imagen() {
   );
 }
 
-// Galería del estado vacío: rejilla de plantillas de la marca + tarjeta de «lienzo en blanco».
-// La marca y «Plantillas» no se rotulan aquí: la barra superior del editor ya muestra ambos.
+// Agrupa plantillas por marca (orden alfabético por nombre de marca). Para la vista «Todas»,
+// donde conviven varias marcas: amontonarlas en una sola rejilla no aporta nada, así que se
+// dividen en secciones por marca.
+function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDiseno[][] {
+  const porMarca = new Map<string, PlantillaDiseno[]>();
+  for (const p of plantillas) {
+    const arr = porMarca.get(p.marca);
+    if (arr) arr.push(p);
+    else porMarca.set(p.marca, [p]);
+  }
+  return [...porMarca.values()].sort((a, b) =>
+    (a[0].marca_nombre || a[0].marca).localeCompare(b[0].marca_nombre || b[0].marca),
+  );
+}
+
+// Galería del estado vacío: rejilla de plantillas + tarjeta de «lienzo en blanco». Con una marca
+// concreta es una sola rejilla; en «Todas» (`agruparPorMarca`) se parte en secciones por marca.
+// La marca y «Plantillas» no se rotulan en el toolbar: aquí lo dicen las cabeceras de sección.
 function GaleriaInline({
   plantillas,
+  agruparPorMarca,
   cargando,
   onAbrir,
   onBorrar,
@@ -682,6 +702,7 @@ function GaleriaInline({
   onBlanco,
 }: {
   plantillas: PlantillaDiseno[];
+  agruparPorMarca: boolean;
   cargando: boolean;
   onAbrir: (p: PlantillaDiseno) => void;
   onBorrar: (p: PlantillaDiseno) => void;
@@ -697,20 +718,17 @@ function GaleriaInline({
     if (n && n !== p.nombre) onRenombrar(p, n);
     setEditId(null);
   };
-  return (
-    <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      {cargando ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          <button
-            onClick={onBlanco}
-            className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground"
-          >
-            <Plus className="h-6 w-6" />
-            Lienzo en blanco
-          </button>
-          {plantillas.map((p) => (
+  const REJILLA = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4";
+  const tarjetaBlanco = (
+    <button
+      onClick={onBlanco}
+      className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+    >
+      <Plus className="h-6 w-6" />
+      Lienzo en blanco
+    </button>
+  );
+  const tarjeta = (p: PlantillaDiseno) => (
             <div key={p.id} className="group relative">
               <button
                 onClick={() => onAbrir(p)}
@@ -786,7 +804,27 @@ function GaleriaInline({
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
+  );
+  return (
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      {cargando ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
+      ) : agruparPorMarca ? (
+        <div className="space-y-8">
+          <div className={REJILLA}>{tarjetaBlanco}</div>
+          {agruparPlantillasPorMarca(plantillas).map((grupo) => (
+            <section key={grupo[0].marca}>
+              <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
+                {grupo[0].marca_nombre || grupo[0].marca}
+              </h3>
+              <div className={REJILLA}>{grupo.map(tarjeta)}</div>
+            </section>
           ))}
+        </div>
+      ) : (
+        <div className={REJILLA}>
+          {tarjetaBlanco}
+          {plantillas.map(tarjeta)}
         </div>
       )}
     </div>
