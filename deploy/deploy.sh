@@ -24,6 +24,28 @@ KENI_VERSION="${KENI_VERSION:-$(date +%Y%m%d-%H%M%S)}"
 export KENI_VERSION
 echo "==> version de build: $KENI_VERSION"
 
+# Render de secretos ANTES de cualquier `compose build/run/up`: los servicios montan
+# ./secrets/<n> (0600) en /run/secrets; si no existieran al instanciar contenedores,
+# Compose fallaria. El codigo los lee via env `*_FILE` (no viajan como env -> no salen
+# en `docker inspect`). El operador sigue editando el .env; este render es derivado.
+echo "==> [1a/5] render de secretos a ./secrets/ (0600)"
+SECRETS_DIR="$(pwd)/secrets"
+mkdir -p "$SECRETS_DIR"; chmod 700 "$SECRETS_DIR"
+render_secret() {  # $1 = clave en .env ; $2 = nombre del fichero de secreto
+  val="$(sed -n "s/^$1=//p" "$ENVFILE" | head -n1)"
+  val="${val%\"}"; val="${val#\"}"      # quita comillas envolventes opcionales
+  printf '%s' "$val" > "$SECRETS_DIR/$2"
+  chmod 600 "$SECRETS_DIR/$2"
+}
+render_secret POSTGRES_PASSWORD        postgres_password
+render_secret S3_ACCESS_KEY            s3_access_key
+render_secret S3_SECRET_KEY            s3_secret_key
+render_secret ANTHROPIC_API_KEY        anthropic_api_key
+render_secret CLAUDE_CODE_OAUTH_TOKEN  claude_code_oauth_token
+render_secret KENI_CONSOLA_ADMIN_PASS  consola_admin_pass
+render_secret KENI_CONSOLA_TOKEN       consola_token
+render_secret KENI_MCP_BEARER          mcp_bearer
+
 echo "==> [1/5] build de imagenes (back SIN Node, worker CON claude, front, mcp)"
 $DC build
 # Cada imagen versionada apunta tambien a :latest (conveniencia/rollback legible).

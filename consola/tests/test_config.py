@@ -488,3 +488,72 @@ def test_gate_maquina_no_cambia_la_semantica_del_accesor(limpio, store_aislado):
     assert config.gate_maquina(config.ingesta_activa)() is False  # maquina off -> no corre
     store_aislado.setenv(config.ENV_MAQUINA, "1")
     assert config.gate_maquina(config.ingesta_activa)() is True  # maquina on -> sigue su toggle
+
+
+# --------------------------------------------------------------------------- #
+# Secretos basados en FICHERO (`*_FILE`, convencion Docker secrets).            #
+# El valor vive en /run/secrets/... (un fichero), NO en la env del contenedor, #
+# asi no aparece en `docker inspect`. La env directa, si esta, MANDA (aditivo). #
+# --------------------------------------------------------------------------- #
+
+
+class TestSecretosFichero:
+    def test_database_url_lee_password_de_fichero(self, limpio, store_aislado, tmp_path):
+        """Sin POSTGRES_PASSWORD en env, la password se lee de POSTGRES_PASSWORD_FILE."""
+        p = tmp_path / "pg_pass"
+        p.write_text("secreta-de-fichero", encoding="utf-8")
+        store_aislado.setenv("POSTGRES_PASSWORD_FILE", str(p))
+        store_aislado.setenv("POSTGRES_USER", "keni")
+        store_aislado.setenv("POSTGRES_DB", "keni_social")
+        dsn = config.database_url()
+        assert dsn == "postgresql://keni:secreta-de-fichero@db:5432/keni_social"
+
+    def test_env_gana_al_fichero(self, limpio, store_aislado, tmp_path):
+        """Con ambos presentes, el valor de la env directa gana al del fichero."""
+        p = tmp_path / "pg_pass"
+        p.write_text("la-del-fichero", encoding="utf-8")
+        store_aislado.setenv("POSTGRES_PASSWORD_FILE", str(p))
+        store_aislado.setenv("POSTGRES_PASSWORD", "la-de-la-env")
+        store_aislado.setenv("POSTGRES_USER", "keni")
+        store_aislado.setenv("POSTGRES_DB", "keni_social")
+        dsn = config.database_url()
+        assert dsn == "postgresql://keni:la-de-la-env@db:5432/keni_social"
+
+    def test_s3_secret_key_de_fichero_preserva_espacio_final(
+        self, limpio, store_aislado, tmp_path
+    ):
+        """SIN strip de espacios significativos; solo se quita el salto de linea final."""
+        p = tmp_path / "s3_secret"
+        p.write_text("clave-con-espacio \n", encoding="utf-8")
+        store_aislado.setenv("S3_SECRET_KEY_FILE", str(p))
+        assert config.s3_secret_key() == "clave-con-espacio "
+
+    def test_admin_pass_de_fichero_preserva_espacio_final(
+        self, limpio, store_aislado, tmp_path
+    ):
+        """admin_pass tampoco recorta espacios; solo el `\\n` artefacto del fichero."""
+        p = tmp_path / "admin_pass"
+        p.write_text("contrasena con espacio \n", encoding="utf-8")
+        store_aislado.setenv("KENI_CONSOLA_ADMIN_PASS_FILE", str(p))
+        assert config.admin_pass() == "contrasena con espacio "
+
+    def test_admin_pass_env_gana_al_fichero(self, limpio, store_aislado, tmp_path):
+        p = tmp_path / "admin_pass"
+        p.write_text("la-del-fichero", encoding="utf-8")
+        store_aislado.setenv("KENI_CONSOLA_ADMIN_PASS_FILE", str(p))
+        store_aislado.setenv("KENI_CONSOLA_ADMIN_PASS", "la-de-la-env")
+        assert config.admin_pass() == "la-de-la-env"
+
+    def test_fichero_inexistente_es_como_ausente(self, limpio, store_aislado, tmp_path):
+        """Un `_FILE` que apunta a un fichero que no existe se ignora (cae al defecto)."""
+        store_aislado.setenv("S3_SECRET_KEY_FILE", str(tmp_path / "no-existe"))
+        assert config.s3_secret_key() is None
+
+    def test_fichero_vacio_es_como_ausente(self, limpio, store_aislado, tmp_path):
+        """Un fichero vacio (o solo `\\n`) se trata como ausente (None / "")."""
+        p = tmp_path / "vacio"
+        p.write_text("\n", encoding="utf-8")
+        store_aislado.setenv("S3_SECRET_KEY_FILE", str(p))
+        store_aislado.setenv("KENI_CONSOLA_ADMIN_PASS_FILE", str(p))
+        assert config.s3_secret_key() is None
+        assert config.admin_pass() == ""

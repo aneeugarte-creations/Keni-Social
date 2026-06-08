@@ -52,6 +52,12 @@ RUN RN="$(python -c 'import keni_consola, os; print(os.path.join(os.path.dirname
  && npm --prefix "$RN" ci --omit=dev \
  && npm cache clean --force
 
+# Entrypoint: exporta las credenciales de Claude desde sus ficheros de secreto (*_FILE) a
+# env antes de arrancar (claude -p solo lee de env), asi no salen en docker inspect. Se
+# copia como root y se hace ejecutable antes de bajar a usuario no-root.
+COPY deploy/worker/entrypoint.sh /usr/local/bin/keni-worker-entrypoint.sh
+RUN chmod +x /usr/local/bin/keni-worker-entrypoint.sh
+
 # HARDENING (#130): el worker NO corre como root. `claude` ya esta instalado globalmente
 # (RUN anterior, como root) y el usuario solo lo EJECUTA; ademas, fuera de root `claude` NO
 # exige el bypass `--dangerously-skip-permissions`+IS_SANDBOX (esa restriccion es solo para
@@ -66,5 +72,7 @@ USER keni
 VOLUME ["/data"]
 
 # El worker NO publica puertos ni sirve HTTP: solo consume la cola. Corre el bucle hasta
-# SIGTERM (compose lo reinicia con `restart: unless-stopped`).
+# SIGTERM (compose lo reinicia con `restart: unless-stopped`). El ENTRYPOINT hidrata las
+# credenciales de Claude desde los ficheros de secreto y luego ejecuta el CMD via `exec "$@"`.
+ENTRYPOINT ["/usr/local/bin/keni-worker-entrypoint.sh"]
 CMD ["python", "-m", "keni_consola.worker"]

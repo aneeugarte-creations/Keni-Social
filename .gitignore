@@ -17,6 +17,8 @@ credenciales.toml
 secretos.toml
 **/secretos.toml
 .env
+# Ficheros de secreto renderizados por deploy.sh desde el .env (montados en /run/secrets).
+deploy/secrets/
 
 # SO / editor
 .DS_Store

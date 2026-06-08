@@ -701,6 +701,21 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 # --------------------------------------------------------------------------- #
 
 
+def _leer_secreto_fichero(nombre: str) -> str | None:
+    """Lee un secreto del fichero apuntado por la env `<nombre>_FILE` (convencion de
+    Docker secrets: el valor vive en /run/secrets/... y NO en la env, asi no aparece en
+    `docker inspect`). None si la env `_FILE` no esta, el fichero no existe o esta vacio.
+    Quita solo el salto de linea final (artefacto del fichero); preserva espacios
+    significativos para secretos que asi lo requieran (contrasenas, claves S3)."""
+    ruta = os.environ.get(nombre + "_FILE")
+    if not ruta:
+        return None
+    try:
+        return Path(ruta).read_text(encoding="utf-8").rstrip("\n") or None
+    except OSError:
+        return None
+
+
 def _crudo(nombre: str) -> str:
     """Valor crudo (str) de un ajuste, sin espacios; "" si no esta.
 
@@ -719,7 +734,10 @@ def _crudo(nombre: str) -> str:
     desde_store = ajustes.obtener(nombre)
     if desde_store is not None:
         return desde_store.strip()
-    return (os.environ.get(nombre) or "").strip()
+    valor = os.environ.get(nombre)
+    if not valor:
+        valor = _leer_secreto_fichero(nombre)
+    return (valor or "").strip()
 
 
 def _entero(nombre: str, defecto: int, *, minimo: int | None = None) -> int:
@@ -903,7 +921,10 @@ def admin_user() -> str:
 def admin_pass() -> str:
     """Contrasena del admin de bootstrap (`KENI_CONSOLA_ADMIN_PASS`, "" si no esta)."""
     # SIN strip: una contrasena puede llevar espacios significativos a proposito.
-    return os.environ.get(ENV_ADMIN_PASS, "")
+    valor = os.environ.get(ENV_ADMIN_PASS)
+    if valor is None:
+        valor = _leer_secreto_fichero(ENV_ADMIN_PASS)
+    return valor if valor is not None else ""
 
 
 def mfa_habilitado() -> bool:
@@ -2023,6 +2044,8 @@ def s3_secret_key() -> str | None:
     espacios significativos. Devuelve None solo si la var no esta o esta vacia.
     """
     valor = os.environ.get(ENV_S3_SECRET_KEY)
+    if not valor:
+        valor = _leer_secreto_fichero(ENV_S3_SECRET_KEY)
     return valor if valor else None
 
 
