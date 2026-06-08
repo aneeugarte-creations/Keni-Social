@@ -4,9 +4,9 @@ Cubre la serializacion (valor efectivo + fuente con store/env/defecto), `validar
 por tipo/min/max, y la precedencia STORE > ENV > DEFECTO via `config._crudo`. Todo
 aislado con monkeypatch de env y del store (sin DB ni red).
 
-Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 3 etapas (KENI_INGESTA "Crear
-noticias", KENI_PIPELINE "Generar copy", KENI_AUTOGEN_ARTE "Generar arte"). Las tres tienen
-excepción por marca.
+Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 4 etapas (KENI_INGESTA "Crear
+noticias", KENI_QA "Validar (QA)", KENI_PIPELINE "Generar copy", KENI_AUTOGEN_ARTE "Generar
+arte"). Las cuatro tienen excepción por marca (1 toggle = 1 etapa).
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     esperadas = {
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
-        # Las 3 etapas (maestros): Crear noticias / Generar copy / Generar arte.
-        config.ENV_INGESTA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE,
+        # Las 4 etapas (maestros): Crear noticias / Validar (QA) / Generar copy / Generar arte.
+        config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE,
         # Automatismos generales (barridos de mantenimiento).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
@@ -68,29 +68,30 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     assert por_marca, "deben existir toggles de copy/arte por marca"
 
 
-def test_maestros_etapa_son_las_tres(store):
-    """El grupo `maestros_etapa` tiene EXACTAMENTE las 3 etapas, todas bool, defecto False."""
+def test_maestros_etapa_son_las_cuatro(store):
+    """El grupo `maestros_etapa` tiene EXACTAMENTE las 4 etapas, todas bool, defecto False."""
     maestros = [a for a in ajustes_catalogo.catalogo() if a.grupo == "maestros_etapa"]
     claves = {a.clave for a in maestros}
-    assert claves == {config.ENV_INGESTA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
+    assert claves == {config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
     for a in maestros:
         assert a.tipo == "bool"
         assert a.defecto is False
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_INGESTA] == "Crear noticias"
+    assert etiquetas[config.ENV_QA] == "Validar (QA)"
     assert etiquetas[config.ENV_PIPELINE] == "Generar copy"
     assert etiquetas[config.ENV_AUTOGEN_ARTE] == "Generar arte"
 
 
 def test_etapas_tienen_excepcion_por_marca(store):
-    """Las TRES etapas (Crear noticias + copy + arte) generan excepciones por marca."""
+    """Las CUATRO etapas (Crear noticias + QA + copy + arte) generan excepciones por marca."""
     por_marca = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo == "automatizacion_marca" and config.SEP_MARCA in a.clave
     ]
     bases = {a.clave.split(config.SEP_MARCA, 1)[0] for a in por_marca}
     assert config.ENV_INGESTA in bases
-    assert bases == {config.ENV_INGESTA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
+    assert bases == {config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
 
 
 def test_maquina_global_kill_switch(store):

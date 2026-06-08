@@ -22,23 +22,45 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, redes, repos
+from .. import config, generaciones, marcas, redes, repos
 from .._http_json import _entero_query
 from ..pipeline_contenido import (
     ORIGEN_PIPELINE,
+    QA_SALTADA,
     TIPO_ACTIVIDAD,
     VERDICTO_NO_VERIFICADO,
     VERDICTO_PROBLEMA,
     qa_lexico,
 )
 
+# Estado de etapa cuando su toggle está DESACTIVADO para la marca (1 toggle = 1 etapa): la etapa
+# no se ejecuta y se pinta "Saltada" (no bloquea el estado global ni cuenta como fallo).
+_ESTADO_SALTADA = "saltada"
+
+
+def _ci_off(marca: str) -> bool:
+    """Etapa "Crear noticias"/CI desactivada para `marca` (maestro `KENI_INGESTA` off o por-marca)."""
+    return config.marca_apagada(config.ENV_INGESTA, marca) or not config.ingesta_activa()
+
+
+def _qa_off(marca: str) -> bool:
+    """Etapa QA desactivada para `marca` (maestro `KENI_QA` off o por-marca)."""
+    return config.marca_apagada(config.ENV_QA, marca) or not config.qa_activo()
+
+
+def _cd_off(marca: str) -> bool:
+    """Etapa "Generar copy"/CD desactivada para `marca` (maestro `KENI_PIPELINE` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE, marca) or not config.pipeline_activo()
+
+
 # Tope por defecto de runs por página (alineado con el resto de la consola).
 _LIMITE_DEF = 50
 _LIMITE_MAX = 200
 
-# Etapas FIJAS del pipeline (en orden de flujo). La derivación de cada estado vive en
-# `_etapas_de_run`. El orden importa: `estado_global` toma la primera no-ok.
-# ORDEN NUEVO (rediseño QPC): la criba de la fuente (QA) va ANTES del copy (CD).
+# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo: documenta el contrato que
+# emite `_etapas_de_run`. Las tres primeras son TOGGLABLES por marca (1 toggle = 1 etapa): activa
+# muestra su estado real, desactivada se pinta "saltada". Aprobación es el gate humano (siempre).
+# `estado_global` toma la primera no-{ok,saltada}. La QA (criba de la fuente) va ANTES del copy.
 _ETAPAS = (
     ("ci", "Ingesta"),
     ("qa", "Criba de la fuente"),
@@ -97,32 +119,36 @@ def _pieza_detalle(plat: dict) -> dict:
 
 
 def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
-    """Deriva las 4 etapas de una run desde el ESTADO REAL del tema, su QA y sus piezas.
+    """Deriva las 4 etapas de una run desde los TOGGLES de la marca + el ESTADO REAL del tema.
 
-    Robusto/auto-curativo (no depende de los logs): se mira el estado actual del tema
-    (`qa_veredicto`) y de las publicaciones por plataforma. ORDEN NUEVO (rediseño QPC): la QA
-    de la FUENTE (criba pre-copy, por tema) va ANTES que el copy; un `problema` NO genera copy.
-    Cada etapa es `{clave, nombre, estado, detalle, ts}`.
+    1 toggle = 1 etapa: cada etapa togglable (CI/Noticias, QA, CD/Copy) está activa o "saltada"
+    según su toggle por-marca; si está activa, su estado se deriva del estado real (no de logs):
+    el `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La QA de la
+    FUENTE (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el gate
+    humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
     """
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
+    marca = item.get("marca", "") or ""
     total = len(piezas)
     qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
-    # --- CI · Ingesta: siempre ok (el tema fue ingerido por el daemon). ----------------
-    ci = {
-        "clave": "ci",
-        "nombre": "Ingesta",
-        "estado": "ok",
-        "detalle": "Nota de origen ingerida de las fuentes.",
-        "ts": creado,
-    }
+    # --- CI · Ingesta (toggle "Crear noticias"): saltada si está off para la marca. -----
+    if _ci_off(marca):
+        ci = {"clave": "ci", "nombre": "Ingesta", "estado": _ESTADO_SALTADA,
+              "detalle": "Etapa «Crear noticias» desactivada para esta marca.", "ts": creado}
+    else:
+        ci = {"clave": "ci", "nombre": "Ingesta", "estado": "ok",
+              "detalle": "Nota de origen ingerida de las fuentes.", "ts": creado}
 
-    # --- QA · Criba de la fuente (PRE-copy): por el veredicto persistido en el TEMA. -----
-    # 'en_curso' = la criba (claude -p) está en vuelo; 'no_verificado' (⚠️) = apta, sigue;
-    # 'problema' (❗) = algo de peso, NO se genera copy.
-    if qa_veredicto == VERDICTO_PROBLEMA:
+    # --- QA · Criba de la fuente (toggle "Validar (QA)"): saltada si está off para la marca. --
+    # Con la etapa activa, por el veredicto persistido en el TEMA: 'en_curso' = criba en vuelo;
+    # 'no_verificado' (⚠️) = apta, sigue; 'problema' (❗) = algo de peso, NO se genera copy.
+    if _qa_off(marca) or qa_veredicto == QA_SALTADA:
+        qa_estado = _ESTADO_SALTADA
+        qa_detalle = "Etapa QA desactivada para esta marca: el copy se genera sin criba."
+    elif qa_veredicto == VERDICTO_PROBLEMA:
         qa_estado = "revisar"
         qa_detalle = "La criba encontró un problema de peso: no se generó copy (revisa los hallazgos)."
     elif qa_veredicto == "en_curso":
@@ -142,9 +168,13 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
         "ts": "",
     }
 
-    # --- CD · Copy + placa: ok si ≥1 pieza tiene copy. Saltada si la QA dio 'problema'. --
+    # --- CD · Copy + placa (toggle "Generar copy"): saltada si está off para la marca. --
+    # Si la etapa está activa: ok con ≥1 pieza con copy; 'problema' de QA omite el copy.
     con_copy = sum(1 for p in piezas if not p["falta_copy"])
-    if es_problema:
+    if _cd_off(marca):
+        cd_estado = _ESTADO_SALTADA
+        cd_detalle = "Etapa «Generar copy» desactivada para esta marca."
+    elif es_problema:
         cd_estado = "pendiente"
         cd_detalle = "Copy omitido: la criba marcó un problema de peso en la fuente."
     elif con_copy:
@@ -190,12 +220,16 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
 
 
 def _estado_global(etapas: list[dict]) -> str:
-    """Estado global de la run: 'fallo' si alguna etapa falló; si no, la primera no-ok."""
+    """Estado global de la run: 'fallo' si alguna etapa falló; si no, la primera no-{ok,saltada}.
+
+    Una etapa 'saltada' (toggle off para la marca) NO bloquea ni cuenta como fallo: se trata como
+    'ok' a efectos de avance, así un run con QA saltada y todo lo demás ok queda 'ok'.
+    """
     for etapa in etapas:
         if etapa["estado"] == "fallo":
             return "fallo"
     for etapa in etapas:
-        if etapa["estado"] != "ok":
+        if etapa["estado"] not in ("ok", _ESTADO_SALTADA):
             return etapa["estado"]
     return "ok"
 
@@ -266,9 +300,18 @@ def _runs_del_pipeline(marca: str | None, limite: int) -> list[dict]:
     `listar_contenido` no filtra por `origen`, así que filtramos en memoria. El listado
     de contenido ya viene acotado al tablero del equipo; recortamos a `limite` tras
     reordenar por recencia (`creado` desc) para no servir un histórico enorme.
+
+    Además, OCULTA los runs de marcas con la etapa de entrada ("Crear noticias"/CI) desactivada:
+    sin ingesta no hay pipeline para esa marca, así que sus runs históricos no se listan (es lo
+    que el usuario espera al desactivar una marca: deja de verla en Pipelines).
     """
     items = repos.listar_contenido(marca=marca or None)
-    pipeline = [it for it in items if (it.get("origen") or "") == ORIGEN_PIPELINE]
+    pipeline = [
+        it
+        for it in items
+        if (it.get("origen") or "") == ORIGEN_PIPELINE
+        and not _ci_off(it.get("marca", "") or "")
+    ]
     pipeline.sort(key=lambda it: (it.get("creado", "") or "", it.get("id", "")), reverse=True)
     return pipeline[:limite]
 

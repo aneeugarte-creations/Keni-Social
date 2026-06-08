@@ -17,6 +17,7 @@ from ._comun import (
     _AUTOGEN_LANZAR_MAX,
     _FORMATO_PIPELINE,
     ETAPA_CD,
+    QA_SALTADA,
     TIPO_COPY,
     VERDICTO_NO_VERIFICADO,
     _copy_pendiente_leido,
@@ -97,15 +98,16 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
 
 
 def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
-    """Temas listos para CD: QA `no_verificado`, con `copy_pendiente` y SIN copy aún.
+    """Temas listos para CD: QA `no_verificado` (o `saltada`), con `copy_pendiente` y SIN copy aún.
 
     La guarda de DOS niveles (copy_pendiente no vacío + sin piezas) hace la fase CD idempotente
     y auto-curativa: un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se
-    hubiera limpiado (p. ej. tras un fallo). Best-effort.
+    hubiera limpiado (p. ej. tras un fallo). Best-effort. Un tema con QA `saltada` (etapa QA
+    desactivada para la marca) fluye a CD igual que uno `no_verificado`; un `problema` sí bloquea.
     """
     listos: list[dict[str, Any]] = []
     for tema in temas_pipeline(marca):
-        if (tema.get("qa_veredicto") or "") != VERDICTO_NO_VERIFICADO:
+        if (tema.get("qa_veredicto") or "") not in (VERDICTO_NO_VERIFICADO, QA_SALTADA):
             continue
         if not (tema.get("copy_pendiente") or "").strip():
             continue

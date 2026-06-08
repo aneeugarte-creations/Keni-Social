@@ -43,6 +43,7 @@ __all__ = [
     "PROMPT_QA_ID",
     "_TITULO_QA",
     "QA_EN_CURSO",
+    "QA_SALTADA",
     "VERDICTO_NO_VERIFICADO",
     "VERDICTO_PROBLEMA",
     "_DEFAULT_QA_CRITERIOS",
@@ -120,6 +121,12 @@ _TITULO_QA = "QA editorial"
 # vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
 # etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el veredicto real.
 QA_EN_CURSO = "en_curso"
+
+# Veredicto SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
+# `KENI_QA` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_copy` lo acepta
+# igual que un `no_verificado`, así el copy se genera sin criba. La vista Pipelines pinta QA como
+# "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
+QA_SALTADA = "saltada"
 
 # Veredictos ESTRUCTURADOS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.

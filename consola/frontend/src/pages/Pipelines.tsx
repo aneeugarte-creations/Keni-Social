@@ -38,6 +38,7 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
   en_curso: { variant: "secondary", clase: "bg-sky-500/15 text-sky-600 border-sky-500/30", texto: "En curso" },
   revisar: { variant: "secondary", clase: "bg-amber-500/15 text-amber-600 border-amber-500/30", texto: "Revisar" },
   pendiente: { variant: "outline", clase: "text-muted-foreground", texto: "Pendiente" },
+  saltada: { variant: "outline", clase: "text-muted-foreground/60 border-dashed line-through", texto: "Saltada" },
   fallo: { variant: "destructive", clase: "", texto: "Fallo" },
 };
 
@@ -142,6 +143,7 @@ function Punto({ estado }: { estado: string }) {
         estado === "en_curso" && "bg-sky-500 animate-pulse",
         estado === "revisar" && "bg-amber-500",
         estado === "pendiente" && "bg-muted-foreground/40",
+        estado === "saltada" && "bg-muted-foreground/20 ring-1 ring-muted-foreground/30",
         estado === "fallo" && "bg-destructive",
       )}
     />

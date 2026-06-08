@@ -40,29 +40,31 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("tuning", "Ajustes finos"),
 )
 
-# Las 3 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), todas colgadas del espinazo
+# Las 4 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), todas colgadas del espinazo
 # pipeline/máquina. Cada una reutiliza una env var existente (NO se renombra) y solo cambia label,
-# agrupación y cableado:
-#   - KENI_INGESTA      → "Crear noticias" (per-marca),
-#   - KENI_PIPELINE     → "Generar copy"  (per-marca),
-#   - KENI_AUTOGEN_ARTE → "Generar arte"  (per-marca).
+# agrupación y cableado (1 toggle = 1 etapa del pipeline, en orden de flujo):
+#   - KENI_INGESTA      → "Crear noticias" (CI, per-marca),
+#   - KENI_QA           → "Validar (QA)"   (criba de la fuente, per-marca),
+#   - KENI_PIPELINE     → "Generar copy"   (CD, per-marca),
+#   - KENI_AUTOGEN_ARTE → "Generar arte"   (per-marca).
 # La tupla es (env, etiqueta, descripción genérica). El maestro vive en `maestros_etapa`; las
-# excepciones por marca (las tres etapas) en `automatizacion_marca`.
+# excepciones por marca (las cuatro etapas) en `automatizacion_marca`.
 _ETAPA_INGESTA = (config.ENV_INGESTA, "Crear noticias", "ingiere fuentes, agrupa historias y traduce/tropicaliza MX")
+_ETAPA_QA = (config.ENV_QA, "Validar (QA)", "criba la fuente con IA antes de generar copy")
 _ETAPA_COPY = (config.ENV_PIPELINE, "Generar copy", "genera copy automático de los temas que aún no lo tienen")
 _ETAPA_ARTE = (config.ENV_AUTOGEN_ARTE, "Generar arte", "genera imagen por IA para los temas con copy y sin imagen")
 
-# Las 3 etapas en orden, para el grupo `maestros_etapa` (maestros globales).
-_ETAPAS: tuple[tuple[str, str, str], ...] = (_ETAPA_INGESTA, _ETAPA_COPY, _ETAPA_ARTE)
+# Las 4 etapas en orden de flujo (Noticias → QA → Copy → Arte), para `maestros_etapa` (globales).
+_ETAPAS: tuple[tuple[str, str, str], ...] = (_ETAPA_INGESTA, _ETAPA_QA, _ETAPA_COPY, _ETAPA_ARTE)
 
-# Etapas CON excepción por marca (`_ajustes_por_marca`). Las TRES tienen excepción por marca
-# (Crear noticias incluida): apagar una marca la excluye de esa etapa, las demás siguen.
+# Etapas CON excepción por marca (`_ajustes_por_marca`). Las CUATRO tienen excepción por marca:
+# apagar una marca la excluye de esa etapa, las demás siguen.
 _ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = _ETAPAS
 
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Maestro GLOBAL de cada una de las 3 etapas. Apagar el maestro deja la etapa en espera para
-    TODAS las marcas; las excepciones por marca (copy/arte) solo restan con el maestro encendido."""
+    """Maestro GLOBAL de cada una de las 4 etapas. Apagar el maestro deja la etapa en espera para
+    TODAS las marcas; las excepciones por marca solo restan con el maestro encendido."""
     return [
         Ajuste(
             clave=env_flag,
@@ -80,15 +82,16 @@ def _global_de_etapa(env_flag: str) -> bool:
     """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca)."""
     return {
         config.ENV_INGESTA: config.ingesta_activa,
+        config.ENV_QA: config.qa_activo,
         config.ENV_PIPELINE: config.pipeline_activo,
         config.ENV_AUTOGEN_ARTE: config.autogen_arte_activo,
     }[env_flag]()
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por (marca × etapa) para las tres etapas (Crear noticias + copy + arte). Se
-    generan en caliente desde el catálogo de marcas, así que añadir una marca añade sus toggles sin
-    código."""
+    """Toggles `bool` por (marca × etapa) para las cuatro etapas (Crear noticias + QA + copy + arte).
+    Se generan en caliente desde el catálogo de marcas, así que añadir una marca añade sus toggles
+    sin código."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
         for env_flag, etiqueta_etapa, desc in _ETAPAS_MARCA:

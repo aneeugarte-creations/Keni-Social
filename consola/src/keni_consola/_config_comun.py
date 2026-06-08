@@ -221,6 +221,13 @@ ENV_PIPELINE = "KENI_PIPELINE"
 ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 
+# Etapa de QA del pipeline: "Validar (QA)" (`KENI_QA`, toggle de etapa por marca). Es la criba
+# de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de generar copy. Toggle
+# PROPIO (1 toggle = 1 etapa): apagarla por marca la deja como "Saltada" y el copy se genera
+# igual (sin la criba). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_QA` no
+# se criba (la etapa aparece saltada). Encender desde el panel admin para activar la verificación.
+ENV_QA = "KENI_QA"
+
 # Etapa de ARTE del pipeline: "Generar arte" (`KENI_AUTOGEN_ARTE`, toggle de etapa). Tras la
 # etapa de copy, el pipeline genera UN arte por IA (mismo proveedor que `/api/media/generar`)
 # para los temas con copy pero sin imagen y lo adjunta. CONSERVADOR por defecto (OFF): sin
@@ -704,6 +711,7 @@ __all__ = [
     'ENV_PRIORIZA_METRICAS_RANGO',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
+    'ENV_QA',
     'ENV_RAIZ',
     'ENV_REAPER_INTERVALO_MIN',
     'ENV_REUTERS_API_KEY',

@@ -8,8 +8,24 @@ exclusión de lo que NO es del pipeline. Usa la fixture `cliente` (entorno aisla
 
 from __future__ import annotations
 
-from keni_consola import generaciones, repos
+import pytest
+
+from keni_consola import config, generaciones, repos
+from keni_consola.api.pipelines import _estado_global
 from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar_etapa
+
+
+@pytest.fixture(autouse=True)
+def _etapas_activas(monkeypatch):
+    """Activa los 3 maestros togglables (Noticias/QA/Copy) para estos tests.
+
+    El default de cada toggle es OFF; sin esto, `_etapas_de_run` pintaría todo "saltada" y el
+    listado ocultaría los runs (la etapa de entrada CI estaría off). Los tests que ejercitan el
+    caso "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
+    """
+    monkeypatch.setenv(config.ENV_INGESTA, "1")
+    monkeypatch.setenv(config.ENV_QA, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE, "1")
 
 
 def _tema_pipeline(titulo: str, marca: str = "unotv", **campos) -> dict:
@@ -86,6 +102,48 @@ def test_run_aprobado(cliente):
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["aprobacion"] == "ok"
     assert run["estado_global"] == "ok"
+
+
+def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
+    """QA desactivada para la marca (`KENI_QA::unotv=0`): etapa QA 'saltada' y el copy se genera
+    igual (CD 'ok'). 'saltada' no bloquea: el estado_global lo marca la aprobación pendiente."""
+    monkeypatch.setattr(
+        "keni_consola.ajustes.obtener",
+        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_QA, "unotv") else None,
+    )
+    tema = _tema_pipeline("Tema sin QA", qa_veredicto="saltada")
+    repos.crear_contenido_plataforma(
+        contenido_id=tema["id"], red="x", estado="borrador",
+        copy="Copy generado sin criba.", veredicto="no_verificado",
+    )
+    run = _run_por_titulo(cliente, "Tema sin QA")
+    assert run is not None
+    etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
+    assert etapas == {"ci": "ok", "qa": "saltada", "cd": "ok", "aprobacion": "pendiente"}
+    assert run["estado_global"] == "pendiente"
+
+
+def test_marca_con_noticias_off_no_aparece(cliente, monkeypatch):
+    """Una marca con 'Crear noticias' (CI) apagada (`KENI_INGESTA::marca=0`) NO lista sus runs;
+    otra marca activa sí (la ingesta es la entrada del pipeline: sin ella, no hay pipeline)."""
+    monkeypatch.setattr(
+        "keni_consola.ajustes.obtener",
+        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_INGESTA, "claro-sports") else None,
+    )
+    _tema_pipeline("Run claro", marca="claro-sports")
+    _tema_pipeline("Run uno", marca="unotv")
+    titulos = {x["titulo"] for x in cliente.get("/api/pipelines").json()["pipelines"]}
+    assert "Run uno" in titulos
+    assert "Run claro" not in titulos
+
+
+def test_estado_global_saltada_no_bloquea():
+    """`_estado_global` puro: 'saltada' cuenta como 'ok' (no bloquea ni falla)."""
+    def _e(estado):
+        return {"estado": estado}
+    assert _estado_global([_e("ok"), _e("saltada"), _e("ok"), _e("pendiente")]) == "pendiente"
+    assert _estado_global([_e("ok"), _e("saltada"), _e("saltada"), _e("ok")]) == "ok"
+    assert _estado_global([_e("ok"), _e("fallo"), _e("saltada"), _e("ok")]) == "fallo"
 
 
 def test_excluye_contenido_no_pipeline(cliente):

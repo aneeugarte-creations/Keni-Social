@@ -191,6 +191,8 @@ def _etapas_de_actividad():
 
 def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
     """CI selecciona <= cap, crea temas SIN copy, marca items usados; QA queda sin documento."""
+    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
+    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op aquí (doc QA vacío): sin veredicto
     monkeypatch.setenv("KENI_PIPELINE", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "2")
     llamadas = _mock_lanzar_copy(monkeypatch)
@@ -230,6 +232,8 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
     """Feed de marca PROPIA: la og:image resuelta queda en `copy_pendiente` del tema."""
     import json
 
+    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
+    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op (doc QA vacío): tema sin veredicto
     monkeypatch.setenv("KENI_PIPELINE", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -250,6 +254,8 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
 
 def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
     """CI: un item con `enlace` http(s) persiste `url_fuente` CANÓNICA en el tema creado."""
+    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
+    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op (doc QA vacío): tema sin veredicto
     monkeypatch.setenv("KENI_PIPELINE", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -271,6 +277,8 @@ def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
 
 def test_ci_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
     """CI: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
+    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
+    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op (doc QA vacío): tema sin veredicto
     monkeypatch.setenv("KENI_PIPELINE", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -308,6 +316,8 @@ def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
 
 def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
     """Una QA de la fuente `problema` -> NO se lanza copy y el tema queda ❗ con hallazgos."""
+    monkeypatch.setenv("KENI_QA", "1")        # etapa QA activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa (aun así, un 'problema' no genera copy)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema malo")
@@ -326,6 +336,8 @@ def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
 
 def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     """Una QA `no_verificado` -> SÍ se lanza copy y las piezas heredan el aviso ⚠️."""
+    monkeypatch.setenv("KENI_QA", "1")        # etapa QA activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa (genera copy del tema apto)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema ok")
@@ -355,6 +367,7 @@ def test_qa_no_relanza_tema_ya_cribado(entorno, monkeypatch):
 
 def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     """El cap por barrido de QA (`_QA_LANZAR_MAX`) acota los lanzamientos de criba."""
+    monkeypatch.setenv("KENI_QA", "1")  # etapa QA activa para que el cap aplique a lanzamientos
     cliente = _cliente()  # noqa: F841 -- lanzador noop: deja la QA en `ejecutando` (en_curso)
     monkeypatch.setattr(pc, "_QA_LANZAR_MAX", 2)
     for i in range(4):
@@ -366,6 +379,7 @@ def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
 
 def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     """El cap por barrido de CD (`_CD_LANZAR_MAX`) acota los lanzamientos de copy."""
+    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa para que el cap aplique
     llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_CD_LANZAR_MAX", 2)
     import json
@@ -380,6 +394,58 @@ def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     lanzados = pc.ejecutar_cd(autor=None)
     assert len(lanzados) == 2
     assert len(llamadas) == 2
+
+
+# --------------------------------------------------------------------------- #
+# 1 toggle = 1 etapa: Noticias/QA/Copy independientes por marca                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_solo_noticias_ci_corre_qa_saltada_cd_no(entorno, monkeypatch):
+    """Solo «Crear noticias» ON: CI crea temas, QA los marca 'saltada', CD no genera copy."""
+    monkeypatch.setenv("KENI_INGESTA", "1")
+    monkeypatch.delenv("KENI_QA", raising=False)        # QA off -> etapa saltada
+    monkeypatch.delenv("KENI_PIPELINE", raising=False)  # Copy off -> CD no corre
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
+    _mock_feed(monkeypatch, [_item(clave="n1", titulo="Solo noticia")])
+    _mock_og_image(monkeypatch, "")
+
+    resumen = pc.ejecutar_barrido()
+
+    assert len(resumen["temas"]) == 1
+    # QA desactivada: los temas quedan 'saltada' (no se lanza criba).
+    assert all((t.get("qa_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
+    # CD desactivada: no se genera copy aunque la marca tenga temas listos.
+    assert llamadas == []
+
+
+def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
+    """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba)."""
+    monkeypatch.setenv("KENI_QA", "1")
+    monkeypatch.setattr(
+        pc.config, "marca_apagada",
+        lambda env, marca: env == config.ENV_QA and marca == "unotv",
+    )
+    tema = _tema_pipeline(titulo="Marca sin QA")
+
+    cribados = pc.ejecutar_qa(autor=None)
+
+    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.QA_SALTADA
+    assert any(c["verdicto"] == pc.QA_SALTADA for c in cribados)
+
+
+def test_temas_para_copy_incluye_qa_saltada(entorno):
+    """Un tema con QA 'saltada' fluye a CD igual que 'no_verificado'; un 'problema' no."""
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="Saltada ok", qa_veredicto=pc.QA_SALTADA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Problema", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
+
+    titulos = {t["titulo"] for t in pc.temas_para_copy()}
+    assert "Saltada ok" in titulos
+    assert "Problema" not in titulos
 
 
 # --------------------------------------------------------------------------- #
@@ -406,6 +472,7 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
 
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
     """`ejecutar_cd` lanza copy de los temas del pool vía `autogen_copy.lanzar_para_topic`."""
+    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa (sin el global, ejecutar_cd no corre)
     from keni_consola import autogen_copy
 
     lanzadas: list[str] = []
@@ -423,6 +490,7 @@ def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
 
 def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
     """La exclusión por marca de «Generar copy» (ENV_PIPELINE) también aplica al pool."""
+    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa; la exclusión es por marca, no global
     from keni_consola import autogen_copy
 
     monkeypatch.setattr(pc.config, "marca_apagada", lambda env, marca: marca == "unotv")

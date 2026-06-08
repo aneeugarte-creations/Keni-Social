@@ -35,6 +35,7 @@ from ._config_comun import (
     ENV_PIPELINE,
     ENV_PIPELINE_INTERVALO_HORAS,
     ENV_PIPELINE_MAX,
+    ENV_QA,
     ENV_REUTERS_API_KEY,
     ENV_REUTERS_BASE_URL,
     ENV_TRAD_LOTE,
@@ -240,6 +241,31 @@ def pipeline_max() -> int:
     Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
     """
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
+
+
+def qa_activo() -> bool:
+    """True si la ETAPA de QA del pipeline debe cribar la fuente (`KENI_QA`, "Validar (QA)").
+
+    Def OFF (conservador, como el resto de etapas): sin el flag NO se criba y la etapa aparece
+    "Saltada"; el copy se genera igual. Con el flag, antes de generar copy un `claude -p` evalúa
+    la nota de origen (criba pre-copy). Toggle PROPIO por marca: 1 toggle = 1 etapa.
+    """
+    return _crudo(ENV_QA).lower() in _VERDADEROS
+
+
+def alguna_etapa_pipeline_activa() -> bool:
+    """True si ALGUNA etapa del pipeline (Noticias/QA/Copy/Arte) está activa globalmente.
+
+    El daemon del pipeline barre si CUALQUIERA de sus etapas está encendida (no solo Copy):
+    con "Noticias" sola, debe barrer para crear temas (CI) aunque Copy esté OFF. Cada fase del
+    barrido se auto-gatea luego por su propio flag global + override por-marca.
+    """
+    return (
+        ingesta_activa()
+        or qa_activo()
+        or pipeline_activo()
+        or autogen_arte_activo()
+    )
 
 
 def autogen_arte_activo() -> bool:

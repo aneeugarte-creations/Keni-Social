@@ -39,10 +39,11 @@ def test_catalogo_expone_toggles_por_marca():
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
     assert config.clave_por_marca(config.ENV_PIPELINE, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_AUTOGEN_ARTE, "unotv") in claves
-    # "Crear noticias" (KENI_INGESTA) ahora también tiene fila por marca.
+    # "Crear noticias" (KENI_INGESTA) y "Validar (QA)" (KENI_QA) también tienen fila por marca.
     assert config.clave_por_marca(config.ENV_INGESTA, "unotv") in claves
-    # Las tres etapas (ingesta + copy + arte) van en `automatizacion_marca`; la publicación, en
-    # su propio grupo `publicacion_marca`. Todos los toggles por marca son `bool`.
+    assert config.clave_por_marca(config.ENV_QA, "unotv") in claves
+    # Las cuatro etapas (ingesta + QA + copy + arte) van en `automatizacion_marca`; la publicación,
+    # en su propio grupo `publicacion_marca`. Todos los toggles por marca son `bool`.
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
     assert por_marca and all(
         a.tipo == "bool" and a.grupo in {"automatizacion_marca", "publicacion_marca"}
