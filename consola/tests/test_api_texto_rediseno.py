@@ -1,7 +1,7 @@
 """Tests HTTP de los endpoints NUEVOS de la Biblioteca (rediseno): facetas, registro de
 pipelines, preview del prompt ensamblado y versionado git.
 
-Misma estrategia que `test_api_biblioteca`: monta solo `api.biblioteca.RUTAS` con un
+Misma estrategia que `test_api_texto`: monta solo `api.texto.RUTAS` con un
 TestClient aislado (sin auth/Postgres). El versionado git esta apagado por la suite; los
 tests que lo ejercitan lo reactivan via env antes de pegarle al endpoint.
 """
@@ -15,7 +15,7 @@ from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
 from keni_consola import generaciones, marcas
-from keni_consola.api import biblioteca as api_bib
+from keni_consola.api import texto as api_texto
 
 _MARCA = marcas.opciones()[0][0]
 
@@ -26,7 +26,7 @@ def cliente(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     monkeypatch.setattr(generaciones, "encolar_job_claude", lambda *a, **k: None)
-    return TestClient(Starlette(routes=list(api_bib.RUTAS)))
+    return TestClient(Starlette(routes=list(api_texto.RUTAS)))
 
 
 # --------------------------------------------------------------------------- #

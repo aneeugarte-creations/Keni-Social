@@ -1,6 +1,6 @@
 """Tests HTTP del API de la Biblioteca, montando solo sus RUTAS (sin auth/Postgres).
 
-Construye una app Starlette minima con `api.biblioteca.RUTAS` y un TestClient, e intercepta
+Construye una app Starlette minima con `api.texto.RUTAS` y un TestClient, e intercepta
 `encolar_job_claude` (no toca cola ni `claude`). Cubre el CRUD, papelera, editoriales, areas
 y el lanzar (contenido / area / errores). El harness completo (auth + Postgres) cubre estos
 endpoints en CI; aqui validamos el contrato HTTP de forma aislada.
@@ -13,7 +13,7 @@ from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
 from keni_consola import biblioteca, generaciones, marcas
-from keni_consola.api import biblioteca as api_bib
+from keni_consola.api import texto as api_texto
 
 _MARCA = marcas.opciones()[0][0]
 
@@ -24,7 +24,7 @@ def cliente(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     monkeypatch.setattr(generaciones, "encolar_job_claude", lambda *a, **k: None)
-    return TestClient(Starlette(routes=list(api_bib.RUTAS)))
+    return TestClient(Starlette(routes=list(api_texto.RUTAS)))
 
 
 # --------------------------------------------------------------------------- #
@@ -188,7 +188,7 @@ def test_lanzar_prompt_piezas_con_redes(monkeypatch, tmp_path):
         generaciones, "encolar_job_claude",
         lambda *a, **k: capturado.update(k),
     )
-    cli = TestClient(Starlette(routes=list(api_bib.RUTAS)))
+    cli = TestClient(Starlette(routes=list(api_texto.RUTAS)))
     creado = cli.post("/api/texto", json={
         "titulo": "Copy por red", "tipo": "prompt", "cuerpo": "haz copy por red",
     })

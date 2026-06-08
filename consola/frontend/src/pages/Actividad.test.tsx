@@ -7,6 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Actividad from "./Actividad";
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 
+// Actividad lee la marca activa global (filtro por marca). En test no hay provider, así que
+// stubeamos el hook a "todas las marcas" (igual patrón que el resto de páginas con marca global).
+vi.mock("@/hooks/marca-activa-contexto", () => ({
+  useMarcaActiva: () => ({ marcaActiva: null, marcaPrimaria: null }),
+}));
+
 const LISTA = {
   items: [
     {
