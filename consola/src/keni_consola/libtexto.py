@@ -198,6 +198,25 @@ def raiz() -> Path:
     return rutas.dir_config() / "texto"
 
 
+def migrar_dir_legacy() -> bool:
+    """Renombra el almacén `…/biblioteca` (nombre viejo) a `…/texto` (idempotente).
+
+    Al purgar "biblioteca" del repo, `raiz()` pasó de `dir_config()/biblioteca` a
+    `dir_config()/texto`. En instalaciones existentes los documentos viven bajo el dir
+    viejo; sin este renombre `raiz()` apuntaría a un dir vacío y la página Texto saldría
+    sin documentos. Solo actúa si existe el viejo y aún no el nuevo (y no hay override por
+    env). Devuelve True si renombró. Es el único sitio que nombra el dir viejo.
+    """
+    if config.texto_dir() is not None:
+        return False
+    viejo = rutas.dir_config() / "biblioteca"
+    nuevo = rutas.dir_config() / "texto"
+    if not viejo.is_dir() or nuevo.exists():
+        return False
+    viejo.rename(nuevo)
+    return True
+
+
 def _ahora_iso() -> str:
     """Marca de tiempo ISO (segundos, UTC) para `creado`/`actualizado`."""
     return datetime.now(UTC).isoformat(timespec="seconds")

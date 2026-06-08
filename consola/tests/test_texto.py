@@ -212,3 +212,38 @@ def test_importar_semilla_no_pisa_lo_editado():
     libtexto.guardar(prompt.id, cuerpo="EDITADO POR EL EQUIPO")
     libtexto.importar_semilla()  # no debe restaurar el original
     assert libtexto.obtener(prompt.id).cuerpo.strip() == "EDITADO POR EL EQUIPO"
+
+
+# --------------------------------------------------------------------------- #
+# Renombre del almacén de documentos: …/biblioteca -> …/texto (idempotente)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_migrar_dir_legacy_renombra_biblioteca_a_texto(tmp_path, monkeypatch):
+    """Una instalación previa guarda los documentos bajo `…/biblioteca`; la migración los
+    mueve a `…/texto` para que `libtexto.raiz()` (renombrado) los vea. Sin override por env."""
+    from keni_consola import rutas
+
+    monkeypatch.delenv("KENI_TEXTO_DIR", raising=False)
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    base = rutas.dir_config()
+    viejo = base / "biblioteca"
+    (viejo / "prompt").mkdir(parents=True)
+    (viejo / "prompt" / "x.md").write_text("hola", encoding="utf-8")
+
+    assert libtexto.migrar_dir_legacy() is True
+    assert (base / "texto" / "prompt" / "x.md").read_text(encoding="utf-8") == "hola"
+    assert not viejo.exists()
+    # Idempotente: ya migrado -> no actúa.
+    assert libtexto.migrar_dir_legacy() is False
+
+
+def test_migrar_dir_legacy_noop_con_override_env(tmp_path, monkeypatch):
+    """Con `KENI_TEXTO_DIR` fijado (tests/instalaciones a medida) NO renombra nada."""
+    from keni_consola import rutas
+
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "custom"))
+    (rutas.dir_config() / "biblioteca").mkdir(parents=True)
+    assert libtexto.migrar_dir_legacy() is False
+    assert (rutas.dir_config() / "biblioteca").is_dir()

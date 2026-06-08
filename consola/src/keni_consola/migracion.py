@@ -43,6 +43,7 @@ class ResumenMigracion:
     db_lista: bool = False
     objetos_media_copiados: int = 0
     objetos_media_saltados: int = 0
+    dir_texto_migrado: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -146,6 +147,12 @@ def migrar(*, solo_db: bool = False, solo_media: bool = False, dry_run: bool = F
     """Ejecuta la migracion segun las banderas y devuelve el resumen."""
     resumen = ResumenMigracion()
     if not solo_media:
+        # Renombre del almacén de documentos `…/biblioteca` → `…/texto` (idempotente). Sin él, una
+        # instalación previa tendría los documentos bajo el dir viejo y la página Texto saldría vacía.
+        if not dry_run:
+            from . import libtexto
+
+            resumen.dir_texto_migrado = libtexto.migrar_dir_legacy()
         resumen.db_lista = asegurar_esquema(dry_run=dry_run)
     if not solo_db:
         copiados, saltados = migrar_media(dry_run=dry_run)
@@ -156,6 +163,8 @@ def migrar(*, solo_db: bool = False, solo_media: bool = False, dry_run: bool = F
 
 def _imprimir_resumen(resumen: ResumenMigracion, *, dry_run: bool) -> None:
     prefijo = "[dry-run] " if dry_run else ""
+    if resumen.dir_texto_migrado:
+        print(f"{prefijo}Texto: almacén renombrado …/biblioteca -> …/texto.")
     if resumen.db_lista:
         print(f"{prefijo}DB: esquema Postgres asegurado (idempotente; ADR 0004).")
     if resumen.objetos_media_copiados or resumen.objetos_media_saltados:
