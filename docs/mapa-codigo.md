@@ -59,15 +59,17 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `pipeline_estado.py` — observabilidad: en qué ETAPA está cada tema.
 
 ## Persistencia / repos
-- `db.py` — persistencia OPERACIONAL: Postgres (ADR 0004). *[el más grande del repo]*
+- `repos.py` — capa REPOSITORIO: fachada ÚNICA de persistencia (lo que llama `api/`). *[el más grande aún sin partir]*
+- `db.py` — BARREL: reexporta todos los `db_<dominio>`; `db.<algo>` sigue funcionando igual.
+- `db_<dominio>.py` — CRUD por dominio (el cuerpo de la antigua db.py de 9571 líneas): `db_rota`, `db_contenido`, `db_publicaciones`, `db_noticias`, `db_editor`, `db_parrilla`, `db_colaboracion`, `db_comercial`, `db_metricas`, `db_hashtags_franjas`, `db_webhooks`, `db_green`, `db_jobs`, `db_notificaciones`.
+- `_db_comun.py` — plumbing compartido de los `db_<dominio>`: imports, logger y re-export de `_db_core`.
 - `_db_core.py` — cimientos: conexión, locks y esquema/migraciones.
 - `motor_db.py` — motor de persistencia operacional: Postgres, un solo backend.
-- `repos.py` — capa REPOSITORIO: fachada ÚNICA de persistencia (lo que llama `api/`).
 - `migracion.py` — migración one-shot del cutover hosted: media disco → S3/Garage.
 - `migrar_contenido.py` — migración de datos legados al tablero de CONTENIDO unificado.
 - `versionado.py` — versionado de la Biblioteca con git (historial · diff · rollback).
 
-> Capas de DB: `api/` → `repos.py` (fachada) → `db.py` (CRUD) → `_db_core.py` (cimientos) ← `motor_db.py` (conexión Postgres).
+> Capas de DB: `api/` → `repos.py` (fachada) → `db.py` (barrel) → `db_<dominio>.py` (CRUD) → `_db_core.py` (cimientos) ← `motor_db.py` (conexión Postgres). El plumbing común de los `db_<dominio>` está en `_db_comun.py`.
 
 ## Ficheros-como-verdad (prosa editorial en disco)
 - `ficheros.py` — backend de FICHEROS YAML: el historial de prompts vive en disco.

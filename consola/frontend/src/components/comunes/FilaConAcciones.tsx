@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useMenuContextual } from "@/hooks/useMenuContextual";
+import { useMenuContextual } from "@/hooks/use-menu-contextual";
 import {
   MenuFlotante,
   type EntradaMenuContextual,
