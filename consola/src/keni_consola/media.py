@@ -126,16 +126,23 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # alternativas tipo Nano Banana (Gemini) son aun mas baratas pero BLOQUEAN personas.
 _MODELO_DEFECTO = "openai/gpt-5-image-mini"
 
-# Mensaje de SISTEMA que fuerza salida de imagen. Los modelos de imagen de OpenAI (GPT-5
-# Image / Mini) son chat-based: si el prompt "suena" a noticia, articulo o instruccion de
-# redaccion, RESPONDEN TEXTO (p.ej. "¿Quieres que redacte un titular?") en vez de generar
-# la imagen. Este system los obliga a interpretar SIEMPRE la peticion como la descripcion de
-# la imagen a crear. Los generadores puros (Nano Banana/Gemini) lo ignoran sin efecto adverso.
+# Mensaje de SISTEMA con DOS encargos. (1) Forzar salida de imagen: los modelos de imagen de
+# OpenAI (GPT-5 Image / Mini) son chat-based y, si el prompt "suena" a noticia/articulo,
+# RESPONDEN TEXTO ("¿Quieres que redacte un titular?") en vez de generar la imagen. (2) Forzar
+# que sea UNA FOTO realista y NO una infografia: ante una noticia de TV tienden a producir el
+# tipico grafico de canal (mapa con etiquetas, titular, cintillo "UnoTV", marco), justo lo que
+# NO queremos: en la consola el titular y la marca se componen DESPUES, de forma determinista,
+# encima de una foto limpia. Los generadores puros (Nano Banana/Gemini) lo respetan sin dano.
 _SISTEMA_IMAGEN = (
-    "Eres un generador de imagenes. Tu UNICA salida es una imagen generada a partir de la "
-    "peticion del usuario. NUNCA respondas con texto, preguntas ni ofertas de ayuda, aunque "
-    "la peticion parezca una noticia, un articulo o una instruccion de redaccion: interpretala "
-    "siempre como la descripcion de la imagen que debes crear y devuelve unicamente la imagen."
+    "Eres un generador de fotografias para una marca de television. Tu UNICA salida es UNA "
+    "sola fotografia realista, estilo fotoperiodismo o banco de imagenes, que represente la "
+    "peticion del usuario. NUNCA respondas con texto, preguntas ni ofertas de ayuda, aunque la "
+    "peticion parezca una noticia, un articulo o una instruccion: interpretala SIEMPRE como la "
+    "descripcion de la foto que debes crear. PROHIBIDO dentro de la imagen: cualquier texto, "
+    "letras, palabras, numeros, titulares, subtitulos, placas o cintillos, logos, marcas de "
+    "agua o nombres de canal; y tampoco infografias, posters, collages, mapas con etiquetas, "
+    "plantillas, marcos ni bordes. Devuelve una unica imagen fotografica limpia: el titular y "
+    "la identidad de marca los anade despues la consola, no tu."
 )
 
 # Lista curada de modelos de imagen ofrecidos en la UI (FUENTE UNICA de verdad: alimenta
