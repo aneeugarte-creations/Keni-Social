@@ -25,6 +25,7 @@ import { documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
+import { prepararDocumento } from "@/lib/placa/docPieza";
 
 type TipoPlantilla = "foto" | "miniatura";
 
@@ -149,10 +150,17 @@ export default function Imagen() {
         return;
       }
       if (pieza.documento) {
+        // Versión ya guardada en el editor: es la verdad (su foto va horneada en los huecos).
         store.getState().cargar(pieza.documento as Documento);
       } else {
-        const res = await api.imagenPlantilla(marca, "feed");
-        store.getState().cargar(res.documento as Documento);
+        // Sin versión: arranca de la plantilla EFECTIVA (la misma que compone el feed) e inyecta
+        // la foto de la pieza en sus huecos, para que el lienzo muestre el marco y la foto REALES
+        // (no la plantilla genérica de la marca ni una foto de muestra). Cae a la plantilla de
+        // marca por defecto si la pieza no tiene plantilla efectiva.
+        const base = (pieza.plantilla ??
+          (await api.imagenPlantilla(marca, "feed")).documento) as Documento;
+        const fotos = pieza.fotos ?? [];
+        store.getState().cargar(fotos.length ? prepararDocumento(base, { fotos }) : base);
       }
     } catch (e) {
       if (guardado) {

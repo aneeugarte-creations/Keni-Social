@@ -122,6 +122,23 @@ def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
     return plantillas[0]
 
 
+def plantilla_efectiva_doc(pub: dict[str, Any]) -> dict[str, Any] | None:
+    """Documento (parseado) de la plantilla de estudio EFECTIVA de la pieza, o None.
+
+    Es la MISMA plantilla con la que se compone el feed (`_plantilla_efectiva`). La usa el editor
+    para arrancar una pieza SIN versión guardada del documento que de verdad se publica (marco real),
+    en vez de la plantilla genérica por SPEC de la marca. Tolerante a JSON inválido.
+    """
+    plantilla = _plantilla_efectiva(pub)
+    if not plantilla:
+        return None
+    try:
+        doc = json.loads(plantilla.get("documento") or "{}")
+    except (ValueError, TypeError):
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
 def fotos_de_pieza(pub: dict[str, Any]) -> list[dict[str, Any]]:
     """Fotos por HUECO de la pieza (collage): `[{objeto, foco, zoom}, …]`, una por hueco en orden.
 

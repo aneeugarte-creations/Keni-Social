@@ -93,12 +93,22 @@ async def pieza_documento(request: Request) -> Response:
     """GET /api/imagen/pieza/{contenido_id}/{plataforma_id}: documento editable de la pieza.
 
     Devuelve la ÚLTIMA versión guardada del documento (o `null` si aún no se editó con el editor),
-    más el número de versiones. El frontend, si es `null`, arranca de la plantilla de la marca.
+    más el número de versiones. Si no hay versión, el frontend arranca de la `plantilla` EFECTIVA
+    (la misma que compone el feed) e inyecta las `fotos` de la pieza en sus huecos, para que el
+    lienzo muestre el marco y la foto REALES (no la plantilla genérica de la marca ni una muestra).
     """
     cid = request.path_params["contenido_id"]
     pid = request.path_params["plataforma_id"]
     versiones = repos.listar_documento_versiones(cid, pid)
     ultima = versiones[0] if versiones else None
+    # `pub` (fila publicación = contenido+plataforma) para resolver plantilla efectiva y fotos.
+    pub = repos.obtener_publicacion(pid) or {}
+    from ..dominio import render_pieza
+
+    fotos = [
+        f for f in (render_pieza.fotos_de_pieza(pub) if pub else [])
+        if (f.get("objeto") or "").strip()
+    ]
     return JSONResponse(
         {
             "documento": _doc_de_version(ultima),
@@ -106,6 +116,10 @@ async def pieza_documento(request: Request) -> Response:
             # Bindings reales para que el editor renderice el titular/pleca de la publicación
             # (no el texto de muestra de las capas con `binding`).
             "bindings": _bindings_de_pieza(cid, pid),
+            # Plantilla efectiva (mismo documento que publica el feed) y fotos por hueco: el editor
+            # las usa solo cuando NO hay versión guardada (ver `abrirPiezaTab`).
+            "plantilla": render_pieza.plantilla_efectiva_doc(pub) if pub else None,
+            "fotos": fotos,
         }
     )
 

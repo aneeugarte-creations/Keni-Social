@@ -21,9 +21,17 @@ export const apiImagen = {
       { signal },
     ),
   // Editor anclado a una pieza (historial/versionado): cargar el documento guardado de la pieza
-  // y guardar (render + nueva versión + fija la imagen de la publicación).
+  // y guardar (render + nueva versión + fija la imagen de la publicación). Cuando no hay versión
+  // guardada, `plantilla` trae el documento EFECTIVO (el mismo que compone el feed) y `fotos` las
+  // fotos por hueco de la pieza, para arrancar del documento real con su foto.
   imagenPieza: (contenidoId: string, plataformaId: string, signal?: AbortSignal) =>
-    peticion<{ documento: unknown; versiones: number; bindings: Record<string, string> }>(
+    peticion<{
+      documento: unknown;
+      versiones: number;
+      bindings: Record<string, string>;
+      plantilla: unknown | null;
+      fotos: { objeto: string; foco: [number, number] | null; zoom: number }[];
+    }>(
       `/imagen/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
       { signal },
     ),
