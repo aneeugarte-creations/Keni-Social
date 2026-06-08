@@ -14,10 +14,16 @@ en el worker desde el `spec`.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
-from .. import generaciones, redes, repos
+from .. import redes, repos
 from . import publicaciones as contrato_publicaciones
 from . import stream
+
+if TYPE_CHECKING:
+    # `generaciones` solo se usa en anotaciones (`-> generaciones.Procesar`). Mantener el
+    # dominio NEUTRO: no importa de `generaciones` en runtime (invariante de `dominio/`).
+    from .. import generaciones
 
 # --------------------------------------------------------------------------- #
 # Cosecha de IMAGENES de salida (skills/prompts de imagen)                     #

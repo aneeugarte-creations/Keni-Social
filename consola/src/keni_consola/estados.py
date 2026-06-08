@@ -26,19 +26,23 @@ ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 #
 # `en_revision` se anadio DESPUES del set original; un YAML legado nunca lo trae, asi
 # que la lectura sigue siendo retrocompatible (los 4 estados originales validan igual).
-ESTADOS_PUBLICACION: tuple[str, ...] = (
-    "borrador",
-    "en_revision",
-    "aprobado",
-    "programado",
-    "publicado",
-)
-
-# Estado intermedio del flujo de aprobacion de equipo (#9): el autor envia su pieza a
-# revision; un revisor/admin la aprueba o la devuelve a borrador.
+# Estados del flujo de publicación (fuente única; usar estas constantes, no literales).
+# `en_revision` se anadio DESPUES del set original (#9): el autor envia su pieza a revision;
+# un revisor/admin la aprueba o la devuelve a borrador. Un YAML legado nunca lo trae, asi
+# que la lectura sigue siendo retrocompatible (los 4 estados originales validan igual).
+ESTADO_BORRADOR = "borrador"
 ESTADO_EN_REVISION = "en_revision"
 ESTADO_APROBADO = "aprobado"
 ESTADO_PROGRAMADO = "programado"
+ESTADO_PUBLICADO = "publicado"
+
+ESTADOS_PUBLICACION: tuple[str, ...] = (
+    ESTADO_BORRADOR,
+    ESTADO_EN_REVISION,
+    ESTADO_APROBADO,
+    ESTADO_PROGRAMADO,
+    ESTADO_PUBLICADO,
+)
 
 # Estados del seguimiento comercial: activa (se captura), pausada (se detuvo la
 # pauta), cerrada (KPI entregado / reporte hecho). Operacional; vive en SQLite.
