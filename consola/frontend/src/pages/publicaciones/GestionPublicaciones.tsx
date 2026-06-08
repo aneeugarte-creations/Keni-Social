@@ -4,22 +4,14 @@ import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
-import { FILTRO_TODOS } from "@/pages/publicaciones/Filtros";
 import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
 import { VistaLista } from "@/pages/publicaciones/VistaLista";
 import type { OpcionesPublicaciones, Publicacion } from "@/types";
@@ -34,8 +26,9 @@ const TAM_PAGINA = 30;
  * `contenido_plataforma` de un `contenido`) y reutiliza el editor rico
  * (`VistaLista`/`VistaCalendario`/`DialogoEditar`/`DialogoDuplicar`).
  *
- * La MARCA viene del selector global (`useMarcaActiva`); no hay selector de marca local.
- * Los únicos filtros propios son RED y LÍNEA editorial.
+ * MARCA, RED y LÍNEA editorial vienen TODAS de los selectores GLOBALES de la barra
+ * superior (`useMarcaActiva` + `useFiltrosContenido`); esta página ya no tiene
+ * dropdowns de filtro propios.
  */
 export function GestionPublicaciones({
   modo,
@@ -96,28 +89,12 @@ function Cuerpo({
   marcaActiva: string | null;
   onConfigurarCadencia?: () => void;
 }) {
-  const [red, setRed] = React.useState(FILTRO_TODOS);
-  const [linea, setLinea] = React.useState(FILTRO_TODOS);
+  // RED y LÍNEA las mandan los selectores GLOBALES de la topbar (la elegibilidad de
+  // línea por marca y su reseteo viven en el provider). La MARCA, el switch de marca.
+  const { red, linea } = useFiltrosContenido();
   const [paginas, setPaginas] = React.useState(1);
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
-
-  // Líneas elegibles: las de la marca activa + las globales (marca === ""). Con marca
-  // activa null (todas) se muestran todas.
-  const lineasElegibles = React.useMemo(
-    () =>
-      opciones.lineas.filter(
-        (l) => l.marca === "" || marcaActiva == null || l.marca === marcaActiva,
-      ),
-    [opciones.lineas, marcaActiva],
-  );
-
-  // Si la línea filtrada deja de pertenecer a la marca activa, se resetea.
-  React.useEffect(() => {
-    if (linea !== FILTRO_TODOS && !lineasElegibles.some((l) => l.id === linea)) {
-      setLinea(FILTRO_TODOS);
-    }
-  }, [lineasElegibles, linea]);
 
   const limite = calendario ? undefined : paginas * TAM_PAGINA;
 
@@ -152,29 +129,6 @@ function Cuerpo({
 
   return (
     <div className="mt-2">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <SelectorRed
-          redes={opciones.redes}
-          valor={red}
-          onCambio={setRed}
-          ariaLabel="Filtrar por red"
-          className="w-full sm:w-[160px]"
-        />
-        <Select value={linea} onValueChange={setLinea}>
-          <SelectTrigger className="w-full sm:w-[200px]" aria-label="Filtrar por línea editorial">
-            <SelectValue placeholder="Línea editorial" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={FILTRO_TODOS}>Todas las líneas</SelectItem>
-            {lineasElegibles.map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.nombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {query.isPending ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (

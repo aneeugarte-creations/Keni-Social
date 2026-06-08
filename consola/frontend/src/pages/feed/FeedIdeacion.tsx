@@ -31,23 +31,15 @@ import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
-import { FILTRO_TODOS } from "@/pages/publicaciones/Filtros";
 import type { Publicacion } from "@/types";
 
 import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
@@ -192,12 +184,12 @@ export default function FeedIdeacion() {
   // La marca la manda el switch global de la barra superior (deriva del perfil).
   // El feed se filtra implícitamente por la marca activa; no hay selector local.
   const { marcaActiva } = useMarcaActiva();
+  // Filtros de Red + Línea editorial: los mandan los selectores GLOBALES de la topbar
+  // (la marca, el switch de marca). Se aplican en SERVIDOR (van en la query); las pestañas
+  // siguen filtrando por estado en memoria.
+  const { red, linea } = useFiltrosContenido();
 
   const [vista, setVista] = React.useState<Vista>("todo");
-  // Filtros propios del feed: Red + Línea editorial (la marca la fija el switch global).
-  // Se aplican en SERVIDOR (van en la query); las pestañas siguen filtrando por estado en memoria.
-  const [red, setRed] = React.useState(FILTRO_TODOS);
-  const [linea, setLinea] = React.useState(FILTRO_TODOS);
 
   // Nº de posts por fila en PC (1-4) y zoom (escala) de los posts. Preferencias locales, persistidas.
   const [columnas, setColumnas] = React.useState(() =>
@@ -217,25 +209,12 @@ export default function FeedIdeacion() {
   const ajustarEscala = (delta: number) =>
     setEscala((s) => Math.round(Math.min(ESCALA_MAX, Math.max(ESCALA_MIN, s + delta)) * 100) / 100);
 
-  // Catálogo para los selects (redes + líneas editoriales).
+  // Catálogo de redes (para la MATRIZ por idea: cada idea se enseña en todas las redes,
+  // con huecos en las que falte pieza). Las líneas editoriales viven en el switch global.
   const opcionesQuery = useQuery({
     queryKey: ["publicaciones", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
-  // Líneas elegibles: las de la marca activa + las globales (marca === ""). Sin marca (todas)
-  // se muestran todas. Si la línea filtrada deja de pertenecer a la marca activa, se resetea.
-  const lineasElegibles = React.useMemo(
-    () =>
-      (opcionesQuery.data?.lineas ?? []).filter(
-        (l) => l.marca === "" || marcaActiva == null || l.marca === marcaActiva,
-      ),
-    [opcionesQuery.data, marcaActiva],
-  );
-  React.useEffect(() => {
-    if (linea !== FILTRO_TODOS && !lineasElegibles.some((l) => l.id === linea)) {
-      setLinea(FILTRO_TODOS);
-    }
-  }, [lineasElegibles, linea]);
 
   // SCROLL INFINITO (feed social): se pide la PRIMERA página pequeña (instantánea) por keyset
   // `creado DESC` y se van pidiendo más al hacer scroll (sentinel + IntersectionObserver). El
@@ -400,9 +379,9 @@ export default function FeedIdeacion() {
         </MenuAcciones>
       </AccionesPagina>
 
-      {/* Pestañas (formato tab, no bubble) + filtros. Las pestañas son VISTAS del MISMO feed
-          (filtran por estado en cliente); Red y Línea filtran en servidor. La marca la fija el
-          switch global de la topbar. En móvil las pestañas hacen wrap y los filtros se apilan. */}
+      {/* Pestañas (formato tab, no bubble) + controles de densidad. Las pestañas son VISTAS del
+          MISMO feed (filtran por estado en cliente); Marca, Red y Línea las mandan los switches
+          GLOBALES de la topbar y filtran en servidor. En móvil las pestañas hacen wrap. */}
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
           <TabsList
@@ -421,29 +400,8 @@ export default function FeedIdeacion() {
         </Tabs>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <SelectorRed
-            redes={opcionesQuery.data?.redes ?? []}
-            valor={red}
-            onCambio={setRed}
-            ariaLabel="Filtrar por red"
-            className="w-full sm:w-[160px]"
-          />
-          <Select value={linea} onValueChange={setLinea}>
-            <SelectTrigger
-              className="w-full sm:w-[200px]"
-              aria-label="Filtrar por línea editorial"
-            >
-              <SelectValue placeholder="Línea editorial" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FILTRO_TODOS}>Todas las líneas</SelectItem>
-              {lineasElegibles.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Red y Línea ya no tienen dropdown aquí: los mandan los selectores globales de
+              la topbar (SwitchFiltrosContenido). Quedan solo los controles de densidad/zoom. */}
 
           {/* Posts por fila: +/- de 1 a 4 (parte la rejilla en CUALQUIER pantalla, móvil incluido). Persiste. */}
           <div
