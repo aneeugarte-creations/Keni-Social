@@ -85,7 +85,7 @@ def test_pieza_evergreen_es_flujo_evergreen(entorno):
 def test_migracion_es_idempotente(entorno):
     db.crear_pieza_rota(programa="P", red_social="IG")
     primera = migrar_contenido.migrar()
-    assert primera == {"piezas": 1, "publicaciones": 0}
+    assert primera == {"piezas": 1}
     segunda = migrar_contenido.migrar()
-    assert segunda == {"piezas": 0, "publicaciones": 0}
+    assert segunda == {"piezas": 0}
     assert len(db.listar_contenido()) == 1
