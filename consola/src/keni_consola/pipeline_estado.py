@@ -167,8 +167,8 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
       - estado `aprobado`               -> aprobada
       - estado `en_revision`            -> lista_para_revisar (gate humano)
       - falta copy                      -> generando_copy
-      - hay copy pero falta imagen      -> generando_arte
-      - copy E imagen listos (aún sin entrar a revisión) -> lista_para_revisar
+      - hay copy pero falta el ASSET del formato (foto: `falta_imagen`; vídeo: `falta_video`) -> generando_arte
+      - copy + asset listos (aún sin entrar a revisión) -> lista_para_revisar
 
     OJO con el último caso: una pieza con copy + imagen pero todavía en `pendiente` (que el
     auto-avance no ha movido aún) está LISTA, no "generando copy". Antes el caso por defecto
@@ -190,7 +190,14 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
         return ETAPA_LISTA_REVISAR
     if pieza.get("falta_copy", True):
         return ETAPA_GENERANDO_COPY
-    if pieza.get("falta_imagen", True):
+    # El ASSET que falta depende del formato (espejo del front): una pieza de VÍDEO necesita el
+    # vídeo (`falta_video`), no una foto (`falta_imagen` es opcional en vídeo: portada/thumbnail).
+    # Sin esto, una pieza de vídeo SIN vídeo salía "lista para revisar" (solo miraba falta_imagen),
+    # p. ej. tras cambiar el formato de foto a vídeo.
+    if _norm(pieza.get("formato")) == "video":
+        if pieza.get("falta_video", True):
+            return ETAPA_GENERANDO_ARTE
+    elif pieza.get("falta_imagen", True):
         return ETAPA_GENERANDO_ARTE
     return ETAPA_LISTA_REVISAR
 

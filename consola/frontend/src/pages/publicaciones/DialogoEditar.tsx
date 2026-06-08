@@ -133,23 +133,20 @@ export function DialogoEditar({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Cambia el formato (foto↔video) PIDIENDO CONFIRMACIÓN si se va a perder el asset del formato
-  // actual. Al cambiar de formato el backend borra el asset anterior (foto o vídeo), quita la
-  // plantilla (foto→miniatura y viceversa) y devuelve la pieza a borrador (pierde el "listo para
-  // revisar"). Avisamos ANTES porque es destructivo; si no hay asset que perder, cambia directo.
+  // Cambia el formato (foto↔video) PIDIENDO CONFIRMACIÓN: el cambio es SIEMPRE destructivo —el
+  // backend borra el asset del formato anterior (la foto al pasar a vídeo, el vídeo al pasar a
+  // foto), quita la plantilla (foto→miniatura y viceversa) y devuelve la pieza a borrador (pierde
+  // el «listo para revisar»)—. Confirmamos siempre porque el asset a perder puede estar en otras
+  // redes de la pieza (no solo en la que se edita aquí), así que no se puede detectar de forma
+  // fiable desde una sola fila.
   const cambiarFormato = (aVideo: boolean) => {
     if (!publicacion) return;
-    const hayFoto = fotos.some((f) => f.objeto) || !!imagen;
-    const hayVideo = !!videoKey;
-    const seBorra = aVideo ? hayFoto : hayVideo;
-    if (seBorra) {
-      const que = aVideo ? "la foto" : "el video";
-      const ok = window.confirm(
-        `Al cambiar a ${aVideo ? "video" : "foto"} se borrará ${que} y la plantilla actual, y la ` +
-          `pieza volverá a borrador (perderá el «listo para revisar»). ¿Continuar?`,
-      );
-      if (!ok) return;
-    }
+    const que = aVideo ? "la foto" : "el video";
+    const ok = window.confirm(
+      `Al cambiar a ${aVideo ? "video" : "foto"} se borrará ${que} y la plantilla actual, y la ` +
+        `pieza volverá a borrador (perderá el «listo para revisar»). ¿Continuar?`,
+    );
+    if (!ok) return;
     flipFormato.mutate(aVideo ? "video" : "foto");
   };
 

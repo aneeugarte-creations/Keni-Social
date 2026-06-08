@@ -73,11 +73,15 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         or bool(imagen_fuente)
         or (not marca and bool(str(pub.get("imagen") or "").strip()))
     )
+    # El ASSET requerido depende del formato: vídeo -> `falta_video` (no `falta_imagen`).
+    hay_video = (not bool(pub.get("falta_video", False))) or bool(str(pub.get("video") or "").strip())
     etapa_ia = pipeline_estado.etapa_de_pieza(
         {
             "estado": pub.get("estado"),
+            "formato": redes.normalizar_formato(pub.get("formato")),
             "falta_copy": not str(pub.get("contenido") or "").strip(),
             "falta_imagen": not hay_imagen_real,
+            "falta_video": not hay_video,
         }
     )
     return {

@@ -158,6 +158,24 @@ def test_pieza_con_copy_e_imagen_aunque_pendiente_es_lista():
     assert etapa == pe.ETAPA_LISTA_REVISAR
 
 
+def test_pieza_video_sin_video_es_generando_arte():
+    # En VÍDEO el asset es el vídeo (`falta_video`), no la foto: sin vídeo NO está lista, aunque
+    # `falta_imagen` sea False (la imagen es opcional en vídeo). Caso típico tras cambiar de
+    # formato foto->vídeo: la pieza debe salir de "lista para revisar".
+    etapa = pe.etapa_de_pieza(
+        _pieza(formato="video", estado="pendiente", falta_copy=False, falta_imagen=False, falta_video=True)
+    )
+    assert etapa == pe.ETAPA_GENERANDO_ARTE
+
+
+def test_pieza_video_con_video_es_lista_aunque_falte_imagen():
+    # Con el vídeo presente, la pieza de vídeo está lista aunque `falta_imagen` (imagen opcional).
+    etapa = pe.etapa_de_pieza(
+        _pieza(formato="video", estado="pendiente", falta_copy=False, falta_imagen=True, falta_video=False)
+    )
+    assert etapa == pe.ETAPA_LISTA_REVISAR
+
+
 def test_pieza_en_revision_lista_para_revisar():
     assert pe.etapa_de_pieza(_pieza(estado="en_revision")) == pe.ETAPA_LISTA_REVISAR
 
