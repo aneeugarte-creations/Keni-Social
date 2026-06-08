@@ -576,8 +576,14 @@ services:
       AUTOHEAL_INTERVAL: "15"              # cada 15s revisa el estado de salud
       AUTOHEAL_START_PERIOD: "60"          # gracia inicial antes de actuar
       AUTOHEAL_DEFAULT_STOP_TIMEOUT: "20"  # SIGTERM->SIGKILL: deja al worker apagar limpio
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # autoheal ya NO monta el docker.sock crudo (riesgo de fuga de contenedor como root):
+      # habla con el daemon a traves del docker-socket-proxy (API FILTRADA, solo LIST + POST).
+      DOCKER_HOST: tcp://autoheal-docker-proxy:2375
+    # Red dedicada para alcanzar SOLO al proxy (no comparte la red interna del stack).
+    networks:
+      - autoheal-proxy
+    depends_on:
+      - autoheal-docker-proxy
     mem_limit: 64m
     cpus: 0.25
     security_opt:
@@ -589,9 +595,42 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # Proxy de la API Docker (tecnativa): UNICO con acceso al socket crudo (montado :ro).
+  # Expone a `autoheal` una API FILTRADA — solo LIST de contenedores (CONTAINERS=1) y
+  # POST de acciones de restart (POST=1) — y DENIEGA por defecto todo lo demas (exec,
+  # swarm, secrets, configs, services, nodes, plugins, system, images, volumes, networks,
+  # info, version). Mismo patron y tag que el proxy del stack Woodpecker. Sustituye al
+  # montaje directo de /var/run/docker.sock en autoheal (que daba acceso total como root =
+  # riesgo de escape de contenedor). En su PROPIA red `autoheal-proxy` (no internal).
+  autoheal-docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    privileged: false
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      CONTAINERS: "1"   # autoheal NECESITA listar contenedores (y leer su salud)
+      POST: "1"         # autoheal NECESITA POST para reiniciar los unhealthy
+      # Resto de secciones de la API en default-deny (0): no las habilitamos.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - autoheal-proxy
+    mem_limit: 64m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
 networks:
   edge:
   internal:
+  # Red dedicada autoheal <-> proxy del socket Docker. Aislada del resto del stack:
+  # solo estos dos contenedores la ven, de modo que la API filtrada del daemon no queda
+  # al alcance de back/worker/daemons/mcp.
+  autoheal-proxy:
 
 volumes:
   traefik-acme:
