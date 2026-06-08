@@ -70,6 +70,46 @@ def test_parsear_respuesta_haiku_normaliza_marca_por_etiqueta():
     assert items[0]["marca"] == "unotv"
 
 
+def test_parsear_respuesta_haiku_marca_defecto_rellena_sin_marca():
+    """Ítem sin marca reconocida hereda la marca del lote (marca_defecto).
+
+    Sin este fallback el ítem quedaba con marca "" y el filtro por marca del cajón
+    (WHERE marca = ?) lo ocultaba: el síntoma de "los cajones no filtran por marca".
+    """
+    texto = json.dumps({"items": [
+        {"titulo": "Nota sin marca clara"},
+        {"titulo": "Marca no reconocida", "marca": "marca-inexistente"},
+    ]})
+    items, errores = ip.parsear_respuesta_haiku(
+        texto, cajon="portal", fecha="2026-06-05", lote_id="l001",
+        marca_defecto="claro-sports",
+    )
+    assert errores == []
+    assert items[0]["marca"] == "claro-sports"
+    assert items[1]["marca"] == "claro-sports"
+
+
+def test_parsear_respuesta_haiku_marca_de_la_ia_prevalece_sobre_defecto():
+    """Si la IA SÍ reconoce una marca, prevalece sobre marca_defecto."""
+    texto = json.dumps({"items": [
+        {"titulo": "Nota política", "marca": "unotv"},
+    ]})
+    items, _ = ip.parsear_respuesta_haiku(
+        texto, cajon="portal", fecha="2026-06-05", lote_id="l001",
+        marca_defecto="claro-sports",
+    )
+    assert items[0]["marca"] == "unotv"
+
+
+def test_parsear_respuesta_haiku_sin_defecto_deja_marca_vacia():
+    """Sin marca_defecto, un ítem sin marca reconocida queda con marca '' (comportamiento previo)."""
+    texto = json.dumps({"items": [{"titulo": "Nota suelta"}]})
+    items, _ = ip.parsear_respuesta_haiku(
+        texto, cajon="portal", fecha="2026-06-05", lote_id="l001"
+    )
+    assert items[0]["marca"] == ""
+
+
 def test_parsear_respuesta_haiku_omite_item_sin_titulo():
     texto = json.dumps({"items": [
         {"titulo": "", "resumen": "sin título"},

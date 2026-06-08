@@ -279,8 +279,14 @@ def _items_desde_registros(
     cajon: str,
     fecha: str,
     lote_id: str,
+    marca_defecto: str = "",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Lista de dicts de Haiku -> (ítems normalizados, errores). PURO."""
+    """Lista de dicts de Haiku -> (ítems normalizados, errores). PURO.
+
+    `marca_defecto` (id canónico de la marca elegida al aportar el lote) es el fallback
+    cuando la IA no reconoce una marca para el ítem: sin él, esos ítems quedan con marca ""
+    y el filtro por marca del cajón los oculta.
+    """
     tipos_validos = {"nota", "cobertura", "evento"}
     # Tipo por defecto SEGÚN EL CAJÓN cuando el modelo no lo da (o da uno inválido): cada cajón
     # tiene una naturaleza fija (portal=nota, corresponsales/reporteros=cobertura, eventos=evento).
@@ -306,7 +312,7 @@ def _items_desde_registros(
             "lote_id": lote_id,
             "fecha": fecha,
             "cajon": cajon,
-            "marca": _normalizar_marca(reg.get("marca")),
+            "marca": _normalizar_marca(reg.get("marca")) or marca_defecto,
             "linea": str(reg.get("linea") or "").strip()[:500],
             "titulo": titulo[:500],
             "resumen": str(reg.get("resumen") or "").strip()[:2000],
@@ -326,12 +332,15 @@ def parsear_respuesta_haiku(
     cajon: str,
     fecha: str,
     lote_id: str,
+    marca_defecto: str = "",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Texto de salida de Haiku -> (ítems normalizados, errores). PURO."""
     registros = _extraer_json_items(texto)
     if registros is None:
         return [], [{"fila": 0, "motivo": "El asistente no devolvió un JSON legible."}]
-    return _items_desde_registros(registros, cajon=cajon, fecha=fecha, lote_id=lote_id)
+    return _items_desde_registros(
+        registros, cajon=cajon, fecha=fecha, lote_id=lote_id, marca_defecto=marca_defecto
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -345,19 +354,21 @@ def parsear_respuesta_haiku(
 # `jobspec.reconstruir_procesar` arma a partir del spec `PROC_INSUMOS`.
 
 
-def construir_procesar_insumos(*, lote_id: str, cajon: str, fecha: str):  # noqa: ANN201 -- generaciones.Procesar (evita ciclo de tipos)
+def construir_procesar_insumos(*, lote_id: str, cajon: str, fecha: str, marca_defecto: str = ""):  # noqa: ANN201 -- generaciones.Procesar (evita ciclo de tipos)
     """Devuelve el callback `procesar(salida, metricas) -> dict` de un lote de cajones (worker).
 
     Parsea la salida de Haiku (`parsear_respuesta_haiku`), normaliza, INSERTA los ítems y
     actualiza el lote: `estado='listo'` + `total_items` si hubo ítems; `estado='error'` +
-    `error` si el parse falló por completo. Devuelve un resumen `{total_items, estado}` para
-    el registro de la generación. Reusa la MISMA lógica pura que usaba el parseo síncrono.
+    `error` si el parse falló por completo. `marca_defecto` (la marca del lote) es el fallback
+    de marca de los ítems que la IA no clasifique, para que el filtro por marca los encuentre.
+    Devuelve un resumen `{total_items, estado}` para el registro de la generación. Reusa la
+    MISMA lógica pura que usaba el parseo síncrono.
     """
     from .. import repos
 
     def procesar(salida: str, _metricas: object) -> dict[str, Any]:
         items, errores = parsear_respuesta_haiku(
-            salida or "", cajon=cajon, fecha=fecha, lote_id=lote_id
+            salida or "", cajon=cajon, fecha=fecha, lote_id=lote_id, marca_defecto=marca_defecto
         )
         if errores and not items:
             mensaje = "; ".join(e.get("motivo", "error") for e in errores[:3])

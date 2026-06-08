@@ -437,6 +437,10 @@ interface PropsTarjetaCajon {
 
 function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   const queryClient = useQueryClient();
+  // Marca activa global: se estampa en el lote al aportar para que los ítems sin
+  // marca reconocida por la IA hereden la marca del contexto (y el filtro por marca
+  // del cajón los encuentre, en vez de dejarlos "huérfanos" fuera de toda marca).
+  const { marcaActiva } = useMarcaActiva();
   const [texto, setTexto] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const archivoRef = React.useRef<HTMLInputElement>(null);
@@ -449,6 +453,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
       const form = new FormData();
       form.set("cajon", def.id);
       form.set("fecha", fecha);
+      if (marcaActiva) form.set("marca", marcaActiva);
       if (texto.trim()) form.set("texto", texto.trim());
       if (archivo) form.set("archivo", archivo);
       return api.insumos.aportar(form);

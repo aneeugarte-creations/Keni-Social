@@ -132,6 +132,33 @@ def test_aportar_json_encola_y_procesa_items():
     assert items[0]["usado"] is False
 
 
+def test_aportar_marca_del_lote_rellena_items_sin_marca():
+    """La marca elegida al aportar (lote) es el fallback de los ítems que la IA no clasifique.
+
+    Sin esto, un ítem sin marca queda con marca "" y el filtro por marca del cajón lo oculta:
+    el síntoma de "los cajones no filtran por marca". La marca que SÍ trae el ítem prevalece.
+    """
+    cli = _cliente_con_items([
+        {"titulo": "Nota sin marca"},  # la IA no la clasifica
+        {"titulo": "Nota con marca propia", "marca": "unotv"},
+    ])
+    r = cli.post(
+        "/api/insumos/aportar",
+        json={"cajon": "portal", "texto": "1.- a\n2.- b", "fecha": "2026-06-05", "marca": "claro-sports"},
+    )
+    assert r.status_code == 200, r.text
+    lote = r.json()["lote"]
+    assert lote["marca"] == "claro-sports"
+    items = cli.get(f"/api/insumos/lote/{lote['id']}").json()["items"]
+    # El ítem sin marca hereda la marca del lote; el que trae marca propia la conserva.
+    assert items[0]["marca"] == "claro-sports"
+    assert items[1]["marca"] == "unotv"
+    # Y el filtro por marca del cajón ahora SÍ encuentra el ítem heredado.
+    filtrados = cli.get("/api/insumos?fecha=2026-06-05&cajon=portal&marca=claro-sports").json()
+    titulos = {it["titulo"] for it in filtrados["cajones"][0]["items"]}
+    assert "Nota sin marca" in titulos
+
+
 def test_aportar_sin_texto_ni_archivo_400(cliente):
     r = cliente.post("/api/insumos/aportar", json={"cajon": "portal"})
     assert r.status_code == 400

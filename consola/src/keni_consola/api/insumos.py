@@ -270,7 +270,9 @@ async def aportar(request: Request) -> Response:
         prompt = insumos_parse.construir_prompt_texto(cajon, texto)
 
     # Spec del post-procesado: parsea la salida de Haiku e inserta los ítems (en el worker).
-    procesar_spec = jobspec.construir_insumos(lote_id=lote_id, cajon=cajon, fecha=fecha)
+    procesar_spec = jobspec.construir_insumos(
+        lote_id=lote_id, cajon=cajon, fecha=fecha, marca_defecto=marca
+    )
     spec = jobspec.construir(
         prompt=prompt,
         procesar=procesar_spec,

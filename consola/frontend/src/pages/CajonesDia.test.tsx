@@ -499,6 +499,10 @@ describe("CajonesDia", () => {
     await waitFor(() => {
       expect(aportarMock).toHaveBeenCalled();
     });
+    // El lote se estampa con la marca activa del usuario ("unotv"): así los ítems que la
+    // IA no clasifique heredan esa marca y el filtro por marca del cajón los encuentra.
+    const form = aportarMock.mock.calls[0][0] as FormData;
+    expect(form.get("marca")).toBe("unotv");
     // Tras encolar, se invalida la query y aparece el ítem ya parseado (segundo listar).
     expect(await screen.findByText("Sismo en CDMX de 5.4 grados")).toBeInTheDocument();
     expect(listarMock.mock.calls.length).toBeGreaterThanOrEqual(2);

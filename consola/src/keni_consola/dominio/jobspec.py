@@ -326,19 +326,23 @@ def construir_green_ideas(
 
 
 def construir_insumos(
-    *, lote_id: str, cajon: str, fecha: str
+    *, lote_id: str, cajon: str, fecha: str, marca_defecto: str = ""
 ) -> dict[str, Any]:
     """Spec del post-procesado de un lote de INSUMOS (cajones): parsea + inserta items.
 
     `lote_id` es el lote (estado `parseando`) al que pertenecen los items; `cajon`/`fecha`
-    los necesita el normalizador (`insumos_parse._items_desde_registros`). El worker parsea
-    `{"items":[...]}`, normaliza, INSERTA los items y deja el lote `listo` (o `error`).
+    los necesita el normalizador (`insumos_parse._items_desde_registros`). `marca_defecto`
+    (id canónico de la marca que el equipo eligió al aportar el lote) es el fallback de marca
+    para los ítems que la IA no clasifique: así el filtro por marca del cajón los encuentra en
+    vez de dejarlos sin marca. El worker parsea `{"items":[...]}`, normaliza, INSERTA los items
+    y deja el lote `listo` (o `error`).
     """
     return {
         "kind": PROC_INSUMOS,
         "lote_id": lote_id,
         "cajon": cajon,
         "fecha": fecha,
+        "marca_defecto": marca_defecto or "",
     }
 
 
@@ -500,6 +504,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
         return insumos_parse.construir_procesar_insumos(
             lote_id=p["lote_id"], cajon=p.get("cajon", ""), fecha=p.get("fecha", ""),
+            marca_defecto=p.get("marca_defecto", "") or "",
         )
 
     if kind == PROC_IMPORT_CALENDARIO:
