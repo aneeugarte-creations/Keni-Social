@@ -29,7 +29,7 @@ TIPOS DE EVENTO (estables; el frontend y los webhooks se suscriben por nombre):
   - `pieza.publicada`   una fila por plataforma pasa a `publicado`.
   - `contenido.vencido` un contenido pasa su `fecha_entrega` sin estar cerrado.
   - `pieza.reciclaje_sugerida`  el barrido `alertas_rendimiento` propone una pieza de
-                        archivo a reciclar (efemeride/perenne/recurrente/rindio bien).
+                        archivo a reciclar (efemeride/evergreen/recurrente/rindio bien).
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
 """
 

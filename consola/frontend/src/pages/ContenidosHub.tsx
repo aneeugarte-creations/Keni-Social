@@ -23,7 +23,7 @@ import { TallerEvergreen } from "./fuentes/TallerEvergreen";
 const CABECERA = {
   titulo: "Contenidos",
   descripcion:
-    "El banco de piezas EVERGREEN (perennes) de la marca: reportajes, producciones " +
+    "El banco de piezas EVERGREEN (evergreens) de la marca: reportajes, producciones " +
     "propias e ideas atemporales que no caducan. Propón ideas con IA y conviértelas " +
     "en piezas cuando estén aprobadas.",
 };

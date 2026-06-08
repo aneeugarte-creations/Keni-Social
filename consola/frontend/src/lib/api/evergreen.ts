@@ -13,7 +13,7 @@ import type {
 } from "@/types";
 
 export const apiEvergreen = {
-  // --- Evergreen: banco de ideas de contenido evergreen (perenne) por marca ---
+  // --- Evergreen: banco de ideas de contenido evergreen (evergreen) por marca ---
   // Las ideas se proponen a mano o con IA (`proponerEvergreen` lanza un trabajo en 2º plano que
   // se SONDEA con `useGeneracion`); al aprobar una idea se puede generar la pieza evergreen.
   ideasEvergreen: (

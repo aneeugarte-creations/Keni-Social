@@ -42,8 +42,8 @@ const META_MOTIVO: Record<
     icono: CalendarHeart,
     clase: "border-fuchsia-500/40 text-fuchsia-700 dark:text-fuchsia-300",
   },
-  perenne: {
-    etiqueta: "Perenne",
+  evergreen: {
+    etiqueta: "Evergreen",
     icono: Sprout,
     clase: "border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
   },
@@ -134,7 +134,7 @@ function FilaSugerencia({
  * Panel DISCRETO de reciclaje proactivo (#110).
  *
  * Muestra, plegado por defecto, las piezas de archivo que la heurística del
- * backend (efeméride próxima, perenne madurada o tema recurrente) propone
+ * backend (efeméride próxima, evergreen madurada o tema recurrente) propone
  * retomar, cada una con su motivo explicable. Al pulsar «Reciclar» dispara el
  * reciclado que YA existe (`api.reciclarPublicacion`), sin lógica nueva: encola
  * la copia si hay cadencia/franjas o la deja como borrador, e invalida la lista.
@@ -217,7 +217,7 @@ export function PanelReciclaje({
           <div className="space-y-2 border-t border-border/60 px-4 py-3">
             <p className="text-sm text-muted-foreground">
               Contenido de archivo que merece retomarse: ya rindió bien en Metricool,
-              vuelve a ser relevante por una efeméride próxima, es perenne madurado o su
+              vuelve a ser relevante por una efeméride próxima, es evergreen madurado o su
               tema vuelve a circular.
             </p>
             {sugerencias.map((s) => (

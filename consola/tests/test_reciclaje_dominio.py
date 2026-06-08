@@ -1,7 +1,7 @@
 """Tests de la heuristica de reciclaje proactivo (`dominio.reciclaje`). PUROS.
 
 No tocan persistencia ni red: alimentan dicts de publicaciones y fijan `hoy` para
-hacer la heuristica deterministica. Cubren las tres senales (efemeride, perenne,
+hacer la heuristica deterministica. Cubren las tres senales (efemeride, evergreen,
 recurrente), la exclusion de copias ya recicladas, el orden y el tope.
 """
 
@@ -63,11 +63,11 @@ def test_efemeride_solo_sobre_piezas_publicadas():
 
 
 # --------------------------------------------------------------------------- #
-# Perenne madurada                                                             #
+# Evergreen madurada                                                             #
 # --------------------------------------------------------------------------- #
 
 
-def test_perenne_madurada_propone():
+def test_evergreen_madurada_propone():
     hoy = date(2026, 5, 25)
     pub = _pub(
         id="ever",
@@ -79,11 +79,11 @@ def test_perenne_madurada_propone():
     )
     out = reciclaje.candidatas_reciclaje([pub], hoy=hoy)
     assert len(out) == 1
-    assert out[0]["motivo"] == reciclaje.MOTIVO_PERENNE
-    assert "perenne" in out[0]["motivo_detalle"].lower()
+    assert out[0]["motivo"] == reciclaje.MOTIVO_EVERGREEN
+    assert "evergreen" in out[0]["motivo_detalle"].lower()
 
 
-def test_perenne_reciente_no_propone():
+def test_evergreen_reciente_no_propone():
     hoy = date(2026, 5, 25)
     pub = _pub(
         evergreen=True,
@@ -94,7 +94,7 @@ def test_perenne_reciente_no_propone():
     assert reciclaje.candidatas_reciclaje([pub], hoy=hoy) == []
 
 
-def test_no_perenne_no_propone_por_esa_senal():
+def test_no_evergreen_no_propone_por_esa_senal():
     hoy = date(2026, 5, 25)
     pub = _pub(
         evergreen=False,
@@ -103,7 +103,7 @@ def test_no_perenne_no_propone_por_esa_senal():
         fecha_creacion=_hace(200, hoy),
         titulo="Algo cualquiera sin tema",
     )
-    # Sin efemeride, sin perenne y sin tema recurrente (no hay piezas recientes).
+    # Sin efemeride, sin evergreen y sin tema recurrente (no hay piezas recientes).
     assert reciclaje.candidatas_reciclaje([pub], hoy=hoy) == []
 
 
@@ -172,14 +172,14 @@ def test_excluye_pieza_ya_reciclada():
     assert out == []  # ya hay una copia pendiente con mismo titulo/marca/red
 
 
-def test_efemeride_gana_a_perenne_en_la_misma_pieza_y_orden_global():
+def test_efemeride_gana_a_evergreen_en_la_misma_pieza_y_orden_global():
     hoy = date(2026, 5, 5)
     # Pieza A: efemeride proxima (debe encabezar).
     a = _pub(id="a", titulo="Día de las Madres especial", estado="publicado")
-    # Pieza B: solo perenne madurada.
+    # Pieza B: solo evergreen madurada.
     b = _pub(
         id="b",
-        titulo="Guía perenne",
+        titulo="Guía evergreen",
         evergreen=True,
         estado="publicado",
         fecha_actualizacion=_hace(90, hoy),

@@ -91,7 +91,7 @@ export interface CuerpoActualizarPublicacion {
   copy_in?: string;
   estado?: EstadoPublicacion;
   fecha_programada?: string | null;
-  /** Marca/desmarca la publicación como perenne. */
+  /** Marca/desmarca la publicación como evergreen. */
   evergreen?: boolean;
   /** Nombre del archivo de imagen adjunto (`""` para quitarla). */
   imagen?: string;
@@ -107,7 +107,7 @@ export interface CuerpoActualizarPublicacion {
   fotos?: string;
 }
 
-/** Respuesta al reciclar una publicación perenne. */
+/** Respuesta al reciclar una publicación evergreen. */
 export interface RespuestaReciclarPublicacion {
   publicacion: Publicacion;
   /** `true` si quedó encolada (con fecha); `false` si quedó como borrador. */
@@ -128,7 +128,7 @@ export interface CuerpoDuplicarPublicacion {
  * `rendimiento`: la pieza YA rindió bien (engagement real medido en Metricool) → repostear.
  * Es la señal más fuerte (datos reales, no solo contexto). El resto son contextuales.
  */
-export type MotivoReciclaje = "rendimiento" | "efemeride" | "perenne" | "recurrente";
+export type MotivoReciclaje = "rendimiento" | "efemeride" | "evergreen" | "recurrente";
 
 /** Una pieza de archivo que la heurística propone reciclar, con su motivo. */
 export interface SugerenciaReciclaje {
@@ -153,7 +153,7 @@ export interface SugerenciaReciclaje {
 /** Parámetros (días/umbral) de la heurística, para que la UI los pueda mostrar. */
 export interface ParametrosReciclaje {
   ventana_efemeride_dias: number;
-  edad_minima_perenne_dias: number;
+  edad_minima_evergreen_dias: number;
   edad_minima_antiguedad_dias: number;
   /** Engagement (%) mínimo para considerar que una pieza "rindió bien". */
   umbral_engagement_rendimiento: number;
@@ -295,7 +295,7 @@ export interface FiltrosPublicaciones {
   estado?: string;
   /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
   linea?: string;
-  /** "1" para mostrar solo publicaciones perennes. */
+  /** "1" para mostrar solo publicaciones evergreens. */
   evergreen?: string;
   /** Paginacion offset-based (#121): tamaño de pagina; ausente = conjunto completo. */
   limite?: string;

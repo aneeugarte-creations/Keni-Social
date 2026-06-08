@@ -140,7 +140,7 @@ function TarjetaPublicacion({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       toast.success(
-        publicacion.evergreen ? "Ya no es perenne" : "Marcada como perenne",
+        publicacion.evergreen ? "Ya no es evergreen" : "Marcada como evergreen",
       );
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -210,7 +210,7 @@ function TarjetaPublicacion({
         ]
       : []),
     {
-      etiqueta: publicacion.evergreen ? "Quitar de perennes" : "Marcar como perenne",
+      etiqueta: publicacion.evergreen ? "Quitar de evergreens" : "Marcar como evergreen",
       icono: Sprout,
       onClick: () => alternarEverevergreen.mutate(),
       activo: publicacion.evergreen,
@@ -264,7 +264,7 @@ function TarjetaPublicacion({
                   className="gap-1 border-emerald-500/40 font-normal text-emerald-700 dark:text-emerald-300"
                 >
                   <Sprout className="h-3 w-3" />
-                  Perenne
+                  Evergreen
                 </Badge>
               )}
               {imagen && (

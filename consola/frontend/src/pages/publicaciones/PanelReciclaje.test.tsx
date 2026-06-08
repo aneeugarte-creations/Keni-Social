@@ -26,7 +26,7 @@ const SUGERENCIAS: SugerenciaReciclaje[] = [
 
 const PARAMETROS = {
   ventana_efemeride_dias: 21,
-  edad_minima_perenne_dias: 30,
+  edad_minima_evergreen_dias: 30,
   edad_minima_antiguedad_dias: 60,
   umbral_engagement_rendimiento: 3.5,
 };

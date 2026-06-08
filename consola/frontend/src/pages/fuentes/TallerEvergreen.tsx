@@ -1,5 +1,5 @@
 /**
- * Taller EVERGREEN: banco de ideas de contenido evergreen (perenne) por marca.
+ * Taller EVERGREEN: banco de ideas de contenido evergreen (evergreen) por marca.
  *
  * Dos bloques:
  *   1. "Proponer ideas": elige marca + contexto opcional y lanza la IA (`/evergreen/proponer`),
@@ -207,7 +207,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            La IA propone ideas de contenido evergreen (perenne) para la marca. Añade un
+            La IA propone ideas de contenido evergreen (evergreen) para la marca. Añade un
             contexto opcional para enfocarla (temporada, programa, ángulo…).
           </p>
 

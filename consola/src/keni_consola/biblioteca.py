@@ -97,7 +97,7 @@ PIPELINES: dict[str, dict[str, str]] = {
     },
     "evergreen": {
         "titulo": "Ideas evergreen (EVERGREEN)",
-        "descripcion": "Propone ideas de contenido perenne para la marca.",
+        "descripcion": "Propone ideas de contenido evergreen para la marca.",
         "prompt_defecto": "prompt/brainstorming-evergreen",
         "rol": "evergreen",
     },

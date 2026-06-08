@@ -25,18 +25,18 @@ def test_respuesta_tiene_forma_esperada(cliente):
     datos = r.json()
     assert isinstance(datos["sugerencias"], list)
     assert "ventana_efemeride_dias" in datos["parametros"]
-    assert "edad_minima_perenne_dias" in datos["parametros"]
+    assert "edad_minima_evergreen_dias" in datos["parametros"]
 
 
-def test_perenne_publicada_aparece_como_candidata(cliente):
-    # Una pieza perenne publicada es la senal mas estable (no depende de la fecha
+def test_evergreen_publicada_aparece_como_candidata(cliente):
+    # Una pieza evergreen publicada es la senal mas estable (no depende de la fecha
     # de hoy): la marcamos evergreen y la publicamos. Por defecto el indice la deja
     # con fecha de hoy, asi que forzamos no depender de la edad: usamos la efemeride
     # via titulo no es estable -> probamos la presencia del endpoint y el filtro.
-    pid = _crear(cliente, titulo="Guía perenne de la marca").json()["publicacion"]["id"]
+    pid = _crear(cliente, titulo="Guía evergreen de la marca").json()["publicacion"]["id"]
     cliente.put(f"/api/publicaciones/{pid}", json={"evergreen": True})
     _publicar(cliente, pid)
-    # Recien publicada NO cumple la edad minima de perenne: no debe salir todavia.
+    # Recien publicada NO cumple la edad minima de evergreen: no debe salir todavia.
     sugs = cliente.get("/api/reciclaje/sugerencias").json()["sugerencias"]
     assert all(s["id"] != pid for s in sugs)
 

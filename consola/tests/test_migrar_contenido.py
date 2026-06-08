@@ -76,7 +76,7 @@ def test_pieza_con_evento_es_flujo_evento(entorno):
 
 
 def test_pieza_evergreen_es_flujo_evergreen(entorno):
-    db.crear_pieza_rota(programa="Siempre", always_on=True, contenido_sugerido="Perenne")
+    db.crear_pieza_rota(programa="Siempre", always_on=True, contenido_sugerido="Evergreen")
     migrar_contenido.migrar_piezas()
     item = db.listar_contenido(clase="contenido")[0]
     assert item["flujo"] == "evergreen"

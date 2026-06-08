@@ -21,27 +21,27 @@ import type { OpcionesPublicaciones } from "@/types";
  */
 export const FILTRO_TODOS = MARCA_TODAS;
 
-/** Filtros de marca, red, estado y "solo perennes". Notifica los cambios hacia arriba. */
+/** Filtros de marca, red, estado y "solo evergreens". Notifica los cambios hacia arriba. */
 export function FiltrosPublicaciones({
   opciones,
   marca,
   red,
   estado,
-  soloPerennes,
+  soloEvergreens,
   onMarca,
   onRed,
   onEstado,
-  onSoloPerennes,
+  onSoloEvergreens,
 }: {
   opciones: OpcionesPublicaciones;
   marca: string;
   red: string;
   estado: string;
-  soloPerennes: boolean;
+  soloEvergreens: boolean;
   onMarca: (v: string) => void;
   onRed: (v: string) => void;
   onEstado: (v: string) => void;
-  onSoloPerennes: (v: boolean) => void;
+  onSoloEvergreens: (v: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -76,18 +76,18 @@ export function FiltrosPublicaciones({
       </Select>
 
       <Label
-        htmlFor="filtro-perennes"
+        htmlFor="filtro-evergreens"
         className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm font-normal"
       >
         <Checkbox
-          id="filtro-perennes"
-          checked={soloPerennes}
-          onCheckedChange={onSoloPerennes}
-          aria-label="Mostrar solo publicaciones perennes"
+          id="filtro-evergreens"
+          checked={soloEvergreens}
+          onCheckedChange={onSoloEvergreens}
+          aria-label="Mostrar solo publicaciones evergreens"
         />
         <span className="inline-flex items-center gap-1">
           <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          Solo perennes
+          Solo evergreens
         </span>
       </Label>
     </div>

@@ -154,12 +154,12 @@ export interface RespuestaEtiqueta {
   etiqueta: Etiqueta;
 }
 
-// --- Evergreen: ideas de contenido evergreen (perenne) ---------------------------
+// --- Evergreen: ideas de contenido evergreen (evergreen) ---------------------------
 
 /** Estado de una idea Evergreen: propuesta → aprobada / descartada. */
 export type EstadoIdeaEvergreen = "propuesta" | "aprobada" | "descartada" | string;
 
-/** Una idea de contenido evergreen (banco de ideas perennes por marca). */
+/** Una idea de contenido evergreen (banco de ideas evergreens por marca). */
 export interface IdeaEvergreen {
   id: string;
   marca: string;

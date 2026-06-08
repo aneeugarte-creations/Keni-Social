@@ -77,8 +77,8 @@ _SINONIMOS: dict[str, set[str]] = {
         "compromiso", "obligatorio", "obligatoria", "mandatory", "commitment", "fijo",
     },
     "evergreen": {
-        # Nueva terminología (evergreen/perenne) + sinónimos ES/EN…
-        "evergreen", "evergreen list", "lista evergreen", "perenne", "verde", "lista verde",
+        # Terminología evergreen + sinónimos ES/EN…
+        "evergreen", "evergreen list", "lista evergreen", "verde", "lista verde",
         # …y RETROCOMPAT: el equipo de AMX ya escribe "green"/"green list" en sus calendarios.
         "green", "green list", "lista green", "greenlist",
     },

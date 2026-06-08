@@ -1,7 +1,7 @@
 """Dominio RECICLAJE PROACTIVO: sugiere contenido de ARCHIVO que merece retomarse.
 
 El reciclaje manual ya existe (`POST /api/publicaciones/{id}/reciclar`): duplica una
-pieza ya publicada (o perenne) y la encola. Lo que FALTA, y resuelve este modulo, es
+pieza ya publicada (o evergreen) y la encola. Lo que FALTA, y resuelve este modulo, es
 la capa PROACTIVA: en vez de esperar a que alguien recuerde una pieza vieja, la app
 PROPONE candidatas del archivo con un MOTIVO explicable. El caso de uso real es "este
 video/post se reviralizo / vuelve a ser relevante".
@@ -18,7 +18,7 @@ SENALES (de mas a menos fuerte):
   2. EFEMERIDE / estacional — el titulo/contenido casa con una efemeride MX que cae
      dentro de una ventana proxima (por defecto 21 dias): el contexto vuelve a hacer la
      pieza relevante AHORA.
-  3. PERENNE MADURADA — la pieza esta marcada `evergreen` (el equipo ya la juzgo
+  3. EVERGREEN MADURADA — la pieza esta marcada `evergreen` (el equipo ya la juzgo
      reutilizable) y ha pasado suficiente tiempo desde su ultima actividad para volver a
      sacarla sin saturar.
   4. ANTIGUEDAD + TEMA RECURRENTE — pieza publicada hace tiempo cuyo tema reaparece
@@ -57,8 +57,8 @@ Rendimiento = Callable[[str, str, str], dict[str, Any]]
 
 # Ventana (dias) para considerar una efemeride "proxima".
 VENTANA_EFEMERIDE_DIAS = 21
-# Edad minima (dias desde la ultima actividad) para proponer una perenne madurada.
-EDAD_MINIMA_PERENNE_DIAS = 30
+# Edad minima (dias desde la ultima actividad) para proponer una evergreen madurada.
+EDAD_MINIMA_EVERGREEN_DIAS = 30
 # Edad minima (dias) para que una pieza cuente como "archivo antiguo" reutilizable.
 EDAD_MINIMA_ANTIGUEDAD_DIAS = 60
 # Minimo de palabras clave compartidas para considerar un tema "recurrente".
@@ -73,14 +73,14 @@ MAX_CANDIDATAS = 12
 # Motivos (etiquetas estables que la UI pinta con su propio icono/color).
 MOTIVO_RENDIMIENTO = "rendimiento"
 MOTIVO_EFEMERIDE = "efemeride"
-MOTIVO_PERENNE = "perenne"
+MOTIVO_EVERGREEN = "evergreen"
 MOTIVO_RECURRENTE = "recurrente"
 
 # Puntuacion base por motivo (el rendimiento real manda; luego la efemeride).
 _PESO_MOTIVO = {
     MOTIVO_RENDIMIENTO: 2000,
     MOTIVO_EFEMERIDE: 1000,
-    MOTIVO_PERENNE: 500,
+    MOTIVO_EVERGREEN: 500,
     MOTIVO_RECURRENTE: 250,
 }
 
@@ -279,8 +279,8 @@ def _por_efemeride(
     return mejor
 
 
-def _por_perenne(pub: dict[str, Any], hoy: date) -> tuple[str, int] | None:
-    """Detalle+bonus si es perenne madurada (evergreen + antiguedad); None si no."""
+def _por_evergreen(pub: dict[str, Any], hoy: date) -> tuple[str, int] | None:
+    """Detalle+bonus si es evergreen madurada (evergreen + antiguedad); None si no."""
     if not pub.get("evergreen"):
         return None
     ref = _parsear_fecha(pub.get("fecha_actualizacion", "")) or _parsear_fecha(
@@ -289,10 +289,10 @@ def _por_perenne(pub: dict[str, Any], hoy: date) -> tuple[str, int] | None:
     if ref is None:
         return None
     dias = (hoy - ref.date()).days
-    if dias < EDAD_MINIMA_PERENNE_DIAS:
+    if dias < EDAD_MINIMA_EVERGREEN_DIAS:
         return None
     detalle = (
-        f"Contenido perenne sin volver a publicarse en {dias} días: "
+        f"Contenido evergreen sin volver a publicarse en {dias} días: "
         "buen momento para retomarlo."
     )
     return (detalle, dias)
@@ -358,7 +358,7 @@ def candidatas_reciclaje(
     `publicado` son candidatas. `rendimiento` (opcional) es el lookup de rendimiento
     real por pieza (Metricool); si se pasa, las piezas que YA rindieron bien se
     proponen como la senal mas fuerte. Devuelve como mucho `limite`, ordenadas por
-    puntuacion (rendimiento > efemeride > perenne > recurrente; desempata la senal
+    puntuacion (rendimiento > efemeride > evergreen > recurrente; desempata la senal
     interna), UNA candidata por pieza (gana su motivo mas fuerte).
     """
     if hoy is None:
@@ -384,8 +384,8 @@ def candidatas_reciclaje(
             )
         if (ef := _por_efemeride(pub, hoy)) is not None:
             opciones.append((MOTIVO_EFEMERIDE, ef[0], _PESO_MOTIVO[MOTIVO_EFEMERIDE] + ef[1], None))
-        if (pe := _por_perenne(pub, hoy)) is not None:
-            opciones.append((MOTIVO_PERENNE, pe[0], _PESO_MOTIVO[MOTIVO_PERENNE] + pe[1], None))
+        if (pe := _por_evergreen(pub, hoy)) is not None:
+            opciones.append((MOTIVO_EVERGREEN, pe[0], _PESO_MOTIVO[MOTIVO_EVERGREEN] + pe[1], None))
         if (re_ := _por_recurrente(pub, hoy, temas)) is not None:
             opciones.append(
                 (MOTIVO_RECURRENTE, re_[0], _PESO_MOTIVO[MOTIVO_RECURRENTE] + re_[1], None)

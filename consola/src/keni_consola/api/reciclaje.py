@@ -30,7 +30,7 @@ async def sugerencias(request: Request) -> Response:
     """Lista las candidatas de reciclaje (archivo que merece retomarse).
 
     Filtros opcionales `?marca=&red=` acotan el universo de piezas. Devuelve las
-    candidatas ya ordenadas (efemeride > perenne > recurrente) con su motivo, mas
+    candidatas ya ordenadas (efemeride > evergreen > recurrente) con su motivo, mas
     los `parametros` de la heuristica para que la UI los pueda explicar.
     """
     qp = request.query_params
@@ -46,7 +46,7 @@ async def sugerencias(request: Request) -> Response:
             "sugerencias": candidatas,
             "parametros": {
                 "ventana_efemeride_dias": reciclaje.VENTANA_EFEMERIDE_DIAS,
-                "edad_minima_perenne_dias": reciclaje.EDAD_MINIMA_PERENNE_DIAS,
+                "edad_minima_evergreen_dias": reciclaje.EDAD_MINIMA_EVERGREEN_DIAS,
                 "edad_minima_antiguedad_dias": reciclaje.EDAD_MINIMA_ANTIGUEDAD_DIAS,
                 "umbral_engagement_rendimiento": reciclaje.UMBRAL_ENGAGEMENT_RENDIMIENTO,
             },
