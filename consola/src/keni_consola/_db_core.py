@@ -1,0 +1,2578 @@
+"""Cimientos de persistencia: conexion, locks y esquema/migraciones (Postgres).
+
+Extraido de `db.py` (god-module): aqui vive la FUNDACION sobre la que se apoyan
+todas las entidades (conexion `_conectar` con asegurado de esquema una-vez-por-proceso,
+advisory locks, el DDL `_DDL_ESQUEMA`, `_crear_esquema` y TODAS las migraciones de
+columnas/modelo idempotentes). NO contiene logica de entidad (CRUD): `db.py` la
+re-exporta entera (`from ._db_core import (...)`) para que los consumidores sigan
+usando `db.<algo>` sin cambios. Acoplamiento hacia abajo: solo `config`/`motor_db`/
+`estados` + stdlib; no importa `db` (aciclico).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import threading
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Any
+
+# Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
+from . import config, motor_db
+from .estados import (
+    ESTADO_ROTA_PROPUESTO,
+    NOMBRE_FRANJA_MANANA_DEFAULT,
+    NOMBRE_FRANJA_TARDE_DEFAULT,
+)
+from .motor_db import IntegrityError
+
+_log = logging.getLogger("keni_consola.db")
+
+
+# URLs de BD cuyo esquema YA aseguramos en ESTE proceso. El DDL (idempotente, ~89 sentencias
+# `CREATE ... IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`) NO necesita re-ejecutarse en
+# CADA conexion: como no hay pool y cada operacion abre su propia conexion, hacerlo en cada
+# `_conectar` significaba barrer el catalogo de Postgres en CADA request -> coste real en prod y,
+# x16k conexiones, el coste DOMINANTE de la suite (medido: con memo la suite cae ~3.5x). Se asegura
+# UNA vez por proceso y URL; tras un deploy el proceso reinicia -> el set se vacia -> se re-crea/migra.
+# En tests, un fixture autouse lo limpia por test, de modo que la PRIMERA conexion de cada test
+# re-asegura el esquema (preserva la auto-curacion que ejercitan los tests de "BD vieja"/on-demand).
+_esquemas_asegurados: set[str] = set()
+# Protege el check-then-act sobre `_esquemas_asegurados`: varios hilos daemon (refrescos,
+# worker, scanners) abren su PRIMERA conexion casi a la vez al arrancar y correrian el DDL en
+# paralelo. El DDL es idempotente (riesgo bajo), pero el lock evita el doble trabajo y deja el
+# "asegurar una vez por proceso/URL" limpio y determinista.
+_lock_esquemas = threading.Lock()
+
+
+def _conectar() -> Any:
+    """Abre la conexion a Postgres y asegura el esquema UNA vez por proceso/URL.
+
+    `motor_db.conectar_cruda()` abre Postgres con `DATABASE_URL` (obligatoria, ADR 0004) y
+    devuelve una conexion que IMITA la API de `sqlite3.Connection` que usan los call sites
+    (`execute(sql, params)` con `?`, filas por nombre, `rowcount`, commit/close).
+
+    El esquema (idempotente) se crea/migra la PRIMERA vez que este proceso ve una URL dada; las
+    siguientes conexiones a la misma BD se saltan el DDL (ver `_esquemas_asegurados`).
+    """
+    con = motor_db.conectar_cruda()
+    url = config.database_url() or ""
+    # Lock de modulo: el check-then-act corre en varios hilos daemon al arranque (ver
+    # `_lock_esquemas`). Doble-check dentro del lock para asegurar el esquema UNA sola vez.
+    if url not in _esquemas_asegurados:
+        with _lock_esquemas:
+            if url not in _esquemas_asegurados:
+                _crear_esquema(con)
+                _esquemas_asegurados.add(url)
+    return con
+
+
+def conectar() -> Any:
+    """Conexion publica al backend (mismo `_conectar`, expuesto para `auth/`).
+
+    El esquema de `usuarios`/`sesiones` se crea aqui igual que el resto de tablas, de modo
+    que `auth/` puede operar sin duplicar la creacion del esquema. Cada operacion
+    abre/cierra su propia conexion.
+    """
+    return _conectar()
+
+
+# --------------------------------------------------------------------------- #
+# Locks de aplicacion CROSS-PROCESO (Postgres advisory locks)                  #
+# --------------------------------------------------------------------------- #
+# Sin pool de conexiones, cada operacion abre su propia conexion: el unico mutex que cruza
+# procesos (back, worker, daemons, replicas) es un advisory lock de Postgres. Lo usamos para
+# el SINGLE-FLIGHT de los barridos (radar/autogen/pipeline): un segundo barrido concurrente
+# (deploy solapado, admin pulsando "ejecutar" mientras corre el daemon) NO debe duplicar
+# items del tablero ni runs de `claude -p`, porque su dedup es leer-luego-escribir en Python.
+# `pg_try_advisory_lock` es NO bloqueante: si otro ya lo tiene, devolvemos False y el segundo
+# barrido sale de inmediato (no encola, no espera). El lock se suelta al cerrar la conexion
+# (o explicitamente con `pg_advisory_unlock`).
+
+# Espacio de nombres (clave alta de 32 bits del par de claves int) para no colisionar con
+# advisory locks de otros subsistemas. Arbitrario pero estable.
+_LOCK_NS_BARRIDO = 0x4B53  # 'KS'
+
+
+def _clave_lock(nombre: str) -> int:
+    """Deriva una clave estable de 32 bits (con signo) para un advisory lock a partir de texto."""
+    h = int.from_bytes(hashlib.blake2b(nombre.encode("utf-8"), digest_size=4).digest(), "big")
+    # Postgres usa bigint con signo; `pg_*_advisory_lock(int4, int4)` toma int de 32 bits.
+    return h - 0x1_0000_0000 if h >= 0x8000_0000 else h
+
+
+@contextmanager
+def lock_barrido(nombre: str) -> Iterator[bool]:
+    """Single-flight CROSS-PROCESO de un barrido. `with lock_barrido("autogen") as ok:`.
+
+    Intenta tomar un advisory lock de Postgres (`pg_try_advisory_lock`, NO bloqueante) keyed
+    en `nombre`. `ok` es True si ESTE proceso lo obtuvo (debe ejecutar el barrido) o False si
+    otro lo retiene ahora mismo (debe abortar sin hacer nada). El lock se mantiene mientras
+    dure el `with` y se suelta SIEMPRE al salir (incluso ante excepcion), sobre una conexion
+    propia dedicada que no se reusa para el trabajo. Es no-op-friendly: el caller solo
+    comprueba `ok`.
+    """
+    clave = _clave_lock(nombre)
+    con = _conectar()
+    obtenido = False
+    try:
+        fila = con.execute(
+            "SELECT pg_try_advisory_lock(?, ?) AS ok", (_LOCK_NS_BARRIDO, clave)
+        ).fetchone()
+        con.commit()
+        obtenido = bool(fila["ok"]) if fila is not None else False
+        yield obtenido
+    finally:
+        if obtenido:
+            try:
+                con.execute(
+                    "SELECT pg_advisory_unlock(?, ?)", (_LOCK_NS_BARRIDO, clave)
+                )
+                con.commit()
+            except Exception:  # noqa: BLE001 -- soltar es best-effort; cerrar la conexion tambien libera.
+                _log.warning("No se pudo soltar el advisory lock de barrido %s.", nombre)
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Arranque de la persistencia                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def arrancar_persistencia() -> None:
+    """Crea el esquema operacional on-demand en el arranque (idempotente).
+
+    Abre Postgres (`DATABASE_URL` obligatoria, ADR 0004) y crea/migra el esquema, de modo
+    que el back arranca con las tablas listas por cualquier via. Si falta `DATABASE_URL`,
+    `motor_db.conectar_cruda()` lanza un `RuntimeError` accionable (no se traga: un back sin
+    Postgres no debe servir). El antiguo guardia anti-orfanamiento SQLite->Postgres se
+    retiro con SQLite (ADR 0004): ya no hay un origen local que orfanar.
+    """
+    _conectar().close()  # crea/migra el esquema y cierra
+
+
+# DDL del esquema operacional, como sentencias INDIVIDUALES (no un script multi-sentencia
+# `executescript`, exclusivo de sqlite3): se ejecutan una a una via `con.execute`. El DDL
+# se mantiene portable (heredado de cuando coexistia SQLite): tipos `TEXT`/`INTEGER`,
+# `PRIMARY KEY`, `UNIQUE`, `NOT NULL DEFAULT ''` y `CREATE [UNIQUE] INDEX IF NOT EXISTS` son
+# todos validos en Postgres 16. Los ids son TEXT generados por la app (uuid), no
+# autoincrementales: no hay `AUTOINCREMENT`/`SERIAL`.
+_DDL_ESQUEMA: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS comercial_publicaciones (
+        id                   TEXT PRIMARY KEY,
+        url                  TEXT NOT NULL DEFAULT '',
+        id_post_metricool    TEXT NOT NULL DEFAULT '',
+        titulo               TEXT NOT NULL DEFAULT '',
+        marca                TEXT NOT NULL DEFAULT '',
+        cliente              TEXT NOT NULL DEFAULT '',
+        campania             TEXT NOT NULL DEFAULT '',
+        red                  TEXT NOT NULL DEFAULT '',
+        formato              TEXT NOT NULL DEFAULT '',
+        metrica_objetivo     TEXT NOT NULL DEFAULT 'interacciones',
+        objetivo             INTEGER NOT NULL DEFAULT 0,
+        estado               TEXT NOT NULL DEFAULT 'activa',
+        publicado            TEXT NOT NULL DEFAULT '',
+        notas                TEXT NOT NULL DEFAULT '',
+        aviso_en             TEXT NOT NULL DEFAULT '',
+        fecha_creacion       TEXT NOT NULL DEFAULT '',
+        fecha_actualizacion  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS comercial_snapshots (
+        id              TEXT PRIMARY KEY,
+        publicacion_id  TEXT NOT NULL,
+        ts              TEXT NOT NULL,
+        interacciones   INTEGER NOT NULL DEFAULT 0,
+        visualizaciones INTEGER NOT NULL DEFAULT 0,
+        alcance         INTEGER NOT NULL DEFAULT 0,
+        likes                          INTEGER NOT NULL DEFAULT 0,
+        comentarios                    INTEGER NOT NULL DEFAULT 0,
+        compartidos                    INTEGER NOT NULL DEFAULT 0,
+        guardados                      INTEGER NOT NULL DEFAULT 0,
+        video_views                    INTEGER NOT NULL DEFAULT 0,
+        tiempo_medio_vis_s             INTEGER NOT NULL DEFAULT 0,
+        clics_enlace                   INTEGER NOT NULL DEFAULT 0,
+        seguidores_netos_atribuidos    INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_comercial_snapshots_pub_ts "
+    "ON comercial_snapshots (publicacion_id, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
+    "ON comercial_snapshots (publicacion_id)",
+    # Histórico de métricas por pieza para TODAS las publicaciones (no solo el módulo
+    # comercial): una fila por pieza por refresco del daemon, para análisis temporales
+    # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de
+    # `metricas_cache` (valor ACTUAL, sobrescrito), esta tabla es la SERIE histórica; a
+    # diferencia de `comercial_snapshots` (seguimiento de OBJETIVOS de piezas comerciales),
+    # esta es GENERAL. El crecimiento lo acota la poda por retención (ADR 0007).
+    """
+    CREATE TABLE IF NOT EXISTS metricas_pieza_snapshots (
+        id                             TEXT PRIMARY KEY,
+        pieza_id                       TEXT NOT NULL,
+        marca                          TEXT NOT NULL DEFAULT '',
+        red                            TEXT NOT NULL DEFAULT '',
+        formato                        TEXT NOT NULL DEFAULT '',
+        ts                             TEXT NOT NULL,
+        visualizaciones                INTEGER NOT NULL DEFAULT 0,
+        interacciones                  INTEGER NOT NULL DEFAULT 0,
+        alcance                        INTEGER NOT NULL DEFAULT 0,
+        engagement_pct                 REAL    NOT NULL DEFAULT 0,
+        likes                          INTEGER NOT NULL DEFAULT 0,
+        comentarios                    INTEGER NOT NULL DEFAULT 0,
+        compartidos                    INTEGER NOT NULL DEFAULT 0,
+        guardados                      INTEGER NOT NULL DEFAULT 0,
+        video_views                    INTEGER NOT NULL DEFAULT 0,
+        tiempo_medio_vis_s             INTEGER NOT NULL DEFAULT 0,
+        clics_enlace                   INTEGER NOT NULL DEFAULT 0,
+        seguidores_netos_atribuidos    INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_pieza_ts "
+    "ON metricas_pieza_snapshots (pieza_id, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_marca_red_ts "
+    "ON metricas_pieza_snapshots (marca, red, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_pieza "
+    "ON metricas_pieza_snapshots (pieza_id)",
+    """
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id                     TEXT PRIMARY KEY,
+        usuario                TEXT NOT NULL UNIQUE,
+        rol                    TEXT NOT NULL DEFAULT 'editor',
+        salt                   TEXT NOT NULL,
+        hash                   TEXT NOT NULL,
+        debe_cambiar_password  INTEGER NOT NULL DEFAULT 0,
+        intentos_fallidos      INTEGER NOT NULL DEFAULT 0,
+        bloqueo_hasta          TEXT NOT NULL DEFAULT '',
+        creado                 TEXT NOT NULL DEFAULT '',
+        ultimo_acceso          TEXT NOT NULL DEFAULT '',
+        cargo                  TEXT NOT NULL DEFAULT '',
+        cobertura              INTEGER NOT NULL DEFAULT 0,
+        puede_coordinar        BOOLEAN NOT NULL DEFAULT FALSE,
+        nombre                 TEXT NOT NULL DEFAULT '',
+        manager_id             TEXT NOT NULL DEFAULT '',
+        -- MFA PASSKEYS / WebAuthn (segundo factor, gateado por `KENI_CONSOLA_MFA`). ADITIVAS y
+        -- con DEFAULT, de modo que un usuario legado nace SIN MFA (`mfa_activo=0`) y el login no
+        -- cambia. Las CREDENCIALES (clave publica + sign_count) viven en `webauthn_credenciales`
+        -- (1:N); aqui solo el flag derivado y los recovery.
+        --   - mfa_activo: 1 = el usuario tiene >=1 passkey (se enciende al registrar la primera
+        --     y se apaga al borrar la ultima o al reset admin).
+        --   - mfa_recovery_codes: JSON con la lista de codigos de recuperacion HASHEADOS
+        --     (scrypt, mismo hasher que la contrasena); cada uno se consume de un solo uso.
+        -- (La columna TOTP `mfa_secret_cifrado` se ELIMINO al pasar a passkeys; ver
+        --  `_migrar_columnas_usuarios`, que la dropa idempotentemente en BDs viejas.)
+        mfa_activo             INTEGER NOT NULL DEFAULT 0,
+        mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]'
+    )
+    """,
+    # Passkeys (WebAuthn/FIDO2): una credencial publica por dispositivo enrolado. Un usuario
+    # puede tener VARIAS (telefono, laptop, llave). El "secreto" (clave privada) NUNCA llega
+    # aqui: solo guardamos la clave PUBLICA y el contador de firmas (anti-clonado).
+    #   - credential_id: id de la credencial en base64url (UNIQUE global: lo asigna el
+    #     autenticador). public_key: COSE public key en base64url. transports: JSON con las
+    #     pistas de transporte (["internal","hybrid"...]). sign_count: contador del autenticador.
+    #     nombre: etiqueta humana que pone el usuario ("iPhone de Ana"). Borrar el usuario
+    #     propaga (ON DELETE CASCADE).
+    """
+    CREATE TABLE IF NOT EXISTS webauthn_credenciales (
+        id             TEXT PRIMARY KEY,
+        usuario_id     TEXT NOT NULL,
+        credential_id  TEXT NOT NULL UNIQUE,
+        public_key     TEXT NOT NULL,
+        sign_count     INTEGER NOT NULL DEFAULT 0,
+        transports     TEXT NOT NULL DEFAULT '[]',
+        nombre         TEXT NOT NULL DEFAULT '',
+        creada         TEXT NOT NULL DEFAULT '',
+        ultimo_uso     TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_webauthn_cred_usuario ON webauthn_credenciales (usuario_id)",
+    """
+    CREATE TABLE IF NOT EXISTS sesiones (
+        token       TEXT PRIMARY KEY,
+        usuario_id  TEXT NOT NULL,
+        creada      TEXT NOT NULL,
+        ultimo_uso  TEXT NOT NULL,
+        expira      TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
+    # Relacion N:M usuarios <-> marcas (organigrama AMX, transcripciones de Bernardo):
+    # una persona puede pertenecer a varias verticales/marcas (Yustine cubre ClaroSports +
+    # UnoTV + Piso 15; Bernardo a todas). `marca_id` se valida en la capa API contra el
+    # catalogo canonico (`keni_shared.marcas`) — no es FK en la BD porque las marcas viven
+    # en TOML/codigo, no en SQL. Borrar un usuario propaga (ON DELETE CASCADE).
+    """
+    CREATE TABLE IF NOT EXISTS usuarios_marcas (
+        usuario_id  TEXT NOT NULL,
+        marca_id    TEXT NOT NULL,
+        PRIMARY KEY (usuario_id, marca_id),
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_usuarios_marcas_marca ON usuarios_marcas (marca_id)",
+    # `tipo_cobertura`/`prioridad`/`cambiado`/`actualizado` (ola B): el evento ya no es
+    # solo "que sacar"; lleva COMO se cubre (transmision|imagenes|no_cubrir), su PRIORIDAD
+    # y si se REPROGRAMO (`cambiado`=1: hay que volver a avisar al equipo). `actualizado`
+    # se refresca en cada edicion. Para bases NUEVAS se declaran aqui; las viejas las
+    # migra `_migrar_columnas_eventos_rota` (idempotente, solo SQLite).
+    """
+    CREATE TABLE IF NOT EXISTS rota_eventos (
+        id             TEXT PRIMARY KEY,
+        titulo         TEXT NOT NULL,
+        fecha          TEXT NOT NULL DEFAULT '',
+        hora           TEXT NOT NULL DEFAULT '',
+        contenido      TEXT NOT NULL DEFAULT '',
+        nota           TEXT NOT NULL DEFAULT '',
+        tipo_cobertura TEXT NOT NULL DEFAULT 'transmision',
+        prioridad      TEXT NOT NULL DEFAULT 'media',
+        cambiado       INTEGER NOT NULL DEFAULT 0,
+        actualizado    TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT '',
+        origen         TEXT NOT NULL DEFAULT '',
+        origen_ref     TEXT NOT NULL DEFAULT '',
+        marca          TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_eventos_marca ON rota_eventos (marca)",
+    # FRANJAS POR SEMANA (#XYZ "Mundial"): el feedback real del piloto AMX descubrio
+    # semanas con coberturas atipicas (Mundial, eventos grandes) con MAS de 2 franjas y
+    # CON SOLAPES (ej. semana 24 jun 2026: 09:00-17:00, 13:00-21:00, 17:00-01:00). El
+    # modelo viejo (`Franja = matutino|vespertino|descanso` literal en `rota_turnos.franja`)
+    # no lo soportaba. Ahora cada SEMANA tiene sus propias franjas: nombre libre, rangos
+    # HH:MM, solapes permitidos y `fin <= inicio` indica franja que cruza medianoche.
+    # `rota_config_franjas` (singleton) sigue existiendo como plantilla por defecto al
+    # sembrar las 2 franjas de trabajo iniciales ("Mañana", "Tarde") de una semana nueva.
+    #
+    # `es_descanso`: marca una franja como "no laboral" (turno planificado de descanso). El
+    # usuario aclaro: el descanso NO es ausencia implicita, es un turno explicito asignado a
+    # la persona ese dia. La franja descanso NO cubre ningun evento (`franjas_activas_en`
+    # la EXCLUYE). Sirve para que la UI muestre una fila "Descanso" en la rejilla donde el
+    # admin marca quien no trabaja ese dia (distinto de "olvido de asignacion").
+    """
+    CREATE TABLE IF NOT EXISTS rota_franjas (
+        id           TEXT PRIMARY KEY,
+        lunes        TEXT NOT NULL,
+        nombre       TEXT NOT NULL,
+        inicio       TEXT NOT NULL,
+        fin          TEXT NOT NULL,
+        orden        INTEGER NOT NULL DEFAULT 0,
+        es_descanso  BOOLEAN NOT NULL DEFAULT FALSE,
+        UNIQUE (lunes, nombre)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)",
+    # TURNO = horario del miembro en (fecha, franja_id). NO esta atado a un evento concreto.
+    # Cambio de modelo (#XYZ "franjas por semana"): el `franja` literal de tres valores
+    # ('matutino'/'vespertino'/'descanso') desaparece. Ahora cada turno apunta a una
+    # `franja_id` de `rota_franjas` (definidas por semana, con nombre libre y solapes).
+    # El "descanso" sigue existiendo como FRANJA explicita (con `es_descanso=true`) en cada
+    # semana: una persona con turno en la franja Descanso esta planificada para no trabajar
+    # ese dia (distinto de "olvido de asignacion"). La migracion (`_migrar_modelo_franjas`):
+    #   - siembra ("Mañana"/"Tarde"/"Descanso") en cada semana con turnos legados (usando
+    #     `rota_config_franjas` como plantilla para las dos primeras),
+    #   - asigna `franja_id` a los turnos PRESERVANDO los de `franja='descanso'`.
+    """
+    CREATE TABLE IF NOT EXISTS rota_turnos (
+        id             TEXT PRIMARY KEY,
+        semana         TEXT NOT NULL,
+        fecha          TEXT NOT NULL DEFAULT '',
+        miembro_id     TEXT NOT NULL DEFAULT '',
+        miembro_nombre TEXT NOT NULL DEFAULT '',
+        franja_id      TEXT NOT NULL DEFAULT '',
+        estado         TEXT NOT NULL DEFAULT 'propuesto',
+        override       INTEGER NOT NULL DEFAULT 0,
+        motivo         TEXT NOT NULL DEFAULT '',
+        nota_relevo    TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT '',
+        actualizado    TEXT NOT NULL DEFAULT '',
+        origen         TEXT NOT NULL DEFAULT '',
+        origen_ref     TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_fecha ON rota_turnos (fecha)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_franja_id ON rota_turnos (franja_id)",
+    # Ausencias/vacaciones del horario (F4 · #144): un rango de fechas (inclusivo) en que un
+    # miembro NO esta disponible. El proponedor del horario las RESPETA (excluye al miembro
+    # esos dias). `tipo` es vacaciones|descanso|baja|otro.
+    """
+    CREATE TABLE IF NOT EXISTS rota_ausencias (
+        id             TEXT PRIMARY KEY,
+        miembro_id     TEXT NOT NULL DEFAULT '',
+        miembro_nombre TEXT NOT NULL DEFAULT '',
+        tipo           TEXT NOT NULL DEFAULT 'otro',
+        desde          TEXT NOT NULL DEFAULT '',
+        hasta          TEXT NOT NULL DEFAULT '',
+        motivo         TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_ausencias_miembro ON rota_ausencias (miembro_id)",
+    # Piezas de la PARRILLA (#150, PARRILLA 2026.xlsx): en el Excel de Tescu cada FILA es un
+    # POST individual, no un evento. Una transmision (p. ej. "LIV GOLF Andalucia R1") genera
+    # varias piezas: pre-evento FB/IG/X, reel IG/TK, historia "5:15 LINK VIVO", post-evento.
+    # Tambien hay campanas EVERGREEN sin evento (Alvaro Fidalgo, Real Oviedo, MUNDIAL, Paty
+    # Cantu): piezas con `programa` y sin `evento_id`. El workflow de produccion del Excel
+    # ("Material entregado / Contenido entregado / Publicado / Enlace") se persiste tal cual.
+    # `evento_id` queda como FK textual a `rota_eventos` ("" para piezas sueltas); no hay
+    # FOREIGN KEY a nivel DB (el borrado del evento NO arrastra sus piezas: la API decide).
+    """
+    CREATE TABLE IF NOT EXISTS rota_piezas (
+        id                      TEXT PRIMARY KEY,
+        evento_id               TEXT NOT NULL DEFAULT '',
+        programa                TEXT NOT NULL DEFAULT '',
+        red_social              TEXT NOT NULL DEFAULT '',
+        tipo_pieza              TEXT NOT NULL DEFAULT '',
+        contenido_sugerido      TEXT NOT NULL DEFAULT '',
+        dia                     TEXT NOT NULL DEFAULT '',
+        hora_post               TEXT NOT NULL DEFAULT '',
+        estado                  TEXT NOT NULL DEFAULT 'pendiente',
+        material_entregado      INTEGER NOT NULL DEFAULT 0,
+        contenido_entregado     INTEGER NOT NULL DEFAULT 0,
+        publicado               INTEGER NOT NULL DEFAULT 0,
+        enlace                  TEXT NOT NULL DEFAULT '',
+        responsable_id          TEXT NOT NULL DEFAULT '',
+        responsable_nombre      TEXT NOT NULL DEFAULT '',
+        notas                   TEXT NOT NULL DEFAULT '',
+        salida                  TEXT NOT NULL DEFAULT '',
+        comentarios             TEXT NOT NULL DEFAULT '',
+        fecha_entrega_material  TEXT NOT NULL DEFAULT '',
+        always_on               INTEGER NOT NULL DEFAULT 0,
+        creado                  TEXT NOT NULL DEFAULT '',
+        actualizado             TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_piezas_evento ON rota_piezas (evento_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_piezas_dia ON rota_piezas (dia)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_piezas_programa ON rota_piezas (programa)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_piezas_responsable ON rota_piezas (responsable_id)",
+    # Tablero de CONTENIDO unificado (herramienta de community manager): un padre
+    # `contenido` (item del tablero: importante del dia / evergreen / evento, o tarea
+    # libre) y N filas `contenido_plataforma` (una por red, con su estado y checklist).
+    # Una "publicacion" del flujo editorial = una fila `contenido_plataforma` unida a su
+    # padre (ver `ficheros.py`/`repos.py`). Operacional; Postgres (ADR 0004).
+    """
+    CREATE TABLE IF NOT EXISTS contenido (
+        id                  TEXT PRIMARY KEY,
+        clase               TEXT NOT NULL DEFAULT 'contenido',
+        flujo               TEXT NOT NULL DEFAULT '',
+        titulo              TEXT NOT NULL DEFAULT '',
+        descripcion         TEXT NOT NULL DEFAULT '',
+        marca               TEXT NOT NULL DEFAULT '',
+        evento_id           TEXT NOT NULL DEFAULT '',
+        programa            TEXT NOT NULL DEFAULT '',
+        prioridad           TEXT NOT NULL DEFAULT 'media',
+        estado              TEXT NOT NULL DEFAULT 'pendiente',
+        fecha_objetivo      TEXT NOT NULL DEFAULT '',
+        hora_objetivo       TEXT NOT NULL DEFAULT '',
+        fecha_entrega       TEXT NOT NULL DEFAULT '',
+        responsable_id      TEXT NOT NULL DEFAULT '',
+        responsable_nombre  TEXT NOT NULL DEFAULT '',
+        autor_id            TEXT NOT NULL DEFAULT '',
+        autor_nombre        TEXT NOT NULL DEFAULT '',
+        origen              TEXT NOT NULL DEFAULT '',
+        notas               TEXT NOT NULL DEFAULT '',
+        tipo_contenido      TEXT NOT NULL DEFAULT 'ia',
+        formato             TEXT NOT NULL DEFAULT 'foto',
+        id_post_metricool   TEXT NOT NULL DEFAULT '',
+        senal_viralidad     INTEGER NOT NULL DEFAULT 0,
+        qa_veredicto        TEXT NOT NULL DEFAULT '',
+        qa_hallazgos        TEXT NOT NULL DEFAULT '',
+        copy_pendiente      TEXT NOT NULL DEFAULT '',
+        fecha_fuente        TEXT NOT NULL DEFAULT '',
+        url_fuente          TEXT NOT NULL DEFAULT '',
+        creado              TEXT NOT NULL DEFAULT '',
+        actualizado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_contenido_flujo ON contenido (flujo)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_marca ON contenido (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_evento ON contenido (evento_id)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_responsable ON contenido (responsable_id)",
+    """
+    CREATE TABLE IF NOT EXISTS contenido_plataforma (
+        id                    TEXT PRIMARY KEY,
+        contenido_id          TEXT NOT NULL DEFAULT '',
+        red                   TEXT NOT NULL DEFAULT '',
+        -- `marca` DENORMALIZADA del padre `contenido`: existe SOLO para que el indice unico
+        -- parcial de parrilla (idx_parrilla_slot_uniq) pueda scope-arse POR MARCA sin cruzar el
+        -- join (un indice parcial no puede). Se mantiene en sync en TODA escritura (insert + cambio
+        -- de marca del padre). Las LECTURAS siguen tomando la marca de `c.marca` (parent), no de aqui.
+        marca                 TEXT NOT NULL DEFAULT '',
+        estado                TEXT NOT NULL DEFAULT 'pendiente',
+        falta_copy            INTEGER NOT NULL DEFAULT 1,
+        falta_imagen          INTEGER NOT NULL DEFAULT 1,
+        falta_revision        INTEGER NOT NULL DEFAULT 1,
+        falta_publicar        INTEGER NOT NULL DEFAULT 1,
+        -- `falta_video`: checklist del asset de VIDEO (espejo de `falta_imagen`). Solo cuenta
+        -- cuando la pieza padre es `formato='video'`; en piezas `foto` se mantiene en 0 (N/A).
+        falta_video           INTEGER NOT NULL DEFAULT 0,
+        copy                  TEXT NOT NULL DEFAULT '',
+        copy_in               TEXT NOT NULL DEFAULT '',
+        imagen                TEXT NOT NULL DEFAULT '',
+        imagen_fuente         TEXT NOT NULL DEFAULT '',
+        foto                  TEXT NOT NULL DEFAULT '',
+        -- `video`: clave del asset de video en el almacen de media (`videos/<sha256>.<ext>`),
+        -- espejo de `imagen`. "" = sin video adjunto. Lo usa el programador para publicar
+        -- `TipoMedia.video` cuando la pieza es `formato='video'`.
+        video                 TEXT NOT NULL DEFAULT '',
+        veredicto             TEXT NOT NULL DEFAULT '',
+        revisor_id            TEXT NOT NULL DEFAULT '',
+        revisor_nombre        TEXT NOT NULL DEFAULT '',
+        revisado_en           TEXT NOT NULL DEFAULT '',
+        enviado_a_revision_en TEXT NOT NULL DEFAULT '',
+        fecha_programada      TEXT NOT NULL DEFAULT '',
+        preparado_en          TEXT NOT NULL DEFAULT '',
+        id_post_metricool     TEXT NOT NULL DEFAULT '',
+        enlace                TEXT NOT NULL DEFAULT '',
+        evergreen             INTEGER NOT NULL DEFAULT 0,
+        es_publicacion        INTEGER NOT NULL DEFAULT 0,
+        copy_in_exento        INTEGER NOT NULL DEFAULT 0,
+        placa_oculta          INTEGER NOT NULL DEFAULT 0,
+        plantilla_diseno_id   TEXT NOT NULL DEFAULT '',
+        foto_encuadre         TEXT NOT NULL DEFAULT '',
+        fotos                 TEXT NOT NULL DEFAULT '',
+        qa_auto_hash          TEXT NOT NULL DEFAULT '',
+        hora_post             TEXT NOT NULL DEFAULT '',
+        creado                TEXT NOT NULL DEFAULT '',
+        actualizado           TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_contenido ON contenido_plataforma (contenido_id)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_red ON contenido_plataforma (red)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_estado ON contenido_plataforma (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_programada ON contenido_plataforma (fecha_programada)",
+    # OLA COLABORACION (inspirada en Planable: internal notes, version history, multi-level
+    # approval). Tres tablas APENDIDAS al modelo `contenido`/`contenido_plataforma`, sin
+    # tocar su esquema: hilo de comentarios por pieza, historial de versiones del copy y
+    # cadena de aprobacion multinivel con trazabilidad. Operacional; vive en Postgres.
+    #
+    # Comentarios internos: hilo de discusion de redaccion por item de `contenido` (el padre,
+    # asi cubre tanto contenido publicable como tarea libre). `plataforma_id` opcional ata el
+    # comentario a UNA red concreta (""=comentario del item entero). `resuelto` marca un hilo
+    # cerrado sin borrarlo (trazabilidad). Borrado real solo por el autor/admin (capa API).
+    """
+    CREATE TABLE IF NOT EXISTS contenido_comentarios (
+        id            TEXT PRIMARY KEY,
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        texto         TEXT NOT NULL DEFAULT '',
+        resuelto      INTEGER NOT NULL DEFAULT 0,
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT '',
+        -- ids de usuarios MENCIONADOS (@) en el comentario, separados por coma ("" = ninguno).
+        -- Una mencion notifica a esa persona y la deja SUSCRITA a la pieza (cajon de notis).
+        menciones     TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    # `menciones` se anadio despues del CREATE original: ALTER idempotente para BD existentes.
+    "ALTER TABLE contenido_comentarios ADD COLUMN IF NOT EXISTS menciones TEXT NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON contenido_comentarios (contenido_id)",
+    "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON contenido_comentarios (plataforma_id)",
+    # Historial de versiones del COPY de una fila por plataforma. Cada vez que el copy de una
+    # `contenido_plataforma` cambia (via la API de versiones), se guarda un SNAPSHOT inmutable
+    # del texto ANTERIOR antes de pisarlo, con quien y cuando. `version` es un contador
+    # incremental por plataforma (1, 2, 3...). Revertir = aplicar el texto de una version vieja
+    # como copy actual (que a su vez genera otro snapshot del que se pisa: nunca se pierde nada).
+    """
+    CREATE TABLE IF NOT EXISTS contenido_copy_versiones (
+        id            TEXT PRIMARY KEY,
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        version       INTEGER NOT NULL DEFAULT 0,
+        copy          TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        nota          TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_copyver_plataforma ON contenido_copy_versiones (plataforma_id)",
+    # Aprobacion MULTINIVEL de una fila por plataforma. La aprobacion editorial deja de ser un
+    # unico "otro par de ojos" y pasa a una CADENA de niveles configurable (p. ej. edicion ->
+    # coordinacion -> direccion). Cada registro es la decision de UN nivel sobre la pieza:
+    # `nivel` (1-based, orden de la cadena), `etiqueta` legible, `decision`
+    # (pendiente/aprobado/rechazado), quien decidio y cuando, mas un `comentario` opcional.
+    # La pieza queda totalmente aprobada cuando TODOS sus niveles estan en `aprobado`; un
+    # `rechazado` en cualquier nivel para la cadena. Trazabilidad completa (quien, que, cuando).
+    """
+    CREATE TABLE IF NOT EXISTS contenido_aprobaciones (
+        id               TEXT PRIMARY KEY,
+        plataforma_id    TEXT NOT NULL DEFAULT '',
+        contenido_id     TEXT NOT NULL DEFAULT '',
+        nivel            INTEGER NOT NULL DEFAULT 1,
+        etiqueta         TEXT NOT NULL DEFAULT '',
+        decision         TEXT NOT NULL DEFAULT 'pendiente',
+        decisor_id       TEXT NOT NULL DEFAULT '',
+        decisor_nombre   TEXT NOT NULL DEFAULT '',
+        comentario       TEXT NOT NULL DEFAULT '',
+        creado           TEXT NOT NULL DEFAULT '',
+        decidido_en      TEXT NOT NULL DEFAULT '',
+        -- Cargo del organigrama EXIGIDO para decidir este nivel ("" = sin requisito). Item C:
+        -- p. ej. "Coordinación" la decide un coordinador, "Dirección" un director.
+        cargo_requerido  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON contenido_aprobaciones (plataforma_id)",
+    "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON contenido_aprobaciones (decision)",
+    # QA EDITORIAL como APROBADOR AUTOMATICO (item D): veredicto de la skill `qa-editorial`
+    # ATADO a una pieza (`contenido_plataforma`). Cada vez que se corre el QA sobre una pieza
+    # concreta se guarda aqui un registro inmutable con el `verdicto` (listo/revisar/no_publicar),
+    # un `resumen` legible y el `copy_hash` (hash del copy revisado en ese momento). El consumidor
+    # (`repos.ultimo_veredicto_qa`) lee el ULTIMO veredicto de la pieza para resolver el nivel
+    # automatico "QA Editorial" de la cadena de aprobacion; compara `copy_hash` con el copy actual
+    # para INVALIDAR el veredicto si el copy cambio despues del QA (entonces el nivel queda
+    # pendiente, lo decide un humano). Append-only: nunca se pisa, solo se inserta y se lee el ultimo.
+    """
+    CREATE TABLE IF NOT EXISTS contenido_qa_veredictos (
+        id            TEXT PRIMARY KEY,
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        verdicto      TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        copy_hash     TEXT NOT NULL DEFAULT '',
+        historial_id  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_qaver_plataforma ON contenido_qa_veredictos (plataforma_id)",
+    # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
+    # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
+    # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
+    # programas para tener color/descripcion/fechas vivas; `rota_piezas.programa` referencia
+    # a este catalogo POR NOMBRE (case-sensitive) y NO por id (defensa: una pieza huerfana
+    # con un programa borrado sigue mostrandose). `nombre` UNIQUE (case-insensitive lo
+    # garantiza la capa API/repos). `activo` para esconder del selector sin perder histórico.
+    """
+    CREATE TABLE IF NOT EXISTS rota_programas (
+        id           TEXT PRIMARY KEY,
+        nombre       TEXT NOT NULL UNIQUE,
+        descripcion  TEXT NOT NULL DEFAULT '',
+        color        TEXT NOT NULL DEFAULT '',
+        inicio       TEXT NOT NULL DEFAULT '',
+        fin          TEXT NOT NULL DEFAULT '',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_programas_activo ON rota_programas (activo)",
+    # Configuracion de FRANJAS (#185): los rangos horarios de matutino/vespertino son
+    # editoriales del equipo y se editan desde la UI. Singleton: una sola fila con
+    # `id='default'`. Si no existe, los endpoints devuelven los defaults del dominio.
+    # Aplica al endpoint `POST /api/rota/cobertura/asignar-franja` (que llama a
+    # `dominio.mapear_franja` con estos valores). Inicios INCLUSIVOS, finales EXCLUSIVOS.
+    """
+    CREATE TABLE IF NOT EXISTS rota_config_franjas (
+        id                  TEXT PRIMARY KEY,
+        matutino_inicio     TEXT NOT NULL DEFAULT '08:00',
+        matutino_fin        TEXT NOT NULL DEFAULT '16:00',
+        vespertino_inicio   TEXT NOT NULL DEFAULT '16:00',
+        vespertino_fin      TEXT NOT NULL DEFAULT '24:00',
+        actualizado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
+    # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
+    # estado `propuesto`; B acepta/rechaza, y si acepta, Elias (admin) aprueba o rechaza.
+    # Al aprobar se ejecuta el swap en `rota_turnos` (intercambia miembro_id) y la
+    # solicitud queda `aplicado`. Las ausencias de verdad (vacaciones/baja) siguen en SAP
+    # y NO se gestionan aqui. Estados validos: ESTADOS_SWAP (ver `estados.py`).
+    """
+    CREATE TABLE IF NOT EXISTS rota_swaps_turno (
+        id                       TEXT PRIMARY KEY,
+        solicitante_id           TEXT NOT NULL,
+        solicitante_nombre       TEXT NOT NULL DEFAULT '',
+        destinatario_id          TEXT NOT NULL,
+        destinatario_nombre      TEXT NOT NULL DEFAULT '',
+        fecha_a                  TEXT NOT NULL,
+        franja_a                 TEXT NOT NULL,
+        fecha_b                  TEXT NOT NULL,
+        franja_b                 TEXT NOT NULL,
+        motivo                   TEXT NOT NULL DEFAULT '',
+        estado                   TEXT NOT NULL DEFAULT 'propuesto',
+        respuesta_destinatario   TEXT NOT NULL DEFAULT '',
+        respuesta_admin          TEXT NOT NULL DEFAULT '',
+        creado                   TEXT NOT NULL DEFAULT '',
+        actualizado              TEXT NOT NULL DEFAULT '',
+        decidido_destinatario    TEXT NOT NULL DEFAULT '',
+        decidido_admin           TEXT NOT NULL DEFAULT '',
+        aplicado                 TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_solicitante ON rota_swaps_turno (solicitante_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_destinatario ON rota_swaps_turno (destinatario_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_estado ON rota_swaps_turno (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_fechas ON rota_swaps_turno (fecha_a, fecha_b)",
+    # COORDINADOR POR TURNO (ola "coord"): cada celda del calendario (fecha, franja_id) puede
+    # tener UN coordinador asignado, INDEPENDIENTE del turno de CM. Los candidatos son los
+    # usuarios con `puede_coordinar=true` (hoy Elias, Ale, Mariana; lo decide el admin desde
+    # /usuarios). UNIQUE(fecha, franja_id): una celda = un coordinador. La tabla es nueva
+    # (no hay migracion historica). Borrar un turno o cambiar franja NO borra la coordinacion.
+    """
+    CREATE TABLE IF NOT EXISTS rota_coordinacion (
+        id              TEXT PRIMARY KEY,
+        lunes           TEXT NOT NULL,
+        fecha           TEXT NOT NULL,
+        franja_id       TEXT NOT NULL,
+        coordinador_id  TEXT NOT NULL,
+        creado          TEXT NOT NULL DEFAULT '',
+        actualizado     TEXT NOT NULL DEFAULT '',
+        UNIQUE (fecha, franja_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_coord_lunes ON rota_coordinacion (lunes)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_coord_franja ON rota_coordinacion (franja_id)",
+    # PROPUESTA de importacion de la parrilla desde un documento (PDF/imagen/docx/xlsx/txt).
+    # El usuario suelta un documento; un `claude -p` READ-ONLY lo lee y PROPONE operaciones
+    # (eventos/turnos nuevos, modificaciones) como JSON. La propuesta se ESTACIONA aqui (NO se
+    # aplica): el frontend la previsualiza sobre el calendario real y, al aceptar, el back
+    # aplica el diff en UNA transaccion. Claude NUNCA escribe en el calendario.
+    #   - `estado`: generando|pendiente|aplicada|descartada|error (ver dominio.parrilla_import).
+    #   - `doc_nombre`: KEY del objeto en el almacen de media (el documento subido).
+    #   - `semana`: lunes ISO de la semana objetivo (todas las ops caen en ella).
+    #   - `gen_id`: id del registro de generacion (el job de claude que la produjo).
+    #   - `operaciones`: lista JSON de operaciones VALIDADAS (NULL hasta que el job termina).
+    #     Se guarda como TEXT/JSON serializado (mismo patron que el resto de columnas JSON del
+    #     esquema, portable desde la era SQLite; la app (de)serializa con json.dumps/loads).
+    """
+    CREATE TABLE IF NOT EXISTS parrilla_propuesta (
+        id            TEXT PRIMARY KEY,
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'generando',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        doc_nombre    TEXT NOT NULL DEFAULT '',
+        doc_tipo      TEXT NOT NULL DEFAULT '',
+        semana        TEXT NOT NULL DEFAULT '',
+        gen_id        TEXT NOT NULL DEFAULT '',
+        operaciones   TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        error         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_estado ON parrilla_propuesta (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_semana ON parrilla_propuesta (semana)",
+    "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_gen ON parrilla_propuesta (gen_id)",
+    # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
+    # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
+    # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
+    # (fuente de verdad del sondeo), `spec` el JSON serializable para reconstruir el job
+    # (prompt + post-procesado + cwd) en el worker, `estado` el del ciclo de la cola
+    # (pendiente|reclamado|terminado), `claimed_at`/`worker` para depurar y reaprovechar
+    # jobs huerfanos (un worker que muere a media ejecucion). `cancelado` lo marca el back
+    # al cancelar: el worker lo lee y mata el arbol (cancelacion cross-proceso).
+    """
+    CREATE TABLE IF NOT EXISTS jobs (
+        id          TEXT PRIMARY KEY,
+        gen_id      TEXT NOT NULL,
+        spec        TEXT NOT NULL,
+        estado      TEXT NOT NULL DEFAULT 'pendiente',
+        cancelado   INTEGER NOT NULL DEFAULT 0,
+        worker      TEXT NOT NULL DEFAULT '',
+        creado      TEXT NOT NULL DEFAULT '',
+        claimed_at  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_jobs_estado ON jobs (estado)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_gen ON jobs (gen_id)",
+    # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
+    # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
+    # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un
+    # daemon + el boton "Actualizar" lo refrescan. `marca` = '' significa "todas".
+    """
+    CREATE TABLE IF NOT EXISTS metricas_cache (
+        clave        TEXT PRIMARY KEY,
+        tipo         TEXT NOT NULL,
+        rango        TEXT NOT NULL,
+        marca        TEXT NOT NULL DEFAULT '',
+        payload      TEXT NOT NULL,
+        fuente       TEXT NOT NULL DEFAULT 'muestra',
+        generado_en  TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_metricas_cache_combo "
+    "ON metricas_cache (tipo, rango, marca)",
+    # ----------------------------------------------------------------------- #
+    # ACTIVOS REUTILIZABLES (ola "activos"): biblioteca de medios interna.     #
+    # (Las "plantillas de contenido" se retiraron por completo.)               #
+    # ----------------------------------------------------------------------- #
+    # Limpieza one-shot: elimina la tabla retirada `plantilla_contenido` (y sus datos) si una
+    # BD vieja aun la tiene. Idempotente (IF EXISTS); no afecta a plantillas de MARCA/diseno.
+    "DROP TABLE IF EXISTS plantilla_contenido CASCADE",
+    # BIBLIOTECA DE MEDIOS interna (ola "activos"): catalogo editorial de imagenes/clips
+    # APROBADOS y reutilizables al armar una pieza. NO publica a redes (eso es Metricool); es
+    # un repositorio interno. Cada fila CATALOGA un objeto del almacen de media (`media.py` /
+    # `almacen_media.py`) por su nombre (`objeto`, un uuid+ext que SIEMPRE genera el servidor)
+    # mas metadatos editoriales: titulo, tipo (`imagen`|`clip`), marca, etiquetas (JSON de
+    # strings para buscar/filtrar), credito/fuente y estado de aprobacion. `objeto` UNIQUE: un
+    # mismo binario se cataloga una sola vez. Borrar una entrada NO borra el binario por
+    # defecto (puede estar referenciado por una pieza ya armada); la API decide.
+    """
+    CREATE TABLE IF NOT EXISTS biblioteca_media (
+        id           TEXT PRIMARY KEY,
+        objeto       TEXT NOT NULL UNIQUE,
+        tipo         TEXT NOT NULL DEFAULT 'imagen',
+        titulo       TEXT NOT NULL DEFAULT '',
+        descripcion  TEXT NOT NULL DEFAULT '',
+        marca        TEXT NOT NULL DEFAULT '',
+        etiquetas    TEXT NOT NULL DEFAULT '[]',
+        credito      TEXT NOT NULL DEFAULT '',
+        aprobado     INTEGER NOT NULL DEFAULT 1,
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_marca ON biblioteca_media (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_tipo ON biblioteca_media (tipo)",
+    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_aprobado ON biblioteca_media (aprobado)",
+    # ACTIVOS DE MARCA (editor profesional): el kit visual reutilizable de cada marca, agrupado
+    # por `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo). Generaliza
+    # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en
+    # S3/almacen (`objeto`, uuid+ext del servidor). `metadatos` (JSON) lleva datos por tipo (p.ej.
+    # familia/peso de una tipografia, lista de hex de una paleta); `lineas` (JSON de ids de
+    # `etiquetas` clase=vertical) etiqueta el activo por linea editorial. Para tipografias el
+    # `objeto` es el .woff2/.ttf y `metadatos.familia` el nombre a registrar en el render.
+    """
+    CREATE TABLE IF NOT EXISTS marca_activos (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        tipo         TEXT NOT NULL DEFAULT 'arte',
+        nombre       TEXT NOT NULL DEFAULT '',
+        objeto       TEXT NOT NULL DEFAULT '',
+        metadatos    TEXT NOT NULL DEFAULT '{}',
+        lineas       TEXT NOT NULL DEFAULT '[]',
+        aprobado     INTEGER NOT NULL DEFAULT 1,
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_marca_activos_marca ON marca_activos (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_marca_activos_tipo ON marca_activos (tipo)",
+    # PLANTILLAS DE DISEÑO (editor profesional): N plantillas reutilizables por marca, cada una
+    # un DOCUMENTO de capas completo (`documento`, JSON validado por `motores/estudio_imagen/
+    # documento.py`). Se etiquetan por `categoria` (post | historia | reel | infografia | …) y por
+    # `lineas` (JSON de ids de `etiquetas` clase=vertical) para filtrar por línea editorial.
+    # `miniatura` es el objeto de media (uuid+ext) de una previa, o "". A diferencia de
+    # `plantillas_marca` (1 plantilla por defecto por marca), aquí hay MUCHAS.
+    # `tipo` ("foto" | "miniatura") es un eje ORTOGONAL a `categoria`: foto = plantilla para
+    # fotos/imagenes; miniatura = portada/thumbnail de video. Las BDs existentes reciben el
+    # DEFAULT "foto" via `_migrar_columnas_plantillas_diseno`.
+    """
+    CREATE TABLE IF NOT EXISTS plantillas_diseno (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        nombre       TEXT NOT NULL DEFAULT '',
+        categoria    TEXT NOT NULL DEFAULT 'post',
+        tipo         TEXT NOT NULL DEFAULT 'foto',
+        documento    TEXT NOT NULL DEFAULT '{}',
+        miniatura    TEXT NOT NULL DEFAULT '',
+        lineas       TEXT NOT NULL DEFAULT '[]',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_marca ON plantillas_diseno (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_categoria ON plantillas_diseno (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_tipo ON plantillas_diseno (tipo)",
+    # BLOQUES (almacén de capas reutilizables): un bloque es un GRUPO de capas con sentido propio
+    # (lower-third, módulo de infografía, pleca de marca) que se suelta en cualquier documento.
+    # `capas` es un JSON con la lista de capas (mismo esquema que `documento.capas`). Se etiqueta
+    # por `marca` y `lineas` (ids de `etiquetas` clase=vertical). `miniatura` = objeto de media o "".
+    """
+    CREATE TABLE IF NOT EXISTS bloques (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        nombre       TEXT NOT NULL DEFAULT '',
+        capas        TEXT NOT NULL DEFAULT '[]',
+        lineas       TEXT NOT NULL DEFAULT '[]',
+        miniatura    TEXT NOT NULL DEFAULT '',
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_bloques_marca ON bloques (marca)",
+    # VERSIONES DE DOCUMENTO (historial del editor por pieza): cada vez que se guarda el editor
+    # sobre una publicación se APENDE una versión con el Documento de capas y el objeto del PNG
+    # renderizado. Append-only (nunca se pisa): la última versión es el estado actual; las previas
+    # permiten restaurar. Clave lógica (contenido_id, plataforma_id) -> N versiones incrementales.
+    """
+    CREATE TABLE IF NOT EXISTS documento_versiones (
+        id            TEXT PRIMARY KEY,
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        version       INTEGER NOT NULL DEFAULT 1,
+        documento     TEXT NOT NULL DEFAULT '{}',
+        render_objeto TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_documento_versiones_pieza "
+    "ON documento_versiones (contenido_id, plataforma_id, version)",
+    # Webhooks SALIENTES (eventos internos del tablero): una fila por suscripcion. Cada
+    # webhook escucha N tipos de evento (`eventos`, lista JSON; ""/[] = todos) y, al
+    # dispararse, recibe un POST JSON a `url`. `secreto` (opcional) firma cada entrega con
+    # HMAC-SHA256 en la cabecera `X-Keni-Signature` (mismo patron que Mixpost: X-Signature).
+    # `formato` decide la forma del payload: `generico` (def, evento crudo) | `slack`
+    # (`{"text": ...}`). SAFE BY DEFAULT: sin webhooks activos, NADA sale a la red.
+    """
+    CREATE TABLE IF NOT EXISTS webhooks (
+        id           TEXT PRIMARY KEY,
+        nombre       TEXT NOT NULL DEFAULT '',
+        url          TEXT NOT NULL DEFAULT '',
+        eventos      TEXT NOT NULL DEFAULT '',
+        formato      TEXT NOT NULL DEFAULT 'generico',
+        secreto      TEXT NOT NULL DEFAULT '',
+        activo        INTEGER NOT NULL DEFAULT 1,
+        ultimo_estado TEXT NOT NULL DEFAULT '',
+        ultimo_en     TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_webhooks_activo ON webhooks (activo)",
+    # Bitacora de eventos internos EMITIDOS (auditoria + idempotencia del barrido de
+    # vencimientos: una `clave_idempotencia` ya registrada no se re-emite). `payload` es el
+    # dict del evento serializado a JSON. No guarda secretos.
+    """
+    CREATE TABLE IF NOT EXISTS eventos_internos (
+        id                  TEXT PRIMARY KEY,
+        tipo                TEXT NOT NULL DEFAULT '',
+        contenido_id        TEXT NOT NULL DEFAULT '',
+        plataforma_id       TEXT NOT NULL DEFAULT '',
+        clave_idempotencia  TEXT NOT NULL DEFAULT '',
+        payload             TEXT NOT NULL DEFAULT '',
+        creado              TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_eventos_internos_tipo ON eventos_internos (tipo)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_eventos_internos_idem "
+    "ON eventos_internos (clave_idempotencia)",
+    # Notificaciones IN-APP por usuario (el "cajon" de la campana, junto al selector de marca).
+    # Una fila = una noticia para UN destinatario (`usuario_id`) sobre una pieza. `tipo` clasifica
+    # el evento (mencion/comentario/aprobacion/rechazo/publicacion); `marca_id` ACOTA al workspace
+    # activo (el cajon solo muestra la marca seleccionada). `actor_*` es quien lo provoco (no se
+    # auto-notifica). `resumen` es la frase ya armada para la UI; `enlace` opcional para navegar.
+    # `leida` se marca al abrir el cajon. Se BORRA en cascada logica? No: se purga por antiguedad
+    # fuera de aqui si hace falta. Append + update de `leida`; nunca se reescribe el contenido.
+    """
+    CREATE TABLE IF NOT EXISTS notificaciones (
+        id            TEXT PRIMARY KEY,
+        usuario_id    TEXT NOT NULL DEFAULT '',
+        marca_id      TEXT NOT NULL DEFAULT '',
+        tipo          TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        actor_id      TEXT NOT NULL DEFAULT '',
+        actor_nombre  TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        enlace        TEXT NOT NULL DEFAULT '',
+        leida         INTEGER NOT NULL DEFAULT 0,
+        creada        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_notif_buzon "
+    "ON notificaciones (usuario_id, marca_id, leida, creada)",
+    # Etiquetas editoriales del tablero (campaña / vertical / tipo), ola "organizacion".
+    # Una etiqueta clasifica transversalmente un `contenido` (p.ej. campaña "Mundial 2026",
+    # vertical "futbol", tipo "reel"). `marca` ACOTA la etiqueta a una marca/workspace
+    # (UnoTV vs Claro Sports); `marca = ''` significa etiqueta GLOBAL (visible en todas las
+    # marcas). `clase` distingue el eje (campania/vertical/tipo) solo para agrupar/colorear
+    # en la UI — no es FK, se valida en la capa API contra una allowlist. `color` es un token
+    # hex opcional para el chip. `activo` esconde del selector sin perder el historico de
+    # asignaciones. `nombre` es UNIQUE por (marca, clase) — lo garantiza la capa API/repos.
+    """
+    CREATE TABLE IF NOT EXISTS etiquetas (
+        id           TEXT PRIMARY KEY,
+        nombre       TEXT NOT NULL DEFAULT '',
+        clase        TEXT NOT NULL DEFAULT 'campania',
+        marca        TEXT NOT NULL DEFAULT '',
+        color        TEXT NOT NULL DEFAULT '',
+        keywords     TEXT NOT NULL DEFAULT '',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        ttl_dias     INTEGER NOT NULL DEFAULT 0,
+        es_green     INTEGER NOT NULL DEFAULT 0,
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_etiquetas_marca ON etiquetas (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_etiquetas_clase ON etiquetas (clase)",
+    "CREATE INDEX IF NOT EXISTS idx_etiquetas_activo ON etiquetas (activo)",
+    # Relacion N:M `contenido` <-> `etiquetas`. Una pieza puede llevar varias etiquetas
+    # (campaña + vertical + tipo). Cascada manual al borrar contenido o etiqueta (sin FK,
+    # igual que el resto del esquema). PK compuesta evita duplicados.
+    """
+    CREATE TABLE IF NOT EXISTS contenido_etiquetas (
+        contenido_id  TEXT NOT NULL,
+        etiqueta_id   TEXT NOT NULL,
+        PRIMARY KEY (contenido_id, etiqueta_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_contenido_etiquetas_etiqueta "
+    "ON contenido_etiquetas (etiqueta_id)",
+    # CONTENIDO editorial reutilizable que ERA file-backed (YAML + indice SQLite de rutas
+    # absolutas) y cerro su rezago a Postgres (ADR 0006). Antes vivian en `ficheros.py` con un
+    # `indice.sqlite` de rutas ABSOLUTAS que, al recrear contenedores, quedaba apuntando a
+    # rutas viejas -> la pagina de Fuentes RSS aparecia VACIA. En Postgres no hay indice de
+    # rutas que se desincronice. Mismo dialecto portable que el resto del esquema.
+    #
+    # Fuentes RSS: una fuente de noticias por marca, con filtros (incluir/excluir CSV),
+    # redes por defecto (`redes_def` CSV) y telemetria de salud del ultimo refresco
+    # (`ultima_actualizacion`/`ultimo_error`/`ultimo_conteo`). `activo` 0/1. `creado` preserva
+    # el orden "recientes primero" (paridad con el indice file-backed). `fecha` = dia de alta.
+    """
+    CREATE TABLE IF NOT EXISTS fuentes_rss (
+        id                    TEXT PRIMARY KEY,
+        nombre                TEXT NOT NULL DEFAULT '',
+        url                   TEXT NOT NULL DEFAULT '',
+        marca                 TEXT NOT NULL DEFAULT '',
+        fecha                 TEXT NOT NULL DEFAULT '',
+        activo                INTEGER NOT NULL DEFAULT 1,
+        incluir               TEXT NOT NULL DEFAULT '',
+        excluir               TEXT NOT NULL DEFAULT '',
+        redes_def             TEXT NOT NULL DEFAULT '',
+        ultima_actualizacion  TEXT NOT NULL DEFAULT '',
+        ultimo_error          TEXT NOT NULL DEFAULT '',
+        ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
+        propia                INTEGER NOT NULL DEFAULT 0,
+        intervalo_min         INTEGER NOT NULL DEFAULT 0,
+        categoria             TEXT NOT NULL DEFAULT '',
+        prioridad             INTEGER NOT NULL DEFAULT 0,
+        proximo_sondeo        TEXT NOT NULL DEFAULT '',
+        errores_seguidos      INTEGER NOT NULL DEFAULT 0,
+        pausado_hasta         TEXT NOT NULL DEFAULT '',
+        desactivado_auto      INTEGER NOT NULL DEFAULT 0,
+        creado                TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_marca ON fuentes_rss (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_creado ON fuentes_rss (creado)",
+    # Selección de feeds VENCIDOS por el motor de ingesta (Ola A): el daemon barre las activas
+    # con `proximo_sondeo` <= ahora. Indexar (activo, proximo_sondeo) hace barata esa consulta.
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_sondeo ON fuentes_rss (activo, proximo_sondeo)",
+    # Items RSS ya VISTOS/usados por fuente. Antes un mapa `{fuente_id: [clave]}` en
+    # `.keni/rss-vistos.yaml` por marca; aqui una fila por (fuente_id, clave). PK compuesta
+    # evita duplicados y hace `marcar_item(usado=True)` idempotente. SIN FK (igual que el
+    # resto del esquema): `marcar_item` NO exige que la fuente exista (paridad con el file-backed).
+    """
+    CREATE TABLE IF NOT EXISTS rss_items_vistos (
+        fuente_id  TEXT NOT NULL,
+        clave      TEXT NOT NULL,
+        PRIMARY KEY (fuente_id, clave)
+    )
+    """,
+    # TALLER GREEN / BRAINSTORMING: ideas de contenido EVERGREEN propuestas (por IA o a mano)
+    # que el equipo aprueba o descarta ANTES de generar nada. La IA NO redacta a ciegas: primero
+    # PROPONE ideas (`origen='ia'`, `estado='propuesta'`); una persona las marca `aprobada` o
+    # `descartada`; solo para las APROBADAS se genera la pieza (`flujo='evergreen'` en el tablero)
+    # y se enlaza en `contenido_id`. `generacion_id` apunta a la generacion IA que las propuso
+    # (para trazar el lote). `creado` preserva el orden "recientes primero".
+    """
+    CREATE TABLE IF NOT EXISTS green_ideas (
+        id            TEXT PRIMARY KEY,
+        marca         TEXT NOT NULL DEFAULT '',
+        titulo        TEXT NOT NULL DEFAULT '',
+        descripcion   TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'propuesta',
+        origen        TEXT NOT NULL DEFAULT 'ia',
+        generacion_id TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_green_ideas_marca ON green_ideas (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_green_ideas_estado ON green_ideas (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_green_ideas_creado ON green_ideas (creado)",
+    # Grupos de hashtags reutilizables (nombre + lista de tags JSON) por marca. `hashtags`
+    # es un JSON serializado de strings (igual patron que `biblioteca_media.etiquetas`).
+    # `creado` preserva el orden "recientes primero".
+    """
+    CREATE TABLE IF NOT EXISTS grupos_hashtags (
+        id        TEXT PRIMARY KEY,
+        nombre    TEXT NOT NULL DEFAULT '',
+        marca     TEXT NOT NULL DEFAULT '',
+        hashtags  TEXT NOT NULL DEFAULT '[]',
+        creado    TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_grupos_hashtags_marca ON grupos_hashtags (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_grupos_hashtags_creado ON grupos_hashtags (creado)",
+    # Franjas EDITORIALES (dia_semana 0-6 + hora) por marca/red: huecos recurrentes de la
+    # parrilla editorial. DISTINTAS de `rota_franjas`/`rota_config_franjas` (franjas horarias
+    # del equipo). Tabla nueva `franjas_editoriales` para no colisionar con `rota_franjas`.
+    """
+    CREATE TABLE IF NOT EXISTS franjas_editoriales (
+        id          TEXT PRIMARY KEY,
+        marca       TEXT NOT NULL DEFAULT '',
+        red         TEXT NOT NULL DEFAULT '',
+        dia_semana  INTEGER NOT NULL DEFAULT 0,
+        hora        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_franjas_editoriales_marca ON franjas_editoriales (marca)",
+    # CADENCIA por (marca?, red?): scheduling por MARGEN entre posts (sustituye a las
+    # franjas-caja para alto volumen). margen_min = minutos entre posts; hora_inicio/fin =
+    # ventana activa 24h; dias = CSV "0..6" (0=lunes). UNIQUE(marca, red): una cadencia por
+    # par. `marca=''`/`red=''` = comodín (aplica a todas). Ver `dominio/cadencia.py`.
+    """
+    CREATE TABLE IF NOT EXISTS cadencias (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        red          TEXT NOT NULL DEFAULT '',
+        margen_min   INTEGER NOT NULL DEFAULT 60,
+        hora_inicio  TEXT NOT NULL DEFAULT '08:00',
+        hora_fin     TEXT NOT NULL DEFAULT '22:00',
+        dias         TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (marca, red)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_cadencias_marca ON cadencias (marca)",
+    # Fuentes de INTELIGENCIA DE PLATAFORMA (blogs oficiales + agregadores) que cubren
+    # cambios de algoritmo y tendencias por red. DISTINTAS de `fuentes_rss` (contenido de
+    # marca para generar copy): estas alimentan la pagina Algoritmos y el panel, y proponen
+    # actualizaciones a la ficha editorial de cada plataforma. `plataforma` ubica la fuente
+    # (meta/instagram/tiktok/youtube/x/linkedin/general); `tipo` distingue oficial vs
+    # agregador (la oficial pesa mas al priorizar). Salud igual que `fuentes_rss`.
+    """
+    CREATE TABLE IF NOT EXISTS fuentes_algoritmo (
+        id                    TEXT PRIMARY KEY,
+        nombre                TEXT NOT NULL DEFAULT '',
+        url                   TEXT NOT NULL DEFAULT '',
+        plataforma            TEXT NOT NULL DEFAULT 'general',
+        tipo                  TEXT NOT NULL DEFAULT 'agregador',
+        activo                INTEGER NOT NULL DEFAULT 1,
+        ultima_actualizacion  TEXT NOT NULL DEFAULT '',
+        ultimo_error          TEXT NOT NULL DEFAULT '',
+        ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
+        creado                TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_algoritmo_plataforma ON fuentes_algoritmo (plataforma)",
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_algoritmo_creado ON fuentes_algoritmo (creado)",
+    # Noticias de algoritmo ya INGERIDAS y CLASIFICADAS (a diferencia de los items RSS, que se
+    # leen en vivo y no se persisten): aqui SI se persisten para poder ordenarlas por
+    # importancia, mostrarlas en el panel y enlazarlas a la biblioteca. `importancia` es un
+    # score HEURISTICO (entero comparable) y `nivel` su tramo (alta/media/baja); `senales` son
+    # las palabras clave que dispararon el score (JSON, para el "por que" honesto, sin inventar).
+    # `es_cambio` marca lo que parece un cambio de algoritmo confirmado (candidato a la ficha).
+    # Dedup por (fuente_id, clave) — la misma identidad estable que usa el RSS.
+    """
+    CREATE TABLE IF NOT EXISTS noticias_algoritmo (
+        id             TEXT PRIMARY KEY,
+        fuente_id      TEXT NOT NULL DEFAULT '',
+        fuente_nombre  TEXT NOT NULL DEFAULT '',
+        plataforma     TEXT NOT NULL DEFAULT 'general',
+        tipo           TEXT NOT NULL DEFAULT 'agregador',
+        titulo         TEXT NOT NULL DEFAULT '',
+        resumen        TEXT NOT NULL DEFAULT '',
+        enlace         TEXT NOT NULL DEFAULT '',
+        fecha          TEXT NOT NULL DEFAULT '',
+        clave          TEXT NOT NULL DEFAULT '',
+        importancia    INTEGER NOT NULL DEFAULT 0,
+        nivel          TEXT NOT NULL DEFAULT 'baja',
+        senales        TEXT NOT NULL DEFAULT '[]',
+        es_cambio      INTEGER NOT NULL DEFAULT 0,
+        aplicada       INTEGER NOT NULL DEFAULT 0,
+        archivada      INTEGER NOT NULL DEFAULT 0,
+        sugerida       INTEGER NOT NULL DEFAULT 0,
+        creado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_algoritmo_dedup ON noticias_algoritmo (fuente_id, clave)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_orden ON noticias_algoritmo (importancia DESC, fecha DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_plataforma ON noticias_algoritmo (plataforma)",
+    # MOTOR DE INGESTA PERSISTENTE (Ola A): ARCHIVO a NIVEL DE ARTÍCULO. A diferencia de los
+    # items RSS del Radar v1 (que se leen en VIVO por request, con tope), aqui cada artículo de
+    # cada feed se PERSISTE una vez (dedup por (fuente_id, clave)) para tener cobertura
+    # newsroom-grade: el Radar/Plan y la UI leen del store y la red se sondea en background por
+    # el `ingesta_daemon`. `clave` = url_canonica normalizada (o hash del título si no hay url);
+    # `categoria`/`marca` vienen de la fuente; `estado` nuevo|usado|descartado; `contenido_id`
+    # enlaza al tablero cuando el equipo lo usa; `cluster_id` lo llena la Ola B (historias).
+    """
+    CREATE TABLE IF NOT EXISTS noticias_items (
+        id             TEXT PRIMARY KEY,
+        fuente_id      TEXT NOT NULL DEFAULT '',
+        fuente_nombre  TEXT NOT NULL DEFAULT '',
+        categoria      TEXT NOT NULL DEFAULT '',
+        marca          TEXT NOT NULL DEFAULT '',
+        titulo         TEXT NOT NULL DEFAULT '',
+        resumen        TEXT NOT NULL DEFAULT '',
+        url            TEXT NOT NULL DEFAULT '',
+        url_canonica   TEXT NOT NULL DEFAULT '',
+        idioma         TEXT NOT NULL DEFAULT '',
+        autor          TEXT NOT NULL DEFAULT '',
+        imagen         TEXT NOT NULL DEFAULT '',
+        publicado_en   TEXT NOT NULL DEFAULT '',
+        capturado_en   TEXT NOT NULL DEFAULT '',
+        clave          TEXT NOT NULL DEFAULT '',
+        cluster_id     TEXT NOT NULL DEFAULT '',
+        senal          INTEGER NOT NULL DEFAULT 0,
+        geo            TEXT NOT NULL DEFAULT '',
+        estado         TEXT NOT NULL DEFAULT 'nuevo',
+        contenido_id   TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_items_dedup ON noticias_items (fuente_id, clave)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_capturado ON noticias_items (capturado_en)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_marca_capturado ON noticias_items (marca, capturado_en)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_categoria ON noticias_items (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_estado ON noticias_items (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_cluster ON noticias_items (cluster_id)",
+    # HISTORIAS (Ola B): una fila por cluster = la misma noticia contada por varias fuentes y
+    # en el tiempo (dedup + corroboración + score). `clave` es la clave de cluster del título
+    # representativo (url canónica o hash); `n_fuentes` es la corroboración (fuentes distintas);
+    # `senal` agrega la viralidad; `breaking` = muchas fuentes en poco tiempo; `score` ranking.
+    # `noticias_items.cluster_id` apunta aquí. Tabla NUEVA: `CREATE TABLE IF NOT EXISTS` basta.
+    """
+    CREATE TABLE IF NOT EXISTS noticias_clusters (
+        id            TEXT PRIMARY KEY,
+        titulo        TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        marca         TEXT NOT NULL DEFAULT '',
+        categoria     TEXT NOT NULL DEFAULT '',
+        geo           TEXT NOT NULL DEFAULT '',
+        clave         TEXT NOT NULL DEFAULT '',
+        n_items       INTEGER NOT NULL DEFAULT 0,
+        n_fuentes     INTEGER NOT NULL DEFAULT 0,
+        idiomas       TEXT NOT NULL DEFAULT '[]',
+        senal         INTEGER NOT NULL DEFAULT 0,
+        score         REAL NOT NULL DEFAULT 0,
+        breaking      INTEGER NOT NULL DEFAULT 0,
+        primer_visto  TEXT NOT NULL DEFAULT '',
+        ultimo_visto  TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'nuevo',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        verificacion  TEXT NOT NULL DEFAULT 'unica_fuente',
+        titulo_es     TEXT NOT NULL DEFAULT '',
+        resumen_es    TEXT NOT NULL DEFAULT '',
+        titulo_original TEXT NOT NULL DEFAULT '',
+        idioma        TEXT NOT NULL DEFAULT '',
+        traducido     INTEGER NOT NULL DEFAULT 0,
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_marca_score ON noticias_clusters (marca, score)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_categoria ON noticias_clusters (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_ultimo ON noticias_clusters (ultimo_visto)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_estado ON noticias_clusters (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_clave ON noticias_clusters (clave)",
+    # Sugerencias editoriales GENERADAS por el job diario a partir de las noticias importantes:
+    # propuestas de cambio a la ficha editorial de una plataforma (`tipo='editorial'`) o a sus
+    # limites (`tipo='limite'`). PROPUESTAS, no aplicadas: el equipo revisa y decide (estado
+    # nueva/aplicada/descartada). `noticia_ids` (JSON) son las noticias que la motivaron;
+    # `ficha_id` el doc de biblioteca destino (p. ej. `editorial/plataformas/instagram`).
+    """
+    CREATE TABLE IF NOT EXISTS sugerencias_editoriales (
+        id           TEXT PRIMARY KEY,
+        plataforma   TEXT NOT NULL DEFAULT 'general',
+        tipo         TEXT NOT NULL DEFAULT 'editorial',
+        titulo       TEXT NOT NULL DEFAULT '',
+        detalle      TEXT NOT NULL DEFAULT '',
+        ficha_id     TEXT NOT NULL DEFAULT '',
+        noticia_ids  TEXT NOT NULL DEFAULT '[]',
+        estado       TEXT NOT NULL DEFAULT 'nueva',
+        creado       TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_estado ON sugerencias_editoriales (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_creado ON sugerencias_editoriales (creado)",
+    # INSUMOS DEL DÍA (cajones): material diario del equipo de AMX procesado con Haiku.
+    # `insumos_lote` = un "drop" (pegada o archivo) en uno de los 4 cajones del día.
+    # `insumos_item` = cada ítem extraído por el parser. El par modela el historial por
+    # día editorial para poder recuperar cualquier jornada pasada (portal/corresponsales/
+    # reporteros/eventos_claro). Ver docs/maquina-contenido/01-insumos-del-dia.md.
+    """
+    CREATE TABLE IF NOT EXISTS insumos_lote (
+        id              TEXT PRIMARY KEY,
+        fecha           TEXT NOT NULL DEFAULT '',
+        cajon           TEXT NOT NULL DEFAULT '',
+        marca           TEXT NOT NULL DEFAULT '',
+        origen_texto    TEXT NOT NULL DEFAULT '',
+        origen_archivo  TEXT NOT NULL DEFAULT '',
+        estado          TEXT NOT NULL DEFAULT 'listo',
+        error           TEXT NOT NULL DEFAULT '',
+        total_items     INTEGER NOT NULL DEFAULT 0,
+        creado_por      TEXT NOT NULL DEFAULT '',
+        creado          TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_insumos_lote_fecha_cajon ON insumos_lote (fecha, cajon)",
+    "CREATE INDEX IF NOT EXISTS idx_insumos_lote_creado ON insumos_lote (creado)",
+    """
+    CREATE TABLE IF NOT EXISTS insumos_item (
+        id               TEXT PRIMARY KEY,
+        lote_id          TEXT NOT NULL DEFAULT '',
+        fecha            TEXT NOT NULL DEFAULT '',
+        cajon            TEXT NOT NULL DEFAULT '',
+        marca            TEXT NOT NULL DEFAULT '',
+        linea            TEXT NOT NULL DEFAULT '',
+        titulo           TEXT NOT NULL DEFAULT '',
+        resumen          TEXT NOT NULL DEFAULT '',
+        hora             TEXT NOT NULL DEFAULT '',
+        lugar            TEXT NOT NULL DEFAULT '',
+        estado_material  TEXT NOT NULL DEFAULT '',
+        tipo             TEXT NOT NULL DEFAULT 'nota',
+        idioma           TEXT NOT NULL DEFAULT 'es',
+        usado            INTEGER NOT NULL DEFAULT 0,
+        contenido_id     TEXT NOT NULL DEFAULT '',
+        orden            INTEGER NOT NULL DEFAULT 0,
+        creado           TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_insumos_item_fecha_cajon ON insumos_item (fecha, cajon)",
+    "CREATE INDEX IF NOT EXISTS idx_insumos_item_lote ON insumos_item (lote_id)",
+    "CREATE INDEX IF NOT EXISTS idx_insumos_item_marca_fecha ON insumos_item (marca, fecha)",
+    # MOTOR DE VIDEO (Ola VIDEO). `video_composiciones` guarda el JSON de COMPOSICION (pistas/
+    # clips/overlay/subtitulos; esquema en `docs/maquina-contenido/G-video-engine.md`, validado
+    # por `keni_shared.video.validar_composicion`). `documento` es el JSON; `contenido_id` la liga
+    # opcionalmente a una pieza del tablero. Una composicion por video del Estudio de Video.
+    """
+    CREATE TABLE IF NOT EXISTS video_composiciones (
+        id           TEXT PRIMARY KEY,
+        contenido_id TEXT NOT NULL DEFAULT '',
+        marca        TEXT NOT NULL DEFAULT '',
+        titulo       TEXT NOT NULL DEFAULT '',
+        estado       TEXT NOT NULL DEFAULT 'borrador',
+        documento    TEXT NOT NULL DEFAULT '{}',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_video_composiciones_marca ON video_composiciones (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_video_composiciones_contenido ON video_composiciones (contenido_id)",
+    # `video_subtitulos`: pista de subtitulos de una composicion. `segmentos` = JSON word-level
+    # del ASR (faster-whisper); `ass` = el ASS renderizado para quemar con ffmpeg. `estado` ∈
+    # {pendiente, transcrito, editado, listo}. La rellena el motor de ASR (motores/transcripcion).
+    """
+    CREATE TABLE IF NOT EXISTS video_subtitulos (
+        id            TEXT PRIMARY KEY,
+        composicion_id TEXT NOT NULL DEFAULT '',
+        idioma        TEXT NOT NULL DEFAULT 'es-MX',
+        estado        TEXT NOT NULL DEFAULT 'pendiente',
+        segmentos     TEXT NOT NULL DEFAULT '',
+        ass           TEXT NOT NULL DEFAULT '',
+        transcrito_en TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
+    "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
+)
+
+
+def _crear_esquema(con: Any) -> None:
+    """Crea las tablas operacionales si no existen (idempotente).
+
+    Ejecuta el DDL sentencia a sentencia y luego aplica las migraciones de columnas
+    ampliadas (`tareas`, `rota_eventos`) y la migracion del modelo de turnos (ola back3:
+    `rota_turnos` → `rota_turnos` con la nueva semantica).
+
+    Las migraciones son NECESARIAS, no opcionales: `CREATE TABLE IF NOT EXISTS`
+    NO anade columnas a una tabla que YA existe, y el Postgres hosted PERSISTE entre
+    despliegues. Una tabla creada por una version anterior se quedaba sin las columnas
+    nuevas (fallo real: `rota_eventos` sin `tipo_cobertura` → 500 al leer el calendario).
+    """
+    # IMPORTANTE: la migracion del MODELO de turnos debe correr ANTES del DDL declarativo,
+    # porque el DDL hoy declara `rota_turnos` con la NUEVA forma (con `fecha`/`franja`). Si
+    # la BD vieja tiene una `rota_turnos` con el VIEJO esquema (cobertura), `CREATE TABLE IF
+    # NOT EXISTS` la deja como esta -> el resto del codigo fallaria al usar columnas que no
+    # existen. La migracion la convierte (renombre + drop + renombre final) y deja la BD lista
+    # para que el DDL declarativo NO haga nada (la tabla ya existe con la forma correcta).
+    _migrar_modelo_turnos(con)
+    # Ola "franjas por semana": tiene que correr ANTES del DDL declarativo. Razon: el DDL
+    # declara `CREATE INDEX ... idx_rota_turnos_franja_id ON rota_turnos (franja_id)`, y en
+    # bases productivas la `rota_turnos` previa solo tiene columna `franja` (literal del
+    # modelo Ω3). Crear el indice sobre una columna inexistente revienta. La migracion
+    # asegura `rota_franjas` con `es_descanso`, añade `franja_id` a `rota_turnos`, mueve
+    # los datos y dropa `franja`. Tras esto, el DDL declarativo es idempotente.
+    _migrar_modelo_franjas(con)
+    # Migraciones cuya columna usa un ÍNDICE del DDL declarativo: corren ANTES del DDL. El DDL
+    # crea `idx_rota_eventos_marca`(marca) e `idx_fuentes_rss_sondeo`(proximo_sondeo); en una BD
+    # VIEJA esas columnas aún no existen, así que crear el índice revienta y ENVENENA la conexión
+    # (mismo motivo que turnos/franjas arriba: el calendario daba 500). Tras añadir la columna, el
+    # DDL es idempotente. Guard interno: si la tabla aún no existe, no hacen nada y el DDL la crea
+    # fresca con todo.
+    _migrar_columnas_eventos_rota(con)
+    _migrar_columnas_fuentes_rss(con)
+    # Mismo motivo (columna usada por un ÍNDICE del DDL declarativo, corre ANTES): el DDL crea
+    # `idx_plantillas_diseno_tipo`(tipo) y en una BD vieja `plantillas_diseno` aún no tiene `tipo`,
+    # así que el índice revienta ("column tipo does not exist") y envenena la conexión (fallo real
+    # en deploy). La migración añade `tipo` primero; tras ella el DDL es idempotente. Guard interno:
+    # si la tabla aún no existe, no hace nada y el DDL la crea fresca con `tipo`.
+    _migrar_columnas_plantillas_diseno(con)
+    for sentencia in _DDL_ESQUEMA:
+        con.execute(sentencia)
+    _migrar_columnas_turnos_rota(con)
+    _migrar_columnas_piezas_rota(con)
+    _migrar_columnas_contenido(con)
+    _migrar_columnas_aprobaciones(con)
+    _migrar_columnas_comercial(con)
+    _migrar_columnas_swaps(con)
+    _migrar_columnas_programas(con)
+    _migrar_columnas_usuarios(con)
+    _migrar_columnas_grupos_hashtags(con)
+    _migrar_columnas_noticias_clusters(con)
+    _migrar_columnas_noticias_algoritmo(con)
+    _migrar_columnas_etiquetas(con)
+    _migrar_columnas_contenido_plataforma(con)
+    _migrar_columnas_video_composiciones(con)
+    con.commit()
+    # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
+    # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
+    _crear_indices_unicos_idempotencia(con)
+
+
+def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
+    """Anade `sugerida` a `noticias_algoritmo` si una BD ya creada no la tuviera (idempotente).
+
+    La tabla `noticias_algoritmo` se creo sin esta columna; el job de sugerencias editoriales
+    la usa para no re-procesar una noticia. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya
+    esta. Solo aplica si la tabla existe (un primer arranque ya la crea con la columna).
+    """
+    if not _tabla_existe(con, "noticias_algoritmo"):
+        return
+    if "sugerida" not in _columnas_existentes(con, "noticias_algoritmo"):
+        con.execute(
+            "ALTER TABLE noticias_algoritmo ADD COLUMN IF NOT EXISTS sugerida INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _migrar_columnas_contenido_plataforma(con: Any) -> None:
+    """Anade `copy_in_exento` y `qa_auto_hash` a `contenido_plataforma` (idempotente).
+
+    Columnas del auto-avance (Flujo: "dale el OK" automatico): `copy_in_exento` marca una
+    pieza como exenta de copy-in (imagen dramatica/autoexplicativa que no lo necesita);
+    `qa_auto_hash` guarda el hash del copy para el que se lanzo la QA automatica, para no
+    relanzarla en cada barrido. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya estan.
+    """
+    if not _tabla_existe(con, "contenido_plataforma"):
+        return
+    cols = _columnas_existentes(con, "contenido_plataforma")
+    if "copy_in_exento" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS copy_in_exento INTEGER NOT NULL DEFAULT 0"
+        )
+    if "qa_auto_hash" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS qa_auto_hash TEXT NOT NULL DEFAULT ''"
+        )
+    # `placa_oculta`: la pieza se publica SOLO con la foto, sin la plantilla/placa de marca
+    # encima ("quitar plantilla" del editor). Persiste la elección entre reaperturas.
+    if "placa_oculta" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS placa_oculta INTEGER NOT NULL DEFAULT 0"
+        )
+    # `plantilla_diseno_id`: la plantilla del estudio (PlantillaDiseno) que la pieza usa para
+    # componer su imagen. "" = sin plantilla del estudio (placa de marca por defecto).
+    if "plantilla_diseno_id" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS plantilla_diseno_id TEXT NOT NULL DEFAULT ''"
+        )
+    # `foto_encuadre`: reencuadre manual de la foto dentro del marco 4:5 (JSON
+    # `{"foco":[x,y],"zoom":z}`; "" = sin reencuadre = encuadre por defecto del path). Persiste
+    # la elección humana del recorte entre reaperturas y se aplica también al render por plantilla.
+    if "foto_encuadre" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS foto_encuadre TEXT NOT NULL DEFAULT ''"
+        )
+    # `fotos`: COLLAGE multi-hueco. JSON array `[{"objeto":media_id,"foco":[x,y],"zoom":z}, …]`,
+    # un elemento por HUECO de la plantilla (en orden de `capas`). "" = sin collage; entonces el
+    # hueco 0 se deriva del par legado `foto`/`foto_encuadre` (retrocompat con la foto única).
+    if "fotos" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS fotos TEXT NOT NULL DEFAULT ''"
+        )
+    # `video` / `falta_video` (Ola VIDEO): asset de video y su checklist, espejo de
+    # `imagen`/`falta_imagen`. Una pieza `formato='video'` necesita este asset; en piezas `foto`
+    # el video es N/A (`falta_video` queda en 0). ADD COLUMN IF NOT EXISTS es no-op si ya estan.
+    if "video" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS video TEXT NOT NULL DEFAULT ''"
+        )
+    if "falta_video" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS falta_video INTEGER NOT NULL DEFAULT 0"
+        )
+    # `marca`: DENORMALIZADA del padre `contenido`. Habilita el indice unico parcial de parrilla
+    # POR MARCA (`idx_parrilla_slot_uniq`, en `_INDICES_UNICOS_IDEMPOTENCIA`): dos marcas distintas
+    # SI pueden programar la misma (red, fecha); la MISMA marca no puede doble-reservar el slot.
+    # Un indice parcial no puede cruzar el join al padre, de ahi la denormalizacion. Las escrituras
+    # la mantienen en sync (`crear_contenido_plataforma` la deriva del padre; `actualizar_contenido`
+    # la propaga al reasignar la marca del padre). El backfill abajo la rellena en BDs ya creadas.
+    if "marca" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS marca TEXT NOT NULL DEFAULT ''"
+        )
+    # BACKFILL one-shot desde el padre: alinea TODA fila cuya `marca` denormalizada difiera de la
+    # del `contenido` padre (incluye filas recien migradas con ""). La app no esta en produccion-
+    # uso, asi que el volumen es minimo; un UPDATE...FROM basta. Idempotente: re-ejecutarlo no toca
+    # nada si ya estan alineadas (el WHERE filtra las que difieren).
+    if _tabla_existe(con, "contenido"):
+        con.execute(
+            "UPDATE contenido_plataforma AS cp SET marca = c.marca "
+            "FROM contenido AS c WHERE cp.contenido_id = c.id AND cp.marca <> c.marca"
+        )
+
+
+def _migrar_columnas_plantillas_diseno(con: Any) -> None:
+    """Anade `tipo` a `plantillas_diseno` si una BD ya creada no la tuviera (idempotente).
+
+    `tipo` ("foto" | "miniatura") es un eje ortogonal a `categoria`: foto = plantilla para
+    fotos/imagenes del feed; miniatura = portada/thumbnail de video. Las plantillas
+    existentes reciben el DEFAULT "foto", que preserva el comportamiento previo al campo.
+    """
+    if not _tabla_existe(con, "plantillas_diseno"):
+        return
+    if "tipo" not in _columnas_existentes(con, "plantillas_diseno"):
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'foto'"
+        )
+
+
+def _migrar_columnas_video_composiciones(con: Any) -> None:
+    """Anade `titulo`/`estado` a `video_composiciones` si una BD ya creada no las tuviera.
+
+    Soporta DRAFTS (borradores) del Estudio de Video: `titulo` identifica la composicion en la
+    lista; `estado` ∈ {borrador, listo} marca si esta lista para producir. Las composiciones
+    existentes reciben los DEFAULTs (titulo vacio, estado 'borrador'), que preservan el
+    comportamiento previo. Idempotente; mismo patron que `_migrar_columnas_plantillas_diseno`.
+    """
+    if not _tabla_existe(con, "video_composiciones"):
+        return
+    cols = _columnas_existentes(con, "video_composiciones")
+    if "titulo" not in cols:
+        con.execute(
+            "ALTER TABLE video_composiciones ADD COLUMN IF NOT EXISTS titulo TEXT NOT NULL DEFAULT ''"
+        )
+    if "estado" not in cols:
+        con.execute(
+            "ALTER TABLE video_composiciones "
+            "ADD COLUMN IF NOT EXISTS estado TEXT NOT NULL DEFAULT 'borrador'"
+        )
+
+
+def _migrar_columnas_etiquetas(con: Any) -> None:
+    """Anade columnas nuevas a `etiquetas` si una BD ya creada no las tuviera (idempotente).
+
+    - `keywords` (CSV) alimenta el auto-etiquetado de líneas (clase `vertical`) y de
+      orígenes (clase `origen`) en la ingesta.
+    - `ttl_dias` (INTEGER, def 0): días que un ítem de esta línea se considera fresco.
+      0 = sin caducidad / evergreen.
+    - `es_green` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
+
+    Solo aplica si la tabla ya existe (un primer arranque la crea con las columnas).
+    """
+    if not _tabla_existe(con, "etiquetas"):
+        return
+    cols = _columnas_existentes(con, "etiquetas")
+    if "keywords" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS keywords TEXT NOT NULL DEFAULT ''"
+        )
+    if "ttl_dias" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS ttl_dias INTEGER NOT NULL DEFAULT 0"
+        )
+    if "es_green" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS es_green INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _columnas_existentes(con: Any, tabla: str) -> set[str]:
+    """Nombres de columnas que YA tiene `tabla` (Postgres, via `information_schema`).
+
+    `tabla` es SIEMPRE un nombre interno de una allowlist (constantes del modulo, nunca
+    entrada de usuario). El placeholder `?` lo traduce `motor_db` a `%s`.
+    """
+    filas = con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+        (tabla,),
+    ).fetchall()
+    return {fila["column_name"] for fila in filas}
+
+
+def _tabla_existe(con: Any, tabla: str) -> bool:
+    """True si `tabla` existe en el esquema actual (Postgres, `information_schema.tables`)."""
+    fila = con.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = ? LIMIT 1",
+        (tabla,),
+    ).fetchone()
+    return fila is not None
+
+
+# Defaults de franjas para la migracion (mismos que `rota.py`; los hardcodeamos aqui para
+# no introducir dependencia ciclica db -> rota). Si la BD ya tiene config de franjas
+# (`rota_config_franjas`), `_migrar_modelo_turnos` la respeta. La conversion de cobertura
+# legada a turnos usa estos rangos para mapear hora del evento -> franja.
+_MIGR_FRANJA_MATUTINO_INICIO_MIN = 8 * 60   # 08:00 inclusivo
+_MIGR_FRANJA_MATUTINO_FIN_MIN = 16 * 60     # 16:00 exclusivo
+_MIGR_FRANJA_VESPERTINO_INICIO_MIN = 16 * 60  # 16:00 inclusivo
+_MIGR_FRANJA_VESPERTINO_FIN_MIN = 24 * 60   # 24:00 exclusivo
+
+
+def _parsear_hora_a_minutos(crudo: str) -> int | None:
+    """Convierte `HH:MM` (o un rango `HH:MM-HH:MM` del Excel) a minutos. None si malformado.
+
+    Acepta sufijos del Excel real ("16:00-18:00", "16:00–18:00"): se queda con la hora de
+    inicio. No lanza: la migracion debe ser tolerante con datos viejos sucios.
+    """
+    if not isinstance(crudo, str) or not crudo.strip():
+        return None
+    parte = crudo.strip().replace("–", "-").split("-", 1)[0].strip()
+    partes = parte.split(":")
+    if len(partes) < 2:
+        return None
+    try:
+        h = int(partes[0])
+        m = int(partes[1])
+    except ValueError:
+        return None
+    if not (0 <= h <= 24 and 0 <= m <= 59):
+        return None
+    if h == 24 and m != 0:
+        return None
+    return h * 60 + m
+
+
+def _franja_para_hora_migracion(
+    hora: str, *, mat_ini: int, mat_fin: int, ves_ini: int, ves_fin: int
+) -> str:
+    """Mapea una hora a su franja usando rangos en MINUTOS. `descanso` si no encaja o malformado.
+
+    Replica `rota.mapear_franja` sin tirar de el (para no introducir dep ciclica desde db.py).
+    """
+    minutos = _parsear_hora_a_minutos(hora)
+    if minutos is None:
+        return "descanso"
+    if mat_ini <= minutos < mat_fin:
+        return "matutino"
+    if ves_ini <= minutos < ves_fin:
+        return "vespertino"
+    return "descanso"
+
+
+def _migrar_modelo_turnos(con: Any) -> None:
+    """Migra el modelo VIEJO de turnos al NUEVO (ola back3). Idempotente.
+
+    MODELO VIEJO (a borrar):
+      - `rota_turnos` (vieja, "cobertura") = evento×miembro: (id, semana, evento_id,
+        miembro_id, miembro_nombre, estado, override, motivo, creado, actualizado).
+      - `rota_turnos_trabajo` (vieja, "horario") = persona×dia×franja: (id, semana, fecha,
+        miembro_id, miembro_nombre, franja, estado, override, motivo, nota_relevo, creado,
+        actualizado).
+
+    MODELO NUEVO (un turno = horario de persona×dia×franja, SIN relacion con eventos):
+      - `rota_turnos` con la MISMA FORMA que la vieja `rota_turnos_trabajo`.
+
+    PASOS (todos `IF EXISTS`/idempotentes):
+      1. Si la vieja `rota_turnos_trabajo` aun esta, renombrarla a `rota_turnos_v2`
+         (auxiliar, para no chocar con la cobertura legada que vamos a borrar).
+      2. Si la vieja `rota_turnos` (cobertura) aun esta, leer sus filas con miembro asignado
+         y derivar turnos en la nueva forma (semana, fecha del evento, miembro, franja
+         derivada de la hora) → INSERT en `rota_turnos_v2` con UPSERT logico (evita
+         duplicados por `(semana, fecha, miembro_id, franja)`).
+      3. DROP de la vieja `rota_turnos` (cobertura).
+      4. RENAME `rota_turnos_v2` -> `rota_turnos`. Tras esto, el resto del codigo opera con
+         la tabla `rota_turnos` que tiene la nueva forma.
+      5. Renombrar indices viejos a sus equivalentes nuevos (ALTER INDEX IF EXISTS).
+
+    Si la BD ya esta migrada (existe `rota_turnos` con columna `fecha`), no hace nada.
+    """
+    # Detectar estado actual: una BD ya MIGRADA tiene `rota_turnos` con `fecha`.
+    # Esta migracion trabaja con la forma INTERMEDIA (`franja` literal): la migracion
+    # posterior (`_migrar_modelo_franjas`) hace el salto a `franja_id`.
+    cols_turnos = _columnas_existentes(con, "rota_turnos")
+    if "fecha" in cols_turnos and ("franja" in cols_turnos or "franja_id" in cols_turnos):
+        # Ya estamos en el modelo intermedio (o posterior); nada que hacer aqui.
+        return
+
+    # Si NO hay tabla `rota_turnos_trabajo` y `rota_turnos` no tiene `fecha`, puede ser
+    # una BD virgen (sin ninguna de las dos): no hay nada que migrar. El DDL declarativo
+    # creara la nueva `rota_turnos` cuando le toque.
+    tiene_trabajo = _tabla_existe(con, "rota_turnos_trabajo")
+    tiene_turnos_vieja = _tabla_existe(con, "rota_turnos")
+    if not tiene_trabajo and not tiene_turnos_vieja:
+        return
+
+    # Caso 1: tenemos `rota_turnos_trabajo` (horario viejo) Y `rota_turnos` (cobertura vieja).
+    # Caso 2: solo `rota_turnos` (cobertura) - sin trabajo (raro: la version anterior siempre
+    #   creaba ambas, pero por defensa lo cubrimos).
+    # Caso 3: solo `rota_turnos_trabajo` - sin cobertura (otro caso defensivo).
+
+    # PASO 1: renombrar trabajo -> _v2 (auxiliar).
+    if tiene_trabajo:
+        con.execute("ALTER TABLE IF EXISTS rota_turnos_trabajo RENAME TO rota_turnos_v2")
+        con.execute(
+            "ALTER INDEX IF EXISTS idx_rota_turnos_trabajo_semana "
+            "RENAME TO idx_rota_turnos_semana_v2"
+        )
+        con.execute(
+            "ALTER INDEX IF EXISTS idx_rota_turnos_trabajo_miembro "
+            "RENAME TO idx_rota_turnos_miembro_v2"
+        )
+    else:
+        # No habia tabla de horario: creamos la auxiliar vacia con la forma nueva, para que
+        # el resto del flujo de migracion siga siendo uniforme.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rota_turnos_v2 (
+                id             TEXT PRIMARY KEY,
+                semana         TEXT NOT NULL,
+                fecha          TEXT NOT NULL DEFAULT '',
+                miembro_id     TEXT NOT NULL DEFAULT '',
+                miembro_nombre TEXT NOT NULL DEFAULT '',
+                franja         TEXT NOT NULL DEFAULT 'descanso',
+                estado         TEXT NOT NULL DEFAULT 'propuesto',
+                override       INTEGER NOT NULL DEFAULT 0,
+                motivo         TEXT NOT NULL DEFAULT '',
+                nota_relevo    TEXT NOT NULL DEFAULT '',
+                creado         TEXT NOT NULL DEFAULT '',
+                actualizado    TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+
+    # PASO 2: sembrar la cobertura legada como turnos en _v2 (si la habia y tenia miembros).
+    if tiene_turnos_vieja and "evento_id" in cols_turnos and "miembro_id" in cols_turnos:
+        # Leemos las franjas configuradas (singleton id='default') o aplicamos defaults.
+        mat_ini = _MIGR_FRANJA_MATUTINO_INICIO_MIN
+        mat_fin = _MIGR_FRANJA_MATUTINO_FIN_MIN
+        ves_ini = _MIGR_FRANJA_VESPERTINO_INICIO_MIN
+        ves_fin = _MIGR_FRANJA_VESPERTINO_FIN_MIN
+        if _tabla_existe(con, "rota_config_franjas"):
+            fila_cfg = con.execute(
+                "SELECT matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin "
+                "FROM rota_config_franjas WHERE id = ?",
+                ("default",),
+            ).fetchone()
+            if fila_cfg is not None:
+                v = _parsear_hora_a_minutos(fila_cfg["matutino_inicio"])
+                if v is not None:
+                    mat_ini = v
+                v = _parsear_hora_a_minutos(fila_cfg["matutino_fin"])
+                if v is not None:
+                    mat_fin = v
+                v = _parsear_hora_a_minutos(fila_cfg["vespertino_inicio"])
+                if v is not None:
+                    ves_ini = v
+                v = _parsear_hora_a_minutos(fila_cfg["vespertino_fin"])
+                if v is not None:
+                    ves_fin = v
+
+        # Cobertura legada CON miembro: derivar turno.
+        filas_cobertura = con.execute(
+            "SELECT t.semana, t.miembro_id, t.miembro_nombre, t.override, t.motivo, "
+            "       t.creado, t.actualizado, e.fecha, e.hora "
+            "FROM rota_turnos t LEFT JOIN rota_eventos e ON e.id = t.evento_id "
+            "WHERE t.miembro_id IS NOT NULL AND t.miembro_id <> ''"
+        ).fetchall()
+        ahora = datetime.now().isoformat(timespec="seconds")
+        for fila in filas_cobertura:
+            fecha = (fila["fecha"] or "").strip()
+            if not fecha:
+                # Sin fecha del evento no podemos derivar un turno coherente.
+                continue
+            franja = _franja_para_hora_migracion(
+                (fila["hora"] or ""),
+                mat_ini=mat_ini, mat_fin=mat_fin, ves_ini=ves_ini, ves_fin=ves_fin,
+            )
+            # Dedup logico: si ya existe un turno para (semana, fecha, miembro_id, franja), no
+            # duplicar. Hacemos SELECT (no UNIQUE en la nueva tabla; preserva libertad para
+            # turnos con el mismo trio cuando se quiera, p. ej. tras swap).
+            existente = con.execute(
+                "SELECT id FROM rota_turnos_v2 "
+                "WHERE semana = ? AND fecha = ? AND miembro_id = ? AND franja = ?",
+                (fila["semana"], fecha, fila["miembro_id"], franja),
+            ).fetchone()
+            if existente is not None:
+                continue
+            con.execute(
+                "INSERT INTO rota_turnos_v2 (id, semana, fecha, miembro_id, miembro_nombre, "
+                "franja, estado, override, motivo, nota_relevo, creado, actualizado) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    uuid.uuid4().hex[:12],
+                    fila["semana"],
+                    fecha,
+                    fila["miembro_id"],
+                    fila["miembro_nombre"] or "",
+                    franja,
+                    ESTADO_ROTA_PROPUESTO,
+                    int(bool(fila["override"])),
+                    fila["motivo"] or "",
+                    "",  # sin nota_relevo en el modelo viejo
+                    fila["creado"] or ahora,
+                    fila["actualizado"] or ahora,
+                ),
+            )
+
+    # PASO 3: drop de la vieja `rota_turnos` (cobertura). Tambien borramos sus indices.
+    con.execute("DROP INDEX IF EXISTS idx_rota_turnos_semana")
+    con.execute("DROP INDEX IF EXISTS idx_rota_turnos_miembro")
+    con.execute("DROP INDEX IF EXISTS idx_rota_turnos_fecha")  # defensa por si existia
+    con.execute("DROP TABLE IF EXISTS rota_turnos")
+
+    # PASO 4: rename _v2 -> rota_turnos (forma final). Recrea indices con los nombres
+    # canonicos del DDL declarativo (que se ejecuta justo despues; sus CREATE INDEX IF NOT
+    # EXISTS no haran nada porque ya existen).
+    con.execute("ALTER TABLE IF EXISTS rota_turnos_v2 RENAME TO rota_turnos")
+    # Renombrar indices auxiliares -> canonicos. Si vinieron del trabajo viejo, ya estan en _v2.
+    con.execute("ALTER INDEX IF EXISTS idx_rota_turnos_semana_v2 RENAME TO idx_rota_turnos_semana")
+    con.execute("ALTER INDEX IF EXISTS idx_rota_turnos_miembro_v2 RENAME TO idx_rota_turnos_miembro")
+    # Indice nuevo (no existia en el trabajo viejo): lo crea el DDL declarativo despues.
+    # Commit para que el DDL siguiente vea el esquema renombrado.
+    con.commit()
+
+
+# Nombres por defecto para sembrar las 2 franjas iniciales de una semana. Coherentes con
+# `estados.NOMBRE_FRANJA_*_DEFAULT` (los re-importamos arriba). Mantener una sola fuente.
+_NOMBRE_FRANJA_MANANA = NOMBRE_FRANJA_MANANA_DEFAULT
+_NOMBRE_FRANJA_TARDE = NOMBRE_FRANJA_TARDE_DEFAULT
+
+
+def _config_franjas_template(con: Any) -> tuple[str, str, str, str]:
+    """Devuelve `(matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin)` para
+    sembrar las 2 franjas por defecto de una semana nueva.
+
+    Si `rota_config_franjas` tiene una fila con `id='default'`, usamos sus rangos
+    (configuracion editorial #185). Si no, defaults del dominio (08-16 / 16-24).
+    """
+    mat_ini, mat_fin = "08:00", "16:00"
+    ves_ini, ves_fin = "16:00", "24:00"
+    if not _tabla_existe(con, "rota_config_franjas"):
+        return mat_ini, mat_fin, ves_ini, ves_fin
+    fila = con.execute(
+        "SELECT matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin "
+        "FROM rota_config_franjas WHERE id = ?",
+        ("default",),
+    ).fetchone()
+    if fila is None:
+        return mat_ini, mat_fin, ves_ini, ves_fin
+    return (
+        fila["matutino_inicio"] or mat_ini,
+        fila["matutino_fin"] or mat_fin,
+        fila["vespertino_inicio"] or ves_ini,
+        fila["vespertino_fin"] or ves_fin,
+    )
+
+
+_NOMBRE_FRANJA_DESCANSO = "Descanso"
+
+
+def _sembrar_franjas_por_defecto_en(con: Any, lunes: str) -> dict[str, str]:
+    """Inserta (Mañana, Tarde, Descanso) en `rota_franjas` para `lunes` si no existen.
+
+    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (sembradas o ya existentes).
+    La franja "Descanso" se siembra con `es_descanso=true`, `inicio='00:00'`/`fin='00:00'`
+    (sin rango horario real: nadie cubre eventos en descanso) y un `orden` alto (999) para
+    que la UI la pinte siempre al final.
+    """
+    if not lunes:
+        return {}
+    existentes = con.execute(
+        "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+        (lunes,),
+    ).fetchall()
+    por_nombre = {f["nombre"]: f["id"] for f in existentes}
+    if (
+        _NOMBRE_FRANJA_MANANA in por_nombre
+        and _NOMBRE_FRANJA_TARDE in por_nombre
+        and _NOMBRE_FRANJA_DESCANSO in por_nombre
+    ):
+        return por_nombre
+    mat_ini, mat_fin, ves_ini, ves_fin = _config_franjas_template(con)
+    # (nombre, inicio, fin, orden, es_descanso)
+    semilla = [
+        (_NOMBRE_FRANJA_MANANA, mat_ini, mat_fin, 0, False),
+        (_NOMBRE_FRANJA_TARDE, ves_ini, ves_fin, 1, False),
+        (_NOMBRE_FRANJA_DESCANSO, "00:00", "00:00", 999, True),
+    ]
+    for nombre, inicio, fin, orden, es_descanso in semilla:
+        if nombre in por_nombre:
+            continue
+        nuevo_id = uuid.uuid4().hex[:12]
+        con.execute(
+            "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lunes, nombre) DO NOTHING",
+            (nuevo_id, lunes, nombre, inicio, fin, orden, es_descanso),
+        )
+        por_nombre[nombre] = nuevo_id
+    # Releemos para coger los `id` reales (el ON CONFLICT pudo descartar el INSERT si otra
+    # transaccion sembro a la vez): el dict en memoria puede traer un id que no esta.
+    filas = con.execute(
+        "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+        (lunes,),
+    ).fetchall()
+    return {f["nombre"]: f["id"] for f in filas}
+
+
+def _migrar_modelo_franjas(con: Any) -> None:
+    """Migra `rota_turnos.franja` (literal) -> `rota_turnos.franja_id` (FK por semana).
+
+    Idempotente. Pasos:
+      1. Asegura que `rota_franjas` tiene la columna `es_descanso` (instancias anteriores
+         a la introduccion de descanso explicito la pierden).
+      2. Asegura que `rota_turnos` tiene una columna `franja_id` (la crea como NULLABLE
+         temporal si la BD legada solo tiene `franja`).
+      3. Por cada `lunes` con turnos legados, siembra las 3 franjas por defecto (Mañana,
+         Tarde, Descanso) en `rota_franjas` usando los rangos de `rota_config_franjas`
+         para las dos primeras si existe.
+      4. Reasigna los turnos: `franja='matutino'`->Mañana, `franja='vespertino'`->Tarde,
+         `franja='descanso'`->Descanso (la franja con `es_descanso=true`).
+         IMPORTANTE: los turnos de descanso SE PRESERVAN. El usuario aclaro que el descanso
+         es un TURNO EXPLICITO planificado, no una ausencia implicita.
+      5. Drop de la columna `franja` (si existe) y commit.
+
+    Si la BD ya esta en el modelo nuevo (no existe `franja`, solo `franja_id` con datos
+    coherentes), no toca nada de turnos, pero igual se asegura de la columna `es_descanso`.
+    """
+    # PASO 0: asegurar `rota_franjas`. La migracion ahora corre ANTES del DDL declarativo
+    # (porque ese DDL crea un indice sobre `franja_id`, que solo existe tras este paso). En
+    # bases productivas previas la tabla no estaba creada todavia, asi que la materializamos
+    # aqui de forma idempotente. El DDL declarativo posterior queda como no-op.
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rota_franjas (
+            id           TEXT PRIMARY KEY,
+            lunes        TEXT NOT NULL,
+            nombre       TEXT NOT NULL,
+            inicio       TEXT NOT NULL,
+            fin          TEXT NOT NULL,
+            orden        INTEGER NOT NULL DEFAULT 0,
+            es_descanso  BOOLEAN NOT NULL DEFAULT FALSE,
+            UNIQUE (lunes, nombre)
+        )
+        """
+    )
+    con.execute("CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)")
+
+    # PASO 1: columna `es_descanso` en `rota_franjas` (idempotente). Necesario antes de
+    # sembrar para que el INSERT no falle en instancias legadas que crearon la tabla sin
+    # ese campo (predicado defensivo: tras PASO 0 siempre existira, pero mantenemos por si
+    # el CREATE IF NOT EXISTS encuentra una tabla previa).
+    cols_franjas = _columnas_existentes(con, "rota_franjas")
+    if cols_franjas and "es_descanso" not in cols_franjas:
+        con.execute(
+            "ALTER TABLE rota_franjas ADD COLUMN es_descanso BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+
+    cols = _columnas_existentes(con, "rota_turnos")
+    if not cols:
+        # Sin tabla `rota_turnos` -> nada que migrar (BD virgen; el DDL la creara con
+        # `franja_id` directamente).
+        return
+    tiene_franja_literal = "franja" in cols
+    tiene_franja_id = "franja_id" in cols
+
+    if not tiene_franja_literal and tiene_franja_id:
+        # Ya migrado a `franja_id`: nada que mover.
+        return
+
+    # PASO 2: asegurar columna `franja_id` (nullable temporal).
+    if not tiene_franja_id:
+        con.execute(
+            "ALTER TABLE rota_turnos ADD COLUMN franja_id TEXT NOT NULL DEFAULT ''"
+        )
+
+    # PASO 3 y 4: por cada semana con turnos legados, sembrar las 3 franjas por defecto y
+    # asignar `franja_id`. Un solo SELECT de lunes distintos con cualquier franja literal
+    # legada que aun no tenga `franja_id`.
+    if tiene_franja_literal:
+        lunes_filas = con.execute(
+            "SELECT DISTINCT semana FROM rota_turnos "
+            "WHERE franja IN ('matutino', 'vespertino', 'descanso') "
+            "AND (franja_id = '' OR franja_id IS NULL)"
+        ).fetchall()
+        for fila in lunes_filas:
+            lunes = (fila["semana"] or "").strip()
+            if not lunes:
+                continue
+            mapa = _sembrar_franjas_por_defecto_en(con, lunes)
+            manana_id = mapa.get(_NOMBRE_FRANJA_MANANA, "")
+            tarde_id = mapa.get(_NOMBRE_FRANJA_TARDE, "")
+            descanso_id = mapa.get(_NOMBRE_FRANJA_DESCANSO, "")
+            if manana_id:
+                con.execute(
+                    "UPDATE rota_turnos SET franja_id = ? "
+                    "WHERE semana = ? AND franja = 'matutino' AND (franja_id = '' OR franja_id IS NULL)",
+                    (manana_id, lunes),
+                )
+            if tarde_id:
+                con.execute(
+                    "UPDATE rota_turnos SET franja_id = ? "
+                    "WHERE semana = ? AND franja = 'vespertino' AND (franja_id = '' OR franja_id IS NULL)",
+                    (tarde_id, lunes),
+                )
+            if descanso_id:
+                # IMPORTANTE: el descanso es turno explicito. Lo PRESERVAMOS reasignando.
+                con.execute(
+                    "UPDATE rota_turnos SET franja_id = ? "
+                    "WHERE semana = ? AND franja = 'descanso' AND (franja_id = '' OR franja_id IS NULL)",
+                    (descanso_id, lunes),
+                )
+
+        # PASO 5: drop de la columna `franja`. En Postgres, `DROP COLUMN ... IF EXISTS`
+        # es soportado.
+        con.execute("ALTER TABLE rota_turnos DROP COLUMN IF EXISTS franja")
+
+    con.commit()
+
+
+# Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
+# Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
+# retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
+#   - tipo_cobertura: transmision|imagenes|no_cubrir; legado -> "transmision" (sigue cubierto).
+#   - prioridad: alta|media|baja; legado -> "media".
+#   - cambiado: 0/1, "se reprogramo, hay que avisar"; legado -> 0 (sin reprogramar).
+#   - actualizado: timestamp de la ultima edicion; legado -> "" (nunca editado tras migrar).
+# Cada par es (columna, fragmento de tipo/DEFAULT) para emitir el ALTER correcto.
+#   - origen/origen_ref: PROVENANCE de las filas creadas por la importacion de documentos
+#     (`dominio.parrilla_import.ORIGEN == 'import-doc'`, `origen_ref` = id de la propuesta).
+#     Legado -> "" (alta manual / migracion). Permite auditar y, en el futuro, deshacer.
+_COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("tipo_cobertura", "TEXT NOT NULL DEFAULT 'transmision'"),
+    ("prioridad", "TEXT NOT NULL DEFAULT 'media'"),
+    ("cambiado", "INTEGER NOT NULL DEFAULT 0"),
+    ("actualizado", "TEXT NOT NULL DEFAULT ''"),
+    ("origen", "TEXT NOT NULL DEFAULT ''"),
+    ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
+    ("marca", "TEXT NOT NULL DEFAULT ''"),
+)
+
+# Columnas de PROVENANCE que se anaden a `rota_turnos` para bases viejas (idempotente; el DDL
+# declarativo ya las trae en bases nuevas). Mismo patron que `_COLUMNAS_EVENTO_ROTA_AMPLIADAS`.
+_COLUMNAS_TURNO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("origen", "TEXT NOT NULL DEFAULT ''"),
+    ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_turnos_rota(con: Any) -> None:
+    """Anade a `rota_turnos` las columnas de provenance (origen/origen_ref) si faltaran.
+
+    Idempotente: una BD nueva ya las trae por el DDL declarativo; una vieja las recibe con
+    DEFAULT '' sin reescribir nada (las filas existentes quedan como alta manual).
+    """
+    if not _COLUMNAS_TURNO_ROTA_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_turnos")
+    for columna, tipo in _COLUMNAS_TURNO_ROTA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_turnos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+def _migrar_columnas_eventos_rota(con: Any) -> None:
+    """Anade a `rota_eventos` las columnas de la ola B que una BD vieja no tuviera (idempotente).
+
+    El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
+    antes de la ampliacion (cobertura/prioridad/reprogramaciones) no las tiene. Recorre
+    `_COLUMNAS_EVENTO_ROTA_AMPLIADAS` y anade solo la que falte con su DEFAULT: los eventos
+    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada. El
+    Postgres hosted persiste entre despliegues; era el origen del 500 del calendario.
+    """
+    columnas = _columnas_existentes(con, "rota_eventos")
+    if not columnas:
+        return  # tabla aún no existe: el DDL declarativo la crea fresca (con marca + índice)
+    for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas de `rota_piezas` declaradas en el DDL inicial: cualquier columna que se
+# anada DESPUES debera entrar aqui con `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` para
+# que las bases viejas la reciban (#150, PARRILLA 2026.xlsx). Mismo patron idempotente que
+# `_migrar_columnas_eventos_rota`. Cada par es (columna, fragmento de tipo/DEFAULT).
+#
+# Ampliaciones reales del Excel (auditoria post-piloto):
+#   - salida: canal MAS AMPLIO que `red_social` (en LA SELECCION EN TUS MANOS y MUNDIAL el
+#     Excel registra "TV", "RADIO", "OOH", "MAILING", "PORTAL", "PROGRAMA", "YT", etc.;
+#     incluye no-redes). `red_social` se reserva al detalle FB/IG/X/TK. Legado -> "".
+#   - comentarios: texto LIBRE de coordinacion PRE/durante (distinto de `notas`, que es
+#     post-mortem). En el Excel evergreen aparece como columna "Comentarios". Legado -> "".
+#   - fecha_entrega_material: deadline INTERNO de cuando debe llegar el material a Tescu
+#     antes de la fecha de publicacion. Columna "Fecha de Entrega (Material)" del Excel.
+#     Legado -> "".
+#   - always_on: pieza siempre activa sin fecha concreta (ej. "ALWAYS ON" de PATY CANTU,
+#     teaser/promo evergreen). Si esta marcada, la fecha `dia` es opcional/ignorada por la
+#     UI. Legado -> 0 (no es always-on).
+_COLUMNAS_PIEZA_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("salida", "TEXT NOT NULL DEFAULT ''"),
+    ("comentarios", "TEXT NOT NULL DEFAULT ''"),
+    ("fecha_entrega_material", "TEXT NOT NULL DEFAULT ''"),
+    ("always_on", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_piezas_rota(con: Any) -> None:
+    """Anade a `rota_piezas` columnas ampliadas que una BD vieja no tuviera (idempotente).
+
+    Hoy `rota_piezas` se crea entera con `CREATE TABLE IF NOT EXISTS`; esta migracion existe
+    para futuras ampliaciones (mismo patron que `_migrar_columnas_eventos_rota`). Idempotente
+    y segura: si no hay ampliaciones, no hace nada.
+    """
+    if not _COLUMNAS_PIEZA_ROTA_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_piezas")
+    for columna, tipo in _COLUMNAS_PIEZA_ROTA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_piezas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas ampliadas de `contenido` / `contenido_plataforma` (tablero unificado). Hoy
+# ambas tablas nacen enteras en el DDL declarativo (sin previas en produccion); estos
+# hooks existen por coherencia con `_migrar_columnas_*` para futuras ampliaciones sin
+# reescribir el esquema en bases hosted. Idempotentes; vacios no hacen nada.
+_COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen de la pieza.
+    ("tipo_contenido", "TEXT NOT NULL DEFAULT 'ia'"),
+    # FORMATO de la pieza (foto|video): decide a qué redes va (regla del dueño). `foto` -> 3
+    # redes (IG/X/FB); `video` -> las 5. El flujo automático crea piezas `foto`. El mapeo
+    # formato->redes vive en `redes.redes_de_formato` (fuente única). BD vieja -> 'foto'.
+    ("formato", "TEXT NOT NULL DEFAULT 'foto'"),
+    # id_post_metricool a NIVEL pieza (Item C, métricas↔contenido): el id de Metricool
+    # "principal" de la pieza, para enlazar el rendimiento de una pieza de Metricool de
+    # vuelta a su `contenido` (y resolver sus etiquetas/tipo en las gráficas por serie).
+    # El id REAL por red sigue viviendo en `contenido_plataforma.id_post_metricool` (una
+    # pieza publica en N redes); este es un acceso directo a NIVEL contenido. Legado -> "".
+    ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
+    # Señal de VIRALIDAD del Radar (Fase 5, loop de aprendizaje): el trafico aproximado REAL
+    # de Google Trends (`radar.Tema.senal`) con que nacio la pieza, para que el score de
+    # priorizacion (`priorizacion.peso_viralidad`) la use al ordenar la lista del dia. 0 =
+    # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
+    ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
+    # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline criba la NOTA DE ORIGEN antes de
+    # generar copy. `qa_veredicto` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
+    # peso: NO se generó copy). `qa_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
+    ("qa_veredicto", "TEXT NOT NULL DEFAULT ''"),
+    ("qa_hallazgos", "TEXT NOT NULL DEFAULT ''"),
+    ("copy_pendiente", "TEXT NOT NULL DEFAULT ''"),
+    # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC. Las bases
+    # creadas antes de esta columna la reciben aquí (idempotente). Legado -> "".
+    ("fecha_fuente", "TEXT NOT NULL DEFAULT ''"),
+    # URL de la NOTA DE ORIGEN (Investigador F3, dedup por URL): la URL canónica de la
+    # fuente con que nació la pieza, para cruzar `existe_publicado_similar` por URL antes
+    # de caer al fuzzy de título. "" si la pieza no nació de una URL (alta manual) o BD vieja.
+    ("url_fuente", "TEXT NOT NULL DEFAULT ''"),
+)
+_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
+    # URL de la imagen de la FUENTE original (cuando tipo_contenido='fuente'): se
+    # previsualiza tal cual sin tener que descargarla a la biblioteca de media.
+    ("imagen_fuente", "TEXT NOT NULL DEFAULT ''"),
+    # Media id de la FOTO CRUDA de fondo (la que el usuario sube/elige), separada de
+    # `imagen` (la placa ya compuesta y publicable). Permite recomponer la placa en vivo.
+    ("foto", "TEXT NOT NULL DEFAULT ''"),
+    # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto
+    # del `copy` que acompana a la publicacion. Se genera por marca con sus reglas/plantilla.
+    ("copy_in", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_contenido(con: Any) -> None:
+    """Anade a `contenido`/`contenido_plataforma` columnas que una BD vieja no tuviera."""
+    for tabla, ampliadas in (
+        ("contenido", _COLUMNAS_CONTENIDO_AMPLIADAS),
+        ("contenido_plataforma", _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
+    ):
+        if not ampliadas:
+            continue
+        columnas = _columnas_existentes(con, tabla)
+        for columna, tipo in ampliadas:
+            if columna not in columnas:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas que se anaden a `contenido_aprobaciones` en bases creadas por una version
+# anterior (el Postgres hosted persiste entre despliegues). `cargo_requerido` (item C: cargo
+# del organigrama exigido por nivel) nace en el `CREATE TABLE` de las bases NUEVAS; este
+# migrador la inyecta a las VIEJAS. Idempotente (no-op si ya esta o si la tabla no existe).
+_COLUMNAS_APROBACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("cargo_requerido", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_aprobaciones(con: Any) -> None:
+    """Anade a `contenido_aprobaciones` las columnas que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "contenido_aprobaciones"):
+        return
+    columnas = _columnas_existentes(con, "contenido_aprobaciones")
+    for columna, tipo in _COLUMNAS_APROBACIONES_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(
+                f"ALTER TABLE contenido_aprobaciones ADD COLUMN IF NOT EXISTS {columna} {tipo}"
+            )
+
+
+# Columnas ampliadas del apartado comercial. Las bases creadas antes del paso a
+# "monitorizar el post real de Metricool" no tienen `id_post_metricool` (la pieza se
+# identificaba por `url`) ni `visualizaciones` en los snapshots (solo interacciones/
+# alcance, de la curva sintetica). El Postgres hosted persiste entre despliegues:
+# sin estos ALTER, una BD vieja reventaria al leer/escribir las columnas nuevas.
+#
+# Ola "metricas granulares por pieza": el snapshot pasa de 3 metricas (interacciones/
+# visualizaciones/alcance) a capturar tambien el desglose que la fuente (Metricool, via
+# `servicio.construir_metricas_pieza`) expone por pieza: likes, comentarios, compartidos,
+# guardados, video_views, tiempo medio de visualizacion (s), clics de enlace y seguidores
+# netos atribuidos. El `formato` (reel/foto/carrusel/video/link/texto) es propiedad ESTATICA
+# de la pieza, no del snapshot: vive en `comercial_publicaciones`. Las columnas nacen con
+# DEFAULT 0 / '' para alinear con las existentes (un dato ausente -> 0, sin ceros falsos en
+# la UI, que distingue "sin dato" por `interacciones`/`encontrado`).
+_COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
+    ("formato", "TEXT NOT NULL DEFAULT ''"),
+)
+_COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("visualizaciones", "INTEGER NOT NULL DEFAULT 0"),
+    ("likes", "INTEGER NOT NULL DEFAULT 0"),
+    ("comentarios", "INTEGER NOT NULL DEFAULT 0"),
+    ("compartidos", "INTEGER NOT NULL DEFAULT 0"),
+    ("guardados", "INTEGER NOT NULL DEFAULT 0"),
+    ("video_views", "INTEGER NOT NULL DEFAULT 0"),
+    ("tiempo_medio_vis_s", "INTEGER NOT NULL DEFAULT 0"),
+    ("clics_enlace", "INTEGER NOT NULL DEFAULT 0"),
+    ("seguidores_netos_atribuidos", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_comercial(con: Any) -> None:
+    """Anade al apartado comercial las columnas que una BD vieja no tuviera (idempotente)."""
+    for tabla, ampliadas in (
+        ("comercial_publicaciones", _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS),
+        ("comercial_snapshots", _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS),
+    ):
+        columnas = _columnas_existentes(con, tabla)
+        for columna, tipo in ampliadas:
+            if columna not in columnas:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
+# tupla esta VACIA: la primera version del swap nace ya con todo el esquema declarado en
+# el `CREATE TABLE IF NOT EXISTS` (sin previas en produccion). Se conserva el hook por
+# coherencia con el patron de `_migrar_columnas_*` (tareas, eventos): cuando aparezca una
+# columna nueva, se agrega aqui como (col, tipo) y este migrador la pondra a las bases
+# viejas sin reescribir nada. Idempotente.
+_COLUMNAS_SWAP_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+
+def _migrar_columnas_swaps(con: Any) -> None:
+    """Anade a `rota_swaps_turno` las columnas que una BD vieja no tuviera (idempotente).
+
+    Hoy es no-op (tupla vacia): la tabla nace completa. Cuando se amplie, basta con
+    declarar la columna en el `CREATE TABLE` (para bases NUEVAS) y anadir `(col, tipo)` a
+    `_COLUMNAS_SWAP_AMPLIADAS` (para que las bases ANTIGUAS la reciban via ALTER). Mismo
+    patron que `_migrar_columnas_eventos_rota`.
+    """
+    if not _COLUMNAS_SWAP_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_swaps_turno")
+    for columna, tipo in _COLUMNAS_SWAP_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas que se podrian anadir a `rota_programas`. Hoy esta tupla esta VACIA: la tabla
+# nace completa en su primer DDL. Se conserva el hook por coherencia con el resto del
+# patron `_migrar_columnas_*` (cuando aparezca una columna nueva, basta con anadirla aqui
+# como `(col, tipo)` y a las bases viejas se le inyecta por ALTER sin reescribir nada).
+_COLUMNAS_PROGRAMA_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+
+def _migrar_columnas_programas(con: Any) -> None:
+    """Anade a `rota_programas` columnas ampliadas que una BD vieja no tuviera (idempotente).
+
+    Hoy es no-op (tupla vacia). Mismo patron que `_migrar_columnas_swaps`.
+    """
+    if not _COLUMNAS_PROGRAMA_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_programas")
+    for columna, tipo in _COLUMNAS_PROGRAMA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_programas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas que se anadieron a `usuarios` despues del esquema original (cargo + cobertura
+# del equipo real, transcripciones AMX; `puede_coordinar` ola "coord"). Una BD creada
+# antes no las tiene; legado -> `cargo=''` (sin clasificar), `cobertura=0` (no entra en
+# rota), `puede_coordinar=false` (no es candidato a coordinador). Cada par es (columna,
+# fragmento de tipo/DEFAULT).
+#   - nombre: nombre HUMANO de la persona (Bernardo Vazquez, Elias...) para el organigrama;
+#     legado -> "" (la UI cae al `usuario`/login). No es UNIQUE: dos personas pueden
+#     llamarse igual, lo que identifica la cuenta sigue siendo `usuario`.
+#   - manager_id: id del usuario SUPERIOR (a quien reporta) en el organigrama; legado/raiz
+#     -> "" (sin superior, p.ej. el director). No es FK en la BD (ALTER ADD COLUMN no la
+#     anade en SQLite y el organigrama tolera ids colgados tras un borrado); la capa API
+#     valida que apunte a un usuario existente, distinto de si mismo y sin ciclos.
+#   - mfa_activo / mfa_recovery_codes (segundo factor PASSKEYS/WebAuthn, gateado por
+#     `KENI_CONSOLA_MFA`): ADITIVAS y con DEFAULT, asi una BD/usuario previos quedan SIN MFA
+#     (`mfa_activo=0`) y el login sigue siendo identico hasta que alguien enrole una passkey.
+#     La antigua columna TOTP `mfa_secret_cifrado` ya NO se anade (passkeys no guardan secreto
+#     en el servidor); en BDs viejas se DROPA en `_migrar_columnas_usuarios`.
+_COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("cargo", "TEXT NOT NULL DEFAULT ''"),
+    ("cobertura", "INTEGER NOT NULL DEFAULT 0"),
+    ("puede_coordinar", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("nombre", "TEXT NOT NULL DEFAULT ''"),
+    ("manager_id", "TEXT NOT NULL DEFAULT ''"),
+    ("mfa_activo", "INTEGER NOT NULL DEFAULT 0"),
+    ("mfa_recovery_codes", "TEXT NOT NULL DEFAULT '[]'"),
+)
+
+# Columnas RETIRADAS de `usuarios` (se dropan si una BD vieja las tiene). `mfa_secret_cifrado`
+# era el secreto TOTP cifrado; al migrar a passkeys (WebAuthn) ya no hay secreto del lado
+# servidor, asi que la columna sobra. DROP idempotente (`IF EXISTS`).
+_COLUMNAS_USUARIOS_RETIRADAS: tuple[str, ...] = ("mfa_secret_cifrado",)
+
+
+def _migrar_columnas_usuarios(con: Any) -> None:
+    """Anade a `usuarios` las columnas de cargo + cobertura que una BD vieja no tuviera.
+
+    Mismo patron que `_migrar_columnas_eventos_rota`. Un usuario legado queda con cargo
+    vacio y `cobertura=0` (no participa en rota hasta marcarlo).
+    """
+    columnas = _columnas_existentes(con, "usuarios")
+    for columna, tipo in _COLUMNAS_USUARIOS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+    # Migracion passkeys: dropamos la columna TOTP retirada (`mfa_secret_cifrado`) si la BD vieja
+    # aun la tiene. `{columna}` viene de una allowlist del modulo (nunca entrada de usuario).
+    for columna in _COLUMNAS_USUARIOS_RETIRADAS:
+        if columna in columnas:
+            con.execute(f"ALTER TABLE usuarios DROP COLUMN IF EXISTS {columna}")
+
+# Columnas ampliables (mismo patron idempotente que `_migrar_columnas_*`): hoy ambas tablas
+# nacen enteras en el DDL declarativo; estos hooks existen por coherencia para futuras
+# ampliaciones sin reescribir el esquema en bases hosted. Vacios no hacen nada.
+_COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # `propia`: la fuente es un sitio de MARCA PROPIA, así que su imagen original es
+    # reutilizable. Al generar desde un item de una fuente propia, la pieza nace con la
+    # imagen del artículo en `imagen_fuente` + `tipo_contenido='fuente'`.
+    ("propia", "INTEGER NOT NULL DEFAULT 0"),
+    # PLANIFICACIÓN del motor de ingesta persistente (Ola A). El `CREATE TABLE` ya las declara
+    # para BDs nuevas; estas migran las BDs viejas (mismo patrón idempotente que
+    # `_migrar_columnas_eventos_rota`). `intervalo_min`=0 -> usar el default por categoría;
+    # `categoria` clasifica/ajusta la cadencia; `prioridad` mayor = más frecuente;
+    # `proximo_sondeo` ISO ('' = sondear ya); `errores_seguidos`/`pausado_hasta` = backoff.
+    ("intervalo_min", "INTEGER NOT NULL DEFAULT 0"),
+    ("categoria", "TEXT NOT NULL DEFAULT ''"),
+    ("prioridad", "INTEGER NOT NULL DEFAULT 0"),
+    ("proximo_sondeo", "TEXT NOT NULL DEFAULT ''"),
+    ("errores_seguidos", "INTEGER NOT NULL DEFAULT 0"),
+    ("pausado_hasta", "TEXT NOT NULL DEFAULT ''"),
+    # AUTO-DESACTIVADO (Ola D): el daemon pone `desactivado_auto=1` + `activo=0` cuando un feed
+    # acumula `KENI_INGESTA_MAX_ERRORES` errores seguidos. Distingue "muerto por el motor" de
+    # "apagado a mano" para poder reactivarlo desde /salud. En éxito se resetea.
+    ("desactivado_auto", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+def _migrar_columnas_fuentes_rss(con: Any) -> None:
+    """Anade a `fuentes_rss` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _COLUMNAS_FUENTES_RSS_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "fuentes_rss")
+    if not columnas:
+        return  # tabla aún no existe: el DDL declarativo la crea fresca (con proximo_sondeo + índice)
+    for columna, tipo in _COLUMNAS_FUENTES_RSS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE fuentes_rss ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+def _migrar_columnas_grupos_hashtags(con: Any) -> None:
+    """Anade a `grupos_hashtags` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "grupos_hashtags")
+    for columna, tipo in _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE grupos_hashtags ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+# COBERTURA + traducción + verificación (Ola D): columnas nuevas de `noticias_clusters`. El
+# `CREATE TABLE` ya las declara para BDs nuevas; estas migran las BDs viejas (mismo patrón
+# idempotente). Algunas pueden existir ya (orden de despliegue de agentes en paralelo): el
+# guard por `_columnas_existentes` las salta sin error.
+_COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # Auto-verificación por corroboración: corroborada / unica_fuente / dudosa.
+    ("verificacion", "TEXT NOT NULL DEFAULT 'unica_fuente'"),
+    # Traducción completa de historias extranjeras (best-effort, por lotes con Haiku).
+    ("titulo_es", "TEXT NOT NULL DEFAULT ''"),
+    ("resumen_es", "TEXT NOT NULL DEFAULT ''"),
+    ("titulo_original", "TEXT NOT NULL DEFAULT ''"),
+    ("idioma", "TEXT NOT NULL DEFAULT ''"),
+    ("traducido", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+def _migrar_columnas_noticias_clusters(con: Any) -> None:
+    """Anade a `noticias_clusters` las columnas de la Ola D que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "noticias_clusters"):
+        return
+    columnas = _columnas_existentes(con, "noticias_clusters")
+    for columna, tipo in _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE noticias_clusters ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+# Indices UNICOS que dan idempotencia a tres tablas que hoy se duplican (mismo grupo/franja/
+# fuente insertados dos veces). Se crean DEFENSIVAMENTE (no en el DDL declarativo): una BD
+# productiva PUEDE tener ya duplicados, y un `CREATE UNIQUE INDEX` sobre datos duplicados
+# revienta. Por eso van fuera del bucle de `_DDL_ESQUEMA` (que aborta el arranque ante
+# cualquier fallo) y cada uno se intenta aislado: si falla por duplicados, se loguea y se
+# sigue (la tabla queda sin el constraint hasta que se limpien los duplicados a mano). El
+# `IF NOT EXISTS` lo hace idempotente cuando ya existe; los INSERT correspondientes usan
+# `ON CONFLICT (...) DO NOTHING` (mismo patron que `rota_franjas`), inofensivo aunque el
+# indice aun no exista (sin conflicto que ignorar).
+# NOTA: `fuentes_rss` NO lleva UNIQUE(url) a proposito: el producto permite registrar la
+# MISMA URL en varias fuentes (distinta marca, filtros incluir/excluir o nombre). La
+# deduplicacion de ITEMS ya la cubre `rss_items_vistos` (PK compuesta). Imponer UNIQUE(url)
+# rompia ese caso de uso legitimo.
+_INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
+    ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
+    ("idx_franjas_editoriales_uniq", "franjas_editoriales (marca, red, dia_semana, hora)"),
+    # Contador de versiones POR PIEZA: dos ediciones concurrentes calculaban `MAX(version)+1`
+    # y, sin unicidad, insertaban la MISMA version (historial duplicado/roto). El indice unico
+    # convierte ese choque en una UniqueViolation que el INSERT REINTENTA con el numero siguiente
+    # (ver `crear_documento_version` / `registrar_copy_version`).
+    ("idx_documento_versiones_uniq", "documento_versiones (contenido_id, plataforma_id, version)"),
+    ("idx_copy_versiones_uniq", "contenido_copy_versiones (plataforma_id, version)"),
+    # PARRILLA — doble-reserva POR MARCA (fix implementado). El slot correcto es por (marca, red,
+    # fecha): dos marcas distintas SI pueden publicar en la misma red a la misma hora, pero la
+    # MISMA marca no puede doble-reservar el mismo slot. Una version previa puso un UNIQUE solo por
+    # (red, fecha) y hubo que retirarlo: chocaba ENTRE MARCAS porque `marca` vivia en `contenido`
+    # (padre) y un indice PARCIAL no puede cruzar el join. La solucion: DENORMALIZAR `marca` en
+    # `contenido_plataforma` (columna mantenida en sync en toda escritura: derivada del padre al
+    # insertar, propagada al reasignar la marca del padre; ver `crear_contenido_plataforma` y
+    # `actualizar_contenido`) y entonces SI cabe el UNIQUE parcial por (marca, red, fecha). El
+    # predicado exige `estado='programado'` (solo lo programado reserva slot) Y `fecha_programada
+    # <> ''` (borradores sin fecha no chocan entre si). El backstop+reintento de la carrera vive en
+    # `api.publicaciones._encolar_en_hueco_libre` y en el PUT (`api.publicaciones.actualizar`).
+    (
+        "idx_parrilla_slot_uniq",
+        "contenido_plataforma (marca, red, fecha_programada) "
+        "WHERE estado = 'programado' AND fecha_programada <> ''",
+    ),
+)
+
+def _crear_indices_unicos_idempotencia(con: Any) -> None:
+    """Crea los indices UNICOS de idempotencia, aislando cada uno ante duplicados previos.
+
+    Cada `CREATE UNIQUE INDEX IF NOT EXISTS` se ejecuta + commitea por separado: si una tabla
+    ya tiene duplicados en prod, Postgres lanza una `UniqueViolation` (23505), que el shim de
+    `motor_db` ya re-lanza como `IntegrityError` TRAS hacer rollback de la conexion. Se loguea
+    un WARNING y se sigue (no rompe el arranque), pero los demas indices SI se aplican.
+    Requiere limpieza manual de los duplicados para que el indice fallido entre en un arranque
+    posterior. El `IF NOT EXISTS` lo hace idempotente cuando el indice ya existe.
+    """
+    for nombre_indice, destino in _INDICES_UNICOS_IDEMPOTENCIA:
+        try:
+            con.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {nombre_indice} ON {destino}")
+            con.commit()
+        except IntegrityError as e:
+            # El shim de `motor_db` ya hizo rollback de la conexion al mapear la
+            # UniqueViolation; aqui solo dejamos rastro y seguimos con el resto de indices.
+            _log.warning(
+                "No se pudo crear el indice unico %s ON %s (probables duplicados previos; "
+                "requiere limpieza manual): %s",
+                nombre_indice,
+                destino,
+                e,
+            )
+
+__all__ = [
+    "_COLUMNAS_APROBACIONES_AMPLIADAS",
+    "_COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS",
+    "_COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS",
+    "_COLUMNAS_CONTENIDO_AMPLIADAS",
+    "_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS",
+    "_COLUMNAS_EVENTO_ROTA_AMPLIADAS",
+    "_COLUMNAS_FUENTES_RSS_AMPLIADAS",
+    "_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS",
+    "_COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS",
+    "_COLUMNAS_PIEZA_ROTA_AMPLIADAS",
+    "_COLUMNAS_PROGRAMA_AMPLIADAS",
+    "_COLUMNAS_SWAP_AMPLIADAS",
+    "_COLUMNAS_TURNO_ROTA_AMPLIADAS",
+    "_COLUMNAS_USUARIOS_AMPLIADAS",
+    "_COLUMNAS_USUARIOS_RETIRADAS",
+    "_DDL_ESQUEMA",
+    "_INDICES_UNICOS_IDEMPOTENCIA",
+    "_LOCK_NS_BARRIDO",
+    "_MIGR_FRANJA_MATUTINO_FIN_MIN",
+    "_MIGR_FRANJA_MATUTINO_INICIO_MIN",
+    "_MIGR_FRANJA_VESPERTINO_FIN_MIN",
+    "_MIGR_FRANJA_VESPERTINO_INICIO_MIN",
+    "_NOMBRE_FRANJA_DESCANSO",
+    "_NOMBRE_FRANJA_MANANA",
+    "_NOMBRE_FRANJA_TARDE",
+    "_clave_lock",
+    "_columnas_existentes",
+    "_conectar",
+    "_config_franjas_template",
+    "_crear_esquema",
+    "_crear_indices_unicos_idempotencia",
+    "_esquemas_asegurados",
+    "_franja_para_hora_migracion",
+    "_lock_esquemas",
+    "_migrar_columnas_aprobaciones",
+    "_migrar_columnas_comercial",
+    "_migrar_columnas_contenido",
+    "_migrar_columnas_contenido_plataforma",
+    "_migrar_columnas_etiquetas",
+    "_migrar_columnas_eventos_rota",
+    "_migrar_columnas_fuentes_rss",
+    "_migrar_columnas_grupos_hashtags",
+    "_migrar_columnas_noticias_algoritmo",
+    "_migrar_columnas_noticias_clusters",
+    "_migrar_columnas_piezas_rota",
+    "_migrar_columnas_plantillas_diseno",
+    "_migrar_columnas_programas",
+    "_migrar_columnas_swaps",
+    "_migrar_columnas_turnos_rota",
+    "_migrar_columnas_usuarios",
+    "_migrar_columnas_video_composiciones",
+    "_migrar_modelo_franjas",
+    "_migrar_modelo_turnos",
+    "_parsear_hora_a_minutos",
+    "_sembrar_franjas_por_defecto_en",
+    "_tabla_existe",
+    "arrancar_persistencia",
+    "conectar",
+    "lock_barrido",
+]
