@@ -2,7 +2,7 @@
 
 **Metricool (multi-red).** `metricool.AdaptadorPublicacionMetricool`
 entrega el post al scheduler de Metricool con su fecha de publicacion, usando el
-MISMO token por marca que la lectura de metricas (`fuentes.metricol`). Cubre
+MISMO token por marca que la lectura de metricas (`fuentes.metricool`). Cubre
 Facebook, Instagram, X (twitter), TikTok y YouTube por un solo endpoint, con
 PROGRAMACION nativa (`publicationDate` + `autoPublish`) — sin integrar cada API
 oficial, y sin cola propia.

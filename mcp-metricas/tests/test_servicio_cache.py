@@ -1,7 +1,7 @@
 """Cache de config + fuente/cliente httpx en `servicio`/`config` (fix N+1 por pieza).
 
 El tablero pide rendimiento pieza-a-pieza: antes cada llamada re-leía el config del
-disco y construía una `FuenteMetricol` NUEVA (con su propio `httpx.Client`), abriendo
+disco y construía una `FuenteMetricool` NUEVA (con su propio `httpx.Client`), abriendo
 docenas de conexiones y quemando cuota. Aquí se verifica que:
 
   - `cargar_config()` se memoiza (no re-parsea el TOML si no cambia mtime/env).
@@ -9,7 +9,7 @@ docenas de conexiones y quemando cuota. Aquí se verifica que:
   - un cambio en el config (mtime distinto, p.ej. token nuevo) invalida ambas caches y
     se refleja SIN reiniciar el proceso.
 
-TODO OFFLINE: construir una `FuenteMetricol` no toca la red (solo guarda credenciales y
+TODO OFFLINE: construir una `FuenteMetricool` no toca la red (solo guarda credenciales y
 un `httpx.Client` ocioso); nunca hacemos una petición.
 """
 

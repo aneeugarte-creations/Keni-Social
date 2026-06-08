@@ -3,7 +3,7 @@ multi-marca/multi-plataforma. Implementa FuenteMetricas a partir de la config.
 
 FALLBACK HISTÓRICO, NO la fuente única
 --------------------------------------
-La fuente única de métricas de keni-social es **Metricool** (`fuentes.metricol`):
+La fuente única de métricas de keni-social es **Metricool** (`fuentes.metricool`):
 dashboard por marca/cuenta Y rendimiento por pieza salen del MISMO camino, sin
 desfase. `FuenteCompuesta` queda como capacidad histórica (ADR 0005 §B) y está
 DESACTIVADA por defecto: `config.construir_fuente` solo la instancia con el flag

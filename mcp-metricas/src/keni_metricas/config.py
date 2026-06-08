@@ -134,7 +134,7 @@ class MetricoolConfig:
         """Subconjunto de `marcas` que tiene credenciales completas (resueltas).
 
         Cada entrada se devuelve con `user_token`/`user_id` YA RESUELTOS (propios o
-        heredados del default), de modo que `FuenteMetricol` no vuelve a mirar el
+        heredados del default), de modo que `FuenteMetricool` no vuelve a mirar el
         default: cada marca lleva sus tres credenciales explícitas.
         """
         salida: dict[str, dict] = {}
@@ -460,16 +460,16 @@ class FuenteScoped:
 
 
 def _fuente_metricool(cfg: Config) -> FuenteMetricas:
-    """Construye `FuenteMetricol` o, sin credenciales, una fuente Metricool VACÍA.
+    """Construye `FuenteMetricool` o, sin credenciales, una fuente Metricool VACÍA.
 
     Si no hay `user_token`/`user_id`/marcas mapeadas NO se inventan datos NI se cae a
-    la fuente de muestra: se devuelve una `FuenteMetricol` sin marcas, que no lista
+    la fuente de muestra: se devuelve una `FuenteMetricool` sin marcas, que no lista
     cuentas ni produce cifras (la UI muestra un estado vacío honesto). El producto no
     debe mostrar datos falsos: con credenciales faltantes se ve "sin datos", no demo.
     Se deja un aviso en el log; el `doctor` reporta la fuente efectiva por `fuente.nombre`
     (sigue siendo "metricool").
     """
-    from .fuentes.metricol import FuenteMetricol
+    from .fuentes.metricool import FuenteMetricool
 
     mc = cfg.metricool
     configuradas = mc.marcas_configuradas()
@@ -482,11 +482,11 @@ def _fuente_metricool(cfg: Config) -> FuenteMetricas:
             "blog_id; admite default [metricool]/METRICOOL_USER_TOKEN/USER_ID); "
             "no se muestran datos (estado vacío, sin inventar cifras de demo)."
         )
-        return FuenteMetricol(marcas={})
+        return FuenteMetricool(marcas={})
 
     # Las marcas SIN credenciales completas se OMITEN honestamente: solo pasan las
     # configuradas, cada una con su token/user_id/blog_id YA resueltos.
-    return FuenteMetricol(marcas=configuradas)
+    return FuenteMetricool(marcas=configuradas)
 
 
 def construir_fuente(cfg: Config | None = None) -> FuenteMetricas:

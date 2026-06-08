@@ -1,10 +1,10 @@
-"""Tests del adapter `FuenteMetricol` (consumidor de la API REST de Metricool).
+"""Tests del adapter `FuenteMetricool` (consumidor de la API REST de Metricool).
 
 SIN red real: toda llamada HTTP va mockeada con respx. Cubren:
   - mapeo de una respuesta Metricool de ejemplo a la forma de `FuenteMetricas`
     (ResumenMetricas + Pieza), respetando el contrato;
   - degradación honesta a `muestra` cuando no hay token (vía `construir_fuente`);
-  - que `FuenteMetricol` cumple el Protocol `FuenteMetricas`;
+  - que `FuenteMetricool` cumple el Protocol `FuenteMetricas`;
   - autenticación: header `X-Mc-Auth` + query params `userId`/`blogId`.
 """
 
@@ -18,7 +18,7 @@ import respx
 
 from keni_metricas.config import Config, MetricoolConfig, construir_fuente
 from keni_metricas.fuentes.base import FuenteMetricas
-from keni_metricas.fuentes.metricol import BASE, FuenteMetricol, _fecha
+from keni_metricas.fuentes.metricool import BASE, FuenteMetricool, _fecha
 from keni_metricas.fuentes.muestra import FuenteMuestra
 from keni_metricas.schema import MotivoOmision, Plataforma, ResumenMetricas
 
@@ -37,8 +37,8 @@ MARCAS = {
 }
 
 
-def _fuente(cliente: httpx.Client) -> FuenteMetricol:
-    return FuenteMetricol(marcas=MARCAS, cliente=cliente)
+def _fuente(cliente: httpx.Client) -> FuenteMetricool:
+    return FuenteMetricool(marcas=MARCAS, cliente=cliente)
 
 
 def _serie(valor: float) -> dict:
@@ -95,7 +95,7 @@ def _mock_posts(net: str, posts: list[dict]) -> None:
 
 @respx.mock
 def test_es_una_fuente_metricas():
-    """FuenteMetricol cumple el contrato `FuenteMetricas` (mismo que muestra)."""
+    """FuenteMetricool cumple el contrato `FuenteMetricas` (mismo que muestra)."""
     with httpx.Client() as cli:
         f = _fuente(cli)
         assert isinstance(f, FuenteMetricas)
@@ -533,7 +533,7 @@ def test_sin_token_no_muestra_datos_falsos():
     """fuente='metricool' sin credenciales -> Metricool VACÍA (sin cuentas), no muestra."""
     cfg = Config(fuente="metricool", metricool=MetricoolConfig())  # sin marcas
     fuente = construir_fuente(cfg)
-    assert isinstance(fuente, FuenteMetricol)
+    assert isinstance(fuente, FuenteMetricool)
     assert not isinstance(fuente, FuenteMuestra)
     assert fuente.nombre == "metricool"
     assert fuente.cuentas() == []  # estado vacío honesto, sin inventar cifras
@@ -546,12 +546,12 @@ def test_marca_sin_credenciales_completas_queda_vacia():
         metricool=MetricoolConfig(marcas={"claro_sports": {"blog_id": "1234567"}}),
     )
     fuente = construir_fuente(cfg)
-    assert isinstance(fuente, FuenteMetricol)
+    assert isinstance(fuente, FuenteMetricool)
     assert fuente.cuentas() == []
 
 
-def test_con_credenciales_por_marca_construye_metricol():
-    """Con token + userId + blogId PROPIOS de la marca, devuelve FuenteMetricol."""
+def test_con_credenciales_por_marca_construye_metricool():
+    """Con token + userId + blogId PROPIOS de la marca, devuelve FuenteMetricool."""
     cfg = Config(
         fuente="metricool",
         metricool=MetricoolConfig(
@@ -565,7 +565,7 @@ def test_con_credenciales_por_marca_construye_metricol():
         ),
     )
     fuente = construir_fuente(cfg)
-    assert isinstance(fuente, FuenteMetricol)
+    assert isinstance(fuente, FuenteMetricool)
     assert fuente.nombre == "metricool"
 
 
@@ -652,7 +652,7 @@ def test_fuente_resuelve_credenciales_distintas_por_marca():
         },
     }
     with httpx.Client() as cli:
-        f = FuenteMetricol(marcas=marcas, cliente=cli)
+        f = FuenteMetricool(marcas=marcas, cliente=cli)
         f.resumen("claro_sports", RANGO)
         f.resumen("unotv", RANGO)
 

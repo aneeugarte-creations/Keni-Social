@@ -324,7 +324,7 @@ def _fecha(v) -> date | None:
     return None
 
 
-class FuenteMetricol:
+class FuenteMetricool:
     """Implementa `FuenteMetricas` leyendo de la API REST de Metricool.
 
     Credenciales POR MARCA: en AMX cada marca es una cuenta Metricool distinta,

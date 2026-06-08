@@ -28,18 +28,18 @@ def _escribir_config(monkeypatch, tmp_path, contenido: str):
 def test_default_es_metricool(monkeypatch, tmp_path):
     """La fuente única por defecto es `metricool` (antes era `muestra`).
 
-    Sin credenciales degrada a una `FuenteMetricol` VACÍA (estado honesto, sin
+    Sin credenciales degrada a una `FuenteMetricool` VACÍA (estado honesto, sin
     cuentas), nunca a la fuente de muestra: el producto no muestra datos de demo por
     defecto.
     """
-    from keni_metricas.fuentes.metricol import FuenteMetricol
+    from keni_metricas.fuentes.metricool import FuenteMetricool
 
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("METRICOOL_USER_TOKEN", raising=False)
     monkeypatch.delenv("METRICOOL_USER_ID", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     fuente = construir_fuente(cargar_config())
-    assert isinstance(fuente, FuenteMetricol)
+    assert isinstance(fuente, FuenteMetricool)
     assert fuente.nombre == "metricool"
 
 
@@ -78,13 +78,13 @@ def test_metricool_sin_credenciales_no_muestra_datos_falsos(monkeypatch, tmp_pat
     El producto no debe mostrar datos de demostración: sin credenciales se ve un estado
     vacío honesto (sin cuentas), nunca cifras inventadas.
     """
-    from keni_metricas.fuentes.metricol import FuenteMetricol
+    from keni_metricas.fuentes.metricool import FuenteMetricool
 
     monkeypatch.delenv("METRICOOL_USER_TOKEN", raising=False)
     monkeypatch.delenv("METRICOOL_USER_ID", raising=False)
     _escribir_config(monkeypatch, tmp_path, 'fuente = "metricool"\n')
     fuente = construir_fuente(cargar_config())
-    assert isinstance(fuente, FuenteMetricol)
+    assert isinstance(fuente, FuenteMetricool)
     assert fuente.nombre == "metricool"
     assert not isinstance(fuente, FuenteMuestra)
     assert fuente.cuentas() == []  # sin credenciales: ninguna cuenta, ningún dato
@@ -110,9 +110,9 @@ def test_metricool_credenciales_por_toml(monkeypatch, tmp_path):
     assert cfg.metricool.user_token == "TOK"
     assert cfg.metricool.marcas["claro_sports"]["blog_id"] == "1234567"
     # construir_fuente devuelve el adapter real (no muestra) con credenciales.
-    from keni_metricas.fuentes.metricol import FuenteMetricol
+    from keni_metricas.fuentes.metricool import FuenteMetricool
 
-    assert isinstance(construir_fuente(cfg), FuenteMetricol)
+    assert isinstance(construir_fuente(cfg), FuenteMetricool)
 
 
 def test_metricool_env_pisa_toml(monkeypatch, tmp_path):

@@ -4,7 +4,7 @@ crosstab marca×red×formato y correlación seguidores↔posts.
 Dos frentes:
   - Sobre la fuente de MUESTRA (offline, determinista): valida shapes y lógica clave
     de las cuatro `construir_*` de la fachada `servicio`.
-  - Sobre `FuenteMetricol` con respx (followers timeline mockeado): valida que la
+  - Sobre `FuenteMetricool` con respx (followers timeline mockeado): valida que la
     serie de seguidores REUSA `/v2/analytics/timelines` y que el neto = último −
     primero, y la degradación honesta a vacío cuando no hay followers.
 
@@ -18,7 +18,7 @@ import pytest
 import respx
 
 from keni_metricas import servicio
-from keni_metricas.fuentes.metricol import BASE, FuenteMetricol
+from keni_metricas.fuentes.metricool import BASE, FuenteMetricool
 from keni_metricas.fuentes.muestra import FuenteMuestra
 from keni_metricas.schema import Plataforma
 
@@ -254,7 +254,7 @@ _MARCAS_MC = {
 
 
 @respx.mock
-def test_metricol_serie_seguidores_stock_diario():
+def test_metricool_serie_seguidores_stock_diario():
     """serie_seguidores REUSA la serie de followers (stock diario por red)."""
     def responder(request: httpx.Request) -> httpx.Response:
         metric = request.url.params.get("metric")
@@ -278,7 +278,7 @@ def test_metricol_serie_seguidores_stock_diario():
 
     ruta = respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
     with httpx.Client() as cli:
-        fuente = FuenteMetricol(marcas=_MARCAS_MC, cliente=cli)
+        fuente = FuenteMetricool(marcas=_MARCAS_MC, cliente=cli)
         s = servicio.serie_seguidores_desde_fuente(fuente, RANGO)
 
     assert ruta.called
@@ -294,13 +294,13 @@ def test_metricol_serie_seguidores_stock_diario():
 
 
 @respx.mock
-def test_metricol_serie_seguidores_vacia_sin_followers():
+def test_metricool_serie_seguidores_vacia_sin_followers():
     """Sin serie de followers (red no la expone) -> puntos vacíos, neto 0."""
     respx.get(f"{BASE}/v2/analytics/timelines").mock(
         return_value=httpx.Response(200, json={"data": []})
     )
     with httpx.Client() as cli:
-        fuente = FuenteMetricol(marcas=_MARCAS_MC, cliente=cli)
+        fuente = FuenteMetricool(marcas=_MARCAS_MC, cliente=cli)
         s = servicio.serie_seguidores_desde_fuente(fuente, RANGO)
 
     assert s["puntos"] == []
@@ -309,7 +309,7 @@ def test_metricol_serie_seguidores_vacia_sin_followers():
 
 
 @respx.mock
-def test_metricol_correlacion_usa_serie_y_marca_nota():
+def test_metricool_correlacion_usa_serie_y_marca_nota():
     """La correlación de Metricool arma items desde la serie de followers + posts."""
     def responder(request: httpx.Request) -> httpx.Response:
         metric = request.url.params.get("metric")
@@ -336,7 +336,7 @@ def test_metricol_correlacion_usa_serie_y_marca_nota():
         return_value=httpx.Response(200, json={"data": []})
     )
     with httpx.Client() as cli:
-        fuente = FuenteMetricol(marcas=_MARCAS_MC, cliente=cli)
+        fuente = FuenteMetricool(marcas=_MARCAS_MC, cliente=cli)
         c = servicio.correlacion_seguidores_desde_fuente(fuente, RANGO)
 
     assert c["nota"]

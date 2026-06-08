@@ -1,7 +1,7 @@
 """Adaptador Meta Graph API: Facebook Pages + Instagram (insights).
 
 Ruta directa opcional: la lectura habitual de metricas va via Metricool
-(`fuentes.metricol`). Para la via directa usa `pages_read_engagement`,
+(`fuentes.metricool`). Para la via directa usa `pages_read_engagement`,
 `read_insights` e `instagram_manage_insights`; `disponible()` es False salvo que
 se configure un access token. Ver docs/credenciales.md.
 

@@ -26,7 +26,7 @@ su fecha de publicacion y Metricool lo dispara. Asi:
   necesitamos cola/agendador propio (a diferencia de `cola.ColaPublicacion`, que
   existe para el camino Meta-directo donde IG no agenda por API);
 - reutiliza EXACTAMENTE el mismo token por marca que ya usa la LECTURA de metricas
-  (`fuentes.metricol.FuenteMetricol`): cabecera `X-Mc-Auth` + query `userId`/`blogId`.
+  (`fuentes.metricool.FuenteMetricool`): cabecera `X-Mc-Auth` + query `userId`/`blogId`.
 
 Contrato de la API (swagger oficial https://app.metricool.com/api/swagger.json):
 
@@ -47,7 +47,7 @@ Contrato de la API (swagger oficial https://app.metricool.com/api/swagger.json):
     `providers[].status` ∈ {PUBLISHED, PUBLISHING, PENDING, ERROR, DRAFT}.
 
 SUPUESTOS SIN CONFIRMAR (no hay token real para validar contra la API en vivo;
-mismo criterio que `fuentes.metricol`). Se AISLAN aqui para corregirlos en un solo
+mismo criterio que `fuentes.metricool`). Se AISLAN aqui para corregirlos en un solo
 sitio contra la API real sin tocar el resto:
 - **Media por URL externa.** Asumimos que `media` admite URLs publicas externas con
   `saveExternalMediaFiles=true`. Si Metricool exige subir el binario antes (a su
@@ -83,7 +83,7 @@ ENDPOINT_PROGRAMAR = "/v2/scheduler/posts"
 TIMEZONE_DEF = "America/Mexico_City"
 
 # Plataforma (keni) -> network (Metricool). Metricool usa "twitter" para X.
-# (Mismo mapeo que `fuentes.metricol._RED_METRICOOL`; se duplica a proposito para
+# (Mismo mapeo que `fuentes.metricool._RED_METRICOOL`; se duplica a proposito para
 # NO acoplarse a un nombre privado de un modulo bajo trabajo paralelo.)
 _RED_METRICOOL: dict[Plataforma, str] = {
     Plataforma.facebook: "facebook",

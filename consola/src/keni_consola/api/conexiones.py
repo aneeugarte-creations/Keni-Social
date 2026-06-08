@@ -412,7 +412,7 @@ def _listar_perfiles(user_token: str, user_id: str) -> tuple[bool, str, list[dic
     """Descubre las marcas (blogId) de un user_token via `GET /admin/simpleProfiles`.
 
     Autentica con `X-Mc-Auth: <user_token>` + query `userId=<user_id>` (igual que
-    `FuenteMetricol`). NO persiste nada y NO devuelve el token. El parseo es DEFENSIVO
+    `FuenteMetricool`). NO persiste nada y NO devuelve el token. El parseo es DEFENSIVO
     (varios alias por id/label) porque la forma exacta de cada perfil no esta fijada en
     el swagger. Punto INYECTABLE/mockeable (`_PROBADOR_PERFILES`): los tests lo parchean
     para NUNCA tocar la red. Devuelve `(ok, mensaje, marcas)` donde cada marca es
