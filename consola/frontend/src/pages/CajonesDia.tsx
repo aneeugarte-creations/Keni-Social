@@ -65,6 +65,12 @@ interface DescripcionCajon {
   descripcion: string;
   aceptaArchivo: string;
   placeholderTexto: string;
+  /**
+   * Marca (id canónico) a la que pertenece el cajón: cada buzón es de UNA marca. Portal/SMS,
+   * Corresponsales y Reporteros son de UnoTV; Eventos Claro (la parrilla) es de Claro Sports.
+   * Los cajones visibles se filtran por la marca activa del switch global (en "Todas" se ven todos).
+   */
+  marca: string;
 }
 
 const CAJONES: DescripcionCajon[] = [
@@ -74,6 +80,7 @@ const CAJONES: DescripcionCajon[] = [
     descripcion: "Lista numerada de Portal o SMS (1.- TITULAR ... cuerpo).",
     aceptaArchivo: ".txt,.pdf",
     placeholderTexto: "Pega aquí la lista numerada de notas del portal o SMS...",
+    marca: "unotv",
   },
   {
     id: "corresponsales",
@@ -81,6 +88,7 @@ const CAJONES: DescripcionCajon[] = [
     descripcion: 'El "así vamos": VOSOT ESTADO (REPORTERO) TITULAR - Tengo/Espero material y guión.',
     aceptaArchivo: ".txt,.pdf",
     placeholderTexto: "Pega aquí el resumen de corresponsales...",
+    marca: "unotv",
   },
   {
     id: "reporteros",
@@ -88,6 +96,7 @@ const CAJONES: DescripcionCajon[] = [
     descripcion: "PDF de agenda de coberturas (tabla con REPORTERO, HORA Y LUGAR, ASIGNACIÓN...).",
     aceptaArchivo: ".pdf",
     placeholderTexto: "O pega el texto exportado del PDF...",
+    marca: "unotv",
   },
   {
     id: "eventos_claro",
@@ -95,6 +104,7 @@ const CAJONES: DescripcionCajon[] = [
     descripcion: "Excel o CSV de eventos y programación de TV de Claro Sports.",
     aceptaArchivo: ".xlsx,.xls,.csv",
     placeholderTexto: "O pega el contenido del CSV...",
+    marca: "claro-sports",
   },
 ];
 
@@ -672,6 +682,14 @@ export default function CajonesDia() {
     return m;
   }, [insumosQuery.data]);
 
+  // Cajones visibles según la marca activa del switch global: cada buzón es de UNA marca
+  // (Portal/SMS, Corresponsales, Reporteros → UnoTV; Eventos Claro → Claro Sports). En "Todas"
+  // (`marcaActiva === null`, admin) se ven todos.
+  const cajonesVisibles = React.useMemo(
+    () => (marcaActiva ? CAJONES.filter((c) => c.marca === marcaActiva) : CAJONES),
+    [marcaActiva],
+  );
+
   return (
     <>
       <PageHeader
@@ -755,16 +773,16 @@ export default function CajonesDia() {
       {/* Esqueleto de carga */}
       {insumosQuery.isLoading && (
         <div className="grid gap-4 sm:grid-cols-2">
-          {CAJONES.map((c) => (
+          {cajonesVisibles.map((c) => (
             <Skeleton key={c.id} className="h-64 w-full rounded-lg" />
           ))}
         </div>
       )}
 
-      {/* 4 cajones */}
+      {/* Cajones de la marca activa */}
       {!insumosQuery.isLoading && !insumosQuery.isError && (
         <div className="grid gap-4 sm:grid-cols-2">
-          {CAJONES.map((def) => (
+          {cajonesVisibles.map((def) => (
             <TarjetaCajon
               key={def.id}
               def={def}

@@ -33,6 +33,21 @@ function usuario(): UsuarioSesion {
   };
 }
 
+/**
+ * Admin sin marca de casa → marca activa "Todas" (vista agregada): ve TODOS los cajones de
+ * todas las marcas. Útil para probar el cajón de Claro Sports (Eventos Claro) sin ser editor
+ * de esa marca.
+ */
+function usuarioAdmin(): UsuarioSesion {
+  return {
+    id: "uA",
+    usuario: "admin",
+    rol: "admin",
+    debe_cambiar_password: false,
+    marcas: [],
+  };
+}
+
 function sesionValor(u: UsuarioSesion | null): ValorSesion {
   return {
     usuario: u,
@@ -45,11 +60,11 @@ function sesionValor(u: UsuarioSesion | null): ValorSesion {
   };
 }
 
-function renderConProviders(ui: React.ReactElement) {
+function renderConProviders(ui: React.ReactElement, u: UsuarioSesion = usuario()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <SesionContexto.Provider value={sesionValor(usuario())}>
+      <SesionContexto.Provider value={sesionValor(u)}>
         <MarcaActivaProvider>
           <MemoryRouter>{ui}</MemoryRouter>
         </MarcaActivaProvider>
@@ -238,9 +253,20 @@ function mockApiInsumos(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("CajonesDia", () => {
-  it("renderiza las 4 tarjetas de cajón", async () => {
+  it("un editor de UnoTV solo ve sus cajones (sin el de Claro Sports)", async () => {
     mockApiInsumos();
     renderConProviders(<CajonesDia />);
+
+    expect(await screen.findByText("Portal / SMS")).toBeInTheDocument();
+    expect(screen.getByText("Corresponsales")).toBeInTheDocument();
+    expect(screen.getByText("Reporteros (agenda PDF)")).toBeInTheDocument();
+    // Eventos Claro es de Claro Sports: NO debe verse para un editor de UnoTV.
+    expect(screen.queryByText("Eventos Claro (Excel/CSV)")).not.toBeInTheDocument();
+  });
+
+  it("en 'Todas' (admin) se ven los 4 cajones de todas las marcas", async () => {
+    mockApiInsumos();
+    renderConProviders(<CajonesDia />, usuarioAdmin());
 
     expect(await screen.findByText("Portal / SMS")).toBeInTheDocument();
     expect(screen.getByText("Corresponsales")).toBeInTheDocument();
@@ -357,7 +383,8 @@ describe("CajonesDia", () => {
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_EVENTO as never);
     vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
 
-    renderConProviders(<CajonesDia />);
+    // El cajón Eventos Claro es de Claro Sports; lo ve un admin en "Todas".
+    renderConProviders(<CajonesDia />, usuarioAdmin());
 
     await screen.findByText("Cruz Azul vs América");
     expect(screen.getByRole("button", { name: "Crear evento" })).toBeInTheDocument();
@@ -375,7 +402,8 @@ describe("CajonesDia", () => {
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_EVENTO as never);
     vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
 
-    renderConProviders(<CajonesDia />);
+    // El cajón Eventos Claro es de Claro Sports; lo ve un admin en "Todas".
+    renderConProviders(<CajonesDia />, usuarioAdmin());
 
     await screen.findByText("Cruz Azul vs América");
     fireEvent.click(screen.getByRole("button", { name: "Crear evento" }));
