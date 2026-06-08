@@ -80,6 +80,20 @@ def _esquema_fresco_por_test():
 
 
 @pytest.fixture(autouse=True)
+def _aislar_plantillas_marca(monkeypatch, tmp_path):
+    """Aisla el store de plantillas de marca para que NINGÚN test escriba en la config
+    REAL del desarrollador (`~/.config/keni-social/plantillas_marca`).
+
+    El store cae a `rutas.dir_config()` salvo override `KENI_PLANTILLAS_MARCA_DIR`, que el
+    resto de fixtures no fijaban. Resultado: tests como `test_marca_tiene_plantilla`
+    guardaban un spec en la config real y contaminaban corridas locales posteriores
+    (el spec persistía y el assert "marca SIN plantilla" fallaba). Autouse → cubre todos
+    los tests, usen o no el fixture `entorno`.
+    """
+    monkeypatch.setenv("KENI_PLANTILLAS_MARCA_DIR", str(tmp_path / "plantillas_marca"))
+
+
+@pytest.fixture(autouse=True)
 def _aislar_logging_keni():
     """Aisla el estado del logger del paquete entre tests (contaminacion cruzada de logging).
 
