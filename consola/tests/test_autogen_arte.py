@@ -171,10 +171,13 @@ def test_orden_por_defecto_conserva_entrada():
 
 
 def test_prompt_incluye_titulo_y_descripcion():
+    # La plantilla viene de la Biblioteca (semilla del paquete); el tema se inserta donde
+    # esté el marcador `{{TEMA}}`, que NO debe quedar crudo en la salida.
     prompt = aa.prompt_arte(_item(titulo="Final de copa", descripcion="Juega Mexico"))
     bajo = prompt.lower()
     assert "Final de copa" in prompt
     assert "Juega Mexico" in prompt
+    assert aa._MARCA_TEMA not in prompt  # marcador sustituido por el tema
     # Pide UNA foto cruda, sin marcos/placas/collage ni texto editorial (eso lo compone
     # la consola despues): nada de diseno editorial dentro de la imagen.
     assert "una sola fotografia" in bajo or "una sola foto" in bajo

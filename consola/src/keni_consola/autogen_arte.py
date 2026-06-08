@@ -161,29 +161,52 @@ def topics_sin_arte(
     return elegidos
 
 
+# Plantilla del prompt de auto-arte: vive en la Biblioteca de Texto como prompt EDITABLE
+# (visible en la pestaña «Prompts»), no hardcodeada. El tema (titulo + descripcion) se inserta
+# donde el equipo ponga el marcador `_MARCA_TEMA`. `_FALLBACK` es la red por si la lectura
+# fallara o el cuerpo viniera vacio.
+_PROMPT_ARTE_ID = "prompt/imagen/arte-noticia"
+_MARCA_TEMA = "{{TEMA}}"
+_PROMPT_ARTE_FALLBACK = (
+    "Genera UNA sola fotografia realista para el feed de una marca de television que "
+    "represente esta noticia: {{TEMA}}. Foto cruda, un unico encuadre fotografico, sin "
+    "collage, marcos, placas, titulares, logotipos ni texto incrustado. Devuelve unicamente "
+    "la imagen, no texto."
+)
+
+
+def _plantilla_arte() -> str:
+    """Cuerpo EFECTIVO de la plantilla de arte (store del equipo > semilla del paquete).
+
+    Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera vacia, cae
+    al `_PROMPT_ARTE_FALLBACK` para no quedarnos sin prompt.
+    """
+    try:
+        from . import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ARTE_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar el auto-arte sin prompt por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _PROMPT_ARTE_FALLBACK
+
+
 def prompt_arte(item: dict[str, Any]) -> str:
     """Prompt de imagen a partir del titulo + descripcion del tema (sin inventar datos).
 
-    Pide UNA sola fotografia cruda (sin marcos, placas ni texto editorial: eso lo
-    compone la consola despues), apta para el feed de una marca de TV, que represente
-    la noticia. Evita texto incrustado (que los modelos renderizan mal) y datos falsos.
+    Toma la plantilla EDITABLE de la Biblioteca (`_PROMPT_ARTE_ID`) e inserta el tema donde
+    esté el marcador `_MARCA_TEMA`; si el equipo lo quitó, adjunta el tema al final para no
+    perderlo. Pide UNA foto cruda (sin marcos, placas ni texto editorial: eso lo compone la
+    consola después). "" si el tema no tiene título (nada que ilustrar).
     """
     titulo = (item.get("titulo") or "").strip()
     descripcion = (item.get("descripcion") or "").strip()
     base = f"{titulo}. {descripcion}".strip(". ").strip() if descripcion else titulo
     if not base:
         return ""
-    return (
-        "Genera UNA sola fotografia realista para el feed de redes sociales de un canal "
-        "de television, que represente de forma directa esta noticia: "
-        f"{base}. "
-        "Debe ser una foto cruda y limpia, estilo imagen de archivo periodistica: un "
-        "unico encuadre fotografico, NADA de collage, marcos, plantillas, placas, "
-        "titulares, logotipos ni texto incrustado de ningun tipo (la marca y el titular "
-        "se anaden despues, fuera del modelo). No inventes rostros reconocibles de "
-        "personas reales, ni cifras o datos que no aparezcan en la noticia. "
-        "Devuelve unicamente la imagen, no texto."
-    )
+    plantilla = _plantilla_arte()
+    if _MARCA_TEMA in plantilla:
+        return plantilla.replace(_MARCA_TEMA, base).strip()
+    return f"{plantilla}\n\nTema: {base}".strip()
 
 
 def _marca_legible(item: dict[str, Any]) -> str:
