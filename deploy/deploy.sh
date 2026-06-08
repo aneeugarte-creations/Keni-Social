@@ -25,17 +25,25 @@ export KENI_VERSION
 echo "==> version de build: $KENI_VERSION"
 
 # Render de secretos ANTES de cualquier `compose build/run/up`: los servicios montan
-# ./secrets/<n> (0600) en /run/secrets; si no existieran al instanciar contenedores,
-# Compose fallaria. El codigo los lee via env `*_FILE` (no viajan como env -> no salen
-# en `docker inspect`). El operador sigue editando el .env; este render es derivado.
-echo "==> [1a/5] render de secretos a ./secrets/ (0600)"
+# ./secrets/<n> en /run/secrets; si no existieran al instanciar contenedores, Compose
+# fallaria. El codigo los lee via env `*_FILE` (no viajan como env -> no salen en
+# `docker inspect`). El operador sigue editando el .env; este render es derivado.
+#
+# PERMISOS: el DIRECTORIO es 0700 (solo root/dueño entra) -> en el HOST nadie sin
+# privilegios lee los secretos. Los FICHEROS son 0644 a proposito: Compose (no-swarm)
+# bind-montea el fichero del host TAL CUAL en /run/secrets, y los contenedores de app
+# corren como usuario NO-root (uid 10001); con 0600 root no podrian leerlos (back caeria
+# a SQLite, el worker se quedaria sin credencial de Claude, S3/MCP off). 0644 dentro de un
+# dir 0700 = legible por el usuario del contenedor PERO no por terceros en el host (el dir
+# bloquea el traverse). Es el mismo modelo que el `mode: 0444` por defecto de Docker secrets.
+echo "==> [1a/5] render de secretos a ./secrets/ (dir 0700, ficheros 0644)"
 SECRETS_DIR="$(pwd)/secrets"
 mkdir -p "$SECRETS_DIR"; chmod 700 "$SECRETS_DIR"
 render_secret() {  # $1 = clave en .env ; $2 = nombre del fichero de secreto
   val="$(sed -n "s/^$1=//p" "$ENVFILE" | head -n1)"
   val="${val%\"}"; val="${val#\"}"      # quita comillas envolventes opcionales
   printf '%s' "$val" > "$SECRETS_DIR/$2"
-  chmod 600 "$SECRETS_DIR/$2"
+  chmod 644 "$SECRETS_DIR/$2"           # legible por el uid no-root del contenedor (dir 0700 protege en host)
 }
 render_secret POSTGRES_PASSWORD        postgres_password
 render_secret S3_ACCESS_KEY            s3_access_key
