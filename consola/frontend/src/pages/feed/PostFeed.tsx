@@ -304,11 +304,11 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           <Button
             variant="ghost"
             size="icon"
-            // Minimalista: el OK no es un botón verde relleno (demasiado), solo el icono en verde
-            // cuando aplica (tu OK / ya aprobada / te toca y sin comentarios pendientes).
+            // El icono va en VERDE solo cuando TÚ ya diste tu OK; si aún no lo has dado (p. ej.
+            // 0/2), queda negro/neutro.
             className={
               "h-8 w-8" +
-              (miReaccion === "like" || yaAprobada || (puedeDar && sinResolver === 0)
+              (miReaccion === "like"
                 ? " text-emerald-600 hover:text-emerald-600 dark:text-emerald-400"
                 : "")
             }
@@ -340,9 +340,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               quitar (tu like o tu dislike). Dos dislikes de dos personas rechazan la pieza. */}
           {enRevision && (puedeDar || miReaccion !== "neutral") && (
             <Button
-              variant={miReaccion === "dislike" ? "destructive" : "ghost"}
+              variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, negro/neutro.
+              className={
+                "h-8 w-8" +
+                (miReaccion === "dislike" ? " text-red-600 hover:text-red-600 dark:text-red-400" : "")
+              }
               onClick={onDislike}
               disabled={ocupado}
               title={
