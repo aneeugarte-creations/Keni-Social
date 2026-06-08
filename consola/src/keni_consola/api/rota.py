@@ -163,6 +163,20 @@ def _lunes_param(request: Request) -> str:
     return dominio.lunes_de_semana_iso(crudo) if crudo else ""
 
 
+def _marca_param(request: Request) -> tuple[str | None, Response | None]:
+    """Filtro de marca (`?marca=`) del calendario de turnos (multi-tenant por marca).
+
+    Devuelve `(marca, None)` con el id canonico, o `(None, None)` si no se pidio
+    (vista "Todas" agregada). Si la marca no existe, devuelve `(None, respuesta_400)`
+    para que el handler la propague tal cual. La rota de turnos cruza eventos por marca
+    (`rota_eventos.marca`); el resto (turnos, franjas, equipo) es compartido por el equipo.
+    """
+    marca = (request.query_params.get("marca") or "").strip() or None
+    if marca and not marcas.es_marca(marca):
+        return None, JSONResponse({"error": "Marca no reconocida."}, status_code=400)
+    return marca, None
+
+
 # --------------------------------------------------------------------------- #
 # Serializacion                                                                #
 # --------------------------------------------------------------------------- #
@@ -1503,14 +1517,21 @@ async def cobertura_semana(request: Request) -> Response:
     Devuelve `{lunes, eventos: [{...evento, cobertura: [{miembro_id, miembro_nombre,
     franja_id, franja_nombre, turno_id, override}, ...]}], franjas}`. NO persiste nada;
     cruza turnos x eventos x franjas vivas de la semana. Sin `lunes` valido -> 400.
+
+    `?marca=` acota los eventos a una marca (multi-tenant por `rota_eventos.marca`);
+    ausente/vacio -> "Todas" (todas las marcas agregadas). Los turnos/franjas del equipo
+    son compartidos: la marca solo filtra QUE se cubre, no QUIEN trabaja.
     """
     lunes = _lunes_param(request)
     if not lunes:
         return JSONResponse(
             {"error": "Indica el lunes de la semana (AAAA-MM-DD)."}, status_code=400
         )
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
     inicio, fin = dominio.rango_semana(lunes)
-    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
+    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin, marca=marca)
     # Filtra los `no_cubrir` por defecto (no se cubren por convencion editorial).
     eventos = [e for e in eventos if (e.get("tipo_cobertura") or "transmision") != TIPO_COBERTURA_NO_CUBRIR]
     turnos = repos.listar_turnos_rota(semana=lunes)
@@ -1591,16 +1612,22 @@ async def carga_semana(request: Request) -> Response:
     Devuelve `{miembros: [...]}` con el resumen de carga: eventos cubiertos (DERIVADO de
     turnos × eventos), dias trabajados, si toca sabado, descansos. Ordenado por el mas
     cargado primero. Datos puros del dominio (`dominio.resumen_carga`).
+
+    `?marca=` acota los eventos contados a una marca (consistente con `cobertura_semana`);
+    ausente -> todas las marcas.
     """
     lunes = _lunes_param(request)
     if not lunes:
         return JSONResponse(
             {"error": "Indica el lunes de la semana (AAAA-MM-DD)."}, status_code=400
         )
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
     equipo = _equipo()
     turnos = repos.listar_turnos_rota(semana=lunes)
     inicio, fin = dominio.rango_semana(lunes)
-    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
+    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin, marca=marca)
     franjas_lista, _por_id = _franjas_de_semana(lunes)
     cargas = dominio.resumen_carga(
         equipo,

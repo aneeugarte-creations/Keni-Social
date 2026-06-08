@@ -38,14 +38,17 @@ modulos_backend = [
 ]
 
 rutas_frontend = [
-  # El antiguo hub "Parrilla" se separó en DOS hubs (#cal-feed): "Feed" (Feed de ideación +
-  # Lista de contenido) y "Calendario" (Turnos + Calendario). Las rutas legacy /parrilla/* se
-  # conservan en el scope para que sus redirecciones (ver router.tsx) resuelvan dentro de la app.
+  # El antiguo hub "Parrilla" se separó en "Feed" (Feed de ideación + Lista de contenido) y,
+  # luego, el hub "Calendario" se separó a su vez en DOS páginas planas: "Programación"
+  # (publicaciones) y "Turnos" (rota). Las rutas legacy (/parrilla/* y /operacion/calendario/*)
+  # se conservan en el scope para que sus redirecciones (ver router.tsx) resuelvan dentro de la app.
   "/publicaciones",
   "/operacion/parrilla",
   "/operacion/feed",
   "/operacion/feed/feed",
   "/operacion/feed/lista",
+  "/operacion/programacion",
+  "/operacion/turnos",
   "/operacion/calendario",
   "/operacion/calendario/turnos",
   "/operacion/calendario/calendario",
@@ -63,12 +66,26 @@ grupo = "operacion"
 grupo_orden = 10
 orden = 20
 
-# Calendario: la planificación temporal (turnos de cobertura + calendario de publicaciones).
+# El antiguo hub "Calendario" (1 entrada, 2 pestañas) se separó en DOS páginas planas del
+# sidebar: Programación (calendario de publicaciones, por marca) y Turnos (rota de cobertura
+# del equipo, por marca). Ambas respetan la marca activa del workspace; "Todas" agrega.
+
+# Programación: la rejilla mensual de publicaciones programadas, por marca activa.
 [[nav]]
-ruta = "/operacion/calendario"
-etiqueta = "Calendario"
+ruta = "/operacion/programacion"
+etiqueta = "Programación"
 icono = "CalendarDays"
-descripcion = "Programación de publicaciones y turnos de cobertura del equipo."
+descripcion = "Calendario de publicaciones programadas, por marca. La cadencia por red alimenta esta rejilla."
 grupo = "operacion"
 grupo_orden = 10
 orden = 25
+
+# Turnos: la rota de cobertura del equipo (semana a semana), por marca activa.
+[[nav]]
+ruta = "/operacion/turnos"
+etiqueta = "Turnos"
+icono = "CalendarClock"
+descripcion = "Turnos y cobertura del equipo, semana a semana, por marca. 'Todas' agrega todas las marcas."
+grupo = "operacion"
+grupo_orden = 10
+orden = 28

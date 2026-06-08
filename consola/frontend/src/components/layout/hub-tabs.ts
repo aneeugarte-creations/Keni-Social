@@ -2,19 +2,14 @@ import {
   Activity,
   BarChart3,
   BookText,
-  CalendarClock,
-  CalendarDays,
   GitBranch,
   LayoutGrid,
   ListTodo,
   Megaphone,
   Newspaper,
   Rss,
-  ScanSearch,
-  ScanText,
   Sparkles,
   Target,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,30 +57,17 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
 ];
 
-export const TABS_REVISION: ItemTabHub[] = [
-  { ruta: "/operacion/revision/editorial", etiqueta: "Editorial", icono: ScanText },
-  { ruta: "/operacion/revision/verificacion", etiqueta: "Verificación", icono: ScanSearch },
-  // Carril Rápido: solo Claro Sports (y vista "Todas"). El gating se aplica en
-  // `gating-marca.ts` (oculta del nav para otras marcas) y en el GuardTurnos equivalente.
-  { ruta: "/operacion/revision/breaking", etiqueta: "Breaking", icono: Zap },
-];
-
 export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
   { ruta: "/datos/analiticas/comercial", etiqueta: "Comercial", icono: Megaphone },
 ];
 
-// El antiguo hub "Parrilla" se separó en DOS hubs (#cal-feed): "Feed" agrupa el feed de
-// ideación (formato red social) y la Lista de contenido; "Calendario" agrupa los Turnos de
-// cobertura y el Calendario de publicaciones. La marca la fija el switch global de la topbar.
+// El antiguo hub "Parrilla" se separó en "Feed" (feed de ideación + Lista de contenido).
+// El hub "Calendario" se separó a su vez en DOS páginas planas del sidebar —Programación
+// y Turnos— sin sub-pestañas (no figuran aquí). La marca la fija el switch global de la topbar.
 export const TABS_FEED: ItemTabHub[] = [
   { ruta: "/operacion/feed/feed", etiqueta: "Feed", icono: LayoutGrid },
   { ruta: "/operacion/feed/lista", etiqueta: "Lista", icono: ListTodo },
-];
-
-export const TABS_CALENDARIO: ItemTabHub[] = [
-  { ruta: "/operacion/calendario/calendario", etiqueta: "Programación", icono: CalendarDays },
-  { ruta: "/operacion/calendario/turnos", etiqueta: "Turnos", icono: CalendarClock },
 ];
 
 // El bloque CONTENIDO ya no agrupa un hub "Estudio" con pestañas: Imagen, Video y Texto
@@ -121,12 +103,10 @@ export const TABS_ACTIVIDAD: ItemTabHub[] = [
  */
 export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/investigacion": TABS_INVESTIGACION,
-  "/operacion/revision": TABS_REVISION,
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
-  "/operacion/calendario": TABS_CALENDARIO,
-  // Bajo /contenido solo Texto es un hub con pestañas; Imagen y Video son páginas planas
-  // (sin entrada aquí), por eso /contenido ya no figura en el mapa.
+  // Bajo /operacion, Programación y Turnos son páginas planas (sin pestañas), no hubs;
+  // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido.
   "/contenido/texto": TABS_TEXTO,
   "/datos/actividad": TABS_ACTIVIDAD,
 };
@@ -141,7 +121,7 @@ export function subPestanasDe(ruta: string): ItemTabHub[] | undefined {
 
 /**
  * Sub-pestañas del hub al que pertenece `pathname` (la sección de cabecera
- * `/investigacion`, `/revision`, …), o `undefined` si la ruta no cae en un hub.
+ * `/datos/investigacion`, `/datos/analiticas`, …), o `undefined` si la ruta no cae en un hub.
  * A diferencia de `subPestanasDe` (que exige la ruta-padre EXACTA), esto matchea
  * también las hojas del hub (`/investigacion/radar` → pestañas de Investigación),
  * para que la barra de pestañas in-page se pinte estando en cualquier sub-ruta.

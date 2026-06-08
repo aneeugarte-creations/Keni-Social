@@ -881,6 +881,30 @@ def test_cobertura_semana_derivada(cliente):
     assert cubrir_madru["cobertura"] == []
 
 
+def test_cobertura_semana_filtra_por_marca(cliente):
+    """`GET /api/rota/cobertura?marca=` acota los eventos a esa marca; sin param, todas."""
+    _crear_equipo(1)
+    ev_cs = _crear_evento(cliente, titulo="Final CS", fecha=SAB1, marca="claro-sports")
+    ev_uv = _crear_evento(cliente, titulo="Nota UV", fecha=SAB1, marca="unotv")
+
+    # Sin filtro: aparecen ambos (vista "Todas" agregada).
+    todos = cliente.get(f"/api/rota/cobertura?lunes={LUNES1}").json()["eventos"]
+    ids_todos = {e["id"] for e in todos}
+    assert {ev_cs["id"], ev_uv["id"]} <= ids_todos
+
+    # Filtrar por claro-sports: solo el de esa marca.
+    solo_cs = cliente.get(f"/api/rota/cobertura?lunes={LUNES1}&marca=claro-sports").json()["eventos"]
+    ids_cs = {e["id"] for e in solo_cs}
+    assert ev_cs["id"] in ids_cs
+    assert ev_uv["id"] not in ids_cs
+
+
+def test_cobertura_semana_marca_invalida_400(cliente):
+    """`GET /api/rota/cobertura?marca=` con valor desconocido responde 400."""
+    r = cliente.get(f"/api/rota/cobertura?lunes={LUNES1}&marca=marca-inexistente-xyz")
+    assert r.status_code == 400
+
+
 def test_cobertura_evento_uno_solo(cliente):
     equipo = _crear_equipo(1)
     ev = _crear_evento(cliente, fecha=SAB1, hora="16:00")

@@ -6,17 +6,18 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { cn } from "@/lib/utils";
 
 /**
- * Barra de pestañas in-page de un hub. En la nueva navegación por flujo, los hubs
- * (Investigación, Revisión, Analíticas, Parrilla) son UNA sola entrada en el
+ * Barra de pestañas in-page de un hub. En la navegación por flujo, los hubs
+ * (Investigación, Analíticas, Feed, Texto, Actividad IA) son UNA sola entrada en el
  * sidebar —para calmar la barra y no listar herramientas que se usan dentro de un
  * flujo, no sueltas—; su sub-navegación vive aquí, como pestañas horizontales
  * sobre el contenido. Se pinta sola cuando la ruta actual cae en un hub con 2+
- * pestañas; fuera de un hub (o en un hub de una sola hoja, p. ej. Activos) no
+ * pestañas; fuera de un hub (o en una página plana, p. ej. Programación o Turnos) no
  * renderiza nada. Vive en el AppShell, encima del `<Outlet/>`.
  *
- * Gating por marca (multitenant): pestañas restringidas a una marca (p. ej. Turnos, solo
- * Claro Sports) se ocultan cuando la marca activa es otra. Si tras filtrar queda una sola
- * pestaña, la barra no se pinta (no hay nada que conmutar).
+ * Gating por marca (multitenant): el mecanismo sigue disponible —pestañas restringidas a
+ * una marca se ocultarían cuando la marca activa es otra (ver `gating-marca.ts`)— pero hoy
+ * ninguna pestaña está restringida. Si tras filtrar queda una sola pestaña, la barra no se
+ * pinta (no hay nada que conmutar).
  */
 export function SubnavHub() {
   const { pathname } = useLocation();

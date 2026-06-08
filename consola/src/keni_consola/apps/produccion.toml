@@ -71,9 +71,6 @@ rutas_frontend = [
   "/datos/investigacion/fuentes",
   "/datos/investigacion/cajones",
   "/datos/investigacion/termometro",
-  "/operacion/revision",
-  "/operacion/revision/editorial",
-  "/operacion/revision/verificacion",
   "/datos/actividad",
   "/datos/actividad/pipelines",
 ]
@@ -125,15 +122,6 @@ descripcion = "El loop diario de la marca: el Plan del día (la lista de conteni
 grupo = "datos"
 grupo_orden = 30
 orden = 10
-
-[[nav]]
-ruta = "/operacion/revision"
-etiqueta = "Revisión"
-icono = "ShieldCheck"
-descripcion = "QA editorial y verificación de imágenes/videos antes de publicar. Pestañas Editorial / Verificación."
-grupo = "operacion"
-grupo_orden = 10
-orden = 30
 
 [[nav]]
 ruta = "/datos/actividad"

@@ -31,22 +31,21 @@ function renderSubnav(ruta: string, marcaActiva: string | null) {
   );
 }
 
-describe("SubnavHub · gating de Turnos por marca", () => {
-  it("Claro Sports ve Programación y Turnos", () => {
-    renderSubnav("/operacion/calendario/calendario", "claro-sports");
-    expect(screen.getByRole("link", { name: /programación/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /turnos/i })).toBeInTheDocument();
+describe("SubnavHub", () => {
+  it("pinta las pestañas de un hub (Investigación: Noticias / Contenidos / Fuentes)", () => {
+    renderSubnav("/datos/investigacion", null);
+    expect(screen.getByRole("link", { name: /noticias/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /contenidos/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /fuentes/i })).toBeInTheDocument();
   });
 
-  it("otra marca (UnoTV) NO ve Turnos; al quedar una sola pestaña, no se pinta la barra", () => {
-    renderSubnav("/operacion/calendario/calendario", "unotv");
-    expect(screen.queryByRole("link", { name: /turnos/i })).not.toBeInTheDocument();
-    // Programación es la única pestaña que queda → SubnavHub no renderiza la barra.
-    expect(screen.queryByRole("link", { name: /programación/i })).not.toBeInTheDocument();
+  it("no pinta nada en una página plana (Turnos ya no es un hub con pestañas)", () => {
+    const { container } = renderSubnav("/operacion/turnos", null);
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("'Todas' (admin, marcaActiva null) ve Turnos", () => {
-    renderSubnav("/operacion/calendario/calendario", null);
-    expect(screen.getByRole("link", { name: /turnos/i })).toBeInTheDocument();
+  it("no pinta nada en Programación (página plana, sin sub-pestañas)", () => {
+    const { container } = renderSubnav("/operacion/programacion", "unotv");
+    expect(container).toBeEmptyDOMElement();
   });
 });

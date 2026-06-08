@@ -34,7 +34,7 @@ export default function ListaContenido() {
   // Encolar/reciclar sin cadencia ni franjas devuelve 400: llevamos al usuario a configurar
   // la cadencia (ahora en el calendario de Programación), que es el camino vigente.
   const irAConfigurarCadencia = () =>
-    navigate("/operacion/calendario/calendario?cadencia=1");
+    navigate("/operacion/programacion?cadencia=1");
 
   return (
     <>

@@ -20,8 +20,10 @@ from keni_consola.apps import registro
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
     # "Operación": los checkpoints que el equipo toca cada día — el Feed (red social interna
-    # + lista de contenido), el Calendario (turnos + publicaciones) y la cola de Revisión.
-    ["Feed", "Calendario", "Revisión"],
+    # + lista de contenido), la Programación (calendario de publicaciones, por marca) y los
+    # Turnos (rota de cobertura del equipo, por marca). La página "Revisión" se retiró por
+    # obsoleta (la aprobación vive en línea en el Feed).
+    ["Feed", "Programación", "Turnos"],
     # "Contenido": TRES páginas planas por tipo de contenido (sin hub con pestañas) —
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Biblioteca: prompts + línea editorial + plantillas).
@@ -70,11 +72,11 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
             assert {"ruta", "etiqueta", "icono", "descripcion"} <= set(item)
 
     # La ruta primaria (primer item) de cada app: `nav` viene ordenada por bloque de
-    # flujo (grupo_orden, orden), así que la 1ª es la entrada de Producción que cae más
-    # arriba en el sidebar — Revisión (bloque "operacion"), no Estudio (bloque "contenido").
-    assert porid["produccion"]["nav"][0]["ruta"] == "/operacion/revision"
+    # flujo (grupo_orden, orden). Tras retirar Revisión, la 1ª entrada de Producción cae en
+    # el bloque "contenido" (Imagen), ya que la app dejó de aportar entradas al bloque "operacion".
+    assert porid["produccion"]["nav"][0]["ruta"] == "/contenido/imagen"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    # La app "operacion" aporta dos entradas (Feed, Calendario); la 1ª por orden es Feed.
+    # La app "operacion" aporta TRES entradas (Feed, Programación, Turnos); la 1ª por orden es Feed.
     assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
 
 
@@ -92,10 +94,10 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/contenido/imagen"] == "Image"
     assert iconos["/contenido/video"] == "Clapperboard"
     assert iconos["/datos/investigacion"] == "Search"
-    assert iconos["/operacion/revision"] == "ShieldCheck"
     assert iconos["/datos/analiticas"] == "BarChart3"
     assert iconos["/operacion/feed"] == "LayoutGrid"
-    assert iconos["/operacion/calendario"] == "CalendarDays"
+    assert iconos["/operacion/programacion"] == "CalendarDays"
+    assert iconos["/operacion/turnos"] == "CalendarClock"
     assert iconos["/datos/actividad"] == "Activity"
 
 

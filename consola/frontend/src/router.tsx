@@ -3,7 +3,6 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
-import { GuardTurnos } from "@/components/layout/GuardTurnos";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
 import Error404 from "@/pages/Error404";
 import { Loader2 } from "lucide-react";
@@ -35,11 +34,6 @@ const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
-const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
-const Verificacion = lazy(() => import("@/pages/Verificacion"));
-// Carril Rápido de Breaking: solo para Claro Sports (y vista "Todas").
-const CarrilRapido = lazy(() => import("@/pages/CarrilRapido"));
-
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
 
@@ -47,7 +41,7 @@ const Rota = lazy(() => import("@/pages/Rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 // Lista de contenido (pestaña "Lista" del hub Feed) y calendario de publicaciones
-// (pestaña "Calendario" del hub Calendario): las dos mitades del antiguo tablero (#cal-feed).
+// (página plana "Programación", `/operacion/programacion`): las dos mitades del antiguo tablero.
 const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
 const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
@@ -72,10 +66,11 @@ const Sistema = lazy(() => import("@/pages/Sistema"));
  * cuelgan de el. La navegación se agrupa por MOMENTO DEL FLUJO y ese bloque vive
  * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
  * (herramientas de creación) y `/datos/*` (entradas y señales). La home es el
- * feed del equipo (`/operacion/feed`). Cada hub (Feed, Calendario,
- * Revisión, Investigación, Analíticas, Biblioteca) es una ruta-layout sin
- * componente: react-router renderiza `<Outlet/>` y la subnav entre sub-rutas vive
- * in-page (SubnavHub, via HUB_TABS).
+ * feed del equipo (`/operacion/feed`). Los hubs que quedan (Feed, Investigación,
+ * Analíticas, Biblioteca, Actividad IA) son una ruta-layout sin componente:
+ * react-router renderiza `<Outlet/>` y la subnav entre sub-rutas vive in-page
+ * (SubnavHub, via HUB_TABS). Programación y Turnos (antes pestañas del hub
+ * Calendario) son ya páginas planas; Revisión se retiró por obsoleta.
  *
  * Las rutas planas anteriores (`/estudio`, `/investigacion/...`, `/parrilla/...`, etc.)
  * se mantienen como redirecciones a su nuevo path con prefijo de bloque.
@@ -126,27 +121,25 @@ export const router = createBrowserRouter([
               { path: "lista", element: <ListaContenido /> },
             ],
           },
-          // Hub Calendario: Programación (calendario de publicaciones, para TODAS las marcas)
-          // + Turnos de cobertura (rota). La 1ª pestaña es Programación, así que el índice del
-          // hub aterriza ahí. TURNOS es solo de Claro Sports: su guard redirige a Programación
-          // para otra marca (el resto del hub es válido para todas).
+          // El hub "Calendario" se separó en DOS páginas planas del sidebar (sin pestañas):
+          // Programación (calendario de publicaciones, por marca activa) y Turnos (rota de
+          // cobertura del equipo, por marca activa). Ambas respetan el switch global de marca;
+          // "Todas" agrega. Las rutas legacy /operacion/calendario/* redirigen abajo.
+          { path: "programacion", element: <CalendarioContenido /> },
+          { path: "turnos", element: <Rota /> },
+          // Compat: el antiguo hub `/operacion/calendario/*` (Programación/Turnos como pestañas)
+          // se separó en las dos páginas planas de arriba. Redirigimos sus sub-rutas.
           {
             path: "calendario",
             children: [
-              { index: true, element: <Navigate to="calendario" replace /> },
-              { path: "calendario", element: <CalendarioContenido /> },
-              {
-                path: "turnos",
-                element: (
-                  <GuardTurnos>
-                    <Rota />
-                  </GuardTurnos>
-                ),
-              },
+              { index: true, element: <Navigate to="/operacion/programacion" replace /> },
+              { path: "calendario", element: <Navigate to="/operacion/programacion" replace /> },
+              { path: "turnos", element: <Navigate to="/operacion/turnos" replace /> },
+              { path: "*", element: <Navigate to="/operacion/programacion" replace /> },
             ],
           },
           // Compat (#cal-feed): el antiguo hub `/operacion/parrilla/*` se separó en
-          // `/operacion/feed/*` y `/operacion/calendario/*`. Redirigimos sus sub-rutas.
+          // `/operacion/feed/*`, `/operacion/programacion` y `/operacion/turnos`.
           {
             path: "parrilla",
             children: [
@@ -154,22 +147,15 @@ export const router = createBrowserRouter([
               { path: "pendientes", element: <Navigate to="/operacion/feed/lista" replace /> },
               { path: "piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
               { path: "feed", element: <Navigate to="/operacion/feed/feed" replace /> },
-              { path: "turnos", element: <Navigate to="/operacion/calendario/turnos" replace /> },
-              { path: "calendario", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+              { path: "turnos", element: <Navigate to="/operacion/turnos" replace /> },
+              { path: "calendario", element: <Navigate to="/operacion/turnos" replace /> },
               { path: "*", element: <Navigate to="/operacion/feed" replace /> },
             ],
           },
-          // Hub Revisión: cola de aprobación (editorial) + verificación de media
-          // + Carril Rápido de Breaking (Claro Sports: temas con señal acelerando).
-          {
-            path: "revision",
-            children: [
-              { index: true, element: <Navigate to="editorial" replace /> },
-              { path: "editorial", element: <RevisionEditorial /> },
-              { path: "verificacion", element: <Verificacion /> },
-              { path: "breaking", element: <CarrilRapido /> },
-            ],
-          },
+          // La página "Revisión" (QA editorial + verificación + Carril Rápido) se retiró por
+          // obsoleta: la aprobación vive ahora en línea en el Feed. Sus rutas redirigen al Feed.
+          { path: "revision", element: <Navigate to="/operacion/feed" replace /> },
+          { path: "revision/*", element: <Navigate to="/operacion/feed" replace /> },
         ],
       },
 
@@ -298,12 +284,13 @@ export const router = createBrowserRouter([
       { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
       { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
-      { path: "revision/*", element: <RedirigirPrefijo a="/operacion/revision" /> },
+      // La página "Revisión" se retiró (obsoleta): sus rutas planas legacy caen en el Feed.
+      { path: "revision/*", element: <Navigate to="/operacion/feed" replace /> },
       { path: "analiticas/*", element: <RedirigirPrefijo a="/datos/analiticas" /> },
-      // El hub "Parrilla" se separó en "Feed" y "Calendario" (#cal-feed). Sus rutas
-      // antiguas se redirigen a la pestaña equivalente del nuevo hub.
-      { path: "parrilla/calendario", element: <Navigate to="/operacion/calendario/turnos" replace /> },
-      { path: "parrilla/turnos", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+      // El hub "Parrilla" se separó en "Feed" y "Calendario"; "Calendario" a su vez en
+      // "Programación" y "Turnos" (páginas planas). Sus rutas antiguas redirigen a la nueva.
+      { path: "parrilla/calendario", element: <Navigate to="/operacion/turnos" replace /> },
+      { path: "parrilla/turnos", element: <Navigate to="/operacion/turnos" replace /> },
       { path: "parrilla/feed", element: <Navigate to="/operacion/feed/feed" replace /> },
       { path: "parrilla/pendientes", element: <Navigate to="/operacion/feed/lista" replace /> },
       { path: "parrilla/piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
@@ -316,12 +303,13 @@ export const router = createBrowserRouter([
       { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
       { path: "termometro", element: <Navigate to="/datos/investigacion/termometro" replace /> },
       { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
-      { path: "revision-editorial", element: <Navigate to="/operacion/revision/editorial" replace /> },
-      { path: "verificacion", element: <Navigate to="/operacion/revision/verificacion" replace /> },
+      // "Revisión" se retiró (obsoleta); estas hojas planas legacy caen en el Feed.
+      { path: "revision-editorial", element: <Navigate to="/operacion/feed" replace /> },
+      { path: "verificacion", element: <Navigate to="/operacion/feed" replace /> },
       { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },
       { path: "comercial", element: <Navigate to="/datos/analiticas/comercial" replace /> },
       { path: "tareas", element: <Navigate to="/operacion/feed/lista" replace /> },
-      { path: "rota", element: <Navigate to="/operacion/calendario/turnos" replace /> },
+      { path: "rota", element: <Navigate to="/operacion/turnos" replace /> },
       // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
       { path: "publicaciones", element: <Navigate to="/operacion/feed/lista" replace /> },
       // El hub Agentes se retiró: su Actividad IA vive ahora en /datos/actividad.

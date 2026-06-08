@@ -73,6 +73,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
@@ -114,22 +115,21 @@ const CABECERA = {
   descripcion: "Turnos y cobertura, semana a semana. (Los eventos a cubrir viven en Fuentes › Eventos.)",
 };
 
-// Marca a la que pertenece esta rota.
-// Hoy la rota es solo de ClaroSports. Multi-marca pendiente (refactor de `rota_eventos`
-// para segregar por marca). De momento, filtramos en el front a los miembros que tienen
-// `claro-sports` en sus marcas; el banner avisa explícitamente del alcance.
-const MARCA_ROTA = "claro-sports" as const;
-const ETIQUETA_MARCA_ROTA = "ClaroSports";
-
 /**
  * Filtra el equipo devuelto por `/api/rota/equipo` a los miembros que cubren la marca
- * de esta rota. Si la respuesta NO trae `marcas` (backend antiguo), no se filtra
- * (degradación segura: vuelve al comportamiento anterior, todos los `cobertura=True`).
+ * activa del workspace (el switch global de la barra superior). La rota de turnos es
+ * multi-marca: cada marca ve sus eventos (`rota_eventos.marca`) y a los miembros que la
+ * cubren; "Todas" (`marcaActiva === null`, admin) agrega todo el equipo. Si la respuesta
+ * NO trae `marcas` (backend antiguo), no se filtra (degradación segura).
  */
-function filtrarEquipoPorMarca(equipo: MiembroRota[]): MiembroRota[] {
+function filtrarEquipoPorMarca(
+  equipo: MiembroRota[],
+  marcaActiva: string | null,
+): MiembroRota[] {
+  if (marcaActiva === null) return equipo; // "Todas": agregado, sin filtrar por marca.
   const algunoTraeMarcas = equipo.some((m) => Array.isArray(m.marcas));
   if (!algunoTraeMarcas) return equipo;
-  return equipo.filter((m) => (m.marcas ?? []).includes(MARCA_ROTA));
+  return equipo.filter((m) => (m.marcas ?? []).includes(marcaActiva));
 }
 
 // Etiquetas legibles de cada franja del turno de trabajo.
@@ -207,6 +207,7 @@ function formatearFechaCorta(s: string): string {
 
 export default function Rota() {
   const { usuario } = useSesion();
+  const { nombreActiva } = useMarcaActiva();
   const esAdmin = usuario?.rol === "admin";
   // Por defecto: la próxima semana (la que más le importa al equipo, B4).
   const [lunes, setLunes] = React.useState(() => lunesSiguiente(lunesDeSemana(new Date()), 1));
@@ -220,16 +221,22 @@ export default function Rota() {
       <PageHeader
         {...CABECERA}
         acciones={
-          // Hoy la rota es solo de ClaroSports. Multi-marca pendiente. El badge
-          // se redujo (texto compacto, sin "Marca:" prefijo) para no comer la
-          // fila de acciones del calendario; el tooltip da el contexto completo.
-          <Tooltip label={`Esta rota cubre solo ${ETIQUETA_MARCA_ROTA}. Multi-marca pendiente.`}>
+          // La rota es por marca: el calendario muestra los eventos de la marca activa
+          // del workspace (switch global de la topbar). El badge recuerda el alcance;
+          // "Todas las marcas" (admin) agrega todos los eventos.
+          <Tooltip
+            label={
+              nombreActiva
+                ? `Esta rota muestra los turnos y eventos de ${nombreActiva}.`
+                : "Vista agregada: turnos y eventos de todas las marcas."
+            }
+          >
             <Badge
               variant="outline"
               className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
               data-testid="banner-marca-rota"
             >
-              {ETIQUETA_MARCA_ROTA}
+              {nombreActiva ?? "Todas las marcas"}
             </Badge>
           </Tooltip>
         }
@@ -686,13 +693,18 @@ function Calendario({
   esAdmin: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
   const claveTurnos = ["rota", "turnos", lunes] as const;
   // El rango (lun→dom) de la semana en vista para acotar las consultas.
   const desde = lunes;
   const hasta = lunesSiguiente(lunes, 1); // exclusivo
+  // La cobertura se acota a la marca activa (multi-tenant por `rota_eventos.marca`); la
+  // marca entra en la queryKey para refrescar al cambiar de workspace. `null` ("Todas",
+  // admin) = sin filtro -> `marca` ausente en la query.
   const coberturaQ = useQuery({
-    queryKey: ["rota", "cobertura", lunes] as const,
-    queryFn: ({ signal }) => api.cobertura({ lunes }, signal),
+    queryKey: ["rota", "cobertura", lunes, marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.cobertura({ lunes, marca: marcaActiva ?? undefined }, signal),
   });
   const turnosQ = useQuery({
     queryKey: claveTurnos,
@@ -722,9 +734,9 @@ function Calendario({
 
   // `equipo` para la edición avanzada del chip (DialogEditarTurno admite reasignar a
   // cualquier miembro de la rota), y `cms` para el dropdown "+ Añadir persona" (sólo
-  // CMs activos de ClaroSports). Mismo desglose que la rejilla Turnos anterior.
-  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
-  const cms = cmsClaroSports(equipoQ.data?.equipo ?? []);
+  // CMs activos de la marca activa). Mismo desglose que la rejilla Turnos anterior.
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? [], marcaActiva);
+  const cms = cmsDeMarca(equipoQ.data?.equipo ?? [], marcaActiva);
   // Candidatos a coordinador (ola "coord"): usuarios con `puede_coordinar=true`. Se
   // sacan del equipo COMPLETO (no solo cobertura) porque hoy son Elias (cubre), Ale
   // y Mariana (NO cubren). El admin gestiona el flag desde /usuarios.
@@ -1922,10 +1934,10 @@ function DialogEditarEvento({
 // los chips de persona con menú.
 
 /**
- * Restringe el equipo a los community managers cubriendo ClaroSports activos.
+ * Restringe el equipo a los community managers de la marca activa que cubren hoy.
  *
  * Aplica los tres filtros pedidos por Bernardo:
- *  - `marcas.includes("claro-sports")` (vertical correcta).
+ *  - `marcas.includes(marcaActiva)` (vertical correcta; "Todas"/`null` no filtra).
  *  - `cobertura === true` (la persona está disponible para cubrir hoy).
  *  - `cargo === "community_manager"` (los coordinadores quedan fuera; Elías
  *    coordina pero no se asigna a una franja).
@@ -1934,8 +1946,10 @@ function DialogEditarEvento({
  * seed de cargos del organigrama AMX aún no se ha aplicado a la BD), degrada al
  * filtro por marca+cobertura para no romper la rejilla.
  */
-function cmsClaroSports(equipo: MiembroRota[]): MiembroRota[] {
-  const porMarca = filtrarEquipoPorMarca(equipo).filter((m) => m.cobertura !== false);
+function cmsDeMarca(equipo: MiembroRota[], marcaActiva: string | null): MiembroRota[] {
+  const porMarca = filtrarEquipoPorMarca(equipo, marcaActiva).filter(
+    (m) => m.cobertura !== false,
+  );
   const estrictos = porMarca.filter((m) => m.cargo === "community_manager");
   if (estrictos.length > 0) return estrictos;
   return porMarca;
@@ -2281,9 +2295,11 @@ function DialogEditarTurno({
  * así que la query arranca al abrir.
  */
 function DialogCargaEquipo({ lunes, onCerrar }: { lunes: string; onCerrar: () => void }) {
+  const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
-    queryKey: ["rota", "carga", lunes],
-    queryFn: ({ signal }) => api.cargaRota({ lunes }, signal),
+    queryKey: ["rota", "carga", lunes, marcaActiva],
+    queryFn: ({ signal }) =>
+      api.cargaRota({ lunes, marca: marcaActiva ?? undefined }, signal),
     enabled: !!lunes,
   });
   const miembros = q.data?.miembros ?? [];
@@ -3269,6 +3285,7 @@ const formatearMomentoCorto = (s: string): string => formatearFechaHoraCorta(s);
  */
 function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
   const { usuario } = useSesion();
+  const { marcaActiva } = useMarcaActiva();
   const queryClient = useQueryClient();
 
   // Filtros locales (sin URL, solo estado): tipo y estado.
@@ -3293,7 +3310,7 @@ function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
-  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? [], marcaActiva);
 
   const invalidarSwaps = () =>
     void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });

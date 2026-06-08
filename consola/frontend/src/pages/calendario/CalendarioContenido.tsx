@@ -19,8 +19,10 @@ const CABECERA = {
 };
 
 /**
- * Pestaña "Programación" del hub Calendario: la rejilla mensual de publicaciones programadas
- * (`GestionPublicaciones` en modo calendario). Desde la cabecera se gestiona la CADENCIA por
+ * Página "Programación" (`/operacion/programacion`): la rejilla mensual de publicaciones
+ * programadas (`GestionPublicaciones` en modo calendario), por marca activa del workspace.
+ * Antes era la pestaña "Programación" del hub Calendario; ahora es una página plana del
+ * sidebar (su hermana es "Turnos"). Desde la cabecera se gestiona la CADENCIA por
  * red (cada cuántos minutos puede salir un post, el reparto que alimenta este calendario) y se
  * importa un calendario externo. Un enlace `?cadencia=1` abre la cadencia directamente (lo usa
  * el aviso "sin cadencia" de la lista de contenido).

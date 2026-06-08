@@ -99,8 +99,10 @@ _URL_RESULTADO_POR_TIPO = {
     "copy": "/operacion/feed/lista",
     "rss": "/operacion/feed/lista",
     "imagen": "/contenido/estudio",
-    "verificacion": "/operacion/revision/verificacion",
-    "qa-editorial": "/operacion/revision/editorial",
+    # La página Revisión (QA editorial + verificación) se retiró: la aprobación vive en línea
+    # en el Feed, así que los resultados de QA/verificación enlazan ahí.
+    "verificacion": "/operacion/feed",
+    "qa-editorial": "/operacion/feed",
     # Nuevos tipos asíncronos (Ola 6+ y calendario):
     "insumos": "/datos/investigacion/cajones",
     "investigacion": "/datos/investigacion/agentes",

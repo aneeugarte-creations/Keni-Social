@@ -136,8 +136,10 @@ export const apiRota = {
     descargar(`/rota/export.${formato}${query(params)}`),
 
   // --- Cobertura DERIVADA (no persistida): eventos × turnos ---
-  cobertura: (params: { lunes: string }, signal?: AbortSignal) =>
-    peticion<RespuestaCoberturaSemana>(`/rota/cobertura${query(params)}`, { signal }),
+  cobertura: (
+    params: { lunes: string; marca?: string },
+    signal?: AbortSignal,
+  ) => peticion<RespuestaCoberturaSemana>(`/rota/cobertura${query(params)}`, { signal }),
   coberturaEvento: (eventoId: string, signal?: AbortSignal) =>
     peticion<RespuestaCoberturaEvento>(
       `/rota/cobertura/evento/${encodeURIComponent(eventoId)}`,
@@ -201,7 +203,7 @@ export const apiRota = {
   // --- Copia de semana + panel de carga ---
   copiarSemana: (cuerpo: CuerpoCopiarSemana) =>
     peticion<RespuestaCopiarSemana>("/rota/copiar-semana", { metodo: "POST", json: cuerpo }),
-  cargaRota: (params: { lunes: string }, signal?: AbortSignal) =>
+  cargaRota: (params: { lunes: string; marca?: string }, signal?: AbortSignal) =>
     peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
 
   // --- Configuración editorial de franjas (#185) ---

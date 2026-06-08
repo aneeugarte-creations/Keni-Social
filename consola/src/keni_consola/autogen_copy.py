@@ -9,7 +9,7 @@ llegue por la manana y tenga BORRADORES listos para revisar, no temas en crudo. 
 (espejo de `radar_auto`) barre el tablero cada N horas y, para cada tema alimentado por una
 fuente que AUN no tiene copy y SI tiene marca, ENCOLA una generacion de copy por el MISMO
 camino que el boton manual del asistente (el lanzador NEUTRO `dominio.generar.lanzar_copy`).
-El borrador resultante cae en la cola de revision (`/revision/editorial`) como cualquier otro.
+El borrador resultante cae en el Feed (aprobación en línea) como cualquier otro.
 
 SEGURO POR DISENO (CONSERVADOR)
 ===============================

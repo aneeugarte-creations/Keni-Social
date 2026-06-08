@@ -26,12 +26,11 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/contenido/imagen", "/datos/investigacion", "/operacion/revision", "/datos/actividad"],
+      rutas_frontend: ["/contenido/imagen", "/datos/investigacion", "/datos/actividad"],
       nav: [
         { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
         { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
         { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
-        { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 30 },
         { ruta: "/datos/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
       ],
     },
@@ -52,23 +51,25 @@ const CATALOGO = {
       icono: "Send",
       descripcion: "Rota, parrilla y publicación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/operacion/feed", "/operacion/calendario"],
+      rutas_frontend: ["/operacion/feed", "/operacion/programacion", "/operacion/turnos"],
       nav: [
         { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
-        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarDays", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
+        { ruta: "/operacion/programacion", etiqueta: "Programación", icono: "CalendarDays", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
+        { ruta: "/operacion/turnos", etiqueta: "Turnos", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 28 },
       ],
     },
   ],
   // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
-  // Feed (red social interna) encabeza "Operación", seguido de Calendario y Revisión; los
-  // hubs van como UNA entrada (su sub-nav es in-page). El bloque vive también en el path.
+  // Feed (red social interna) encabeza "Operación", seguido de Programación y Turnos (antes
+  // pestañas del hub Calendario, ahora páginas planas). Revisión se retiró. Los hubs que quedan
+  // van como UNA entrada (su sub-nav es in-page). El bloque vive también en el path.
   navegacion: [
     {
       etiqueta: "Operación",
       items: [
         { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "Feed del equipo" },
-        { ruta: "/operacion/calendario", etiqueta: "Calendario", icono: "CalendarDays", descripcion: "Turnos y calendario" },
-        { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
+        { ruta: "/operacion/programacion", etiqueta: "Programación", icono: "CalendarDays", descripcion: "Calendario de publicaciones" },
+        { ruta: "/operacion/turnos", etiqueta: "Turnos", icono: "CalendarClock", descripcion: "Rota de cobertura" },
       ],
     },
     {
@@ -214,18 +215,20 @@ describe("Sidebar · bloques de flujo", () => {
     expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
-  it("el hub Calendario se ve en cualquier marca (su gating es por pestaña, no por hub)", async () => {
-    // La Programación (calendario de publicaciones) es para todas las marcas; lo único de
-    // Claro Sports es la pestaña Turnos, que se filtra dentro del hub (ver SubnavHub), no aquí.
+  it("Programación y Turnos se ven en cualquier marca (ambas son por marca, sin gating)", async () => {
+    // Tras separar el hub Calendario en dos páginas planas, ambas son por marca: cada marca ve
+    // su Programación y sus Turnos. Ya no hay ruta restringida a una marca concreta.
     renderSidebar("editor", "/operacion/feed", {}, "unotv");
-    expect(await screen.findByRole("link", { name: /calendario/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /programación/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /turnos/i })).toBeInTheDocument();
   });
 
   it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {
     renderSidebar("editor", "/operacion/feed");
-    // Bloque "Operación": tablero + revisión, los checkpoints diarios.
+    // Bloque "Operación": Feed, Programación y Turnos, los checkpoints diarios.
     expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
-    expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/operacion/revision");
+    expect(screen.getByRole("link", { name: /programación/i })).toHaveAttribute("href", "/operacion/programacion");
+    expect(screen.getByRole("link", { name: /turnos/i })).toHaveAttribute("href", "/operacion/turnos");
     // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/contenido/imagen");
     expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/contenido/texto");
@@ -327,10 +330,6 @@ describe("apps-scope · helpers", () => {
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",
-      // /operacion/revision (hub) → sus sub-pestañas (Breaking = carril rápido Claro Sports)
-      "/operacion/revision/editorial",
-      "/operacion/revision/verificacion",
-      "/operacion/revision/breaking",
       // /datos/actividad (hub) → el feed (índice) + Pipelines (pestaña, antes entrada suelta)
       "/datos/actividad",
       "/datos/actividad/pipelines",
@@ -339,7 +338,7 @@ describe("apps-scope · helpers", () => {
 
   it("appDeRuta resuelve por prefijo más largo", () => {
     expect(appDeRuta(apps, "/contenido/imagen")?.id).toBe("produccion");
-    expect(appDeRuta(apps, "/operacion/calendario/turnos")?.id).toBe("operacion");
+    expect(appDeRuta(apps, "/operacion/turnos")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
     expect(appDeRuta(apps, "/configuracion")).toBeUndefined();
@@ -348,9 +347,9 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    // Ordenado por (grupo_orden, orden): operacion(/revision) · contenido(/imagen,/texto) · datos(/investigacion,/actividad).
+    // Tras retirar Revisión, Producción ya no aporta entradas al bloque "operacion".
+    // Ordenado por (grupo_orden, orden): contenido(/imagen,/texto) · datos(/investigacion,/actividad).
     expect(rutas).toEqual([
-      "/operacion/revision",
       "/contenido/imagen",
       "/contenido/texto",
       "/datos/investigacion",
