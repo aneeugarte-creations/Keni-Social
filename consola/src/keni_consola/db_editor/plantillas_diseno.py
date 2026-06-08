@@ -17,6 +17,7 @@ _COLS_PLANTILLAS_DISENO = (
     "miniatura",
     "lineas",
     "activo",
+    "rotar",
     "autor_id",
     "autor_nombre",
     "creado",
@@ -32,6 +33,7 @@ _CAMPOS_EDITABLES_PLANTILLAS_DISENO: tuple[str, ...] = (
     "miniatura",
     "lineas",
     "activo",
+    "rotar",
 )
 
 
@@ -39,6 +41,7 @@ def _fila_a_plantilla_diseno(fila: Any) -> dict[str, Any]:
     """Convierte una fila de `plantillas_diseno` en dict (con defaults defensivos)."""
     item: dict[str, Any] = {col: fila[col] for col in _COLS_PLANTILLAS_DISENO}
     item["activo"] = bool(fila["activo"])
+    item["rotar"] = bool(fila["rotar"])
     item["documento"] = fila["documento"] or "{}"
     item["lineas"] = fila["lineas"] or "[]"
     item["categoria"] = fila["categoria"] or "post"
@@ -56,6 +59,7 @@ def crear_plantilla_diseno(
     miniatura: str = "",
     lineas: str = "[]",
     activo: bool = True,
+    rotar: bool = False,
     autor: dict[str, str] | None = None,
     id: str = "",
     creado: str = "",
@@ -74,6 +78,7 @@ def crear_plantilla_diseno(
         "miniatura": miniatura or "",
         "lineas": lineas or "[]",
         "activo": 1 if activo else 0,
+        "rotar": 1 if rotar else 0,
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",
         "creado": creado or ahora,
@@ -140,6 +145,8 @@ def actualizar_plantilla_diseno(plantilla_id: str, campos: dict[str, Any]) -> di
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PLANTILLAS_DISENO}
     if "activo" in cambios:
         cambios["activo"] = 1 if cambios["activo"] else 0
+    if "rotar" in cambios:
+        cambios["rotar"] = 1 if cambios["rotar"] else 0
     if not cambios:
         return obtener_plantilla_diseno(plantilla_id)
     ahora = datetime.now().isoformat(timespec="seconds")

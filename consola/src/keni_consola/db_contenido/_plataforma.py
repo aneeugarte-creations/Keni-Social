@@ -126,6 +126,66 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
     return plat
 
 
+def _plantilla_rotacion(con: Any, marca: str, contenido_id: str) -> str:
+    """Siguiente plantilla del GRUPO en rotación de la marca para esta pieza, o "" si no aplica.
+
+    Rotación automática de plantillas (p. ej. los 6 colores de UnoTV): cada pieza nueva se lleva la
+    SIGUIENTE plantilla del grupo (round-robin), y todas las redes de la MISMA pieza comparten color.
+    Dormido por defecto: si la marca no tiene ≥2 plantillas con `rotar=1` (del `tipo` que toca según
+    el formato de la pieza), devuelve "" y el comportamiento es el de siempre. Reglas:
+
+      - El POOL son las plantillas activas de la marca con `rotar=1` y `tipo` acorde al formato de la
+        pieza (foto -> "foto"; video -> "miniatura"), en orden estable (`creado ASC`).
+      - MISMO color en todas las redes: si una red hermana de la pieza ya tiene una plantilla del
+        pool, se reutiliza.
+      - PRIMERA red de la pieza: round-robin por nº de PIEZAS de la marca ya rotadas
+        (`pool[n % len(pool)]`), no por marca de tiempo —`creado` se guarda al segundo y empata
+        entre piezas creadas a la vez, lo que hacía un "última usada" poco fiable—.
+
+    Stateless (sin contador propio): se deriva del recuento real de piezas ya rotadas, así funciona
+    entre contenedores (back/worker/daemons) sin estado compartido y es estable.
+    """
+    # Atajo barato (la rotación está DORMIDA para casi todas las marcas): si la marca no tiene
+    # NINGUNA plantilla en rotación, no toques nada más (evita el lookup de formato + pool).
+    if con.execute(
+        "SELECT 1 FROM plantillas_diseno WHERE marca = ? AND activo = 1 AND rotar = 1 LIMIT 1",
+        (marca,),
+    ).fetchone() is None:
+        return ""
+    padre = con.execute("SELECT formato FROM contenido WHERE id = ?", (contenido_id,)).fetchone()
+    formato = (padre["formato"] if padre is not None else "") or "foto"
+    tipo = "miniatura" if formato == "video" else "foto"
+    pool = con.execute(
+        "SELECT id FROM plantillas_diseno "
+        "WHERE marca = ? AND activo = 1 AND rotar = 1 AND tipo = ? "
+        "ORDER BY creado ASC, id ASC",
+        (marca, tipo),
+    ).fetchall()
+    ids = [r["id"] for r in pool]
+    if len(ids) < 2:
+        return ""
+    # Mismo color en todas las redes: reutiliza el de una red hermana si ya tiene uno del pool.
+    hermanas = con.execute(
+        "SELECT plantilla_diseno_id FROM contenido_plataforma "
+        "WHERE contenido_id = ? AND plantilla_diseno_id <> ''",
+        (contenido_id,),
+    ).fetchall()
+    for h in hermanas:
+        if h["plantilla_diseno_id"] in ids:
+            return str(h["plantilla_diseno_id"])
+    # Primera red: round-robin por nº de PIEZAS de la marca ya rotadas (`pool[n % len(pool)]`). La
+    # pieza actual aún no tiene ninguna red del pool (las hermanas se comprobaron arriba), así que
+    # NO se cuenta a sí misma. Estable y sin depender de timestamps que empatan al segundo.
+    marcadores = ", ".join("?" for _ in ids)
+    fila = con.execute(
+        f"SELECT COUNT(DISTINCT contenido_id) AS n FROM contenido_plataforma "  # noqa: S608 -- '?'
+        f"WHERE marca = ? AND plantilla_diseno_id IN ({marcadores})",
+        (marca, *ids),
+    ).fetchone()
+    n = int(fila["n"]) if fila is not None and fila["n"] is not None else 0
+    return ids[n % len(ids)]
+
+
 def crear_contenido_plataforma(
     *,
     contenido_id: str,
@@ -235,6 +295,11 @@ def crear_contenido_plataforma(
             ).fetchone()
             if padre is not None:
                 fila["marca"] = padre["marca"] or ""
+        # ROTACIÓN de plantillas: si el llamante NO fijó plantilla y la marca tiene un GRUPO en
+        # rotación, asigna la siguiente del grupo (mismo color en todas las redes; round-robin entre
+        # piezas). Dormido salvo que la marca tenga ≥2 plantillas con `rotar=1`.
+        if not fila["plantilla_diseno_id"] and fila["marca"]:
+            fila["plantilla_diseno_id"] = _plantilla_rotacion(con, fila["marca"], contenido_id)
         marcadores = ", ".join("?" for _ in _COLS_CONTENIDO_PLATAFORMA)
         con.execute(
             f"INSERT INTO contenido_plataforma ({', '.join(_COLS_CONTENIDO_PLATAFORMA)}) "

@@ -8,7 +8,7 @@ por `lineas` (ids de `etiquetas` clase=vertical) para filtrar por línea editori
   - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&tipo=&linea=&q=`).
   - `POST   /api/plantillas-diseno`        crea una plantilla a partir de un documento (validado).
   - `GET    /api/plantillas-diseno/{id}`   una plantilla (con su documento listo para cargar).
-  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/lineas/miniatura/activo.
+  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/lineas/miniatura/activo/rotar.
   - `DELETE /api/plantillas-diseno/{id}`   borra.
 
 SEGURIDAD: `marca` (si llega) del catálogo único; el `documento` se valida en el dominio
@@ -144,6 +144,7 @@ async def crear(request: Request) -> Response:
         documento=json.dumps(doc_ok, ensure_ascii=False),
         miniatura=miniatura,
         lineas=json.dumps(lineas, ensure_ascii=False),
+        rotar=bool(datos.get("rotar")),
         autor=autor_de_peticion(request),
     )
     return JSONResponse({"plantilla": _plantilla_a_dict(plantilla)})
@@ -180,6 +181,8 @@ async def actualizar(request: Request) -> Response:
         campos["lineas"] = json.dumps(_normalizar_lineas(datos.get("lineas")), ensure_ascii=False)
     if "activo" in datos:
         campos["activo"] = bool(datos["activo"])
+    if "rotar" in datos:
+        campos["rotar"] = bool(datos["rotar"])
     if "documento" in datos:
         if not isinstance(datos["documento"], dict):
             return JSONResponse({"error": "El documento debe ser un objeto."}, status_code=400)

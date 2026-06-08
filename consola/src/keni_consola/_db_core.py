@@ -907,6 +907,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         miniatura    TEXT NOT NULL DEFAULT '',
         lineas       TEXT NOT NULL DEFAULT '[]',
         activo       INTEGER NOT NULL DEFAULT 1,
+        rotar        INTEGER NOT NULL DEFAULT 0,
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',
         creado       TEXT NOT NULL DEFAULT '',
@@ -1619,9 +1620,17 @@ def _migrar_columnas_plantillas_diseno(con: Any) -> None:
     """
     if not _tabla_existe(con, "plantillas_diseno"):
         return
-    if "tipo" not in _columnas_existentes(con, "plantillas_diseno"):
+    cols = _columnas_existentes(con, "plantillas_diseno")
+    if "tipo" not in cols:
         con.execute(
             "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'foto'"
+        )
+    # `rotar`: la plantilla entra en la ROTACIÓN automática de la marca (cada post nuevo se lleva
+    # la siguiente del grupo; mismo color en todas las redes). Las existentes reciben 0 (sin rotar),
+    # que preserva el comportamiento previo (la marca usa su plantilla por defecto/más reciente).
+    if "rotar" not in cols:
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS rotar INTEGER NOT NULL DEFAULT 0"
         )
 
 
