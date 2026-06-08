@@ -250,6 +250,14 @@ def ajustar_plataformas_por_formato(
         se reportan en `conservadas`. En las filas que quedan, `falta_video=0` (N/A) y, si no hay
         imagen real, `falta_imagen=1`.
 
+    Además, cambiar de formato cambia la PARTE VISUAL de la pieza, así que en CADA fila restante:
+      - se BORRA el asset del formato anterior (`foto->video` borra foto/collage/encuadre/placa;
+        `video->foto` borra el vídeo). El COPY no se toca (es independiente del formato).
+      - se LIMPIA la `plantilla_diseno_id` (la plantilla foto no aplica a vídeo —que va con
+        miniatura— ni al revés); el render la re-deriva por marca/tipo.
+      - la pieza vuelve a BORRADOR (`estado=pendiente`, `falta_revision/publicar=1`), salvo lo ya
+        `publicado`: pierde el "listo para revisar"/aprobación para que se revise de nuevo.
+
     Idempotente y PURO de side-effects salvo las escrituras descritas. Devuelve un resumen
     `{creadas, eliminadas, conservadas}` (listas de ids de red) para que la API avise al usuario.
     """
@@ -293,20 +301,46 @@ def ajustar_plataformas_por_formato(
             db.borrar_contenido_plataforma(plat["id"])
             eliminadas.append(red)
 
-    # 3) Reaplicar el checklist por formato a TODAS las filas que QUEDAN (objetivo + conservadas).
-    #    foto: falta_video=0 (N/A); video: falta_video=1 si no hay asset de video. La imagen es
-    #    obligatoria en foto (falta_imagen=1 si no hay imagen real) y opcional en video (0).
+    # 3) Reaplicar el checklist por formato a TODAS las filas que QUEDAN + LIMPIAR lo que el cambio
+    #    de formato invalida. Cambiar de formato cambia la PARTE VISUAL de la pieza, así que:
+    #      - El ASSET del formato anterior deja de servir: `foto->video` borra la foto y su placa
+    #        (el vídeo trae su propio asset + miniatura); `video->foto` borra el vídeo (la foto, si
+    #        la hay, se conserva). El COPY (texto) NO se toca: es independiente del formato.
+    #      - La PLANTILLA del formato anterior ya no aplica (foto usa plantilla tipo "foto"; el
+    #        vídeo va con "miniatura"): se limpia y el render la re-deriva por marca/tipo.
+    #      - La pieza vuelve a BORRADOR: pierde "listo para revisar"/aprobación/programación, para
+    #        que un humano la revise de nuevo con su nueva parte visual.
+    #    Checklist: foto -> falta_video=0 (N/A), falta_imagen=1 si no hay imagen real; video ->
+    #    falta_video=1 si no hay asset de vídeo, falta_imagen=0 (opcional: portada/thumbnail).
     for plat in db.listar_contenido_plataforma(contenido_id):
-        tiene_video = bool(str(plat.get("video") or "").strip())
+        # Lo ya PUBLICADO no se toca (no se le borra el asset ni se le revierte el estado): solo
+        # se le reaplica el checklist del formato, como siempre.
+        publicada = (plat.get("estado") or "") == "publicado"
         tiene_imagen = bool(
             str(plat.get("imagen") or "").strip()
             or str(plat.get("foto") or "").strip()
             or str(plat.get("imagen_fuente") or "").strip()
         )
         if es_video:
-            campos = {"falta_video": not tiene_video, "falta_imagen": False}
+            campos: dict[str, Any] = {
+                "falta_video": not bool(str(plat.get("video") or "").strip()),
+                "falta_imagen": False,
+            }
+            if not publicada:
+                # foto -> video: borra la foto (cruda, collage, encuadre) y la placa horneada.
+                campos.update({"foto": "", "fotos": "", "foto_encuadre": "", "imagen": ""})
         else:
             campos = {"falta_video": False, "falta_imagen": not tiene_imagen}
+            if not publicada:
+                # video -> foto: borra el vídeo; la foto (si la hay) se conserva.
+                campos["video"] = ""
+        if not publicada:
+            # La plantilla del formato anterior ya no aplica: se limpia (el render la re-deriva).
+            campos["plantilla_diseno_id"] = ""
+            # Volver a BORRADOR: el cambio de formato invalida la revisión/aprobación/programación.
+            campos["estado"] = "pendiente"
+            campos["falta_revision"] = True
+            campos["falta_publicar"] = True
         db.actualizar_contenido_plataforma(plat["id"], campos)
 
     return {"creadas": creadas, "eliminadas": eliminadas, "conservadas": conservadas}

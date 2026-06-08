@@ -92,3 +92,52 @@ def test_flip_es_idempotente(entorno):
     res = repos.ajustar_plataformas_por_formato(item["id"], "video")
     assert res["creadas"] == []
     assert res["eliminadas"] == []
+
+
+def test_flip_foto_a_video_borra_foto_plantilla_y_vuelve_a_borrador(entorno):
+    """foto->video: borra la foto/placa y la plantilla, y devuelve la pieza a borrador. El copy se queda."""
+    item = db.crear_contenido(titulo="P", formato="foto")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram",
+        foto="fotos/a.jpg", fotos='[{"objeto":"fotos/a.jpg"}]', foto_encuadre="0.5,0.5,1",
+        imagen="render/x.png", plantilla_diseno_id="pl-1", estado="en_revision",
+        falta_revision=False, falta_publicar=False, copy="texto del post", falta_copy=False,
+    )
+    repos.ajustar_plataformas_por_formato(item["id"], "video")
+    p = db.obtener_contenido_plataforma(plat["id"])
+    assert p["foto"] == "" and p["fotos"] == "" and p["foto_encuadre"] == "" and p["imagen"] == ""
+    assert p["plantilla_diseno_id"] == ""
+    assert p["estado"] == "pendiente" and p["falta_revision"] is True
+    assert p["falta_video"] is True and p["falta_imagen"] is False
+    assert p["copy"] == "texto del post"  # el COPY no se toca
+
+
+def test_flip_video_a_foto_borra_video_plantilla_y_vuelve_a_borrador(entorno):
+    """video->foto: borra el vídeo y la plantilla, vuelve a borrador; la foto (si la hay) se conserva."""
+    item = db.crear_contenido(titulo="V", formato="video")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram",
+        video="videos/x.mp4", falta_video=False, foto="fotos/keep.jpg",
+        plantilla_diseno_id="pm-1", estado="en_revision",
+        falta_revision=False, falta_publicar=False, copy="guion", falta_copy=False,
+    )
+    repos.ajustar_plataformas_por_formato(item["id"], "foto")
+    p = db.obtener_contenido_plataforma(plat["id"])
+    assert p["video"] == ""
+    assert p["plantilla_diseno_id"] == ""
+    assert p["estado"] == "pendiente" and p["falta_revision"] is True
+    assert p["foto"] == "fotos/keep.jpg"  # la foto se conserva
+    assert p["copy"] == "guion" and p["falta_video"] is False
+
+
+def test_flip_no_revierte_ni_borra_lo_publicado(entorno):
+    """Una fila ya `publicado` no pierde su asset/plantilla ni se revierte de estado."""
+    item = db.crear_contenido(titulo="Pub", formato="foto")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram",
+        foto="fotos/pub.jpg", plantilla_diseno_id="pl-1", estado="publicado",
+    )
+    repos.ajustar_plataformas_por_formato(item["id"], "video")
+    p = db.obtener_contenido_plataforma(plat["id"])
+    assert p["estado"] == "publicado"
+    assert p["foto"] == "fotos/pub.jpg" and p["plantilla_diseno_id"] == "pl-1"

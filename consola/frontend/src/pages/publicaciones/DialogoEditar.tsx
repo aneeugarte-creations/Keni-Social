@@ -133,6 +133,26 @@ export function DialogoEditar({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Cambia el formato (foto↔video) PIDIENDO CONFIRMACIÓN si se va a perder el asset del formato
+  // actual. Al cambiar de formato el backend borra el asset anterior (foto o vídeo), quita la
+  // plantilla (foto→miniatura y viceversa) y devuelve la pieza a borrador (pierde el "listo para
+  // revisar"). Avisamos ANTES porque es destructivo; si no hay asset que perder, cambia directo.
+  const cambiarFormato = (aVideo: boolean) => {
+    if (!publicacion) return;
+    const hayFoto = fotos.some((f) => f.objeto) || !!imagen;
+    const hayVideo = !!videoKey;
+    const seBorra = aVideo ? hayFoto : hayVideo;
+    if (seBorra) {
+      const que = aVideo ? "la foto" : "el video";
+      const ok = window.confirm(
+        `Al cambiar a ${aVideo ? "video" : "foto"} se borrará ${que} y la plantilla actual, y la ` +
+          `pieza volverá a borrador (perderá el «listo para revisar»). ¿Continuar?`,
+      );
+      if (!ok) return;
+    }
+    flipFormato.mutate(aVideo ? "video" : "foto");
+  };
+
   // Ola F: guardar video (PATCH plataforma con {video}).
   const guardarVideo = useMutation({
     mutationFn: ({ clave }: { clave: string; url: string }) => {
@@ -313,7 +333,7 @@ export function DialogoEditar({
               <Switch
                 id="editar-formato-toggle"
                 checked={formato === "video"}
-                onCheckedChange={(v) => flipFormato.mutate(v ? "video" : "foto")}
+                onCheckedChange={(v) => cambiarFormato(v)}
                 disabled={flipFormato.isPending}
               />
               <Label htmlFor="editar-formato-toggle">Video</Label>
