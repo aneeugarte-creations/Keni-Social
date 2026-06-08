@@ -6,9 +6,8 @@ lo que el equipo ya tenía. NO destruye los orígenes (las tablas legadas quedan
 es IDEMPOTENTE: cada item migrado marca su `origen` (`pieza:<id>`) y un
 segundo paso no lo duplica.
 
-Las PUBLICACIONES (hoy en YAML) NO se migran aquí: se incorporan al fusionar su
-persistencia sobre Postgres (paso 3 del plan), para no duplicar mientras siguen viviendo
-en disco y editándose por su propia página.
+Las PUBLICACIONES ya viven en Postgres (ADR 0004); su backfill YAML→PG se retiró tras
+migrar el piloto, así que aquí solo queda la migración de piezas de la rota.
 
 Uso:  python -m keni_consola.migrar_contenido        (requiere DATABASE_URL, ADR 0004)
 """
@@ -17,20 +16,9 @@ from __future__ import annotations
 
 import logging
 
-from . import ficheros, repos
+from . import repos
 
 _logger = logging.getLogger(__name__)
-
-# Campos editoriales de una publicacion que no entran en `crear_publicacion` y se aplican
-# con un `actualizar_publicacion` posterior al migrar (preservan el flujo de aprobación).
-_CAMPOS_PUB_EXTRA = (
-    "enviado_a_revision_en",
-    "revisor_id",
-    "revisor_nombre",
-    "revisado_en",
-    "preparado_en",
-    "id_post_metricool",
-)
 
 # Tokens libres de `rota_piezas.red_social` ("FB, IG, X" / "IG, TK (REEL)" / "WEB") -> red
 # canónica. Lo que no mapea (HISTORIA, REEL, NOTA...) NO es una red: se vuelca a `notas`.
@@ -175,48 +163,10 @@ def migrar_piezas() -> int:
     return creadas
 
 
-def migrar_publicaciones() -> int:
-    """Migra las publicaciones YAML legadas (`ficheros`) a Postgres (modelo `contenido`).
-
-    Idempotente: si el id ya existe en Postgres, se salta (el id de la publicación se
-    preserva). Lee la fuente legada DIRECTO de `ficheros` (YAML); las nuevas ya nacen en
-    Postgres vía `repos`/`db`.
-    """
-    creadas = 0
-    for pub in ficheros.listar_publicaciones():
-        if repos.obtener_publicacion(pub["id"]) is not None:
-            continue
-        repos.crear_publicacion(
-            pub.get("marca", "") or "",
-            pub.get("red", "") or "",
-            titulo=pub.get("titulo", "") or "",
-            contenido=pub.get("contenido", "") or "",
-            estado=pub.get("estado", "borrador") or "borrador",
-            veredicto=pub.get("veredicto", "") or "",
-            fecha_programada=pub.get("fecha_programada", "") or "",
-            origen=pub.get("origen", "") or "",
-            imagen=pub.get("imagen", "") or "",
-            evergreen=bool(pub.get("evergreen")),
-            autor=(
-                {"id": pub["autor_id"], "usuario": pub.get("autor_nombre", "")}
-                if pub.get("autor_id")
-                else None
-            ),
-            id=pub["id"],
-            fecha_creacion=pub.get("fecha_creacion", "") or "",
-        )
-        extra = {k: pub[k] for k in _CAMPOS_PUB_EXTRA if pub.get(k)}
-        if extra:
-            repos.actualizar_publicacion(pub["id"], extra)
-        creadas += 1
-    return creadas
-
-
 def migrar() -> dict[str, int]:
     """Ejecuta toda la migración (idempotente). Devuelve recuentos por origen."""
     resultado = {
         "piezas": migrar_piezas(),
-        "publicaciones": migrar_publicaciones(),
     }
     _logger.info("Migración a contenido: %s", resultado)
     return resultado

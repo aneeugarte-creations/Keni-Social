@@ -1,13 +1,19 @@
-"""Tests del backend de FICHEROS YAML (#84): la verdad vive en disco.
+"""Tests del backend de FICHEROS YAML: la verdad vive en disco.
 
-OFFLINE, todo aislado en tmp (raiz de datos + indice via env vars). Cubre:
-  - round-trip: crear via repos -> existe el .yaml legible -> editar el .yaml a
-    mano -> repos lo lee actualizado.
-  - orden por fecha-hora (determinista, sin apoyarse en rowid).
-  - validacion: YAML corrupto / estado o red invalidos se omiten sin romper.
+Tras la migracion a Postgres (ADR 0004/0006), la UNICA entidad editorial que sigue
+file-backed es el HISTORIAL de prompts (`<marca>/historial/<YYYY>/<MM>/<id>.yaml`).
+Publicaciones, plantillas, fuentes RSS, hashtags y franjas viven en Postgres y se
+prueban en test_repos / test_db_editorial. Aqui cubrimos la infra YAML compartida que
+el historial sigue ejercitando, contra el historial:
+  - layout agente=marca=carpeta + marca.yaml/CLAUDE.md sembrados al escribir.
+  - round-trip: crear -> .yaml legible -> editar a mano -> repos lo lee actualizado.
+  - texto multilinea volcado como bloque literal '|' (editable a mano).
+  - orden por fecha-hora (mas reciente primero, determinista).
+  - YAML corrupto se OMITE sin romper el listado.
   - escritura atomica (no quedan ficheros .tmp).
-  - regeneracion del indice si se borra.
-  - layout agente=marca=carpeta + marca.yaml/CLAUDE.md sembrados.
+  - regeneracion del indice si se borra (los .yaml son la verdad).
+
+OFFLINE, todo aislado en tmp (raiz de datos + indice via env vars).
 """
 
 from __future__ import annotations
@@ -28,8 +34,11 @@ def base(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _ruta_pub(base, marca, pub_id):
-    return base / "datos" / marca / "publicaciones" / f"{pub_id}.yaml"
+def _ruta_hist(base, marca, hid):
+    """Ruta del .yaml de una entrada de historial (vive bajo historial/<YYYY>/<MM>/)."""
+    hits = list((base / "datos" / marca / "historial").rglob(f"{hid}.yaml"))
+    assert len(hits) == 1, hits
+    return hits[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -38,7 +47,7 @@ def _ruta_pub(base, marca, pub_id):
 
 
 def test_carpeta_marca_siembra_meta_y_claude(base):
-    pub = ficheros.crear_publicacion("unotv", "x", titulo="Hola")
+    hid = repos.registrar_historial_prompt("copy-desde-nota", "unotv", "Hola")
     carpeta = base / "datos" / "unotv"
     assert carpeta.is_dir()
     assert (carpeta / "marca.yaml").is_file()
@@ -47,48 +56,42 @@ def test_carpeta_marca_siembra_meta_y_claude(base):
     assert meta["id"] == "unotv"
     assert meta["etiqueta"] == "UnoTV"
     assert meta["id_metricas"] == "unotv"
-    # El YAML de la publicacion existe y NO repite id ni marca dentro.
-    cuerpo = yaml.safe_load(_ruta_pub(base, "unotv", pub["id"]).read_text())
+    # El YAML del historial existe y NO repite id ni marca dentro (id=nombre, marca=carpeta).
+    cuerpo = yaml.safe_load(_ruta_hist(base, "unotv", hid).read_text())
     assert "id" not in cuerpo
     assert "marca" not in cuerpo
-    assert cuerpo["titulo"] == "Hola"
+    assert cuerpo["prompt"] == "copy-desde-nota"
 
 
 # --------------------------------------------------------------------------- #
-# Round-trip: crear via repos -> .yaml legible -> editar a mano -> repos lo lee #
+# Round-trip: crear -> .yaml legible -> editar a mano -> repos lo lee          #
 # --------------------------------------------------------------------------- #
 
 
-def test_round_trip_publicacion(base):
-    pub = ficheros.crear_publicacion("unotv", "x", titulo="T", contenido="Cuerpo largo\nmultilinea")
-    ruta = _ruta_pub(base, "unotv", pub["id"])
-    assert ruta.is_file()
+def test_round_trip_historial(base):
+    hid = repos.registrar_historial_prompt(
+        "copy-desde-nota", "unotv", "Cuerpo largo\nmultilinea", titulo="T",
+        piezas=[{"red": "x", "contenido": "c", "caracteres": 1}],
+    )
+    ruta = _ruta_hist(base, "unotv", hid)
     # Editamos el YAML A MANO (como haria una persona en su editor).
     datos = yaml.safe_load(ruta.read_text())
     datos["titulo"] = "Editado a mano"
     ruta.write_text(yaml.safe_dump(datos, allow_unicode=True, sort_keys=False))
     # repos lo lee actualizado (re-indexa por mtime distinto).
-    leida = ficheros.obtener_publicacion(pub["id"])
-    assert leida["titulo"] == "Editado a mano"
-    assert leida["contenido"] == "Cuerpo largo\nmultilinea"
+    leido = repos.obtener_historial_prompt(hid)
+    assert leido["titulo"] == "Editado a mano"
+    assert leido["resultado"] == "Cuerpo largo\nmultilinea"
+    assert leido["piezas"][0]["red"] == "x"
 
 
 def test_contenido_largo_en_bloque_literal(base):
     largo = "linea1\nlinea2\nlinea3 con texto\n"
-    pub = ficheros.crear_publicacion("unotv", "x", contenido=largo)
-    texto = _ruta_pub(base, "unotv", pub["id"]).read_text()
+    hid = repos.registrar_historial_prompt("p", "unotv", largo)
+    texto = _ruta_hist(base, "unotv", hid).read_text()
     # PyYAML usa bloque '|' para multilinea: el texto crudo aparece sin escapes \n.
     assert "linea1" in texto and "\\n" not in texto
-    assert ficheros.obtener_publicacion(pub["id"])["contenido"] == largo
-
-
-def test_round_trip_plantilla(base):
-    # Plantillas de copy plano: el modelo OPERACIONAL vive en Postgres (catálogo unificado
-    # `plantilla_contenido`); en YAML solo queda el origen legado que lee la migración.
-    # (Grupos de hashtags y fuentes RSS ya NO viven file-backed: migraron a Postgres,
-    # ADR 0006; su CRUD se prueba en test_repos/test_db_editorial.)
-    p = ficheros.crear_plantilla("Saludo", marca="unotv", red="x", contenido="Hola")
-    assert ficheros.obtener_plantilla(p["id"])["nombre"] == "Saludo"
+    assert repos.obtener_historial_prompt(hid)["resultado"] == largo
 
 
 def test_historial_round_trip_y_layout_por_fecha(base):
@@ -118,53 +121,33 @@ def test_historial_guarda_y_devuelve_metricas(base):
 
 
 # --------------------------------------------------------------------------- #
-# Orden por fecha-hora (determinista)                                          #
+# Orden por fecha-hora (mas reciente primero, determinista)                    #
 # --------------------------------------------------------------------------- #
 
 
-def test_orden_publicaciones_por_fecha_hora(base):
-    a = ficheros.crear_publicacion("unotv", "x", titulo="A")
+def test_orden_historial_por_fecha_hora(base):
+    a = repos.registrar_historial_prompt("p", "unotv", "A")
     time.sleep(1.05)  # fecha_creacion tiene resolucion de segundos
-    b = ficheros.crear_publicacion("unotv", "x", titulo="B")
-    ids = [p["id"] for p in ficheros.listar_publicaciones()]
+    b = repos.registrar_historial_prompt("p", "unotv", "B")
+    ids = [h["id"] for h in repos.listar_historial_prompts()]
     # Mas reciente primero (B antes que A).
-    assert ids.index(b["id"]) < ids.index(a["id"])
+    assert ids.index(b) < ids.index(a)
 
 
 # --------------------------------------------------------------------------- #
-# Validacion: YAML corrupto / estado o red invalidos se OMITEN sin romper      #
+# Validacion: YAML corrupto se OMITE sin romper                                #
 # --------------------------------------------------------------------------- #
 
 
 def test_yaml_corrupto_se_omite(base):
-    ok = ficheros.crear_publicacion("unotv", "x", titulo="Buena")
-    mala = ficheros.crear_publicacion("unotv", "x", titulo="Mala")
+    ok = repos.registrar_historial_prompt("p", "unotv", "Buena")
+    mala = repos.registrar_historial_prompt("p", "unotv", "Mala")
     # Corrompemos el YAML de 'mala' a mano.
-    _ruta_pub(base, "unotv", mala["id"]).write_text(":\n  - [esto no es yaml valido")
-    pubs = ficheros.listar_publicaciones()
-    ids = {p["id"] for p in pubs}
-    assert ok["id"] in ids
-    assert mala["id"] not in ids  # omitida, no rompe el listado
-    assert ficheros.obtener_publicacion(mala["id"]) is None
-
-
-def test_estado_invalido_se_omite(base):
-    pub = ficheros.crear_publicacion("unotv", "x", titulo="X")
-    ruta = _ruta_pub(base, "unotv", pub["id"])
-    datos = yaml.safe_load(ruta.read_text())
-    datos["estado"] = "estado-inventado"
-    ruta.write_text(yaml.safe_dump(datos, allow_unicode=True))
-    assert all(p["id"] != pub["id"] for p in ficheros.listar_publicaciones())
-    assert ficheros.obtener_publicacion(pub["id"]) is None
-
-
-def test_red_invalida_se_omite(base):
-    pub = ficheros.crear_publicacion("unotv", "x", titulo="X")
-    ruta = _ruta_pub(base, "unotv", pub["id"])
-    datos = yaml.safe_load(ruta.read_text())
-    datos["red"] = "myspace"
-    ruta.write_text(yaml.safe_dump(datos, allow_unicode=True))
-    assert all(p["id"] != pub["id"] for p in ficheros.listar_publicaciones())
+    _ruta_hist(base, "unotv", mala).write_text(":\n  - [esto no es yaml valido")
+    ids = {h["id"] for h in repos.listar_historial_prompts()}
+    assert ok in ids
+    assert mala not in ids  # omitida, no rompe el listado
+    assert repos.obtener_historial_prompt(mala) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -174,11 +157,11 @@ def test_red_invalida_se_omite(base):
 
 def test_escritura_no_deja_temporales(base):
     for i in range(5):
-        ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")
+        repos.registrar_historial_prompt("p", "unotv", f"R{i}")
     tmp = list((base / "datos").rglob(".tmp-*"))
     assert tmp == []
     # Y los .yaml definitivos si estan.
-    yamls = list((base / "datos" / "unotv" / "publicaciones").glob("*.yaml"))
+    yamls = list((base / "datos" / "unotv" / "historial").rglob("*.yaml"))
     assert len(yamls) == 5
 
 
@@ -188,52 +171,13 @@ def test_escritura_no_deja_temporales(base):
 
 
 def test_indice_se_regenera_si_se_borra(base):
-    a = ficheros.crear_publicacion("unotv", "x", titulo="A")
-    b = ficheros.crear_publicacion("claro-sports", "instagram", titulo="B")
+    a = repos.registrar_historial_prompt("p", "unotv", "A")
+    b = repos.registrar_historial_prompt("p", "claro-sports", "B")
     # Borra el indice (NO es la verdad): los YAML siguen en disco.
     indice.ruta_indice().unlink()
     # Listar lo reconstruye desde los ficheros.
-    ids = {p["id"] for p in ficheros.listar_publicaciones()}
-    assert {a["id"], b["id"]} <= ids
+    ids = {h["id"] for h in repos.listar_historial_prompts()}
+    assert {a, b} <= ids
     # Y obtener por id tambien funciona tras el borrado.
     indice.ruta_indice().unlink()
-    assert ficheros.obtener_publicacion(a["id"])["titulo"] == "A"
-
-
-def test_reconstruir_indice_completo(base):
-    ficheros.crear_publicacion("unotv", "x", titulo="A")
-    ficheros.crear_plantilla("P", marca="unotv")
-    indice.ruta_indice().unlink()
-    ficheros.reconstruir_indice()
-    assert len(ficheros.listar_publicaciones()) == 1
-    assert len(ficheros.listar_plantillas()) == 1
-
-
-# --------------------------------------------------------------------------- #
-# Filtros (delegados al indice)                                               #
-# --------------------------------------------------------------------------- #
-
-
-def test_filtros_listar_publicaciones(base):
-    ficheros.crear_publicacion("unotv", "x", evergreen=True)
-    ficheros.crear_publicacion("unotv", "instagram", evergreen=False)
-    ficheros.crear_publicacion("claro-sports", "x", estado="aprobado")
-    assert len(ficheros.listar_publicaciones(marca="unotv")) == 2
-    assert len(ficheros.listar_publicaciones(red="x")) == 2
-    assert len(ficheros.listar_publicaciones(estado="aprobado")) == 1
-    assert len(ficheros.listar_publicaciones(evergreen=True)) == 1
-    assert len(ficheros.listar_publicaciones(evergreen=False)) == 2
-
-
-# --------------------------------------------------------------------------- #
-# Borrado de publicaciones                                                    #
-# --------------------------------------------------------------------------- #
-
-
-def test_borrar_publicacion(base):
-    pub = ficheros.crear_publicacion("unotv", "x")
-    assert ficheros.borrar_publicacion(pub["id"]) is True
-    assert ficheros.obtener_publicacion(pub["id"]) is None
-    assert ficheros.borrar_publicacion(pub["id"]) is False
-
-
+    assert repos.obtener_historial_prompt(a)["resultado"] == "A"

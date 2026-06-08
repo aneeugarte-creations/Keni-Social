@@ -2,7 +2,7 @@
 
 OFFLINE, todo aislado en tmp (raiz de datos + indice + almacenes via env vars). Cubre:
   - indice: `listar(limite/desplazamiento)` (LIMIT/OFFSET) respeta el ORDER BY y
-    `contar()` ignora la paginacion.
+    `contar()` ignora la paginacion (probado contra el historial, unica entidad YAML viva).
   - ficheros: `_listar_validado` solo lee los cuerpos YAML de la PAGINA, no de todo.
   - agentes: los runs se INDEXAN al crear/actualizar; `listar_runs_globales` pagina via
     el indice; `agregados_runs` agrega con SQL.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import agentes, ficheros, indice
+from keni_consola import agentes, ficheros, indice, repos
 
 
 @pytest.fixture
@@ -33,31 +33,31 @@ def base(monkeypatch, tmp_path):
 
 
 def test_indice_paginacion_respeta_orden_y_pagina(base):
-    # 5 publicaciones; el orden del indice es fecha_creacion DESC, fecha DESC, id DESC.
-    creadas = [ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}") for i in range(5)]
-    todas = indice.listar("publicacion")
+    # 5 entradas de historial; el indice ordena por fecha_creacion DESC, fecha DESC, id DESC.
+    creadas = [repos.registrar_historial_prompt("p", "unotv", f"R{i}") for i in range(5)]
+    todas = indice.listar("historial")
     assert len(todas) == 5
 
-    pagina1 = indice.listar("publicacion", limite=2, desplazamiento=0)
-    pagina2 = indice.listar("publicacion", limite=2, desplazamiento=2)
-    pagina3 = indice.listar("publicacion", limite=2, desplazamiento=4)
+    pagina1 = indice.listar("historial", limite=2, desplazamiento=0)
+    pagina2 = indice.listar("historial", limite=2, desplazamiento=2)
+    pagina3 = indice.listar("historial", limite=2, desplazamiento=4)
     # Las paginas son cortes consecutivos del orden completo (sin solapes ni huecos).
     assert [e["id"] for e in pagina1] == [e["id"] for e in todas[:2]]
     assert [e["id"] for e in pagina2] == [e["id"] for e in todas[2:4]]
     assert [e["id"] for e in pagina3] == [e["id"] for e in todas[4:]]
     assert len(pagina3) == 1
     # contar() ignora la paginacion: es el total real.
-    assert indice.contar("publicacion") == 5
-    assert {c["id"] for c in creadas} == {e["id"] for e in todas}
+    assert indice.contar("historial") == 5
+    assert set(creadas) == {e["id"] for e in todas}
 
 
 def test_indice_contar_aplica_filtros(base):
-    ficheros.crear_publicacion("unotv", "x")
-    ficheros.crear_publicacion("unotv", "instagram")
-    ficheros.crear_publicacion("claro-sports", "x")
-    assert indice.contar("publicacion") == 3
-    assert indice.contar("publicacion", {"marca": "unotv"}) == 2
-    assert indice.contar("publicacion", {"red": "x"}) == 2
+    repos.registrar_historial_prompt("p", "unotv", "a")
+    repos.registrar_historial_prompt("p", "unotv", "b")
+    repos.registrar_historial_prompt("p", "claro-sports", "c")
+    assert indice.contar("historial") == 3
+    assert indice.contar("historial", {"marca": "unotv"}) == 2
+    assert indice.contar("historial", {"marca": "claro-sports"}) == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -65,9 +65,9 @@ def test_indice_contar_aplica_filtros(base):
 # --------------------------------------------------------------------------- #
 
 
-def test_listar_publicaciones_paginado_solo_lee_la_pagina(base, monkeypatch):
+def test_listar_historial_paginado_solo_lee_la_pagina(base, monkeypatch):
     for i in range(6):
-        ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")
+        repos.registrar_historial_prompt("p", "unotv", f"R{i}")
 
     # Contamos cuantos cuerpos YAML se leen al pedir una pagina de 2.
     original = ficheros._leer_yaml
@@ -78,24 +78,24 @@ def test_listar_publicaciones_paginado_solo_lee_la_pagina(base, monkeypatch):
         return original(ruta, tipo=tipo)
 
     monkeypatch.setattr(ficheros, "_leer_yaml", _contado)
-    pagina = ficheros.listar_publicaciones(limite=2, desplazamiento=0)
+    pagina = repos.listar_historial_prompts(limite=2, desplazamiento=0)
     assert len(pagina) == 2
     # Solo se leyeron los 2 cuerpos de la pagina, no los 6.
     assert llamadas["n"] == 2
 
 
-def test_listar_publicaciones_sin_params_devuelve_todo(base):
+def test_listar_historial_sin_params_devuelve_todo(base):
     for i in range(4):
-        ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")
-    assert len(ficheros.listar_publicaciones()) == 4
-    assert ficheros.contar_publicaciones() == 4
+        repos.registrar_historial_prompt("p", "unotv", f"R{i}")
+    assert len(repos.listar_historial_prompts()) == 4
+    assert repos.contar_historial_prompts() == 4
 
 
-def test_listar_publicaciones_paginas_consecutivas_cubren_todo(base):
-    ids = {ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")["id"] for i in range(5)}
+def test_listar_historial_paginas_consecutivas_cubren_todo(base):
+    ids = {repos.registrar_historial_prompt("p", "unotv", f"R{i}") for i in range(5)}
     vistos: list[str] = []
     for off in (0, 2, 4):
-        vistos += [p["id"] for p in ficheros.listar_publicaciones(limite=2, desplazamiento=off)]
+        vistos += [h["id"] for h in repos.listar_historial_prompts(limite=2, desplazamiento=off)]
     assert set(vistos) == ids
     assert len(vistos) == 5  # sin duplicados
 

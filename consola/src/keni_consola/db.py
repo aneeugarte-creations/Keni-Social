@@ -1,11 +1,11 @@
 """Persistencia OPERACIONAL de la Consola Keni: Postgres (ADR 0004).
 
-Cubre lo que NO es contenido editable a mano: las `tareas`, el apartado `comercial`
-(seguimiento de piezas + su serie temporal de snapshots), la `rota` y, via `auth/`, los
-`usuarios`/`sesiones`. El CONTENIDO editorial (publicaciones, plantillas, fuentes RSS,
-hashtags, franjas, historial de skills) vive en ficheros YAML por marca (`ficheros.py`),
-con un indice SQLite regenerable (`indice.py`). La fachada `repos.py` enruta cada cosa a
-su almacen.
+Cubre las `tareas`, el apartado `comercial` (seguimiento de piezas + su serie temporal de
+snapshots), la `rota`, via `auth/` los `usuarios`/`sesiones`, y el CONTENIDO editorial ya
+migrado a Postgres (publicaciones, plantillas, fuentes RSS, hashtags, franjas; ADR
+0004/0006). Lo UNICO que sigue file-backed es el HISTORIAL de prompts (YAML por marca en
+`ficheros.py`, con un indice regenerable `indice.py`). La fachada `repos.py` enruta cada
+cosa a su almacen.
 
 BACKEND (#130 / ADR 0004): UNICO, Postgres. `motor_db.conectar_cruda()` abre Postgres con
 `DATABASE_URL` (OBLIGATORIA, local o hosted). Antes el backend se elegia segun esa var
@@ -7191,8 +7191,8 @@ def crear_publicacion(
 ) -> dict[str, Any]:
     """Crea una publicacion (padre `contenido` + fila `contenido_plataforma` es_publicacion=1).
 
-    Conserva la firma de `ficheros.crear_publicacion` (+ `id`/`fecha_creacion` opcionales
-    para PRESERVAR identidad al migrar desde YAML). El `estado` editorial se traduce al de
+    Acepta `id`/`fecha_creacion` opcionales (preservaban identidad al migrar desde el YAML
+    legado, hoy retirado). El `estado` editorial se traduce al de
     plataforma. `imagen_fuente` (URL original, p.ej. de un RSS de marca propia) +
     `tipo_contenido='fuente'` nacen juntos: hay imagen (la del artículo), así que la pieza
     no queda con `falta_imagen`.

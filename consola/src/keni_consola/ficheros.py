@@ -46,9 +46,9 @@ from typing import Any
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
-from . import config, indice, marcas, redes, rutas
+from . import config, indice, marcas, rutas
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
-from .io_atomico import bloqueo_archivo, escribir_atomico
+from .io_atomico import escribir_atomico
 
 _log = logging.getLogger("keni_consola.ficheros")
 
@@ -123,11 +123,6 @@ def _sembrar_marca(carpeta: Path, marca: str) -> None:
         )
 
 
-def _subcarpeta(marca: str, tipo: str) -> Path:
-    """Sub-carpeta de un `tipo` dentro de la marca (creada si falta)."""
-    carpeta = carpeta_marca(marca) / _SUBDIR[tipo]
-    carpeta.mkdir(parents=True, exist_ok=True)
-    return carpeta
 
 
 def _marcas_en_disco() -> list[str]:
@@ -213,9 +208,6 @@ def _leer_yaml(ruta: Path, *, tipo: str) -> dict[str, Any] | None:
     return migrar(tipo, datos)
 
 
-def _ahora_iso() -> str:
-    """Fecha-hora ISO a segundos (orden determinista en la creacion)."""
-    return datetime.now().isoformat(timespec="seconds")
 
 
 def _nuevo_id() -> str:
@@ -306,20 +298,6 @@ def _reindexar_tipo(tipo: str) -> None:
     indice.reemplazar_tipo(tipo, entradas)
 
 
-def reconstruir_indice() -> None:
-    """Reconstruye el indice COMPLETO desde los ficheros (todas las entidades indexadas).
-
-    Los tipos de CONTENIDO editorial que aun viven file-backed (publicacion/plantilla/
-    historial) los reconstruye este modulo; el tipo `run` lo posee `agentes.py` (los runs
-    viven en `runs/<id>.yaml` por agente, no en sub-carpetas de contenido), asi que se
-    delega ahi para no acoplar `ficheros` al layout de runs. Las 3 entidades editoriales
-    que cerraron su rezago file->pg (fuentes_rss/grupos_hashtags/franjas, ADR 0006) ya NO
-    se indexan aqui: viven en Postgres.
-    """
-    for tipo in ("publicacion", "plantilla", "historial"):
-        _reindexar_tipo(tipo)
-    from . import agentes  # import local: evita ciclo a nivel de modulo
-    agentes.reindexar_runs()
 
 
 def _listar_validado(
@@ -361,270 +339,28 @@ def _listar_validado(
 # Publicaciones                                                                #
 # --------------------------------------------------------------------------- #
 
-# Campos que la edicion parcial puede tocar (igual que `db.py`). Incluye los del flujo
-# de aprobacion de equipo (#9, Fase 3: revisor/marcas de tiempo) y la preparacion del
-# programador (`preparado_en`), todos ADITIVOS y retrocompatibles.
-_CAMPOS_EDITABLES_PUBLICACION = (
-    "titulo",
-    "contenido",
-    "estado",
-    "fecha_programada",
-    "imagen",
-    "evergreen",
-    # Flujo de aprobacion de equipo (#9).
-    "enviado_a_revision_en",
-    "revisor_id",
-    "revisor_nombre",
-    "revisado_en",
-    # Preparacion por el programador (#9): marca dry-run "lista para publicar".
-    "preparado_en",
-    # Publicacion real via Metricool: id del post en el scheduler de Metricool.
-    "id_post_metricool",
-)
 
 
-def _publicacion_yaml(pub: dict[str, Any]) -> dict[str, Any]:
-    """Cuerpo YAML de una publicacion (sin `id` ni `marca`: implicitos por fichero/carpeta).
-
-    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) se persisten como
-    campos mas; vacios en creaciones anonimas o legadas (retrocompat: un YAML sin estas
-    claves se lee como "sin autor", ver `_parsear_publicacion`).
-    """
-    return {
-        "titulo": pub["titulo"],
-        "red": pub["red"],
-        "estado": pub["estado"],
-        "veredicto": pub["veredicto"],
-        "evergreen": bool(pub["evergreen"]),
-        "autor_id": pub.get("autor_id", "") or "",
-        "autor_nombre": pub.get("autor_nombre", "") or "",
-        # Flujo de aprobacion de equipo (#9, Fase 3). Aditivos: una pieza legada no los
-        # trae y se leen como "" (ver `_parsear_publicacion`); nunca rompen el round-trip.
-        "enviado_a_revision_en": pub.get("enviado_a_revision_en", "") or "",
-        "revisor_id": pub.get("revisor_id", "") or "",
-        "revisor_nombre": pub.get("revisor_nombre", "") or "",
-        "revisado_en": pub.get("revisado_en", "") or "",
-        # Marca dry-run del programador (#9): instante en que se preparo "lista para
-        # publicar" (NO publica de verdad; gating en `KENI_PUBLICAR_REAL`). "" hasta que vence.
-        "preparado_en": pub.get("preparado_en", "") or "",
-        # Id del post en Metricool una vez programado de verdad (KENI_PUBLICAR_REAL).
-        # "" en dry-run y en piezas legadas; nunca rompe el round-trip.
-        "id_post_metricool": pub.get("id_post_metricool", "") or "",
-        "fecha_creacion": pub["fecha_creacion"],
-        "fecha_actualizacion": pub["fecha_actualizacion"],
-        "fecha_programada": pub["fecha_programada"],
-        "origen": pub["origen"],
-        "imagen": pub["imagen"],
-        "contenido": pub["contenido"],
-    }
 
 
-def _parsear_publicacion(datos: dict[str, Any], marca: str, pub_id: str) -> dict[str, Any] | None:
-    """Reconstruye el dict publico de una publicacion; None si `red`/`estado` invalidos."""
-    red = datos.get("red", "")
-    estado = datos.get("estado", "borrador")
-    if not isinstance(red, str) or not redes.es_red(red):
-        _log.warning("publicacion %s: red invalida %r, se omite", pub_id, red)
-        return None
-    if estado not in ESTADOS_PUBLICACION:
-        _log.warning("publicacion %s: estado invalido %r, se omite", pub_id, estado)
-        return None
-    return {
-        "id": pub_id,
-        "titulo": datos.get("titulo", "") or "",
-        "marca": marca,
-        "red": red,
-        "contenido": datos.get("contenido", "") or "",
-        "estado": estado,
-        "veredicto": datos.get("veredicto", "") or "",
-        # Atribucion por usuario (#130 Fase 1). Ausente en publicaciones legadas/anonimas
-        # => "" (la UI lo muestra como "desconocido"); nunca rompe la lectura.
-        "autor_id": datos.get("autor_id", "") or "",
-        "autor_nombre": datos.get("autor_nombre", "") or "",
-        # Flujo de aprobacion de equipo (#9, Fase 3). Ausentes en piezas legadas => ""
-        # (la pieza simplemente no ha pasado por revision aun); nunca rompe la lectura.
-        "enviado_a_revision_en": datos.get("enviado_a_revision_en", "") or "",
-        "revisor_id": datos.get("revisor_id", "") or "",
-        "revisor_nombre": datos.get("revisor_nombre", "") or "",
-        "revisado_en": datos.get("revisado_en", "") or "",
-        # Marca dry-run del programador (#9): "" hasta que el programador la prepara.
-        "preparado_en": datos.get("preparado_en", "") or "",
-        # Id del post en Metricool (solo cuando KENI_PUBLICAR_REAL esta activo).
-        "id_post_metricool": datos.get("id_post_metricool", "") or "",
-        "fecha_creacion": datos.get("fecha_creacion", "") or "",
-        "fecha_actualizacion": datos.get("fecha_actualizacion", "") or "",
-        "fecha_programada": datos.get("fecha_programada", "") or "",
-        "origen": datos.get("origen", "") or "",
-        "imagen": datos.get("imagen", "") or "",
-        "evergreen": bool(datos.get("evergreen")),
-    }
 
 
-def _construir_publicacion(datos: dict[str, Any]) -> dict[str, Any]:
-    """Normaliza un dict de entrada en una publicacion completa (id + fechas con hora)."""
-    ahora = _ahora_iso()
-    return {
-        "id": _nuevo_id(),
-        "titulo": datos.get("titulo") or "",
-        "marca": datos.get("marca") or "",
-        "red": datos.get("red") or "",
-        "contenido": datos.get("contenido") or "",
-        "estado": datos.get("estado") or "borrador",
-        "veredicto": datos.get("veredicto") or "",
-        "autor_id": datos.get("autor_id") or "",
-        "autor_nombre": datos.get("autor_nombre") or "",
-        # Flujo de aprobacion de equipo (#9): una pieza nueva nace sin revision.
-        "enviado_a_revision_en": datos.get("enviado_a_revision_en") or "",
-        "revisor_id": datos.get("revisor_id") or "",
-        "revisor_nombre": datos.get("revisor_nombre") or "",
-        "revisado_en": datos.get("revisado_en") or "",
-        "preparado_en": datos.get("preparado_en") or "",
-        "id_post_metricool": datos.get("id_post_metricool") or "",
-        "fecha_creacion": ahora,
-        "fecha_actualizacion": ahora,
-        "fecha_programada": datos.get("fecha_programada") or "",
-        "origen": datos.get("origen") or "",
-        "imagen": datos.get("imagen") or "",
-        "evergreen": bool(datos.get("evergreen")),
-    }
 
 
-def _guardar_publicacion(pub: dict[str, Any]) -> None:
-    """Escribe el YAML de una publicacion y actualiza el indice."""
-    ruta = _subcarpeta(pub["marca"], "publicacion") / f"{pub['id']}.yaml"
-    cuerpo = _publicacion_yaml(pub)
-    _escribir_yaml(ruta, cuerpo, tipo="publicacion")
-    _indexar("publicacion", pub["marca"], ruta, cuerpo)
 
 
-def crear_publicacion(
-    marca: str,
-    red: str,
-    *,
-    titulo: str = "",
-    contenido: str = "",
-    estado: str = "borrador",
-    veredicto: str = "",
-    fecha_programada: str = "",
-    origen: str = "",
-    imagen: str = "",
-    evergreen: bool = False,
-    autor: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Crea una publicacion (un YAML en `<marca>/publicaciones/`) y la devuelve.
-
-    `autor` (atribucion por usuario, #130 Fase 1) es `{"id", "usuario"}` o `None`
-    (creacion anonima / por token de mantenimiento). Se persiste en el YAML.
-    """
-    autor = autor or {}
-    pub = _construir_publicacion(
-        {
-            "titulo": titulo,
-            "marca": marca,
-            "red": red,
-            "contenido": contenido,
-            "estado": estado,
-            "veredicto": veredicto,
-            "fecha_programada": fecha_programada,
-            "origen": origen,
-            "imagen": imagen,
-            "evergreen": evergreen,
-            "autor_id": autor.get("id", ""),
-            "autor_nombre": autor.get("usuario", ""),
-        }
-    )
-    _guardar_publicacion(pub)
-    return pub
 
 
-def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Crea varias publicaciones (una por dict de entrada) y las devuelve."""
-    creadas: list[dict[str, Any]] = []
-    for d in lista:
-        pub = _construir_publicacion(d)
-        _guardar_publicacion(pub)
-        creadas.append(pub)
-    return creadas
 
 
-def listar_publicaciones(
-    marca: str | None = None,
-    red: str | None = None,
-    estado: str | None = None,
-    evergreen: bool | None = None,
-    *,
-    limite: int | None = None,
-    desplazamiento: int | None = None,
-) -> list[dict[str, Any]]:
-    """Publicaciones (mas recientes primero), con filtros y paginacion opcionales.
-
-    `limite=None` (def) devuelve todas (retrocompat); con `limite`/`desplazamiento`
-    solo se lee el cuerpo YAML de la pagina pedida.
-    """
-    return _listar_validado(
-        "publicacion",
-        filtros={"marca": marca, "red": red, "estado": estado, "evergreen": evergreen},
-        parsear=_parsear_publicacion,
-        limite=limite,
-        desplazamiento=desplazamiento,
-    )
 
 
-def contar_publicaciones(
-    marca: str | None = None,
-    red: str | None = None,
-    estado: str | None = None,
-    evergreen: bool | None = None,
-) -> int:
-    """Total de publicaciones que casan los filtros (para el `total` de paginacion)."""
-    filtros = {"marca": marca, "red": red, "estado": estado, "evergreen": evergreen}
-    if indice.contar("publicacion", filtros) == 0 and _rutas_de_tipo("publicacion"):
-        _reindexar_tipo("publicacion")
-    return indice.contar("publicacion", filtros)
 
 
-def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
-    """Una publicacion por id (None si no existe o su YAML no valida)."""
-    ruta = _buscar_ruta("publicacion", publicacion_id)
-    if ruta is None:
-        return None
-    datos = _leer_yaml(ruta, tipo="publicacion")
-    if datos is None:
-        return None
-    marca = _marca_de_slug(ruta.parent.parent.name)
-    return _parsear_publicacion(datos, marca, publicacion_id)
 
 
-def actualizar_publicacion(
-    publicacion_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    """Edita parcialmente una publicacion (titulo/contenido/estado/fecha_programada/imagen/evergreen)."""
-    ruta = _buscar_ruta("publicacion", publicacion_id)
-    if ruta is None:
-        return None
-    # leer-modificar-escribir bajo bloqueo de fichero: evita last-write-wins entre escrituras
-    # concurrentes del mismo YAML (igual que `generaciones.actualizar`). `marca` no es editable
-    # aqui, asi que la ruta no cambia dentro de la seccion critica.
-    with bloqueo_archivo(ruta):
-        actual = obtener_publicacion(publicacion_id)
-        if actual is None:
-            return None
-        for clave in _CAMPOS_EDITABLES_PUBLICACION:
-            if clave in campos:
-                actual[clave] = bool(campos[clave]) if clave == "evergreen" else campos[clave]
-        actual["fecha_actualizacion"] = _ahora_iso()
-        _guardar_publicacion(actual)
-        return actual
 
 
-def borrar_publicacion(publicacion_id: str) -> bool:
-    """Borra una publicacion (su YAML + entrada de indice); True si existia."""
-    ruta = _buscar_ruta("publicacion", publicacion_id)
-    if ruta is None:
-        return False
-    ruta.unlink(missing_ok=True)
-    indice.borrar("publicacion", publicacion_id)
-    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -632,135 +368,20 @@ def borrar_publicacion(publicacion_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def _parsear_plantilla(datos: dict[str, Any], marca: str, plantilla_id: str) -> dict[str, Any]:
-    """Reconstruye el dict publico de una plantilla."""
-    return {
-        "id": plantilla_id,
-        "nombre": datos.get("nombre", "") or "",
-        "marca": marca,
-        "red": datos.get("red", "") or "",
-        "contenido": datos.get("contenido", "") or "",
-        "fecha": datos.get("fecha", "") or "",
-    }
 
 
-def _guardar_plantilla(plantilla: dict[str, Any]) -> None:
-    """Escribe el YAML de una plantilla y la indexa."""
-    ruta = _subcarpeta(plantilla["marca"], "plantilla") / f"{plantilla['id']}.yaml"
-    cuerpo = {
-        "nombre": plantilla["nombre"],
-        "red": plantilla["red"],
-        "fecha": plantilla["fecha"],
-        "fecha_creacion": plantilla.get("fecha_creacion", plantilla["fecha"]),
-        "contenido": plantilla["contenido"],
-    }
-    _escribir_yaml(ruta, cuerpo, tipo="plantilla")
-    _indexar("plantilla", plantilla["marca"], ruta, cuerpo)
 
 
-def listar_plantillas(
-    *, limite: int | None = None, desplazamiento: int | None = None
-) -> list[dict[str, Any]]:
-    """Plantillas (mas recientes primero), con paginacion opcional."""
-    return _listar_validado(
-        "plantilla",
-        filtros=None,
-        parsear=_parsear_plantilla,
-        limite=limite,
-        desplazamiento=desplazamiento,
-    )
 
 
-def contar_plantillas() -> int:
-    """Total de plantillas (para el `total` de paginacion)."""
-    if indice.contar("plantilla", None) == 0 and _rutas_de_tipo("plantilla"):
-        _reindexar_tipo("plantilla")
-    return indice.contar("plantilla", None)
 
 
-def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
-    """Una plantilla por id (None si no existe)."""
-    ruta = _buscar_ruta("plantilla", plantilla_id)
-    if ruta is None:
-        return None
-    datos = _leer_yaml(ruta, tipo="plantilla")
-    if datos is None:
-        return None
-    return _parsear_plantilla(datos, _marca_de_slug(ruta.parent.parent.name), plantilla_id)
 
 
-def crear_plantilla(
-    nombre: str, marca: str = "", red: str = "", contenido: str = ""
-) -> dict[str, Any]:
-    """Crea una plantilla y la devuelve."""
-    ahora = _ahora_iso()
-    plantilla = {
-        "id": _nuevo_id(),
-        "nombre": nombre,
-        "marca": marca,
-        "red": red,
-        "contenido": contenido,
-        "fecha": date.today().isoformat(),
-        "fecha_creacion": ahora,
-    }
-    _guardar_plantilla(plantilla)
-    return {
-        "id": plantilla["id"],
-        "nombre": nombre,
-        "marca": marca,
-        "red": red,
-        "contenido": contenido,
-        "fecha": plantilla["fecha"],
-    }
 
 
-def actualizar_plantilla(
-    plantilla_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    """Edita parcialmente una plantilla (nombre/marca/red/contenido); None si no existe."""
-    ruta = _buscar_ruta("plantilla", plantilla_id)
-    if ruta is None:
-        return None
-    # leer-modificar-escribir bajo bloqueo del fichero de origen: evita last-write-wins entre
-    # escrituras concurrentes de la misma plantilla (igual que `generaciones.actualizar`).
-    with bloqueo_archivo(ruta):
-        datos = _leer_yaml(ruta, tipo="plantilla")
-        if datos is None:
-            return None
-        marca_actual = _marca_de_slug(ruta.parent.parent.name)
-        actual = _parsear_plantilla(datos, marca_actual, plantilla_id)
-        actual["fecha_creacion"] = datos.get("fecha_creacion", actual["fecha"])
-
-        editables = ("nombre", "marca", "red", "contenido")
-        cambios = {k: v for k, v in campos.items() if k in editables}
-        if not cambios:
-            return _parsear_plantilla(datos, marca_actual, plantilla_id)
-        nueva_marca = cambios.get("marca", marca_actual)
-        for k, v in cambios.items():
-            actual[k] = v
-        actual["marca"] = nueva_marca
-        if nueva_marca != marca_actual:
-            ruta.unlink(missing_ok=True)
-            indice.borrar("plantilla", plantilla_id)
-        _guardar_plantilla(actual)
-        return {
-            "id": plantilla_id,
-            "nombre": actual["nombre"],
-            "marca": nueva_marca,
-            "red": actual["red"],
-            "contenido": actual["contenido"],
-            "fecha": actual["fecha"],
-        }
 
 
-def borrar_plantilla(plantilla_id: str) -> bool:
-    """Borra una plantilla; True si existia, False si no."""
-    ruta = _buscar_ruta("plantilla", plantilla_id)
-    if ruta is None:
-        return False
-    ruta.unlink(missing_ok=True)
-    indice.borrar("plantilla", plantilla_id)
-    return True
 
 
 # --------------------------------------------------------------------------- #
