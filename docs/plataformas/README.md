@@ -14,16 +14,13 @@ Metricool).
 
 | Doc | Qué cubre |
 |---|---|
-| [`publicacion-metricool.md`](publicacion-metricool.md) | **Camino de publicación vigente.** Entregar el post al scheduler de Metricool (FB/IG/X/TikTok/YouTube en una sola integración). Adaptador, contrato de la API, credenciales por marca, enganche en la Consola. |
-| [`publicacion-fase2-plan.md`](publicacion-fase2-plan.md) | Plan de implementación de la **publicación real vía Metricool**: reutilización de la cola de aprobación + scheduler de #9, audit-log, gate dry-run→real, secuenciación. |
-| [`tiktok-audit.md`](tiktok-audit.md) | **Ruta directa opcional** por el Content Posting API de TikTok (auditoría + UI de UX-compliance). No necesaria: TikTok ya está cubierto por Metricool. |
-| [`youtube-x.md`](youtube-x.md) | **Rutas directas opcionales** por API oficial — YouTube: cuota y borrador de solicitud. X: análisis de coste 2026 (~$0.20/post con enlace). No necesarias para publicar: ambas están cubiertas por Metricool. |
+| [`publicacion-metricool.md`](publicacion-metricool.md) | **Camino de publicación vigente.** Entregar el post al scheduler de Metricool (FB/IG/X/TikTok/YouTube en una sola integración). Adaptador, contrato de la API, credenciales por marca, enganche en la Consola. Incluye el **apéndice de rutas directas por API** (TikTok/YouTube/X) como alternativa NO usada. |
 
 ## Cómo encaja
 
 - **Publicar de verdad = Metricool.** Camino recomendado y único necesario; lo restante es código
-  interno (ver `publicacion-metricool.md` y `publicacion-fase2-plan.md`). El dry-run es el defecto;
-  la publicación real se activa con el flag `KENI_PUBLICAR_REAL`.
+  interno (ver `publicacion-metricool.md`). El dry-run es el defecto; la publicación real se activa
+  con el flag `KENI_PUBLICAR_REAL`.
 - **Rutas directas por API oficial (TikTok, YouTube, X) = alternativa opcional.** Documentadas por si
   alguna vez se quisiera integrar una plataforma directamente sin pasar por Metricool; **no son
   bloqueantes** de publicación ni de métricas.

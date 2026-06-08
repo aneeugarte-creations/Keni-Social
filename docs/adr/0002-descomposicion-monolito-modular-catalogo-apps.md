@@ -40,8 +40,8 @@ peor de depurar y de desenredar.
 - **El moat es editorial, no la infra.** `estado-producto.md` §3: "Claude + MCP + whisper.cpp es
   plomería replicable". Invertir en una plataforma de microservicios es invertir en la plomería.
 - **Las features nuevas son ligeras.** Las de la convergencia de Elías
-  (`docs/contexto/2026-05-27-elias-spec-operativo.md`: rota, radar, QA editorial, pendientes) son
-  en el fondo CRUD + una llamada a Claude; no son dominios pesados que justifiquen un servicio cada uno.
+  (rota, radar, QA editorial, pendientes) son en el fondo CRUD + una llamada a Claude; no son
+  dominios pesados que justifiquen un servicio cada uno.
 
 ---
 
@@ -212,4 +212,3 @@ Incremental y sin parar el piloto. No mueve la IP de dominio; reordena y formali
 - #9 — Fase 3: scheduling + cola de aprobación + dashboard (apps del catálogo sobre estado compartido)
 - #135 — Multi-cliente sin hardcodear marcas (coordina con el contrato de módulo)
 - #133 — Distribución rota (el servicio compartido del catálogo la resuelve de fondo)
-- `docs/contexto/2026-05-27-elias-spec-operativo.md` — las apps nuevas (F1–F9) que pueblan el catálogo

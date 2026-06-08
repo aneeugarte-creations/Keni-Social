@@ -145,6 +145,39 @@ arranque ni fichero sidecar). **Añadir una migración** cuando cambie la forma 
 `VERSIONES[tipo]` a N+1 y añadir a `MIGRACIONES[tipo]` una función en la posición N (0-based = versión
 de partida) que transforme de N a N+1; el salto 0→1 es identidad y no se registra.
 
+### Contratos de la máquina automática
+
+Cuando las fuentes (RSS, radar, calendario, alta del equipo) auto-generan borradores, el
+trabajo concurrente se apoya en unos seams compartidos que NO deben divergir. Los contratos
+vigentes (verificados en código):
+
+- **Seam de handoff A→C — única puerta de creación de borradores** (`dominio/publicaciones.py`):
+  - `crear_borrador(marca, red, *, titulo, contenido, copy_in, veredicto, origen, imagen,
+    imagen_fuente, tipo_contenido, evergreen, autor)` → pieza nueva con padre propio.
+  - `crear_borrador_en(contenido_id, marca, red, ...)` → NIDA el borrador bajo un tema
+    existente del tablero (`contenido_plataforma` con `es_publicacion=1`); devuelve `None` si
+    el tema no existe. Es el camino de la auto-generación, para que el borrador cuelgue de su
+    tema origen.
+  - Invariante: el estado inicial SIEMPRE es `borrador` (ninguna de las dos vías expone
+    `estado`). Revisión, programación y publicación son responsabilidad EXCLUSIVA de C; el
+    gate humano vive en C y permanece intacto: la IA produce hasta el borrador, el humano
+    aprueba cada pieza y autoriza cada publicación.
+
+- **Flags de automatización** (todos default OFF / conservador; accesores en `config.py`):
+
+  | Flag (env) | Accesor | Semántica |
+  |---|---|---|
+  | `KENI_RADAR_AUTO` | `radar_auto_activo()` | Promueve temas virales del Radar al tablero (`origen='radar-auto'`). |
+  | `KENI_AUTOGEN` | `autogen_activo()` | Encola COPY para temas de fuente sin copy y con marca. Nada se publica solo. |
+  | `KENI_AUTOGEN_ARTE` | `autogen_arte_activo()` | Genera ARTE por IA para temas con copy pero sin imagen (degrada sin proveedor). |
+  | `KENI_PUBLICAR_REAL` | `publicar_real()` | Gate de publicación REAL vía Metricool. OFF = dry-run. |
+
+- **`origen='equipo'`** (`estados.ORIGEN_EQUIPO`): el origen con que nace un alta CREATIVA del
+  equipo (foto/nota/idea con marca); se AUTO-GENERA siempre. La auto-generación de copy trata
+  como "tema redactable" el conjunto `estados.ORIGENES_AUTOGEN` = fuentes externas históricas
+  (`import-calendario`, `radar-auto`, `radar`, `rss`) + `equipo`. El alta tecleada legada
+  (`origen=""`) queda EXCLUIDA a propósito (la genera quien la crea, si quiere).
+
 ## Cómo encajan
 
 Un prompt de copy puede consultar `mejores_piezas` del MCP para ajustar el tono a lo que funcionó (paso opcional con degradación: si el MCP no está, se omite). Así el sistema que **produce** aprende del que **mide**, sin acoplarse: cada uno funciona solo. La Consola es la cara visible que reúne las tres piezas para quien no quiere usar Claude Code a pelo.

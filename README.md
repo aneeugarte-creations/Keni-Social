@@ -6,7 +6,7 @@
 
 **El diferenciador:** copy tropicalizado es-MX + auto-verificación honesta + transcripción 100% local + métricas conversacionales, todo dentro de Claude Code y con la llave de cada red viviendo en tu máquina, no en la IA.
 
-> **Empieza aquí:** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 minutos.
+> **Empieza aquí:** [`docs/consola.md`](docs/consola.md) — qué es la Consola y cómo arrancarla.
 
 Componentes principales:
 
@@ -33,8 +33,6 @@ keni-consola
 
 ## Por dónde empezar
 
-- **Primeros pasos (recomendado):** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 min, sin tecnicismos.
-- **Día a día del community manager:** [`docs/guia-community-manager.md`](docs/guia-community-manager.md) — qué le escribes a Claude para cada tarea.
 - **Generar copy:** desde la Consola (Biblioteca de prompts). Ver [`docs/consola.md`](docs/consola.md) y [`consola/README.md`](consola/README.md).
 - **Conectar métricas a Claude:** ver [`mcp-metricas/README.md`](mcp-metricas/README.md).
 - **Credenciales y despliegue local:** ver [`docs/`](docs/).

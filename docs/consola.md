@@ -85,7 +85,3 @@ para no duplicarlo aquí:
 - Tener instalado el servidor de métricas (`keni-metricas`), que necesita **`uv`/`uvx`** o un entorno virtual (`venv`) en la máquina. Ver [`../mcp-metricas/README.md`](../mcp-metricas/README.md) y [`credenciales.md`](credenciales.md).
 - Para **"Generar copy"** hace falta tener el **CLI `claude`** instalado y disponible; cada generación **consume tokens** (es Claude trabajando por debajo).
 - Para el flujo **clip → copy** (transcripción de audio/video) hace falta **whisper** y, hoy, un **Mac**. La transcripción ocurre **en local**, dentro de tu máquina.
-
----
-
-Para empezar de cero con el sistema, ver [`primeros-pasos.md`](primeros-pasos.md). Para el día a día del community manager, ver [`guia-community-manager.md`](guia-community-manager.md).

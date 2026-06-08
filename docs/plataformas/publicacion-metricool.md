@@ -88,3 +88,27 @@ Aislados en `cuerpo_para`, corregibles en un solo sitio contra la API real:
 
 Validación recomendada: como `scripts/probar_metricool.py` (sólo lecturas), crear una
 prueba que POSTee un `draft=true` (no publica) y confirme la forma de la respuesta.
+
+## Apéndice: rutas directas por API (alternativa NO usada)
+
+Se evaluaron las APIs oficiales de cada red como camino directo de publicación y se
+descartaron en favor de Metricool (una sola integración cubre FB/IG/X/TikTok/YouTube, AMX ya
+en plan Advanced). Por qué cada ruta directa NO se usa:
+
+- **TikTok (Content Posting API):** bloqueo duro. Sin pasar su **auditoría**, todo lo que la
+  app publique queda en `SELF_ONLY` (solo lo ve el creador) y máx. 5 usuarios/24h —
+  inservible para una redacción. La auditoría tarda semanas, con varias rondas, y casi todos
+  los rechazos son por **incumplimiento de UX** (consentimiento, mostrar la cuenta destino,
+  privacidad sin preselección), no por el código de subida. Metricool publica en público sin
+  esa auditoría.
+- **YouTube (Data API v3):** `videos.insert` consume cuota y la **ampliación** exige pasar la
+  auditoría de cumplimiento de YouTube API Services (sin plazo fijo). Posible, pero un
+  trámite externo que Metricool evita.
+- **X / Twitter:** modelo **pay-per-use sin tier gratuito**; el **post con enlace** (caso real
+  de una redacción de noticias) es muy caro frente al post sin enlace, así que publicar a
+  volumen por API directa se dispara. Si alguna vez se usara directo: X en **solo lectura**
+  (barato) y la publicación gateada por una decisión de coste explícita.
+
+Conclusión: las tres rutas directas son **alternativas opcionales no bloqueantes**; el camino
+vigente para publicar (y para leer métricas, vía `FuenteMetricol`) es Metricool. Las cifras de
+precio/cuota cambian a menudo: verificar en la fuente antes de comprometer gasto.

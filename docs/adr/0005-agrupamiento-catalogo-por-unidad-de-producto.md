@@ -7,8 +7,6 @@
 - **Relación:** **complementa** a [ADR 0002](0002-descomposicion-monolito-modular-catalogo-apps.md).
   0002 fija el **mecanismo** (monolito modular + catálogo data-driven + fronteras enforced); este
   ADR fija **el contenido**: qué apps existen, qué módulos contiene cada una y por qué.
-  Contexto estratégico en `07-innovacion/separacion-productos.md`. Plan de ejecución en
-  [`docs/plan-separacion-apps.md`](../plan-separacion-apps.md).
 
 > **[Nota de estado]** La **decisión de fronteras A/B/C + shell sigue vigente**. El inventario de
 > módulos de abajo refleja el estado del 2026-05-29: el **sistema de skills** (`skills`,
@@ -155,6 +153,3 @@ tocada + el contrato + `keni-shared`**:
 ## Enlaces
 
 - [ADR 0002](0002-descomposicion-monolito-modular-catalogo-apps.md) — mecanismo del catálogo.
-- [`docs/plan-separacion-apps.md`](../plan-separacion-apps.md) — runbook ejecutable (tareas de agentes).
-- `07-innovacion/separacion-productos.md` — contexto estratégico y motivos.
-- `docs/contexto/2026-05-27-elias-spec-operativo.md` — features F1–F9 que pueblan A/B/C.

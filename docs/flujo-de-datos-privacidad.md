@@ -41,7 +41,7 @@ Tres piezas, cada una con un alcance de datos distinto:
 4. **Imágenes (Estudio de imagen)** — operaciones deterministas (logo, recorte, peso…) en local y
    sin terceros; pero la **generación/expansión por IA** (ilustraciones, fondos, *outpaint*) va a un
    modelo de imagen **a través de OpenRouter** (gateway compatible con OpenAI). *(ACTUAL: en uso en
-   fase beta dentro del piloto AMX — ver [`estudio-imagen.md`](estudio-imagen.md).)*
+   fase beta dentro del piloto AMX — ver [`diseno-estudio-imagen.md`](diseno-estudio-imagen.md).)*
 
 ### Dos modos de despliegue (dónde se procesa lo sensible)
 

@@ -1,8 +1,7 @@
 # Estado del producto — keni-social
 
-Panorama honesto para dirección. Complementa el
-[`resumen-para-direccion.md`](resumen-para-direccion.md) con el detalle de qué está construido,
-qué está pausado por causas externas, y qué falta para tener un producto vendible a AMX.
+Panorama honesto para dirección: el detalle de qué está construido, qué está pausado por
+causas externas, y qué falta para tener un producto vendible a AMX.
 
 > **Marco de honestidad.** keni-social está en **beta**: producto real en uso con AMX Contenido
 > (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación). Lo que sigue distingue con cuidado lo
@@ -43,8 +42,7 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   publicar ni subir media.
 - **Lista viva multi-fuente (tablero).** El tablero de contenidos es una lista
   priorizada que se alimenta de varias fuentes y deja el trabajo operativo adelantado hasta el
-  punto de validación humana. Ya construido y probado (ver
-  [`contexto/2026-05-31-lista-viva-angel.md`](contexto/2026-05-31-lista-viva-angel.md)): el
+  punto de validación humana. Ya construido y probado: el
   **importador de calendario Excel/CSV** (H1) que sube los temas al tablero con prioridad, fecha y
   etiqueta de compromiso; la **auto-generación de copy** al entrar un tema de una fuente (H2, por
   el mismo pipeline que el botón manual, dejando el borrador en la cola de revisión; gated por
@@ -92,7 +90,7 @@ esto**: el piloto genera valor desde ya.
 
 La estrategia es **complementar, no reemplazar** al incumbente (AMX ya tiene Metricool): entrar
 por el hueco diario del community manager, no por la analítica/publicación de primera. Por fases,
-alineadas al estado real (detalle en [`analisis-competitivo.md`](analisis-competitivo.md) §3 y §5):
+alineadas al estado real:
 
 1. **Fase 0 — vender lo listo (hoy).** Copy desde texto, clip→copy local, **métricas-insight con
    dato real vía Metricool (Advanced)**, preview dry-run y la **lista viva multi-fuente**
@@ -106,12 +104,11 @@ alineadas al estado real (detalle en [`analisis-competitivo.md`](analisis-compet
    vía Metricool (ya construida y gateada OFF en el programador, sin espera externa) y el modo
    alojado por Keni con **System User de Meta (tokens que no caducan)**. Cada hito que cae es un
    upsell natural, no una promesa que devalúe la venta inicial.
-3. **Fase 2 — publicación y siguientes mejoras de UX.** Publicación real vía Metricool y las
-   mejoras priorizadas en [`ux-roadmap.md`](ux-roadmap.md) (olas 2 y 3): quick-start "empieza aquí
-   en 10 min", dashboard exportable a PDF, loop de vuelta a la acción (el dashboard sugiere "pide
-   copy para lo que rinde"), selección de marca asistida y estados vacíos. La ola 1 del roadmap
-   (semáforo de veredicto al inicio, nombres de marca legibles, picos top-N, doctor y asistente
-   accionables) **ya está implementada**.
+3. **Fase 2 — publicación y siguientes mejoras de UX.** Publicación real vía Metricool y mejoras
+   de UX de cola (olas 2 y 3): quick-start "empieza aquí en 10 min", dashboard exportable a PDF,
+   loop de vuelta a la acción (el dashboard sugiere "pide copy para lo que rinde"), selección de
+   marca asistida y estados vacíos. La ola 1 (semáforo de veredicto al inicio, nombres de marca
+   legibles, picos top-N, doctor y asistente accionables) **ya está implementada**.
 
 **El moat que sostiene la venta** no es la tecnología (Claude + MCP + whisper.cpp es plomería
 replicable), sino lo editorial: **corpus es-MX por marca + disciplina de verificación honesta +
@@ -133,8 +130,7 @@ privacidad verificable**. Eso crece con cada cliente y es propio e intransferibl
   corpus y las voces son texto portable; el método no está atado al modelo.
 - **Supuesto central a validar en el piloto:** que el copy es-MX + la verificación honesta + la
   privacidad local resuelven un dolor por el que AMX paga, y que la cuña es portátil al cliente
-  nº2. Esto es justo lo que el piloto pone a prueba. (Riesgos al detalle en
-  [`analisis-competitivo.md`](analisis-competitivo.md) §4.)
+  nº2. Esto es justo lo que el piloto pone a prueba.
 
 ## 5. Métrica de éxito del piloto
 

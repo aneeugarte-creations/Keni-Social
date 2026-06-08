@@ -84,7 +84,7 @@ keni-reporte-deck --formato pdf --salida reporte-semana.pdf                     
 keni-reporte-deck --formato json                                                 # datos estructurados a stdout (sin render)
 ```
 
-La **agenda** (eventos principales y transmisiones propias, con qué/cómo se cubren) es curaduría manual: se escribe en un TOML — ver `agenda-editorial.ejemplo.toml`. El PDF es **nativo** (reportlab, sin LibreOffice); `--pdf` lo genera junto al `.pptx`. Ver `docs/reporte-deportes.md`.
+La **agenda** (eventos principales y transmisiones propias, con qué/cómo se cubren) es curaduría manual: se escribe en un TOML — ver `agenda-editorial.ejemplo.toml`. El PDF es **nativo** (reportlab, sin LibreOffice); `--pdf` lo genera junto al `.pptx`.
 
 ## Desarrollo
 
