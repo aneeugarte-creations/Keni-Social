@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from keni_consola import db, metricas_pieza, repos
+from keni_consola import db, db_metricas, metricas_pieza, repos
 
 
 # --------------------------------------------------------------------------- #
@@ -86,7 +86,7 @@ def test_metricas_ausentes_defaultean_a_cero(pg):
     assert db.registrar_snapshot_pieza("p0", "m", "r", "", "2026-06-01T00:00:00", {}) is True
     serie = db.serie_pieza("p0")
     p = serie[0]
-    for col, _tipo in db._METRICAS_PIEZA_SNAPSHOT:
+    for col, _tipo in db_metricas._METRICAS_PIEZA_SNAPSHOT:
         assert p[col] == 0
 
 

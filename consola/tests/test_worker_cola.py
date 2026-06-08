@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from keni_consola import cola, config, db, generaciones, repos, worker
+from keni_consola import cola, config, db, db_jobs, generaciones, repos, worker
 from keni_consola.dominio import jobspec
 
 _MARCA = "unotv"
@@ -94,7 +94,7 @@ def test_reclama_job_huerfano_de_worker_muerto(entorno):
     # Envejecemos `claimed_at` mas alla del umbral de huerfano (wall-timeout + margen).
     viejo = (
         datetime.now()
-        - timedelta(seconds=config.claude_timeout() + db._RECLAIM_STALE_MARGEN_S + 60)
+        - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
     ).isoformat(timespec="seconds")
     con = db._conectar()
     try:

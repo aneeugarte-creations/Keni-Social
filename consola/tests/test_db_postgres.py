@@ -8,7 +8,7 @@ para bases creadas por versiones anteriores. SKIP si no hay Postgres (ver `_post
 
 from __future__ import annotations
 
-from keni_consola import auth, db, motor_db
+from keni_consola import auth, db, db_comercial, motor_db
 
 # La fixture `pg` (activa Postgres o salta) se autodescubre via `pytest_plugins` en
 # conftest (`tests._postgres`); no se importa aqui (evita falsos F811).
@@ -99,7 +99,7 @@ def test_snapshot_sin_granulares_defaultea_a_cero(pg):
     assert pub["formato"] == ""  # formato no provisto -> vacio
     assert db.registrar_snapshot_comercial(pub["id"], "2026-02-02T00:00:00", 10, 100) is True
     ultimo = db.ultimo_snapshot_comercial(pub["id"])
-    for campo in db._METRICAS_GRANULARES_SNAPSHOT:
+    for campo in db_comercial._METRICAS_GRANULARES_SNAPSHOT:
         assert ultimo[campo] == 0
 
 
@@ -144,7 +144,7 @@ def test_migracion_columnas_comercial_granulares_bd_vieja(pg):
     # El snapshot legado conserva su valor y gana las columnas granulares en 0.
     ultimo = db.ultimo_snapshot_comercial("viejo")
     assert ultimo["interacciones"] == 42
-    for campo in db._METRICAS_GRANULARES_SNAPSHOT:
+    for campo in db_comercial._METRICAS_GRANULARES_SNAPSHOT:
         assert ultimo[campo] == 0
     # Idempotente: re-crear el esquema no falla (las columnas ya existen).
     db._esquemas_asegurados.clear()

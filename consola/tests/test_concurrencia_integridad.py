@@ -23,7 +23,7 @@ import threading
 
 import pytest
 
-from keni_consola import db, generaciones, repos
+from keni_consola import db, db_jobs, generaciones, repos
 from keni_consola.dominio import colaboracion
 from keni_consola.estados import (
     DECISION_APROBADO,
@@ -364,7 +364,7 @@ def test_reclamar_no_reejecuta_huerfano_terminal(entorno):
     )
     # Envejecemos `claimed_at` para que cuente como huérfano.
     viejo = (
-        datetime.now() - timedelta(seconds=config.claude_timeout() + db._RECLAIM_STALE_MARGEN_S + 60)
+        datetime.now() - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
     ).isoformat(timespec="seconds")
     con = db._conectar()
     try:
@@ -396,7 +396,7 @@ def test_reclamar_si_reejecuta_huerfano_no_terminal(entorno):
     primero = repos.reclamar_job("w-muerto")
     assert primero is not None
     viejo = (
-        datetime.now() - timedelta(seconds=config.claude_timeout() + db._RECLAIM_STALE_MARGEN_S + 60)
+        datetime.now() - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
     ).isoformat(timespec="seconds")
     con = db._conectar()
     try:

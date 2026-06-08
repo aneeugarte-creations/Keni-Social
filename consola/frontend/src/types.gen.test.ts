@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const GEN = resolve(AQUI, "./types.gen.ts");
-const TYPES = resolve(AQUI, "./types.ts");
+const TYPES = resolve(AQUI, "./types/index.ts");
 
 function interfacesDe(texto: string): string[] {
   return [...texto.matchAll(/export interface ([A-Za-z0-9_]+)/g)].map((m) => m[1]);
@@ -47,9 +47,9 @@ describe("types.gen.ts (tipos derivados del backend, #101)", () => {
 
   it("toda interface generada se re-exporta desde types.ts", () => {
     const generadas = interfacesDe(gen);
-    // Bloque `export type { ... } from "./types.gen";` de types.ts.
-    const bloque = types.match(/export type \{([\s\S]*?)\} from "\.\/types\.gen";/);
-    expect(bloque, "falta el re-export de ./types.gen en types.ts").not.toBeNull();
+    // Bloque `export type { ... } from "../types.gen";` del barrel types/index.ts.
+    const bloque = types.match(/export type \{([\s\S]*?)\} from "\.\.\/types\.gen";/);
+    expect(bloque, "falta el re-export de ../types.gen en types/index.ts").not.toBeNull();
     const reexportadas = new Set(
       bloque![1]
         .split(",")
