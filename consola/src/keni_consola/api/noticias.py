@@ -143,9 +143,9 @@ def _historia_a_dict(cluster: dict[str, Any], enlaces: list[dict[str, Any]]) -> 
 async def listar(request: Request) -> Response:
     """GET /api/noticias: archivo filtrable + paginado, MÁS NUEVOS primero.
 
-    Query: `marca` ('' / ausente = todas), `categoria`, `desde` (ISO; capturado_en >= desde),
-    `q` (búsqueda en titulo+resumen), `estado` (nuevo|usado|descartado), `limit`, `offset`.
-    Devuelve `{items, total}` (total = nº que pasa los filtros, para la paginación).
+    Query: `marca` ('' / ausente = todas), `desde` (ISO; capturado_en >= desde), `q` (búsqueda en
+    titulo+resumen), `estado` (nuevo|usado|descartado), `limit`, `offset`. Ya NO se filtra por
+    `categoria` (el eje es marca/línea editorial). Devuelve `{items, total}`.
     """
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
@@ -155,7 +155,6 @@ async def listar(request: Request) -> Response:
     if estado is not None and estado not in repos.ESTADOS_NOTICIA_ITEM:
         return JSONResponse({"error": "Estado no permitido."}, status_code=400)
 
-    categoria = (request.query_params.get("categoria") or "").strip() or None
     desde = (request.query_params.get("desde") or "").strip() or None
     q = (request.query_params.get("q") or "").strip() or None
 
@@ -172,7 +171,6 @@ async def listar(request: Request) -> Response:
 
     items, total = repos.listar_noticias_items(
         marca=marca or None,
-        categoria=categoria,
         desde=desde,
         q=q,
         estado=estado,
@@ -404,12 +402,12 @@ async def salud(request: Request) -> Response:
 
 
 async def listar_historias(request: Request) -> Response:
-    """GET /api/noticias/historias: historias filtrables + paginadas, MÁS NUEVAS primero.
+    """GET /api/noticias/historias: historias filtrables + paginadas, MÁS RELEVANTES primero.
 
-    Query: `marca` ('' / ausente = todas), `categoria`, `desde` (ISO; `ultimo_visto >= desde`),
-    `estado` (nuevo|usado|descartado), `limit`, `offset`. Orden: `ultimo_visto` desc (recencia),
-    `score` desc como desempate. Devuelve `{historias, total}`. Cada historia trae sus enlaces
-    corroborantes (hasta ~8).
+    Query: `marca` ('' / ausente = todas), `desde` (ISO; `ultimo_visto >= desde`), `estado`
+    (nuevo|usado|descartado), `limit`, `offset`. Orden: `score` desc (jerarquización por el
+    algoritmo de ponderación), `ultimo_visto` desc como desempate. Ya NO se filtra por `categoria`
+    (el eje es marca/línea editorial). Devuelve `{historias, total}` con enlaces corroborantes.
     """
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
@@ -419,7 +417,6 @@ async def listar_historias(request: Request) -> Response:
     if estado is not None and estado not in repos.ESTADOS_NOTICIA_CLUSTER:
         return JSONResponse({"error": "Estado no permitido."}, status_code=400)
 
-    categoria = (request.query_params.get("categoria") or "").strip() or None
     desde = (request.query_params.get("desde") or "").strip() or None
 
     try:
@@ -435,7 +432,6 @@ async def listar_historias(request: Request) -> Response:
 
     clusters, total = repos.listar_noticia_clusters(
         marca=marca or None,
-        categoria=categoria,
         desde=desde,
         estado=estado,
         limite=limite,

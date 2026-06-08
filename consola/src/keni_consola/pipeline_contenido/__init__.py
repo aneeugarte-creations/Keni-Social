@@ -142,10 +142,13 @@ from ._ingesta import (
     _nota_de_item,
     _redes_de_fuente,
     _url_fuente_de,
+    clusters_para_promover,
     crear_tema_de,
+    crear_tema_de_cluster,
     fuentes_activas_de_marca,
     ingerir_marca,
     items_ingeribles,
+    promover_clusters_marca,
 )
 from ._qa import (
     _contexto_qa_fuente,
@@ -224,6 +227,9 @@ __all__ = [
     "_AVISO_SIN_LINEA",
     "_auto_etiquetar_linea",
     "crear_tema_de",
+    "crear_tema_de_cluster",
+    "clusters_para_promover",
+    "promover_clusters_marca",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",

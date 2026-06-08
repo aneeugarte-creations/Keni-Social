@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Flame,
   Globe,
   Loader2,
   Newspaper,
@@ -82,10 +83,9 @@ function tiempoRelativo(iso: string): string {
 
 const CLAVE_HISTORIAS = (
   marcaActiva: string | null,
-  categoria: string,
   estado: string,
   offset: number,
-) => ["noticias", "historias", marcaActiva ?? "", categoria, estado, offset] as const;
+) => ["noticias", "historias", marcaActiva ?? "", estado, offset] as const;
 
 const CLAVE_COBERTURA = ["noticias", "cobertura"] as const;
 
@@ -111,8 +111,6 @@ function BarraCobertura() {
   }
 
   const d = query.data;
-  const categorias = d?.por_categoria ?? {};
-  const cats = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
 
   return (
     <div
@@ -143,13 +141,6 @@ function BarraCobertura() {
           {d.items_24h.toLocaleString("es-MX")} en 24 h
         </Badge>
       )}
-
-      {/* Breakdown por categoría (top 4) */}
-      {cats.slice(0, 4).map(([cat, n]) => (
-        <Badge key={cat} variant="outline" className="text-xs">
-          {cat || "sin categoría"}: {n}
-        </Badge>
-      ))}
 
       {/* Frescura: último sondeo */}
       {d?.ultimo_sondeo && (
@@ -333,9 +324,12 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
             </Badge>
           )}
 
-          {/* Categoría */}
-          {historia.categoria && (
-            <Badge variant="outline" className="text-xs">{historia.categoria}</Badge>
+          {/* Score de jerarquización (algoritmo de ponderación): mayor = más prioritaria */}
+          {historia.score > 0 && (
+            <Badge variant="secondary" className="gap-1 text-xs" data-testid="badge-score">
+              <Flame className="h-3 w-3 text-amber-500" />
+              {Math.round(historia.score * 100)}
+            </Badge>
           )}
 
           {/* Idiomas (excepto solo "es") */}
@@ -409,15 +403,14 @@ interface PropsVistaHistorias {
 }
 
 function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
-  const [categoria, setCategoria] = React.useState("");
   const [estado, setEstado] = React.useState("");
   const [offset, setOffset] = React.useState(0);
 
   React.useEffect(() => {
     setOffset(0);
-  }, [marcaActiva, categoria, estado]);
+  }, [marcaActiva, estado]);
 
-  const clave = CLAVE_HISTORIAS(marcaActiva, categoria, estado, offset);
+  const clave = CLAVE_HISTORIAS(marcaActiva, estado, offset);
 
   const query = useQuery({
     queryKey: clave,
@@ -425,7 +418,6 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
       api.noticias.historias(
         {
           marca: marcaActiva ?? undefined,
-          categoria: categoria || undefined,
           estado: estado || undefined,
           limit: PAGE_SIZE,
           offset,
@@ -443,24 +435,8 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
 
   return (
     <>
-      {/* Filtros */}
+      {/* Filtros — la jerarquización es por marca/línea editorial, no por categoría */}
       <div className="mb-5 flex flex-wrap items-end gap-3">
-        {/* Categoría */}
-        <Select value={categoria || "__todas__"} onValueChange={(v) => setCategoria(v === "__todas__" ? "" : v)}>
-          <SelectTrigger className="w-44" aria-label="Filtrar por categoría" data-testid="filtro-categoria-historias">
-            <SelectValue placeholder="Categoría" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__todas__">Todas las categorías</SelectItem>
-            <SelectItem value="mx">MX</SelectItem>
-            <SelectItem value="internacional">Internacional</SelectItem>
-            <SelectItem value="deportes">Deportes</SelectItem>
-            <SelectItem value="ciencia-tech">Ciencia / Tech</SelectItem>
-            <SelectItem value="gaming">Gaming</SelectItem>
-            <SelectItem value="tendencias">Tendencias</SelectItem>
-          </SelectContent>
-        </Select>
-
         {/* Estado */}
         <Select value={estado || "__todos__"} onValueChange={(v) => setEstado(v === "__todos__" ? "" : v)}>
           <SelectTrigger className="w-36" aria-label="Filtrar por estado" data-testid="filtro-estado-historias">

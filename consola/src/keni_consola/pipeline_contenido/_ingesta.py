@@ -32,11 +32,17 @@ __all__ = [
     "_AVISO_SIN_LINEA",
     "_auto_etiquetar_linea",
     "crear_tema_de",
+    "crear_tema_de_cluster",
+    "clusters_para_promover",
+    "promover_clusters_marca",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",
     "ingerir_marca",
 ]
+
+# Tope de enlaces corroborantes que se anexan a la nota de un tema promovido de un cluster.
+_MAX_ENLACES_CLUSTER = 6
 
 
 def items_ingeribles(
@@ -267,6 +273,127 @@ def crear_tema_de(
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no debe romper el barrido
             _log.warning("pipeline: no se pudo marcar el item usado (%s)", clave, exc_info=True)
     return tema
+
+
+def _nota_de_cluster(titulo: str, resumen: str, enlaces: list[str]) -> str:
+    """Nota de partida del copy desde una HISTORIA: titulo + resumen + enlaces corroborantes."""
+    partes = [titulo.strip(), resumen.strip()]
+    nota = "\n\n".join(p for p in partes if p)
+    urls = [u for u in enlaces if u][:_MAX_ENLACES_CLUSTER]
+    if urls:
+        nota = (nota + "\n\nFuentes:\n" + "\n".join(urls)).strip()
+    return nota
+
+
+def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+    """Top-N historias (`estado='nuevo'`) de la marca por SCORE para promover a temas. Best-effort.
+
+    Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
+    score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
+    —no un tema por cada item RSS—, que es lo que frena el volumen y respeta la jerarquización.
+    """
+    try:
+        clusters, _total = repos.listar_noticia_clusters(
+            marca=marca, estado="nuevo", limite=maximo
+        )
+    except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no promueve nada
+        _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
+        return []
+    return clusters
+
+
+def crear_tema_de_cluster(
+    cluster: dict[str, Any], items: list[dict[str, Any]], *, claves_vistas: set[str] | None = None
+) -> dict[str, Any] | None:
+    """CI — promueve una HISTORIA (cluster rankeado) a tema del pipeline SIN copy. Marca el cluster usado.
+
+    Mismo modelo que `crear_tema_de` (origen `pipeline`, nota en `descripcion`, parámetros de copy
+    en `copy_pendiente` para la fase CD, QA pendiente), pero la nota viene del cluster (título +
+    resumen + enlaces corroborantes de sus items) en vez de un único item RSS. La dedup contra el
+    contenido reciente de la marca evita re-promover una historia que ya está en el tablero. None
+    si se omite (sin marca/título válidos o duplicado), marcando el cluster usado igualmente.
+    """
+    marca = (cluster.get("marca") or "").strip()
+    if not marca or not marcas.es_marca(marca):
+        return None
+    titulo = (cluster.get("titulo") or "").strip()
+    if not titulo and items:
+        titulo = ((items[0].get("titulo") or items[0].get("url")) or "").strip()
+    if not titulo:
+        return None
+    cid = cluster.get("id") or ""
+    # Dedup: la historia ya se trabajó hace poco para esta marca -> no se crea otro tema.
+    if claves_vistas is not None and dedup.es_duplicado(titulo, claves_vistas):
+        if cid:
+            try:
+                repos.actualizar_noticia_cluster(cid, estado="usado")
+            except Exception:  # noqa: BLE001 -- best-effort
+                _log.warning("pipeline: no se pudo marcar historia dup usada (%s)", cid, exc_info=True)
+        _log.info("pipeline: omito historia duplicada «%s» (%s)", titulo[:60], marca)
+        return None
+    resumen = (cluster.get("resumen") or "").strip()
+    enlaces = [it.get("url") or "" for it in items if it.get("url")]
+    nota = _nota_de_cluster(titulo, resumen, enlaces)[: gen_dom.MAX_TEXTO]
+    redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
+    imagen = next((it["imagen"].strip() for it in items if (it.get("imagen") or "").strip()), "")
+    # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
+    trabajo = {"fuente": {}, "item": {"clave": ""}, "imagen": imagen}
+    url_fuente = (items[0].get("url_canonica") if items else "") or ""
+    try:
+        from datetime import date
+
+        tema = repos.crear_contenido(
+            clase="contenido",
+            titulo=titulo[:300],
+            descripcion=nota[:5000],
+            marca=marca,
+            origen=ORIGEN_PIPELINE,
+            fecha_objetivo=date.today().isoformat(),
+            formato=_FORMATO_PIPELINE,
+            copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
+            fecha_fuente=cluster.get("primer_visto") or "",
+            url_fuente=url_fuente,
+        )
+    except Exception:  # noqa: BLE001 -- sin tema, esta historia no produce nada (no rompe el barrido)
+        _log.warning("pipeline: no se pudo crear el tema de la historia (%s)", marca, exc_info=True)
+        return None
+    _auto_etiquetar_linea(tema, titulo, resumen)
+    if claves_vistas is not None:
+        claves_vistas.add(dedup.clave(titulo))
+    if cid:
+        try:
+            repos.actualizar_noticia_cluster(cid, estado="usado", contenido_id=tema["id"])
+            repos.marcar_items_cluster_usados(cid, tema["id"])
+        except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no rompe el barrido
+            _log.warning("pipeline: no se pudo marcar la historia usada (%s)", cid, exc_info=True)
+    return tema
+
+
+def promover_clusters_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+    """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
+
+    Reemplaza la lectura directa de feeds RSS (que creaba un tema por item): ahora consume el pool
+    ya fusionado/rankeado (Ola B). Devuelve los temas creados. Best-effort por historia.
+    """
+    clusters = clusters_para_promover(marca, maximo=maximo)
+    claves_vistas = _claves_dedup_marca(marca)
+    temas: list[dict[str, Any]] = []
+    for cluster in clusters:
+        try:
+            items = repos.items_de_cluster(cluster.get("id") or "", limite=_MAX_ENLACES_CLUSTER)
+            tema = crear_tema_de_cluster(cluster, items, claves_vistas=claves_vistas)
+        except Exception:  # noqa: BLE001 -- una historia problemática no aborta el barrido
+            _log.exception("pipeline: fallo al promover una historia (%s)", marca)
+            continue
+        if tema:
+            temas.append(tema)
+    registrar_etapa(
+        ETAPA_CI,
+        marca,
+        f"Promoción de historias — {marcas.etiqueta_de(marca)}: {len(temas)} temas "
+        f"de {len(clusters)} historias rankeadas",
+    )
+    return temas
 
 
 def _claves_dedup_marca(marca: str) -> set[str]:

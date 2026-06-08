@@ -63,10 +63,10 @@ def test_marca_invalida_400(cliente):
     assert cliente.get("/api/noticias", params={"marca": "no-existe"}).status_code == 400
 
 
-def test_filtra_por_categoria_y_estado(cliente):
+def test_filtra_por_estado(cliente):
+    # Ya NO se filtra por categoría (el eje es marca/línea editorial): solo estado.
     _sembrar(fuente_id="a", clave="k1", categoria="deportes")
     _sembrar(fuente_id="b", clave="k2", categoria="mx")
-    assert cliente.get("/api/noticias", params={"categoria": "deportes"}).json()["total"] == 1
     assert cliente.get("/api/noticias", params={"estado": "nuevo"}).json()["total"] == 2
     assert cliente.get("/api/noticias", params={"estado": "usado"}).json()["total"] == 0
 

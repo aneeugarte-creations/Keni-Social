@@ -67,26 +67,27 @@ def test_historias_vacio(cliente):
     assert datos == {"historias": [], "total": 0}
 
 
-def test_historias_orden_por_recencia_desc_y_total(cliente):
-    # La más NUEVA va primero aunque tenga menor `score` (recencia es el criterio primario).
+def test_historias_orden_por_score_desc_y_total(cliente):
+    # La de MAYOR score va primero aunque sea más vieja: la jerarquización (algoritmo de
+    # ponderación) es el criterio primario; la recencia solo desempata.
     _sembrar_cluster("vieja", score=0.9, titulo="Historia vieja con score alto",
                      ultimo_visto="2026-06-01T12:00:00+00:00")
     _sembrar_cluster("nueva", score=0.2, titulo="Historia nueva con score bajo",
                      ultimo_visto="2026-06-05T12:00:00+00:00")
     datos = cliente.get("/api/noticias/historias").json()
     assert datos["total"] == 2
-    assert [h["id"] for h in datos["historias"]] == ["nueva", "vieja"]
+    assert [h["id"] for h in datos["historias"]] == ["vieja", "nueva"]
     assert datos["historias"][0]["marca_nombre"]  # marca-aware
 
 
-def test_historias_score_desempata_misma_recencia(cliente):
-    # Con el mismo `ultimo_visto`, el `score` mayor desempata primero.
-    _sembrar_cluster("baja", score=0.2, titulo="Misma fecha, score bajo",
-                     ultimo_visto="2026-06-05T12:00:00+00:00")
-    _sembrar_cluster("alta", score=0.9, titulo="Misma fecha, score alto",
+def test_historias_recencia_desempata_mismo_score(cliente):
+    # Con el mismo `score`, la más reciente (`ultimo_visto`) desempata primero.
+    _sembrar_cluster("vieja", score=0.5, titulo="Mismo score, más vieja",
+                     ultimo_visto="2026-06-01T12:00:00+00:00")
+    _sembrar_cluster("nueva", score=0.5, titulo="Mismo score, más nueva",
                      ultimo_visto="2026-06-05T12:00:00+00:00")
     datos = cliente.get("/api/noticias/historias").json()
-    assert [h["id"] for h in datos["historias"]] == ["alta", "baja"]
+    assert [h["id"] for h in datos["historias"]] == ["nueva", "vieja"]
 
 
 def test_historias_incluye_enlaces_corroborantes(cliente):
@@ -109,10 +110,10 @@ def test_historias_filtra_por_marca(cliente):
     assert datos["historias"][0]["marca"] == "claro-sports"
 
 
-def test_historias_filtra_por_categoria_y_estado(cliente):
-    _sembrar_cluster("a", categoria="deportes")
-    _sembrar_cluster("b", categoria="mx")
-    assert cliente.get("/api/noticias/historias", params={"categoria": "deportes"}).json()["total"] == 1
+def test_historias_filtra_por_estado(cliente):
+    # Ya NO se filtra por categoría (el eje es marca/línea editorial): solo estado.
+    _sembrar_cluster("a")
+    _sembrar_cluster("b")
     assert cliente.get("/api/noticias/historias", params={"estado": "nuevo"}).json()["total"] == 2
     assert cliente.get("/api/noticias/historias", params={"estado": "usado"}).json()["total"] == 0
 

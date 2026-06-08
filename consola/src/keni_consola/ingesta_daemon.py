@@ -123,6 +123,7 @@ def paso_clustering() -> dict[str, Any]:
     breaking_fuentes = config.cluster_breaking_fuentes()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
+    pesos = config.score_pesos()  # pesos editables del algoritmo de ponderación
 
     ahora = datetime.now(UTC)
     desde = (ahora - timedelta(hours=ventana_h)).isoformat()
@@ -172,7 +173,9 @@ def paso_clustering() -> dict[str, Any]:
                 fuentes_baja_confianza=fuentes_baja,
             )
             palabras = relevancia_marca.palabras_de_marca(recalc.get("marca") or None)
-            score, _razon = clustering.puntuar(recalc, palabras_marca=palabras, ahora=ahora)
+            score, _razon = clustering.puntuar(
+                recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
+            )
             recalc["score"] = score
             repos.upsert_noticia_cluster(recalc)
         except Exception:  # noqa: BLE001 -- recalcular un cluster no aborta el paso

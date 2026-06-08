@@ -37,6 +37,11 @@ from ._config_comun import (
     ENV_PIPELINE_MAX,
     ENV_QA,
     ENV_REUTERS_API_KEY,
+    ENV_SCORE_BONUS_BREAKING,
+    ENV_SCORE_PESO_CORROBORACION,
+    ENV_SCORE_PESO_FRESCURA,
+    ENV_SCORE_PESO_MARCA,
+    ENV_SCORE_PESO_VIRALIDAD,
     ENV_REUTERS_BASE_URL,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
@@ -57,6 +62,11 @@ from ._config_comun import (
     INGESTA_WORKERS_DEF,
     PIPELINE_INTERVALO_HORAS_DEF,
     PIPELINE_MAX_DEF,
+    SCORE_BONUS_BREAKING_DEF,
+    SCORE_PESO_CORROBORACION_DEF,
+    SCORE_PESO_FRESCURA_DEF,
+    SCORE_PESO_MARCA_DEF,
+    SCORE_PESO_VIRALIDAD_DEF,
     TRAD_LOTE_DEF,
     TRAD_MIN_SCORE_DEF,
     _crudo,
@@ -155,6 +165,36 @@ def cluster_breaking_fuentes() -> int:
 def cluster_breaking_ventana_h() -> int:
     """Ventana (horas) para la heurística de breaking (`KENI_CLUSTER_BREAKING_VENTANA_H`, def 6, min 1)."""
     return _entero(ENV_CLUSTER_BREAKING_VENTANA_H, CLUSTER_BREAKING_VENTANA_H_DEF, minimo=1)
+
+
+def _peso01(env_flag: str, defecto: float) -> float:
+    """Lee un peso float del store/env, acotado a [0,1]; valor inválido/ausente → `defecto`."""
+    crudo = _crudo(env_flag)
+    if not crudo:
+        return defecto
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return defecto
+    return min(1.0, max(0.0, valor))
+
+
+def score_pesos():
+    """Pesos del algoritmo de ponderación del score de cluster, como `clustering.PesosScore`.
+
+    Lee cada peso del store/env (clamp [0,1]; default = los de `clustering`). El daemon de ingesta
+    inyecta el resultado en `clustering.puntuar` para que el equipo afine la jerarquización desde
+    la consola sin tocar código. Import perezoso de `dominio.clustering` para evitar ciclos.
+    """
+    from .dominio.clustering import PesosScore
+
+    return PesosScore(
+        corroboracion=_peso01(ENV_SCORE_PESO_CORROBORACION, SCORE_PESO_CORROBORACION_DEF),
+        frescura=_peso01(ENV_SCORE_PESO_FRESCURA, SCORE_PESO_FRESCURA_DEF),
+        viralidad=_peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF),
+        marca=_peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF),
+        breaking=_peso01(ENV_SCORE_BONUS_BREAKING, SCORE_BONUS_BREAKING_DEF),
+    )
 
 
 

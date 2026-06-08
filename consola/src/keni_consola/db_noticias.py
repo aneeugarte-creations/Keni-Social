@@ -400,7 +400,6 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
 def listar_noticias_items(
     *,
     marca: str | None = None,
-    categoria: str | None = None,
     desde: str | None = None,
     q: str | None = None,
     estado: str | None = None,
@@ -409,18 +408,16 @@ def listar_noticias_items(
 ) -> tuple[list[dict[str, Any]], int]:
     """Items de archivo filtrables, MÁS NUEVOS primero (`capturado_en` desc) + total.
 
-    Filtros: `marca` ('' / None = todas), `categoria`, `desde` (ISO; `capturado_en >= desde`),
-    `q` (subcadena insensible sobre titulo+resumen), `estado`. Devuelve `(items, total)` donde
-    `total` cuenta los que pasan los filtros (para la paginación), no solo la página.
+    Filtros: `marca` ('' / None = todas), `desde` (ISO; `capturado_en >= desde`), `q` (subcadena
+    insensible sobre titulo+resumen), `estado`. Ya NO se filtra por `categoria` (el eje de la UI es
+    marca/línea editorial). Devuelve `(items, total)` donde `total` cuenta los que pasan los
+    filtros (para la paginación), no solo la página.
     """
     condiciones: list[str] = []
     params: list[Any] = []
     if marca:
         condiciones.append("marca = ?")
         params.append(marca)
-    if categoria:
-        condiciones.append("categoria = ?")
-        params.append(categoria)
     if desde:
         condiciones.append("capturado_en >= ?")
         params.append(desde)
@@ -838,16 +835,16 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
 def listar_noticia_clusters(
     *,
     marca: str | None = None,
-    categoria: str | None = None,
     desde: str | None = None,
     estado: str | None = None,
     limite: int = 50,
     desplazamiento: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Historias filtrables, MÁS NUEVAS primero (`ultimo_visto` desc) + total.
+    """Historias filtrables, MÁS RELEVANTES primero (`score` desc) + total.
 
-    Filtros: `marca` ('' / None = todas), `categoria`, `desde` (ISO; `ultimo_visto >= desde`),
-    `estado`. Orden `ultimo_visto DESC, score DESC` (recencia primaria, score desempate).
+    Filtros: `marca` ('' / None = todas), `desde` (ISO; `ultimo_visto >= desde`), `estado`. Orden
+    `score DESC, ultimo_visto DESC` (jerarquización por el algoritmo de ponderación; recencia como
+    desempate). Ya NO se filtra por `categoria` (la jerarquización es por marca/línea editorial).
     Devuelve `(clusters, total)`.
     """
     condiciones: list[str] = []
@@ -855,9 +852,6 @@ def listar_noticia_clusters(
     if marca:
         condiciones.append("marca = ?")
         params.append(marca)
-    if categoria:
-        condiciones.append("categoria = ?")
-        params.append(categoria)
     if desde:
         condiciones.append("ultimo_visto >= ?")
         params.append(desde)
@@ -867,7 +861,7 @@ def listar_noticia_clusters(
     where = (" WHERE " + " AND ".join(condiciones)) if condiciones else ""
     sql = (
         f"{_SELECT_NOTICIA_CLUSTER}{where} "
-        "ORDER BY ultimo_visto DESC, score DESC, id DESC LIMIT ? OFFSET ?"
+        "ORDER BY score DESC, ultimo_visto DESC, id DESC LIMIT ? OFFSET ?"
     )
     con = _conectar()
     try:

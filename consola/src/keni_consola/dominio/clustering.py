@@ -27,6 +27,7 @@ Scoring (`puntuar`): ver la fórmula documentada en su docstring.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
 from typing import Any
@@ -43,11 +44,34 @@ BREAKING_FUENTES_DEF = 3
 BREAKING_VENTANA_H_DEF = 6
 
 # Pesos del score (ver `puntuar`). Suman 1.0: el score vive en [0, 1] y es comparable
-# entre marcas/categorías para el ranking.
+# entre marcas/categorías para el ranking. Son los DEFAULTS; el daemon los puede inyectar
+# desde la configuración (ajustes editables por la consola), de ahí la dataclass `PesosScore`.
 _PESO_CORROBORACION = 0.35
 _PESO_FRESCURA = 0.25
 _PESO_VIRALIDAD = 0.20
 _PESO_MARCA = 0.20
+# Empujón aditivo si la historia es breaking (no es un peso de la combinación lineal).
+_BONUS_BREAKING = 0.10
+
+
+@dataclass(frozen=True)
+class PesosScore:
+    """Pesos del algoritmo de ponderación del score de cluster (inyectables desde config).
+
+    Los cuatro primeros son la combinación lineal (idealmente suman ~1.0); `breaking` es el
+    empujón aditivo. `puntuar()` usa estos; el daemon construye una instancia desde
+    `config.score_pesos()` para que el equipo afine el ranking sin tocar código. Sin inyección,
+    `puntuar()` cae a `_PESOS_DEF` (estos defaults), preservando el comportamiento actual.
+    """
+
+    corroboracion: float = _PESO_CORROBORACION
+    frescura: float = _PESO_FRESCURA
+    viralidad: float = _PESO_VIRALIDAD
+    marca: float = _PESO_MARCA
+    breaking: float = _BONUS_BREAKING
+
+
+_PESOS_DEF = PesosScore()
 
 # Normalizadores de cada señal (ver fórmula).
 _FUENTES_SATURA = 6  # 6+ fuentes distintas saturan la corroboración a 1.0
@@ -454,6 +478,7 @@ def puntuar(
     *,
     palabras_marca: frozenset[str] = frozenset(),
     ahora: datetime | None = None,
+    pesos: PesosScore | None = None,
 ) -> tuple[float, str]:
     """Puntúa una historia para el ranking newsroom. Devuelve `(score, razon)`. PURA.
 
@@ -471,6 +496,7 @@ def puntuar(
     MONÓTONA en cada señal: a igualdad de lo demás, más fuentes / más fresca / más señal /
     más relevante ⇒ score mayor (los tests lo verifican). `razon` resume las señales activas.
     """
+    p = pesos or _PESOS_DEF
     n_fuentes = int(cluster.get("n_fuentes") or 0)
     senal = int(cluster.get("senal") or 0)
     s_corro = _log_norm(n_fuentes, _FUENTES_SATURA)
@@ -479,13 +505,13 @@ def puntuar(
     s_marca = _relevancia_marca(cluster, palabras_marca)
 
     score = (
-        _PESO_CORROBORACION * s_corro
-        + _PESO_FRESCURA * s_fresca
-        + _PESO_VIRALIDAD * s_viral
-        + _PESO_MARCA * s_marca
+        p.corroboracion * s_corro
+        + p.frescura * s_fresca
+        + p.viralidad * s_viral
+        + p.marca * s_marca
     )
     if int(cluster.get("breaking") or 0):
-        score = min(1.0, score + 0.10)
+        score = min(1.0, score + p.breaking)
 
     razones: list[str] = []
     if n_fuentes > 1:

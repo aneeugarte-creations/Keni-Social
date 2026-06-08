@@ -91,7 +91,6 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
 def listar_noticias_items(
     *,
     marca: str | None = None,
-    categoria: str | None = None,
     desde: str | None = None,
     q: str | None = None,
     estado: str | None = None,
@@ -100,7 +99,6 @@ def listar_noticias_items(
 ) -> tuple[list[dict[str, Any]], int]:
     return db.listar_noticias_items(
         marca=marca,
-        categoria=categoria,
         desde=desde,
         q=q,
         estado=estado,
@@ -184,7 +182,6 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
 def listar_noticia_clusters(
     *,
     marca: str | None = None,
-    categoria: str | None = None,
     desde: str | None = None,
     estado: str | None = None,
     limite: int = 50,
@@ -192,7 +189,6 @@ def listar_noticia_clusters(
 ) -> tuple[list[dict[str, Any]], int]:
     return db.listar_noticia_clusters(
         marca=marca,
-        categoria=categoria,
         desde=desde,
         estado=estado,
         limite=limite,

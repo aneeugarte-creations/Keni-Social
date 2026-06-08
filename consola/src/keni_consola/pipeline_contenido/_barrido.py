@@ -14,7 +14,7 @@ from .. import config, daemon_util, generaciones, marcas, repos
 from . import _ref
 from ._comun import QA_EN_CURSO, QA_SALTADA, _log
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
-from ._ingesta import _claves_dedup_marca, crear_tema_de, ingerir_marca
+from ._ingesta import promover_clusters_marca
 from ._qa import lanzar_qa_fuente, temas_sin_qa
 
 __all__ = [
@@ -66,29 +66,20 @@ def _ejecutar_barrido() -> dict[str, Any]:
     # Etapa CI = toggle "Crear noticias" (`KENI_INGESTA`), 1 toggle = 1 etapa: si el maestro está
     # OFF no entran temas nuevos (aunque el daemon barra por otra etapa, p. ej. Copy de temas ya
     # ingeridos). Por marca, el override `KENI_INGESTA::marca=0` excluye esa marca de la ingesta.
+    # CI consume el pool ya FUSIONADO y RANKEADO (Ola B): promueve las top-N historias por marca
+    # (no un tema por item RSS), ordenadas por el score del algoritmo de ponderación. Esto frena el
+    # volumen y respeta la jerarquización. El clustering del pool lo alimenta el daemon de ingesta.
     temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids() if config.ingesta_activa() else []:
-        # Exclusión por marca: si "Crear noticias" de ESTA marca se apagó a mano, no se ingiere
+        # Exclusión por marca: si "Crear noticias" de ESTA marca se apagó a mano, no se promueve
         # nada suyo (no entran temas nuevos). Sin override, sigue al maestro (global).
         if config.marca_apagada(config.ENV_INGESTA, marca):
             continue
         try:
-            trabajos = ingerir_marca(marca, maximo=maximo)
-        except Exception:  # noqa: BLE001 -- un fallo de ingesta de una marca no rompe el barrido
-            _log.exception("pipeline: fallo la ingesta (CI) de la marca %s", marca)
+            temas_nuevos.extend(promover_clusters_marca(marca, maximo=maximo))
+        except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
+            _log.exception("pipeline: fallo la promoción de historias (CI) de la marca %s", marca)
             continue
-        # Dedup: claves de los títulos del contenido reciente de la marca (ventana `_DIAS_DEDUP`).
-        # `crear_tema_de` salta los trabajos cuyo título ya esté aquí (duplicado en cola o
-        # republicado) y va añadiendo los nuevos, para dedup también DENTRO de este barrido.
-        claves_vistas = _claves_dedup_marca(marca)
-        for trabajo in trabajos:
-            try:
-                tema = crear_tema_de(trabajo, claves_vistas=claves_vistas)
-            except Exception:  # noqa: BLE001 -- un fallo por item no debe matar el barrido
-                _log.exception("pipeline: fallo la creación del tema (CI) de un item.")
-                continue
-            if tema:
-                temas_nuevos.append(tema)
     # --- Fase QA (criba de la fuente) + Fase CD (copy) + Etapa ARTE. -------------------------
     cribados = ejecutar_qa(autor=autor)
     lanzados = ejecutar_cd(autor=autor)

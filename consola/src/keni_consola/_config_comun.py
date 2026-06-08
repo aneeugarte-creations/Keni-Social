@@ -198,6 +198,15 @@ ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
 ENV_CLUSTER_BREAKING_FUENTES = "KENI_CLUSTER_BREAKING_FUENTES"
 ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
 
+# Pesos del ALGORITMO DE PONDERACIÓN del score de cluster (jerarquización de noticias). Editables
+# por la consola para que el equipo afine el ranking sin tocar código (clamp [0,1]; default =
+# los de `dominio.clustering.PesosScore`). El daemon de ingesta los inyecta en `clustering.puntuar`.
+ENV_SCORE_PESO_CORROBORACION = "KENI_SCORE_PESO_CORROBORACION"
+ENV_SCORE_PESO_FRESCURA = "KENI_SCORE_PESO_FRESCURA"
+ENV_SCORE_PESO_VIRALIDAD = "KENI_SCORE_PESO_VIRALIDAD"
+ENV_SCORE_PESO_MARCA = "KENI_SCORE_PESO_MARCA"
+ENV_SCORE_BONUS_BREAKING = "KENI_SCORE_BONUS_BREAKING"
+
 # Monitor de COBERTURA + traducción completa + auto-verificación (Ola D). Aditivo sobre A-C.
 #   MAX_ERRORES: tras N errores seguidos el daemon AUTO-DESACTIVA el feed (deja de sondearlo).
 #   FEED_SLA_MIN: un feed activo sin items nuevos en > N min cuenta como "stale" en /salud.
@@ -457,6 +466,13 @@ CLUSTER_VENTANA_H_DEF = 72
 CLUSTER_UMBRAL_DEF = 0.82
 CLUSTER_BREAKING_FUENTES_DEF = 3
 CLUSTER_BREAKING_VENTANA_H_DEF = 6
+
+# Pesos del algoritmo de ponderación del score (defaults; espejan `clustering.PesosScore`).
+SCORE_PESO_CORROBORACION_DEF = 0.35
+SCORE_PESO_FRESCURA_DEF = 0.25
+SCORE_PESO_VIRALIDAD_DEF = 0.20
+SCORE_PESO_MARCA_DEF = 0.20
+SCORE_BONUS_BREAKING_DEF = 0.10
 
 # Monitor de cobertura + traducción + verificación (Ola D): defaults.
 #   8 errores seguidos ya es señal robusta de feed muerto (con backoff, son horas de fallos).
@@ -724,6 +740,11 @@ __all__ = [
     'ENV_S3_ENDPOINT',
     'ENV_S3_REGION',
     'ENV_S3_SECRET_KEY',
+    'ENV_SCORE_BONUS_BREAKING',
+    'ENV_SCORE_PESO_CORROBORACION',
+    'ENV_SCORE_PESO_FRESCURA',
+    'ENV_SCORE_PESO_MARCA',
+    'ENV_SCORE_PESO_VIRALIDAD',
     'ENV_SECRETOS',
     'ENV_SESION_HORAS',
     'ENV_SESION_MAX_HORAS',
@@ -780,6 +801,11 @@ __all__ = [
     'REAPER_INTERVALO_MIN_DEF',
     'S3_BUCKET_DEF',
     'S3_REGION_DEF',
+    'SCORE_BONUS_BREAKING_DEF',
+    'SCORE_PESO_CORROBORACION_DEF',
+    'SCORE_PESO_FRESCURA_DEF',
+    'SCORE_PESO_MARCA_DEF',
+    'SCORE_PESO_VIRALIDAD_DEF',
     'SESION_HORAS_DEF',
     'SESION_MAX_HORAS_DEF',
     'SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF',

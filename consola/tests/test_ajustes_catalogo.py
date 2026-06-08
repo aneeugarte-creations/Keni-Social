@@ -58,6 +58,10 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
         config.ENV_CLUSTER_VENTANA_H, config.ENV_CLUSTER_BREAKING_FUENTES,
         config.ENV_CLUSTER_BREAKING_VENTANA_H,
+        # Pesos del algoritmo de ponderación del ranking de noticias.
+        config.ENV_SCORE_PESO_CORROBORACION, config.ENV_SCORE_PESO_MARCA,
+        config.ENV_SCORE_PESO_FRESCURA, config.ENV_SCORE_PESO_VIRALIDAD,
+        config.ENV_SCORE_BONUS_BREAKING,
         config.ENV_TRAD_MIN_SCORE, config.ENV_TRAD_LOTE,
         config.ENV_FEED_SLA_MIN,
     }

@@ -219,6 +219,19 @@ def test_puntuar_relevancia_de_marca_sube_el_score():
     assert con > sin
 
 
+def test_puntuar_pesos_inyectados_cambian_el_score():
+    """Pesos inyectados (PesosScore) reemplazan los defaults: el ranking es configurable."""
+    cl = _cluster(n_fuentes=6, senal=0, breaking=0, ultimo_visto=_T0.isoformat())
+    solo_corro = clustering.PesosScore(
+        corroboracion=1.0, frescura=0.0, viralidad=0.0, marca=0.0, breaking=0.0
+    )
+    todo_cero = clustering.PesosScore(
+        corroboracion=0.0, frescura=0.0, viralidad=0.0, marca=0.0, breaking=0.0
+    )
+    assert clustering.puntuar(cl, ahora=_T0, pesos=solo_corro)[0] > 0.0
+    assert clustering.puntuar(cl, ahora=_T0, pesos=todo_cero)[0] == 0.0
+
+
 # --------------------------------------------------------------------------- #
 # Auto-verificación por corroboración (Ola D)                                  #
 # --------------------------------------------------------------------------- #

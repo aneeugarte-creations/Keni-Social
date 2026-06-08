@@ -24,7 +24,6 @@ export const apiNoticias = {
     listar: (
       params: {
         marca?: string;
-        categoria?: string;
         desde?: string;
         q?: string;
         estado?: string;
@@ -36,7 +35,6 @@ export const apiNoticias = {
       peticion<RespuestaNoticias>(
         `/noticias${query({
           marca: params.marca,
-          categoria: params.categoria,
           desde: params.desde,
           q: params.q,
           estado: params.estado,
@@ -89,7 +87,6 @@ export const apiNoticias = {
     historias: (
       params: {
         marca?: string;
-        categoria?: string;
         desde?: string;
         estado?: string;
         limit?: number;
@@ -100,7 +97,6 @@ export const apiNoticias = {
       peticion<RespuestaHistorias>(
         `/noticias/historias${query({
           marca: params.marca,
-          categoria: params.categoria,
           desde: params.desde,
           estado: params.estado,
           limit: params.limit != null ? String(params.limit) : undefined,

@@ -79,6 +79,29 @@ def _mock_og_image(monkeypatch, url=""):
     monkeypatch.setattr(pc, "_FETCH_OG_IMAGE", lambda enlace: url)
 
 
+def _ci_desde_feed(marca="unotv", *, maximo=2):
+    """CI feed→tema con los building blocks `ingerir_marca` + `crear_tema_de` (sin el barrido).
+
+    El barrido auto ahora promueve CLUSTERS rankeados; estos building blocks de feed siguen
+    existiendo y se cubren aquí en aislamiento (dedup, copy_pendiente con og:image, url_fuente).
+    """
+    trabajos = pc.ingerir_marca(marca, maximo=maximo)
+    claves: set[str] = set()
+    return [t for tr in trabajos if (t := pc.crear_tema_de(tr, claves_vistas=claves))]
+
+
+def _sembrar_cluster(cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo"):
+    """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema."""
+    repos.upsert_noticia_cluster({
+        "id": cid, "titulo": titulo, "resumen": "Resumen de la historia", "marca": marca,
+        "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1, "n_fuentes": 2,
+        "idiomas": ["es"], "senal": 100, "score": score, "breaking": 0,
+        "primer_visto": "2026-06-01T00:00:00+00:00", "ultimo_visto": "2026-06-05T12:00:00+00:00",
+        "estado": estado,
+    })
+    return repos.obtener_noticia_cluster(cid)
+
+
 # --------------------------------------------------------------------------- #
 # Funciones PURAS (sin DB)                                                     #
 # --------------------------------------------------------------------------- #
@@ -190,16 +213,8 @@ def _etapas_de_actividad():
 
 
 def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
-    """CI selecciona <= cap, crea temas SIN copy, marca items usados; QA queda sin documento."""
-    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
-    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op aquí (doc QA vacío): sin veredicto
-    monkeypatch.setenv("KENI_PIPELINE", "1")
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "2")
-    llamadas = _mock_lanzar_copy(monkeypatch)
+    """CI feed→tema (building blocks) selecciona <= cap, crea temas SIN copy y dedup efectiva."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    # Sin documento de QA disponible: la fase QA no lanza nada (temas quedan sin veredicto) y CD
-    # no genera copy. Aislamos así la fase CI sin tocar `claude`.
-    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
 
     fuente = repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
     items = [_item(clave="a", titulo="Tema A"), _item(clave="b", titulo="Tema B"),
@@ -207,11 +222,10 @@ def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
     _mock_feed(monkeypatch, items)
     _mock_og_image(monkeypatch, "")
 
-    resumen = pc.ejecutar_barrido()
+    temas = _ci_desde_feed(maximo=2)
 
-    # CI creó 2 temas (cap) SIN copy; CD no lanzó nada (sin QA aprobada).
-    assert len(resumen["temas"]) == 2
-    assert llamadas == []
+    # CI creó 2 temas (cap) SIN copy ni veredicto de QA.
+    assert len(temas) == 2
     titulos = {t["titulo"] for t in pc.temas_pipeline()}
     assert {"Tema A", "Tema B"} <= titulos
     assert all((t.get("qa_veredicto") or "") == "" for t in pc.temas_pipeline())
@@ -223,8 +237,8 @@ def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
     # Etapa CI en la actividad.
     assert any(e.startswith("CI · ") for e in _etapas_de_actividad())
 
-    # dedup efectiva: un SEGUNDO barrido crea el restante (C).
-    pc.ejecutar_barrido()
+    # dedup efectiva: un SEGUNDO pase crea el restante (C).
+    _ci_desde_feed(maximo=2)
     assert {t["titulo"] for t in pc.temas_pipeline()} >= {"Tema A", "Tema B", "Tema C"}
 
 
@@ -232,34 +246,23 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
     """Feed de marca PROPIA: la og:image resuelta queda en `copy_pendiente` del tema."""
     import json
 
-    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
-    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op (doc QA vacío): tema sin veredicto
-    monkeypatch.setenv("KENI_PIPELINE", "1")
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
 
     repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
     _mock_feed(monkeypatch, [_item(clave="p1", titulo="Nota propia")])
     _mock_og_image(monkeypatch, "https://casa.test/foto.jpg")
 
-    pc.ejecutar_barrido()
+    temas = _ci_desde_feed(maximo=1)
 
-    temas = pc.temas_pipeline()
     assert len(temas) == 1
-    pend = json.loads(temas[0]["copy_pendiente"])
+    pend = json.loads(pc.temas_pipeline()[0]["copy_pendiente"])
     assert pend["imagen"] == "https://casa.test/foto.jpg"
     assert pend["tipo_contenido"] == "fuente"
 
 
 def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
     """CI: un item con `enlace` http(s) persiste `url_fuente` CANÓNICA en el tema creado."""
-    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
-    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op (doc QA vacío): tema sin veredicto
-    monkeypatch.setenv("KENI_PIPELINE", "1")
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
 
     repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
     # Enlace con tracking + esquema + www: la canónica los normaliza (cruce por URL).
@@ -267,9 +270,8 @@ def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
     _mock_feed(monkeypatch, [_item(clave="u1", titulo="Tema con URL", enlace=enlace)])
     _mock_og_image(monkeypatch, "")
 
-    pc.ejecutar_barrido()
+    temas = _ci_desde_feed(maximo=1)
 
-    temas = pc.temas_pipeline()
     assert len(temas) == 1
     tema = repos.obtener_contenido(temas[0]["id"])
     assert (tema.get("url_fuente") or "") == "ejemplo.test/nota-1?id=7"
@@ -277,20 +279,13 @@ def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
 
 def test_ci_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
     """CI: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
-    monkeypatch.setenv("KENI_INGESTA", "1")  # etapa CI = "Crear noticias" (1 toggle = 1 etapa)
-    monkeypatch.setenv("KENI_QA", "1")       # QA activa pero no-op (doc QA vacío): tema sin veredicto
-    monkeypatch.setenv("KENI_PIPELINE", "1")
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
 
     repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
     _mock_feed(monkeypatch, [_item(clave="u2", titulo="Sin enlace", enlace="")])
     _mock_og_image(monkeypatch, "")
 
-    pc.ejecutar_barrido()
-
-    temas = pc.temas_pipeline()
+    temas = _ci_desde_feed(maximo=1)
     assert len(temas) == 1
     tema = repos.obtener_contenido(temas[0]["id"])
     assert (tema.get("url_fuente") or "") == ""
@@ -401,25 +396,58 @@ def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_solo_noticias_ci_corre_qa_saltada_cd_no(entorno, monkeypatch):
-    """Solo «Crear noticias» ON: CI crea temas, QA los marca 'saltada', CD no genera copy."""
+def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
+    """Solo «Crear noticias» ON: CI promueve la historia top, QA la marca 'saltada', CD no copia."""
     monkeypatch.setenv("KENI_INGESTA", "1")
     monkeypatch.delenv("KENI_QA", raising=False)        # QA off -> etapa saltada
     monkeypatch.delenv("KENI_PIPELINE", raising=False)  # Copy off -> CD no corre
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
-    _mock_feed(monkeypatch, [_item(clave="n1", titulo="Solo noticia")])
-    _mock_og_image(monkeypatch, "")
+    _sembrar_cluster("c1", titulo="Historia caliente", score=0.8)
 
     resumen = pc.ejecutar_barrido()
 
+    # CI promovió el cluster a un tema del pipeline.
     assert len(resumen["temas"]) == 1
-    # QA desactivada: los temas quedan 'saltada' (no se lanza criba).
+    assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
+    # QA desactivada: el tema queda 'saltada' (no se lanza criba).
     assert all((t.get("qa_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
-    # CD desactivada: no se genera copy aunque la marca tenga temas listos.
+    # CD desactivada: no se genera copy aunque haya tema listo.
     assert llamadas == []
+    # El cluster quedó marcado usado (no se re-promueve).
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"
+
+
+def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
+    """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("baja", titulo="Score bajo", score=0.1)
+    _sembrar_cluster("alta", titulo="Score alto", score=0.9)
+    _sembrar_cluster("media", titulo="Score medio", score=0.5)
+
+    temas = pc.promover_clusters_marca("unotv", maximo=2)
+
+    # Solo las 2 de mayor score (alta, media); todas con origen pipeline y copy pendiente.
+    assert {t["titulo"] for t in temas} == {"Score alto", "Score medio"}
+    assert all(t["origen"] == pc.ORIGEN_PIPELINE for t in temas)
+    assert all((t.get("copy_pendiente") or "").strip() for t in temas)
+    assert repos.obtener_noticia_cluster("alta")["estado"] == "usado"
+    assert repos.obtener_noticia_cluster("baja")["estado"] == "nuevo"  # no promovida
+
+
+def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
+    """Una historia cuyo título ya está en el tablero reciente no crea un segundo tema."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    cluster = _sembrar_cluster("c1", titulo="Historia repetida", score=0.7)
+    # Sembramos la clave del título como ya vista para forzar el dedup.
+    from keni_consola.dominio import dedup as _dedup
+    claves = {_dedup.clave("Historia repetida")}
+
+    tema = pc.crear_tema_de_cluster(cluster, [], claves_vistas=claves)
+
+    assert tema is None  # duplicado: no se crea
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"  # pero se marca usado
 
 
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
