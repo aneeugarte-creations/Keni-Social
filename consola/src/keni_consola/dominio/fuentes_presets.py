@@ -1633,14 +1633,29 @@ del _p, _cat, _vistas
 # --------------------------------------------------------------------------- #
 
 
-def listar_presets(categoria: str | None = None) -> list[dict[str, Any]]:
-    """Lista de presets del catálogo, opcionalmente filtrada por `categoria`.
+def listar_presets(
+    categoria: str | None = None, marca: str | None = None
+) -> list[dict[str, Any]]:
+    """Lista de presets del catálogo, opcionalmente filtrada por `categoria` y `marca`.
+
+    Filtro de `marca` (conservador, son sugerencias de catálogo): cuando se pasa una
+    marca, se ocultan SOLO los presets cuya `marca_sugerida` declara OTRA marca; los
+    presets sin marca sugerida (catálogo genérico) siempre se muestran. Con `marca=None`
+    se devuelven todos.
 
     Devuelve una copia superficial de cada preset (sin mutar el catálogo).
     """
+    presets = _PRESETS
     if categoria is not None:
-        return [dict(p) for p in _PRESETS if p["categoria"] == categoria]
-    return [dict(p) for p in _PRESETS]
+        presets = [p for p in presets if p["categoria"] == categoria]
+    if marca:
+        presets = [
+            p
+            for p in presets
+            if not (p.get("marca_sugerida") or "")
+            or (p.get("marca_sugerida") or "") == marca
+        ]
+    return [dict(p) for p in presets]
 
 
 def categorias() -> list[str]:

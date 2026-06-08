@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useGeneracion } from "@/hooks/use-generacion";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { cn } from "@/lib/utils";
@@ -427,6 +428,11 @@ function EsqueletoActividad() {
  */
 export default function Actividad() {
   const navigate = useNavigate();
+  // La marca la MANDA el switch global de la barra superior (workspace); Actividad no
+  // tiene selector propio: respeta el global. `marcaActiva` es el id canónico (o null =
+  // "Todas", solo admin) que el back valida con `marcas.es_marca`.
+  const { marcaActiva } = useMarcaActiva();
+  const marcaParam = marcaActiva ?? undefined;
   // Item D: id de la generación que se está viendo EN VIVO en el modal (o null).
   const [visorId, setVisorId] = React.useState<string | null>(null);
   const [tipo, setTipo] = React.useState<string>(TODOS);
@@ -438,12 +444,13 @@ export default function Actividad() {
   const tipoParam = tipo === TODOS ? undefined : tipo;
 
   const listaQuery = useQuery({
-    queryKey: ["actividad", "lista", limite, tipoParam],
-    queryFn: ({ signal }) => api.actividad({ limite, tipo: tipoParam }, signal),
+    queryKey: ["actividad", "lista", limite, tipoParam, marcaParam ?? "todas"],
+    queryFn: ({ signal }) =>
+      api.actividad({ limite, tipo: tipoParam, marca: marcaParam }, signal),
   });
   const agregadosQuery = useQuery({
-    queryKey: ["actividad", "agregados"],
-    queryFn: ({ signal }) => api.actividadAgregados(signal),
+    queryKey: ["actividad", "agregados", marcaParam ?? "todas"],
+    queryFn: ({ signal }) => api.actividadAgregados({ marca: marcaParam }, signal),
   });
 
   const cargando = agregadosQuery.isPending || listaQuery.isPending;

@@ -456,14 +456,24 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
 
 
 def listar(
-    limite: int | None = _LISTADO_MAX, desplazamiento: int = 0
+    limite: int | None = _LISTADO_MAX,
+    desplazamiento: int = 0,
+    *,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
     """Generaciones recientes primero (por `fecha_inicio` desc, luego id), paginadas.
 
     `limite=None` devuelve TODAS (sin recortar); por defecto recorta a `_LISTADO_MAX`
     (retrocompat con la UI de actividad). `desplazamiento` salta las N primeras.
+
+    `marca` (opcional): si viene NO vacia, restringe a las generaciones de ESA marca
+    (campo `marca` del registro). El default `None` (o "") NO filtra — todos los
+    llamantes previos quedan inalterados. El filtro se aplica ANTES de paginar, asi el
+    `limite`/`desplazamiento` operan sobre el subconjunto de la marca.
     """
     items = _todas_ordenadas()
+    if marca:
+        items = [g for g in items if g.get("marca") == marca]
     inicio = max(0, int(desplazamiento or 0))
     if limite is None:
         return items[inicio:]

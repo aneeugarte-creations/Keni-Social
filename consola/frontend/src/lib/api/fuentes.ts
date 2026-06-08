@@ -16,7 +16,8 @@ import type {
 
 export const apiFuentes = {
   // --- RSS (solo gestión de fuentes/feeds; los items viven en el pool de Noticias) ---
-  fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),
+  fuentesRss: (marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaFuentesRss>(`/rss/fuentes${query({ marca })}`, { signal }),
   crearFuenteRss: (cuerpo: CuerpoCrearFuenteRss) =>
     peticion<RespuestaFuenteRss>("/rss/fuentes", { metodo: "POST", json: cuerpo }),
   actualizarFuenteRss: (id: string, cuerpo: CuerpoActualizarFuenteRss) =>
@@ -29,8 +30,8 @@ export const apiFuentes = {
 
   // --- Catálogo de fuentes: la vista "Todas" lista los feeds (desde fuentes_rss, tipo='rss')
   // + el estado honesto de agencias (Reuters/AFP). Solo lectura. ---
-  fuentesHub: (tipo?: string, signal?: AbortSignal) =>
-    peticion<RespuestaFuentesHub>(`/fuentes${query({ tipo })}`, { signal }),
+  fuentesHub: (tipo?: string, marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaFuentesHub>(`/fuentes${query({ tipo, marca })}`, { signal }),
   // APORTACION MANUAL (idea / enlace pegado / contenido interno): crea un item REAL en el
   // tablero (`flujo='importante'`) con su `origen` y, best-effort, le lanza copy de fondo.
   aportarFuente: (cuerpo: CuerpoAportarFuente) =>
@@ -39,9 +40,9 @@ export const apiFuentes = {
   // --- Catálogo de presets (Ola 4: Fuentes externas + idiomas) ---
   // Lista el catálogo curado de feeds listos para activar, opcionalmente filtrado por categoría.
   // Marca cada preset con `activa: bool` si ya existe una `fuentes_rss` con esa URL.
-  fuentesPresets: (categoria?: string, signal?: AbortSignal) =>
+  fuentesPresets: (categoria?: string, marca?: string, signal?: AbortSignal) =>
     peticion<RespuestaPresets>(
-      `/fuentes/presets${query({ categoria })}`,
+      `/fuentes/presets${query({ categoria, marca })}`,
       { signal },
     ),
   // Activa los presets elegidos: crea `fuentes_rss` de forma idempotente por URL.

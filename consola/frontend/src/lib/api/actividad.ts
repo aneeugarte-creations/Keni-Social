@@ -11,7 +11,13 @@ export const apiActividad = {
   // Solo lectura: el backend fusiona ambas fuentes en un único feed con métricas
   // (tokens/coste/duración) y expone sus agregados (totales + por tipo + por día).
   actividad: (
-    params: { limite?: number; offset?: number; fuente?: string; tipo?: string } = {},
+    params: {
+      limite?: number;
+      offset?: number;
+      fuente?: string;
+      tipo?: string;
+      marca?: string;
+    } = {},
     signal?: AbortSignal,
   ) =>
     peticion<RespuestaActividad>(
@@ -20,10 +26,14 @@ export const apiActividad = {
         offset: params.offset != null ? String(params.offset) : undefined,
         fuente: params.fuente,
         tipo: params.tipo,
+        marca: params.marca,
       })}`,
       { signal },
     ),
-  actividadAgregados: (signal?: AbortSignal) =>
-    peticion<ActividadAgregados>("/actividad/agregados", { signal }),
+  actividadAgregados: (params: { marca?: string } = {}, signal?: AbortSignal) =>
+    peticion<ActividadAgregados>(
+      `/actividad/agregados${query({ marca: params.marca })}`,
+      { signal },
+    ),
 
 };

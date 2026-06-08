@@ -228,7 +228,11 @@ function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
   const query = useQuery({
     queryKey: ["fuentes", "presets", categoriaFiltro, marcaActiva ?? ""],
     queryFn: ({ signal }) =>
-      api.fuentesPresets(categoriaFiltro === "todas" ? undefined : categoriaFiltro, signal),
+      api.fuentesPresets(
+        categoriaFiltro === "todas" ? undefined : categoriaFiltro,
+        marcaActiva ?? undefined,
+        signal,
+      ),
   });
 
   const activar = useMutation({
@@ -705,7 +709,7 @@ function GestionFuentes({
 
   const query = useQuery({
     queryKey: [...CLAVE_FUENTES, marcaActiva ?? ""],
-    queryFn: ({ signal }) => api.fuentesRss(signal),
+    queryFn: ({ signal }) => api.fuentesRss(marcaActiva ?? undefined, signal),
   });
 
   // null = sin diálogo; "nuevo" = creando; objeto = editando ese feed.

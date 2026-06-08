@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import actividad
+from keni_consola import actividad, generaciones
 
 # --------------------------------------------------------------------------- #
 # Datos de ejemplo                                                            #
@@ -215,3 +215,54 @@ def test_agregados_vacio():
     assert agg["total"] == {"items": 0, "coste_usd": 0, "tokens": 0}
     assert agg["por_tipo"] == []
     assert agg["por_dia"] == []
+
+
+# --------------------------------------------------------------------------- #
+# API `/api/actividad`: filtro por marca (respeta el switch global de marca)  #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_gen(marca: str, etiqueta: str) -> dict:
+    """Crea una generacion REAL en el almacen aislado del entorno (estado completado)."""
+    return generaciones.crear(
+        {"tipo": "copy", "marca": marca, "etiqueta": etiqueta, "estado": "completado"}
+    )
+
+
+def test_actividad_filtra_por_marca(cliente):
+    """`marca=unotv` deja solo la actividad de UnoTV; otras marcas se excluyen."""
+    _crear_gen("unotv", "Copy UnoTV")
+    _crear_gen("claro-sports", "Copy Claro")
+
+    r = cliente.get("/api/actividad?marca=unotv")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["total"] == 1
+    assert [it["marca"] for it in datos["items"]] == ["unotv"]
+
+    # Los agregados tambien se acotan a la marca.
+    ragg = cliente.get("/api/actividad/agregados?marca=unotv")
+    assert ragg.status_code == 200
+    assert ragg.json()["total"]["items"] == 1
+
+
+def test_actividad_sin_marca_devuelve_todo(cliente):
+    """Sin `marca` (caso admin "todas"): se devuelve la actividad de TODAS las marcas."""
+    _crear_gen("unotv", "Copy UnoTV")
+    _crear_gen("claro-sports", "Copy Claro")
+
+    r = cliente.get("/api/actividad")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["total"] == 2
+    assert {it["marca"] for it in datos["items"]} == {"unotv", "claro-sports"}
+
+    ragg = cliente.get("/api/actividad/agregados")
+    assert ragg.status_code == 200
+    assert ragg.json()["total"]["items"] == 2
+
+
+def test_actividad_marca_invalida_400(cliente):
+    """Una `marca` que no es del catalogo se rechaza con 400 (igual que pipelines)."""
+    assert cliente.get("/api/actividad?marca=inventada").status_code == 400
+    assert cliente.get("/api/actividad/agregados?marca=inventada").status_code == 400

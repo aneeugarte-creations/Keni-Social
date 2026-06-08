@@ -122,6 +122,25 @@ def test_filtro_categoria_inexistente_devuelve_lista_vacia():
     assert fuentes_presets.listar_presets(categoria="noexiste") == []
 
 
+def test_filtro_marca_oculta_otras_marcas_y_mantiene_genericos():
+    """`marca=` (conservador): oculta presets de OTRA marca; conserva los sin marca + los de la marca."""
+    de_unotv = fuentes_presets.listar_presets(marca="unotv")
+    sugeridas = {(p.get("marca_sugerida") or "") for p in de_unotv}
+    # No aparece ninguna preset sugerida a otra marca.
+    assert sugeridas <= {"", "unotv"}
+    # Los genéricos (sin marca sugerida) siguen presentes.
+    assert any(not (p.get("marca_sugerida") or "") for p in de_unotv)
+    # Las presets de unotv que existen en el catálogo se conservan.
+    todas_unotv = {
+        p["id"] for p in fuentes_presets.listar_presets() if p.get("marca_sugerida") == "unotv"
+    }
+    assert todas_unotv <= {p["id"] for p in de_unotv}
+    # Sin marca -> catálogo completo (incluye presets de claro-sports).
+    todos = fuentes_presets.listar_presets()
+    assert any(p.get("marca_sugerida") == "claro-sports" for p in todos)
+    assert all(p.get("marca_sugerida") != "claro-sports" for p in de_unotv)
+
+
 def test_listar_devuelve_copia_superficial():
     """listar_presets devuelve copias: mutar el resultado no altera el catálogo."""
     antes = fuentes_presets.listar_presets()
@@ -241,6 +260,20 @@ def test_get_presets_filtro_categoria(cliente):
     presets = r.json()["presets"]
     assert len(presets) >= 3
     assert all(p["categoria"] == "gaming" for p in presets)
+
+
+def test_get_presets_filtro_marca(cliente):
+    """`?marca=unotv` oculta presets de otra marca; conserva genéricos y los de unotv."""
+    r = cliente.get("/api/fuentes/presets?marca=unotv")
+    assert r.status_code == 200, r.text
+    presets = r.json()["presets"]
+    assert all((p.get("marca_sugerida") or "") in ("", "unotv") for p in presets)
+    # No se cuela ninguna sugerida a claro-sports.
+    assert all(p.get("marca_sugerida") != "claro-sports" for p in presets)
+
+
+def test_get_presets_marca_invalida_400(cliente):
+    assert cliente.get("/api/fuentes/presets?marca=marca_falsa").status_code == 400
 
 
 def test_get_presets_activa_refleja_fuentes_existentes(cliente, monkeypatch):

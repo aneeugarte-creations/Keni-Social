@@ -176,8 +176,14 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
 
 
 async def listar_fuentes(request: Request) -> Response:
-    """Listado de fuentes RSS."""
-    fuentes = repos.listar_fuentes_rss()
+    """Listado de fuentes RSS.
+
+    `?marca=` filtra por marca (sus fuentes + las compartidas); vacio = todas.
+    """
+    marca = (request.query_params.get("marca") or "").strip()
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    fuentes = repos.listar_fuentes_rss(marca=marca or None)
     return JSONResponse({"fuentes": [_fuente_a_dict(f) for f in fuentes]})
 
 

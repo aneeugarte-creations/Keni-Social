@@ -102,6 +102,41 @@ def test_crear_fuente_y_listar(cliente):
     assert len(cliente.get("/api/rss/fuentes").json()["fuentes"]) == 1
 
 
+def test_listar_fuentes_filtra_por_marca(cliente):
+    """`?marca=` devuelve las fuentes de ESA marca + las COMPARTIDAS (sin marca).
+
+    Sin `marca` (admin "todas") devuelve todas. Las URLs son distintas porque el alta
+    es idempotente por URL.
+    """
+    cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "UnoTV", "url": "https://93.184.216.34/uno.xml", "marca": "unotv"},
+    )
+    cliente.post(
+        "/api/rss/fuentes",
+        json={
+            "nombre": "Claro",
+            "url": "https://93.184.216.34/claro.xml",
+            "marca": "claro-sports",
+        },
+    )
+    cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Compartida", "url": "https://93.184.216.34/comun.xml"},
+    )
+
+    # Admin (sin marca): ve todas.
+    todas = cliente.get("/api/rss/fuentes").json()["fuentes"]
+    assert {f["nombre"] for f in todas} == {"UnoTV", "Claro", "Compartida"}
+
+    # Marca seleccionada: sus fuentes + las compartidas, NO las de otra marca.
+    de_unotv = cliente.get("/api/rss/fuentes?marca=unotv").json()["fuentes"]
+    assert {f["nombre"] for f in de_unotv} == {"UnoTV", "Compartida"}
+
+    # Marca no permitida -> 400.
+    assert cliente.get("/api/rss/fuentes?marca=marca_falsa").status_code == 400
+
+
 def test_crear_fuente_nombre_obligatorio_400(cliente):
     assert (
         cliente.post("/api/rss/fuentes", json={"url": _URL_OK}).status_code == 400

@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import actividad, agentes, generaciones
+from .. import actividad, agentes, generaciones, marcas
 from .._http_json import _entero_query
 
 # Tope por defecto de items por pagina (alineado con el contrato del frontend).
@@ -60,15 +60,26 @@ def _filtro(valor: str | None, validos: frozenset[str]) -> str:
     return v if v in validos else ""
 
 
-def _origenes() -> tuple[list, list]:
+def _origenes(marca: str | None = None) -> tuple[list, list]:
     """Lee TODAS las generaciones y TODOS los runs (sin recortar) para combinar/agregar.
 
     Las generaciones se piden con `limite=None` (conjunto completo; la paginacion la
     aplica el dominio sobre la mezcla). Los runs vienen del dominio `agentes`
     (`listar_runs_globales`) con sus metricas y su agente denormalizado.
+
+    `marca` (opcional): si viene NO vacia, acota AMBOS origenes a esa marca —las
+    generaciones filtran por su campo `marca` (en la fuente, `generaciones.listar`); los
+    runs por su `agente` (que, para los agentes-marca, ES el id de marca). El default
+    `None`/"" NO filtra (caso admin "todas las marcas").
     """
-    gens = [g for g in generaciones.listar(limite=None) if not _es_marcador_pipeline(g)]
+    gens = [
+        g
+        for g in generaciones.listar(limite=None, marca=marca or None)
+        if not _es_marcador_pipeline(g)
+    ]
     runs = agentes.listar_runs_globales()
+    if marca:
+        runs = [r for r in runs if (r.get("agente") or r.get("marca") or "") == marca]
     return gens, runs
 
 
@@ -76,15 +87,19 @@ async def listar(request: Request) -> Response:
     """Actividad unificada (generaciones + runs), filtrada, ordenada y paginada.
 
     Query: `limite` (def 50), `offset` (def 0), `fuente` (""|generacion|run),
-    `tipo` (""|copy|rss|autogen|hashtags|imagen|verificacion|qa-editorial|prompt|run).
+    `tipo` (""|copy|rss|autogen|hashtags|imagen|verificacion|qa-editorial|prompt|run),
+    `marca` (""=todas, o un id de marca valido — acota la actividad a esa marca).
     """
     qp = request.query_params
+    marca = (qp.get("marca") or "").strip()
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     limite = _entero_query(qp.get("limite"), minimo=1)
     offset = _entero_query(qp.get("offset"), minimo=0) or 0
     fuente = _filtro(qp.get("fuente"), _FUENTES)
     tipo = _filtro(qp.get("tipo"), _TIPOS)
 
-    gens, runs = _origenes()
+    gens, runs = _origenes(marca or None)
     items, total = actividad.combinar(
         gens, runs,
         fuente=fuente, tipo=tipo, offset=offset,
@@ -94,8 +109,15 @@ async def listar(request: Request) -> Response:
 
 
 async def agregados(request: Request) -> Response:
-    """Agregados de la actividad: total + por_tipo (incluye 'run') + por_dia."""
-    gens, runs = _origenes()
+    """Agregados de la actividad: total + por_tipo (incluye 'run') + por_dia.
+
+    Query: `marca` (""=todas, o un id de marca valido — acota los agregados a esa marca).
+    """
+    qp = request.query_params
+    marca = (qp.get("marca") or "").strip()
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    gens, runs = _origenes(marca or None)
     return JSONResponse(actividad.agregados(gens, runs))
 
 

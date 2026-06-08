@@ -97,7 +97,12 @@ async def listar(request: Request) -> Response:
     tipo = request.query_params.get("tipo") or None
     if tipo is not None and tipo not in _TIPOS_FUENTE:
         return JSONResponse({"error": "Tipo de fuente no permitido."}, status_code=400)
-    fuentes_rss = repos.listar_fuentes_rss() if tipo in (None, "rss") else []
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    fuentes_rss = (
+        repos.listar_fuentes_rss(marca=marca or None) if tipo in (None, "rss") else []
+    )
     return JSONResponse(
         {
             "fuentes": [_fuente_rss_a_hub(f) for f in fuentes_rss],
@@ -258,7 +263,10 @@ async def listar_presets_handler(request: Request) -> Response:
     `activa` es True si ya existe una `fuentes_rss` con esa URL exacta.
     """
     categoria = (request.query_params.get("categoria") or "").strip() or None
-    todos = fuentes_presets.listar_presets(categoria=categoria)
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    todos = fuentes_presets.listar_presets(categoria=categoria, marca=marca or None)
     urls = _urls_activas()
     for p in todos:
         p["activa"] = p.get("url", "") in urls

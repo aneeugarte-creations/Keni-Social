@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -466,9 +467,14 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
 
 export default function Pipelines() {
   const [abierto, setAbierto] = React.useState<string | null>(null);
+  // La vista respeta el switch global de marca de la barra superior (no tiene selector
+  // propio). `marcaActiva` es el id canónico (o null = "Todas", solo admin) que el back
+  // valida; null → sin filtro de marca.
+  const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
-    queryKey: ["pipelines", "lista"],
-    queryFn: ({ signal }) => api.pipelines({ limite: 50 }, signal),
+    queryKey: ["pipelines", "lista", marcaActiva ?? "todas"],
+    queryFn: ({ signal }) =>
+      api.pipelines({ marca: marcaActiva ?? undefined, limite: 50 }, signal),
     refetchInterval: 30_000,
   });
   const datos = q.data as RespuestaPipelines | undefined;

@@ -15,9 +15,14 @@ from ._repos_comun import (
 
 
 def listar_fuentes_rss(
-    *, limite: int | None = None, desplazamiento: int | None = None
+    *,
+    marca: str | None = None,
+    limite: int | None = None,
+    desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
-    return db.listar_fuentes_rss(limite=limite, desplazamiento=desplazamiento)
+    return db.listar_fuentes_rss(
+        marca=marca, limite=limite, desplazamiento=desplazamiento
+    )
 
 
 def contar_fuentes_rss() -> int:

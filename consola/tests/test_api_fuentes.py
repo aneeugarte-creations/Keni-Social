@@ -40,6 +40,34 @@ def test_listar_fuentes_tipo_invalido_400(cliente):
     assert cliente.get("/api/fuentes?tipo=loquesea").status_code == 400
 
 
+def test_listar_fuentes_filtra_por_marca(cliente):
+    """`?marca=` devuelve las fuentes de ESA marca + las compartidas; sin marca, todas."""
+    cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "UnoTV", "url": "https://93.184.216.34/uno.xml", "marca": "unotv"},
+    )
+    cliente.post(
+        "/api/rss/fuentes",
+        json={
+            "nombre": "Claro",
+            "url": "https://93.184.216.34/claro.xml",
+            "marca": "claro-sports",
+        },
+    )
+    cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Compartida", "url": "https://93.184.216.34/comun.xml"},
+    )
+
+    todas = {f["nombre"] for f in cliente.get("/api/fuentes").json()["fuentes"]}
+    assert todas == {"UnoTV", "Claro", "Compartida"}
+
+    de_unotv = {f["nombre"] for f in cliente.get("/api/fuentes?marca=unotv").json()["fuentes"]}
+    assert de_unotv == {"UnoTV", "Compartida"}
+
+    assert cliente.get("/api/fuentes?marca=marca_falsa").status_code == 400
+
+
 # --- Aportacion MANUAL (idea / enlace / interna) -> item REAL en el tablero --- #
 
 

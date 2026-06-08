@@ -78,11 +78,23 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
 
 
 def listar_fuentes_rss(
-    *, limite: int | None = None, desplazamiento: int | None = None
+    *,
+    marca: str | None = None,
+    limite: int | None = None,
+    desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Fuentes RSS (mas recientes primero), con paginacion opcional."""
-    sql = _SELECT_FUENTE_RSS + " ORDER BY creado DESC, fecha DESC, id DESC"
+    """Fuentes RSS (mas recientes primero), con paginacion opcional.
+
+    Si se pasa `marca`, devuelve las fuentes de ESA marca MAS las COMPARTIDAS
+    (`marca` vacia/NULL); con `marca=None` devuelve todas (admin "todas").
+    """
+    sql = _SELECT_FUENTE_RSS
     params: list[Any] = []
+    if marca:
+        # Marca seleccionada: propias de la marca + compartidas (vacia/NULL).
+        sql += " WHERE (marca = ? OR marca IS NULL OR marca = '')"
+        params.append(marca)
+    sql += " ORDER BY creado DESC, fecha DESC, id DESC"
     if limite is not None:
         sql += " LIMIT ?"
         params.append(int(limite))
