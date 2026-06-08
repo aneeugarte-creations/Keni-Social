@@ -37,7 +37,6 @@ modulos_backend = [
   "historial",
   "imagenes",
   "marca_activos",
-  "plantillas",
   "plantillas_diseno",
   "plantillas_marca",
   "qa_editorial",
@@ -45,15 +44,12 @@ modulos_backend = [
   "reciclaje",
   "rss",
   "termometro",
-  "radar",
   "radar_auto",
   "breaking",
-  "investigacion",
   "noticias",
   "fuentes",
   "insumos",
   "algoritmos",
-  "parrilla",
   "pipelines",
   # Motor de video (Ola VIDEO): api/video.py (lo crea otro agente). Declarado aqui para que
   # el lint de fronteras mapee el router a esta app.
