@@ -96,3 +96,32 @@ def listar_snapshots_comerciales(
 
 def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
     return db.ultimo_snapshot_comercial(publicacion_id)
+
+
+# --- Campañas comerciales (filtro por hashtag; analítica al vuelo) ------------
+
+
+def crear_campania_comercial(
+    *, marca: str, nombre: str, hashtags: list[str], activa: bool = True
+) -> dict[str, Any]:
+    return db.crear_campania_comercial(
+        marca=marca, nombre=nombre, hashtags=hashtags, activa=activa
+    )
+
+
+def listar_campanias_comerciales(marca: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_campanias_comerciales(marca=marca)
+
+
+def obtener_campania_comercial(campania_id: str) -> dict[str, Any] | None:
+    return db.obtener_campania_comercial(campania_id)
+
+
+def actualizar_campania_comercial(
+    campania_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_campania_comercial(campania_id, campos)
+
+
+def borrar_campania_comercial(campania_id: str) -> bool:
+    return db.borrar_campania_comercial(campania_id)

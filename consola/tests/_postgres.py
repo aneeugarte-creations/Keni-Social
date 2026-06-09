@@ -41,6 +41,7 @@ _TABLAS = (
     "usuarios",
     "comercial_snapshots",
     "comercial_publicaciones",
+    "comercial_campanias",
     "metricas_pieza_snapshots",
     "rota_turnos",
     "rota_franjas",

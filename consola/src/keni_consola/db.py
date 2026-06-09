@@ -174,11 +174,16 @@ from .db_colaboracion import (  # noqa: F401
     ultimo_veredicto_qa,
 )
 from .db_comercial import (  # noqa: F401
+    actualizar_campania_comercial,
     actualizar_publicacion_comercial,
+    borrar_campania_comercial,
     borrar_publicacion_comercial,
+    crear_campania_comercial,
     crear_publicacion_comercial,
+    listar_campanias_comerciales,
     listar_publicaciones_comerciales,
     marcar_aviso_comercial,
+    obtener_campania_comercial,
     obtener_publicacion_comercial,
     registrar_snapshot_comercial,
 )

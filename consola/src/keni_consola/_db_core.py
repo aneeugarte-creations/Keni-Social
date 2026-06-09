@@ -204,6 +204,25 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ON comercial_snapshots (publicacion_id, ts)",
     "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
     "ON comercial_snapshots (publicacion_id)",
+    # Campañas comerciales: agrupan piezas por uno o varios HASHTAGS configurables.
+    # No monitorizan piezas sueltas (eso era `comercial_publicaciones`, retirado de la
+    # UI): definen un filtro (marca + hashtags) y la analítica se computa AL VUELO sobre
+    # el listado de piezas del periodo (`servicio.construir_listado_piezas`), cruzando por
+    # los hashtags presentes en el caption (`Pieza.texto`). `hashtags` es un array JSON de
+    # tags NORMALIZADOS (minúsculas, sin '#'); portable SQLite/Postgres como TEXT.
+    """
+    CREATE TABLE IF NOT EXISTS comercial_campanias (
+        id                   TEXT PRIMARY KEY,
+        marca                TEXT NOT NULL DEFAULT '',
+        nombre               TEXT NOT NULL DEFAULT '',
+        hashtags             TEXT NOT NULL DEFAULT '[]',
+        activa               INTEGER NOT NULL DEFAULT 1,
+        fecha_creacion       TEXT NOT NULL DEFAULT '',
+        fecha_actualizacion  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_comercial_campanias_marca "
+    "ON comercial_campanias (marca)",
     # Histórico de métricas por pieza para TODAS las publicaciones (no solo el módulo
     # comercial): una fila por pieza por refresco del daemon, para análisis temporales
     # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de

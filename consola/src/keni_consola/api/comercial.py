@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import comercial, marcas, redes, repos
+from .. import campanias, comercial, marcas, redes, repos
 from .._http_json import leer_json
 
 # Nombres legibles de los estados del seguimiento (para los selects del SPA).
@@ -373,8 +373,116 @@ async def reporte(request: Request) -> Response:
     return JSONResponse({"reporte": rep})
 
 
+# --------------------------------------------------------------------------- #
+# Campañas (agrupan piezas por hashtag; analítica al vuelo)                     #
+# --------------------------------------------------------------------------- #
+
+
+def _leer_hashtags(valor: Any) -> tuple[list[str] | None, str | None]:
+    """Acepta lista de strings o un string con hashtags separados por espacios/comas."""
+    if isinstance(valor, str):
+        valor = [t for t in valor.replace(",", " ").split() if t]
+    if not isinstance(valor, list) or not all(isinstance(t, str) for t in valor):
+        return None, "Los hashtags deben ser una lista de texto."
+    return valor, None
+
+
+async def listar_campanias(request: Request) -> Response:
+    """Campañas, opcionalmente filtradas por `?marca=`."""
+    marca = request.query_params.get("marca") or None
+    if marca and marca not in _MARCAS_IDS:
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    return JSONResponse(
+        {
+            "campanias": campanias.listar_campanias(marca=marca),
+            "fuente": comercial.fuente_actual(),
+            "es_muestra": comercial.es_muestra(),
+        }
+    )
+
+
+async def crear_campania(request: Request) -> Response:
+    """Crea una campaña: `{marca, nombre, hashtags: [...]}`."""
+    datos = await leer_json(request)
+    marca = datos.get("marca")
+    if not isinstance(marca, str) or marca not in _MARCAS_IDS:
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str):
+        return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+    tags, error = _leer_hashtags(datos.get("hashtags"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    try:
+        cam = campanias.crear_campania(marca=marca, nombre=nombre, hashtags=tags)
+    except campanias.CampaniaInvalida as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"campania": cam}, status_code=201)
+
+
+async def detalle_campania(request: Request) -> Response:
+    cam = campanias.obtener_campania(request.path_params["campania_id"])
+    if cam is None:
+        return JSONResponse({"error": "Esa campaña ya no existe."}, status_code=404)
+    return JSONResponse({"campania": cam})
+
+
+async def actualizar_campania(request: Request) -> Response:
+    """Edición parcial: `{nombre?, hashtags?, activa?}`; 404 si no existe."""
+    campania_id = request.path_params["campania_id"]
+    datos = await leer_json(request)
+    campos: dict[str, Any] = {}
+    if "nombre" in datos:
+        if not isinstance(datos["nombre"], str):
+            return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+        campos["nombre"] = datos["nombre"]
+    if "hashtags" in datos:
+        tags, error = _leer_hashtags(datos.get("hashtags"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["hashtags"] = tags
+    if "activa" in datos:
+        campos["activa"] = bool(datos["activa"])
+    try:
+        cam = campanias.actualizar_campania(campania_id, campos)
+    except campanias.CampaniaInvalida as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if cam is None:
+        return JSONResponse({"error": "Esa campaña ya no existe."}, status_code=404)
+    return JSONResponse({"campania": cam})
+
+
+async def eliminar_campania(request: Request) -> Response:
+    if not campanias.borrar_campania(request.path_params["campania_id"]):
+        return JSONResponse({"error": "Esa campaña ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Campaña eliminada."})
+
+
+async def analitica_campania(request: Request) -> Response:
+    """Analítica de una campaña en un periodo: `?rango=` (def `mes`). 404 si no existe."""
+    campania_id = request.path_params["campania_id"]
+    rango = request.query_params.get("rango") or campanias.RANGO_DEF
+    try:
+        datos = campanias.analitica_campania(campania_id, rango)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if datos is None:
+        return JSONResponse({"error": "Esa campaña ya no existe."}, status_code=404)
+    return JSONResponse(datos)
+
+
 RUTAS = [
     Route("/api/comercial/opciones", opciones, methods=["GET"]),
+    Route("/api/comercial/campanias", listar_campanias, methods=["GET"]),
+    Route("/api/comercial/campanias", crear_campania, methods=["POST"]),
+    Route("/api/comercial/campanias/{campania_id}", detalle_campania, methods=["GET"]),
+    Route("/api/comercial/campanias/{campania_id}", actualizar_campania, methods=["PUT"]),
+    Route("/api/comercial/campanias/{campania_id}", eliminar_campania, methods=["DELETE"]),
+    Route(
+        "/api/comercial/campanias/{campania_id}/analitica",
+        analitica_campania,
+        methods=["GET"],
+    ),
     Route("/api/comercial/posts", posts, methods=["GET"]),
     Route("/api/comercial/reporte", reporte, methods=["GET"]),
     Route("/api/comercial/refrescar", refrescar_todas, methods=["POST"]),

@@ -6,6 +6,7 @@ from ._db_comun import (
     _conectar,
     date,
     datetime,
+    json,
     uuid,
 )
 
@@ -305,6 +306,151 @@ def registrar_snapshot_comercial(
             f"INSERT OR IGNORE INTO comercial_snapshots ({', '.join(cols)}) "
             f"VALUES ({marcadores})",
             tuple(valores),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Campañas comerciales (agrupan piezas por hashtag(s) configurables)           #
+# --------------------------------------------------------------------------- #
+#
+# Una campaña no monitoriza piezas sueltas: define un FILTRO (marca + lista de
+# hashtags) y su analítica se computa al vuelo sobre el listado de piezas del periodo,
+# cruzando por los hashtags del caption. `hashtags` se persiste como array JSON de tags
+# NORMALIZADOS (minúsculas, sin '#'); la normalización/validación la hace la capa de
+# negocio (`campanias.py`), no la DB.
+
+_COLS_CAMPANIA = (
+    "id",
+    "marca",
+    "nombre",
+    "hashtags",
+    "activa",
+    "fecha_creacion",
+    "fecha_actualizacion",
+)
+_SELECT_CAMPANIA = f"SELECT {', '.join(_COLS_CAMPANIA)} FROM comercial_campanias"
+_CAMPOS_EDITABLES_CAMPANIA = ("nombre", "hashtags", "activa")
+
+
+def _fila_a_campania(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `comercial_campanias` en dict (hashtags como lista, activa bool)."""
+    cam = {col: fila[col] for col in _COLS_CAMPANIA}
+    try:
+        tags = json.loads(fila["hashtags"] or "[]")
+    except (ValueError, TypeError):
+        tags = []
+    cam["hashtags"] = [str(t) for t in tags] if isinstance(tags, list) else []
+    cam["activa"] = bool(fila["activa"])
+    return cam
+
+
+def crear_campania_comercial(
+    *,
+    marca: str,
+    nombre: str,
+    hashtags: list[str],
+    activa: bool = True,
+) -> dict[str, Any]:
+    """Inserta una campaña comercial y la devuelve. NO valida (lo hace `campanias.py`)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "marca": marca,
+        "nombre": nombre,
+        "hashtags": json.dumps(list(hashtags), ensure_ascii=False),
+        "activa": 1 if activa else 0,
+        "fecha_creacion": ahora,
+        "fecha_actualizacion": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_CAMPANIA)
+        con.execute(
+            f"INSERT INTO comercial_campanias ({', '.join(_COLS_CAMPANIA)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_CAMPANIA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_campania(fila)
+
+
+def listar_campanias_comerciales(marca: str | None = None) -> list[dict[str, Any]]:
+    """Campañas comerciales (más recientes primero), opcionalmente filtradas por marca."""
+    sql = _SELECT_CAMPANIA
+    params: list[Any] = []
+    if marca:
+        sql += " WHERE marca = ?"
+        params.append(marca)
+    sql += " ORDER BY fecha_creacion DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_campania(f) for f in filas]
+
+
+def obtener_campania_comercial(campania_id: str) -> dict[str, Any] | None:
+    """Una campaña comercial por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_CAMPANIA} WHERE id = ?", (campania_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_campania(fila) if fila is not None else None
+
+
+def actualizar_campania_comercial(
+    campania_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una campaña; None si el id no existe.
+
+    Solo toca `nombre`/`hashtags`/`activa`. `hashtags` (si viene) se serializa a JSON;
+    `activa` a 0/1. NO valida (lo hace `campanias.py`).
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CAMPANIA}
+    if "hashtags" in cambios:
+        cambios["hashtags"] = json.dumps(list(cambios["hashtags"] or []), ensure_ascii=False)
+    if "activa" in cambios:
+        cambios["activa"] = 1 if cambios["activa"] else 0
+    if not cambios:
+        return obtener_campania_comercial(campania_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("fecha_actualizacion = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(campania_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE comercial_campanias SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_CAMPANIA} WHERE id = ?", (campania_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_campania(fila) if fila is not None else None
+
+
+def borrar_campania_comercial(campania_id: str) -> bool:
+    """Borra una campaña; True si existía, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM comercial_campanias WHERE id = ?", (campania_id,)
         )
         con.commit()
         return cur.rowcount > 0
