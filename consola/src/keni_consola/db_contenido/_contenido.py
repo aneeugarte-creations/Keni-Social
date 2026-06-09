@@ -291,6 +291,88 @@ def listar_contenido(
     return [_fila_a_contenido(f) for f in filas]
 
 
+def listar_contenido_origenes(
+    origenes: list[str], *, excluir_estado: str | None = None
+) -> list[dict[str, Any]]:
+    """Items del tablero (clase 'contenido') cuyo `origen` esta en `origenes`. Orden estable.
+
+    Variante con el WHERE empujado a SQL para los barridos del pipeline (antes recorrian
+    `listar_contenido()` COMPLETO y filtraban en Python en cada barrido). `excluir_estado`
+    (p. ej. 'hecha') descarta los cerrados ya en la query. Mismo orden que `listar_contenido`.
+    """
+    origenes = [o for o in origenes if o]
+    if not origenes:
+        return []
+    marcadores = ",".join("?" for _ in origenes)
+    sql = (
+        f"{_SELECT_CONTENIDO} WHERE clase = 'contenido' AND origen IN ({marcadores})"
+    )
+    params: list[Any] = list(origenes)
+    if excluir_estado:
+        sql += " AND estado <> ?"
+        params.append(excluir_estado)
+    sql += (
+        " ORDER BY CASE prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,"
+        " fecha_objetivo ASC, creado ASC, id ASC"
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_contenido(f) for f in filas]
+
+
+def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
+    """Ids de `contenido` con AL MENOS una pieza por plataforma con copy redactado.
+
+    Variante agregada para el gate serial del pipeline (`temas_en_vuelo`): antes se traia la
+    tabla `contenido_plataforma` ENTERA por cada marca y barrido y se filtraba en Python.
+    Con `marca`, el JOIN acota a los temas de esa marca. Mismo criterio que el filtro previo
+    en Python: `copy` no vacio (texto redactado, no solo la fila placeholder).
+    """
+    if marca:
+        sql = (
+            "SELECT DISTINCT cp.contenido_id AS cid FROM contenido_plataforma cp "
+            "JOIN contenido c ON c.id = cp.contenido_id "
+            "WHERE c.marca = ? AND cp.copy <> ''"
+        )
+        params: tuple[Any, ...] = (marca,)
+    else:
+        sql = (
+            "SELECT DISTINCT contenido_id AS cid FROM contenido_plataforma WHERE copy <> ''"
+        )
+        params = ()
+    con = _conectar()
+    try:
+        filas = con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+    return {f["cid"] for f in filas if f["cid"]}
+
+
+def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
+    """Devuelve a re-criba (qa_veredicto='') los temas ZOMBI en 'en_curso' mas viejos que `umbral_iso`.
+
+    Saneamiento del reaper: la fase QA marca el tema `en_curso` antes de lanzar la criba; si
+    la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
+    `temas_sin_qa` y contando en `temas_en_vuelo`). Compara contra `actualizado` (lo refresca
+    cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA
+    se toca (el umbral es muy superior al timeout de la criba). Devuelve cuantos reseteo.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE contenido SET qa_veredicto = '' "
+            "WHERE qa_veredicto = 'en_curso' AND actualizado <> '' AND actualizado < ?",
+            (umbral_iso,),
+        )
+        con.commit()
+        return int(cur.rowcount or 0)
+    finally:
+        con.close()
+
+
 def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     """Títulos del contenido (temas) de `marca` creados desde `desde_iso` (ISO inclusivo).
 

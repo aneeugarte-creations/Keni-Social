@@ -88,6 +88,66 @@ def test_qa_fuente_persiste_veredicto_no_verificado(entorno):
     assert (actual.get("qa_veredicto") or "") == pc.VERDICTO_NO_VERIFICADO
 
 
+def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
+    """La criba de la fuente corre BARATA por defecto: Haiku + esfuerzo low + timeout 180 s.
+
+    Es un filtro PERMISIVO (no redacción): no necesita el modelo/esfuerzo/timeout globales.
+    Cada override es configurable por env y, vaciándolos todos, no se endurece nada (None).
+    """
+    from keni_consola.pipeline_contenido import _qa
+
+    for var in ("KENI_QA_FUENTE_MODELO", "KENI_QA_FUENTE_ESFUERZO", "KENI_QA_FUENTE_TIMEOUT"):
+        monkeypatch.delenv(var, raising=False)
+    assert _qa._endurecer_qa_fuente() == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
+
+    # Overrides por env: otro modelo / sin override (cae al global correspondiente).
+    monkeypatch.setenv("KENI_QA_FUENTE_MODELO", "sonnet")
+    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "60")
+    endurecido = _qa._endurecer_qa_fuente()
+    assert endurecido["modelo"] == "sonnet" and endurecido["timeout"] == 60
+
+    monkeypatch.setenv("KENI_QA_FUENTE_MODELO", "")
+    monkeypatch.setenv("KENI_QA_FUENTE_ESFUERZO", "")
+    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "0")
+    assert _qa._endurecer_qa_fuente() is None
+
+
+def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
+    """El TTL del saneador de `en_curso` zombi es configurable, con suelo de 5 min.
+
+    El suelo evita que un TTL absurdo resetee QAs VIVAS (debe superar el timeout de la criba).
+    """
+    from keni_consola import config
+
+    monkeypatch.delenv("KENI_QA_EN_CURSO_TTL_MIN", raising=False)
+    assert config.qa_en_curso_ttl_seg() == 30 * 60  # def 30 min
+    monkeypatch.setenv("KENI_QA_EN_CURSO_TTL_MIN", "45")
+    assert config.qa_en_curso_ttl_seg() == 45 * 60
+    monkeypatch.setenv("KENI_QA_EN_CURSO_TTL_MIN", "1")
+    assert config.qa_en_curso_ttl_seg() == 5 * 60  # suelo
+
+
+def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
+    """`lanzar_qa_fuente` pasa el `endurecer` barato (modelo/esfuerzo/timeout) al lanzador."""
+    from keni_consola.pipeline_contenido import _qa
+
+    cliente = _cliente()  # noqa: F841 -- inicializa stores; el lanzador real se intercepta abajo
+    capturado: dict = {}
+
+    def _fake_lanzar(**kw):
+        capturado.update(kw)
+        return {"id": "gen-qa-1"}
+
+    monkeypatch.setattr(_qa.gen_dom, "lanzar", _fake_lanzar)
+    tema = _tema()
+
+    gen = pc.lanzar_qa_fuente(tema, autor=None)
+
+    assert gen is not None and gen["id"] == "gen-qa-1"
+    assert capturado["tipo"] == "qa-fuente"
+    assert capturado["endurecer"] == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
+
+
 def test_qa_fuente_persiste_veredicto_problema(entorno):
     """Una criba 🔴 con hallazgo de error -> veredicto `problema` + hallazgos persistidos."""
     salida = (

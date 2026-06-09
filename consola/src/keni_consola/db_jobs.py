@@ -34,33 +34,44 @@ JOB_TERMINADO = "terminado"
 _RECLAIM_STALE_MARGEN_S = 300
 
 
-def encolar_job(gen_id: str, spec: str) -> str:
+def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
     """Encola un job de generacion para el `gen_id` dado con su `spec` (JSON). Devuelve el job id.
 
     `spec` es el JSON serializable que el worker usa para reconstruir el trabajo (prompt +
     post-procesado + cwd). Idempotente por `gen_id` (indice UNICO): re-encolar el mismo
-    registro no duplica filas. El back lo llama dentro de la peticion y responde al instante.
+    registro VIVO (pendiente/reclamado) no duplica filas. El back lo llama dentro de la
+    peticion y responde al instante.
 
-    Devuelve SIEMPRE el job id REAL de la fila (no el generado a la ligera): en un re-encolar
-    del mismo `gen_id` el INSERT no inserta nada (`ON CONFLICT DO NOTHING`) y la fila viva
-    conserva su id previo; devolver el id recien generado dejaria al worker actualizando un id
-    inexistente (UPDATE de 0 filas). SQL estandar Postgres (NO `INSERT OR IGNORE`, que el shim
-    de `motor_db` no sabe combinar con `RETURNING`): `ON CONFLICT (gen_id) DO NOTHING RETURNING
-    id`; si el RETURNING viene vacio (hubo conflicto), se relee el id real con un SELECT.
+    `prioridad` (entero, mayor = antes): los lanzamientos MANUALES del equipo (API/MCP) van
+    con prioridad alta y los del pipeline/autogen con baja, para que un copy manual no espere
+    detras del lote de fondo (`reclamar_job` ordena por prioridad DESC, creado ASC).
+
+    RESURRECCION de filas `terminado`: re-encolar un `gen_id` cuya fila vieja ya esta
+    `terminado` debe correr el trabajo NUEVO (p. ej. el reintento de un copy del pipeline que
+    fallo). Antes el `ON CONFLICT DO NOTHING` devolvia el job viejo (terminado) y el nuevo no
+    corria jamas. El `ON CONFLICT ... DO UPDATE` REVIVE la fila a `pendiente` (spec/prioridad
+    nuevos, flags de despacho limpios) SOLO si estaba `terminado` (el `WHERE jobs.estado = ?`);
+    una fila VIVA no se toca (idempotencia intacta: el RETURNING viene vacio y se relee su id
+    real con un SELECT, como antes).
     """
     job_id = uuid.uuid4().hex[:12]
     ahora = datetime.now().isoformat(timespec="seconds")
     con = _conectar()
     try:
         fila = con.execute(
-            "INSERT INTO jobs (id, gen_id, spec, estado, creado) "
-            "VALUES (?, ?, ?, ?, ?) "
-            "ON CONFLICT (gen_id) DO NOTHING RETURNING id",
-            (job_id, gen_id, spec, JOB_PENDIENTE, ahora),
+            "INSERT INTO jobs (id, gen_id, spec, estado, creado, prioridad) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (gen_id) DO UPDATE SET "
+            "spec = EXCLUDED.spec, estado = EXCLUDED.estado, creado = EXCLUDED.creado, "
+            "prioridad = EXCLUDED.prioridad, cancelado = 0, worker = '', claimed_at = '' "
+            "WHERE jobs.estado = ? "
+            "RETURNING id",
+            (job_id, gen_id, spec, JOB_PENDIENTE, ahora, int(prioridad), JOB_TERMINADO),
         ).fetchone()
         if fila is None:
-            # Hubo conflicto (gen_id ya encolado): el INSERT no inserto. Releemos el id REAL
-            # de la fila viva para que el llamante/worker operen sobre la fila correcta.
+            # Hubo conflicto con una fila VIVA (gen_id ya encolado/reclamado): ni insert ni
+            # update. Releemos el id REAL de la fila viva para que el llamante/worker operen
+            # sobre la fila correcta.
             fila = con.execute(
                 "SELECT id FROM jobs WHERE gen_id = ?", (gen_id,)
             ).fetchone()
@@ -184,7 +195,8 @@ def reclamar_job(worker: str = "") -> dict[str, Any] | None:
             fila = con.execute(
                 "SELECT id, gen_id, spec, estado FROM jobs "
                 "WHERE estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?) "
-                "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+                # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
+                "ORDER BY prioridad DESC, creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
                 (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano),
             ).fetchone()
             if fila is None:

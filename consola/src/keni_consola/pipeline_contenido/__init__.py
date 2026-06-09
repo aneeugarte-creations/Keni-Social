@@ -125,6 +125,8 @@ from ._comun import (
     temas_pipeline,
 )
 from ._copy import (
+    encadenar_arte_tras_copy,
+    encadenar_copy_tras_qa,
     lanzar_copy_de_tema,
     temas_autogen_sin_copy,
     temas_para_copy,
@@ -241,6 +243,8 @@ __all__ = [
     "lanzar_copy_de_tema",
     "temas_para_copy",
     "temas_autogen_sin_copy",
+    "encadenar_copy_tras_qa",
+    "encadenar_arte_tras_copy",
     # barrido / daemon
     "ejecutar_barrido",
     "_ejecutar_barrido",

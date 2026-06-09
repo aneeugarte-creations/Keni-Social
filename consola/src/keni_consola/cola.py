@@ -43,7 +43,10 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
         raise runner.ColaLlenaError(
             "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
         )
-    return repos.encolar_job(gen_id, jobspec.serializar(spec))
+    # La PRIORIDAD de despacho viaja DENTRO del spec (`jobspec.prioridad`): manual > pipeline.
+    # Asi los seams inyectables de encolado no cambian de firma y `reclamar_job` puede ordenar
+    # por prioridad (un copy manual del equipo no espera detras del lote del pipeline/autogen).
+    return repos.encolar_job(gen_id, jobspec.serializar(spec), jobspec.prioridad(spec))
 
 
 def reclamar(worker: str = "") -> dict[str, Any] | None:
@@ -65,6 +68,11 @@ def reclamar(worker: str = "") -> dict[str, Any] | None:
 def terminar(job_id: str) -> None:
     """Marca un job como terminado (el worker ya fijo el estado terminal del registro)."""
     repos.terminar_job(job_id)
+
+
+def reencolar(gen_id: str) -> bool:
+    """Devuelve el job de `gen_id` a `pendiente` (apagado gracioso): otro worker lo re-reclama."""
+    return repos.reencolar_job(gen_id)
 
 
 def cancelar(gen_id: str) -> bool:

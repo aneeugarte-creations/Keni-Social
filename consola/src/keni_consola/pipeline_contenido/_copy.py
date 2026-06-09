@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import config, marcas, redes, repos
+from .. import config, generaciones, marcas, redes, repos
 from ..dominio import generar as gen_dom
 from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ._comun import (
@@ -30,6 +30,8 @@ __all__ = [
     "lanzar_copy_de_tema",
     "temas_para_copy",
     "temas_autogen_sin_copy",
+    "encadenar_copy_tras_qa",
+    "encadenar_arte_tras_copy",
 ]
 
 
@@ -39,8 +41,15 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
     Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` con los parámetros que CI guardó
     en `copy_pendiente` (nota, redes, imagen ya resuelta, fuente, clave). El borrador resultante
     cuelga del tema (`contenido_id`) y hereda su origen. Para marca PROPIA con `og:image`, la
-    pieza nace con esa imagen (`tipo_contenido='fuente'`). Registra la etapa CD y limpia
-    `copy_pendiente` (evita relanzar). None si se omite (sin parámetros / marca inválida).
+    pieza nace con esa imagen (`tipo_contenido='fuente'`). Registra la etapa CD. None si se
+    omite (sin parámetros / marca inválida).
+
+    DEDUP AL ÉXITO (no al lanzar): `copy_pendiente` lo limpia el POST-PROCESADO del copy al
+    completar con éxito (`limpiar_pendiente=True`), no este lanzador. Antes se limpiaba tras
+    encolar y un copy FALLIDO jamás se reintentaba (el tema quedaba huérfano para siempre).
+    Mientras el job está EN VUELO no hay doble lanzamiento: la clave de idempotencia de
+    `dominio.generar.lanzar` devuelve el run en curso, y `temas_para_copy` además excluye los
+    temas que ya tienen piezas.
     """
     tema_id = (tema.get("id") or "").strip()
     marca = (tema.get("marca") or "").strip()
@@ -78,12 +87,10 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
         # piezas heredan ese aviso (⚠️) en su veredicto, para que la parrilla y Pipelines lo
         # muestren. Si el copy trajera un veredicto propio, ese manda; aquí da el por defecto.
         veredicto_inicial=VERDICTO_NO_VERIFICADO,
+        # Dedup al ÉXITO: el post-procesado limpia `copy_pendiente` cuando los borradores ya
+        # existen. Un copy fallido conserva la marca y el barrido lo reintenta.
+        limpiar_pendiente=True,
     )
-    # Limpia `copy_pendiente`: el copy ya se lanzó; la fase CD no debe relanzarlo (idempotencia).
-    try:
-        repos.actualizar_contenido(tema_id, {"copy_pendiente": ""})
-    except Exception:  # noqa: BLE001 -- best-effort; sin esto, la guarda "sin copy" lo evita igual
-        _log.warning("pipeline: no se pudo limpiar copy_pendiente (%s)", tema_id, exc_info=True)
     registrar_etapa(
         ETAPA_CD,
         marca,
@@ -138,7 +145,10 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     from .. import autogen_copy
 
     try:
-        items = repos.listar_contenido()
+        # WHERE empujado a SQL (antes: tabla completa + filtro en Python por CADA barrido).
+        items = repos.listar_contenido_origenes(
+            sorted(ORIGENES_AUTOGEN), excluir_estado="hecha"
+        )
     except Exception:  # noqa: BLE001 -- sin tablero legible, la etapa no actúa sobre el pool
         return []
     ya_generados = autogen_copy.ids_ya_generados()
@@ -165,3 +175,86 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
             continue
         elegidos.append(item)
     return elegidos
+
+
+# --------------------------------------------------------------------------- #
+# Encadenado por EVENTOS (QA -> copy -> arte), sin esperar al siguiente barrido #
+# --------------------------------------------------------------------------- #
+
+
+def encadenar_copy_tras_qa(
+    contenido_id: str, *, autor: dict[str, str] | None = None
+) -> dict[str, Any] | None:
+    """Dispara el copy de UN tema justo tras persistirse su veredicto de QA (por eventos).
+
+    Lo llama el POST-PROCESADO de la QA de la fuente (worker) cuando el veredicto sale
+    `no_verificado`: antes cada etapa esperaba al siguiente barrido de 20 min (40-60 min en
+    total para 3-8 min de LLM). El barrido queda como RED DE SEGURIDAD (recoge lo que el
+    encadenado pierda). Respeta los MISMOS gates que la fase CD: toggle global de copy
+    (`KENI_PIPELINE_COPY`), exclusión por marca y las guardas de dedup (`copy_pendiente`
+    presente + sin piezas aún). `ColaLlenaError` NO rompe el procesar de la QA: se loguea y
+    el barrido lo reintenta. Devuelve la generación lanzada o None si se omite.
+    """
+    if not contenido_id or not config.pipeline_activo():
+        return None
+    try:
+        tema = repos.obtener_contenido(contenido_id)
+    except Exception:  # noqa: BLE001 -- sin tema legible, el barrido lo recogerá
+        return None
+    if not tema:
+        return None
+    if (tema.get("qa_veredicto") or "") not in (VERDICTO_NO_VERIFICADO, QA_SALTADA):
+        return None
+    if not (tema.get("copy_pendiente") or "").strip():
+        return None
+    if config.marca_apagada(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
+        return None
+    if _tiene_copy(tema.get("id", "") or ""):
+        return None
+    try:
+        return lanzar_copy_de_tema(tema, autor=autor)
+    except generaciones.ColaLlenaError:
+        _log.info(
+            "pipeline: cola llena al encadenar copy del tema %s; el barrido lo recogerá.",
+            contenido_id,
+        )
+        return None
+
+
+def encadenar_arte_tras_copy(contenido_id: str) -> dict[str, Any] | None:
+    """Dispara la etapa de ARTE de UN tema justo tras crearse sus borradores (por eventos).
+
+    Lo llama el POST-PROCESADO del copy (worker) cuando el copy nidó piezas bajo un tema:
+    ilustra ESE tema al instante en vez de esperar al barrido. MISMOS gates que
+    `ejecutar_arte`: toggle "Generar arte" + máquina (`gate_maquina`), proveedor de imagen
+    configurado, exclusión por marca y dedup por etiqueta `autogen-arte`. Best-effort: un
+    fallo se loguea y lo recogerá el barrido. Devuelve lo adjuntado o None si se omite.
+    """
+    if not contenido_id:
+        return None
+    if not config.gate_maquina(config.autogen_arte_activo)():
+        return None
+    from .. import autogen_arte, media
+
+    try:
+        if not media.proveedor_configurado():
+            return None
+        tema = repos.obtener_contenido(contenido_id)
+        if not tema:
+            return None
+        if (tema.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
+            return None
+        if (tema.get("estado") or "") == "hecha":
+            return None
+        if not (tema.get("titulo") or "").strip():
+            return None
+        if config.marca_apagada(config.ENV_PIPELINE_ARTE, tema.get("marca") or ""):
+            return None
+        if (tema.get("id") or "") in autogen_arte.ids_ya_procesados():
+            return None
+        return autogen_arte.lanzar_para_topic(tema)
+    except Exception:  # noqa: BLE001 -- el barrido de arte lo recogerá
+        _log.warning(
+            "pipeline: fallo el encadenado copy->arte (%s)", contenido_id, exc_info=True
+        )
+        return None

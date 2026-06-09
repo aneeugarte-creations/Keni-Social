@@ -66,6 +66,27 @@ def ejecutar_barrido() -> int:
             _log.info("Reaper de generaciones: %d lote(s) de cajón zombi reconciliado(s).", m)
     except Exception:  # noqa: BLE001 -- saneamiento aditivo; un fallo no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo el saneo de lotes de cajón.", exc_info=True)
+    # Cuarto saneamiento: temas del pipeline ZOMBI en `qa_veredicto='en_curso'`. La fase QA
+    # marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la generación
+    # mueren sin finalizador (crash del worker, fallo al encolar), nada lo reseteaba: el tema
+    # quedaba excluido PARA SIEMPRE de `temas_sin_qa` y contando en `temas_en_vuelo` (bloquea
+    # el cupo serial de su marca). Se resetean a "" (re-criba) los `en_curso` más viejos que
+    # `KENI_QA_EN_CURSO_TTL_MIN` (def 30 min, muy superior al timeout de la criba: nunca toca
+    # una QA viva). El worker además sanea en caliente al cerrar un job de QA en error; esto
+    # es la red para las muertes no graciosas. Best-effort.
+    try:
+        from . import repos
+
+        umbral_qa = (
+            datetime.now() - timedelta(seconds=config.qa_en_curso_ttl_seg())
+        ).isoformat(timespec="microseconds")
+        z = repos.sanear_qa_en_curso_huerfanos(umbral_qa)
+        if z:
+            _log.info(
+                "Reaper de generaciones: %d tema(s) con QA 'en_curso' zombi devuelto(s) a re-criba.", z
+            )
+    except Exception:  # noqa: BLE001 -- saneamiento aditivo; un fallo no debe tumbar el barrido
+        _log.warning("Reaper de generaciones: fallo el saneo de QA en_curso.", exc_info=True)
     return n
 
 

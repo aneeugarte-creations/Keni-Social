@@ -145,7 +145,17 @@ def componer(
     añaden, para que un prompt cualquiera de la Texto no quede forzado a "sin emojis"
     ni al bloque de piezas por red. Las features de copy los activan.
     """
+    # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos (cuerpo del
+    # prompt + instrucciones fijas + editorial de la marca) va ANTES; lo VARIABLE (la nota/
+    # transcripción del CONTEXTO) va AL FINAL. Así dos copies de la misma marca comparten el
+    # prefijo y el proveedor puede cachearlo (antes las instrucciones iban DESPUÉS del
+    # contexto y rompían el prefijo común). El contenido del prompt es el mismo; solo cambia
+    # el orden de los bloques.
     partes: list[str] = [cuerpo_prompt.strip()]
+    if sin_emojis:
+        partes.append(INSTRUCCION_SIN_EMOJIS)
+    if redes_ids:
+        partes.append(instruccion_redes(redes_ids))
     if adjuntos:
         bloques = [f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos]
         partes.append(
@@ -157,17 +167,17 @@ def componer(
         # en <contenido_usuario>...</contenido_usuario> con un aviso anti-inyección, para que
         # el modelo no lo interprete como instrucciones (defensa contra prompt-injection).
         partes.append("---\nCONTEXTO:\n\n" + envolver_contenido_usuario(bloque_contexto))
-    texto = "\n\n".join(partes)
-    if sin_emojis:
-        texto = f"{texto}\n\n{INSTRUCCION_SIN_EMOJIS}"
-    if redes_ids:
-        texto = f"{texto}\n\n{instruccion_redes(redes_ids)}"
-    return texto
+    return "\n\n".join(partes)
 
 
 def _autor_campos(autor: dict[str, str] | None) -> dict[str, str]:
     autor = autor or {}
     return {"autor_id": autor.get("id", "") or "", "autor_nombre": autor.get("usuario", "") or ""}
+
+
+# Tipos de generacion que son TRABAJO DE FONDO (los lanza el propio pipeline/autogen, no una
+# persona esperando): en la cola del worker ceden el paso a los lanzamientos manuales.
+_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen", "qa-fuente"})
 
 
 def lanzar(
@@ -230,6 +240,11 @@ def lanzar(
         dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
         prefetch_s3=prefetch_s3,
         endurecer=endurecer,
+        # PRIORIDAD de despacho: el lote de FONDO (pipeline/autogen/QA de la fuente) cede el
+        # paso a los lanzamientos manuales del equipo (API/MCP) en la cola del worker.
+        prioridad=(
+            jobspec.PRIORIDAD_PIPELINE if tipo in _TIPOS_FONDO else jobspec.PRIORIDAD_MANUAL
+        ),
     )
     try:
         generaciones.encolar_job_claude(
@@ -283,6 +298,9 @@ def lanzar_copy(
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
+    limpiar_pendiente: bool = False,
+    etiqueta_exito: str = "",
+    endurecer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
@@ -327,11 +345,16 @@ def lanzar_copy(
         imagen_fuente=imagen_fuente or "", tipo_contenido=tipo_contenido or "",
         veredicto_inicial=veredicto_inicial or "",
         url_fuente=url_fuente or "",
+        # Dedup AL EXITO (pipeline/autogen): limpiar `copy_pendiente` / etiquetar `autogen`
+        # cuando los borradores YA existen, no al encolar (un copy fallido se reintenta).
+        limpiar_pendiente=bool(limpiar_pendiente),
+        etiqueta_exito=etiqueta_exito or "",
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
+        endurecer=endurecer,
         # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/veredicto; el usuario no ve la salida
         # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
         # veta la web por-callsite; queda la veta global `Bash Write Edit`.

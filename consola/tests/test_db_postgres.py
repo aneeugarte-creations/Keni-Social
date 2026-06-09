@@ -278,9 +278,40 @@ def test_cola_encolar_reclamar_terminar_pg(pg):
 
 def test_cola_encolar_idempotente_por_gen_id_pg(pg):
     db.encolar_job("gen-2", "{}")
-    db.encolar_job("gen-2", "{}")  # UNIQUE(gen_id) -> ON CONFLICT DO NOTHING
+    db.encolar_job("gen-2", "{}")  # UNIQUE(gen_id): la fila VIVA no se duplica ni se toca
     assert db.reclamar_job() is not None
     assert db.reclamar_job() is None
+
+
+def test_cola_encolar_resucita_fila_terminada_pg(pg):
+    """Re-encolar un gen_id con fila `terminado` la REVIVE a `pendiente` (spec nuevo).
+
+    Antes el `ON CONFLICT DO NOTHING` devolvia el job viejo y el trabajo nuevo no corria
+    jamas. La resurreccion SOLO aplica a filas terminadas; una viva queda intacta.
+    """
+    j1 = db.encolar_job("gen-r", '{"v": 1}')
+    assert db.reclamar_job("w") is not None
+    db.terminar_job(j1)
+    assert db.reclamar_job() is None  # nada pendiente
+
+    j2 = db.encolar_job("gen-r", '{"v": 2}', 5)
+    assert j2 == j1  # misma fila (UNIQUE gen_id), revivida
+    fila = db.reclamar_job("w2")
+    assert fila is not None and fila["gen_id"] == "gen-r"
+    assert fila["spec"] == '{"v": 2}'  # corre el trabajo NUEVO
+
+
+def test_cola_reclama_por_prioridad_desc_pg(pg):
+    """`reclamar_job` despacha por (prioridad DESC, creado ASC): manual antes que pipeline."""
+    db.encolar_job("gen-fondo-1", "{}", 0)
+    db.encolar_job("gen-manual", "{}", 10)
+    db.encolar_job("gen-fondo-2", "{}", 0)
+    assert db.reclamar_job("w")["gen_id"] == "gen-manual"
+    # El fondo va despues (a igual prioridad el orden es FIFO por `creado`; aqui ambos caen
+    # en el mismo segundo, asi que no se asserta el orden relativo entre ellos).
+    assert {db.reclamar_job("w")["gen_id"], db.reclamar_job("w")["gen_id"]} == {
+        "gen-fondo-1", "gen-fondo-2",
+    }
 
 
 def test_cola_cancelar_y_flag_pg(pg):

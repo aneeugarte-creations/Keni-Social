@@ -52,6 +52,29 @@ def test_componer_incluye_solo_secciones_presentes():
     assert "CONTEXTO" in con_todo and "una nota" in con_todo
 
 
+def test_componer_orden_estable_primero_contexto_al_final():
+    """PROMPT CACHING: lo estable (cuerpo + instrucciones fijas + editorial) va ANTES; lo
+    variable (la nota del CONTEXTO) va AL FINAL. Así dos copies de la misma marca comparten
+    el prefijo del prompt y el proveedor puede cachearlo (antes las instrucciones colgaban
+    DESPUÉS del contexto y rompían el prefijo común)."""
+    from keni_consola.dominio import generar
+
+    ed = libtexto.crear(
+        "Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano"
+    )
+    final = generar.componer(
+        "Haz X", [ed], "la nota variable", sin_emojis=True, redes_ids=["x"],
+    )
+    i_cuerpo = final.index("Haz X")
+    i_emojis = final.index(generar.INSTRUCCION_SIN_EMOJIS)
+    i_redes = final.index("Genera el copy SOLO para estas redes")
+    i_editorial = final.index("tono cercano")
+    i_contexto = final.index("la nota variable")
+    assert i_cuerpo < i_emojis < i_redes < i_editorial < i_contexto
+    # El contexto del usuario es el ÚLTIMO bloque del prompt.
+    assert i_contexto > max(i_cuerpo, i_emojis, i_redes, i_editorial)
+
+
 # --------------------------------------------------------------------------- #
 # Lanzar                                                                       #
 # --------------------------------------------------------------------------- #

@@ -125,6 +125,66 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
     assert repos.contar_jobs_activos() == 0
 
 
+def test_reclamar_respeta_prioridad_manual_antes_que_pipeline(entorno):
+    """La cola NO es FIFO pura: un lanzamiento MANUAL pasa antes que el lote del pipeline.
+
+    El job de FONDO (spec con `prioridad=PRIORIDAD_PIPELINE`) se encola PRIMERO; aun asi, el
+    worker clava antes el MANUAL (default `PRIORIDAD_MANUAL`). A igual prioridad, FIFO.
+    """
+    g_fondo = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Fondo"})
+    spec_fondo = jobspec.construir(
+        prompt="fondo", procesar=jobspec.construir_hashtags(),
+        prioridad=jobspec.PRIORIDAD_PIPELINE,
+    )
+    cola.encolar(g_fondo["id"], spec_fondo)
+    g_manual = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Manual"})
+    spec_manual = jobspec.construir(prompt="manual", procesar=jobspec.construir_hashtags())
+    cola.encolar(g_manual["id"], spec_manual)
+
+    primero = cola.reclamar("w")
+    assert primero is not None and primero["gen_id"] == g_manual["id"]
+    segundo = cola.reclamar("w")
+    assert segundo is not None and segundo["gen_id"] == g_fondo["id"]
+
+
+def test_jobspec_prioridad_roundtrip_y_default_puro():
+    # PURO (sin DB): la prioridad viaja DENTRO del spec y sobrevive al round-trip; un spec
+    # VIEJO (sin el campo) o de PROCESO (render/ASR, iniciado por una persona) cae a MANUAL.
+    spec = jobspec.construir(
+        prompt="p", procesar=jobspec.construir_hashtags(),
+        prioridad=jobspec.PRIORIDAD_PIPELINE,
+    )
+    vuelto = jobspec.deserializar(jobspec.serializar(spec))
+    assert jobspec.prioridad(vuelto) == jobspec.PRIORIDAD_PIPELINE
+    assert jobspec.prioridad({}) == jobspec.PRIORIDAD_MANUAL  # spec viejo sin campo
+    assert jobspec.prioridad({"prioridad": "no-numero"}) == jobspec.PRIORIDAD_MANUAL
+    # El default de `construir` es MANUAL (los seams que no fijan prioridad no degradan a nadie).
+    assert jobspec.prioridad(jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())) \
+        == jobspec.PRIORIDAD_MANUAL
+
+
+def test_encolar_gen_id_con_fila_terminada_resucita_el_job(entorno):
+    """Re-encolar un gen_id cuya fila vieja ya esta `terminado` corre el trabajo NUEVO.
+
+    REGRESION: el `ON CONFLICT DO NOTHING` devolvia el job viejo (terminado) y el nuevo no
+    corria jamas (p. ej. el reintento de un copy del pipeline que fallo). Ahora la fila se
+    REVIVE a `pendiente` con el spec nuevo; una fila VIVA sigue intacta (idempotencia).
+    """
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    spec1 = jobspec.construir(prompt="v1", procesar=jobspec.construir_hashtags())
+    j1 = cola.encolar(gen["id"], spec1)
+    assert cola.reclamar("w") is not None
+    cola.terminar(j1)
+    assert repos.contar_jobs_activos() == 0
+
+    spec2 = jobspec.construir(prompt="v2", procesar=jobspec.construir_hashtags())
+    cola.encolar(gen["id"], spec2)  # fila `terminado`: debe resucitar, no devolver el viejo
+    clavado = cola.reclamar("w2")
+    assert clavado is not None
+    assert clavado["gen_id"] == gen["id"]
+    assert clavado["spec"]["prompt"] == "v2"  # corre el trabajo NUEVO
+
+
 def test_reclama_job_huerfano_de_worker_muerto(entorno):
     """Un job `reclamado` cuyo worker murio (claimed_at viejo) lo RE-RECLAMA otro worker.
 
@@ -675,6 +735,95 @@ def test_cancelacion_cross_proceso_mata_el_arbol(entorno, monkeypatch):
 
 
 @pytest.mark.timeout(20)
+def test_vigia_cancelacion_sobrevive_errores_transitorios(monkeypatch):
+    """Un blip al sondear la cola NO deja el job incancelable: el vigia SIGUE sondeando.
+
+    REGRESION: ante cualquier excepcion el vigia hacia `return` y el job quedaba imposible
+    de cancelar el resto de su ejecucion (hasta el wall-timeout). Ahora loguea y continua:
+    el primer sondeo revienta (blip de BD) y el segundo ve el flag y cancela.
+    """
+    intentos = {"n": 0}
+
+    def _cancelado_flaky(_job_id):
+        intentos["n"] += 1
+        if intentos["n"] == 1:
+            raise RuntimeError("blip transitorio de la BD")
+        return True
+
+    canceladas: list[str] = []
+    monkeypatch.setattr(cola, "cancelado", _cancelado_flaky)
+    monkeypatch.setattr(generaciones, "cancelar", lambda gid: canceladas.append(gid))
+    monkeypatch.setattr(worker, "_SONDEO_CANCELACION_S", 0.05)
+
+    parar = threading.Event()
+    hilo = threading.Thread(target=worker._vigilar_cancelacion, args=("j1", "g1", parar))
+    hilo.start()
+    hilo.join(timeout=10)
+    assert not hilo.is_alive(), "el vigia debio terminar al ver el flag (tras el blip)"
+    assert canceladas == ["g1"]
+    assert intentos["n"] >= 2  # sobrevivio al primer error y siguio sondeando
+
+
+def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
+    """Un job de QA-FUENTE que termina en ERROR resetea el sentinel `en_curso` del tema.
+
+    CIERRA EL ZOMBI: la fase QA marca `en_curso` ANTES de lanzar y solo el `procesar` (exito)
+    escribe el veredicto real; si la generacion muere, el tema quedaba excluido para siempre
+    de la re-criba (y contando en el cupo en vuelo de su marca).
+    """
+    from keni_consola import pipeline_contenido as pc
+
+    tema = repos.crear_contenido(
+        clase="contenido", titulo="Zombi QA", marca=_MARCA, origen=pc.ORIGEN_PIPELINE,
+        qa_veredicto=pc.QA_EN_CURSO,
+    )
+    spec = {
+        "procesar": jobspec.construir_qa_fuente(
+            marca=_MARCA, titulo="Zombi QA", autor=None, contenido_id=tema["id"],
+        )
+    }
+    gen = generaciones.crear({"tipo": "qa-fuente", "marca": _MARCA, "etiqueta": "QA"})
+
+    # Registro aun NO en error: el saneo no toca el sentinel (la QA podria seguir viva).
+    generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    worker._sanear_qa_si_fallo(gen["id"], spec)
+    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.QA_EN_CURSO
+
+    # Registro en ERROR: el saneo devuelve el tema a "" (re-criba en el proximo barrido).
+    generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_ERROR})
+    worker._sanear_qa_si_fallo(gen["id"], spec)
+    assert (repos.obtener_contenido(tema["id"])["qa_veredicto"] or "") == ""
+
+
+def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
+    """El post-procesado del copy (EXITO) limpia `copy_pendiente` y etiqueta `autogen`.
+
+    DEDUP AL EXITO (no al lanzar): las marcas de dedup las pone el `procesar` cuando los
+    borradores YA existen; un copy fallido las conserva y el barrido lo reintenta.
+    """
+    from keni_consola import autogen_copy
+
+    tema = repos.crear_contenido(
+        clase="contenido", titulo="Tema pool", marca=_MARCA, origen="rss",
+        copy_pendiente='{"nota": "n", "redes_ids": ["x"]}',
+    )
+    spec = jobspec.construir(
+        prompt="p",
+        procesar=jobspec.construir_copy(
+            prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
+            texto_base="nota", contenido_id=tema["id"],
+            limpiar_pendiente=True, etiqueta_exito=autogen_copy.ETIQUETA_AUTOGEN,
+        ),
+    )
+    procesar = jobspec.reconstruir_procesar(jobspec.deserializar(jobspec.serializar(spec)))
+    procesar('```json\n{"piezas": [{"red": "x", "texto": "Hola"}]}\n```', None)
+
+    actual = repos.obtener_contenido(tema["id"])
+    assert (actual["copy_pendiente"] or "") == ""  # dedup del pipeline, al exito
+    assert tema["id"] in autogen_copy.ids_ya_generados()  # dedup del autogen (etiqueta)
+
+
+@pytest.mark.timeout(20)
 def test_cancelar_job_pendiente_no_lanza_claude(entorno, monkeypatch):
     """Un job AUN pendiente, cancelado antes de clavarse, se finaliza SIN llamar a `claude`."""
     # Si por error llamara a claude, esto reventaria (no hay binario): garantiza que NO se llama.
@@ -897,12 +1046,14 @@ def test_worker_inproceso_corre_jobs_en_paralelo(entorno, monkeypatch, pool_limp
 
 @pytest.mark.timeout(40)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
-def test_pool_detener_cancela_todos_los_en_vuelo_y_son_reclamables(entorno, monkeypatch, pool_limpio):
-    """`pool.detener()` (apagado/SIGTERM) cancela TODOS los jobs en vuelo y los re-reclama.
+def test_pool_detener_reencola_los_en_vuelo_para_el_worker_post_deploy(entorno, monkeypatch, pool_limpio):
+    """`pool.detener()` (apagado/SIGTERM por deploy) DEVUELVE los jobs en vuelo a `pendiente`.
 
-    Cada job en curso queda INTERRUMPIDO (estado honesto, no "ejecutando" fantasma) y SALE de
-    la cola. El reaper de huerfanos los devuelve a la cola pasado el umbral (claimed_at viejo),
-    asi que un deploy no pierde trabajo: tras envejecerlos, otro worker los vuelve a clavar.
+    ANTES se marcaban INTERRUMPIDO y se sacaban de la cola "para que los relanzara el reaper",
+    pero NINGUN reaper relanzaba jobs terminados: cada deploy PERDIA los jobs en vuelo y exigia
+    relanzarlos a mano. Ahora el apagado gracioso re-encola cada job (mismo spec) y deja su
+    registro `ejecutando` (la UI sigue en "Generando..."): el worker post-deploy lo re-reclama
+    y lo completa SOLO. La guardia anti-duplicado del reclamo cubre el post-procesado.
     """
     n = 3
     monkeypatch.setenv("KENI_MAX_JOBS", str(n))
@@ -933,21 +1084,21 @@ def test_pool_detener_cancela_todos_los_en_vuelo_y_son_reclamables(entorno, monk
         time.sleep(0.05)
     assert len(worker._jobs_en_curso()) == n, "los N jobs deberian estar en vuelo"
 
-    # Apagado determinista: para el pool, cancela todos los en vuelo y hace join.
+    # Apagado determinista: para el pool, cancela los `claude` en vuelo, hace join y RE-ENCOLA.
     hilo._pool.detener()  # type: ignore[attr-defined]
 
-    # Todos quedaron INTERRUMPIDOS (estado terminal honesto) y fuera del registro de en-curso.
+    # Fuera del registro de en-curso, pero el TRABAJO no se pierde: el registro sigue
+    # `ejecutando` (revivido, sin motivo de error) y el job esta de vuelta como `pendiente`.
     assert worker._jobs_en_curso() == []
     for gid in gens:
         g = generaciones.obtener(gid)
-        assert g["estado"] == generaciones.ESTADO_ERROR
-        assert g["motivo"] == generaciones.MOTIVO_INTERRUMPIDO
-    # La cola COMPARTIDA quedo libre (cada job en vuelo salio con `cola.terminar`).
-    assert repos.contar_jobs_activos() == 0
+        assert g["estado"] == generaciones.ESTADO_EJECUTANDO
+        assert (g.get("motivo") or "") == ""
+        assert (g.get("error") or "") == ""
+    assert repos.contar_jobs_activos() == n  # los N jobs volvieron a la cola
 
-    # RE-RECLAMABLES tras el umbral de huerfano: envejecemos claimed_at y otro worker los clava.
-    # (cola.terminar saco el job, pero el reaper/segunda vida cubre el caso general; aqui
-    # validamos que el registro quedo terminal y el sistema queda limpio para reintentar.)
-    assert all(
-        generaciones.obtener(gid)["estado"] == generaciones.ESTADO_ERROR for gid in gens
-    )
+    # RE-RECLAMABLES YA (sin envejecer claimed_at): el "worker post-deploy" los clava.
+    reclamado = cola.reclamar("w-post-deploy")
+    assert reclamado is not None and reclamado["gen_id"] in gens
+    cola.terminar(reclamado["id"])  # higiene: no dejar la fila reclamada al siguiente assert
+    assert repos.contar_jobs_activos() == n - 1

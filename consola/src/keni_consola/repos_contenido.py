@@ -107,6 +107,23 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     return db.titulos_recientes_marca(marca, desde_iso)
 
 
+def listar_contenido_origenes(
+    origenes: list[str], *, excluir_estado: str | None = None
+) -> list[dict[str, Any]]:
+    """Items del tablero con `origen` en la lista (WHERE en SQL). Delegado en `db.py`."""
+    return db.listar_contenido_origenes(origenes, excluir_estado=excluir_estado)
+
+
+def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
+    """Ids de contenido con alguna pieza con copy (gate serial del pipeline). Delegado en `db.py`."""
+    return db.ids_contenido_con_copy(marca)
+
+
+def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
+    """Resetea a "" los `qa_veredicto='en_curso'` zombi (reaper). Delegado en `db.py`."""
+    return db.sanear_qa_en_curso_huerfanos(umbral_iso)
+
+
 def contar_contenido_origen_desde(marca: str, origen: str, desde_iso: str) -> int:
     """Nº de items del tablero de `marca` con `origen` creados desde `desde_iso`. Delegado en `db.py`."""
     return db.contar_contenido_origen_desde(marca, origen, desde_iso)

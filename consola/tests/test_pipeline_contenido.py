@@ -330,7 +330,14 @@ def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
 
 
 def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
-    """Una QA `no_verificado` -> SÍ se lanza copy y las piezas heredan el aviso ⚠️."""
+    """Una QA `no_verificado` -> el ENCADENADO dispara el copy YA y las piezas heredan el ⚠️.
+
+    ENCADENADO POR EVENTOS: el `procesar` de la QA, al persistir un veredicto apto, lanza el
+    copy de ESE tema al instante (antes esperaba al siguiente barrido de CD, +20 min). El
+    barrido queda de red de seguridad. DEDUP AL ÉXITO: el lanzamiento NO limpia
+    `copy_pendiente` (lo limpia el post-procesado del copy al completar); un copy fallido se
+    reintenta y, en cuanto hay pieza, el tema sale de la selección.
+    """
     monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")        # etapa QA activa (criba la fuente)
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (genera copy del tema apto)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
@@ -341,17 +348,79 @@ def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
 
-    # Fase CD: el tema está listo para copy.
-    listos = pc.temas_para_copy()
-    assert [t["id"] for t in listos] == [tema["id"]]
-    pc.ejecutar_cd(autor=None)
+    # ENCADENADO QA→copy: el copy se disparó al persistirse el veredicto (sin esperar a CD).
     assert len(llamadas) == 1
     # La pieza hereda el aviso ⚠️ por el veredicto inicial.
     assert llamadas[0]["veredicto_inicial"] == pc.VERDICTO_NO_VERIFICADO
-    # Limpia copy_pendiente: la fase CD no lo relanza.
-    assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "") == ""
+    # Dedup AL ÉXITO: el lanzador pide la limpieza al post-procesado (no limpia al encolar).
+    assert llamadas[0]["limpiar_pendiente"] is True
+    assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "").strip()
+
+    # Éxito del copy (simulado): nace la pieza -> el tema sale de la selección de CD y el
+    # barrido (red de seguridad) NO lo relanza.
+    repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Hola X")
+    assert pc.temas_para_copy() == []
     pc.ejecutar_cd(autor=None)
     assert len(llamadas) == 1
+
+
+def test_encadenado_no_dispara_copy_si_cd_apagada(entorno, monkeypatch):
+    """El encadenado QA→copy respeta el gate de CD: con «Generar copy» OFF no lanza nada."""
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    tema = _tema_pipeline(titulo="Sin CD")
+
+    pc.ejecutar_qa(autor=None)
+
+    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert llamadas == []  # el encadenado no salta el toggle de copy
+
+
+def test_encadenado_cola_llena_no_rompe_la_qa(entorno, monkeypatch):
+    """`ColaLlenaError` al encadenar el copy NO rompe el procesar de la QA (lo recoge el barrido)."""
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+
+    def _llena(**_kw):
+        raise generaciones.ColaLlenaError("cola llena")
+
+    monkeypatch.setattr(pc.gen_dom, "lanzar_copy", _llena)
+    tema = _tema_pipeline(titulo="Cola llena")
+
+    pc.ejecutar_qa(autor=None)  # no debe reventar
+
+    # El veredicto SÍ quedó persistido y el tema sigue elegible para el barrido de CD.
+    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert [t["id"] for t in pc.temas_para_copy()] == [tema["id"]]
+
+
+def test_copy_fallido_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch):
+    """DEDUP AL ÉXITO: un copy que falló (sin piezas, `copy_pendiente` intacto) se RELANZA.
+
+    Antes `copy_pendiente` se limpiaba al ENCOLAR y un copy fallido jamás se reintentaba (el
+    tema quedaba huérfano para siempre). El doble lanzamiento mientras el job está EN VUELO
+    lo evita la clave de idempotencia de `dominio.generar.lanzar` (no este filtro).
+    """
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    tema = _tema_pipeline(titulo="Reintento", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+
+    pc.ejecutar_cd(autor=None)
+    assert len(llamadas) == 1
+    # El lanzamiento NO limpió `copy_pendiente` (lo limpia el post-procesado al ÉXITO).
+    assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "").strip()
+
+    # El copy "falló" (no nació pieza): el siguiente barrido lo reintenta.
+    pc.ejecutar_cd(autor=None)
+    assert len(llamadas) == 2
+
+    # Éxito (pieza creada): deja de relanzarse.
+    repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Listo")
+    pc.ejecutar_cd(autor=None)
+    assert len(llamadas) == 2
 
 
 def test_qa_no_relanza_tema_ya_cribado(entorno, monkeypatch):
@@ -705,3 +774,110 @@ def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
     assert tras["estado"] == "usado"          # el estado promovido NO se revierte
     assert tras["contenido_id"] == "tema-77"  # el enlace al tema NO se pierde
     assert tras["score"] == 0.9               # los agregados sí se actualizan
+
+
+# --------------------------------------------------------------------------- #
+# Encadenado copy→arte por eventos + saneadores y helpers SQL del pipeline      #
+# --------------------------------------------------------------------------- #
+
+
+def test_encadenar_arte_tras_copy_ilustra_ese_tema(entorno, monkeypatch):
+    """El post-procesado del copy dispara el ARTE de ESE tema al instante (gates ON)."""
+    from keni_consola import autogen_arte, media
+
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setattr(media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
+    lanzados: list[str] = []
+    monkeypatch.setattr(
+        autogen_arte, "lanzar_para_topic",
+        lambda it: lanzados.append(it["id"]) or {"contenido_id": it["id"]},
+    )
+    tema = repos.crear_contenido(
+        clase="contenido", titulo="Ilustrable", marca="unotv", origen=pc.ORIGEN_PIPELINE,
+    )
+
+    res = pc.encadenar_arte_tras_copy(tema["id"])
+
+    assert lanzados == [tema["id"]]
+    assert res is not None
+
+
+def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
+    """Con el toggle de arte OFF (o el tema ya ilustrado) el encadenado NO lanza nada."""
+    from keni_consola import autogen_arte, media
+
+    # Toggle OFF: ni siquiera consulta el tema.
+    monkeypatch.delenv(config.ENV_PIPELINE_ARTE, raising=False)
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    assert pc.encadenar_arte_tras_copy("cualquiera") is None
+
+    # Toggle ON pero tema YA ilustrado (dedup por etiqueta): tampoco.
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setattr(media, "proveedor_configurado", lambda: True)
+    tema = repos.crear_contenido(
+        clase="contenido", titulo="Ya ilustrado", marca="unotv", origen=pc.ORIGEN_PIPELINE,
+    )
+    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: {tema["id"]})
+    monkeypatch.setattr(
+        autogen_arte, "lanzar_para_topic",
+        lambda it: (_ for _ in ()).throw(AssertionError("no debe ilustrar un tema ya hecho")),
+    )
+    assert pc.encadenar_arte_tras_copy(tema["id"]) is None
+
+
+def test_sanear_qa_en_curso_huerfanos_resetea_solo_viejos(entorno):
+    """El saneador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
+
+    Cierra el ZOMBI: si la criba muere sin finalizador, el tema quedaba `en_curso` para
+    siempre (excluido de `temas_sin_qa` y contando en el cupo en vuelo de su marca).
+    """
+    from keni_consola import db
+
+    zombi = _tema_pipeline(titulo="Zombi", qa_veredicto=pc.QA_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", qa_veredicto=pc.QA_EN_CURSO)
+    # Envejecemos el `actualizado` del zombi más allá del umbral (el del vivo queda reciente).
+    con = db._conectar()
+    try:
+        con.execute(
+            "UPDATE contenido SET actualizado = ? WHERE id = ?",
+            ("2020-01-01T00:00:00", zombi["id"]),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    n = repos.sanear_qa_en_curso_huerfanos("2025-01-01T00:00:00")
+
+    assert n == 1
+    assert (repos.obtener_contenido(zombi["id"])["qa_veredicto"] or "") == ""  # a re-criba
+    assert repos.obtener_contenido(vivo["id"])["qa_veredicto"] == pc.QA_EN_CURSO  # intacto
+
+
+def test_ids_contenido_con_copy_filtra_por_marca(entorno):
+    """`ids_contenido_con_copy` empuja el filtro a SQL: solo ids con pieza con copy redactado."""
+    a = repos.crear_contenido(clase="contenido", titulo="A", marca="unotv")
+    b = repos.crear_contenido(clase="contenido", titulo="B", marca="claro-sports")
+    sin_copy = repos.crear_contenido(clase="contenido", titulo="C", marca="unotv")
+    repos.crear_contenido_plataforma(contenido_id=a["id"], red="x", copy="hola")
+    repos.crear_contenido_plataforma(contenido_id=b["id"], red="x", copy="hola")
+    repos.crear_contenido_plataforma(contenido_id=sin_copy["id"], red="x", copy="")
+
+    assert repos.ids_contenido_con_copy("unotv") == {a["id"]}
+    assert {a["id"], b["id"]} <= repos.ids_contenido_con_copy()
+    assert sin_copy["id"] not in repos.ids_contenido_con_copy()
+
+
+def test_listar_contenido_origenes_filtra_en_sql(entorno):
+    """`listar_contenido_origenes` trae solo los orígenes pedidos y excluye el estado dado."""
+    rss = repos.crear_contenido(clase="contenido", titulo="R", marca="unotv", origen="rss")
+    repos.crear_contenido(clase="contenido", titulo="M", marca="unotv", origen="")
+    hecho = repos.crear_contenido(clase="contenido", titulo="H", marca="unotv", origen="rss")
+    repos.actualizar_contenido(hecho["id"], {"estado": "hecha"})
+
+    ids = {t["id"] for t in repos.listar_contenido_origenes(["rss"], excluir_estado="hecha")}
+    assert ids == {rss["id"]}
+    # Sin exclusión, el 'hecha' también sale; con lista vacía, nada (y sin query).
+    assert hecho["id"] in {t["id"] for t in repos.listar_contenido_origenes(["rss"])}
+    assert repos.listar_contenido_origenes([]) == []

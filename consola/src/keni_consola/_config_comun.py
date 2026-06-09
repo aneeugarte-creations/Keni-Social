@@ -255,6 +255,17 @@ ENV_AUTO_PROGRAMAR = "KENI_AUTO_PROGRAMAR"
 ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
 ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
 
+# QA de la FUENTE (criba pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
+# que corre BARATO por defecto: modelo rapido (Haiku), esfuerzo bajo y timeout corto. Cada
+# una es configurable; vacia ("") = se usa el global correspondiente.
+ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
+ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
+ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
+# Saneador de temas zombi `qa_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
+# muere sin finalizador, el tema quedaba excluido para siempre de la re-criba (y contando en
+# el cupo en vuelo). El reaper resetea a "" los `en_curso` mas viejos que este TTL (minutos).
+ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"
+
 # Recoleccion de basura (GC) de MEDIA HUERFANA (Estudio de imagen, diseno §5). El Estudio
 # genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
 # nadie borra. Un hilo demonio barre periodicamente el almacen y borra SOLO los objetos
@@ -428,6 +439,10 @@ DB_POOL_MIN_DEF = 2
 # 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
 DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
+# QA de la fuente: timeout corto (criba permisiva con modelo rapido) y TTL del saneador de
+# temas `en_curso` huerfanos (minutos; muy superior al timeout de la criba).
+QA_FUENTE_TIMEOUT_DEF = 180
+QA_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
 WORKER_SONDEO_SEGUNDOS_DEF = 0.5
@@ -680,6 +695,8 @@ __all__ = [
     'ALGORITMOS_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
     'CLAUDE_TIMEOUT_DEF',
+    'QA_EN_CURSO_TTL_MIN_DEF',
+    'QA_FUENTE_TIMEOUT_DEF',
     'CLUSTER_BREAKING_FUENTES_DEF',
     'CLUSTER_BREAKING_VENTANA_H_DEF',
     'CLUSTER_UMBRAL_DEF',
@@ -794,6 +811,10 @@ __all__ = [
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VALIDACION',
+    'ENV_QA_EN_CURSO_TTL_MIN',
+    'ENV_QA_FUENTE_ESFUERZO',
+    'ENV_QA_FUENTE_MODELO',
+    'ENV_QA_FUENTE_TIMEOUT',
     'ENV_RAIZ',
     'ENV_REAPER_INTERVALO_MIN',
     'ENV_RENDIMIENTO_MIN_PIEZAS',

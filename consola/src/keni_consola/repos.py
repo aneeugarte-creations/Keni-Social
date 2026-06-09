@@ -100,8 +100,10 @@ from .repos_contenido import (  # noqa: F401
     etiquetas_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
+    ids_contenido_con_copy,
     ids_contenido_con_etiqueta,
     listar_contenido,
+    listar_contenido_origenes,
     listar_contenido_plataforma,
     listar_etiquetas,
     listar_evergreen_ideas,
@@ -117,6 +119,7 @@ from .repos_contenido import (  # noqa: F401
     obtener_insumo_lote,
     quitar_etiqueta,
     sanear_lotes_parseando_huerfanos,
+    sanear_qa_en_curso_huerfanos,
     titulos_recientes_marca,
 )
 from .repos_editor import (  # noqa: F401

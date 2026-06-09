@@ -15,8 +15,10 @@ copy del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KE
   - SOLO FUENTES: la etapa de copy solo procesa temas cuyo `origen` es de una FUENTE
     (`estados.ORIGENES_AUTOGEN`); el contenido manual del equipo NO se toca.
   - REQUIERE MARCA: sin marca no hay voz/tropicalizacion; esos temas se omiten.
-  - DEDUP: tras encolar, el tema se ETIQUETA `autogen` para no re-generarlo. La selección lee
-    esa etiqueta para saltarse lo ya hecho.
+  - DEDUP: al COMPLETAR CON EXITO el copy, el post-procesado ETIQUETA el tema `autogen` para
+    no re-generarlo (la selección lee esa etiqueta para saltarse lo ya hecho). Se etiqueta al
+    éxito —no al encolar— para que un copy fallido se REINTENTE en el siguiente barrido; el
+    doble lanzamiento en vuelo lo evita la clave de idempotencia de `dominio.generar.lanzar`.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revision/aprobacion humana;
     la publicacion real (vía Metricool) sigue gated por `KENI_PUBLICAR_REAL`.
 """
@@ -127,10 +129,12 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         # Lista viva: el borrador auto-generado cuelga del tema origen (su tarjeta lo
         # muestra y sigue fluyendo por aprobacion/programador), no como contenido suelto.
         contenido_id=item.get("id") or "",
+        # DEDUP AL EXITO (no al encolar): la etiqueta `autogen` la asigna el POST-PROCESADO
+        # del copy al completar con exito. Antes se etiquetaba tras encolar y un copy FALLIDO
+        # jamas se reintentaba (el tema quedaba excluido para siempre de la seleccion).
+        # Mientras el job esta EN VUELO no hay doble lanzamiento: la clave de idempotencia
+        # de `dominio.generar.lanzar` devuelve el run en curso.
+        etiqueta_exito=ETIQUETA_AUTOGEN,
     )
-    # Dedup: marca el tema como ya encolado (solo si el encolado no lanzo). Best-effort.
-    et_id = _id_etiqueta_autogen()
-    if et_id:
-        repos.asignar_etiqueta(item["id"], et_id)
     return gen
 

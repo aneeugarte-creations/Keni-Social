@@ -37,8 +37,11 @@ from ._contenido import (
     contar_contenido_origen_desde,
     crear_contenido,
     existe_publicado_similar,
+    ids_contenido_con_copy,
     listar_contenido,
+    listar_contenido_origenes,
     obtener_contenido,
+    sanear_qa_en_curso_huerfanos,
     titulos_recientes_marca,
 )
 from ._etiquetas import (

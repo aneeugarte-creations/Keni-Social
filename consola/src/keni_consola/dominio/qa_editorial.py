@@ -214,6 +214,22 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
                 contenido_id,
                 {"qa_veredicto": verdicto, "qa_hallazgos": serializar_hallazgos(informe)},
             )
+            # ENCADENADO QA->copy (por eventos): si la fuente paso la criba, dispara el copy
+            # de ESE tema YA, sin esperar al siguiente barrido de 20 min (el barrido queda de
+            # red de seguridad: recoge lo que el encadenado pierda, p. ej. con la cola llena).
+            # Respeta los mismos gates que la fase CD (toggle copy global + por marca) dentro
+            # de `encadenar_copy_tras_qa`. Best-effort: nunca rompe el post-procesado de QA.
+            if verdicto != VERDICTO_PROBLEMA:
+                try:
+                    from ..pipeline_contenido import encadenar_copy_tras_qa
+
+                    encadenar_copy_tras_qa(contenido_id, autor=autor)
+                except Exception:  # noqa: BLE001 -- el barrido lo recogera
+                    import logging
+
+                    logging.getLogger("keni_consola.qa_editorial").warning(
+                        "QA fuente: fallo el encadenado a copy (%s)", contenido_id, exc_info=True
+                    )
         return {
             "informe": informe,
             "verdicto": verdicto,

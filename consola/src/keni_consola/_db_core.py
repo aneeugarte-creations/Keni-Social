@@ -811,6 +811,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_jobs_estado ON jobs (estado)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_gen ON jobs (gen_id)",
+    # PRIORIDAD de despacho (entero, mayor = antes): un lanzamiento MANUAL del equipo
+    # (API/MCP) no debe esperar detras del lote del pipeline/autogen. `reclamar_job` ordena
+    # por (prioridad DESC, creado ASC). Migracion idempotente para BDs existentes.
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS prioridad INTEGER NOT NULL DEFAULT 0",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_estado_prioridad "
+    "ON jobs (estado, prioridad DESC, creado ASC)",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
     # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
     # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un

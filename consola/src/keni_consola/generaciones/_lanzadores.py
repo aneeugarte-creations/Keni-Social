@@ -334,7 +334,17 @@ def lanzar_job_claude(
     hereda la admision (`slot(ya_admitido=True)`) y la libera al terminar.
     """
     acumulador = stream.AcumuladorStream()
+    # Wall-timeout del run: el global (`KENI_CLAUDE_TIMEOUT`, def 600 s) salvo que el job
+    # traiga un override en `endurecer["timeout"]` (timeout POR ETAPA: p. ej. la criba QA de
+    # la fuente corre con ~180 s). Solo puede ENDURECER (acortar): se topa con `min(...)`,
+    # nunca alarga el global (misma filosofia que el resto de overrides de `endurecer`).
     timeout = _timeout()
+    try:
+        timeout_job = int((endurecer or {}).get("timeout") or 0)
+    except (TypeError, ValueError):
+        timeout_job = 0
+    if timeout_job > 0:
+        timeout = min(timeout, timeout_job)
 
     # CORRELACION (#123 + #137): capturamos AQUI (sincronicamente, dentro de la peticion)
     # el request-id de quien lanzo el job. El hilo de trabajo corre fuera del contexto de

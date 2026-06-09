@@ -199,13 +199,16 @@ from .db_contenido import (  # noqa: F401
     estado_pieza_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
+    ids_contenido_con_copy,
     listar_contenido,
+    listar_contenido_origenes,
     listar_contenido_plataforma,
     listar_etiquetas,
     obtener_contenido,
     obtener_contenido_plataforma,
     obtener_etiqueta,
     obtener_etiqueta_por_nombre,
+    sanear_qa_en_curso_huerfanos,
     titulos_recientes_marca,
 )
 from .db_editor import (  # noqa: F401

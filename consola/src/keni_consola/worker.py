@@ -94,9 +94,10 @@ def _jobs_en_curso() -> list[dict[str, str]]:
     with _JOBS_EN_CURSO_LOCK:
         return list(_JOBS_EN_CURSO.values())
 
-# Cuanto sondea el vigia de cancelacion el flag de la cola (s). Bajo para que cancelar
-# se sienta inmediato sin martillear la BD.
-_SONDEO_CANCELACION_S = 0.4
+# Cuanto sondea el vigia de cancelacion el flag de la cola (s). Equilibrio: cancelar se
+# siente casi inmediato (~1.5 s) sin martillear la BD con un SELECT por job cada 0.4 s
+# (con N jobs en vuelo el sondeo de cancelacion era la mayor fuente de QPS de fondo).
+_SONDEO_CANCELACION_S = 1.5
 
 
 def _finalizar_cancelado(gen_id: str) -> None:
@@ -120,12 +121,50 @@ def _finalizar_error(gen_id: str, mensaje: str) -> None:
     )
 
 
+def _sanear_qa_si_fallo(gen_id: str, spec: object) -> None:
+    """Si un job de QA-FUENTE termino en ERROR, devuelve su tema a "sin veredicto" (re-criba).
+
+    CIERRA EL ZOMBI `qa_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
+    lanzar, y solo el `procesar` (exito) escribe el veredicto real. Si la generacion muere en
+    error/timeout/cancelacion, nada lo reseteaba: el tema quedaba excluido PARA SIEMPRE de
+    `temas_sin_qa` y contando en `temas_en_vuelo` (bloqueando el cupo serial de su marca).
+    Aqui, al cerrar un job cuyo `procesar` es `qa-fuente` con el registro en ERROR, se resetea
+    el sentinel a "" para que el siguiente barrido lo re-cribe. El reaper cubre ademas los
+    casos donde este saneo no llega a correr (muerte no graciosa del worker). Best-effort.
+    """
+    try:
+        p = (spec.get("procesar") if isinstance(spec, dict) else None) or {}
+        if p.get("kind") != jobspec.PROC_QA_FUENTE:
+            return
+        contenido_id = (p.get("contenido_id") or "").strip()
+        if not contenido_id:
+            return
+        g = generaciones.obtener(gen_id)
+        if g is not None and g.get("estado") != generaciones.ESTADO_ERROR:
+            return  # completo bien (el procesar ya escribio el veredicto real) o sigue vivo
+        from . import repos
+        from .pipeline_contenido import QA_EN_CURSO
+
+        tema = repos.obtener_contenido(contenido_id)
+        if tema is not None and (tema.get("qa_veredicto") or "") == QA_EN_CURSO:
+            repos.actualizar_contenido(contenido_id, {"qa_veredicto": ""})
+            _log.info(
+                "worker: QA de la fuente fallida; tema %s devuelto a re-criba", contenido_id
+            )
+    except Exception:  # noqa: BLE001 -- saneo best-effort; el reaper es la red de seguridad
+        _log.warning("worker: fallo el saneo del tema de QA (gen %s)", gen_id, exc_info=True)
+
+
 def _vigilar_cancelacion(job_id: str, gen_id: str, parar: threading.Event) -> None:
     """Hilo vigia: sondea el flag de cancelacion de la cola y propaga al runner local.
 
     Mientras el job corre, mira `cola.cancelado(job_id)`; al verlo, llama a
     `generaciones.cancelar(gen_id)` (arma el evento in-memoria + mata el arbol) y termina.
     `parar` lo corta cuando el job ya alcanzo un estado terminal (no seguir sondeando).
+
+    TOLERANTE A FALLOS TRANSITORIOS: un error al sondear (p. ej. un blip de la BD) se loguea
+    y se SIGUE sondeando. Antes el vigia hacia `return` ante cualquier excepcion y el job
+    quedaba INCANCELABLE durante el resto de su ejecucion (hasta 10 min de wall-timeout).
     """
     while not parar.wait(_SONDEO_CANCELACION_S):
         try:
@@ -134,7 +173,6 @@ def _vigilar_cancelacion(job_id: str, gen_id: str, parar: threading.Event) -> No
                 return
         except Exception:  # noqa: BLE001 -- el vigia nunca debe romper el procesado del job
             _log.warning("worker: fallo al sondear cancelacion del job %s", job_id, exc_info=True)
-            return
 
 
 def _prefetch_s3(job_id: str, gen_id: str, prefetch: dict[str, str]) -> bool:
@@ -218,6 +256,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     # Job ya cancelado (lo marcaron antes de clavarlo) o spec corrupto: finalizar SIN claude.
     if cola.cancelado(job_id):
         _finalizar_cancelado(gen_id)
+        _sanear_qa_si_fallo(gen_id, spec)
         generaciones.runner.liberar_admision()  # el cupo lo tomo el encolado; liberar
         cola.terminar(job_id)
         return
@@ -245,6 +284,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     except Exception:  # noqa: BLE001 -- spec mal formado: error claro, sin traceback al cliente
         _log.exception("worker: no se pudo reconstruir el job %s (gen %s)", job_id, gen_id)
         _finalizar_error(gen_id, "No se pudo iniciar la generación.")
+        _sanear_qa_si_fallo(gen_id, spec)
         generaciones.runner.liberar_admision()
         cola.terminar(job_id)
         return
@@ -276,6 +316,9 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
             dir_temporal=dir_temporal, ya_admitido=True, endurecer=endurecer,
         )
         _esperar_terminal(gen_id)
+        # Saneo del pipeline: una QA de la fuente que TERMINO EN ERROR devuelve su tema a
+        # "sin veredicto" (re-criba), en vez de dejarlo `en_curso` zombi para siempre.
+        _sanear_qa_si_fallo(gen_id, spec)
     finally:
         _desmarcar_job_en_curso(job_id)
         parar.set()
@@ -285,6 +328,11 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
 # Margen extra sobre el wall-timeout del job para esperar el estado terminal (cierre +
 # post-procesado). Si se excede (no deberia), dejamos de esperar y marcamos terminado.
 _MARGEN_TERMINAL_S = 60
+
+# Tope del BACKOFF del sondeo de la cola cuando lleva vacia varios ciclos (s). El sondeo
+# arranca en `config.worker_sondeo_segundos()` (def 0.5) y crece x1.5 por ciclo vacio hasta
+# este maximo; un job lo resetea al ritmo base. Reduce el QPS de fondo del pool contra la BD.
+_SONDEO_MAX_S = 5.0
 
 
 def _esperar_terminal(gen_id: str) -> None:
@@ -318,18 +366,25 @@ def _bucle(parar: threading.Event, worker_id: str) -> None:
     hasta N jobs `claude` en vuelo a la vez (acotado tambien por `runner.slot`).
     """
     sondeo = config.worker_sondeo_segundos()
+    espera = sondeo
     while not parar.is_set():
         try:
             job = cola.reclamar(worker_id)
         except Exception:  # noqa: BLE001 -- un fallo de la cola no debe matar el worker
             _log.exception("worker: fallo al reclamar un job de la cola")
-            if parar.wait(sondeo):
+            if parar.wait(espera):
                 return
             continue
         if job is None:
-            if parar.wait(sondeo):
+            # BACKOFF con cola vacia: tras cada sondeo sin trabajo la espera crece (x1.5)
+            # hasta `_SONDEO_MAX_S`, y se RESETEA al sondeo base en cuanto hay un job. Con
+            # N hilos del pool sondeando, esto recorta el QPS de fondo contra Postgres sin
+            # afectar la latencia bajo carga (con cola activa se sondea al ritmo base).
+            if parar.wait(espera):
                 return
+            espera = min(espera * 1.5, max(sondeo, _SONDEO_MAX_S))
             continue
+        espera = sondeo
         # CARRERA DE APAGADO: `parar` pudo activarse DESPUES de pasar el `while` y ANTES (o
         # durante) este `reclamar`. Sin esta re-comprobacion el hilo procesaria un job nuevo
         # tras el apagado, sobreviviendo al `detener()` (atascado luego en `_esperar_terminal`)
@@ -384,7 +439,7 @@ class _Pool:
         (ni un job procesandose, ni un hilo en su bucle de reclamacion). No quedan hilos
         fugados que reclamen un job nuevo en el siguiente test/deploy.
 
-        ORDEN (para que el estado final sea INTERRUMPIDO, no CANCELADO):
+        ORDEN:
         1) Activa `parar`: tras esto NINGUN hilo entra a procesar un job nuevo (el bucle
            re-comprueba `parar` JUSTO despues de reclamar; si esta puesto, devuelve el job a
            la cola y sale en vez de procesarlo).
@@ -394,14 +449,19 @@ class _Pool:
            hace join. Se REPITE porque un hilo pudo haber reclamado un job en la ventana de
            carrera justo antes de ver `parar`: ese job aparece en una pasada posterior y se
            cancela tambien. Se acota por `timeout` global (defensa: nunca colgar el apagado).
-        3) Marca cada job capturado INTERRUMPIDO (gana al `cancelado` que pudo escribir el hilo
-           del job: un apagado por deploy es "interrumpido", no cancelacion del usuario) y lo
-           SACA de la cola (`cola.terminar`) para que se re-reclame mas tarde (reaper) sin
-           reiniciar el run en bucle.
+        3) RE-ENCOLA cada job capturado (`cola.reencolar` -> `pendiente`) para que el worker
+           POST-DEPLOY lo retome solo, y deja su registro `ejecutando` otra vez (revive el
+           `cancelado` que escribio el hilo del job: el usuario no cancelo nada; la UI sigue
+           mostrando "Generando..." y el run se reanuda sin intervencion). ANTES se marcaba
+           INTERRUMPIDO y se sacaba de la cola "para que se re-reclame mas tarde (reaper)",
+           pero NINGUN reaper relanzaba jobs terminados: cada deploy PERDIA los jobs en vuelo
+           y exigia relanzarlos a mano. Excepcion: un registro que YA llego a `completado`
+           (su post-procesado corrio) NO se re-encola (re-ejecutarlo duplicaria borradores).
         4) Limpia `_JOBS_EN_CURSO` (defensa final): si un hilo quedo colgado pasado el timeout
            (no deberia), su entrada no debe contaminar el registro global.
 
-        El reaper cubre las muertes NO graciosas (SIGKILL/OOM), donde esto no llega a correr.
+        El reaper cubre las muertes NO graciosas (SIGKILL/OOM), donde esto no llega a correr
+        (ahi actua el re-reclamo de huerfanos de `reclamar_job` por `claimed_at` viejo).
         """
         self._parar.set()
         limite = time.monotonic() + timeout
@@ -437,21 +497,39 @@ class _Pool:
                     generaciones.cancelar(job.get("gen_id", ""))
                 except Exception:  # noqa: BLE001 -- en apagado, best-effort por job
                     pass
-        # 3) Estado HONESTO final: interrumpido (no cancelado) + fuera de la cola.
+        # 3) RE-DESPACHO: devolver cada job a `pendiente` para que el worker post-deploy lo
+        #    retome SOLO (el trabajo no se pierde). Un registro YA `completado` no se re-encola
+        #    (su post-procesado corrio: re-ejecutarlo duplicaria borradores); se cierra su job.
         for job in capturados.values():
             gid, jid = job.get("gen_id", ""), job.get("id", "")
-            _log.warning("worker: apagado con job en curso gen=%s; lo marco interrumpido", gid)
             try:
+                g = generaciones.obtener(gid)
+            except Exception:  # noqa: BLE001 -- sin registro legible, mejor re-encolar (pendiente nunca corrio su post-procesado dos veces: la guardia anti-duplicado del reclamo lo cubre)
+                g = None
+            if g is not None and g.get("estado") == generaciones.ESTADO_COMPLETADO:
+                _log.info("worker: apagado con job gen=%s ya completado; cierro su job", gid)
+                try:
+                    cola.terminar(jid)
+                except Exception:  # noqa: BLE001 -- en apagado, best-effort
+                    pass
+                continue
+            _log.warning(
+                "worker: apagado con job en curso gen=%s; lo devuelvo a la cola (pendiente)", gid
+            )
+            try:
+                # Revive el registro (el hilo del job lo dejo `cancelado`/error al matar el
+                # arbol): vuelve a `ejecutando` SIN motivo/error, para que la UI siga en
+                # "Generando..." hasta que el worker post-deploy lo retome y lo complete.
                 generaciones.actualizar(gid, {
-                    "estado": generaciones.ESTADO_ERROR,
-                    "motivo": generaciones.MOTIVO_INTERRUMPIDO,
-                    "error": "Interrumpida por un reinicio del worker (despliegue). Vuelve a intentarla.",
-                    "fecha_fin": generaciones.ahora_iso(),
+                    "estado": generaciones.ESTADO_EJECUTANDO,
+                    "motivo": "",
+                    "error": "",
+                    "fecha_fin": "",
                 })
             except Exception:  # noqa: BLE001 -- en apagado, best-effort
                 pass
             try:
-                cola.terminar(jid)  # fuera de la cola: NO re-ejecutar (evita reinicio en bucle)
+                cola.reencolar(gid)  # de vuelta a `pendiente`: el proximo worker lo clava
             except Exception:  # noqa: BLE001
                 pass
         # 4) Defensa: vaciar el registro global por si un hilo quedo colgado (no debe ocurrir).

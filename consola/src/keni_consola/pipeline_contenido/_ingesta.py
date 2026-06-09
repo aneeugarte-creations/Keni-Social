@@ -401,13 +401,12 @@ def temas_en_vuelo(marca: str) -> int:
         return 0
     if not temas:
         return 0
-    con_copy: set[str] = set()
     try:
-        for p in repos.listar_contenido_plataforma():
-            if (p.get("copy") or "").strip():
-                con_copy.add(p.get("contenido_id", "") or "")
+        # WHERE en SQL por marca (antes: tabla `contenido_plataforma` ENTERA por cada marca
+        # y barrido, filtrada en Python).
+        con_copy = repos.ids_contenido_con_copy(marca)
     except Exception:  # noqa: BLE001 -- sin plataformas, contamos solo los pendientes de QA
-        pass
+        con_copy = set()
     n = 0
     for t in temas:
         veredicto = (t.get("qa_veredicto") or "").strip()

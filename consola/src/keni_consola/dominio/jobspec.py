@@ -37,6 +37,13 @@ from . import qa_editorial as dom_qa
 # Versiona el spec por si su forma cambia (un worker viejo no debe malinterpretar uno nuevo).
 VERSION = 1
 
+# PRIORIDAD de despacho del job en la cola (entero, mayor = antes). Viaja DENTRO del spec
+# (asi los seams inyectables de encolado no cambian de firma); `cola.encolar` la copia a la
+# columna `jobs.prioridad` y `reclamar_job` ordena por ella. Un lanzamiento MANUAL del equipo
+# (API/MCP) pasa primero; el lote de fondo del pipeline/autogen cede el paso.
+PRIORIDAD_PIPELINE = 0
+PRIORIDAD_MANUAL = 10
+
 # cwd NEUTRO para prompts AUTOCONTENIDOS (Texto y TODAS las generaciones de texto): un
 # dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).
 # Tras retirar el sistema de skills es el ÚNICO cwd de `claude`; ya no hay cwd "de skills".
@@ -162,6 +169,8 @@ def construir_copy(
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
+    limpiar_pendiente: bool = False,
+    etiqueta_exito: str = "",
 ) -> dict[str, Any]:
     """Spec del post-procesado de PIEZAS (copy/RSS): parsea piezas + crea borradores.
 
@@ -177,6 +186,12 @@ def construir_copy(
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
     procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
     URL). "" = no se toca (comportamiento de hoy).
+    `limpiar_pendiente` (pipeline): si True, el post-procesado LIMPIA `contenido.copy_pendiente`
+    del tema AL COMPLETAR CON EXITO (dedup al exito, no al lanzar: un copy fallido se reintenta
+    en el siguiente barrido; mientras el job esta EN VUELO, la clave de idempotencia de
+    `dominio.generar.lanzar` evita el doble lanzamiento).
+    `etiqueta_exito` (autogen): nombre de etiqueta a asignar al tema AL COMPLETAR CON EXITO
+    (p. ej. `autogen`): mismo principio de dedup-al-exito que `limpiar_pendiente`.
     """
     return {
         "kind": PROC_COPY,
@@ -194,6 +209,8 @@ def construir_copy(
         "tipo_contenido": tipo_contenido or "",
         "veredicto_inicial": veredicto_inicial or "",
         "url_fuente": url_fuente or "",
+        "limpiar_pendiente": bool(limpiar_pendiente),
+        "etiqueta_exito": etiqueta_exito or "",
     }
 
 
@@ -344,6 +361,7 @@ def construir(
     dir_temporal: str | None = None,
     prefetch_s3: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
+    prioridad: int = PRIORIDAD_MANUAL,
 ) -> dict[str, Any]:
     """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal).
 
@@ -362,7 +380,20 @@ def construir(
         "prefetch_s3": prefetch_s3 or None,
         "procesar": procesar,
         "endurecer": endurecer or None,
+        "prioridad": int(prioridad),
     }
+
+
+def prioridad(spec: dict[str, Any]) -> int:
+    """Prioridad de despacho del spec (def `PRIORIDAD_MANUAL` si falta/ilegible).
+
+    El default conserva la semantica para specs VIEJOS aun en cola (sin el campo) y para los
+    jobs de PROCESO (render/ASR, iniciados por una persona): se despachan como manuales.
+    """
+    try:
+        return int(spec.get("prioridad", PRIORIDAD_MANUAL))
+    except (TypeError, ValueError):
+        return PRIORIDAD_MANUAL
 
 
 def endurecer(spec: dict[str, Any]) -> dict[str, Any] | None:
@@ -523,18 +554,76 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         )
         fuente_id = p.get("fuente_id") or ""
         clave = p.get("clave") or ""
-        if not (fuente_id and clave):
-            return procesar_copy
+        base = procesar_copy
+        if fuente_id and clave:
+            # RSS: tras el copy, marca el item del feed como usado (solo si la fuente existe).
+            from .. import repos
 
-        # RSS: tras el copy, marca el item del feed como usado (solo si la fuente existe).
-        from .. import repos
+            def procesar_rss(salida: str, metricas: object) -> dict[str, object]:
+                resultado = procesar_copy(salida, metricas)
+                if repos.obtener_fuente_rss(fuente_id) is not None:
+                    repos.marcar_item(fuente_id, clave, True)
+                return resultado
 
-        def procesar_rss(salida: str, metricas: object) -> dict[str, object]:
-            resultado = procesar_copy(salida, metricas)
-            if repos.obtener_fuente_rss(fuente_id) is not None:
-                repos.marcar_item(fuente_id, clave, True)
+            base = procesar_rss
+
+        contenido_id = p.get("contenido_id", "") or ""
+        if not contenido_id:
+            return base
+        # COPY NIDADO BAJO UN TEMA (pipeline/autogen): acciones POST-EXITO sobre el tema.
+        #   - dedup AL EXITO (no al lanzar): limpiar `copy_pendiente` / etiquetar `autogen`
+        #     SOLO cuando los borradores ya existen. Un copy fallido conserva sus marcas de
+        #     "pendiente" y el barrido lo REINTENTA; el doble lanzamiento en vuelo lo evita
+        #     la clave de idempotencia de `dominio.generar.lanzar`.
+        #   - ENCADENADO copy->arte: dispara la etapa de arte de ESE tema al instante (si su
+        #     gate esta activo), sin esperar al siguiente barrido (que queda de red de
+        #     seguridad). Todo best-effort: el copy YA esta hecho; nada de esto lo rompe.
+        limpiar_pendiente = bool(p.get("limpiar_pendiente"))
+        etiqueta_exito = str(p.get("etiqueta_exito") or "").strip()
+
+        def procesar_pipeline(salida: str, metricas: object) -> dict[str, object]:
+            resultado = base(salida, metricas)
+            from .. import repos
+
+            if limpiar_pendiente:
+                try:
+                    repos.actualizar_contenido(contenido_id, {"copy_pendiente": ""})
+                except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
+                    pass
+            if etiqueta_exito:
+                try:
+                    _asignar_etiqueta_por_nombre(contenido_id, etiqueta_exito)
+                except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
+                    pass
+            try:
+                from ..pipeline_contenido import encadenar_arte_tras_copy
+
+                encadenar_arte_tras_copy(contenido_id)
+            except Exception:  # noqa: BLE001 -- el encadenado nunca rompe el post-procesado
+                pass
             return resultado
 
-        return procesar_rss
+        return procesar_pipeline
 
     raise ValueError(f"kind de post-procesado desconocido: {kind!r}")
+
+
+def _asignar_etiqueta_por_nombre(contenido_id: str, nombre: str) -> None:
+    """Asigna al contenido la etiqueta llamada `nombre` (creandola si falta). Best-effort.
+
+    Pequeno helper del dedup-al-exito del copy autogen (etiqueta `autogen`): mismo criterio
+    de normalizacion que `autogen_copy._id_etiqueta_autogen`, sin acoplar este modulo de
+    dominio a aquel (import de `repos` perezoso, igual que el resto de posts-procesados).
+    """
+    from .. import repos
+
+    objetivo = " ".join(nombre.strip().lower().split())
+    et_id = ""
+    for et in repos.listar_etiquetas():
+        if " ".join(str(et.get("nombre", "")).strip().lower().split()) == objetivo:
+            et_id = et.get("id", "")
+            break
+    if not et_id:
+        et_id = repos.crear_etiqueta(nombre=nombre).get("id", "")
+    if et_id:
+        repos.asignar_etiqueta(contenido_id, et_id)

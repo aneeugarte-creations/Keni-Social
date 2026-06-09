@@ -112,6 +112,27 @@ def _contexto_qa_fuente(nota: str) -> str:
     return "Nota de origen a cribar (aún no hay copy):\n\n" + nota
 
 
+def _endurecer_qa_fuente() -> dict[str, Any] | None:
+    """Overrides `endurecer` de la criba de la fuente: modelo rápido + esfuerzo bajo + timeout corto.
+
+    La QA-fuente era un run `claude -p` completo con modelo/esfuerzo por defecto (~60-120 s por
+    tema); como es una criba PERMISIVA (no redacción), corre con Haiku + `low` + ~180 s
+    (configurables: `KENI_QA_FUENTE_MODELO`, `KENI_QA_FUENTE_ESFUERZO`, `KENI_QA_FUENTE_TIMEOUT`).
+    Se omiten las claves vacías (cada una cae a su global). None si no hay ningún override.
+    """
+    overrides: dict[str, Any] = {}
+    modelo = config.qa_fuente_modelo()
+    if modelo:
+        overrides["modelo"] = modelo
+    esfuerzo = config.qa_fuente_esfuerzo()
+    if esfuerzo:
+        overrides["esfuerzo"] = esfuerzo
+    timeout = config.qa_fuente_timeout()
+    if timeout > 0:
+        overrides["timeout"] = timeout
+    return overrides or None
+
+
 def lanzar_qa_fuente(
     tema: dict[str, Any], *, autor: dict[str, str] | None
 ) -> dict[str, Any] | None:
@@ -175,6 +196,10 @@ def lanzar_qa_fuente(
         # `no_verificado`/`problema` + hallazgos, parseados; el usuario no ve la salida cruda).
         # Corroborar el material puede requerir LEER la fuente: NO se le veta la web. Queda la
         # veta global `Bash Write Edit`.
+        # CRIBA BARATA: la QA de la fuente es un filtro permisivo, no redacción. Corre con un
+        # modelo rápido (def Haiku), esfuerzo bajo y timeout corto (def 180 s), configurables
+        # por env (`KENI_QA_FUENTE_MODELO`/`_ESFUERZO`/`_TIMEOUT`). Solo endurece; vacío = global.
+        endurecer=_endurecer_qa_fuente(),
     )
     registrar_etapa(
         ETAPA_QA,

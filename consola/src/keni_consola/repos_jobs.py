@@ -19,8 +19,8 @@ JOB_TERMINADO = db.JOB_TERMINADO
 # ejecuta `claude -p`. La fachada delega 1:1 en db.py (Postgres).
 
 
-def encolar_job(gen_id: str, spec: str) -> str:
-    return db.encolar_job(gen_id, spec)
+def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
+    return db.encolar_job(gen_id, spec, prioridad)
 
 
 def contar_jobs_activos() -> int:

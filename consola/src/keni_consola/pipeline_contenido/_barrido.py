@@ -227,7 +227,9 @@ def ejecutar_arte() -> list[dict[str, Any]]:
         _log.info("pipeline: etapa de arte sin proveedor de imagen configurado; se omite.")
         return []
     try:
-        items = repos.listar_contenido()
+        # Solo la clase 'contenido' (el filtro va en SQL; las tareas nunca se ilustran).
+        # `topics_sin_arte` aplica el resto de reglas (estado, copy sin imagen, dedup...).
+        items = repos.listar_contenido(clase="contenido")
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa de arte no actúa
         _log.exception("pipeline: no se pudo leer el tablero para la etapa de arte.")
         return []
@@ -239,15 +241,25 @@ def ejecutar_arte() -> list[dict[str, Any]]:
         etiquetas_por_item=autogen_arte._etiquetas_por_item(),
         hoy=date.today(),
     )
-    adjuntados: list[dict[str, Any]] = []
-    for item in elegidos:
+
+    # EN PARALELO (antes en serie): cada arte es una llamada HTTP sincrona al proveedor de
+    # imagen (segundos por tema); con el cap por barrido (def 3), ilustrarlos a la vez deja
+    # la etapa en ~el tiempo del mas lento. Cada tema es independiente y best-effort.
+    def _ilustrar(item: dict[str, Any]) -> dict[str, Any] | None:
         try:
-            res = autogen_arte.lanzar_para_topic(item)
+            return autogen_arte.lanzar_para_topic(item)
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la etapa de arte
             _log.exception("pipeline: fallo la generación de arte de un tema.")
-            continue
-        if res:
-            adjuntados.append(res)
+            return None
+
+    adjuntados: list[dict[str, Any]] = []
+    if elegidos:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(
+            max_workers=min(4, len(elegidos)), thread_name_prefix="pipeline-arte"
+        ) as pool:
+            adjuntados = [res for res in pool.map(_ilustrar, elegidos) if res]
     if adjuntados:
         _log.info("pipeline: %d tema(s) ilustrado(s) (etapa arte).", len(adjuntados))
     return adjuntados
