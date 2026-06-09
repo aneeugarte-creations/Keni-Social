@@ -6,7 +6,7 @@
  */
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink, Megaphone } from "lucide-react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +37,12 @@ import {
   porcentaje,
   variacion,
 } from "@/lib/formato";
-import type { ComparativaKpi, DesgloseRedCampania, PiezaCampania } from "@/types";
+import type {
+  AnaliticaCampania,
+  ComparativaKpi,
+  DesgloseRedCampania,
+  PiezaCampania,
+} from "@/types";
 
 import { CabeceraOrdenable } from "@/pages/metricas/CabeceraOrdenable";
 import { useOrdenTabla } from "@/pages/metricas/useOrdenTabla";
@@ -118,7 +123,7 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
     );
   }
 
-  const { kpis, comparativa, tendencia, desglose_red, piezas } = consulta.data;
+  const { kpis, comparativa, tendencia, desglose_red, inorganico, ads, piezas } = consulta.data;
 
   return (
     <div className="space-y-6">
@@ -129,7 +134,7 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
           comp={comparativa.piezas}
         />
         <TarjetaKpiComparada
-          etiqueta="Visualizaciones"
+          etiqueta="Visualizaciones (orgánicas)"
           valor={numeroCompacto(kpis.visualizaciones)}
           titulo={numeroCompleto(kpis.visualizaciones)}
           comp={comparativa.visualizaciones}
@@ -147,12 +152,100 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
         />
       </div>
 
+      <BloqueInorganico inorganico={inorganico} />
+
       <GraficaTendencia puntos={tendencia.puntos} />
 
       <DesgloseRedTabla filas={desglose_red} />
 
       <TablaPiezas piezas={piezas} />
+
+      <TablaAds ads={ads} />
     </div>
+  );
+}
+
+/** Resumen INORGÁNICO (Meta Ads): visualizaciones pagadas + gasto + nº de campañas.
+ * Solo se muestra si hubo inversión; deja claro que es lo PAGADO, no lo orgánico. */
+function BloqueInorganico({ inorganico }: { inorganico: AnaliticaCampania["inorganico"] }) {
+  if (!inorganico || inorganico.visualizaciones <= 0) return null;
+  const gasto = inorganico.gasto.toLocaleString("es-MX", { maximumFractionDigits: 0 });
+  return (
+    <Card className="border-amber-300/60 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-500/5">
+      <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-2 p-5">
+        <div className="flex items-center gap-2">
+          <Megaphone className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <span className="text-sm font-medium">Inorgánico (Meta Ads)</span>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-muted-foreground">Visualizaciones pagadas</p>
+          <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(inorganico.visualizaciones)}>
+            {numeroCompacto(inorganico.visualizaciones)}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-muted-foreground">Gasto</p>
+          <p className="text-xl font-semibold tabular-nums">
+            {gasto} {inorganico.moneda}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-muted-foreground">Campañas</p>
+          <p className="text-xl font-semibold tabular-nums">{inorganico.campanias}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Tabla "Meta Ads del periodo": campañas de pago con nombre propio (no atribuibles a una
+ * pieza). Las que SÍ son post impulsado de una pieza salen como columna en la tabla de piezas. */
+function TablaAds({ ads }: { ads: AnaliticaCampania["ads"] }) {
+  if (!ads || ads.length === 0) return null;
+  const filas = [...ads].sort((a, b) => b.impresiones - a.impresiones);
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="px-6 py-4">
+          <h3 className="text-sm font-medium">Meta Ads del periodo</h3>
+          <p className="text-xs text-muted-foreground">
+            Campañas de pago relacionadas con la campaña (inversión no atribuible a una pieza).
+          </p>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">Campaña</TableHead>
+              <TableHead>Red</TableHead>
+              <TableHead className="text-right">Impresiones</TableHead>
+              <TableHead className="text-right">Gasto</TableHead>
+              <TableHead className="pr-6 text-right">Clics</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filas.map((a, i) => (
+              <TableRow key={`${a.nombre}-${i}`}>
+                <TableCell className="pl-6">
+                  <span className="block max-w-[28rem] truncate font-medium" title={a.nombre}>
+                    {a.nombre}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{nombreRed(a.red)}</Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums" title={numeroCompleto(a.impresiones)}>
+                  {numeroCompacto(a.impresiones)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {a.gasto.toLocaleString("es-MX", { maximumFractionDigits: 0 })} {a.moneda}
+                </TableCell>
+                <TableCell className="pr-6 text-right tabular-nums">{numeroCompacto(a.clics)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -258,6 +351,7 @@ type ClaveOrdenPieza =
   | "formato"
   | "publicado"
   | "visualizaciones"
+  | "visualizaciones_pagadas"
   | "interacciones"
   | "engagement_pct";
 
@@ -293,6 +387,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
       formato: (p) => nombreFormato(p.formato),
       publicado: (p) => p.publicado,
       visualizaciones: (p) => p.visualizaciones,
+      visualizaciones_pagadas: (p) => p.visualizaciones_pagadas,
       interacciones: (p) => p.interacciones,
       engagement_pct: (p) => p.engagement_pct,
     },
@@ -371,6 +466,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
               {col("formato", "Formato", "left")}
               {col("publicado", "Fecha")}
               {col("visualizaciones", "Visualizaciones")}
+              {col("visualizaciones_pagadas", "Vis. Ads")}
               {col("interacciones", "Interacciones")}
               {col("engagement_pct", "Engagement", "right", "pr-6")}
             </TableRow>
@@ -378,7 +474,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
           <TableBody>
             {filtradas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                   {piezas.length === 0
                     ? "No hay piezas con estos hashtags en el periodo."
                     : "Ninguna pieza coincide con los filtros."}
@@ -430,6 +526,18 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
                   </TableCell>
                   <TableCell className="text-right tabular-nums" title={numeroCompleto(p.visualizaciones)}>
                     {numeroCompacto(p.visualizaciones)}
+                  </TableCell>
+                  <TableCell
+                    className="text-right tabular-nums"
+                    title={p.visualizaciones_pagadas ? numeroCompleto(p.visualizaciones_pagadas) : "Sin inversión"}
+                  >
+                    {p.visualizaciones_pagadas ? (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {numeroCompacto(p.visualizaciones_pagadas)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums" title={numeroCompleto(p.interacciones)}>
                     {numeroCompacto(p.interacciones)}

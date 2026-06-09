@@ -163,6 +163,8 @@ export interface PiezaCampania {
   titulo: string;
   publicado: string;
   visualizaciones: number;
+  /** Visualizaciones INORGÁNICAS (Meta Ads) atribuidas a esta pieza; 0 si no se impulsó. */
+  visualizaciones_pagadas: number;
   interacciones: number;
   engagement_pct: number;
   url: string;
@@ -207,6 +209,29 @@ export interface DesgloseRedCampania {
   engagement_pct: number;
 }
 
+/** Totales del INORGÁNICO (Meta/TikTok Ads) atribuido a la campaña. */
+export interface InorganicoCampania {
+  visualizaciones: number;
+  gasto: number;
+  clics: number;
+  campanias: number;
+  moneda: string;
+}
+
+/** Una campaña de Ads con nombre propio (no atribuible a una pieza): bloque "Meta Ads". */
+export interface CampaniaAdsItem {
+  nombre: string;
+  red: string;
+  impresiones: number;
+  gasto: number;
+  clics: number;
+  moneda: string;
+  inicio: string;
+  fin: string;
+  es_post_impulsado: boolean;
+  atribuida_a: string | null;
+}
+
 export interface AnaliticaCampania {
   campania: CampaniaComercial;
   rango: string;
@@ -219,6 +244,10 @@ export interface AnaliticaCampania {
   desglose_red: DesgloseRedCampania[];
   /** Nº de piezas añadidas por inferencia de cross-post (sin el hashtag propio). */
   cross_posts: number;
+  /** Totales inorgánicos (Meta Ads) atribuidos a la campaña. */
+  inorganico: InorganicoCampania;
+  /** Campañas de Ads con nombre propio (las que no son un post impulsado de una pieza). */
+  ads: CampaniaAdsItem[];
   piezas: PiezaCampania[];
   generado_en: string;
 }
