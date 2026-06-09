@@ -31,6 +31,11 @@ export interface DocumentoTexto {
   rol?: string;
   /** Orden de ensamblaje del auto-adjunto (menor = antes). */
   prioridad?: number;
+  /**
+   * SOLO LECTURA (transparencia): procesos/agentes a los que se INYECTA este prompt. Sale del
+   * catálogo en código (`prompts_procesos`), no del contenido editable. [] = sin catalogar.
+   */
+  procesos?: string[];
 }
 
 /** Resumen de facetas para poblar los filtros de navegación. */

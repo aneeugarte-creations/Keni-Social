@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import libtexto, marcas, redes
+from .. import libtexto, marcas, prompts_procesos, redes
 from .._http_json import leer_json
 from ..dominio import texto_lanzar, extraccion_url
 from ..seguridad import autor_de_peticion
@@ -46,6 +46,16 @@ _RE_EXT = re.compile(r"^\.[a-z0-9]{1,8}$")
 # --------------------------------------------------------------------------- #
 # CRUD de documentos                                                          #
 # --------------------------------------------------------------------------- #
+
+
+def _doc_json(doc: libtexto.Documento) -> dict[str, object]:
+    """Serializa un documento + el campo de TRANSPARENCIA `procesos` (a qué procesos se inyecta).
+
+    `procesos` es de SOLO LECTURA y sale del catálogo en código (`prompts_procesos`), no del
+    contenido editable: refleja qué módulo inyecta el prompt en un agente. [] si no está catalogado
+    (p. ej. documentos editoriales o prompts aún sin cablear).
+    """
+    return {**doc.a_dict(), "procesos": prompts_procesos.procesos_de(doc.id)}
 
 
 def _facetas(docs: list[libtexto.Documento]) -> dict[str, object]:
@@ -85,7 +95,7 @@ async def listar(request: Request) -> Response:
         pipeline=qp.get("pipeline") or None,
     )
     return JSONResponse({
-        "documentos": [d.a_dict() for d in docs],
+        "documentos": [_doc_json(d) for d in docs],
         "carpetas": libtexto.listar_carpetas(tipo=qp.get("tipo") or None),
         "facetas": _facetas(docs),
     })
@@ -111,7 +121,7 @@ async def crear(request: Request) -> Response:
         doc = libtexto.crear(titulo, **kwargs)
     except libtexto.TextoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse({"documento": doc.a_dict()})
+    return JSONResponse({"documento": _doc_json(doc)})
 
 
 async def obtener(request: Request) -> Response:
@@ -119,7 +129,7 @@ async def obtener(request: Request) -> Response:
     doc = libtexto.obtener(request.path_params["doc_id"])
     if doc is None:
         return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
-    return JSONResponse({"documento": doc.a_dict()})
+    return JSONResponse({"documento": _doc_json(doc)})
 
 
 async def guardar(request: Request) -> Response:
@@ -142,7 +152,7 @@ async def guardar(request: Request) -> Response:
         # "no existe" -> 404; el resto (validacion) -> 400.
         codigo = 404 if "no existe" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
-    return JSONResponse({"documento": doc.a_dict()})
+    return JSONResponse({"documento": _doc_json(doc)})
 
 
 async def borrar(request: Request) -> Response:
@@ -171,7 +181,7 @@ async def papelera_restaurar(request: Request) -> Response:
     except libtexto.TextoError as e:
         codigo = 404 if "no está en la papelera" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
-    return JSONResponse({"documento": doc.a_dict()})
+    return JSONResponse({"documento": _doc_json(doc)})
 
 
 # --------------------------------------------------------------------------- #
@@ -277,7 +287,7 @@ async def version(request: Request) -> Response:
     doc = libtexto.version(request.path_params["doc_id"], request.path_params["sha"])
     if doc is None:
         return JSONResponse({"error": "No se encontró esa versión."}, status_code=404)
-    return JSONResponse({"documento": doc.a_dict()})
+    return JSONResponse({"documento": _doc_json(doc)})
 
 
 async def revertir(request: Request) -> Response:
@@ -290,7 +300,7 @@ async def revertir(request: Request) -> Response:
     except libtexto.TextoError as e:
         codigo = 404 if ("no existe" in str(e) or "esa versión" in str(e)) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
-    return JSONResponse({"documento": doc.a_dict()})
+    return JSONResponse({"documento": _doc_json(doc)})
 
 
 # --------------------------------------------------------------------------- #

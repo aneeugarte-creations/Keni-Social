@@ -46,6 +46,18 @@ def test_crear_listar_obtener(cliente):
     assert r.json()["documento"]["cuerpo"].strip() == "haz algo"
 
 
+def test_doc_incluye_procesos_de_transparencia(cliente):
+    # `procesos` (solo lectura) sale del catálogo en código: un prompt CATALOGADO lo trae; uno
+    # cualquiera lo trae vacío. Y va en TODOS los documentos del listado.
+    cualq = cliente.post("/api/texto", json={"titulo": "Mi prompt", "tipo": "prompt"}).json()["documento"]
+    assert cualq["procesos"] == []
+    cat = cliente.post("/api/texto", json={"titulo": "QA fuente", "tipo": "prompt"}).json()["documento"]
+    assert cat["id"] == "prompt/qa-fuente"
+    assert cat["procesos"] and any("criba" in p.lower() for p in cat["procesos"])
+    docs = cliente.get("/api/texto", params={"tipo": "prompt"}).json()["documentos"]
+    assert all("procesos" in d for d in docs)
+
+
 def test_crear_sin_titulo_400(cliente):
     r = cliente.post("/api/texto", json={"tipo": "prompt"})
     assert r.status_code == 400
