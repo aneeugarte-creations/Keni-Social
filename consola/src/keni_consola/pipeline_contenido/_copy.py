@@ -131,7 +131,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     radar, rss, equipo) y que aún no tienen copy. Reglas (espejo de `autogen_copy.topics_pendientes`):
       - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
       - con marca válida y título no vacío,
-      - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE`),
+      - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_COPY`),
       - dedup: salta los ya encolados (etiqueta `autogen`) y los que ya tienen copy,
       - cap `_AUTOGEN_LANZAR_MAX` por barrido.
     Best-effort: una lectura fallida devuelve []. Import diferido de `autogen_copy` para reusar su
@@ -157,7 +157,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
         marca = item.get("marca") or ""
         if not marca or not marcas.es_marca(marca):
             continue
-        if config.marca_apagada(config.ENV_PIPELINE, marca):
+        if config.marca_apagada(config.ENV_PIPELINE_COPY, marca):
             continue
         if not (item.get("titulo") or "").strip():
             continue

@@ -167,9 +167,9 @@ ENV_TRENDS_GEOS = "KENI_TRENDS_GEOS"
 # MOTOR DE INGESTA PERSISTENTE (Ola A): un hilo demonio sondea en background los feeds RSS
 # VENCIDOS (cadencia por feed/categoría) y PERSISTE cada artículo en `noticias_items` (archivo
 # a nivel de artículo). A diferencia del resto, SOLO LEE feeds públicos y persiste; no genera ni
-# publica nada. Def OFF para CI/tests; se ACTIVA en producción (deploy: KENI_INGESTA=1). `BATCH`
+# publica nada. Def OFF para CI/tests; se ACTIVA en producción (deploy: KENI_PIPELINE_SELECCION=1). `BATCH`
 # = feeds por barrido; `WORKERS` = descargas en paralelo; `MAX_ITEMS` = artículos por feed.
-ENV_INGESTA = "KENI_INGESTA"
+ENV_PIPELINE_SELECCION = "KENI_PIPELINE_SELECCION"
 ENV_INGESTA_BATCH = "KENI_INGESTA_BATCH"
 ENV_INGESTA_WORKERS = "KENI_INGESTA_WORKERS"
 ENV_INGESTA_MAX_ITEMS = "KENI_INGESTA_MAX_ITEMS"
@@ -219,24 +219,24 @@ ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 # lanza la generacion de copy+arte de marca (CD, mismo camino que el boton manual) y valida
 # automaticamente los borradores recientes (QA), registrando CADA etapa en "Actividad IA" como
 # un pipeline de CI/CD. Deja BORRADORES en la cola de revision para la aprobacion humana; NUNCA
-# publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE` el comportamiento no cambia.
-ENV_PIPELINE = "KENI_PIPELINE"
+# publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_COPY` el comportamiento no cambia.
+ENV_PIPELINE_COPY = "KENI_PIPELINE_COPY"
 ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 
-# Etapa de QA del pipeline: "Validar (QA)" (`KENI_QA`, toggle de etapa por marca). Es la criba
+# Etapa de QA del pipeline: "Validar (QA)" (`KENI_PIPELINE_VALIDACION`, toggle de etapa por marca). Es la criba
 # de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de generar copy. Toggle
 # PROPIO (1 toggle = 1 etapa): apagarla por marca la deja como "Saltada" y el copy se genera
-# igual (sin la criba). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_QA` no
+# igual (sin la criba). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_PIPELINE_VALIDACION` no
 # se criba (la etapa aparece saltada). Encender desde el panel admin para activar la verificación.
-ENV_QA = "KENI_QA"
+ENV_PIPELINE_VALIDACION = "KENI_PIPELINE_VALIDACION"
 
-# Etapa de ARTE del pipeline: "Generar arte" (`KENI_AUTOGEN_ARTE`, toggle de etapa). Tras la
+# Etapa de ARTE del pipeline: "Generar arte" (`KENI_PIPELINE_ARTE`, toggle de etapa). Tras la
 # etapa de copy, el pipeline genera UN arte por IA (mismo proveedor que `/api/media/generar`)
 # para los temas con copy pero sin imagen y lo adjunta. CONSERVADOR por defecto (OFF): sin
-# `KENI_AUTOGEN_ARTE` no se ilustra. Sin proveedor de imagen configurado, no hace nada.
+# `KENI_PIPELINE_ARTE` no se ilustra. Sin proveedor de imagen configurado, no hace nada.
 # `KENI_AUTOGEN_ARTE_MAX` acota cuántos temas se ilustran por barrido (cada uno cuesta).
-ENV_AUTOGEN_ARTE = "KENI_AUTOGEN_ARTE"
+ENV_PIPELINE_ARTE = "KENI_PIPELINE_ARTE"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
 # Auto-programación: una pieza APROBADA (cerrada toda su cadena humana) pasa SOLA a `programado`
@@ -273,16 +273,16 @@ ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 
 # Perfil editorial por marca (Fase 2): un agente Haiku extrae las keywords/temas de la línea
 # editorial (página texto) y el ranking las usa como relevancia de marca (reemplaza el diccionario
-# hardcodeado). GATEADO por `KENI_PERFIL_EDITORIAL` (def OFF): sin el flag se usa el vocabulario
+# hardcodeado). GATEADO por `KENI_PIPELINE_RANKING` (def OFF): sin el flag se usa el vocabulario
 # semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de ingesta.
-ENV_PERFIL_EDITORIAL = "KENI_PERFIL_EDITORIAL"
+ENV_PIPELINE_RANKING = "KENI_PIPELINE_RANKING"
 ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 
 # Fusión SEMÁNTICA de historias del mismo evento (Fase 2b): un agente Haiku agrupa las historias
 # recientes de una marca que cubren el mismo acontecimiento (titulares distintos) y el daemon las
-# funde en una sola (n_fuentes real). GATEADO por `KENI_FUSION_SEMANTICA` (def OFF). `_MAX` acota
+# funde en una sola (n_fuentes real). GATEADO por `KENI_PIPELINE_FUSION` (def OFF). `_MAX` acota
 # cuántas historias por marca se mandan a Haiku por barrido (coste/contexto).
-ENV_FUSION_SEMANTICA = "KENI_FUSION_SEMANTICA"
+ENV_PIPELINE_FUSION = "KENI_PIPELINE_FUSION"
 ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
 
 # Señal de RENDIMIENTO en el ranking (Fase 2c): prioriza historias de las líneas editoriales que
@@ -302,7 +302,7 @@ ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 
 # Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4). La traducción es
 # SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de ingesta, gateada por
-# KENI_INGESTA + KENI_MAQUINA). `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top
+# KENI_PIPELINE_SELECCION + KENI_MAQUINA). `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top
 # se traducen por request (def 15). Se usa el mismo modelo de `KENI_INSUMOS_MODELO` (Haiku).
 ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
 
@@ -685,7 +685,7 @@ __all__ = [
     'ENV_ALERTAS_UMBRAL_ENGAGEMENT',
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
-    'ENV_AUTOGEN_ARTE',
+    'ENV_PIPELINE_ARTE',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
@@ -712,7 +712,7 @@ __all__ = [
     'ENV_EVENTOS_INTERVALO_SEGUNDOS',
     'ENV_EVENTOS_VENCIMIENTOS',
     'ENV_FEED_SLA_MIN',
-    'ENV_FUSION_SEMANTICA',
+    'ENV_PIPELINE_FUSION',
     'ENV_FUSION_SEMANTICA_MAX',
     'ENV_FFMPEG_BIN',
     'ENV_FUENTES_BAJA_CONFIANZA',
@@ -723,7 +723,7 @@ __all__ = [
     'ENV_IMAGEN_API_KEY',
     'ENV_IMAGEN_PROVEEDOR',
     'ENV_INDICE',
-    'ENV_INGESTA',
+    'ENV_PIPELINE_SELECCION',
     'ENV_INGESTA_BATCH',
     'ENV_INGESTA_INTERVALO_BREAKING',
     'ENV_INGESTA_INTERVALO_CIENCIA_TECH',
@@ -760,14 +760,14 @@ __all__ = [
     'ENV_NOTICIAS_GC_INTERVALO_HORAS',
     'ENV_NOTICIAS_GC_SCORE_UMBRAL',
     'ENV_ORIGENES',
-    'ENV_PERFIL_EDITORIAL',
+    'ENV_PIPELINE_RANKING',
     'ENV_PERFIL_EDITORIAL_TTL_HORAS',
     'ENV_PG_DB',
     'ENV_PG_HOST',
     'ENV_PG_PASSWORD',
     'ENV_PG_PORT',
     'ENV_PG_USER',
-    'ENV_PIPELINE',
+    'ENV_PIPELINE_COPY',
     'ENV_PIPELINE_INTERVALO_HORAS',
     'ENV_PIPELINE_MAX',
     'ENV_PORT',
@@ -776,7 +776,7 @@ __all__ = [
     'ENV_PRIORIZA_METRICAS_RANGO',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
-    'ENV_QA',
+    'ENV_PIPELINE_VALIDACION',
     'ENV_RAIZ',
     'ENV_REAPER_INTERVALO_MIN',
     'ENV_RENDIMIENTO_MIN_PIEZAS',

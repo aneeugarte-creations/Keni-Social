@@ -6,7 +6,7 @@ de_marca`) y devuelve sus temas/keywords; se cachea en disco (dir de texto) y se
 cambia la editorial (hash) o caduca (TTL). El ranking usa `palabras(marca)` (match léxico, SIN
 coste por-cluster: el Haiku solo corre en el refresco, acotado por marca y TTL).
 
-GATEADO por `KENI_PERFIL_EDITORIAL` (def OFF): la decisión de usarlo/refrescarlo la toma el daemon
+GATEADO por `KENI_PIPELINE_RANKING` (def OFF): la decisión de usarlo/refrescarlo la toma el daemon
 de ingesta; este módulo es neutro (lee/escribe el cache y, si se le pide, llama a Haiku).
 
 Patrón de Haiku SÍNCRONO POR LOTES idéntico a `dominio.traduccion` (ejecutor inyectable en tests).

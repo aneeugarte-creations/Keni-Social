@@ -5,8 +5,8 @@ clustering, verificación, video). Cada doc es autocontenido; léelos en orden p
 entender la tubería de "reutilizar lo que ya existe".
 
 > **Modelo de máquina de contenido (Fase 1):** 1 master (`KENI_MAQUINA`) + 3 etapas, todas
-> colgando del pipeline: «Crear noticias» (`KENI_INGESTA`, global), «Generar copy»
-> (`KENI_PIPELINE`) y «Generar arte» (`KENI_AUTOGEN_ARTE`), estas dos con excepción por marca.
+> colgando del pipeline: «Crear noticias» (`KENI_PIPELINE_SELECCION`, global), «Generar copy»
+> (`KENI_PIPELINE_COPY`) y «Generar arte» (`KENI_PIPELINE_ARTE`), estas dos con excepción por marca.
 > Los daemons sueltos de auto-copy / auto-arte / auto-feed / breaking / auto-avance se
 > retiraron; sus etapas viven dentro del pipeline (`pipeline_contenido.py`).
 

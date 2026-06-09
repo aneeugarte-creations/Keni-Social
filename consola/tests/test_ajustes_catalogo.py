@@ -4,9 +4,9 @@ Cubre la serializacion (valor efectivo + fuente con store/env/defecto), `validar
 por tipo/min/max, y la precedencia STORE > ENV > DEFECTO via `config._crudo`. Todo
 aislado con monkeypatch de env y del store (sin DB ni red).
 
-Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 4 etapas (KENI_INGESTA "Crear
-noticias", KENI_QA "Validar (QA)", KENI_PIPELINE "Generar copy", KENI_AUTOGEN_ARTE "Generar
-arte"). Las cuatro tienen excepción por marca (1 toggle = 1 etapa).
+Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 6 etapas con nombres consolidados
+(`KENI_PIPELINE_<ETAPA>`: Fusión/Ranking/Selección/Validación/Copy/Arte). Las seis tienen
+excepción por marca (1 toggle = 1 etapa).
 """
 
 from __future__ import annotations
@@ -44,8 +44,9 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
         # Las 6 etapas (maestros): Fusión / Ranking / Selección / Validación / Copy / Arte.
-        config.ENV_FUSION_SEMANTICA, config.ENV_PERFIL_EDITORIAL,
-        config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE,
+        config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_RANKING,
+        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
         # Automatismos generales (barridos de mantenimiento).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
@@ -81,8 +82,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
 
 
 _ETAPAS_ENV = {
-    config.ENV_FUSION_SEMANTICA, config.ENV_PERFIL_EDITORIAL, config.ENV_INGESTA,
-    config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE,
+    config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_RANKING, config.ENV_PIPELINE_SELECCION,
+    config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
 }
 
 
@@ -95,12 +96,12 @@ def test_maestros_etapa_son_las_seis(store):
         assert a.tipo == "bool"
         assert a.defecto is False
     etiquetas = {a.clave: a.etiqueta for a in maestros}
-    assert etiquetas[config.ENV_FUSION_SEMANTICA] == "Fusión"
-    assert etiquetas[config.ENV_PERFIL_EDITORIAL] == "Ranking"
-    assert etiquetas[config.ENV_INGESTA] == "Selección"
-    assert etiquetas[config.ENV_QA] == "Validación"
-    assert etiquetas[config.ENV_PIPELINE] == "Copy"
-    assert etiquetas[config.ENV_AUTOGEN_ARTE] == "Arte"
+    assert etiquetas[config.ENV_PIPELINE_FUSION] == "Fusión IA"
+    assert etiquetas[config.ENV_PIPELINE_RANKING] == "Ranking IA"
+    assert etiquetas[config.ENV_PIPELINE_SELECCION] == "Selección"
+    assert etiquetas[config.ENV_PIPELINE_VALIDACION] == "Validación IA"
+    assert etiquetas[config.ENV_PIPELINE_COPY] == "Copy IA"
+    assert etiquetas[config.ENV_PIPELINE_ARTE] == "Arte IA"
 
 
 def test_etapas_tienen_excepcion_por_marca(store):
@@ -168,7 +169,7 @@ def test_motor_noticias_trad_min_score_float(store):
 
 def test_publicar_real_es_peligroso(store):
     assert _ajuste(config.ENV_PUBLICAR_REAL).peligroso is True
-    assert _ajuste(config.ENV_PIPELINE).peligroso is False
+    assert _ajuste(config.ENV_PIPELINE_COPY).peligroso is False
 
 
 def test_por_clave_desconocida(store):
@@ -203,8 +204,8 @@ def test_valor_desde_store_gana_a_env(store, monkeypatch):
 
 
 def test_bool_efectivo_tipado(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE, "1")
-    a = _ajuste(config.ENV_PIPELINE)
+    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
+    a = _ajuste(config.ENV_PIPELINE_COPY)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert valor is True and fuente == "env"
 
@@ -229,7 +230,7 @@ def test_a_dict_int_tiene_min(store):
 
 
 def test_a_dict_bool_sin_min_ni_opciones(store):
-    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE))
+    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE_COPY))
     assert d["tipo"] == "bool" and "min" not in d and "opciones" not in d
 
 
@@ -243,12 +244,12 @@ def test_a_dict_bool_sin_min_ni_opciones(store):
     ("true", "1"), ("0", "0"), ("YES", "1"), ("off", "0"),
 ])
 def test_validar_bool_ok(store, entrada, guardado):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE), entrada)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_COPY), entrada)
     assert err is None and val == guardado
 
 
 def test_validar_bool_invalido(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE), "quizas")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_COPY), "quizas")
     assert val is None and err is not None
 
 
@@ -295,15 +296,15 @@ def test_validar_float_bajo_minimo(store):
 
 
 def test_config_crudo_store_gana_a_env(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE, "0")
-    ajustes.guardar(config.ENV_PIPELINE, "1")
-    assert config._crudo(config.ENV_PIPELINE) == "1"
+    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "0")
+    ajustes.guardar(config.ENV_PIPELINE_COPY, "1")
+    assert config._crudo(config.ENV_PIPELINE_COPY) == "1"
     assert config.pipeline_activo() is True  # accesor bool ve el store
 
 
 def test_config_crudo_cae_a_env_sin_store(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE, "1")
-    assert config._crudo(config.ENV_PIPELINE) == "1"
+    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
+    assert config._crudo(config.ENV_PIPELINE_COPY) == "1"
     assert config.pipeline_activo() is True
 
 

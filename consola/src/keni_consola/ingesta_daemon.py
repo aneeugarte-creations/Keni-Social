@@ -10,7 +10,7 @@ del store; nadie golpea la red por request.
 
 SEGURO POR DISEÑO
 =================
-  - GATEADO EN VIVO: solo sondea con `KENI_INGESTA=1` (def OFF para CI/tests; ON en prod).
+  - GATEADO EN VIVO: solo sondea con `KENI_PIPELINE_SELECCION=1` (def OFF para CI/tests; ON en prod).
     El hilo arranca SIEMPRE y comprueba el flag cada ciclo (toggle en caliente).
   - SOLO LECTURA EXTERNA: descarga feeds RSS públicos (guard SSRF de `http_feed`) y persiste.
     No publica, no genera, no llama a `claude -p`.
@@ -267,7 +267,7 @@ def paso_clustering() -> dict[str, Any]:
             # el toggle "Ranking"); si no, semilla.
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
-                and not config.marca_apagada(config.ENV_PERFIL_EDITORIAL, marca_c)
+                and not config.marca_apagada(config.ENV_PIPELINE_RANKING, marca_c)
             ):
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(
@@ -341,7 +341,7 @@ def _fusionar_grupo(
 
 
 def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) -> dict[str, Any]:
-    """Funde con IA (Haiku) las historias del MISMO evento, por marca. Gateado `KENI_FUSION_SEMANTICA`.
+    """Funde con IA (Haiku) las historias del MISMO evento, por marca. Gateado `KENI_PIPELINE_FUSION`.
 
     Por marca, manda hasta `KENI_FUSION_SEMANTICA_MAX` historias `nuevo` recientes a Haiku para que
     agrupe las del mismo acontecimiento, y funde cada grupo (`_fusionar_grupo`). Best-effort: un
@@ -375,7 +375,7 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
         if len(recientes) < 2:
             continue
         # Excepción por marca (toggle "Fusión"): si está apagada para esta marca, no se funde.
-        if config.marca_apagada(config.ENV_FUSION_SEMANTICA, marca_f):
+        if config.marca_apagada(config.ENV_PIPELINE_FUSION, marca_f):
             continue
         lote = recientes[:maximo]
         por_id = {str(c["id"]): c for c in lote}
@@ -527,10 +527,10 @@ def ejecutar_barrido() -> dict[str, Any]:
 
         ahora = datetime.now(UTC)
         feeds = repos.feeds_vencidos(ahora.isoformat(), config.ingesta_batch())
-        # Excepción por marca de "Crear noticias" (KENI_INGESTA::<marca>): salta los feeds de
+        # Excepción por marca de "Crear noticias" (KENI_PIPELINE_SELECCION::<marca>): salta los feeds de
         # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
         # con marca vacía es False. Best-effort: no toca clustering/traducción (pasos globales).
-        feeds = [f for f in feeds if not config.marca_apagada(config.ENV_INGESTA, str(f.get("marca") or ""))]
+        feeds = [f for f in feeds if not config.marca_apagada(config.ENV_PIPELINE_SELECCION, str(f.get("marca") or ""))]
         if not feeds:
             return {"feeds": 0, "items_nuevos": 0, "errores": 0}
 
@@ -598,7 +598,7 @@ def ejecutar_barrido() -> dict[str, Any]:
                 )
 
         # Paso de AGENCIAS (Fase 2): vuelca al MISMO pool las notas de Reuters/AFP CONFIGURADAS,
-        # antes del clustering para que se agrupen en el mismo barrido. Gateado por KENI_INGESTA
+        # antes del clustering para que se agrupen en el mismo barrido. Gateado por KENI_PIPELINE_SELECCION
         # (este daemon) — sin toggle propio. Best-effort + no-op honesto sin credencial: nunca
         # rompe el barrido de RSS. Sus items entran al conteo de `items_nuevos`.
         agencias_resumen: dict[str, Any] = {"items": 0}
@@ -618,7 +618,7 @@ def ejecutar_barrido() -> dict[str, Any]:
             _log.exception("ingesta_daemon: fallo en el paso de clustering.")
 
         # Paso de FUSIÓN SEMÁNTICA (Fase 2b): funde con Haiku las historias del mismo evento que el
-        # léxico no unió (titulares distintos). Gateado `KENI_FUSION_SEMANTICA` (def OFF). Best-effort.
+        # léxico no unió (titulares distintos). Gateado `KENI_PIPELINE_FUSION` (def OFF). Best-effort.
         try:
             paso_fusion_semantica()
         except Exception:  # noqa: BLE001 -- la fusión es aditiva; nunca tumba la ingesta
@@ -655,7 +655,7 @@ def ejecutar_barrido() -> dict[str, Any]:
 def iniciar_ingesta() -> threading.Thread:
     """Arranca el hilo daemon del motor de ingesta (GATEADO EN VIVO).
 
-    El hilo arranca SIEMPRE y comprueba `KENI_INGESTA` en cada ciclo: encender/apagar en
+    El hilo arranca SIEMPRE y comprueba `KENI_PIPELINE_SELECCION` en cada ciclo: encender/apagar en
     runtime aplica sin reiniciar. Tick corto (30s) para recoger feeds vencidos pronto y ser
     responsivo al apagado. El hilo es daemon; un fallo de barrido se loguea y NO lo mata.
     """
@@ -671,7 +671,7 @@ def iniciar_ingesta() -> threading.Thread:
 
     hilo = threading.Thread(target=bucle, name="ingesta-daemon", daemon=True)
     hilo.start()
-    estado = "ACTIVO" if config.ingesta_activa() else "EN ESPERA (KENI_INGESTA off)"
+    estado = "ACTIVO" if config.ingesta_activa() else "EN ESPERA (KENI_PIPELINE_SELECCION off)"
     _log.info(
         "Ingesta daemon %s, tick %.0fs (batch=%d, workers=%d, max_items=%d).",
         estado, _TICK_SEG, config.ingesta_batch(), config.ingesta_workers(),

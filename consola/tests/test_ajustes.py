@@ -38,24 +38,24 @@ def test_guardar_y_obtener(store):
 
 
 def test_guardar_clave_por_marca_no_corrompe_el_store(store):
-    """Regresion: una clave con `::` (excepcion por marca, p.ej. `KENI_PIPELINE::unotv`)
+    """Regresion: una clave con `::` (excepcion por marca, p.ej. `KENI_PIPELINE_COPY::unotv`)
     debe round-trippear por el FICHERO real. El bug: la clave se escribia desnuda, y `::`
     es invalido en una clave TOML -> `tomllib` fallaba al parsear TODO el fichero ->
     `_leer_disco` devolvia {} -> el siguiente guardado borraba las demas claves."""
     ajustes.guardar("KENI_MAQUINA", "1")
-    ajustes.guardar("KENI_PIPELINE", "1")
-    ajustes.guardar("KENI_PIPELINE::unotv", "1")
+    ajustes.guardar("KENI_PIPELINE_COPY", "1")
+    ajustes.guardar("KENI_PIPELINE_COPY::unotv", "1")
     # El fichero sigue siendo TOML valido y conserva las tres claves.
     assert ajustes.leer() == {
         "KENI_MAQUINA": "1",
-        "KENI_PIPELINE": "1",
-        "KENI_PIPELINE::unotv": "1",
+        "KENI_PIPELINE_COPY": "1",
+        "KENI_PIPELINE_COPY::unotv": "1",
     }
     # Y un guardado posterior NO borra las anteriores (antes: leer()->{}->wipe).
-    ajustes.guardar("KENI_AUTOGEN_ARTE", "1")
+    ajustes.guardar("KENI_PIPELINE_ARTE", "1")
     assert ajustes.obtener("KENI_MAQUINA") == "1"
-    assert ajustes.obtener("KENI_PIPELINE::unotv") == "1"
-    assert ajustes.obtener("KENI_AUTOGEN_ARTE") == "1"
+    assert ajustes.obtener("KENI_PIPELINE_COPY::unotv") == "1"
+    assert ajustes.obtener("KENI_PIPELINE_ARTE") == "1"
 
 
 def test_guardar_sobrescribe(store):

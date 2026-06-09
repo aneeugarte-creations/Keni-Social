@@ -76,8 +76,8 @@ Cada barrido (`ejecutar_barrido`):
 4. **Backoff**: en error incrementa `errores_seguidos` y fija `pausado_hasta =
    ahora + min(intervalo * 2^errores, tope)`. En éxito resetea `errores_seguidos`.
 
-Gating: `config.ingesta_activa()` vía `KENI_INGESTA` (**default False** para CI/test;
-se ACTIVA en producción, ver deploy). Config: `KENI_INGESTA`, `KENI_INGESTA_BATCH`,
+Gating: `config.ingesta_activa()` vía `KENI_PIPELINE_SELECCION` (**default False** para CI/test;
+se ACTIVA en producción, ver deploy). Config: `KENI_PIPELINE_SELECCION`, `KENI_INGESTA_BATCH`,
 `KENI_INGESTA_WORKERS`, `KENI_INGESTA_MAX_ITEMS` (def 100), y los intervalos por
 categoría. Registra `daemons.iniciar_ingesta()` como los demás.
 
@@ -99,7 +99,7 @@ cientos verificados; aquí solo garantizamos cobertura inicial real.)
   feeds con error, items últimas 24h por categoría, último sondeo. (Monitor completo = Ola D.)
 
 ## Deploy (que SÍ corra en producción)
-Añade al servicio `daemons` en `deploy/` las env: `KENI_INGESTA=1` (+ batch/workers
+Añade al servicio `daemons` en `deploy/` las env: `KENI_PIPELINE_SELECCION=1` (+ batch/workers
 si procede). Así el motor está **activo en prod** (no como el Investigador, apagado).
 NO lo actives en CI/tests.
 

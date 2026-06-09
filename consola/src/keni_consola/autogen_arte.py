@@ -4,7 +4,7 @@ PROBLEMA QUE RESUELVE
 =====================
 La etapa de copy del pipeline deja BORRADORES de texto listos para revisar, pero el equipo
 aun tiene que generar un arte a mano para cada uno. La ETAPA DE ARTE del pipeline (toggle
-"Generar arte", `KENI_AUTOGEN_ARTE`) corre TRAS la de copy y, para cada TEMA que YA tiene
+"Generar arte", `KENI_PIPELINE_ARTE`) corre TRAS la de copy y, para cada TEMA que YA tiene
 copy/borrador en alguna plataforma pero le FALTA imagen, genera UN arte por IA (reutilizando
 el MISMO proveedor que el boton `/api/media/generar`) y lo ADJUNTA a esa plataforma. La pieza
 sigue su flujo normal de revision/aprobacion humana.
@@ -15,7 +15,7 @@ del barrido del pipeline (`pipeline_contenido.ejecutar_arte`), que reutiliza la 
 
 SEGURO POR DISENO (CONSERVADOR)
 ===============================
-  - GATEADO: la etapa solo ilustra con `KENI_AUTOGEN_ARTE=1` (def OFF) + `KENI_MAQUINA=1`.
+  - GATEADO: la etapa solo ilustra con `KENI_PIPELINE_ARTE=1` (def OFF) + `KENI_MAQUINA=1`.
   - SOLO TEMAS CON COPY Y SIN IMAGEN: solo procesa contenido 'contenido' no cerrado que
     tenga alguna `contenido_plataforma` con copy pero sin imagen. No inventa piezas.
   - SIN CREDENCIALES, NO HACE NADA: si no hay proveedor de imagen configurado, no ilustra.
@@ -149,7 +149,7 @@ def topics_sin_arte(
         if not (item.get("titulo") or "").strip():
             continue
         # Exclusión por marca: no auto-ilustramos temas de una marca apagada a mano para arte.
-        if config.marca_apagada(config.ENV_AUTOGEN_ARTE, item.get("marca") or ""):
+        if config.marca_apagada(config.ENV_PIPELINE_ARTE, item.get("marca") or ""):
             continue
         item_id = item.get("id")
         if item_id in ya_procesados:

@@ -55,7 +55,7 @@ Ejecutor inyectable (tests). Best-effort: si falla, devuelve los originales.
 - Detectar idioma del item/preset (usa el `idioma` del preset; heurística simple
   si no se sabe). Marcar `idioma` en cada tema.
 - La traducción es **SIEMPRE ON** (no tiene toggle propio: corre dentro de la etapa
-  «Crear noticias», gateada por `KENI_INGESTA` + `KENI_MAQUINA`). Tras consolidar,
+  «Crear noticias», gateada por `KENI_PIPELINE_SELECCION` + `KENI_MAQUINA`). Tras consolidar,
   toma los temas extranjeros del **top N** (cap, p.ej. `KENI_TRADUCCION_MAX=15`),
   llama UNA vez a `traducir_items`, y sustituye `titulo`/`por_que` por la versión ES,
   guardando `titulo_original`. Con timeout y fallback al original (no degradar el

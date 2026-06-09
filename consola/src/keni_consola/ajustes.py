@@ -126,7 +126,7 @@ def _toml_str(valor: str) -> str:
 def _escribir(datos: dict[str, str]) -> None:
     """Escribe los ajustes como TOML de forma atomica (temp + os.replace) e invalida cache."""
     global _CACHE_MTIME
-    # La clave TAMBIEN va entrecomillada: las claves por-marca (`KENI_PIPELINE::unotv`)
+    # La clave TAMBIEN va entrecomillada: las claves por-marca (`KENI_PIPELINE_COPY::unotv`)
     # llevan `::`, invalido en una clave TOML desnuda -> el fichero entero se vuelve
     # imparseable y `_leer_disco` devolveria {} (perdiendo TODAS las claves en el siguiente
     # guardado). Una basic-string key es valida y los nombres simples siguen parseando igual.

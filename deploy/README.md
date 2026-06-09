@@ -251,9 +251,9 @@ OFF**:
 | Flag | Qué hace | Validación |
 |---|---|---|
 | `KENI_MAQUINA` | Interruptor general (kill-switch); sin él nada automático corre | **ON** |
-| `KENI_INGESTA` | «Crear noticias»: ingesta + clustering + traducción/tropicalización MX | **ON** |
-| `KENI_PIPELINE` | «Generar copy»: etapa de copy (único motor de copy) | **ON** |
-| `KENI_AUTOGEN_ARTE` | «Generar arte»: etapa de arte (temas con copy sin imagen) | **ON** |
+| `KENI_PIPELINE_SELECCION` | «Crear noticias»: ingesta + clustering + traducción/tropicalización MX | **ON** |
+| `KENI_PIPELINE_COPY` | «Generar copy»: etapa de copy (único motor de copy) | **ON** |
+| `KENI_PIPELINE_ARTE` | «Generar arte»: etapa de arte (temas con copy sin imagen) | **ON** |
 | `KENI_PUBLICAR_REAL` | Publica de verdad a Metricool | **OFF** (queda en dry-run) |
 
 **Por qué es SEGURO encender el master + las 3 etapas:** la máquina de contenido solo PRODUCE
@@ -283,9 +283,9 @@ default**.
 
    ```yaml
    #   KENI_MAQUINA:       "1"
-   #   KENI_INGESTA:       "1"
-   #   KENI_PIPELINE:      "1"
-   #   KENI_AUTOGEN_ARTE:  "1"
+   #   KENI_PIPELINE_SELECCION:       "1"
+   #   KENI_PIPELINE_COPY:      "1"
+   #   KENI_PIPELINE_ARTE:  "1"
    #   KENI_PUBLICAR_REAL deliberadamente NO se pone (sigue OFF = dry-run).
    ```
 

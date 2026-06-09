@@ -483,7 +483,7 @@ def test_gate_maquina_no_cambia_la_semantica_del_accesor(limpio, store_aislado):
     Con su propio flag ON pero la maquina apagada (default), el accesor sigue True pero el
     gate efectivo es False: nada corre hasta encender el interruptor general.
     """
-    store_aislado.setenv(config.ENV_INGESTA, "1")
+    store_aislado.setenv(config.ENV_PIPELINE_SELECCION, "1")
     assert config.ingesta_activa() is True  # semantica intacta
     assert config.gate_maquina(config.ingesta_activa)() is False  # maquina off -> no corre
     store_aislado.setenv(config.ENV_MAQUINA, "1")
@@ -491,25 +491,28 @@ def test_gate_maquina_no_cambia_la_semantica_del_accesor(limpio, store_aislado):
 
 
 # --------------------------------------------------------------------------- #
-# Etapa QA (toggle propio `KENI_QA`) + barrido por "cualquier etapa activa"     #
+# Etapa QA (toggle propio `KENI_PIPELINE_VALIDACION`) + barrido por "cualquier etapa activa"     #
 # --------------------------------------------------------------------------- #
 
 
 def test_qa_activo_default_off(limpio, store_aislado):
-    """Sin `KENI_QA`, la etapa de QA está APAGADA por defecto (kill-switch, como las demás)."""
+    """Sin `KENI_PIPELINE_VALIDACION`, la etapa de QA está APAGADA por defecto (kill-switch, como las demás)."""
     assert config.qa_activo() is False
 
 
 @pytest.mark.parametrize("valor", ["1", "true", "on", "si", "yes"])
 def test_qa_activo_afirmativo(limpio, store_aislado, valor):
-    store_aislado.setenv(config.ENV_QA, valor)
+    store_aislado.setenv(config.ENV_PIPELINE_VALIDACION, valor)
     assert config.qa_activo() is True
 
 
 def test_alguna_etapa_pipeline_activa_or_de_las_cuatro(limpio, store_aislado):
     """El barrido del daemon corre si CUALQUIER etapa (Noticias/QA/Copy/Arte) está activa."""
     assert config.alguna_etapa_pipeline_activa() is False  # todas off por defecto
-    for env in (config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE):
+    for env in (
+        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+    ):
         store_aislado.setenv(env, "1")
         assert config.alguna_etapa_pipeline_activa() is True
         store_aislado.delenv(env, raising=False)

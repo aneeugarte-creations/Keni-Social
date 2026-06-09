@@ -53,7 +53,7 @@ publica; NUNCA se llama a Metricool.
 
 SEGURO POR DISEÑO (CONSERVADOR)
 ===============================
-  - GATEADO: el daemon solo barre con `KENI_PIPELINE=1` (def OFF). Sin el flag, el
+  - GATEADO: el daemon solo barre con `KENI_PIPELINE_COPY=1` (def OFF). Sin el flag, el
     comportamiento existente NO cambia (este modulo es ADITIVO: nadie lo invoca con el flag
     ausente). El hilo arranca SIEMPRE y comprueba el flag en cada ciclo (apagar/encender en
     runtime sin reiniciar).

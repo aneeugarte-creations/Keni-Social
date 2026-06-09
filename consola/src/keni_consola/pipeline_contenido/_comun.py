@@ -128,7 +128,7 @@ _TITULO_QA = "QA fuente"
 QA_EN_CURSO = "en_curso"
 
 # Veredicto SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
-# `KENI_QA` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_copy` lo acepta
+# `KENI_PIPELINE_VALIDACION` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_copy` lo acepta
 # igual que un `no_verificado`, así el copy se genera sin criba. La vista Pipelines pinta QA como
 # "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
 QA_SALTADA = "saltada"

@@ -16,32 +16,32 @@ def _store(monkeypatch, datos: dict[str, str]):
 
 def test_sin_override_no_esta_apagada(monkeypatch):
     _store(monkeypatch, {})
-    assert config.marca_apagada(config.ENV_PIPELINE, "claro-sports") is False
-    assert config.marca_apagada(config.ENV_AUTOGEN_ARTE, "nacion-gamer") is False
+    assert config.marca_apagada(config.ENV_PIPELINE_COPY, "claro-sports") is False
+    assert config.marca_apagada(config.ENV_PIPELINE_ARTE, "nacion-gamer") is False
 
 
 def test_override_falsy_apaga_la_marca(monkeypatch):
-    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE, "nacion-gamer"): "0"})
-    assert config.marca_apagada(config.ENV_PIPELINE, "nacion-gamer") is True   # excluida
-    assert config.marca_apagada(config.ENV_PIPELINE, "claro-sports") is False  # sin override
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_COPY, "nacion-gamer"): "0"})
+    assert config.marca_apagada(config.ENV_PIPELINE_COPY, "nacion-gamer") is True   # excluida
+    assert config.marca_apagada(config.ENV_PIPELINE_COPY, "claro-sports") is False  # sin override
 
 
 def test_override_truthy_no_apaga(monkeypatch):
-    _store(monkeypatch, {config.clave_por_marca(config.ENV_AUTOGEN_ARTE, "claro-sports"): "1"})
-    assert config.marca_apagada(config.ENV_AUTOGEN_ARTE, "claro-sports") is False
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_ARTE, "claro-sports"): "1"})
+    assert config.marca_apagada(config.ENV_PIPELINE_ARTE, "claro-sports") is False
 
 
 def test_clave_por_marca_formato():
-    assert config.clave_por_marca("KENI_PIPELINE", "unotv") == "KENI_PIPELINE::unotv"
+    assert config.clave_por_marca("KENI_PIPELINE_COPY", "unotv") == "KENI_PIPELINE_COPY::unotv"
 
 
 def test_catalogo_expone_toggles_por_marca():
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
-    assert config.clave_por_marca(config.ENV_PIPELINE, "nacion-gamer") in claves
-    assert config.clave_por_marca(config.ENV_AUTOGEN_ARTE, "unotv") in claves
-    # "Crear noticias" (KENI_INGESTA) y "Validar (QA)" (KENI_QA) también tienen fila por marca.
-    assert config.clave_por_marca(config.ENV_INGESTA, "unotv") in claves
-    assert config.clave_por_marca(config.ENV_QA, "unotv") in claves
+    assert config.clave_por_marca(config.ENV_PIPELINE_COPY, "nacion-gamer") in claves
+    assert config.clave_por_marca(config.ENV_PIPELINE_ARTE, "unotv") in claves
+    # Selección (KENI_PIPELINE_SELECCION) y Validación (KENI_PIPELINE_VALIDACION) también por marca.
+    assert config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "unotv") in claves
+    assert config.clave_por_marca(config.ENV_PIPELINE_VALIDACION, "unotv") in claves
     # Las cuatro etapas (ingesta + QA + copy + arte) van en `automatizacion_marca`; la publicación,
     # en su propio grupo `publicacion_marca`. Todos los toggles por marca son `bool`.
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]

@@ -56,7 +56,7 @@ Tras insertar items nuevos en cada barrido, ejecutar un paso de clustering:
 para los items recién insertados (sin `cluster_id`), cargar clusters de la ventana,
 asignar/crear, fijar `noticias_items.cluster_id`, y `upsert` del cluster recalculado.
 Best-effort; acotado por la ventana. (Si es más limpio, un `iniciar_clustering()`
-aparte gateado por `KENI_INGESTA`, con su propio tick corto.)
+aparte gateado por `KENI_PIPELINE_SELECCION`, con su propio tick corto.)
 
 ## API (api/noticias.py — añadir)
 - `GET /api/noticias/historias?marca=&categoria=&desde=&estado=&limit=&offset=`

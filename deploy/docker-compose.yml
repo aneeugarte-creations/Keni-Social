@@ -277,8 +277,8 @@ services:
     # `python -m keni_consola.daemons`: refresco de metricas (cuenta + por pieza), alertas de
     # rendimiento/reciclaje, scanner de vencimientos, captura comercial, programador (DRY-RUN
     # salvo KENI_PUBLICAR_REAL), auto-promocion del Radar (solo con KENI_RADAR_AUTO) y la
-    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline (KENI_PIPELINE) ingiere del news-pool y, en sus
-    # etapas de copy y arte (KENI_AUTOGEN_ARTE), lleva los temas a BORRADOR en la cola de revision.
+    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline (KENI_PIPELINE_COPY) ingiere del news-pool y, en sus
+    # etapas de copy y arte (KENI_PIPELINE_ARTE), lleva los temas a BORRADOR en la cola de revision.
     # NO publica ni aprueba contenido por su cuenta (la auto-produccion para en el gate humano); NO
     # publica puertos ni va por Traefik. Misma imagen que el `back`; comparte Postgres + /data
     # (donde viven las credenciales Metricool y la clave del proveedor de imagen del auto-arte).
@@ -326,9 +326,9 @@ services:
       # (avatar -> Configuración) o, si se prefiere fijar por entorno, descomentando los flags de
       # abajo. El maestro KENI_MAQUINA es el kill-switch global; cuelgan de él las 3 etapas:
       #   KENI_MAQUINA:       "1"   # interruptor general (sin él, NADA automático de contenido corre)
-      #   KENI_INGESTA:       "1"   # «Crear noticias»: ingesta + clustering + traducción (siempre on)
-      #   KENI_PIPELINE:      "1"   # «Generar copy»: etapa de copy (único motor de copy)
-      #   KENI_AUTOGEN_ARTE:  "1"   # «Generar arte»: etapa de arte (temas con copy sin imagen)
+      #   KENI_PIPELINE_SELECCION:       "1"   # «Crear noticias»: ingesta + clustering + traducción (siempre on)
+      #   KENI_PIPELINE_COPY:      "1"   # «Generar copy»: etapa de copy (único motor de copy)
+      #   KENI_PIPELINE_ARTE:  "1"   # «Generar arte»: etapa de arte (temas con copy sin imagen)
       # GATES DE SEGURIDAD: ausentes por defecto. Sin estos, el sistema NO publica ni crea
       # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md §Validacion):
       #   KENI_RADAR_AUTO:    "1"   # auto-promueve temas del Radar (def: solo bandeja revisable)

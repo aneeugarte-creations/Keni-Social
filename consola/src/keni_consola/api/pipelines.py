@@ -39,33 +39,33 @@ _ESTADO_SALTADA = "saltada"
 
 
 def _fusion_off(marca: str) -> bool:
-    """Etapa "Fusión" desactivada para `marca` (maestro `KENI_FUSION_SEMANTICA` off o por-marca)."""
-    return config.marca_apagada(config.ENV_FUSION_SEMANTICA, marca) or not config.fusion_semantica_activa()
+    """Etapa "Fusión" desactivada para `marca` (maestro `KENI_PIPELINE_FUSION` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_FUSION, marca) or not config.fusion_semantica_activa()
 
 
 def _ranking_off(marca: str) -> bool:
-    """Etapa "Ranking" desactivada para `marca` (maestro `KENI_PERFIL_EDITORIAL` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PERFIL_EDITORIAL, marca) or not config.perfil_editorial_activo()
+    """Etapa "Ranking" desactivada para `marca` (maestro `KENI_PIPELINE_RANKING` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_RANKING, marca) or not config.perfil_editorial_activo()
 
 
 def _ci_off(marca: str) -> bool:
-    """Etapa "Selección"/CI desactivada para `marca` (maestro `KENI_INGESTA` off o por-marca)."""
-    return config.marca_apagada(config.ENV_INGESTA, marca) or not config.ingesta_activa()
+    """Etapa "Selección"/CI desactivada para `marca` (maestro `KENI_PIPELINE_SELECCION` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_SELECCION, marca) or not config.ingesta_activa()
 
 
 def _qa_off(marca: str) -> bool:
-    """Etapa QA desactivada para `marca` (maestro `KENI_QA` off o por-marca)."""
-    return config.marca_apagada(config.ENV_QA, marca) or not config.qa_activo()
+    """Etapa QA desactivada para `marca` (maestro `KENI_PIPELINE_VALIDACION` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_VALIDACION, marca) or not config.qa_activo()
 
 
 def _cd_off(marca: str) -> bool:
-    """Etapa "Generar copy"/CD desactivada para `marca` (maestro `KENI_PIPELINE` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE, marca) or not config.pipeline_activo()
+    """Etapa "Generar copy"/CD desactivada para `marca` (maestro `KENI_PIPELINE_COPY` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_COPY, marca) or not config.pipeline_activo()
 
 
 def _arte_off(marca: str) -> bool:
-    """Etapa "Generar arte" desactivada para `marca` (maestro `KENI_AUTOGEN_ARTE` off o por-marca)."""
-    return config.marca_apagada(config.ENV_AUTOGEN_ARTE, marca) or not config.autogen_arte_activo()
+    """Etapa "Generar arte" desactivada para `marca` (maestro `KENI_PIPELINE_ARTE` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_ARTE, marca) or not config.autogen_arte_activo()
 
 
 # Tope por defecto de runs por página (alineado con el resto de la consola).
@@ -229,7 +229,7 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
     qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
-    # --- Selección (toggle "Selección"/KENI_INGESTA): saltada si está off para la marca. -----
+    # --- Selección (toggle "Selección"/KENI_PIPELINE_SELECCION): saltada si está off para la marca. -----
     if _ci_off(marca):
         ci = {"clave": "ci", "nombre": "Selección", "estado": _ESTADO_SALTADA, "detalle": "", "ts": creado}
     else:

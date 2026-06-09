@@ -167,7 +167,7 @@ def test_barrido_respeta_single_flight(monkeypatch):
 
 
 def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
-    """Excepción por marca de KENI_INGESTA: el feed de una marca apagada se salta; el feed
+    """Excepción por marca de KENI_PIPELINE_SELECCION: el feed de una marca apagada se salta; el feed
     COMPARTIDO (marca vacía) y el de una marca permitida sí se sondean."""
     feed_apagado = {"id": "off", "nombre": "Off", "url": "https://93.184.216.34/a",
                     "categoria": "mx", "marca": "nacion-gamer", "errores_seguidos": 0}
@@ -175,8 +175,8 @@ def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
                       "categoria": "mx", "marca": "claro-sports", "errores_seguidos": 0}
     feed_compartido = {"id": "shared", "nombre": "Shared", "url": "https://93.184.216.34/c",
                        "categoria": "mx", "marca": "", "errores_seguidos": 0}
-    # Override falsy de KENI_INGESTA solo para nacion-gamer -> esa marca queda apagada.
-    overrides = {config.clave_por_marca(config.ENV_INGESTA, "nacion-gamer"): "0"}
+    # Override falsy de KENI_PIPELINE_SELECCION solo para nacion-gamer -> esa marca queda apagada.
+    overrides = {config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "nacion-gamer"): "0"}
     monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
 
     registrados = []

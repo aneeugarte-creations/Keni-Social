@@ -12,14 +12,13 @@ from ._config_comun import (
     ENV_AFP_CLIENT_ID,
     ENV_AFP_CLIENT_SECRET,
     ENV_AUTO_PROGRAMAR,
-    ENV_AUTOGEN_ARTE,
     ENV_CLUSTER_BREAKING_FUENTES,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_UMBRAL,
     ENV_CLUSTER_VENTANA_H,
     ENV_FEED_SLA_MIN,
     ENV_FUENTES_BAJA_CONFIANZA,
-    ENV_INGESTA,
+    ENV_FUSION_SEMANTICA_MAX,
     ENV_INGESTA_BATCH,
     ENV_INGESTA_INTERVALO_BREAKING,
     ENV_INGESTA_INTERVALO_CIENCIA_TECH,
@@ -32,34 +31,36 @@ from ._config_comun import (
     ENV_INGESTA_MAX_ERRORES,
     ENV_INGESTA_MAX_ITEMS,
     ENV_INGESTA_WORKERS,
-    ENV_PIPELINE,
-    ENV_PIPELINE_INTERVALO_HORAS,
-    ENV_PIPELINE_MAX,
-    ENV_QA,
-    ENV_REUTERS_API_KEY,
     ENV_NOTICIAS_GC,
     ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
     ENV_NOTICIAS_GC_INTERVALO_HORAS,
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
-    ENV_FUSION_SEMANTICA,
-    ENV_FUSION_SEMANTICA_MAX,
-    ENV_PERFIL_EDITORIAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
+    ENV_PIPELINE_ARTE,
+    ENV_PIPELINE_COPY,
+    ENV_PIPELINE_FUSION,
+    ENV_PIPELINE_INTERVALO_HORAS,
+    ENV_PIPELINE_MAX,
+    ENV_PIPELINE_RANKING,
+    ENV_PIPELINE_SELECCION,
+    ENV_PIPELINE_VALIDACION,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
     ENV_RENDIMIENTO_TOP_N,
+    ENV_REUTERS_API_KEY,
+    ENV_REUTERS_BASE_URL,
     ENV_SCORE_BONUS_BREAKING,
     ENV_SCORE_PESO_CORROBORACION,
     ENV_SCORE_PESO_FRESCURA,
     ENV_SCORE_PESO_MARCA,
     ENV_SCORE_PESO_RENDIMIENTO,
     ENV_SCORE_PESO_VIRALIDAD,
-    ENV_REUTERS_BASE_URL,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
     ENV_TRADUCCION_MAX,
     FEED_SLA_MIN_DEF,
     FUENTES_BAJA_CONFIANZA_DEF,
+    FUSION_SEMANTICA_MAX_DEF,
     INGESTA_BATCH_DEF,
     INGESTA_INTERVALO_BREAKING_DEF,
     INGESTA_INTERVALO_CIENCIA_TECH_DEF,
@@ -72,7 +73,6 @@ from ._config_comun import (
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
-    FUSION_SEMANTICA_MAX_DEF,
     NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
     NOTICIAS_GC_INTERVALO_HORAS_DEF,
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
@@ -100,13 +100,13 @@ from ._config_comun import (
 
 
 def ingesta_activa() -> bool:
-    """True si el motor de ingesta persistente debe sondear feeds (`KENI_INGESTA`).
+    """True si el motor de ingesta persistente debe sondear feeds (`KENI_PIPELINE_SELECCION`).
 
     Def OFF (CI/tests): sin el flag, el hilo arranca pero no sondea nada. Se ACTIVA en
-    producción (deploy: `KENI_INGESTA=1`) para que el archivo de artículos esté siempre al día.
+    producción (deploy: `KENI_PIPELINE_SELECCION=1`) para que el archivo de artículos esté siempre al día.
     SOLO LEE feeds públicos y persiste artículos; no genera ni publica nada.
     """
-    return _crudo(ENV_INGESTA).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_SELECCION).lower() in _VERDADEROS
 
 
 def ingesta_batch() -> int:
@@ -283,13 +283,13 @@ def noticias_gc_inactividad_horas() -> int:
 
 
 def perfil_editorial_activo() -> bool:
-    """True si el ranking usa el perfil editorial extraído con Haiku (`KENI_PERFIL_EDITORIAL`).
+    """True si el ranking usa el perfil editorial extraído con Haiku (`KENI_PIPELINE_RANKING`).
 
     Def OFF (conservador, IA en prod): sin el flag el ranking usa el vocabulario semilla
     (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
     score usa esas keywords derivadas de la línea editorial de la página texto.
     """
-    return _crudo(ENV_PERFIL_EDITORIAL).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_RANKING).lower() in _VERDADEROS
 
 
 def perfil_editorial_ttl_horas() -> int:
@@ -304,13 +304,13 @@ def perfil_editorial_ttl_horas() -> int:
 
 
 def fusion_semantica_activa() -> bool:
-    """True si se funden con IA las historias del mismo evento (`KENI_FUSION_SEMANTICA`, def OFF).
+    """True si se funden con IA las historias del mismo evento (`KENI_PIPELINE_FUSION`, def OFF).
 
     Def OFF (IA que MUTA el pool en prod): sin el flag, el clustering se queda en el léxico. Con el
     flag, el daemon manda a Haiku las historias recientes por marca y funde los grupos del mismo
     acontecimiento (conservador: ante duda no fusiona).
     """
-    return _crudo(ENV_FUSION_SEMANTICA).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_FUSION).lower() in _VERDADEROS
 
 
 def fusion_semantica_max() -> int:
@@ -382,14 +382,14 @@ def fuentes_baja_confianza() -> frozenset[str]:
 
 
 def pipeline_activo() -> bool:
-    """True si el daemon del pipeline de contenido debe BARRER (`KENI_PIPELINE`).
+    """True si el daemon del pipeline de contenido debe BARRER (`KENI_PIPELINE_COPY`).
 
     Def OFF (conservador): sin el flag el comportamiento existente NO cambia (nada se ingiere/
     genera por el pipeline). Con el flag a un valor afirmativo, un hilo demonio ejecuta cada N
     horas el flujo CI→CD→QA por marca y deja borradores en la cola de revision. Nada se publica
     solo (sigue gated). El hilo arranca SIEMPRE pero, gateado, solo actua con el flag activo.
     """
-    return _crudo(ENV_PIPELINE).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_COPY).lower() in _VERDADEROS
 
 
 def pipeline_intervalo_horas() -> int:
@@ -406,13 +406,13 @@ def pipeline_max() -> int:
 
 
 def qa_activo() -> bool:
-    """True si la ETAPA de QA del pipeline debe cribar la fuente (`KENI_QA`, "Validar (QA)").
+    """True si la ETAPA de QA del pipeline debe cribar la fuente (`KENI_PIPELINE_VALIDACION`, "Validar (QA)").
 
     Def OFF (conservador, como el resto de etapas): sin el flag NO se criba y la etapa aparece
     "Saltada"; el copy se genera igual. Con el flag, antes de generar copy un `claude -p` evalúa
     la nota de origen (criba pre-copy). Toggle PROPIO por marca: 1 toggle = 1 etapa.
     """
-    return _crudo(ENV_QA).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_VALIDACION).lower() in _VERDADEROS
 
 
 def alguna_etapa_pipeline_activa() -> bool:
@@ -431,13 +431,13 @@ def alguna_etapa_pipeline_activa() -> bool:
 
 
 def autogen_arte_activo() -> bool:
-    """True si la ETAPA de arte del pipeline debe ilustrar (`KENI_AUTOGEN_ARTE`, "Generar arte").
+    """True si la ETAPA de arte del pipeline debe ilustrar (`KENI_PIPELINE_ARTE`, "Generar arte").
 
     Def OFF (conservador): el equipo hace el arte a mano. Con el flag, la etapa de arte del
     pipeline (tras la de copy) genera imagen por IA para los temas con copy pero sin imagen y
     la adjunta. Sin proveedor de imagen configurado, no hace nada (degrada).
     """
-    return _crudo(ENV_AUTOGEN_ARTE).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_ARTE).lower() in _VERDADEROS
 
 
 def auto_programar_activo() -> bool:

@@ -191,8 +191,8 @@ def main() -> int:
     iniciar_sugerencias_editoriales()
 
     # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el espinazo de la auto-producción. Si está
-    # activo (`KENI_PIPELINE`, bajo el maestro `KENI_MAQUINA`), cada N horas ingiere del news-pool,
-    # genera copy (etapa de copy) y arte (etapa de arte, `KENI_AUTOGEN_ARTE`) y valida los
+    # activo (`KENI_PIPELINE_COPY`, bajo el maestro `KENI_MAQUINA`), cada N horas ingiere del news-pool,
+    # genera copy (etapa de copy) y arte (etapa de arte, `KENI_PIPELINE_ARTE`) y valida los
     # borradores recientes (QA), registrando cada etapa en "Actividad IA". Deja borradores en la
     # cola de revision; NO publica solo. SAFE BY DEFAULT: sin el flag no barre. Vive aqui (servidor
     # real), NO en `crear_app`, para no arrancarlo en los tests.

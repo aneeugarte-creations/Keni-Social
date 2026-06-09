@@ -63,9 +63,9 @@ def _ejecutar_barrido() -> dict[str, Any]:
     autor = _ref._autor_pipeline()
     maximo = config.pipeline_max()
     # --- Fase CI · "Crear noticias": crea los temas (sin copy) por marca. --------------------
-    # Etapa CI = toggle "Crear noticias" (`KENI_INGESTA`), 1 toggle = 1 etapa: si el maestro está
+    # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_SELECCION`), 1 toggle = 1 etapa: si el maestro está
     # OFF no entran temas nuevos (aunque el daemon barra por otra etapa, p. ej. Copy de temas ya
-    # ingeridos). Por marca, el override `KENI_INGESTA::marca=0` excluye esa marca de la ingesta.
+    # ingeridos). Por marca, el override `KENI_PIPELINE_SELECCION::marca=0` excluye esa marca de la ingesta.
     # CI consume el pool ya FUSIONADO y RANKEADO (Ola B): promueve las top-N historias por marca
     # (no un tema por item RSS), ordenadas por el score del algoritmo de ponderación. Esto frena el
     # volumen y respeta la jerarquización. El clustering del pool lo alimenta el daemon de ingesta.
@@ -73,7 +73,7 @@ def _ejecutar_barrido() -> dict[str, Any]:
     for marca in marcas.ids() if config.ingesta_activa() else []:
         # Exclusión por marca: si "Crear noticias" de ESTA marca se apagó a mano, no se promueve
         # nada suyo (no entran temas nuevos). Sin override, sigue al maestro (global).
-        if config.marca_apagada(config.ENV_INGESTA, marca):
+        if config.marca_apagada(config.ENV_PIPELINE_SELECCION, marca):
             continue
         try:
             temas_nuevos.extend(promover_clusters_marca(marca, maximo=maximo))
@@ -84,7 +84,7 @@ def _ejecutar_barrido() -> dict[str, Any]:
     cribados = ejecutar_qa(autor=autor)
     lanzados = ejecutar_cd(autor=autor)
     # Etapa de arte (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
-    # toggle "Generar arte" (KENI_AUTOGEN_ARTE) + máquina; si está OFF, devuelve [].
+    # toggle "Generar arte" (KENI_PIPELINE_ARTE) + máquina; si está OFF, devuelve [].
     artes = ejecutar_arte()
     if temas_nuevos or cribados or lanzados or artes:
         _log.info(
@@ -110,10 +110,10 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     qa_global = config.qa_activo()
     for tema in temas_sin_qa():
         marca_t = tema.get("marca") or ""
-        # Etapa QA desactivada (maestro `KENI_QA` off o `KENI_QA::marca=0`): se SALTA la criba.
+        # Etapa QA desactivada (`KENI_PIPELINE_VALIDACION` off, global o `::marca`): se SALTA la criba.
         # No se lanza `claude -p`; se marca el tema `saltada` para que CD lo recoja igual (sin
         # verificar) y la vista Pipelines pinte QA como "saltada". No cuenta para el cap ni rompe.
-        if not qa_global or config.marca_apagada(config.ENV_QA, marca_t):
+        if not qa_global or config.marca_apagada(config.ENV_PIPELINE_VALIDACION, marca_t):
             try:
                 repos.actualizar_contenido(tema.get("id", "") or "", {"qa_veredicto": QA_SALTADA})
             except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no debe matar la fase
@@ -153,7 +153,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """
     if autor is None:
         autor = _ref._autor_pipeline()
-    # Etapa CD = toggle "Generar copy" (`KENI_PIPELINE`), 1 toggle = 1 etapa: si el maestro está
+    # Etapa CD = toggle "Generar copy" (`KENI_PIPELINE_COPY`), 1 toggle = 1 etapa: si el maestro está
     # OFF no se genera copy (aunque el daemon barra por otra etapa). Por marca se filtra abajo.
     if not config.pipeline_activo():
         return []
@@ -164,7 +164,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             break
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
         # ya estuvieran ingeridos antes de apagarla).
-        if config.marca_apagada(config.ENV_PIPELINE, tema.get("marca") or ""):
+        if config.marca_apagada(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
             continue
         try:
             gen = lanzar_copy_de_tema(tema, autor=autor)
@@ -198,15 +198,15 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
 def ejecutar_arte() -> list[dict[str, Any]]:
     """Etapa de ARTE del pipeline (tras copy): ilustra los temas con copy y sin imagen.
 
-    Toggle "Generar arte" (`KENI_AUTOGEN_ARTE`, gateado además por el maestro `KENI_MAQUINA`).
+    Toggle "Generar arte" (`KENI_PIPELINE_ARTE`, gateado además por el maestro `KENI_MAQUINA`).
     FUNDE el antiguo daemon suelto `autogen_arte`: reutiliza su selección
     (`autogen_arte.topics_sin_arte`) y su lanzador (`autogen_arte.lanzar_para_topic` →
     `media.generar_imagen`), con cap por barrido (`KENI_AUTOGEN_ARTE_MAX`). Per-marca: salta las
-    marcas apagadas a mano (lo hace la propia selección, gateada por `ENV_AUTOGEN_ARTE`). Sin
+    marcas apagadas a mano (lo hace la propia selección, gateada por `ENV_PIPELINE_ARTE`). Sin
     proveedor de imagen configurado, no hace nada. Best-effort: un fallo por tema se loguea y se
     sigue. Devuelve los artes adjuntados.
 
-    GATEADO EN VIVO: solo actúa con `KENI_AUTOGEN_ARTE=1` Y `KENI_MAQUINA=1`. Sin el toggle, la
+    GATEADO EN VIVO: solo actúa con `KENI_PIPELINE_ARTE=1` Y `KENI_MAQUINA=1`. Sin el toggle, la
     etapa no ilustra (el equipo hace el arte a mano).
     """
     from datetime import date

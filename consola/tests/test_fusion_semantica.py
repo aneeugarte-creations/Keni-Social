@@ -2,7 +2,7 @@
 
 OFFLINE: nunca llama a `claude` (ejecutor falso). Cubre el PARSEO/validación de grupos (puro) y la
 FUSIÓN end-to-end en el daemon (Postgres): reasigna items a la canónica, borra las absorbidas y
-recalcula n_fuentes/score. La fusión está gateada por `KENI_FUSION_SEMANTICA`.
+recalcula n_fuentes/score. La fusión está gateada por `KENI_PIPELINE_FUSION`.
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def _sembrar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", url="
 
 
 def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_FUSION_SEMANTICA", "1")
+    monkeypatch.setenv("KENI_PIPELINE_FUSION", "1")
     # c1 (2 fuentes) es la canónica; c2 (1 fuente) se absorbe. Fuentes distintas -> n_fuentes 2.
     _sembrar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
     _sembrar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
@@ -91,7 +91,7 @@ def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
 
 
 def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
-    monkeypatch.delenv("KENI_FUSION_SEMANTICA", raising=False)
+    monkeypatch.delenv("KENI_PIPELINE_FUSION", raising=False)
     _sembrar("c1")
     _sembrar("c2")
     res = ingesta_daemon.paso_fusion_semantica(ejecutor=_ej([["c1", "c2"]]))

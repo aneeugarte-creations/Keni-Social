@@ -589,7 +589,7 @@ export default function Pipelines() {
           texto={
             hayFiltro
               ? "Ninguna run coincide con la etapa/estado elegidos. Prueba a quitar el filtro."
-              : "Cuando el pipeline automático ingiera temas (RSS/tendencias), cada pieza aparecerá aquí con sus etapas. Actívalo con KENI_PIPELINE."
+              : "Cuando el pipeline automático ingiera temas (RSS/tendencias), cada pieza aparecerá aquí con sus etapas. Actívalo en Ajustes (toggles por etapa)."
           }
         />
       ) : (

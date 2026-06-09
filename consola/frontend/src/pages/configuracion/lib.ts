@@ -13,8 +13,8 @@ export const CLAVE_AJUSTES = ["ajustes"];
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
-/** Grupos de ajustes que viven en la pestaña «Básica»: el master de la máquina, los tres maestros
- *  de etapa (Crear noticias / Generar copy / Generar arte) y sus excepciones por marca (las tres
+/** Grupos de ajustes que viven en la pestaña «Básica»: el master de la máquina, los seis maestros
+ *  de etapa (Fusión/Ranking/Selección/Validación/Copy/Arte) y sus excepciones por marca (las seis
  *  etapas). Son los controles clave del día a día. Todo grupo que NO esté aquí (publicación,
  *  publicación por marca, automatismos generales, ajustes finos) va a «Avanzada». Coincide con la
  *  `id` de grupo del backend; un grupo ausente en la respuesta simplemente no pinta nada. */

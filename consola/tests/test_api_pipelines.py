@@ -24,11 +24,11 @@ def _etapas_activas(monkeypatch):
     que ejercitan el caso "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
     (Arte se deja OFF por defecto; el test de Arte lo enciende a propósito.)
     """
-    monkeypatch.setenv(config.ENV_FUSION_SEMANTICA, "1")
-    monkeypatch.setenv(config.ENV_PERFIL_EDITORIAL, "1")
-    monkeypatch.setenv(config.ENV_INGESTA, "1")
-    monkeypatch.setenv(config.ENV_QA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_FUSION, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_RANKING, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_SELECCION, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_VALIDACION, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
 
 
 def _tema_pipeline(titulo: str, marca: str = "unotv", **campos) -> dict:
@@ -115,11 +115,11 @@ def test_run_aprobado(cliente):
 
 
 def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
-    """QA desactivada para la marca (`KENI_QA::unotv=0`): etapa QA 'saltada' y el copy se genera
+    """QA desactivada para la marca (`KENI_PIPELINE_VALIDACION::unotv=0`): etapa QA 'saltada' y el copy se genera
     igual (CD 'ok'). 'saltada' no bloquea: el estado_global lo marca la aprobación pendiente."""
     monkeypatch.setattr(
         "keni_consola.ajustes.obtener",
-        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_QA, "unotv") else None,
+        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_VALIDACION, "unotv") else None,
     )
     tema = _tema_pipeline("Tema sin QA", qa_veredicto="saltada")
     repos.crear_contenido_plataforma(
@@ -142,7 +142,7 @@ def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
     """
     monkeypatch.setattr(
         "keni_consola.ajustes.obtener",
-        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_INGESTA, "claro-sports") else None,
+        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "claro-sports") else None,
     )
     _tema_pipeline("Run claro", marca="claro-sports")
     _tema_pipeline("Run uno", marca="unotv")
@@ -325,7 +325,7 @@ def test_etapa_arte_ok_con_imagen_y_toggle(cliente, monkeypatch):
     arte = next(e for e in run["etapas"] if e["clave"] == "arte")
     assert arte["estado"] == "saltada"
     # Toggle Arte on + una pieza con imagen -> ok.
-    monkeypatch.setenv(config.ENV_AUTOGEN_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
     tema2 = _tema_pipeline("Tema arte ok")
     repos.crear_contenido_plataforma(
         contenido_id=tema2["id"], red="x", estado="borrador", copy="C.",

@@ -10,7 +10,7 @@ función única (`lanzar_para_topic`) + su dedup por etiqueta (`autogen`).
 
 Antes existía además un DAEMON suelto (`KENI_AUTOGEN`) que barría el tablero y auto-generaba
 copy; se RETIRÓ: la selección de temas del news-pool sin copy vive ahora dentro de la etapa de
-copy del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KENI_PIPELINE`.
+copy del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KENI_PIPELINE_COPY`.
 
   - SOLO FUENTES: la etapa de copy solo procesa temas cuyo `origen` es de una FUENTE
     (`estados.ORIGENES_AUTOGEN`); el contenido manual del equipo NO se toca.

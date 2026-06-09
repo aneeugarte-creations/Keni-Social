@@ -349,7 +349,7 @@ export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }
               />
             ));
 
-            // Maestros de etapa (Crear noticias / Generar copy / Generar arte): título + filas.
+            // Maestros de etapa (Fusión/Ranking/Selección/Validación/Copy/Arte IA): título + filas.
             if (grupo.id === "maestros_etapa") {
               return (
                 <div key={grupo.id} className="space-y-1">

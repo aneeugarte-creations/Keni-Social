@@ -1,4 +1,4 @@
-"""Tests del pipeline de contenido CI→QA(fuente)→CD (ADITIVO, gateado por `KENI_PIPELINE`).
+"""Tests del pipeline de contenido CI→QA(fuente)→CD (ADITIVO, gateado por `KENI_PIPELINE_COPY`).
 
 REDISEÑO QPC: la QA se movió a ANTES del copy y por PIEZA (tema/fuente). El barrido es ahora
 CI (crea temas SIN copy) → QA de la FUENTE (criba permisiva por tema) → CD (copy SOLO de los
@@ -172,7 +172,7 @@ def test_qa_lexico_supera_limite_de_red():
 
 
 def test_gateado_off_no_arranca_el_daemon():
-    """Sin `KENI_PIPELINE`, el flag está OFF (def): el `bucle_gateado` no barrería."""
+    """Sin `KENI_PIPELINE_COPY`, el flag está OFF (def): el `bucle_gateado` no barrería."""
     assert config.pipeline_activo() is False
 
 
@@ -311,8 +311,8 @@ def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
 
 def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
     """Una QA de la fuente `problema` -> NO se lanza copy y el tema queda ❗ con hallazgos."""
-    monkeypatch.setenv("KENI_QA", "1")        # etapa QA activa (criba la fuente)
-    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa (aun así, un 'problema' no genera copy)
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")        # etapa QA activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (aun así, un 'problema' no genera copy)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema malo")
@@ -331,8 +331,8 @@ def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
 
 def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     """Una QA `no_verificado` -> SÍ se lanza copy y las piezas heredan el aviso ⚠️."""
-    monkeypatch.setenv("KENI_QA", "1")        # etapa QA activa (criba la fuente)
-    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa (genera copy del tema apto)
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")        # etapa QA activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (genera copy del tema apto)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema ok")
@@ -388,7 +388,7 @@ def test_temas_para_copy_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
 
 def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     """El cap por barrido de QA (`_QA_LANZAR_MAX`) acota los lanzamientos de criba."""
-    monkeypatch.setenv("KENI_QA", "1")  # etapa QA activa para que el cap aplique a lanzamientos
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")  # etapa QA activa para que el cap aplique a lanzamientos
     cliente = _cliente()  # noqa: F841 -- lanzador noop: deja la QA en `ejecutando` (en_curso)
     monkeypatch.setattr(pc, "_QA_LANZAR_MAX", 2)
     for i in range(4):
@@ -400,7 +400,7 @@ def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
 
 def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     """El cap por barrido de CD (`_CD_LANZAR_MAX`) acota los lanzamientos de copy."""
-    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa para que el cap aplique
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa para que el cap aplique
     llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_CD_LANZAR_MAX", 2)
     import json
@@ -424,9 +424,9 @@ def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
 
 def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     """Solo «Crear noticias» ON: CI promueve la historia top, QA la marca 'saltada', CD no copia."""
-    monkeypatch.setenv("KENI_INGESTA", "1")
-    monkeypatch.delenv("KENI_QA", raising=False)        # QA off -> etapa saltada
-    monkeypatch.delenv("KENI_PIPELINE", raising=False)  # Copy off -> CD no corre
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)        # QA off -> etapa saltada
+    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)  # Copy off -> CD no corre
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -478,10 +478,10 @@ def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
 
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
     """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba)."""
-    monkeypatch.setenv("KENI_QA", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
     monkeypatch.setattr(
         pc.config, "marca_apagada",
-        lambda env, marca: env == config.ENV_QA and marca == "unotv",
+        lambda env, marca: env == config.ENV_PIPELINE_VALIDACION and marca == "unotv",
     )
     tema = _tema_pipeline(titulo="Marca sin QA")
 
@@ -526,7 +526,7 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
 
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
     """`ejecutar_cd` lanza copy de los temas del pool vía `autogen_copy.lanzar_para_topic`."""
-    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa (sin el global, ejecutar_cd no corre)
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (sin el global, ejecutar_cd no corre)
     from keni_consola import autogen_copy
 
     lanzadas: list[str] = []
@@ -543,8 +543,8 @@ def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
 
 
 def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
-    """La exclusión por marca de «Generar copy» (ENV_PIPELINE) también aplica al pool."""
-    monkeypatch.setenv("KENI_PIPELINE", "1")  # etapa CD activa; la exclusión es por marca, no global
+    """La exclusión por marca de «Generar copy» (ENV_PIPELINE_COPY) también aplica al pool."""
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa; la exclusión es por marca, no global
     from keni_consola import autogen_copy
 
     monkeypatch.setattr(pc.config, "marca_apagada", lambda env, marca: marca == "unotv")
@@ -561,13 +561,13 @@ def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Etapa de ARTE del pipeline (toggle "Generar arte", KENI_AUTOGEN_ARTE)        #
+# Etapa de ARTE del pipeline (toggle "Generar arte", KENI_PIPELINE_ARTE)        #
 # --------------------------------------------------------------------------- #
 
 
 def test_ejecutar_arte_off_por_defecto_no_hace_nada(entorno, monkeypatch):
-    """Sin `KENI_AUTOGEN_ARTE`, la etapa de arte no ilustra (devuelve [])."""
-    monkeypatch.delenv(config.ENV_AUTOGEN_ARTE, raising=False)
+    """Sin `KENI_PIPELINE_ARTE`, la etapa de arte no ilustra (devuelve [])."""
+    monkeypatch.delenv(config.ENV_PIPELINE_ARTE, raising=False)
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     assert pc.ejecutar_arte() == []
 
@@ -577,7 +577,7 @@ def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatc
     from keni_consola import autogen_arte
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_AUTOGEN_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
     monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
     item = {"id": "t1", "titulo": "Tema", "marca": "unotv"}
     monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: [item])
@@ -600,6 +600,6 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
     from keni_consola import media
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_AUTOGEN_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: False)
     assert pc.ejecutar_arte() == []
