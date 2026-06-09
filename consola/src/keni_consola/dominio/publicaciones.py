@@ -89,6 +89,15 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Id del `contenido` padre: la UI lo usa para colgar los comentarios del item
         # (que son del tema, no de la fila por red). "" en piezas legadas sin padre.
         "contenido_id": pub.get("contenido_id") or "",
+        # Enlace al RUN del pipeline (vista del proceso IA): el `contenido_id` ES el id de la run
+        # en `/api/pipelines/{id}`, pero SOLO si la pieza nació del pipeline (`origen='pipeline'`).
+        # Las piezas manuales/radar/rss no tienen run que encontrar -> "" (la UI no ofrece "ver
+        # proceso IA" y el usuario deja de buscar un pipeline inexistente).
+        "pipeline_id": (
+            (pub.get("contenido_id") or "")
+            if str(pub.get("origen") or "").strip() == "pipeline"
+            else ""
+        ),
         "titulo": pub["titulo"],
         "marca": pub["marca"],
         "marca_nombre": marcas.etiqueta_de(pub["marca"]),

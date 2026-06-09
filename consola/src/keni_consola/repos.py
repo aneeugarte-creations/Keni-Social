@@ -205,7 +205,9 @@ from .repos_noticias import (  # noqa: F401
     borrar_fuente_rss,
     borrar_noticia_cluster,
     claves_vistas,
+    cluster_por_contenido,
     clusters_extranjeros_sin_traducir,
+    clusters_por_contenidos,
     clusters_recientes,
     contar_fuentes_algoritmo,
     contar_fuentes_rss,
@@ -288,6 +290,7 @@ from .repos_publicaciones import (  # noqa: F401
 )
 from .repos_rota import (  # noqa: F401
     actualizar_ausencia_rota,
+    actualizar_coordinador_rota,
     actualizar_evento_rota,
     actualizar_franja_semana,
     actualizar_programa_rota,
@@ -335,7 +338,6 @@ from .repos_rota import (  # noqa: F401
     obtener_turno_rota,
     quitar_coordinador_rota,
     sembrar_franjas_por_defecto,
-    actualizar_coordinador_rota,
 )
 from .repos_webhooks import (  # noqa: F401
     actualizar_webhook,

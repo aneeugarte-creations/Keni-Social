@@ -52,10 +52,14 @@ def test_run_qa_no_verificado_con_copy(cliente):
     )
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
-    assert [e["clave"] for e in run["etapas"]] == ["ci", "qa", "cd", "aprobacion"]
+    assert [e["clave"] for e in run["etapas"]] == ["jerarquia", "ci", "qa", "cd", "aprobacion"]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas == {"ci": "ok", "qa": "ok", "cd": "ok", "aprobacion": "pendiente"}
+    # Sin historia (cluster) asociada, la Jerarquización se pinta "saltada" (no bloquea).
+    assert etapas == {
+        "jerarquia": "saltada", "ci": "ok", "qa": "ok", "cd": "ok", "aprobacion": "pendiente"
+    }
     assert run["estado_global"] == "pendiente"
+    assert run["cluster"] is None
     # La criba de la fuente surface el aviso ⚠️.
     assert run["qa_fuente"]["no_verificado"] is True
     assert run["qa_fuente"]["problema"] is False
@@ -119,22 +123,79 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
     run = _run_por_titulo(cliente, "Tema sin QA")
     assert run is not None
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas == {"ci": "ok", "qa": "saltada", "cd": "ok", "aprobacion": "pendiente"}
+    assert etapas == {
+        "jerarquia": "saltada", "ci": "ok", "qa": "saltada", "cd": "ok", "aprobacion": "pendiente"
+    }
     assert run["estado_global"] == "pendiente"
 
 
-def test_marca_con_noticias_off_no_aparece(cliente, monkeypatch):
-    """Una marca con 'Crear noticias' (CI) apagada (`KENI_INGESTA::marca=0`) NO lista sus runs;
-    otra marca activa sí (la ingesta es la entrada del pipeline: sin ella, no hay pipeline)."""
+def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
+    """Una marca con 'Crear noticias' (CI) apagada SIGUE listando sus runs (la etapa CI se pinta
+    'saltada', pero la run NO desaparece): así no quedan posts en el feed sin pipeline que hallar.
+    """
     monkeypatch.setattr(
         "keni_consola.ajustes.obtener",
         lambda clave: "0" if clave == config.clave_por_marca(config.ENV_INGESTA, "claro-sports") else None,
     )
     _tema_pipeline("Run claro", marca="claro-sports")
     _tema_pipeline("Run uno", marca="unotv")
-    titulos = {x["titulo"] for x in cliente.get("/api/pipelines").json()["pipelines"]}
+    pipelines = cliente.get("/api/pipelines").json()["pipelines"]
+    titulos = {x["titulo"] for x in pipelines}
     assert "Run uno" in titulos
-    assert "Run claro" not in titulos
+    assert "Run claro" in titulos  # ya NO se oculta
+    claro = next(x for x in pipelines if x["titulo"] == "Run claro")
+    ci = next(e for e in claro["etapas"] if e["clave"] == "ci")
+    assert ci["estado"] == "saltada"
+
+
+def _historia_de(tema_id: str, marca: str = "unotv", **campos) -> dict:
+    """Crea una HISTORIA (cluster) enlazada a un tema del pipeline (`contenido_id`)."""
+    base = {
+        "marca": marca, "titulo": "Historia", "n_items": 1, "n_fuentes": 1,
+        "score": 0.5, "breaking": 0, "verificacion": "unica_fuente",
+        "estado": "usado", "contenido_id": tema_id,
+    }
+    base.update(campos)
+    return repos.upsert_noticia_cluster(base)
+
+
+def test_jerarquia_ok_desde_historia(cliente):
+    """Un tema promovido de una HISTORIA muestra Jerarquización 'ok' + la procedencia IA real
+    (corroboración, fusión, score, verificación), y la etapa CI refleja la promoción."""
+    tema = _tema_pipeline("Tema con historia")
+    _historia_de(
+        tema["id"], n_items=5, n_fuentes=3, score=0.82, breaking=1, verificacion="corroborada",
+    )
+    run = _run_por_titulo(cliente, "Tema con historia")
+    assert run is not None
+    etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
+    assert etapas["jerarquia"] == "ok"
+    assert etapas["ci"] == "ok"
+    cl = run["cluster"]
+    assert cl is not None
+    assert cl["n_fuentes"] == 3
+    assert cl["n_items"] == 5
+    assert cl["breaking"] is True
+    assert cl["verificacion"] == "corroborada"
+    assert cl["score"] == pytest.approx(0.82)
+    jer = next(e for e in run["etapas"] if e["clave"] == "jerarquia")
+    assert "3 fuente" in jer["detalle"]
+    assert "breaking" in jer["detalle"]
+    ci = next(e for e in run["etapas"] if e["clave"] == "ci")
+    assert "promovida a tema" in ci["detalle"].lower()
+
+
+def test_cluster_por_contenido_reverso(cliente):
+    """Lookup reverso historia<-tema: single y por lote; "" y faltantes se ignoran."""
+    tema = _tema_pipeline("Tema reverso")
+    hist = _historia_de(tema["id"], n_fuentes=2, score=0.5)
+    c = repos.cluster_por_contenido(tema["id"])
+    assert c is not None and c["id"] == hist["id"]
+    mapa = repos.clusters_por_contenidos([tema["id"], "no-existe"])
+    assert mapa[tema["id"]]["id"] == hist["id"]
+    assert "no-existe" not in mapa
+    assert repos.cluster_por_contenido("") is None
+    assert repos.clusters_por_contenidos([]) == {}
 
 
 def test_estado_global_saltada_no_bloquea():
@@ -174,7 +235,9 @@ def test_detalle_run(cliente):
     assert d.status_code == 200
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
-    assert [e["clave"] for e in body["pipeline"]["etapas"]] == ["ci", "qa", "cd", "aprobacion"]
+    assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
+        "jerarquia", "ci", "qa", "cd", "aprobacion"
+    ]
     assert "actividad" in body
     assert "qa_fuente" in body["pipeline"]
     # El detalle trae las piezas COMPLETAS: el copy real + observaciones de la validación.

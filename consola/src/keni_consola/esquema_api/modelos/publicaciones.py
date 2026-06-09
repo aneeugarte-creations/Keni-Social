@@ -62,6 +62,10 @@ class Publicacion(TypedDict):
     # Id del `contenido` padre (tema). La UI lo usa para colgar los comentarios del item,
     # que son del tema y no de la fila por red. "" en piezas legadas sin padre.
     contenido_id: str
+    # Enlace al RUN del pipeline (vista del proceso IA): = `contenido_id` SOLO si la pieza nació
+    # del pipeline (`origen="pipeline"`); "" en piezas manuales/radar/rss (no hay run que hallar).
+    # La UI ofrece "ver proceso IA" cuando no está vacío; evita posts en el feed sin pipeline.
+    pipeline_id: str
     titulo: str
     marca: str
     marca_nombre: str

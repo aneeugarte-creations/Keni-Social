@@ -2153,6 +2153,9 @@
         "contenido_id": {
           "type": "string"
         },
+        "pipeline_id": {
+          "type": "string"
+        },
         "titulo": {
           "type": "string"
         },
@@ -2294,6 +2297,7 @@
       "required": [
         "id",
         "contenido_id",
+        "pipeline_id",
         "titulo",
         "marca",
         "marca_nombre",

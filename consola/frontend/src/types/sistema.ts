@@ -145,6 +145,24 @@ export interface PipelineQaFuente {
   hallazgos: PipelineHallazgo[];
 }
 
+/** Procedencia IA de un tema: la HISTORIA (cluster) de la que nació, con las señales del
+ *  pool de noticias (dedup/fusión + ranking). `null` si el tema se creó a mano o pre-ranking. */
+export interface PipelineCluster {
+  id: string;
+  /** Fuentes distintas que corroboran la historia (corroboración). */
+  n_fuentes: number;
+  /** Notas agrupadas en la historia (resultado de la fusión semántica + clustering). */
+  n_items: number;
+  /** Score del ranking [0..1] (jerarquización por ponderación). */
+  score: number;
+  /** Historia "breaking" (muchas fuentes en poco tiempo). */
+  breaking: boolean;
+  /** Verificación por corroboración: "corroborada" | "unica_fuente" | "dudosa" | "". */
+  verificacion: string;
+  /** Señal de viralidad (tráfico aprox. de tendencias); 0 si no aplica. */
+  senal: number;
+}
+
 /** Una RUN del pipeline: el recorrido de una pieza por sus etapas. */
 export interface Pipeline {
   id: string;
@@ -159,6 +177,8 @@ export interface Pipeline {
   etapas: PipelineEtapa[];
   /** Criba de la fuente (⚠️/❗ + hallazgos). Siempre presente desde el back. */
   qa_fuente?: PipelineQaFuente;
+  /** Procedencia IA (historia/cluster) del tema. `null` si no nació de una historia. */
+  cluster?: PipelineCluster | null;
   piezas: PipelinePieza[];
 }
 

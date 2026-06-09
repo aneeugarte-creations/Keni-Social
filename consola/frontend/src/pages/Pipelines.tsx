@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, ChevronRight, GitBranch, OctagonAlert, RefreshCw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, GitBranch, OctagonAlert, RefreshCw, Sparkles } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 import type {
   Pipeline,
   PipelineActividad,
+  PipelineCluster,
   PipelineEtapa,
   PipelineGeneracion,
   PipelineHallazgo,
@@ -30,6 +32,13 @@ import type {
   RespuestaPipelineDetalle,
   RespuestaPipelines,
 } from "@/types";
+
+// Verificación por corroboración (Ola D) -> etiqueta corta para los chips de procedencia IA.
+const VERIFICACION_TEXTO: Record<string, string> = {
+  corroborada: "corroborada",
+  unica_fuente: "1 sola fuente",
+  dudosa: "dudosa",
+};
 
 // Estado de etapa/run -> aspecto del badge + etiqueta corta. Mapeo único para toda la
 // página (la tira de etapas y el chip de estado global comparten convención GitLab-like).
@@ -134,6 +143,33 @@ function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
   );
 }
 
+/** Chips de PROCEDENCIA IA: las señales reales del pool (corroboración, fusión, score,
+ *  verificación, breaking) que la IA usó para deduplicar y jerarquizar la historia. */
+function ProcedenciaIA({ cluster }: { cluster: PipelineCluster }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <Badge variant="outline" className="text-[10px]">{cluster.n_fuentes} fuente(s)</Badge>
+      {cluster.n_items > 1 && (
+        <Badge variant="outline" className="text-[10px]">{cluster.n_items} notas agrupadas</Badge>
+      )}
+      <Badge variant="outline" className="text-[10px]">score {cluster.score.toFixed(2)}</Badge>
+      {cluster.verificacion && (
+        <Badge variant="outline" className="text-[10px]">
+          {VERIFICACION_TEXTO[cluster.verificacion] ?? cluster.verificacion}
+        </Badge>
+      )}
+      {cluster.breaking && (
+        <Badge variant="secondary" className="gap-1 border border-amber-500/30 bg-amber-500/15 text-[10px] text-amber-600">
+          🔥 breaking
+        </Badge>
+      )}
+      {cluster.senal > 0 && (
+        <Badge variant="outline" className="text-[10px]">viralidad {cluster.senal.toLocaleString("es-MX")}</Badge>
+      )}
+    </div>
+  );
+}
+
 function Punto({ estado }: { estado: string }) {
   return (
     <span
@@ -208,6 +244,16 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: (id: string) =
             <Badge variant="outline" className="shrink-0">{run.marca_nombre || run.marca}</Badge>
             <ChipEstado estado={run.estado_global} />
             <BadgeQaFuente qa={run.qa_fuente} />
+            {run.cluster && (
+              <Badge
+                variant="outline"
+                className="shrink-0 gap-1 text-[10px]"
+                title={`Historia jerarquizada por IA: ${run.cluster.n_fuentes} fuente(s), score ${run.cluster.score.toFixed(2)}`}
+              >
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                {run.cluster.n_fuentes} fuente(s)
+              </Badge>
+            )}
             <span className="truncate text-xs text-muted-foreground">{tiempoRelativo(run.creado)}</span>
           </div>
           <p className="truncate text-sm font-medium" title={run.titulo}>{run.titulo}</p>
@@ -270,6 +316,26 @@ function ContenidoEtapa({
   run: Pipeline;
   generacion?: PipelineGeneracion;
 }) {
+  if (clave === "jerarquia") {
+    // Paso de IA del POOL de noticias: dedup/fusión (Haiku) + ranking por score. Si el tema
+    // nació de una historia, mostramos sus señales reales; si no, lo decimos claramente.
+    if (!run.cluster) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          Este tema no nació de una historia rankeada (creado a mano o antes del ranking por IA).
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-2 text-xs">
+        <p className="text-muted-foreground">
+          La IA del pool de noticias deduplicó (fusión semántica) y jerarquizó esta historia
+          antes de crear el tema. Estas son las señales que usó:
+        </p>
+        <ProcedenciaIA cluster={run.cluster} />
+      </div>
+    );
+  }
   if (clave === "ci") {
     return (
       <div className="space-y-1 text-xs text-muted-foreground">
@@ -468,7 +534,21 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
 }
 
 export default function Pipelines() {
-  const [abierto, setAbierto] = React.useState<string | null>(null);
+  // Deep-link `?run=<id>`: el feed enlaza aquí para abrir el proceso IA de una pieza. La run
+  // abierta vive en la URL (compartible/navegable); al cerrar, se limpia el parámetro.
+  const [params, setParams] = useSearchParams();
+  const runParam = params.get("run");
+  const [abierto, setAbierto] = React.useState<string | null>(runParam);
+  React.useEffect(() => {
+    if (runParam) setAbierto(runParam);
+  }, [runParam]);
+  const cerrar = React.useCallback(() => {
+    setAbierto(null);
+    if (params.has("run")) {
+      params.delete("run");
+      setParams(params, { replace: true });
+    }
+  }, [params, setParams]);
   // La vista respeta el switch global de marca de la barra superior (no tiene selector
   // propio). `marcaActiva` es el id canónico (o null = "Todas", solo admin) que el back
   // valida; null → sin filtro de marca.
@@ -517,7 +597,7 @@ export default function Pipelines() {
         </div>
       )}
 
-      <DetalleRun id={abierto} onCerrar={() => setAbierto(null)} />
+      <DetalleRun id={abierto} onCerrar={cerrar} />
     </div>
   );
 }

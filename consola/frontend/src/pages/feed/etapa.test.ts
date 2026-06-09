@@ -15,6 +15,7 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
   return {
     id: "p1",
     contenido_id: "c1",
+    pipeline_id: "",
     titulo: "Tema",
     marca: "unotv",
     marca_nombre: "Uno TV",

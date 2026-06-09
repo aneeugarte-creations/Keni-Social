@@ -212,6 +212,14 @@ def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
     return db.obtener_noticia_cluster(cluster_id)
 
 
+def cluster_por_contenido(contenido_id: str) -> dict[str, Any] | None:
+    return db.cluster_por_contenido(contenido_id)
+
+
+def clusters_por_contenidos(contenido_ids: list[str]) -> dict[str, dict[str, Any]]:
+    return db.clusters_por_contenidos(contenido_ids)
+
+
 def actualizar_noticia_cluster(
     cluster_id: str,
     *,

@@ -19,8 +19,9 @@
  * dislikes para rechazar"); el gate lo decide el backend, `elegibilidadOK` solo habilita/explica.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Inbox, Loader2, MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Bot, Check, Inbox, Loader2, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
@@ -402,6 +403,21 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {/* Editor rico (reusa el de Publicaciones): copy + imagen (placa con titular inline). Se MONTA
           solo al editar. Es un modal (portal): los clics dentro no abren otra vez la tarjeta. */}
       {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
+
+      {/* Enlace al PROCESO IA de esta pieza (su run del pipeline): dedup/fusión, jerarquización y
+          criba. Solo en piezas que NACIERON del pipeline (`pipeline_id`); las manuales/radar/rss no
+          tienen run que mostrar, así nadie busca un pipeline inexistente. */}
+      {publicacion.pipeline_id && (
+        <Link
+          to={`/datos/actividad/pipelines?run=${encodeURIComponent(publicacion.pipeline_id)}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
+          title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          Ver proceso IA
+        </Link>
+      )}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
           (cuántos y de quién) + lo que falta. */}

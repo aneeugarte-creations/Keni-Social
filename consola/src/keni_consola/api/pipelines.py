@@ -58,15 +58,26 @@ _LIMITE_DEF = 50
 _LIMITE_MAX = 200
 
 # Catálogo de etapas del pipeline (clave → nombre) en orden de flujo: documenta el contrato que
-# emite `_etapas_de_run`. Las tres primeras son TOGGLABLES por marca (1 toggle = 1 etapa): activa
-# muestra su estado real, desactivada se pinta "saltada". Aprobación es el gate humano (siempre).
-# `estado_global` toma la primera no-{ok,saltada}. La QA (criba de la fuente) va ANTES del copy.
+# emite `_etapas_de_run`. Jerarquización es el paso de IA del POOL de noticias (dedup/fusión por
+# Haiku + ranking por score) que ocurre ANTES de promover la historia a tema; se DERIVA de la
+# historia (cluster) enlazada al tema, no de un toggle. Las tres siguientes (CI/QA/CD) son
+# TOGGLABLES por marca (1 toggle = 1 etapa): activa muestra su estado real, desactivada se pinta
+# "saltada". Aprobación es el gate humano (siempre). `estado_global` toma la primera no-{ok,
+# saltada}. La QA (criba de la fuente) va ANTES del copy.
 _ETAPAS = (
+    ("jerarquia", "Jerarquización"),
     ("ci", "Ingesta"),
     ("qa", "Criba de la fuente"),
     ("cd", "Copy + placa"),
     ("aprobacion", "Aprobación"),
 )
+
+# Verificación por corroboración (Ola D) -> texto legible para la etapa Jerarquización.
+_VERIFICACION_TEXTO = {
+    "corroborada": "corroborada por varias fuentes",
+    "unica_fuente": "de una sola fuente",
+    "dudosa": "dudosa (fuentes en conflicto)",
+}
 
 # Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobación.
 _ESTADOS_APROBADOS = frozenset({"aprobado", "programado", "publicado"})
@@ -118,15 +129,74 @@ def _pieza_detalle(plat: dict) -> dict:
     }
 
 
-def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
-    """Deriva las 4 etapas de una run desde los TOGGLES de la marca + el ESTADO REAL del tema.
+def _cluster_publico(cluster: dict | None) -> dict | None:
+    """Forma reducida de la HISTORIA (cluster) de la que nació el tema, para la UI. None si no hay.
 
-    1 toggle = 1 etapa: cada etapa togglable (CI/Noticias, QA, CD/Copy) está activa o "saltada"
-    según su toggle por-marca; si está activa, su estado se deriva del estado real (no de logs):
-    el `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La QA de la
-    FUENTE (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el gate
-    humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
+    Es la PRUEBA de que hubo dedup + jerarquización por IA aguas arriba (pool de noticias): cuántas
+    fuentes corroboran, cuántas notas se agruparon (fusión), el score del ranking, la verificación
+    por corroboración y si fue breaking. La vista lo pinta junto a la etapa Jerarquización.
     """
+    if not cluster:
+        return None
+    return {
+        "id": cluster.get("id", "") or "",
+        "n_fuentes": int(cluster.get("n_fuentes", 0) or 0),
+        "n_items": int(cluster.get("n_items", 0) or 0),
+        "score": round(float(cluster.get("score", 0.0) or 0.0), 3),
+        "breaking": bool(cluster.get("breaking", 0)),
+        "verificacion": cluster.get("verificacion", "") or "",
+        "senal": int(cluster.get("senal", 0) or 0),
+    }
+
+
+def _jerarquia_de(cluster: dict | None) -> dict:
+    """Etapa "Jerarquización": el paso de IA del pool (dedup/fusión + ranking) que precede al tema.
+
+    Se DERIVA de la historia enlazada al tema (no de un toggle): si el tema nació de un cluster
+    rankeado, la etapa es "ok" y su detalle resume las señales reales (corroboración, fusión,
+    score, verificación, breaking). Si el tema NO tiene historia (creado a mano o por la ingesta
+    item-a-item anterior al ranking), se pinta "saltada" (no bloquea: no es un fallo).
+    """
+    if not cluster:
+        return {
+            "clave": "jerarquia",
+            "nombre": "Jerarquización",
+            "estado": _ESTADO_SALTADA,
+            "detalle": "Sin historia asociada: tema creado a mano o anterior al ranking por IA.",
+            "ts": "",
+        }
+    n_fuentes = int(cluster.get("n_fuentes", 0) or 0)
+    n_items = int(cluster.get("n_items", 0) or 0)
+    score = round(float(cluster.get("score", 0.0) or 0.0), 2)
+    verif = _VERIFICACION_TEXTO.get(cluster.get("verificacion", "") or "", "")
+    partes = [
+        f"Historia jerarquizada por IA: {n_fuentes} fuente(s)",
+        f"{n_items} nota(s) agrupadas" if n_items > 1 else "",
+        f"score {score}",
+        verif,
+        "🔥 breaking" if cluster.get("breaking") else "",
+    ]
+    detalle = " · ".join(p for p in partes if p) + "."
+    return {
+        "clave": "jerarquia",
+        "nombre": "Jerarquización",
+        "estado": "ok",
+        "detalle": detalle,
+        "ts": cluster.get("primer_visto", "") or "",
+    }
+
+
+def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) -> list[dict]:
+    """Deriva las 5 etapas de una run: Jerarquización (historia) + TOGGLES + ESTADO REAL del tema.
+
+    Jerarquización se deriva de la HISTORIA enlazada (cluster): es el paso de IA del pool (dedup/
+    fusión + ranking) previo al tema. Las togglables (CI/Noticias, QA, CD/Copy) están activas o
+    "saltada" según su toggle por-marca; si activas, su estado se deriva del estado real (no de
+    logs): el `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La QA de
+    la FUENTE (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el
+    gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
+    """
+    jerarquia = _jerarquia_de(cluster)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     marca = item.get("marca", "") or ""
@@ -138,6 +208,10 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
     if _ci_off(marca):
         ci = {"clave": "ci", "nombre": "Ingesta", "estado": _ESTADO_SALTADA,
               "detalle": "Etapa «Crear noticias» desactivada para esta marca.", "ts": creado}
+    elif cluster is not None:
+        n_f = int(cluster.get("n_fuentes", 0) or 0)
+        ci = {"clave": "ci", "nombre": "Ingesta", "estado": "ok",
+              "detalle": f"Historia promovida a tema ({n_f} fuente(s) corroboran).", "ts": creado}
     else:
         ci = {"clave": "ci", "nombre": "Ingesta", "estado": "ok",
               "detalle": "Nota de origen ingerida de las fuentes.", "ts": creado}
@@ -216,7 +290,7 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
         "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    return [ci, qa, cd, aprobacion]
+    return [jerarquia, ci, qa, cd, aprobacion]
 
 
 def _estado_global(etapas: list[dict]) -> str:
@@ -266,15 +340,19 @@ def _qa_fuente_de(item: dict) -> dict:
     }
 
 
-def _run_de(item: dict, piezas_plat: list[dict], *, completo: bool = False) -> dict:
+def _run_de(
+    item: dict, piezas_plat: list[dict], *, completo: bool = False, cluster: dict | None = None
+) -> dict:
     """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
 
     `completo`: en el DETALLE, las piezas llevan la forma COMPLETA (`_pieza_detalle`: copy,
     placa, observaciones, traza de revisión) para mostrar todo lo ocurrido por etapa. En la
     LISTA basta la reducida. Las ETAPAS se derivan SIEMPRE de la forma reducida (mismos campos).
+    `cluster`: la HISTORIA de la que nació el tema (None si no nació de una); alimenta la etapa
+    Jerarquización y el bloque `cluster` (procedencia IA: corroboración, fusión, score).
     """
     base = [_pieza_de(p) for p in piezas_plat]
-    etapas = _etapas_de_run(item, base)
+    etapas = _etapas_de_run(item, base, cluster)
     marca = item.get("marca", "") or ""
     # `origen` real de la pieza padre (la fuente RSS que la ingirió): contexto de la etapa CI.
     return {
@@ -290,6 +368,8 @@ def _run_de(item: dict, piezas_plat: list[dict], *, completo: bool = False) -> d
         "etapas": etapas,
         # Criba de la fuente (⚠️/❗ + hallazgos): la señal de QA pre-copy del tema.
         "qa_fuente": _qa_fuente_de(item),
+        # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-ranking.
+        "cluster": _cluster_publico(cluster),
         "piezas": [_pieza_detalle(p) for p in piezas_plat] if completo else base,
     }
 
@@ -301,16 +381,16 @@ def _runs_del_pipeline(marca: str | None, limite: int) -> list[dict]:
     de contenido ya viene acotado al tablero del equipo; recortamos a `limite` tras
     reordenar por recencia (`creado` desc) para no servir un histórico enorme.
 
-    Además, OCULTA los runs de marcas con la etapa de entrada ("Crear noticias"/CI) desactivada:
-    sin ingesta no hay pipeline para esa marca, así que sus runs históricos no se listan (es lo
-    que el usuario espera al desactivar una marca: deja de verla en Pipelines).
+    NO oculta runs por el toggle de la marca: un tema que NACIÓ del pipeline sigue siendo
+    localizable aunque luego apaguen "Crear noticias" (antes se ocultaban y aparecían posts en
+    el feed sin pipeline que encontrar). Con la marca apagada, la etapa CI se pinta "saltada"
+    (lo refleja `_etapas_de_run`), pero la run NO desaparece de Pipelines.
     """
     items = repos.listar_contenido(marca=marca or None)
     pipeline = [
         it
         for it in items
         if (it.get("origen") or "") == ORIGEN_PIPELINE
-        and not _ci_off(it.get("marca", "") or "")
     ]
     pipeline.sort(key=lambda it: (it.get("creado", "") or "", it.get("id", "")), reverse=True)
     return pipeline[:limite]
@@ -332,8 +412,11 @@ async def listar(request: Request) -> Response:
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma():
         por_contenido.setdefault(plat.get("contenido_id", ""), []).append(plat)
+    # Una sola lectura de las HISTORIAS (clusters) de estos temas (procedencia IA; evita N consultas).
+    clusters = repos.clusters_por_contenidos([it.get("id", "") or "" for it in runs_items])
     pipelines = [
-        _run_de(it, por_contenido.get(it.get("id", ""), [])) for it in runs_items
+        _run_de(it, por_contenido.get(it.get("id", ""), []), cluster=clusters.get(it.get("id", "")))
+        for it in runs_items
     ]
     return JSONResponse({"pipelines": pipelines})
 
@@ -410,10 +493,11 @@ async def detalle(request: Request) -> Response:
     if item is None or (item.get("origen") or "") != ORIGEN_PIPELINE:
         return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
     piezas = repos.listar_contenido_plataforma(pipeline_id)
+    cluster = repos.cluster_por_contenido(pipeline_id)
     actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id)
     return JSONResponse(
         {
-            "pipeline": _run_de(item, piezas, completo=True),
+            "pipeline": _run_de(item, piezas, completo=True, cluster=cluster),
             "actividad": actividad,
             # Stream del agente (`claude -p`) por código de etapa (CI/CD/QA). Aditivo y
             # back-compat: vacío si ninguna etapa tiene una generación correlacionada.

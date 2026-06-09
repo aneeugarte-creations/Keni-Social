@@ -955,6 +955,57 @@ def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
     return _fila_a_noticia_cluster(fila) if fila is not None else None
 
 
+def cluster_por_contenido(contenido_id: str) -> dict[str, Any] | None:
+    """La historia que se promovió a un tema del pipeline (`contenido_id` -> cluster), o None.
+
+    Lookup REVERSO del enlace que sella `crear_tema_de_cluster` (cluster.contenido_id apunta al
+    tema). La vista de pipelines lo usa para mostrar la PROCEDENCIA IA del tema (corroboración,
+    score, verificación) en las etapas Jerarquización/Ingesta. Si por algún motivo varias
+    historias apuntaran al mismo tema (no debería), gana la actualizada más recientemente.
+    """
+    if not contenido_id:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE contenido_id = ? "
+            "ORDER BY actualizado DESC, id DESC LIMIT 1",
+            (contenido_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_noticia_cluster(fila) if fila is not None else None
+
+
+def clusters_por_contenidos(contenido_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Mapa `contenido_id -> historia` para un lote de temas (1 query; los "" se ignoran).
+
+    Versión por LOTE de `cluster_por_contenido` para la LISTA de pipelines (evita N consultas).
+    Un tema que no nació de una historia no aparece en el mapa. Ante empates (varias historias
+    por tema, no debería), gana la primera que devuelve la consulta (orden `actualizado` desc).
+    """
+    ids = [i for i in dict.fromkeys(contenido_ids) if i]
+    if not ids:
+        return {}
+    marcadores = ",".join("?" for _ in ids)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- marcadores parametrizados; ids deduplicados/saneados
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE contenido_id IN ({marcadores}) "
+            "ORDER BY actualizado DESC, id DESC",
+            tuple(ids),
+        ).fetchall()
+    finally:
+        con.close()
+    out: dict[str, dict[str, Any]] = {}
+    for fila in filas:
+        cluster = _fila_a_noticia_cluster(fila)
+        cid = cluster["contenido_id"]
+        if cid and cid not in out:  # la primera (más reciente) gana
+            out[cid] = cluster
+    return out
+
+
 def actualizar_noticia_cluster(
     cluster_id: str,
     *,

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -68,11 +69,13 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
   };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
-      <SesionContexto.Provider value={valor}>
-        <PostFeed publicacion={publicacion} />
-      </SesionContexto.Provider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <SesionContexto.Provider value={valor}>
+          <PostFeed publicacion={publicacion} />
+        </SesionContexto.Provider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -85,6 +88,17 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     renderPost(pub({ autor_nombre: "" }));
     expect(screen.getByText("IA")).toBeInTheDocument();
     expect(screen.queryByText(/desconocido/i)).not.toBeInTheDocument();
+  });
+
+  it("enlaza al proceso IA (su run) cuando la pieza nació del pipeline", () => {
+    renderPost(pub({ pipeline_id: "c1" }));
+    const enlace = screen.getByRole("link", { name: /ver proceso ia/i });
+    expect(enlace).toHaveAttribute("href", "/datos/actividad/pipelines?run=c1");
+  });
+
+  it("no ofrece «ver proceso IA» en piezas sin pipeline (manuales/radar/rss)", () => {
+    renderPost(pub({ pipeline_id: "" }));
+    expect(screen.queryByRole("link", { name: /ver proceso ia/i })).not.toBeInTheDocument();
   });
 
   it("muestra el icono de formato «Foto» para una pieza con formato foto (3 redes)", () => {

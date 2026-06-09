@@ -51,6 +51,18 @@ def test_pieza_sin_foto_no_esta_lista_aunque_no_lleve_copy_in():
     assert d["etapa_ia"] == "generando_arte"
 
 
+def test_pipeline_id_enlaza_solo_piezas_del_pipeline():
+    # Pieza nacida del pipeline CON `contenido_id`: `pipeline_id` = ese id (la UI enlaza al run).
+    d = publicacion_a_dict(_pub(origen="pipeline", contenido_id="c-123"))
+    assert d["pipeline_id"] == "c-123"
+    # Pieza manual (otro origen): sin run que encontrar -> `pipeline_id` vacío.
+    d2 = publicacion_a_dict(_pub(origen="equipo", contenido_id="c-123"))
+    assert d2["pipeline_id"] == ""
+    # Origen pipeline pero sin `contenido_id` (pieza legada): vacío.
+    d3 = publicacion_a_dict(_pub(origen="pipeline"))
+    assert d3["pipeline_id"] == ""
+
+
 def test_pieza_sin_marca_con_imagen_subida_esta_lista():
     # En piezas SIN marca/placa, la imagen subida (bespoke) SÍ cuenta como foto real -> lista.
     d = publicacion_a_dict(_pub(marca="", contenido="copy", copy_in="", imagen="subida.png", foto=""))
