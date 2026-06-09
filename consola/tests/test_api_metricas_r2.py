@@ -343,3 +343,43 @@ def test_mcp_tool_seguidores_invocable_devuelve_estructura(entorno, monkeypatch)
     payload = res[1] if isinstance(res, tuple) else res
     texto = repr(payload)
     assert "neto" in texto and "puntos" in texto
+
+
+# --------------------------------------------------------------------------- #
+# /api/metricas/ads (inorgánico: Meta/TikTok Ads)                              #
+# --------------------------------------------------------------------------- #
+
+
+def _ads(rango="mes", marca=None):
+    return [
+        {"nombre": "ALCANCE CAMPAÑA CHIHUAHUA", "red": "facebook", "impresiones": 244093,
+         "gasto": 117.04, "clics": 50, "moneda": "MXN", "es_post_impulsado": False},
+        {"nombre": 'Publicación: "MÉXICO TAMBIÉN SE DESCUBRE"', "red": "facebook",
+         "impresiones": 118696, "gasto": 993.62, "clics": 3077, "moneda": "MXN",
+         "es_post_impulsado": True},
+    ]
+
+
+def test_ads_200_shape_y_totales(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_ads=_ads)
+    r = cliente.get("/api/metricas/ads?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["ads"]) == 2
+    # Totales = suma de impresiones/gasto/clics; nº de campañas; moneda de la 1ª no vacía.
+    assert data["total"]["visualizaciones"] == 362789
+    assert data["total"]["gasto"] == 1110.66
+    assert data["total"]["clics"] == 3127
+    assert data["total"]["campanias"] == 2
+    assert data["total"]["moneda"] == "MXN"
+    assert data["etiqueta_rango"] and data["etiqueta_rango"] != "ignored"
+    assert data["generado_en"]
+
+
+def test_ads_vacio_sin_inversion(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_ads=lambda rango="mes", marca=None: [])
+    r = cliente.get("/api/metricas/ads?rango=7d")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ads"] == [] and data["total"]["campanias"] == 0
+    assert data["total"]["visualizaciones"] == 0

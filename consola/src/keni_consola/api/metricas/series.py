@@ -23,7 +23,7 @@ from ._comun import (
     metricas_cache,
 )
 
-__all__ = ["tendencia", "seguidores", "desglose", "crosstab", "correlacion"]
+__all__ = ["tendencia", "seguidores", "desglose", "crosstab", "correlacion", "ads"]
 
 
 async def tendencia(request: Request) -> Response:
@@ -44,6 +44,37 @@ async def tendencia(request: Request) -> Response:
         _log.exception("Fallo al generar la tendencia (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar la tendencia."}, status_code=500)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def ads(request: Request) -> Response:
+    """GET /api/metricas/ads: campañas de publicidad PAGADA del periodo (Meta/TikTok Ads).
+
+    El INORGÁNICO a nivel marca: lista de campañas (impresiones, gasto, clics) + totales.
+    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill). Lista
+    vacía = sin Ads conectado o sin entrega en el periodo (degradación honesta).
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
+    try:
+        payload, generado_en = await metricas_cache.ads_async(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al leer los ads (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudieron leer las campañas de Ads."}, status_code=500)
+    lista = payload.get("ads") or []
+    total = {
+        "visualizaciones": sum(int(a.get("impresiones") or 0) for a in lista),
+        "gasto": round(sum(float(a.get("gasto") or 0.0) for a in lista), 2),
+        "clics": sum(int(a.get("clics") or 0) for a in lista),
+        "campanias": len(lista),
+        "moneda": next((a.get("moneda") for a in lista if a.get("moneda")), ""),
+    }
+    return JSONResponse(
+        {"ads": lista, "total": total, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en}
+    )
 
 
 async def seguidores(request: Request) -> Response:

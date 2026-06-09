@@ -2,6 +2,7 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion, query, descargar } from "./_core";
 import type {
+  AdsMetricas,
   AnalisisDiario,
   AnaliticaPiezas,
   CompararMetricas,
@@ -71,6 +72,9 @@ export const apiMetricas = {
   // Correlación seguidores ganados ↔ piezas publicadas por día (con la pieza estrella).
   metricasCorrelacion: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<CorrelacionSeguidores>(`/metricas/correlacion${query(params)}`, { signal }),
+  // Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el inorgánico a nivel marca.
+  metricasAds: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<AdsMetricas>(`/metricas/ads${query(params)}`, { signal }),
   // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
   metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),

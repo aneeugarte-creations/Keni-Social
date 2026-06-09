@@ -43,3 +43,30 @@ export interface PiezasPorEtiqueta {
   sin_enlace: number;
   fuente: string;
 }
+
+/** Una campaña de publicidad pagada (Meta/TikTok Ads) del periodo a nivel marca. */
+export interface CampaniaAdsMetrica {
+  nombre: string;
+  red: string;
+  impresiones: number;
+  gasto: number;
+  clics: number;
+  moneda: string;
+  inicio: string;
+  fin: string;
+  es_post_impulsado: boolean;
+}
+
+/** Respuesta de `GET /api/metricas/ads`: el INORGÁNICO (Meta Ads) del periodo. */
+export interface AdsMetricas {
+  ads: CampaniaAdsMetrica[];
+  total: {
+    visualizaciones: number;
+    gasto: number;
+    clics: number;
+    campanias: number;
+    moneda: string;
+  };
+  etiqueta_rango: string;
+  generado_en: string;
+}

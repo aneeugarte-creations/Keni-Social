@@ -30,6 +30,7 @@ import { Kpis } from "./metricas/Kpis";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
 import { PanoramaPiezas } from "./metricas/PanoramaPiezas";
 import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
+import { SeccionAds } from "./metricas/SeccionAds";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
@@ -207,6 +208,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            <SeccionAds marcaActual={marca} rangoActual={rango} />
           </section>
 
           {/* Detalle granular de piezas: del alto nivel al caso concreto. UNA tabla
