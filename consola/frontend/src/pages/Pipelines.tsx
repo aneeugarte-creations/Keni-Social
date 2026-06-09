@@ -10,6 +10,7 @@ import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Markdown } from "@/components/ui/Markdown";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -321,17 +322,17 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
             Entrada · prompt{esPlantilla ? " (plantilla)" : ""}
           </div>
           {prompt ? (
-            <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
-              {prompt}
-            </pre>
+            <div className="max-h-72 overflow-y-auto rounded bg-background/60 p-2">
+              <Markdown className="text-xs text-foreground/80">{prompt}</Markdown>
+            </div>
           ) : <p className="text-[11px] italic text-muted-foreground">Prompt no disponible.</p>}
         </div>
         <div className="min-w-0 space-y-1">
           <div className="text-[11px] font-medium text-muted-foreground">Salida · razonamiento + resultado</div>
           {salida ? (
-            <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/90">
-              {salida}
-            </pre>
+            <div className="max-h-72 overflow-y-auto rounded bg-background/60 p-2">
+              <Markdown className="text-xs text-foreground/90">{salida}</Markdown>
+            </div>
           ) : (
             <p className="text-xs italic text-muted-foreground">
               {enCurso ? "En curso…" : "Pendiente: esta etapa aún no se ha ejecutado."}
@@ -368,11 +369,9 @@ function ContenidoEtapa({
   }
   if (clave === "ci") {
     // Selección: crea el tema en BD (no es IA). Solo la nota de origen.
-    return (
-      <div className="space-y-1 text-xs text-muted-foreground">
-        {run.descripcion && <p className="line-clamp-4">{run.descripcion}</p>}
-      </div>
-    );
+    return run.descripcion
+      ? <Markdown className="text-xs text-muted-foreground">{run.descripcion}</Markdown>
+      : null;
   }
   if (clave === "cd") {
     return (
@@ -385,7 +384,7 @@ function ContenidoEtapa({
               {p.copy_in && <Badge variant="outline" className="text-[10px]">placa: {p.copy_in}</Badge>}
             </div>
             {p.copy
-              ? <p className="whitespace-pre-wrap text-xs text-foreground/90">{p.copy}</p>
+              ? <Markdown className="text-xs text-foreground/90">{p.copy}</Markdown>
               : <p className="text-xs italic text-muted-foreground">Sin copy.</p>}
           </div>
         ))}
