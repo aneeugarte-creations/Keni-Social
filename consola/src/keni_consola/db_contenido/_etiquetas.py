@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from .._db_comun import (
+    ahora_iso,
     Any,
     _conectar,
-    datetime,
     uuid,
 )
 
@@ -78,7 +78,7 @@ def crear_etiqueta(
     id: str = "",
 ) -> dict[str, Any]:
     """Inserta una etiqueta editorial y la devuelve. NO valida (lo hace la API)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "nombre": nombre or "",
@@ -187,7 +187,7 @@ def actualizar_etiqueta(
         cambios["ttl_dias"] = max(0, int(cambios["ttl_dias"] or 0))
     if not cambios:
         return obtener_etiqueta(etiqueta_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, etiqueta_id]

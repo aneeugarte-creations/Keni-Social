@@ -211,3 +211,19 @@ def test_fila_a_contenido_plataforma_imagen_fuente_fallback():
     fila["imagen"] = "m.png"
     con_media = db_contenido._fila_a_contenido_plataforma(fila)
     assert con_media["imagen_url"] == "/api/media/m.png"
+
+
+def test_listar_contenido_plataforma_filtra_por_marca(entorno):
+    """El filtro `marca` (denormalizada) se aplica EN SQL: solo viajan las filas de esa
+    marca (antes el tablero traia la tabla entera y filtraba en memoria)."""
+    a = db.crear_contenido(titulo="De UnoTV", marca="unotv")
+    b = db.crear_contenido(titulo="De Claro", marca="claro-sports")
+    db.crear_contenido_plataforma(contenido_id=a["id"], red="x")
+    db.crear_contenido_plataforma(contenido_id=b["id"], red="x")
+
+    solo_uno = db.listar_contenido_plataforma(marca="unotv")
+    assert [p["contenido_id"] for p in solo_uno] == [a["id"]]
+    # Sin filtro: todas (retrocompat).
+    assert len(db.listar_contenido_plataforma()) == 2
+    # Combinable con contenido_id.
+    assert db.listar_contenido_plataforma(a["id"], marca="claro-sports") == []

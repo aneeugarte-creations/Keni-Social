@@ -105,6 +105,7 @@ from .repos_contenido import (  # noqa: F401
     listar_contenido,
     listar_contenido_origenes,
     listar_contenido_plataforma,
+    listar_contenido_vencido,
     listar_etiquetas,
     listar_evergreen_ideas,
     listar_insumo_items,

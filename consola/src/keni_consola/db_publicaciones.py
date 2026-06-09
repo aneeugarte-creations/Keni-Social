@@ -1,22 +1,20 @@
 """Persistencia — dominio publicaciones. Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ._db_comun import (
     PRIORIDAD_EVENTO_DEFECTO,
     TIPO_COBERTURA_TRANSMISION,
     TIPO_CONTENIDO_DEFECTO,
     Any,
     _conectar,
-    datetime,
+    ahora_iso,
 )
 from .db_contenido import (
-    actualizar_contenido,
-    actualizar_contenido_plataforma,
-    borrar_contenido,
-    borrar_contenido_plataforma,
-    crear_contenido,
-    crear_contenido_plataforma,
-    listar_contenido_plataforma,
+    _fila_contenido_nueva,
+    _insertar_contenido,
+    _insertar_contenido_plataforma,
     obtener_contenido_plataforma,
 )
 from .db_rota import (
@@ -169,65 +167,143 @@ def crear_publicacion(
 ) -> dict[str, Any]:
     """Crea una publicacion (padre `contenido` + fila `contenido_plataforma` es_publicacion=1).
 
+    ATOMICA: padre y fila por plataforma se insertan en UNA transaccion (antes eran dos:
+    un fallo entre ambas dejaba un `contenido` huerfano sin fila por plataforma).
+
     Acepta `id`/`fecha_creacion` opcionales (preservaban identidad al migrar desde el YAML
     legado, hoy retirado). El `estado` editorial se traduce al de
     plataforma. `imagen_fuente` (URL original, p.ej. de un RSS de marca propia) +
     `tipo_contenido='fuente'` nacen juntos: hay imagen (la del artículo), así que la pieza
     no queda con `falta_imagen`.
     """
-    padre = crear_contenido(
+    con = _conectar()
+    try:
+        padre, plat = _insertar_publicacion(
+            con,
+            marca=marca,
+            red=red,
+            titulo=titulo,
+            contenido=contenido,
+            copy_in=copy_in,
+            estado=estado,
+            veredicto=veredicto,
+            fecha_programada=fecha_programada,
+            origen=origen,
+            imagen=imagen,
+            imagen_fuente=imagen_fuente,
+            tipo_contenido=tipo_contenido,
+            evergreen=evergreen,
+            autor=autor,
+            id=id,
+            fecha_creacion=fecha_creacion,
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_publicacion(plat["id"]) or _publicacion_de_filas(padre, plat)
+
+
+def _insertar_publicacion(
+    con: Any, *, marca: str, red: str, **campos: Any
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Inserta padre + fila por plataforma sobre `con` (SIN commit). Devuelve `(padre, plat)`.
+
+    Nucleo compartido por `crear_publicacion` (transaccion propia) y `crear_publicaciones`
+    (lote todo-o-nada: N publicaciones en UNA transaccion del llamante). Mismos kwargs que
+    `crear_publicacion` (menos los posicionales `marca`/`red`).
+    """
+    evergreen = bool(campos.get("evergreen"))
+    fecha_creacion = campos.get("fecha_creacion") or ""
+    imagen_fuente = campos.get("imagen_fuente") or ""
+    padre = _fila_contenido_nueva(
         clase="contenido",
         flujo="evergreen" if evergreen else "",
-        titulo=titulo,
+        titulo=campos.get("titulo") or "",
         marca=marca,
-        tipo_contenido=tipo_contenido or TIPO_CONTENIDO_DEFECTO,
-        autor=autor,
-        origen=origen,
+        tipo_contenido=campos.get("tipo_contenido") or TIPO_CONTENIDO_DEFECTO,
+        autor=campos.get("autor"),
+        origen=campos.get("origen") or "",
         creado=fecha_creacion,
         actualizado=fecha_creacion,
     )
-    plat = crear_contenido_plataforma(
-        id=id,
+    _insertar_contenido(con, padre)
+    plat = _insertar_contenido_plataforma(
+        con,
+        id=campos.get("id") or "",
         contenido_id=padre["id"],
         red=red,
-        # Marca denormalizada explicita: la del padre recien creado (evita un lookup extra).
+        # Marca denormalizada explicita: la del padre recien insertado (evita un lookup extra).
         marca=padre["marca"],
-        estado=_ESTADO_PUB_A_PLAT.get(estado, "pendiente"),
-        copy=contenido,
-        copy_in=copy_in,
-        imagen=imagen,
+        estado=_ESTADO_PUB_A_PLAT.get(campos.get("estado") or "borrador", "pendiente"),
+        copy=campos.get("contenido") or "",
+        copy_in=campos.get("copy_in") or "",
+        imagen=campos.get("imagen") or "",
         imagen_fuente=imagen_fuente,
         # Si hay imagen de fuente (URL del artículo), la pieza YA tiene imagen.
         falta_imagen=False if imagen_fuente else None,
-        veredicto=veredicto,
-        fecha_programada=fecha_programada,
+        veredicto=campos.get("veredicto") or "",
+        fecha_programada=campos.get("fecha_programada") or "",
         evergreen=evergreen,
         es_publicacion=True,
         creado=fecha_creacion,
         actualizado=fecha_creacion,
     )
-    return obtener_publicacion(plat["id"]) or _fila_a_publicacion(
+    return padre, plat
+
+
+def _publicacion_de_filas(
+    padre: dict[str, Any], plat: dict[str, Any]
+) -> dict[str, Any]:
+    """Construye el dict publico de una publicacion desde las filas padre+plataforma en mano.
+
+    Equivale a `_fila_a_publicacion` sobre la fila unida, sin re-leer la base: lo usan los
+    caminos que acaban de INSERTAR ambas filas (creacion y lote) y ya tienen los datos.
+    """
+    return _fila_a_publicacion(
         {
-            "pid": plat["id"], "red": red, "pestado": plat["estado"], "copy": contenido,
-            "copy_in": copy_in,
-            "imagen": imagen, "veredicto": veredicto, "revisor_id": "", "revisor_nombre": "",
-            "revisado_en": "", "enviado_a_revision_en": "", "fecha_programada": fecha_programada,
-            "preparado_en": "", "id_post_metricool": "", "evergreen": plat["evergreen"],
-            "pactualizado": plat["actualizado"], "cid": padre["id"], "titulo": titulo,
-            "marca": marca, "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
-            "origen": origen, "ccreado": padre["creado"],
+            "pid": plat["id"], "red": plat["red"], "pestado": plat["estado"],
+            "copy": plat["copy"], "copy_in": plat["copy_in"], "imagen": plat["imagen"],
+            "imagen_fuente": plat["imagen_fuente"], "foto": plat["foto"],
+            "video": plat["video"], "falta_video": plat["falta_video"],
+            "veredicto": plat["veredicto"], "revisor_id": plat["revisor_id"],
+            "revisor_nombre": plat["revisor_nombre"], "revisado_en": plat["revisado_en"],
+            "enviado_a_revision_en": plat["enviado_a_revision_en"],
+            "fecha_programada": plat["fecha_programada"],
+            "preparado_en": plat["preparado_en"],
+            "id_post_metricool": plat["id_post_metricool"],
+            "falta_copy": plat["falta_copy"], "falta_imagen": plat["falta_imagen"],
+            "falta_revision": plat["falta_revision"],
+            "falta_publicar": plat["falta_publicar"], "evergreen": plat["evergreen"],
+            "copy_in_exento": plat["copy_in_exento"],
+            "placa_oculta": plat["placa_oculta"],
+            "plantilla_diseno_id": plat["plantilla_diseno_id"],
+            "foto_encuadre": plat["foto_encuadre"], "fotos": plat["fotos"],
+            "qa_auto_hash": plat["qa_auto_hash"], "pactualizado": plat["actualizado"],
+            "cid": padre["id"], "titulo": padre["titulo"], "marca": padre["marca"],
+            "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
+            "origen": padre["origen"], "ccreado": padre["creado"],
+            "fecha_fuente": padre["fecha_fuente"],
+            "tipo_contenido": padre["tipo_contenido"], "formato": padre["formato"],
         }
     )
 
 
 def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Crea varias publicaciones (una por dict de entrada) y las devuelve."""
+    """Crea varias publicaciones (una por dict de entrada) y las devuelve. TODO-O-NADA.
+
+    Antes iteraba `crear_publicacion` (una transaccion POR pieza): un fallo a mitad dejaba
+    el lote a medias pese a que el endpoint promete "si una falla, no inserta". Ahora las N
+    publicaciones se insertan en UNA SOLA transaccion: si cualquier insert falla, ninguna
+    queda (el `close()` sin commit hace rollback) y la excepcion se propaga al caller.
+    """
+    con = _conectar()
     creadas: list[dict[str, Any]] = []
-    for d in lista:
-        creadas.append(
-            crear_publicacion(
-                d.get("marca", "") or "",
-                d.get("red", "") or "",
+    try:
+        for d in lista:
+            padre, plat = _insertar_publicacion(
+                con,
+                marca=d.get("marca", "") or "",
+                red=d.get("red", "") or "",
                 titulo=d.get("titulo", "") or "",
                 contenido=d.get("contenido", "") or "",
                 copy_in=d.get("copy_in", "") or "",
@@ -243,23 +319,38 @@ def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     else None
                 ),
             )
-        )
+            creadas.append(_publicacion_de_filas(padre, plat))
+        con.commit()
+    finally:
+        con.close()
     return creadas
 
 
 def _filtros_publicacion(
-    marca: str | None,
+    marca: str | Sequence[str] | None,
     red: str | None,
     estado: str | None,
     evergreen: bool | None,
     linea: str | None = None,
 ) -> tuple[str, list[Any]]:
-    """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros."""
+    """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
+
+    `marca` admite UNA marca (str) o VARIAS (secuencia -> `c.marca IN (...)`). El caso
+    multi-marca empuja al SQL el foco por marcas preferentes del feed, que antes se
+    post-filtraba en memoria y ROMPIA el keyset (página corta + cursor que salta filas).
+    """
     clausulas: list[str] = []
     params: list[Any] = []
     if marca:
-        clausulas.append("c.marca = ?")
-        params.append(marca)
+        if isinstance(marca, str):
+            clausulas.append("c.marca = ?")
+            params.append(marca)
+        else:
+            marcas_lista = sorted({m for m in marca if m})
+            if marcas_lista:
+                marcadores = ", ".join("?" for _ in marcas_lista)
+                clausulas.append(f"c.marca IN ({marcadores})")
+                params.extend(marcas_lista)
     if red:
         clausulas.append("cp.red = ?")
         params.append(red)
@@ -285,7 +376,7 @@ def _filtros_publicacion(
 
 
 def listar_publicaciones(
-    marca: str | None = None,
+    marca: str | Sequence[str] | None = None,
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
@@ -332,7 +423,7 @@ def listar_publicaciones(
 
 
 def contar_publicaciones(
-    marca: str | None = None,
+    marca: str | Sequence[str] | None = None,
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
@@ -387,12 +478,22 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
 
 
 def actualizar_publicacion(
-    publicacion_id: str, campos: dict[str, Any]
+    publicacion_id: str,
+    campos: dict[str, Any],
+    *,
+    estado_esperado: str | None = None,
 ) -> dict[str, Any] | None:
-    """Edita parcialmente una publicacion; None si no existe. Mapea a padre/plataforma."""
-    actual = obtener_publicacion(publicacion_id)
-    if actual is None:
-        return None
+    """Edita parcialmente una publicacion; None si no existe. Mapea a padre/plataforma.
+
+    ATOMICA: la fila por plataforma y el padre se actualizan en UNA SOLA transaccion
+    (antes eran dos: un fallo entre ambas dejaba media edicion aplicada, p. ej. el estado
+    movido pero el titulo sin tocar).
+
+    `estado_esperado` (opcional) añade un CAS al UPDATE de la fila por plataforma: solo
+    aplica si el `estado` ACTUAL (de publicacion) sigue siendo ese; si otro flujo lo movio
+    entre el snapshot del caller y esta escritura, NO se toca nada y se devuelve None (el
+    caller lo distingue de "no existe" re-leyendo). Cierra el TOCTOU del PUT generico.
+    """
     plat = obtener_contenido_plataforma(publicacion_id)
     if plat is None:
         return None
@@ -400,22 +501,55 @@ def actualizar_publicacion(
     cambios_plat: dict[str, Any] = {}
     for clave, columna in _CAMPOS_PUB_A_PLAT.items():
         if clave in campos:
-            cambios_plat[columna] = (
-                bool(campos[clave]) if clave in ("evergreen", "placa_oculta") else campos[clave]
-            )
+            valor = campos[clave]
+            if clave in ("evergreen", "placa_oculta"):
+                valor = 1 if valor else 0
+            cambios_plat[columna] = valor
     if "estado" in campos:
         cambios_plat["estado"] = _ESTADO_PUB_A_PLAT.get(campos["estado"], "pendiente")
-    if cambios_plat:
-        actualizar_contenido_plataforma(publicacion_id, cambios_plat)
 
     cambios_padre: dict[str, Any] = {}
     if "titulo" in campos:
         cambios_padre["titulo"] = campos["titulo"]
     if "evergreen" in campos:
         cambios_padre["flujo"] = "evergreen" if campos["evergreen"] else ""
-    if cambios_padre:
-        actualizar_contenido(plat["contenido_id"], cambios_padre)
 
+    ahora = ahora_iso()
+    con = _conectar()
+    try:
+        if cambios_plat:
+            asignaciones = [f"{col} = ?" for col in cambios_plat]
+            asignaciones.append("actualizado = ?")
+            params: list[Any] = [*cambios_plat.values(), ahora, publicacion_id]
+            sql = (
+                f"UPDATE contenido_plataforma SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
+                "WHERE id = ?"
+            )
+            if estado_esperado is not None:
+                # El estado de PUBLICACION es una proyeccion del de plataforma y NO es 1:1
+                # (tanto `pendiente` como `en_curso` proyectan a `borrador`): el CAS acepta
+                # CUALQUIER estado de plataforma que proyecte al esperado, o un en_curso
+                # quedaria bloqueado para siempre por un falso "estado movido".
+                plat_esperados = [
+                    p for p, e in _ESTADO_PLAT_A_PUB.items() if e == estado_esperado
+                ] or [estado_esperado]
+                marcadores_cas = ", ".join("?" for _ in plat_esperados)
+                sql += f" AND estado IN ({marcadores_cas})"
+                params.extend(plat_esperados)
+            cur = con.execute(sql, tuple(params))
+            if cur.rowcount == 0:
+                # No existe o el CAS no aplico (estado movido): nada que commitear.
+                return None
+        if cambios_padre:
+            asignaciones_p = [f"{col} = ?" for col in cambios_padre]
+            asignaciones_p.append("actualizado = ?")
+            con.execute(
+                f"UPDATE contenido SET {', '.join(asignaciones_p)} WHERE id = ?",  # noqa: S608 -- allowlist
+                (*cambios_padre.values(), ahora, plat["contenido_id"]),
+            )
+        con.commit()
+    finally:
+        con.close()
     return obtener_publicacion(publicacion_id)
 
 
@@ -470,7 +604,7 @@ def transicionar_estado_publicacion(
     plat_origen = _ESTADO_PUB_A_PLAT.get(estado_origen, estado_origen)
     plat_destino = _ESTADO_PUB_A_PLAT.get(estado_destino, estado_destino)
     asignaciones = ["estado = ?", "actualizado = ?"]
-    params: list[Any] = [plat_destino, datetime.now().isoformat(timespec="seconds")]
+    params: list[Any] = [plat_destino, ahora_iso()]
     for clave, valor in (campos_extra or {}).items():
         columna = _CAMPOS_PUB_A_PLAT.get(clave)
         if columna is None or columna == "estado":
@@ -517,16 +651,48 @@ def borrar_publicacion(publicacion_id: str) -> bool:
       - Borrador ANIDADO bajo un tema (el padre tiene MAS filas por plataforma, p.ej. un tema
         importado/Radar con su copy auto-generado): se borra SOLO esta fila, conservando el
         tema y sus demas piezas. Evita que borrar un borrador se lleve el tema entero (#nido).
+
+    UNA SOLA transaccion con `SELECT ... FOR UPDATE` del padre: el patron previo
+    (listar hermanas -> decidir -> borrar, cada paso en su transaccion) tenia una carrera:
+    dos borrados simultaneos de las DOS ultimas hermanas podian decidir ambos "quedan mas"
+    y dejar el padre vivo y vacio (o al reves, llevarse el tema con piezas vivas). El lock
+    de fila del padre serializa la decision contra otros borrados del mismo tema.
     """
-    plat = obtener_contenido_plataforma(publicacion_id)
-    if plat is None:
-        return False
-    hermanas = listar_contenido_plataforma(plat["contenido_id"])
-    if len(hermanas) <= 1:
-        # Padre 1:1 con la publicacion: borrarlo arrastra la fila por plataforma.
-        return borrar_contenido(plat["contenido_id"])
-    # Anidada bajo un tema con mas piezas: borrar SOLO esta fila, conservar el tema.
-    return borrar_contenido_plataforma(publicacion_id)
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT contenido_id FROM contenido_plataforma WHERE id = ?",
+            (publicacion_id,),
+        ).fetchone()
+        if fila is None:
+            return False
+        contenido_id = fila["contenido_id"]
+        # Serializa contra otros borrados/ediciones del MISMO tema (lock de fila del padre).
+        con.execute("SELECT id FROM contenido WHERE id = ? FOR UPDATE", (contenido_id,))
+        cuenta = con.execute(
+            "SELECT COUNT(*) AS n FROM contenido_plataforma WHERE contenido_id = ?",
+            (contenido_id,),
+        ).fetchone()
+        if cuenta is not None and int(cuenta["n"]) <= 1:
+            # Padre 1:1 con la publicacion: borrarlo arrastra fila y etiquetas (cascada manual,
+            # mismas sentencias que `borrar_contenido` pero dentro de ESTA transaccion).
+            con.execute(
+                "DELETE FROM contenido_plataforma WHERE contenido_id = ?", (contenido_id,)
+            )
+            con.execute(
+                "DELETE FROM contenido_etiquetas WHERE contenido_id = ?", (contenido_id,)
+            )
+            cur = con.execute("DELETE FROM contenido WHERE id = ?", (contenido_id,))
+            con.commit()
+            return cur.rowcount > 0
+        # Anidada bajo un tema con mas piezas: borrar SOLO esta fila, conservar el tema.
+        cur = con.execute(
+            "DELETE FROM contenido_plataforma WHERE id = ?", (publicacion_id,)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 def duplicar_evento_rota(

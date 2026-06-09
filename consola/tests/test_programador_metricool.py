@@ -450,8 +450,13 @@ def test_varias_piezas_una_sin_creds_no_rompe_otras(entorno, monkeypatch):
     assert a2["preparado_en"]  # la con-creds tambien
 
 
-def test_error_de_red_no_rompe_barrido(entorno, monkeypatch):
-    """Un fallo HTTP de Metricool se loguea y la pieza sigue en 'programado' (no rompe)."""
+def test_error_de_red_libera_la_preparacion_y_no_rompe_barrido(entorno, monkeypatch):
+    """Un fallo HTTP de Metricool se loguea, LIBERA `preparado_en` y no rompe el barrido.
+
+    Antes la pieza quedaba con `preparado_en` estampado y `piezas_vencidas` la excluia
+    PARA SIEMPRE: una pieza programada que nunca salia, en silencio. Ahora el claim se
+    libera para que el siguiente barrido la reintente.
+    """
     monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
     monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
 
@@ -465,12 +470,40 @@ def test_error_de_red_no_rompe_barrido(entorno, monkeypatch):
         mc.post(_METRICOOL_URL).mock(Response(500, json={"error": "server error"}))
         preparadas = preparar_vencidas(datetime.now())
 
-    assert preparadas == 1
+    # El fallo de ENTREGA no cuenta como preparada y deja la pieza reintentable.
+    assert preparadas == 0
     actualizada = repos.obtener_publicacion(pub["id"])
-    # Fallo de red: la pieza se prepara pero NO pasa a publicado
     assert actualizada["estado"] == "programado"
-    assert actualizada["preparado_en"]
+    assert actualizada["preparado_en"] == ""  # claim liberado: se reintentara
     assert actualizada.get("id_post_metricool", "") == ""
+
+
+def test_error_de_red_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch):
+    """Tras un fallo de entrega, el SIGUIENTE barrido reintenta y publica si Metricool ya
+    responde (cierre del bug 'pieza muerta en programado')."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+
+    pub = _pub_programada(entorno, red="x", contenido="Tweet con reintento", imagen="")
+
+    with patch(
+        "keni_consola.programador._creds_metricool",
+        return_value=_CREDS_PRUEBA,
+    ), respx.mock() as mc:
+        # 1er barrido: 500 (fallo transitorio). 2do barrido: 200 (Metricool se recupero).
+        mc.post(_METRICOOL_URL).mock(
+            side_effect=[
+                Response(500, json={"error": "server error"}),
+                Response(200, json=_RESP_OK),
+            ]
+        )
+        assert preparar_vencidas(datetime.now()) == 0
+        assert preparar_vencidas(datetime.now()) == 1
+
+    actualizada = repos.obtener_publicacion(pub["id"])
+    assert actualizada["estado"] == "publicado"
+    assert actualizada["preparado_en"]
+    assert actualizada["id_post_metricool"] == "mc-post-id-001"
 
 
 # --------------------------------------------------------------------------- #

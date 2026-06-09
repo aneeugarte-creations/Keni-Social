@@ -5,7 +5,7 @@ from .._db_comun import (
     ESTADOS_CONTENIDO_PLATAFORMA,
     Any,
     _conectar,
-    datetime,
+    ahora_iso,
     uuid,
 )
 
@@ -186,6 +186,122 @@ def _plantilla_rotacion(con: Any, marca: str, contenido_id: str) -> str:
     return ids[n % len(ids)]
 
 
+def _insertar_contenido_plataforma(
+    con: Any,
+    *,
+    contenido_id: str,
+    red: str,
+    marca: str | None = None,
+    estado: str = "pendiente",
+    falta_copy: bool | None = None,
+    falta_imagen: bool | None = None,
+    falta_revision: bool = True,
+    falta_publicar: bool = True,
+    falta_video: bool | None = None,
+    copy: str = "",
+    copy_in: str = "",
+    imagen: str = "",
+    imagen_fuente: str = "",
+    foto: str = "",
+    video: str = "",
+    veredicto: str = "",
+    revisor_id: str = "",
+    revisor_nombre: str = "",
+    revisado_en: str = "",
+    enviado_a_revision_en: str = "",
+    fecha_programada: str = "",
+    preparado_en: str = "",
+    id_post_metricool: str = "",
+    enlace: str = "",
+    evergreen: bool = False,
+    es_publicacion: bool = False,
+    copy_in_exento: bool = False,
+    placa_oculta: bool = False,
+    plantilla_diseno_id: str = "",
+    foto_encuadre: str = "",
+    fotos: str = "",
+    qa_auto_hash: str = "",
+    hora_post: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """INSERT de una fila por plataforma sobre la conexion `con` del llamante (SIN commit).
+
+    Nucleo de `crear_contenido_plataforma`, extraido para que un lote (p. ej.
+    `db_publicaciones.crear_publicaciones`, todo-o-nada) inserte varias filas EN UNA SOLA
+    transaccion: el llamante decide cuando commitear/cerrar. Devuelve la fila ya formateada.
+    """
+    ahora = ahora_iso()
+    falta_copy = (not bool(copy)) if falta_copy is None else falta_copy
+    falta_imagen = (not bool(imagen)) if falta_imagen is None else falta_imagen
+    # `falta_video` (espejo de `falta_imagen`, pero con default INVERSO): cuando se pasa explicito
+    # se respeta; cuando es None se asume 0 (N/A). El video solo es obligatorio en piezas
+    # `formato='video'`; la creacion por defecto es `foto`, asi que `falta_video` nace en 0 y lo
+    # activa quien sabe el formato (crear con `formato=video` o el flip `ajustar_plataformas_por_formato`).
+    falta_video = False if falta_video is None else bool(falta_video)
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "contenido_id": contenido_id,
+        "red": red,
+        # Marca denormalizada: la del padre salvo override explicito. La derivacion real (lookup)
+        # se hace abajo dentro de la conexion para que vea el padre ya commiteado.
+        "marca": marca or "",
+        "estado": estado if estado in ESTADOS_CONTENIDO_PLATAFORMA else "pendiente",
+        "falta_copy": 1 if falta_copy else 0,
+        "falta_imagen": 1 if falta_imagen else 0,
+        "falta_revision": 1 if falta_revision else 0,
+        "falta_publicar": 1 if falta_publicar else 0,
+        "falta_video": 1 if falta_video else 0,
+        "copy": copy or "",
+        "copy_in": copy_in or "",
+        "imagen": imagen or "",
+        "imagen_fuente": imagen_fuente or "",
+        "foto": foto or "",
+        "video": video or "",
+        "veredicto": veredicto or "",
+        "revisor_id": revisor_id or "",
+        "revisor_nombre": revisor_nombre or "",
+        "revisado_en": revisado_en or "",
+        "enviado_a_revision_en": enviado_a_revision_en or "",
+        "fecha_programada": fecha_programada or "",
+        "preparado_en": preparado_en or "",
+        "id_post_metricool": id_post_metricool or "",
+        "enlace": enlace or "",
+        "evergreen": 1 if evergreen else 0,
+        "es_publicacion": 1 if es_publicacion else 0,
+        "copy_in_exento": 1 if copy_in_exento else 0,
+        "placa_oculta": 1 if placa_oculta else 0,
+        "plantilla_diseno_id": plantilla_diseno_id or "",
+        "foto_encuadre": foto_encuadre or "",
+        "fotos": fotos or "",
+        "qa_auto_hash": qa_auto_hash or "",
+        "hora_post": hora_post or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    # Deriva la marca denormalizada del padre cuando el llamante no la pasa (el caso normal):
+    # asi ningun call-site tiene que conocerla y la denormalizacion nace siempre alineada.
+    if marca is None:
+        padre = con.execute(
+            "SELECT marca FROM contenido WHERE id = ?", (contenido_id,)
+        ).fetchone()
+        if padre is not None:
+            fila["marca"] = padre["marca"] or ""
+    # ROTACIÓN de plantillas: si el llamante NO fijó plantilla y la marca tiene un GRUPO en
+    # rotación, asigna la siguiente del grupo (mismo color en todas las redes; round-robin entre
+    # piezas). Dormido salvo que la marca tenga ≥2 plantillas con `rotar=1`.
+    if not fila["plantilla_diseno_id"] and fila["marca"]:
+        fila["plantilla_diseno_id"] = _plantilla_rotacion(con, fila["marca"], contenido_id)
+    marcadores = ", ".join("?" for _ in _COLS_CONTENIDO_PLATAFORMA)
+    con.execute(
+        f"INSERT INTO contenido_plataforma ({', '.join(_COLS_CONTENIDO_PLATAFORMA)}) "
+        f"VALUES ({marcadores})",
+        tuple(fila[col] for col in _COLS_CONTENIDO_PLATAFORMA),
+    )
+    return _fila_a_contenido_plataforma(fila)
+
+
 def crear_contenido_plataforma(
     *,
     contenido_id: str,
@@ -236,95 +352,80 @@ def crear_contenido_plataforma(
     sigue siempre correcta. Pasar `marca` explicito solo lo necesita la migracion (preservar la
     marca de datos legados) o un padre aun no commiteado en otra transaccion. Mantenerla en sync
     es lo que da sentido al indice unico de parrilla POR MARCA (`idx_parrilla_slot_uniq`).
+    El nucleo (INSERT sin commit) vive en `_insertar_contenido_plataforma`, reutilizable por
+    los lotes transaccionales; esta envoltura aporta la transaccion propia commit-y-cierra.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
-    falta_copy = (not bool(copy)) if falta_copy is None else falta_copy
-    falta_imagen = (not bool(imagen)) if falta_imagen is None else falta_imagen
-    # `falta_video` (espejo de `falta_imagen`, pero con default INVERSO): cuando se pasa explicito
-    # se respeta; cuando es None se asume 0 (N/A). El video solo es obligatorio en piezas
-    # `formato='video'`; la creacion por defecto es `foto`, asi que `falta_video` nace en 0 y lo
-    # activa quien sabe el formato (crear con `formato=video` o el flip `ajustar_plataformas_por_formato`).
-    falta_video = False if falta_video is None else bool(falta_video)
-    fila = {
-        "id": id or uuid.uuid4().hex[:12],
-        "contenido_id": contenido_id,
-        "red": red,
-        # Marca denormalizada: la del padre salvo override explicito. La derivacion real (lookup)
-        # se hace abajo dentro de la conexion para que vea el padre ya commiteado.
-        "marca": marca or "",
-        "estado": estado if estado in ESTADOS_CONTENIDO_PLATAFORMA else "pendiente",
-        "falta_copy": 1 if falta_copy else 0,
-        "falta_imagen": 1 if falta_imagen else 0,
-        "falta_revision": 1 if falta_revision else 0,
-        "falta_publicar": 1 if falta_publicar else 0,
-        "falta_video": 1 if falta_video else 0,
-        "copy": copy or "",
-        "copy_in": copy_in or "",
-        "imagen": imagen or "",
-        "imagen_fuente": imagen_fuente or "",
-        "foto": foto or "",
-        "video": video or "",
-        "veredicto": veredicto or "",
-        "revisor_id": revisor_id or "",
-        "revisor_nombre": revisor_nombre or "",
-        "revisado_en": revisado_en or "",
-        "enviado_a_revision_en": enviado_a_revision_en or "",
-        "fecha_programada": fecha_programada or "",
-        "preparado_en": preparado_en or "",
-        "id_post_metricool": id_post_metricool or "",
-        "enlace": enlace or "",
-        "evergreen": 1 if evergreen else 0,
-        "es_publicacion": 1 if es_publicacion else 0,
-        "copy_in_exento": 1 if copy_in_exento else 0,
-        "placa_oculta": 1 if placa_oculta else 0,
-        "plantilla_diseno_id": plantilla_diseno_id or "",
-        "foto_encuadre": foto_encuadre or "",
-        "fotos": fotos or "",
-        "qa_auto_hash": qa_auto_hash or "",
-        "hora_post": hora_post or "",
-        "creado": creado or ahora,
-        "actualizado": actualizado or ahora,
-    }
     con = _conectar()
     try:
-        # Deriva la marca denormalizada del padre cuando el llamante no la pasa (el caso normal):
-        # asi ningun call-site tiene que conocerla y la denormalizacion nace siempre alineada.
-        if marca is None:
-            padre = con.execute(
-                "SELECT marca FROM contenido WHERE id = ?", (contenido_id,)
-            ).fetchone()
-            if padre is not None:
-                fila["marca"] = padre["marca"] or ""
-        # ROTACIÓN de plantillas: si el llamante NO fijó plantilla y la marca tiene un GRUPO en
-        # rotación, asigna la siguiente del grupo (mismo color en todas las redes; round-robin entre
-        # piezas). Dormido salvo que la marca tenga ≥2 plantillas con `rotar=1`.
-        if not fila["plantilla_diseno_id"] and fila["marca"]:
-            fila["plantilla_diseno_id"] = _plantilla_rotacion(con, fila["marca"], contenido_id)
-        marcadores = ", ".join("?" for _ in _COLS_CONTENIDO_PLATAFORMA)
-        con.execute(
-            f"INSERT INTO contenido_plataforma ({', '.join(_COLS_CONTENIDO_PLATAFORMA)}) "
-            f"VALUES ({marcadores})",
-            tuple(fila[col] for col in _COLS_CONTENIDO_PLATAFORMA),
+        fila = _insertar_contenido_plataforma(
+            con,
+            contenido_id=contenido_id,
+            red=red,
+            marca=marca,
+            estado=estado,
+            falta_copy=falta_copy,
+            falta_imagen=falta_imagen,
+            falta_revision=falta_revision,
+            falta_publicar=falta_publicar,
+            falta_video=falta_video,
+            copy=copy,
+            copy_in=copy_in,
+            imagen=imagen,
+            imagen_fuente=imagen_fuente,
+            foto=foto,
+            video=video,
+            veredicto=veredicto,
+            revisor_id=revisor_id,
+            revisor_nombre=revisor_nombre,
+            revisado_en=revisado_en,
+            enviado_a_revision_en=enviado_a_revision_en,
+            fecha_programada=fecha_programada,
+            preparado_en=preparado_en,
+            id_post_metricool=id_post_metricool,
+            enlace=enlace,
+            evergreen=evergreen,
+            es_publicacion=es_publicacion,
+            copy_in_exento=copy_in_exento,
+            placa_oculta=placa_oculta,
+            plantilla_diseno_id=plantilla_diseno_id,
+            foto_encuadre=foto_encuadre,
+            fotos=fotos,
+            qa_auto_hash=qa_auto_hash,
+            hora_post=hora_post,
+            creado=creado,
+            actualizado=actualizado,
+            id=id,
         )
         con.commit()
     finally:
         con.close()
-    return _fila_a_contenido_plataforma(fila)
+    return fila
 
 
 def listar_contenido_plataforma(
     contenido_id: str | None = None,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Filas por plataforma de un contenido (o de todos si `contenido_id` es None)."""
+    """Filas por plataforma; filtros opcionales por `contenido_id` y/o `marca` (denormalizada).
+
+    `marca` empuja al SQL el filtro que el tablero aplicaba en memoria tras traer TODAS las
+    filas (full scan por GET): con el workspace acotado a una marca, solo viajan sus filas.
+    """
     sql = _SELECT_CONTENIDO_PLATAFORMA
-    params: tuple[Any, ...] = ()
+    clausulas: list[str] = []
+    params: list[Any] = []
     if contenido_id is not None:
-        sql += " WHERE contenido_id = ?"
-        params = (contenido_id,)
+        clausulas.append("contenido_id = ?")
+        params.append(contenido_id)
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
     sql += " ORDER BY contenido_id ASC, creado ASC, id ASC"
     con = _conectar()
     try:
-        filas = con.execute(sql, params).fetchall()
+        filas = con.execute(sql, tuple(params)).fetchall()
     finally:
         con.close()
     return [_fila_a_contenido_plataforma(f) for f in filas]
@@ -381,7 +482,7 @@ def actualizar_contenido_plataforma(
     for col in _BOOLS_CONTENIDO_PLATAFORMA:
         if col in cambios:
             cambios[col] = 1 if cambios[col] else 0
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, plataforma_id]

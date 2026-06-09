@@ -87,3 +87,82 @@ def test_integrity_error_es_neutra():
     (`sqlite3.IntegrityError`); ningun SQLite operacional se abre ya (ADR 0004).
     """
     assert motor_db.IntegrityError is sqlite3.IntegrityError
+
+
+# --------------------------------------------------------------------------- #
+# Robustez: `?` dentro de literales de string NO es un marcador               #
+# --------------------------------------------------------------------------- #
+
+
+def test_no_traduce_marcadores_dentro_de_literales():
+    """Un `?` dentro de comillas simples (p.ej. el cuantificador de una regex inline) se
+    respeta; solo los `?` FUERA de literales se traducen a `%s`."""
+    sql = r"UPDATE t SET col = left(col, ?) WHERE col ~ '^\d+?$' AND id = ?"
+    salida = motor_db._traducir_sql(sql)
+    assert salida == r"UPDATE t SET col = left(col, %s) WHERE col ~ '^\d+?$' AND id = %s"
+
+
+def test_no_traduce_dentro_de_literal_con_comilla_escapada():
+    """El escape SQL `''` (comilla duplicada) no rompe la particion: el `?` del literal
+    sigue intacto y el de fuera se traduce."""
+    sql = "UPDATE t SET nota = 'que ''pasa?'' aqui' WHERE id = ?"
+    salida = motor_db._traducir_sql(sql)
+    assert salida == "UPDATE t SET nota = 'que ''pasa?'' aqui' WHERE id = %s"
+
+
+def test_traduce_varios_literales_y_marcadores_mezclados():
+    sql = "SELECT '?' AS a, ? AS b, 'x?y' AS c, ? AS d"
+    salida = motor_db._traducir_sql(sql)
+    assert salida == "SELECT '?' AS a, %s AS b, 'x?y' AS c, %s AS d"
+
+
+# --------------------------------------------------------------------------- #
+# Mapeo de violaciones de integridad: FK / NOT NULL / CHECK -> IntegrityError #
+# --------------------------------------------------------------------------- #
+
+
+class _CursorQueExplota:
+    """Cursor falso cuyo `execute` lanza la excepcion configurada (sin Postgres real)."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def execute(self, sql, params=()):  # noqa: ANN001 -- firma minima
+        raise self._exc
+
+
+class _ConQueExplota:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+        self.rollbacks = 0
+
+    def cursor(self, row_factory=None):  # noqa: ANN001 -- firma minima
+        return _CursorQueExplota(self._exc)
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+@pytest.mark.parametrize(
+    "nombre_error",
+    ["UniqueViolation", "ForeignKeyViolation", "NotNullViolation", "CheckViolation"],
+)
+def test_violaciones_de_integridad_se_mapean_a_integrity_error(nombre_error):
+    """TODAS las violaciones de integridad de psycopg (no solo UNIQUE) salen como la
+    excepcion neutra `motor_db.IntegrityError`, con rollback de la transaccion."""
+    psycopg = pytest.importorskip("psycopg")
+    exc = getattr(psycopg.errors, nombre_error)("boom")
+    con_falsa = _ConQueExplota(exc)
+    wrapper = motor_db._ConexionPg(con_falsa, dict_row=None, pool=None)
+    with pytest.raises(motor_db.IntegrityError):
+        wrapper.execute("INSERT INTO t (id) VALUES (?)", ("x",))
+    assert con_falsa.rollbacks == 1
+
+
+def test_otros_errores_de_psycopg_no_se_enmascaran():
+    """Un error que NO es de integridad (p.ej. sintaxis) NO se convierte en IntegrityError."""
+    psycopg = pytest.importorskip("psycopg")
+    exc = psycopg.errors.SyntaxError("mal sql")
+    wrapper = motor_db._ConexionPg(_ConQueExplota(exc), dict_row=None, pool=None)
+    with pytest.raises(psycopg.errors.SyntaxError):
+        wrapper.execute("SELECT ?", ("x",))

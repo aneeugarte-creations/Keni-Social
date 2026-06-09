@@ -18,8 +18,9 @@ import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
 from typing import Any
+
+from .tiempo import ahora_iso
 
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
 from . import config, motor_db
@@ -133,8 +134,19 @@ def lock_barrido(nombre: str) -> Iterator[bool]:
                     "SELECT pg_advisory_unlock(?, ?)", (_LOCK_NS_BARRIDO, clave)
                 )
                 con.commit()
-            except Exception:  # noqa: BLE001 -- soltar es best-effort; cerrar la conexion tambien libera.
-                _log.warning("No se pudo soltar el advisory lock de barrido %s.", nombre)
+            except Exception:  # noqa: BLE001 -- soltar fallo: DESCARTAR la conexion (no reciclarla).
+                # CRITICO con pool: si el unlock falla y la conexion VOLVIERA al pool, el lock de
+                # SESION seguiria pegado a ese socket reciclado y TODOS los `lock_barrido`
+                # posteriores verian ok=False hasta el reciclado (~1 h): single-flight envenenado.
+                # `descartar()` cierra el socket (el servidor libera los locks de sesion) y deja
+                # que el pool reponga una conexion fresca. El `close()` de abajo queda como no-op.
+                _log.warning(
+                    "No se pudo soltar el advisory lock de barrido %s; se descarta la conexion.",
+                    nombre,
+                )
+                descartar = getattr(con, "descartar", None)
+                if descartar is not None:
+                    descartar()
         con.close()
 
 
@@ -531,6 +543,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_contenido_marca ON contenido (marca)",
     "CREATE INDEX IF NOT EXISTS idx_contenido_evento ON contenido (evento_id)",
     "CREATE INDEX IF NOT EXISTS idx_contenido_responsable ON contenido (responsable_id)",
+    # Orden del feed/keyset (`ORDER BY c.creado DESC, cp.id DESC` + `c.creado < ?`) y de los
+    # barridos por recencia (`titulos_recientes_marca`, dedup 90d): sin este indice cada pagina
+    # del feed era un scan+sort de la tabla entera.
+    "CREATE INDEX IF NOT EXISTS idx_contenido_creado_id ON contenido (creado DESC, id DESC)",
     """
     CREATE TABLE IF NOT EXISTS contenido_plataforma (
         id                    TEXT PRIMARY KEY,
@@ -1421,7 +1437,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
 
 
 def _crear_esquema(con: Any) -> None:
-    """Crea las tablas operacionales si no existen (idempotente).
+    """Crea las tablas operacionales si no existen (idempotente) BAJO LOCK cross-proceso.
 
     Ejecuta el DDL sentencia a sentencia y luego aplica las migraciones de columnas
     ampliadas (`tareas`, `rota_eventos`) y la migracion del modelo de turnos (ola back3:
@@ -1431,7 +1447,37 @@ def _crear_esquema(con: Any) -> None:
     NO anade columnas a una tabla que YA existe, y el Postgres hosted PERSISTE entre
     despliegues. Una tabla creada por una version anterior se quedaba sin las columnas
     nuevas (fallo real: `rota_eventos` sin `tipo_cobertura` → 500 al leer el calendario).
+
+    LOCK CROSS-PROCESO: en un deploy, back/worker/daemons/mcp arrancan A LA VEZ y cada
+    proceso corre estas ~90 sentencias + migraciones en paralelo (el memo
+    `_esquemas_asegurados` es por-proceso). El DDL es idempotente pero NO es inmune al
+    paralelismo (dos ALTER/CREATE INDEX simultaneos se bloquean entre si o fallan con
+    duplicados transitorios). Un `pg_advisory_lock` BLOQUEANTE con clave fija serializa
+    los arranques: el primero migra y los demas esperan y encuentran todo hecho.
     """
+    clave = _clave_lock("esquema")
+    con.execute("SELECT pg_advisory_lock(?, ?)", (_LOCK_NS_BARRIDO, clave))
+    con.commit()
+    try:
+        _crear_esquema_bajo_lock(con)
+    finally:
+        try:
+            con.execute("SELECT pg_advisory_unlock(?, ?)", (_LOCK_NS_BARRIDO, clave))
+            con.commit()
+        except Exception:  # noqa: BLE001 -- igual que lock_barrido: descartar, no reciclar.
+            # Si el unlock falla, la conexion arrastra un lock de SESION sobre la clave
+            # "esquema": reciclada al pool BLOQUEARIA para siempre los arranques futuros
+            # (este lock es bloqueante). Descartar cierra el socket y el servidor libera
+            # el lock; el caller vera el fallo en su primera operacion y reintentara.
+            _log.warning("No se pudo soltar el lock de esquema; se descarta la conexion.")
+            descartar = getattr(con, "descartar", None)
+            if descartar is not None:
+                descartar()
+            raise
+
+
+def _crear_esquema_bajo_lock(con: Any) -> None:
+    """Cuerpo real de `_crear_esquema` (DDL + migraciones); requiere el lock ya tomado."""
     # IMPORTANTE: la migracion del MODELO de turnos debe correr ANTES del DDL declarativo,
     # porque el DDL hoy declara `rota_turnos` con la NUEVA forma (con `fecha`/`franja`). Si
     # la BD vieja tiene una `rota_turnos` con el VIEJO esquema (cobertura), `CREATE TABLE IF
@@ -1495,6 +1541,13 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_contenido_plataforma(con)
     _migrar_columnas_video_composiciones(con)
     con.commit()
+    # Normalizacion de TIMESTAMPS TEXT al canon UTC-sin-offset (ver `tiempo.ahora_iso`):
+    # idempotente y best-effort, ANTES de los indices unicos (el de parrilla compara el
+    # texto crudo de `fecha_programada`; con formatos mixtos dos reservas iguales no chocan).
+    _normalizar_timestamps_texto(con)
+    # Limpieza de turnos duplicados ANTES del indice unico de rota (un CREATE UNIQUE INDEX
+    # sobre duplicados preexistentes fallaria y dejaria la tabla sin el constraint).
+    _dedup_turnos_rota(con)
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
     # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
     _crear_indices_unicos_idempotencia(con)
@@ -1617,6 +1670,12 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
             "UPDATE contenido_plataforma AS cp SET marca = c.marca "
             "FROM contenido AS c WHERE cp.contenido_id = c.id AND cp.marca <> c.marca"
         )
+    # Indice plano por `marca` (filtros del tablero/feed por marca denormalizada). Se crea AQUI
+    # (no en el DDL declarativo) porque en BDs viejas la columna `marca` la añade esta migracion:
+    # un CREATE INDEX en el DDL correria ANTES y reventaria ("column marca does not exist").
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_contenido_plataforma_marca ON contenido_plataforma (marca)"
+    )
 
 
 def _migrar_columnas_plantillas_diseno(con: Any) -> None:
@@ -1908,7 +1967,7 @@ def _migrar_modelo_turnos(con: Any) -> None:
             "FROM rota_turnos t LEFT JOIN rota_eventos e ON e.id = t.evento_id "
             "WHERE t.miembro_id IS NOT NULL AND t.miembro_id <> ''"
         ).fetchall()
-        ahora = datetime.now().isoformat(timespec="seconds")
+        ahora = ahora_iso()
         for fila in filas_cobertura:
             fecha = (fila["fecha"] or "").strip()
             if not fecha:
@@ -2656,6 +2715,108 @@ def _migrar_columnas_noticias_clusters(con: Any) -> None:
         if columna not in columnas:
             con.execute(f"ALTER TABLE noticias_clusters ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
+# --------------------------------------------------------------------------- #
+# Normalizacion de TIMESTAMPS TEXT al canon UTC-sin-offset (ver `tiempo.py`)    #
+# --------------------------------------------------------------------------- #
+#
+# Historicamente convivieron dos formatos en las MISMAS columnas TEXT: naive
+# "YYYY-MM-DDTHH:MM:SS" (el ~80%) y aware "...+00:00" (a veces con microsegundos). Como
+# estas columnas se comparan/ordenan LEXICOGRAFICAMENTE en SQL (poda de snapshots, keyset
+# del feed `c.creado < ?`, dedup por `creado >=`, el UNIQUE de parrilla sobre el texto de
+# `fecha_programada`), la mezcla rompia el orden. El canon es UTC SIN offset; aqui se
+# normalizan los valores YA almacenados (idempotente: tras normalizar, ningun patron casa).
+# Cada par es (tabla, columna, longitud_canon): 19 = segundos ("...THH:MM:SS"), 16 =
+# minutos ("...THH:MM", el canon de `fecha_programada`, que generan franjas/cadencias/UI).
+_COLUMNAS_TS_CANON: tuple[tuple[str, str, int], ...] = (
+    ("contenido", "creado", 19),
+    ("contenido", "actualizado", 19),
+    ("contenido_plataforma", "creado", 19),
+    ("contenido_plataforma", "actualizado", 19),
+    ("contenido_plataforma", "preparado_en", 19),
+    ("contenido_plataforma", "fecha_programada", 16),
+    ("metricas_pieza_snapshots", "ts", 19),
+    ("comercial_snapshots", "ts", 19),
+)
+
+# Valor ISO naive con fraccion de segundo (microsegundos de `isoformat()` sin timespec).
+_RE_TS_NAIVE_FRACCION = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+$"
+# Valor ISO con zona explicita (+HH:MM/-HH:MM/Z), con o sin segundos/fraccion. El patron
+# es ESTRICTO a proposito: solo castea a timestamptz lo que seguro parsea (un valor
+# malformado no casa y se deja tal cual, sin reventar la migracion).
+_RE_TS_CON_ZONA = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?([+-]\d{2}:\d{2}|Z)$"
+
+
+def _normalizar_timestamps_texto(con: Any) -> None:
+    """Normaliza al canon (UTC sin offset) los timestamps TEXT ya almacenados (idempotente).
+
+    Dos pasadas por columna, ambas acotadas por regex estrictas (solo toca lo que casa):
+      1. naive con MICROSEGUNDOS -> truncado por texto a la longitud canon.
+      2. con ZONA (+HH:MM/Z) -> cast a `timestamptz`, conversion a UTC y re-formateo
+         sin offset (asi un hipotetico "-06:00" tambien queda bien, no solo "+00:00").
+    Best-effort: un fallo se loguea y NO tumba el arranque (rollback y se sigue); la
+    columna quedaria mixta hasta el proximo arranque, igual que antes del fix.
+    """
+    for tabla, col, largo in _COLUMNAS_TS_CANON:
+        if not _tabla_existe(con, tabla):
+            continue
+        formato = "YYYY-MM-DD\"T\"HH24:MI:SS" if largo == 19 else "YYYY-MM-DD\"T\"HH24:MI"
+        try:
+            con.execute(
+                f"UPDATE {tabla} SET {col} = left({col}, ?) WHERE {col} ~ ?",  # noqa: S608 -- allowlist fija
+                (largo, _RE_TS_NAIVE_FRACCION),
+            )
+            # `fecha_programada` (canon minutos): tambien recorta los naive con segundos.
+            if largo == 16:
+                con.execute(
+                    f"UPDATE {tabla} SET {col} = left({col}, 16) "  # noqa: S608 -- allowlist fija
+                    f"WHERE {col} ~ ?",
+                    (r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$",),
+                )
+            con.execute(
+                f"UPDATE {tabla} SET {col} = "  # noqa: S608 -- allowlist fija
+                f"to_char(({col})::timestamptz AT TIME ZONE 'UTC', ?) "
+                f"WHERE {col} ~ ?",
+                (formato, _RE_TS_CON_ZONA),
+            )
+            con.commit()
+        except Exception:  # noqa: BLE001 -- best-effort: no tumbar el arranque por una columna
+            _log.warning(
+                "No se pudo normalizar el timestamp %s.%s al canon UTC.", tabla, col,
+                exc_info=True,
+            )
+            try:
+                con.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _dedup_turnos_rota(con: Any) -> None:
+    """Borra turnos DUPLICADOS en `rota_turnos` (misma marca/semana/fecha/miembro/franja).
+
+    Limpieza previa al indice unico `idx_rota_turnos_uniq`: el check-then-insert historico
+    del endpoint permitia duplicar un turno bajo carrera; un CREATE UNIQUE INDEX sobre esos
+    duplicados fallaria. Conserva el turno MAS ANTIGUO (menor `(creado, id)`) de cada grupo
+    y solo considera turnos con miembro asignado (el indice es parcial: `miembro_id <> ''`).
+    Best-effort e idempotente.
+    """
+    if not _tabla_existe(con, "rota_turnos"):
+        return
+    try:
+        con.execute(
+            "DELETE FROM rota_turnos a USING rota_turnos b "
+            "WHERE a.miembro_id <> '' AND a.marca = b.marca AND a.semana = b.semana "
+            "AND a.fecha = b.fecha AND a.miembro_id = b.miembro_id "
+            "AND a.franja_id = b.franja_id AND (a.creado, a.id) > (b.creado, b.id)"
+        )
+        con.commit()
+    except Exception:  # noqa: BLE001 -- best-effort: el indice unico avisara si quedan duplicados
+        _log.warning("No se pudieron deduplicar los turnos de rota.", exc_info=True)
+        try:
+            con.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 # Indices UNICOS que dan idempotencia a tres tablas que hoy se duplican (mismo grupo/franja/
 # fuente insertados dos veces). Se crean DEFENSIVAMENTE (no en el DDL declarativo): una BD
 # productiva PUEDE tener ya duplicados, y un `CREATE UNIQUE INDEX` sobre datos duplicados
@@ -2698,6 +2859,15 @@ _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
         "idx_parrilla_slot_uniq",
         "contenido_plataforma (marca, red, fecha_programada) "
         "WHERE estado = 'programado' AND fecha_programada <> ''",
+    ),
+    # ROTA — turnos duplicables (check-then-insert sin constraint): dos peticiones simultaneas
+    # pasaban ambas el pre-check del endpoint e insertaban el MISMO turno. El indice parcial
+    # (solo turnos con miembro asignado: los huecos sin miembro no chocan entre si) convierte
+    # la carrera en IntegrityError, que el endpoint traduce a 409. La limpieza de duplicados
+    # previos vive en `_dedup_turnos_rota` (corre justo antes de crear estos indices).
+    (
+        "idx_rota_turnos_uniq",
+        "rota_turnos (marca, semana, fecha, miembro_id, franja_id) WHERE miembro_id <> ''",
     ),
 )
 

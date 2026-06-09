@@ -18,8 +18,8 @@ from ._db_comun import (
     IntegrityError,
     _conectar,
     _sembrar_franjas_por_defecto_en,
+    ahora_iso,
     date,
-    datetime,
     timedelta,
     uuid,
 )
@@ -103,7 +103,7 @@ def crear_evento_rota(
     Nace `cambiado=0` (sin reprogramar) y con `actualizado`=`creado` (alta = primera version).
     `marca` es el id canonico de la marca a la que pertenece el evento ("" = sin marca asignada).
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "titulo": titulo,
@@ -220,7 +220,7 @@ def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, 
     elif "cambiado" in campos and campos["cambiado"]:
         nuevo_cambiado = 1
 
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("cambiado = ?")
     asignaciones.append("actualizado = ?")
@@ -345,7 +345,7 @@ def crear_turno_rota(
             franja_id = mapa.get(_NOMBRE_FRANJA_TARDE, "")
         elif franja_norm == "descanso":
             franja_id = mapa.get(_NOMBRE_FRANJA_DESCANSO, "")
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "semana": semana,
@@ -444,7 +444,7 @@ def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, An
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(ahora_iso())
     params.append(turno_id)
     con = _conectar()
     try:
@@ -506,7 +506,7 @@ def aprobar_semana_rota(semana: str, marca: str | None = None) -> int:
     GRID POR MARCA: con `marca` aprueba SOLO la rejilla de esa marca; `None` aprueba todas
     (la API exige marca concreta — aprobar en "Todas" no tiene sentido). Idempotente.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     clausulas = ["semana = ?"]
     params: list[Any] = [ESTADO_ROTA_APROBADO, ahora, semana]
     if marca:
@@ -530,7 +530,7 @@ def desaprobar_semana_rota(semana: str, marca: str | None = None) -> int:
     Inverso de `aprobar_semana_rota`. GRID POR MARCA: con `marca` revierte SOLO esa rejilla.
     Idempotente.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     clausulas = ["semana = ?"]
     params: list[Any] = [ESTADO_ROTA_PROPUESTO, ahora, semana]
     if marca:
@@ -560,7 +560,7 @@ def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]
     """
     if not turnos:
         return []
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     filas: list[dict[str, Any]] = []
     for entrada in turnos:
         estado = entrada.get("estado") or ESTADO_ROTA_PROPUESTO
@@ -666,7 +666,7 @@ def crear_ausencia_rota(
     motivo: str = "",
 ) -> dict[str, Any]:
     """Inserta una ausencia (rango inclusivo) y la devuelve. NO valida (lo hace la API)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "miembro_id": miembro_id or "",
@@ -874,7 +874,7 @@ def crear_programa_rota(
     garantiza la capa API antes de llegar aqui (un INSERT chocaria con el UNIQUE del
     DDL en caso de duplicado exacto).
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "nombre": nombre,
@@ -946,7 +946,7 @@ def actualizar_programa_rota(
         return obtener_programa_rota(programa_id)
     if "activo" in cambios:
         cambios["activo"] = 1 if cambios["activo"] else 0
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, programa_id]
@@ -1338,7 +1338,7 @@ def guardar_franjas_config(
     GRID POR MARCA: `rota_config_franjas.id` guarda el id de la marca; sin marca cae al
     singleton `'default'`. Cada marca define los rangos por defecto de su rejilla.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     clave = marca or "default"
     con = _conectar()
     try:
@@ -1390,7 +1390,7 @@ def crear_swap_turno(
 
     GRID POR MARCA: `marca` es la rejilla del swap (denormalizada del turno A por la API).
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "solicitante_id": solicitante_id or "",
@@ -1498,7 +1498,7 @@ def actualizar_swap_turno(
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(ahora_iso())
     params.append(swap_id)
     con = _conectar()
     try:
@@ -1556,7 +1556,7 @@ def aplicar_swap_turno(
         coinciden con lo solicitado en este momento,
       - None si el `swap_id` no existe.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     con = _conectar()
     try:
         # 1) El swap debe existir. Lo BLOQUEAMOS (`FOR UPDATE`) para serializar dos aplicaciones
@@ -1695,7 +1695,7 @@ def actualizar_turnos_rota_lote(
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(ahora_iso())
     marcadores = ", ".join("?" for _ in ids)
     sql_update = (
         f"UPDATE rota_turnos SET {', '.join(asignaciones)} "
@@ -1789,7 +1789,7 @@ def copiar_turnos_rota(
             (de_lunes, marca) if marca else (de_lunes,),
         ).fetchall()
         creadas = 0
-        ahora = datetime.now().isoformat(timespec="seconds")
+        ahora = ahora_iso()
         marcadores = ", ".join("?" for _ in _COLS_TURNO_ROTA)
         for f in filas:
             fila = _fila_a_turno_rota(f)
@@ -1818,12 +1818,15 @@ def copiar_turnos_rota(
                 # GRID POR MARCA: el clon hereda la marca de la rejilla copiada (o la del origen).
                 "marca": marca_val or fila.get("marca", ""),
             }
-            con.execute(
-                f"INSERT INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) "
+            # OR IGNORE: con el indice unico `idx_rota_turnos_uniq` una RE-COPIA sobre la
+            # misma semana (sin `reemplazar`) chocaria con los turnos ya copiados; antes
+            # duplicaba en silencio, ahora el duplicado se salta y se cuenta solo lo insertado.
+            cur = con.execute(
+                f"INSERT OR IGNORE INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) "
                 f"VALUES ({marcadores})",
                 tuple(nuevo[col] for col in _COLS_TURNO_ROTA),
             )
-            creadas += 1
+            creadas += cur.rowcount if (cur.rowcount or 0) > 0 else 0
         con.commit()
     finally:
         con.close()
@@ -1890,7 +1893,7 @@ def actualizar_coordinador_rota(
     GRID POR MARCA: `marca` es la rejilla de la celda (la `franja_id` ya es propia de una
     marca; `marca` se denormaliza para filtrar/etiquetar sin join).
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     con = _conectar()
     try:
         fila_existente = con.execute(

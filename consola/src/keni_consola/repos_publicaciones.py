@@ -1,6 +1,8 @@
 """Repositorio — dominio publicaciones. Implementación de repos.py (ver barrel `repos.py`)."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ._repos_comun import (
     Any,
     Iterator,
@@ -59,7 +61,7 @@ def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def listar_publicaciones(
-    marca: str | None = None,
+    marca: str | Sequence[str] | None = None,
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
@@ -69,6 +71,8 @@ def listar_publicaciones(
     desplazamiento: int | None = None,
     cursor: tuple[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    # `marca` admite varias (secuencia -> `IN (...)` en SQL): el foco multi-marca del feed
+    # se empuja al repo para que el keyset pagine bien (antes se post-filtraba en memoria).
     return db.listar_publicaciones(
         marca=marca,
         red=red,
@@ -82,7 +86,7 @@ def listar_publicaciones(
 
 
 def contar_publicaciones(
-    marca: str | None = None,
+    marca: str | Sequence[str] | None = None,
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
@@ -98,9 +102,16 @@ def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
 
 
 def actualizar_publicacion(
-    publicacion_id: str, campos: dict[str, Any]
+    publicacion_id: str,
+    campos: dict[str, Any],
+    *,
+    estado_esperado: str | None = None,
 ) -> dict[str, Any] | None:
-    return db.actualizar_publicacion(publicacion_id, campos)
+    # `estado_esperado` (opcional): CAS sobre el estado actual; si otro flujo movio la pieza
+    # entre el snapshot del caller y esta escritura, devuelve None sin tocar nada.
+    return db.actualizar_publicacion(
+        publicacion_id, campos, estado_esperado=estado_esperado
+    )
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:

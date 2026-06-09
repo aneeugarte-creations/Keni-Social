@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from ._db_comun import (
+    ahora_iso,
     Any,
     _conectar,
     date,
-    datetime,
     json,
     uuid,
 )
@@ -88,7 +88,7 @@ def crear_publicacion_comercial(
     hace la API contra sus allowlists). `aviso_en` nace vacio; se rellena la primera vez
     que el valor supera el objetivo.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "url": url,
@@ -180,7 +180,7 @@ def actualizar_publicacion_comercial(
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("fecha_actualizacion = ?")
     params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(ahora_iso())
     params.append(publicacion_id)
     con = _conectar()
     try:
@@ -258,14 +258,24 @@ _COLS_SNAPSHOT_LECTURA: tuple[str, ...] = (
     *_METRICAS_GRANULARES_SNAPSHOT,
 )
 _SELECT_SNAPSHOT = ", ".join(_COLS_SNAPSHOT_LECTURA)
+# Alias PUBLICO: `db_metricas` (modulo hermano del dominio) consume este select; importar
+# un nombre con guion bajo entre modulos era un contrato privado encubierto.
+SELECT_SNAPSHOT = _SELECT_SNAPSHOT
 
 
-def _fila_a_snapshot(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `comercial_snapshots` en un dict (ts texto, resto enteros)."""
+def fila_a_snapshot(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `comercial_snapshots` en un dict (ts texto, resto enteros).
+
+    PUBLICA: la consume tambien `db_metricas` (las series comerciales comparten forma).
+    """
     snap: dict[str, Any] = {"ts": fila["ts"]}
     for col in _COLS_SNAPSHOT_LECTURA[1:]:
         snap[col] = int(fila[col] or 0)
     return snap
+
+
+# Alias privado retrocompat (call sites internos historicos de este modulo).
+_fila_a_snapshot = fila_a_snapshot
 
 
 def registrar_snapshot_comercial(
@@ -362,7 +372,7 @@ def crear_campania_comercial(
     activa: bool = True,
 ) -> dict[str, Any]:
     """Inserta una campaña comercial (multimarca) y la devuelve. NO valida (lo hace `campanias.py`)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "marcas": json.dumps(list(marcas), ensure_ascii=False),
@@ -435,7 +445,7 @@ def actualizar_campania_comercial(
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("fecha_actualizacion = ?")
     params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(ahora_iso())
     params.append(campania_id)
     con = _conectar()
     try:

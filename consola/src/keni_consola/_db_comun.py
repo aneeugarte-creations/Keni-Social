@@ -98,11 +98,16 @@ from .estados import (
     TIPOS_CONTENIDO,
 )
 from .motor_db import IntegrityError
+from .tiempo import ahora_iso, iso_utc
 
 _log = logging.getLogger("keni_consola.db")
 
+# NOTA (__all__): solo la API real de la fundacion de persistencia. Antes re-exportaba
+# tambien los modulos/clases de stdlib que este modulo importa para si (`json`, `logging`,
+# `datetime`, `uuid`, `date`, `timedelta`, `annotations`, `Any`, `UTC`, `config`, `redes`);
+# los submodulos `db_<dominio>` que los importaban explicitamente siguen funcionando (un
+# import explicito no depende de __all__), pero dejan de anunciarse como API publica.
 __all__ = [
-    'Any',
     'CLASE_CONTENIDO',
     'DECISION_APROBADO',
     'DECISION_PENDIENTE',
@@ -128,7 +133,6 @@ __all__ = [
     'TIPOS_CONTENIDO',
     'TIPO_COBERTURA_TRANSMISION',
     'TIPO_CONTENIDO_DEFECTO',
-    'UTC',
     '_COLUMNAS_APROBACIONES_AMPLIADAS',
     '_COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS',
     '_COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS',
@@ -186,16 +190,9 @@ __all__ = [
     '_parsear_hora_a_minutos',
     '_sembrar_franjas_por_defecto_en',
     '_tabla_existe',
-    'annotations',
+    'ahora_iso',
     'arrancar_persistencia',
     'conectar',
-    'config',
-    'date',
-    'datetime',
-    'json',
+    'iso_utc',
     'lock_barrido',
-    'logging',
-    'redes',
-    'timedelta',
-    'uuid',
 ]

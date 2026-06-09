@@ -128,3 +128,36 @@ def test_url_match_aislado_por_marca(entorno):
         db.existe_publicado_similar("clarosports", "x", url="https://medio.com/final")
         is True
     )
+
+
+# --------------------------------------------------------------------------- #
+# Cache por marca para el barrido (una lectura por marca, N candidatos)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_cache_equivale_a_la_consulta_directa(entorno):
+    """`publicados_marca_cache` + `existe_publicado_similar_en_cache` da el mismo veredicto
+    que `existe_publicado_similar`, pero leyendo la BD UNA vez por marca (no por candidato)."""
+    _publicar("unotv", "El América gana el clásico", url_fuente="https://uno.tv/nota?utm=x")
+    cache = db.publicados_marca_cache("unotv")
+
+    # (a) por titulo (exacto/fuzzy)
+    assert db.existe_publicado_similar_en_cache(cache, "el america GANA el clasico") is True
+    assert db.existe_publicado_similar_en_cache(cache, "Clima en CDMX mañana") is False
+    # (b) por URL canonica (la señal mas fuerte)
+    assert db.existe_publicado_similar_en_cache(cache, "Otro titulo", "https://uno.tv/nota") is True
+    # Mismo veredicto que el camino directo:
+    assert db.existe_publicado_similar("unotv", "el america GANA el clasico") is True
+    assert db.existe_publicado_similar("unotv", "Clima en CDMX mañana") is False
+
+
+def test_cache_es_puro_y_no_toca_la_bd(entorno):
+    """Cruzar candidatos contra el cache NO abre conexiones: publicar algo DESPUES de
+    construir el cache no cambia el veredicto (es un snapshot)."""
+    _publicar("unotv", "Primera nota publicada")
+    cache = db.publicados_marca_cache("unotv")
+    _publicar("unotv", "Segunda nota publicada despues del snapshot")
+    assert db.existe_publicado_similar_en_cache(cache, "Primera nota publicada") is True
+    # La segunda solo la ve la consulta directa, no el snapshot.
+    assert db.existe_publicado_similar_en_cache(cache, "Segunda nota publicada despues del snapshot") is False
+    assert db.existe_publicado_similar("unotv", "Segunda nota publicada despues del snapshot") is True

@@ -68,14 +68,29 @@ IntegrityError = sqlite3.IntegrityError
 # --------------------------------------------------------------------------- #
 
 
-_RE_MARCADOR = re.compile(r"\?")
 _RE_INSERT_OR_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.IGNORECASE)
+
+
+def _sustituir_marcadores(sql: str) -> str:
+    """Sustituye `?` -> `%s` SOLO fuera de literales de string (comillas simples).
+
+    Un `?` dentro de un literal (p. ej. el cuantificador de una REGEX pasada inline en el
+    SQL) NO es un marcador y corromperia la sentencia si se tradujera. Partimos por `'`:
+    los segmentos PARES estan fuera de comillas (se traduce) y los IMPARES dentro (se
+    respeta). El escape SQL `''` (comilla duplicada) produce segmentos vacios que alternan
+    la paridad de forma correcta, asi que tambien se maneja bien.
+    """
+    partes = sql.split("'")
+    for i in range(0, len(partes), 2):
+        partes[i] = partes[i].replace("?", "%s")
+    return "'".join(partes)
 
 
 def _traducir_sql(sql: str) -> str:
     """Normaliza SQL de dialecto SQLite a Postgres (solo marcadores y OR IGNORE).
 
-    - `?` -> `%s` (psycopg usa %s para parametros posicionales).
+    - `?` -> `%s` (psycopg usa %s para parametros posicionales), respetando los
+      literales de string (un `?` entre comillas simples NO se toca).
     - `INSERT OR IGNORE INTO t (...)` -> `INSERT INTO t (...) ... ON CONFLICT DO NOTHING`.
 
     El `ON CONFLICT DO NOTHING` se ANEXA al final (Postgres lo admite tras los VALUES) en
@@ -86,7 +101,7 @@ def _traducir_sql(sql: str) -> str:
     tenia_or_ignore = bool(_RE_INSERT_OR_IGNORE.search(sql))
     if tenia_or_ignore:
         sql = _RE_INSERT_OR_IGNORE.sub("INSERT", sql)
-    sql = _RE_MARCADOR.sub("%s", sql)
+    sql = _sustituir_marcadores(sql)
     if tenia_or_ignore:
         sql = sql.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
     return sql
@@ -137,14 +152,56 @@ class _ConexionPg:
         cur = self._con.cursor(row_factory=self._dict_row)
         try:
             cur.execute(_traducir_sql(sql), tuple(params))
-        except psycopg.errors.UniqueViolation as e:
-            # Mapeo a la excepcion neutra que captura auth.
+        except (
+            # TODAS las violaciones de integridad (UNIQUE/PK, FK, NOT NULL, CHECK) se mapean a
+            # la excepcion neutra: antes solo UniqueViolation y las demas salian como psycopg
+            # crudo, que ningun call site capturaba (500 en vez de un error de dominio).
+            psycopg.errors.UniqueViolation,
+            psycopg.errors.ForeignKeyViolation,
+            psycopg.errors.NotNullViolation,
+            psycopg.errors.CheckViolation,
+        ) as e:
             self._con.rollback()
             raise IntegrityError(str(e)) from e
         return _CursorPg(cur)
 
     def commit(self) -> None:
         self._con.commit()
+
+    def rollback(self) -> None:
+        """Deshace la transaccion abierta (para migraciones defensivas que absorben fallos).
+
+        Los call sites historicos no lo usan (el shim hace rollback solo al mapear una
+        violacion de integridad), pero las migraciones best-effort de `_db_core` lo
+        necesitan: tras un fallo NO mapeado la transaccion queda abortada y, sin rollback,
+        envenenaria todas las sentencias siguientes de la misma conexion.
+        """
+        self._con.rollback()
+
+    def descartar(self) -> None:
+        """DESCARTA la conexion (cierra el socket) en vez de devolverla sana al pool.
+
+        Para conexiones cuyo ESTADO DE SESION quedo sucio sin remedio: p. ej. un advisory
+        lock de sesion que no se pudo soltar (`lock_barrido`/lock de esquema). Devolver esa
+        conexion al pool dejaria el lock pegado y todos los `pg_try_advisory_lock` futuros
+        devolverian False hasta el reciclado (~1 h): el single-flight quedaria envenenado.
+        Cerrar el socket libera los locks de sesion en el servidor; `putconn` de una
+        conexion CERRADA hace que el pool la deseche y reponga una fresca. Idempotente, y
+        deja `close()` posterior como no-op.
+        """
+        pool, self._pool = self._pool, None
+        con, self._con = self._con, None
+        if con is None:
+            return
+        try:
+            con.close()
+        except Exception:  # noqa: BLE001 -- cerrar es best-effort
+            pass
+        if pool is not None:
+            try:
+                pool.putconn(con)  # cerrada -> el pool la descarta y repone
+            except Exception:  # noqa: BLE001 -- descartar es best-effort
+                pass
 
     def close(self) -> None:
         """Cierra la conexion. Si vino del pool, la DEVUELVE; si no, cierra el socket.

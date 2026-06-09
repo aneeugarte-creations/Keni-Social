@@ -6,13 +6,16 @@ from ._db_comun import (
     _conectar,
     config,
     datetime,
+    iso_utc,
     json,
     timedelta,
     uuid,
 )
 from .db_comercial import (
-    _SELECT_SNAPSHOT,
-    _fila_a_snapshot,
+    SELECT_SNAPSHOT as _SELECT_SNAPSHOT,
+)
+from .db_comercial import (
+    fila_a_snapshot as _fila_a_snapshot,
 )
 
 # --- Tope de puntos de las series temporales (Item: límite/downsampling) ----- #
@@ -168,7 +171,9 @@ def registrar_snapshot_pieza(
         *(col for col, _ in _METRICAS_PIEZA_SNAPSHOT),
     )
     valores = [
-        uuid.uuid4().hex[:12],
+        # hex COMPLETO (32): esta tabla acumula una fila por pieza por refresco (volumen alto
+        # y sostenido); con hex[:12] el riesgo de colision de id dejaba de ser teorico.
+        uuid.uuid4().hex,
         pieza_id,
         marca or "",
         red or "",
@@ -284,7 +289,10 @@ def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
         corte = datetime.fromisoformat(ahora_iso) - timedelta(days=retencion_dias)
     except (TypeError, ValueError):
         return 0
-    corte_iso = corte.isoformat()
+    # Corte en el CANON (UTC sin offset, segundos): el `ts` comparado es TEXT y la
+    # comparacion es lexicografica; un corte con "+00:00"/microsegundos (segun lo que
+    # pasara el llamante) ordenaba mal contra los ts canonicos y podaba de menos/mas.
+    corte_iso = iso_utc(corte)
     con = _conectar()
     try:
         cur = con.execute(

@@ -102,6 +102,15 @@ def listar_contenido(
     )
 
 
+def listar_contenido_vencido(hoy: str) -> list[dict[str, Any]]:
+    """Items con `fecha_entrega` vencida y estado no terminal (filtro en SQL). Delegado en `db.py`.
+
+    Para el barrido de vencimientos (`eventos_scanner`): antes traia el tablero ENTERO y
+    filtraba en Python en cada barrido.
+    """
+    return db.listar_contenido_vencido(hoy)
+
+
 def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     """Títulos del contenido reciente de una marca (dedup del pipeline). Delegado en `db.py`."""
     return db.titulos_recientes_marca(marca, desde_iso)
@@ -232,8 +241,10 @@ def crear_contenido_plataforma(
 
 def listar_contenido_plataforma(
     contenido_id: str | None = None,
+    marca: str | None = None,
 ) -> list[dict[str, Any]]:
-    return db.listar_contenido_plataforma(contenido_id)
+    # `marca` (denormalizada) empuja al SQL el filtro que el tablero aplicaba en memoria.
+    return db.listar_contenido_plataforma(contenido_id, marca=marca)
 
 
 def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:

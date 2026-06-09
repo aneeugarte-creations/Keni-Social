@@ -50,6 +50,7 @@ from typing import Any
 
 from . import config, marcas, repos
 from .estados import ESTADO_PROGRAMADO
+from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.programador")
 
@@ -298,15 +299,21 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         `programado`. Comportamiento identico al anterior al enganche.
       - ON: construye el borrador, resuelve las creds de la marca y llama al
         adaptador con `dry_run=False`. Si Metricool acepta el post, la pieza pasa
-        a `publicado` y se guarda `id_post_metricool`. Si hay cualquier error
-        (creds faltantes, fallo de red, red no soportada), se loguea y la pieza
-        SIGUE en `programado` con `preparado_en` estampado (no rompe el barrido).
+        a `publicado` y se guarda `id_post_metricool`. Errores de CONFIGURACION
+        (creds faltantes, red no soportada, borrador inviable) se loguean y la pieza
+        SIGUE en `programado` con `preparado_en` estampado (no rompe el barrido;
+        reintentar cada minuto no arregla una config rota). Un fallo de ENTREGA
+        (excepcion de red/auth contra Metricool) LIMPIA `preparado_en` para que el
+        siguiente barrido la reintente: antes quedaba estampada y `piezas_vencidas`
+        la excluia PARA SIEMPRE (pieza programada que nunca salia, en silencio).
     """
     # Gate maestro + excepción por marca: el maestro global debe estar ON y la marca NO excluida.
     marca_id = pub.get("marca") or ""
     publicar_real_flag = config.publicar_real_para(marca_id)
 
-    campos_base: dict[str, Any] = {"preparado_en": ahora.isoformat(timespec="seconds")}
+    # Canon UTC sin offset (ver `tiempo.py`): antes `ahora.isoformat()` de un datetime aware
+    # estampaba "+00:00", que rompia el orden lexicografico contra los timestamps naive.
+    campos_base: dict[str, Any] = {"preparado_en": iso_utc(ahora)}
 
     if not publicar_real_flag:
         # DRY-RUN (maestro OFF o marca excluida): comportamiento original intacto.
@@ -340,11 +347,21 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         adaptador = AdaptadorPublicacionMetricool(creds=creds)
         resultado = adaptador.programar(borrador, dry_run=False, ahora=ahora)  # type: ignore[arg-type]
     except Exception:  # noqa: BLE001 -- cualquier fallo de red/auth no mata el barrido
+        # FALLO DE ENTREGA (transitorio: red caida, 5xx de Metricool, auth rota): LIBERAR el
+        # claim limpiando `preparado_en`, para que el siguiente barrido (cada ~60 s) la vuelva
+        # a intentar. Si quedara estampado, `piezas_vencidas` la excluiria PARA SIEMPRE y la
+        # pieza moriria en `programado` sin publicarse ni avisar. El error queda en el log de
+        # cada intento (visible); no se cuenta como preparada (return None).
         _log.exception(
-            "Pieza %r: fallo al enviar a Metricool; se prepara en dry-run y sigue en 'programado'.",
+            "Pieza %r: fallo al enviar a Metricool; se libera la preparacion y se "
+            "reintentara en el proximo barrido.",
             pub_id,
         )
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        try:
+            repos.actualizar_publicacion(pub_id, {"preparado_en": ""})
+        except Exception:  # noqa: BLE001 -- si ni esto entra, el log ya dejo rastro
+            _log.exception("Pieza %r: no se pudo liberar la preparacion.", pub_id)
+        return None
 
     # Metricool acepto el post: marcar como publicado.
     id_post = resultado.id_post or ""
@@ -440,7 +457,9 @@ def programar_pieza_metricool(
     repos.actualizar_publicacion(
         pub["id"],
         {
-            "preparado_en": ahora.isoformat(timespec="seconds"),
+            # Canon UTC sin offset (ver `tiempo.py`): `ahora` es aware; isoformat directo
+            # estamparia "+00:00" y romperia el orden lexicografico del TEXT.
+            "preparado_en": iso_utc(ahora),
             "estado": "publicado",
             "id_post_metricool": id_post,
         },
@@ -455,7 +474,8 @@ def preparar_vencidas(ahora: datetime | None = None) -> int:
     Lee SOLO las piezas en estado `programado` (filtro en el indice), no todo el catalogo.
     """
     ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
-    ts = ahora.isoformat(timespec="seconds")
+    # Canon UTC sin offset (ver `tiempo.py`): el claim `preparado_en` se compara como TEXT.
+    ts = iso_utc(ahora)
     programadas = repos.listar_publicaciones(estado=ESTADO_PROGRAMADO)
     preparadas = 0
     for pub in piezas_vencidas(programadas, ahora):

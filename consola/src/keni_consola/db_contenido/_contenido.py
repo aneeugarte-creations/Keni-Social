@@ -8,8 +8,10 @@ from .._db_comun import (
     PRIORIDADES_EVENTO,
     TIPO_CONTENIDO_DEFECTO,
     TIPOS_CONTENIDO,
+    UTC,
     Any,
     _conectar,
+    ahora_iso,
     datetime,
     redes,
     timedelta,
@@ -24,9 +26,12 @@ __all__ = [
     "_entero_no_negativo",
     "crear_contenido",
     "listar_contenido",
+    "listar_contenido_vencido",
     "titulos_recientes_marca",
     "contar_contenido_origen_desde",
     "existe_publicado_similar",
+    "publicados_marca_cache",
+    "existe_publicado_similar_en_cache",
     "obtener_contenido",
     "actualizar_contenido",
     "borrar_contenido",
@@ -180,60 +185,95 @@ def crear_contenido(
     `clase` distingue un contenido publicable (con filas por plataforma) de una tarea libre
     del equipo (`tarea`, sin plataformas). `id`/`creado`/`actualizado` se pueden pasar para
     PRESERVAR identidad al migrar datos legados; si van vacios se generan.
+
+    El nucleo (construir fila + INSERT sin commit) vive en `_fila_contenido_nueva` /
+    `_insertar_contenido`, reutilizables por los lotes transaccionales (todo-o-nada).
     """
-    autor = autor or {}
-    responsable = responsable or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
-    fila = {
-        "id": id or uuid.uuid4().hex[:12],
-        "clase": clase if clase in ("contenido", "tarea") else CLASE_CONTENIDO,
-        "flujo": flujo or "",
-        "titulo": titulo or "",
-        "descripcion": descripcion or "",
-        "marca": marca or "",
-        "evento_id": evento_id or "",
-        "programa": programa or "",
-        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_CONTENIDO_DEFECTO,
-        "estado": estado if estado in ESTADOS_CONTENIDO else "pendiente",
-        "fecha_objetivo": fecha_objetivo or "",
-        "hora_objetivo": hora_objetivo or "",
-        "fecha_entrega": fecha_entrega or "",
-        "responsable_id": responsable.get("id", "") or "",
-        "responsable_nombre": responsable.get("usuario", "") or "",
-        "autor_id": autor.get("id", "") or "",
-        "autor_nombre": autor.get("usuario", "") or "",
-        "origen": origen or "",
-        "notas": notas or "",
-        "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
-        # FORMATO de la pieza (foto|video): decide las redes destino (`redes.redes_de_formato`).
-        # Se normaliza (vacío/desconocido -> 'foto') para no persistir valores fuera de catálogo.
-        "formato": redes.normalizar_formato(formato),
-        # id de Metricool a nivel pieza (Item C): acceso directo opcional para el cruce
-        # métricas↔contenido; el id real por red sigue en `contenido_plataforma`. Legado -> "".
-        "id_post_metricool": id_post_metricool or "",
-        # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
-        "senal_viralidad": _entero_no_negativo(senal_viralidad),
-        # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras cribar la nota).
-        "qa_veredicto": qa_veredicto or "",
-        "qa_hallazgos": qa_hallazgos or "",
-        "copy_pendiente": copy_pendiente or "",
-        "fecha_fuente": fecha_fuente or "",
-        # URL de la nota de origen (Investigador F3): la conserva la pieza para el dedup por URL.
-        "url_fuente": url_fuente or "",
-        "creado": creado or ahora,
-        "actualizado": actualizado or ahora,
-    }
+    fila = _fila_contenido_nueva(
+        clase=clase, flujo=flujo, titulo=titulo, descripcion=descripcion, marca=marca,
+        evento_id=evento_id, programa=programa, prioridad=prioridad, estado=estado,
+        fecha_objetivo=fecha_objetivo, hora_objetivo=hora_objetivo,
+        fecha_entrega=fecha_entrega, autor=autor, responsable=responsable, origen=origen,
+        notas=notas, tipo_contenido=tipo_contenido, formato=formato,
+        id_post_metricool=id_post_metricool, senal_viralidad=senal_viralidad,
+        qa_veredicto=qa_veredicto, qa_hallazgos=qa_hallazgos,
+        copy_pendiente=copy_pendiente, fecha_fuente=fecha_fuente, url_fuente=url_fuente,
+        creado=creado, actualizado=actualizado, id=id,
+    )
     con = _conectar()
     try:
-        marcadores = ", ".join("?" for _ in _COLS_CONTENIDO)
-        con.execute(
-            f"INSERT INTO contenido ({', '.join(_COLS_CONTENIDO)}) VALUES ({marcadores})",
-            tuple(fila[col] for col in _COLS_CONTENIDO),
-        )
+        _insertar_contenido(con, fila)
         con.commit()
     finally:
         con.close()
     return fila
+
+
+def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
+    """Construye la fila NORMALIZADA de un `contenido` nuevo (defaults + allowlists).
+
+    Nucleo puro de `crear_contenido` (mismos kwargs y misma normalizacion), separado para
+    que los lotes transaccionales construyan filas sin insertar. No toca la BD.
+    """
+    autor = campos.get("autor") or {}
+    responsable = campos.get("responsable") or {}
+    ahora = ahora_iso()
+    clase = campos.get("clase") or CLASE_CONTENIDO
+    prioridad = campos.get("prioridad") or PRIORIDAD_CONTENIDO_DEFECTO
+    estado = campos.get("estado") or "pendiente"
+    tipo_contenido = campos.get("tipo_contenido") or TIPO_CONTENIDO_DEFECTO
+    return {
+        "id": campos.get("id") or uuid.uuid4().hex[:12],
+        "clase": clase if clase in ("contenido", "tarea") else CLASE_CONTENIDO,
+        "flujo": campos.get("flujo") or "",
+        "titulo": campos.get("titulo") or "",
+        "descripcion": campos.get("descripcion") or "",
+        "marca": campos.get("marca") or "",
+        "evento_id": campos.get("evento_id") or "",
+        "programa": campos.get("programa") or "",
+        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_CONTENIDO_DEFECTO,
+        "estado": estado if estado in ESTADOS_CONTENIDO else "pendiente",
+        "fecha_objetivo": campos.get("fecha_objetivo") or "",
+        "hora_objetivo": campos.get("hora_objetivo") or "",
+        "fecha_entrega": campos.get("fecha_entrega") or "",
+        "responsable_id": responsable.get("id", "") or "",
+        "responsable_nombre": responsable.get("usuario", "") or "",
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "origen": campos.get("origen") or "",
+        "notas": campos.get("notas") or "",
+        "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
+        # FORMATO de la pieza (foto|video): decide las redes destino (`redes.redes_de_formato`).
+        # Se normaliza (vacío/desconocido -> 'foto') para no persistir valores fuera de catálogo.
+        "formato": redes.normalizar_formato(campos.get("formato") or redes.FORMATO_FOTO),
+        # id de Metricool a nivel pieza (Item C): acceso directo opcional para el cruce
+        # métricas↔contenido; el id real por red sigue en `contenido_plataforma`. Legado -> "".
+        "id_post_metricool": campos.get("id_post_metricool") or "",
+        # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
+        "senal_viralidad": _entero_no_negativo(campos.get("senal_viralidad") or 0),
+        # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras cribar la nota).
+        "qa_veredicto": campos.get("qa_veredicto") or "",
+        "qa_hallazgos": campos.get("qa_hallazgos") or "",
+        "copy_pendiente": campos.get("copy_pendiente") or "",
+        "fecha_fuente": campos.get("fecha_fuente") or "",
+        # URL de la nota de origen (Investigador F3): la conserva la pieza para el dedup por URL.
+        "url_fuente": campos.get("url_fuente") or "",
+        "creado": campos.get("creado") or ahora,
+        "actualizado": campos.get("actualizado") or ahora,
+    }
+
+
+def _insertar_contenido(con: Any, fila: dict[str, Any]) -> None:
+    """INSERT de una fila YA construida de `contenido` sobre `con` (SIN commit).
+
+    Extraido de `crear_contenido` para que un lote (p. ej. `crear_publicaciones`,
+    todo-o-nada) inserte varios padres EN UNA SOLA transaccion del llamante.
+    """
+    marcadores = ", ".join("?" for _ in _COLS_CONTENIDO)
+    con.execute(
+        f"INSERT INTO contenido ({', '.join(_COLS_CONTENIDO)}) VALUES ({marcadores})",
+        tuple(fila[col] for col in _COLS_CONTENIDO),
+    )
 
 
 def listar_contenido(
@@ -373,6 +413,26 @@ def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
         con.close()
 
 
+def listar_contenido_vencido(hoy: str) -> list[dict[str, Any]]:
+    """Items con `fecha_entrega` VENCIDA (`< hoy`, ISO `YYYY-MM-DD`) y estado NO terminal.
+
+    Empuja al SQL el filtro que el scanner de vencimientos (`eventos_scanner`) aplicaba en
+    Python tras traerse el tablero ENTERO en cada barrido. Los estados terminales
+    (`publicado`/`hecha`) replican `eventos_scanner._ESTADOS_CERRADOS`. Orden estable.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_CONTENIDO} WHERE fecha_entrega <> '' AND fecha_entrega < ? "
+            "AND estado NOT IN ('publicado', 'hecha') "
+            "ORDER BY fecha_entrega ASC, creado ASC, id ASC",
+            (hoy,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_contenido(f) for f in filas]
+
+
 def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     """Títulos del contenido (temas) de `marca` creados desde `desde_iso` (ISO inclusivo).
 
@@ -425,45 +485,69 @@ def existe_publicado_similar(
           estado 'publicado' (JOIN `contenido` x `contenido_plataforma`), ventana de 90 dias,
           y aplica `dedup.es_similar` (exacto o fuzzy >= `umbral`).
     """
-    from ..dominio import dedup
-
     try:
-        desde = (datetime.now() - timedelta(days=90)).isoformat(timespec="seconds")
-        con = _conectar()
-        try:
-            # Rama (a) por URL: solo si traemos una url candidata. La url_fuente publicada se
-            # canoniza en Python (mismo `dedup.url_canonica` que se usa al guardar la pieza),
-            # para que el cruce sea robusto a variantes (querystring de tracking, etc.).
-            url_canon = dedup.url_canonica(url) if url else ""
-            if url_canon:
-                filas_url = con.execute(
-                    "SELECT DISTINCT c.url_fuente FROM contenido c "
-                    "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "
-                    "WHERE c.marca = ? AND c.clase = 'contenido' "
-                    "AND cp.estado = 'publicado' AND c.url_fuente <> '' AND c.creado >= ?",
-                    (marca, desde),
-                ).fetchall()
-                publicadas = {
-                    dedup.url_canonica(f["url_fuente"] or "") for f in filas_url
-                }
-                publicadas.discard("")
-                if url_canon in publicadas:
-                    return True
-            # Rama (b): titulos del contenido de la marca con alguna plataforma 'publicado'.
-            filas = con.execute(
-                "SELECT DISTINCT c.titulo FROM contenido c "
-                "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "
-                "WHERE c.marca = ? AND c.clase = 'contenido' "
-                "AND cp.estado = 'publicado' AND c.creado >= ?",
-                (marca, desde),
-            ).fetchall()
-        finally:
-            con.close()
-        titulos_norm = {dedup.clave(f["titulo"] or "") for f in filas}
-        titulos_norm.discard("")
-        return dedup.es_similar(titulo, titulos_norm, umbral=umbral)
+        cache = publicados_marca_cache(marca)
+        return existe_publicado_similar_en_cache(cache, titulo, url, umbral=umbral)
     except Exception:  # noqa: BLE001 -- best-effort: el dedup nunca debe tumbar el pipeline
         return False
+
+
+def publicados_marca_cache(marca: str) -> dict[str, Any]:
+    """Snapshot REUTILIZABLE de lo publicado por `marca` (90 dias) para el dedup de un barrido.
+
+    `existe_publicado_similar` traia TODOS los titulos/urls publicados de la marca POR CADA
+    candidato del barrido (N candidatos x lectura completa). Con este snapshot el llamante
+    del pipeline lee UNA vez por marca y cruza N candidatos contra el mismo set via
+    `existe_publicado_similar_en_cache`. Forma: `{"urls": set[str], "titulos": set[str]}`
+    (urls canonizadas con `dedup.url_canonica`; titulos como claves de `dedup.clave`).
+    Puede LANZAR (no es best-effort): el llamante decide como degradar.
+    """
+    from ..dominio import dedup
+
+    # Ventana de 90 dias en el canon UTC-sin-offset (los `creado` comparados son naive-UTC).
+    desde = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=90)).isoformat(
+        timespec="seconds"
+    )
+    con = _conectar()
+    try:
+        filas_url = con.execute(
+            "SELECT DISTINCT c.url_fuente FROM contenido c "
+            "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "
+            "WHERE c.marca = ? AND c.clase = 'contenido' "
+            "AND cp.estado = 'publicado' AND c.url_fuente <> '' AND c.creado >= ?",
+            (marca, desde),
+        ).fetchall()
+        filas = con.execute(
+            "SELECT DISTINCT c.titulo FROM contenido c "
+            "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "
+            "WHERE c.marca = ? AND c.clase = 'contenido' "
+            "AND cp.estado = 'publicado' AND c.creado >= ?",
+            (marca, desde),
+        ).fetchall()
+    finally:
+        con.close()
+    urls = {dedup.url_canonica(f["url_fuente"] or "") for f in filas_url}
+    urls.discard("")
+    titulos = {dedup.clave(f["titulo"] or "") for f in filas}
+    titulos.discard("")
+    return {"urls": urls, "titulos": titulos}
+
+
+def existe_publicado_similar_en_cache(
+    cache: dict[str, Any], titulo: str, url: str = "", *, umbral: float = 0.85
+) -> bool:
+    """`existe_publicado_similar` contra un snapshot de `publicados_marca_cache` (sin BD).
+
+    Misma semantica que la funcion original: (a) match exacto de URL canonica (señal mas
+    fuerte: la MISMA fuente ya salio) y si no, (b) titulo exacto/fuzzy >= `umbral`. PURA:
+    no toca la base, asi el barrido cruza N candidatos contra UNA lectura por marca.
+    """
+    from ..dominio import dedup
+
+    url_canon = dedup.url_canonica(url) if url else ""
+    if url_canon and url_canon in (cache.get("urls") or set()):
+        return True
+    return dedup.es_similar(titulo, cache.get("titulos") or set(), umbral=umbral)
 
 
 def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
@@ -485,7 +569,7 @@ def actualizar_contenido(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CONTENIDO}
     if not cambios:
         return obtener_contenido(contenido_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, contenido_id]
