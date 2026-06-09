@@ -47,7 +47,6 @@ __all__ = [
     "VERDICTO_NO_VERIFICADO",
     "VERDICTO_PROBLEMA",
     "_DEFAULT_QA_CRITERIOS",
-    "_PROMPT_QA_FUENTE_ID",
     "_AUTOGEN_LANZAR_MAX",
     # og:image
     "_RE_OG_IMAGE",
@@ -111,17 +110,14 @@ _DIAS_DEDUP = 60
 # `redes.redes_de_formato` (fuente única); video -> las 5 queda definido para flujos futuros.
 _FORMATO_PIPELINE = redes.FORMATO_FOTO
 
-# --- QA editorial por DOCUMENTO de Texto (no skills) ---------------------------------
-# El equipo NO usa skills: el QA editorial se hace adjuntando un DOCUMENTO de la Texto con
-# los criterios de revisión. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
-# créalo y adjúntalo." Este es el id (prompt) de ese documento de criterios.
-PROMPT_QA_ID = "prompt/qa-editorial"
-_TITULO_QA = "QA editorial"
-# Id del prompt EDITABLE (Biblioteca, pestaña «Prompts») con los criterios de la criba pre-copy
-# de la FUENTE. Su cuerpo base viaja en la semilla del paquete (`prompt/qa-fuente.md`) y replica
-# `_DEFAULT_QA_CRITERIOS`; `asegurar_documento_qa` lo usa de respaldo. (NOTA: hoy `PROMPT_QA_ID`
-# y este id apuntan a documentos distintos; ver `asegurar_documento_qa`.)
-_PROMPT_QA_FUENTE_ID = "prompt/qa-fuente"
+# --- QA de la FUENTE por DOCUMENTO de Texto (no skills) ------------------------------
+# El equipo NO usa skills: la criba pre-copy de la FUENTE se hace adjuntando un DOCUMENTO de la
+# Texto con los criterios. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
+# créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/qa-fuente` (pestaña «Prompts»), cuyo
+# cuerpo base viaja en la semilla. El título DEBE sluggear al id (`crear` deriva el id del
+# slug del título): "QA fuente" -> "prompt/qa-fuente". DISTINTO del QA de COPY (`prompt/qa-editorial`).
+PROMPT_QA_ID = "prompt/qa-fuente"
+_TITULO_QA = "QA fuente"
 
 # Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
 # vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la

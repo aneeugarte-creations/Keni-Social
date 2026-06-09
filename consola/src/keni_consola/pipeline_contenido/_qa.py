@@ -16,7 +16,6 @@ from ..dominio import qa_editorial as dom_qa
 from . import _ref
 from ._comun import (
     _DEFAULT_QA_CRITERIOS,
-    _PROMPT_QA_FUENTE_ID,
     _TITULO_QA,
     ETAPA_QA,
     PROMPT_QA_ID,
@@ -72,12 +71,12 @@ def asegurar_documento_qa() -> str:
     Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." El
     equipo NO usa skills: el QA se hace con un documento adjunto. Aquí:
       - si el documento (`PROMPT_QA_ID`) ya está en el STORE de la Texto, lo respeta;
-      - si no, lo CREA con `_DEFAULT_QA_CRITERIOS` (criba pre-copy de la fuente). IDEMPOTENTE.
+      - si no, lo CREA con el cuerpo de la semilla `prompt/qa-fuente` (criba pre-copy). IDEMPOTENTE.
     Devuelve `PROMPT_QA_ID` si el documento queda disponible (creado o ya presente), o "" si no
     se pudo asegurar (best-effort: sin documento, la QA de la fuente no corre y el tema queda sin
     veredicto, de modo que la fase CD no genera copy hasta que haya criba).
 
-    Nota: la semilla del paquete ya trae un `prompt/qa-editorial`; `cuerpo_efectivo` lo resuelve
+    Nota: la semilla del paquete ya trae un `prompt/qa-fuente`; `cuerpo_efectivo` lo resuelve
     aunque no esté materializado en el store. Materializarlo aquí garantiza un documento EDITABLE
     por el equipo (la regla pide un documento real, adjuntable y versionado).
     """
@@ -86,12 +85,12 @@ def asegurar_documento_qa() -> str:
             return PROMPT_QA_ID
         # No está en el store: si la semilla lo trae, ya hay cuerpo efectivo; aun así CREAMOS el
         # documento del store para que sea editable/adjuntable (la regla pide un doc real).
+        # `PROMPT_QA_ID` = `prompt/qa-fuente`: la criba pre-copy vive como prompt EDITABLE en la
+        # Biblioteca (semilla del paquete); la constante es el último recurso si faltara.
         cuerpo_semilla = libtexto.cuerpo_efectivo(PROMPT_QA_ID)
-        # Respaldo: la criba pre-copy de la FUENTE vive como prompt EDITABLE en la Biblioteca
-        # (`_PROMPT_QA_FUENTE_ID`, semilla del paquete); la constante es el último recurso.
-        cuerpo = cuerpo_semilla or libtexto.cuerpo_efectivo(_PROMPT_QA_FUENTE_ID) or _DEFAULT_QA_CRITERIOS
+        cuerpo = cuerpo_semilla or _DEFAULT_QA_CRITERIOS
         doc = libtexto.crear(_TITULO_QA, tipo="prompt", cuerpo=cuerpo)
-        # `crear` deriva el id del slug del título: "QA editorial" -> "prompt/qa-editorial".
+        # `crear` deriva el id del slug del título: "QA fuente" -> "prompt/qa-fuente".
         return doc.id if doc.id == PROMPT_QA_ID else (PROMPT_QA_ID if libtexto.obtener(PROMPT_QA_ID) else doc.id)
     except Exception:  # noqa: BLE001 -- asegurar el doc es best-effort
         _log.warning("pipeline: no se pudo asegurar el documento de QA", exc_info=True)
