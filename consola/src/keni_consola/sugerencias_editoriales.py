@@ -87,10 +87,50 @@ def seleccionar(noticias: list[dict[str, Any]], *, maximo: int) -> dict[str, lis
 # --------------------------------------------------------------------------- #
 
 
+# La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
+# «Prompts»), no hardcodeada. Los 4 datos dinámicos se insertan en sus marcadores. El SCAFFOLD
+# de abajo es la red por si la lectura fallara: es la MISMA plantilla (misma fuente de verdad
+# que la semilla del paquete), con los marcadores `{{...}}`.
+_PROMPT_SUGERENCIAS_ID = "prompt/editorial/sugerencias-plataforma"
+_SCAFFOLD_SUGERENCIAS = (
+    "Eres el editor de estándares de plataforma de un equipo de redes sociales.\n"
+    "Plataforma: {{PLATAFORMA}}.\n\n"
+    "FICHA EDITORIAL ACTUAL de {{PLATAFORMA}} (cómo escribimos para esta red):\n"
+    "\"\"\"\n{{FICHA}}\n\"\"\"\n\n"
+    "LÍMITE de caracteres actual que tenemos registrado para {{PLATAFORMA}}: {{LIMITE}}.\n\n"
+    "NOTICIAS recientes y verificadas sobre el algoritmo o las tendencias de {{PLATAFORMA}}:\n"
+    "{{NOTICIAS}}\n\n"
+    "TAREA: propón SOLO cambios concretos y accionables que ESTAS noticias justifiquen, "
+    "a la ficha editorial (`tipo`: \"editorial\") y/o al límite de caracteres "
+    "(`tipo`: \"limite\"). Si una noticia no implica un cambio editorial real, NO "
+    "inventes uno. Sé específico: qué añadir/quitar/cambiar y por qué, citando la noticia.\n\n"
+    "Responde EXCLUSIVAMENTE con un bloque ```json``` que contenga una lista de objetos, "
+    "cada uno con las claves: \"tipo\" (\"editorial\" o \"limite\"), \"titulo\" (resumen "
+    "corto del cambio) y \"detalle\" (qué cambiar y por qué, en markdown). Si no hay "
+    "ningún cambio que proponer, responde con una lista vacía: ```json\n[]\n```."
+)
+
+
+def _plantilla_sugerencias() -> str:
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete).
+
+    Cae al `_SCAFFOLD_SUGERENCIAS` si la lectura fallara o viniera vacía (no quedarnos sin prompt).
+    """
+    try:
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_SUGERENCIAS_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar el digest sin prompt por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _SCAFFOLD_SUGERENCIAS
+
+
 def componer_prompt(
     plataforma: str, noticias: list[dict[str, Any]], *, ficha: str, limite: int | None
 ) -> str:
-    """Arma el prompt de `claude -p` para una plataforma (ficha + limite + noticias)."""
+    """Arma el prompt de `claude -p` para una plataforma (ficha + limite + noticias).
+
+    La plantilla es EDITABLE en la Biblioteca (`_PROMPT_SUGERENCIAS_ID`); aquí solo insertamos
+    los 4 datos en sus marcadores `{{PLATAFORMA}}` `{{FICHA}}` `{{LIMITE}}` `{{NOTICIAS}}`.
+    """
     nombre = plataforma.capitalize()
     limite_txt = f"{limite} caracteres" if limite else "sin límite duro definido"
     ficha_txt = ficha.strip() or "(todavía no hay ficha editorial para esta plataforma)"
@@ -104,22 +144,14 @@ def componer_prompt(
         lineas_noticias.append("\n".join(partes))
     noticias_txt = "\n".join(lineas_noticias)
 
+    # Orden: la PLATAFORMA primero (aparece varias veces); los datos libres (ficha/noticias) al
+    # final, para que su contenido no se reescanee en busca de otros marcadores.
     return (
-        f"Eres el editor de estándares de plataforma de un equipo de redes sociales.\n"
-        f"Plataforma: {nombre}.\n\n"
-        f"FICHA EDITORIAL ACTUAL de {nombre} (cómo escribimos para esta red):\n"
-        f"\"\"\"\n{ficha_txt}\n\"\"\"\n\n"
-        f"LÍMITE de caracteres actual que tenemos registrado para {nombre}: {limite_txt}.\n\n"
-        f"NOTICIAS recientes y verificadas sobre el algoritmo o las tendencias de {nombre}:\n"
-        f"{noticias_txt}\n\n"
-        f"TAREA: propón SOLO cambios concretos y accionables que ESTAS noticias justifiquen, "
-        f"a la ficha editorial (`tipo`: \"editorial\") y/o al límite de caracteres "
-        f"(`tipo`: \"limite\"). Si una noticia no implica un cambio editorial real, NO "
-        f"inventes uno. Sé específico: qué añadir/quitar/cambiar y por qué, citando la noticia.\n\n"
-        f"Responde EXCLUSIVAMENTE con un bloque ```json``` que contenga una lista de objetos, "
-        f"cada uno con las claves: \"tipo\" (\"editorial\" o \"limite\"), \"titulo\" (resumen "
-        f"corto del cambio) y \"detalle\" (qué cambiar y por qué, en markdown). Si no hay "
-        f"ningún cambio que proponer, responde con una lista vacía: ```json\n[]\n```."
+        _plantilla_sugerencias()
+        .replace("{{PLATAFORMA}}", nombre)
+        .replace("{{LIMITE}}", limite_txt)
+        .replace("{{FICHA}}", ficha_txt)
+        .replace("{{NOTICIAS}}", noticias_txt)
     )
 
 

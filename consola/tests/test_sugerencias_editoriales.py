@@ -82,6 +82,9 @@ def test_componer_prompt_incluye_ficha_limite_y_noticias():
     assert "2200" in prompt
     assert "Cambio de feed" in prompt
     assert "json" in prompt.lower()
+    # La plantilla viene de la Biblioteca (semilla del paquete): los marcadores `{{...}}` deben
+    # quedar sustituidos, no crudos en la salida.
+    assert "{{" not in prompt
 
 
 # --------------------------------------------------------------------------- #
