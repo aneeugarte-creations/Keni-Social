@@ -116,6 +116,10 @@ export interface ColaDaemon {
   etiqueta: string;
   activo: boolean | null;
   descripcion: string;
+  /** Env var del catálogo de ajustes que lo enciende/apaga ("" = sin toggle, p. ej. reaper). */
+  clave_ajuste: string;
+  /** Si el Monitor puede pintarlo como TOGGLE real (clave en catálogo y no peligrosa). */
+  editable: boolean;
 }
 
 /** Snapshot en vivo de la cola de generación + workers + daemons. */

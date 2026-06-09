@@ -77,9 +77,16 @@ def test_cola_snapshot_contrato(entorno):
     esperando = data["esperando"]
     assert any(j["gen_id"] == gen_id and j["etiqueta"] == "QA fuente · UnoTV" for j in esperando)
     # Daemons: lista no vacia con el reaper SIEMPRE activo.
-    claves = {d["clave"] for d in data["daemons"]}
-    assert "reaper" in claves
-    assert next(d for d in data["daemons"] if d["clave"] == "reaper")["activo"] is True
+    porclave = {d["clave"]: d for d in data["daemons"]}
+    assert "reaper" in porclave
+    assert porclave["reaper"]["activo"] is True
+    # Toggles REALES en el Monitor: un daemon con clave de catálogo no peligrosa es editable y trae
+    # su `clave_ajuste`; el reaper (sin toggle) y `publicar_real` (peligroso) NO son editables.
+    assert porclave["maquina"]["editable"] is True
+    assert porclave["maquina"]["clave_ajuste"] == "KENI_MAQUINA"
+    assert porclave["reaper"]["editable"] is False
+    assert porclave["reaper"]["clave_ajuste"] == ""
+    assert porclave["publicar_real"]["editable"] is False  # peligroso: read-only en el Monitor
 
 
 def test_cola_snapshot_marca_reclamado_como_procesando(entorno):

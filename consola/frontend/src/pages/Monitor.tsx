@@ -5,7 +5,6 @@ import {
   Boxes,
   Clock,
   Cpu,
-  Gauge,
   Layers,
   Power,
   RefreshCw,
@@ -17,11 +16,12 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -60,7 +60,7 @@ function Kpi({
   titulo: string;
   valor: React.ReactNode;
   subtitulo?: React.ReactNode;
-  tono?: "alerta" | "ok";
+  tono?: "alerta" | "ok" | "espera";
 }) {
   return (
     <Card>
@@ -76,6 +76,7 @@ function Kpi({
             "text-2xl font-semibold tabular-nums",
             tono === "alerta" && "text-destructive",
             tono === "ok" && "text-emerald-600",
+            tono === "espera" && "text-amber-600",
           )}
         >
           {valor}
@@ -174,6 +175,11 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
             <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{dia.slice(5)}</span>
             <div className="flex h-4 flex-1 overflow-hidden rounded bg-muted">
               <div
+                className="bg-amber-500/70"
+                style={{ width: `${(enc / maximo) * 100}%` }}
+                title={`${enc} encolados`}
+              />
+              <div
                 className="bg-emerald-500/70"
                 style={{ width: `${(res.completados / maximo) * 100}%` }}
                 title={`${res.completados} completados`}
@@ -185,7 +191,7 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
               />
             </div>
             <span className="w-28 shrink-0 text-right tabular-nums text-muted-foreground">
-              {enc} enc · {res.completados} ok
+              <span className="text-amber-600">{enc} enc</span> · {res.completados} ok
               {res.errores > 0 && (
                 <span className="text-destructive"> · {res.errores} err</span>
               )}
@@ -194,38 +200,64 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
         );
       })}
       <p className="text-[11px] text-muted-foreground">
-        Barra verde = completados, roja = errores. «enc» = encolados ese día.
+        Barra ámbar = encolados, verde = completados, roja = errores.
       </p>
     </div>
   );
 }
 
-/** Estado de los daemons de fondo (ON/OFF). */
-function PanelDaemons({ daemons }: { daemons: ColaMonitor["daemons"] }) {
+/** Daemons de fondo: TOGGLE real (escribe en config vía /api/ajustes) cuando el daemon es
+ *  editable; badge de solo lectura si no (reaper sin toggle, o `publicar_real` que es peligroso y
+ *  se controla en su flujo propio). El estado `activo` lo refresca el sondeo en vivo de la cola. */
+function PanelDaemons({
+  daemons,
+  onToggle,
+  guardandoClave,
+  esAdmin,
+}: {
+  daemons: ColaMonitor["daemons"];
+  onToggle: (clave: string, valor: boolean) => void;
+  guardandoClave: string | null;
+  esAdmin: boolean;
+}) {
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {daemons.map((d) => (
-        <div
-          key={d.clave}
-          className="flex items-start justify-between gap-2 rounded-lg border p-3"
-        >
-          <div className="min-w-0">
-            <div className="text-sm font-medium">{d.etiqueta}</div>
-            <div className="text-xs text-muted-foreground">{d.descripcion}</div>
-          </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "shrink-0",
-              d.activo === true && "border-emerald-500/30 bg-emerald-500/15 text-emerald-600",
-              d.activo === false && "text-muted-foreground",
-              d.activo == null && "border-dashed text-muted-foreground/70",
-            )}
+      {daemons.map((d) => {
+        // Editable solo para admin: un editor ve el estado pero no conmuta (coherente con #153).
+        const conmutable = d.editable && esAdmin;
+        const guardando = guardandoClave === d.clave_ajuste;
+        return (
+          <div
+            key={d.clave}
+            className="flex items-start justify-between gap-2 rounded-lg border p-3"
           >
-            {d.activo === true ? "Activo" : d.activo === false ? "Apagado" : "—"}
-          </Badge>
-        </div>
-      ))}
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{d.etiqueta}</div>
+              <div className="text-xs text-muted-foreground">{d.descripcion}</div>
+            </div>
+            {conmutable ? (
+              <Switch
+                checked={d.activo === true}
+                disabled={guardando}
+                onCheckedChange={(v) => onToggle(d.clave_ajuste, v)}
+                aria-label={`${d.etiqueta}: ${d.activo ? "apagar" : "encender"}`}
+              />
+            ) : (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "shrink-0",
+                  d.activo === true && "border-emerald-500/30 bg-emerald-500/15 text-emerald-600",
+                  d.activo === false && "text-muted-foreground",
+                  d.activo == null && "border-dashed text-muted-foreground/70",
+                )}
+              >
+                {d.activo === true ? "Activo" : d.activo === false ? "Apagado" : "—"}
+              </Badge>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -240,6 +272,7 @@ export default function Monitor() {
   const esAdmin = usuario?.rol === "admin";
   const qc = useQueryClient();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
+  const [guardandoClave, setGuardandoClave] = React.useState<string | null>(null);
 
   const cola = useQuery({
     queryKey: ["actividad", "cola"],
@@ -278,9 +311,21 @@ export default function Monitor() {
     onSettled: () => setCancelandoId(null),
   });
 
+  // Toggle REAL de un daemon: escribe en la config (mismo endpoint que Configuración) y refresca
+  // el snapshot para que el estado «Activo/Apagado» refleje el cambio al instante.
+  const toggleDaemon = useMutation({
+    mutationFn: (cuerpo: { clave: string; valor: boolean }) => api.guardarAjuste(cuerpo),
+    onMutate: (cuerpo) => setGuardandoClave(cuerpo.clave),
+    onSuccess: (res) => {
+      toast.success(`«${res.ajuste.etiqueta}» ${res.ajuste.valor ? "activado" : "apagado"}.`);
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+    onSettled: () => setGuardandoClave(null),
+  });
+
   return (
     <>
-      <TituloPagina titulo="Monitor de cola" icono={Gauge} />
       <AccionesPagina>
         <Button
           variant="outline"
@@ -352,6 +397,7 @@ export default function Monitor() {
               titulo="En cola"
               valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
               subtitulo="esperando un slot"
+              tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
             />
             <Kpi
               icono={Layers}
@@ -396,9 +442,9 @@ export default function Monitor() {
 
           {/* Esperando */}
           {cola.data.esperando.length > 0 && (
-            <Card>
+            <Card className="border-amber-500/30">
               <CardHeader className="p-4 pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
+                <CardTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-500">
                   <Clock className="h-4 w-4 text-amber-600" />
                   Esperando ({cola.data.esperando.length})
                 </CardTitle>
@@ -443,7 +489,12 @@ export default function Monitor() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-2">
-              <PanelDaemons daemons={cola.data.daemons} />
+              <PanelDaemons
+                daemons={cola.data.daemons}
+                esAdmin={esAdmin}
+                guardandoClave={guardandoClave}
+                onToggle={(clave, valor) => toggleDaemon.mutate({ clave, valor })}
+              />
             </CardContent>
           </Card>
         </div>

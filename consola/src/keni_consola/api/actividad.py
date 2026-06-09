@@ -32,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import actividad, agentes, config, generaciones, marcas, permisos, repos
+from .. import actividad, agentes, ajustes_catalogo, config, generaciones, marcas, permisos, repos
 from .._http_json import _entero_query
 
 _MSG_SOLO_ADMIN = "Solo un administrador puede operar la cola de generación."
@@ -141,32 +141,35 @@ async def agregados(request: Request) -> Response:
 # (etiqueta/tipo/marca/estado) vive en `generaciones` (app A, ya importado aqui). Shaping
 # LIGERO de lectura: la agregacion pesada (combinar/agregados) sigue en el dominio `actividad`.
 
-# Daemons de fondo a reportar: (clave, etiqueta, accesor de toggle en `config`, descripcion).
-# `accesor`=None => SIEMPRE activo (sin toggle). El estado se lee best-effort: si el accesor no
-# existe en `config`, el daemon sale con `activo=None` (desconocido) en vez de romper el panel.
-_DAEMONS: list[tuple[str, str, str | None, str]] = [
+# Daemons de fondo a reportar: (clave, etiqueta, accesor de toggle en `config`, descripcion,
+# clave_ajuste). `accesor`=None => SIEMPRE activo (sin toggle). `clave_ajuste` es la env var
+# del catálogo de ajustes (`KENI_*`) que lo enciende/apaga; el Monitor la usa para pintar un
+# TOGGLE REAL (PUT /api/ajustes) en vez de un badge de solo lectura. "" => sin toggle (reaper).
+# El estado se lee best-effort: si el accesor no existe en `config`, el daemon sale con
+# `activo=None` (desconocido) en vez de romper el panel.
+_DAEMONS: list[tuple[str, str, str | None, str, str]] = [
     ("maquina", "Máquina de contenido", "maquina_activa",
-     "Maestro de la auto-producción (ingesta + copy + arte)."),
+     "Maestro de la auto-producción (ingesta + copy + arte).", config.ENV_MAQUINA),
     ("ingesta", "Ingesta RSS", "ingesta_activa",
-     "Sondea feeds y persiste artículos en el pool de noticias."),
+     "Sondea feeds y persiste artículos en el pool de noticias.", config.ENV_PIPELINE_SELECCION),
     ("pipeline", "Pipeline (copy/arte)", "pipeline_activo",
-     "Lleva temas del pool a borrador: genera copy y arte."),
+     "Lleva temas del pool a borrador: genera copy y arte.", config.ENV_PIPELINE_COPY),
     ("trends", "Google Trends", "trends_activo",
-     "Ingiere tendencias (con sus noticias) al pool."),
+     "Ingiere tendencias (con sus noticias) al pool.", config.ENV_TRENDS),
     ("algoritmos", "Feeds de algoritmo", "algoritmos_auto_activo",
-     "Refresca los feeds de algoritmo por marca."),
+     "Refresca los feeds de algoritmo por marca.", config.ENV_ALGORITMOS_AUTO),
     ("sugerencias", "Sugerencias editoriales", "sugerencias_editoriales_activo",
-     "Digest diario de sugerencias editoriales."),
+     "Digest diario de sugerencias editoriales.", config.ENV_SUGERENCIAS_EDITORIALES),
     ("media_gc", "GC de media", "media_gc_activo",
-     "Recoge media huérfana (no borra salvo toggle)."),
+     "Recoge media huérfana (no borra salvo toggle).", config.ENV_MEDIA_GC),
     ("noticias_gc", "GC de noticias", "noticias_gc_activo",
-     "Poda el pool de noticias por relevancia/inactividad."),
+     "Poda el pool de noticias por relevancia/inactividad.", config.ENV_NOTICIAS_GC),
     ("alertas", "Alertas de rendimiento", "alertas_rendimiento_activas",
-     "Lee métricas y emite eventos de alerta."),
+     "Lee métricas y emite eventos de alerta.", config.ENV_ALERTAS_ACTIVAS),
     ("publicar_real", "Publicación real", "publicar_real",
-     "Si está OFF, el programador corre en DRY-RUN (no publica)."),
+     "Si está OFF, el programador corre en DRY-RUN (no publica).", config.ENV_PUBLICAR_REAL),
     ("reaper", "Reaper de generaciones", None,
-     "Siempre activo: cierra como error las generaciones zombi."),
+     "Siempre activo: cierra como error las generaciones zombi.", ""),
 ]
 
 
@@ -200,9 +203,15 @@ def _item_job(job: dict, ahora: datetime) -> dict:
 
 
 def _daemons_estado() -> list[dict]:
-    """Estado ON/OFF de cada daemon de fondo (lee los toggles de `config`, best-effort)."""
+    """Estado ON/OFF de cada daemon de fondo (lee los toggles de `config`, best-effort).
+
+    Cada daemon reporta su `clave_ajuste` (env var del catálogo) y si es `editable`: el Monitor
+    pinta un TOGGLE REAL (PUT /api/ajustes) cuando la clave está en el catálogo y NO es peligrosa;
+    si no (reaper sin toggle, o `publicar_real` que es peligroso y vive en su flujo propio), pinta
+    un badge de solo lectura. Así los toggles del Monitor son los MISMOS que los de Configuración.
+    """
     items: list[dict] = []
-    for clave, etiqueta, accesor, desc in _DAEMONS:
+    for clave, etiqueta, accesor, desc, clave_ajuste in _DAEMONS:
         if accesor is None:
             activo: bool | None = True
         else:
@@ -211,9 +220,16 @@ def _daemons_estado() -> list[dict]:
                 activo = bool(fn()) if callable(fn) else None
             except Exception:  # noqa: BLE001 -- un toggle que falle no debe tumbar el panel
                 activo = None
-        items.append(
-            {"clave": clave, "etiqueta": etiqueta, "activo": activo, "descripcion": desc}
-        )
+        cat = ajustes_catalogo.por_clave(clave_ajuste) if clave_ajuste else None
+        editable = cat is not None and not cat.peligroso
+        items.append({
+            "clave": clave,
+            "etiqueta": etiqueta,
+            "activo": activo,
+            "descripcion": desc,
+            "clave_ajuste": clave_ajuste,
+            "editable": editable,
+        })
     return items
 
 

@@ -51,6 +51,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
         config.ENV_NOTICIAS_GC,
+        config.ENV_TRENDS, config.ENV_ALGORITMOS_AUTO, config.ENV_SUGERENCIAS_EDITORIALES,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
         # Tuning · pipeline de contenido (cadencia, volumen y topes por barrido).

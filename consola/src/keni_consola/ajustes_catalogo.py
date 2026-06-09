@@ -215,6 +215,33 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        # Automatismos de ingesta extra (también daemons del Monitor): Trends, feeds de algoritmo y
+        # digest de sugerencias. Antes solo se veían como ESTADO en el Monitor; al estar en el
+        # catálogo, sus toggles son REALES (editables desde el Monitor y desde aquí).
+        Ajuste(
+            clave=config.ENV_TRENDS,
+            tipo="bool",
+            etiqueta="Google Trends",
+            ayuda="Ingiere tendencias (con sus noticias) al pool de noticias.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_ALGORITMOS_AUTO,
+            tipo="bool",
+            etiqueta="Feeds de algoritmo",
+            ayuda="Refresca periódicamente los feeds de cambios de algoritmo por marca.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_SUGERENCIAS_EDITORIALES,
+            tipo="bool",
+            etiqueta="Sugerencias editoriales",
+            ayuda="Digest diario de sugerencias editoriales por marca.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # NOTA: Fusión (KENI_PIPELINE_FUSION) y Ranking/encaje (KENI_PIPELINE_RANKING) ya NO viven
         # aquí: ahora son ETAPAS del pipeline (grupo `maestros_etapa` + excepción por marca), 1
         # toggle = 1 etapa, como el resto. Ver `_ETAPA_FUSION`/`_ETAPA_RANKING`.
