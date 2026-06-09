@@ -92,15 +92,15 @@ ETAPA_ARTE = "ARTE"
 # dejaba fuera de la ventana los temas nuevos y mataba de hambre al pipeline.
 _QA_REVISAR_MAX = 50
 
-# CAP de LANZAMIENTOS de QA de la FUENTE (`claude -p`) por barrido. Cada uno es un job del worker
-# (KENI_MAX_JOBS); sin tope, una pasada que encuentra muchos temas sin veredicto dispara una
-# RÁFAGA que satura el worker e inunda Actividad de QA "ejecutando". Con el tope, cada barrido
-# lanza pocos y el resto se criba en el siguiente; el sweep es horario, así drena gradualmente.
-_QA_LANZAR_MAX = 4
+# CAP de LANZAMIENTOS de Validación (QA) de la FUENTE (`claude -p`) por barrido. Cada uno es un
+# job del worker (KENI_MAX_JOBS); sin tope, una pasada que encuentra muchos temas sin veredicto
+# dispara una RÁFAGA que satura el worker. Con el tope, cada barrido lanza pocos y el resto se
+# valida en el siguiente; con el sweep cada 20 min, 8/barrido drenan ~24/h por etapa.
+_QA_LANZAR_MAX = 8
 
 # CAP de LANZAMIENTOS de COPY (CD) por barrido: la fase CD también encola `claude -p` (uno por
-# tema `no_verificado`); mismo motivo de anti-ráfaga que la QA. El resto entra en el siguiente.
-_CD_LANZAR_MAX = 4
+# tema validado); mismo motivo de anti-ráfaga que la Validación. El resto entra en el siguiente.
+_CD_LANZAR_MAX = 8
 
 # DEDUP de contenido: ventana (días) hacia atrás para considerar que una noticia "ya está" en la
 # marca. Un tema nuevo cuyo título coincide (normalizado) con otro contenido de la MISMA marca
@@ -182,7 +182,7 @@ Usa gravedad "error" SOLO para lo de peso (lo que hace 🔴). Sin emojis en el c
 
 # Tope de temas del news-pool (origen autogen) a los que la etapa de copy genera copy por
 # barrido. Mismo motivo anti-ráfaga que `_CD_LANZAR_MAX`: cada uno encola un `claude -p`.
-_AUTOGEN_LANZAR_MAX = 4
+_AUTOGEN_LANZAR_MAX = 8
 
 
 # --------------------------------------------------------------------------- #

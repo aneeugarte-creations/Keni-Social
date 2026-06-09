@@ -40,6 +40,7 @@ from ._config_comun import (
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_FUSION,
     ENV_PIPELINE_INTERVALO_HORAS,
+    ENV_PIPELINE_INTERVALO_MIN,
     ENV_PIPELINE_MAX,
     ENV_PIPELINE_RANKING,
     ENV_PIPELINE_SELECCION,
@@ -78,6 +79,7 @@ from ._config_comun import (
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
     PERFIL_EDITORIAL_TTL_HORAS_DEF,
     PIPELINE_INTERVALO_HORAS_DEF,
+    PIPELINE_INTERVALO_MIN_DEF,
     PIPELINE_MAX_DEF,
     RENDIMIENTO_MIN_PIEZAS_DEF,
     RENDIMIENTO_TOP_N_DEF,
@@ -395,6 +397,19 @@ def pipeline_activo() -> bool:
 def pipeline_intervalo_horas() -> int:
     """Cada cuantas horas barre el pipeline de contenido (`KENI_PIPELINE_INTERVALO_HORAS`, def 1, min 1)."""
     return _entero(ENV_PIPELINE_INTERVALO_HORAS, PIPELINE_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def pipeline_intervalo_min() -> int:
+    """Cada cuántos MINUTOS barre el pipeline (`KENI_PIPELINE_INTERVALO_MIN`, def 20, min 1).
+
+    Fuente de verdad del intervalo. Compatibilidad: si NO se fijó el de minutos pero SÍ el viejo
+    `KENI_PIPELINE_INTERVALO_HORAS`, se respeta ese (en minutos). El de minutos siempre manda.
+    """
+    if _crudo(ENV_PIPELINE_INTERVALO_MIN).strip():
+        return _entero(ENV_PIPELINE_INTERVALO_MIN, PIPELINE_INTERVALO_MIN_DEF, minimo=1)
+    if _crudo(ENV_PIPELINE_INTERVALO_HORAS).strip():
+        return max(1, pipeline_intervalo_horas() * 60)
+    return PIPELINE_INTERVALO_MIN_DEF
 
 
 def pipeline_max() -> int:

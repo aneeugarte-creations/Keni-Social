@@ -222,6 +222,7 @@ ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 # publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_COPY` el comportamiento no cambia.
 ENV_PIPELINE_COPY = "KENI_PIPELINE_COPY"
 ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
+ENV_PIPELINE_INTERVALO_MIN = "KENI_PIPELINE_INTERVALO_MIN"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 
 # Etapa de QA del pipeline: "Validar (QA)" (`KENI_PIPELINE_VALIDACION`, toggle de etapa por marca). Es la criba
@@ -532,6 +533,9 @@ AUTOGEN_ARTE_MAX_DEF = 3
 # (def 3), porque cada item ingerido lanza un `claude -p` (coste). El cap del worker
 # (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
 PIPELINE_INTERVALO_HORAS_DEF = 1
+# Intervalo del barrido del pipeline EN MINUTOS (fuente de verdad; el de horas queda como
+# compatibilidad). 20 min = barrido ágil sin saturar el worker (los caps por barrido frenan ráfagas).
+PIPELINE_INTERVALO_MIN_DEF = 20
 PIPELINE_MAX_DEF = 3
 
 
@@ -769,6 +773,7 @@ __all__ = [
     'ENV_PG_USER',
     'ENV_PIPELINE_COPY',
     'ENV_PIPELINE_INTERVALO_HORAS',
+    'ENV_PIPELINE_INTERVALO_MIN',
     'ENV_PIPELINE_MAX',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
@@ -853,6 +858,7 @@ __all__ = [
     'NOTICIAS_GC_SCORE_UMBRAL_DEF',
     'PERFIL_EDITORIAL_TTL_HORAS_DEF',
     'PIPELINE_INTERVALO_HORAS_DEF',
+    'PIPELINE_INTERVALO_MIN_DEF',
     'PIPELINE_MAX_DEF',
     'PORT_DEF',
     'Path',

@@ -248,8 +248,8 @@ def ejecutar_arte() -> list[dict[str, Any]]:
 
 
 def _intervalo_segundos() -> float:
-    """Intervalo del barrido en segundos (a partir de `KENI_PIPELINE_INTERVALO_HORAS`)."""
-    return config.pipeline_intervalo_horas() * 3600.0
+    """Intervalo del barrido en segundos (a partir de `KENI_PIPELINE_INTERVALO_MIN`, def 20)."""
+    return config.pipeline_intervalo_min() * 60.0
 
 
 def iniciar_pipeline(intervalo_segundos: float | None = None) -> threading.Thread:

@@ -38,6 +38,8 @@ _TODAS = (
     config.ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     config.ENV_COMERCIAL_INTERVALO_HORAS,
     config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
+    config.ENV_PIPELINE_INTERVALO_MIN,
+    config.ENV_PIPELINE_INTERVALO_HORAS,
     config.ENV_DATABASE_URL,
     config.ENV_PG_USER,
     config.ENV_PG_PASSWORD,
@@ -394,6 +396,24 @@ def test_comercial_intervalo_horas_crudo(limpio):
     assert config.comercial_intervalo_horas() == 2.0
     limpio.setenv(config.ENV_COMERCIAL_INTERVALO_HORAS, "x")
     assert config.comercial_intervalo_horas() is None
+
+
+def test_pipeline_intervalo_min_default_y_clamp(limpio):
+    # Sin env: default 20 min (barrido ágil).
+    assert config.pipeline_intervalo_min() == 20
+    limpio.setenv(config.ENV_PIPELINE_INTERVALO_MIN, "0")
+    assert config.pipeline_intervalo_min() == 1  # clamp min 1
+    limpio.setenv(config.ENV_PIPELINE_INTERVALO_MIN, "5")
+    assert config.pipeline_intervalo_min() == 5
+
+
+def test_pipeline_intervalo_min_compat_horas(limpio):
+    # Compatibilidad: solo el viejo de HORAS -> se respeta (en minutos).
+    limpio.setenv(config.ENV_PIPELINE_INTERVALO_HORAS, "2")
+    assert config.pipeline_intervalo_min() == 120
+    # El de minutos MANDA si están ambos.
+    limpio.setenv(config.ENV_PIPELINE_INTERVALO_MIN, "10")
+    assert config.pipeline_intervalo_min() == 10
 
 
 def test_programador_intervalo_segundos_min_1(limpio):
