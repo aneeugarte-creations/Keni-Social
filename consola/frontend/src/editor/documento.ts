@@ -322,10 +322,13 @@ export function documentoVacio(
   formato: { w: number; h: number; safe_top: number; safe_bottom: number; safe_left?: number; safe_right?: number },
   marca = "",
 ): Documento {
-  // Un lienzo nuevo nace LIMPIO y TRANSPARENTE (fondo `#00000000` => se ve el tablero y exporta con
-  // alfa). Trae su HUECO DE FOTO (obligatorio para guardar plantilla) pero OCULTO: así no pinta el
-  // placeholder gris que tapaba todo y parecía "prediseñado". El usuario lo muestra (ojo en el panel
-  // de capas) cuando quiere colocar la foto.
+  // Un lienzo nuevo nace con un FONDO DEGRADADO GRIS NEUTRO (lineal a 45°: claro en la esquina
+  // inferior-izquierda → oscuro en la superior-derecha): una superficie de diseño lista sobre la
+  // que trabajar, en vez del tablero de transparencia. Es solo el punto de partida — el usuario lo
+  // cambia en el inspector del lienzo (color/imagen/transparente). El degradado renderiza idéntico
+  // en el editor (Konva) y en el export del servidor (misma convención de ángulo). Trae su HUECO DE
+  // FOTO (obligatorio para guardar plantilla) pero OCULTO: así no tapa el lienzo; el usuario lo
+  // muestra (ojo en el panel de capas) cuando quiere colocar la foto.
   const hueco = nuevaCapaImagen("", {
     id: "foto",
     x: 0,
@@ -343,7 +346,7 @@ export function documentoVacio(
     marca,
     fuentes: { sans: "Barlow", condensada: "Barlow Condensed" },
     formato,
-    fondo: { tipo: "color", color: "#00000000" },
+    fondo: { tipo: "degradado", degradado: { desde: "#bababa", hasta: "#363636", angulo: 45 } },
     capas: [hueco],
   };
 }
