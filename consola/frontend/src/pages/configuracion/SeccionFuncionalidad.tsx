@@ -261,19 +261,22 @@ function AjustesPorMarca({
   );
 }
 
-/** Query de ajustes + mutación de guardado, COMPARTIDO por Configuración y el Monitor (misma
- *  caché `CLAVE_AJUSTES`, así un cambio en una vista se refleja en la otra). */
-function useAjustesAdmin() {
+/** Mutación ÚNICA de guardado de un ajuste, COMPARTIDA por Configuración y el Monitor (el
+ *  panel de la máquina Y los toggles de daemons): una sola implementación del control.
+ *
+ *  Tras guardar: (1) parche optimista del ajuste devuelto, (2) INVALIDACIÓN del catálogo
+ *  completo —los toggles por marca sin override heredan su valor del MAESTRO, así que cambiar
+ *  un maestro cambia el valor efectivo de otras filas que el parche puntual no toca— y (3)
+ *  invalidación de las vistas que DERIVAN de estos toggles (Pipelines pinta «saltada» por
+ *  etapa/marca; el Monitor pinta el estado de los daemons), para que el cambio se vea al
+ *  instante sin esperar su polling ni recargar. */
+export function useGuardarAjuste() {
   const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: CLAVE_AJUSTES,
-    queryFn: ({ signal }) => api.ajustes(signal),
-  });
-  const guardar = useMutation({
+  return useMutation({
     mutationFn: (cuerpo: { clave: string; valor?: boolean | number | string }) =>
       api.guardarAjuste(cuerpo),
     onSuccess: (res) => {
-      // Sustituye el ajuste en la caché (sin refetch completo) y confirma.
+      // Sustituye el ajuste en la caché (respuesta inmediata, sin parpadeo)…
       queryClient.setQueryData<RespuestaAjustes>(CLAVE_AJUSTES, (prev) =>
         prev
           ? {
@@ -284,10 +287,24 @@ function useAjustesAdmin() {
             }
           : prev,
       );
+      // …y re-lee la verdad del backend: el resto de filas dependientes (defectos por marca
+      // que siguen al maestro) y las vistas derivadas (Pipelines, daemons del Monitor).
+      void queryClient.invalidateQueries({ queryKey: CLAVE_AJUSTES });
+      void queryClient.invalidateQueries({ queryKey: ["pipelines"] });
+      void queryClient.invalidateQueries({ queryKey: ["actividad", "cola"] });
       toast.success(`«${res.ajuste.etiqueta}» actualizado.`);
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+}
+
+/** Query de ajustes + la mutación compartida de guardado (Configuración y panel de máquina). */
+function useAjustesAdmin() {
+  const query = useQuery({
+    queryKey: CLAVE_AJUSTES,
+    queryFn: ({ signal }) => api.ajustes(signal),
+  });
+  const guardar = useGuardarAjuste();
   return { ...query, guardar };
 }
 
