@@ -22,7 +22,12 @@ from . import _comun
 from .hashing import hash_en_falso, hashear_password, verificar_password
 
 # Anti fuerza bruta: tras N fallos seguidos, el usuario queda bloqueado un rato.
-MAX_INTENTOS_FALLIDOS = 5
+# OJO: el lockout POR CUENTA es, en si mismo, un vector de DoS (un tercero puede bloquear
+# la cuenta de otro a base de fallos). La barrera principal contra fuerza bruta es ahora
+# el limite POR IP delante (Traefik + `api/auth._login_ip_bloqueada`), asi que este umbral
+# se SUBIO de 5 a 10 (hardening 2026-06): mas tolerante con humanos torpes, igual de inutil
+# para un atacante (la IP se corta mucho antes de agotar cuentas).
+MAX_INTENTOS_FALLIDOS = 10
 BLOQUEO_MINUTOS = 5
 
 

@@ -125,6 +125,22 @@ def _aislar_logging_keni():
         logger.setLevel(nivel)
 
 
+@pytest.fixture(autouse=True)
+def _limpiar_limite_login_por_ip():
+    """Vacia el limite de login POR IP entre tests (estado en memoria por proceso).
+
+    El TestClient de Starlette presenta SIEMPRE la misma IP ("testclient"): sin esta
+    limpieza, los intentos FALLIDOS de login de tests anteriores se acumularian en la
+    ventana deslizante de `api.auth` y un test tardio del mismo proceso recibiria 429 en
+    vez de su 401 esperado (fallo order-dependent). Es un arreglo SOLO de test.
+    """
+    from keni_consola.api import auth as api_auth
+
+    api_auth.reiniciar_limite_login_por_ip()
+    yield
+    api_auth.reiniciar_limite_login_por_ip()
+
+
 @pytest.fixture
 def entorno(monkeypatch, tmp_path):
     """Config + DB aisladas; metricas offline; Texto de prompts aislada en tmp.

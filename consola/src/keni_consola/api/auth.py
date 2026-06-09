@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 import time
+from collections import deque
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -35,6 +38,74 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 
 # Mensaje GENERICO de login fallido: NO revela si el usuario existe (anti enumeracion).
 _MSG_LOGIN_KO = "Usuario o contraseña incorrectos."
+
+# --------------------------------------------------------------------------- #
+# Limite de intentos de login POR IP (ventana deslizante, hardening 2026-06)   #
+# --------------------------------------------------------------------------- #
+#
+# COMPLEMENTA el lockout POR CUENTA de `auth.usuarios` (que, solo, es un vector de DoS:
+# cualquiera puede bloquear la cuenta de otro a base de fallos). Solo cuentan los intentos
+# FALLIDOS: los logins correctos no consumen cupo (el polling/uso normal no se ve afectado).
+# Al frente hay ademas un rate limit por IP en Traefik (deploy/docker-compose.yml).
+#
+# EN MEMORIA y POR PROCESO a proposito: el back corre 1 solo worker uvicorn (ver
+# deploy/back/Dockerfile), asi que el estado es efectivamente global; si algun dia se
+# escala a N procesos/replicas, el limite pasa a ser por-proceso (N veces mas laxo), lo
+# cual sigue siendo una barrera util — documentado, no un bug. La IP viene de
+# `request.client` (uvicorn --proxy-headers ya resuelve X-Forwarded-For desde Traefik).
+# Ajustables por env (enteros): KENI_LOGIN_IP_MAX (def 20 fallos) y
+# KENI_LOGIN_IP_VENTANA_SEG (def 300 s). OJO: una oficina entera puede salir por UNA IP
+# (NAT); 20 fallos/5 min es generoso para humanos y ridiculo para fuerza bruta.
+_LOGIN_IP_MAX_DEF = 20
+_LOGIN_IP_VENTANA_SEG_DEF = 300
+_intentos_login_por_ip: dict[str, deque[float]] = {}
+_candado_login_ips = threading.Lock()
+
+_MSG_LOGIN_IP_LIMITE = "Demasiados intentos desde esta dirección. Inténtalo de nuevo en unos minutos."
+
+
+def _entero_env(nombre: str, defecto: int) -> int:
+    """Entero de una env var (defecto si falta o no parsea). Lectura en caliente: barata."""
+    try:
+        return int(os.environ.get(nombre, "") or defecto)
+    except ValueError:
+        return defecto
+
+
+def _ip_cliente(request: Request) -> str:
+    """IP de origen de la peticion ("" si el transporte no la expone, p.ej. ciertos tests)."""
+    cliente = request.client
+    return cliente.host if cliente is not None else ""
+
+
+def _login_ip_bloqueada(ip: str) -> bool:
+    """True si esta IP agoto su cupo de intentos FALLIDOS dentro de la ventana."""
+    maximo = _entero_env("KENI_LOGIN_IP_MAX", _LOGIN_IP_MAX_DEF)
+    ventana = _entero_env("KENI_LOGIN_IP_VENTANA_SEG", _LOGIN_IP_VENTANA_SEG_DEF)
+    corte = time.monotonic() - ventana
+    with _candado_login_ips:
+        cola = _intentos_login_por_ip.get(ip)
+        if cola is None:
+            return False
+        while cola and cola[0] < corte:
+            cola.popleft()
+        if not cola:
+            # Higiene: no acumular claves de IPs ya "limpias" (memoria acotada).
+            _intentos_login_por_ip.pop(ip, None)
+            return False
+        return len(cola) >= maximo
+
+
+def _login_ip_registrar_fallo(ip: str) -> None:
+    """Anota un intento FALLIDO de esta IP (los exitosos no cuentan)."""
+    with _candado_login_ips:
+        _intentos_login_por_ip.setdefault(ip, deque()).append(time.monotonic())
+
+
+def reiniciar_limite_login_por_ip() -> None:
+    """Vacia el estado del limite por IP (lo usa la suite de tests entre casos)."""
+    with _candado_login_ips:
+        _intentos_login_por_ip.clear()
 
 # --------------------------------------------------------------------------- #
 # MFA (segundo factor PASSKEYS / WebAuthn), GATEADO por `KENI_CONSOLA_MFA` (def OFF).
@@ -254,19 +325,31 @@ def _respuesta_sesion_creada(usuario_id: str, usuario: dict) -> Response:
 
 
 async def login(request: Request) -> Response:
-    """POST /api/auth/login: valida credenciales, abre sesion y siembra la cookie."""
+    """POST /api/auth/login: valida credenciales, abre sesion y siembra la cookie.
+
+    Antes de NADA (ni siquiera leer el body) se aplica el limite de intentos FALLIDOS por
+    IP (429): es la barrera barata contra fuerza bruta distribuida sobre muchas cuentas y
+    contra el DoS de lockout (bloquear cuentas ajenas a base de fallos).
+    """
+    ip = _ip_cliente(request)
+    if _login_ip_bloqueada(ip):
+        return JSONResponse({"error": _MSG_LOGIN_IP_LIMITE}, status_code=429)
+
     datos = await leer_json(request)
     usuario = datos.get("usuario")
     password = datos.get("password")
     if not isinstance(usuario, str) or not isinstance(password, str) or not usuario or not password:
         # Mismo mensaje generico que un fallo de credenciales (no damos pistas).
+        _login_ip_registrar_fallo(ip)
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
     if len(password) > auth.LONGITUD_MAX_PASSWORD or len(usuario) > auth.LONGITUD_MAX_USUARIO:
         # Tope anti-DoS: no hasheamos (scrypt) entradas absurdamente largas. Generico.
+        _login_ip_registrar_fallo(ip)
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
     autenticado = auth.autenticar(usuario, password)
     if autenticado is None:
+        _login_ip_registrar_fallo(ip)
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
     # ELEVACION MFA (gateada): si el flag esta ON y este usuario tiene >=1 passkey (`mfa_activo`),

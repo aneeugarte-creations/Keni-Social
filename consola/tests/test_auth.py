@@ -75,7 +75,11 @@ def test_bootstrap_es_idempotente(entorno, monkeypatch):
     assert auth.contar_admins() == 1
 
 
-def test_bootstrap_genera_pass_y_la_loguea(entorno, monkeypatch, caplog):
+def test_bootstrap_sin_pass_no_crea_admin_ni_loguea_contrasena(entorno, monkeypatch, caplog):
+    """Hardening 2026-06: sin KENI_CONSOLA_ADMIN_PASS NO se crea admin y NUNCA se loguea
+    una contrasena (antes se generaba una aleatoria y se MOSTRABA en el log: una
+    credencial valida en claro que sobrevive en `docker logs`). El aviso debe decir
+    como arreglarlo (fijar la env o usar el token de mantenimiento con la BD vacia)."""
     import logging
 
     from keni_consola.observabilidad import NOMBRE_LOGGER
@@ -89,9 +93,10 @@ def test_bootstrap_genera_pass_y_la_loguea(entorno, monkeypatch, caplog):
             auth.bootstrap_admin()
     finally:
         logger.propagate = previa
-    assert auth.contar_admins() == 1
+    assert auth.contar_admins() == 0  # no se crea un admin con una pass inaccesible
     mensajes = "\n".join(r.getMessage() for r in caplog.records if r.name == NOMBRE_LOGGER)
-    assert "contrasena=" in mensajes  # se mostro la pass temporal en el log
+    assert "contrasena=" not in mensajes  # JAMAS una contrasena en el log
+    assert "KENI_CONSOLA_ADMIN_PASS" in mensajes  # instruccion de como fijarla
 
 
 def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
@@ -1131,6 +1136,39 @@ def test_login_expirado_por_intentos_fallidos_bloquea(entorno):
         assert auth.autenticar("ana", "mala") is None
     # Aun con la contrasena CORRECTA, queda bloqueada justo despues.
     assert auth.autenticar("ana", CLAVE) is None
+
+
+def test_login_limite_por_ip_devuelve_429(entorno, monkeypatch):
+    """Limite POR IP (hardening 2026-06): tras N intentos FALLIDOS desde la misma IP, el
+    login responde 429 ANTES de tocar credenciales (ni siquiera con la pass correcta).
+
+    Complementa el lockout por cuenta (que solo, es un vector de DoS contra terceros).
+    Ventana deslizante EN MEMORIA, por proceso (1 worker uvicorn en prod: ver api/auth).
+    """
+    from keni_consola.api import auth as api_auth
+
+    monkeypatch.setenv("KENI_LOGIN_IP_MAX", "3")
+    api_auth.reiniciar_limite_login_por_ip()
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    for _ in range(3):
+        assert _login(c, "ana", "mala").status_code == 401
+    # Cupo agotado: 429 incluso con credenciales CORRECTAS (la IP esta cortada).
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 429
+    assert "error" in r.json()
+
+
+def test_login_limite_por_ip_no_cuenta_exitos(entorno, monkeypatch):
+    """Los logins CORRECTOS no consumen cupo del limite por IP (uso normal intacto)."""
+    from keni_consola.api import auth as api_auth
+
+    monkeypatch.setenv("KENI_LOGIN_IP_MAX", "2")
+    api_auth.reiniciar_limite_login_por_ip()
+    _crear("ana", CLAVE, "editor", debe_cambiar_password=False)
+    c = _cli()
+    for _ in range(4):  # mas exitos que el maximo de fallos: nunca 429
+        assert _login(c, "ana", CLAVE).status_code == 200
 
 
 # --------------------------------------------------------------------------- #
