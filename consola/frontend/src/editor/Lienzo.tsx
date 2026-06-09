@@ -326,7 +326,8 @@ export function Lienzo({
       : [];
 
   return (
-    <div ref={medirRef} className="flex h-full w-full items-center justify-center overflow-hidden">
+    <div className="flex h-full w-full items-stretch gap-2">
+    <div ref={medirRef} className="flex min-w-0 flex-1 items-center justify-center overflow-hidden">
     <div className="relative" style={{ width: baseFit * w, height: baseFit * h }}>
       <div
         ref={scrollRef}
@@ -462,24 +463,27 @@ export function Lienzo({
         />
       )}
 
-      {/* Controles de ENCUADRE + zoom. Imán, rejilla (+ tamaño de celda) y "dentro del marco" son
-          toggles INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
-      <ControlesEncuadre
-        iman={iman}
-        setIman={setIman}
-        grid={grid}
-        setGrid={setGrid}
-        tamCelda={tamCelda}
-        setTamCelda={setTamCelda}
-        dentroMarco={dentroMarco}
-        setDentroMarco={setDentroMarco}
-        escala={escala}
-        alejar={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))}
-        acercar={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))}
-        zoomReal={zoomReal}
-        ajustarPantalla={ajustarPantalla}
-      />
     </div>
+    </div>
+
+    {/* Controles de ENCUADRE + zoom: raíl vertical AL LADO del lienzo (fuera de la foto, no tapa
+        el campo visual). Imán, rejilla (+ tamaño de celda) y "dentro del marco" son toggles
+        INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
+    <ControlesEncuadre
+      iman={iman}
+      setIman={setIman}
+      grid={grid}
+      setGrid={setGrid}
+      tamCelda={tamCelda}
+      setTamCelda={setTamCelda}
+      dentroMarco={dentroMarco}
+      setDentroMarco={setDentroMarco}
+      escala={escala}
+      alejar={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))}
+      acercar={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))}
+      zoomReal={zoomReal}
+      ajustarPantalla={ajustarPantalla}
+    />
     </div>
   );
 }

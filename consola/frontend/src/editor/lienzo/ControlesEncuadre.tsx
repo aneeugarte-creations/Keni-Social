@@ -1,6 +1,7 @@
-// Controles de ENCUADRE + zoom (barra flotante abajo-derecha). Imán, rejilla (+ tamaño de celda) y
-// "dentro del marco" son toggles INDEPENDIENTES; sus preferencias se guardan en localStorage en el
-// componente padre. Presentacional: recibe el estado y los setters/handlers por props.
+// Controles de ENCUADRE + zoom (raíl vertical al lado del lienzo, FUERA de la foto para no tapar
+// el campo visual). Imán, rejilla (+ tamaño de celda) y "dentro del marco" son toggles
+// INDEPENDIENTES; sus preferencias se guardan en localStorage en el componente padre.
+// Presentacional: recibe el estado y los setters/handlers por props.
 
 import { Frame, Grid3x3, Magnet, Maximize, Minus, Plus } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
@@ -37,7 +38,7 @@ export function ControlesEncuadre({
   ajustarPantalla: () => void;
 }) {
   return (
-    <div className="absolute bottom-2 right-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 shadow">
+    <div className="flex shrink-0 flex-col items-center gap-0.5 self-center rounded-md border border-border bg-popover/90 p-0.5 shadow">
       <button
         title="Imán: ajustar a objetos, bordes y márgenes"
         onClick={() => setIman((v) => !v)}
@@ -71,7 +72,7 @@ export function ControlesEncuadre({
       >
         <Frame className="h-3.5 w-3.5" />
       </button>
-      <div className="mx-0.5 h-4 w-px bg-border" />
+      <div className="my-0.5 h-px w-4 bg-border" />
       <button title="Alejar" onClick={alejar} className="rounded p-1 hover:bg-accent">
         <Minus className="h-3.5 w-3.5" />
       </button>
