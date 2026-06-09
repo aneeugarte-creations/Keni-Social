@@ -47,7 +47,13 @@ def test_listar_urlencodea_los_filtros(cliente):
     assert url.params["marca"] == "claro sports & más"
     assert url.params["flujo"] == "evento"
     assert "clase" not in url.params  # los filtros vacios no viajan
-    assert "claro%20sports%20%26%20m%C3%A1s" in str(url)
+    # Lo que protege esta regresion: los caracteres peligrosos van PERCENT-ENCODED en la
+    # query cruda, no literales (un '&' literal partiria la query; un acento crudo da URL
+    # invalida). El espacio httpx lo codifica como '+' (equivalente valido a %20), asi que
+    # NO lo fijamos: comprobamos el '&' y el acento, que son los que rompian con f-strings.
+    cruda = str(url)
+    assert "%26" in cruda  # el '&' del valor viaja escapado, no parte la query
+    assert "m%C3%A1s" in cruda  # el acento viaja percent-encoded
 
 
 @respx.mock
