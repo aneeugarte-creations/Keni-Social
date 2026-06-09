@@ -1,0 +1,7 @@
+[Unit]
+Description=Notifica (journal err + webhook opcional) el fallo de la unidad %i via keni-alertas
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/keni-alertas.conf
+ExecStart=/usr/local/bin/keni-alertas --fallo %i

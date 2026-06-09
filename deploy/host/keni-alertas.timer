@@ -1,0 +1,10 @@
+[Unit]
+Description=Chequeo de infra keni-social cada 10 minutos (keni-alertas)
+
+[Timer]
+OnBootSec=5min
+OnCalendar=*:0/10
+Persistent=false
+
+[Install]
+WantedBy=timers.target

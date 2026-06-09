@@ -1,0 +1,11 @@
+[Unit]
+Description=keni-social: chequeo de salud de infra (healthchecks, disco, backup, TLS) con alerta a journal/webhook
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Overrides opcionales (KENI_ALERTA_WEBHOOK, KENI_ALERTA_DISCO_MAX, KENI_ALERTA_BACKUP_MAX_H,
+# KENI_ALERTA_CERT_MIN_DIAS, KENI_ALERTA_HOST). El `-` permite que el fichero no exista.
+EnvironmentFile=-/etc/keni-alertas.conf
+ExecStart=/usr/local/bin/keni-alertas

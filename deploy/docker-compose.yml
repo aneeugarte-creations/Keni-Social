@@ -34,7 +34,7 @@ name: keni-social
 #   Servicio   mem_limit (def)   env override            cpus
 #   ────────   ───────────────   ─────────────────────   ─────────
 #   db         8g                DB_MEM_LIMIT            (reserva: sin tope de CPU)
-#   worker     14g               WORKER_MEM_LIMIT        WORKER_CPUS (def 6)
+#   worker     20g               WORKER_MEM_LIMIT        WORKER_CPUS (def 6)
 #   back       3g                BACK_MEM_LIMIT          3.0
 #   files      3g                FILES_MEM_LIMIT         2.0
 #   daemons    2g                DAEMONS_MEM_LIMIT       2.0
@@ -42,10 +42,10 @@ name: keni-social
 #   traefik    512m              —                       1.0
 #   front      256m              —                       1.0
 #
-# El worker subio de 6g/4cpu a 14g/6cpu porque ahora corre KENI_MAX_JOBS (def 4) jobs
-# `claude -p` EN PARALELO (antes el bucle era serial: 1 a la vez, asi 6g bastaba). Cada job
-# ~1.5–2.5 GiB en pico => 4 × 2.5 + margen ≈ 14 GiB. Ver la nota junto al servicio `worker`.
-# Suma de defaults ≈ 31.8 GiB sobre 61 GiB: deja ~29 GiB para host + CI + learn-postgres.
+# El worker corre KENI_MAX_JOBS (def 6, antes 4) jobs `claude -p` EN PARALELO. Cada job
+# ~1.5–2.5 GiB en pico => 6 × 2.5 + margen ≈ 18–20 GiB. Ver la nota junto al servicio
+# `worker`. Suma de defaults ≈ 37.8 GiB sobre 61 GiB: deja ~23 GiB para host + CI +
+# learn-postgres.
 # Los `cpus` son TOPES (no reservas): si keni esta ocioso, el CI usa los 12 nucleos.
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -127,15 +127,25 @@ services:
       - autoheal=true  # vigilado por el sidecar autoheal
       # Cabeceras de seguridad para TODO social.kenitech.io (front Y back, ver router back):
       # HSTS (fuerza HTTPS en visitas siguientes), nosniff, X-Frame-Options: DENY (anti
-      # clickjacking) y Referrer-Policy. CSP se deja como follow-up: requiere validar el SPA
-      # (inline scripts/estilos, origen de la media) para no romperlo. Mismo patron que el
-      # middleware `sec-headers@file` de traefik/dynamic/legacy-sites.yml, definido aqui por
-      # labels para vivir junto al servicio.
+      # clickjacking) y Referrer-Policy. Mismo patron que el middleware `sec-headers@file`
+      # de traefik/dynamic/legacy-sites.yml, definido aqui por labels para vivir junto al
+      # servicio.
       - traefik.http.middlewares.keni-sec.headers.stsSeconds=31536000
       - traefik.http.middlewares.keni-sec.headers.stsIncludeSubdomains=true
       - traefik.http.middlewares.keni-sec.headers.contentTypeNosniff=true
       - traefik.http.middlewares.keni-sec.headers.frameDeny=true
       - traefik.http.middlewares.keni-sec.headers.referrerPolicy=strict-origin-when-cross-origin
+      # CSP REAL (no Report-Only), validada contra el SPA actual (consola/frontend):
+      #   - script-src 'unsafe-inline': index.html lleva un <script> inline (tema oscuro
+      #     anti-parpadeo) y el back puede inyectar window.__KENI_TOKEN__ en el index (modo
+      #     local). Sigue bloqueando scripts EXTERNOS (ningun CDN de JS permitido).
+      #   - style-src/font-src con fonts.googleapis.com / fonts.gstatic.com: el index carga
+      #     Geist + las tipografias del editor de plantillas desde Google Fonts.
+      #   - img/media con data:/blob:: previews del editor (createObjectURL) y media inline.
+      #   - connect-src 'self': la API/SSE es mismo-origen (/api). frame-ancestors 'none'
+      #     refuerza el frameDeny de arriba. Si el SPA suma un origen externo nuevo, hay que
+      #     anadirlo AQUI a la vez.
+      - "traefik.http.middlewares.keni-sec.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     # nginx estatico no-root: huella minima. 127.0.0.1 (no `localhost`): el busybox wget de
     # alpine intenta ::1 (IPv6) primero y nginx solo escucha IPv4 (ver front/Dockerfile).
     healthcheck:
@@ -267,7 +277,29 @@ services:
       - traefik.http.routers.back.entrypoints=websecure
       - traefik.http.routers.back.tls.certresolver=le
       - traefik.http.services.back.loadbalancer.server.port=8765
-      - traefik.http.routers.back.middlewares=keni-sec  # mismas cabeceras de seguridad que el front
+      # RATE LIMITING (hardening): limites GENEROSOS pensados para no romper el uso normal
+      # (la UI hace polling; una oficina entera puede salir por UNA sola IP NAT).
+      #   keni-ratelimit: 50 req/s de media con rafagas de 100 POR IP de origen (criterio
+      #     por defecto de Traefik: la IP remota). Periodo por defecto: 1s.
+      #   keni-inflightreq: tope de 150 peticiones EN VUELO hacia el back. OJO: el criterio
+      #     por defecto de inFlightReq es requestHost => es un tope GLOBAL de concurrencia
+      #     (las SSE abiertas cuentan); protege al unico proceso uvicorn de un pileup.
+      - traefik.http.middlewares.keni-ratelimit.ratelimit.average=50
+      - traefik.http.middlewares.keni-ratelimit.ratelimit.burst=100
+      - traefik.http.middlewares.keni-inflightreq.inflightreq.amount=150
+      - traefik.http.routers.back.middlewares=keni-sec,keni-ratelimit,keni-inflightreq  # cabeceras + limites
+      # TOPE DE BODY para SUBIDAS (videos de hasta ~300 MB): middleware buffering con techo
+      # de 350 MB, aplicado SOLO al router de subidas (POST /api/media*). NO se aplica al
+      # router general del back a proposito: buffering almacena la respuesta antes de
+      # reenviarla y ROMPERIA el streaming SSE token a token de la generacion. El limite
+      # fino por endpoint (JSON pequeno, etc.) lo aplica el propio backend.
+      - traefik.http.middlewares.keni-buffer.buffering.maxRequestBodyBytes=367001600
+      - traefik.http.routers.back-subidas.rule=Host(`${KENI_HOST}`) && PathPrefix(`/api/media`) && Method(`POST`)
+      - traefik.http.routers.back-subidas.priority=20
+      - traefik.http.routers.back-subidas.entrypoints=websecure
+      - traefik.http.routers.back-subidas.tls.certresolver=le
+      - traefik.http.routers.back-subidas.service=back
+      - traefik.http.routers.back-subidas.middlewares=keni-sec,keni-ratelimit,keni-inflightreq,keni-buffer
       - autoheal=true  # el sidecar autoheal lo reinicia si /healthz queda unhealthy (cuelgue)
 
   daemons:
@@ -392,10 +424,12 @@ services:
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
       # Concurrencia de `claude` por worker + topes de coste/tiempo (mismos nombres que antes).
       # El worker corre un POOL de KENI_MAX_JOBS hilos => hasta N jobs `claude` EN PARALELO
-      # (antes el bucle era serial y solo corria 1 a la vez pese a este valor). Default 4 (ver
-      # config.MAX_JOBS_DEF); explicito aqui con fallback 4 para no depender del .env. El
-      # mem_limit/cpus de abajo estan dimensionados para ESTOS 4 jobs concurrentes.
-      KENI_MAX_JOBS: ${KENI_MAX_JOBS:-4}
+      # (antes el bucle era serial y solo corria 1 a la vez pese a este valor). Default 6
+      # (subido de 4: los jobs son mayormente ESPERA de API y el worker tiene 6 cpus/20 GiB;
+      # la cola con prioridad aprovecha el hueco extra). OJO: si el .env del operador fija
+      # KENI_MAX_JOBS, ese valor MANDA sobre este fallback. El mem_limit/cpus de abajo estan
+      # dimensionados para 6 jobs concurrentes.
+      KENI_MAX_JOBS: ${KENI_MAX_JOBS:-6}
       # Credencial de Claude para `claude -p` (el back ya no la necesita: no genera).
       # Como ficheros de secreto: el entrypoint del worker las exporta a env antes de
       # arrancar (claude -p solo lee de env), asi el valor no sale en docker inspect.
@@ -453,17 +487,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    # DIMENSIONADO PARA KENI_MAX_JOBS=4 CONCURRENTES (el worker ahora corre N jobs `claude`
-    # EN PARALELO, no de uno en uno). Cada `claude -p` (Node + uso de herramientas del modelo)
-    # consume ~1.5–2.5 GiB en pico. Matematica: 4 × ~2.5 GiB ≈ 10 GiB + ~2 GiB de margen
-    # (post-procesado, descarga de media S3, buffers de stream) ≈ 12 GiB. Antes el limite era
-    # 6g (correcto para 1 job a la vez, pero OOM-killaria a 4 concurrentes). Si subes
+    # DIMENSIONADO PARA KENI_MAX_JOBS=6 CONCURRENTES (el worker corre N jobs `claude` EN
+    # PARALELO, no de uno en uno). Cada `claude -p` (Node + uso de herramientas del modelo)
+    # consume ~1.5–2.5 GiB en pico. Matematica: 6 × ~2.5 GiB ≈ 15 GiB + margen (post-
+    # procesado, descarga de media S3, buffers de stream) ≈ 18–20 GiB. Si subes
     # KENI_MAX_JOBS, sube WORKER_MEM_LIMIT en proporcion (~3 GiB/job) y revisa la suma global
-    # (cabecera de este fichero): a 14g el worker sigue dejando holgura amplia sobre 61 GiB.
-    mem_limit: ${WORKER_MEM_LIMIT:-14g}
-    # CPU: 4 `claude` concurrentes quieren ~4–6 nucleos (cada uno empuja CPU al razonar/usar
-    # tools). 6 da holgura para los picos sin monopolizar la caja (12 vCPU). Es un TOPE, no
-    # reserva: si el worker esta ocioso, esos nucleos quedan para el resto del stack/CI.
+    # (cabecera de este fichero): a 20g el worker sigue dejando holgura sobre 61 GiB.
+    # ESCALAR A worker=2: TODAVIA NO. Cuando haga falta mas throughput que KENI_MAX_JOBS=6,
+    # el camino es `docker compose up -d --scale worker=2` (la cola reparte sin doble-
+    # ejecutar: claim FOR UPDATE SKIP LOCKED), pero hay que re-presupuestar RAM antes
+    # (2 workers × 20g no caben con holgura junto a db+CI en 61 GiB).
+    mem_limit: ${WORKER_MEM_LIMIT:-20g}
+    # CPU: 6 `claude` concurrentes quieren ~4–6 nucleos (cada uno empuja CPU al razonar/usar
+    # tools; la mayor parte del tiempo es ESPERA de API). 6 da holgura para los picos sin
+    # monopolizar la caja (12 vCPU). Es un TOPE, no reserva: si el worker esta ocioso, esos
+    # nucleos quedan para el resto del stack/CI.
     cpus: ${WORKER_CPUS:-6}
     security_opt:
       - no-new-privileges:true
@@ -582,8 +620,15 @@ services:
     labels:
       - autoheal=true  # vigilado por el sidecar autoheal
     environment:
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
-      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      # Secretos como FICHEROS (no env plano -> no salen en `docker inspect`): Garage
+      # v1.0.x soporta GARAGE_RPC_SECRET_FILE / GARAGE_ADMIN_TOKEN_FILE (desde v0.8.5/
+      # v0.9.1). deploy.sh los renderiza a ./secrets/ con 0400 root:root (Garage corre
+      # como root en la imagen oficial y RECHAZA ficheros de secreto world-readable).
+      GARAGE_RPC_SECRET_FILE: /run/secrets/garage_rpc_secret
+      GARAGE_ADMIN_TOKEN_FILE: /run/secrets/garage_admin_token
+    secrets:
+      - garage_rpc_secret
+      - garage_admin_token
     volumes:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
@@ -645,6 +690,16 @@ services:
         max-file: "5"
 
 networks:
+  # NOTA SUBREDES (auditoria 2026-06): en el server real `edge` = 172.19.0.0/16 e
+  # `internal` = 172.18.0.0/16, ambas DENTRO de 172.16.0.0/12 (el pool por defecto de
+  # Docker), que es lo que asume `--forwarded-allow-ips=172.16.0.0/12` del back. NO se
+  # fija la subred con `ipam` a proposito: probado en el server, docker compose detecta
+  # el cambio de config y RECREA la red (parando los contenedores enganchados), y a
+  # `edge` esta enganchado tambien el woodpecker-server del stack keni-ci (red externa
+  # para el), asi que el deploy fallaria/cortaria el CI. Si algun dia hace falta fijarla:
+  # ventana de mantenimiento con AMBOS stacks abajo, ipam con subnet 172.19.0.0/16 (la
+  # actual) y arrancar keni-social antes que keni-ci. Mientras tanto, NO cambies el pool
+  # por defecto del daemon (default-address-pools) fuera de 172.16.0.0/12.
   edge:
   internal:
   # Red de DATOS interna (sin egress a internet): db (Postgres) y files (Garage) viven
@@ -682,3 +737,7 @@ secrets:
     file: ./secrets/consola_token
   mcp_bearer:
     file: ./secrets/mcp_bearer
+  garage_rpc_secret:
+    file: ./secrets/garage_rpc_secret
+  garage_admin_token:
+    file: ./secrets/garage_admin_token

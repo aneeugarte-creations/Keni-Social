@@ -2,6 +2,10 @@
 Description=keni-social backup local (Postgres dump + snapshot media Garage)
 After=docker.service
 Requires=docker.service
+# Si el backup FALLA, dispara una notificacion (journal err + webhook opcional) via
+# keni-alertas (ver deploy/host/). %n = nombre de esta unidad. Si keni-alertas no esta
+# instalado, systemd solo loguea un warning y el backup sigue funcionando igual.
+OnFailure=keni-alerta-fallo@%n.service
 
 [Service]
 Type=oneshot

@@ -13,6 +13,7 @@ Resumen de lo que cubre, con la severidad del audit de infra (2026-06):
 | `sshd_config.d/99-keni-hardening.conf` | Low | `AllowUsers`, cripto moderna, RSA≥3072, sin agent-forwarding, `LogLevel VERBOSE`. |
 | `apt/52-keni-auto-reboot.conf` | Low | Auto-reboot 04:00 UTC tras parches de kernel desatendidos. |
 | `../backup/keni-backup.*` | C1 | Backup local diario (Postgres dump + media Garage) con retencion. |
+| `keni-alertas.*` + `keni-alerta-fallo@.service` | M | Alertas de infra cada 10 min (healthchecks incl. db, disco, backup, TLS) sin servicios externos. |
 
 > El backup vive en `deploy/backup/` (no aqui) porque depende del stack; se instala igual.
 
@@ -35,6 +36,32 @@ Restore (Postgres, formato custom): `docker exec -i keni-social-db-1 sh -c 'pg_r
 Restore (volumen): `docker run --rm -v keni-social_keni-data:/v -v /var/backups/keni-social/volumes:/b alpine sh -c 'cd /v && tar xzf /b/keni-data-XXXX.tar.gz'` (con el stack parado).
 Offsite (recomendado al escalar): instala `rclone`, configura un remoto y pon
 `BACKUP_RCLONE_REMOTE=remoto:keni-social` en `/etc/keni-backup.conf`. El script lo usa solo.
+
+## 1b. Alertas de infra (M) — sin servicios externos
+
+Chequeo cada 10 min: salud de contenedores (INCLUIDO `db`, que esta excluido de autoheal
+a proposito), disco > 85 %, ultimo backup local > 26 h y certificado TLS < 15 dias. Alerta
+SIEMPRE al journal con prioridad `err`; opcionalmente a un webhook JSON. Ademas, el
+servicio de backup lleva `OnFailure=keni-alerta-fallo@%n.service`: un backup fallido
+notifica por el mismo canal.
+
+```sh
+sudo install -m 0755 deploy/host/keni-alertas.sh /usr/local/bin/keni-alertas
+sudo install -m 0644 deploy/host/keni-alertas.service        /etc/systemd/system/keni-alertas.service
+sudo install -m 0644 deploy/host/keni-alertas.timer          /etc/systemd/system/keni-alertas.timer
+sudo install -m 0644 deploy/host/keni-alerta-fallo@.service  /etc/systemd/system/keni-alerta-fallo@.service
+# Reinstala tambien la unidad de backup (ahora con OnFailure= hacia keni-alerta-fallo@):
+sudo install -m 0644 deploy/backup/keni-backup.service /etc/systemd/system/keni-backup.service
+# (opcional) webhook y umbrales:
+#   echo 'KENI_ALERTA_WEBHOOK=https://hooks.example.com/...' | sudo tee /etc/keni-alertas.conf
+sudo systemctl daemon-reload
+sudo systemctl enable --now keni-alertas.timer
+sudo systemctl start keni-alertas.service   # chequeo AHORA; si todo esta sano sale 0
+journalctl -t keni-alertas -n 20            # las alertas (si las hubo)
+```
+
+Ver las alertas historicas: `journalctl -p err -t keni-alertas`. Un chequeo con problemas
+deja la unidad `failed` (visible en `systemctl --failed`) ademas de notificar.
 
 ## 2. Firewall DOCKER-USER (M1)
 
