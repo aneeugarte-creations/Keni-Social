@@ -40,25 +40,31 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("tuning", "Ajustes finos"),
 )
 
-# Las 4 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), todas colgadas del espinazo
-# pipeline/máquina. Cada una reutiliza una env var existente (NO se renombra) y solo cambia label,
-# agrupación y cableado (1 toggle = 1 etapa del pipeline, en orden de flujo):
-#   - KENI_INGESTA      → "Crear noticias" (CI, per-marca),
-#   - KENI_QA           → "Validar (QA)"   (criba de la fuente, per-marca),
-#   - KENI_PIPELINE     → "Generar copy"   (CD, per-marca),
-#   - KENI_AUTOGEN_ARTE → "Generar arte"   (per-marca).
-# La tupla es (env, etiqueta, descripción genérica). El maestro vive en `maestros_etapa`; las
-# excepciones por marca (las cuatro etapas) en `automatizacion_marca`.
-_ETAPA_INGESTA = (config.ENV_INGESTA, "Crear noticias", "ingiere fuentes, agrupa historias y traduce/tropicaliza MX")
-_ETAPA_QA = (config.ENV_QA, "Validar (QA)", "criba la fuente con IA antes de generar copy")
-_ETAPA_COPY = (config.ENV_PIPELINE, "Generar copy", "genera copy automático de los temas que aún no lo tienen")
-_ETAPA_ARTE = (config.ENV_AUTOGEN_ARTE, "Generar arte", "genera imagen por IA para los temas con copy y sin imagen")
+# Las 6 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), en el MISMO orden y con el
+# MISMO nombre que las etapas del pipeline (vista de runs). Cada una reutiliza una env var
+# existente (NO se renombra la env, solo el label) — 1 toggle = 1 etapa:
+#   - KENI_FUSION_SEMANTICA → "Fusión"     (dedup IA de historias del mismo evento),
+#   - KENI_PERFIL_EDITORIAL → "Ranking"    (encaje editorial IA que afina el score),
+#   - KENI_INGESTA          → "Selección"  (ingiere/agrupa y promueve las top a temas),
+#   - KENI_QA               → "Validación" (criba la fuente con IA antes del copy),
+#   - KENI_PIPELINE         → "Copy"       (genera el copy automático),
+#   - KENI_AUTOGEN_ARTE     → "Arte"       (genera la imagen por IA).
+# La tupla es (env, etiqueta, descripción). El maestro vive en `maestros_etapa`; las excepciones
+# por marca en `automatizacion_marca`. (Aprobación es gate humano: no tiene toggle.)
+_ETAPA_FUSION = (config.ENV_FUSION_SEMANTICA, "Fusión", "une con IA las historias del mismo evento (dedup semántico)")
+_ETAPA_RANKING = (config.ENV_PERFIL_EDITORIAL, "Ranking", "afina el ranking con el encaje editorial por IA")
+_ETAPA_SELECCION = (config.ENV_INGESTA, "Selección", "ingiere fuentes, agrupa historias y promueve las top a temas")
+_ETAPA_VALIDACION = (config.ENV_QA, "Validación", "criba la fuente con IA antes de generar copy")
+_ETAPA_COPY = (config.ENV_PIPELINE, "Copy", "genera copy automático de los temas que aún no lo tienen")
+_ETAPA_ARTE = (config.ENV_AUTOGEN_ARTE, "Arte", "genera imagen por IA para los temas con copy y sin imagen")
 
-# Las 4 etapas en orden de flujo (Noticias → QA → Copy → Arte), para `maestros_etapa` (globales).
-_ETAPAS: tuple[tuple[str, str, str], ...] = (_ETAPA_INGESTA, _ETAPA_QA, _ETAPA_COPY, _ETAPA_ARTE)
+# Las 6 etapas en orden de flujo (Fusión → Ranking → Selección → Validación → Copy → Arte).
+_ETAPAS: tuple[tuple[str, str, str], ...] = (
+    _ETAPA_FUSION, _ETAPA_RANKING, _ETAPA_SELECCION, _ETAPA_VALIDACION, _ETAPA_COPY, _ETAPA_ARTE,
+)
 
-# Etapas CON excepción por marca (`_ajustes_por_marca`). Las CUATRO tienen excepción por marca:
-# apagar una marca la excluye de esa etapa, las demás siguen.
+# Etapas CON excepción por marca (`_ajustes_por_marca`). Las SEIS: apagar una marca la excluye de
+# esa etapa, las demás siguen.
 _ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = _ETAPAS
 
 
@@ -81,6 +87,8 @@ def _maestros_etapa() -> list[Ajuste]:
 def _global_de_etapa(env_flag: str) -> bool:
     """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca)."""
     return {
+        config.ENV_FUSION_SEMANTICA: config.fusion_semantica_activa,
+        config.ENV_PERFIL_EDITORIAL: config.perfil_editorial_activo,
         config.ENV_INGESTA: config.ingesta_activa,
         config.ENV_QA: config.qa_activo,
         config.ENV_PIPELINE: config.pipeline_activo,
@@ -94,7 +102,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
     sin código."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
-        for env_flag, etiqueta_etapa, desc in _ETAPAS_MARCA:
+        for env_flag, etiqueta_etapa, _desc in _ETAPAS_MARCA:
             salida.append(
                 Ajuste(
                     clave=config.clave_por_marca(env_flag, mid),
@@ -207,26 +215,9 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        Ajuste(
-            clave=config.ENV_PERFIL_EDITORIAL,
-            tipo="bool",
-            etiqueta="Relevancia por línea editorial (IA)",
-            ayuda="Un agente (Haiku) lee la línea editorial de cada marca (página Texto) y extrae "
-            "sus temas/keywords; el ranking de noticias los usa como relevancia de marca en vez "
-            "del vocabulario fijo. Se refresca por marca cada cierto tiempo o si cambia la línea.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
-        Ajuste(
-            clave=config.ENV_FUSION_SEMANTICA,
-            tipo="bool",
-            etiqueta="Fusión de historias del mismo evento (IA)",
-            ayuda="Un agente (Haiku) agrupa las historias recientes de cada marca que cubren el "
-            "MISMO acontecimiento con titulares distintos y las funde en una sola (cuenta de "
-            "fuentes real → mejor señal de tendencia). Conservador: ante duda no fusiona.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
+        # NOTA: Fusión (KENI_FUSION_SEMANTICA) y Ranking/encaje (KENI_PERFIL_EDITORIAL) ya NO viven
+        # aquí: ahora son ETAPAS del pipeline (grupo `maestros_etapa` + excepción por marca), 1
+        # toggle = 1 etapa, como el resto. Ver `_ETAPA_FUSION`/`_ETAPA_RANKING`.
         Ajuste(
             clave=config.ENV_RENDIMIENTO_RANKING,
             tipo="bool",

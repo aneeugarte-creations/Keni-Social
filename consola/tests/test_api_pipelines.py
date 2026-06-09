@@ -17,12 +17,15 @@ from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar
 
 @pytest.fixture(autouse=True)
 def _etapas_activas(monkeypatch):
-    """Activa los 3 maestros togglables (Noticias/QA/Copy) para estos tests.
+    """Activa los maestros togglables de las etapas (Fusión/Ranking/Selección/Validación/Copy) para
+    estos tests.
 
-    El default de cada toggle es OFF; sin esto, `_etapas_de_run` pintaría todo "saltada" y el
-    listado ocultaría los runs (la etapa de entrada CI estaría off). Los tests que ejercitan el
-    caso "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
+    El default de cada toggle es OFF; sin esto, `_etapas_de_run` pintaría todo "saltada". Los tests
+    que ejercitan el caso "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
+    (Arte se deja OFF por defecto; el test de Arte lo enciende a propósito.)
     """
+    monkeypatch.setenv(config.ENV_FUSION_SEMANTICA, "1")
+    monkeypatch.setenv(config.ENV_PERFIL_EDITORIAL, "1")
     monkeypatch.setenv(config.ENV_INGESTA, "1")
     monkeypatch.setenv(config.ENV_QA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE, "1")

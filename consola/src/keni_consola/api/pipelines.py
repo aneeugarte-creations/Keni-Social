@@ -38,8 +38,18 @@ from ..pipeline_contenido import (
 _ESTADO_SALTADA = "saltada"
 
 
+def _fusion_off(marca: str) -> bool:
+    """Etapa "Fusión" desactivada para `marca` (maestro `KENI_FUSION_SEMANTICA` off o por-marca)."""
+    return config.marca_apagada(config.ENV_FUSION_SEMANTICA, marca) or not config.fusion_semantica_activa()
+
+
+def _ranking_off(marca: str) -> bool:
+    """Etapa "Ranking" desactivada para `marca` (maestro `KENI_PERFIL_EDITORIAL` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PERFIL_EDITORIAL, marca) or not config.perfil_editorial_activo()
+
+
 def _ci_off(marca: str) -> bool:
-    """Etapa "Crear noticias"/CI desactivada para `marca` (maestro `KENI_INGESTA` off o por-marca)."""
+    """Etapa "Selección"/CI desactivada para `marca` (maestro `KENI_INGESTA` off o por-marca)."""
     return config.marca_apagada(config.ENV_INGESTA, marca) or not config.ingesta_activa()
 
 
@@ -174,9 +184,9 @@ def _cluster_publico(cluster: dict | None) -> dict | None:
     }
 
 
-def _fusion_de(cluster: dict | None) -> dict:
-    """Etapa "Fusión": dedup del pool (agrupar historias del mismo evento). Derivada del cluster."""
-    if not cluster:
+def _fusion_de(cluster: dict | None, marca: str) -> dict:
+    """Etapa "Fusión": dedup IA del pool. Saltada si su toggle está off para la marca."""
+    if _fusion_off(marca) or not cluster:
         return {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     n_fuentes = int(cluster.get("n_fuentes", 0) or 0)
     n_items = int(cluster.get("n_items", 0) or 0)
@@ -187,9 +197,9 @@ def _fusion_de(cluster: dict | None) -> dict:
     }
 
 
-def _ranking_de(cluster: dict | None) -> dict:
-    """Etapa "Ranking": score/jerarquización de la historia. Derivada del cluster."""
-    if not cluster:
+def _ranking_de(cluster: dict | None, marca: str) -> dict:
+    """Etapa "Ranking": encaje editorial IA + score. Saltada si su toggle está off para la marca."""
+    if _ranking_off(marca) or not cluster:
         return {"clave": "ranking", "nombre": "Ranking", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     score = round(float(cluster.get("score", 0.0) or 0.0), 2)
     detalle = f"Score {score}" + (" · 🔥" if cluster.get("breaking") else "")
@@ -210,16 +220,16 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
     (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
     """
-    fusion = _fusion_de(cluster)
-    ranking = _ranking_de(cluster)
+    marca = item.get("marca", "") or ""
+    fusion = _fusion_de(cluster, marca)
+    ranking = _ranking_de(cluster, marca)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
-    marca = item.get("marca", "") or ""
     total = len(piezas)
     qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
-    # --- Selección (toggle "Crear noticias"): saltada si está off para la marca. -----
+    # --- Selección (toggle "Selección"/KENI_INGESTA): saltada si está off para la marca. -----
     if _ci_off(marca):
         ci = {"clave": "ci", "nombre": "Selección", "estado": _ESTADO_SALTADA, "detalle": "", "ts": creado}
     else:

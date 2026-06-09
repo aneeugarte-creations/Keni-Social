@@ -263,8 +263,12 @@ def paso_clustering() -> dict[str, Any]:
                 fuentes_baja_confianza=fuentes_baja,
             )
             marca_c = recalc.get("marca") or ""
-            # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa; si no, semilla.
-            if perfil_activo and marca_c and marca_c not in perfil_refrescadas:
+            # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
+            # el toggle "Ranking"); si no, semilla.
+            if (
+                perfil_activo and marca_c and marca_c not in perfil_refrescadas
+                and not config.marca_apagada(config.ENV_PERFIL_EDITORIAL, marca_c)
+            ):
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(
                     marca_c, ttl_horas=perfil_ttl, ahora=ahora,
@@ -369,6 +373,9 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
     fusionadas_total = 0
     for marca_f, recientes in por_marca.items():
         if len(recientes) < 2:
+            continue
+        # Excepción por marca (toggle "Fusión"): si está apagada para esta marca, no se funde.
+        if config.marca_apagada(config.ENV_FUSION_SEMANTICA, marca_f):
             continue
         lote = recientes[:maximo]
         por_id = {str(c["id"]): c for c in lote}

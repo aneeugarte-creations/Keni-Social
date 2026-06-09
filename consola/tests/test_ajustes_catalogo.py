@@ -43,12 +43,13 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     esperadas = {
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
-        # Las 4 etapas (maestros): Crear noticias / Validar (QA) / Generar copy / Generar arte.
+        # Las 6 etapas (maestros): Fusión / Ranking / Selección / Validación / Copy / Arte.
+        config.ENV_FUSION_SEMANTICA, config.ENV_PERFIL_EDITORIAL,
         config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE,
         # Automatismos generales (barridos de mantenimiento).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
-        config.ENV_NOTICIAS_GC, config.ENV_PERFIL_EDITORIAL, config.ENV_FUSION_SEMANTICA,
+        config.ENV_NOTICIAS_GC,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
         # Tuning.
@@ -79,30 +80,37 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     assert por_marca, "deben existir toggles de copy/arte por marca"
 
 
-def test_maestros_etapa_son_las_cuatro(store):
-    """El grupo `maestros_etapa` tiene EXACTAMENTE las 4 etapas, todas bool, defecto False."""
+_ETAPAS_ENV = {
+    config.ENV_FUSION_SEMANTICA, config.ENV_PERFIL_EDITORIAL, config.ENV_INGESTA,
+    config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE,
+}
+
+
+def test_maestros_etapa_son_las_seis(store):
+    """El grupo `maestros_etapa` tiene EXACTAMENTE las 6 etapas (1 toggle = 1 etapa), bool, def False."""
     maestros = [a for a in ajustes_catalogo.catalogo() if a.grupo == "maestros_etapa"]
     claves = {a.clave for a in maestros}
-    assert claves == {config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
+    assert claves == _ETAPAS_ENV
     for a in maestros:
         assert a.tipo == "bool"
         assert a.defecto is False
     etiquetas = {a.clave: a.etiqueta for a in maestros}
-    assert etiquetas[config.ENV_INGESTA] == "Crear noticias"
-    assert etiquetas[config.ENV_QA] == "Validar (QA)"
-    assert etiquetas[config.ENV_PIPELINE] == "Generar copy"
-    assert etiquetas[config.ENV_AUTOGEN_ARTE] == "Generar arte"
+    assert etiquetas[config.ENV_FUSION_SEMANTICA] == "Fusión"
+    assert etiquetas[config.ENV_PERFIL_EDITORIAL] == "Ranking"
+    assert etiquetas[config.ENV_INGESTA] == "Selección"
+    assert etiquetas[config.ENV_QA] == "Validación"
+    assert etiquetas[config.ENV_PIPELINE] == "Copy"
+    assert etiquetas[config.ENV_AUTOGEN_ARTE] == "Arte"
 
 
 def test_etapas_tienen_excepcion_por_marca(store):
-    """Las CUATRO etapas (Crear noticias + QA + copy + arte) generan excepciones por marca."""
+    """Las SEIS etapas generan excepciones por marca (apagar una marca la excluye de esa etapa)."""
     por_marca = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo == "automatizacion_marca" and config.SEP_MARCA in a.clave
     ]
     bases = {a.clave.split(config.SEP_MARCA, 1)[0] for a in por_marca}
-    assert config.ENV_INGESTA in bases
-    assert bases == {config.ENV_INGESTA, config.ENV_QA, config.ENV_PIPELINE, config.ENV_AUTOGEN_ARTE}
+    assert bases == _ETAPAS_ENV
 
 
 def test_maquina_global_kill_switch(store):
