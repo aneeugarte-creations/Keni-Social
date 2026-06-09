@@ -466,7 +466,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
               {col("formato", "Formato", "left")}
               {col("publicado", "Fecha")}
               {col("visualizaciones", "Visualizaciones")}
-              {col("visualizaciones_pagadas", "Vis. Ads")}
+              {col("visualizaciones_pagadas", "Ads")}
               {col("interacciones", "Interacciones")}
               {col("engagement_pct", "Engagement", "right", "pr-6")}
             </TableRow>
