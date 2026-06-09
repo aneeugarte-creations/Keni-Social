@@ -8,12 +8,12 @@ from ._db_comun import (
     Any,
     IntegrityError,
     _conectar,
-    datetime,
     uuid,
 )
 from .db_editor import (
     _MAX_REINTENTOS_VERSION,
 )
+from .tiempo import ahora_iso
 
 # --------------------------------------------------------------------------- #
 # Ola COLABORACION: comentarios internos por pieza                             #
@@ -59,7 +59,7 @@ def crear_comentario(
     devolvemos como lista en el dict de salida (ver `_fila_a_comentario`).
     """
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "contenido_id": contenido_id,
@@ -125,7 +125,7 @@ def actualizar_comentario(
         return obtener_comentario(comentario_id)
     if "resuelto" in cambios:
         cambios["resuelto"] = 1 if cambios["resuelto"] else 0
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, comentario_id]
@@ -203,7 +203,7 @@ def registrar_copy_version(
     (bucle acotado) recalculando el siguiente numero (en vez de duplicar la version).
     """
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila_id = uuid.uuid4().hex[:12]
     con = _conectar()
     try:
@@ -312,7 +312,7 @@ def crear_cadena_aprobacion(
     Devuelve la cadena nueva. NO valida.
     """
     cargos = cargos or []
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     con = _conectar()
     try:
         con.execute(

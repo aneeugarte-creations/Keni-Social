@@ -22,6 +22,7 @@ from datetime import date
 
 from . import config, daemon_util, marcas, repos
 from .dominio import eventos
+from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.eventos_scanner")
 
@@ -53,7 +54,7 @@ def emitir_vencimientos(hoy: date | None = None) -> int:
     idempotencia (clave `contenido.vencido:<id>:<fecha_entrega>`) hace que solo cuente los
     que aun no se habian notificado: re-ejecutar es seguro y no duplica avisos.
     """
-    hoy_iso = (hoy or date.today()).isoformat()
+    hoy_iso = (hoy or hoy_utc()).isoformat()
     try:
         # Filtro EN SQL (`fecha_entrega < hoy AND estado NOT IN (cerrados)`): antes se traia
         # el tablero ENTERO en cada barrido y se filtraba en Python (full scan por minuto).

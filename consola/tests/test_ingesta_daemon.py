@@ -36,7 +36,7 @@ def test_planificar_exito_programa_intervalo_y_resetea_errores():
     assert plan["errores_seguidos"] == 0
     assert plan["pausado_hasta"] == ""
     # proximo = ahora + 600s
-    assert plan["proximo_sondeo"] == "2026-06-05T12:10:00+00:00"
+    assert plan["proximo_sondeo"] == "2026-06-05T12:10:00"  # canon UTC sin offset (tiempo.iso_utc)
 
 
 def test_planificar_error_aplica_backoff_exponencial():
@@ -45,14 +45,14 @@ def test_planificar_error_aplica_backoff_exponencial():
         ahora=_AHORA, intervalo_seg=600, error=True, errores_previos=0
     )
     assert p1["errores_seguidos"] == 1
-    assert p1["proximo_sondeo"] == "2026-06-05T12:20:00+00:00"
+    assert p1["proximo_sondeo"] == "2026-06-05T12:20:00"
     assert p1["pausado_hasta"] == p1["proximo_sondeo"]
     # Segundo error: espera = 600 * 2^2 = 2400s.
     p2 = ingesta_daemon.planificar_proximo(
         ahora=_AHORA, intervalo_seg=600, error=True, errores_previos=1
     )
     assert p2["errores_seguidos"] == 2
-    assert p2["proximo_sondeo"] == "2026-06-05T12:40:00+00:00"
+    assert p2["proximo_sondeo"] == "2026-06-05T12:40:00"
 
 
 def test_planificar_backoff_no_supera_el_tope():
@@ -61,7 +61,7 @@ def test_planificar_backoff_no_supera_el_tope():
         ahora=_AHORA, intervalo_seg=600, error=True, errores_previos=50,
         backoff_tope_seg=3600,
     )
-    assert plan["proximo_sondeo"] == "2026-06-05T13:00:00+00:00"  # +3600s
+    assert plan["proximo_sondeo"] == "2026-06-05T13:00:00"  # +3600s
 
 
 # --------------------------------------------------------------------------- #

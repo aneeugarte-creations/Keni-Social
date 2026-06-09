@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from datetime import UTC
 from typing import Any
 
+from ..tiempo import iso_utc
 from . import dedup, http_feed
 
 # Tope por defecto de artículos por feed en la ingesta (el Radar/RSS usan 30; aquí más, para
@@ -87,7 +87,7 @@ def _publicado_en(fecha_cruda: str) -> str:
     dt = http_feed.fecha_a_orden(fecha_cruda)
     if dt == http_feed._FECHA_MINIMA:
         return ""
-    return dt.astimezone(UTC).isoformat()
+    return iso_utc(dt)
 
 
 def items_de_feed(

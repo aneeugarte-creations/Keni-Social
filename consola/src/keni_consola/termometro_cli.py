@@ -29,7 +29,6 @@ import argparse
 import shutil
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
 
 from . import libtexto, preferencias, redes, repos, termometro
@@ -38,6 +37,7 @@ from .api.termometro import ORIGEN_HISTORIAL, PROMPT_ID, _contexto, titulo_termo
 from .dominio import copy as dom_copy
 from .dominio import generar as gen_dom
 from .dominio import stream
+from .tiempo import hoy_utc
 
 # Wall-timeout (s) de la generacion programada. Mas holgado que la web porque corre sola.
 _TIMEOUT_DEF = 600
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
 
     numero = args.numero or str(config["numero"])
     regiones = config["regiones"] if args.regiones is None else args.regiones
-    fecha = args.fecha or date.today().isoformat()
+    fecha = args.fecha or hoy_utc().isoformat()
 
     try:
         noticias = _leer_noticias(args, marca)

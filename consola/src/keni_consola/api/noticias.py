@@ -17,7 +17,7 @@ allowlist; SQL parametrizado en `db`. Errores en español, sin tracebacks.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from starlette.requests import Request
@@ -27,6 +27,7 @@ from starlette.routing import Route
 from .. import autogen_copy, config, marcas, redes, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
+from ..tiempo import hoy_utc
 
 # Paginación: defecto holgado (el archivo es un flujo continuo) y tope duro defensivo.
 _LIMITE_DEFECTO = 50
@@ -259,7 +260,7 @@ async def usar(request: Request) -> Response:
         descripcion=descripcion[:_MAX_TEXTO],
         marca=marca,
         prioridad="media",
-        fecha_objetivo=date.today().isoformat(),
+        fecha_objetivo=hoy_utc().isoformat(),
         autor=autor_de_peticion(request),
         origen="noticia",
         tipo_contenido="fuente",
@@ -553,7 +554,7 @@ async def usar_historia(request: Request) -> Response:
         descripcion=descripcion[:_MAX_TEXTO],
         marca=marca,
         prioridad="media",
-        fecha_objetivo=date.today().isoformat(),
+        fecha_objetivo=hoy_utc().isoformat(),
         autor=autor_de_peticion(request),
         origen="historia",
         tipo_contenido="fuente",

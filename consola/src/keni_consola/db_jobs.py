@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._db_comun import (
+    UTC,
     Any,
     _conectar,
     config,
@@ -9,6 +10,7 @@ from ._db_comun import (
     timedelta,
     uuid,
 )
+from .tiempo import ahora_iso, iso_utc
 
 # --------------------------------------------------------------------------- #
 # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B)                    #
@@ -55,7 +57,7 @@ def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
     real con un SELECT, como antes).
     """
     job_id = uuid.uuid4().hex[:12]
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     con = _conectar()
     try:
         fila = con.execute(
@@ -148,7 +150,7 @@ def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     Throughput de ENTRADA de la cola: cuanto se pidio cada dia (incluye los ya `terminado`,
     que se conservan). El dia se deriva con `substr(creado,1,10)` (ISO `YYYY-MM-DD`), portable
     SQLite/Postgres. El corte se compara lexicograficamente (ISO ordena por texto)."""
-    corte = (datetime.now() - timedelta(days=max(0, int(dias)))).isoformat(timespec="seconds")
+    corte = iso_utc(datetime.now(UTC) - timedelta(days=max(0, int(dias))))
     con = _conectar()
     try:
         filas = con.execute(
@@ -183,10 +185,10 @@ def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
     (su trabajo ya se hizo). Solo afecta al re-reclamo de huerfanos; un `pendiente` nunca corrio.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
-    limite_huerfano = (
-        datetime.now() - timedelta(seconds=config.claude_timeout() + _RECLAIM_STALE_MARGEN_S)
-    ).isoformat(timespec="seconds")
+    ahora = ahora_iso()
+    limite_huerfano = iso_utc(
+        datetime.now(UTC) - timedelta(seconds=config.claude_timeout() + _RECLAIM_STALE_MARGEN_S)
+    )
     con = _conectar()
     try:
         # Acotamos los saltos: descartamos huerfanos ya-terminados (terminando su job) y

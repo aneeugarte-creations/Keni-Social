@@ -17,6 +17,7 @@ from .._db_comun import (
     timedelta,
     uuid,
 )
+from ..tiempo import iso_utc
 
 __all__ = [
     "_COLS_CONTENIDO",
@@ -505,9 +506,7 @@ def publicados_marca_cache(marca: str) -> dict[str, Any]:
     from ..dominio import dedup
 
     # Ventana de 90 dias en el canon UTC-sin-offset (los `creado` comparados son naive-UTC).
-    desde = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=90)).isoformat(
-        timespec="seconds"
-    )
+    desde = iso_utc(datetime.now(UTC) - timedelta(days=90))
     con = _conectar()
     try:
         filas_url = con.execute(

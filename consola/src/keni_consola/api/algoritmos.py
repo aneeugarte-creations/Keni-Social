@@ -27,7 +27,6 @@ errores en español, sin tracebacks.
 from __future__ import annotations
 
 import threading
-from datetime import date
 from typing import Any
 
 from starlette.requests import Request
@@ -36,6 +35,7 @@ from starlette.routing import Route
 
 from .. import algoritmos, libtexto, repos, sugerencias_editoriales
 from .._http_json import leer_json
+from ..tiempo import hoy_utc
 from . import rss
 
 # Cuantas noticias devolver por defecto en el listado de la pagina (las mas importantes).
@@ -285,7 +285,7 @@ def _aplicar_a_ficha(plataforma: str, detalle: str) -> str:
     """
     fid = sugerencias_editoriales.ficha_id_de(plataforma)
     seccion = (
-        f"## Actualización editorial ({date.today().isoformat()}) — desde noticias de algoritmo\n\n"
+        f"## Actualización editorial ({hoy_utc().isoformat()}) — desde noticias de algoritmo\n\n"
         f"{detalle.strip()}\n"
     )
     doc = libtexto.obtener(fid)

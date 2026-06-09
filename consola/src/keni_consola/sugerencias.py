@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from . import config, rutas
 from .io_atomico import bloqueo_archivo, escribir_atomico
+from .tiempo import ahora_iso
 
 # Categorías y estados válidos (la UI los pinta con etiquetas legibles).
 CATEGORIAS: tuple[str, ...] = ("idea", "producto", "mejora", "bug")
@@ -158,7 +158,7 @@ def crear(
         "categoria": categoria if categoria in CATEGORIAS else CATEGORIA_DEFECTO,
         "estado": ESTADO_DEFECTO,
         "autor": (autor or "").strip()[:_MAX_AUTOR],
-        "creada": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "creada": ahora_iso(),
     }
     with bloqueo_archivo(ruta_sugerencias()):
         lista = listar()

@@ -19,13 +19,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from keni_metricas import servicio
 
 from . import marcas, metricas_cache, repos
 from .comercial import es_muestra, fuente_actual
+from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.campanias")
 
@@ -342,5 +343,5 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "tendencia": {"puntos": _tendencia(piezas, rango)},
         "desglose_red": _desglose_por_red(piezas),
         "piezas": tabla,
-        "generado_en": datetime.now().isoformat(timespec="seconds"),
+        "generado_en": ahora_iso(),
     }

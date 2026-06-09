@@ -24,6 +24,7 @@ from starlette.routing import Route
 
 from .. import campanias, comercial, marcas, redes, repos
 from .._http_json import leer_json
+from ..tiempo import hoy_utc
 
 # Nombres legibles de los estados del seguimiento (para los selects del SPA).
 _ESTADO_NOMBRE: dict[str, str] = {
@@ -119,7 +120,7 @@ def _validar_objetivo(valor: Any) -> tuple[int | None, str | None]:
 def _validar_publicado(valor: Any) -> tuple[str | None, str | None]:
     """Fecha de publicacion ISO (YYYY-MM-DD); vacio -> hoy. None si invalida."""
     if valor in (None, ""):
-        return date.today().isoformat(), None
+        return hoy_utc().isoformat(), None
     if not isinstance(valor, str):
         return None, "La fecha de publicación debe ser texto (YYYY-MM-DD)."
     try:

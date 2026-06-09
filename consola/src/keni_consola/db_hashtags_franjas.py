@@ -4,10 +4,10 @@ from __future__ import annotations
 from ._db_comun import (
     Any,
     _conectar,
-    datetime,
     json,
     uuid,
 )
+from .tiempo import ahora_iso
 
 # --- Grupos de hashtags ---------------------------------------------------- #
 # `hashtags` se almacena como JSON serializado; el dict publico lo devuelve como lista de
@@ -100,7 +100,7 @@ def crear_grupo_hashtags(
                 nombre or "",
                 marca or "",
                 json.dumps(tags, ensure_ascii=False),
-                datetime.now().isoformat(timespec="seconds"),
+                ahora_iso(),
             ),
         )
         con.commit()

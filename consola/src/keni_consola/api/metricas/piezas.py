@@ -15,6 +15,7 @@ import asyncio
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...tiempo import ahora_iso
 from ._comun import (
     _etiqueta_rango,
     _gate_marca_metricas,
@@ -62,12 +63,11 @@ async def piezas(request: Request) -> Response:
         if red:
             # Vista filtrada por red: recálculo bajo demanda (trabajo bloqueante de la
             # fuente) en executor para no congelar el event loop; no usa la cache por combo.
-            from datetime import datetime
 
             payload = await asyncio.get_running_loop().run_in_executor(
                 None, servicio.construir_analitica_piezas, rango, marca, red
             )
-            generado_en = datetime.now().isoformat(timespec="seconds")
+            generado_en = ahora_iso()
         else:
             payload, generado_en = await metricas_cache.piezas_async(rango, marca)
     except ValueError as e:

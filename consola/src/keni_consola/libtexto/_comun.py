@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+
+from ..tiempo import ahora_iso
 
 __all__ = [
     "TIPOS",
@@ -175,7 +176,7 @@ class Documento:
 
 def _ahora_iso() -> str:
     """Marca de tiempo ISO (segundos, UTC) para `creado`/`actualizado`."""
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return ahora_iso()
 
 
 def _slug(texto: str) -> str:

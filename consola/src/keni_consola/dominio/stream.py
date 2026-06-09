@@ -18,9 +18,9 @@ import json
 import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import date
 
 from .. import config
+from ..tiempo import hoy_utc
 
 
 class GeneracionError(RuntimeError):
@@ -762,7 +762,7 @@ def derivar_titulo(texto: str) -> str:
                 corte = recorte.rsplit(" ", 1)[0].rstrip() if " " in recorte else recorte.rstrip()
                 return corte + "…"
             return limpia
-    return f"Borrador {date.today().isoformat()}"
+    return f"Borrador {hoy_utc().isoformat()}"
 
 
 # --------------------------------------------------------------------------- #

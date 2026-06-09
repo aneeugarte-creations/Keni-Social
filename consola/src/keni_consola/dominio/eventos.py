@@ -43,6 +43,7 @@ import threading
 from typing import Any
 
 from .. import repos
+from ..tiempo import ahora_iso
 
 log = logging.getLogger("keni_consola.eventos")
 
@@ -99,11 +100,10 @@ def _resumen_humano(tipo: str, datos: dict[str, Any]) -> str:
 
 def construir_payload(tipo: str, datos: dict[str, Any]) -> dict[str, Any]:
     """Payload `generico` del evento (PURO, sin red). El `slack` se deriva de aqui al enviar."""
-    from datetime import datetime
 
     return {
         "evento": tipo,
-        "emitido_en": datetime.now().isoformat(timespec="seconds"),
+        "emitido_en": ahora_iso(),
         "resumen": _resumen_humano(tipo, datos),
         "datos": datos,
     }
@@ -170,7 +170,6 @@ def _repartir(tipo: str, payload: dict[str, Any]) -> None:
     SAFE BY DEFAULT: sin webhooks suscritos, no toca la red. Estampa `ultimo_estado`/
     `ultimo_en` de cada webhook para que la UI muestre si la ultima entrega fue OK.
     """
-    from datetime import datetime
 
     try:
         webhooks = repos.listar_webhooks_para(tipo)
@@ -186,7 +185,7 @@ def _repartir(tipo: str, payload: dict[str, Any]) -> None:
                 wh["id"],
                 {
                     "ultimo_estado": ("ok" if ok else "error") + f": {estado}",
-                    "ultimo_en": datetime.now().isoformat(timespec="seconds"),
+                    "ultimo_en": ahora_iso(),
                 },
             )
         except Exception:  # noqa: BLE001 -- estampar el estado es accesorio

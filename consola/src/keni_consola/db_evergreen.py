@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from ._db_comun import (
+    UTC,
     Any,
     _conectar,
     datetime,
     uuid,
 )
+from .tiempo import ahora_iso
 
 # --------------------------------------------------------------------------- #
 # Taller EVERGREEN / brainstorming: ideas evergreen (propuesta -> aprobada/descartada)
@@ -59,7 +61,7 @@ def crear_evergreen_idea(
     # pero `id` es un uuid aleatorio (no monotónico), así que dos ideas creadas en el MISMO
     # segundo quedaban en orden indefinido ("recientes primero" no determinista). Los
     # microsegundos desempatan creaciones consecutivas sin añadir un campo de secuencia.
-    ahora = datetime.now().isoformat(timespec="microseconds")
+    ahora = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds")
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "marca": marca or "",
@@ -124,7 +126,7 @@ def actualizar_evergreen_idea(idea_id: str, campos: dict[str, Any]) -> dict[str,
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_EVERGREEN_IDEA}
     if not cambios:
         return obtener_evergreen_idea(idea_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, idea_id]

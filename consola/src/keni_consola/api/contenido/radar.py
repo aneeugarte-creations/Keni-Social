@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...tiempo import hoy_utc
 from ._comun import (
     _MAX_TEXTO,
     _MAX_TITULO,
@@ -64,7 +63,7 @@ async def desde_radar(request: Request) -> Response:
         descripcion=descripcion.strip()[:_MAX_TEXTO],
         marca=marca,
         prioridad=prioridad,
-        fecha_objetivo=date.today().isoformat(),
+        fecha_objetivo=hoy_utc().isoformat(),
         autor=autor_de_peticion(request),
         origen="radar",
         # El tema viene de una FUENTE (Radar), no de arte propio: tipo "fuente" (item E).

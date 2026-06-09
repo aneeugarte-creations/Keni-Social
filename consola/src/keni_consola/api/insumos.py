@@ -24,7 +24,6 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +37,7 @@ from .._http_json import leer_json
 from ..dominio import insumos_parse, jobspec
 from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
+from ..tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.api.insumos")
 
@@ -74,7 +74,7 @@ def _item_a_dict(item: dict[str, Any], hoy: str | None = None) -> dict[str, Any]
     `hoy` (ISO YYYY-MM-DD) se usa para calcular la frescura. Si es None usa la
     fecha del día en el servidor. La frescura se resuelve por la línea+marca del ítem.
     """
-    _hoy = hoy or date.today().isoformat()
+    _hoy = hoy or hoy_utc().isoformat()
     ttl_dias, es_evergreen = resolver_linea(
         item.get("linea") or "",
         item.get("marca") or "",
@@ -119,7 +119,7 @@ async def listar(request: Request) -> Response:
     """
     fecha = (request.query_params.get("fecha") or "").strip()
     if not fecha:
-        fecha = date.today().isoformat()
+        fecha = hoy_utc().isoformat()
     cajon_filtro = (request.query_params.get("cajon") or "").strip() or None
     marca_filtro = (request.query_params.get("marca") or "").strip() or None
     solo_frescos = request.query_params.get("solo_frescos") == "1"
@@ -129,7 +129,7 @@ async def listar(request: Request) -> Response:
     if marca_filtro and marca_filtro not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no válida."}, status_code=400)
 
-    hoy = date.today().isoformat()
+    hoy = hoy_utc().isoformat()
     cajones_resultado: list[dict[str, Any]] = []
     for cajon in _CAJONES:
         if cajon_filtro and cajon != cajon_filtro:
@@ -226,7 +226,7 @@ async def aportar(request: Request) -> Response:
     if marca and marca not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no válida."}, status_code=400)
     if not fecha:
-        fecha = date.today().isoformat()
+        fecha = hoy_utc().isoformat()
     if not texto and not archivo_bytes:
         return JSONResponse(
             {"error": "Debes aportar texto o un archivo."}, status_code=400
@@ -351,7 +351,7 @@ async def detalle_lote(request: Request) -> Response:
     if lote is None:
         return JSONResponse({"error": "Ese lote no existe."}, status_code=404)
     items = repos.listar_insumo_items(lote_id=lote_id)
-    _hoy = date.today().isoformat()
+    _hoy = hoy_utc().isoformat()
     return JSONResponse({
         "lote": _lote_a_dict(lote),
         "items": [_item_a_dict(i, hoy=_hoy) for i in items],
@@ -387,7 +387,7 @@ async def editar_item(request: Request) -> Response:
     item = repos.actualizar_insumo_item(item_id, campos)
     if item is None:
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
-    return JSONResponse({"item": _item_a_dict(item, hoy=date.today().isoformat())})
+    return JSONResponse({"item": _item_a_dict(item, hoy=hoy_utc().isoformat())})
 
 
 # --------------------------------------------------------------------------- #
@@ -426,7 +426,7 @@ async def usar_item(request: Request) -> Response:
         descripcion=item.get("resumen", ""),
         marca=item.get("marca", ""),
         prioridad="media",
-        fecha_objetivo=item.get("fecha", date.today().isoformat()),
+        fecha_objetivo=item.get("fecha", hoy_utc().isoformat()),
         autor=autor,
         origen="insumo",
         tipo_contenido="fuente",
@@ -451,7 +451,7 @@ async def usar_item(request: Request) -> Response:
         item_actualizado = item
 
     return JSONResponse({
-        "item": _item_a_dict(item_actualizado, hoy=date.today().isoformat()),
+        "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
         "contenido_id": contenido["id"],
         "copy_en_proceso": genero,
     })
@@ -517,7 +517,7 @@ async def crear_evento_item(request: Request) -> Response:
 
     return JSONResponse(
         {
-            "item": _item_a_dict(item_actualizado, hoy=date.today().isoformat()),
+            "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
             "evento": evento,
             "evento_id": evento["id"],
         }

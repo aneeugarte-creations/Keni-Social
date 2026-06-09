@@ -3,12 +3,12 @@
 Ver barrel `db.py`."""
 from __future__ import annotations
 
+from ..tiempo import ahora_iso
 from ._comun import (
     ESTADO_ROTA_PROPUESTO,
     Any,
     _conectar,
     date,
-    datetime,
     json,
     timedelta,
     uuid,
@@ -83,7 +83,7 @@ def crear_propuesta_parrilla(
     estado: str = "generando",
 ) -> dict[str, Any]:
     """Crea una propuesta en estado `generando` y la devuelve. NO valida (lo hace la API)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex,
         "creado": ahora,
@@ -162,7 +162,7 @@ def actualizar_propuesta_parrilla(
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(ahora_iso())
     params.append(propuesta_id)
     con = _conectar()
     try:
@@ -204,7 +204,7 @@ def aplicar_propuesta_parrilla(
     el documento puede traer slots nuevos), con el horario `franja_inicio/fin` del documento si
     vino. NO rechaza por plantilla. Cacheamos el mapa nombre->id por semana.
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     eventos_creados: list[str] = []
     turnos_creados: list[str] = []
     turnos_modificados: list[str] = []

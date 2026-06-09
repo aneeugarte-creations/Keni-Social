@@ -11,6 +11,7 @@ import threading
 from typing import Any
 
 from .. import config, daemon_util, generaciones, marcas, repos
+from ..tiempo import hoy_utc
 from . import _ingesta, _ref
 from ._comun import QA_EN_CURSO, QA_SALTADA, _log
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
@@ -215,7 +216,6 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     GATEADO EN VIVO: solo actúa con `KENI_PIPELINE_ARTE=1` Y `KENI_MAQUINA=1`. Sin el toggle, la
     etapa no ilustra (el equipo hace el arte a mano).
     """
-    from datetime import date
 
     from .. import autogen_arte
 
@@ -239,7 +239,7 @@ def ejecutar_arte() -> list[dict[str, Any]]:
         ya_procesados=autogen_arte.ids_ya_procesados(),
         maximo=config.autogen_arte_max(),
         etiquetas_por_item=autogen_arte._etiquetas_por_item(),
-        hoy=date.today(),
+        hoy=hoy_utc(),
     )
 
     # EN PARALELO (antes en serie): cada arte es una llamada HTTP sincrona al proveedor de

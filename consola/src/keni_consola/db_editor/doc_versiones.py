@@ -1,7 +1,8 @@
 """Persistencia — dominio editor: versiones de documento (historial por pieza). Ver barrel `db.py`."""
 from __future__ import annotations
 
-from ._comun import Any, IntegrityError, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import Any, IntegrityError, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Versiones de documento (historial del editor por pieza)                        #
@@ -53,7 +54,7 @@ def crear_documento_version(
     recalculando el siguiente numero, en vez de duplicar la version (que rompia el historial).
     """
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila_id = id or uuid.uuid4().hex[:12]
     con = _conectar()
     try:

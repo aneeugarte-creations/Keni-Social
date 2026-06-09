@@ -11,7 +11,6 @@ responsable. Los submódulos importan de aquí EXPLÍCITAMENTE.
 from __future__ import annotations
 
 import logging
-from datetime import date
 
 from starlette.requests import Request
 
@@ -43,6 +42,7 @@ from ...estados import (
     TIPOS_CONTENIDO,
 )
 from ...seguridad import autor_de_peticion
+from ...tiempo import hoy_utc
 
 __all__ = [
     # Puentes a módulos de la Consola que usan los submódulos.
@@ -155,7 +155,7 @@ def _contenido_a_dict(
     item: dict, plataformas: list[dict], etiquetas: list[str] | None = None
 ) -> dict:
     """Serializa un item del tablero con sus plataformas (ordenadas), etiquetas y `vencido`."""
-    hoy = date.today().isoformat()
+    hoy = hoy_utc().isoformat()
     entrega = item.get("fecha_entrega") or ""
     vencido = bool(
         entrega and entrega < hoy and item.get("estado") not in _ESTADOS_CERRADOS

@@ -31,7 +31,6 @@ SEGURIDAD
 from __future__ import annotations
 
 import logging
-from datetime import date
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -42,6 +41,7 @@ from .._http_json import leer_json
 from ..dominio import breaking as dom_breaking
 from ..estados import FLUJO_IMPORTANTE
 from ..seguridad import autor_de_peticion
+from ..tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.api.breaking")
 
@@ -190,7 +190,7 @@ async def preparar(request: Request) -> Response:
         descripcion="",
         marca=marca_crudo,
         prioridad="alta",
-        fecha_objetivo=date.today().isoformat(),
+        fecha_objetivo=hoy_utc().isoformat(),
         autor=autor,
         origen=ORIGEN_BREAKING,
         tipo_contenido="fuente",

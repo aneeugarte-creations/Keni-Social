@@ -7,11 +7,10 @@ métricas, importación y puerta creativa viven en sus propios submódulos.
 
 from __future__ import annotations
 
-from datetime import date
-
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...tiempo import hoy_utc
 from ._comun import (
     _MAX_TEXTO,
     _MAX_TITULO,
@@ -41,7 +40,7 @@ from ._comun import (
 
 def _eventos_proximos() -> list[dict]:
     """Eventos de la rota desde hoy en adelante (para atar un contenido a un evento)."""
-    eventos = repos.listar_eventos_rota(desde=date.today().isoformat())
+    eventos = repos.listar_eventos_rota(desde=hoy_utc().isoformat())
     return [
         {
             "id": e["id"],

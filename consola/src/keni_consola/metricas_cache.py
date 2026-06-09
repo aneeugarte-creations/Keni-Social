@@ -35,11 +35,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from datetime import datetime
 
 from keni_metricas import servicio
 
 from . import repos
+from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.metricas_cache")
 
@@ -90,7 +90,7 @@ def _lock_combo(clave: str) -> threading.Lock:
 
 
 def _ahora() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return ahora_iso()
 
 
 def _marca_norm(marca: str | None) -> str:

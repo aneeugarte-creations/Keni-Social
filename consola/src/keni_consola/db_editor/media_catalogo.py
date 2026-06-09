@@ -1,7 +1,8 @@
 """Persistencia — dominio editor: catálogo de media. Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
-from ._comun import Any, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Texto de MEDIOS interna (ola "activos")                                  #
@@ -69,7 +70,7 @@ def crear_media_catalogo(
 ) -> dict[str, Any]:
     """Cataloga un objeto de media en la galería y lo devuelve. NO valida (lo hace la API)."""
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "objeto": objeto or "",
@@ -172,7 +173,7 @@ def actualizar_media_catalogo(
         cambios["aprobado"] = 1 if cambios["aprobado"] else 0
     if not cambios:
         return obtener_media_catalogo(media_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, media_id]

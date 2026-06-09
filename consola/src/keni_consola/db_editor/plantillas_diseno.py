@@ -1,7 +1,8 @@
 """Persistencia — dominio editor: plantillas de diseño. Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
-from ._comun import Any, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Plantillas de diseño (editor profesional: N plantillas reutilizables por marca) #
@@ -67,7 +68,7 @@ def crear_plantilla_diseno(
 ) -> dict[str, Any]:
     """Crea una plantilla de diseño y la devuelve. NO valida el documento (lo hace la API)."""
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "marca": marca or "",
@@ -149,7 +150,7 @@ def actualizar_plantilla_diseno(plantilla_id: str, campos: dict[str, Any]) -> di
         cambios["rotar"] = 1 if cambios["rotar"] else 0
     if not cambios:
         return obtener_plantilla_diseno(plantilla_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, plantilla_id]

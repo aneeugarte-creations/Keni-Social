@@ -1,7 +1,8 @@
 """Persistencia — dominio editor: bloques (capas reutilizables). Ver barrel `db.py`."""
 from __future__ import annotations
 
-from ._comun import Any, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Bloques (almacén de capas reutilizables)                                       #
@@ -44,7 +45,7 @@ def crear_bloque(
 ) -> dict[str, Any]:
     """Crea un bloque (grupo de capas reutilizable) y lo devuelve."""
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "marca": marca or "",
@@ -99,7 +100,7 @@ def actualizar_bloque(bloque_id: str, campos: dict[str, Any]) -> dict[str, Any] 
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_BLOQUES}
     if not cambios:
         return obtener_bloque(bloque_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, bloque_id]

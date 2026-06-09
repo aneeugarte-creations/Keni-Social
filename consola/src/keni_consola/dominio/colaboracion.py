@@ -31,7 +31,6 @@ umbral de rechazos). Es lo que la UI pinta y lo que el resto del flujo puede con
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from ..estados import (
@@ -43,10 +42,11 @@ from ..estados import (
     ESTADO_EN_REVISION,
     ROL_ADMIN,
 )
+from ..tiempo import ahora_iso
 
 
 def _ahora_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return ahora_iso()
 
 
 # Cuantos niveles `rechazado` hacen falta para RECHAZAR la pieza: dos "dislikes" de dos

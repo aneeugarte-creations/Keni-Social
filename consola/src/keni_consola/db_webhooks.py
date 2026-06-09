@@ -5,10 +5,10 @@ from ._db_comun import (
     Any,
     IntegrityError,
     _conectar,
-    datetime,
     json,
     uuid,
 )
+from .tiempo import ahora_iso
 
 # --------------------------------------------------------------------------- #
 # Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
@@ -77,7 +77,7 @@ def crear_webhook(
 ) -> dict[str, Any]:
     """Inserta una suscripcion de webhook y la devuelve (sin exponer el secreto). NO valida."""
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "nombre": nombre or "",
@@ -181,7 +181,7 @@ def actualizar_webhook(
         cambios["activo"] = 1 if cambios["activo"] else 0
     if not cambios:
         return obtener_webhook(webhook_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, webhook_id]
@@ -226,7 +226,7 @@ def registrar_evento_interno(
     si el INSERT choca con la constraint, devolvemos False sin tocar nada. Una clave vacia
     NO desduplica (cada llamada inserta): usala para eventos de transicion (siempre unicos).
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "tipo": tipo,

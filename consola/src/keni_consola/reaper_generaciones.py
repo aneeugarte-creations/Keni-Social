@@ -26,9 +26,10 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from . import config, daemon_util, generaciones
+from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.reaper_generaciones")
 
@@ -58,9 +59,9 @@ def ejecutar_barrido() -> int:
     try:
         from . import repos
 
-        umbral = (
-            datetime.now() - timedelta(seconds=config.generaciones_ttl_seg())
-        ).isoformat(timespec="microseconds")
+        umbral = iso_utc(
+            datetime.now(UTC) - timedelta(seconds=config.generaciones_ttl_seg())
+        )
         m = repos.sanear_lotes_parseando_huerfanos(umbral)
         if m:
             _log.info("Reaper de generaciones: %d lote(s) de cajón zombi reconciliado(s).", m)
@@ -77,9 +78,9 @@ def ejecutar_barrido() -> int:
     try:
         from . import repos
 
-        umbral_qa = (
-            datetime.now() - timedelta(seconds=config.qa_en_curso_ttl_seg())
-        ).isoformat(timespec="microseconds")
+        umbral_qa = iso_utc(
+            datetime.now(UTC) - timedelta(seconds=config.qa_en_curso_ttl_seg())
+        )
         z = repos.sanear_qa_en_curso_huerfanos(umbral_qa)
         if z:
             _log.info(

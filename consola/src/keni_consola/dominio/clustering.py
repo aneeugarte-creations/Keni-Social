@@ -262,10 +262,6 @@ class Asignador:
 # --------------------------------------------------------------------------- #
 
 
-def _ahora_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 def _parse_iso(valor: str) -> datetime | None:
     """Parsea un ISO 8601 a datetime aware (UTC); None si no parsea. Best-effort."""
     if not valor:

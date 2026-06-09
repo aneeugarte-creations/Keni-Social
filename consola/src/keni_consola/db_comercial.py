@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from ._db_comun import (
-    ahora_iso,
     Any,
     _conectar,
-    date,
+    ahora_iso,
     json,
     uuid,
 )
+from .tiempo import hoy_utc
 
 # --------------------------------------------------------------------------- #
 # Publicaciones comerciales (seguimiento de UNA pieza por su link)             #
@@ -102,7 +102,7 @@ def crear_publicacion_comercial(
         "metrica_objetivo": metrica_objetivo or "interacciones",
         "objetivo": int(objetivo or 0),
         "estado": estado or "activa",
-        "publicado": publicado or date.today().isoformat(),
+        "publicado": publicado or hoy_utc().isoformat(),
         "notas": notas,
         "aviso_en": "",
         "fecha_creacion": ahora,

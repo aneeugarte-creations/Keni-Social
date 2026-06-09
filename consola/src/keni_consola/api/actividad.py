@@ -26,7 +26,7 @@ Solo LECTURA. Errores en espanol; sin tracebacks crudos.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -34,6 +34,7 @@ from starlette.routing import Route
 
 from .. import actividad, agentes, ajustes_catalogo, config, generaciones, marcas, permisos, repos
 from .._http_json import _entero_query
+from ..tiempo import hoy_utc
 
 _MSG_SOLO_ADMIN = "Solo un administrador puede operar la cola de generación."
 
@@ -273,7 +274,7 @@ def _resultados_por_dia(dias: int) -> list[dict]:
     lado de SALIDA de la cola; el endpoint que lo usa se sondea con poca frecuencia (no es el
     snapshot en vivo), asi que el escaneo completo es aceptable.
     """
-    corte = (date.today() - timedelta(days=max(0, dias - 1))).isoformat()
+    corte = (hoy_utc() - timedelta(days=max(0, dias - 1))).isoformat()
     buckets: dict[str, dict] = {}
     for g in generaciones.listar(limite=None):
         dia = (g.get("fecha_inicio") or "")[:10]

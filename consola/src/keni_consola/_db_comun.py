@@ -98,7 +98,7 @@ from .estados import (
     TIPOS_CONTENIDO,
 )
 from .motor_db import IntegrityError
-from .tiempo import ahora_iso, iso_utc
+from .tiempo import ahora_iso, hoy_utc, iso_utc
 
 _log = logging.getLogger("keni_consola.db")
 
@@ -191,6 +191,7 @@ __all__ = [
     '_sembrar_franjas_por_defecto_en',
     '_tabla_existe',
     'ahora_iso',
+    'hoy_utc',
     'arrancar_persistencia',
     'conectar',
     'iso_utc',

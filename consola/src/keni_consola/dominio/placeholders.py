@@ -28,6 +28,7 @@ import re
 from datetime import date
 
 from .. import marcas, repos
+from ..tiempo import hoy_utc
 
 # Variables soportadas y su explicacion humana (para el catalogo del frontend). El ORDEN
 # es el de presentacion en la UI. La RESOLUCION de cada una vive en `resolver_variables`.
@@ -54,7 +55,7 @@ _MESES_ES = (
 
 def fecha_es(hoy: date | None = None) -> str:
     """Fecha en es-MX larga ("29 de mayo de 2026"), sin depender del locale del SO."""
-    hoy = hoy or date.today()
+    hoy = hoy or hoy_utc()
     return f"{hoy.day} de {_MESES_ES[hoy.month - 1]} de {hoy.year}"
 
 

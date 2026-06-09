@@ -6,12 +6,11 @@ eso enciende el pipeline de auto-generación. Ver el docstring de `aportar`.
 
 from __future__ import annotations
 
-from datetime import date
-
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...tiempo import hoy_utc
 from ._comun import (
     _MAX_TEXTO,
     _MAX_TITULO,
@@ -163,7 +162,7 @@ async def aportar(request: Request) -> Response:
         descripcion=material,
         marca=marca,
         prioridad="media",
-        fecha_objetivo=date.today().isoformat(),
+        fecha_objetivo=hoy_utc().isoformat(),
         autor=autor_de_peticion(request),
         responsable=responsable,
         origen=ORIGEN_EQUIPO,

@@ -19,10 +19,10 @@ mantener el cambio en ese fichero minimo y localizado (coordinacion de fase 3).
 from __future__ import annotations
 
 import logging
-from datetime import date
 
 from . import auth, repos
 from . import rota as dominio
+from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.auto_responsable")
 
@@ -43,7 +43,7 @@ def responsable_automatico(marca: str, fecha_iso: str | None = None) -> dict[str
     """
     if not marca:
         return None
-    dia = (fecha_iso or date.today().isoformat()).strip()
+    dia = (fecha_iso or hoy_utc().isoformat()).strip()
     if not dia:
         return None
     try:

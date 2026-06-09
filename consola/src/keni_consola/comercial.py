@@ -40,6 +40,7 @@ from typing import Any
 from keni_metricas import servicio
 
 from . import config, marcas, metricas_pieza, redes, repos
+from .tiempo import ahora_iso, iso_utc
 
 _log = logging.getLogger("keni_consola.comercial")
 
@@ -211,7 +212,7 @@ def _capturar_en(pub: dict[str, Any], en: datetime) -> bool:
     (sin ceros falsos). De paso captura el `formato` ESTATICO de la pieza la primera vez que
     la fuente lo expone. En modo MUESTRA usa la curva sintetica (interacciones + alcance).
     """
-    ts = en.isoformat(timespec="seconds")
+    ts = iso_utc(en)
     if es_muestra():
         inter, alc = metrica_en(_clave_muestra(pub), pub["publicado"], en)
         return repos.registrar_snapshot_comercial(pub["id"], ts, inter, alc, visualizaciones=0)
@@ -360,7 +361,7 @@ def resumen_actual(pub: dict[str, Any]) -> dict[str, Any]:
         else:
             inter, alc = 0, 0
         snap = {
-            "ts": datetime.now().isoformat(timespec="seconds"),
+            "ts": ahora_iso(),
             "interacciones": inter,
             "visualizaciones": 0,
             "alcance": alc,
@@ -433,7 +434,7 @@ def reporte_publicacion(pub: dict[str, Any]) -> dict[str, Any]:
     serie_ = serie(pub["id"])
     return {
         "tipo": "publicacion",
-        "generado": datetime.now().isoformat(timespec="seconds"),
+        "generado": ahora_iso(),
         "fuente": fuente_actual(),
         "es_muestra": es_muestra(),
         "publicacion": _pub_publica(pub),
@@ -469,7 +470,7 @@ def reporte_campania(
     eng = round(tot_inter / base * 100, 2) if base else 0.0
     return {
         "tipo": "campania",
-        "generado": datetime.now().isoformat(timespec="seconds"),
+        "generado": ahora_iso(),
         "fuente": fuente_actual(),
         "es_muestra": es_muestra(),
         "campania": campania,

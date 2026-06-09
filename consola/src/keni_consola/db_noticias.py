@@ -5,12 +5,12 @@ from ._db_comun import (
     UTC,
     Any,
     _conectar,
-    date,
     datetime,
     json,
     timedelta,
     uuid,
 )
+from .tiempo import ahora_iso, hoy_utc, iso_utc
 
 # --- Fuentes RSS ----------------------------------------------------------- #
 # El dict publico (paridad con `ficheros._parsear_fuente`) NO incluye `creado` (orden
@@ -149,13 +149,13 @@ def crear_fuente_rss(
     """
     # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
     # en el mismo segundo empataban, dejando el orden al `id` (uuid aleatorio) -> test flaky.
-    ahora = datetime.now().isoformat(timespec="microseconds")
+    ahora = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
         "nombre": nombre or "",
         "url": url or "",
         "marca": marca or "",
-        "fecha": date.today().isoformat(),
+        "fecha": hoy_utc().isoformat(),
         "activo": 1,
         "incluir": incluir or "",
         "excluir": excluir or "",
@@ -220,7 +220,7 @@ def actualizar_fuente_rss(
 def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
     """Anota la salud de una fuente (instante UTC + conteo + error). Best-effort.
 
-    UTC ISO completo (no `date.today()` local): la columna `ultima_actualizacion` mezclaba
+    Canon UTC sin offset (`tiempo.ahora_iso`): la columna `ultima_actualizacion` mezclaba
     fechas locales sin hora con instantes UTC (`registrar_sondeo_feed`), y el `MAX()` /
     las comparaciones de frescura salían de relojes distintos. Formato unificado.
     """
@@ -229,7 +229,7 @@ def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") 
         con.execute(
             "UPDATE fuentes_rss SET ultima_actualizacion = ?, ultimo_conteo = ?, "
             "ultimo_error = ? WHERE id = ?",
-            (datetime.now(UTC).isoformat(), int(conteo), error or "", fuente_id),
+            (ahora_iso(), int(conteo), error or "", fuente_id),
         )
         con.commit()
     finally:
@@ -264,7 +264,7 @@ def purgar_pool_irrelevante(
     NO es un TTL: la antigüedad es solo UNA condición junto a la baja relevancia. `dry_run=True`
     cuenta sin borrar. Devuelve `{clusters, items, dry_run}`.
     """
-    cutoff = (datetime.now(UTC) - timedelta(hours=max(1, int(inactividad_horas)))).isoformat()
+    cutoff = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(inactividad_horas))))
     cond_clusters = (
         "estado = 'nuevo' AND (contenido_id IS NULL OR contenido_id = '') "
         "AND n_fuentes <= 1 AND score < ? AND ultimo_visto <> '' AND ultimo_visto < ?"
@@ -484,7 +484,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
     candidatos = [it for it in items if (it.get("clave") or "").strip()]
     if not candidatos:
         return 0
-    ahora = datetime.now(UTC).isoformat()
+    ahora = ahora_iso()
     marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ITEM)
     insertadas = 0
     con = _conectar()
@@ -669,7 +669,7 @@ def registrar_sondeo_feed(
         "proximo_sondeo = ?", "errores_seguidos = ?", "pausado_hasta = ?",
     ]
     params: list[Any] = [
-        datetime.now(UTC).isoformat(),
+        ahora_iso(),
         int(conteo),
         error or "",
         proximo_sondeo or "",
@@ -701,7 +701,7 @@ def resumen_cobertura() -> dict[str, Any]:
     las últimas 24h por categoría, total de items, y el último sondeo registrado. Todo en una
     conexión, sin tocar la red.
     """
-    hace_24h = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+    hace_24h = iso_utc(datetime.now(UTC) - timedelta(hours=24))
     con = _conectar()
     try:
         feeds_activos = int(
@@ -752,7 +752,7 @@ def salud_feeds(marca: str | None = None) -> list[dict[str, Any]]:
     El daemon/API derivan `frescura_min` y `stale` de `ultimo_item`. Una sola conexión; sin red.
     Incluye feeds inactivos/auto-desactivados (la UI los muestra para reactivar).
     """
-    hace_24h = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+    hace_24h = iso_utc(datetime.now(UTC) - timedelta(hours=24))
     cond = ""
     params: list[Any] = []
     if marca:
@@ -794,7 +794,7 @@ def conteos_items_recientes(
     del resumen y para detectar HUECOS (categorías/regiones esperadas sin items frescos).
     Devuelve `{"por_categoria": {cat: n}, "por_idioma": {lang: n}}`.
     """
-    desde = (datetime.now(UTC) - timedelta(hours=max(1, int(horas)))).isoformat()
+    desde = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(horas))))
     cond = "capturado_en >= ?"
     params: list[Any] = [desde]
     if marca:
@@ -908,7 +908,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     los pisa (mutarlos es trabajo exclusivo de `actualizar_noticia_cluster`; protege contra el
     TOCTOU daemon↔pipeline que revertía clusters promovidos a 'nuevo').
     """
-    ahora = datetime.now(UTC).isoformat()
+    ahora = ahora_iso()
     cid = (cluster.get("id") or "").strip() or uuid.uuid4().hex[:12]
     idiomas = cluster.get("idiomas") or []
     if not isinstance(idiomas, list):
@@ -1092,7 +1092,7 @@ def actualizar_noticia_cluster(
         cambios["contenido_id"] = contenido_id
     if not cambios:
         return obtener_noticia_cluster(cluster_id)
-    cambios["actualizado"] = datetime.now(UTC).isoformat()
+    cambios["actualizado"] = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     params: list[Any] = [*cambios.values(), cluster_id]
     con = _conectar()
@@ -1116,7 +1116,7 @@ def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[st
     incremental ACOTADO por la ventana: nunca re-cluster el archivo entero). Excluye los
     `descartado` (no se reabren). `marca` opcional acota a una marca. Orden `ultimo_visto` desc.
     """
-    corte = (datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h)))).isoformat()
+    corte = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h))))
     condiciones = ["ultimo_visto >= ?", "estado <> 'descartado'"]
     params: list[Any] = [corte]
     if marca:
@@ -1144,7 +1144,7 @@ def clusters_extranjeros_sin_traducir(
     distinto de `descartado`. MÁS RELEVANTES primero (`score DESC`), `limite` acota el lote por
     barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
     """
-    corte = (datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h)))).isoformat()
+    corte = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h))))
     con = _conectar()
     try:
         filas = con.execute(
@@ -1183,7 +1183,7 @@ def marcar_cluster_traducido(
                 (titulo_es or "")[:300],
                 (resumen_es or "")[:2000],
                 (titulo_original or "")[:300],
-                datetime.now(UTC).isoformat(),
+                ahora_iso(),
                 cluster_id,
             ),
         )
@@ -1300,7 +1300,7 @@ def actualizar_scores_clusters(scores: dict[str, float]) -> int:
     pares = [(cid, float(s)) for cid, s in scores.items() if cid]
     if not pares:
         return 0
-    ahora = datetime.now(UTC).isoformat()
+    ahora = ahora_iso()
     n = 0
     con = _conectar()
     try:
@@ -1401,7 +1401,7 @@ def crear_fuente_algoritmo(
     nombre: str, url: str, *, plataforma: str = "general", tipo: str = "agregador"
 ) -> dict[str, Any]:
     """Crea una fuente de algoritmo (activa, salud vacia) y la devuelve."""
-    ahora = datetime.now().isoformat(timespec="microseconds")
+    ahora = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
         "nombre": nombre or "",
@@ -1455,14 +1455,14 @@ def actualizar_fuente_algoritmo(
 def registrar_salud_fuente_algoritmo(fuente_id: str, *, conteo: int, error: str = "") -> None:
     """Anota la salud de una fuente de algoritmo (instante UTC + conteo + error).
 
-    UTC ISO (unificado con el resto de columnas de salud; antes `date.today()` local).
+    Canon UTC sin offset (`tiempo.ahora_iso`), unificado con el resto de columnas de salud.
     """
     con = _conectar()
     try:
         con.execute(
             "UPDATE fuentes_algoritmo SET ultima_actualizacion = ?, ultimo_conteo = ?, "
             "ultimo_error = ? WHERE id = ?",
-            (datetime.now(UTC).isoformat(), int(conteo), error or "", fuente_id),
+            (ahora_iso(), int(conteo), error or "", fuente_id),
         )
         con.commit()
     finally:
@@ -1578,7 +1578,7 @@ def guardar_noticia_algoritmo(noticia: dict[str, Any]) -> str:
             "aplicada": 0,
             "archivada": 0,
             "sugerida": 0,
-            "creado": datetime.now().isoformat(timespec="microseconds"),
+            "creado": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds"),
         }
         marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ALGO)
         con.execute(
@@ -1722,7 +1722,7 @@ def crear_sugerencia_editorial(
         "ficha_id": ficha_id or "",
         "noticia_ids": json.dumps(noticia_ids or []),
         "estado": "nueva",
-        "creado": datetime.now().isoformat(timespec="microseconds"),
+        "creado": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds"),
     }
     con = _conectar()
     try:

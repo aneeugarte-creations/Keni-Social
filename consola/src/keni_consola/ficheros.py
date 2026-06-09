@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +44,7 @@ from keni_shared.esquema_yaml import migrar, sellar
 from . import config, indice, marcas, rutas
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
 from .io_atomico import escribir_atomico
+from .tiempo import hoy_utc, iso_utc
 
 _log = logging.getLogger("keni_consola.ficheros")
 
@@ -425,11 +426,11 @@ def registrar_historial_prompt(
     """
     autor = autor or {}
     hid = _nuevo_id()
-    ahora = datetime.now()
+    ahora = datetime.now(UTC)
     cuerpo: dict[str, Any] = {
         "prompt": prompt_id,
-        "fecha": date.today().isoformat(),
-        "fecha_creacion": ahora.isoformat(timespec="seconds"),
+        "fecha": hoy_utc().isoformat(),
+        "fecha_creacion": iso_utc(ahora),
         "titulo": titulo,
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",

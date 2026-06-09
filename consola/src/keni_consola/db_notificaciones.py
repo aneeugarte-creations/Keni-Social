@@ -4,9 +4,9 @@ from __future__ import annotations
 from ._db_comun import (
     Any,
     _conectar,
-    datetime,
     uuid,
 )
+from .tiempo import ahora_iso
 
 # --------------------------------------------------------------------------- #
 # Notificaciones IN-APP (el "cajon" de la campana)                             #
@@ -63,7 +63,7 @@ def crear_notificacion(
         "resumen": resumen or "",
         "enlace": enlace or "",
         "leida": 0,
-        "creada": datetime.now().isoformat(timespec="seconds"),
+        "creada": ahora_iso(),
     }
     con = _conectar()
     try:

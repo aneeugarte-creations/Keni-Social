@@ -67,7 +67,6 @@ from starlette.routing import Route
 from .. import auth, marcas, permisos, repos
 from .. import rota as dominio
 from .._http_json import leer_json
-from ..motor_db import IntegrityError
 from ..estados import (
     ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_ACEPTADO,
@@ -81,6 +80,8 @@ from ..estados import (
     TIPOS_AUSENCIA,
     TIPOS_COBERTURA,
 )
+from ..motor_db import IntegrityError
+from ..tiempo import ahora_iso
 
 # Media types oficiales de un .xlsx (Open XML) y un CSV.
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -2370,9 +2371,8 @@ async def cancelar_swap(request: Request) -> Response:
 
 def _ahora_iso() -> str:
     """Timestamp ISO con segundos (mismo formato que el resto del modulo)."""
-    from datetime import datetime
 
-    return datetime.now().isoformat(timespec="seconds")
+    return ahora_iso()
 
 
 # --------------------------------------------------------------------------- #

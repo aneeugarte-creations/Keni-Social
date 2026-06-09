@@ -22,8 +22,6 @@ en espanol, sin tracebacks.
 
 from __future__ import annotations
 
-from datetime import date
-
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -34,6 +32,7 @@ from ..dominio import copy as dom_copy
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec
 from ..seguridad import autor_de_peticion
+from ..tiempo import hoy_utc
 
 # Prompt base (Texto) que arma el termometro + etiqueta de origen del historial.
 PROMPT_ID = "prompt/termometro-mundial"
@@ -119,7 +118,7 @@ def construir_valores(datos: dict[str, object]) -> dict[str, str]:
 
 def titulo_termometro(fecha: str) -> str:
     """Titulo legible para el historial: 'Termómetro mundial · <fecha>'."""
-    return f"Termómetro mundial · {fecha or date.today().isoformat()}"
+    return f"Termómetro mundial · {fecha or hoy_utc().isoformat()}"
 
 
 async def generar(request: Request) -> Response:

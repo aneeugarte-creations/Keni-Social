@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from .. import config
+from ..tiempo import iso_utc
 
 # Env var (opcional) para la duracion de la sesion en horas (def 12h). Nombre/default
 # canonicos en `config` (fuente unica); re-exportados aqui por compat de referencias.
@@ -24,7 +25,7 @@ def ahora() -> datetime:
 
 def iso(momento: datetime) -> str:
     """Serializa un datetime a ISO-8601 (segundos), para guardar en SQLite."""
-    return momento.astimezone(UTC).isoformat(timespec="seconds")
+    return iso_utc(momento)
 
 
 def parsear_iso(texto: str) -> datetime | None:

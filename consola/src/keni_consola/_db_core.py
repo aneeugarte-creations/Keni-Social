@@ -25,8 +25,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from .tiempo import ahora_iso
-
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
 from . import config, motor_db
 from .estados import (
@@ -35,6 +33,7 @@ from .estados import (
     NOMBRE_FRANJA_TARDE_DEFAULT,
 )
 from .motor_db import IntegrityError
+from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.db")
 
@@ -2825,6 +2824,33 @@ _COLUMNAS_TS_CANON: tuple[tuple[str, str, int], ...] = (
     ("contenido_plataforma", "fecha_programada", 16),
     ("metricas_pieza_snapshots", "ts", 19),
     ("comercial_snapshots", "ts", 19),
+    # Motor de noticias: estas columnas se comparan/ordenan como texto (ventanas 24h,
+    # GC del pool, `ultimo_visto >= ?`, `capturado_en >= ?`, `proximo_sondeo <= ahora`,
+    # `MAX(ultima_actualizacion)`) y se escribian con `datetime.now(UTC).isoformat()`
+    # (aware + microsegundos) hasta la unificacion al canon. OJO: los `creado` de
+    # DESEMPATE (fuentes_rss/fuentes_algoritmo/sugerencias_editoriales/...) NO van aqui:
+    # sus microsegundos naive son intencionales y compatibles con el orden (ver tiempo.py).
+    ("noticias_items", "capturado_en", 19),
+    ("noticias_items", "creado", 19),
+    ("noticias_items", "publicado_en", 19),
+    ("noticias_clusters", "primer_visto", 19),
+    ("noticias_clusters", "ultimo_visto", 19),
+    ("noticias_clusters", "creado", 19),
+    ("noticias_clusters", "actualizado", 19),
+    ("fuentes_rss", "ultima_actualizacion", 19),
+    ("fuentes_rss", "proximo_sondeo", 19),
+    ("fuentes_rss", "pausado_hasta", 19),
+    ("fuentes_algoritmo", "ultima_actualizacion", 19),
+    # Auth: `webauthn_credenciales` se ordena por `creada` como texto; el resto se parsea
+    # en Python pero compartia el formato aware de `auth/_comun.iso` (tambien unificado).
+    ("usuarios", "creado", 19),
+    ("usuarios", "ultimo_acceso", 19),
+    ("usuarios", "bloqueo_hasta", 19),
+    ("sesiones", "creada", 19),
+    ("sesiones", "ultimo_uso", 19),
+    ("sesiones", "expira", 19),
+    ("webauthn_credenciales", "creada", 19),
+    ("webauthn_credenciales", "ultimo_uso", 19),
 )
 
 # Valor ISO naive con fraccion de segundo (microsegundos de `isoformat()` sin timespec).

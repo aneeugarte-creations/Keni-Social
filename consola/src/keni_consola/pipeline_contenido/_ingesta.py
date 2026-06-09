@@ -12,6 +12,7 @@ from typing import Any
 from .. import marcas, redes, repos
 from ..dominio import dedup
 from ..dominio import generar as gen_dom
+from ..tiempo import hoy_utc
 from . import _ref
 from ._comun import (
     _DIAS_DEDUP,
@@ -241,7 +242,6 @@ def crear_tema_de(
     nota = _nota_de_item(item)[: gen_dom.MAX_TEXTO]
     redes_ids = _redes_de_fuente(fuente)
     try:
-        from datetime import date
 
         tema = repos.crear_contenido(
             clase="contenido",
@@ -249,7 +249,7 @@ def crear_tema_de(
             descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
-            fecha_objetivo=date.today().isoformat(),
+            fecha_objetivo=hoy_utc().isoformat(),
             # FOTO explícito: el pipeline no sabe si el ítem será foto o video, así que crea
             # un post de FOTO (3 redes IG/X/FB). El humano puede pasarlo a video más adelante.
             formato=_FORMATO_PIPELINE,
@@ -359,7 +359,6 @@ def crear_tema_de_cluster(
     trabajo = {"fuente": {}, "item": {"clave": ""}, "imagen": imagen}
     url_fuente = (items[0].get("url_canonica") if items else "") or ""
     try:
-        from datetime import date
 
         tema = repos.crear_contenido(
             clase="contenido",
@@ -367,7 +366,7 @@ def crear_tema_de_cluster(
             descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
-            fecha_objetivo=date.today().isoformat(),
+            fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
             fecha_fuente=cluster.get("primer_visto") or "",
@@ -451,9 +450,9 @@ def _claves_dedup_marca(marca: str) -> set[str]:
     barrido). Cubre el duplicado en cola y el republicado: todo contenido de la marca creado en
     la ventana entra (esté en borrador, en revisión o ya publicado).
     """
-    from datetime import date, timedelta
+    from datetime import timedelta
 
-    desde = (date.today() - timedelta(days=_DIAS_DEDUP)).isoformat()
+    desde = (hoy_utc() - timedelta(days=_DIAS_DEDUP)).isoformat()
     try:
         titulos = repos.titulos_recientes_marca(marca, desde)
     except Exception:  # noqa: BLE001 -- sin títulos legibles, no dedup (no rompe el barrido)

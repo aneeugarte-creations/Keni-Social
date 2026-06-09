@@ -44,6 +44,7 @@ from .dominio import (
     perfil_editorial,
     traduccion,
 )
+from .tiempo import ahora_iso, iso_utc
 
 _log = logging.getLogger("keni_consola.ingesta_daemon")
 
@@ -80,13 +81,14 @@ def planificar_proximo(
     min(intervalo * 2^errores, tope)` (backoff exponencial acotado). `proximo_sondeo` se fija a
     la misma pausa, de modo que el feed no se vuelve a elegir hasta que expire.
 
-    Devuelve `{proximo_sondeo, errores_seguidos, pausado_hasta}` con ISO 8601 UTC.
+    Devuelve `{proximo_sondeo, errores_seguidos, pausado_hasta}` en el canon UTC sin
+    offset de `tiempo.iso_utc` (los compara `feeds_vencidos` como texto).
     """
     intervalo = max(1, int(intervalo_seg))
     if not error:
         proximo = ahora + timedelta(seconds=intervalo)
         return {
-            "proximo_sondeo": proximo.isoformat(),
+            "proximo_sondeo": iso_utc(proximo),
             "errores_seguidos": 0,
             "pausado_hasta": "",
         }
@@ -96,9 +98,9 @@ def planificar_proximo(
     espera = min(intervalo * factor, max(intervalo, int(backoff_tope_seg)))
     reanuda = ahora + timedelta(seconds=espera)
     return {
-        "proximo_sondeo": reanuda.isoformat(),
+        "proximo_sondeo": iso_utc(reanuda),
         "errores_seguidos": errores,
-        "pausado_hasta": reanuda.isoformat(),
+        "pausado_hasta": iso_utc(reanuda),
     }
 
 
@@ -197,7 +199,7 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
                 "salida": (salida or "")[:20000],
                 "estado": generaciones.ESTADO_COMPLETADO,
                 "fase": generaciones.FASE_COMPLETADO,
-                "fecha_fin": datetime.now(UTC).isoformat(),
+                "fecha_fin": ahora_iso(),
             }
         )
     except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la ingesta
@@ -248,7 +250,7 @@ def paso_clustering() -> dict[str, Any]:
         _log.warning("ingesta_daemon: no se pudieron reparar items colgantes.", exc_info=True)
 
     ahora = datetime.now(UTC)
-    desde = (ahora - timedelta(hours=ventana_h)).isoformat()
+    desde = iso_utc(ahora - timedelta(hours=ventana_h))
     pendientes = repos.items_sin_cluster(desde, _CLUSTER_BATCH)
     if not pendientes:
         return {"items": 0, "clusters_nuevos": 0, "clusters_tocados": 0}
@@ -712,7 +714,7 @@ def ejecutar_barrido() -> dict[str, Any]:
             return {"feeds": 0, "items_nuevos": 0, "errores": 0}
 
         ahora = datetime.now(UTC)
-        feeds = repos.feeds_vencidos(ahora.isoformat(), config.ingesta_batch())
+        feeds = repos.feeds_vencidos(iso_utc(ahora), config.ingesta_batch())
         # Excepción por marca de "Crear noticias" (KENI_PIPELINE_SELECCION::<marca>): salta los feeds de
         # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
         # con marca vacía es False. Best-effort: no toca clustering/traducción (pasos globales).

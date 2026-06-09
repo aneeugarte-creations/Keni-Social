@@ -18,12 +18,12 @@ import re
 import threading
 import uuid
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from .. import config
 from ..dominio import stream
 from ..dominio.runner import ColaLlenaError  # noqa: F401  (re-export; ver nota arriba)
+from ..tiempo import ahora_iso
 
 __all__ = [
     "ColaLlenaError",
@@ -128,7 +128,3 @@ def nuevo_id() -> str:
     """Nuevo id de generacion (12 hex)."""
     return uuid.uuid4().hex[:12]
 
-
-def ahora_iso() -> str:
-    """Fecha-hora ISO a segundos (orden determinista de las generaciones)."""
-    return datetime.now().isoformat(timespec="seconds")

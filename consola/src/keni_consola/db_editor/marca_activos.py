@@ -1,7 +1,8 @@
 """Persistencia — dominio editor: activos de marca. Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
-from ._comun import Any, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Activos de marca (editor profesional: kit visual reutilizable por marca)       #
@@ -60,7 +61,7 @@ def crear_marca_activo(
 ) -> dict[str, Any]:
     """Cataloga un activo de marca y lo devuelve. NO valida (lo hace la API)."""
     autor = autor or {}
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "marca": marca or "",
@@ -131,7 +132,7 @@ def actualizar_marca_activo(activo_id: str, campos: dict[str, Any]) -> dict[str,
         cambios["aprobado"] = 1 if cambios["aprobado"] else 0
     if not cambios:
         return obtener_marca_activo(activo_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, activo_id]

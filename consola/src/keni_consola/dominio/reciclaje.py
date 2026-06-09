@@ -45,6 +45,7 @@ from datetime import date, datetime
 from typing import Any
 
 from .. import marcas, redes
+from ..tiempo import hoy_utc
 from . import publicaciones as contrato_publicaciones
 
 # Firma del lookup de rendimiento que se inyecta (contrato de `metricas_pieza.rendimiento`):
@@ -362,7 +363,7 @@ def candidatas_reciclaje(
     interna), UNA candidata por pieza (gana su motivo mas fuerte).
     """
     if hoy is None:
-        hoy = date.today()
+        hoy = hoy_utc()
 
     publicadas = [p for p in publicaciones if _es_archivo(p)]
     pendientes = {

@@ -32,6 +32,7 @@ from datetime import date
 
 from . import config, daemon_util, marcas, metricas_pieza, redes, repos
 from .dominio import eventos, reciclaje
+from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.alertas_rendimiento")
 
@@ -131,7 +132,7 @@ def emitir_alertas(hoy: date | None = None) -> tuple[int, int]:
     Es lo que ejecuta cada vuelta del hilo y tambien se puede llamar a mano (test/CLI).
     La idempotencia por bucket diario hace que re-ejecutar el mismo dia no duplique avisos.
     """
-    hoy_iso = (hoy or date.today()).isoformat()
+    hoy_iso = (hoy or hoy_utc()).isoformat()
     umbral = config.alertas_umbral_engagement()
     return _emitir_reciclaje(hoy_iso), _emitir_bajo_rendimiento(hoy_iso, umbral)
 

@@ -218,6 +218,49 @@ def test_normalizar_timestamps_convierte_offsets_no_utc(entorno):
         con.close()
 
 
+def test_normalizar_timestamps_cubre_noticias_y_feeds(entorno):
+    """Las columnas del motor de noticias (aware + microsegundos historicos) entran al canon.
+
+    `capturado_en`/`ultimo_visto`/`proximo_sondeo` se comparan LEXICOGRAFICAMENTE (ventanas
+    24h, `feeds_vencidos`, GC del pool): los valores legados con "+00:00" y microsegundos
+    deben normalizarse; los ya-canon no se tocan (idempotente).
+    """
+    fuente = db.crear_fuente_rss("F", "https://ej.mx/rss")
+    db.crear_noticias_items([{"clave": "k1", "fuente_id": fuente["id"],
+                              "capturado_en": "2026-01-01T10:00:00.123456+00:00"}])
+    con = db._conectar()
+    try:
+        con.execute(
+            "UPDATE fuentes_rss SET ultima_actualizacion = ?, proximo_sondeo = ? WHERE id = ?",
+            ("2026-01-01T10:00:00.500000+00:00", "2026-01-01T10:10:00+00:00", fuente["id"]),
+        )
+        con.execute(
+            "INSERT INTO noticias_clusters (id, ultimo_visto, primer_visto) VALUES (?, ?, ?)",
+            ("cl-ts-canon", "2026-01-01T09:00:00-06:00", "2026-01-01T08:00:00+00:00"),
+        )
+        con.commit()
+        _db_core._normalizar_timestamps_texto(con)
+        _db_core._normalizar_timestamps_texto(con)  # idempotente
+        f = con.execute(
+            "SELECT ultima_actualizacion, proximo_sondeo FROM fuentes_rss WHERE id = ?",
+            (fuente["id"],),
+        ).fetchone()
+        assert f["ultima_actualizacion"] == "2026-01-01T10:00:00"
+        assert f["proximo_sondeo"] == "2026-01-01T10:10:00"
+        it = con.execute(
+            "SELECT capturado_en FROM noticias_items WHERE clave = ?", ("k1",)
+        ).fetchone()
+        assert it["capturado_en"] == "2026-01-01T10:00:00"
+        cl = con.execute(
+            "SELECT ultimo_visto, primer_visto FROM noticias_clusters WHERE id = ?",
+            ("cl-ts-canon",),
+        ).fetchone()
+        assert cl["ultimo_visto"] == "2026-01-01T15:00:00"  # CDMX -> UTC
+        assert cl["primer_visto"] == "2026-01-01T08:00:00"
+    finally:
+        con.close()
+
+
 # --------------------------------------------------------------------------- #
 # Vencimientos del tablero en SQL                                              #
 # --------------------------------------------------------------------------- #

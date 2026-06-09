@@ -1,7 +1,8 @@
 """Persistencia — dominio editor: motor de video (composiciones + subtítulos). Ver barrel `db.py`."""
 from __future__ import annotations
 
-from ._comun import Any, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Motor de video: composiciones + subtitulos (Ola VIDEO)                        #
@@ -53,7 +54,7 @@ def crear_video_composicion(
     actualizado: str = "",
 ) -> dict[str, Any]:
     """Crea una composicion de video y la devuelve. NO valida el documento (lo hace la API/shared)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "contenido_id": contenido_id or "",
@@ -121,7 +122,7 @@ def actualizar_video_composicion(composicion_id: str, campos: dict[str, Any]) ->
         del cambios["estado"]
     if not cambios:
         return obtener_video_composicion(composicion_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, composicion_id]
@@ -203,7 +204,7 @@ def crear_video_subtitulo(
     actualizado: str = "",
 ) -> dict[str, Any]:
     """Crea una fila de subtitulos para una composicion y la devuelve."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "composicion_id": composicion_id or "",
@@ -270,7 +271,7 @@ def actualizar_video_subtitulo(subtitulo_id: str, campos: dict[str, Any]) -> dic
         cambios.pop("estado")
     if not cambios:
         return obtener_video_subtitulo(subtitulo_id)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, subtitulo_id]

@@ -50,6 +50,7 @@ from ..estados import (
 )
 from ..motor_db import IntegrityError
 from ..seguridad import autor_de_peticion
+from ..tiempo import ahora_iso
 from .colaboracion import montar_cadena_aprobacion
 
 _log = logging.getLogger("keni_consola.api.aprobacion")
@@ -215,7 +216,7 @@ async def enviar_a_revision(request: Request) -> Response:
         "borrador",
         ESTADO_EN_REVISION,
         {
-            "enviado_a_revision_en": datetime.now().isoformat(timespec="seconds"),
+            "enviado_a_revision_en": ahora_iso(),
             "revisor_id": "",
             "revisor_nombre": "",
             "revisado_en": "",
@@ -332,7 +333,7 @@ async def forzar(request: Request) -> Response:
     autor = autor_de_peticion(request) or {}
     decisor_id = autor.get("id", "") or "forzado"
     decisor_nombre = autor.get("usuario", "") or "Override"
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     nivel_decidido: dict[str, Any] | None = None
     for nivel in repos.listar_aprobaciones(publicacion_id):
         if nivel.get("decision") != DECISION_PENDIENTE:

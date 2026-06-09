@@ -1,7 +1,8 @@
 """Persistencia — piezas de la parrilla (tabla `rota_piezas`). Ver barrel `db.py`."""
 from __future__ import annotations
 
-from ._comun import ESTADOS_PIEZA, Any, _conectar, datetime, uuid
+from ..tiempo import ahora_iso
+from ._comun import ESTADOS_PIEZA, Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Piezas de la parrilla (#150, PARRILLA 2026.xlsx)                              #
@@ -115,7 +116,7 @@ def crear_pieza_rota(
     post-mortem. `fecha_entrega_material` es el deadline interno antes de `dia`. `always_on`
     marca piezas evergreen sin fecha (la `dia` se permite vacia en ese caso).
     """
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
         "evento_id": evento_id or "",
@@ -242,7 +243,7 @@ def actualizar_pieza_rota(
     for col in ("material_entregado", "contenido_entregado", "publicado", "always_on"):
         if col in cambios:
             cambios[col] = 1 if cambios[col] else 0
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = [*cambios.values(), ahora, pieza_id]

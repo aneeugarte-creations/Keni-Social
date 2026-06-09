@@ -3,7 +3,7 @@
 Contrato: docs/maquina-contenido/01-insumos-del-dia.md. Ver barrel `db.py`."""
 from __future__ import annotations
 
-from ._comun import Any, _conectar, datetime, uuid
+from ._comun import UTC, Any, _conectar, datetime, uuid
 
 # --------------------------------------------------------------------------- #
 # Insumos del día (cajones) — tabla `insumos_lote` + `insumos_item`            #
@@ -81,7 +81,7 @@ def crear_insumo_lote(
     creado_por: str = "",
 ) -> dict[str, Any]:
     """Crea un lote de insumos y lo devuelve."""
-    ahora = datetime.now().isoformat(timespec="microseconds")
+    ahora = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds")
     lote_id = uuid.uuid4().hex[:16]
     fila = {
         "id": lote_id,
@@ -203,7 +203,7 @@ def crear_insumo_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Cada dict debe contener al menos: `lote_id`, `fecha`, `cajon`, `titulo`.
     Los campos ausentes reciben sus valores por defecto.
     """
-    ahora = datetime.now().isoformat(timespec="microseconds")
+    ahora = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds")
     marcadores = ", ".join("?" for _ in _COLS_INSUMO_ITEM)
     insertados: list[dict[str, Any]] = []
     con = _conectar()
