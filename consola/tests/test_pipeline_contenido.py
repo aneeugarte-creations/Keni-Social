@@ -476,6 +476,68 @@ def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"  # pero se marca usado
 
 
+# --------------------------------------------------------------------------- #
+# Serial POR MARCA: el gate de CI no promueve más historias mientras la marca  #
+# tenga cola EN VUELO (sin cribar / sin copy). Cada item entra y se completa.  #
+# --------------------------------------------------------------------------- #
+
+
+def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):
+    """`temas_en_vuelo` cuenta los temas sin terminar las fases de IA (QA pendiente o sin copy).
+
+    En vuelo: veredicto ''/'en_curso' (QA pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
+    vuelo: 'problema' (terminal) ni 'no_verificado' que YA tiene copy en una pieza por plataforma.
+    """
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="Pendiente QA", qa_veredicto="", copy_pendiente=pend)          # +1
+    _tema_pipeline(titulo="QA en curso", qa_veredicto=pc.QA_EN_CURSO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Apto sin copy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Saltada sin copy", qa_veredicto=pc.QA_SALTADA, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Problema", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)  # terminal: 0
+    con_copy = _tema_pipeline(titulo="Apto con copy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en vuelo.
+    repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
+
+    assert pc.temas_en_vuelo("unotv") == 4
+
+
+def test_ci_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
+    """Gate SERIAL: si la marca ya tiene >= cupo en vuelo, CI no promueve clusters nuevos."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")  # ingesta_activa: CI corre
+    monkeypatch.setattr(pc._ingesta, "_PIPELINE_EN_VUELO_MAX", 2)
+    # 2 temas en vuelo (pendientes de QA) -> cupo 0 para unotv.
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En vuelo 2", qa_veredicto="", copy_pendiente=pend)
+    _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
+
+    res = pc._ejecutar_barrido()
+
+    assert res["temas"] == []  # cupo agotado: no se promueve nada
+    assert repos.obtener_noticia_cluster("hot")["estado"] == "nuevo"  # el cluster sigue disponible
+
+
+def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
+    """Gate SERIAL: con cupo parcial, CI promueve como mucho `cupo` historias (no `pipeline_max`)."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "3")  # pipeline_max alto: el límite real es el cupo
+    monkeypatch.setattr(pc._ingesta, "_PIPELINE_EN_VUELO_MAX", 3)
+    # 2 en vuelo -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En vuelo 2", qa_veredicto="", copy_pendiente=pend)
+    _sembrar_cluster("c1", titulo="Hist 1", score=0.9)
+    _sembrar_cluster("c2", titulo="Hist 2", score=0.8)
+    _sembrar_cluster("c3", titulo="Hist 3", score=0.7)
+
+    res = pc._ejecutar_barrido()
+
+    assert len(res["temas"]) == 1  # cupo=1, no min(3, pipeline_max)
+    assert res["temas"][0]["titulo"] == "Hist 1"  # la de mayor score
+
+
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
     """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba)."""
     monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")

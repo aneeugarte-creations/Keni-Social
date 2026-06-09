@@ -18,9 +18,19 @@ from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_CI,
     ORIGEN_PIPELINE,
+    QA_EN_CURSO,
+    QA_SALTADA,
+    VERDICTO_NO_VERIFICADO,
     _log,
     registrar_etapa,
+    temas_pipeline,
 )
+
+# Tope de temas EN VUELO POR MARCA (sin terminar las fases de IA: QA o copy). El gate SERIAL de CI
+# no promueve más historias de UNA marca mientras ésta tenga >= esto en cola: primero se COMPLETA lo
+# que entró (QA→copy), luego entran nuevos. Antes CI promovía `pipeline_max` por marca y barrido sin
+# mirar el backlog → QA se atascaba (CI iba más rápido que QA). Es POR MARCA: cada una drena la suya.
+_PIPELINE_EN_VUELO_MAX = 8
 
 __all__ = [
     "items_ingeribles",
@@ -35,6 +45,8 @@ __all__ = [
     "crear_tema_de_cluster",
     "clusters_para_promover",
     "promover_clusters_marca",
+    "temas_en_vuelo",
+    "_PIPELINE_EN_VUELO_MAX",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",
@@ -367,6 +379,36 @@ def crear_tema_de_cluster(
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no rompe el barrido
             _log.warning("pipeline: no se pudo marcar la historia usada (%s)", cid, exc_info=True)
     return tema
+
+
+def temas_en_vuelo(marca: str) -> int:
+    """Cuántos temas del pipeline de `marca` están EN VUELO (sin terminar las fases de IA).
+
+    En vuelo = pendiente de QA (veredicto ''/'en_curso') O cribado-apto/saltado pero SIN copy aún.
+    Es lo que el gate SERIAL de CI mira para no promover más historias de esa marca hasta drenarlas
+    (así cada item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
+    """
+    try:
+        temas = temas_pipeline(marca)
+    except Exception:  # noqa: BLE001 -- sin temas legibles, no bloqueamos la promoción
+        return 0
+    if not temas:
+        return 0
+    con_copy: set[str] = set()
+    try:
+        for p in repos.listar_contenido_plataforma():
+            if (p.get("copy") or "").strip():
+                con_copy.add(p.get("contenido_id", "") or "")
+    except Exception:  # noqa: BLE001 -- sin plataformas, contamos solo los pendientes de QA
+        pass
+    n = 0
+    for t in temas:
+        veredicto = (t.get("qa_veredicto") or "").strip()
+        if veredicto in ("", QA_EN_CURSO):
+            n += 1  # pendiente de QA
+        elif veredicto in (VERDICTO_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
+            n += 1  # cribado pero pendiente de copy
+    return n
 
 
 def promover_clusters_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:

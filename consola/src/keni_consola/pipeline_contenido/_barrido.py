@@ -11,7 +11,7 @@ import threading
 from typing import Any
 
 from .. import config, daemon_util, generaciones, marcas, repos
-from . import _ref
+from . import _ingesta, _ref
 from ._comun import QA_EN_CURSO, QA_SALTADA, _log
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
 from ._ingesta import promover_clusters_marca
@@ -75,8 +75,14 @@ def _ejecutar_barrido() -> dict[str, Any]:
         # nada suyo (no entran temas nuevos). Sin override, sigue al maestro (global).
         if config.marca_apagada(config.ENV_PIPELINE_SELECCION, marca):
             continue
+        # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin
+        # cribar/sin copy). Promueve solo hasta llenar su cupo; si está lleno, salta. Así cada item
+        # que entró se COMPLETA (QA→copy) antes de meter nuevos, en vez de atascar QA con backlog.
+        cupo = _ingesta._PIPELINE_EN_VUELO_MAX - _ingesta.temas_en_vuelo(marca)
+        if cupo <= 0:
+            continue
         try:
-            temas_nuevos.extend(promover_clusters_marca(marca, maximo=maximo))
+            temas_nuevos.extend(promover_clusters_marca(marca, maximo=min(maximo, cupo)))
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
             _log.exception("pipeline: fallo la promoción de historias (CI) de la marca %s", marca)
             continue

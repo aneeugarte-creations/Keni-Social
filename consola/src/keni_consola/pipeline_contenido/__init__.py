@@ -150,6 +150,7 @@ from ._ingesta import (
     ingerir_marca,
     items_ingeribles,
     promover_clusters_marca,
+    temas_en_vuelo,
 )
 from ._qa import (
     _contexto_qa_fuente,
@@ -232,6 +233,7 @@ __all__ = [
     "crear_tema_de_cluster",
     "clusters_para_promover",
     "promover_clusters_marca",
+    "temas_en_vuelo",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",
