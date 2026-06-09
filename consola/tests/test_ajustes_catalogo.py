@@ -54,11 +54,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_TRENDS, config.ENV_ALGORITMOS_AUTO, config.ENV_SUGERENCIAS_EDITORIALES,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
-        # Tuning · pipeline de contenido (cadencia, volumen y topes por barrido).
-        config.ENV_PIPELINE_INTERVALO_MIN, config.ENV_PIPELINE_MAX,
-        config.ENV_PIPELINE_EN_VUELO_MAX, config.ENV_PIPELINE_QA_MAX,
-        config.ENV_PIPELINE_COPY_MAX, config.ENV_PIPELINE_AUTOGEN_MAX,
-        config.ENV_PIPELINE_QA_REVISAR_MAX,
+        # Admisión del flujo continuo (sin intervalo ni topes por etapa: ya no existen).
+        config.ENV_PIPELINE_MAX, config.ENV_PIPELINE_EN_VUELO_MAX,
         # Tuning.
         config.ENV_AUTOGEN_ARTE_MAX,
         config.ENV_ALERTAS_INTERVALO_HORAS, config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
@@ -205,22 +202,18 @@ def test_tuning_solo_operacional(store):
     assert en_grupo == set(claves)
 
 
-# Los 8 topes de la máquina viven en su propio grupo `pipeline_topes` (sección «Máquina de
-# contenido» del Monitor), NO en `tuning` de Configuración.
+# La admisión del flujo continuo vive en su propio grupo `pipeline_topes` (sección «Máquina de
+# contenido» del Monitor), NO en `tuning` de Configuración. FLUJO CONTINUO: sin intervalo del
+# barrido ni topes por etapa (QA/Copy/autogen/revisar); solo admisión + WIP + cap de Arte.
 _PIPELINE_TOPES_INT = {
-    config.ENV_PIPELINE_INTERVALO_MIN,
     config.ENV_PIPELINE_MAX,
     config.ENV_PIPELINE_EN_VUELO_MAX,
-    config.ENV_PIPELINE_QA_MAX,
-    config.ENV_PIPELINE_COPY_MAX,
-    config.ENV_PIPELINE_AUTOGEN_MAX,
-    config.ENV_PIPELINE_QA_REVISAR_MAX,
     config.ENV_AUTOGEN_ARTE_MAX,
 }
 
 
 def test_pipeline_topes_en_grupo_propio(store):
-    """Los 8 topes son int (min >= 1) y viven EXACTAMENTE en el grupo `pipeline_topes`."""
+    """Los knobs de admisión son int (min >= 1) y viven EXACTAMENTE en el grupo `pipeline_topes`."""
     for clave in _PIPELINE_TOPES_INT:
         a = ajustes_catalogo.por_clave(clave)
         assert a is not None, f"falta la clave {clave}"

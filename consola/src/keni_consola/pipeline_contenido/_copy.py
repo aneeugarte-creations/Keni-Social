@@ -120,10 +120,8 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
         if _tiene_copy(tema.get("id", "") or ""):
             continue
         listos.append(tema)
-        # Recorte SOBRE LOS LISTOS (no sobre la lista cruda): así un backlog grande no deja
-        # fuera de la ventana a los temas nuevos, y se acota el nº de `_tiene_copy` (1 query/tema).
-        if len(listos) >= config.pipeline_qa_revisar_max():
-            break
+        # SIN recorte: el volumen lo acota la ADMISIÓN (gate serial en vuelo por marca) y el
+        # backpressure de la cola (`ColaLlenaError` corta la fase; el siguiente tick reintenta).
     return listos
 
 
@@ -137,8 +135,9 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
       - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
       - con marca válida y título no vacío,
       - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_COPY`),
-      - dedup: salta los ya encolados (etiqueta `autogen`) y los que ya tienen copy,
-      - cap `config.pipeline_autogen_max()` por barrido.
+      - dedup: salta los ya encolados (etiqueta `autogen`) y los que ya tienen copy.
+    SIN cap propio: el backpressure lo pone la cola de generación (`ColaLlenaError` corta la fase
+    en `ejecutar_cd`; el siguiente tick retoma donde quedó gracias al dedup por etiqueta).
     Best-effort: una lectura fallida devuelve []. Import diferido de `autogen_copy` para reusar su
     dedup por etiqueta sin acoplar la carga del módulo.
     """
@@ -154,8 +153,6 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     ya_generados = autogen_copy.ids_ya_generados()
     elegidos: list[dict[str, Any]] = []
     for item in items:
-        if len(elegidos) >= config.pipeline_autogen_max():
-            break
         if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
             continue
         if (item.get("origen") or "") not in ORIGENES_AUTOGEN:

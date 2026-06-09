@@ -36,7 +36,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido (interruptor general)"),
     ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
     ("automatizacion_marca", "Excepciones por marca"),
-    ("pipeline_topes", "Cadencia y topes por barrido"),
+    ("pipeline_topes", "Admisión del flujo continuo"),
     ("publicacion", "Publicación"),
     ("publicacion_marca", "Publicación · excepciones por marca"),
     ("automatismos_generales", "Automatismos generales"),
@@ -274,24 +274,16 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
             peligroso=True,
         ),
-        # --- Máquina de contenido · cadencia y topes por barrido (grupo `pipeline_topes`) --- #
-        # Viven en el MONITOR (junto a la cola que controlan), NO en Configuración. Las etiquetas no
-        # repiten "Pipeline:" porque el grupo ya lo dice.
-        Ajuste(
-            clave=config.ENV_PIPELINE_INTERVALO_MIN,
-            tipo="int",
-            etiqueta="Intervalo del barrido (minutos)",
-            ayuda="Cada cuántos minutos barre la máquina (Selección→Validación→Copy→Arte).",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_INTERVALO_MIN_DEF,
-            minimo=1,
-        ),
+        # --- Máquina de contenido · admisión del flujo continuo (grupo `pipeline_topes`) --- #
+        # Viven en el MONITOR (junto a la cola que controlan), NO en Configuración. FLUJO CONTINUO:
+        # no hay intervalo (tick corto fijo) ni topes por etapa; el volumen lo regulan estos knobs
+        # de ADMISIÓN (y `KENI_MAX_JOBS` aguas abajo). In=out: solo entra lo que cabe en vuelo.
         Ajuste(
             clave=config.ENV_PIPELINE_MAX,
             tipo="int",
-            etiqueta="Historias por marca/barrido",
-            ayuda="Máximo de historias que la Selección intenta promover a temas por marca y barrido "
-            "(acotado además por el gate serial: nunca mete más de lo que cabe en vuelo).",
+            etiqueta="Historias admitidas por marca",
+            ayuda="Máximo de historias que la Selección admite de golpe por marca (acotado además "
+            "por el cupo en vuelo: nunca entra más de lo que cabe).",
             grupo="pipeline_topes",
             defecto=config.PIPELINE_MAX_DEF,
             minimo=1,
@@ -299,58 +291,20 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_PIPELINE_EN_VUELO_MAX,
             tipo="int",
-            etiqueta="Temas en vuelo por marca (gate serial)",
-            ayuda="Tope de temas sin terminar (Validación pendiente o sin copy) por marca. Mientras "
-            "una marca tenga estos en cola, la Selección no le mete más: primero completa lo que entró.",
+            etiqueta="Piezas en vuelo por marca (regulador del flujo)",
+            ayuda="Tope de piezas sin terminar (Validación pendiente o sin copy) por marca. Es EL "
+            "regulador: no se admite más hasta que algo sale por el otro lado (in=out). Una pieza "
+            "que falla repetidamente sale del cupo marcada como problema.",
             grupo="pipeline_topes",
             defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
-            clave=config.ENV_PIPELINE_QA_MAX,
-            tipo="int",
-            etiqueta="Cribas de Validación por barrido",
-            ayuda="Máximo de cribas de Validación (`claude -p`) lanzadas por barrido. Evita la "
-            "ráfaga que satura el worker; el resto se valida en el siguiente barrido.",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_QA_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_PIPELINE_COPY_MAX,
-            tipo="int",
-            etiqueta="Copies por barrido",
-            ayuda="Máximo de generaciones de copy (`claude -p`) lanzadas por barrido en la etapa Copy.",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_COPY_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_PIPELINE_AUTOGEN_MAX,
-            tipo="int",
-            etiqueta="Copies del pool de noticias por barrido",
-            ayuda="Máximo de temas del pool de noticias (no ingeridos por el propio pipeline) a los "
-            "que la etapa Copy redacta por barrido.",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_AUTOGEN_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_PIPELINE_QA_REVISAR_MAX,
-            tipo="int",
-            etiqueta="Temas pendientes revisados por barrido",
-            ayuda="Cota de cuántos temas PENDIENTES mira cada fase por barrido (sobre los filtrados, "
-            "no la lista cruda). Sube si tienes mucho backlog y quieres que cada barrido alcance más.",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_QA_REVISAR_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
             clave=config.ENV_AUTOGEN_ARTE_MAX,
             tipo="int",
-            etiqueta="Arte: temas ilustrados por barrido",
-            ayuda="Máximo de temas a ilustrar por barrido de la etapa de Arte (cada uno llama "
-            "al proveedor de imagen).",
+            etiqueta="Arte: temas ilustrados por ciclo",
+            ayuda="Máximo de temas a ilustrar en cada ciclo de la etapa de Arte (cada uno llama "
+            "al proveedor de imagen; acota el gasto del proveedor).",
             grupo="pipeline_topes",
             defecto=config.AUTOGEN_ARTE_MAX_DEF,
             minimo=1,

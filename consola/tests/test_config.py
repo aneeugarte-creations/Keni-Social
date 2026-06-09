@@ -38,8 +38,6 @@ _TODAS = (
     config.ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     config.ENV_COMERCIAL_INTERVALO_HORAS,
     config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
-    config.ENV_PIPELINE_INTERVALO_MIN,
-    config.ENV_PIPELINE_INTERVALO_HORAS,
     config.ENV_DATABASE_URL,
     config.ENV_PG_USER,
     config.ENV_PG_PASSWORD,
@@ -398,49 +396,23 @@ def test_comercial_intervalo_horas_crudo(limpio):
     assert config.comercial_intervalo_horas() is None
 
 
-def test_pipeline_intervalo_min_default_y_clamp(limpio):
-    # Sin env: default 20 min (barrido ágil).
-    assert config.pipeline_intervalo_min() == 20
-    limpio.setenv(config.ENV_PIPELINE_INTERVALO_MIN, "0")
-    assert config.pipeline_intervalo_min() == 1  # clamp min 1
-    limpio.setenv(config.ENV_PIPELINE_INTERVALO_MIN, "5")
-    assert config.pipeline_intervalo_min() == 5
+def test_pipeline_admision_default_y_clamp(limpio):
+    """Los DOS knobs de admisión del flujo continuo: ajustables por env, default y clamp min 1.
 
-
-def test_pipeline_topes_por_barrido_default_y_clamp(limpio):
-    """Los topes por barrido del pipeline son ajustables por env, con default y clamp min 1."""
-    # Defaults (antes constantes fijas en `pipeline_contenido`).
+    Los topes por etapa (QA/Copy/autogen/revisar) y el intervalo del barrido YA NO EXISTEN:
+    el volumen lo regula la admisión (estos dos) + el backpressure de la cola.
+    """
     assert config.pipeline_max() == 3
     assert config.pipeline_en_vuelo_max() == 8
-    assert config.pipeline_qa_max() == 8
-    assert config.pipeline_copy_max() == 8
-    assert config.pipeline_autogen_max() == 8
-    assert config.pipeline_qa_revisar_max() == 50
-    # Ajustables por env.
     limpio.setenv(config.ENV_PIPELINE_EN_VUELO_MAX, "12")
     assert config.pipeline_en_vuelo_max() == 12
-    limpio.setenv(config.ENV_PIPELINE_QA_MAX, "4")
-    assert config.pipeline_qa_max() == 4
-    limpio.setenv(config.ENV_PIPELINE_COPY_MAX, "6")
-    assert config.pipeline_copy_max() == 6
-    limpio.setenv(config.ENV_PIPELINE_AUTOGEN_MAX, "2")
-    assert config.pipeline_autogen_max() == 2
-    limpio.setenv(config.ENV_PIPELINE_QA_REVISAR_MAX, "100")
-    assert config.pipeline_qa_revisar_max() == 100
-    # Clamp min 1 (un 0/negativo no apaga la fase).
+    limpio.setenv(config.ENV_PIPELINE_MAX, "5")
+    assert config.pipeline_max() == 5
+    # Clamp min 1 (un 0/negativo no apaga la admisión).
     limpio.setenv(config.ENV_PIPELINE_EN_VUELO_MAX, "0")
     assert config.pipeline_en_vuelo_max() == 1
-    limpio.setenv(config.ENV_PIPELINE_QA_MAX, "-3")
-    assert config.pipeline_qa_max() == 1
-
-
-def test_pipeline_intervalo_min_compat_horas(limpio):
-    # Compatibilidad: solo el viejo de HORAS -> se respeta (en minutos).
-    limpio.setenv(config.ENV_PIPELINE_INTERVALO_HORAS, "2")
-    assert config.pipeline_intervalo_min() == 120
-    # El de minutos MANDA si están ambos.
-    limpio.setenv(config.ENV_PIPELINE_INTERVALO_MIN, "10")
-    assert config.pipeline_intervalo_min() == 10
+    limpio.setenv(config.ENV_PIPELINE_MAX, "-3")
+    assert config.pipeline_max() == 1
 
 
 def test_programador_intervalo_segundos_min_1(limpio):

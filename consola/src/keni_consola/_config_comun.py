@@ -217,15 +217,11 @@ ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 # un pipeline de CI/CD. Deja BORRADORES en la cola de revision para la aprobacion humana; NUNCA
 # publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_COPY` el comportamiento no cambia.
 ENV_PIPELINE_COPY = "KENI_PIPELINE_COPY"
-ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
-ENV_PIPELINE_INTERVALO_MIN = "KENI_PIPELINE_INTERVALO_MIN"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
-# Topes por barrido del pipeline (antes constantes fijas en `pipeline_contenido`; ahora ajustables).
+# FLUJO CONTINUO: el pipeline ya no barre por tandas (sin intervalo configurable: tick corto
+# constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (QA/Copy/autogen/revisar):
+# el volumen lo regula la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la cola.
 ENV_PIPELINE_EN_VUELO_MAX = "KENI_PIPELINE_EN_VUELO_MAX"  # gate serial: temas en vuelo por marca
-ENV_PIPELINE_QA_MAX = "KENI_PIPELINE_QA_MAX"  # cribas QA (claude -p) lanzadas por barrido
-ENV_PIPELINE_QA_REVISAR_MAX = "KENI_PIPELINE_QA_REVISAR_MAX"  # temas pendientes que mira cada fase
-ENV_PIPELINE_COPY_MAX = "KENI_PIPELINE_COPY_MAX"  # copies lanzados por barrido
-ENV_PIPELINE_AUTOGEN_MAX = "KENI_PIPELINE_AUTOGEN_MAX"  # autogen del news-pool por barrido
 
 # Etapa de QA del pipeline: "Validar (QA)" (`KENI_PIPELINE_VALIDACION`, toggle de etapa por marca). Es la criba
 # de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de generar copy. Toggle
@@ -546,21 +542,13 @@ FUENTES_BAJA_CONFIANZA_DEF: tuple[str, ...] = (
 # proveedor de imagen (coste).
 AUTOGEN_ARTE_MAX_DEF = 3
 
-# Pipeline de contenido CI→CD→QA: barrido HORARIO (def 1h) por marca y cap bajo por barrido
-# (def 3), porque cada item ingerido lanza un `claude -p` (coste). El cap del worker
-# (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
-PIPELINE_INTERVALO_HORAS_DEF = 1
-# Intervalo del barrido del pipeline EN MINUTOS (fuente de verdad; el de horas queda como
-# compatibilidad). 20 min = barrido ágil sin saturar el worker (los caps por barrido frenan ráfagas).
-PIPELINE_INTERVALO_MIN_DEF = 20
+# Pipeline de contenido (FLUJO CONTINUO): la Selección admite hasta este nº de historias por
+# marca en cada admisión, acotada además por el gate serial en vuelo. Cada admisión acaba en
+# `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
 PIPELINE_MAX_DEF = 3
-# Defectos de los topes por barrido (8 lanzamientos/barrido drenan ~24/h con el sweep de 20 min;
-# 50 = cota de seguridad de cuántos pendientes mira cada fase, sobre los FILTRADOS no la cruda).
+# WIP del gate serial: piezas EN VUELO (sin terminar QA→Copy) por marca. ES el regulador del
+# flujo continuo: in=out (no se admite más hasta que algo sale por el otro lado).
 PIPELINE_EN_VUELO_MAX_DEF = 8
-PIPELINE_QA_MAX_DEF = 8
-PIPELINE_QA_REVISAR_MAX_DEF = 50
-PIPELINE_COPY_MAX_DEF = 8
-PIPELINE_AUTOGEN_MAX_DEF = 8
 
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
@@ -798,14 +786,8 @@ __all__ = [
     'ENV_PG_PORT',
     'ENV_PG_USER',
     'ENV_PIPELINE_COPY',
-    'ENV_PIPELINE_INTERVALO_HORAS',
-    'ENV_PIPELINE_INTERVALO_MIN',
     'ENV_PIPELINE_MAX',
     'ENV_PIPELINE_EN_VUELO_MAX',
-    'ENV_PIPELINE_QA_MAX',
-    'ENV_PIPELINE_QA_REVISAR_MAX',
-    'ENV_PIPELINE_COPY_MAX',
-    'ENV_PIPELINE_AUTOGEN_MAX',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
@@ -890,14 +872,8 @@ __all__ = [
     'NOTICIAS_GC_INTERVALO_HORAS_DEF',
     'NOTICIAS_GC_SCORE_UMBRAL_DEF',
     'PERFIL_EDITORIAL_TTL_HORAS_DEF',
-    'PIPELINE_INTERVALO_HORAS_DEF',
-    'PIPELINE_INTERVALO_MIN_DEF',
     'PIPELINE_MAX_DEF',
     'PIPELINE_EN_VUELO_MAX_DEF',
-    'PIPELINE_QA_MAX_DEF',
-    'PIPELINE_QA_REVISAR_MAX_DEF',
-    'PIPELINE_COPY_MAX_DEF',
-    'PIPELINE_AUTOGEN_MAX_DEF',
     'PORT_DEF',
     'Path',
     'REAPER_INTERVALO_MIN_DEF',

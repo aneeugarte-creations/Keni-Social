@@ -13,7 +13,15 @@ from typing import Any
 from .. import config, daemon_util, generaciones, marcas, repos
 from ..tiempo import hoy_utc
 from . import _ingesta, _ref
-from ._comun import QA_EN_CURSO, QA_SALTADA, _log
+from ._comun import (
+    _MAX_INTENTOS_ETAPA,
+    QA_EN_CURSO,
+    QA_SALTADA,
+    _log,
+    anotar_intento,
+    intentos_de,
+    marcar_fallo_etapa,
+)
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
 from ._ingesta import promover_clusters_marca
 from ._qa import lanzar_qa_fuente, temas_sin_qa
@@ -30,20 +38,19 @@ __all__ = [
 
 
 def ejecutar_barrido() -> dict[str, Any]:
-    """Un barrido del pipeline: CI (crea temas) → QA de la fuente → CD (copy de los OK).
+    """Un TICK del flujo continuo: CI (admisión) → QA de la fuente → CD (copy de los OK).
 
-    Tres fases EN ORDEN (rediseño QPC):
-      1) CI: por cada marca con feeds activos, crea temas SIN copy (`crear_tema_de`) y marca los
-         items usados (dedup).
-      2) QA: lanza la criba de la FUENTE (`claude -p`) de los temas nuevos sin veredicto, con tope
-         `config.pipeline_qa_max()`. ASÍNCRONA: marca el tema `en_curso` y el `procesar` persiste el
-         veredicto (`no_verificado`/`problema`) al completar (normalmente en un barrido posterior).
+    Tres fases EN ORDEN (rediseño QPC), SIN topes por etapa (el volumen lo regula la ADMISIÓN):
+      1) CI: por marca, ADMITE historias solo hasta llenar su cupo en vuelo (gate serial WIP).
+      2) QA: lanza la criba de la FUENTE (`claude -p`) de los temas admitidos sin veredicto.
+         ASÍNCRONA: marca el tema `en_curso` y el `procesar` persiste el veredicto
+         (`no_verificado`/`problema`) al completar; el SIGUIENTE tick (segundos) encadena.
       3) CD: genera copy SOLO de los temas cuya QA salió `no_verificado` y que aún no tienen copy
-         (`temas_para_copy`), con tope `config.pipeline_copy_max()`. Los `problema` NO generan copy.
+         (`temas_para_copy`). Los `problema` NO generan copy.
 
     Best-effort: un fallo por marca/tema se loguea y se sigue; si la cola de generación está
-    llena, se corta la fase en curso (reintenta el siguiente barrido). Devuelve un resumen
-    `{temas, cribados, lanzados}` (para el endpoint/los tests).
+    llena, se corta la fase en curso (el siguiente tick reintenta: backpressure). Devuelve un
+    resumen `{temas, cribados, lanzados}` (para el endpoint/los tests).
 
     SINGLE-FLIGHT cross-proceso (advisory lock de Postgres): el daemon y el endpoint a demanda
     comparten este barrido; su dedup (`_claves_dedup_marca`) es leer-luego-escribir en Python,
@@ -103,17 +110,17 @@ def _ejecutar_barrido() -> dict[str, Any]:
 
 
 def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase QA del barrido: lanza la CRIBA de la fuente (`claude -p`) de los temas sin veredicto.
+    """Fase QA del tick: lanza la CRIBA de la fuente (`claude -p`) de los temas sin veredicto.
 
-    Con TOPE de lanzamientos por barrido (`config.pipeline_qa_max()`): evita la ráfaga de `claude -p`
-    que satura el worker e inunda Actividad de QA "en curso". Los temas restantes se criban en el
-    siguiente barrido (drenaje gradual). Si la cola se llena, corta la fase (reintenta luego).
-    Best-effort por tema. Devuelve los temas cuya QA se lanzó.
+    SIN tope propio (flujo continuo): aquí solo puede haber lo que la ADMISIÓN dejó entrar (gate
+    serial en vuelo por marca); el backpressure real lo pone la cola (`ColaLlenaError` corta la
+    fase y el siguiente tick reintenta). REINTENTOS ACOTADOS: cada lanzamiento anota su intento
+    en el tema; al agotar `_MAX_INTENTOS_ETAPA`, el tema se marca `problema` (sale del cupo en
+    vuelo y el fallo queda visible). Best-effort por tema. Devuelve los temas cuya QA se lanzó.
     """
     if autor is None:
         autor = _ref._autor_pipeline()
     cribados: list[dict[str, Any]] = []
-    lanzados = 0
     qa_global = config.qa_activo()
     for tema in temas_sin_qa():
         marca_t = tema.get("marca") or ""
@@ -128,19 +135,27 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             else:
                 cribados.append({"id": tema.get("id", ""), "gen_id": "", "verdicto": QA_SALTADA})
             continue
-        if lanzados >= config.pipeline_qa_max():
-            break
+        # Reintentos acotados: una QA que falla vuelve a "sin veredicto" (saneo del worker) y se
+        # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
+        if intentos_de(tema, "qa_intentos") >= _MAX_INTENTOS_ETAPA:
+            marcar_fallo_etapa(
+                tema.get("id", "") or "", "Validación",
+                f"La criba de la fuente falló {_MAX_INTENTOS_ETAPA} veces.",
+            )
+            continue
         try:
             gen = lanzar_qa_fuente(tema, autor=autor)
         except generaciones.ColaLlenaError:
-            _log.info("pipeline: cola llena en QA; el resto entra en el próximo barrido.")
+            _log.info("pipeline: cola llena en QA; el resto entra en el próximo tick.")
             break
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase QA
             _log.exception("pipeline: fallo la criba de la fuente (QA) de un tema.")
             continue
         if gen is not None:
+            # El intento se anota TRAS el lanzamiento efectivo: una cola llena o un fallo
+            # previo al lanzamiento no queman intentos (solo los `claude -p` reales cuentan).
+            anotar_intento(tema, "qa_intentos")
             cribados.append({"id": tema.get("id", ""), "gen_id": gen.get("id", ""), "verdicto": QA_EN_CURSO})
-            lanzados += 1
     return cribados
 
 
@@ -154,9 +169,11 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
       2) temas que las FUENTES de noticias metieron al tablero sin copy
          (`temas_autogen_sin_copy` → `autogen_copy.lanzar_para_topic`), FUNDIENDO aquí la
          selección del antiguo daemon suelto `autogen_copy`.
-    Con TOPE por barrido (`config.pipeline_copy_max()` para 1, `config.pipeline_autogen_max()` dentro
-    de la selección para 2). Si la cola se llena, corta la fase (reintenta luego). Best-effort por tema.
-    Devuelve las generaciones de copy lanzadas.
+    SIN topes propios (flujo continuo): el carril 1 lo acota la ADMISIÓN (gate serial en vuelo);
+    el carril 2, el dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la
+    fase (el siguiente tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar
+    `_MAX_INTENTOS_ETAPA`, el tema se marca `problema` (sale del cupo en vuelo, fallo visible).
+    Best-effort por tema. Devuelve las generaciones de copy lanzadas.
     """
     if autor is None:
         autor = _ref._autor_pipeline()
@@ -165,25 +182,32 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     if not config.pipeline_activo():
         return []
     lanzados: list[dict[str, Any]] = []
-    contador = 0
     for tema in temas_para_copy():
-        if contador >= config.pipeline_copy_max():
-            break
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
         # ya estuvieran ingeridos antes de apagarla).
         if config.marca_apagada(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
             continue
+        # Reintentos acotados: un copy fallido conserva `copy_pendiente` (dedup al éxito) y se
+        # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
+        if intentos_de(tema, "cd_intentos") >= _MAX_INTENTOS_ETAPA:
+            marcar_fallo_etapa(
+                tema.get("id", "") or "", "Copy",
+                f"La generación de copy falló {_MAX_INTENTOS_ETAPA} veces.",
+            )
+            continue
         try:
             gen = lanzar_copy_de_tema(tema, autor=autor)
         except generaciones.ColaLlenaError:
-            _log.info("pipeline: cola llena en CD; el resto entra en el próximo barrido.")
+            _log.info("pipeline: cola llena en CD; el resto entra en el próximo tick.")
             return lanzados
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
             _log.exception("pipeline: fallo la generación de copy (CD) de un tema.")
             continue
         if gen:
+            # Tras el lanzamiento efectivo (cola llena o fallo previo no queman intentos). Si el
+            # copy completó EN LÍNEA (tests síncronos), `copy_pendiente` ya se limpió y no anota.
+            anotar_intento(tema, "cd_intentos")
             lanzados.append(gen)
-            contador += 1
     # Fundido de la selección de autogen_copy: la etapa de copy también redacta los temas del
     # news-pool/tablero (orígenes de noticias) que aún no tienen copy, vía el lanzador NEUTRO.
     from .. import autogen_copy
@@ -265,9 +289,17 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     return adjuntados
 
 
+# TICK del flujo continuo (constante, NO un ajuste): el pipeline ya no barre "por tandas" cada
+# N minutos; reacciona al ESTADO cada pocos segundos. En cuanto la QA de una pieza termina, el
+# siguiente tick lanza su Copy (latencia entre etapas: segundos, no minutos). El volumen NO lo
+# pone el tick sino la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la cola;
+# un tick sin trabajo son unas pocas lecturas indexadas a BD.
+_TICK_SEGUNDOS = 15.0
+
+
 def _intervalo_segundos() -> float:
-    """Intervalo del barrido en segundos (a partir de `KENI_PIPELINE_INTERVALO_MIN`, def 20)."""
-    return config.pipeline_intervalo_min() * 60.0
+    """Cadencia del tick del flujo continuo (constante; el volumen lo regula la admisión)."""
+    return _TICK_SEGUNDOS
 
 
 def iniciar_pipeline(intervalo_segundos: float | None = None) -> threading.Thread:

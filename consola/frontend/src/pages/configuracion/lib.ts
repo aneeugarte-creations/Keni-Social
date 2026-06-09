@@ -15,9 +15,9 @@ export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de 
 
 /** Grupos de ajustes de la MÁQUINA DE CONTENIDO: viven en el MONITOR (junto a la cola que
  *  gobiernan), NO en Configuración. Son el interruptor general, los seis maestros de etapa
- *  (Fusión/Ranking/Selección/Validación/Copy/Arte), sus excepciones por marca y los topes por
- *  barrido. Debe coincidir con `ajustes_catalogo.GRUPOS_MAQUINA` del backend. Configuración EXCLUYE
- *  estos grupos; el panel del Monitor pinta SOLO estos. */
+ *  (Fusión/Editorial/Selección/Validación/Copy/Arte), sus excepciones por marca y la admisión del
+ *  flujo continuo. Debe coincidir con `ajustes_catalogo.GRUPOS_MAQUINA` del backend. Configuración
+ *  EXCLUYE estos grupos; el panel del Monitor pinta SOLO estos. */
 export const GRUPOS_MAQUINA = new Set([
   "maquina_global",
   "maestros_etapa",

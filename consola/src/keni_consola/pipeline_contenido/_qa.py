@@ -215,8 +215,8 @@ def temas_sin_qa(marca: str | None = None) -> list[dict[str, Any]]:
     """Temas del pipeline SIN veredicto de QA todavía (criba pendiente). Best-effort.
 
     Excluye los `en_curso` (su QA está en vuelo) y los ya cribados (`no_verificado`/`problema`).
-    El recorte `config.pipeline_qa_revisar_max()` se aplica AQUÍ, sobre los PENDIENTES (no sobre la
-    lista cruda), así los temas nuevos siempre entran y el pipeline no se mata de hambre con backlog.
+    SIN recorte: el volumen lo acota la ADMISIÓN (el gate serial en vuelo por marca); aquí solo
+    puede haber, como mucho, lo admitido. La cola de generación pone el backpressure real
+    (`ColaLlenaError` corta la fase y el siguiente tick reintenta).
     """
-    pendientes = [t for t in temas_pipeline(marca) if not (t.get("qa_veredicto") or "").strip()]
-    return pendientes[:config.pipeline_qa_revisar_max()]
+    return [t for t in temas_pipeline(marca) if not (t.get("qa_veredicto") or "").strip()]

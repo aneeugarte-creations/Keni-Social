@@ -499,7 +499,7 @@ export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }
 
 /** Controles de la MÁQUINA DE CONTENIDO, para el MONITOR (junto a la cola que gobiernan): el
  * interruptor general, las etapas (Selección→Validación→Copy→Arte), sus excepciones por marca y la
- * cadencia/topes por barrido. Mismo motor que Configuración (`/api/ajustes`); aplican en caliente. */
+ * admisión del flujo continuo. Mismo motor que Configuración (`/api/ajustes`); aplican en caliente. */
 export function PanelMaquinaContenido() {
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
   const grupos = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));
@@ -511,8 +511,9 @@ export function PanelMaquinaContenido() {
       contentClassName="space-y-6 pt-0"
       descripcion={
         <>
-          Enciende/apaga las etapas (Selección→Validación→Copy→Arte), por marca, y ajusta la cadencia
-          y los topes por barrido. Aplican <strong>en caliente</strong> (hasta ~1 minuto).
+          Enciende/apaga las etapas (Selección→Validación→Copy→Arte), por marca, y regula la
+          admisión del flujo continuo: solo entra lo que cabe en vuelo (in=out). Aplican{" "}
+          <strong>en caliente</strong> (hasta ~1 minuto).
         </>
       }
     >

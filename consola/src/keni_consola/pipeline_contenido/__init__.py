@@ -33,8 +33,8 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
     `no_verificado` (nada de peso en contra: seguir; la pieza llevará ⚠️ "no verificado") o
     `problema` (algo de peso: NO se genera copy; el tema se marca ❗ con los hallazgos). Por
     defecto `no_verificado` cuando hay duda (permisivo). El veredicto + hallazgos se PERSISTEN
-    sobre el tema (`qa_veredicto`/`qa_hallazgos`). Cota de lanzamientos por barrido
-    (`config.pipeline_qa_max()`). Registra etapa="QA" por tema, enlazada a la generación (stream).
+    sobre el tema (`qa_veredicto`/`qa_hallazgos`). Sin tope por etapa (el volumen lo regula la
+    admisión). Registra etapa="QA" por tema, enlazada a la generación (stream).
   - CD — CREACIÓN DE CONTENIDO: por cada tema cuya QA salió `no_verificado` y que aún no tiene
     copy, lanza la generación de copy por el camino PROBADO (`dominio.generar.lanzar_copy`) con
     los parámetros guardados (`imagen_fuente` para marca propia). NUNCA genera copy de un tema
@@ -98,6 +98,7 @@ from ._comun import (
     _DIAS_DEDUP,
     _FETCH_OG_IMAGE,
     _FORMATO_PIPELINE,
+    _MAX_INTENTOS_ETAPA,
     _OG_MAX_BYTES,
     _OG_TIMEOUT_S,
     _RE_CONTENT,
@@ -121,6 +122,9 @@ from ._comun import (
     _fetch_og_image_real,
     _log,
     _tiene_copy,
+    anotar_intento,
+    intentos_de,
+    marcar_fallo_etapa,
     registrar_etapa,
     temas_pipeline,
 )
@@ -214,6 +218,10 @@ __all__ = [
     "_copy_pendiente_leido",
     "_tiene_copy",
     "temas_pipeline",
+    "_MAX_INTENTOS_ETAPA",
+    "intentos_de",
+    "anotar_intento",
+    "marcar_fallo_etapa",
     # CI
     "items_ingeribles",
     "_leer_items_fuente",

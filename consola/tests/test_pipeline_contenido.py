@@ -448,49 +448,81 @@ def test_qa_no_relanza_tema_ya_cribado(entorno, monkeypatch):
     assert pc.temas_sin_qa() == []
 
 
-def test_temas_sin_qa_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
-    """Regresión de INANICIÓN: con backlog > ventana, los temas NUEVOS sin QA SÍ entran.
+def test_temas_sin_qa_devuelve_todos_los_pendientes(entorno):
+    """FLUJO CONTINUO: sin recorte por etapa; los pendientes entran TODOS (los cribados no).
 
-    Antes `temas_pipeline` recortaba la lista CRUDA a los N más viejos; en cuanto esos N ya
-    estaban cribados, los temas nuevos quedaban FUERA de la ventana y QA no los veía jamás (en
-    prod: 126 historias 'usado' atascadas sin veredicto). Ahora el recorte se aplica sobre los
-    PENDIENTES, así que el nuevo entra aunque los viejos llenen el crudo.
+    El volumen lo acota la ADMISIÓN (gate serial en vuelo por marca), no una ventana de revisión:
+    aquí solo puede haber, como mucho, lo admitido.
     """
-    monkeypatch.setenv("KENI_PIPELINE_QA_REVISAR_MAX", "2")
     _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _tema_pipeline(titulo="Nuevo", id="n1")  # sin veredicto -> pendiente
-    assert [t["id"] for t in pc.temas_sin_qa()] == ["n1"]
+    _tema_pipeline(titulo="Nuevo A", id="n1")  # sin veredicto -> pendiente
+    _tema_pipeline(titulo="Nuevo B", id="n2")
+    assert {t["id"] for t in pc.temas_sin_qa()} == {"n1", "n2"}
 
 
-def test_temas_para_copy_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
-    """Mismo anti-inanición para CD: un tema nuevo listo entra aunque los viejos llenen el crudo."""
-    monkeypatch.setenv("KENI_PIPELINE_QA_REVISAR_MAX", "2")
-    # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de CD),
-    # ocuparían la ventana cruda. El nuevo (no_verificado + copy_pendiente + sin pieza) es el listo.
+def test_temas_para_copy_devuelve_todos_los_listos(entorno):
+    """FLUJO CONTINUO: CD ve TODOS los temas listos (cribados+pendiente de copy), sin ventana."""
+    # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de CD).
     _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
     _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
-    _tema_pipeline(titulo="Nuevo", id="n1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    assert [t["id"] for t in pc.temas_para_copy()] == ["n1"]
+    _tema_pipeline(titulo="Nuevo A", id="n1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Nuevo B", id="n2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    assert {t["id"] for t in pc.temas_para_copy()} == {"n1", "n2"}
 
 
-def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
-    """El cap por barrido de QA (`config.pipeline_qa_max()`) acota los lanzamientos de criba."""
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")  # etapa QA activa para que el cap aplique a lanzamientos
+def test_qa_sin_tope_lanza_todos_los_admitidos(entorno, monkeypatch):
+    """FLUJO CONTINUO: la fase QA criba TODO lo admitido en un tick (sin cap por etapa)."""
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
     cliente = _cliente()  # noqa: F841 -- lanzador noop: deja la QA en `ejecutando` (en_curso)
-    monkeypatch.setenv("KENI_PIPELINE_QA_MAX", "2")
     for i in range(4):
         _tema_pipeline(titulo=f"T{i}", id=f"tqa{i}")
 
     cribados = pc.ejecutar_qa(autor=None)
-    assert len(cribados) == 2  # solo 2 cribas lanzadas; el resto en el próximo barrido.
+    assert len(cribados) == 4  # todo lo admitido entra; el backpressure lo pone la cola
 
 
-def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
-    """El cap por barrido de CD (`config.pipeline_copy_max()`) acota los lanzamientos de copy."""
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa para que el cap aplique
+def test_qa_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
+    """REINTENTOS ACOTADOS: una QA que ya agotó sus intentos sale TERMINAL (problema), sin claude.
+
+    Con el tick corto, una QA que falla se relanzaría cada pocos segundos para siempre; al agotar
+    `_MAX_INTENTOS_ETAPA` el tema se marca `problema` (sale del cupo en vuelo, fallo visible).
+    """
+    import json
+
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    cliente = _cliente()  # noqa: F841
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"], "qa_intentos": pc._MAX_INTENTOS_ETAPA})
+    tema = _tema_pipeline(titulo="QA agotada", copy_pendiente=pend)
+
+    cribados = pc.ejecutar_qa(autor=None)
+
+    assert cribados == []  # no se lanzó criba
+    refrescado = repos.obtener_contenido(tema["id"])
+    assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert "falló" in (refrescado["qa_hallazgos"] or "")
+    # Terminal: sale del cupo en vuelo de su marca (la admisión se libera).
+    assert pc.temas_en_vuelo("unotv") == 0
+
+
+def test_qa_lanzamiento_anota_intento(entorno, monkeypatch):
+    """Cada criba REAL anota su intento en `copy_pendiente` (la base del tope de reintentos)."""
+    import json
+
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    cliente = _cliente()  # noqa: F841 -- lanzador noop: la QA queda en_curso
+    tema = _tema_pipeline(titulo="Cuenta intentos")
+
+    pc.ejecutar_qa(autor=None)
+
+    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    assert pend["qa_intentos"] == 1
+
+
+def test_cd_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
+    """FLUJO CONTINUO: la fase CD redacta TODOS los temas listos en un tick (sin cap por etapa)."""
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    monkeypatch.setenv("KENI_PIPELINE_COPY_MAX", "2")
     import json
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
@@ -501,8 +533,42 @@ def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
         )
 
     lanzados = pc.ejecutar_cd(autor=None)
-    assert len(lanzados) == 2
+    assert len(lanzados) == 4
+    assert len(llamadas) == 4
+
+
+def test_cd_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
+    """REINTENTOS ACOTADOS en CD: un copy que ya agotó sus intentos sale TERMINAL (problema)."""
+    import json
+
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"], "cd_intentos": pc._MAX_INTENTOS_ETAPA})
+    tema = _tema_pipeline(titulo="Copy agotado", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+
+    lanzados = pc.ejecutar_cd(autor=None)
+
+    assert lanzados == [] and llamadas == []
+    refrescado = repos.obtener_contenido(tema["id"])
+    assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert "falló" in (refrescado["qa_hallazgos"] or "")
+    assert pc.temas_en_vuelo("unotv") == 0  # terminal: libera la admisión de su marca
+
+
+def test_cd_reintento_anota_intentos_acumulados(entorno, monkeypatch):
+    """Cada relanzamiento de copy suma su intento (el tope corta el bucle de reintentos)."""
+    import json
+
+    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    tema = _tema_pipeline(titulo="Suma intentos", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+
+    pc.ejecutar_cd(autor=None)  # 1er intento (el copy mockeado "falla": no nace pieza)
+    pc.ejecutar_cd(autor=None)  # 2º intento
+
     assert len(llamadas) == 2
+    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    assert pend["cd_intentos"] == 2
 
 
 # --------------------------------------------------------------------------- #

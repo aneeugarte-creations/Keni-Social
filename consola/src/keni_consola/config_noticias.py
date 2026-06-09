@@ -37,17 +37,11 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ARTE,
-    ENV_PIPELINE_AUTOGEN_MAX,
     ENV_PIPELINE_COPY,
-    ENV_PIPELINE_COPY_MAX,
     ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
     ENV_PIPELINE_FUSION,
-    ENV_PIPELINE_INTERVALO_HORAS,
-    ENV_PIPELINE_INTERVALO_MIN,
     ENV_PIPELINE_MAX,
-    ENV_PIPELINE_QA_MAX,
-    ENV_PIPELINE_QA_REVISAR_MAX,
     ENV_PIPELINE_SELECCION,
     ENV_PIPELINE_VALIDACION,
     ENV_QA_EN_CURSO_TTL_MIN,
@@ -87,14 +81,8 @@ from ._config_comun import (
     NOTICIAS_GC_INTERVALO_HORAS_DEF,
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
     PERFIL_EDITORIAL_TTL_HORAS_DEF,
-    PIPELINE_AUTOGEN_MAX_DEF,
-    PIPELINE_COPY_MAX_DEF,
     PIPELINE_EN_VUELO_MAX_DEF,
-    PIPELINE_INTERVALO_HORAS_DEF,
-    PIPELINE_INTERVALO_MIN_DEF,
     PIPELINE_MAX_DEF,
-    PIPELINE_QA_MAX_DEF,
-    PIPELINE_QA_REVISAR_MAX_DEF,
     QA_EN_CURSO_TTL_MIN_DEF,
     QA_FUENTE_TIMEOUT_DEF,
     RENDIMIENTO_MIN_PIEZAS_DEF,
@@ -450,72 +438,25 @@ def pipeline_activo() -> bool:
     return _crudo(ENV_PIPELINE_COPY).lower() in _VERDADEROS
 
 
-def pipeline_intervalo_horas() -> int:
-    """Cada cuantas horas barre el pipeline de contenido (`KENI_PIPELINE_INTERVALO_HORAS`, def 1, min 1)."""
-    return _entero(ENV_PIPELINE_INTERVALO_HORAS, PIPELINE_INTERVALO_HORAS_DEF, minimo=1)
-
-
-def pipeline_intervalo_min() -> int:
-    """Cada cuántos MINUTOS barre el pipeline (`KENI_PIPELINE_INTERVALO_MIN`, def 20, min 1).
-
-    Fuente de verdad del intervalo. Compatibilidad: si NO se fijó el de minutos pero SÍ el viejo
-    `KENI_PIPELINE_INTERVALO_HORAS`, se respeta ese (en minutos). El de minutos siempre manda.
-    """
-    if _crudo(ENV_PIPELINE_INTERVALO_MIN).strip():
-        return _entero(ENV_PIPELINE_INTERVALO_MIN, PIPELINE_INTERVALO_MIN_DEF, minimo=1)
-    if _crudo(ENV_PIPELINE_INTERVALO_HORAS).strip():
-        return max(1, pipeline_intervalo_horas() * 60)
-    return PIPELINE_INTERVALO_MIN_DEF
+# FLUJO CONTINUO: el pipeline ya no tiene intervalo configurable (tick corto constante en
+# `pipeline_contenido._barrido`) ni topes por etapa (QA/Copy/autogen/revisar): el volumen lo
+# regulan los DOS knobs de admisión de abajo + el backpressure de la cola (`KENI_MAX_JOBS`).
 
 
 def pipeline_max() -> int:
-    """Maximo de temas a ingerir+generar por barrido y por marca (`KENI_PIPELINE_MAX`, def 3, min 1).
-
-    Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
-    """
+    """Máximo de historias que la Selección admite por marca en cada admisión
+    (`KENI_PIPELINE_MAX`, def 3, min 1). Cada admisión acaba en `claude -p` (coste)."""
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
 
 
 def pipeline_en_vuelo_max() -> int:
-    """Tope de temas EN VUELO por marca para el gate SERIAL de CI (`KENI_PIPELINE_EN_VUELO_MAX`, def 8, min 1).
+    """WIP del gate SERIAL: piezas EN VUELO por marca (`KENI_PIPELINE_EN_VUELO_MAX`, def 8, min 1).
 
-    CI no promueve más historias de una marca mientras ésta tenga >= esto sin terminar las fases de
-    IA (QA pendiente o cribado sin copy): primero se COMPLETA lo que entró, luego entran nuevos.
+    ES el regulador del flujo continuo (in=out): la Selección no admite más historias de una
+    marca mientras ésta tenga >= esto sin terminar (QA pendiente o cribado sin copy); primero se
+    COMPLETA lo que entró, luego entran nuevas.
     """
     return _entero(ENV_PIPELINE_EN_VUELO_MAX, PIPELINE_EN_VUELO_MAX_DEF, minimo=1)
-
-
-def pipeline_qa_max() -> int:
-    """Cribas de Validación (`claude -p`) lanzadas por barrido (`KENI_PIPELINE_QA_MAX`, def 8, min 1).
-
-    Cada una es un job del worker; el tope evita la ráfaga que satura el worker. El resto se valida
-    en el siguiente barrido (drenaje gradual).
-    """
-    return _entero(ENV_PIPELINE_QA_MAX, PIPELINE_QA_MAX_DEF, minimo=1)
-
-
-def pipeline_qa_revisar_max() -> int:
-    """Temas PENDIENTES que mira cada fase por barrido (`KENI_PIPELINE_QA_REVISAR_MAX`, def 50, min 1).
-
-    Cota de seguridad para no recorrer un histórico enorme. Se aplica SOBRE LOS PENDIENTES (tras
-    filtrar), nunca sobre la lista cruda, para no matar de hambre al pipeline con backlog grande.
-    """
-    return _entero(ENV_PIPELINE_QA_REVISAR_MAX, PIPELINE_QA_REVISAR_MAX_DEF, minimo=1)
-
-
-def pipeline_copy_max() -> int:
-    """Copies (`claude -p`) lanzados por barrido en la fase CD (`KENI_PIPELINE_COPY_MAX`, def 8, min 1).
-
-    Mismo anti-ráfaga que la Validación: el resto entra en el siguiente barrido.
-    """
-    return _entero(ENV_PIPELINE_COPY_MAX, PIPELINE_COPY_MAX_DEF, minimo=1)
-
-
-def pipeline_autogen_max() -> int:
-    """Temas del news-pool (orígenes de noticias) a los que se lanza copy por barrido
-    (`KENI_PIPELINE_AUTOGEN_MAX`, def 8, min 1). Acota el fundido del antiguo daemon `autogen_copy`.
-    """
-    return _entero(ENV_PIPELINE_AUTOGEN_MAX, PIPELINE_AUTOGEN_MAX_DEF, minimo=1)
 
 
 def qa_activo() -> bool:

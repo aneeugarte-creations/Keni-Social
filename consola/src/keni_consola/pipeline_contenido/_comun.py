@@ -57,6 +57,10 @@ __all__ = [
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",
+    "_MAX_INTENTOS_ETAPA",
+    "intentos_de",
+    "anotar_intento",
+    "marcar_fallo_etapa",
     "temas_pipeline",
 ]
 
@@ -82,9 +86,9 @@ ETAPA_CD = "CD"
 ETAPA_QA = "QA"
 ETAPA_ARTE = "ARTE"
 
-# Los TOPES por barrido del pipeline (cuántos pendientes mira cada fase, cribas QA, copies, autogen
-# y el gate serial en vuelo) ya NO son constantes: son ajustables en la config (`config.pipeline_*`,
-# env `KENI_PIPELINE_*`, editables en avatar → Sistema → Ajustes). Cada fase los lee al ejecutarse.
+# FLUJO CONTINUO: el pipeline NO tiene topes por etapa (cribas QA/copies/autogen/revisados). El
+# volumen lo regula la ADMISIÓN (`config.pipeline_max()` + el gate serial WIP
+# `config.pipeline_en_vuelo_max()`, editables en el Monitor) y el backpressure de la cola.
 
 # DEDUP de contenido: ventana (días) hacia atrás para considerar que una noticia "ya está" en la
 # marca. Un tema nuevo cuyo título coincide (normalizado) con otro contenido de la MISMA marca
@@ -323,6 +327,70 @@ def _copy_pendiente_leido(tema: dict[str, Any]) -> dict[str, Any]:
     return datos if isinstance(datos, dict) else {}
 
 
+# REINTENTOS ACOTADOS por etapa (flujo continuo): con el tick corto, una etapa que falla se
+# relanzaría cada pocos segundos para siempre (bucle de tokens). Cada lanzamiento de QA/Copy
+# anota su intento en `copy_pendiente` (JSON, sin migración de esquema); al agotarlos, el tema
+# se marca `problema` con un hallazgo de sistema: SALE del cupo en vuelo (in=out se sostiene)
+# y queda visible en Pipelines/tablero como fallo, para que un humano decida.
+_MAX_INTENTOS_ETAPA = 3
+
+
+def intentos_de(tema: dict[str, Any], campo: str) -> int:
+    """Intentos ya consumidos de una etapa (`campo` = 'qa_intentos'/'cd_intentos'). 0 si no hay."""
+    try:
+        return int(_copy_pendiente_leido(tema).get(campo) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def anotar_intento(tema: dict[str, Any], campo: str) -> None:
+    """Suma 1 al contador de intentos de la etapa en `copy_pendiente` (best-effort, persiste).
+
+    RE-LEE el tema de BD antes de escribir: con el lanzador SÍNCRONO de los tests, el `procesar`
+    del copy puede haber LIMPIADO `copy_pendiente` (éxito) durante el propio lanzamiento; anotar
+    sobre el dict viejo lo resucitaría. Si ya no hay pendiente, no hay nada que contar.
+    """
+    import json
+
+    tema_id = (tema.get("id") or "").strip()
+    if not tema_id:
+        return
+    try:
+        fresco = repos.obtener_contenido(tema_id)
+    except Exception:  # noqa: BLE001 -- sin lectura no anotamos (el tope simplemente no avanza)
+        return
+    if fresco is None or not (fresco.get("copy_pendiente") or "").strip():
+        return  # éxito ya limpió el pendiente (o el tema desapareció): nada que anotar
+    pend = _copy_pendiente_leido(fresco)
+    pend[campo] = int(pend.get(campo) or 0) + 1
+    try:
+        repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend, ensure_ascii=False)})
+    except Exception:  # noqa: BLE001 -- sin contador, el tope no aplica; el reintento sigue
+        _log.warning("pipeline: no se pudo anotar el intento %s del tema %s", campo, tema_id, exc_info=True)
+
+
+def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
+    """Marca el tema con veredicto `problema` por fallo REPETIDO de una etapa (salida terminal).
+
+    El tema sale del cupo en vuelo (deja de reintentarse y de bloquear la admisión de su marca)
+    y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la criba QA.
+    """
+    import json
+
+    hallazgos = [{
+        "tipo": "sistema", "gravedad": "error", "fragmento": etapa,
+        "explicacion": motivo, "sugerencia": "Revisa la generación o relanza a mano.",
+    }]
+    try:
+        repos.actualizar_contenido(tema_id, {
+            "qa_veredicto": VERDICTO_PROBLEMA,
+            "qa_hallazgos": json.dumps(hallazgos, ensure_ascii=False),
+        })
+        _log.warning("pipeline: tema %s marcado problema por fallo repetido de %s", tema_id, etapa)
+    except Exception:  # noqa: BLE001 -- best-effort; el tema seguirá reintentando si no persiste
+        _log.warning("pipeline: no se pudo marcar el fallo terminal del tema %s", tema_id, exc_info=True)
+
+
 def _tiene_copy(tema_id: str) -> bool:
     """True si el tema ya tiene al menos una pieza por plataforma (copy en marcha). Best-effort."""
     if not tema_id:
@@ -336,11 +404,8 @@ def _tiene_copy(tema_id: str) -> bool:
 def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
     """TODOS los temas del pipeline (origen `pipeline`), en orden FIFO. [] si la lectura falla.
 
-    NO recorta aquí: el recorte (`config.pipeline_qa_revisar_max()`) lo aplican los consumidores SOBRE LOS
-    TEMAS PENDIENTES (sin QA / listos para copy), no sobre la lista cruda. Recortar la lista
-    cruda a los N más viejos hacía que, en cuanto el backlog superaba N y esos N más viejos ya
-    estaban procesados, los temas NUEVOS quedaran FUERA de la ventana y QA/CD no los vieran
-    nunca (inanición del pipeline). `listar_contenido` ya ordena por prioridad y
+    NO recorta: el volumen lo acota la ADMISIÓN (gate serial en vuelo por marca), así que aquí
+    solo puede haber, como mucho, lo admitido. `listar_contenido` ya ordena por prioridad y
     `fecha_objetivo/creado ASC`, así que el más antiguo PENDIENTE se atiende primero (justo).
     """
     try:
