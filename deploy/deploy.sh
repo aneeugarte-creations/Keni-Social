@@ -18,11 +18,34 @@ ENVFILE="${1:-.env}"
 DC="docker compose --env-file $ENVFILE"
 VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-social)
 
-# Tag VERSIONADO para que el janitor (deploy/janitor) conserve N versiones por imagen y
-# permita rollback legible. Sin override => timestamp. Compose interpola ${KENI_VERSION:-latest}.
-KENI_VERSION="${KENI_VERSION:-$(date +%Y%m%d-%H%M%S)}"
-export KENI_VERSION
-echo "==> version de build: $KENI_VERSION"
+# VERSIONADO POR CONTENIDO (deploy QUIRÚRGICO). Antes la tag era un TIMESTAMP único por deploy,
+# igual para las 4 imágenes: como cambiaba SIEMPRE, el `up -d` final RECREABA TODOS los
+# contenedores en cada deploy —incluido el `worker`, abortando sus `claude -p` en vuelo— aunque
+# el cambio fuese solo de front. Ahora la tag de CADA imagen es un HASH de SUS entradas de build;
+# así solo se (re)construye y recrea el servicio cuyo contenido cambió. Un deploy de SOLO front
+# (o solo mcp) NO toca el worker. back y worker comparten `consola/`: un cambio ahí recrea ambos
+# (el worker DEBE correr ese código). El hash sale del ÁRBOL de ficheros (no de git: este script
+# corre en el dir estable del host, cuyo .git puede no estar sincronizado). El janitor sigue
+# conservando N por repo (ordena por CreatedAt); una imagen sin cambios no se reconstruye.
+RAIZ="$(cd .. && pwd)"   # raíz del repo (deploy/ es el cwd; el contexto de build es `..`)
+hash_entradas() {  # $@ = paths relativos a la raíz -> 12 hex del CONTENIDO (orden estable)
+  ( cd "$RAIZ" && find "$@" -type d \( -name node_modules -o -name .git -o -name __pycache__ \
+        -o -name '.venv*' -o -name .ruff_cache -o -name webapp -o -name dist \) -prune \
+        -o -type f -print 2>/dev/null | LC_ALL=C sort | xargs sha1sum 2>/dev/null ) \
+    | sha1sum | cut -c1-12
+}
+# Entradas de build de cada imagen (ver los Dockerfile en deploy/<svc>/). OJO: para back/worker
+# hasheamos el PAQUETE Python (consola/src + consola/pyproject.toml), NO `consola` entero: el
+# Dockerfile copia `consola/` completo pero solo `pip install ./consola`, así que `consola/frontend`
+# y `consola/tests` NO afectan al runtime. Si los incluyéramos, un cambio de SOLO front recrearía
+# back+worker —justo lo que queremos evitar—. front sí bundlea consola/frontend. Se añade el dir
+# deploy/<svc> (Dockerfile + entrypoint/nginx.conf) para que un cambio en la receta reconstruya.
+FRONT_VERSION="$(hash_entradas consola/frontend deploy/front)"
+BACK_VERSION="$(hash_entradas keni-shared mcp-metricas consola/src consola/pyproject.toml deploy/back)"
+WORKER_VERSION="$(hash_entradas keni-shared mcp-metricas consola/src consola/pyproject.toml deploy/worker)"
+MCP_VERSION="$(hash_entradas keni-shared mcp-metricas deploy/mcp)"
+export FRONT_VERSION BACK_VERSION WORKER_VERSION MCP_VERSION
+echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION mcp=$MCP_VERSION"
 
 # Render de secretos ANTES de cualquier `compose build/run/up`: los servicios montan
 # ./secrets/<n> en /run/secrets; si no existieran al instanciar contenedores, Compose
@@ -54,23 +77,56 @@ render_secret KENI_CONSOLA_ADMIN_PASS  consola_admin_pass
 render_secret KENI_CONSOLA_TOKEN       consola_token
 render_secret KENI_MCP_BEARER          mcp_bearer
 
-echo "==> [1/5] build de imagenes (back SIN Node, worker CON claude, front, mcp)"
-$DC build
-# Cada imagen versionada apunta tambien a :latest (conveniencia/rollback legible).
-for svc in front back worker mcp; do
-  docker tag "keni-social/$svc:$KENI_VERSION" "keni-social/$svc:latest" || true
-done
+# Build SELECTIVO: cada servicio se (re)construye SOLO si su imagen-por-hash no existe ya (=
+# su contenido cambió). Si ya existe, se salta -> su tag NO cambia -> el `up -d` final no lo
+# recrea (ni interrumpe el worker). `daemons` comparte la imagen de `back` (no se build aparte).
+# `cambio` (imagen AÚN no construida) marca los flags ANTES de construir, para gatear los pasos
+# de esquema/estado. La detección va SEPARADA del build a propósito: así un fallo de `$DC build`
+# aborta el deploy por `set -e` (sin `|| true` que lo enmascare) y deja prod intacto.
+cambio() { ! docker image inspect "$1" >/dev/null 2>&1; }  # 0 (true) si la imagen NO existe aún
+BACK_CAMBIO=0; WORKER_CAMBIO=0
+cambio "keni-social/back:$BACK_VERSION"     && BACK_CAMBIO=1   || true
+cambio "keni-social/worker:$WORKER_VERSION" && WORKER_CAMBIO=1 || true
 
-echo "==> [2/5] stop back (breve indisponibilidad mientras se aplica el esquema)"
-$DC stop back || true
+construir() {  # $1 = servicio compose ; $2 = imagen:tag esperada (keni-social/<svc>:<hash>)
+  if docker image inspect "$2" >/dev/null 2>&1; then
+    echo "==> $1: sin cambios ($2 ya existe) — no se reconstruye ni recrea"
+    return 0
+  fi
+  echo "==> $1: cambió -> build $2"
+  $DC build "$1"                                     # un fallo aquí aborta el deploy (set -e)
+  docker tag "$2" "keni-social/$1:latest" || true   # :latest = conveniencia/rollback legible
+}
+echo "==> [1/5] build SELECTIVO (solo imagenes cuyo contenido cambió)"
+construir front  "keni-social/front:$FRONT_VERSION"
+construir back   "keni-social/back:$BACK_VERSION"
+construir worker "keni-social/worker:$WORKER_VERSION"
+construir mcp    "keni-social/mcp:$MCP_VERSION"
 
-echo "==> [3/5] chown del volumen de estado a uid no-root 10001 (back/worker corren no-root)"
-docker run --rm -v "$VOL":/d alpine chown -R 10001:10001 /d
+# Pasos de ESQUEMA/ESTADO: SOLO cuando cambió el código del back/worker (comparten `consola/`).
+# Un deploy de solo front no toca el esquema ni el volumen de estado (ni para el back).
+if [ "$BACK_CAMBIO" = 1 ]; then
+  echo "==> [2/5] stop back (breve indisponibilidad mientras se aplica el esquema)"
+  $DC stop back || true
+else
+  echo "==> [2/5] back sin cambios — no se para (sin indisponibilidad)"
+fi
 
-echo "==> [4/5] asegura esquema Postgres (idempotente; ADR 0004)"
-$DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
+if [ "$BACK_CAMBIO" = 1 ] || [ "$WORKER_CAMBIO" = 1 ]; then
+  echo "==> [3/5] chown del volumen de estado a uid no-root 10001 (back/worker corren no-root)"
+  docker run --rm -v "$VOL":/d alpine chown -R 10001:10001 /d
+else
+  echo "==> [3/5] back/worker sin cambios — se omite chown del volumen"
+fi
 
-echo "==> [5/5] up (recrea back no-root sobre Postgres + arranca el worker de generacion)"
+if [ "$BACK_CAMBIO" = 1 ]; then
+  echo "==> [4/5] asegura esquema Postgres (idempotente; ADR 0004)"
+  $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
+else
+  echo "==> [4/5] back sin cambios — esquema ya vigente, se omite la migración"
+fi
+
+echo "==> [5/5] up (recrea SOLO los servicios cuya imagen o config cambió)"
 $DC up -d
 $DC ps
-echo "==> OK. El esquema se crea idempotente al arrancar el back; este paso lo adelanta."
+echo "==> OK. Los servicios sin cambios (p.ej. el worker en un deploy de front) NO se recrearon."

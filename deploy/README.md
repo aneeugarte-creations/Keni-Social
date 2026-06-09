@@ -153,12 +153,17 @@ docker compose logs -f back     # el admin inicial (#130) se loguea aquí en el 
 El primer arranque crea el admin desde `KENI_CONSOLA_ADMIN_USER/PASS` (si la BD no
 tiene usuarios). Entra por `https://social.kenitech.io`.
 
-## Versionado de imágenes + limpieza (janitor)
+## Versionado de imágenes + deploy quirúrgico + limpieza (janitor)
 
-`deploy.sh` taggea las imágenes propias (`front`/`back`/`worker`/`mcp`) con un tag
-**versionado** (`KENI_VERSION`, timestamp por defecto; o `KENI_VERSION=1.4.0 sh deploy.sh .env`)
-y también las marca `:latest`. El compose interpola `${KENI_VERSION:-latest}`, así que un
-`docker compose build` "pelado" sin la var sigue dando `:latest` (compatible).
+`deploy.sh` taggea cada imagen propia (`front`/`back`/`worker`/`mcp`) con un **hash de SUS
+entradas de build** (`FRONT_VERSION`/`BACK_VERSION`/`WORKER_VERSION`/`MCP_VERSION`) y también
+`:latest`. Así el deploy es **quirúrgico**: solo (re)construye y **recrea** el servicio cuyo
+contenido cambió. Un deploy de **solo front** (o solo mcp) **no toca el `worker`**, de modo
+que sus `claude -p` en vuelo no se interrumpen. `back` y `worker` comparten `consola/`, así que
+un cambio de código ahí recrea **ambos** (el worker DEBE correr ese código). El compose
+interpola `${FRONT_VERSION:-latest}` etc., así que un `docker compose build` "pelado" sin las
+vars sigue dando `:latest` (compatible). El hash se calcula del árbol de ficheros (no de git:
+`deploy.sh` corre en el dir estable del host, cuyo `.git` puede no estar sincronizado).
 
 Un **janitor** (`deploy/janitor/`, systemd timer **diario**) evita que las imágenes se
 acumulen: conserva las **5** más recientes por repo `keni-social/*` (nunca borra una en
