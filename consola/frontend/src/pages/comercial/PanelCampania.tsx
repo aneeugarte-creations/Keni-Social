@@ -287,6 +287,8 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
     { clave: "visualizaciones", direccion: "desc" },
   );
 
+  const crossCount = React.useMemo(() => piezas.filter((p) => p.por_cross_post).length, [piezas]);
+
   const col = (clave: ClaveOrdenPieza, etiqueta: string, className?: string) => (
     <CabeceraOrdenable
       activa={estado.clave === clave}
@@ -303,7 +305,14 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
     <Card>
       <CardContent className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-          <h3 className="text-sm font-medium">Piezas del periodo</h3>
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-medium">Piezas del periodo</h3>
+            {crossCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Incluye {crossCount} por cross-post (mismo contenido en otra red, sin el hashtag).
+              </p>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={red} onValueChange={setRed}>
               <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filtrar por red">
@@ -375,6 +384,15 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
+                      )}
+                      {p.por_cross_post && (
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 text-[10px]"
+                          title="Incluida por cross-post: mismo contenido en otra red, sin el hashtag propio"
+                        >
+                          cross-post
+                        </Badge>
                       )}
                     </span>
                   </TableCell>

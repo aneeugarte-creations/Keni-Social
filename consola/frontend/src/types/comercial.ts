@@ -165,6 +165,8 @@ export interface PiezaCampania {
   engagement_pct: number;
   url: string;
   formato: string;
+  /** True si entró por cross-post (gemela sin hashtag de una pieza etiquetada). */
+  por_cross_post: boolean;
 }
 
 export interface KpisCampania {
@@ -213,6 +215,8 @@ export interface AnaliticaCampania {
   comparativa: Record<ClaveKpiCampania, ComparativaKpi>;
   tendencia: { puntos: PuntoTendenciaCampania[] };
   desglose_red: DesgloseRedCampania[];
+  /** Nº de piezas añadidas por inferencia de cross-post (sin el hashtag propio). */
+  cross_posts: number;
   piezas: PiezaCampania[];
   generado_en: string;
 }

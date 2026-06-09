@@ -143,6 +143,55 @@ def test_desglose_por_red_agrega_e_iguala_los_kpis(cliente, monkeypatch):
     assert sum(f["piezas"] for f in datos["desglose_red"]) == datos["kpis"]["piezas"]
 
 
+def test_cross_post_incluye_gemelas_sin_hashtag(cliente, monkeypatch):
+    """Una pieza cross-posteada a otra red SIN el hashtag (mismo cuerpo de caption) se
+    cuenta en la campaña y se marca `por_cross_post`; contenido no relacionado NO entra."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    cuerpo = "Gran reportaje desde la sierra tarahumara este fin de semana"
+
+    def _listado_falso(rango, marca=None):
+        base = {"titulo": "x", "publicado": "2026-06-01", "url": "", "engagement_pct": 5.0,
+                "interacciones": 100}
+        return [
+            {**base, "id": "ig1", "red": "instagram", "formato": "reel",
+             "texto": f"{cuerpo} #Chihuahua", "visualizaciones": 1000},
+            {**base, "id": "tk1", "red": "tiktok", "formato": "video",  # mismo cuerpo, sin hashtag
+             "texto": cuerpo, "visualizaciones": 2000},
+            {**base, "id": "x1", "red": "x", "formato": "texto",  # no relacionada
+             "texto": "Otra noticia distinta sin relacion alguna con lo anterior",
+             "visualizaciones": 500},
+        ]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    filas = {p["id"]: p for p in datos["piezas"]}
+    assert set(filas) == {"ig1", "tk1"}  # x1 (no relacionada) queda fuera
+    assert datos["cross_posts"] == 1
+    assert filas["ig1"]["por_cross_post"] is False
+    assert filas["tk1"]["por_cross_post"] is True
+    assert datos["kpis"]["piezas"] == 2
+    assert datos["kpis"]["visualizaciones"] == 3000
+
+
+def test_cross_post_no_empareja_captions_genericos_cortos(cliente, monkeypatch):
+    """Un cuerpo demasiado corto NO siembra cross-post (evita falsos positivos): un TikTok
+    corto sin el hashtag no se cuela por coincidir con un IG corto etiquetado."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+
+    def _listado_falso(rango, marca=None):
+        base = {"titulo": "x", "publicado": "2026-06-01", "url": "", "engagement_pct": 5.0,
+                "interacciones": 10, "visualizaciones": 100}
+        return [
+            {**base, "id": "ig1", "red": "instagram", "texto": "Gol! #Chihuahua"},
+            {**base, "id": "tk1", "red": "tiktok", "texto": "Gol!"},  # corto: no debe entrar
+        ]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    assert {p["id"] for p in datos["piezas"]} == {"ig1"}
+    assert datos["cross_posts"] == 0
+
+
 def test_analitica_matchea_hashtag_sin_importar_casing(cliente, monkeypatch):
     # El hashtag se guarda con casing ('Chihuahua') pero matchea posts con '#chihuahua',
     # '#CHIHUAHUA' o '#Chihuahua'. Un post sin el hashtag queda fuera.

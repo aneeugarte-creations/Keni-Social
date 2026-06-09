@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import unicodedata
 from datetime import timedelta
 from typing import Any
 
@@ -172,6 +173,61 @@ def _filtrar(piezas: list[dict[str, Any]], tags: set[str]) -> list[dict[str, Any
     return [p for p in piezas if tags & hashtags_de(p.get("texto", ""))]
 
 
+# Mínimo de caracteres ÚTILES (sin hashtags/menciones/emojis) para que una clave de
+# contenido sea fiable como huella de cross-post; por debajo es demasiado genérica.
+_MIN_CLAVE_CONTENIDO = 20
+
+
+def _clave_contenido(texto: str) -> str:
+    """Huella normalizada del CUERPO de un caption, para detectar el MISMO contenido
+    cross-posteado a otra red (donde a veces falta el hashtag). Quita hashtags, menciones,
+    emojis y puntuación, normaliza acentos, colapsa espacios y recorta a 60 chars. Devuelve
+    "" si el cuerpo útil es más corto que `_MIN_CLAVE_CONTENIDO` (demasiado genérico para
+    emparejar sin riesgo de falso positivo)."""
+    t = re.sub(r"#\w+", "", texto or "")
+    t = re.sub(r"@\w+", "", t)
+    t = "".join(c for c in t if c == " " or not unicodedata.category(c).startswith(("S", "P")))
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r"\s+", " ", t).strip().lower()
+    return t[:60] if len(t) >= _MIN_CLAVE_CONTENIDO else ""
+
+
+def _expandir_cross_post(
+    piezas: list[dict[str, Any]], tags: set[str]
+) -> tuple[list[dict[str, Any]], set[tuple[str, str]]]:
+    """Piezas de la campaña = las que llevan el hashtag (`seed`) MÁS sus gemelas
+    cross-posteadas a otra red SIN el hashtag (mismo cuerpo de caption).
+
+    El equipo cross-postea el mismo contenido y a veces olvida el tag en una red (sobre todo
+    TikTok); sin esto, esas piezas no se cuentan pese a ser de la campaña. El emparejamiento
+    es por `_clave_contenido`, única en la práctica (0 colisiones en los datos del piloto);
+    las claves demasiado cortas no siembran nada (evita falsos positivos).
+
+    Devuelve `(piezas_en_campania, ids_cross)`, donde `ids_cross` (id, red) son las añadidas
+    por inferencia, para que la UI las marque como tales y el humano pueda revisarlas.
+    """
+    seed = _filtrar(piezas, tags)
+    claves = {k for k in (_clave_contenido(p.get("texto", "")) for p in seed) if k}
+
+    def _id(p: dict[str, Any]) -> tuple[str, str]:
+        return (str(p.get("id", "")), str(p.get("red", "")))
+
+    vistos = {_id(p) for p in seed}
+    resultado = list(seed)
+    ids_cross: set[tuple[str, str]] = set()
+    if claves:
+        for p in piezas:
+            ident = _id(p)
+            if ident in vistos:
+                continue
+            if _clave_contenido(p.get("texto", "")) in claves:
+                resultado.append(p)
+                ids_cross.add(ident)
+                vistos.add(ident)
+    return resultado, ids_cross
+
+
 def _agregar(piezas: list[dict[str, Any]]) -> dict[str, Any]:
     """Totales del subconjunto: visualizaciones, interacciones, engagement %, nº piezas."""
     vis = sum(int(p.get("visualizaciones") or 0) for p in piezas)
@@ -274,8 +330,12 @@ def _tendencia(piezas: list[dict[str, Any]], rango: str) -> list[dict[str, Any]]
     return puntos
 
 
-def _pieza_tabla(p: dict[str, Any]) -> dict[str, Any]:
-    """Adapta una pieza del listado a la fila de la tabla de campaña."""
+def _pieza_tabla(p: dict[str, Any], por_cross_post: bool = False) -> dict[str, Any]:
+    """Adapta una pieza del listado a la fila de la tabla de campaña.
+
+    `por_cross_post` marca las piezas incluidas por inferencia (gemelas de una etiquetada,
+    sin el hashtag propio) para que la UI las distinga de las etiquetadas directamente.
+    """
     return {
         "id": p.get("id", ""),
         "red": p.get("red", ""),
@@ -286,6 +346,7 @@ def _pieza_tabla(p: dict[str, Any]) -> dict[str, Any]:
         "engagement_pct": round(float(p.get("engagement_pct") or 0.0), 2),
         "url": p.get("url") or "",
         "formato": p.get("formato") or "",
+        "por_cross_post": por_cross_post,
     }
 
 
@@ -293,7 +354,9 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
     """Analítica completa de una campaña en un periodo (None si la campaña no existe).
 
     Devuelve KPIs, tabla de piezas del periodo, tendencia diaria y comparativa contra el
-    periodo anterior, todo restringido a las piezas cuyo caption lleva sus hashtags.
+    periodo anterior. El conjunto son las piezas cuyo caption lleva sus hashtags MÁS sus
+    gemelas cross-posteadas a otra red sin el hashtag (ver `_expandir_cross_post`); cada
+    fila marca `por_cross_post` y `cross_posts` cuenta cuántas se añadieron por inferencia.
 
     Es ASÍNCRONA y descarga los listados de TODAS las marcas × (periodo actual + anterior)
     EN PARALELO y CACHEADOS: el coste de pared es la descarga más lenta, no la suma — clave
@@ -315,20 +378,21 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
     crudos = await asyncio.gather(*(_listado_cacheado(r, idm) for r, idm in combos))
     por_combo = dict(zip(combos, crudos))
 
-    def _piezas_de(r: str) -> list[dict[str, Any]]:
+    def _piezas_de(r: str) -> tuple[list[dict[str, Any]], set[tuple[str, str]]]:
         unidas: list[dict[str, Any]] = []
         for idm in ids_metricas:
             unidas.extend(por_combo.get((r, idm), []))
-        return _filtrar(unidas, tags)
+        return _expandir_cross_post(unidas, tags)
 
-    piezas = _piezas_de(rango)
-    piezas_prev = _piezas_de(rango_prev)
+    piezas, ids_cross = _piezas_de(rango)
+    piezas_prev, _ = _piezas_de(rango_prev)
     actual = _agregar(piezas)
     anterior = _agregar(piezas_prev)
 
-    # Tabla ordenada por visualizaciones desc (las piezas que más rindieron arriba).
+    # Tabla ordenada por visualizaciones desc (las piezas que más rindieron arriba). Cada
+    # fila marca si entró por cross-post (gemela sin hashtag de una pieza etiquetada).
     tabla = sorted(
-        (_pieza_tabla(p) for p in piezas),
+        (_pieza_tabla(p, (str(p.get("id", "")), str(p.get("red", ""))) in ids_cross) for p in piezas),
         key=lambda f: f["visualizaciones"],
         reverse=True,
     )
@@ -342,6 +406,7 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "comparativa": _comparar(actual, anterior),
         "tendencia": {"puntos": _tendencia(piezas, rango)},
         "desglose_red": _desglose_por_red(piezas),
+        "cross_posts": len(ids_cross),
         "piezas": tabla,
         "generado_en": ahora_iso(),
     }
