@@ -409,7 +409,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           tienen run que mostrar, así nadie busca un pipeline inexistente. */}
       {publicacion.pipeline_id && (
         <Link
-          to={`/datos/actividad/pipelines?run=${encodeURIComponent(publicacion.pipeline_id)}`}
+          to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
           onClick={(e) => e.stopPropagation()}
           className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
           title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"

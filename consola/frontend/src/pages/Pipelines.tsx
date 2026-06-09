@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronRight, GitBranch, OctagonAlert, RefreshCw, Sparkles } from "lucide-react";
 import * as React from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -10,13 +10,6 @@ import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -37,7 +30,6 @@ import type {
   PipelineGeneracion,
   PipelineHallazgo,
   PipelineQaFuente,
-  RespuestaPipelineDetalle,
   RespuestaPipelines,
 } from "@/types";
 
@@ -60,7 +52,7 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
 };
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
-const ETAPA_A_EVENTO: Record<string, string> = {
+export const ETAPA_A_EVENTO: Record<string, string> = {
   fusion: "FUSION", ranking: "RANKING", ci: "CI", qa: "QA", cd: "CD", arte: "ARTE",
 };
 
@@ -89,7 +81,7 @@ function aspecto(estado: string) {
   return ASPECTO[estado] ?? ASPECTO.pendiente;
 }
 
-function ChipEstado({ estado, className }: { estado: string; className?: string }) {
+export function ChipEstado({ estado, className }: { estado: string; className?: string }) {
   const a = aspecto(estado);
   return (
     <Badge variant={a.variant} className={cn("border", a.clase, className)}>
@@ -211,7 +203,7 @@ function Punto({ estado }: { estado: string }) {
 }
 
 /** Tira horizontal de etapas (CI · CD · QA · Aprobación), estilo pipeline de GitLab. */
-function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
+export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {etapas.map((e, i) => (
@@ -233,7 +225,7 @@ function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
   );
 }
 
-function tiempoRelativo(iso: string): string {
+export function tiempoRelativo(iso: string): string {
   if (!iso) return "";
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return iso;
@@ -313,7 +305,7 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
   const prompt = (gen?.prompt || plantilla || "").trim();
   const esPlantilla = !gen?.prompt && !!plantilla;
   return (
-    <div className="space-y-1.5 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
+    <div className="space-y-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
       <div className="flex items-center gap-2">
         <Sparkles className="h-3 w-3 text-violet-600" aria-hidden="true" />
         <span className="text-xs font-semibold text-foreground">IA</span>
@@ -321,28 +313,32 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
           ? <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
           : <span className="text-[11px] text-muted-foreground">aún no ejecutado</span>}
       </div>
-      {/* 1) PROMPT de entrada (real o plantilla). */}
-      {prompt ? (
-        <details className="rounded bg-background/60">
-          <summary className="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
-            Prompt{esPlantilla ? " (plantilla)" : ""}
-          </summary>
-          <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words border-t px-2 py-2 font-mono text-[11px] leading-relaxed text-foreground/80">
-            {prompt}
-          </pre>
-        </details>
-      ) : <p className="text-[11px] text-muted-foreground">Prompt no disponible.</p>}
-      {/* 2) RAZONAMIENTO + RESULTADO (el stream del agente). */}
-      <div className="text-[11px] font-medium text-muted-foreground">Razonamiento + resultado</div>
-      {salida ? (
-        <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/90">
-          {salida}
-        </pre>
-      ) : (
-        <p className="text-xs italic text-muted-foreground">
-          {enCurso ? "En curso…" : "Pendiente: esta etapa aún no se ha ejecutado."}
-        </p>
-      )}
+      {/* ENTRADA (prompt) ↔ SALIDA (razonamiento + resultado), lado a lado en pantallas anchas
+          (la página dedicada) y apilados en estrecho (el feed móvil). */}
+      <div className="grid gap-2 lg:grid-cols-2">
+        <div className="min-w-0 space-y-1">
+          <div className="text-[11px] font-medium text-muted-foreground">
+            Entrada · prompt{esPlantilla ? " (plantilla)" : ""}
+          </div>
+          {prompt ? (
+            <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
+              {prompt}
+            </pre>
+          ) : <p className="text-[11px] italic text-muted-foreground">Prompt no disponible.</p>}
+        </div>
+        <div className="min-w-0 space-y-1">
+          <div className="text-[11px] font-medium text-muted-foreground">Salida · razonamiento + resultado</div>
+          {salida ? (
+            <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/90">
+              {salida}
+            </pre>
+          ) : (
+            <p className="text-xs italic text-muted-foreground">
+              {enCurso ? "En curso…" : "Pendiente: esta etapa aún no se ha ejecutado."}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -446,7 +442,7 @@ function ContenidoEtapa({
 /** Panel INDEPENDIENTE y plegable de una etapa: cabecera siempre visible (nombre + estado)
  *  y, al desplegar, el detalle COMPLETO de lo ocurrido en ese paso. Cada panel se abre/cierra
  *  por su cuenta (estado local propio). */
-function PanelEtapa({
+export function PanelEtapa({
   etapa,
   run,
   eventos,
@@ -501,90 +497,13 @@ function PanelEtapa({
   );
 }
 
-function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void }) {
-  const q = useQuery({
-    queryKey: ["pipelines", "detalle", id],
-    queryFn: ({ signal }) => api.pipelineDetalle(id as string, signal),
-    enabled: !!id,
-  });
-  const datos = q.data as RespuestaPipelineDetalle | undefined;
-  const run = datos?.pipeline;
-  const eventosDe = (clave: string): PipelineActividad[] => {
-    const cod = ETAPA_A_EVENTO[clave];
-    return cod && datos ? datos.actividad.filter((e) => e.etapa === cod) : [];
-  };
-  // Stream del agente (`claude -p`) de la etapa, si la run lo correlacionó.
-  const generacionDe = (clave: string): PipelineGeneracion | undefined => {
-    const cod = ETAPA_A_EVENTO[clave];
-    return cod ? datos?.generaciones_por_etapa?.[cod] : undefined;
-  };
-  // Plantilla del prompt de la etapa IA (para enseñar el prompt aunque aún no haya corrido).
-  const plantillaDe = (clave: string): string | undefined => {
-    const cod = ETAPA_A_EVENTO[clave];
-    return cod ? datos?.prompts_por_etapa?.[cod] : undefined;
-  };
-
-  return (
-    <Dialog open={!!id} onOpenChange={(o) => { if (!o) onCerrar(); }}>
-      <DialogContent className="max-h-[85vh] w-full overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="pr-6 text-base">{run?.titulo ?? "Pipeline"}</DialogTitle>
-          <DialogDescription>
-            {run ? `${run.marca_nombre} · ${tiempoRelativo(run.creado)}` : "Cargando…"}
-          </DialogDescription>
-        </DialogHeader>
-
-        {q.isPending ? (
-          <div className="space-y-3 py-4">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
-          </div>
-        ) : q.isError || !run ? (
-          <BloqueError
-            titulo="No se pudo cargar el pipeline"
-            mensaje={q.error instanceof ApiError ? q.error.message : "Inténtalo de nuevo."}
-            onReintentar={() => q.refetch()}
-          />
-        ) : (
-          <div className="space-y-2 py-4">
-            {run.etapas.map((e, i) => (
-              <PanelEtapa
-                key={e.clave}
-                etapa={e}
-                run={run}
-                eventos={eventosDe(e.clave)}
-                generacion={generacionDe(e.clave)}
-                plantilla={plantillaDe(e.clave)}
-                // Abre por defecto la PRIMERA etapa no completada (donde está la acción);
-                // si todas están ok, abre la última (Aprobación). El resto, plegadas.
-                defaultOpen={
-                  i === (run.etapas.findIndex((x) => x.estado !== "ok") + run.etapas.length) % run.etapas.length
-                }
-              />
-            ))}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function Pipelines() {
-  // Deep-link `?run=<id>`: el feed enlaza aquí para abrir el proceso IA de una pieza. La run
-  // abierta vive en la URL (compartible/navegable); al cerrar, se limpia el parámetro.
-  const [params, setParams] = useSearchParams();
-  const runParam = params.get("run");
-  const [abierto, setAbierto] = React.useState<string | null>(runParam);
-  React.useEffect(() => {
-    if (runParam) setAbierto(runParam);
-  }, [runParam]);
-  const cerrar = React.useCallback(() => {
-    setAbierto(null);
-    if (params.has("run")) {
-      params.delete("run");
-      setParams(params, { replace: true });
-    }
-  }, [params, setParams]);
+  // Cada run abre su PÁGINA dedicada (estilo GitLab/Azure), no un pop-up.
+  const navigate = useNavigate();
+  const abrir = React.useCallback(
+    (id: string) => navigate(`/datos/actividad/pipelines/${encodeURIComponent(id)}`),
+    [navigate],
+  );
   // La vista respeta el switch global de marca de la barra superior (no tiene selector
   // propio). `marcaActiva` es el id canónico (o null = "Todas", solo admin) que el back
   // valida; null → sin filtro de marca.
@@ -678,7 +597,7 @@ export default function Pipelines() {
         <>
           <div className="space-y-3">
             {runs.map((run) => (
-              <FilaPipeline key={run.id} run={run} onAbrir={setAbierto} />
+              <FilaPipeline key={run.id} run={run} onAbrir={abrir} />
             ))}
           </div>
           {runs.length < total && (
@@ -694,8 +613,6 @@ export default function Pipelines() {
           )}
         </>
       )}
-
-      <DetalleRun id={abierto} onCerrar={cerrar} />
     </div>
   );
 }
