@@ -44,7 +44,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
         # Las 6 etapas (maestros): Fusión / Ranking / Selección / Validación / Copy / Arte.
-        config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_RANKING,
+        config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL,
         config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
         config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
         # Automatismos generales (barridos de mantenimiento).
@@ -88,7 +88,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
 
 
 _ETAPAS_ENV = {
-    config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_RANKING, config.ENV_PIPELINE_SELECCION,
+    config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL, config.ENV_PIPELINE_SELECCION,
     config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
 }
 
@@ -103,7 +103,7 @@ def test_maestros_etapa_son_las_seis(store):
         assert a.defecto is False
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_PIPELINE_FUSION] == "Fusión IA"
-    assert etiquetas[config.ENV_PIPELINE_RANKING] == "Ranking IA"
+    assert etiquetas[config.ENV_PIPELINE_EDITORIAL] == "Editorial IA"
     assert etiquetas[config.ENV_PIPELINE_SELECCION] == "Selección"
     assert etiquetas[config.ENV_PIPELINE_VALIDACION] == "Validación IA"
     assert etiquetas[config.ENV_PIPELINE_COPY] == "Copy IA"

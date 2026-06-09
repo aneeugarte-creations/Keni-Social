@@ -40,6 +40,7 @@ from ._config_comun import (
     ENV_PIPELINE_AUTOGEN_MAX,
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_COPY_MAX,
+    ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
     ENV_PIPELINE_FUSION,
     ENV_PIPELINE_INTERVALO_HORAS,
@@ -47,15 +48,12 @@ from ._config_comun import (
     ENV_PIPELINE_MAX,
     ENV_PIPELINE_QA_MAX,
     ENV_PIPELINE_QA_REVISAR_MAX,
-    ENV_PIPELINE_RANKING,
     ENV_PIPELINE_SELECCION,
     ENV_PIPELINE_VALIDACION,
     ENV_QA_EN_CURSO_TTL_MIN,
     ENV_QA_FUENTE_ESFUERZO,
     ENV_QA_FUENTE_MODELO,
     ENV_QA_FUENTE_TIMEOUT,
-    QA_EN_CURSO_TTL_MIN_DEF,
-    QA_FUENTE_TIMEOUT_DEF,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
     ENV_RENDIMIENTO_TOP_N,
@@ -97,6 +95,8 @@ from ._config_comun import (
     PIPELINE_MAX_DEF,
     PIPELINE_QA_MAX_DEF,
     PIPELINE_QA_REVISAR_MAX_DEF,
+    QA_EN_CURSO_TTL_MIN_DEF,
+    QA_FUENTE_TIMEOUT_DEF,
     RENDIMIENTO_MIN_PIEZAS_DEF,
     RENDIMIENTO_TOP_N_DEF,
     SCORE_BONUS_BREAKING_DEF,
@@ -341,13 +341,13 @@ def noticias_gc_inactividad_horas() -> int:
 
 
 def perfil_editorial_activo() -> bool:
-    """True si el ranking usa el perfil editorial extraído con Haiku (`KENI_PIPELINE_RANKING`).
+    """True si el ranking usa el perfil editorial extraído con Haiku (`KENI_PIPELINE_EDITORIAL`).
 
     Def OFF (conservador, IA en prod): sin el flag el ranking usa el vocabulario semilla
     (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
     score usa esas keywords derivadas de la línea editorial de la página texto.
     """
-    return _crudo(ENV_PIPELINE_RANKING).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_EDITORIAL).lower() in _VERDADEROS
 
 
 def perfil_editorial_ttl_horas() -> int:

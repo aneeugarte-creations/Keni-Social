@@ -17,7 +17,7 @@ from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar
 
 @pytest.fixture(autouse=True)
 def _etapas_activas(monkeypatch):
-    """Activa los maestros togglables de las etapas (Fusión/Ranking/Selección/Validación/Copy) para
+    """Activa los maestros togglables de las etapas (Fusión/Editorial/Selección/Validación/Copy) para
     estos tests.
 
     El default de cada toggle es OFF; sin esto, `_etapas_de_run` pintaría todo "saltada". Los tests
@@ -25,7 +25,7 @@ def _etapas_activas(monkeypatch):
     (Arte se deja OFF por defecto; el test de Arte lo enciende a propósito.)
     """
     monkeypatch.setenv(config.ENV_PIPELINE_FUSION, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_RANKING, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_EDITORIAL, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_SELECCION, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_VALIDACION, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
@@ -56,12 +56,12 @@ def test_run_qa_no_verificado_con_copy(cliente):
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
-        "fusion", "ranking", "ci", "qa", "cd", "arte", "aprobacion"
+        "fusion", "editorial", "ci", "qa", "cd", "arte", "aprobacion"
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    # Sin cluster -> Fusión/Ranking saltadas; Arte saltada (toggle off). Ninguna bloquea.
+    # Sin cluster -> Fusión/Editorial saltadas; Arte saltada (toggle off). Ninguna bloquea.
     assert etapas == {
-        "fusion": "saltada", "ranking": "saltada", "ci": "ok", "qa": "ok",
+        "fusion": "saltada", "editorial": "saltada", "ci": "ok", "qa": "ok",
         "cd": "ok", "arte": "saltada", "aprobacion": "pendiente",
     }
     assert run["estado_global"] == "pendiente"
@@ -130,7 +130,7 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
     assert run is not None
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas == {
-        "fusion": "saltada", "ranking": "saltada", "ci": "ok", "qa": "saltada",
+        "fusion": "saltada", "editorial": "saltada", "ci": "ok", "qa": "saltada",
         "cd": "ok", "arte": "saltada", "aprobacion": "pendiente",
     }
     assert run["estado_global"] == "pendiente"
@@ -166,8 +166,8 @@ def _historia_de(tema_id: str, marca: str = "unotv", **campos) -> dict:
     return repos.upsert_noticia_cluster(base)
 
 
-def test_fusion_y_ranking_ok_desde_historia(cliente):
-    """Un tema de una HISTORIA: Fusión y Ranking 'ok' con sus señales (fuentes/notas, score)."""
+def test_fusion_y_editorial_ok_desde_historia(cliente):
+    """Un tema de una HISTORIA: Fusión y Editorial 'ok' con sus señales (fuentes/notas, score)."""
     tema = _tema_pipeline("Tema con historia")
     _historia_de(
         tema["id"], n_items=5, n_fuentes=3, score=0.82, breaking=1, verificacion="corroborada",
@@ -176,17 +176,17 @@ def test_fusion_y_ranking_ok_desde_historia(cliente):
     assert run is not None
     etapas = {e["clave"]: e for e in run["etapas"]}
     assert etapas["fusion"]["estado"] == "ok"
-    assert etapas["ranking"]["estado"] == "ok"
+    assert etapas["editorial"]["estado"] == "ok"
     cl = run["cluster"]
     assert cl is not None
     assert cl["n_fuentes"] == 3
     assert cl["n_items"] == 5
     assert cl["breaking"] is True
     assert cl["score"] == pytest.approx(0.82)
-    # Fusión = dedup (fuentes/notas); Ranking = score (+ breaking).
+    # Fusión = dedup (fuentes/notas); Editorial = score (+ breaking).
     assert "3 fuentes" in etapas["fusion"]["detalle"]
     assert "5 notas" in etapas["fusion"]["detalle"]
-    assert "0.82" in etapas["ranking"]["detalle"]
+    assert "0.82" in etapas["editorial"]["detalle"]
 
 
 def test_cluster_por_contenido_reverso(cliente):
@@ -284,7 +284,7 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "fusion", "ranking", "ci", "qa", "cd", "arte", "aprobacion"
+        "fusion", "editorial", "ci", "qa", "cd", "arte", "aprobacion"
     ]
     assert "actividad" in body
     assert "qa_fuente" in body["pipeline"]
@@ -296,7 +296,7 @@ def test_detalle_run(cliente):
 
 
 def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
-    """El detalle enlaza el Haiku del pool por etapa: 'Fusión...' -> FUSION, 'Encaje...' -> RANKING,
+    """El detalle enlaza el Haiku del pool por etapa: 'Fusión...' -> FUSION, 'Encaje...' -> EDITORIAL,
     cada uno con su prompt + salida REALES."""
     tema = _tema_pipeline("Tema con pool", marca="unotv")
     generaciones.crear({
@@ -312,8 +312,8 @@ def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
     por_etapa = cliente.get(f"/api/pipelines/{tema['id']}").json()["generaciones_por_etapa"]
     assert por_etapa["FUSION"]["prompt"] == "PROMPT-FUSION"
     assert por_etapa["FUSION"]["salida"] == "SALIDA-FUSION"
-    assert por_etapa["RANKING"]["prompt"] == "PROMPT-ENCAJE"
-    assert por_etapa["RANKING"]["salida"] == "SALIDA-ENCAJE"
+    assert por_etapa["EDITORIAL"]["prompt"] == "PROMPT-ENCAJE"
+    assert por_etapa["EDITORIAL"]["salida"] == "SALIDA-ENCAJE"
 
 
 def test_etapa_arte_ok_con_imagen_y_toggle(cliente, monkeypatch):
@@ -342,7 +342,7 @@ def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
     tema = _tema_pipeline("Tema ia flags")
     run = _run_por_titulo(cliente, "Tema ia flags")
     ia = {e["clave"]: e["es_ia"] for e in run["etapas"]}
-    assert ia["fusion"] is True and ia["ranking"] is True
+    assert ia["fusion"] is True and ia["editorial"] is True
     assert ia["qa"] is True and ia["cd"] is True and ia["arte"] is True
     assert ia["ci"] is False and ia["aprobacion"] is False
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()

@@ -277,7 +277,7 @@ export interface PipelineGeneracion {
 export interface RespuestaPipelineDetalle {
   pipeline: Pipeline;
   actividad: PipelineActividad[];
-  /** Stream del agente por código de etapa ("FUSION"/"RANKING"/"QA"/"CD"/"ARTE"). {} si no hay. */
+  /** Stream del agente por código de etapa ("FUSION"/"EDITORIAL"/"QA"/"CD"/"ARTE"). {} si no hay. */
   generaciones_por_etapa?: Record<string, PipelineGeneracion>;
   /** Plantilla del prompt de cada etapa IA (para enseñar el prompt de entrada aunque no haya
    *  corrido aún; cuando corre, se prefiere el prompt real de la generación). */

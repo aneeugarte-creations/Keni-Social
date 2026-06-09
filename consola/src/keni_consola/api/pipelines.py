@@ -43,9 +43,9 @@ def _fusion_off(marca: str) -> bool:
     return config.marca_apagada(config.ENV_PIPELINE_FUSION, marca) or not config.fusion_semantica_activa()
 
 
-def _ranking_off(marca: str) -> bool:
-    """Etapa "Ranking" desactivada para `marca` (maestro `KENI_PIPELINE_RANKING` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_RANKING, marca) or not config.perfil_editorial_activo()
+def _editorial_off(marca: str) -> bool:
+    """Etapa "Editorial" desactivada para `marca` (maestro `KENI_PIPELINE_EDITORIAL` off o por-marca)."""
+    return config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca) or not config.perfil_editorial_activo()
 
 
 def _ci_off(marca: str) -> bool:
@@ -72,13 +72,13 @@ def _arte_off(marca: str) -> bool:
 _LIMITE_DEF = 50
 _LIMITE_MAX = 200
 
-# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo. Fusión y Ranking son el
-# trabajo del POOL (dedup + score), DERIVADO de la historia (cluster), no de un toggle. Selección/
-# Validación/Copy son TOGGLABLES por marca (activa = estado real; desactivada = "saltada").
+# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo. Fusión y Editorial son el
+# trabajo del POOL (dedup + encaje/score), DERIVADO de la historia (cluster), no de un toggle.
+# Selección/Validación/Copy son TOGGLABLES por marca (activa = estado real; desactivada = "saltada").
 # Aprobación es el gate humano. `estado_global` toma la primera no-{ok,saltada}.
 _ETAPAS = (
     ("fusion", "Fusión"),
-    ("ranking", "Ranking"),
+    ("editorial", "Editorial"),
     ("ci", "Selección"),
     ("qa", "Validación"),
     ("cd", "Copy"),
@@ -90,12 +90,12 @@ _ETAPAS = (
 _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
 # Selección (crea el tema en BD) y Aprobación (humana) NO lo son.
-_ETAPAS_IA = frozenset({"fusion", "ranking", "qa", "cd", "arte"})
+_ETAPAS_IA = frozenset({"fusion", "editorial", "qa", "cd", "arte"})
 # Prompt de la Biblioteca de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
 _PROMPT_POR_ETAPA = {
     "FUSION": "prompt/noticias/fusion-historias",
-    "RANKING": "prompt/noticias/perfil-editorial",
+    "EDITORIAL": "prompt/noticias/perfil-editorial",
     "QA": "prompt/qa-fuente",
     "CD": "prompt/copy-desde-nota",
     "ARTE": "prompt/imagen/arte-noticia",
@@ -197,23 +197,23 @@ def _fusion_de(cluster: dict | None, marca: str) -> dict:
     }
 
 
-def _ranking_de(cluster: dict | None, marca: str) -> dict:
-    """Etapa "Ranking": encaje editorial IA + score. Saltada si su toggle está off para la marca."""
-    if _ranking_off(marca) or not cluster:
-        return {"clave": "ranking", "nombre": "Ranking", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
+def _editorial_de(cluster: dict | None, marca: str) -> dict:
+    """Etapa "Editorial": encaje editorial IA + score. Saltada si su toggle está off para la marca."""
+    if _editorial_off(marca) or not cluster:
+        return {"clave": "editorial", "nombre": "Editorial", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     score = round(float(cluster.get("score", 0.0) or 0.0), 2)
     detalle = f"Score {score}" + (" · 🔥" if cluster.get("breaking") else "")
     return {
-        "clave": "ranking", "nombre": "Ranking", "estado": "ok",
+        "clave": "editorial", "nombre": "Editorial", "estado": "ok",
         "detalle": detalle, "ts": cluster.get("primer_visto", "") or "",
     }
 
 
 def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) -> list[dict]:
-    """Deriva las 7 etapas de una run: Fusión + Ranking (pool) + Selección/Validación/Copy/Arte
+    """Deriva las 7 etapas de una run: Fusión + Editorial (pool) + Selección/Validación/Copy/Arte
     (toggles) + Aprobación (humana).
 
-    Fusión y Ranking se derivan de la HISTORIA enlazada (cluster): el dedup y el score del pool,
+    Fusión y Editorial se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
     previos al tema. Las togglables (Selección/Validación/Copy/Arte) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
     `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La Validación
@@ -222,7 +222,7 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
     """
     marca = item.get("marca", "") or ""
     fusion = _fusion_de(cluster, marca)
-    ranking = _ranking_de(cluster, marca)
+    editorial = _editorial_de(cluster, marca)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
@@ -286,7 +286,7 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
         "detalle": ap_detalle, "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    etapas = [fusion, ranking, ci, qa, cd, arte, aprobacion]
+    etapas = [fusion, editorial, ci, qa, cd, arte, aprobacion]
     for e in etapas:
         e["es_ia"] = e["clave"] in _ETAPAS_IA
     return etapas
@@ -506,9 +506,9 @@ def _generacion_pool_de_marca(marca: str, gens: list[dict], *, prefijo: str) -> 
     """La generación `noticias-ia` más reciente de `marca` cuya etiqueta empieza por `prefijo`.
 
     La IA del POOL (Fusión / Encaje) corre por LOTE de marca, no 1:1 con cada pieza. Para dar
-    transparencia del Haiku REAL en las etapas Fusión/Ranking, enlazamos su generación de pool más
+    transparencia del Haiku REAL en las etapas Fusión/Editorial, enlazamos su generación de pool más
     reciente (con prompt+salida reales). `prefijo` distingue "Fusión de historias" (→ Fusión) de
-    "Encaje editorial" (→ Ranking). `gens` es la lista YA leída (evita re-escanear el almacén).
+    "Encaje editorial" (→ Editorial). `gens` es la lista YA leída (evita re-escanear el almacén).
     None si no hay ninguna.
     """
     if not marca:
@@ -580,7 +580,7 @@ async def detalle(request: Request) -> Response:
     # UNA sola lectura del almacén de generaciones (antes 3×, ~3 s cada una); se reparte.
     gens = generaciones.listar(limite=None)
     actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
-    # Fusión/Ranking: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
+    # Fusión/Editorial: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
     # reciente para enseñar el prompt+salida REALES del Haiku en cada etapa (por su etiqueta).
     marca_tema = item.get("marca", "") or ""
     gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo="Fusión")
@@ -588,7 +588,7 @@ async def detalle(request: Request) -> Response:
         generaciones_por_etapa.setdefault("FUSION", gen_fusion)
     gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo="Encaje")
     if gen_encaje is not None:
-        generaciones_por_etapa.setdefault("RANKING", gen_encaje)
+        generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
     return JSONResponse(
         {
             "pipeline": _run_de(item, piezas, completo=True, cluster=cluster),

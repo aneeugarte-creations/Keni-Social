@@ -120,13 +120,13 @@ def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
     """Keywords de relevancia de la marca: perfil editorial (Haiku) si está activo y existe; si no,
     el vocabulario semilla de `relevancia_marca`. Centraliza la elección perfil-vs-semilla.
 
-    Respeta el toggle POR MARCA de `KENI_PIPELINE_RANKING`: una marca con el Ranking apagado
+    Respeta el toggle POR MARCA de `KENI_PIPELINE_EDITORIAL`: una marca con el Editorial apagado
     vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado (antes el toggle solo
     frenaba el refresco, pero el perfil viejo seguía mandando en el score).
     """
     if (
         perfil_activo and marca
-        and not config.marca_apagada(config.ENV_PIPELINE_RANKING, marca)
+        and not config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca)
     ):
         perfil = perfil_editorial.palabras(marca)
         if perfil:
@@ -183,7 +183,7 @@ def _rendimiento_bonus(
 def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: str = "") -> None:
     """Sella una GENERACIÓN-actividad (`tipo='noticias-ia'`) de un paso IA del pool (best-effort).
 
-    Hace VISIBLES en «Actividad IA» (y en la etapa Ranking del pipeline) los pasos Haiku del pool
+    Hace VISIBLES en «Actividad IA» (y en la etapa Editorial del pipeline) los pasos Haiku del pool
     —fusión de historias (dedup) y encaje editorial— que antes corrían mudos. Es un registro ya
     COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los REALES de la
     llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no se pasan,
@@ -328,10 +328,10 @@ def paso_clustering() -> dict[str, Any]:
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
-            # el toggle "Ranking"); si no, semilla.
+            # el toggle "Editorial"); si no, semilla.
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
-                and not config.marca_apagada(config.ENV_PIPELINE_RANKING, marca_c)
+                and not config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca_c)
             ):
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(

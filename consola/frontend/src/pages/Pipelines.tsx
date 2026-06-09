@@ -54,13 +54,13 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
 export const ETAPA_A_EVENTO: Record<string, string> = {
-  fusion: "FUSION", ranking: "RANKING", ci: "CI", qa: "QA", cd: "CD", arte: "ARTE",
+  fusion: "FUSION", editorial: "EDITORIAL", ci: "CI", qa: "QA", cd: "CD", arte: "ARTE",
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
 const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "fusion", nombre: "Fusión" },
-  { clave: "ranking", nombre: "Ranking" },
+  { clave: "editorial", nombre: "Editorial" },
   { clave: "ci", nombre: "Selección" },
   { clave: "qa", nombre: "Validación" },
   { clave: "cd", nombre: "Copy" },
@@ -153,8 +153,8 @@ function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
 }
 
 /** Chips de las señales del cluster. `modo` decide cuáles: "fusion" (dedup: fuentes/notas) o
- *  "ranking" (score/verificación/viralidad). */
-function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fusion" | "ranking" }) {
+ *  "editorial" (score/verificación/viralidad). */
+function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fusion" | "editorial" }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {modo === "fusion" && (
@@ -165,7 +165,7 @@ function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fus
           )}
         </>
       )}
-      {modo === "ranking" && (
+      {modo === "editorial" && (
         <>
           <Badge variant="outline" className="text-[10px]">Score {cluster.score.toFixed(2)}</Badge>
           {cluster.verificacion && (
@@ -357,7 +357,7 @@ function ContenidoEtapa({
   generacion?: PipelineGeneracion;
   plantilla?: string;
 }) {
-  if (clave === "fusion" || clave === "ranking") {
+  if (clave === "fusion" || clave === "editorial") {
     return (
       <div className="space-y-2 text-xs">
         {run.cluster
