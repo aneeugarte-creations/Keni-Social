@@ -203,6 +203,30 @@ _ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format", "vid
 # nivel post; se captura si algún alias lo trae, si no queda None.
 _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
 
+# --- REELS (endpoint SEPARADO `/v2/analytics/reels/{network}`) -----------------
+# Metricool sirve los Reels de Facebook/Instagram en un endpoint APARTE de `/posts`;
+# `/posts/{network}` NO los incluye. Sin esto, todo el contenido en VÍDEO vertical
+# (lo que más cross-postea un medio) quedaba invisible: solo se veían en TikTok. La
+# FORMA del reel difiere de un post y entre redes (confirmado contra la API real AMX):
+#   - Instagram: reelId, content (caption), publishedAt, views, impressionsTotal,
+#                interactions, likes/comments/shares/saved, url, averageWatchTime.
+#   - Facebook:  reelId, description (caption), created, blueReelsPlayCount,
+#                postImpressionsUnique, engagement, postVideoReactions, reelUrl/videoUrl.
+# Redes con endpoint de reels (las demás no lo tienen):
+_RED_CON_REELS: frozenset[Plataforma] = frozenset({Plataforma.facebook, Plataforma.instagram})
+_ALIAS_REEL_ID = ("reelId", "id", "videoId", "postId")
+# El caption del reel: `content` (IG) / `description` (FB) van PRIMERO (son el cuerpo
+# real con los hashtags); el resto son defensivos.
+_ALIAS_REEL_TEXTO = ("content", "description", "text", "caption", "title")
+_ALIAS_REEL_VIS = (
+    "views", "blueReelsPlayCount", "videoViews", "impressionsTotal",
+    "postImpressionsUnique", "reach", "impressions", "plays",
+)
+_ALIAS_REEL_INT = ("interactions", "engagement", "postVideoSocialActions", "engagements")
+_ALIAS_REEL_URL = ("url", "reelUrl", "permalink", "videoUrl", "shareUrl")
+_ALIAS_REEL_TIEMPO = ("averageWatchTime", "postVideoAvgTimeWatchedSeconds", "avgWatchTime")
+_ALIAS_REEL_LIKES = ("likes", "postVideoReactions", "reactions", "likeCount")
+
 # Normalización del formato crudo (mediaType/type de Metricool/redes) a los
 # literales del contrato. Claves comparadas en MAYÚSCULAS.
 _FORMATO_NORMAL: dict[str, str] = {
@@ -642,6 +666,9 @@ class FuenteMetricool:
         piezas: list[Pieza] = []
         for plat in self._plataformas(marca):
             piezas.extend(self._piezas_plataforma(cuenta_id, plat, desde, hasta, n))
+            # Reels (FB/IG) viven en un endpoint aparte que `/posts` no cubre: añádelos.
+            if plat in _RED_CON_REELS:
+                piezas.extend(self._reels_plataforma(cuenta_id, plat, desde, hasta))
         piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return piezas[:n]
 
@@ -689,6 +716,73 @@ class FuenteMetricool:
             log.warning("metricool: piezas %s/%s fallaron: %s", plat.value, cuenta_id, e)
             return []
         return self._parsear_posts(posts, plat, cuenta_id, desde, hasta)
+
+    def _fetch_reels(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[dict]:
+        """GET crudo de `/v2/analytics/reels/{network}` (RAISES si la API falla)."""
+        datos = get_json(
+            self._cli,
+            f"{BASE}/v2/analytics/reels/{_RED_METRICOOL[plat]}",
+            params={
+                **self._params_base(cuenta_id),
+                "from": desde.isoformat() + "T00:00:00",
+                "to": hasta.isoformat() + "T23:59:59",
+            },
+            headers=self._headers(cuenta_id),
+        )
+        return [r for r in (datos.get("data") or []) if isinstance(r, dict)]
+
+    def _reels_plataforma(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[Pieza]:
+        """Reels de una plataforma como `Pieza` (degrada a [] si la API falla)."""
+        try:
+            reels = self._fetch_reels(cuenta_id, plat, desde, hasta)
+        except Exception as e:  # noqa: BLE001 -- sin reels (red sin endpoint / API caída): [].
+            log.warning("metricool: reels %s/%s fallaron: %s", plat.value, cuenta_id, e)
+            return []
+        piezas: list[Pieza] = []
+        for reel in reels:
+            pieza = self._pieza_desde_reel(reel, plat, cuenta_id)
+            if pieza is not None and desde <= pieza.publicado <= hasta:
+                piezas.append(pieza)
+        return piezas
+
+    def _pieza_desde_reel(
+        self, reel: dict, plat: Plataforma, cuenta_id: str | None = None
+    ) -> Pieza | None:
+        """Mapea un Reel de Metricool a `Pieza` (mismo contrato que un post; formato='reel').
+
+        Descarta el reel sin reproducciones o sin fecha determinable (mismo criterio que
+        `_pieza_desde_post`: sin fecha real no se ubica en el rango, no se fabrica)."""
+        vis = _entero(_primero(reel, _ALIAS_REEL_VIS, 0))
+        if not vis:
+            return None
+        fecha = _fecha(_primero(reel, _ALIAS_FECHA))
+        if fecha is None:
+            return None
+        inter = _entero(_primero(reel, _ALIAS_REEL_INT, 0))
+        texto = str(_primero(reel, _ALIAS_REEL_TEXTO, ""))
+        return Pieza(
+            id=str(_primero(reel, _ALIAS_REEL_ID, "")),
+            plataforma=plat,
+            titulo=(texto or "(sin texto)")[:120],
+            texto=texto,
+            publicado=fecha,
+            visualizaciones=vis,
+            interacciones=inter,
+            engagement_pct=engagement_pct(inter, vis),
+            url=_primero(reel, _ALIAS_REEL_URL),
+            cuenta=cuenta_id,
+            formato="reel",
+            likes=_a_int_opt(_primero(reel, _ALIAS_REEL_LIKES)),
+            comentarios=_a_int_opt(_primero(reel, _ALIAS_COMENTARIOS)),
+            compartidos=_a_int_opt(_primero(reel, _ALIAS_COMPARTIDOS)),
+            guardados=_a_int_opt(_primero(reel, _ALIAS_GUARDADOS)),
+            video_views=_a_int_opt(_primero(reel, _ALIAS_REEL_VIS)),
+            tiempo_medio_vis_s=_a_int_opt(_primero(reel, _ALIAS_REEL_TIEMPO)),
+        )
 
     @staticmethod
     def _granulares(post: dict) -> dict:

@@ -235,6 +235,68 @@ def test_mejores_piezas_mapea_posts():
     assert all(p.cuenta == "claro_sports" for p in piezas)
 
 
+def _mock_reels(net: str, reels: list[dict]) -> None:
+    """Mockea `/v2/analytics/reels/{net}` con una lista de reels."""
+    respx.get(f"{BASE}/v2/analytics/reels/{net}").mock(
+        return_value=httpx.Response(200, json={"data": reels})
+    )
+
+
+@respx.mock
+def test_mejores_piezas_incluye_reels_de_instagram():
+    """Los Reels viven en `/v2/analytics/reels/{network}` (endpoint APARTE de /posts).
+
+    Sin leerlos, todo el vídeo vertical cross-posteado quedaba invisible (solo se veía en
+    TikTok). Se parsean con su caption (`content`) — que SÍ trae los hashtags — y métricas.
+    """
+    _mock_posts("instagram", [])  # sin posts de feed
+    _mock_reels(
+        "instagram",
+        [
+            {
+                "reelId": "r1",
+                "type": "REELS_VIDEO",
+                "publishedAt": "2026-05-26T10:00:00",
+                "content": "🌎⚽ ¿Vienes a #México por el #Mundial? ... está escondido en #Chihuahua",
+                "views": 10000,
+                "interactions": 800,  # 8.0%
+                "likes": 600,
+                "comments": 50,
+                "shares": 100,
+                "saved": 50,
+                "averageWatchTime": 9,
+                "url": "https://instagram.com/reel/r1",
+            }
+        ],
+    )
+    with httpx.Client() as cli:
+        piezas = _fuente(cli).mejores_piezas("claro_sports", RANGO, 5)
+
+    assert len(piezas) == 1
+    reel = piezas[0]
+    assert reel.id == "r1"
+    assert reel.plataforma == Plataforma.instagram
+    assert reel.formato == "reel"
+    assert reel.visualizaciones == 10000
+    assert reel.engagement_pct == pytest.approx(8.0)
+    # El caption del reel trae los hashtags (lo que /posts no daba para IG/FB).
+    assert "#chihuahua" in reel.texto.lower()
+    assert reel.likes == 600 and reel.comentarios == 50
+    assert reel.url == "https://instagram.com/reel/r1"
+
+
+@respx.mock
+def test_reels_que_fallan_no_rompen_las_piezas():
+    """Si el endpoint de reels falla, las piezas de /posts siguen saliendo (degrada a [])."""
+    _mock_posts("instagram", [_post_ig("p1", 5000, 250)])
+    respx.get(f"{BASE}/v2/analytics/reels/instagram").mock(
+        return_value=httpx.Response(500, json={"error": "boom"})
+    )
+    with httpx.Client() as cli:
+        piezas = _fuente(cli).mejores_piezas("claro_sports", RANGO, 5)
+    assert [p.id for p in piezas] == ["p1"]  # el post sobrevive aunque el reel reviente
+
+
 @respx.mock
 def test_formato_feed_prefix_y_video_views_sin_colision():
     """Vocabulario REAL de Metricool: 'feed_carousel_album'/'feed_image' y que
