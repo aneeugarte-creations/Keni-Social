@@ -307,8 +307,20 @@ async def piezas_listado_async(rango: str, marca: str | None) -> tuple[dict, str
 
 
 def refrescar_combo(rango: str, marca: str | None) -> None:
-    """Recalcula reporte + analisis + piezas + tendencia de UN combo (best-effort)."""
-    for tipo in (TIPO_REPORTE, TIPO_ANALISIS, TIPO_PIEZAS, TIPO_TENDENCIA):
+    """Recalcula reporte + analisis + piezas + tendencia de UN combo (best-effort).
+
+    Para una marca CONCRETA refresca también el listado de piezas (`TIPO_PIEZAS_LISTADO`):
+    es lo que consumen las Campañas (filtran piezas por hashtag sobre ese listado). Sin
+    incluirlo aquí, la primera versión que se cacheaba por lazy-fill se servía para siempre
+    —ni una pieza nueva ni un cambio de forma del payload (p.ej. añadir `texto` y los reels)
+    aparecían jamás—, y la campaña quedaba en cero. Se OMITE para `marca=None` ("todas"):
+    ninguna vista lo pide (las campañas son por-marca) y agregaría TODAS las cuentas, caro e
+    inútil; ese combo se queda en lazy-fill bajo demanda.
+    """
+    tipos = [TIPO_REPORTE, TIPO_ANALISIS, TIPO_PIEZAS, TIPO_TENDENCIA]
+    if _marca_norm(marca):
+        tipos.append(TIPO_PIEZAS_LISTADO)
+    for tipo in tipos:
         try:
             _refrescar(tipo, rango, marca)
         except Exception:  # noqa: BLE001 -- un combo que falla no aborta el barrido

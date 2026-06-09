@@ -59,6 +59,28 @@ def test_refrescar_combo_actualiza_generado_en(entorno, monkeypatch):
     assert entrada["generado_en"] == "2026-05-29T11:00:00"
 
 
+def test_refrescar_combo_marca_concreta_incluye_listado(entorno):
+    """Una marca CONCRETA refresca también el listado de piezas (lo que leen las Campañas).
+
+    Regresión: el listado solo se llenaba por lazy-fill y nunca se refrescaba, así que la
+    primera versión cacheada (sin `texto`/reels tras un deploy) se servía para siempre y la
+    campaña de hashtag quedaba en cero. El daemon debe mantenerlo fresco por marca.
+    """
+    mc.refrescar_combo("semana", "claro_sports")
+    entrada = repos.leer_metricas_cache(mc._clave(mc.TIPO_PIEZAS_LISTADO, "semana", "claro_sports"))
+    assert entrada is not None
+    assert "piezas" in entrada["payload"]
+
+
+def test_refrescar_combo_todas_no_incluye_listado(entorno):
+    """`marca=None` ("todas") NO prewarmea el listado: ninguna vista lo pide y agregaría
+    todas las cuentas. Queda en lazy-fill bajo demanda."""
+    mc.refrescar_combo("semana", None)
+    # El reporte de "todas" sí se refresca; el listado de "todas" no.
+    assert repos.leer_metricas_cache(mc._clave(mc.TIPO_REPORTE, "semana", None)) is not None
+    assert repos.leer_metricas_cache(mc._clave(mc.TIPO_PIEZAS_LISTADO, "semana", None)) is None
+
+
 def test_estado_reporta_generado_en_del_combo(entorno):
     _rep, gen = mc.reporte("mes", "claro_sports")
     est = mc.estado("mes", "claro_sports")
