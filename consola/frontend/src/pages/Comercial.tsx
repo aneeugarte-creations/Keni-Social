@@ -26,7 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { CampaniaComercial } from "@/types";
 
@@ -41,30 +40,17 @@ const RANGOS: { id: string; etiqueta: string }[] = [
 ];
 
 export default function Comercial() {
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
-
-  if (marcaActiva == null) {
-    return (
-      <EstadoVacio
-        icono={Megaphone}
-        titulo="Elige una marca para ver sus campañas"
-        texto="Las campañas pertenecen a una marca concreta. Selecciona una en el switch de la barra superior."
-      />
-    );
-  }
-  return <Panel key={marcaActiva} marca={marcaActiva} nombreMarca={nombreActiva} />;
-}
-
-function Panel({ marca, nombreMarca }: { marca: string; nombreMarca: string | null }) {
   const queryClient = useQueryClient();
   const [rango, setRango] = React.useState("mes");
   const [seleccionada, setSeleccionada] = React.useState<string | null>(null);
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState<CampaniaComercial | null>(null);
 
+  // Las campañas son MULTIMARCA: no se acotan al switch de marca de la barra; se listan
+  // todas. La elección de marcas vive en el diálogo (sobre las marcas de la persona).
   const listaQuery = useQuery({
-    queryKey: [...CLAVE_COMERCIAL, "lista", marca],
-    queryFn: ({ signal }) => api.campanias({ marca }, signal),
+    queryKey: [...CLAVE_COMERCIAL, "lista"],
+    queryFn: ({ signal }) => api.campanias({}, signal),
   });
 
   const campanias = React.useMemo(
@@ -127,8 +113,8 @@ function Panel({ marca, nombreMarca }: { marca: string; nombreMarca: string | nu
       ) : campanias.length === 0 ? (
         <EstadoVacio
           icono={Megaphone}
-          titulo={`${nombreMarca ?? "Esta marca"} aún no tiene campañas`}
-          texto="Crea una campaña con uno o varios hashtags y le daremos seguimiento a las publicaciones que los lleven."
+          titulo="Aún no hay campañas"
+          texto="Crea una campaña con una o varias marcas y sus hashtags; le daremos seguimiento a las publicaciones que los lleven."
           accion={
             <Button onClick={abrirNueva}>
               <Plus className="h-4 w-4" />
@@ -185,6 +171,14 @@ function Panel({ marca, nombreMarca }: { marca: string; nombreMarca: string | nu
 
           {campaniaActual && (
             <div className="flex flex-wrap items-center gap-1.5">
+              {campaniaActual.marcas_nombres.map((nombre) => (
+                <Badge key={nombre} variant="outline">
+                  {nombre}
+                </Badge>
+              ))}
+              {campaniaActual.marcas_nombres.length > 0 && campaniaActual.hashtags.length > 0 && (
+                <span className="mx-1 text-muted-foreground">·</span>
+              )}
               {campaniaActual.hashtags.map((h) => (
                 <Badge key={h} variant="secondary">
                   #{h}

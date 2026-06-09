@@ -401,12 +401,26 @@ async def listar_campanias(request: Request) -> Response:
     )
 
 
+def _leer_marcas(valor: Any) -> tuple[list[str] | None, str | None]:
+    """Acepta una lista de ids de marca (o un string único, retrocompat). Valida allowlist."""
+    if isinstance(valor, str):
+        valor = [valor] if valor else []
+    if not isinstance(valor, list) or not all(isinstance(m, str) for m in valor):
+        return None, "Las marcas deben ser una lista de ids."
+    if not valor:
+        return None, "Elige al menos una marca."
+    if any(m not in _MARCAS_IDS for m in valor):
+        return None, "Marca no permitida."
+    return valor, None
+
+
 async def crear_campania(request: Request) -> Response:
-    """Crea una campaña: `{marca, nombre, hashtags: [...]}`."""
+    """Crea una campaña (multimarca): `{marcas: [...], nombre, hashtags: [...]}`."""
     datos = await leer_json(request)
-    marca = datos.get("marca")
-    if not isinstance(marca, str) or marca not in _MARCAS_IDS:
-        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    # `marcas` (lista) es la forma actual; se acepta `marca` (string) por retrocompat.
+    marcas_ids, error = _leer_marcas(datos.get("marcas", datos.get("marca")))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
     nombre = datos.get("nombre")
     if not isinstance(nombre, str):
         return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
@@ -414,7 +428,7 @@ async def crear_campania(request: Request) -> Response:
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
     try:
-        cam = campanias.crear_campania(marca=marca, nombre=nombre, hashtags=tags)
+        cam = campanias.crear_campania(marcas_ids=marcas_ids, nombre=nombre, hashtags=tags)
     except campanias.CampaniaInvalida as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"campania": cam}, status_code=201)
@@ -428,7 +442,7 @@ async def detalle_campania(request: Request) -> Response:
 
 
 async def actualizar_campania(request: Request) -> Response:
-    """Edición parcial: `{nombre?, hashtags?, activa?}`; 404 si no existe."""
+    """Edición parcial: `{nombre?, marcas?, hashtags?, activa?}`; 404 si no existe."""
     campania_id = request.path_params["campania_id"]
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
@@ -436,6 +450,11 @@ async def actualizar_campania(request: Request) -> Response:
         if not isinstance(datos["nombre"], str):
             return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
         campos["nombre"] = datos["nombre"]
+    if "marcas" in datos:
+        marcas_ids, error = _leer_marcas(datos.get("marcas"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["marcas"] = marcas_ids
     if "hashtags" in datos:
         tags, error = _leer_hashtags(datos.get("hashtags"))
         if error is not None:

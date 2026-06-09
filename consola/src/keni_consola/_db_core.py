@@ -12,6 +12,7 @@ usando `db.<algo>` sin cambios. Acoplamiento hacia abajo: solo `config`/`motor_d
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import threading
 import uuid
@@ -204,16 +205,20 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ON comercial_snapshots (publicacion_id, ts)",
     "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
     "ON comercial_snapshots (publicacion_id)",
-    # Campañas comerciales: agrupan piezas por uno o varios HASHTAGS configurables.
-    # No monitorizan piezas sueltas (eso era `comercial_publicaciones`, retirado de la
-    # UI): definen un filtro (marca + hashtags) y la analítica se computa AL VUELO sobre
-    # el listado de piezas del periodo (`servicio.construir_listado_piezas`), cruzando por
-    # los hashtags presentes en el caption (`Pieza.texto`). `hashtags` es un array JSON de
-    # tags NORMALIZADOS (minúsculas, sin '#'); portable SQLite/Postgres como TEXT.
+    # Campañas comerciales: agrupan piezas por uno o varios HASHTAGS configurables, y
+    # pueden abarcar VARIAS marcas (multimarca). No monitorizan piezas sueltas (eso era
+    # `comercial_publicaciones`, retirado de la UI): definen un filtro (marcas + hashtags) y
+    # la analítica se computa AL VUELO sobre el listado de piezas del periodo
+    # (`servicio.construir_listado_piezas`, por cada marca), cruzando por los hashtags del
+    # caption (`Pieza.texto`). `marcas` y `hashtags` son arrays JSON (ids de marca; tags sin
+    # '#', con su casing); portables SQLite/Postgres como TEXT. La columna `marca` (singular)
+    # es vestigial: queda para que las BDs antiguas conserven su valor durante la migración a
+    # `marcas` (ver `_migrar_columnas_campanias`); el código solo lee/escribe `marcas`.
     """
     CREATE TABLE IF NOT EXISTS comercial_campanias (
         id                   TEXT PRIMARY KEY,
         marca                TEXT NOT NULL DEFAULT '',
+        marcas               TEXT NOT NULL DEFAULT '[]',
         nombre               TEXT NOT NULL DEFAULT '',
         hashtags             TEXT NOT NULL DEFAULT '[]',
         activa               INTEGER NOT NULL DEFAULT 1,
@@ -221,8 +226,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         fecha_actualizacion  TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_comercial_campanias_marca "
-    "ON comercial_campanias (marca)",
     # Histórico de métricas por pieza para TODAS las publicaciones (no solo el módulo
     # comercial): una fila por pieza por refresco del daemon, para análisis temporales
     # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de
@@ -1496,6 +1499,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_contenido(con)
     _migrar_columnas_aprobaciones(con)
     _migrar_columnas_comercial(con)
+    _migrar_columnas_campanias(con)
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
@@ -2475,6 +2479,31 @@ def _migrar_columnas_comercial(con: Any) -> None:
         for columna, tipo in ampliadas:
             if columna not in columnas:
                 con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+def _migrar_columnas_campanias(con: Any) -> None:
+    """Migra `comercial_campanias` de marca ÚNICA a `marcas` (multimarca). Idempotente.
+
+    Añade la columna `marcas` (array JSON) si falta y backfilla desde la `marca` (singular,
+    vestigial) solo las filas aún sin migrar (`marcas = '[]'`). Para BDs nuevas es no-op: la
+    tabla nace ya con `marcas` y sin filas que migrar.
+    """
+    columnas = _columnas_existentes(con, "comercial_campanias")
+    if not columnas:
+        return  # BD virgen: el DDL crea la tabla con `marcas`.
+    if "marcas" not in columnas:
+        con.execute(
+            "ALTER TABLE comercial_campanias ADD COLUMN IF NOT EXISTS marcas TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "marca" in columnas:
+        filas = con.execute(
+            "SELECT id, marca FROM comercial_campanias WHERE marcas = '[]' AND marca <> ''"
+        ).fetchall()
+        for fila in filas:
+            con.execute(
+                "UPDATE comercial_campanias SET marcas = ? WHERE id = ?",
+                (json.dumps([fila["marca"]], ensure_ascii=False), fila["id"]),
+            )
 
 
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta

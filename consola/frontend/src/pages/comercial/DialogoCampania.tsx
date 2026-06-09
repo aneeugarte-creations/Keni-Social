@@ -1,9 +1,9 @@
 /**
- * Diálogo para crear o editar una CAMPAÑA: nombre + hashtags configurables (varios).
+ * Diálogo para crear o editar una CAMPAÑA: marcas (multimarca) + nombre + hashtags.
  *
- * La marca la fija el switch global de la barra superior (`useMarcaActiva`); una campaña
- * pertenece a una marca concreta. Los hashtags se escriben separados por espacios o comas
- * y se previsualizan normalizados (sin '#', en minúsculas) tal como los guardará el backend.
+ * Una campaña puede abarcar VARIAS marcas: se eligen con casillas (de las marcas a las que
+ * la persona tiene acceso). Los hashtags se escriben separados por espacios o comas y se
+ * previsualizan conservando su casing ('#Chihuahua') tal como los guardará el backend.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +29,21 @@ import type { CampaniaComercial } from "@/types";
 
 import { CLAVE_COMERCIAL } from "./claves";
 
-/** Normaliza un texto de hashtags (separados por espacios/comas) a una lista única. */
+/**
+ * Limpia un texto de hashtags (separados por espacios/comas) a una lista única,
+ * CONSERVANDO el casing tal cual se escribió ('#Chihuahua' se guarda '#Chihuahua').
+ * La deduplicación es case-insensitive (no repetir '#Chihuahua' y '#chihuahua').
+ */
 function parsearHashtags(texto: string): string[] {
   const vistos: string[] = [];
+  const claves = new Set<string>();
   for (const bruto of texto.split(/[\s,]+/)) {
-    const tag = bruto.trim().replace(/^#+/, "").toLowerCase();
-    if (tag && !vistos.includes(tag)) vistos.push(tag);
+    const tag = bruto.trim().replace(/^#+/, "");
+    const clave = tag.toLowerCase();
+    if (tag && !claves.has(clave)) {
+      vistos.push(tag);
+      claves.add(clave);
+    }
   }
   return vistos;
 }
@@ -49,27 +59,33 @@ export function DialogoCampania({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva, marcasParaSwitch } = useMarcaActiva();
   const editando = campania != null;
 
   const [nombre, setNombre] = React.useState("");
   const [hashtagsTexto, setHashtagsTexto] = React.useState("");
+  const [marcasSel, setMarcasSel] = React.useState<string[]>([]);
 
-  // Al abrir, sembrar el formulario con los datos de la campaña (edición) o vacío (alta).
+  // Al abrir, sembrar el formulario: en edición, con los datos de la campaña; en alta,
+  // preseleccionar la marca activa (si hay una concreta) como atajo.
   React.useEffect(() => {
     if (!abierto) return;
     setNombre(campania?.nombre ?? "");
     setHashtagsTexto(campania ? campania.hashtags.map((h) => `#${h}`).join(" ") : "");
-  }, [abierto, campania]);
+    setMarcasSel(campania ? campania.marcas : marcaActiva ? [marcaActiva] : []);
+  }, [abierto, campania, marcaActiva]);
 
   const hashtags = parsearHashtags(hashtagsTexto);
 
+  const alternarMarca = (id: string, marcada: boolean) =>
+    setMarcasSel((prev) => (marcada ? [...prev, id] : prev.filter((m) => m !== id)));
+
   const guardar = useMutation({
     mutationFn: () => {
-      if (editando) {
-        return api.actualizarCampania(campania.id, { nombre: nombre.trim(), hashtags });
-      }
-      return api.crearCampania({ marca: marcaActiva ?? "", nombre: nombre.trim(), hashtags });
+      const cuerpo = { marcas: marcasSel, nombre: nombre.trim(), hashtags };
+      return editando
+        ? api.actualizarCampania(campania.id, cuerpo)
+        : api.crearCampania(cuerpo);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_COMERCIAL });
@@ -80,7 +96,7 @@ export function DialogoCampania({
   });
 
   const puedeGuardar =
-    (editando || marcaActiva != null) &&
+    marcasSel.length > 0 &&
     Boolean(nombre.trim()) &&
     hashtags.length > 0 &&
     !guardar.isPending;
@@ -91,51 +107,69 @@ export function DialogoCampania({
         <DialogHeader>
           <DialogTitle>{editando ? "Editar campaña" : "Nueva campaña"}</DialogTitle>
           <DialogDescription>
-            {editando
-              ? "Cambia el nombre o los hashtags que agrupan las piezas."
-              : `Agrupa las piezas de ${nombreActiva ?? "la marca"} por uno o varios hashtags.`}
+            Agrupa por hashtags las piezas de una o varias marcas.
           </DialogDescription>
         </DialogHeader>
 
-        {!editando && marcaActiva == null ? (
-          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            Elige una marca concreta en la barra superior para crear una campaña.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="campania-nombre">Nombre</Label>
-              <Input
-                id="campania-nombre"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Campaña Chihuahua"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campania-hashtags">Hashtags</Label>
-              <Input
-                id="campania-hashtags"
-                value={hashtagsTexto}
-                onChange={(e) => setHashtagsTexto(e.target.value)}
-                placeholder="#Chihuahua #Turismo"
-              />
-              <p className="text-xs text-muted-foreground">
-                Separa varios con espacios o comas. Se buscan en el texto de cada publicación.
-              </p>
-              {hashtags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {hashtags.map((h) => (
-                    <Badge key={h} variant="outline">
-                      #{h}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="campania-nombre">Nombre</Label>
+            <Input
+              id="campania-nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Campaña Chihuahua"
+              autoFocus
+            />
           </div>
-        )}
+
+          <div className="space-y-1.5">
+            <Label>Marcas</Label>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {marcasParaSwitch.map((m) => {
+                const marcada = marcasSel.includes(m.id);
+                return (
+                  <label
+                    key={m.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    <Checkbox
+                      checked={marcada}
+                      onCheckedChange={(v) => alternarMarca(m.id, v)}
+                      aria-label={m.nombre}
+                    />
+                    <span className="truncate">{m.nombre}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {marcasSel.length === 0 && (
+              <p className="text-xs text-muted-foreground">Elige al menos una marca.</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="campania-hashtags">Hashtags</Label>
+            <Input
+              id="campania-hashtags"
+              value={hashtagsTexto}
+              onChange={(e) => setHashtagsTexto(e.target.value)}
+              placeholder="#Chihuahua #Turismo"
+            />
+            <p className="text-xs text-muted-foreground">
+              Separa varios con espacios o comas. Se buscan en el texto de cada publicación.
+            </p>
+            {hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {hashtags.map((h) => (
+                  <Badge key={h} variant="outline">
+                    #{h}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={onCerrar}>

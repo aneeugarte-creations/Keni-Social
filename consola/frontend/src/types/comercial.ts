@@ -132,10 +132,12 @@ export interface RespuestaReporteComercial {
 
 export interface CampaniaComercial {
   id: string;
-  marca: string;
-  marca_nombre: string;
+  /** Marcas que abarca la campaña (ids canónicos). Multimarca. */
+  marcas: string[];
+  /** Nombres legibles de `marcas`, en el mismo orden. */
+  marcas_nombres: string[];
   nombre: string;
-  /** Hashtags normalizados (sin '#', en minúsculas). */
+  /** Hashtags tal como se escribieron (sin '#', conservando casing). */
   hashtags: string[];
   activa: boolean;
   fecha_creacion: string;
@@ -202,13 +204,14 @@ export interface AnaliticaCampania {
 }
 
 export interface CuerpoCrearCampania {
-  marca: string;
+  marcas: string[];
   nombre: string;
   hashtags: string[];
 }
 
 export interface CuerpoActualizarCampania {
   nombre?: string;
+  marcas?: string[];
   hashtags?: string[];
   activa?: boolean;
 }

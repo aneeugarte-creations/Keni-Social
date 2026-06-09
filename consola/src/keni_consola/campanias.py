@@ -1,11 +1,12 @@
 """Apartado CAMPAÑAS: agrupa piezas por uno o varios HASHTAGS configurables.
 
-Una campaña define un FILTRO (marca + hashtags) sobre las piezas YA publicadas; su
-analítica —KPIs (visualizaciones, interacciones, engagement), tendencia diaria, tabla de
-piezas del periodo y comparativa contra el periodo anterior— se computa AL VUELO sobre el
-listado del periodo (`servicio.construir_listado_piezas`), cruzando por los hashtags
-presentes en el caption de cada pieza (`Pieza.texto`, el caption ÍNTEGRO: los hashtags
-suelen ir al final y se perderían en el `titulo` truncado).
+Una campaña define un FILTRO (una o varias MARCAS + hashtags) sobre las piezas YA
+publicadas; su analítica —KPIs (visualizaciones, interacciones, engagement), tendencia
+diaria, tabla de piezas del periodo y comparativa contra el periodo anterior— se computa AL
+VUELO sobre el listado del periodo de cada marca (`servicio.construir_listado_piezas`),
+cruzando por los hashtags presentes en el caption de cada pieza (`Pieza.texto`, el caption
+ÍNTEGRO: los hashtags suelen ir al final y se perderían en el `titulo` truncado). Las
+campañas son MULTIMARCA: agregan las piezas de todas sus marcas.
 
 No monitoriza piezas sueltas ni guarda snapshots propios (eso era el viejo apartado de
 publicaciones comerciales, retirado): reúsa lo que el dashboard de Métricas ya descarga.
@@ -39,57 +40,77 @@ class CampaniaInvalida(ValueError):
 
 
 def normalizar_hashtag(tag: str) -> str:
-    """Normaliza un hashtag para comparar: sin '#' inicial, sin espacios, en minúsculas.
+    """Limpia un hashtag CONSERVANDO su casing: sin '#' inicial ni espacios.
 
-    No quita acentos a propósito: '#Mañana' y '#Manana' son hashtags distintos en las
-    redes. Devuelve "" si tras limpiar no queda nada (lo descarta el llamante).
+    Se preserva el case tal cual lo escribió la persona ('#Chihuahua' se guarda y se
+    muestra '#Chihuahua', no '#chihuahua'): el casing es decisión editorial. El MATCHING
+    contra los posts sí es case-insensitive (en las redes los hashtags lo son); eso lo
+    resuelve la comparación, no el almacenamiento. No quita acentos a propósito: '#Mañana'
+    y '#Manana' son hashtags distintos. Devuelve "" si tras limpiar no queda nada.
     """
-    limpio = tag.strip().lstrip("#").strip().lower()
-    return limpio
+    return tag.strip().lstrip("#").strip()
 
 
 def _normalizar_lista(tags: list[str]) -> list[str]:
-    """Normaliza y deduplica una lista de hashtags, preservando el orden de entrada."""
+    """Limpia y deduplica una lista de hashtags, preservando orden y casing de entrada.
+
+    La deduplicación es case-insensitive (no se guardan '#Chihuahua' y '#chihuahua' a la
+    vez), pero conserva el casing de la PRIMERA aparición.
+    """
     vistos: list[str] = []
+    claves: set[str] = set()
     for t in tags or []:
         n = normalizar_hashtag(str(t))
-        if n and n not in vistos:
+        if n and n.lower() not in claves:
             vistos.append(n)
+            claves.add(n.lower())
     return vistos
 
 
 def hashtags_de(texto: str) -> set[str]:
-    """Conjunto de hashtags NORMALIZADOS presentes en un texto (caption)."""
+    """Conjunto de hashtags de un texto, en MINÚSCULAS (para comparar sin importar case)."""
     return {m.lower() for m in _PAT_HASHTAG.findall(texto or "")}
 
 
 def _enriquecer(cam: dict[str, Any]) -> dict[str, Any]:
-    """Añade el nombre legible de la marca a un dict de campaña."""
+    """Añade los nombres legibles de las marcas de la campaña."""
     return {
         **cam,
-        "marca_nombre": marcas.etiqueta_de(cam["marca"]) if cam.get("marca") else "",
+        "marcas_nombres": [marcas.etiqueta_de(m) for m in cam.get("marcas", [])],
     }
+
+
+def _validar_marcas(marcas_ids: list[str]) -> list[str]:
+    """Deduplica (preservando orden) y valida que cada marca exista. >=1 obligatoria."""
+    vistas: list[str] = []
+    for m in marcas_ids or []:
+        if not isinstance(m, str) or not marcas.es_marca(m):
+            raise CampaniaInvalida(f"Marca desconocida: {m!r}.")
+        if m not in vistas:
+            vistas.append(m)
+    if not vistas:
+        raise CampaniaInvalida("La campaña necesita al menos una marca.")
+    return vistas
 
 
 # --- CRUD de configuración ----------------------------------------------------
 
 
-def crear_campania(*, marca: str, nombre: str, hashtags: list[str]) -> dict[str, Any]:
-    """Crea una campaña validando marca, nombre y al menos un hashtag."""
-    if not marcas.es_marca(marca):
-        raise CampaniaInvalida(f"Marca desconocida: {marca!r}.")
+def crear_campania(*, marcas_ids: list[str], nombre: str, hashtags: list[str]) -> dict[str, Any]:
+    """Crea una campaña (multimarca) validando marcas, nombre y al menos un hashtag."""
+    marcas_validas = _validar_marcas(marcas_ids)
     nombre = (nombre or "").strip()
     if not nombre:
         raise CampaniaInvalida("La campaña necesita un nombre.")
     tags = _normalizar_lista(hashtags)
     if not tags:
         raise CampaniaInvalida("La campaña necesita al menos un hashtag.")
-    cam = repos.crear_campania_comercial(marca=marca, nombre=nombre, hashtags=tags)
+    cam = repos.crear_campania_comercial(marcas=marcas_validas, nombre=nombre, hashtags=tags)
     return _enriquecer(cam)
 
 
 def listar_campanias(marca: str | None = None) -> list[dict[str, Any]]:
-    """Campañas (más recientes primero), opcionalmente filtradas por marca."""
+    """Campañas (más recientes primero); `marca` filtra a las que la INCLUYEN."""
     return [_enriquecer(c) for c in repos.listar_campanias_comerciales(marca=marca)]
 
 
@@ -100,13 +121,15 @@ def obtener_campania(campania_id: str) -> dict[str, Any] | None:
 
 
 def actualizar_campania(campania_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    """Edita parcialmente una campaña (nombre/hashtags/activa); None si el id no existe."""
+    """Edita parcialmente una campaña (nombre/marcas/hashtags/activa); None si no existe."""
     cambios: dict[str, Any] = {}
     if "nombre" in campos:
         nombre = (campos["nombre"] or "").strip()
         if not nombre:
             raise CampaniaInvalida("La campaña necesita un nombre.")
         cambios["nombre"] = nombre
+    if "marcas" in campos:
+        cambios["marcas"] = _validar_marcas(campos["marcas"])
     if "hashtags" in campos:
         tags = _normalizar_lista(campos["hashtags"])
         if not tags:
@@ -126,18 +149,22 @@ def borrar_campania(campania_id: str) -> bool:
 # --- Analítica al vuelo -------------------------------------------------------
 
 
-def _piezas_filtradas(id_metricas: str, rango: str, tags: set[str]) -> list[dict[str, Any]]:
-    """Piezas del periodo cuyo caption contiene alguno de los hashtags de la campaña.
+def _piezas_filtradas(ids_metricas: list[str], rango: str, tags: set[str]) -> list[dict[str, Any]]:
+    """Piezas del periodo (de TODAS las marcas de la campaña) cuyo caption lleva algún hashtag.
 
-    Degrada a `[]` si la fuente no puede listar (config incompleto / rango raro), para que
-    la vista nunca reviente.
+    Recorre cada `id_metricas` (una marca) y une sus piezas. Degrada por-marca: si una
+    fuente no puede listar (config incompleto / rango raro), esa marca aporta 0 y la vista
+    nunca revienta.
     """
-    try:
-        piezas = servicio.construir_listado_piezas(rango, id_metricas)
-    except Exception:  # noqa: BLE001 -- sin fuente/cuenta válida: subconjunto vacío
-        _log.exception("campanias: no se pudo listar piezas (marca=%s rango=%s).", id_metricas, rango)
-        return []
-    return [p for p in piezas if tags & hashtags_de(p.get("texto", ""))]
+    piezas: list[dict[str, Any]] = []
+    for idm in ids_metricas:
+        try:
+            lista = servicio.construir_listado_piezas(rango, idm)
+        except Exception:  # noqa: BLE001 -- sin fuente/cuenta válida: esa marca aporta 0
+            _log.exception("campanias: no se pudo listar piezas (marca=%s rango=%s).", idm, rango)
+            continue
+        piezas.extend(p for p in lista if tags & hashtags_de(p.get("texto", "")))
+    return piezas
 
 
 def _agregar(piezas: list[dict[str, Any]]) -> dict[str, Any]:
@@ -233,12 +260,15 @@ def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[str, An
     cam = obtener_campania(campania_id)
     if cam is None:
         return None
-    tags = set(cam["hashtags"])
-    id_metricas = marcas.id_metricas_de(cam["marca"])
+    # Matching case-insensitive: los hashtags se guardan con su casing, pero se comparan
+    # en minúsculas (en las redes '#Chihuahua' y '#chihuahua' son el mismo hashtag).
+    tags = {h.lower() for h in cam["hashtags"]}
+    # Una marca puede no tener id_metricas (no conectada): se omite del agregado.
+    ids_metricas = [m for m in (marcas.id_metricas_de(x) for x in cam["marcas"]) if m]
     desde, hasta, _dias = servicio.resolver_rango(rango)
 
-    piezas = _piezas_filtradas(id_metricas, rango, tags)
-    piezas_prev = _piezas_filtradas(id_metricas, _rango_anterior(rango), tags)
+    piezas = _piezas_filtradas(ids_metricas, rango, tags)
+    piezas_prev = _piezas_filtradas(ids_metricas, _rango_anterior(rango), tags)
     actual = _agregar(piezas)
     anterior = _agregar(piezas_prev)
 

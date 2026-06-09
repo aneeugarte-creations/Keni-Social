@@ -102,10 +102,10 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 
 
 def crear_campania_comercial(
-    *, marca: str, nombre: str, hashtags: list[str], activa: bool = True
+    *, marcas: list[str], nombre: str, hashtags: list[str], activa: bool = True
 ) -> dict[str, Any]:
     return db.crear_campania_comercial(
-        marca=marca, nombre=nombre, hashtags=hashtags, activa=activa
+        marcas=marcas, nombre=nombre, hashtags=hashtags, activa=activa
     )
 
 

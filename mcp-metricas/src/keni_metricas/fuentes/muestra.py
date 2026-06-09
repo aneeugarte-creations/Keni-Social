@@ -242,32 +242,6 @@ _TITULOS: dict[str, list[str]] = {
     ],
 }
 
-# Hashtags genéricos por tema (tropicalización MX): el caption sintético los
-# añade al final del título para parecerse a un post real. El detector de
-# campañas (`hashtags_de`) los lee desde `Pieza.texto`.
-_HASHTAGS_TEMA: dict[str, list[str]] = {
-    "deportes": ["#Deportes", "#Futbol", "#ClaroSports", "#MX"],
-    "noticias": ["#Noticias", "#UnoTV", "#MX", "#CDMX"],
-    "gaming": ["#Gaming", "#Esports", "#MX"],
-    "podcast": ["#Podcast", "#MX"],
-    "social": ["#Comunidad", "#MX"],
-}
-
-
-def _texto_muestra(tema: str, idx: int, titulo: str) -> str:
-    """Caption sintético = título + hashtags del tema (al FINAL, como en la vida real).
-
-    Cada ~28ª pieza añade `#Chihuahua` de forma DETERMINISTA: así la campaña de
-    demo (hashtag #Chihuahua) cae en ~5-10 piezas al mes y la vista de campañas
-    se ve poblada sin datos reales. Sin esto, en modo muestra no hay hashtags que
-    detectar y toda campaña saldría vacía.
-    """
-    tags = list(_HASHTAGS_TEMA.get(tema, ["#MX"]))
-    if idx % 28 == 3:
-        tags.append("#Chihuahua")
-    return f"{titulo} " + " ".join(tags)
-
-
 _URL_BASE = {
     Plataforma.facebook: "https://facebook.com/{cuenta}/posts/{pid}",
     Plataforma.instagram: "https://instagram.com/p/{pid}",
@@ -362,7 +336,6 @@ def _pieza(
     dias: int,
     desde: date,
     titulo: str,
-    tema: str,
 ) -> Pieza:
     """Construye una pieza sembrada y determinista para (cuenta, rango, plataforma, idx).
 
@@ -383,7 +356,6 @@ def _pieza(
         id=f"p_{pid}",
         plataforma=plat,
         titulo=titulo,
-        texto=_texto_muestra(tema, idx, titulo),
         publicado=dia,
         visualizaciones=vistas,
         interacciones=inter,
@@ -504,7 +476,6 @@ class FuenteMuestra:
                 dias,
                 desde,
                 titulos[i % len(titulos)],
-                tema,
             )
             # El pool sintético se acota a un máximo razonable: el llamante de stats pide
             # n enorme ("todas"), pero generar cientos de miles de piezas falsas no aporta
@@ -646,7 +617,7 @@ class FuenteMuestra:
                 resultado[plat] = []
                 continue
             pool = [
-                _pieza(cuenta_id, rango, plat, i, base_mes, dias, desde, titulos[i % len(titulos)], tema)
+                _pieza(cuenta_id, rango, plat, i, base_mes, dias, desde, titulos[i % len(titulos)])
                 for i in range(max(n, 6))
             ]
             pool.sort(key=lambda p: p.visualizaciones + p.interacciones, reverse=True)

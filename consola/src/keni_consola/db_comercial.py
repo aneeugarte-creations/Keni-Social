@@ -317,15 +317,15 @@ def registrar_snapshot_comercial(
 # Campañas comerciales (agrupan piezas por hashtag(s) configurables)           #
 # --------------------------------------------------------------------------- #
 #
-# Una campaña no monitoriza piezas sueltas: define un FILTRO (marca + lista de
-# hashtags) y su analítica se computa al vuelo sobre el listado de piezas del periodo,
-# cruzando por los hashtags del caption. `hashtags` se persiste como array JSON de tags
-# NORMALIZADOS (minúsculas, sin '#'); la normalización/validación la hace la capa de
-# negocio (`campanias.py`), no la DB.
+# Una campaña no monitoriza piezas sueltas: define un FILTRO (marcas + lista de hashtags) y
+# su analítica se computa al vuelo sobre el listado de piezas del periodo (por cada marca),
+# cruzando por los hashtags del caption. `marcas` (ids de marca) y `hashtags` (tags sin '#',
+# con su casing) se persisten como arrays JSON; la normalización/validación la hace la capa
+# de negocio (`campanias.py`), no la DB. Las campañas son MULTIMARCA.
 
 _COLS_CAMPANIA = (
     "id",
-    "marca",
+    "marcas",
     "nombre",
     "hashtags",
     "activa",
@@ -333,33 +333,39 @@ _COLS_CAMPANIA = (
     "fecha_actualizacion",
 )
 _SELECT_CAMPANIA = f"SELECT {', '.join(_COLS_CAMPANIA)} FROM comercial_campanias"
-_CAMPOS_EDITABLES_CAMPANIA = ("nombre", "hashtags", "activa")
+_CAMPOS_EDITABLES_CAMPANIA = ("nombre", "marcas", "hashtags", "activa")
+
+
+def _lista_json(valor: Any) -> list[str]:
+    """Parsea un array JSON de strings (defensivo: lista vacía si no es válido)."""
+    try:
+        datos = json.loads(valor or "[]")
+    except (ValueError, TypeError):
+        return []
+    return [str(x) for x in datos] if isinstance(datos, list) else []
 
 
 def _fila_a_campania(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `comercial_campanias` en dict (hashtags como lista, activa bool)."""
+    """Convierte una fila en dict (marcas/hashtags como listas, activa bool)."""
     cam = {col: fila[col] for col in _COLS_CAMPANIA}
-    try:
-        tags = json.loads(fila["hashtags"] or "[]")
-    except (ValueError, TypeError):
-        tags = []
-    cam["hashtags"] = [str(t) for t in tags] if isinstance(tags, list) else []
+    cam["marcas"] = _lista_json(fila["marcas"])
+    cam["hashtags"] = _lista_json(fila["hashtags"])
     cam["activa"] = bool(fila["activa"])
     return cam
 
 
 def crear_campania_comercial(
     *,
-    marca: str,
+    marcas: list[str],
     nombre: str,
     hashtags: list[str],
     activa: bool = True,
 ) -> dict[str, Any]:
-    """Inserta una campaña comercial y la devuelve. NO valida (lo hace `campanias.py`)."""
+    """Inserta una campaña comercial (multimarca) y la devuelve. NO valida (lo hace `campanias.py`)."""
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
-        "marca": marca,
+        "marcas": json.dumps(list(marcas), ensure_ascii=False),
         "nombre": nombre,
         "hashtags": json.dumps(list(hashtags), ensure_ascii=False),
         "activa": 1 if activa else 0,
@@ -381,19 +387,21 @@ def crear_campania_comercial(
 
 
 def listar_campanias_comerciales(marca: str | None = None) -> list[dict[str, Any]]:
-    """Campañas comerciales (más recientes primero), opcionalmente filtradas por marca."""
-    sql = _SELECT_CAMPANIA
-    params: list[Any] = []
-    if marca:
-        sql += " WHERE marca = ?"
-        params.append(marca)
-    sql += " ORDER BY fecha_creacion DESC, id DESC"
+    """Campañas comerciales (más recientes primero).
+
+    `marca` (opcional) filtra a las campañas que INCLUYEN esa marca. Como `marcas` es un
+    array JSON, el filtro se hace en Python tras leer (el volumen de campañas es pequeño).
+    """
+    sql = f"{_SELECT_CAMPANIA} ORDER BY fecha_creacion DESC, id DESC"
     con = _conectar()
     try:
-        filas = con.execute(sql, tuple(params)).fetchall()
+        filas = con.execute(sql).fetchall()
     finally:
         con.close()
-    return [_fila_a_campania(f) for f in filas]
+    cams = [_fila_a_campania(f) for f in filas]
+    if marca:
+        cams = [c for c in cams if marca in c["marcas"]]
+    return cams
 
 
 def obtener_campania_comercial(campania_id: str) -> dict[str, Any] | None:
@@ -413,12 +421,13 @@ def actualizar_campania_comercial(
 ) -> dict[str, Any] | None:
     """Edita parcialmente una campaña; None si el id no existe.
 
-    Solo toca `nombre`/`hashtags`/`activa`. `hashtags` (si viene) se serializa a JSON;
-    `activa` a 0/1. NO valida (lo hace `campanias.py`).
+    Solo toca `nombre`/`marcas`/`hashtags`/`activa`. `marcas`/`hashtags` (si vienen) se
+    serializan a JSON; `activa` a 0/1. NO valida (lo hace `campanias.py`).
     """
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CAMPANIA}
-    if "hashtags" in cambios:
-        cambios["hashtags"] = json.dumps(list(cambios["hashtags"] or []), ensure_ascii=False)
+    for clave in ("marcas", "hashtags"):
+        if clave in cambios:
+            cambios[clave] = json.dumps(list(cambios[clave] or []), ensure_ascii=False)
     if "activa" in cambios:
         cambios["activa"] = 1 if cambios["activa"] else 0
     if not cambios:
