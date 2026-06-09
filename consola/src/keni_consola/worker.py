@@ -288,11 +288,20 @@ _MARGEN_TERMINAL_S = 60
 
 
 def _esperar_terminal(gen_id: str) -> None:
-    """Espera a que el registro `gen_id` alcance un estado terminal (no `ejecutando`)."""
+    """Espera a que el registro `gen_id` alcance un estado terminal (no `ejecutando`).
+
+    Si el registro DESAPARECE (obtener -> None) tambien dejamos de esperar: no queda nada
+    que vigilar, y seguir sondeando hasta el timeout retiene la entrada de `_JOBS_EN_CURSO`
+    durante minutos (en la suite, el TRUNCATE entre tests borra la fila y ese hilo fugado
+    contaminaba el siguiente test del pool con un job fantasma).
+    """
     limite = time.monotonic() + config.claude_timeout() + _MARGEN_TERMINAL_S
     while time.monotonic() < limite:
         g = generaciones.obtener(gen_id)
-        if g is not None and g["estado"] != generaciones.ESTADO_EJECUTANDO:
+        if g is None:
+            _log.warning("worker: la generacion %s desaparecio del registro; dejo de esperar", gen_id)
+            return
+        if g["estado"] != generaciones.ESTADO_EJECUTANDO:
             return
         time.sleep(0.2)
     _log.warning("worker: el job de la generacion %s no alcanzo estado terminal a tiempo", gen_id)

@@ -617,6 +617,12 @@ def test_cancelacion_cross_proceso_mata_el_arbol(entorno, monkeypatch):
     assert not _vivo(pids["hijo"]), "cancelar debio matar el arbol entero (incluido el hijo)"
     g = generaciones.obtener(gen["id"])
     assert g["motivo"] == generaciones.MOTIVO_CANCELADO
+    # Join determinista: que `procesar_job` termine (y desregistre su entrada de
+    # `_JOBS_EN_CURSO`) ANTES de acabar el test; sin esto el hilo daemon sobrevivia unos
+    # instantes, el TRUNCATE le borraba la generacion y quedaba como job fantasma del
+    # siguiente test (`assert 4 == 3` en el pool).
+    hilo.join(timeout=10)
+    assert not hilo.is_alive(), "procesar_job no termino: fugaria un job en curso al siguiente test"
 
 
 @pytest.mark.timeout(20)
@@ -708,6 +714,11 @@ def test_reinicio_back_no_mata_job_en_vuelo(entorno, monkeypatch):
 
     # Y el job termina por su cuenta, sin perderse.
     assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
+    # Join determinista (misma razon que en el test de cancelacion cross-proceso): que el
+    # hilo desregistre su job de `_JOBS_EN_CURSO` antes de acabar, para no contaminar el
+    # siguiente test con un job fantasma.
+    hilo.join(timeout=10)
+    assert not hilo.is_alive(), "procesar_job no termino: fugaria un job en curso al siguiente test"
 
 
 def test_spec_no_se_puede_encolar_sin_spec(entorno):

@@ -102,16 +102,17 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   });
 
   it("muestra el icono de formato «Foto» para una pieza con formato foto (3 redes)", () => {
-    // El formato se muestra como ICONO sobre la imagen (con `title`), no como texto.
+    // El formato va DENTRO del distintivo de cabecera (DistintivoRed): un solo `title`
+    // combinado "Red · Formato", iconos pelados sin texto.
     renderPost(pub({ formato: "foto" }));
-    expect(screen.getByTitle("Foto")).toBeInTheDocument();
-    expect(screen.queryByTitle("Video")).not.toBeInTheDocument();
+    expect(screen.getByTitle("X · Foto")).toBeInTheDocument();
+    expect(screen.queryByTitle(/· Video$/)).not.toBeInTheDocument();
   });
 
   it("muestra el icono de formato «Video» para una pieza con formato video (5 redes)", () => {
     renderPost(pub({ formato: "video" }));
-    expect(screen.getByTitle("Video")).toBeInTheDocument();
-    expect(screen.queryByTitle("Foto")).not.toBeInTheDocument();
+    expect(screen.getByTitle("X · Video")).toBeInTheDocument();
+    expect(screen.queryByTitle(/· Foto$/)).not.toBeInTheDocument();
   });
 
   it("pieza posteada por una persona muestra su nombre, no «IA»", () => {
