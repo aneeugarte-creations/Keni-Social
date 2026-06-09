@@ -733,6 +733,7 @@ class FuenteMetricool:
             id=str(_primero(post, _ALIAS_ID, "")),
             plataforma=plat,
             titulo=(str(_primero(post, _ALIAS_TEXTO, "(sin texto)")))[:120],
+            texto=str(_primero(post, _ALIAS_TEXTO, "")),
             publicado=fecha,
             visualizaciones=vis,
             interacciones=inter,

@@ -313,6 +313,7 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
             "id": p.id,
             "red": p.plataforma.value,
             "titulo": p.titulo,
+            "texto": p.texto,
             "publicado": p.publicado.isoformat(),
             "visualizaciones": p.visualizaciones,
             "interacciones": p.interacciones,

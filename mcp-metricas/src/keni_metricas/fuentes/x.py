@@ -94,6 +94,7 @@ class AdaptadorX(AdaptadorBase):
                     id=str(t.get("id", "")),
                     plataforma=self.plataforma,
                     titulo=(t.get("text") or "")[:120],
+                    texto=str(t.get("text") or ""),
                     publicado=date.fromisoformat(fecha) if fecha else hasta,
                     visualizaciones=vis,
                     interacciones=inter,

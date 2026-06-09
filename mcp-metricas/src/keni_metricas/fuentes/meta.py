@@ -152,6 +152,7 @@ class AdaptadorMeta(AdaptadorBase):
                         id=str(it.get("id", "")),
                         plataforma=self.plataforma,
                         titulo=(it.get("message") or it.get("caption") or "(sin texto)")[:120],
+                        texto=str(it.get("message") or it.get("caption") or ""),
                         publicado=date.fromisoformat(fecha) if fecha else hasta,
                         visualizaciones=vis,
                         interacciones=inter,

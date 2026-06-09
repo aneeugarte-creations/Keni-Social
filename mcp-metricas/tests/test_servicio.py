@@ -139,6 +139,23 @@ def test_instantanea_config_propaga_config_invalida(muestra, monkeypatch):
         servicio.instantanea_config()
 
 
+def test_listado_piezas_trae_texto_completo(muestra):
+    # El listado expone `texto` (caption completo) además del `titulo` corto: es el
+    # insumo del detector de hashtags de campaña. La muestra siempre lo rellena.
+    piezas = servicio.construir_listado_piezas("mes")
+    assert piezas, "la muestra debe emitir piezas"
+    assert all("texto" in p for p in piezas)
+    assert any("#" in p["texto"] for p in piezas)
+
+
+def test_listado_piezas_muestra_inyecta_hashtag_chihuahua(muestra):
+    # La fuente de muestra siembra #Chihuahua de forma determinista para que la
+    # campaña de demo tenga piezas; sin esto la vista de campañas saldría vacía.
+    piezas = servicio.construir_listado_piezas("mes")
+    con_chihuahua = [p for p in piezas if "#chihuahua" in p["texto"].lower()]
+    assert con_chihuahua, "la muestra debe sembrar al menos una pieza con #Chihuahua"
+
+
 def test_excepciones_reexportadas_son_las_del_dominio():
     # La Consola captura estas desde la fachada; deben ser las clases reales.
     from keni_metricas.config import ConfigInvalida as RealConfigInvalida

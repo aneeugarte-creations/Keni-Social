@@ -112,6 +112,7 @@ class AdaptadorYouTube(AdaptadorBase):
                     id=vid,
                     plataforma=self.plataforma,
                     titulo=titulos.get(vid, vid),
+                    texto=titulos.get(vid, ""),
                     publicado=hasta,
                     visualizaciones=vis,
                     interacciones=inter,

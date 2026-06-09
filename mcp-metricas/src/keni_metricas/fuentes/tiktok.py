@@ -123,6 +123,7 @@ class AdaptadorTikTok(AdaptadorBase):
                     id=vid,
                     plataforma=self.plataforma,
                     titulo=(v.get("title") or "(sin titulo)")[:120],
+                    texto=str(v.get("title") or ""),
                     publicado=pub,
                     visualizaciones=vis,
                     interacciones=inter,

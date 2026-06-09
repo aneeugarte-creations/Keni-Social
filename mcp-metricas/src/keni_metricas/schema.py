@@ -195,6 +195,12 @@ class Pieza(BaseModel):
     clics_enlace: int | None = None
     # formato normalizado: 'reel'|'foto'|'carrusel'|'video'|'link'|'texto'|None.
     formato: str | None = None
+    # texto COMPLETO del post (caption sin truncar). `titulo` es la etiqueta corta
+    # (primeros ~120 chars) para pintar; `texto` conserva el caption íntegro para
+    # análisis que necesitan el cuerpo entero —p.ej. detectar hashtags de campaña,
+    # que suelen ir al FINAL del caption y se perderían en el truncado de `titulo`.
+    # OPCIONAL y retrocompatible: "" cuando la fuente no expone el cuerpo.
+    texto: str = ""
 
 
 class MetricaPieza(BaseModel):
