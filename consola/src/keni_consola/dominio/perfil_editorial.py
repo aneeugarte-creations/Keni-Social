@@ -185,13 +185,22 @@ def palabras(marca: str | None) -> frozenset[str]:
 
 
 def refrescar_si_corresponde(
-    marca: str, *, ttl_horas: int, ahora: datetime | None = None, ejecutor: Ejecutor | None = None
+    marca: str,
+    *,
+    ttl_horas: int,
+    ahora: datetime | None = None,
+    ejecutor: Ejecutor | None = None,
+    al_refrescar: Callable[[str, list[str]], None] | None = None,
 ) -> frozenset[str]:
     """Refresca el perfil de `marca` si el cache falta, caducó (TTL) o cambió la editorial (hash).
 
     Si el cache está fresco (mismo hash y dentro del TTL) NO llama a Haiku. Si la marca no tiene
     editorial, no hace nada. Best-effort: ante fallo conserva el cache previo. Devuelve las
     keywords vigentes tras el (posible) refresco.
+
+    `al_refrescar(marca, keywords)`: callback OPCIONAL que se invoca SOLO cuando Haiku refrescó de
+    verdad el perfil (no en aciertos de cache). El daemon lo usa para registrar la actividad IA del
+    encaje editorial; un fallo del callback no rompe el refresco (es observabilidad).
     """
     texto = _texto_editorial(marca)
     if not texto:
@@ -225,6 +234,11 @@ def refrescar_si_corresponde(
     cache[marca] = {"keywords": kws, "hash": h, "generado_en": ref.isoformat()}
     _guardar(cache)
     _log.info("perfil_editorial(%s): perfil refrescado (%d keywords).", marca, len(kws))
+    if al_refrescar is not None:
+        try:
+            al_refrescar(marca, kws)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("perfil_editorial(%s): fallo en al_refrescar.", marca, exc_info=True)
     return frozenset(kws)
 
 

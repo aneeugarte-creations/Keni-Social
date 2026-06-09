@@ -34,7 +34,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from . import agencias, config, daemon_util, db, relevancia_marca, repos
+from . import agencias, config, daemon_util, db, generaciones, marcas, relevancia_marca, repos
 from .dominio import (
     clustering,
     fusion_semantica,
@@ -165,6 +165,30 @@ def _rendimiento_bonus(
     return rendimiento_tema.bonus_de_historia(nombre, top_lineas)
 
 
+def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str) -> None:
+    """Sella una GENERACIÓN-actividad (`tipo='noticias-ia'`) de un paso IA del pool (best-effort).
+
+    Hace VISIBLES en «Actividad IA» los pasos Haiku del pool de noticias —fusión de historias
+    (dedup) y encaje editorial— que antes corrían mudos. Es un registro ya COMPLETADO (no encola
+    trabajo: el Haiku ya corrió); `salida` es el detalle humano de lo ocurrido. Un fallo al
+    registrar NUNCA aborta el barrido: la actividad es observabilidad, no parte del trabajo.
+    """
+    try:
+        generaciones.crear(
+            {
+                "tipo": "noticias-ia",
+                "marca": marca,
+                "etiqueta": etiqueta,
+                "salida": (salida or "")[:4000],
+                "estado": generaciones.ESTADO_COMPLETADO,
+                "fase": generaciones.FASE_COMPLETADO,
+                "fecha_fin": datetime.now(UTC).isoformat(),
+            }
+        )
+    except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la ingesta
+        _log.warning("ingesta_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
+
+
 def paso_clustering() -> dict[str, Any]:
     """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
 
@@ -240,7 +264,15 @@ def paso_clustering() -> dict[str, Any]:
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa; si no, semilla.
             if perfil_activo and marca_c and marca_c not in perfil_refrescadas:
                 perfil_refrescadas.add(marca_c)
-                perfil_editorial.refrescar_si_corresponde(marca_c, ttl_horas=perfil_ttl, ahora=ahora)
+                perfil_editorial.refrescar_si_corresponde(
+                    marca_c, ttl_horas=perfil_ttl, ahora=ahora,
+                    al_refrescar=lambda m, kws: _registrar_actividad_ia(
+                        m,
+                        f"Encaje editorial — {marcas.etiqueta_de(m)}: {len(kws)} temas clave",
+                        "Perfil de cobertura de la marca extraído de su línea editorial por IA "
+                        "(Haiku), para puntuar qué noticias le encajan:\n\n" + ", ".join(kws),
+                    ),
+                )
             palabras = _palabras_relevancia(marca_c, perfil_activo)
             # Señal de rendimiento (Fase 2c): 1 si la historia cae en una línea top por engagement.
             if top_lineas:
@@ -333,7 +365,7 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
 
     grupos_total = 0
     fusionadas_total = 0
-    for recientes in por_marca.values():
+    for marca_f, recientes in por_marca.items():
         if len(recientes) < 2:
             continue
         lote = recientes[:maximo]
@@ -343,6 +375,9 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
         except Exception:  # noqa: BLE001 -- un fallo de Haiku por marca no aborta el paso
             _log.exception("ingesta_daemon: fallo proponiendo fusiones de una marca.")
             continue
+        grupos_marca = 0
+        fusionadas_marca = 0
+        descripciones: list[str] = []
         for grupo in grupos:
             try:
                 if _fusionar_grupo(
@@ -352,8 +387,21 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
                 ):
                     grupos_total += 1
                     fusionadas_total += len(grupo) - 1
+                    grupos_marca += 1
+                    fusionadas_marca += len(grupo) - 1
+                    titulos = [str((por_id.get(i) or {}).get("titulo") or i).strip() for i in grupo]
+                    descripciones.append(" + ".join(t for t in titulos if t))
             except Exception:  # noqa: BLE001 -- una fusión problemática no aborta el paso
                 _log.exception("ingesta_daemon: fallo al fundir un grupo de historias.")
+        # Actividad IA: deja constancia VISIBLE de la dedup semántica por marca (qué se unió).
+        if grupos_marca:
+            _registrar_actividad_ia(
+                marca_f,
+                f"Fusión de historias — {marcas.etiqueta_de(marca_f)}: "
+                f"{fusionadas_marca} absorbida(s) en {grupos_marca} grupo(s)",
+                "Historias del mismo acontecimiento unidas por IA (dedup semántico):\n\n"
+                + "\n".join(f"• {d}" for d in descripciones),
+            )
     if grupos_total:
         _log.info(
             "ingesta_daemon: fusión semántica: %d grupo(s), %d historia(s) absorbida(s).",

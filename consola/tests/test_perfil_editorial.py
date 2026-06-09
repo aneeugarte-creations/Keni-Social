@@ -46,6 +46,23 @@ def test_fresco_no_relanza_haiku(monkeypatch, tmp_path):
     assert out == frozenset({"mexico"})
 
 
+def test_al_refrescar_solo_en_refresco_real(monkeypatch, tmp_path):
+    """`al_refrescar(marca, kws)` se llama cuando Haiku refresca, NO en aciertos de cache."""
+    _preparar(monkeypatch, tmp_path)
+    llamadas: list[tuple[str, list[str]]] = []
+    cb = lambda m, kws: llamadas.append((m, list(kws)))  # noqa: E731
+    # 1er refresco (cache vacío): Haiku corre -> callback con marca + keywords normalizadas.
+    pe.refrescar_si_corresponde(
+        "unotv", ttl_horas=24, ejecutor=_ejecutor(["mexico", "cdmx"]), al_refrescar=cb
+    )
+    assert llamadas == [("unotv", ["mexico", "cdmx"])]
+    # 2º con cache fresco (mismo hash, dentro de TTL): NO corre Haiku -> NO callback.
+    pe.refrescar_si_corresponde(
+        "unotv", ttl_horas=24, ejecutor=_ejecutor(["otro"]), al_refrescar=cb
+    )
+    assert len(llamadas) == 1
+
+
 def test_ttl_caducado_relanza(monkeypatch, tmp_path):
     _preparar(monkeypatch, tmp_path)
     ayer = datetime.now(UTC) - timedelta(hours=48)

@@ -391,3 +391,52 @@ def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
     # RSS no se ve afectado; agencias cae a su default sin sumar.
     assert resumen["items_nuevos"] == 2
     assert resumen["agencias"] == {"items": 0}
+
+
+# --------------------------------------------------------------------------- #
+# Actividad IA del pool: fusión semántica deja constancia VISIBLE (noticias-ia) #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_fusion_semantica_registra_actividad_ia(monkeypatch):
+    """Cuando la fusión une historias, sella una generación `noticias-ia` (visible en Actividad)."""
+    monkeypatch.setattr(ingesta_daemon.config, "fusion_semantica_activa", lambda: True)
+    recientes = [
+        {"id": "c1", "titulo": "Remontada épica", "estado": "nuevo", "marca": "unotv"},
+        {"id": "c2", "titulo": "Remontada increíble", "estado": "nuevo", "marca": "unotv"},
+    ]
+    monkeypatch.setattr(ingesta_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: list(recientes))
+    monkeypatch.setattr(ingesta_daemon.fusion_semantica, "proponer_fusiones",
+                        lambda lote, **kw: [["c1", "c2"]])
+    monkeypatch.setattr(ingesta_daemon, "_fusionar_grupo", lambda *a, **k: True)
+    registradas: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(ingesta_daemon, "_registrar_actividad_ia",
+                        lambda marca, etiqueta, salida: registradas.append((marca, etiqueta, salida)))
+
+    resumen = ingesta_daemon.paso_fusion_semantica()
+    assert resumen == {"grupos": 1, "fusionadas": 1}
+    assert len(registradas) == 1
+    marca, etiqueta, salida = registradas[0]
+    assert marca == "unotv"
+    assert "Fusión de historias" in etiqueta
+    # La salida muestra QUÉ se dedupó (los títulos unidos).
+    assert "Remontada épica" in salida and "Remontada increíble" in salida
+
+
+def test_paso_fusion_semantica_sin_fusiones_no_registra(monkeypatch):
+    """Si Haiku no agrupa nada, no hay generación de actividad (sin ruido a 0)."""
+    monkeypatch.setattr(ingesta_daemon.config, "fusion_semantica_activa", lambda: True)
+    recientes = [
+        {"id": "c1", "titulo": "A", "estado": "nuevo", "marca": "unotv"},
+        {"id": "c2", "titulo": "B", "estado": "nuevo", "marca": "unotv"},
+    ]
+    monkeypatch.setattr(ingesta_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: list(recientes))
+    monkeypatch.setattr(ingesta_daemon.fusion_semantica, "proponer_fusiones", lambda lote, **kw: [])
+    registradas: list[object] = []
+    monkeypatch.setattr(ingesta_daemon, "_registrar_actividad_ia",
+                        lambda *a, **k: registradas.append(a))
+
+    assert ingesta_daemon.paso_fusion_semantica() == {"grupos": 0, "fusionadas": 0}
+    assert registradas == []
