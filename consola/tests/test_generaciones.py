@@ -412,6 +412,60 @@ def test_get_y_listar_generaciones(entorno):
     assert any(x["id"] == g["id"] for x in lista)
 
 
+def test_stream_404_si_no_existe(entorno):
+    r = _cliente().get("/api/generaciones/noexiste/stream")
+    assert r.status_code == 404
+
+
+def test_stream_emite_estado_y_terminal_para_generacion_terminada(entorno):
+    """El SSE de una generacion YA terminal emite `estado` + `terminal` y CIERRA solo.
+
+    Con el TestClient se puede leer el cuerpo entero porque el generador acaba en la
+    primera vuelta (estado terminal): no hay bucle vivo que cuelgue el test.
+    """
+    g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})
+    generaciones.actualizar(
+        g["id"],
+        {
+            "estado": generaciones.ESTADO_COMPLETADO,
+            "salida": "hola mundo",
+            "fecha_fin": generaciones.ahora_iso(),
+        },
+    )
+    cli = _cliente()
+    with cli.stream("GET", f"/api/generaciones/{g['id']}/stream") as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        assert r.headers["cache-control"] == "no-cache"
+        assert r.headers["x-accel-buffering"] == "no"
+        cuerpo = "".join(r.iter_text())
+    # Primero la instantanea (`estado`), luego el cierre (`terminal`); ambos llevan
+    # la generacion completa con la MISMA forma JSON que `GET /api/generaciones/{id}`.
+    assert cuerpo.index("event: estado") < cuerpo.index("event: terminal")
+    assert '"estado": "completado"' in cuerpo
+    assert '"salida": "hola mundo"' in cuerpo
+    assert f'"id": "{g["id"]}"' in cuerpo
+
+
+def test_stream_error_tambien_es_terminal(entorno):
+    """Una generacion en `error` (cancelada/timeout) tambien cierra el stream con `terminal`."""
+    g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})
+    generaciones.actualizar(
+        g["id"],
+        {
+            "estado": generaciones.ESTADO_ERROR,
+            "motivo": generaciones.MOTIVO_CANCELADO,
+            "error": "Cancelada por el usuario.",
+            "fecha_fin": generaciones.ahora_iso(),
+        },
+    )
+    with _cliente().stream("GET", f"/api/generaciones/{g['id']}/stream") as r:
+        assert r.status_code == 200
+        cuerpo = "".join(r.iter_text())
+    assert "event: terminal" in cuerpo
+    assert '"motivo": "cancelado"' in cuerpo
+
+
 def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
     """Con el lanzador por defecto (noop) la generacion queda `ejecutando`, sondeable.
 
