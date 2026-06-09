@@ -77,7 +77,7 @@ export function SeccionAds({
 
   return (
     <SeccionColapsable
-      titulo="Publicidad (Meta Ads)"
+      titulo="Ads"
       icono={Megaphone}
       descripcion="Inversión pagada del periodo (inorgánico), separada de lo orgánico."
       contentClassName="p-0"

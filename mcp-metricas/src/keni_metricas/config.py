@@ -467,6 +467,18 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.metricas_de_post(cuenta_id, plat, id_post, **kw)
 
+    def campanias_ads(self, cuenta_id: str, rango: str):
+        """Delega las campañas de Ads (inorgánico) si la fuente envuelta las expone.
+
+        Solo Metricool las implementa (muestra/compuesta no). Si la envuelta no la tiene,
+        propaga `AttributeError` para que el llamante (`servicio.construir_ads`) degrade a
+        inorgánico vacío — igual que `serie_diaria`. SIN esto, una campaña (siempre por-marca,
+        y por tanto envuelta en `FuenteScoped`) nunca veía sus Ads."""
+        if not hasattr(self._fuente, "campanias_ads"):
+            raise AttributeError("la fuente envuelta no expone campanias_ads")
+        self._verificar(cuenta_id)
+        return self._fuente.campanias_ads(cuenta_id, rango)
+
 
 def _fuente_metricool(cfg: Config) -> FuenteMetricas:
     """Construye `FuenteMetricool` o, sin credenciales, una fuente Metricool VACÍA.

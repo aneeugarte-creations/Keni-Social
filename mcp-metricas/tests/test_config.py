@@ -377,6 +377,39 @@ def test_fuente_scoped_resumen_fuera_de_alcance_rechaza():
     assert "claro_sports" in str(exc.value)  # lista las disponibles
 
 
+def test_fuente_scoped_delega_campanias_ads_dentro_de_alcance():
+    """FuenteScoped DEBE exponer `campanias_ads` (delegando): una campaña es siempre
+    por-marca (envuelta), y sin esto su inorgánico (y el del dashboard por-marca) salía
+    SIEMPRE vacío. Regresión del bug de Ads inorgánico."""
+
+    class _ConAds(FuenteMuestra):
+        def campanias_ads(self, cuenta_id, rango):
+            return [{"nombre": "ALCANCE CAMPAÑA CHIHUAHUA", "cuenta": cuenta_id, "rango": rango}]
+
+    scoped = FuenteScoped(_ConAds(), ["claro_sports"])
+    assert scoped.campanias_ads("claro_sports", "mes") == [
+        {"nombre": "ALCANCE CAMPAÑA CHIHUAHUA", "cuenta": "claro_sports", "rango": "mes"}
+    ]
+
+
+def test_fuente_scoped_campanias_ads_fuera_de_alcance_rechaza():
+    class _ConAds(FuenteMuestra):
+        def campanias_ads(self, cuenta_id, rango):
+            return []
+
+    scoped = FuenteScoped(_ConAds(), ["claro_sports"])
+    with pytest.raises(CuentaNoEncontrada):
+        scoped.campanias_ads("unotv", "mes")
+
+
+def test_fuente_scoped_sin_ads_propaga_attributeerror():
+    """Una fuente envuelta SIN Ads (muestra) propaga AttributeError; `construir_ads` lo
+    captura y degrada a inorgánico vacío (no enmascara el wrap)."""
+    scoped = FuenteScoped(FuenteMuestra(), ["claro_sports"])
+    with pytest.raises(AttributeError):
+        scoped.campanias_ads("claro_sports", "mes")
+
+
 def test_fuente_scoped_mejores_piezas_dentro_y_fuera():
     scoped = FuenteScoped(FuenteMuestra(), ["claro_sports"])
     piezas = scoped.mejores_piezas("claro_sports", "semana", 2)

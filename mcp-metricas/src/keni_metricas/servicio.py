@@ -344,23 +344,31 @@ _log = logging.getLogger("keni_metricas")
 def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
     """Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el INORGÁNICO.
 
-    Dispatch por capacidad: si la fuente activa expone `campanias_ads` (Metricool), agrega
-    las campañas con entrega de TODAS las cuentas en alcance, sellando el id_metricas de la
-    marca en cada una. Si no (muestra/compuesta), devuelve [] — el inorgánico solo existe
-    contra la API real. `marca=None` agrega todas las cuentas en alcance.
-    Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera de alcance)."""
+    Dispatch por capacidad (mismo idioma que `construir_tendencia_diaria`): usa
+    `fuente.campanias_ads` si la fuente activa la expone (Metricool, también a través de
+    `FuenteScoped` por-marca). Si no (muestra/compuesta), degrada a [] — el inorgánico solo
+    existe contra la API real. OJO: el `FuenteScoped` por-marca SÍ debe exponer el método
+    (lo delega); sin eso, campañas y dashboard por-marca salían SIEMPRE vacíos.
+    `marca=None` agrega todas las cuentas en alcance. Propaga `ValueError` (rango inválido)
+    y `CuentaNoEncontrada` (marca fuera de alcance)."""
     fuente = _fuente(marca)
-    if not hasattr(fuente, "campanias_ads"):
+    ads_fn = getattr(fuente, "campanias_ads", None)
+    if ads_fn is None:
         return []
     salida: list[dict] = []
     for c in fuente.cuentas():
         try:
-            for ad in fuente.campanias_ads(c.id, rango):
-                d = ad.model_dump()
-                d["cuenta"] = c.id
-                salida.append(d)
-        except Exception:  # noqa: BLE001 -- una cuenta sin Ads no aborta el resto
+            campanias = ads_fn(c.id, rango)
+        except AttributeError:
+            # La fuente envuelta no la implementa (FuenteScoped lo propaga): inorgánico vacío.
+            return []
+        except Exception:  # noqa: BLE001 -- una cuenta que falla no aborta el resto
             _log.exception("construir_ads: cuenta %s falló (rango=%s).", c.id, rango)
+            continue
+        for ad in campanias:
+            d = ad.model_dump()
+            d["cuenta"] = c.id
+            salida.append(d)
     return salida
 
 
