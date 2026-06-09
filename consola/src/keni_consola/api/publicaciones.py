@@ -465,6 +465,65 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Publicación borrada."})
 
 
+# Tope de ids por peticion batch (cadenas / borrar-lote): defensivo, el SPA manda como
+# mucho una pagina de feed o la seleccion visible de la lista.
+_MAX_IDS_LOTE = 200
+
+
+def _ids_de_lote(crudos: Any) -> list[str] | None:
+    """Sanea una lista de ids (strings no vacios, sin duplicados, con tope). None si invalida."""
+    if not isinstance(crudos, list):
+        return None
+    ids = list(dict.fromkeys(i.strip() for i in crudos if isinstance(i, str) and i.strip()))
+    if not ids:
+        return None
+    return ids[:_MAX_IDS_LOTE]
+
+
+async def borrar_lote(request: Request) -> Response:
+    """Borra VARIAS publicaciones de una vez: `POST /api/publicaciones/borrar-lote {ids}`.
+
+    Sustituye el patron del SPA de "N DELETEs en paralelo" (un solo round-trip). Itera la
+    misma funcion de borrado individual (`repos.borrar_publicacion`); las ids inexistentes
+    no abortan el resto: se reportan en `fallos`. -> `{borradas, fallos}` | 400.
+    """
+    datos = await leer_json(request)
+    ids = _ids_de_lote(datos.get("ids"))
+    if ids is None:
+        return JSONResponse(
+            {"error": "Envía la lista de ids de publicaciones a borrar."}, status_code=400
+        )
+    borradas = 0
+    fallos: list[str] = []
+    for publicacion_id in ids:
+        if repos.borrar_publicacion(publicacion_id):
+            borradas += 1
+        else:
+            fallos.append(publicacion_id)
+    return JSONResponse({"borradas": borradas, "fallos": fallos})
+
+
+async def cadenas_lote(request: Request) -> Response:
+    """Cadenas de aprobacion de VARIAS piezas en una llamada (batch del feed).
+
+    `GET /api/publicaciones/cadenas?ids=a,b,c` -> `{cadenas: {id: cadena}}`. Elimina el
+    N+1 del feed (antes: un GET /aprobacion por pieza visible). SIEMPRE devuelve una
+    entrada por id pedida: para una pieza inexistente la cadena sale vacia
+    (`estado="sin_cadena"`), de modo que el cliente nunca reitere ids "que faltan".
+    El endpoint individual (`GET /api/plataformas/{id}/aprobacion`) sigue intacto.
+    """
+    from . import colaboracion as api_colaboracion
+
+    crudo = request.query_params.get("ids") or ""
+    ids = _ids_de_lote(crudo.split(","))
+    if ids is None:
+        return JSONResponse(
+            {"error": "Indica las ids de publicaciones (?ids=a,b,c)."}, status_code=400
+        )
+    cadenas = {pid: api_colaboracion.cadena_publica(pid) for pid in ids}
+    return JSONResponse({"cadenas": cadenas})
+
+
 def calcular_hueco_para(
     pub: dict[str, Any], ahora: datetime | None = None
 ) -> str | None:
@@ -834,6 +893,9 @@ async def compuesta(request: Request) -> Response:
 
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
+    # Batch del feed: ANTES de "/{publicacion_id}" para que "cadenas" no matchee como id.
+    Route("/api/publicaciones/cadenas", cadenas_lote, methods=["GET"]),
+    Route("/api/publicaciones/borrar-lote", borrar_lote, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/compuesta", compuesta, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
     Route("/api/publicaciones", crear, methods=["POST"]),

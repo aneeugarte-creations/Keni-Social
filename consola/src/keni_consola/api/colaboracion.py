@@ -298,6 +298,13 @@ def _cadena_publica(plataforma_id: str) -> dict[str, object]:
     }
 
 
+# Alias PUBLICO del armado de la cadena (la usa `api/publicaciones.cadenas_lote` para el
+# endpoint batch del feed, sin importar un simbolo privado de este modulo).
+def cadena_publica(plataforma_id: str) -> dict[str, object]:
+    """Cadena de aprobacion + estado global + gates, para UNA plataforma (ver `_cadena_publica`)."""
+    return _cadena_publica(plataforma_id)
+
+
 async def obtener_aprobacion_cadena(request: Request) -> Response:
     """GET /api/plataformas/{pid}/aprobacion: la cadena de niveles y su estado global."""
     plataforma_id = request.path_params["plataforma_id"]

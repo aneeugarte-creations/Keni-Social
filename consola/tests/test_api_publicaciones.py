@@ -384,3 +384,76 @@ def test_compuesta_404_si_no_hay_imagen_derivable(cliente, monkeypatch):
     pid = _crear(cliente).json()["publicacion"]["id"]
     monkeypatch.setattr(render_pieza, "render_bytes", lambda pub: None)
     assert cliente.get(f"/api/publicaciones/{pid}/compuesta").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/publicaciones/borrar-lote (borrado batch)                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_borrar_lote(cliente):
+    ids = [_crear(cliente, titulo=f"T{i}").json()["publicacion"]["id"] for i in range(3)]
+    r = cliente.post("/api/publicaciones/borrar-lote", json={"ids": ids})
+    assert r.status_code == 200
+    assert r.json() == {"borradas": 3, "fallos": []}
+    assert cliente.get("/api/publicaciones").json()["publicaciones"] == []
+
+
+def test_borrar_lote_reporta_fallos_parciales(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.post("/api/publicaciones/borrar-lote", json={"ids": [pid, "no-existe"]})
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["borradas"] == 1
+    assert datos["fallos"] == ["no-existe"]
+
+
+def test_borrar_lote_sin_ids_400(cliente):
+    assert cliente.post("/api/publicaciones/borrar-lote", json={}).status_code == 400
+    assert cliente.post("/api/publicaciones/borrar-lote", json={"ids": []}).status_code == 400
+    assert cliente.post("/api/publicaciones/borrar-lote", json={"ids": "x"}).status_code == 400
+
+
+def test_borrar_lote_dedup_ids(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.post("/api/publicaciones/borrar-lote", json={"ids": [pid, pid]})
+    assert r.json() == {"borradas": 1, "fallos": []}
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/publicaciones/cadenas (cadenas de aprobacion en batch, feed)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_cadenas_lote_devuelve_entrada_por_id(cliente):
+    a = _crear(cliente, titulo="A").json()["publicacion"]["id"]
+    b = _crear(cliente, titulo="B").json()["publicacion"]["id"]
+    r = cliente.get(f"/api/publicaciones/cadenas?ids={a},{b}")
+    assert r.status_code == 200
+    cadenas = r.json()["cadenas"]
+    assert set(cadenas) == {a, b}
+    # Piezas recien creadas: sin cadena montada -> estado global "sin_cadena".
+    assert cadenas[a]["estado"] == "sin_cadena"
+    assert cadenas[a]["niveles"] == []
+    assert "comentarios_sin_resolver" in cadenas[a]
+
+
+def test_cadenas_lote_coincide_con_endpoint_individual(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    # Monta una cadena real (la misma que veria el endpoint individual).
+    assert cliente.post(f"/api/plataformas/{pid}/aprobacion", json={}).status_code == 201
+    individual = cliente.get(f"/api/plataformas/{pid}/aprobacion").json()
+    lote = cliente.get(f"/api/publicaciones/cadenas?ids={pid}").json()["cadenas"][pid]
+    assert lote == individual
+
+
+def test_cadenas_lote_id_inexistente_sale_vacia_no_404(cliente):
+    # El batch NUNCA omite ids (el cliente no debe reiterar "faltantes"): inexistente -> vacia.
+    r = cliente.get("/api/publicaciones/cadenas?ids=fantasma")
+    assert r.status_code == 200
+    assert r.json()["cadenas"]["fantasma"]["estado"] == "sin_cadena"
+
+
+def test_cadenas_lote_sin_ids_400(cliente):
+    assert cliente.get("/api/publicaciones/cadenas").status_code == 400
+    assert cliente.get("/api/publicaciones/cadenas?ids=,,").status_code == 400
