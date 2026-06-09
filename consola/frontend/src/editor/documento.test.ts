@@ -3,12 +3,11 @@ import { describe, expect, it } from "vitest";
 import { documentoVacio } from "./documento";
 
 describe("documentoVacio", () => {
-  it("nace con fondo degradado gris y con el hueco de foto OCULTO (marcado y bloqueado)", () => {
+  it("nace transparente y con el hueco de foto OCULTO (marcado y bloqueado)", () => {
     const doc = documentoVacio({ w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 }, "claro-sports");
-    // Fondo degradado gris neutro (claro abajo-izq → oscuro arriba-der, lineal a 45°): superficie de
-    // diseño lista en vez del tablero de transparencia. Renderiza igual en editor y export.
-    expect(doc.fondo.tipo).toBe("degradado");
-    expect(doc.fondo.degradado).toEqual({ desde: "#bababa", hasta: "#363636", angulo: 45 });
+    // Fondo transparente: se ve el tablero en el editor y exporta con alfa.
+    expect(doc.fondo.tipo).toBe("color");
+    expect(doc.fondo.color).toBe("#00000000");
     // Trae su hueco de foto (obligatorio para plantilla) pero OCULTO para no ensuciar el lienzo.
     const imagenes = doc.capas.filter((c) => c.tipo === "imagen");
     expect(imagenes).toHaveLength(1);
