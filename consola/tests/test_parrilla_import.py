@@ -10,6 +10,7 @@ slot / turno desaparecido) y la re-validacion de operaciones ya parseadas. Todo
 from __future__ import annotations
 
 from keni_consola.dominio import parrilla_import as pi
+from keni_consola.dominio import parrilla_import_job as pij
 
 
 # Mapa id->nombre de las franjas existentes (de cualquier semana del rango).
@@ -358,3 +359,22 @@ def test_no_dedup_eventos_distintos_misma_fecha():
     validas, errores = pi.parsear_y_validar(txt, _ctx())
     assert errores == []
     assert len(validas) == 2
+
+
+# --------------------------------------------------------------------------- #
+# componer_prompt: plantilla editable (Biblioteca) + fragmentos calculados     #
+# --------------------------------------------------------------------------- #
+
+
+def test_componer_prompt_inserta_fragmentos_ambos_modos():
+    # La plantilla viene de la Biblioteca (semilla); roster, esquema y la fuente/cola se insertan
+    # en sus marcadores, que NO deben quedar crudos. Modo TEXTO: el documento va embebido al final.
+    p_txt = pij.componer_prompt(ctx=_ctx(), texto_documento="### HOJA: A\nfila")
+    assert "Luis" in p_txt and "Ana" in p_txt          # roster (miembros)
+    assert "### HOJA: A" in p_txt                        # documento embebido en la cola
+    assert '"operaciones"' in p_txt                      # esquema/contrato JSON
+    assert "{{" not in p_txt                              # todos los marcadores sustituidos
+    # Modo RUTA: claude lee el fichero; aparece la ruta y NO hay documento embebido.
+    p_ruta = pij.componer_prompt(ctx=_ctx(), ruta_doc="/tmp/rota.pdf")
+    assert "/tmp/rota.pdf" in p_ruta
+    assert "{{" not in p_ruta

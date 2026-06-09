@@ -239,6 +239,41 @@ _ESQUEMA_JSON = (
 )
 
 
+# La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
+# «Prompts»). Los fragmentos calculados (fuente/reglas según el modo, roster, slots, esquema y la
+# cola con el documento embebido) se insertan en sus marcadores `{{...}}`. `_SCAFFOLD` es la red
+# (misma plantilla que la semilla del paquete) por si la lectura fallara.
+_PROMPT_ID = "prompt/importacion/parrilla"
+# Fallback CORTO (la plantilla COMPLETA vive en la semilla del paquete / store): mantiene los 6
+# marcadores y el contrato JSON para no romper si la lectura de la Biblioteca fallara.
+_SCAFFOLD = (
+    "Convierte el documento de PLANIFICACIÓN de la rota/parrilla en operaciones estructuradas. "
+    "{{FUENTE}}\n\n"
+    "Extrae TODO (cualquier fecha y nº de franjas/día); cada operación con fecha ISO AAAA-MM-DD.\n\n"
+    "MIEMBROS (usa estos id en `miembro_id`; omite a los desconocidos en vez de inventar):\n"
+    "{{MIEMBROS}}\n\n"
+    "FRANJAS de referencia (usa el NOMBRE tal como aparece en el documento):\n{{SLOTS}}\n\n"
+    "Enums válidos: tipo_cobertura ∈ {transmision, imagenes, no_cubrir}; "
+    "prioridad ∈ {alta, media, baja}; estado ∈ {propuesto, aprobado}.\n\n"
+    "REGLAS:\n{{REGLA_FUENTE}}\n"
+    "- AGRUPA por EVENTO (no por red); no dupliques; respeta franjas; no inventes.\n\n"
+    "SALIDA: UN ÚNICO bloque ```json con esta forma EXACTA, sin texto antes ni después:\n"
+    "```json\n{{ESQUEMA_JSON}}\n```\n"
+    'Si no hay parrilla, devuelve ```json\n{"operaciones": []}\n```.{{COLA_FUENTE}}'
+)
+
+
+def _plantilla() -> str:
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
+    try:
+        from .. import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar la importación sin prompt por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _SCAFFOLD
+
+
 def componer_prompt(
     *,
     ctx: pi.Contexto,
@@ -277,40 +312,16 @@ def componer_prompt(
         regla_fuente = "- No uses herramientas más allá de LEER el documento de la ruta indicada."
         cola_fuente = ""
 
+    # Inserta los fragmentos calculados en la plantilla editable. El orden deja COLA_FUENTE (que
+    # puede llevar el documento embebido del usuario) al final, para no reescanear su contenido.
     return (
-        "Eres un asistente que convierte un documento de PLANIFICACIÓN de la rota/parrilla de un "
-        f"equipo de redes sociales en operaciones estructuradas. {fuente}\n\n"
-        "EXTRAE TODO lo que encuentres en el documento, SIN RECORTAR: todos los eventos y todos "
-        "los turnos, SEA CUAL SEA su fecha (el documento puede cubrir una semana, un mes o un "
-        "AÑO ENTERO) y haya las franjas que haya por día (puede haber 3 o más). Cada operación "
-        "DEBE llevar una fecha ISO explícita AAAA-MM-DD (resuelve fechas relativas/abreviadas).\n\n"
-        "MIEMBROS del equipo (usa estos id en `miembro_id`; mapea los nombres del documento a "
-        "esta lista; si alguien del documento no está aquí, OMÍTELO en vez de inventar un id):\n"
-        f"{lineas_miembros}\n\n"
-        "FRANJAS: usa en `franja` el NOMBRE de la franja TAL COMO aparece en el documento (no lo "
-        "fuerces a una plantilla). Un día puede tener varias franjas (p.ej. 3). Si el documento "
-        "indica el horario de la franja, ponlo en `franja_inicio`/`franja_fin` (HH:MM). Como "
-        "REFERENCIA, los slots habituales del equipo son (pero NO te limites a ellos):\n"
-        f"{lineas_slots}\n\n"
-        "Valores de enum válidos: tipo_cobertura ∈ {transmision, imagenes, no_cubrir}; "
-        "prioridad ∈ {alta, media, baja}; estado ∈ {propuesto, aprobado}.\n\n"
-        "REGLAS:\n"
-        f"{regla_fuente}\n"
-        "- AGRUPA por EVENTO, no por red: si el documento describe el MISMO post/evento para "
-        "varias redes o plataformas (p.ej. una fila por red — Facebook, Instagram, Twitter, "
-        "TikTok, YouTube, Historias, Web, Programa…), crea UN ÚNICO `crear_evento` para esa "
-        "fecha+tema y consolida las redes y formatos en `contenido`/`nota` (p.ej. «Redes: IG, "
-        "FB, TW · formatos: video, póster»). NO emitas un evento separado por cada red.\n"
-        "- No dupliques: no repitas el mismo evento/turno (misma fecha y tema) más de una vez.\n"
-        "- Asigna turnos solo a miembros de la lista (mapea nombres→id); omite a los desconocidos.\n"
-        "- Respeta las franjas del documento (nombre y horario); no las reduzcas ni renombres.\n"
-        "- Emite TODO lo que refleje el documento; no inventes eventos ni turnos que no estén.\n\n"
-        "SALIDA: responde con UN ÚNICO bloque de código cercado ```json con esta forma EXACTA, "
-        "y NADA de texto antes ni después:\n"
-        f"```json\n{_ESQUEMA_JSON}\n```\n"
-        "Si el documento no contiene una parrilla, devuelve "
-        '```json\n{"operaciones": []}\n```.'
-        f"{cola_fuente}"
+        _plantilla()
+        .replace("{{FUENTE}}", fuente)
+        .replace("{{MIEMBROS}}", lineas_miembros)
+        .replace("{{SLOTS}}", lineas_slots)
+        .replace("{{REGLA_FUENTE}}", regla_fuente)
+        .replace("{{ESQUEMA_JSON}}", _ESQUEMA_JSON)
+        .replace("{{COLA_FUENTE}}", cola_fuente)
     )
 
 
