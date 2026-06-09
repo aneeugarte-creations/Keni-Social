@@ -406,6 +406,7 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
             "alcance": t.get("alcance") or 0,
             "interacciones": t.get("interacciones", 0),
             "engagement_pct": _engagement_pct(t.get("interacciones"), t.get("visualizaciones")),
+            "publicaciones": t.get("publicaciones", 0),
         },
         "cuentas": cuentas,
         "por_red": por_red,

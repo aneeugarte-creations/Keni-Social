@@ -30,6 +30,10 @@ from .formato import (
 )
 from .fuentes.base import FuenteMetricas
 
+# Tope efectivamente "sin límite" para CONTAR todas las piezas del periodo: `mejores_piezas`
+# ya descarga todas y trunca a `n`, así que pedir todas no añade llamadas a la API.
+_TODAS_LAS_PIEZAS = 100_000
+
 if TYPE_CHECKING:
     from .historico import Historico
 
@@ -43,7 +47,7 @@ def construir_reporte(
     """Estructura JSON-serializable con el total y el desglose por marca."""
     cuentas = fuente.cuentas()
     filas: list[dict] = []
-    tot_vis = tot_inter = 0
+    tot_vis = tot_inter = tot_piezas = 0
     tot_alc: int | None = None  # se suma solo el alcance medido; None = nadie lo mide (#138)
     cuentas_parciales: list[str] = []  # marcas con alguna plataforma omitida
     # Mapa id->nombre legible (mismo origen que el dashboard). El resumen guarda
@@ -56,7 +60,12 @@ def construir_reporte(
         if historico is not None:
             historico.aplicar_variacion(r)
             historico.guardar(r)
-        mejores = fuente.mejores_piezas(c.id, rango, top)
+        # `mejores_piezas` descarga TODAS las piezas del periodo y solo trunca a `n`; pedir
+        # todas (para CONTARLAS) no cuesta una llamada extra a la API. Las top-`top` se
+        # quedan para mostrar; el total cuenta cuántas se publicaron.
+        todas = fuente.mejores_piezas(c.id, rango, _TODAS_LAS_PIEZAS)
+        mejores = todas[:top]
+        tot_piezas += len(todas)
         filas.append(
             {
                 "resumen": r.model_dump(mode="json"),
@@ -84,6 +93,7 @@ def construir_reporte(
             # vive por plataforma. None se muestra como "n/d".
             "engagement_pct": None,
             "cuentas": len(filas),
+            "publicaciones": tot_piezas,
         },
         # cobertura global: marcas con datos parciales. Vacio = todas completas.
         # Hace explicito que los totales pueden no incluir todas las plataformas.
@@ -127,6 +137,7 @@ def render_markdown(rep: dict) -> str:
     out.append(f"- **Alcance:** {cifra(t['alcance'])}")
     out.append(f"- **Interacciones:** {miles(t['interacciones'])}")
     out.append(f"- **Engagement:** {pct(t['engagement_pct'])} (ver por plataforma)")
+    out.append(f"- **Publicaciones:** {miles(t.get('publicaciones', 0))}")
     out.append(f"- **Cuentas:** {t['cuentas']}")
     cob_global = rep.get("cobertura") or {}
     if cob_global.get("cuentas_parciales"):

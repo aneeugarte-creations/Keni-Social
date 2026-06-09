@@ -71,6 +71,8 @@ class TotalMetricas(TypedDict):
     alcance: int
     interacciones: int
     engagement_pct: float
+    # Nº de publicaciones del periodo (todas las piezas, no solo las top).
+    publicaciones: int
 
 
 class CuentaMetrica(TypedDict):

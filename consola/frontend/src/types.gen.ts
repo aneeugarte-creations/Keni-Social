@@ -68,6 +68,7 @@ export interface TotalMetricas {
   alcance: number;
   interacciones: number;
   engagement_pct: number;
+  publicaciones: number;
 }
 export interface CuentaMetrica {
   marca_id: string;

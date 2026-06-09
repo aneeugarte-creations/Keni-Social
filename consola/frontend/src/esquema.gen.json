@@ -247,13 +247,17 @@
         },
         "engagement_pct": {
           "type": "number"
+        },
+        "publicaciones": {
+          "type": "integer"
         }
       },
       "required": [
         "visualizaciones",
         "alcance",
         "interacciones",
-        "engagement_pct"
+        "engagement_pct",
+        "publicaciones"
       ]
     },
     "CuentaMetrica": {

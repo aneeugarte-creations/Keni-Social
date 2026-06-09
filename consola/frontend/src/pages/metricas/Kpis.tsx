@@ -1,15 +1,21 @@
 /**
- * Fila de KPIs: cuatro tarjetas con el total del reporte. Estilo Vercel/Geist:
- * etiqueta gris pequena + numero contenido, sin iconos ni acentos de color.
+ * Fila de KPIs: nº de publicaciones + las métricas del total del reporte. Estilo
+ * Vercel/Geist: etiqueta gris pequena + numero contenido, sin iconos ni acentos de color.
  */
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import type { TotalMetricas } from "@/types";
 
+import { numeroCompleto } from "./formato";
 import { METRICAS, valorMetrica } from "./metricas-meta";
 
 export function Kpis({ total }: { total: TotalMetricas }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <TarjetaKpi
+        variante="card"
+        etiqueta="Publicaciones"
+        valor={numeroCompleto(total.publicaciones)}
+      />
       {METRICAS.map((m) => (
         <TarjetaKpi
           key={m.clave}
