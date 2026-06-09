@@ -106,6 +106,8 @@ export interface ColaJob {
   marca: string;
   gen_estado: string;
   fase: string;
+  /** Prioridad de despacho (mayor = adelanta en la cola; manual > lote del pipeline). */
+  prioridad: number;
   encolado_hace_s: number | null;
   corriendo_hace_s: number | null;
 }
@@ -124,6 +126,8 @@ export interface ColaDaemon {
 
 /** Snapshot en vivo de la cola de generación + workers + daemons. */
 export interface ColaMonitor {
+  /** Eco del filtro de marca aplicado a las listas en_curso/esperando ("" = todas). */
+  marca: string;
   capacidad: { max_jobs: number; max_cola: number; tope: number };
   conteo: { pendientes: number; reclamados: number; terminados: number; activos: number };
   cola_llena: boolean;

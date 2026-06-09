@@ -30,10 +30,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { PanelMaquinaContenido } from "@/pages/configuracion/SeccionFuncionalidad";
+import { PanelMaquinaContenido, useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import type { ColaJob, ColaMonitor, ColaSerie } from "@/types";
 
 // Cadencia del snapshot en vivo: lo bastante rápido para sentirse "en tiempo real" sin
@@ -117,7 +118,22 @@ function TablaJobs({
       <TableBody>
         {jobs.map((j) => (
           <TableRow key={j.job_id}>
-            <TableCell className="font-medium">{j.etiqueta || j.gen_id}</TableCell>
+            <TableCell className="font-medium">
+              <span className="inline-flex items-center gap-1.5">
+                {j.etiqueta || j.gen_id}
+                {/* Prioridad de cola (1f3acd7d): un lanzamiento manual adelanta al lote de
+                    fondo del pipeline. Solo se señala lo prioritario (>0). */}
+                {j.prioridad > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="border border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-600"
+                    title={`Prioridad ${j.prioridad}: adelanta en la cola al lote de fondo.`}
+                  >
+                    prioritario
+                  </Badge>
+                )}
+              </span>
+            </TableCell>
             <TableCell className="hidden sm:table-cell text-muted-foreground">{j.tipo || "—"}</TableCell>
             <TableCell className="hidden md:table-cell text-muted-foreground">{j.marca || "—"}</TableCell>
             {mostrarWorker && (
@@ -272,12 +288,14 @@ export default function Monitor() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const qc = useQueryClient();
+  // El Monitor respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
+  // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
-  const [guardandoClave, setGuardandoClave] = React.useState<string | null>(null);
 
   const cola = useQuery({
-    queryKey: ["actividad", "cola"],
-    queryFn: ({ signal }) => api.cola(signal),
+    queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
+    queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_COLA_MS,
   });
   const serie = useQuery({
@@ -312,18 +330,12 @@ export default function Monitor() {
     onSettled: () => setCancelandoId(null),
   });
 
-  // Toggle REAL de un daemon: escribe en la config (mismo endpoint que Configuración) y refresca
-  // el snapshot para que el estado «Activo/Apagado» refleje el cambio al instante.
-  const toggleDaemon = useMutation({
-    mutationFn: (cuerpo: { clave: string; valor: boolean }) => api.guardarAjuste(cuerpo),
-    onMutate: (cuerpo) => setGuardandoClave(cuerpo.clave),
-    onSuccess: (res) => {
-      toast.success(`«${res.ajuste.etiqueta}» ${res.ajuste.valor ? "activado" : "apagado"}.`);
-      refrescar();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-    onSettled: () => setGuardandoClave(null),
-  });
+  // Toggle REAL de un daemon: la MISMA mutación compartida que Configuración y el panel de la
+  // máquina (una sola implementación del control); su onSuccess ya invalida ajustes + cola +
+  // pipelines, así el estado «Activo/Apagado» y las vistas derivadas reflejan el cambio al
+  // instante. `guardandoClave` se deriva de la mutación en vuelo (sin estado local paralelo).
+  const toggleDaemon = useGuardarAjuste();
+  const guardandoClave = toggleDaemon.isPending ? (toggleDaemon.variables?.clave ?? null) : null;
 
   return (
     <>
@@ -422,12 +434,19 @@ export default function Monitor() {
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Activity className="h-4 w-4 text-sky-600" />
                 En curso ({cola.data.en_curso.length})
+                {/* Las listas respetan el switch global de marca; la capacidad es global. */}
+                {marcaActiva && (
+                  <Badge variant="outline" className="font-normal text-muted-foreground">
+                    {nombreActiva ?? marcaActiva}
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {cola.data.en_curso.length === 0 ? (
                 <p className="p-4 pt-0 text-sm text-muted-foreground">
-                  Ningún <code>claude -p</code> corriendo ahora mismo.
+                  Ningún <code>claude -p</code>
+                  {marcaActiva ? ` de ${nombreActiva ?? marcaActiva}` : ""} corriendo ahora mismo.
                 </p>
               ) : (
                 <TablaJobs
@@ -448,6 +467,11 @@ export default function Monitor() {
                 <CardTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-500">
                   <Clock className="h-4 w-4 text-amber-600" />
                   Esperando ({cola.data.esperando.length})
+                  {marcaActiva && (
+                    <Badge variant="outline" className="font-normal text-muted-foreground">
+                      {nombreActiva ?? marcaActiva}
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">

@@ -195,6 +195,9 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         "marca": reg.get("marca") or "",
         "gen_estado": reg.get("estado") or "",
         "fase": reg.get("fase") or "",
+        # Prioridad de cola (mayor = adelanta): los lanzamientos manuales van por delante
+        # del lote de fondo del pipeline; el Monitor lo señala en la lista de espera.
+        "prioridad": int(job.get("prioridad") or 0),
         "encolado_hace_s": _edad_s(job.get("creado"), ahora),
         "corriendo_hace_s": _edad_s(job.get("claimed_at"), ahora) if corriendo else None,
     }
@@ -232,7 +235,19 @@ def _daemons_estado() -> list[dict]:
 
 
 async def cola(request: Request) -> Response:
-    """GET /api/actividad/cola: snapshot EN VIVO de la cola de generacion + workers + daemons."""
+    """GET /api/actividad/cola?marca=: snapshot EN VIVO de la cola de generacion + workers + daemons.
+
+    `marca` (""=todas, o un id de marca valido): acota las LISTAS `en_curso`/`esperando` a los
+    jobs de esa marca (la del registro de generacion), igual que el resto del hub Actividad IA
+    respeta el switch global de marca. Los KPIs de CAPACIDAD/conteo siguen siendo GLOBALES a
+    proposito: la cola es infraestructura compartida (un slot ocupado por otra marca tambien
+    te bloquea) y mentiria mostrar capacidad "por marca".
+    """
+    qp = request.query_params
+    marca = (qp.get("marca") or "").strip()
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+
     estados = repos.contar_jobs_por_estado()
     pendientes = estados.get(repos.JOB_PENDIENTE, 0)
     reclamados = estados.get(repos.JOB_RECLAMADO, 0)
@@ -243,12 +258,17 @@ async def cola(request: Request) -> Response:
 
     ahora = datetime.now()
     filas = repos.jobs_activos(limite=200)
-    en_curso = [_item_job(j, ahora) for j in filas if j["estado"] == repos.JOB_RECLAMADO]
-    esperando = [_item_job(j, ahora) for j in filas if j["estado"] == repos.JOB_PENDIENTE]
+    en_vuelo = [_item_job(j, ahora) for j in filas]
+    if marca:
+        en_vuelo = [j for j in en_vuelo if j["marca"] == marca]
+    en_curso = [j for j in en_vuelo if j["estado"] == repos.JOB_RECLAMADO]
+    esperando = [j for j in en_vuelo if j["estado"] == repos.JOB_PENDIENTE]
     workers = sorted({j.get("worker") for j in filas if j["estado"] == repos.JOB_RECLAMADO and j.get("worker")})
 
     return JSONResponse(
         {
+            # Eco del filtro aplicado a las listas ("" = todas): la UI lo usa para etiquetar.
+            "marca": marca,
             "capacidad": {"max_jobs": max_jobs, "max_cola": max_cola, "tope": tope},
             "conteo": {
                 "pendientes": pendientes,

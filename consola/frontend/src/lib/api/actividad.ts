@@ -41,7 +41,9 @@ export const apiActividad = {
     ),
 
   // --- Monitor de cola (snapshot en vivo + serie por día + acciones admin) ---
-  cola: (signal?: AbortSignal) => peticion<ColaMonitor>("/actividad/cola", { signal }),
+  // `marca` acota las listas en_curso/esperando (los KPIs de capacidad siguen globales).
+  cola: (params: { marca?: string } = {}, signal?: AbortSignal) =>
+    peticion<ColaMonitor>(`/actividad/cola${query({ marca: params.marca })}`, { signal }),
   colaSeries: (dias = 14, signal?: AbortSignal) =>
     peticion<ColaSerie>(`/actividad/cola/series${query({ dias: String(dias) })}`, { signal }),
   // Acciones ADMIN (el backend devuelve 403 si no es una sesión admin).

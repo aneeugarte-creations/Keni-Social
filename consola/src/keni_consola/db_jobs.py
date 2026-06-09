@@ -119,13 +119,14 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
     """Jobs EN VUELO (`pendiente` + `reclamado`) con sus metadatos de despacho, mas antiguos primero.
 
     Para el monitor de cola: cada fila lleva `id`, `gen_id`, `estado`, `worker` (quien lo clavo),
-    `creado` (cuando se encolo) y `claimed_at` (cuando empezo a correr). El front deriva la EDAD
-    y enriquece con el registro de generacion (etiqueta/tipo/marca). NO incluye `spec` (pesado).
+    `creado` (cuando se encolo), `claimed_at` (cuando empezo a correr) y `prioridad` (mayor =
+    adelanta en la cola; el Monitor distingue los manuales del lote de fondo). El front deriva
+    la EDAD y enriquece con el registro de generacion (etiqueta/tipo/marca). Sin `spec` (pesado).
     """
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, gen_id, estado, worker, creado, claimed_at FROM jobs "
+            "SELECT id, gen_id, estado, worker, creado, claimed_at, prioridad FROM jobs "
             "WHERE estado <> ? ORDER BY creado ASC, id ASC LIMIT ?",
             (JOB_TERMINADO, int(limite)),
         ).fetchall()
@@ -139,6 +140,7 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
             "worker": f["worker"] or "",
             "creado": f["creado"],
             "claimed_at": f["claimed_at"],
+            "prioridad": int(f["prioridad"] or 0),
         }
         for f in filas
     ]
