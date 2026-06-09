@@ -10,6 +10,19 @@ import { Seccion } from "../Seccion";
 import { Campo, CamposDegradado, CamposSombra, Num } from "./Campos";
 import type { PropsCuerpoCapa } from "./tipos";
 
+// Pesos tipográficos con nombre: hace descubrible la "Black" (900) —la negra que usa Claro Sports
+// en sus titulares— sin teclear el número. El render elige el archivo por peso (p. ej. Lato 900 ->
+// Lato-Black.ttf); las familias que no tengan ese peso caen al más cercano (inocuo).
+const PESOS: { valor: number; etiqueta: string }[] = [
+  { valor: 300, etiqueta: "Ligera (300)" },
+  { valor: 400, etiqueta: "Regular (400)" },
+  { valor: 500, etiqueta: "Media (500)" },
+  { valor: 600, etiqueta: "Seminegrita (600)" },
+  { valor: 700, etiqueta: "Negrita (700)" },
+  { valor: 800, etiqueta: "Extranegrita (800)" },
+  { valor: 900, etiqueta: "Black / Negra (900)" },
+];
+
 export function CuerpoTexto({ capa, set, familias }: PropsCuerpoCapa<CapaTexto>) {
   return (
     <>
@@ -77,7 +90,23 @@ export function CuerpoTexto({ capa, set, familias }: PropsCuerpoCapa<CapaTexto>)
       <Seccion titulo="Más">
         <div className="grid grid-cols-2 gap-2">
           <Campo etiqueta="Tamaño"><Num valor={capa.tamano} onChange={(v) => set({ tamano: v } as Partial<Capa>)} /></Campo>
-          <Campo etiqueta="Peso"><Num valor={capa.peso} paso={100} onChange={(v) => set({ peso: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Peso">
+            <select
+              value={capa.peso}
+              onChange={(e) => set({ peso: Number(e.target.value) } as Partial<Capa>)}
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              {PESOS.map((p) => (
+                <option key={p.valor} value={p.valor}>
+                  {p.etiqueta}
+                </option>
+              ))}
+              {/* Si la capa trae un peso fuera de la lista, lo mostramos igual (no lo perdemos). */}
+              {!PESOS.some((p) => p.valor === capa.peso) && (
+                <option value={capa.peso}>{capa.peso}</option>
+              )}
+            </select>
+          </Campo>
           <Campo etiqueta="Color">
             <ColorControl valor={capa.color} onChange={(c) => set({ color: c } as Partial<Capa>)} />
           </Campo>

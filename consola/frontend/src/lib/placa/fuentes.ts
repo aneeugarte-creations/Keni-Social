@@ -31,6 +31,7 @@ const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Exo 2", archivo: "Exo2-Variable.ttf", peso: "100 900" },
   { familia: "Lato", archivo: "Lato-Regular.ttf", peso: "400" },
   { familia: "Lato", archivo: "Lato-Bold.ttf", peso: "700" },
+  { familia: "Lato", archivo: "Lato-Black.ttf", peso: "900" },
 ];
 
 // Una sola promesa por familia: no recargamos en cada render.

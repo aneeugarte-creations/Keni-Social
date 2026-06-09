@@ -30,6 +30,7 @@ const ARCHIVOS = [
   ["Exo 2", "Exo2-Variable.ttf"],
   ["Lato", "Lato-Regular.ttf"],
   ["Lato", "Lato-Bold.ttf"],
+  ["Lato", "Lato-Black.ttf"],
 ];
 
 // Catálogo de familias ofrecidas (el editor mantiene su propia copia para el selector).
