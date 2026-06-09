@@ -170,6 +170,7 @@ let mockHistorias: any;
 let mockUsarHistoria: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarHistoria: any;
+let mockDescartarLote: any;
 
 beforeEach(() => {
   vi.spyOn(apiMod.api.noticias, "cobertura").mockResolvedValue(RESUMEN_COBERTURA);
@@ -182,6 +183,9 @@ beforeEach(() => {
   mockDescartarHistoria = vi
     .spyOn(apiMod.api.noticias, "descartarHistoria")
     .mockResolvedValue({ ok: true });
+  mockDescartarLote = vi
+    .spyOn(apiMod.api.noticias, "descartarHistoriasLote")
+    .mockResolvedValue({ descartadas: 1 });
 });
 
 afterEach(() => {
@@ -383,6 +387,30 @@ describe("Cobertura · Historias — acciones Empujar / Descartar", () => {
     fireEvent.click(boton);
     await waitFor(() => {
       expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1");
+    });
+  });
+});
+
+describe("Cobertura · Historias — selección múltiple (papelera estilo correo)", () => {
+  it("no muestra la acción de descarte hasta que hay selección", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("btn-descartar-seleccion")).toBeNull();
+  });
+
+  it("'seleccionar todo' + Descartar llama a descartarHistoriasLote con los ids", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todas/i }));
+    fireEvent.click(screen.getByTestId("btn-descartar-seleccion"));
+    await waitFor(() => {
+      expect(mockDescartarLote).toHaveBeenCalledWith(["h-1"]);
     });
   });
 });

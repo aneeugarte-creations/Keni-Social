@@ -39,6 +39,7 @@ import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -161,9 +162,16 @@ function BarraCobertura() {
 interface PropsTarjetaHistoria {
   historia: Historia;
   queryKey: readonly unknown[];
+  seleccionada: boolean;
+  onToggleSeleccion: (checked: boolean) => void;
 }
 
-function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
+function TarjetaHistoria({
+  historia,
+  queryKey,
+  seleccionada,
+  onToggleSeleccion,
+}: PropsTarjetaHistoria) {
   const queryClient = useQueryClient();
   const [expandida, setExpandida] = React.useState(false);
 
@@ -196,13 +204,21 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
 
   return (
     <Card
-      className={`text-sm transition-opacity ${esDescartada ? "opacity-50" : ""}`}
+      className={`text-sm transition-opacity ${esDescartada ? "opacity-50" : ""} ${
+        seleccionada ? "ring-2 ring-primary/40" : ""
+      }`}
       data-testid="historia-item"
     >
       <CardContent className="pt-3 pb-3 space-y-2">
-        {/* Cabecera: título + acciones */}
+        {/* Cabecera: checkbox de selección (papelera estilo correo) + título + acciones */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
+          <div className="flex flex-1 min-w-0 items-start gap-2">
+            <Checkbox
+              checked={seleccionada}
+              onCheckedChange={onToggleSeleccion}
+              className="mt-0.5"
+              aria-label={`Seleccionar «${historia.titulo || "sin título"}»`}
+            />
             <p className="font-medium leading-snug">{historia.titulo || "(sin título)"}</p>
           </div>
 
@@ -428,10 +444,19 @@ interface PropsVistaHistorias {
 function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
   const [estado, setEstado] = React.useState("");
   const [offset, setOffset] = React.useState(0);
+  // Selección estilo correo (papelera): ids marcados para descartar en lote.
+  const [seleccion, setSeleccion] = React.useState<Set<string>>(() => new Set());
+  const queryClient = useQueryClient();
 
   React.useEffect(() => {
     setOffset(0);
   }, [marcaActiva, estado]);
+
+  // La selección NO debe sobrevivir a un cambio de marca/estado/página: mostraría otro conjunto
+  // de historias y se descartarían ids que ya no se ven.
+  React.useEffect(() => {
+    setSeleccion(new Set());
+  }, [marcaActiva, estado, offset]);
 
   const clave = CLAVE_HISTORIAS(marcaActiva, estado, offset);
 
@@ -455,6 +480,34 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
   const total = query.data?.total ?? 0;
   const hayMas = offset + PAGE_SIZE < total;
   const hayAnterior = offset > 0;
+
+  // ── Selección estilo correo ─────────────────────────────────────────────
+  const idsVisibles = historias.map((h) => h.id);
+  const algunaSeleccion = seleccion.size > 0;
+  const todasSeleccionadas =
+    idsVisibles.length > 0 && idsVisibles.every((id) => seleccion.has(id));
+
+  const alternarUna = (id: string, checked: boolean) =>
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const alternarTodas = (checked: boolean) =>
+    setSeleccion(checked ? new Set(idsVisibles) : new Set());
+
+  const descartarLoteMut = useMutation({
+    mutationFn: (ids: string[]) => api.noticias.descartarHistoriasLote(ids),
+    onSuccess: (d) => {
+      void queryClient.invalidateQueries({ queryKey: clave });
+      setSeleccion(new Set());
+      const n = d.descartadas;
+      toast.success(`${n} historia${n !== 1 ? "s" : ""} descartada${n !== 1 ? "s" : ""}.`);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   return (
     <>
@@ -483,6 +536,53 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
           </span>
         )}
       </div>
+
+      {/* Barra de selección (papelera estilo correo): seleccionar todo / descartar lo marcado */}
+      {!query.isError && historias.length > 0 && (
+        <div
+          className="mb-3 flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2"
+          data-testid="barra-seleccion-historias"
+        >
+          <Checkbox
+            checked={todasSeleccionadas}
+            onCheckedChange={alternarTodas}
+            aria-label="Seleccionar todas las historias de esta página"
+          />
+          <span className="text-xs text-muted-foreground">
+            {algunaSeleccion
+              ? `${seleccion.size} seleccionada${seleccion.size !== 1 ? "s" : ""}`
+              : "Seleccionar todo"}
+          </span>
+          {algunaSeleccion && (
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setSeleccion(new Set())}
+                disabled={descartarLoteMut.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                onClick={() => descartarLoteMut.mutate([...seleccion])}
+                disabled={descartarLoteMut.isPending}
+                data-testid="btn-descartar-seleccion"
+              >
+                {descartarLoteMut.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                Descartar {seleccion.size}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error */}
       {query.isError && (
@@ -514,7 +614,13 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
           ) : (
             <div className="space-y-2">
               {historias.map((h) => (
-                <TarjetaHistoria key={h.id} historia={h} queryKey={clave} />
+                <TarjetaHistoria
+                  key={h.id}
+                  historia={h}
+                  queryKey={clave}
+                  seleccionada={seleccion.has(h.id)}
+                  onToggleSeleccion={(checked) => alternarUna(h.id, checked)}
+                />
               ))}
             </div>
           )}

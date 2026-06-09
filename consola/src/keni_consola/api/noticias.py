@@ -599,11 +599,43 @@ async def descartar_historia(request: Request) -> Response:
     return JSONResponse({"historia": historia})
 
 
+# Tope de ids por lote, para que un cuerpo enorme no dispare un barrido de updates sin control.
+_MAX_LOTE_DESCARTE = 500
+
+
+async def descartar_historias_lote(request: Request) -> Response:
+    """POST /api/noticias/historias/descartar-lote: descarta VARIAS historias de una (papelera).
+
+    Cuerpo `{ids: [cluster_id, ...]}`. Marca cada cluster existente `estado=descartado`
+    (idempotente: ignora silenciosamente los ids vacíos, repetidos o que ya no existen). Es el
+    motor del multi-selección estilo correo de Investigación: seleccionar (o "todos") + descartar.
+    Devuelve `{descartadas: n}` (cuántas se marcaron de verdad).
+    """
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list):
+        return JSONResponse({"error": "Se esperaba una lista de ids."}, status_code=400)
+    descartadas = 0
+    for cid in dict.fromkeys(ids):  # dedup preservando orden; evita doble update del mismo id
+        if not isinstance(cid, str) or not cid:
+            continue
+        if descartadas >= _MAX_LOTE_DESCARTE:
+            break
+        if repos.obtener_noticia_cluster(cid) is None:
+            continue
+        repos.actualizar_noticia_cluster(cid, estado="descartado")
+        descartadas += 1
+    return JSONResponse({"descartadas": descartadas})
+
+
 RUTAS = [
     Route("/api/noticias", listar, methods=["GET"]),
     Route("/api/noticias/cobertura", cobertura, methods=["GET"]),
     Route("/api/noticias/salud", salud, methods=["GET"]),
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
+    # El lote va ANTES de `/historias/{cluster_id}` para que `descartar-lote` no se confunda
+    # con un cluster_id (aunque difieren en método, el orden lo deja explícito y a prueba de futuros GET).
+    Route("/api/noticias/historias/descartar-lote", descartar_historias_lote, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}", detalle_historia, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}/usar", usar_historia, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}/descartar", descartar_historia, methods=["POST"]),

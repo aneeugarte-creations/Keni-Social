@@ -139,6 +139,16 @@ export const apiNoticias = {
         { metodo: "POST", muestrear: false },
       ),
 
+    /**
+     * Descarta VARIAS historias de una (papelera estilo correo: seleccionar + descartar).
+     * POST /api/noticias/historias/descartar-lote  →  { descartadas: n }
+     */
+    descartarHistoriasLote: (ids: string[]) =>
+      peticion<{ descartadas: number }>(
+        `/noticias/historias/descartar-lote`,
+        { metodo: "POST", json: { ids }, muestrear: false },
+      ),
+
     // --- Ola D: salud de fuentes ---
 
     /**

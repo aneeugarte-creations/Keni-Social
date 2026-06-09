@@ -272,3 +272,36 @@ def test_descartar_marca_descartada(cliente):
 
 def test_descartar_inexistente_404(cliente):
     assert cliente.post("/api/noticias/historias/nope/descartar").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# descartar-lote (papelera estilo correo: seleccionar + descartar)              #
+# --------------------------------------------------------------------------- #
+
+
+def test_descartar_lote_marca_solo_las_pasadas(cliente):
+    _sembrar_cluster("a")
+    _sembrar_cluster("b")
+    _sembrar_cluster("c")
+    r = cliente.post(
+        "/api/noticias/historias/descartar-lote", json={"ids": ["a", "b", "a", "nope"]}
+    )
+    assert r.status_code == 200, r.text
+    # 'a' deduplicada (no cuenta doble) y 'nope' inexistente (ignorada): solo a + b.
+    assert r.json() == {"descartadas": 2}
+    assert repos.obtener_noticia_cluster("a")["estado"] == "descartado"
+    assert repos.obtener_noticia_cluster("b")["estado"] == "descartado"
+    assert repos.obtener_noticia_cluster("c")["estado"] == "nuevo"  # intacta
+
+
+def test_descartar_lote_lista_vacia_no_borra_nada(cliente):
+    _sembrar_cluster("a")
+    r = cliente.post("/api/noticias/historias/descartar-lote", json={"ids": []})
+    assert r.status_code == 200
+    assert r.json() == {"descartadas": 0}
+    assert repos.obtener_noticia_cluster("a")["estado"] == "nuevo"
+
+
+def test_descartar_lote_ids_no_lista_400(cliente):
+    r = cliente.post("/api/noticias/historias/descartar-lote", json={"ids": "a"})
+    assert r.status_code == 400
