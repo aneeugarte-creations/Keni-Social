@@ -123,6 +123,48 @@ def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
     return relevancia_marca.palabras_de_marca(marca or None)
 
 
+def _rendimiento_top_lineas() -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:
+    """Precalcula (1 vez por barrido) las líneas TOP por engagement y el catálogo de líneas.
+
+    Gateado por `KENI_RENDIMIENTO_RANKING` (def OFF). Best-effort: ante cualquier fallo (sin
+    métricas, sin Metricool) devuelve vacío y la señal queda inerte. Devuelve
+    `(nombres_top, {etiqueta_id: nombre}, etiquetas_vertical)`.
+    """
+    if not config.rendimiento_ranking_activo():
+        return set(), {}, []
+    try:
+        from . import metricas_linea
+        from .dominio import rendimiento_tema
+
+        data = metricas_linea.lineas_y_origenes("mes", None, None)
+        top = rendimiento_tema.lineas_top(
+            data.get("lineas", []),
+            minimo_piezas=config.rendimiento_min_piezas(),
+            n=config.rendimiento_top_n(),
+        )
+        etiquetas = [e for e in repos.listar_etiquetas(clase="vertical") if e.get("id")]
+        id_a_nombre = {e["id"]: (e.get("nombre") or "") for e in etiquetas}
+        return top, id_a_nombre, etiquetas
+    except Exception:  # noqa: BLE001 -- la señal de rendimiento es opcional; nunca rompe la ingesta
+        _log.warning("ingesta_daemon: no se pudo calcular el rendimiento por línea (señal inerte).", exc_info=True)
+        return set(), {}, []
+
+
+def _rendimiento_bonus(
+    cluster: dict[str, Any],
+    top_lineas: set[str],
+    vert_id_a_nombre: dict[str, str],
+    vert_etiquetas: list[dict[str, Any]],
+) -> float:
+    """Bonus [0,1] de una historia: 1.0 si su línea (clasificación léxica) está en el top. 0 si no."""
+    from .dominio import clasificador_lineas, rendimiento_tema
+
+    texto = f"{cluster.get('titulo', '')} {cluster.get('resumen', '')}"
+    lid = clasificador_lineas.clasificar(texto, vert_etiquetas)
+    nombre = vert_id_a_nombre.get(lid or "", "")
+    return rendimiento_tema.bonus_de_historia(nombre, top_lineas)
+
+
 def paso_clustering() -> dict[str, Any]:
     """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
 
@@ -144,6 +186,8 @@ def paso_clustering() -> dict[str, Any]:
     perfil_activo = config.perfil_editorial_activo()  # relevancia desde la línea editorial (Haiku)
     perfil_ttl = config.perfil_editorial_ttl_horas()
     perfil_refrescadas: set[str] = set()  # 1 refresco por marca por barrido (Haiku acotado)
+    # Señal de RENDIMIENTO (Fase 2c, gateada): líneas top por engagement + clasificación léxica.
+    top_lineas, vert_id_a_nombre, vert_etiquetas = _rendimiento_top_lineas()
 
     ahora = datetime.now(UTC)
     desde = (ahora - timedelta(hours=ventana_h)).isoformat()
@@ -198,6 +242,11 @@ def paso_clustering() -> dict[str, Any]:
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(marca_c, ttl_horas=perfil_ttl, ahora=ahora)
             palabras = _palabras_relevancia(marca_c, perfil_activo)
+            # Señal de rendimiento (Fase 2c): 1 si la historia cae en una línea top por engagement.
+            if top_lineas:
+                recalc["bonus_rendimiento"] = _rendimiento_bonus(
+                    recalc, top_lineas, vert_id_a_nombre, vert_etiquetas
+                )
             score, _razon = clustering.puntuar(
                 recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
             )

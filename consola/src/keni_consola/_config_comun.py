@@ -291,6 +291,15 @@ ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 ENV_FUSION_SEMANTICA = "KENI_FUSION_SEMANTICA"
 ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
 
+# Señal de RENDIMIENTO en el ranking (Fase 2c): prioriza historias de las líneas editoriales que
+# MEJOR funcionan en redes (Metricool). GATEADO por `KENI_RENDIMIENTO_RANKING` (def OFF). Anti-sesgo:
+# una línea solo cuenta si tiene ≥ `_MIN_PIEZAS` medidas; se limita al `_TOP_N`. El peso de la señal
+# en el score es `KENI_SCORE_PESO_RENDIMIENTO`.
+ENV_RENDIMIENTO_RANKING = "KENI_RENDIMIENTO_RANKING"
+ENV_SCORE_PESO_RENDIMIENTO = "KENI_SCORE_PESO_RENDIMIENTO"
+ENV_RENDIMIENTO_TOP_N = "KENI_RENDIMIENTO_TOP_N"
+ENV_RENDIMIENTO_MIN_PIEZAS = "KENI_RENDIMIENTO_MIN_PIEZAS"
+
 # Insumos del día (cajones): modelo de parseo que usa `claude -p` para extraer los ítems
 # del material diario (portal/corresponsales/reporteros/eventos_claro). Por defecto "haiku"
 # (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
@@ -555,6 +564,11 @@ PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
 # Fusión semántica: hasta 40 historias por marca y barrido se mandan a Haiku a agrupar.
 FUSION_SEMANTICA_MAX_DEF = 40
 
+# Rendimiento en el ranking (Fase 2c): peso de la señal (0.15), top-3 líneas, muestra mínima 5.
+SCORE_PESO_RENDIMIENTO_DEF = 0.15
+RENDIMIENTO_TOP_N_DEF = 3
+RENDIMIENTO_MIN_PIEZAS_DEF = 5
+
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
 S3_REGION_DEF = "garage"
@@ -772,6 +786,9 @@ __all__ = [
     'ENV_QA',
     'ENV_RAIZ',
     'ENV_REAPER_INTERVALO_MIN',
+    'ENV_RENDIMIENTO_MIN_PIEZAS',
+    'ENV_RENDIMIENTO_RANKING',
+    'ENV_RENDIMIENTO_TOP_N',
     'ENV_REUTERS_API_KEY',
     'ENV_REUTERS_BASE_URL',
     'ENV_RP_ID',
@@ -783,6 +800,7 @@ __all__ = [
     'ENV_S3_REGION',
     'ENV_S3_SECRET_KEY',
     'ENV_SCORE_BONUS_BREAKING',
+    'ENV_SCORE_PESO_RENDIMIENTO',
     'ENV_SCORE_PESO_CORROBORACION',
     'ENV_SCORE_PESO_FRESCURA',
     'ENV_SCORE_PESO_MARCA',
@@ -846,12 +864,15 @@ __all__ = [
     'PORT_DEF',
     'Path',
     'REAPER_INTERVALO_MIN_DEF',
+    'RENDIMIENTO_MIN_PIEZAS_DEF',
+    'RENDIMIENTO_TOP_N_DEF',
     'S3_BUCKET_DEF',
     'S3_REGION_DEF',
     'SCORE_BONUS_BREAKING_DEF',
     'SCORE_PESO_CORROBORACION_DEF',
     'SCORE_PESO_FRESCURA_DEF',
     'SCORE_PESO_MARCA_DEF',
+    'SCORE_PESO_RENDIMIENTO_DEF',
     'SCORE_PESO_VIRALIDAD_DEF',
     'SESION_HORAS_DEF',
     'SESION_MAX_HORAS_DEF',

@@ -52,16 +52,19 @@ _PESO_VIRALIDAD = 0.20
 _PESO_MARCA = 0.20
 # Empujón aditivo si la historia es breaking (no es un peso de la combinación lineal).
 _BONUS_BREAKING = 0.10
+# Peso de la señal de RENDIMIENTO (líneas que mejor funcionan). DEFAULT 0.0 = INERTE: la señal
+# (Fase 2c) solo cuenta cuando el equipo le da peso desde config; así no cambia nada por defecto.
+_PESO_RENDIMIENTO = 0.0
 
 
 @dataclass(frozen=True)
 class PesosScore:
     """Pesos del algoritmo de ponderación del score de cluster (inyectables desde config).
 
-    Los cuatro primeros son la combinación lineal (idealmente suman ~1.0); `breaking` es el
-    empujón aditivo. `puntuar()` usa estos; el daemon construye una instancia desde
-    `config.score_pesos()` para que el equipo afine el ranking sin tocar código. Sin inyección,
-    `puntuar()` cae a `_PESOS_DEF` (estos defaults), preservando el comportamiento actual.
+    `corroboracion/frescura/viralidad/marca` son la combinación lineal (idealmente suman ~1.0);
+    `breaking` es el empujón aditivo; `rendimiento` es la señal de líneas que mejor funcionan
+    (Fase 2c), INERTE por defecto (peso 0). `puntuar()` usa estos; el daemon construye una
+    instancia desde `config.score_pesos()`. Sin inyección, `puntuar()` cae a `_PESOS_DEF`.
     """
 
     corroboracion: float = _PESO_CORROBORACION
@@ -69,6 +72,7 @@ class PesosScore:
     viralidad: float = _PESO_VIRALIDAD
     marca: float = _PESO_MARCA
     breaking: float = _BONUS_BREAKING
+    rendimiento: float = _PESO_RENDIMIENTO
 
 
 _PESOS_DEF = PesosScore()
@@ -503,15 +507,20 @@ def puntuar(
     s_fresca = _frescura(str(cluster.get("ultimo_visto") or ""), ahora=ahora)
     s_viral = _log_norm(senal, _SENAL_SATURA)
     s_marca = _relevancia_marca(cluster, palabras_marca)
+    # Señal de RENDIMIENTO (Fase 2c): 0..1 que el daemon precalcula (1 si la historia cae en una
+    # línea top por engagement). INERTE salvo que `pesos.rendimiento` > 0. Acota a [0,1] por defensa.
+    s_rend = min(1.0, max(0.0, float(cluster.get("bonus_rendimiento") or 0.0)))
 
     score = (
         p.corroboracion * s_corro
         + p.frescura * s_fresca
         + p.viralidad * s_viral
         + p.marca * s_marca
+        + p.rendimiento * s_rend
     )
     if int(cluster.get("breaking") or 0):
         score = min(1.0, score + p.breaking)
+    score = min(1.0, score)
 
     razones: list[str] = []
     if n_fuentes > 1:

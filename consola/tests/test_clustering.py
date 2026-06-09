@@ -232,6 +232,22 @@ def test_puntuar_pesos_inyectados_cambian_el_score():
     assert clustering.puntuar(cl, ahora=_T0, pesos=todo_cero)[0] == 0.0
 
 
+def test_puntuar_senal_rendimiento_inerte_sin_peso():
+    """La señal de rendimiento (Fase 2c) NO afecta con el peso por defecto (0): no rompe nada."""
+    base = _cluster(n_fuentes=2, ultimo_visto=_T0.isoformat())
+    con_bonus = {**base, "bonus_rendimiento": 1.0}
+    assert clustering.puntuar(base, ahora=_T0)[0] == clustering.puntuar(con_bonus, ahora=_T0)[0]
+
+
+def test_puntuar_senal_rendimiento_con_peso_sube_el_score():
+    """Con peso > 0, una historia en una línea top (bonus 1.0) puntúa más que una sin bonus."""
+    base = _cluster(n_fuentes=2, ultimo_visto=_T0.isoformat())
+    pesos = clustering.PesosScore(rendimiento=0.2)
+    sin = clustering.puntuar(base, ahora=_T0, pesos=pesos)[0]
+    con = clustering.puntuar({**base, "bonus_rendimiento": 1.0}, ahora=_T0, pesos=pesos)[0]
+    assert con > sin
+
+
 # --------------------------------------------------------------------------- #
 # Auto-verificación por corroboración (Ola D)                                  #
 # --------------------------------------------------------------------------- #

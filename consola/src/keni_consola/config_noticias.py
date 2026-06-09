@@ -45,10 +45,14 @@ from ._config_comun import (
     ENV_FUSION_SEMANTICA_MAX,
     ENV_PERFIL_EDITORIAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
+    ENV_RENDIMIENTO_MIN_PIEZAS,
+    ENV_RENDIMIENTO_RANKING,
+    ENV_RENDIMIENTO_TOP_N,
     ENV_SCORE_BONUS_BREAKING,
     ENV_SCORE_PESO_CORROBORACION,
     ENV_SCORE_PESO_FRESCURA,
     ENV_SCORE_PESO_MARCA,
+    ENV_SCORE_PESO_RENDIMIENTO,
     ENV_SCORE_PESO_VIRALIDAD,
     ENV_REUTERS_BASE_URL,
     ENV_TRAD_LOTE,
@@ -75,10 +79,13 @@ from ._config_comun import (
     PERFIL_EDITORIAL_TTL_HORAS_DEF,
     PIPELINE_INTERVALO_HORAS_DEF,
     PIPELINE_MAX_DEF,
+    RENDIMIENTO_MIN_PIEZAS_DEF,
+    RENDIMIENTO_TOP_N_DEF,
     SCORE_BONUS_BREAKING_DEF,
     SCORE_PESO_CORROBORACION_DEF,
     SCORE_PESO_FRESCURA_DEF,
     SCORE_PESO_MARCA_DEF,
+    SCORE_PESO_RENDIMIENTO_DEF,
     SCORE_PESO_VIRALIDAD_DEF,
     TRAD_LOTE_DEF,
     TRAD_MIN_SCORE_DEF,
@@ -207,7 +214,34 @@ def score_pesos():
         viralidad=_peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF),
         marca=_peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF),
         breaking=_peso01(ENV_SCORE_BONUS_BREAKING, SCORE_BONUS_BREAKING_DEF),
+        rendimiento=_peso01(ENV_SCORE_PESO_RENDIMIENTO, SCORE_PESO_RENDIMIENTO_DEF),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Señal de rendimiento en el ranking (líneas que mejor funcionan) — Fase 2c     #
+# --------------------------------------------------------------------------- #
+
+
+def rendimiento_ranking_activo() -> bool:
+    """True si el ranking prioriza historias de las líneas que mejor rinden (`KENI_RENDIMIENTO_RANKING`).
+
+    Def OFF: sin el flag, el daemon no calcula la señal de rendimiento (queda inerte aunque tenga
+    peso). Con el flag, calcula las líneas top por engagement (Metricool) y empuja las historias
+    de esas líneas. Anti-sesgo: muestra mínima por línea + tope N (ver accesores).
+    """
+    return _crudo(ENV_RENDIMIENTO_RANKING).lower() in _VERDADEROS
+
+
+def rendimiento_top_n() -> int:
+    """Cuántas líneas top se premian (`KENI_RENDIMIENTO_TOP_N`, def 3, min 1)."""
+    return _entero(ENV_RENDIMIENTO_TOP_N, RENDIMIENTO_TOP_N_DEF, minimo=1)
+
+
+def rendimiento_min_piezas() -> int:
+    """Muestra mínima de piezas medidas para que una línea cuente como top (anti-sesgo)
+    (`KENI_RENDIMIENTO_MIN_PIEZAS`, def 5, min 1): evita encaramar una línea que 'funcionó una vez'."""
+    return _entero(ENV_RENDIMIENTO_MIN_PIEZAS, RENDIMIENTO_MIN_PIEZAS_DEF, minimo=1)
 
 
 # --------------------------------------------------------------------------- #

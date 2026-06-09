@@ -49,6 +49,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
         config.ENV_NOTICIAS_GC, config.ENV_PERFIL_EDITORIAL, config.ENV_FUSION_SEMANTICA,
+        config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
         # Tuning.
         config.ENV_AUTOGEN_ARTE_MAX,
@@ -58,6 +59,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_NOTICIAS_GC_INTERVALO_HORAS, config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
         config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
         config.ENV_PERFIL_EDITORIAL_TTL_HORAS, config.ENV_FUSION_SEMANTICA_MAX,
+        config.ENV_SCORE_PESO_RENDIMIENTO, config.ENV_RENDIMIENTO_TOP_N,
+        config.ENV_RENDIMIENTO_MIN_PIEZAS,
         config.ENV_INGESTA_BATCH, config.ENV_INGESTA_WORKERS,
         config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
         config.ENV_CLUSTER_VENTANA_H, config.ENV_CLUSTER_BREAKING_FUENTES,

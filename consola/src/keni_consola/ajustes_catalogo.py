@@ -227,6 +227,16 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        Ajuste(
+            clave=config.ENV_RENDIMIENTO_RANKING,
+            tipo="bool",
+            etiqueta="Priorizar por rendimiento (Metricool)",
+            ayuda="El ranking de noticias da un empujón a las historias de las líneas editoriales "
+            "que MEJOR funcionan en redes. Anti-sesgo: una línea solo cuenta con una muestra "
+            "mínima de piezas medidas y se limita a un top-N (no monotematiza).",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -344,6 +354,36 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="tuning",
             defecto=config.FUSION_SEMANTICA_MAX_DEF,
             minimo=2,
+        ),
+        Ajuste(
+            clave=config.ENV_SCORE_PESO_RENDIMIENTO,
+            tipo="float",
+            etiqueta="Ranking: peso rendimiento (líneas top)",
+            ayuda="Cuánto pesa que la historia caiga en una línea editorial de alto rendimiento. "
+            "Solo cuenta con «Priorizar por rendimiento» activo. [0-1].",
+            grupo="tuning",
+            defecto=config.SCORE_PESO_RENDIMIENTO_DEF,
+            minimo=0,
+            maximo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_RENDIMIENTO_TOP_N,
+            tipo="int",
+            etiqueta="Rendimiento: nº de líneas top",
+            ayuda="Cuántas líneas (las de mejor engagement) reciben el empujón de rendimiento.",
+            grupo="tuning",
+            defecto=config.RENDIMIENTO_TOP_N_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_RENDIMIENTO_MIN_PIEZAS,
+            tipo="int",
+            etiqueta="Rendimiento: muestra mínima por línea",
+            ayuda="Una línea solo cuenta como top si tiene al menos estas piezas medidas "
+            "(anti-sesgo: evita encaramar una línea que «funcionó una vez»).",
+            grupo="tuning",
+            defecto=config.RENDIMIENTO_MIN_PIEZAS_DEF,
+            minimo=1,
         ),
         # --- Ingesta (Ola A) ------------------------------------------------------ #
         Ajuste(
