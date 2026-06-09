@@ -482,7 +482,7 @@ async def analitica_campania(request: Request) -> Response:
     campania_id = request.path_params["campania_id"]
     rango = request.query_params.get("rango") or campanias.RANGO_DEF
     try:
-        datos = campanias.analitica_campania(campania_id, rango)
+        datos = await campanias.analitica_campania(campania_id, rango)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     if datos is None:

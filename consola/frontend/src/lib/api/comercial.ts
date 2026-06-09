@@ -85,6 +85,8 @@ export const apiComercial = {
   analiticaCampania: (id: string, params: { rango?: string } = {}, signal?: AbortSignal) =>
     peticion<AnaliticaCampania>(
       `/comercial/campanias/${encodeURIComponent(id)}/analitica${query(params)}`,
-      { signal },
+      // La 1a carga de un combo frío descarga miles de posts+reels de Metricool (luego se
+      // cachea y es instantánea). Techo amplio para que no la corte el timeout por defecto.
+      { signal, timeoutMs: 90_000 },
     ),
 };

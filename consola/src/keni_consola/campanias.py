@@ -16,14 +16,15 @@ demo) y se marcan con `es_muestra`, igual que el resto de la consola.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from keni_metricas import servicio
 
-from . import marcas, repos
+from . import marcas, metricas_cache, repos
 from .comercial import es_muestra, fuente_actual
 
 _log = logging.getLogger("keni_consola.campanias")
@@ -149,22 +150,25 @@ def borrar_campania(campania_id: str) -> bool:
 # --- Analítica al vuelo -------------------------------------------------------
 
 
-def _piezas_filtradas(ids_metricas: list[str], rango: str, tags: set[str]) -> list[dict[str, Any]]:
-    """Piezas del periodo (de TODAS las marcas de la campaña) cuyo caption lleva algún hashtag.
+async def _listado_cacheado(rango: str, idm: str) -> list[dict[str, Any]]:
+    """Listado de piezas de una marca/periodo, vía la cache de Métricas (lazy fill).
 
-    Recorre cada `id_metricas` (una marca) y une sus piezas. Degrada por-marca: si una
-    fuente no puede listar (config incompleto / rango raro), esa marca aporta 0 y la vista
-    nunca revienta.
+    Reúsa `metricas_cache.piezas_listado_async`: el listado de cada (rango, marca) se
+    calcula UNA vez (golpe caro a Metricool: miles de posts+reels) y se persiste; las
+    siguientes lecturas —y el dashboard de Métricas del mismo combo— son instantáneas.
+    Degrada a `[]` si la fuente falla, para que la campaña nunca reviente.
     """
-    piezas: list[dict[str, Any]] = []
-    for idm in ids_metricas:
-        try:
-            lista = servicio.construir_listado_piezas(rango, idm)
-        except Exception:  # noqa: BLE001 -- sin fuente/cuenta válida: esa marca aporta 0
-            _log.exception("campanias: no se pudo listar piezas (marca=%s rango=%s).", idm, rango)
-            continue
-        piezas.extend(p for p in lista if tags & hashtags_de(p.get("texto", "")))
-    return piezas
+    try:
+        payload, _gen = await metricas_cache.piezas_listado_async(rango, idm)
+    except Exception:  # noqa: BLE001 -- sin fuente/cuenta válida: esa marca aporta 0
+        _log.exception("campanias: no se pudo listar piezas (marca=%s rango=%s).", idm, rango)
+        return []
+    return payload.get("piezas") or []
+
+
+def _filtrar(piezas: list[dict[str, Any]], tags: set[str]) -> list[dict[str, Any]]:
+    """Piezas cuyo caption (`texto`) contiene alguno de los hashtags de la campaña."""
+    return [p for p in piezas if tags & hashtags_de(p.get("texto", ""))]
 
 
 def _agregar(piezas: list[dict[str, Any]]) -> dict[str, Any]:
@@ -251,11 +255,15 @@ def _pieza_tabla(p: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[str, Any] | None:
+async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[str, Any] | None:
     """Analítica completa de una campaña en un periodo (None si la campaña no existe).
 
     Devuelve KPIs, tabla de piezas del periodo, tendencia diaria y comparativa contra el
     periodo anterior, todo restringido a las piezas cuyo caption lleva sus hashtags.
+
+    Es ASÍNCRONA y descarga los listados de TODAS las marcas × (periodo actual + anterior)
+    EN PARALELO y CACHEADOS: el coste de pared es la descarga más lenta, no la suma — clave
+    para que una campaña multimarca de periodo amplio no agote el tiempo de la petición.
     """
     cam = obtener_campania(campania_id)
     if cam is None:
@@ -266,9 +274,21 @@ def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[str, An
     # Una marca puede no tener id_metricas (no conectada): se omite del agregado.
     ids_metricas = [m for m in (marcas.id_metricas_de(x) for x in cam["marcas"]) if m]
     desde, hasta, _dias = servicio.resolver_rango(rango)
+    rango_prev = _rango_anterior(rango)
 
-    piezas = _piezas_filtradas(ids_metricas, rango, tags)
-    piezas_prev = _piezas_filtradas(ids_metricas, _rango_anterior(rango), tags)
+    # Todos los combos (periodo, marca) a la vez; cada uno cacheado e independiente.
+    combos = [(rango, idm) for idm in ids_metricas] + [(rango_prev, idm) for idm in ids_metricas]
+    crudos = await asyncio.gather(*(_listado_cacheado(r, idm) for r, idm in combos))
+    por_combo = dict(zip(combos, crudos))
+
+    def _piezas_de(r: str) -> list[dict[str, Any]]:
+        unidas: list[dict[str, Any]] = []
+        for idm in ids_metricas:
+            unidas.extend(por_combo.get((r, idm), []))
+        return _filtrar(unidas, tags)
+
+    piezas = _piezas_de(rango)
+    piezas_prev = _piezas_de(rango_prev)
     actual = _agregar(piezas)
     anterior = _agregar(piezas_prev)
 

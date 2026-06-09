@@ -55,7 +55,6 @@ const RANGOS: { id: string; etiqueta: string }[] = [
   { id: "mes", etiqueta: "Últimos 30 días" },
   { id: tokenUltimosDias(90), etiqueta: "Últimos 90 días" },
   { id: tokenUltimosDias(180), etiqueta: "Últimos 6 meses" },
-  { id: tokenUltimosDias(365), etiqueta: "Último año" },
 ];
 
 export default function Comercial() {
