@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 import { DistintivoRed } from "./DistintivoRed";
 
 /**
- * El distintivo unifica logo de red + icono de formato en un solo contenedor (logos pelados, sin
- * píldora), SIN el nombre de la red (solo iconos) ni dos burbujas. El nombre va al `title`, no como texto.
+ * El distintivo unifica icono de formato + logo de red en un solo contenedor (logos pelados, sin
+ * píldora), SIN el nombre de la red (solo iconos) ni dos burbujas. El nombre va al `title`, no
+ * como texto. Orden del rediseño aprobado: FORMATO delante de la RED.
  */
 describe("DistintivoRed", () => {
   it("no muestra el NOMBRE de la red como texto (solo iconos); el nombre vive en el tooltip", () => {
@@ -15,8 +16,10 @@ describe("DistintivoRed", () => {
     const distintivo = container.querySelector("span");
     expect(distintivo).not.toBeNull();
     expect(distintivo).toHaveAttribute("title", "Instagram · Foto");
-    // Red + formato => dos iconos (SVG) dentro del mismo contenedor.
-    expect(distintivo!.querySelectorAll("svg")).toHaveLength(2);
+    // Formato + red => dos iconos (SVG) dentro del mismo contenedor, el FORMATO primero.
+    const iconos = distintivo!.querySelectorAll("svg");
+    expect(iconos).toHaveLength(2);
+    expect(iconos[0].classList.contains("lucide-camera")).toBe(true);
   });
 
   it("sin formato pinta solo el logo de la red (un icono)", () => {

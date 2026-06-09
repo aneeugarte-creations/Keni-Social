@@ -71,6 +71,7 @@ _SELECT_PUBLICACION = (
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
     "c.fecha_fuente AS fecha_fuente, "
+    "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, "
     "c.formato AS formato "
     "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
@@ -122,6 +123,10 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC; "" si la
         # pieza no nació de una fuente con fecha. La UI muestra "Fuente del …".
         "fecha_fuente": f["fecha_fuente"] or "",
+        # PROCEDENCIA de la nota original: URL canónica + nombre legible del medio (copiado
+        # en la promoción CI). La serialización pública deriva de aquí `fuente_original`.
+        "url_fuente": f["url_fuente"] or "",
+        "fuente_nombre": f["fuente_nombre"] or "",
         "origen": f["origen"] or "",
         "imagen": f["imagen"] or "",
         # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`) y su checklist,
@@ -283,6 +288,7 @@ def _publicacion_de_filas(
             "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
             "origen": padre["origen"], "ccreado": padre["creado"],
             "fecha_fuente": padre["fecha_fuente"],
+            "url_fuente": padre["url_fuente"], "fuente_nombre": padre["fuente_nombre"],
             "tipo_contenido": padre["tipo_contenido"], "formato": padre["formato"],
         }
     )

@@ -116,7 +116,13 @@ class Publicacion(TypedDict):
     # Fecha de la FUENTE de origen (pipeline automático): pubDate/updated del item de RSS/
     # noticia, normalizado a ISO UTC. La consola muestra "Fuente del …" junto a "Generado el
     # …" (`fecha_creacion`). "" si la pieza no nació de una fuente con fecha (alta manual).
+    # Es la fecha de PUBLICACIÓN de la nota original (fallback: captura del Radar); la
+    # cabecera de grupo del feed la muestra en hora CDMX junto a `fuente_original`.
     fecha_fuente: str
+    # FUENTE ORIGINAL: nombre legible del medio del que salió la nota ("Récord"…), o el
+    # dominio (sin www) de la URL de origen en piezas viejas. "" si la pieza no nació de
+    # una nota (alta manual / creación propia): la UI omite fuente y fecha.
+    fuente_original: str
     origen: str
     imagen: str
     imagen_url: str

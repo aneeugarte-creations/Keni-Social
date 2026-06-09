@@ -31,6 +31,26 @@ from .. import marcas, pipeline_estado, redes, repos
 from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 
 
+def _fuente_original_de(pub: dict[str, Any]) -> str:
+    """Nombre LEGIBLE del medio del que salió la nota original de la pieza ("Récord"…).
+
+    Prefiere `fuente_nombre` (copiado al `contenido` en la promoción CI, para sobrevivir
+    al GC de noticias). Para piezas viejas (anteriores a esa columna) deriva el dominio
+    de `url_fuente`, que se guarda CANÓNICA (sin esquema ni `www.`); defensivo por si
+    llegara una URL completa. "" si la pieza no nació de una nota (alta manual /
+    creación propia): la UI omite entonces fuente y fecha en la cabecera del grupo.
+    """
+    nombre = str(pub.get("fuente_nombre") or "").strip()
+    if nombre:
+        return nombre
+    url = str(pub.get("url_fuente") or "").strip()
+    if not url:
+        return ""
+    sin_esquema = url.split("://", 1)[-1]
+    dominio = sin_esquema.split("/", 1)[0].split("?", 1)[0].strip().lower()
+    return dominio.removeprefix("www.")
+
+
 def _imagen_url_de(pub: dict[str, Any]) -> str:
     """URL servible de la imagen de la pieza (delega en `render_pieza`, sin componer).
 
@@ -172,7 +192,13 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Fecha de la FUENTE de origen (pipeline automático): pubDate normalizado a ISO UTC.
         # La UI la muestra junto a `fecha_creacion` ("Generado el …" + "Fuente del …"). "" si
         # la pieza no nació de una fuente con fecha (alta manual, fuente sin pubDate).
+        # NOTA: este campo ES el "publicado_original" de la nota (en clusters cae al
+        # `primer_visto` del Radar si el medio no traía fecha); no se duplica con otro nombre.
         "fecha_fuente": pub.get("fecha_fuente") or "",
+        # FUENTE ORIGINAL: nombre legible del medio del que salió la nota ("Récord"…), o el
+        # dominio de `url_fuente` para piezas viejas sin `fuente_nombre`. "" si la pieza no
+        # nació de una nota. La cabecera de grupo del feed lo muestra junto a `fecha_fuente`.
+        "fuente_original": _fuente_original_de(pub),
         "origen": pub["origen"],
         "imagen": imagen,
         # `imagen_url`: la URL SERVIBLE de la imagen de la pieza. Si hay `imagen` horneada

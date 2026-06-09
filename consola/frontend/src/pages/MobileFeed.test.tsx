@@ -55,6 +55,7 @@ const PUBLICACION = {
   fecha_actualizacion: "",
   fecha_programada: "",
   fecha_fuente: "",
+  fuente_original: "",
   origen: "",
   imagen: "",
   imagen_url: "",

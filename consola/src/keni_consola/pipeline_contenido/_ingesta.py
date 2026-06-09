@@ -260,6 +260,9 @@ def crear_tema_de(
             # URL CANÓNICA de la nota de origen (trazabilidad + dedup por URL). El enlace ya va
             # como texto en la nota; aquí se persiste estructurado. "" si no es http(s) válido.
             url_fuente=_url_fuente_de(item),
+            # NOMBRE legible del MEDIO de origen (la fuente RSS configurada): la pieza lo
+            # conserva para la UI (cabecera de grupo del feed) aunque el item desaparezca.
+            fuente_nombre=(fuente.get("nombre") or "").strip(),
         )
     except Exception:  # noqa: BLE001 -- sin tema, este item no produce nada (no rompe el barrido)
         _log.warning("pipeline: no se pudo crear el tema (%s)", marca, exc_info=True)
@@ -369,8 +372,15 @@ def crear_tema_de_cluster(
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
-            fecha_fuente=cluster.get("primer_visto") or "",
+            # FECHA de la NOTA ORIGINAL: preferimos el `publicado_en` del item más reciente
+            # (cuando el medio publicó la nota); si el medio no traía fecha, caemos al
+            # `primer_visto` del cluster (cuando el Radar la capturó).
+            fecha_fuente=((items[0].get("publicado_en") if items else "") or "")
+            or (cluster.get("primer_visto") or ""),
             url_fuente=url_fuente,
+            # NOMBRE del MEDIO de origen (item del cluster): se COPIA aquí porque el GC de
+            # noticias puede borrar el cluster y la pieza debe conservar su procedencia.
+            fuente_nombre=(((items[0].get("fuente_nombre") if items else "") or "").strip()),
         )
     except Exception:  # noqa: BLE001 -- sin tema, esta historia no produce nada (no rompe el barrido)
         _log.warning("pipeline: no se pudo crear el tema de la historia (%s)", marca, exc_info=True)

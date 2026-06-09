@@ -277,6 +277,25 @@ def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
     assert (tema.get("url_fuente") or "") == "ejemplo.test/nota-1?id=7"
 
 
+def test_ci_persiste_fuente_nombre_de_la_fuente(entorno, monkeypatch):
+    """CI (feed RSS): el tema conserva el NOMBRE del medio (`fuente_nombre` = nombre de la fuente).
+
+    Se copia al `contenido` al promover para que la cabecera de grupo del feed muestre la
+    procedencia aunque el item/cluster de origen desaparezca después.
+    """
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+
+    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
+    _mock_feed(monkeypatch, [_item(clave="fn1", titulo="Tema con medio")])
+    _mock_og_image(monkeypatch, "")
+
+    temas = _ci_desde_feed(maximo=1)
+
+    assert len(temas) == 1
+    tema = repos.obtener_contenido(temas[0]["id"])
+    assert (tema.get("fuente_nombre") or "") == "Diario"
+
+
 def test_ci_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
     """CI: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -549,6 +568,49 @@ def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
 # Serial POR MARCA: el gate de CI no promueve más historias mientras la marca  #
 # tenga cola EN VUELO (sin cribar / sin copy). Cada item entra y se completa.  #
 # --------------------------------------------------------------------------- #
+
+
+def test_crear_tema_de_cluster_copia_fuente_y_fecha_de_la_nota(entorno, monkeypatch):
+    """La promoción CI→tema COPIA la procedencia de la nota original al `contenido`.
+
+    `fuente_nombre` viene del item más reciente del cluster, y `fecha_fuente` prefiere su
+    `publicado_en` (cuando el medio publicó la nota). Se copian porque el GC de noticias
+    puede borrar el cluster y la pieza debe conservar fuente y fecha para la UI.
+    """
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    cluster = _sembrar_cluster("cf1", titulo="Historia con medio", score=0.7)
+    items = [{
+        "titulo": "Historia con medio", "url": "https://record.com.mx/nota-1",
+        "url_canonica": "record.com.mx/nota-1", "fuente_nombre": "Récord",
+        "publicado_en": "2026-06-09T21:21:00+00:00", "imagen": "",
+    }]
+
+    tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
+
+    assert tema is not None
+    guardado = repos.obtener_contenido(tema["id"])
+    assert (guardado.get("fuente_nombre") or "") == "Récord"
+    assert (guardado.get("fecha_fuente") or "") == "2026-06-09T21:21:00+00:00"
+    assert (guardado.get("url_fuente") or "") == "record.com.mx/nota-1"
+
+
+def test_crear_tema_de_cluster_fecha_cae_a_primer_visto(entorno, monkeypatch):
+    """Si el medio no traía fecha (`publicado_en` vacío), `fecha_fuente` cae al `primer_visto`
+    del cluster (cuándo capturó la historia el Radar). Sin items, también."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    cluster = _sembrar_cluster("cf2", titulo="Historia sin fecha de medio", score=0.7)
+    items = [{
+        "titulo": "Historia sin fecha de medio", "url": "https://medio.test/n",
+        "url_canonica": "medio.test/n", "fuente_nombre": "Medio", "publicado_en": "",
+        "imagen": "",
+    }]
+
+    tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
+
+    assert tema is not None
+    guardado = repos.obtener_contenido(tema["id"])
+    # `primer_visto` del cluster sembrado por `_sembrar_cluster`.
+    assert (guardado.get("fecha_fuente") or "") == "2026-06-01T00:00:00+00:00"
 
 
 def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):

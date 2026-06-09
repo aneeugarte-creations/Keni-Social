@@ -47,6 +47,7 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
     fecha_actualizacion: "",
     fecha_programada: "",
     fecha_fuente: "",
+    fuente_original: "",
     origen: "equipo",
     imagen: "",
     imagen_url: "",

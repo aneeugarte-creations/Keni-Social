@@ -199,11 +199,12 @@ function TarjetaFeed({
 
   return (
     <article className="snap-start border-b border-border bg-background pb-3">
-      {/* Cabecera EN UNA LÍNEA: quién posteó (IA/autor) + distintivo de plataforma/formato ·
-          tiempo (igual que el feed de escritorio). El distintivo (logo de red + icono de
-          foto/vídeo, sin nombre ni dos burbujas) va JUNTO al logo de IA/autor, no sobre la
-          imagen; la marca la fija el selector global de arriba. */}
+      {/* Cabecera EN UNA LÍNEA (orden del rediseño aprobado, igual que el feed de escritorio):
+          distintivo de FORMATO + RED (iconos pelados, sin nombre ni dos burbujas) → quién
+          posteó (IA/autor) · tiempo. El distintivo va en la cabecera, no sobre la imagen; la
+          marca la fija el selector global de arriba. */}
       <header className="flex items-center gap-2 px-4 pb-2 pt-3 text-xs text-muted-foreground">
+        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
         {publicacion.autor_nombre?.trim() ? (
           <Autor
             nombre={publicacion.autor_nombre}
@@ -219,7 +220,6 @@ function TarjetaFeed({
             IA
           </span>
         )}
-        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">
             {tiempoRelativo(publicacion.enviado_a_revision_en)}

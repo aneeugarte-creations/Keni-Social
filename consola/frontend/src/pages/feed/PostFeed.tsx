@@ -277,10 +277,11 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     // El editor se abre SOLO al pulsar la imagen (área interactiva de la pieza). La cabecera, el
     // copy (con su "leer más"), las acciones y los comentarios NO abren el editor.
     <div className="rounded-xl border border-border bg-background text-left shadow-sm">
-      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó (IA/autor) + distintivo de plataforma/formato ·
-          tiempo. El distintivo (logo de red + icono de foto/vídeo, sin nombre ni dos burbujas) va
-          JUNTO al logo de IA/autor, no sobre la imagen, para no taparla. */}
+      {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
+          (iconos pelados, sin nombre ni dos burbujas) → quién posteó (IA/autor) · tiempo. El
+          distintivo va en la cabecera, no sobre la imagen, para no taparla. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
+        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
         {generadaPorIA ? (
           <span
             className="inline-flex items-center gap-1 text-xs font-medium text-foreground"
@@ -296,7 +297,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             className="text-xs font-medium text-foreground"
           />
         )}
-        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}

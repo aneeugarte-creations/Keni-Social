@@ -85,6 +85,10 @@ _COLS_CONTENIDO = (
     # Permite el dedup por URL en `existe_publicado_similar` (cruza la url canónica contra lo
     # publicado) antes de caer al fuzzy de título. "" en alta manual o BD vieja.
     "url_fuente",
+    # NOMBRE legible del MEDIO de origen ("Récord"…): copiado en la promoción CI (el cluster
+    # puede borrarlo el GC). "" en alta manual o BD vieja (la UI deriva el dominio de
+    # `url_fuente` como fallback).
+    "fuente_nombre",
     "creado",
     "actualizado",
 )
@@ -177,6 +181,7 @@ def crear_contenido(
     copy_pendiente: str = "",
     fecha_fuente: str = "",
     url_fuente: str = "",
+    fuente_nombre: str = "",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -199,7 +204,7 @@ def crear_contenido(
         id_post_metricool=id_post_metricool, senal_viralidad=senal_viralidad,
         qa_veredicto=qa_veredicto, qa_hallazgos=qa_hallazgos,
         copy_pendiente=copy_pendiente, fecha_fuente=fecha_fuente, url_fuente=url_fuente,
-        creado=creado, actualizado=actualizado, id=id,
+        fuente_nombre=fuente_nombre, creado=creado, actualizado=actualizado, id=id,
     )
     con = _conectar()
     try:
@@ -259,6 +264,8 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         "fecha_fuente": campos.get("fecha_fuente") or "",
         # URL de la nota de origen (Investigador F3): la conserva la pieza para el dedup por URL.
         "url_fuente": campos.get("url_fuente") or "",
+        # Nombre legible del medio de origen (copiado en la promoción CI; "" en alta manual).
+        "fuente_nombre": campos.get("fuente_nombre") or "",
         "creado": campos.get("creado") or ahora,
         "actualizado": campos.get("actualizado") or ahora,
     }

@@ -5,16 +5,23 @@
  * por red. Las redes que aún NO tienen pieza salen como un hueco "No generado" (todo el contenido
  * debería existir en todas las redes; si no se quiere postear, se rechaza, no se omite).
  *
+ * Cabecera del grupo (rediseño aprobado): a la IZQUIERDA la marca DELANTE del título
+ * (`UnoTV · Solari fue…`); a la DERECHA los LOGOS de las redes que el grupo YA tiene + la
+ * FECHA de la nota original (hora CDMX) + la FUENTE original (el medio del que salió la
+ * nota). Si la idea no nació de una nota (creación propia), solo se pintan los logos. El
+ * formato (foto/video) ya NO va en la cabecera del grupo: vive en el distintivo de cada
+ * tarjeta (`DistintivoRed`).
+ *
  * `PlaceholderRed` es ese hueco: una tarjeta atenuada con la etiqueta de la red y "No generado",
  * con la MISMA forma (4:5) que un post real para que la rejilla quede pareja.
  */
 import * as React from "react";
 
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import { iconoRed, nombreRed } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
-import { BadgeFormato } from "./BadgeFormato";
 import { PostFeed } from "./PostFeed";
 
 /** Una idea agrupada: el tema + la marca + sus piezas (una por red ya generada). */
@@ -59,9 +66,10 @@ export function PlaceholderRed({ red, titulo }: { red: string; titulo?: string }
 }
 
 /**
- * Un bloque por idea: cabecera ligera (tema · marca · cuántas redes generadas) + una rejilla con
- * UNA celda por red (`redes`): el post si existe, o un hueco "No generado". `columnas` controla
- * cuántas redes por fila (1-4). Las ideas NO comparten fila: cada `GrupoIdea` es su propio bloque.
+ * Un bloque por idea: cabecera ligera (marca · tema + logos de redes generadas · fecha/fuente de
+ * la nota original) + una rejilla con UNA celda por red (`redes`): el post si existe, o un hueco
+ * "No generado". `columnas` controla cuántas redes por fila (1-4). Las ideas NO comparten fila:
+ * cada `GrupoIdea` es su propio bloque.
  */
 export function GrupoIdea({
   grupo,
@@ -77,20 +85,44 @@ export function GrupoIdea({
     for (const p of grupo.piezas) if (!m.has(p.red)) m.set(p.red, p);
     return m;
   }, [grupo.piezas]);
-  const generadas = redes.filter((r) => porRed.has(r)).length;
-  // El FORMATO es propiedad del tema (todas las piezas de la idea lo comparten): lo tomamos de la
-  // primera. "" -> foto (default del backend). El badge lo hace explícito ("Foto"/"Video").
-  const formato = grupo.piezas[0]?.formato;
+  // Logos de las redes que el grupo YA TIENE (en el orden del catálogo): sustituyen al viejo
+  // contador "3/5 redes" (los huecos de la rejilla ya cantan lo que falta).
+  const redesGeneradas = redes.filter((r) => porRed.has(r));
+  // PROCEDENCIA de la idea (propiedad del tema; todas las piezas la comparten): fecha en que el
+  // medio publicó la nota original (`fecha_fuente`, fallback a la captura del Radar) + nombre
+  // del medio (`fuente_original`). Vacíos en creación propia -> la cabecera solo pinta logos.
+  const fechaNota = grupo.piezas[0]?.fecha_fuente || "";
+  const fuenteNota = grupo.piezas[0]?.fuente_original || "";
 
   return (
     <section className="rounded-xl border border-border/60 bg-muted/20 p-2 sm:p-3">
       <header className="flex items-center gap-2 px-1 pb-2 text-xs text-muted-foreground">
-        <span className="truncate font-medium text-foreground">{grupo.titulo || "Sin título"}</span>
-        <span aria-hidden="true">·</span>
         <span className="shrink-0">{grupo.marca_nombre}</span>
-        <BadgeFormato formato={formato} className="shrink-0" />
-        <span className="ml-auto shrink-0 tabular-nums">
-          {generadas}/{redes.length} redes
+        <span aria-hidden="true">·</span>
+        <span className="truncate font-medium text-foreground">{grupo.titulo || "Sin título"}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {redesGeneradas.length > 0 && (
+            <span className="flex items-center gap-1.5" data-testid="redes-grupo">
+              {redesGeneradas.map((r) => {
+                const Icono = iconoRed(r);
+                return <Icono key={r} className="h-3.5 w-3.5" aria-label={nombreRed(r)} />;
+              })}
+            </span>
+          )}
+          {fechaNota && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="tabular-nums" title="Fecha de la nota original (hora CDMX)">
+                {formatearFechaHoraCorta(fechaNota)}
+              </span>
+            </>
+          )}
+          {fuenteNota && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span title="Medio del que salió la nota original">{fuenteNota}</span>
+            </>
+          )}
         </span>
       </header>
       <div className={cn("grid items-start gap-3", GRID_COLS[columnas])}>

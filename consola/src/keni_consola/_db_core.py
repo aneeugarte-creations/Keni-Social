@@ -539,6 +539,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         copy_pendiente      TEXT NOT NULL DEFAULT '',
         fecha_fuente        TEXT NOT NULL DEFAULT '',
         url_fuente          TEXT NOT NULL DEFAULT '',
+        fuente_nombre       TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -2520,6 +2521,12 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # fuente con que nació la pieza, para cruzar `existe_publicado_similar` por URL antes
     # de caer al fuzzy de título. "" si la pieza no nació de una URL (alta manual) o BD vieja.
     ("url_fuente", "TEXT NOT NULL DEFAULT ''"),
+    # NOMBRE legible del MEDIO de origen ("Récord", "Reforma"…): se copia al `contenido` en
+    # la promoción (CI) desde el item del cluster / la fuente RSS, porque el cluster puede
+    # ser borrado por el GC de noticias y la pieza debe conservar su procedencia. La UI
+    # (cabecera de grupo del feed) lo muestra junto a `fecha_fuente`; si va vacío (BD vieja,
+    # alta manual) la serialización deriva el dominio de `url_fuente`. Legado -> "".
+    ("fuente_nombre", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),

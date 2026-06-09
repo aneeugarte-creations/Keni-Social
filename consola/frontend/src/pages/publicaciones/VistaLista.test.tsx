@@ -48,6 +48,7 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     fecha_actualizacion: "",
     fecha_programada: "",
     fecha_fuente: "",
+    fuente_original: "",
     origen: "pipeline",
     imagen: "",
     imagen_url: "",

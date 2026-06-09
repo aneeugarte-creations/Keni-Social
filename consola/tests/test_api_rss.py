@@ -729,6 +729,32 @@ def test_publicacion_a_dict_defaults_sin_imagen_de_fuente():
     assert d["imagen_url"] == ""
 
 
+def test_publicacion_a_dict_fuente_original_prefiere_nombre_del_medio():
+    """`fuente_original` expone el nombre del medio copiado en la promoción (`fuente_nombre`)."""
+    d = publicacion_a_dict(
+        {**_PUB_BASE, "fuente_nombre": "Récord", "url_fuente": "record.com.mx/nota-1?id=7"}
+    )
+    assert d["fuente_original"] == "Récord"
+
+
+def test_publicacion_a_dict_fuente_original_deriva_dominio_de_url():
+    """Piezas viejas sin `fuente_nombre`: `fuente_original` deriva el dominio de `url_fuente`.
+
+    La URL se guarda CANÓNICA (sin esquema ni www), pero el helper es defensivo ante una
+    URL completa con esquema y `www.`.
+    """
+    d = publicacion_a_dict({**_PUB_BASE, "url_fuente": "record.com.mx/nota-1?id=7"})
+    assert d["fuente_original"] == "record.com.mx"
+    d = publicacion_a_dict({**_PUB_BASE, "url_fuente": "https://www.Record.com.mx/nota-1"})
+    assert d["fuente_original"] == "record.com.mx"
+
+
+def test_publicacion_a_dict_fuente_original_vacia_sin_nota_de_origen():
+    """Creación propia (sin nota de origen): `fuente_original` vacía (la UI omite fuente/fecha)."""
+    d = publicacion_a_dict(_PUB_BASE)
+    assert d["fuente_original"] == ""
+
+
 def test_publicacion_a_dict_expone_etapa_ia():
     """La pieza serializa `etapa_ia` derivada por `pipeline_estado.etapa_de_pieza` (Flujo C #3)."""
     from keni_consola import pipeline_estado as pe

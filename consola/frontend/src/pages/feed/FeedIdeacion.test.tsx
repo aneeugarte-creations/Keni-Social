@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import { FiltrosContenidoProvider } from "@/hooks/use-filtros-contenido";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import type { UsuarioSesion } from "@/types";
 
 import FeedIdeacion from "./FeedIdeacion";
@@ -54,6 +55,7 @@ const PUBLICACION = {
   fecha_actualizacion: "",
   fecha_programada: "",
   fecha_fuente: "",
+  fuente_original: "",
   origen: "equipo",
   imagen: "",
   imagen_url: "",
@@ -311,7 +313,17 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         }
         if (ruta.includes("/api/publicaciones")) {
           return new Response(
-            JSON.stringify({ publicaciones: [PUBLICACION], paginacion: { total: 1, limite: 50, desplazamiento: 0 } }),
+            JSON.stringify({
+              publicaciones: [
+                {
+                  ...PUBLICACION,
+                  // Nota original (pipeline): fecha de publicación en el medio + medio.
+                  fecha_fuente: "2026-06-09T21:21:00Z",
+                  fuente_original: "Récord",
+                },
+              ],
+              paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+            }),
             { status: 200 },
           );
         }
@@ -323,7 +335,17 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Las 2 redes que faltan → 2 huecos "No generado".
     expect(screen.getAllByText("No generado")).toHaveLength(2);
-    // Cabecera de la idea: 1 de 3 redes generadas.
-    expect(screen.getByText("1/3 redes")).toBeInTheDocument();
+    // Cabecera de la idea (rediseño): ya NO hay contador "1/3 redes"; a la derecha van los
+    // LOGOS de las redes generadas (solo X) + fecha de la nota original (CDMX) + fuente.
+    expect(screen.queryByText("1/3 redes")).toBeNull();
+    const logos = screen.getByTestId("redes-grupo");
+    expect(logos.querySelectorAll("svg")).toHaveLength(1);
+    // La fecha de la nota se muestra en hora CDMX con el helper central (21:21 UTC -> 15:21
+    // CDMX); el literal exacto depende de los datos de locale del runtime, así que se compara
+    // contra el propio helper.
+    expect(
+      screen.getByText(formatearFechaHoraCorta("2026-06-09T21:21:00Z")),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Récord")).toBeInTheDocument();
   });
 });
