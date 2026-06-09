@@ -3,6 +3,7 @@
 import { peticion } from "./_core";
 import type {
   CadenaAprobacion,
+  RespuestaCadenasLote,
   RespuestaComentario,
   RespuestaComentarios,
   RespuestaCopyGuardado,
@@ -58,6 +59,15 @@ export const apiColaboracion = {
     peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(plataformaId)}/aprobacion`, {
       signal,
     }),
+  /**
+   * BATCH del feed: las cadenas de VARIAS piezas en una sola llamada (elimina el N+1 de un
+   * GET /aprobacion por pieza visible). Siempre devuelve una entrada por id pedida.
+   */
+  cadenasAprobacion: (plataformaIds: string[], signal?: AbortSignal) =>
+    peticion<RespuestaCadenasLote>(
+      `/publicaciones/cadenas?ids=${encodeURIComponent(plataformaIds.join(","))}`,
+      { signal },
+    ),
   crearCadenaAprobacion: (plataformaId: string, etiquetas?: string[]) =>
     peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(plataformaId)}/aprobacion`, {
       metodo: "POST",

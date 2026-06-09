@@ -217,7 +217,9 @@ export function CalendarioPreview({
     for (const op of operaciones) {
       const f = fechaDeOperacion(op);
       if (!f) continue;
-      const d = new Date(`${f}T00:00:00`);
+      // Anclado a mediodía UTC (convención de lib/fecha): el día calendario no se
+      // desplaza aunque el navegador no esté en CDMX.
+      const d = new Date(`${f}T12:00:00Z`);
       if (Number.isNaN(d.getTime())) continue;
       set.add(lunesDeSemana(d));
     }

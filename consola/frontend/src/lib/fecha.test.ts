@@ -6,12 +6,13 @@
  * de pared CDMX correcta, y un ISO naive se interpreta como UTC (convención backend).
  * CDMX está en UTC-06:00 (sin horario de verano desde 2023).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   aInstante,
   datetimeLocalAIso,
   formatearHora,
+  hoyCDMX,
   isoADatetimeLocal,
   ZONA_CDMX,
 } from "./fecha";
@@ -86,5 +87,22 @@ describe("datetimeLocalAIso ↔ isoADatetimeLocal (CDMX)", () => {
 describe("ZONA_CDMX", () => {
   it("es America/Mexico_City", () => {
     expect(ZONA_CDMX).toBe("America/Mexico_City");
+  });
+});
+
+describe("hoyCDMX", () => {
+  it("devuelve el día CDMX, no el día UTC (a las 23:30Z en CDMX aún es el día anterior)", () => {
+    vi.useFakeTimers();
+    try {
+      // 2026-06-04 23:30 UTC = 2026-06-04 17:30 CDMX (UTC-6): mismo día.
+      vi.setSystemTime(new Date("2026-06-04T23:30:00Z"));
+      expect(hoyCDMX()).toBe("2026-06-04");
+      // 2026-06-05 03:30 UTC = 2026-06-04 21:30 CDMX: el día UTC ya es el 5, CDMX sigue en el 4.
+      vi.setSystemTime(new Date("2026-06-05T03:30:00Z"));
+      expect(hoyCDMX()).toBe("2026-06-04");
+      expect(new Date().toISOString().slice(0, 10)).toBe("2026-06-05"); // el bug que evita
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

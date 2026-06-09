@@ -24,6 +24,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 import type { NoticiaItem, RespuestaTermometro } from "@/types";
 
 /** Clave de sessionStorage para reanudar la generación en curso al volver a la página. */
@@ -235,7 +236,8 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
     "";
   const [numero, setNumero] = React.useState(String(datos.config.numero));
   const [regiones] = React.useState(datos.config.regiones);
-  const [fecha, setFecha] = React.useState(() => new Date().toISOString().slice(0, 10));
+  // Fecha por defecto: HOY en CDMX (no el día UTC, que de noche ya es "mañana").
+  const [fecha, setFecha] = React.useState(() => hoyCDMX());
   const [noticias, setNoticias] = React.useState("");
   const [trayendo, setTrayendo] = React.useState(false);
 

@@ -17,8 +17,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import * as React from "react";
 
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { tiempoRelativo } from "../publicaciones/meta";
@@ -61,13 +63,23 @@ export function BotonActualizar({
     }
   }, [estadoQuery.data, solicitado, queryClient]);
 
+  // `disparando` cubre el hueco entre el click y el aterrizaje del POST: el polling NO
+  // arranca hasta que el backend confirmó el disparo. Antes se fijaba `solicitado` ANTES
+  // del POST y el primer poll podía ver `corriendo=false` (refresco aún no arrancado) y
+  // mostrar "Actualizado" con datos viejos.
+  const [disparando, setDisparando] = React.useState(false);
+
   async function actualizar() {
-    setSolicitado(generadoEn ?? "");
+    const base = generadoEn ?? "";
+    setDisparando(true);
     try {
       await api.metricasRefrescar({ rango, marca });
-    } catch {
-      // Si el disparo falla, no nos quedamos polleando para siempre.
-      setSolicitado(null);
+      setSolicitado(base); // ahora sí: el refresco está en marcha, empieza el polling
+    } catch (e) {
+      // El disparo falló: avisa (antes se silenciaba) y no te quedes polleando.
+      toast.error(mensajeError(e));
+    } finally {
+      setDisparando(false);
     }
   }
 
@@ -76,16 +88,16 @@ export function BotonActualizar({
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs text-muted-foreground" aria-live="polite">
-        {polling ? "Actualizando…" : relativo ? `Actualizado ${relativo}` : null}
+        {polling || disparando ? "Actualizando…" : relativo ? `Actualizado ${relativo}` : null}
       </span>
       <Button
         variant="outline"
         size="sm"
         onClick={() => void actualizar()}
-        disabled={polling || !rango}
+        disabled={polling || disparando || !rango}
         title="Vuelve a descargar las métricas desde las plataformas"
       >
-        <RefreshCw className={cn("h-4 w-4", polling && "animate-spin")} />
+        <RefreshCw className={cn("h-4 w-4", (polling || disparando) && "animate-spin")} />
         Actualizar
       </Button>
     </div>

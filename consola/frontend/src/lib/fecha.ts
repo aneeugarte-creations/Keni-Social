@@ -103,6 +103,32 @@ export function formatearHora(iso: string | null | undefined): string {
   return d ? _fHora.format(d) : "";
 }
 
+// "YYYY-MM-DD" en CDMX (en-CA formatea ISO). Cacheado como el resto de formateadores.
+const _fDiaIso = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ZONA_CDMX,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * El día calendario (`YYYY-MM-DD`) de un instante, en zona CDMX (no la del navegador
+ * ni UTC). Base de `hoyCDMX` y de la aritmética de semanas de la rota.
+ */
+export function diaCDMX(d: Date): string {
+  return _fDiaIso.format(d);
+}
+
+/**
+ * El día de HOY (`YYYY-MM-DD`) en zona CDMX, independiente de la zona del navegador.
+ * Úsalo en vez de `new Date().toISOString().slice(0, 10)`: eso da el día UTC, que entre
+ * las 18:00 y la medianoche CDMX ya es "mañana" (descuadra cajones del día, fechas por
+ * defecto de formularios, etc.).
+ */
+export function hoyCDMX(): string {
+  return diaCDMX(new Date());
+}
+
 /**
  * Día legible CDMX a partir de `YYYY-MM-DD` (sin componente horario). Se ancla a
  * mediodía UTC para que el día del calendario no se desplace al pasarlo a CDMX.

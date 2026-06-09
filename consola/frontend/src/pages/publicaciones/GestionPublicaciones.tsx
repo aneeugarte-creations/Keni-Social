@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import * as React from "react";
 
@@ -67,7 +67,6 @@ export function GestionPublicaciones({
 
   return (
     <Cuerpo
-      modo={modo}
       calendario={calendario}
       opciones={opcionesQuery.data}
       marcaActiva={marcaActiva}
@@ -77,13 +76,11 @@ export function GestionPublicaciones({
 }
 
 function Cuerpo({
-  modo,
   calendario,
   opciones,
   marcaActiva,
   onConfigurarCadencia,
 }: {
-  modo: "lista" | "calendario";
   calendario: boolean;
   opciones: OpcionesPublicaciones;
   marcaActiva: string | null;
@@ -92,39 +89,73 @@ function Cuerpo({
   // RED y LÍNEA las mandan los selectores GLOBALES de la topbar (la elegibilidad de
   // línea por marca y su reseteo viven en el provider). La MARCA, el switch de marca.
   const { red, linea } = useFiltrosContenido();
-  const [paginas, setPaginas] = React.useState(1);
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
 
-  const limite = calendario ? undefined : paginas * TAM_PAGINA;
-
-  const filtros = {
+  const filtrosBase = {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
-    limite: limite != null ? String(limite) : undefined,
-    desplazamiento: undefined,
   };
 
-  React.useEffect(() => {
-    setPaginas(1);
-  }, [marcaActiva, red, linea, modo]);
+  // CALENDARIO: rejilla mensual; necesita el conjunto completo (sin paginar).
+  const calendarioQuery = useQuery({
+    queryKey: [
+      ...CLAVE_PUBLICACIONES,
+      "calendario",
+      filtrosBase.marca ?? "",
+      filtrosBase.red ?? "",
+      filtrosBase.linea ?? "",
+    ],
+    queryFn: ({ signal }) => api.publicaciones(filtrosBase, signal),
+    enabled: calendario,
+  });
 
-  const query = useQuery({
+  // LISTA: paginación REAL por limite+desplazamiento. Antes cada "Cargar más" reenviaba la
+  // petición con un límite creciente (30, 60, 90…) y el backend devolvía el acumulado entero;
+  // ahora cada página trae SOLO sus 30 filas y el infinite query las concatena en cliente.
+  // Cambiar los filtros cambia la queryKey, que resetea las páginas sola.
+  const listaQuery = useInfiniteQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
       "lista",
-      filtros.marca ?? "",
-      filtros.red ?? "",
-      filtros.linea ?? "",
-      filtros.limite ?? "",
+      filtrosBase.marca ?? "",
+      filtrosBase.red ?? "",
+      filtrosBase.linea ?? "",
     ],
-    queryFn: ({ signal }) => api.publicaciones(filtros, signal),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      api.publicaciones(
+        {
+          ...filtrosBase,
+          limite: String(TAM_PAGINA),
+          desplazamiento: String(pageParam),
+        },
+        signal,
+      ),
+    getNextPageParam: (ultima, paginas) => {
+      const cargadas = paginas.reduce((n, p) => n + p.publicaciones.length, 0);
+      const total = ultima.paginacion?.total;
+      // Sin total fiable: seguimos mientras la última página venga llena.
+      const hayMas =
+        total != null ? cargadas < total : ultima.publicaciones.length >= TAM_PAGINA;
+      return hayMas && ultima.publicaciones.length > 0 ? cargadas : undefined;
+    },
+    enabled: !calendario,
   });
 
-  const publicaciones = query.data?.publicaciones ?? [];
-  const total = query.data?.paginacion?.total ?? publicaciones.length;
-  const hayMas = !calendario && publicaciones.length < total;
+  const query = calendario ? calendarioQuery : listaQuery;
+  const publicaciones = React.useMemo(
+    () =>
+      calendario
+        ? calendarioQuery.data?.publicaciones ?? []
+        : (listaQuery.data?.pages ?? []).flatMap((p) => p.publicaciones),
+    [calendario, calendarioQuery.data, listaQuery.data],
+  );
+  const total = calendario
+    ? publicaciones.length
+    : listaQuery.data?.pages.at(-1)?.paginacion?.total ?? publicaciones.length;
+  const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
   const filtrando = red !== FILTRO_TODOS || linea !== FILTRO_TODOS;
 
   return (
@@ -167,10 +198,10 @@ function Cuerpo({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPaginas((p) => p + 1)}
-                disabled={query.isFetching}
+                onClick={() => void listaQuery.fetchNextPage()}
+                disabled={listaQuery.isFetchingNextPage}
               >
-                {query.isFetching ? "Cargando…" : "Cargar más"}
+                {listaQuery.isFetchingNextPage ? "Cargando…" : "Cargar más"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 Mostrando {publicaciones.length} de {total}

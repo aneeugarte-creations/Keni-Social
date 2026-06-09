@@ -44,6 +44,7 @@ import type { Publicacion } from "@/types";
 
 import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PostFeed } from "./PostFeed";
+import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
 
 // --- Tamaño (zoom) y nº de columnas del feed (preferencia local, por dispositivo) --- //
 // Dos controles independientes que persisten por dispositivo:
@@ -280,6 +281,10 @@ export default function FeedIdeacion() {
     [feedQuery.data],
   );
 
+  // ANTI-N+1: pide en UN lote las cadenas de aprobación de las piezas cargadas y las
+  // siembra en las claves individuales que consumen los `PostFeed` (vía contexto).
+  const cadenasLote = useCadenasLote(piezas);
+
   // Sentinel de scroll infinito: cuando el ancla del fondo entra en viewport, pide la siguiente
   // página (con guardas de `hasNextPage`/`isFetchingNextPage` para no encadenar peticiones).
   const sentinelRef = React.useRef<HTMLDivElement>(null);
@@ -396,6 +401,7 @@ export default function FeedIdeacion() {
   const refrescar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
 
   return (
+    <CadenasLoteContexto.Provider value={cadenasLote}>
     <div ref={rootRef}>
       <AccionesPagina>
         <MenuAcciones>
@@ -584,5 +590,6 @@ export default function FeedIdeacion() {
         )}
       </FeedZoom>
     </div>
+    </CadenasLoteContexto.Provider>
   );
 }

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowRight,
   BarChart3,
@@ -320,13 +321,17 @@ function TarjetaPublicacion({
   );
 }
 
+// Nº de filas a partir del cual la lista se VIRTUALIZA (solo se montan las visibles).
+const UMBRAL_VIRTUALIZAR = 40;
+
 /**
  * Vista de lista: tarjetas de publicación con SELECCIÓN MÚLTIPLE para borrar en masa.
  *
  * Cada tarjeta lleva un checkbox a la izquierda; al marcar una o más aparece una barra de
- * acciones (pegajosa arriba) con "seleccionar todo" y "borrar". El borrado en lote se hace
- * en cliente (un DELETE por pieza, en paralelo) porque no hay endpoint de lote; se resume el
- * resultado y se podan las selecciones que ya no estén en la lista (cambió el filtro/página).
+ * acciones (pegajosa arriba) con "seleccionar todo" y "borrar". El borrado en lote va al
+ * endpoint batch (`POST /api/publicaciones/borrar-lote`, un solo round-trip) que reporta
+ * fallos parciales; se resume el resultado y se podan las selecciones que ya no estén en
+ * la lista (cambió el filtro/página). Las listas largas se virtualizan (react-virtual).
  */
 export function VistaLista({
   publicaciones,
@@ -342,6 +347,56 @@ export function VistaLista({
   const queryClient = useQueryClient();
   const [seleccionadas, setSeleccionadas] = React.useState<Set<string>>(() => new Set());
   const [confirmar, setConfirmar] = React.useState(false);
+
+  // --- Virtualización de filas (listas largas) ---------------------------------------
+  // El scroll de la app vive en el <main> del AppShell (no en window): lo localizamos
+  // subiendo desde la raíz del componente. `margenScroll` es el offset del arranque de la
+  // lista dentro de ese scroller (cambia cuando aparece la barra pegajosa de selección).
+  const raizRef = React.useRef<HTMLDivElement>(null);
+  const listaRef = React.useRef<HTMLDivElement>(null);
+  const [scroller, setScroller] = React.useState<HTMLElement | null>(null);
+  const [margenScroll, setMargenScroll] = React.useState(0);
+  React.useLayoutEffect(() => {
+    setScroller((raizRef.current?.closest("main") as HTMLElement | null) ?? null);
+  }, []);
+  const haySeleccion = seleccionadas.size > 0;
+  React.useLayoutEffect(() => {
+    if (!scroller || !listaRef.current) return;
+    setMargenScroll(
+      listaRef.current.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top +
+        scroller.scrollTop,
+    );
+  }, [scroller, haySeleccion]);
+  // Solo merece la pena virtualizar con muchas filas; por debajo, lista plana (y los
+  // tests/jsdom, sin <main> ni medidas reales, siempre van por la rama plana).
+  const virtualizar = scroller !== null && publicaciones.length > UMBRAL_VIRTUALIZAR;
+  const virtualizador = useVirtualizer({
+    count: virtualizar ? publicaciones.length : 0,
+    getScrollElement: () => scroller,
+    estimateSize: () => 122, // alto típico de una tarjeta + separación; se ajusta al medir
+    overscan: 8,
+    scrollMargin: margenScroll,
+  });
+
+  const fila = (p: Publicacion) => (
+    <div className="flex items-start gap-2">
+      <Checkbox
+        checked={seleccionadas.has(p.id)}
+        onCheckedChange={() => alternar(p.id)}
+        aria-label={`Seleccionar "${p.titulo}"`}
+        className="mt-4 shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <TarjetaPublicacion
+          publicacion={p}
+          onEditar={onEditar}
+          onDuplicar={onDuplicar}
+          onConfigurarCadencia={onConfigurarCadencia}
+        />
+      </div>
+    </div>
+  );
 
   // Poda las ids seleccionadas que ya no aparecen en la lista (cambió el filtro o la página).
   React.useEffect(() => {
@@ -366,22 +421,28 @@ export function VistaLista({
   const alternarTodas = () =>
     setSeleccionadas(todasSeleccionadas ? new Set() : new Set(publicaciones.map((p) => p.id)));
 
-  // Borrado en lote: un DELETE por pieza en paralelo (no hay endpoint de lote). Cuenta fallos
-  // para resumir sin abortar el resto.
+  // Borrado en lote: UN solo round-trip al endpoint batch (`POST /publicaciones/borrar-lote`),
+  // que itera el borrado en servidor y reporta los fallos parciales sin abortar el resto
+  // (antes: N DELETEs en paralelo desde el cliente).
   const borrarLote = useMutation({
     mutationFn: async (ids: string[]) => {
-      const res = await Promise.allSettled(ids.map((id) => api.eliminarPublicacion(id)));
-      return { total: ids.length, fallos: res.filter((r) => r.status === "rejected").length };
+      const res = await api.borrarPublicacionesLote(ids);
+      return { total: ids.length, borradas: res.borradas, fallos: res.fallos };
     },
-    onSuccess: ({ total, fallos }) => {
+    onSuccess: ({ total, borradas, fallos }) => {
       setConfirmar(false);
       setSeleccionadas(new Set());
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      const ok = total - fallos;
-      if (fallos === 0) {
-        toast.success(`${ok} ${ok === 1 ? "publicación borrada" : "publicaciones borradas"}.`);
+      if (fallos.length === 0) {
+        toast.success(
+          `${borradas} ${borradas === 1 ? "publicación borrada" : "publicaciones borradas"}.`,
+        );
       } else {
-        toast.error(`Borradas ${ok} de ${total}; ${fallos} no se pudieron borrar.`);
+        toast.error(
+          `Borradas ${borradas} de ${total}; ${fallos.length} no se ${
+            fallos.length === 1 ? "pudo" : "pudieron"
+          } borrar (ya no existían).`,
+        );
       }
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -390,7 +451,7 @@ export function VistaLista({
   const n = seleccionadas.size;
 
   return (
-    <div className="space-y-3">
+    <div ref={raizRef} className="space-y-3">
       {n > 0 && (
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-sm backdrop-blur">
           <span className="text-sm font-medium">
@@ -425,24 +486,39 @@ export function VistaLista({
         </div>
       )}
 
-      {publicaciones.map((p) => (
-        <div key={p.id} className="flex items-start gap-2">
-          <Checkbox
-            checked={seleccionadas.has(p.id)}
-            onCheckedChange={() => alternar(p.id)}
-            aria-label={`Seleccionar "${p.titulo}"`}
-            className="mt-4 shrink-0"
-          />
-          <div className="min-w-0 flex-1">
-            <TarjetaPublicacion
-              publicacion={p}
-              onEditar={onEditar}
-              onDuplicar={onDuplicar}
-              onConfigurarCadencia={onConfigurarCadencia}
-            />
-          </div>
+      {/* FILAS. Con listas largas se VIRTUALIZA (solo se montan las filas visibles +
+          overscan): el scroll vive en el <main> del AppShell, así que el virtualizador
+          usa ese contenedor y mide cada fila real (alturas variables: imagen, badges…).
+          Con pocas filas (o sin <main>, p. ej. en tests) se pinta la lista plana. */}
+      {virtualizar ? (
+        <div
+          ref={listaRef}
+          className="relative"
+          style={{ height: virtualizador.getTotalSize() }}
+        >
+          {virtualizador.getVirtualItems().map((vi) => {
+            const p = publicaciones[vi.index];
+            if (!p) return null;
+            return (
+              <div
+                key={p.id}
+                data-index={vi.index}
+                ref={virtualizador.measureElement}
+                className="absolute left-0 top-0 w-full pb-3"
+                style={{ transform: `translateY(${vi.start - margenScroll}px)` }}
+              >
+                {fila(p)}
+              </div>
+            );
+          })}
         </div>
-      ))}
+      ) : (
+        <div ref={listaRef} className="space-y-3">
+          {publicaciones.map((p) => (
+            <React.Fragment key={p.id}>{fila(p)}</React.Fragment>
+          ))}
+        </div>
+      )}
 
       <Dialog open={confirmar} onOpenChange={(o) => !o && setConfirmar(false)}>
         <DialogContent>

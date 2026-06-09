@@ -53,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import type { CajonInsumo, CajonConItems, InsumoItem, InsumoLote } from "@/types";
 
@@ -109,9 +110,9 @@ const CAJONES: DescripcionCajon[] = [
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
 
-/** Hoy en ISO YYYY-MM-DD local. */
+/** Hoy en ISO YYYY-MM-DD, en zona CDMX (antes era el día UTC, que se adelantaba de noche). */
 function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return hoyCDMX();
 }
 
 /** Convierte una fecha ISO a una etiqueta legible. */

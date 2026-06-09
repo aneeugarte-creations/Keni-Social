@@ -37,7 +37,7 @@ const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
 
-const Rota = lazy(() => import("@/pages/Rota"));
+const Rota = lazy(() => import("@/pages/rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 // Lista de contenido (pestaña "Lista" del hub Feed) y calendario de publicaciones

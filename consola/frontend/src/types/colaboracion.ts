@@ -99,3 +99,12 @@ export interface RespuestaDecisionAprobacion {
   estado: EstadoCadenaAprobacion;
   niveles: NivelAprobacion[];
 }
+
+/**
+ * Respuesta del batch de cadenas del feed (`GET /api/publicaciones/cadenas?ids=`):
+ * SIEMPRE una entrada por id pedida (las piezas sin cadena/inexistentes salen con
+ * `estado="sin_cadena"` y `niveles=[]`, nunca se omiten).
+ */
+export interface RespuestaCadenasLote {
+  cadenas: Record<string, CadenaAprobacion>;
+}

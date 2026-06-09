@@ -8,6 +8,10 @@ import type { Publicacion } from "@/types";
 
 import { VistaLista } from "./VistaLista";
 
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
+
 /** Una `Publicacion` mínima viable (los campos que VistaLista/Tarjeta leen). */
 function pub(over: Partial<Publicacion> = {}): Publicacion {
   return {
@@ -85,10 +89,10 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     expect(screen.getByText("2 seleccionadas")).toBeInTheDocument();
   });
 
-  it("borra en lote SOLO las seleccionadas (un DELETE por pieza) tras confirmar", async () => {
+  it("borra en lote SOLO las seleccionadas (UNA llamada batch) tras confirmar", async () => {
     const borrar = vi
-      .spyOn(apiMod.api, "eliminarPublicacion")
-      .mockResolvedValue({ mensaje: "ok" } as never);
+      .spyOn(apiMod.api, "borrarPublicacionesLote")
+      .mockResolvedValue({ borradas: 2, fallos: [] });
     renderLista([
       pub({ id: "p1", titulo: "Uno" }),
       pub({ id: "p2", titulo: "Dos" }),
@@ -103,8 +107,29 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     const dialogo = await screen.findByRole("dialog");
     fireEvent.click(within(dialogo).getByRole("button", { name: /^Borrar 2$/ }));
 
-    await waitFor(() => expect(borrar).toHaveBeenCalledTimes(2));
-    const ids = borrar.mock.calls.map((c) => c[0]).sort();
-    expect(ids).toEqual(["p1", "p3"]);
+    // UN solo round-trip con las ids seleccionadas (no un DELETE por pieza).
+    await waitFor(() => expect(borrar).toHaveBeenCalledTimes(1));
+    expect([...borrar.mock.calls[0][0]].sort()).toEqual(["p1", "p3"]);
+  });
+
+  it("reporta los fallos parciales del lote (toast de error con el resumen)", async () => {
+    vi.spyOn(apiMod.api, "borrarPublicacionesLote").mockResolvedValue({
+      borradas: 1,
+      fallos: ["p3"],
+    });
+    renderLista([pub({ id: "p1", titulo: "Uno" }), pub({ id: "p3", titulo: "Tres" })]);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar "Uno"/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar "Tres"/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Borrar 2$/ }));
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.click(within(dialogo).getByRole("button", { name: /^Borrar 2$/ }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() =>
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+        expect.stringContaining("Borradas 1 de 2"),
+      ),
+    );
   });
 });

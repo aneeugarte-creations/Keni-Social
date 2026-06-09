@@ -289,6 +289,14 @@ export interface CuerpoGuardarCadencia {
   activo?: boolean;
 }
 
+/** Respuesta del borrado batch (`POST /api/publicaciones/borrar-lote`). */
+export interface RespuestaBorrarLotePublicaciones {
+  /** Cuántas se borraron de verdad. */
+  borradas: number;
+  /** Ids que NO se pudieron borrar (ya no existían); el resto del lote no se aborta. */
+  fallos: string[];
+}
+
 export interface FiltrosPublicaciones {
   marca?: string;
   red?: string;

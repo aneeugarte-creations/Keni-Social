@@ -47,7 +47,10 @@ export function useGeneracion(persistKey?: string) {
     api
       .generacion(id)
       .then((r) => {
-        if (vivo) setGeneracion(r.generacion);
+        // CARRERA: si mientras resolvía este fetch el usuario YA lanzó una generación
+        // nueva (`iniciar`), la reanudación NO debe pisarla con la vieja. Solo se aplica
+        // si seguimos sin generación activa (functional update: lee el estado vigente).
+        if (vivo) setGeneracion((prev) => prev ?? r.generacion);
       })
       .catch(() => {
         sessionStorage.removeItem(persistKey);

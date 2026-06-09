@@ -33,15 +33,20 @@ import { Button } from "@/components/ui/button";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { plural } from "@/lib/formato";
-import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
+import {
+  CLAVE_PUBLICACIONES,
+  claveCadenaAprobacion,
+  remplazarPublicacionEnCaches,
+} from "@/pages/publicaciones/claves";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { Publicacion } from "@/types";
+import type { Publicacion, RespuestaPublicacion } from "@/types";
 
 import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
 import { BadgeEtapa } from "./TarjetaEtapa";
+import { CadenasLoteContexto } from "./use-cadenas-lote";
 
 export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();
@@ -62,10 +67,19 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // cadena, el motor simple `aprobar`/`rechazar` forwardea a la cadena multinivel.
   // Se carga en revisión (cuando importa el OK) y también en piezas aprobadas pendientes de salir
   // (ahí el gate de comentarios sin resolver bloquea PROGRAMAR/publicar, como el "merge" de un PR).
+  //
+  // ANTI-N+1: dentro del feed, el padre pide las cadenas de la página en UN lote
+  // (`useCadenasLote`) y las SIEMBRA en esta misma clave. Mientras el lote está en vuelo,
+  // esta query queda deshabilitada (si no, cada tarjeta dispararía su GET en paralelo);
+  // al aterrizar, encuentra el dato sembrado fresco (staleTime) y no refetchea. Fuera del
+  // feed (sin contexto) o si el lote falla, carga individual como siempre.
+  const lote = React.useContext(CadenasLoteContexto);
   const cadenaQuery = useQuery({
-    queryKey: ["cadena-aprobacion", publicacion.id],
+    queryKey: claveCadenaAprobacion(publicacion.id),
     queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
-    enabled: enRevision || etapa === "aprobada",
+    enabled:
+      (enRevision || etapa === "aprobada") && !(lote?.pendiente(publicacion.id) ?? false),
+    staleTime: 30_000,
   });
   const cadena = cadenaQuery.data;
   // Comentarios SIN RESOLVER: como en GitHub, bloquean publicar hasta marcarse resueltos. La cifra
@@ -81,10 +95,18 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // Hay cadena configurada => pintamos el panel "dale el OK"; si no, camino simple (legado).
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
 
-  const tras = (mensaje: string) => () => {
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+  // Tras una reacción: actualiza SOLO la pieza afectada en las cachés de listados (antes se
+  // invalidaba `CLAVE_PUBLICACIONES` entero, que refetcheaba TODAS las páginas del scroll
+  // infinito por cada like) e invalida únicamente SU cadena. El kanban (`contenido`) se marca
+  // stale en bloque: es otra superficie y se refresca al montarse.
+  const tras = (mensaje: string) => (res?: RespuestaPublicacion) => {
+    if (res?.publicacion) {
+      remplazarPublicacionEnCaches(queryClient, res.publicacion);
+    } else {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+    }
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-    void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
+    void queryClient.invalidateQueries({ queryKey: claveCadenaAprobacion(publicacion.id) });
     toast.success(mensaje);
   };
   const onError = (e: unknown) => toast.error(mensajeError(e));

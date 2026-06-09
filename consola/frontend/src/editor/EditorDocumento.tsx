@@ -51,6 +51,7 @@ import {
   type Correccion,
 } from "./legibilidad";
 import type { StoreEditor } from "./store";
+import { Telon, useCerrarConEscape } from "./Telon";
 import { useFuentesMarca } from "./useFuentesMarca";
 
 type Herramienta = "elementos" | "texto" | "ia" | "capas";
@@ -130,6 +131,14 @@ export function EditorDocumento({
     !!avisaHueco && !store.getState().documento.capas.some((c) => c.tipo === "imagen" && c.es_foto);
 
   const abrirTool = (t: Herramienta) => setTool((prev) => (prev === t ? null : t));
+
+  // ESCAPE cierra el overlay ABIERTO más "alto" (menú > flyout > inspector), esté donde
+  // esté el foco. Los backdrops (`Telon`) cubren además teclado con foco en ellos.
+  useCerrarConEscape(menuAdaptar || tool !== null || ajustes, () => {
+    if (menuAdaptar) setMenuAdaptar(false);
+    else if (tool !== null) setTool(null);
+    else setAjustes(false);
+  });
 
   const abrirReencuadre = () => {
     const sel = store.getState().seleccion;
@@ -226,7 +235,11 @@ export function EditorDocumento({
         {/* FLYOUT del rail (columna en md+, hoja inferior en móvil). */}
         {tool && (
           <>
-            <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setTool(null)} />
+            <Telon
+              onCerrar={() => setTool(null)}
+              etiqueta="Cerrar panel de herramienta"
+              className="fixed inset-0 z-20 bg-black/30 md:hidden"
+            />
             <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-r">
               <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
@@ -274,7 +287,11 @@ export function EditorDocumento({
                 </button>
                 {menuAdaptar && (
                   <>
-                    <div className="fixed inset-0 z-30" onClick={() => setMenuAdaptar(false)} />
+                    <Telon
+                      onCerrar={() => setMenuAdaptar(false)}
+                      etiqueta="Cerrar menú de adaptar"
+                      className="fixed inset-0 z-30"
+                    />
                     <div className="absolute right-0 top-full z-40 mt-1 w-52 overflow-hidden rounded-md border border-border bg-popover shadow-md">
                       <div className="border-b border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         Adaptar a…
@@ -363,7 +380,11 @@ export function EditorDocumento({
         {/* INSPECTOR (ajustes profundos): columna derecha en md+, hoja inferior en móvil. */}
         {ajustes && (
           <>
-            <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setAjustes(false)} />
+            <Telon
+              onCerrar={() => setAjustes(false)}
+              etiqueta="Cerrar ajustes"
+              className="fixed inset-0 z-20 bg-black/30 md:hidden"
+            />
             <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-l">
               <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">

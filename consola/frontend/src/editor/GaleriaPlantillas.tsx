@@ -7,6 +7,8 @@ import { useState } from "react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 
+import { Telon, useCerrarConEscape } from "./Telon";
+
 type FiltroTipo = "foto" | "miniatura";
 
 /** Badge de tipo: pequeña etiqueta visual sobre la tarjeta de plantilla. */
@@ -60,15 +62,30 @@ export function GaleriaPlantillas({
     if (n && n !== p.nombre) onRenombrar?.(p, n);
     setEditId(null);
   };
+
+  // Escape cierra la galería esté donde esté el foco (overlay casero, sin Radix).
+  useCerrarConEscape(true, onCerrar);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCerrar}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop accesible: clicable, focusable y cierra también con Escape (A11y). */}
+      <Telon
+        onCerrar={onCerrar}
+        etiqueta="Cerrar galería de plantillas"
+        className="absolute inset-0 bg-black/50"
+      />
       <div
-        className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Plantillas"
+        className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold">Plantillas</h2>
-          <button onClick={onCerrar} className="text-muted-foreground hover:text-foreground">
+          <button
+            onClick={onCerrar}
+            aria-label="Cerrar"
+            className="text-muted-foreground hover:text-foreground"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

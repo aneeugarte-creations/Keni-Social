@@ -130,8 +130,16 @@ export function ColorControl({ valor, onChange }: { valor: string; onChange: (c:
   useEffect(() => {
     if (!abierto) return;
     const cerrar = () => setAbierto(false);
+    // Escape también cierra el popover (A11y: antes solo el click fuera lo cerraba).
+    const conTecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAbierto(false);
+    };
     window.addEventListener("click", cerrar);
-    return () => window.removeEventListener("click", cerrar);
+    window.addEventListener("keydown", conTecla);
+    return () => {
+      window.removeEventListener("click", cerrar);
+      window.removeEventListener("keydown", conTecla);
+    };
   }, [abierto]);
 
   const abrir = () => {

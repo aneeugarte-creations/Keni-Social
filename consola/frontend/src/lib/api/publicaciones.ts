@@ -8,6 +8,7 @@ import type {
   FiltrosReciclaje,
   OpcionesPublicaciones,
   RespuestaAlertas,
+  RespuestaBorrarLotePublicaciones,
   RespuestaColaAprobacion,
   RespuestaImportCalendario,
   RespuestaImportCalendarioPendiente,
@@ -39,6 +40,9 @@ export const apiPublicaciones = {
     }),
   eliminarPublicacion: (id: string) =>
     peticion<RespuestaMensaje>(`/publicaciones/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  /** Borrado BATCH (selección múltiple de la lista): un solo round-trip, fallos parciales en `fallos`. */
+  borrarPublicacionesLote: (ids: string[]) =>
+    peticion<RespuestaBorrarLotePublicaciones>("/publicaciones/borrar-lote", { metodo: "POST", json: { ids } }),
   duplicarPublicacion: (id: string, cuerpo: CuerpoDuplicarPublicacion = {}) =>
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/duplicar`, {
       metodo: "POST",
