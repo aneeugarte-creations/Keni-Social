@@ -27,26 +27,32 @@ def tope_cola() -> int:
 def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     """Encola el job de `gen_id` con su `spec` (dict). Devuelve el job id. NO bloquea.
 
-    BACKPRESSURE COMPARTIDO (#130 Fase 2): el gate de admision se decide AQUI contra el conteo
-    REAL de la cola en Postgres (`repos.contar_jobs_activos`), no contra un contador en memoria
-    por-proceso. Asi el tope lo respetan TODOS los procesos que encolan (back, daemons) y se
-    AUTOLIBERA cuando un worker marca un job `terminado`. Si ya hay `tope_cola()` jobs en vuelo,
-    rechaza con `ColaLlenaError` (el llamante lo traduce a 429) ANTES de insertar.
+    BACKPRESSURE SOLO PARA EL TRABAJO DE FONDO: el gate de admision se decide contra el conteo
+    REAL de la cola en Postgres (`repos.contar_jobs_activos`), compartido por todos los procesos
+    que encolan (back, daemons) y autoliberado cuando un worker marca un job `terminado`. Pero el
+    tope SOLO frena a los jobs de FONDO (prioridad pipeline: la maquina): su llamante (el tick del
+    pipeline) trata `ColaLlenaError` como backpressure y reintenta solo en unos segundos.
 
-    POR QUE CAMBIO: el contador en memoria de `runner.admitir()` solo funcionaba en el perfil
-    LOCAL (back y worker en el MISMO proceso). En hosted son contenedores distintos: el back
-    sumaba al encolar y el worker restaba al terminar, en memorias separadas, asi que el contador
-    del back solo subia y nunca bajaba — tras `max_jobs+max_cola` generaciones el back rechazaba
-    TODO para siempre ("Hay demasiadas generaciones en curso") aunque la cola real estuviera vacia.
+    Un lanzamiento MANUAL (una persona pulsando un boton) SIEMPRE encola: para eso existe la
+    cola. Rechazarlo con "intentalo en unos segundos" era pedirle a un humano que hiciera de
+    reintentador del sistema mientras la maquina (flujo continuo) mantenia la cola llena. Ademas
+    los manuales van PRIMERO (`jobs.prioridad`, `reclamar_job` ordena por ella): aunque la cola
+    este cargada de pipeline, lo manual se despacha en cuanto un worker queda libre.
+
+    POR QUE el gate vive aqui (y no en `runner.admitir`): el contador en memoria solo funcionaba
+    en el perfil LOCAL (back y worker en el MISMO proceso). En hosted son contenedores distintos
+    y el contador del back solo subia — rechazaba TODO para siempre con la cola real vacia.
     """
-    if repos.contar_jobs_activos() >= tope_cola():
-        raise runner.ColaLlenaError(
-            "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
-        )
     # La PRIORIDAD de despacho viaja DENTRO del spec (`jobspec.prioridad`): manual > pipeline.
     # Asi los seams inyectables de encolado no cambian de firma y `reclamar_job` puede ordenar
     # por prioridad (un copy manual del equipo no espera detras del lote del pipeline/autogen).
-    return repos.encolar_job(gen_id, jobspec.serializar(spec), jobspec.prioridad(spec))
+    prio = jobspec.prioridad(spec)
+    es_fondo = prio < jobspec.PRIORIDAD_MANUAL
+    if es_fondo and repos.contar_jobs_activos() >= tope_cola():
+        raise runner.ColaLlenaError(
+            "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
+        )
+    return repos.encolar_job(gen_id, jobspec.serializar(spec), prio)
 
 
 def reclamar(worker: str = "") -> dict[str, Any] | None:

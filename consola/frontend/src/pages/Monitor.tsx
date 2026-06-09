@@ -386,12 +386,13 @@ export default function Monitor() {
       ) : (
         <div className="space-y-6">
           {cola.data.cola_llena && (
-            <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
-                La cola está llena ({cola.data.conteo.activos}/{cola.data.capacidad.tope}). Las
-                nuevas generaciones se rechazan hasta que se liberen huecos.
-                {esAdmin && " Puedes purgarla para destrabarla."}
+                La cola está al tope ({cola.data.conteo.activos}/{cola.data.capacidad.tope}). La
+                máquina espera (reintenta sola); los lanzamientos manuales siguen entrando y se
+                despachan primero.
+                {esAdmin && " Puedes purgar la cola para vaciarla."}
               </span>
             </div>
           )}

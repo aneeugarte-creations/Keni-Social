@@ -79,28 +79,61 @@ def test_encolar_idempotente_por_gen_id(entorno):
     assert cola.reclamar() is None  # no habia un segundo job
 
 
-def test_gate_cola_rechaza_al_tope_y_se_libera(entorno, monkeypatch):
-    """`cola.encolar` rechaza con ColaLlenaError al llegar al tope (max_jobs+max_cola).
+def test_gate_cola_rechaza_fondo_al_tope_y_se_libera(entorno, monkeypatch):
+    """`cola.encolar` rechaza con ColaLlenaError SOLO al trabajo de FONDO al llegar al tope.
 
-    El gate cuenta los jobs EN VUELO en la cola compartida; al terminar uno, vuelve a haber sitio.
+    El gate cuenta los jobs EN VUELO en la cola compartida; al terminar uno, vuelve a haber
+    sitio. El backpressure es para la MAQUINA (su tick reintenta solo); ver el test del bypass
+    manual debajo.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
     monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
     assert cola.tope_cola() == 2
 
-    def _encolar_nuevo():
-        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    def _encolar_fondo():
+        gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "X"})
+        spec = jobspec.construir(
+            prompt="p", procesar=jobspec.construir_hashtags(),
+            prioridad=jobspec.PRIORIDAD_PIPELINE,
+        )
         return cola.encolar(gen["id"], spec)
 
-    j1 = _encolar_nuevo()
-    _encolar_nuevo()  # 2do: la cola queda al tope
-    # 3ro: rechazo SINCRONO (la cola esta llena) -> el llamante responde 429.
+    j1 = _encolar_fondo()
+    _encolar_fondo()  # 2do: la cola queda al tope
+    # 3ro (fondo): rechazo SINCRONO -> el tick del pipeline lo trata como backpressure.
     with pytest.raises(generaciones.ColaLlenaError):
-        _encolar_nuevo()
+        _encolar_fondo()
     # Al terminar un job, se libera capacidad y vuelve a admitir.
     cola.terminar(j1)
-    assert _encolar_nuevo()  # ya cabe de nuevo
+    assert _encolar_fondo()  # ya cabe de nuevo
+
+
+def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
+    """Un lanzamiento MANUAL nunca recibe 429: encola aunque la cola este al tope... y VA PRIMERO.
+
+    La cola existe para que una persona espere EN COLA, no para pedirle que reintente mientras
+    la maquina (flujo continuo) la mantiene llena. `reclamar` ademas despacha el manual ANTES
+    que el lote de fondo ya encolado (orden por `jobs.prioridad`).
+    """
+    monkeypatch.setenv("KENI_MAX_JOBS", "1")
+    monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
+    # Llena la cola con trabajo de FONDO hasta el tope.
+    for i in range(cola.tope_cola()):
+        gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"F{i}"})
+        spec = jobspec.construir(
+            prompt="p", procesar=jobspec.construir_hashtags(),
+            prioridad=jobspec.PRIORIDAD_PIPELINE,
+        )
+        cola.encolar(gen["id"], spec)
+
+    # Manual con la cola al tope: ENTRA igual (sin ColaLlenaError)...
+    gen_manual = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Manual"})
+    spec_manual = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    assert cola.encolar(gen_manual["id"], spec_manual)
+
+    # ...y el siguiente reclamo lo despacha PRIMERO (prioridad manual > pipeline).
+    clavado = cola.reclamar("w-prio")
+    assert clavado is not None and clavado["gen_id"] == gen_manual["id"]
 
 
 def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
@@ -116,8 +149,11 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
     monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
     for i in range(2 * cola.tope_cola() + 3):  # 7 ciclos completos, muy por encima del tope
-        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": f"X{i}"})
-        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"X{i}"})
+        spec = jobspec.construir(
+            prompt="p", procesar=jobspec.construir_hashtags(),
+            prioridad=jobspec.PRIORIDAD_PIPELINE,  # FONDO: el unico que pasa por el gate
+        )
         job_id = cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError nunca
         clavado = cola.reclamar(f"w{i}")
         assert clavado is not None
