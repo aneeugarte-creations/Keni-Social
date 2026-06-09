@@ -158,6 +158,8 @@ export interface RespuestaCampania {
 export interface PiezaCampania {
   id: string;
   red: string;
+  /** Marca de origen (nombre legible), útil para agrupar en campañas multimarca. */
+  marca: string;
   titulo: string;
   publicado: string;
   visualizaciones: number;

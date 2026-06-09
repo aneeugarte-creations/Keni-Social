@@ -192,6 +192,26 @@ def test_cross_post_no_empareja_captions_genericos_cortos(cliente, monkeypatch):
     assert datos["cross_posts"] == 0
 
 
+def test_pieza_trae_marca_de_origen(cliente, monkeypatch):
+    """Cada fila lleva su marca de origen (nombre legible desde `cuenta`/id_metricas), para
+    poder agrupar y comparar en campañas multimarca."""
+    cam = _crear(cliente, marcas=["unotv", "claro-sports"], hashtags=["#Chihuahua"]).json()["campania"]
+
+    def _listado_falso(rango, marca=None):
+        # `marca` es el id_metricas (guion_bajo); la fuente real lo sella en `cuenta`.
+        return [{
+            "id": f"p-{marca}", "red": "instagram", "titulo": f"Post {marca}",
+            "texto": "campaña #Chihuahua", "publicado": "2026-06-01", "url": "",
+            "formato": "foto", "engagement_pct": 5.0, "interacciones": 100,
+            "visualizaciones": 1000, "cuenta": marca,
+        }]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    marca_por_id = {p["id"]: p["marca"] for p in datos["piezas"]}
+    assert marca_por_id == {"p-unotv": "UnoTV", "p-claro_sports": "Claro Sports"}
+
+
 def test_analitica_matchea_hashtag_sin_importar_casing(cliente, monkeypatch):
     # El hashtag se guarda con casing ('Chihuahua') pero matchea posts con '#chihuahua',
     # '#CHIHUAHUA' o '#Chihuahua'. Un post sin el hashtag queda fuera.

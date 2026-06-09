@@ -251,7 +251,15 @@ function DesgloseRedTabla({ filas }: { filas: DesgloseRedCampania[] }) {
 }
 
 const TODAS = "__todas__";
-type ClaveOrdenPieza = "publicado" | "visualizaciones" | "interacciones" | "engagement_pct";
+type ClaveOrdenPieza =
+  | "titulo"
+  | "red"
+  | "marca"
+  | "formato"
+  | "publicado"
+  | "visualizaciones"
+  | "interacciones"
+  | "engagement_pct";
 
 /** Tabla de piezas del periodo: filtrable por red/formato y ordenable por columna. */
 function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
@@ -279,6 +287,10 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<PiezaCampania, ClaveOrdenPieza>(
     filtradas,
     {
+      titulo: (p) => p.titulo.toLowerCase(),
+      red: (p) => nombreRed(p.red),
+      marca: (p) => p.marca,
+      formato: (p) => nombreFormato(p.formato),
       publicado: (p) => p.publicado,
       visualizaciones: (p) => p.visualizaciones,
       interacciones: (p) => p.interacciones,
@@ -289,12 +301,17 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
 
   const crossCount = React.useMemo(() => piezas.filter((p) => p.por_cross_post).length, [piezas]);
 
-  const col = (clave: ClaveOrdenPieza, etiqueta: string, className?: string) => (
+  const col = (
+    clave: ClaveOrdenPieza,
+    etiqueta: string,
+    alinear: "left" | "right" = "right",
+    className?: string,
+  ) => (
     <CabeceraOrdenable
       activa={estado.clave === clave}
       direccion={estado.direccion}
       onClick={() => alClicar(clave)}
-      alinear="right"
+      alinear={alinear}
       className={className}
     >
       {etiqueta}
@@ -348,19 +365,20 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-6">Publicación</TableHead>
-              <TableHead>Red</TableHead>
-              <TableHead>Formato</TableHead>
+              {col("titulo", "Publicación", "left", "pl-6")}
+              {col("red", "Red", "left")}
+              {col("marca", "Marca", "left")}
+              {col("formato", "Formato", "left")}
               {col("publicado", "Fecha")}
               {col("visualizaciones", "Visualizaciones")}
               {col("interacciones", "Interacciones")}
-              {col("engagement_pct", "Engagement", "pr-6")}
+              {col("engagement_pct", "Engagement", "right", "pr-6")}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtradas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                   {piezas.length === 0
                     ? "No hay piezas con estos hashtags en el periodo."
                     : "Ninguna pieza coincide con los filtros."}
@@ -402,6 +420,9 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {p.marca || <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{nombreFormato(p.formato)}</TableCell>
                   <TableCell className="text-right text-muted-foreground tabular-nums">

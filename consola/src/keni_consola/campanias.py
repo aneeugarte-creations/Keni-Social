@@ -339,6 +339,7 @@ def _pieza_tabla(p: dict[str, Any], por_cross_post: bool = False) -> dict[str, A
     return {
         "id": p.get("id", ""),
         "red": p.get("red", ""),
+        "marca": marcas.etiqueta_por_id_metricas(str(p.get("cuenta") or "")),
         "titulo": p.get("titulo", ""),
         "publicado": str(p.get("publicado") or "")[:10],
         "visualizaciones": int(p.get("visualizaciones") or 0),
