@@ -177,6 +177,17 @@ def test_conexion_rota_no_se_devuelve_poisoned(pool_falso):
     con2.close()
 
 
+def test_close_devuelve_la_conexion_idle(pool_falso):
+    # close() hace rollback ANTES de putconn: la conexion vuelve al pool sin transaccion
+    # abierta (IDLE), asi `psycopg_pool` no emite "rolling back returned connection" en cada
+    # retorno. No cambia el resultado (la conexion se reusa), solo la deja limpia y sin ruido.
+    con = motor_db.conectar_cruda()
+    fisica = con._con
+    con.close()
+    assert fisica.rollbacks == 1
+    assert fisica.closed is False  # devuelta al pool, no cerrada
+
+
 def test_putconn_que_falla_cierra_la_conexion(pool_falso, monkeypatch):
     # Si devolver al pool lanza (conexion inservible), `close()` cierra el socket y NO filtra
     # la lease ni propaga la excepcion.

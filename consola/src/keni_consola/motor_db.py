@@ -149,10 +149,17 @@ class _ConexionPg:
     def close(self) -> None:
         """Cierra la conexion. Si vino del pool, la DEVUELVE; si no, cierra el socket.
 
-        Idempotente (varios `close()` no rompen). En el camino pooled, `putconn` del
-        `psycopg_pool` hace rollback de cualquier transaccion abierta y DESCARTA la conexion
-        si esta rota (no la devuelve poisoned); si `putconn` fallara (conexion inservible),
-        la cerramos para no filtrar la lease.
+        Idempotente (varios `close()` no rompen). En el camino pooled devolvemos la conexion
+        en estado IDLE (rollback previo) y `putconn` del `psycopg_pool` la reencola o la
+        DESCARTA si esta rota (no la devuelve poisoned); si `putconn` fallara (conexion
+        inservible), la cerramos para no filtrar la lease.
+
+        El rollback previo NO cambia el comportamiento (putconn haria el mismo rollback) pero
+        evita el WARNING que `psycopg_pool` emite en CADA retorno de una conexion con
+        transaccion abierta ("rolling back returned connection"): toda LECTURA bajo
+        autocommit=False deja la conexion INTRANS (un SELECT abre transaccion y los call sites
+        de lectura no commitean), asi que sin esto el log se llena con ~1 linea por request.
+        `rollback()` es no-op si la conexion ya esta IDLE (p. ej. tras un `commit()`).
         """
         pool, self._pool = self._pool, None
         con, self._con = self._con, None
@@ -161,6 +168,10 @@ class _ConexionPg:
         if pool is None:
             con.close()
             return
+        try:
+            con.rollback()  # devolver IDLE: sin transaccion abierta -> putconn no avisa
+        except Exception:  # noqa: BLE001 -- inservible: que putconn/check la descarte.
+            pass
         try:
             pool.putconn(con)
         except Exception:  # noqa: BLE001 -- devolver es best-effort; si falla, cerramos.
