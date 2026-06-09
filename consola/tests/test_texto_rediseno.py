@@ -129,7 +129,7 @@ def test_editoriales_scoping_por_carpeta():
 
 def test_prompt_base_defecto_cuando_nadie_rebindea():
     assert libtexto.prompt_base_de("copy") == "prompt/copy-desde-nota"
-    assert libtexto.prompt_base_de("qa") == "prompt/qa-editorial"
+    assert libtexto.prompt_base_de("qa") == "prompt/qa-fuente"
 
 
 def test_prompt_base_rebindeo_por_documento():

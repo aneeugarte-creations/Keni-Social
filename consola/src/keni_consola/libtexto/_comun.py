@@ -80,7 +80,7 @@ PIPELINES: dict[str, dict[str, str]] = {
     "qa": {
         "titulo": "Criba editorial de la fuente",
         "descripcion": "Verifica la nota de origen antes de generar copy (pipeline de contenido).",
-        "prompt_defecto": "prompt/qa-editorial",
+        "prompt_defecto": "prompt/qa-fuente",
         "rol": "qa",
     },
     "evergreen": {
