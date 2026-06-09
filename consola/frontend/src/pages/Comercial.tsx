@@ -33,10 +33,29 @@ import { CLAVE_COMERCIAL } from "./comercial/claves";
 import { DialogoCampania } from "./comercial/DialogoCampania";
 import { PanelCampania } from "./comercial/PanelCampania";
 
-// Periodos ofrecidos para la analítica (tokens que entiende el backend).
+/**
+ * Token `rango:AAAA-MM-DD_AAAA-MM-DD` de los últimos `n` días (incluye hoy), en fecha
+ * LOCAL. El backend (`resolver_rango`) lo entiende igual que los presets. Las campañas
+ * abarcan semanas o meses, así que no basta con la ventana de 30 días: un post con el
+ * hashtag publicado hace 2 meses (p. ej. de un evento) debe poder verse ampliando el periodo.
+ */
+function tokenUltimosDias(n: number): string {
+  const hasta = new Date();
+  const desde = new Date();
+  desde.setDate(desde.getDate() - (n - 1));
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `rango:${iso(desde)}_${iso(hasta)}`;
+}
+
+// Periodos ofrecidos para la analítica (tokens que entiende el backend). Los más largos
+// se calculan al cargar como rango personalizado; el backend acota a 366 días.
 const RANGOS: { id: string; etiqueta: string }[] = [
   { id: "semana", etiqueta: "Última semana" },
   { id: "mes", etiqueta: "Últimos 30 días" },
+  { id: tokenUltimosDias(90), etiqueta: "Últimos 90 días" },
+  { id: tokenUltimosDias(180), etiqueta: "Últimos 6 meses" },
+  { id: tokenUltimosDias(365), etiqueta: "Último año" },
 ];
 
 export default function Comercial() {
