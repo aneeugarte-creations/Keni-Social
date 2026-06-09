@@ -138,7 +138,10 @@ def test_url_match_aislado_por_marca(entorno):
 def test_cache_equivale_a_la_consulta_directa(entorno):
     """`publicados_marca_cache` + `existe_publicado_similar_en_cache` da el mismo veredicto
     que `existe_publicado_similar`, pero leyendo la BD UNA vez por marca (no por candidato)."""
-    _publicar("unotv", "El América gana el clásico", url_fuente="https://uno.tv/nota?utm=x")
+    # URL con tracking REAL (`utm_*`): el canon lo quita, asi la nota publicada con tracking
+    # cruza contra la misma URL limpia (lo que prueba la rama (b)). Un `utm=x` pelado NO es
+    # tracking estandar y `url_canonica` lo conserva, por eso aqui va `utm_source`.
+    _publicar("unotv", "El América gana el clásico", url_fuente="https://uno.tv/nota?utm_source=x")
     cache = db.publicados_marca_cache("unotv")
 
     # (a) por titulo (exacto/fuzzy)
