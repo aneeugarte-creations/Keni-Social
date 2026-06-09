@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 import statistics
 import threading
 from pathlib import Path
@@ -335,6 +336,32 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
         }
         for p in piezas
     ]
+
+
+_log = logging.getLogger("keni_metricas")
+
+
+def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
+    """Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el INORGÁNICO.
+
+    Dispatch por capacidad: si la fuente activa expone `campanias_ads` (Metricool), agrega
+    las campañas con entrega de TODAS las cuentas en alcance, sellando el id_metricas de la
+    marca en cada una. Si no (muestra/compuesta), devuelve [] — el inorgánico solo existe
+    contra la API real. `marca=None` agrega todas las cuentas en alcance.
+    Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera de alcance)."""
+    fuente = _fuente(marca)
+    if not hasattr(fuente, "campanias_ads"):
+        return []
+    salida: list[dict] = []
+    for c in fuente.cuentas():
+        try:
+            for ad in fuente.campanias_ads(c.id, rango):
+                d = ad.model_dump()
+                d["cuenta"] = c.id
+                salida.append(d)
+        except Exception:  # noqa: BLE001 -- una cuenta sin Ads no aborta el resto
+            _log.exception("construir_ads: cuenta %s falló (rango=%s).", c.id, rango)
+    return salida
 
 
 def construir_tendencia_diaria(rango: str = "mes", marca: str | None = None) -> dict:

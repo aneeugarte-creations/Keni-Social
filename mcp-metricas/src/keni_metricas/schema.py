@@ -243,6 +243,32 @@ class MetricaPieza(BaseModel):
     seguidores_netos_atribuidos: int | None = None
 
 
+class CampaniaAds(BaseModel):
+    """Una campaña de publicidad PAGADA (Meta/TikTok Ads) en un periodo: el INORGÁNICO.
+
+    Es la otra cara de `Pieza` (orgánico): lo que el equipo pauta con dinero. `impresiones`
+    son las visualizaciones pagadas (`IMPRESSIONS` de Metricool); `gasto` el coste en su
+    `moneda`. `es_post_impulsado` distingue un post orgánico promocionado (nombre
+    `Publicación: "<caption>"`) —cuyo `caption` permite enlazarlo a su pieza orgánica— de una
+    campaña con nombre propio (p.ej. "ALCANCE CAMPAÑA CHIHUAHUA"), no atribuible a una pieza.
+    """
+
+    nombre: str
+    # Red destino normalizada ('facebook'|'instagram'|'tiktok'), no el provider ('facebookads').
+    red: str
+    impresiones: int = 0
+    gasto: float = 0.0
+    clics: int = 0
+    moneda: str = ""
+    inicio: str = ""  # ISO date ('' si la fuente no la da)
+    fin: str = ""
+    es_post_impulsado: bool = False
+    # caption extraído del nombre cuando es post impulsado (para atribuirlo a su pieza).
+    caption: str = ""
+    # id_metricas de la marca dueña (lo sella el servicio al agregar varias cuentas).
+    cuenta: str | None = None
+
+
 class EstadisticasNumericas(BaseModel):
     """Resumen estadistico de una serie de valores (engagement o visualizaciones).
 

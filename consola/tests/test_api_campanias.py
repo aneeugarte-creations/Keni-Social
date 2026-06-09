@@ -258,6 +258,45 @@ def test_analitica_multimarca_agrega_todas_las_marcas(cliente, monkeypatch):
     assert len({p["id"] for p in datos["piezas"]}) == 2
 
 
+def test_inorganico_atribuye_boost_a_pieza_y_separa_campanias(cliente, monkeypatch):
+    """Lo inorgánico (Meta Ads): un POST IMPULSADO cae como `visualizaciones_pagadas` en su
+    pieza (enlazado por caption); una campaña con NOMBRE PROPIO relacionada va al bloque
+    `ads`; una ajena se descarta. Los totales `inorganico` suman ambos, no la ajena."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    cuerpo = "Gran reportaje en la sierra tarahumara este fin de semana"
+
+    def _listado_falso(rango, marca=None):
+        return [{
+            "id": "ig1", "red": "instagram", "titulo": "Reportaje", "texto": f"{cuerpo} #Chihuahua",
+            "publicado": "2026-06-01", "url": "", "formato": "reel", "engagement_pct": 5.0,
+            "interacciones": 100, "visualizaciones": 1000, "cuenta": "claro_sports",
+        }]
+
+    def _ads_falso(rango, marca=None):
+        return [
+            {"nombre": f'Publicación: "{cuerpo}"', "red": "facebook", "impresiones": 5000,
+             "gasto": 300.0, "clics": 100, "moneda": "MXN", "es_post_impulsado": True, "caption": cuerpo},
+            {"nombre": "ALCANCE CAMPAÑA CHIHUAHUA", "red": "facebook", "impresiones": 20000,
+             "gasto": 117.0, "clics": 50, "moneda": "MXN", "es_post_impulsado": False, "caption": ""},
+            {"nombre": "COLAB CORONA", "red": "facebook", "impresiones": 99999, "gasto": 500.0,
+             "clics": 0, "moneda": "MXN", "es_post_impulsado": False, "caption": ""},
+        ]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    monkeypatch.setattr(campanias.servicio, "construir_ads", _ads_falso)
+    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+
+    fila = {p["id"]: p for p in datos["piezas"]}["ig1"]
+    assert fila["visualizaciones_pagadas"] == 5000  # boost atribuido a la pieza
+    # Bloque ads: solo la campaña con nombre propio RELACIONADA (no la ajena, no el boost).
+    nombres = {a["nombre"] for a in datos["ads"]}
+    assert nombres == {"ALCANCE CAMPAÑA CHIHUAHUA"}
+    # Totales inorgánicos = boost (5000) + relacionada (20000); la ajena (COLAB CORONA) fuera.
+    assert datos["inorganico"]["visualizaciones"] == 25000
+    assert datos["inorganico"]["gasto"] == 417.0
+    assert datos["inorganico"]["campanias"] == 2
+
+
 def test_analitica_campania_inexistente_es_404(cliente):
     r = cliente.get("/api/comercial/campanias/nada/analitica")
     assert r.status_code == 404

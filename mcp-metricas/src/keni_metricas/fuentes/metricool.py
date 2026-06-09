@@ -50,11 +50,13 @@ documentados también en el reporte de la tarea):
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime, timedelta
 
 import httpx
 
 from ..schema import (
+    CampaniaAds,
     Cobertura,
     Cuenta,
     MetricaPieza,
@@ -264,6 +266,37 @@ def _entero(v) -> int:
         return int(float(v))
     except (TypeError, ValueError):
         return 0
+
+
+# --- Publicidad (Meta/TikTok Ads): el INORGÁNICO ------------------------------
+# Las campañas de pago viven en `/v2/advertising/campaigns?providers[]=...`, APARTE del
+# feed orgánico (`/v2/analytics/posts`), que NO trae lo pagado. Las métricas van en un
+# objeto `metrics` con claves en MAYÚSCULAS (IMPRESSIONS/SPENT/CLICKS), acotadas por
+# from/to. Confirmado contra la API real del piloto (act_… de Claro Sports/UnoTV).
+_PROVIDERS_ADS: tuple[str, ...] = ("facebookads", "tiktokads")
+# Provider de Ads -> red destino normalizada (la de keni). 'facebookads' cubre FB e IG;
+# se queda en 'facebook' (la cuenta de Ads es de la página). 'tiktokads' -> 'tiktok'.
+_RED_DE_PROVIDER_ADS: dict[str, str] = {"facebookads": "facebook", "tiktokads": "tiktok"}
+# Un nombre de campaña de un POST IMPULSADO: "Publicación: «caption»" o
+# "Publicación de Instagram: caption". El grupo 1 es el caption (para atribuir a la pieza).
+_PAT_AD_PUBLICACION = re.compile(
+    r'^\s*publicaci[oó]n(?:\s+de\s+\w+)?\s*:\s*["“]?(.+?)["”]?\s*$', re.IGNORECASE | re.UNICODE
+)
+
+
+def _caption_de_anuncio(nombre: str) -> str:
+    """Caption de un post impulsado a partir del nombre de la campaña de Ads; "" si el
+    nombre no es de un post impulsado (campaña con nombre propio)."""
+    m = _PAT_AD_PUBLICACION.match(nombre or "")
+    return m.group(1).strip() if m else ""
+
+
+def _fecha_ads(v) -> str:
+    """Fecha ISO (YYYY-MM-DD) de un campo de Ads, que puede ser `{dateTime, timezone}` o
+    una cadena; "" si no se puede determinar."""
+    if isinstance(v, dict):
+        v = v.get("dateTime") or v.get("date")
+    return str(v)[:10] if v else ""
 
 
 def _a_int_opt(v) -> int | None:
@@ -714,6 +747,57 @@ class FuenteMetricool:
     def cobertura_piezas(self) -> Cobertura | None:
         """Cobertura de la última llamada a `mejores_piezas` (None si aún no se llamó)."""
         return self._cobertura_piezas
+
+    def campanias_ads(self, cuenta_id: str, rango: str) -> list[CampaniaAds]:
+        """Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el inorgánico.
+
+        Lee `/v2/advertising/campaigns` por provider. Solo devuelve las campañas con ENTREGA
+        en la ventana (impresiones > 0): la API lista TODO el histórico de campañas (activas
+        o no), pero su `metrics` viene acotado a from/to, así que 0 impresiones = sin entrega
+        en el periodo. Degrada por provider: un 403/500 (red de Ads no conectada, p.ej.
+        TikTok Ads en el piloto) se OMITE, no rompe el resto."""
+        desde, hasta, _ = resolver_rango(rango)
+        params_rango = {
+            "from": desde.isoformat() + "T00:00:00",
+            "to": hasta.isoformat() + "T23:59:59",
+        }
+        out: list[CampaniaAds] = []
+        for prov in _PROVIDERS_ADS:
+            try:
+                datos = get_json(
+                    self._cli,
+                    f"{BASE}/v2/advertising/campaigns",
+                    params={**self._params_base(cuenta_id), **params_rango, "providers[]": prov},
+                    headers=self._headers(cuenta_id),
+                )
+            except Exception as e:  # noqa: BLE001 -- provider no conectado/caído: se omite.
+                log.warning("metricool: ads %s/%s fallaron: %s", prov, cuenta_id, e)
+                continue
+            for c in datos.get("data") or []:
+                if not isinstance(c, dict):
+                    continue
+                m = c.get("metrics") or {}
+                impresiones = _entero(m.get("IMPRESSIONS") or 0)
+                if impresiones <= 0:
+                    continue  # sin entrega en la ventana: no es del periodo
+                nombre = str(c.get("name") or "")
+                caption = _caption_de_anuncio(nombre)
+                out.append(
+                    CampaniaAds(
+                        nombre=nombre,
+                        red=_RED_DE_PROVIDER_ADS.get(prov, prov),
+                        impresiones=impresiones,
+                        gasto=round(float(m.get("SPENT") or 0.0), 2),
+                        clics=_entero(m.get("CLICKS") or 0),
+                        moneda=str(c.get("currency") or ""),
+                        inicio=_fecha_ads(c.get("start")),
+                        fin=_fecha_ads(c.get("stop")),
+                        es_post_impulsado=bool(caption),
+                        caption=caption,
+                        cuenta=cuenta_id,
+                    )
+                )
+        return out
 
     def _fetch_posts(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date

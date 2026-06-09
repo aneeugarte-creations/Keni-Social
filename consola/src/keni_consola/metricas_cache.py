@@ -60,6 +60,11 @@ TIPO_CORRELACION = "correlacion"
 # de la Consola (eso es `piezas-rendimiento`).
 TIPO_PIEZAS_LISTADO = "piezas_listado"
 
+# Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el INORGÁNICO. Mismo patrón
+# de lazy fill + persistencia. Lo consumen el panel de Campañas (atribuye boosts a piezas)
+# y el dashboard de Métricas (sección Ads). `servicio.construir_ads`.
+TIPO_ADS = "ads"
+
 # Estado del refresco en curso (en memoria; un solo proceso del back). Lo leen el
 # endpoint /estado y lo escriben el daemon y el disparador manual.
 _LOCK = threading.Lock()
@@ -148,6 +153,9 @@ def _calcular(tipo: str, rango: str, marca: str | None) -> dict:
             "piezas": piezas,
             "total": len(piezas),
         }
+    if tipo == TIPO_ADS:
+        ads = servicio.construir_ads(rango, marca)
+        return {"fuente": servicio.nombre_fuente(), "ads": ads, "total": len(ads)}
     raise ValueError(f"Tipo de cache desconocido: {tipo!r}.")
 
 
@@ -301,6 +309,11 @@ async def piezas_listado_async(rango: str, marca: str | None) -> tuple[dict, str
     return await _leer_o_calcular_async(TIPO_PIEZAS_LISTADO, rango, marca)
 
 
+async def ads_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Campañas de Ads (inorgánico) del periodo desde cache (lazy fill) sin bloquear el loop."""
+    return await _leer_o_calcular_async(TIPO_ADS, rango, marca)
+
+
 # --------------------------------------------------------------------------- #
 # Refresco (combo y barrido completo)                                          #
 # --------------------------------------------------------------------------- #
@@ -309,17 +322,17 @@ async def piezas_listado_async(rango: str, marca: str | None) -> tuple[dict, str
 def refrescar_combo(rango: str, marca: str | None) -> None:
     """Recalcula reporte + analisis + piezas + tendencia de UN combo (best-effort).
 
-    Para una marca CONCRETA refresca también el listado de piezas (`TIPO_PIEZAS_LISTADO`):
-    es lo que consumen las Campañas (filtran piezas por hashtag sobre ese listado). Sin
-    incluirlo aquí, la primera versión que se cacheaba por lazy-fill se servía para siempre
-    —ni una pieza nueva ni un cambio de forma del payload (p.ej. añadir `texto` y los reels)
-    aparecían jamás—, y la campaña quedaba en cero. Se OMITE para `marca=None` ("todas"):
-    ninguna vista lo pide (las campañas son por-marca) y agregaría TODAS las cuentas, caro e
-    inútil; ese combo se queda en lazy-fill bajo demanda.
+    Para una marca CONCRETA refresca también el listado de piezas (`TIPO_PIEZAS_LISTADO`) y
+    las campañas de Ads (`TIPO_ADS`, el inorgánico): es lo que consumen las Campañas (filtran
+    piezas por hashtag sobre el listado y atribuyen boosts sobre los ads). Sin incluirlos
+    aquí, la primera versión cacheada por lazy-fill se servía para siempre —ni una pieza
+    nueva ni un cambio de forma del payload aparecían jamás—. Se OMITEN para `marca=None`
+    ("todas"): ninguna vista lo pide (las campañas son por-marca) y agregaría TODAS las
+    cuentas, caro e inútil; esos combos se quedan en lazy-fill bajo demanda.
     """
     tipos = [TIPO_REPORTE, TIPO_ANALISIS, TIPO_PIEZAS, TIPO_TENDENCIA]
     if _marca_norm(marca):
-        tipos.append(TIPO_PIEZAS_LISTADO)
+        tipos.extend((TIPO_PIEZAS_LISTADO, TIPO_ADS))
     for tipo in tipos:
         try:
             _refrescar(tipo, rango, marca)

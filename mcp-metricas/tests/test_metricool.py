@@ -796,3 +796,48 @@ def test_serie_diaria_degrada_si_falla():
     with httpx.Client() as cli:
         puntos = _fuente(cli).serie_diaria("claro_sports", RANGO)
     assert puntos == []
+
+
+@respx.mock
+def test_campanias_ads_parsea_filtra_y_degrada_por_provider():
+    """Lo INORGÁNICO: `/v2/advertising/campaigns` por provider. Solo campañas con entrega
+    (IMPRESSIONS>0); el caption de un post impulsado se extrae del nombre; un provider sin
+    Ads (TikTok, 403) se OMITE sin romper el resto."""
+
+    def responder(request):
+        if request.url.params.get("providers[]") == "tiktokads":
+            return httpx.Response(403, json={"detail": "no ads provider"})
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "name": 'Publicación: "MÉXICO TAMBIÉN SE DESCUBRE"',
+                        "currency": "MXN",
+                        "start": {"dateTime": "2026-05-25T21:40:19"},
+                        "stop": {"dateTime": "2026-06-08T21:40:19"},
+                        "metrics": {"IMPRESSIONS": 118696.0, "SPENT": 993.62, "CLICKS": 3077.0},
+                    },
+                    {
+                        "name": "ALCANCE CAMPAÑA CHIHUAHUA",
+                        "currency": "MXN",
+                        "metrics": {"IMPRESSIONS": 244093.0, "SPENT": 117.04, "CLICKS": 0.0},
+                    },
+                    {"name": "Sin entrega", "metrics": {"IMPRESSIONS": 0.0, "SPENT": 0.0}},
+                ]
+            },
+        )
+
+    respx.get(f"{BASE}/v2/advertising/campaigns").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        ads = _fuente(cli).campanias_ads("claro_sports", RANGO)
+
+    # 2 con entrega (la de 0 impresiones fuera); tiktokads (403) omitido sin romper.
+    assert len(ads) == 2
+    boost = next(a for a in ads if a.es_post_impulsado)
+    assert boost.impresiones == 118696 and boost.gasto == 993.62 and boost.clics == 3077
+    assert boost.caption == "MÉXICO TAMBIÉN SE DESCUBRE" and boost.red == "facebook"
+    assert boost.inicio == "2026-05-25" and boost.fin == "2026-06-08"
+    named = next(a for a in ads if not a.es_post_impulsado)
+    assert named.nombre == "ALCANCE CAMPAÑA CHIHUAHUA" and named.impresiones == 244093
+    assert named.caption == ""
