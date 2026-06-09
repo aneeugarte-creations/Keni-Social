@@ -155,3 +155,12 @@ def test_texto_largo_no_rompe():
     assert len(resultado) == 1
     assert "titulo_es" in resultado[0]
 
+
+def test_construir_prompt_inserta_items_y_contrato():
+    # La plantilla viene de la Biblioteca (semilla): la lista JSON sustituye al marcador (que
+    # NO debe quedar crudo) y se conserva el contrato JSON {"traducciones": [...]}.
+    p = traduccion._construir_prompt('[{"id":"1","titulo":"Hi"}]')
+    assert '[{"id":"1","titulo":"Hi"}]' in p
+    assert traduccion._MARCA_ITEMS not in p
+    assert "traducciones" in p
+

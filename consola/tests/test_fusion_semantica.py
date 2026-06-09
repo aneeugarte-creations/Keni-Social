@@ -97,3 +97,12 @@ def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
     res = ingesta_daemon.paso_fusion_semantica(ejecutor=_ej([["c1", "c2"]]))
     assert res == {"grupos": 0, "fusionadas": 0}
     assert repos.obtener_noticia_cluster("c2") is not None       # nada se fundió
+
+
+def test_construir_prompt_inserta_historias_y_contrato():
+    # La plantilla viene de la Biblioteca (semilla): la lista JSON sustituye al marcador (que NO
+    # debe quedar crudo) y se conserva el contrato JSON {"grupos": [...]}.
+    p = fusion_semantica._construir_prompt('[{"id":"a"}]')
+    assert '[{"id":"a"}]' in p
+    assert fusion_semantica._MARCA_HISTORIAS not in p
+    assert "grupos" in p

@@ -89,3 +89,13 @@ def test_extraer_keywords_tolera_fences_y_normaliza():
 def test_palabras_sin_cache_es_vacio(monkeypatch, tmp_path):
     monkeypatch.setattr(pe, "_ruta_cache", lambda: tmp_path / "noexiste.json")
     assert pe.palabras("unotv") == frozenset()
+
+
+def test_construir_prompt_inserta_marca_editorial_y_contrato():
+    # Plantilla de la Biblioteca (semilla): se sustituyen marca y línea editorial; ningún
+    # marcador `{{...}}` queda crudo y se conserva el contrato JSON {"keywords": [...]}.
+    p = pe._construir_prompt("unotv", "Cubrimos política y deportes.")
+    assert "unotv" in p
+    assert "Cubrimos política y deportes." in p
+    assert "{{" not in p
+    assert "keywords" in p

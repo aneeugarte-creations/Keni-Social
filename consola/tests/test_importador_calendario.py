@@ -225,3 +225,12 @@ def test_extraer_con_claude_ejecutor_que_falla_devuelve_error_legible():
     filas, errores = ic.extraer_con_claude(b"x", nombre="x.bin", ejecutor=ejecutor_roto)
     assert filas == []
     assert errores and "IA" in errores[0]["motivo"]
+
+
+def test_prompt_extraccion_inserta_ruta_marcas_redes_y_contrato():
+    # Plantilla de la Biblioteca (semilla): se insertan la RUTA y el catálogo de MARCAS/REDES;
+    # ningún marcador `{{...}}` queda crudo y se conserva el contrato JSON {"filas": [...]}.
+    p = ic._prompt_extraccion("/tmp/cal.xlsx")
+    assert "/tmp/cal.xlsx" in p
+    assert "{{" not in p
+    assert '"filas"' in p

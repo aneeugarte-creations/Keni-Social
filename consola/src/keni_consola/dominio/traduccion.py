@@ -100,20 +100,41 @@ def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
+# La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
+# JSON a traducir se inserta en `{{ITEMS}}`. `_SCAFFOLD` es la red por si fallara la lectura.
+_PROMPT_ID = "prompt/noticias/traduccion"
+_MARCA_ITEMS = "{{ITEMS}}"
+_SCAFFOLD = (
+    "Eres un traductor y localizador para el equipo de redes sociales de UnoTV en México. "
+    "Recibes una lista JSON de titulares y resúmenes en idioma extranjero. "
+    "Tradúcelos al español mexicano (MX): usa vocabulario natural de México, "
+    "tropicaliza nombres/referencias si corresponde, sé conciso y periodístico. "
+    "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
+    '{"traducciones": [{"id": "...", "titulo_es": "...", "resumen_es": "..."}, ...]} '
+    "sin ningún texto adicional ni ```json. "
+    "Si un resumen está vacío, devuelve resumen_es vacío también. "
+    "No inventes ni añadas información que no esté en el original.\n\n"
+    "Lista de ítems:\n{{ITEMS}}"
+)
+
+
+def _plantilla() -> str:
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
+    try:
+        from .. import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar la traducción sin prompt por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _SCAFFOLD
+
+
 def _construir_prompt(items_json: str) -> str:
-    """Prompt de traducción por lotes para Haiku."""
-    return (
-        "Eres un traductor y localizador para el equipo de redes sociales de UnoTV en México. "
-        "Recibes una lista JSON de titulares y resúmenes en idioma extranjero. "
-        "Tradúcelos al español mexicano (MX): usa vocabulario natural de México, "
-        "tropicaliza nombres/referencias si corresponde, sé conciso y periodístico. "
-        "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
-        '{"traducciones": [{"id": "...", "titulo_es": "...", "resumen_es": "..."}, ...]} '
-        "sin ningún texto adicional ni ```json. "
-        "Si un resumen está vacío, devuelve resumen_es vacío también. "
-        "No inventes ni añadas información que no esté en el original.\n\n"
-        f"Lista de ítems:\n{items_json}"
-    )
+    """Prompt de traducción por lotes para Haiku (plantilla editable + lista JSON)."""
+    plantilla = _plantilla()
+    if _MARCA_ITEMS in plantilla:
+        return plantilla.replace(_MARCA_ITEMS, items_json)
+    return f"{plantilla}\n\nLista de ítems:\n{items_json}"
 
 
 # --------------------------------------------------------------------------- #

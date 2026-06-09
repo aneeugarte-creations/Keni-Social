@@ -97,19 +97,48 @@ def _hash(texto: str) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:16]
 
 
+# La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
+# insertan la MARCA, el tope de keywords y la línea editorial en sus marcadores. `_SCAFFOLD` es
+# la red por si fallara la lectura.
+_PROMPT_ID = "prompt/noticias/perfil-editorial"
+_SCAFFOLD = (
+    "Eres un analista editorial del equipo de redes de una empresa de medios en México. "
+    "Lee la LÍNEA EDITORIAL de la marca «{{MARCA}}» y extrae su PERFIL de cobertura: las "
+    "palabras y frases clave (temas, secciones, entidades, coberturas típicas) que definen "
+    "QUÉ publica esta marca, para poder puntuar qué noticias le encajan. "
+    "Devuelve entre 10 y {{MAX_KEYWORDS}} términos, en minúsculas, sin acentos, concretos "
+    "(p. ej. 'liga mx', 'seleccion mexicana', 'box'), no genéricos ('noticia', 'contenido'). "
+    "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
+    '{"keywords": ["...", "..."]} sin ningún texto adicional ni ```json.\n\n'
+    "Línea editorial de «{{MARCA}}»:\n{{EDITORIAL}}"
+)
+
+
+def _plantilla() -> str:
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
+    try:
+        from .. import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar el perfil sin prompt por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _SCAFFOLD
+
+
 def _construir_prompt(marca: str, texto_editorial: str) -> str:
-    """Prompt para que Haiku extraiga el perfil de temas/keywords de la marca."""
-    return (
-        "Eres un analista editorial del equipo de redes de una empresa de medios en México. "
-        f"Lee la LÍNEA EDITORIAL de la marca «{marca}» y extrae su PERFIL de cobertura: las "
-        "palabras y frases clave (temas, secciones, entidades, coberturas típicas) que definen "
-        "QUÉ publica esta marca, para poder puntuar qué noticias le encajan. "
-        f"Devuelve entre 10 y {_MAX_KEYWORDS} términos, en minúsculas, sin acentos, concretos "
-        "(p. ej. 'liga mx', 'seleccion mexicana', 'box'), no genéricos ('noticia', 'contenido'). "
-        "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
-        '{"keywords": ["...", "..."]} sin ningún texto adicional ni ```json.\n\n'
-        f"Línea editorial de «{marca}»:\n{texto_editorial}"
+    """Prompt para que Haiku extraiga el perfil de temas/keywords de la marca (plantilla editable).
+
+    Inserta MARCA (puede aparecer varias veces), el tope de keywords y la línea editorial; si el
+    equipo quitó el marcador de la línea editorial, la adjunta al final para no perderla.
+    """
+    plantilla = (
+        _plantilla()
+        .replace("{{MARCA}}", marca)
+        .replace("{{MAX_KEYWORDS}}", str(_MAX_KEYWORDS))
     )
+    if "{{EDITORIAL}}" in plantilla:
+        return plantilla.replace("{{EDITORIAL}}", texto_editorial)
+    return f"{plantilla}\n\nLínea editorial de «{marca}»:\n{texto_editorial}"
 
 
 def _extraer_keywords(texto: str) -> list[str]:

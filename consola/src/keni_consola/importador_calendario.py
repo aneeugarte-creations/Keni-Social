@@ -436,25 +436,50 @@ def parsear_respuesta_claude(texto: str) -> tuple[list[FilaCalendario], list[dic
     return _filas_desde_registros(registros)
 
 
+# La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
+# insertan la RUTA del archivo y las listas (catálogo) de MARCAS y REDES en sus marcadores.
+# `_SCAFFOLD` es la red por si fallara la lectura.
+_PROMPT_ID = "prompt/importacion/calendario"
+_SCAFFOLD = (
+    "Eres un extractor de calendarios de contenido para redes sociales. Lee el archivo "
+    "en la ruta {{RUTA}} (puede ser Excel, CSV, PDF, Word, una imagen/captura o texto) y "
+    'devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"filas": [ ... ]}, sin ningún '
+    "texto adicional ni explicación. Cada elemento de `filas` es un objeto con estas claves:\n"
+    '- "titulo": el tema o post (OBLIGATORIO).\n'
+    '- "fecha": fecha de publicación en ISO YYYY-MM-DD, o "" si no la hay.\n'
+    '- "marca": una de estas marcas por su nombre exacto, o "": {{MARCAS}}.\n'
+    '- "redes": lista de redes (subconjunto de): {{REDES}}.\n'
+    '- "prioridad": "alta", "media" o "baja".\n'
+    '- "compromiso": true si la fila está marcada como obligatoria/comprometida.\n'
+    '- "evergreen": true si está marcada como evergreen/verde.\n'
+    '- "notas": cualquier detalle adicional, o "".\n'
+    "Si el archivo no contiene un calendario, devuelve {\"filas\": []}."
+)
+
+
+def _plantilla() -> str:
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
+    try:
+        from . import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar la extracción sin prompt por un fallo de lectura
+        cuerpo = ""
+    return cuerpo or _SCAFFOLD
+
+
 def _prompt_extraccion(ruta: str) -> str:
-    """Prompt para que Claude LEA el archivo y devuelva el calendario en JSON."""
+    """Prompt para que Claude LEA el archivo y devuelva el calendario en JSON (plantilla editable).
+
+    Inserta la RUTA y el catálogo vigente de MARCAS/REDES en sus marcadores; si el equipo quitó
+    el marcador de la ruta, la adjunta al final para no perderla.
+    """
     lista_marcas = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(ninguna)"
     lista_redes = ", ".join(redes.nombre_por_id(r) for r in redes.ids()) or "(ninguna)"
-    return (
-        "Eres un extractor de calendarios de contenido para redes sociales. Lee el archivo "
-        f"en la ruta {ruta} (puede ser Excel, CSV, PDF, Word, una imagen/captura o texto) y "
-        'devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"filas": [ ... ]}, sin ningún '
-        "texto adicional ni explicación. Cada elemento de `filas` es un objeto con estas claves:\n"
-        '- "titulo": el tema o post (OBLIGATORIO).\n'
-        '- "fecha": fecha de publicación en ISO YYYY-MM-DD, o "" si no la hay.\n'
-        f'- "marca": una de estas marcas por su nombre exacto, o "": {lista_marcas}.\n'
-        f'- "redes": lista de redes (subconjunto de): {lista_redes}.\n'
-        '- "prioridad": "alta", "media" o "baja".\n'
-        '- "compromiso": true si la fila está marcada como obligatoria/comprometida.\n'
-        '- "evergreen": true si está marcada como evergreen/verde.\n'
-        '- "notas": cualquier detalle adicional, o "".\n'
-        "Si el archivo no contiene un calendario, devuelve {\"filas\": []}."
-    )
+    plantilla = _plantilla().replace("{{MARCAS}}", lista_marcas).replace("{{REDES}}", lista_redes)
+    if "{{RUTA}}" in plantilla:
+        return plantilla.replace("{{RUTA}}", ruta)
+    return f"{plantilla}\n\nArchivo a leer: {ruta}"
 
 
 def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
