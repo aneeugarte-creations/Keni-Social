@@ -122,8 +122,13 @@ fi
 if [ "$BACK_CAMBIO" = 1 ]; then
   echo "==> [4/5] asegura esquema Postgres (idempotente; ADR 0004)"
   $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
+  # El `back` arranca uvicorn-factory (no pasa por `__main__`), así que la siembra de la Texto
+  # NO corre en su arranque: la materializamos aquí para que los prompts/editorial NUEVOS de la
+  # imagen aparezcan en el estudio. Idempotente; no pisa ediciones del equipo.
+  echo "==> [4b/5] siembra Texto: importa prompts/editorial base que falten (idempotente)"
+  $DC run --rm --no-deps -T back python -m keni_consola.sembrar
 else
-  echo "==> [4/5] back sin cambios — esquema ya vigente, se omite la migración"
+  echo "==> [4/5] back sin cambios — esquema ya vigente, se omite la migración/siembra"
 fi
 
 echo "==> [5/5] up (recrea SOLO los servicios cuya imagen o config cambió)"
