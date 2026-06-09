@@ -104,7 +104,9 @@ _URL_RESULTADO_POR_TIPO = {
     "verificacion": "/operacion/feed",
     "qa-editorial": "/operacion/feed",
     # Nuevos tipos asíncronos (Ola 6+ y calendario):
-    "insumos": "/datos/investigacion/cajones",
+    # "insumos" NO enlaza: navegar al cajón pierde el resultado del parseo. La fila de
+    # Actividad abre el VISOR EN VIVO (popup con stream + prompt + métricas), que SÍ muestra
+    # el resultado del lote. Sin `resultado_url`, el SPA cae a ese visor (ver Actividad.tsx).
     "investigacion": "/datos/investigacion/agentes",
     "import-calendario": "/operacion/feed",
 }

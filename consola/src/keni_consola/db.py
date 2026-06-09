@@ -370,6 +370,7 @@ from .db_parrilla import (  # noqa: F401
     obtener_insumo_lote,
     obtener_pieza_rota,
     obtener_propuesta_parrilla,
+    sanear_lotes_parseando_huerfanos,
 )
 from .db_publicaciones import (  # noqa: F401
     actualizar_publicacion,

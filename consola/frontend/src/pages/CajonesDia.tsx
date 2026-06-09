@@ -137,17 +137,6 @@ const CLAVE_INSUMOS = (fecha: string, soloFrescos: boolean, marca: string | null
 const CLAVE_INSUMOS_PREFIJO = (fecha: string) => ["insumos", "listar", fecha] as const;
 const CLAVE_DIAS = ["insumos", "dias"] as const;
 
-// ── Componente: badge de estado de material ───────────────────────────────────
-
-function BadgeEstadoMaterial({ estado }: { estado: InsumoItem["estado_material"] }) {
-  if (!estado) return null;
-  return (
-    <Badge variant={estado === "tengo" ? "ok" : "aviso"} className="capitalize">
-      {estado === "tengo" ? "Tengo" : "Espero"}
-    </Badge>
-  );
-}
-
 // ── Componente: dialogo de edición de ítem ────────────────────────────────────
 
 interface PropsDialogoEditar {
@@ -163,9 +152,6 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
   const [linea, setLinea] = React.useState(item.linea);
   const [hora, setHora] = React.useState(item.hora);
   const [lugar, setLugar] = React.useState(item.lugar);
-  const [estadoMaterial, setEstadoMaterial] = React.useState<InsumoItem["estado_material"]>(
-    item.estado_material,
-  );
 
   // Resincroniza cuando cambia el ítem (por si se abre con otro)
   React.useEffect(() => {
@@ -174,7 +160,6 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
     setLinea(item.linea);
     setHora(item.hora);
     setLugar(item.lugar);
-    setEstadoMaterial(item.estado_material);
   }, [item]);
 
   const mutacion = useMutation({
@@ -185,7 +170,6 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
         linea,
         hora,
         lugar,
-        estado_material: estadoMaterial,
       }),
     onSuccess: (resp) => {
       onGuardado(resp.item);
@@ -221,34 +205,14 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
               className="mt-1"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="di-linea">Línea</Label>
-              <Input
-                id="di-linea"
-                value={linea}
-                onChange={(e) => setLinea(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="di-em">Estado material</Label>
-              <Select
-                value={estadoMaterial || "__vacio__"}
-                onValueChange={(v) =>
-                  setEstadoMaterial(v === "__vacio__" ? "" : (v as "tengo" | "espero"))
-                }
-              >
-                <SelectTrigger id="di-em" className="mt-1">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__vacio__">—</SelectItem>
-                  <SelectItem value="tengo">Tengo</SelectItem>
-                  <SelectItem value="espero">Espero</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div>
+            <Label htmlFor="di-linea">Línea</Label>
+            <Input
+              id="di-linea"
+              value={linea}
+              onChange={(e) => setLinea(e.target.value)}
+              className="mt-1"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -417,7 +381,6 @@ function ItemCard({ item, fecha }: PropsItemCard) {
               {[item.hora, item.lugar].filter(Boolean).join(" · ")}
             </Badge>
           )}
-          <BadgeEstadoMaterial estado={item.estado_material} />
         </div>
       </div>
 
@@ -503,8 +466,15 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
 
   // Lotes con error para mostrar aviso
   const lotesError = lotes.filter((l) => l.estado === "error");
-  // Lotes en proceso: el worker aún corre Haiku; mostramos un indicador "Procesando…".
-  const lotesParseando = lotes.filter((l) => l.estado === "parseando");
+  // Lotes realmente en proceso: el worker aún corre Haiku y todavía no insertó ítems.
+  // Un lote `parseando` que YA tiene ítems es un ZOMBI (el worker murió entre el INSERT de
+  // los ítems y el UPDATE final del lote): el parseo SÍ produjo resultado, así que NO
+  // mostramos "Procesando con Haiku…" por él (antes se quedaba atascado para siempre). El
+  // reaper del back lo reconciliará a `listo`. Comparamos por `lote_id` de los ítems.
+  const idsLotesConItems = new Set(items.map((it) => it.lote_id));
+  const lotesParseando = lotes.filter(
+    (l) => l.estado === "parseando" && !idsLotesConItems.has(l.id),
+  );
 
   const puedeEnviar = (texto.trim().length > 0 || archivo !== null) && !aportarMut.isPending;
 
@@ -603,25 +573,31 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
         {/* Ítems parseados */}
         {items.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted-foreground">
                 {items.length} ítem{items.length !== 1 ? "s" : ""}
               </p>
-              {/* Botón de borrar lote completo (solo si hay lotes listo/no-error) */}
-              {lotes.filter((l) => l.estado === "listo").map((l: InsumoLote) => (
-                <Button
-                  key={l.id}
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => borrarLoteMut.mutate(l.id)}
-                  disabled={borrarLoteMut.isPending}
-                  aria-label={`Borrar lote ${l.id}`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Borrar lote
-                </Button>
-              ))}
+              {/* Botón de borrar lote completo (solo lotes terminales `listo`). Van en su
+                  propio contenedor con `flex-wrap`: si hay varios lotes (p.ej. tras reenvíos),
+                  los botones BAJAN de línea en vez de salirse por el lateral de la pantalla. */}
+              {lotes.some((l) => l.estado === "listo") && (
+                <div className="flex flex-wrap justify-end gap-1">
+                  {lotes.filter((l) => l.estado === "listo").map((l: InsumoLote) => (
+                    <Button
+                      key={l.id}
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => borrarLoteMut.mutate(l.id)}
+                      disabled={borrarLoteMut.isPending}
+                      aria-label={`Borrar lote ${l.id}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Borrar lote
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               {items.map((item) => (
@@ -657,17 +633,20 @@ export default function CajonesDia() {
   });
 
   // Datos del día seleccionado — filtrados por la marca activa (null = todas).
-  // SONDEO: mientras haya lotes en estado "parseando" (el worker corre Haiku), refrescamos
-  // cada ~1.5 s para que los ítems aparezcan en cuanto el lote pase a "listo"/"error".
+  // SONDEO: mientras haya lotes REALMENTE en proceso (parseando y SIN ítems aún), refrescamos
+  // cada ~1.5 s para que los ítems aparezcan en cuanto el lote pase a "listo"/"error". Un lote
+  // `parseando` que ya tiene ítems es un ZOMBI (worker muerto a medias): no seguimos sondeando
+  // por él indefinidamente (el reaper del back lo reconcilia). Misma lógica que `lotesParseando`.
   const insumosQuery = useQuery({
     queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados, marcaActiva),
     queryFn: ({ signal }) =>
       api.insumos.listar(fecha, signal, ocultarCaducados, marcaActiva ?? undefined),
     staleTime: 30 * 1000,
     refetchInterval: (q) =>
-      (q.state.data?.cajones ?? []).some((c) =>
-        c.lotes.some((l) => l.estado === "parseando"),
-      )
+      (q.state.data?.cajones ?? []).some((c) => {
+        const conItems = new Set(c.items.map((it) => it.lote_id));
+        return c.lotes.some((l) => l.estado === "parseando" && !conItems.has(l.id));
+      })
         ? 1500
         : false,
   });

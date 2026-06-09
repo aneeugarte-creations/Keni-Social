@@ -95,6 +95,9 @@ def test_normalizar_generacion_resultado_url_none_si_no_completado_o_sin_pagina(
     # Tipos sin pagina de resultado propia: sin enlace.
     assert actividad.normalizar_generacion(_gen(tipo="hashtags"))["resultado_url"] is None
     assert actividad.normalizar_generacion(_gen(tipo="prompt"))["resultado_url"] is None
+    # "insumos" (cajones) NO enlaza a propósito: la fila abre el visor en vivo (popup con el
+    # resultado del parseo), en vez de navegar al cajón y perder el resultado.
+    assert actividad.normalizar_generacion(_gen(tipo="insumos"))["resultado_url"] is None
 
 
 def test_normalizar_generacion_sin_metricas():

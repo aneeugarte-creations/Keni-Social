@@ -470,6 +470,29 @@ describe("CajonesDia", () => {
     expect(screen.getByText("Procesando con Haiku…")).toBeInTheDocument();
   });
 
+  it("NO muestra 'Procesando con Haiku…' si el lote parseando YA tiene ítems (zombi: worker muerto a medias)", async () => {
+    // Lote atascado en `parseando` pero con ítems ya insertados: el parseo SÍ terminó.
+    // El spinner NO debe quedarse atascado (regresión: antes se mostraba para siempre).
+    const itemDelLote = { ...ITEM_PARSED, id: "item-z", lote_id: LOTE_PARSEANDO.id };
+    const insumosZombi = {
+      fecha: "2026-06-05",
+      cajones: [
+        { cajon: "portal", lotes: [LOTE_PARSEANDO], items: [itemDelLote] },
+        { cajon: "corresponsales", lotes: [], items: [] },
+        { cajon: "reporteros", lotes: [], items: [] },
+        { cajon: "eventos_claro", lotes: [], items: [] },
+      ],
+    };
+    mockApiInsumos(insumosZombi, { dias: [] });
+    renderConProviders(<CajonesDia />);
+
+    // El ítem del lote aparece…
+    expect(await screen.findByText("Sismo en CDMX de 5.4 grados")).toBeInTheDocument();
+    // …y NO se muestra el spinner "Procesando con Haiku…" (el parseo ya produjo ítems).
+    expect(screen.queryByTestId("lote-parseando")).not.toBeInTheDocument();
+    expect(screen.queryByText("Procesando con Haiku…")).not.toBeInTheDocument();
+  });
+
   it("muestra el visor de streaming cuando hay lote parseando con generación en ejecución", async () => {
     // Simula aportar devolviendo una generación en ejecución.
     const genEjecutando = { ...GENERACION_INSUMOS, estado: "ejecutando" };

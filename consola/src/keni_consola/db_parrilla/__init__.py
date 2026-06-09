@@ -41,6 +41,7 @@ from .insumos import (
     marcar_insumo_item_usado,
     obtener_insumo_item,
     obtener_insumo_lote,
+    sanear_lotes_parseando_huerfanos,
 )
 from .piezas import (
     _CAMPOS_EDITABLES_PIEZA_ROTA,
@@ -121,4 +122,5 @@ __all__ = [
     "marcar_insumo_item_usado",
     "obtener_insumo_item",
     "obtener_insumo_lote",
+    "sanear_lotes_parseando_huerfanos",
 ]

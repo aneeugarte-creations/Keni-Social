@@ -557,6 +557,10 @@ def borrar_insumo_lote(lote_id: str) -> bool:
     return db.borrar_insumo_lote(lote_id)
 
 
+def sanear_lotes_parseando_huerfanos(antes_de: str) -> int:
+    return db.sanear_lotes_parseando_huerfanos(antes_de)
+
+
 def crear_insumo_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return db.crear_insumo_items(items)
 

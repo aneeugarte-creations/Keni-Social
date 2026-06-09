@@ -534,3 +534,67 @@ def test_solo_frescos_mantiene_items_sin_ttl():
     portal = next(c for c in r.json()["cajones"] if c["cajon"] == "portal")
     titulos = [i["titulo"] for i in portal["items"]]
     assert "Everevergreen item" in titulos
+
+
+# --------------------------------------------------------------------------- #
+# Saneo de lotes ZOMBI atascados en `parseando` (worker muerto)               #
+# --------------------------------------------------------------------------- #
+
+_FUTURO = "2999-01-01T00:00:00.000000"  # umbral por encima de cualquier `creado` real
+_PASADO = "2000-01-01T00:00:00.000000"  # umbral por debajo de cualquier `creado` real
+
+
+def test_sanear_lote_parseando_con_items_pasa_a_listo():
+    """Lote atascado en `parseando` PERO con ítems insertados → `listo` + total_items real."""
+    from keni_consola import repos
+
+    lote = repos.crear_insumo_lote(
+        fecha="2026-06-05", cajon="corresponsales", estado="parseando"
+    )
+    repos.crear_insumo_items([
+        {"lote_id": lote["id"], "fecha": "2026-06-05", "cajon": "corresponsales", "titulo": "A"},
+        {"lote_id": lote["id"], "fecha": "2026-06-05", "cajon": "corresponsales", "titulo": "B"},
+    ])
+
+    saneados = repos.sanear_lotes_parseando_huerfanos(_FUTURO)
+    assert saneados == 1
+
+    recargado = repos.obtener_insumo_lote(lote["id"])
+    assert recargado["estado"] == "listo"
+    assert recargado["total_items"] == 2
+
+
+def test_sanear_lote_parseando_sin_items_pasa_a_error():
+    """Lote atascado en `parseando` SIN ítems (parse nunca llegó a insertar) → `error`."""
+    from keni_consola import repos
+
+    lote = repos.crear_insumo_lote(
+        fecha="2026-06-05", cajon="corresponsales", estado="parseando"
+    )
+
+    saneados = repos.sanear_lotes_parseando_huerfanos(_FUTURO)
+    assert saneados == 1
+
+    recargado = repos.obtener_insumo_lote(lote["id"])
+    assert recargado["estado"] == "error"
+    assert recargado["error"]  # mensaje no vacío
+
+
+def test_sanear_no_toca_lotes_recientes_ni_terminales():
+    """No saneamos un `parseando` reciente (umbral en el pasado) ni lotes ya terminales."""
+    from keni_consola import repos
+
+    parseando = repos.crear_insumo_lote(
+        fecha="2026-06-05", cajon="corresponsales", estado="parseando"
+    )
+    listo = repos.crear_insumo_lote(
+        fecha="2026-06-05", cajon="portal", estado="listo"
+    )
+
+    # Umbral en el pasado: el lote `parseando` es más nuevo que el umbral → no se toca.
+    assert repos.sanear_lotes_parseando_huerfanos(_PASADO) == 0
+    assert repos.obtener_insumo_lote(parseando["id"])["estado"] == "parseando"
+
+    # Umbral en el futuro: solo toca `parseando`; el `listo` se queda como está.
+    repos.sanear_lotes_parseando_huerfanos(_FUTURO)
+    assert repos.obtener_insumo_lote(listo["id"])["estado"] == "listo"

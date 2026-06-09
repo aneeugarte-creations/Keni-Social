@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime, timedelta
 
 from . import config, daemon_util, generaciones
 
@@ -49,6 +50,22 @@ def ejecutar_barrido() -> int:
         generaciones.podar_generaciones()
     except Exception:  # noqa: BLE001 -- la poda es best-effort; no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo la poda de registros viejos.", exc_info=True)
+    # Tercer saneamiento: lotes de cajones ZOMBI atascados en `parseando`. Si el worker muere
+    # entre el INSERT de los ítems y el UPDATE del lote, el lote queda `parseando` para siempre
+    # (spinner "Procesando con Haiku…" eterno en el SPA + lote no borrable). Mismo TTL que las
+    # generaciones zombi (muy superior al wall-timeout, así nunca toca un parseo vivo). El
+    # `creado` del lote es ISO naive local, así que el umbral también lo es. Best-effort.
+    try:
+        from . import repos
+
+        umbral = (
+            datetime.now() - timedelta(seconds=config.generaciones_ttl_seg())
+        ).isoformat(timespec="microseconds")
+        m = repos.sanear_lotes_parseando_huerfanos(umbral)
+        if m:
+            _log.info("Reaper de generaciones: %d lote(s) de cajón zombi reconciliado(s).", m)
+    except Exception:  # noqa: BLE001 -- saneamiento aditivo; un fallo no debe tumbar el barrido
+        _log.warning("Reaper de generaciones: fallo el saneo de lotes de cajón.", exc_info=True)
     return n
 
 

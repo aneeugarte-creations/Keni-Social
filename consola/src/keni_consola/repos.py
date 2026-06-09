@@ -110,6 +110,7 @@ from .repos_contenido import (  # noqa: F401
     obtener_insumo_item,
     obtener_insumo_lote,
     quitar_etiqueta,
+    sanear_lotes_parseando_huerfanos,
     titulos_recientes_marca,
 )
 from .repos_editor import (  # noqa: F401
