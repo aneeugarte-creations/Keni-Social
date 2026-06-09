@@ -14,7 +14,7 @@ lanzador de generación inyectado (NUNCA se llama a `claude`).
 
 from __future__ import annotations
 
-from keni_consola import libtexto, generaciones, repos
+from keni_consola import generaciones, libtexto, repos
 from keni_consola import pipeline_contenido as pc
 from keni_consola.pipeline_contenido import ORIGEN_PIPELINE
 
@@ -144,7 +144,7 @@ def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
     gen = pc.lanzar_qa_fuente(tema, autor=None)
 
     assert gen is not None and gen["id"] == "gen-qa-1"
-    assert capturado["tipo"] == "qa-fuente"
+    assert capturado["tipo"] == "pipeline"  # trabajo de la máquina: un solo tipo en Actividad
     assert capturado["endurecer"] == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
 
 

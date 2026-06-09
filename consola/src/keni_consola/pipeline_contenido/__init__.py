@@ -113,7 +113,7 @@ from ._comun import (
     QA_EN_CURSO,
     QA_SALTADA,
     TIPO_ACTIVIDAD,
-    TIPO_COPY,
+    TIPO_PIPELINE,
     VERDICTO_NO_VERIFICADO,
     VERDICTO_PROBLEMA,
     _autor_pipeline,
@@ -190,7 +190,7 @@ __all__ = [
     # constantes de flujo
     "ORIGEN_PIPELINE",
     "TIPO_ACTIVIDAD",
-    "TIPO_COPY",
+    "TIPO_PIPELINE",
     "ETAPA_CI",
     "ETAPA_CD",
     "ETAPA_QA",

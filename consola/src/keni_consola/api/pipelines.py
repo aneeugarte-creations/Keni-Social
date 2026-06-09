@@ -503,7 +503,7 @@ def _prompts_plantilla() -> dict[str, str]:
 
 
 def _generacion_pool_de_marca(marca: str, gens: list[dict], *, prefijo: str) -> dict | None:
-    """La generación `noticias-ia` más reciente de `marca` cuya etiqueta empieza por `prefijo`.
+    """La generación de pool (tipo `pipeline`, Haiku) más reciente de `marca` con etiqueta `prefijo`.
 
     La IA del POOL (Fusión / Encaje) corre por LOTE de marca, no 1:1 con cada pieza. Para dar
     transparencia del Haiku REAL en las etapas Fusión/Editorial, enlazamos su generación de pool más
@@ -516,7 +516,7 @@ def _generacion_pool_de_marca(marca: str, gens: list[dict], *, prefijo: str) -> 
     pool = [
         g for g in gens
         if (g.get("marca", "") or "") == marca
-        and (g.get("tipo") or "") == "noticias-ia"
+        and (g.get("tipo") or "") == "pipeline"
         and (g.get("etiqueta", "") or "").startswith(prefijo)
     ]
     if not pool:

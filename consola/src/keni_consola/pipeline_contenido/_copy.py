@@ -17,7 +17,7 @@ from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_CD,
     QA_SALTADA,
-    TIPO_COPY,
+    TIPO_PIPELINE,
     VERDICTO_NO_VERIFICADO,
     _copy_pendiente_leido,
     _log,
@@ -70,7 +70,7 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
     gen = gen_dom.lanzar_copy(
         # `pipeline`: la generación REAL (claude -p) queda etiquetada como pipeline y reporta
         # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/QA— no cuesta).
-        tipo=TIPO_COPY,
+        tipo=TIPO_PIPELINE,
         marca=marca,
         contexto=nota,
         redes_ids=redes_ids,

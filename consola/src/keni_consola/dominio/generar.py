@@ -18,7 +18,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from .. import libtexto, generaciones, marcas, redes
+from .. import generaciones, libtexto, marcas, redes
 from . import jobspec
 
 _log = logging.getLogger("keni_consola.generar")
@@ -177,7 +177,7 @@ def _autor_campos(autor: dict[str, str] | None) -> dict[str, str]:
 
 # Tipos de generacion que son TRABAJO DE FONDO (los lanza el propio pipeline/autogen, no una
 # persona esperando): en la cola del worker ceden el paso a los lanzamientos manuales.
-_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen", "qa-fuente"})
+_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen"})
 
 
 def lanzar(

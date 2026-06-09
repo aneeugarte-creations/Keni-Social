@@ -20,6 +20,7 @@ from ._comun import (
     ETAPA_QA,
     PROMPT_QA_ID,
     QA_EN_CURSO,
+    TIPO_PIPELINE,
     _copy_pendiente_leido,
     _log,
     registrar_etapa,
@@ -181,7 +182,7 @@ def lanzar_qa_fuente(
     except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento lo evita el sweep
         _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
     gen = gen_dom.lanzar(
-        tipo="qa-fuente",
+        tipo=TIPO_PIPELINE,
         titulo=_TITULO_QA,
         marca=marca,
         prompt=prompt,

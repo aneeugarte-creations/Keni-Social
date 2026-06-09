@@ -263,8 +263,10 @@ def lanzar_para_topic(
 
 
 def _registrar_actividad_arte(item: dict[str, Any], item_id: str, prompt: str, imagen: str) -> None:
-    """Deja la generación de arte VISIBLE: una generación `tipo='imagen'` (con su PROMPT real) +
+    """Deja la generación de arte VISIBLE: una generación `tipo='pipeline'` (con su PROMPT real) +
     el marcador de etapa ARTE correlacionado al tema (para Actividad IA y el detalle del pipeline).
+    Es trabajo de la MÁQUINA: se sella `pipeline` como el resto de etapas; la creación manual de
+    imagen (Estudio) conserva su tipo `imagen`.
 
     Best-effort: un fallo de traza no rompe la generación de arte. Import diferido de
     `pipeline_contenido` para no acoplar el módulo en carga (evita ciclo con `_barrido`).
@@ -274,7 +276,7 @@ def _registrar_actividad_arte(item: dict[str, Any], item_id: str, prompt: str, i
         from .pipeline_contenido import ETAPA_ARTE, registrar_etapa
 
         gen = generaciones.crear({
-            "tipo": "imagen",
+            "tipo": "pipeline",
             "marca": marca,
             "contenido_id": item_id,
             "prompt": prompt[:20000],

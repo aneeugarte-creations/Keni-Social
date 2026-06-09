@@ -192,7 +192,7 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
     try:
         generaciones.crear(
             {
-                "tipo": "noticias-ia",
+                "tipo": "pipeline",
                 "marca": marca,
                 "etiqueta": etiqueta,
                 "prompt": (prompt or "")[:20000],

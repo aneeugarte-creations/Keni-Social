@@ -782,7 +782,7 @@ def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
             marca=_MARCA, titulo="Zombi QA", autor=None, contenido_id=tema["id"],
         )
     }
-    gen = generaciones.crear({"tipo": "qa-fuente", "marca": _MARCA, "etiqueta": "QA"})
+    gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "QA"})
 
     # Registro aun NO en error: el saneo no toca el sentinel (la QA podria seguir viva).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})

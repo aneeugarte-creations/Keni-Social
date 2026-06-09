@@ -23,8 +23,11 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   "import-calendario": "Importar calendario",
   "render-video": "Render de video",
   transcribir: "Transcripción",
-  // Pasos Haiku del pool de noticias: fusión semántica (dedup) y encaje editorial.
+  // Etiquetas retenidas para registros HISTÓRICOS: todo el trabajo de la máquina se sella
+  // ahora tipo='pipeline' (criba QA, copy, arte, fusión/encaje del pool); estos tipos ya no
+  // se crean pero el historial los trae.
   "noticias-ia": "IA de noticias",
+  "qa-fuente": "Criba de fuente",
 };
 
 /**

@@ -226,7 +226,7 @@ def test_lanzar_para_topic_adjunta_imagen(monkeypatch):
 
 
 def test_lanzar_para_topic_registra_actividad(monkeypatch):
-    """El arte deja constancia: una generación `tipo='imagen'` con su PROMPT + la etapa ARTE
+    """El arte deja constancia: una generación `tipo='pipeline'` con su PROMPT + la etapa ARTE
     correlacionada al tema (gen_id), para que sea visible en Actividad IA y el detalle del pipeline."""
     monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
     monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")])
@@ -246,7 +246,7 @@ def test_lanzar_para_topic_registra_actividad(monkeypatch):
     aa.lanzar_para_topic(_item(), generar=lambda prompt: b"PNGBYTES")
 
     assert len(gens) == 1
-    assert gens[0]["tipo"] == "imagen"
+    assert gens[0]["tipo"] == "pipeline"  # arte de la máquina: tipo pipeline (la imagen manual sigue "imagen")
     assert gens[0]["contenido_id"] == "c1"
     assert gens[0]["prompt"]  # el prompt REAL del arte
     assert len(etapas) == 1

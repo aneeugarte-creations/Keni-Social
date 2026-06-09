@@ -300,12 +300,12 @@ def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
     cada uno con su prompt + salida REALES."""
     tema = _tema_pipeline("Tema con pool", marca="unotv")
     generaciones.crear({
-        "tipo": "noticias-ia", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
         "prompt": "PROMPT-FUSION", "salida": "SALIDA-FUSION",
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
     generaciones.crear({
-        "tipo": "noticias-ia", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
         "prompt": "PROMPT-ENCAJE", "salida": "SALIDA-ENCAJE",
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })

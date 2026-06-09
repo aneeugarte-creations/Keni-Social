@@ -84,10 +84,9 @@ TIPOS = (
     # Jobs de PROCESO (no-claude) del motor de video (Ola VIDEO): render con ffmpeg y
     # transcripcion ASR. Se cuelgan de Actividad IA igual que el resto de generaciones.
     "render-video", "transcribir",
-    # Pasos Haiku del POOL de noticias (Ola B/2): fusion semantica (dedup de historias del
-    # mismo evento) y encaje editorial (perfil de cobertura por marca). Corren en el daemon de
-    # ingesta y se REGISTRAN como actividad COMPLETADA para que la dedup/jerarquizacion por IA
-    # sea visible en «Actividad IA» (antes corrian mudos).
+    # HISTORICO: los pasos Haiku del pool (fusion/encaje) hoy se sellan `tipo='pipeline'`
+    # como el resto del trabajo de la maquina; se retiene para que los registros viejos
+    # sigan filtrables en «Actividad IA».
     "noticias-ia",
 )
 
