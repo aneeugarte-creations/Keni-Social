@@ -286,6 +286,43 @@ def test_mejores_piezas_incluye_reels_de_instagram():
 
 
 @respx.mock
+def test_reel_facebook_cuenta_interacciones_no_la_tasa():
+    """En FB el reel trae `engagement` como TASA (%), no conteo; las interacciones son
+    reacciones (`postVideoReactions`) + acciones sociales (`postVideoSocialActions`)."""
+    _mock_posts("facebook", [])
+    _mock_reels(
+        "facebook",
+        [
+            {
+                "reelId": "fbr1",
+                "created": "2026-05-26T10:00:00",
+                "description": "Reel FB de campaña #Chihuahua",
+                "blueReelsPlayCount": 2530,
+                "engagement": 0.8352,  # TASA en %, NO interacciones -> NO debe usarse
+                "postVideoReactions": 16,
+                "postVideoSocialActions": 6,
+                "reelUrl": "https://facebook.com/reel/fbr1",
+            }
+        ],
+    )
+    marcas_fb = {"claro_sports": {**MARCAS["claro_sports"], "plataformas": [Plataforma.facebook]}}
+    with httpx.Client() as cli:
+        piezas = FuenteMetricool(marcas=marcas_fb, cliente=cli).mejores_piezas(
+            "claro_sports", RANGO, 5
+        )
+
+    assert len(piezas) == 1
+    reel = piezas[0]
+    assert reel.plataforma == Plataforma.facebook
+    assert reel.formato == "reel"
+    assert reel.visualizaciones == 2530
+    # interacciones = 16 reacciones + 6 acciones sociales = 22 (NO 0 por la tasa 0.83).
+    assert reel.interacciones == 22
+    # engagement recalculado sobre el conteo real (22/2530), redondeado a 1 decimal.
+    assert reel.engagement_pct == pytest.approx(0.9)
+
+
+@respx.mock
 def test_reels_que_fallan_no_rompen_las_piezas():
     """Si el endpoint de reels falla, las piezas de /posts siguen saliendo (degrada a [])."""
     _mock_posts("instagram", [_post_ig("p1", 5000, 250)])

@@ -222,7 +222,9 @@ _ALIAS_REEL_VIS = (
     "views", "blueReelsPlayCount", "videoViews", "impressionsTotal",
     "postImpressionsUnique", "reach", "impressions", "plays",
 )
-_ALIAS_REEL_INT = ("interactions", "engagement", "postVideoSocialActions", "engagements")
+# OJO: en Reels `engagement` es una TASA (%), NO un conteo de interacciones: no se usa como
+# tal. El conteo se arma en `_interacciones_reel` (IG: `interactions`; FB: reacciones +
+# acciones sociales; más el desglose granular).
 _ALIAS_REEL_URL = ("url", "reelUrl", "permalink", "videoUrl", "shareUrl")
 _ALIAS_REEL_TIEMPO = ("averageWatchTime", "postVideoAvgTimeWatchedSeconds", "avgWatchTime")
 _ALIAS_REEL_LIKES = ("likes", "postVideoReactions", "reactions", "likeCount")
@@ -294,6 +296,24 @@ def _interacciones_efectivas(inter: int, gran: dict) -> int:
     agregado ni desglose, queda 0 (degradación honesta).
     """
     return max(inter, sum(gran[k] for k in _GRANULAR_INTERACCION if gran.get(k) is not None))
+
+
+def _interacciones_reel(reel: dict, gran: dict) -> int:
+    """Interacciones (CONTEO) de un Reel: el MÁXIMO entre el agregado, las acciones de FB y
+    el desglose granular.
+
+    Por red (confirmado contra la API real AMX): Instagram trae `interactions` (conteo).
+    Facebook NO lo trae: su conteo es reacciones (`postVideoReactions`) + acciones sociales
+    (`postVideoSocialActions`); su campo `engagement` es una TASA (%), NO un conteo, así que
+    NUNCA se usa como interacciones (era el bug: `engagement`=0.83 → 0). `max(...)` toma lo
+    mejor disponible; 0 si la red no expone ninguno (degradación honesta).
+    """
+    agg = _entero(_primero(reel, ("interactions",), 0))
+    fb = _entero(_primero(reel, ("postVideoReactions",), 0)) + _entero(
+        _primero(reel, ("postVideoSocialActions",), 0)
+    )
+    desglose = sum(gran[k] for k in _GRANULAR_INTERACCION if gran.get(k) is not None)
+    return max(agg, fb, desglose)
 
 
 def _formato_opt(v) -> str | None:
@@ -762,8 +782,17 @@ class FuenteMetricool:
         fecha = _fecha(_primero(reel, _ALIAS_FECHA))
         if fecha is None:
             return None
-        inter = _entero(_primero(reel, _ALIAS_REEL_INT, 0))
         texto = str(_primero(reel, _ALIAS_REEL_TEXTO, ""))
+        gran = {
+            "likes": _a_int_opt(_primero(reel, _ALIAS_REEL_LIKES)),
+            "comentarios": _a_int_opt(_primero(reel, _ALIAS_COMENTARIOS)),
+            "compartidos": _a_int_opt(_primero(reel, _ALIAS_COMPARTIDOS)),
+            "guardados": _a_int_opt(_primero(reel, _ALIAS_GUARDADOS)),
+            "video_views": _a_int_opt(_primero(reel, _ALIAS_REEL_VIS)),
+            "tiempo_medio_vis_s": _a_int_opt(_primero(reel, _ALIAS_REEL_TIEMPO)),
+            "formato": "reel",
+        }
+        inter = _interacciones_reel(reel, gran)
         return Pieza(
             id=str(_primero(reel, _ALIAS_REEL_ID, "")),
             plataforma=plat,
@@ -775,13 +804,7 @@ class FuenteMetricool:
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(reel, _ALIAS_REEL_URL),
             cuenta=cuenta_id,
-            formato="reel",
-            likes=_a_int_opt(_primero(reel, _ALIAS_REEL_LIKES)),
-            comentarios=_a_int_opt(_primero(reel, _ALIAS_COMENTARIOS)),
-            compartidos=_a_int_opt(_primero(reel, _ALIAS_COMPARTIDOS)),
-            guardados=_a_int_opt(_primero(reel, _ALIAS_GUARDADOS)),
-            video_views=_a_int_opt(_primero(reel, _ALIAS_REEL_VIS)),
-            tiempo_medio_vis_s=_a_int_opt(_primero(reel, _ALIAS_REEL_TIEMPO)),
+            **gran,
         )
 
     @staticmethod
