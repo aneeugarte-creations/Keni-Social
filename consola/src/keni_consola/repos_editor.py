@@ -45,10 +45,15 @@ def crear_media_catalogo(
 
 
 def listar_media_catalogo(
-    *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
+    *,
+    marca: str | None = None,
+    tipo: str | None = None,
+    solo_aprobados: bool = False,
+    incluir_globales: bool = False,
 ) -> list[dict[str, Any]]:
     return db.listar_media_catalogo(
-        marca=marca, tipo=tipo, solo_aprobados=solo_aprobados
+        marca=marca, tipo=tipo, solo_aprobados=solo_aprobados,
+        incluir_globales=incluir_globales,
     )
 
 

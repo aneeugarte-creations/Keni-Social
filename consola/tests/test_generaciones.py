@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from keni_consola import generaciones, preferencias
+from keni_consola import generaciones, media, preferencias, repos
 from keni_consola.dominio import runner, stream
 
 from .conftest import _cliente
@@ -478,6 +478,46 @@ def test_lanzar_job_imagen_error(entorno):
     g = generaciones.obtener(gid)
     assert g["estado"] == "error"
     assert "proveedor" in g["error"].lower()
+
+
+def _esperar_fin(gid: str) -> None:
+    """Espera a que el hilo del job termine (suelta el handle tras el estado terminal)."""
+    with generaciones._HANDLES_LOCK:
+        handle = generaciones._HANDLES.get(gid)
+    if handle is not None:
+        handle["hilo"].join(timeout=5)
+
+
+def test_lanzar_job_imagen_autocataloga_arte_ia(entorno):
+    """Una imagen GENERADA por IA (objeto en `generadas/`) se cataloga sola en la galería de
+    artes (GLOBAL, tipo='ia') para poder reutilizarla en otros posts/redes."""
+    clave = media.guardar_bytes(b"\x89PNG-fake-bytes", ext="png")  # -> generadas/<uuid>.png
+    assert clave.startswith("generadas/")
+    gid = generaciones.crear({"tipo": "imagen", "marca": "", "etiqueta": "Imagen · Neymar"})["id"]
+    _LANZAR_IMAGEN_REAL(gid, generar=lambda: {"id": clave, "url": f"/api/media/{clave}"})
+    _esperar_fin(gid)
+
+    assert generaciones.obtener(gid)["estado"] == "completado"
+    artes = repos.listar_media_catalogo()
+    nuevo = [a for a in artes if a["objeto"].endswith(clave.split("/", 1)[-1])]
+    assert len(nuevo) == 1
+    arte = nuevo[0]
+    assert arte["objeto"].startswith("artes/")  # promovido a la carpeta reusable
+    assert arte["tipo"] == "ia"
+    assert arte["marca"] == ""  # GLOBAL: visible desde la galería de cualquier marca
+    assert arte["titulo"] == "Imagen · Neymar"
+    # El `generadas/` original NO se borra (promover COPIA): la pieza que lo use sigue intacta.
+    assert media.leer_media(clave) is not None
+
+
+def test_lanzar_job_imagen_no_cataloga_render(entorno):
+    """Un resultado determinista (recorte/composite en `render/`, o una key plana) NO entra en
+    la galería: solo se catalogan las imágenes GENERATIVAS (`generadas/`)."""
+    gid = generaciones.crear({"tipo": "imagen", "marca": "", "etiqueta": "Editar · recortar"})["id"]
+    _LANZAR_IMAGEN_REAL(gid, generar=lambda: {"id": "render/abc.png", "url": "/api/media/render/abc.png"})
+    _esperar_fin(gid)
+    assert generaciones.obtener(gid)["estado"] == "completado"
+    assert repos.listar_media_catalogo() == []
 
 
 # --------------------------------------------------------------------------- #

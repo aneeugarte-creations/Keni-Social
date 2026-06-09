@@ -28,7 +28,7 @@ from typing import Any
 from .. import preferencias
 from ..dominio import runner, stream
 from ..observabilidad import request_id_actual
-from ._almacen import actualizar, crear
+from ._almacen import actualizar, crear, obtener
 from ._comun import (
     _HANDLES,
     _HANDLES_LOCK,
@@ -575,6 +575,52 @@ def cancelar(gen_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
+def _autocatalogar_arte_ia(gen_id: str, resultado: Any) -> None:
+    """Cataloga en la galería de artes las imágenes recién GENERADAS por IA, para REUTILIZARLAS
+    en otros posts/redes sin re-generarlas (la foto de un post de Neymar vale para el resto de
+    redes). Solo toca objetos GENERATIVOS (carpeta `generadas/`): los deterministas
+    (recortes/composites/sets en `render/`) NO se catalogan. Las cataloga como GLOBALES
+    (marca='') para que salgan en la galería de CUALQUIER marca (ver `api/artes` listar).
+
+    Best-effort y AISLADO: corre tras fijar el estado terminal; cualquier fallo se loguea y NO
+    afecta a la generación (ya `completada`). Idempotente por `objeto` UNIQUE en `catalogo_media`.
+    """
+    if not isinstance(resultado, dict):
+        return
+    try:
+        from .. import almacen_media, media, repos
+    except Exception:  # noqa: BLE001 -- si el cableado no está, no rompemos la generación
+        return
+    claves: list[str] = []
+    pid = resultado.get("id")
+    if isinstance(pid, str) and pid:
+        claves.append(pid)
+    for img in resultado.get("imagenes") or []:
+        if isinstance(img, dict) and isinstance(img.get("id"), str) and img["id"]:
+            claves.append(img["id"])
+    # Solo las imágenes GENERATIVAS (carpeta `generadas/`); de-dup conservando orden.
+    generadas = [k for k in dict.fromkeys(claves) if almacen_media.categoria_de(k) == "generadas"]
+    if not generadas:
+        return
+    gen = obtener(gen_id) or {}
+    titulo = (gen.get("etiqueta") or "").strip()
+    autor = {"id": gen.get("autor_id", ""), "usuario": gen.get("autor_nombre", "")}
+    for clave in generadas:
+        try:
+            if media.leer_media(clave) is None:
+                continue
+            # Promueve a la carpeta reusable `artes/` (igual que `POST /api/artes`): COPIA, así la
+            # pieza que referencia el `generadas/` original sigue intacta.
+            objeto = almacen_media.promover_objeto(clave, "artes")
+            if repos.existe_media_objeto(objeto):
+                continue
+            repos.crear_media_catalogo(
+                objeto=objeto, tipo="ia", marca="", titulo=titulo, aprobado=False, autor=autor,
+            )
+        except Exception:  # noqa: BLE001 -- best-effort por objeto; nunca rompe la generación
+            _log.warning("auto-catálogo de arte IA falló para %r (gen %s)", clave, gen_id, exc_info=True)
+
+
 def lanzar_job_imagen(gen_id: str, *, generar: Callable[[], dict[str, Any]]) -> None:
     """Lanza un trabajo de imagen EN SEGUNDO PLANO (un hilo simple; sin Popen).
 
@@ -593,6 +639,8 @@ def lanzar_job_imagen(gen_id: str, *, generar: Callable[[], dict[str, Any]]) -> 
             actualizar(gen_id, {
                 "estado": ESTADO_COMPLETADO, "resultado": resultado, "fecha_fin": ahora_iso(),
             })
+            # Auto-catálogo: si generó imagen(es) por IA, las deja reutilizables en la galería.
+            _autocatalogar_arte_ia(gen_id, resultado)
         # Soltamos el handle DESPUES de fijar el estado terminal (ver `lanzar_job_claude`).
         with _HANDLES_LOCK:
             _HANDLES.pop(gen_id, None)

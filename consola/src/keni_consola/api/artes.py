@@ -97,8 +97,10 @@ def _coincide_busqueda(arte: dict, q: str) -> bool:
 async def listar(request: Request) -> Response:
     """GET /api/artes: artes catalogadas (mas recientes primero).
 
-    Filtros opcionales: `marca` (acota a esa marca), `tipo` (`estudio|subida|ia`) y `q`
-    (busqueda por titulo/etiqueta, en memoria). Devuelve `{artes: [...]}`.
+    Filtros opcionales: `marca` (acota a esa marca, MÁS los artes globales compartidos),
+    `tipo` (`estudio|subida|ia`) y `q` (busqueda por titulo/etiqueta, en memoria). Devuelve
+    `{artes: [...]}`. Al acotar por marca se incluyen también los artes GLOBALES (marca='')
+    para que un arte reutilizable (p.ej. una foto generada por IA) salga en cualquier marca.
     """
     q = request.query_params
     artes = [
@@ -106,6 +108,7 @@ async def listar(request: Request) -> Response:
         for item in repos.listar_media_catalogo(
             marca=q.get("marca") or None,
             tipo=q.get("tipo") or None,
+            incluir_globales=True,
         )
     ]
     busqueda = (q.get("q") or "").strip()

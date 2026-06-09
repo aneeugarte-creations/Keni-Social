@@ -104,12 +104,21 @@ def listar_media_catalogo(
     marca: str | None = None,
     tipo: str | None = None,
     solo_aprobados: bool = False,
+    incluir_globales: bool = False,
 ) -> list[dict[str, Any]]:
-    """Items de la galería de medios, filtros combinables (AND). Mas recientes primero."""
+    """Items de la galería de medios, filtros combinables (AND). Mas recientes primero.
+
+    `incluir_globales` (def False): al filtrar por `marca`, suma también los artes GLOBALES
+    (marca='') — "compartidos entre marcas" —, de modo que un arte global (p.ej. una foto
+    generada por IA y catalogada para reutilizar) aparezca en la galería de CUALQUIER marca.
+    """
     clausulas: list[str] = []
     params: list[Any] = []
     if marca:
-        clausulas.append("marca = ?")
+        if incluir_globales:
+            clausulas.append("(marca = ? OR marca = '')")
+        else:
+            clausulas.append("marca = ?")
         params.append(marca)
     if tipo:
         clausulas.append("tipo = ?")

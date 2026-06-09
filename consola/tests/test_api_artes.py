@@ -101,6 +101,20 @@ def test_listar_filtra_por_marca(cliente):
     assert a1["objeto"] in objetos and a2["objeto"] not in objetos
 
 
+def test_listar_incluye_artes_globales_en_cualquier_marca(cliente):
+    """Un arte GLOBAL (marca='') aparece al filtrar por CUALQUIER marca: así una foto generada
+    por IA y catalogada como global se reutiliza en todas las marcas/redes. Un arte de OTRA
+    marca sigue sin colarse."""
+    og, om = _subir_objeto(cliente, b"\x01"), _subir_objeto(cliente, b"\x02")
+    glob = cliente.post("/api/artes", json={"objeto": og, "marca": ""}).json()["arte"]
+    otra = cliente.post("/api/artes", json={"objeto": om, "marca": "claro-sports"}).json()["arte"]
+    assert glob["marca"] == ""
+    artes = cliente.get("/api/artes", params={"marca": "unotv"}).json()["artes"]
+    objetos = {a["objeto"] for a in artes}
+    assert glob["objeto"] in objetos       # el global SÍ aparece bajo unotv
+    assert otra["objeto"] not in objetos   # el de claro-sports NO
+
+
 def test_listar_busqueda_q(cliente):
     o1, o2 = _subir_objeto(cliente, b"\x01"), _subir_objeto(cliente, b"\x02")
     a1 = cliente.post("/api/artes", json={"objeto": o1, "marca": "unotv", "etiquetas": ["mundial"]}).json()["arte"]
