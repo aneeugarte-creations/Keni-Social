@@ -422,18 +422,21 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
   // Visibilidad: ocultar una capa es solo una AYUDA DE EDICIÓN (ver fondos/transparencias detrás),
   // así que NO se dibuja en el editor pero SÍ aparece en la imagen FINAL (el render del servidor
   // ignora `visible`, ver `dibujarDocumento(..., final:true)`). EXCEPCIÓN: en "Vista con muestra" el
-  // hueco de foto oculto SÍ se pinta con la foto de muestra, para diseñar viéndolo. Así el hueco que
-  // nace oculto no ensucia el lienzo con su placeholder gris cuando la muestra está apagada.
-  const esHuecoImg = capa.tipo === "imagen" && ((capa as CapaImagen).es_foto || !(capa as CapaImagen).objeto);
+  // HUECO DE FOTO (`es_foto`) oculto SÍ se pinta con la muestra, para diseñar viéndolo. Así el hueco
+  // que nace oculto no ensucia el lienzo con su placeholder gris cuando la muestra está apagada.
+  // OJO: SOLO el hueco `es_foto`, no cualquier imagen vacía: si no, una imagen vacía OCULTA de z alto
+  // se forzaría a pintar y taparía el diseño (pleca/titular) con la muestra opaca al activarla.
+  const esHuecoImg = capa.tipo === "imagen" && (capa as CapaImagen).es_foto === true;
   if (capa.visible === false && !(muestra && esHuecoImg)) return null;
 
   switch (capa.tipo) {
     case "imagen": {
       const c = capa as CapaImagen;
-      // "Vista con muestra": el hueco de foto (es_foto, o cualquier imagen vacía) se RELLENA con una
-      // foto de muestra sintética para ver recorte/encuadre/forma/filtros/duotono/sombra. Solo
-      // visual; el dato sigue vacío. La imagen real (objeto cargado) manda; la muestra es fallback.
-      const esHueco = c.es_foto || !c.objeto;
+      // "Vista con muestra": SOLO el hueco de foto (`es_foto`) se RELLENA con la muestra para ver
+      // recorte/encuadre/forma/filtros/duotono/sombra. Solo visual; el dato sigue vacío. La imagen
+      // real (objeto cargado) manda; la muestra es fallback. No se rellena cualquier imagen vacía:
+      // una imagen vacía por encima del diseño taparía la pleca/titular con la muestra opaca.
+      const esHueco = c.es_foto === true;
       const imgEfectiva = img ?? (muestra && esHueco ? fotoMuestra(() => redibujar()) : null);
       if (!imgEfectiva) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
