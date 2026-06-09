@@ -43,7 +43,6 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Pipeline de contenido
     "prompt/qa-fuente": ["Pipeline · criba QA de la fuente (pre-copy)"],
     "prompt/copy-desde-nota": ["Pipeline · generación de copy desde la nota"],
-    "prompt/qa-editorial": ["QA editorial del copy (revisión manual y aprobador automático)"],
     "prompt/brainstorming-evergreen": ["Taller evergreen · brainstorming de ideas"],
     # De LANZAMIENTO MANUAL (no se inyectan en un proceso de fondo; se ejecutan a demanda).
     "prompt/termometro-mundial": ["Se lanza a mano · sección Termómetro (descubrimiento de tendencias)"],

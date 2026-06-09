@@ -47,7 +47,6 @@ PROC_COPY = "copy"
 PROC_GALERIA = "galeria"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
-PROC_QA = "qa"
 # QA de la FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la nota de origen por TEMA antes
 # de generar copy. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
@@ -243,31 +242,6 @@ def construir_documento(
 def construir_hashtags() -> dict[str, Any]:
     """Spec del post-procesado de HASHTAGS (parsea los hashtags de la salida)."""
     return {"kind": PROC_HASHTAGS}
-
-
-def construir_qa(
-    *,
-    marca: str,
-    titulo: str,
-    autor: dict[str, str] | None = None,
-    plataforma_id: str = "",
-    contenido_id: str = "",
-    copy_hash: str = "",
-) -> dict[str, Any]:
-    """Spec del post-procesado de QA EDITORIAL (parsea el informe; no crea borradores).
-
-    `plataforma_id`/`contenido_id`/`copy_hash` (item A): si la revision se lanzo SOBRE una pieza
-    concreta, viajan en el spec para que el WORKER persista el veredicto atado a ella.
-    """
-    return {
-        "kind": PROC_QA,
-        "marca": marca,
-        "titulo": titulo,
-        "autor": _autor_spec(autor),
-        "plataforma_id": plataforma_id or "",
-        "contenido_id": contenido_id or "",
-        "copy_hash": copy_hash or "",
-    }
 
 
 def construir_qa_fuente(
@@ -514,14 +488,6 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
         return importador_calendario.construir_procesar_import(
             marca_defecto=p.get("marca_defecto", "") or "", autor=autor,
-        )
-
-    if kind == PROC_QA:
-        return dom_qa.construir_procesar_qa(
-            p["marca"], p.get("titulo", ""), autor=autor,
-            plataforma_id=p.get("plataforma_id", "") or "",
-            contenido_id=p.get("contenido_id", "") or "",
-            copy_hash=p.get("copy_hash", "") or "",
         )
 
     if kind == PROC_QA_FUENTE:

@@ -39,7 +39,6 @@ modulos_backend = [
   "marca_activos",
   "plantillas_diseno",
   "plantillas_marca",
-  "qa_editorial",
   "verificaciones",
   "reciclaje",
   "rss",

@@ -1,12 +1,12 @@
-"""Tests del QA editorial como APROBADOR AUTOMATICO (items A-D). SIN Postgres.
+"""Tests del aprobador-automático de QA en la cadena de aprobación. SIN Postgres.
 
-Cubre el flujo PURO/lógico del veredicto de QA atado a una pieza, sin levantar la BD real:
+Cubre el flujo PURO/lógico del veredicto de QA atado a una pieza, sin levantar la BD real. (La
+PÁGINA de revisión de copy que PRODUCÍA estos veredictos se retiró; queda la ETAPA de validación
+que los CONSUME, más su almacén.)
 
-  - `dominio.qa_editorial.hash_copy`: hash estable del copy revisado (item D).
-  - `dominio.qa_editorial.construir_procesar_qa`: persiste el veredicto atado a la pieza
-    cuando se le pasa `plataforma_id` (item A); no ata nada en una revisión suelta.
+  - `dominio.qa_editorial.hash_copy`: hash estable del copy revisado.
   - `repos.ultimo_veredicto_qa`: devuelve el último veredicto VIGENTE e INVALIDA el veredicto
-    si el copy cambió después del QA (item B/D), monkeypatcheando `db` (sin Postgres).
+    si el copy cambió después del QA, monkeypatcheando `db` (sin Postgres).
 """
 
 from __future__ import annotations
@@ -30,10 +30,7 @@ def test_hash_copy_cambia_si_el_texto_cambia():
     assert dom_qa.hash_copy("texto A") != dom_qa.hash_copy("texto B")
 
 
-# --------------------------------------------------------------------------- #
-# construir_procesar_qa: persistir veredicto atado a la pieza (item A)         #
-# --------------------------------------------------------------------------- #
-
+# Salida de ejemplo de una criba 🟢 (reutilizada por el parseo del informe, abajo).
 _SALIDA = """🟢 LISTO PARA APROBAR
 
 ```json
@@ -42,44 +39,8 @@ _SALIDA = """🟢 LISTO PARA APROBAR
 """
 
 
-def test_procesar_qa_ata_veredicto_a_la_pieza(monkeypatch):
-    registros: list[dict] = []
-    monkeypatch.setattr(repos, "registrar_historial_prompt", lambda *a, **k: "hist-1")
-    monkeypatch.setattr(
-        repos, "registrar_veredicto_qa", lambda **k: registros.append(k) or "ver-1"
-    )
-
-    procesar = dom_qa.construir_procesar_qa(
-        "unotv", "Una pieza",
-        plataforma_id="plat-7", contenido_id="cont-3", copy_hash="abc123",
-    )
-    res = procesar(_SALIDA, None)
-
-    assert res["verdicto"] == "listo"
-    assert len(registros) == 1
-    r = registros[0]
-    assert r["plataforma_id"] == "plat-7"
-    assert r["contenido_id"] == "cont-3"
-    assert r["verdicto"] == "listo"
-    assert r["copy_hash"] == "abc123"
-    assert r["historial_id"] == "hist-1"
-
-
-def test_procesar_qa_revision_suelta_no_ata_nada(monkeypatch):
-    registros: list[dict] = []
-    monkeypatch.setattr(repos, "registrar_historial_prompt", lambda *a, **k: "hist-2")
-    monkeypatch.setattr(
-        repos, "registrar_veredicto_qa", lambda **k: registros.append(k) or "x"
-    )
-
-    procesar = dom_qa.construir_procesar_qa("unotv", "Suelta")  # sin plataforma_id
-    procesar(_SALIDA, None)
-
-    assert registros == []  # nada atado: revisión suelta (copy pegado a mano)
-
-
 # --------------------------------------------------------------------------- #
-# repos.ultimo_veredicto_qa: vigencia e invalidación por cambio de copy (B/D)  #
+# repos.ultimo_veredicto_qa: vigencia e invalidación por cambio de copy        #
 # --------------------------------------------------------------------------- #
 
 
