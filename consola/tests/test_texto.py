@@ -205,6 +205,13 @@ def test_importar_semilla_puebla_y_es_idempotente():
     assert libtexto.importar_semilla() == 0
 
 
+def test_semilla_trae_prompt_qa_fuente_editable():
+    # La criba pre-copy de la FUENTE se migró de `_DEFAULT_QA_CRITERIOS` a un prompt EDITABLE de
+    # la Biblioteca: su cuerpo efectivo lo trae la semilla del paquete (visible en «Prompts»).
+    cuerpo = libtexto.cuerpo_efectivo("prompt/qa-fuente")
+    assert cuerpo and "CRIBA PREVIA" in cuerpo
+
+
 def test_importar_semilla_no_pisa_lo_editado():
     docs = libtexto.importar_semilla()
     assert docs > 0

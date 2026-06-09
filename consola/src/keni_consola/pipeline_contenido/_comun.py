@@ -47,6 +47,7 @@ __all__ = [
     "VERDICTO_NO_VERIFICADO",
     "VERDICTO_PROBLEMA",
     "_DEFAULT_QA_CRITERIOS",
+    "_PROMPT_QA_FUENTE_ID",
     "_AUTOGEN_LANZAR_MAX",
     # og:image
     "_RE_OG_IMAGE",
@@ -116,6 +117,11 @@ _FORMATO_PIPELINE = redes.FORMATO_FOTO
 # créalo y adjúntalo." Este es el id (prompt) de ese documento de criterios.
 PROMPT_QA_ID = "prompt/qa-editorial"
 _TITULO_QA = "QA editorial"
+# Id del prompt EDITABLE (Biblioteca, pestaña «Prompts») con los criterios de la criba pre-copy
+# de la FUENTE. Su cuerpo base viaja en la semilla del paquete (`prompt/qa-fuente.md`) y replica
+# `_DEFAULT_QA_CRITERIOS`; `asegurar_documento_qa` lo usa de respaldo. (NOTA: hoy `PROMPT_QA_ID`
+# y este id apuntan a documentos distintos; ver `asegurar_documento_qa`.)
+_PROMPT_QA_FUENTE_ID = "prompt/qa-fuente"
 
 # Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
 # vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la

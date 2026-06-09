@@ -16,6 +16,7 @@ from ..dominio import qa_editorial as dom_qa
 from . import _ref
 from ._comun import (
     _DEFAULT_QA_CRITERIOS,
+    _PROMPT_QA_FUENTE_ID,
     _TITULO_QA,
     ETAPA_QA,
     PROMPT_QA_ID,
@@ -86,7 +87,9 @@ def asegurar_documento_qa() -> str:
         # No está en el store: si la semilla lo trae, ya hay cuerpo efectivo; aun así CREAMOS el
         # documento del store para que sea editable/adjuntable (la regla pide un doc real).
         cuerpo_semilla = libtexto.cuerpo_efectivo(PROMPT_QA_ID)
-        cuerpo = cuerpo_semilla if cuerpo_semilla else _DEFAULT_QA_CRITERIOS
+        # Respaldo: la criba pre-copy de la FUENTE vive como prompt EDITABLE en la Biblioteca
+        # (`_PROMPT_QA_FUENTE_ID`, semilla del paquete); la constante es el último recurso.
+        cuerpo = cuerpo_semilla or libtexto.cuerpo_efectivo(_PROMPT_QA_FUENTE_ID) or _DEFAULT_QA_CRITERIOS
         doc = libtexto.crear(_TITULO_QA, tipo="prompt", cuerpo=cuerpo)
         # `crear` deriva el id del slug del título: "QA editorial" -> "prompt/qa-editorial".
         return doc.id if doc.id == PROMPT_QA_ID else (PROMPT_QA_ID if libtexto.obtener(PROMPT_QA_ID) else doc.id)
