@@ -736,12 +736,15 @@ def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
 
 
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
-    """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba)."""
+    """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba).
+
+    La exclusión se expresa como el override REAL del store (`KENI_PIPELINE_VALIDACION::unotv=0`),
+    igual que lo escribe la UI: la fase consulta la fuente única `config.etapa_activa`, que lee
+    `marca_apagada` de su módulo de origen (parchear el atributo del barrel ya no intercepta).
+    """
     monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    monkeypatch.setattr(
-        pc.config, "marca_apagada",
-        lambda env, marca: env == config.ENV_PIPELINE_VALIDACION and marca == "unotv",
-    )
+    overrides = {config.clave_por_marca(config.ENV_PIPELINE_VALIDACION, "unotv"): "0"}
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
     tema = _tema_pipeline(titulo="Marca sin QA")
 
     cribados = pc.ejecutar_qa(autor=None)
