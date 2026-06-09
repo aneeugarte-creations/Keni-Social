@@ -1077,7 +1077,10 @@ def clusters_extranjeros_sin_traducir(
     try:
         filas = con.execute(
             f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 AND idioma <> '' "
-            "AND idioma NOT LIKE 'es%' AND score >= ? AND ultimo_visto >= ? "
+            # `es%%`: el `%` literal va DOBLADO porque psycopg interpreta `%` como inicio de
+            # placeholder (el shim `?`->`%s` no escapa los `%` del SQL). En Postgres `%%`->`%`
+            # (un comodín LIKE); en SQLite `%%` son dos comodines contiguos (equivalentes a uno).
+            "AND idioma NOT LIKE 'es%%' AND score >= ? AND ultimo_visto >= ? "
             "AND estado <> 'descartado' "
             "ORDER BY score DESC, ultimo_visto DESC LIMIT ?",
             (float(min_score), corte, max(1, int(limite))),

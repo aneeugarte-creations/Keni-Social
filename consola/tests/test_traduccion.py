@@ -164,3 +164,56 @@ def test_construir_prompt_inserta_items_y_contrato():
     assert traduccion._MARCA_ITEMS not in p
     assert "traducciones" in p
 
+
+# --------------------------------------------------------------------------- #
+# Regresión SQL: `clusters_extranjeros_sin_traducir` toca la BD REAL (no mock)  #
+# La fixture `cliente` (conftest) aísla el entorno y prepara el esquema de BD.   #
+# --------------------------------------------------------------------------- #
+
+
+def _sembrar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo"):
+    from keni_consola import repos
+
+    repos.upsert_noticia_cluster({
+        "id": cid,
+        "titulo": f"Cluster {cid}",
+        "resumen": "r",
+        "marca": "unotv",
+        "categoria": "internacional",
+        "geo": "US",
+        "clave": f"t:{cid}",
+        "n_items": 1,
+        "n_fuentes": 1,
+        "idiomas": [idioma],
+        "senal": 10,
+        "score": 0.5,
+        "breaking": 0,
+        "primer_visto": "2026-06-01T00:00:00+00:00",
+        "ultimo_visto": "2026-06-05T12:00:00+00:00",
+        "estado": estado,
+        "idioma": idioma,
+        "traducido": traducido,
+    })
+
+
+def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noqa: ARG001
+    """El selector usa `idioma NOT LIKE 'es%%'`: el `%` literal DEBE ir doblado o psycopg casca.
+
+    Antes reventaba en prod con `ProgrammingError: only '%s','%b','%t' are allowed as
+    placeholders, got "%'"` (el shim `?`->`%s` no escapaba el `%`), tumbando el paso de
+    traducción del daemon en CADA barrido. Los tests del daemon mockeaban este repo, así que
+    el SQL real nunca corría: este test lo ejercita contra Postgres de verdad.
+    """
+    from keni_consola import repos
+
+    _sembrar_cluster_idioma("en1", idioma="en")  # extranjero sin traducir -> candidato
+    _sembrar_cluster_idioma("es1", idioma="es")  # español -> excluido por el NOT LIKE 'es%'
+    _sembrar_cluster_idioma("en2", idioma="en", traducido=1)  # ya traducido -> excluido
+
+    # Ventana enorme para que el corte temporal no descarte la semilla; min_score bajo.
+    candidatos = repos.clusters_extranjeros_sin_traducir(24 * 365 * 100, min_score=0.0, limite=40)
+    ids = {c["id"] for c in candidatos}
+    assert "en1" in ids
+    assert "es1" not in ids  # el `NOT LIKE 'es%'` filtra el español
+    assert "en2" not in ids  # ya traducido
+
