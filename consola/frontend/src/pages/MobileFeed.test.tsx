@@ -23,6 +23,7 @@ const OPCIONES = {
 const PUBLICACION = {
   id: "p1",
   contenido_id: "c1",
+  pipeline_id: "",
   titulo: "Gol de último minuto",
   marca: "unotv",
   marca_nombre: "Uno TV",
