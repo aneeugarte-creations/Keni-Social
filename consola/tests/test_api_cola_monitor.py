@@ -82,11 +82,16 @@ def test_cola_snapshot_contrato(entorno):
     assert porclave["reaper"]["activo"] is True
     # Toggles REALES en el Monitor: un daemon con clave de catálogo no peligrosa es editable y trae
     # su `clave_ajuste`; el reaper (sin toggle) y `publicar_real` (peligroso) NO son editables.
-    assert porclave["maquina"]["editable"] is True
-    assert porclave["maquina"]["clave_ajuste"] == "KENI_MAQUINA"
+    assert porclave["media_gc"]["editable"] is True
+    assert porclave["media_gc"]["clave_ajuste"] == "KENI_MEDIA_GC"
     assert porclave["reaper"]["editable"] is False
     assert porclave["reaper"]["clave_ajuste"] == ""
     assert porclave["publicar_real"]["editable"] is False  # peligroso: read-only en el Monitor
+    # El interruptor general y las etapas (Selección/Copy) ya NO son daemons: viven en la sección
+    # «Máquina de contenido» del Monitor (no en este panel de daemons de fondo).
+    assert "maquina" not in porclave
+    assert "ingesta" not in porclave
+    assert "pipeline" not in porclave
 
 
 def test_cola_snapshot_marca_reclamado_como_procesando(entorno):

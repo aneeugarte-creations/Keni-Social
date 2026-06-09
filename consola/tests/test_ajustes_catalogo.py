@@ -137,13 +137,13 @@ def test_grupos_estables(store):
     """Los ids de grupo se mantienen (el frontend rutea Básica/Avanzado por estos ids)."""
     ids = {g[0] for g in ajustes_catalogo.GRUPOS}
     assert ids == {
-        "maquina_global", "maestros_etapa", "automatizacion_marca",
+        "maquina_global", "maestros_etapa", "automatizacion_marca", "pipeline_topes",
         "publicacion", "publicacion_marca", "automatismos_generales", "tuning",
     }
 
 
 def test_motor_noticias_tuning_int(store):
-    """Los knobs de tuning del motor de noticias son int con minimo >= 1."""
+    """Los knobs de tuning del motor de noticias son int con minimo >= 1 (NO son de la máquina)."""
     claves_int = [
         config.ENV_INGESTA_BATCH,
         config.ENV_INGESTA_WORKERS,
@@ -154,14 +154,6 @@ def test_motor_noticias_tuning_int(store):
         config.ENV_CLUSTER_BREAKING_VENTANA_H,
         config.ENV_TRAD_LOTE,
         config.ENV_FEED_SLA_MIN,
-        config.ENV_AUTOGEN_ARTE_MAX,
-        config.ENV_PIPELINE_INTERVALO_MIN,
-        config.ENV_PIPELINE_MAX,
-        config.ENV_PIPELINE_EN_VUELO_MAX,
-        config.ENV_PIPELINE_QA_MAX,
-        config.ENV_PIPELINE_COPY_MAX,
-        config.ENV_PIPELINE_AUTOGEN_MAX,
-        config.ENV_PIPELINE_QA_REVISAR_MAX,
     ]
     for clave in claves_int:
         a = ajustes_catalogo.por_clave(clave)
@@ -169,6 +161,42 @@ def test_motor_noticias_tuning_int(store):
         assert a.tipo == "int", f"{clave} debe ser int"
         assert a.grupo == "tuning", f"{clave} debe estar en grupo tuning"
         assert a.minimo is not None and a.minimo >= 1, f"{clave} debe tener minimo >= 1"
+
+
+# Los 8 topes de la máquina viven en su propio grupo `pipeline_topes` (sección «Máquina de
+# contenido» del Monitor), NO en `tuning` de Configuración.
+_PIPELINE_TOPES_INT = {
+    config.ENV_PIPELINE_INTERVALO_MIN,
+    config.ENV_PIPELINE_MAX,
+    config.ENV_PIPELINE_EN_VUELO_MAX,
+    config.ENV_PIPELINE_QA_MAX,
+    config.ENV_PIPELINE_COPY_MAX,
+    config.ENV_PIPELINE_AUTOGEN_MAX,
+    config.ENV_PIPELINE_QA_REVISAR_MAX,
+    config.ENV_AUTOGEN_ARTE_MAX,
+}
+
+
+def test_pipeline_topes_en_grupo_propio(store):
+    """Los 8 topes son int (min >= 1) y viven EXACTAMENTE en el grupo `pipeline_topes`."""
+    for clave in _PIPELINE_TOPES_INT:
+        a = ajustes_catalogo.por_clave(clave)
+        assert a is not None, f"falta la clave {clave}"
+        assert a.tipo == "int", f"{clave} debe ser int"
+        assert a.grupo == "pipeline_topes", f"{clave} debe estar en grupo pipeline_topes"
+        assert a.minimo is not None and a.minimo >= 1, f"{clave} debe tener minimo >= 1"
+    en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "pipeline_topes"}
+    assert en_grupo == _PIPELINE_TOPES_INT
+
+
+def test_grupos_maquina_son_los_del_monitor(store):
+    """`GRUPOS_MAQUINA` referencia grupos REALES; son los que el front saca de Configuración y pinta
+    en la sección «Máquina de contenido» del Monitor (master + etapas + por marca + topes)."""
+    ids_grupo = {g[0] for g in ajustes_catalogo.GRUPOS}
+    assert set(ajustes_catalogo.GRUPOS_MAQUINA) <= ids_grupo
+    assert set(ajustes_catalogo.GRUPOS_MAQUINA) == {
+        "maquina_global", "maestros_etapa", "automatizacion_marca", "pipeline_topes",
+    }
 
 
 def test_motor_noticias_trad_min_score_float(store):

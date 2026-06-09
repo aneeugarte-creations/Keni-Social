@@ -147,13 +147,10 @@ async def agregados(request: Request) -> Response:
 # TOGGLE REAL (PUT /api/ajustes) en vez de un badge de solo lectura. "" => sin toggle (reaper).
 # El estado se lee best-effort: si el accesor no existe en `config`, el daemon sale con
 # `activo=None` (desconocido) en vez de romper el panel.
+# El interruptor general (`maquina`), la Selección (`ingesta`) y el Copy (`pipeline`) NO están aquí:
+# son ETAPAS de la máquina y se controlan en la sección «Máquina de contenido» del Monitor (toggles
+# del catálogo: maquina_global + maestros_etapa + topes). Aquí quedan los daemons de fondo restantes.
 _DAEMONS: list[tuple[str, str, str | None, str, str]] = [
-    ("maquina", "Máquina de contenido", "maquina_activa",
-     "Maestro de la auto-producción (ingesta + copy + arte).", config.ENV_MAQUINA),
-    ("ingesta", "Ingesta RSS", "ingesta_activa",
-     "Sondea feeds y persiste artículos en el pool de noticias.", config.ENV_PIPELINE_SELECCION),
-    ("pipeline", "Pipeline (copy/arte)", "pipeline_activo",
-     "Lleva temas del pool a borrador: genera copy y arte.", config.ENV_PIPELINE_COPY),
     ("trends", "Google Trends", "trends_activo",
      "Ingiere tendencias (con sus noticias) al pool.", config.ENV_TRENDS),
     ("algoritmos", "Feeds de algoritmo", "algoritmos_auto_activo",

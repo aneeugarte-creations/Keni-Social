@@ -33,6 +33,7 @@ import {
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PanelMaquinaContenido } from "@/pages/configuracion/SeccionFuncionalidad";
 import type { ColaJob, ColaMonitor, ColaSerie } from "@/types";
 
 // Cadencia del snapshot en vivo: lo bastante rápido para sentirse "en tiempo real" sin
@@ -479,6 +480,10 @@ export default function Monitor() {
               )}
             </CardContent>
           </Card>
+
+          {/* Controles de la máquina de contenido (etapas + por marca + topes). Solo admin: el
+              endpoint /api/ajustes exige rol admin, así que para un editor ni se monta. */}
+          {esAdmin && <PanelMaquinaContenido />}
 
           {/* Daemons */}
           <Card>

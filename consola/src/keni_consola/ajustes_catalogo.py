@@ -34,10 +34,22 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido (interruptor general)"),
     ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
     ("automatizacion_marca", "Excepciones por marca"),
+    ("pipeline_topes", "Cadencia y topes por barrido"),
     ("publicacion", "Publicación"),
     ("publicacion_marca", "Publicación · excepciones por marca"),
     ("automatismos_generales", "Automatismos generales"),
     ("tuning", "Ajustes finos"),
+)
+
+# Grupos de la MÁQUINA DE CONTENIDO: el interruptor general, los maestros de etapa, sus excepciones
+# por marca y los topes por barrido. Estos NO viven en Configuración (que se queda con lo global/
+# genérico): se editan en el MONITOR, junto a la cola que controlan. La fuente de verdad de "qué es
+# máquina" es esta tupla; el front la usa para repartir grupos entre Configuración y Monitor.
+GRUPOS_MAQUINA: tuple[str, ...] = (
+    "maquina_global",
+    "maestros_etapa",
+    "automatizacion_marca",
+    "pipeline_topes",
 )
 
 # Las 6 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), con NOMBRES CONSOLIDADOS:
@@ -266,86 +278,88 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
             peligroso=True,
         ),
-        # --- Tuning (int/float/select) --------------------------------------------- #
-        # --- Pipeline de contenido: cadencia, volumen y topes por barrido ---------- #
+        # --- Máquina de contenido · cadencia y topes por barrido (grupo `pipeline_topes`) --- #
+        # Viven en el MONITOR (junto a la cola que controlan), NO en Configuración. Las etiquetas no
+        # repiten "Pipeline:" porque el grupo ya lo dice.
         Ajuste(
             clave=config.ENV_PIPELINE_INTERVALO_MIN,
             tipo="int",
-            etiqueta="Pipeline: intervalo (minutos)",
-            ayuda="Cada cuántos minutos barre el pipeline de contenido (CI→Validación→Copy→Arte).",
-            grupo="tuning",
+            etiqueta="Intervalo del barrido (minutos)",
+            ayuda="Cada cuántos minutos barre la máquina (Selección→Validación→Copy→Arte).",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_INTERVALO_MIN_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_MAX,
             tipo="int",
-            etiqueta="Pipeline: historias por marca/barrido",
+            etiqueta="Historias por marca/barrido",
             ayuda="Máximo de historias que la Selección intenta promover a temas por marca y barrido "
             "(acotado además por el gate serial: nunca mete más de lo que cabe en vuelo).",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_EN_VUELO_MAX,
             tipo="int",
-            etiqueta="Pipeline: temas en vuelo por marca (gate serial)",
+            etiqueta="Temas en vuelo por marca (gate serial)",
             ayuda="Tope de temas sin terminar (Validación pendiente o sin copy) por marca. Mientras "
             "una marca tenga estos en cola, la Selección no le mete más: primero completa lo que entró.",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_QA_MAX,
             tipo="int",
-            etiqueta="Pipeline: cribas de validación por barrido",
+            etiqueta="Cribas de Validación por barrido",
             ayuda="Máximo de cribas de Validación (`claude -p`) lanzadas por barrido. Evita la "
             "ráfaga que satura el worker; el resto se valida en el siguiente barrido.",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_QA_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_COPY_MAX,
             tipo="int",
-            etiqueta="Pipeline: copies por barrido",
+            etiqueta="Copies por barrido",
             ayuda="Máximo de generaciones de copy (`claude -p`) lanzadas por barrido en la etapa Copy.",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_COPY_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_AUTOGEN_MAX,
             tipo="int",
-            etiqueta="Pipeline: copies del pool de noticias por barrido",
+            etiqueta="Copies del pool de noticias por barrido",
             ayuda="Máximo de temas del pool de noticias (no ingeridos por el propio pipeline) a los "
             "que la etapa Copy redacta por barrido.",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_AUTOGEN_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_QA_REVISAR_MAX,
             tipo="int",
-            etiqueta="Pipeline: temas pendientes revisados por barrido",
+            etiqueta="Temas pendientes revisados por barrido",
             ayuda="Cota de cuántos temas PENDIENTES mira cada fase por barrido (sobre los filtrados, "
             "no la lista cruda). Sube si tienes mucho backlog y quieres que cada barrido alcance más.",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.PIPELINE_QA_REVISAR_MAX_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_AUTOGEN_ARTE_MAX,
             tipo="int",
-            etiqueta="Generar arte: máximo por barrido",
-            ayuda="Máximo de temas a ilustrar por barrido de la etapa de arte (cada uno llama "
+            etiqueta="Arte: temas ilustrados por barrido",
+            ayuda="Máximo de temas a ilustrar por barrido de la etapa de Arte (cada uno llama "
             "al proveedor de imagen).",
-            grupo="tuning",
+            grupo="pipeline_topes",
             defecto=config.AUTOGEN_ARTE_MAX_DEF,
             minimo=1,
         ),
+        # --- Tuning (int/float/select) --------------------------------------------- #
         Ajuste(
             clave=config.ENV_ALERTAS_INTERVALO_HORAS,
             tipo="int",

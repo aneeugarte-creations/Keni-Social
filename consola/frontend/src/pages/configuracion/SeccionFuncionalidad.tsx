@@ -29,7 +29,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 
-import { CLAVE_AJUSTES, GRUPOS_BASICOS, mensajeError } from "./lib";
+import { CLAVE_AJUSTES, GRUPOS_BASICOS, GRUPOS_MAQUINA, mensajeError } from "./lib";
 import { TarjetaColapsable } from "./TarjetaColapsable";
 
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
@@ -261,23 +261,14 @@ function AjustesPorMarca({
   );
 }
 
-/** Sección admin: toggles + ajustes finos de funcionalidad (aplican en caliente).
- *
- * `nivel` decide qué grupos pinta: «basica» muestra los grupos de `GRUPOS_BASICOS`; «avanzada»
- * muestra todo lo demás. Si tras filtrar no queda ningún grupo, la tarjeta no se renderiza (no
- * deja un hueco vacío en la pestaña). */
-export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
+/** Query de ajustes + mutación de guardado, COMPARTIDO por Configuración y el Monitor (misma
+ *  caché `CLAVE_AJUSTES`, así un cambio en una vista se refleja en la otra). */
+function useAjustesAdmin() {
   const queryClient = useQueryClient();
-  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+  const query = useQuery({
     queryKey: CLAVE_AJUSTES,
     queryFn: ({ signal }) => api.ajustes(signal),
   });
-
-  const avanzada = nivel === "avanzada";
-  // Grupos que tocan a esta pestaña (basica: los de GRUPOS_BASICOS; avanzada: el resto).
-  const grupos = (data?.grupos ?? []).filter((g) =>
-    avanzada ? !GRUPOS_BASICOS.has(g.id) : GRUPOS_BASICOS.has(g.id),
-  );
   const guardar = useMutation({
     mutationFn: (cuerpo: { clave: string; valor?: boolean | number | string }) =>
       api.guardarAjuste(cuerpo),
@@ -297,15 +288,185 @@ export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  return { ...query, guardar };
+}
 
-  // Maestros de etapa por su clave ENV (p. ej. `KENI_PIPELINE` -> bool). Se usa para atenuar las
-  // excepciones por marca cuyo maestro está OFF.
-  const ajustesMaestros = grupos.find((g) => g.id === "maestros_etapa")?.ajustes ?? [];
+/** Render del mapa de grupos de ajustes con su casuística por grupo (maestros de etapa, excepciones
+ *  por marca, publicación, automatismos, topes…). `grupos` ya viene FILTRADO por el contenedor
+ *  (Configuración pinta lo global; el Monitor pinta la máquina de contenido). */
+function GruposAjustes({
+  grupos,
+  onGuardar,
+  guardando,
+}: {
+  grupos: RespuestaAjustes["grupos"];
+  onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
+  guardando: boolean;
+}) {
+  // Maestros de etapa por su clave ENV -> bool. Atenúa las excepciones por marca cuyo maestro está OFF.
   const maestros: Record<string, boolean> = {};
-  for (const m of ajustesMaestros) maestros[m.clave] = Boolean(m.valor);
+  for (const m of grupos.find((g) => g.id === "maestros_etapa")?.ajustes ?? [])
+    maestros[m.clave] = Boolean(m.valor);
+
+  return (
+    <>
+      {grupos.map((grupo) => {
+        const filas = grupo.ajustes.map((ajuste) => (
+          <FilaAjuste key={ajuste.clave} ajuste={ajuste} onGuardar={onGuardar} guardando={guardando} />
+        ));
+
+        // Maestros de etapa (Fusión/Ranking/Selección/Validación/Copy/Arte IA): título + filas.
+        if (grupo.id === "maestros_etapa") {
+          return (
+            <div key={grupo.id} className="space-y-1">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {grupo.titulo}
+              </h4>
+              <div>{filas}</div>
+            </div>
+          );
+        }
+
+        // Excepciones por marca: una pestaña por marca; atenuadas si su maestro está OFF.
+        if (grupo.id === "automatizacion_marca") {
+          return (
+            <div key={grupo.id} className="space-y-1">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {grupo.titulo}
+              </h4>
+              <AjustesPorMarca
+                ajustes={grupo.ajustes}
+                onGuardar={onGuardar}
+                guardando={guardando}
+                maestros={maestros}
+              />
+            </div>
+          );
+        }
+
+        // Publicación: el mega-maestro del paso final (postea de verdad), en su BLOQUE PROPIO
+        // destacado (acento ámbar) por ser el más peligroso. Mismo patrón maestro+excepción:
+        // el maestro autoriza el posteo real global; debajo, las excepciones por marca lo
+        // restan (apagan una marca -> dry-run). El grupo `publicacion_marca` se pinta AQUÍ.
+        if (grupo.id === "publicacion") {
+          const maestroPub = grupo.ajustes[0];
+          const maestroPubOn = Boolean(maestroPub?.valor);
+          const exMarca = grupos.find((g) => g.id === "publicacion_marca")?.ajustes ?? [];
+          return (
+            <div
+              key={grupo.id}
+              className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"
+            >
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  {grupo.titulo} · publica de verdad
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Autoriza el posteo <strong>REAL</strong> a Metricool.
+                </p>
+              </div>
+              <div>{filas}</div>
+              {exMarca.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Excepciones por marca
+                  </p>
+                  <div>
+                    {exMarca.map((a) => (
+                      <FilaAjuste
+                        key={a.clave}
+                        ajuste={a}
+                        onGuardar={onGuardar}
+                        guardando={guardando}
+                        bloqueado={!maestroPubOn}
+                        notaBloqueo="maestro apagado"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }
+        // Las excepciones de publicación se pintan dentro del bloque «publicacion» de arriba.
+        if (grupo.id === "publicacion_marca") return null;
+
+        // Automatismos generales: barridos del sistema; van en un colapsible para no confundir
+        // con los controles de las etapas de la máquina de arriba.
+        if (grupo.id === "automatismos_generales") {
+          return (
+            <TarjetaColapsable
+              key={grupo.id}
+              titulo={grupo.titulo}
+              descripcion="Barridos del sistema sin dimensión por marca (radar, alertas, vencimientos, limpieza…)."
+            >
+              <div>{filas}</div>
+            </TarjetaColapsable>
+          );
+        }
+
+        // Resto (interruptor general, topes, ajustes finos): título + lista plana.
+        return (
+          <div key={grupo.id} className="space-y-1">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {grupo.titulo}
+            </h4>
+            <div>{filas}</div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Estados de carga/error compartidos del panel de ajustes. */
+function EstadoAjustes({
+  isError,
+  error,
+  refetch,
+  isFetching,
+}: {
+  isError: boolean;
+  error: unknown;
+  refetch: () => void;
+  isFetching: boolean;
+}) {
+  if (isError) {
+    return (
+      <BloqueError
+        titulo="No se pudieron cargar los ajustes"
+        mensaje={mensajeError(error)}
+        onReintentar={() => void refetch()}
+        cargando={isFetching}
+      />
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+/** Sección admin de Configuración: toggles + ajustes finos GLOBALES (aplican en caliente). Los
+ * grupos de la MÁQUINA DE CONTENIDO (`GRUPOS_MAQUINA`) NO se pintan aquí: viven en el Monitor.
+ *
+ * `nivel` decide qué grupos pinta: «basica» los de `GRUPOS_BASICOS`; «avanzada» el resto (excluida
+ * siempre la máquina). Si tras filtrar no queda ningún grupo, la tarjeta no se renderiza. */
+export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
+  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
+
+  const avanzada = nivel === "avanzada";
+  // Configuración EXCLUYE los grupos de la máquina (van al Monitor). El resto se reparte
+  // básica/avanzada como antes.
+  const grupos = (data?.grupos ?? []).filter(
+    (g) => !GRUPOS_MAQUINA.has(g.id) && (avanzada ? !GRUPOS_BASICOS.has(g.id) : GRUPOS_BASICOS.has(g.id)),
+  );
 
   // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
-  // Va DESPUÉS de los hooks (useQuery/useMutation) para no llamarlos condicionalmente.
+  // Va DESPUÉS de los hooks para no llamarlos condicionalmente.
   if (!isPending && !isError && grupos.length === 0) return null;
 
   return (
@@ -323,133 +484,47 @@ export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }
         ) : undefined
       }
     >
-        {isPending ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : isError ? (
-          <BloqueError
-            titulo="No se pudieron cargar los ajustes"
-            mensaje={mensajeError(error)}
-            onReintentar={() => void refetch()}
-            cargando={isFetching}
-          />
-        ) : (
-          grupos.map((grupo) => {
-            const onGuardar = (cuerpo: { clave: string; valor?: boolean | number | string }) =>
-              guardar.mutate(cuerpo);
-            const filas = grupo.ajustes.map((ajuste) => (
-              <FilaAjuste
-                key={ajuste.clave}
-                ajuste={ajuste}
-                onGuardar={onGuardar}
-                guardando={guardar.isPending}
-              />
-            ));
+      {isPending || isError ? (
+        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
+      ) : (
+        <GruposAjustes
+          grupos={grupos}
+          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+          guardando={guardar.isPending}
+        />
+      )}
+    </TarjetaColapsable>
+  );
+}
 
-            // Maestros de etapa (Fusión/Ranking/Selección/Validación/Copy/Arte IA): título + filas.
-            if (grupo.id === "maestros_etapa") {
-              return (
-                <div key={grupo.id} className="space-y-1">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {grupo.titulo}
-                  </h4>
-                  <div>{filas}</div>
-                </div>
-              );
-            }
+/** Controles de la MÁQUINA DE CONTENIDO, para el MONITOR (junto a la cola que gobiernan): el
+ * interruptor general, las etapas (Selección→Validación→Copy→Arte), sus excepciones por marca y la
+ * cadencia/topes por barrido. Mismo motor que Configuración (`/api/ajustes`); aplican en caliente. */
+export function PanelMaquinaContenido() {
+  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
+  const grupos = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));
 
-            // Excepciones por marca: una pestaña por marca; atenuadas si su maestro está OFF.
-            if (grupo.id === "automatizacion_marca") {
-              return (
-                <div key={grupo.id} className="space-y-1">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {grupo.titulo}
-                  </h4>
-                  <AjustesPorMarca
-                    ajustes={grupo.ajustes}
-                    onGuardar={onGuardar}
-                    guardando={guardar.isPending}
-                    maestros={maestros}
-                  />
-                </div>
-              );
-            }
-
-            // Publicación: el mega-maestro del paso final (postea de verdad), en su BLOQUE PROPIO
-            // destacado (acento ámbar) por ser el más peligroso. Mismo patrón maestro+excepción:
-            // el maestro autoriza el posteo real global; debajo, las excepciones por marca lo
-            // restan (apagan una marca -> dry-run). El grupo `publicacion_marca` se pinta AQUÍ.
-            if (grupo.id === "publicacion") {
-              const maestroPub = grupo.ajustes[0];
-              const maestroPubOn = Boolean(maestroPub?.valor);
-              const exMarca = grupos.find((g) => g.id === "publicacion_marca")?.ajustes ?? [];
-              return (
-                <div
-                  key={grupo.id}
-                  className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"
-                >
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                      {grupo.titulo} · publica de verdad
-                    </h4>
-                    <p className="text-xs text-muted-foreground">
-                      Autoriza el posteo <strong>REAL</strong> a Metricool.
-                    </p>
-                  </div>
-                  <div>{filas}</div>
-                  {exMarca.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Excepciones por marca
-                      </p>
-                      <div>
-                        {exMarca.map((a) => (
-                          <FilaAjuste
-                            key={a.clave}
-                            ajuste={a}
-                            onGuardar={onGuardar}
-                            guardando={guardar.isPending}
-                            bloqueado={!maestroPubOn}
-                            notaBloqueo="maestro apagado"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-            // Las excepciones de publicación se pintan dentro del bloque «publicacion» de arriba.
-            if (grupo.id === "publicacion_marca") return null;
-
-            // Automatismos generales: barridos del sistema; van en un colapsible para no confundir
-            // con los controles de las etapas de la máquina de arriba.
-            if (grupo.id === "automatismos_generales") {
-              return (
-                <TarjetaColapsable
-                  key={grupo.id}
-                  titulo={grupo.titulo}
-                  descripcion="Barridos del sistema sin dimensión por marca (radar, alertas, vencimientos, limpieza…)."
-                >
-                  <div>{filas}</div>
-                </TarjetaColapsable>
-              );
-            }
-
-            // Resto (Publicación, Ajustes finos): título + lista plana.
-            return (
-              <div key={grupo.id} className="space-y-1">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {grupo.titulo}
-                </h4>
-                <div>{filas}</div>
-              </div>
-            );
-          })
-        )}
+  return (
+    <TarjetaColapsable
+      titulo="Máquina de contenido"
+      abiertaInicial
+      contentClassName="space-y-6 pt-0"
+      descripcion={
+        <>
+          Enciende/apaga las etapas (Selección→Validación→Copy→Arte), por marca, y ajusta la cadencia
+          y los topes por barrido. Aplican <strong>en caliente</strong> (hasta ~1 minuto).
+        </>
+      }
+    >
+      {isPending || isError ? (
+        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
+      ) : (
+        <GruposAjustes
+          grupos={grupos}
+          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+          guardando={guardar.isPending}
+        />
+      )}
     </TarjetaColapsable>
   );
 }

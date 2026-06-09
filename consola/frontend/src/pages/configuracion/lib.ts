@@ -13,12 +13,23 @@ export const CLAVE_AJUSTES = ["ajustes"];
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
-/** Grupos de ajustes que viven en la pestaña «Básica»: el master de la máquina, los seis maestros
- *  de etapa (Fusión/Ranking/Selección/Validación/Copy/Arte) y sus excepciones por marca (las seis
- *  etapas). Son los controles clave del día a día. Todo grupo que NO esté aquí (publicación,
- *  publicación por marca, automatismos generales, ajustes finos) va a «Avanzada». Coincide con la
- *  `id` de grupo del backend; un grupo ausente en la respuesta simplemente no pinta nada. */
-export const GRUPOS_BASICOS = new Set(["maquina_global", "maestros_etapa", "automatizacion_marca"]);
+/** Grupos de ajustes de la MÁQUINA DE CONTENIDO: viven en el MONITOR (junto a la cola que
+ *  gobiernan), NO en Configuración. Son el interruptor general, los seis maestros de etapa
+ *  (Fusión/Ranking/Selección/Validación/Copy/Arte), sus excepciones por marca y los topes por
+ *  barrido. Debe coincidir con `ajustes_catalogo.GRUPOS_MAQUINA` del backend. Configuración EXCLUYE
+ *  estos grupos; el panel del Monitor pinta SOLO estos. */
+export const GRUPOS_MAQUINA = new Set([
+  "maquina_global",
+  "maestros_etapa",
+  "automatizacion_marca",
+  "pipeline_topes",
+]);
+
+/** Grupos de ajustes que viven en la pestaña «Básica» de Configuración. Tras mover la máquina de
+ *  contenido al Monitor, Configuración solo conserva lo global/genérico; en Básica no queda ningún
+ *  grupo de `SeccionFuncionalidad` (publicación, automatismos y ajustes finos van a «Avanzada»).
+ *  Coincide con la `id` de grupo del backend; un grupo ausente en la respuesta no pinta nada. */
+export const GRUPOS_BASICOS = new Set<string>([]);
 
 /**
  * Limpia emojis de estado (❌ ✅ ⚠️ …) que pueda traer el backend y normaliza
