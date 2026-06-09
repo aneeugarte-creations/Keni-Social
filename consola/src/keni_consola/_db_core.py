@@ -3,7 +3,9 @@
 Extraido de `db.py` (god-module): aqui vive la FUNDACION sobre la que se apoyan
 todas las entidades (conexion `_conectar` con asegurado de esquema una-vez-por-proceso,
 advisory locks, el DDL `_DDL_ESQUEMA`, `_crear_esquema` y TODAS las migraciones de
-columnas/modelo idempotentes). NO contiene logica de entidad (CRUD): `db.py` la
+columnas/modelo, hoy VERSIONADAS via el journal `schema_migraciones` + el registro
+ordenado `MIGRACIONES` — ver la REGLA junto a `_DDL_SCHEMA_MIGRACIONES` y ADR 0008
+antes de cambiar el esquema). NO contiene logica de entidad (CRUD): `db.py` la
 re-exporta entera (`from ._db_core import (...)`) para que los consumidores sigan
 usando `db.<algo>` sin cambios. Acoplamiento hacia abajo: solo `config`/`motor_db`/
 `estados` + stdlib; no importa `db` (aciclico).
@@ -12,12 +14,15 @@ usando `db.<algo>` sin cambios. Acoplamiento hacia abajo: solo `config`/`motor_d
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 import threading
+import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from .tiempo import ahora_iso
@@ -1477,80 +1482,164 @@ def _crear_esquema(con: Any) -> None:
 
 
 def _crear_esquema_bajo_lock(con: Any) -> None:
-    """Cuerpo real de `_crear_esquema` (DDL + migraciones); requiere el lock ya tomado."""
-    # IMPORTANTE: la migracion del MODELO de turnos debe correr ANTES del DDL declarativo,
-    # porque el DDL hoy declara `rota_turnos` con la NUEVA forma (con `fecha`/`franja`). Si
-    # la BD vieja tiene una `rota_turnos` con el VIEJO esquema (cobertura), `CREATE TABLE IF
-    # NOT EXISTS` la deja como esta -> el resto del codigo fallaria al usar columnas que no
-    # existen. La migracion la convierte (renombre + drop + renombre final) y deja la BD lista
-    # para que el DDL declarativo NO haga nada (la tabla ya existe con la forma correcta).
-    _migrar_modelo_turnos(con)
-    # Ola "franjas por semana": tiene que correr ANTES del DDL declarativo. Razon: el DDL
-    # declara `CREATE INDEX ... idx_rota_turnos_franja_id ON rota_turnos (franja_id)`, y en
-    # bases productivas la `rota_turnos` previa solo tiene columna `franja` (literal del
-    # modelo Ω3). Crear el indice sobre una columna inexistente revienta. La migracion
-    # asegura `rota_franjas` con `es_descanso`, añade `franja_id` a `rota_turnos`, mueve
-    # los datos y dropa `franja`. Tras esto, el DDL declarativo es idempotente.
-    _migrar_modelo_franjas(con)
-    # Migraciones cuya columna usa un ÍNDICE del DDL declarativo: corren ANTES del DDL. El DDL
-    # crea `idx_rota_eventos_marca`(marca) e `idx_fuentes_rss_sondeo`(proximo_sondeo); en una BD
-    # VIEJA esas columnas aún no existen, así que crear el índice revienta y ENVENENA la conexión
-    # (mismo motivo que turnos/franjas arriba: el calendario daba 500). Tras añadir la columna, el
-    # DDL es idempotente. Guard interno: si la tabla aún no existe, no hacen nada y el DDL la crea
-    # fresca con todo.
-    _migrar_columnas_eventos_rota(con)
-    _migrar_columnas_fuentes_rss(con)
-    # Mismo motivo (columna usada por un ÍNDICE del DDL declarativo, corre ANTES): el DDL crea
-    # `idx_plantillas_diseno_tipo`(tipo) y en una BD vieja `plantillas_diseno` aún no tiene `tipo`,
-    # así que el índice revienta ("column tipo does not exist") y envenena la conexión (fallo real
-    # en deploy). La migración añade `tipo` primero; tras ella el DDL es idempotente. Guard interno:
-    # si la tabla aún no existe, no hace nada y el DDL la crea fresca con `tipo`.
-    _migrar_columnas_plantillas_diseno(con)
-    # Rebrand GREEN -> EVERGREEN: la tabla/columna/tag se llamaban `green*`. Corre ANTES del
-    # DDL declarativo (que hoy declara `evergreen_ideas` y `etiquetas.es_evergreen`): si no
-    # renombrásemos primero, `CREATE TABLE IF NOT EXISTS evergreen_ideas` crearía una tabla
-    # NUEVA vacía y huérfanaría los datos de `green_ideas`. Idempotente.
-    _migrar_green_a_evergreen(con)
-    # Renombre `biblioteca_media` → `catalogo_media` (catálogo de medios aprobados). Corre ANTES
-    # del DDL declarativo, que ya declara `catalogo_media`; si no, `CREATE TABLE IF NOT EXISTS
-    # catalogo_media` crearía una tabla nueva vacía y la vieja quedaría huérfana con los datos.
-    # Idempotente: solo actúa si existe la vieja y no la nueva.
-    _migrar_renombre_catalogo_media(con)
-    # GRID POR MARCA: añade `marca` al grid de rota (franjas/turnos/coordinacion/swaps) ANTES
-    # del DDL, por el mismo motivo que las migraciones de arriba: el DDL declara índices
-    # `idx_rota_*_marca` sobre esa columna y, en una BD que ya tiene esas tablas sin `marca`
-    # (incluida `rota_franjas`, que `_migrar_modelo_franjas` materializa arriba sin `marca`),
-    # crear el índice ANTES de añadir la columna revienta y envenena la conexión. Guard interno:
-    # si una tabla aún no existe (BD virgen), no la toca y el DDL la crea fresca con `marca`.
-    _asegurar_marca_grid_rota(con)
+    """Cuerpo real de `_crear_esquema` (DDL + migraciones VERSIONADAS); requiere el lock.
+
+    Orquestacion (el ORDEN importa):
+      1. Journal `schema_migraciones` (debe existir antes de leerlo).
+      2. Migraciones PRE-DDL pendientes (`MIGRACIONES_PRE_DDL`): transforman tablas viejas
+         ANTES de que el DDL declarativo cree indices sobre columnas que aun no existen
+         (cada entrada documenta su porque en la definicion del registro, al final del modulo).
+      3. DDL declarativo idempotente (`_DDL_ESQUEMA`): red de seguridad y fuente de verdad
+         de la FORMA del esquema; se ejecuta SIEMPRE (es barato: una vez por proceso/URL).
+      4. Migraciones POST-DDL pendientes (`MIGRACIONES_POST_DDL`).
+      5. Red de seguridad SIEMPRE-ON (fuera del journal, ver abajo): dedup de turnos +
+         indices unicos best-effort.
+    """
+    con.execute(_DDL_SCHEMA_MIGRACIONES)
+    con.commit()
+    _aplicar_migraciones(con, MIGRACIONES_PRE_DDL)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
-    _migrar_columnas_turnos_rota(con)
-    _migrar_columnas_piezas_rota(con)
-    _migrar_columnas_contenido(con)
-    _migrar_columnas_aprobaciones(con)
-    _migrar_columnas_comercial(con)
-    _migrar_columnas_campanias(con)
-    _migrar_columnas_swaps(con)
-    _migrar_columnas_programas(con)
-    _migrar_columnas_usuarios(con)
-    _migrar_columnas_grupos_hashtags(con)
-    _migrar_columnas_noticias_clusters(con)
-    _migrar_columnas_noticias_algoritmo(con)
-    _migrar_columnas_etiquetas(con)
-    _migrar_columnas_contenido_plataforma(con)
-    _migrar_columnas_video_composiciones(con)
     con.commit()
-    # Normalizacion de TIMESTAMPS TEXT al canon UTC-sin-offset (ver `tiempo.ahora_iso`):
-    # idempotente y best-effort, ANTES de los indices unicos (el de parrilla compara el
-    # texto crudo de `fecha_programada`; con formatos mixtos dos reservas iguales no chocan).
-    _normalizar_timestamps_texto(con)
+    _aplicar_migraciones(con, MIGRACIONES_POST_DDL)
     # Limpieza de turnos duplicados ANTES del indice unico de rota (un CREATE UNIQUE INDEX
-    # sobre duplicados preexistentes fallaria y dejaria la tabla sin el constraint).
+    # sobre duplicados preexistentes fallaria y dejaria la tabla sin el constraint). Corre
+    # SIEMPRE (no va al journal): es el companero del retry de los indices unicos de abajo.
     _dedup_turnos_rota(con)
-    # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
-    # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
+    # Indices UNICOS de idempotencia: AL FINAL, aislados (commit propio por indice) y SIEMPRE
+    # (no van al journal A PROPOSITO): pueden fallar sobre BDs con duplicados previos sin
+    # tumbar el arranque, y deben REINTENTARSE en cada arranque hasta que la limpieza manual
+    # permita crearlos (journalizarlos congelaria el fallo). Ver helper.
     _crear_indices_unicos_idempotencia(con)
+
+
+# --------------------------------------------------------------------------- #
+# Migraciones VERSIONADAS de esquema (journal `schema_migraciones`)             #
+# --------------------------------------------------------------------------- #
+#
+# REGLA para cambiar el esquema (leer antes de tocar nada):
+#
+#   1. Ajusta el DDL declarativo (`_DDL_ESQUEMA`): es la fuente de verdad de la FORMA del
+#      esquema y lo que recibe una BD VIRGEN (CREATE TABLE/INDEX IF NOT EXISTS).
+#   2. Anade una entrada NUEVA al final de `MIGRACIONES_POST_DDL` (o PRE_DDL solo si el DDL
+#      declarativo crearia un indice/tabla que choca con la forma vieja) con NOMBRE SECUENCIAL
+#      estable ("00NN-que-hace") y una funcion `fn(con)` con el ALTER/backfill para BDs ya
+#      creadas. Las migraciones nuevas corren UNA SOLA VEZ por BD (quedan registradas en el
+#      journal `schema_migraciones`), asi que NO necesitan ser re-ejecutables en cada arranque
+#      (pero la idempotencia sigue siendo deseable: es la defensa si el registro post-commit
+#      no llega a escribirse, p.ej. caida justo tras un DDL con commit interno).
+#   3. NUNCA renumeres ni reordenes entradas ya publicadas: el journal las referencia por id.
+#
+# COMPATIBILIDAD con las migraciones LEGADAS (las `_migrar_*` historicas de este modulo):
+# nacieron re-ejecutables en cada arranque y muchas se EXTIENDEN editando su tupla directora
+# (`_COLUMNAS_*_AMPLIADAS`, `_COLUMNAS_TS_CANON`) o su propio cuerpo. Para conservar ese
+# flujo sin journal manual, sus entradas llevan `re_aplicar_si_cambia=True`: el id registrado
+# incluye una HUELLA (hash del fuente de la fn + repr de sus datos directores), de modo que
+# anadir una columna a la tupla (o editar la fn) re-aplica la migracion UNA vez (son
+# idempotentes) y la re-registra bajo el id nuevo. Los ids viejos quedan como filas inertes.
+#
+# PRIMERA EJECUCION sobre una BD ya existente (pre-journal): el journal nace vacio aunque
+# las migraciones legadas ya se aplicaran de facto en arranques anteriores. Como TODAS las
+# legadas son idempotentes, simplemente corren una ultima vez y quedan registradas; a partir
+# de ahi cada arranque solo consulta el journal (1 SELECT) + DDL idempotente.
+#
+# ERRORES: si una migracion pendiente FALLA, se loguea con su id y se ABORTA el arranque sin
+# registrarla (mejor caerse visible que servir con esquema a medias; mismo comportamiento que
+# tenian las `_migrar_*` legadas, cuyas excepciones tumbaban `_crear_esquema`). Las legadas
+# best-effort (`_normalizar_timestamps_texto`) siguen tragandose fallos POR COLUMNA dentro de
+# su cuerpo, como siempre.
+
+# Journal: una fila por migracion APLICADA. `id` = nombre estable de la entrada (con huella
+# `@hash` si `re_aplicar_si_cambia`), `aplicado_en` = ISO UTC de cuando se completo. Se crea
+# aqui (no en `_DDL_ESQUEMA`) porque debe existir ANTES de leer el journal, que es lo primero
+# que hace el orquestador. En los tests se trunca entre tests como el resto de tablas
+# (`tests/_postgres.py`), preservando la auto-curacion "BD vieja" que ejercita la suite.
+_DDL_SCHEMA_MIGRACIONES = """
+    CREATE TABLE IF NOT EXISTS schema_migraciones (
+        id          TEXT PRIMARY KEY,
+        aplicado_en TEXT NOT NULL DEFAULT ''
+    )
+"""
+
+
+@dataclass(frozen=True)
+class Migracion:
+    """Entrada del registro ordenado de migraciones de esquema.
+
+    - `nombre`: id estable y secuencial ("00NN-que-hace"). No se renumera jamas.
+    - `fn`: la migracion en si; recibe la conexion (puede commitear internamente; si no lo
+      hace, su trabajo y el registro en el journal entran en la MISMA transaccion).
+    - `re_aplicar_si_cambia`: solo para las migraciones LEGADAS re-ejecutables (idempotentes):
+      el id del journal incluye una huella de `fn`+`datos`, asi que editar la fn o su tupla
+      directora la re-aplica una vez. Las migraciones NUEVAS deben dejarlo en False.
+    - `datos`: datos directores de la migracion (p.ej. la tupla `_COLUMNAS_*_AMPLIADAS`),
+      solo para componer la huella; la fn los lee de su modulo como siempre.
+    """
+
+    nombre: str
+    fn: Callable[[Any], None]
+    re_aplicar_si_cambia: bool = False
+    datos: Any = None
+
+
+def _id_migracion(migracion: Migracion) -> str:
+    """Id con que la migracion se registra en el journal (nombre[, + huella de contenido])."""
+    if not migracion.re_aplicar_si_cambia:
+        return migracion.nombre
+    try:
+        fuente = inspect.getsource(migracion.fn)
+    except (OSError, TypeError):  # sin fuente disponible: la huella cae a los datos
+        fuente = migracion.fn.__qualname__
+    huella = hashlib.blake2b(
+        (fuente + repr(migracion.datos)).encode("utf-8"), digest_size=4
+    ).hexdigest()
+    return f"{migracion.nombre}@{huella}"
+
+
+def _aplicar_migraciones(con: Any, migraciones: tuple[Migracion, ...]) -> None:
+    """Ejecuta SOLO las migraciones aun no registradas en el journal y las registra.
+
+    Requiere el advisory lock de esquema ya tomado (lo garantiza `_crear_esquema`): dos
+    procesos arrancando a la vez se serializan ahi, asi que el primero aplica y registra y
+    el segundo encuentra el journal completo y no hace nada. El INSERT lleva ademas
+    `ON CONFLICT DO NOTHING` como cinturon. Si la fn NO commitea internamente, fn + registro
+    + commit son UNA transaccion (o todo o nada); si commitea (DDL multi-paso legado), el
+    registro va despues y la idempotencia de la fn cubre una caida entre medias.
+    """
+    aplicadas = {
+        fila["id"] for fila in con.execute("SELECT id FROM schema_migraciones").fetchall()
+    }
+    for migracion in migraciones:
+        id_migracion = _id_migracion(migracion)
+        if id_migracion in aplicadas:
+            continue
+        t0 = time.monotonic()
+        try:
+            migracion.fn(con)
+        except Exception:
+            # Deja la conexion utilizable para que el finally de `_crear_esquema` pueda
+            # soltar el advisory lock limpiamente (una tx abortada reventaria el unlock).
+            try:
+                con.rollback()
+            except Exception:  # noqa: BLE001 -- best-effort: el descarte del caller cubre el resto
+                pass
+            _log.error(
+                "La migracion de esquema %s FALLO; se aborta el arranque sin registrarla "
+                "(se reintentara en el proximo arranque).",
+                id_migracion,
+            )
+            raise
+        con.execute(
+            "INSERT INTO schema_migraciones (id, aplicado_en) VALUES (?, ?) "
+            "ON CONFLICT (id) DO NOTHING",
+            (id_migracion, ahora_iso()),
+        )
+        con.commit()
+        _log.info(
+            "Migracion de esquema %s aplicada en %.0f ms.",
+            id_migracion,
+            (time.monotonic() - t0) * 1000,
+        )
 
 
 def _migrar_renombre_catalogo_media(con: Any) -> None:
@@ -2896,6 +2985,153 @@ def _crear_indices_unicos_idempotencia(con: Any) -> None:
                 e,
             )
 
+
+# --------------------------------------------------------------------------- #
+# REGISTRO ordenado de migraciones (ver la REGLA junto a `_DDL_SCHEMA_MIGRACIONES`)
+# --------------------------------------------------------------------------- #
+# Definido AQUI (final del modulo) porque referencia las fns y tuplas de arriba. Todas las
+# entradas actuales son las migraciones LEGADAS re-ejecutables -> `re_aplicar_si_cambia=True`
+# (su id de journal lleva huella de contenido: editar la fn o su tupla directora las
+# re-aplica una vez). Las migraciones NUEVAS van AL FINAL de POST_DDL con nombre secuencial
+# y SIN `re_aplicar_si_cambia` (corren exactamente una vez por BD).
+
+# PRE-DDL: transforman la forma VIEJA de una tabla ANTES de que el DDL declarativo cree
+# tablas/indices que chocarian con ella (indice sobre columna aun inexistente "envenena" la
+# conexion; un CREATE TABLE IF NOT EXISTS sobre un renombre pendiente huerfanaria los datos).
+MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
+    # El DDL declara `rota_turnos` con la forma NUEVA (fecha/franja); una BD con el modelo
+    # viejo (cobertura) debe convertirse antes (renombre + drop + renombre final).
+    Migracion("0001-modelo-turnos", _migrar_modelo_turnos, re_aplicar_si_cambia=True),
+    # Franjas POR SEMANA: asegura `rota_franjas` + `rota_turnos.franja_id` antes del indice
+    # `idx_rota_turnos_franja_id` del DDL (en BDs viejas solo existia `franja` literal).
+    Migracion("0002-modelo-franjas", _migrar_modelo_franjas, re_aplicar_si_cambia=True),
+    # Columnas usadas por INDICES del DDL declarativo (idx_rota_eventos_marca,
+    # idx_fuentes_rss_sondeo, idx_plantillas_diseno_tipo): se anaden antes de crearlos.
+    Migracion(
+        "0003-columnas-eventos-rota",
+        _migrar_columnas_eventos_rota,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_EVENTO_ROTA_AMPLIADAS,
+    ),
+    Migracion(
+        "0004-columnas-fuentes-rss",
+        _migrar_columnas_fuentes_rss,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_FUENTES_RSS_AMPLIADAS,
+    ),
+    Migracion(
+        "0005-columnas-plantillas-diseno",
+        _migrar_columnas_plantillas_diseno,
+        re_aplicar_si_cambia=True,
+    ),
+    # Renombres: deben correr antes de que el DDL cree la tabla nueva VACIA y huerfane datos.
+    Migracion("0006-green-a-evergreen", _migrar_green_a_evergreen, re_aplicar_si_cambia=True),
+    Migracion(
+        "0007-renombre-catalogo-media", _migrar_renombre_catalogo_media, re_aplicar_si_cambia=True
+    ),
+    # GRID POR MARCA: anade `marca` al grid de rota antes de los indices `idx_rota_*_marca`.
+    Migracion("0008-marca-grid-rota", _asegurar_marca_grid_rota, re_aplicar_si_cambia=True),
+)
+
+# POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
+# creadas por versiones anteriores; el Postgres hosted persiste entre despliegues).
+MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
+    Migracion(
+        "0009-columnas-turnos-rota",
+        _migrar_columnas_turnos_rota,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_TURNO_ROTA_AMPLIADAS,
+    ),
+    Migracion(
+        "0010-columnas-piezas-rota",
+        _migrar_columnas_piezas_rota,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_PIEZA_ROTA_AMPLIADAS,
+    ),
+    Migracion(
+        "0011-columnas-contenido",
+        _migrar_columnas_contenido,
+        re_aplicar_si_cambia=True,
+        datos=(_COLUMNAS_CONTENIDO_AMPLIADAS, _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
+    ),
+    Migracion(
+        "0012-columnas-aprobaciones",
+        _migrar_columnas_aprobaciones,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_APROBACIONES_AMPLIADAS,
+    ),
+    Migracion(
+        "0013-columnas-comercial",
+        _migrar_columnas_comercial,
+        re_aplicar_si_cambia=True,
+        datos=(
+            _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS,
+            _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS,
+        ),
+    ),
+    Migracion("0014-columnas-campanias", _migrar_columnas_campanias, re_aplicar_si_cambia=True),
+    Migracion(
+        "0015-columnas-swaps",
+        _migrar_columnas_swaps,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_SWAP_AMPLIADAS,
+    ),
+    Migracion(
+        "0016-columnas-programas",
+        _migrar_columnas_programas,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_PROGRAMA_AMPLIADAS,
+    ),
+    Migracion(
+        "0017-columnas-usuarios",
+        _migrar_columnas_usuarios,
+        re_aplicar_si_cambia=True,
+        datos=(_COLUMNAS_USUARIOS_AMPLIADAS, _COLUMNAS_USUARIOS_RETIRADAS),
+    ),
+    Migracion(
+        "0018-columnas-grupos-hashtags",
+        _migrar_columnas_grupos_hashtags,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS,
+    ),
+    Migracion(
+        "0019-columnas-noticias-clusters",
+        _migrar_columnas_noticias_clusters,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS,
+    ),
+    Migracion(
+        "0020-columnas-noticias-algoritmo",
+        _migrar_columnas_noticias_algoritmo,
+        re_aplicar_si_cambia=True,
+    ),
+    Migracion("0021-columnas-etiquetas", _migrar_columnas_etiquetas, re_aplicar_si_cambia=True),
+    Migracion(
+        "0022-columnas-contenido-plataforma",
+        _migrar_columnas_contenido_plataforma,
+        re_aplicar_si_cambia=True,
+    ),
+    Migracion(
+        "0023-columnas-video-composiciones",
+        _migrar_columnas_video_composiciones,
+        re_aplicar_si_cambia=True,
+    ),
+    # Normalizacion de TIMESTAMPS TEXT al canon UTC-sin-offset (ver `tiempo.ahora_iso`):
+    # idempotente y best-effort POR COLUMNA, ANTES de los indices unicos (el de parrilla
+    # compara el texto crudo de `fecha_programada`; con formatos mixtos dos reservas iguales
+    # no chocan). Anadir una columna a `_COLUMNAS_TS_CANON` cambia la huella -> se re-aplica.
+    Migracion(
+        "0024-normalizar-timestamps",
+        _normalizar_timestamps_texto,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_TS_CANON,
+    ),
+)
+
+# Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
+MIGRACIONES: tuple[Migracion, ...] = MIGRACIONES_PRE_DDL + MIGRACIONES_POST_DDL
+
+
 __all__ = [
     "_COLUMNAS_APROBACIONES_AMPLIADAS",
     "_COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS",
@@ -2913,8 +3149,13 @@ __all__ = [
     "_COLUMNAS_USUARIOS_AMPLIADAS",
     "_COLUMNAS_USUARIOS_RETIRADAS",
     "_DDL_ESQUEMA",
+    "_DDL_SCHEMA_MIGRACIONES",
     "_INDICES_UNICOS_IDEMPOTENCIA",
     "_LOCK_NS_BARRIDO",
+    "MIGRACIONES",
+    "MIGRACIONES_POST_DDL",
+    "MIGRACIONES_PRE_DDL",
+    "Migracion",
     "_MIGR_FRANJA_MATUTINO_FIN_MIN",
     "_MIGR_FRANJA_MATUTINO_INICIO_MIN",
     "_MIGR_FRANJA_VESPERTINO_FIN_MIN",
@@ -2922,8 +3163,10 @@ __all__ = [
     "_NOMBRE_FRANJA_DESCANSO",
     "_NOMBRE_FRANJA_MANANA",
     "_NOMBRE_FRANJA_TARDE",
+    "_aplicar_migraciones",
     "_clave_lock",
     "_columnas_existentes",
+    "_id_migracion",
     "_conectar",
     "_config_franjas_template",
     "_crear_esquema",

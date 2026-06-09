@@ -2,10 +2,11 @@
 
 HISTORICO (ADR 0004): originalmente este modulo orquestaba tambien el cutover de datos
 SQLite -> Postgres. Tras retirar SQLite de la persistencia operacional, la DB ya solo es
-Postgres y NO hay nada que copiar entre bases. `--solo-db` se conserva como NO-OP que
-GARANTIZA el esquema en Postgres (idempotente) para que `deploy/deploy.sh` siga llamando
-al mismo comando sin romper. La copia de media disco -> bucket S3 SI tiene sentido todavia
-en clientes que aun guardan la media en disco.
+Postgres y NO hay nada que copiar entre bases. `--solo-db` GARANTIZA el esquema en Postgres
+(DDL idempotente + migraciones VERSIONADAS pendientes del journal `schema_migraciones`; ver
+`_db_core.MIGRACIONES`) para que `deploy/deploy.sh` siga llamando al mismo comando sin
+romper. La copia de media disco -> bucket S3 SI tiene sentido todavia en clientes que aun
+guardan la media en disco.
 
 Uso:
 
@@ -56,8 +57,11 @@ def asegurar_esquema(*, dry_run: bool = False) -> bool:
 
     Sustituto del antiguo `migrar_db` (SQLite -> Postgres): tras la ADR 0004 ya no hay
     fuente SQLite; lo unico que queda por hacer del lado de la DB es que el esquema este
-    creado. Lo creamos abriendo una conexion (lo dispara `db._conectar`). En `dry_run` no
-    abre conexion, solo informa.
+    creado. Lo creamos abriendo una conexion (lo dispara `db._conectar`, que ejecuta el DDL
+    idempotente y aplica las migraciones VERSIONADAS pendientes del journal
+    `schema_migraciones` bajo el advisory lock de esquema; si una migracion falla, este
+    comando sale con error visible en vez de dejar esquema a medias). En `dry_run` no abre
+    conexion, solo informa.
 
     Exige `DATABASE_URL` (la conexion fallaria si falta): se delega en `motor_db` para que
     el mensaje sea el unico y accionable de toda la app.
@@ -182,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--solo-db",
         action="store_true",
-        help="Solo asegura el esquema Postgres (no-op tras ADR 0004; compat. deploy.sh).",
+        help="Solo asegura el esquema Postgres (DDL + migraciones pendientes; compat. deploy.sh).",
     )
     parser.add_argument("--solo-media", action="store_true", help="Migra solo la media (S3).")
     parser.add_argument(
