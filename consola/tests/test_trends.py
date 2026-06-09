@@ -50,7 +50,14 @@ _TRENDS_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 @pytest.mark.parametrize(
     ("crudo", "esperado"),
-    [("2K+", 2_000), ("50 mil+", 50_000), ("1M+", 1_000_000), ("1,000+", 1_000), ("", 0), ("?", 0)],
+    [
+        ("2K+", 2_000), ("50 mil+", 50_000), ("1M+", 1_000_000), ("1,000+", 1_000),
+        # Separador DECIMAL (1-2 dígitos al final): "1.5M" es 1.5 millones, NO 15 millones.
+        ("1.5M+", 1_500_000), ("1,5 millones+", 1_500_000), ("2.25M+", 2_250_000),
+        # Tres dígitos tras el punto = millares, como siempre.
+        ("1.000+", 1_000),
+        ("", 0), ("?", 0),
+    ],
 )
 def test_traduce_trafico(crudo, esperado):
     assert dom.traduce_trafico(crudo) == esperado

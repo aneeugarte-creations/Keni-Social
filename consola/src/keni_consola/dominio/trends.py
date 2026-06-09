@@ -52,20 +52,33 @@ _MULTIPLICADOR = {
 }
 
 
-def traduce_trafico(crudo: str) -> int:
-    """Convierte un `approx_traffic` ("2K+", "50 mil+") a un entero comparable, o 0.
+# "1.5" / "1,5": separador DECIMAL (1-2 dígitos al final), no de millares. "1.000"/"1,000"
+# (3 dígitos) sí es millar. Distinguirlos evita leer "1.5M" como 15M (10× la señal real).
+_RE_DECIMAL = re.compile(r"^(\d+)[.,](\d{1,2})$")
 
-    No fabrica nada: sin número parseable devuelve 0. Solo se usa para ORDENAR por señal.
+
+def traduce_trafico(crudo: str) -> int:
+    """Convierte un `approx_traffic` ("2K+", "50 mil+", "1.5M+") a un entero comparable, o 0.
+
+    Trata `./,` seguidos de 1-2 dígitos al final como separador DECIMAL ("1.5M" -> 1 500 000);
+    el resto, como separador de millares ("1,000" -> 1000). No fabrica nada: sin número
+    parseable devuelve 0. Solo se usa para ORDENAR por señal.
     """
     if not isinstance(crudo, str) or not crudo.strip():
         return 0
     m = _RE_TRAFICO.search(crudo)
     if not m:
         return 0
-    numero = m.group(1).replace(",", "").replace(".", "")
-    if not numero.isdigit():
-        return 0
-    return int(numero) * _MULTIPLICADOR.get((m.group(2) or "").lower(), 1)
+    grupo = m.group(1)
+    decimal = _RE_DECIMAL.match(grupo)
+    if decimal:
+        valor = float(f"{decimal.group(1)}.{decimal.group(2)}")
+    else:
+        numero = grupo.replace(",", "").replace(".", "")
+        if not numero.isdigit():
+            return 0
+        valor = float(numero)
+    return int(valor * _MULTIPLICADOR.get((m.group(2) or "").lower(), 1))
 
 
 def _texto_hijo(elemento: ET.Element, *nombres: str) -> str:

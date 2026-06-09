@@ -10,7 +10,7 @@ Postgres: se comprueba que persiste items nuevos y que programa el próximo sond
 from __future__ import annotations
 
 import contextlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from keni_consola import config, ingesta_daemon
 from keni_consola.dominio import ingesta
@@ -145,10 +145,31 @@ def test_barrido_aplica_backoff_cuando_el_feed_falla(monkeypatch):
     assert kw["error"]  # mensaje de error registrado
 
 
-def test_barrido_sin_feeds_vencidos_no_hace_nada(monkeypatch):
+def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
+    """Sin feeds RSS vencidos, el barrido NO sondea nada pero los pasos post-RSS corren igual.
+
+    Antes un `return` temprano dejaba los items de Trends/agencias SIN clusterizar
+    indefinidamente si ningún RSS estaba vencido (Trends inserta por su propio daemon).
+    """
     _parchear_comun(monkeypatch, feeds=[], fetcher=lambda _u: _FEED_OK)
+    llamados: list[str] = []
+    monkeypatch.setattr(ingesta_daemon, "paso_agencias",
+                        lambda: llamados.append("agencias") or {"items": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering",
+                        lambda: llamados.append("clustering") or {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_rescore",
+                        lambda *a, **k: llamados.append("rescore") or {"revisados": 0, "actualizados": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_fusion_semantica",
+                        lambda **k: llamados.append("fusion") or {"grupos": 0, "fusionadas": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion",
+                        lambda: llamados.append("traduccion") or {"traducidos": 0, "candidatos": 0})
+
     resumen = ingesta_daemon.ejecutar_barrido()
-    assert resumen == {"feeds": 0, "items_nuevos": 0, "errores": 0}
+    assert resumen["feeds"] == 0
+    assert resumen["items_nuevos"] == 0
+    assert resumen["errores"] == 0
+    # Los pasos post-RSS corrieron AUNQUE no hubiera feeds vencidos.
+    assert llamados == ["agencias", "clustering", "rescore", "fusion", "traduccion"]
 
 
 def test_barrido_respeta_single_flight(monkeypatch):
@@ -448,3 +469,110 @@ def test_paso_fusion_semantica_sin_fusiones_no_registra(monkeypatch):
 
     assert ingesta_daemon.paso_fusion_semantica() == {"grupos": 0, "fusionadas": 0}
     assert registradas == []
+
+
+# --------------------------------------------------------------------------- #
+# paso_clustering: marca por vocabulario + durabilidad + escritura en lote     #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_clustering_asigna_marca_por_vocabulario_a_historia_solo_trends(monkeypatch):
+    """Un cluster formado SOLO por items sin marca (Trends) acaba con marca asignada por
+    vocabulario y, por tanto, SELECCIONABLE por la promoción por marca (antes quedaba con
+    marca='' e invisible para todas)."""
+    item = {
+        "id": "i1", "fuente_id": "google-trends", "fuente_nombre": "ESPN",
+        "categoria": "tendencias", "marca": "",  # <- Trends llega SIN marca
+        "titulo": "Futbol: gol agónico en la final de la liga mx",
+        "resumen": "", "url": "https://e.com/n1", "url_canonica": "e.com/n1",
+        "idioma": "es", "senal": 50_000, "geo": "MX", "estado": "nuevo",
+        "publicado_en": datetime.now(UTC).isoformat(),
+        "capturado_en": datetime.now(UTC).isoformat(),
+    }
+    eventos: list[tuple[str, object]] = []
+    monkeypatch.setattr(ingesta_daemon.config, "perfil_editorial_activo", lambda: False)
+    monkeypatch.setattr(ingesta_daemon.config, "rendimiento_ranking_activo", lambda: False)
+    monkeypatch.setattr(ingesta_daemon.repos, "limpiar_items_cluster_colgante", lambda: 0)
+    monkeypatch.setattr(ingesta_daemon.repos, "items_sin_cluster", lambda desde, lim: [dict(item)])
+    monkeypatch.setattr(ingesta_daemon.repos, "clusters_recientes", lambda ventana_h, *a, **k: [])
+    monkeypatch.setattr(ingesta_daemon.repos, "obtener_noticia_cluster", lambda cid: None)
+    monkeypatch.setattr(ingesta_daemon.repos, "items_de_cluster",
+                        lambda cid, **kw: [dict(item, cluster_id=cid)])
+    monkeypatch.setattr(ingesta_daemon.repos, "upsert_noticia_cluster",
+                        lambda c: eventos.append(("upsert", dict(c))) or dict(c))
+    monkeypatch.setattr(ingesta_daemon.repos, "asignar_cluster_items",
+                        lambda asg: eventos.append(("asignar", dict(asg))))
+
+    resumen = ingesta_daemon.paso_clustering()
+
+    assert resumen["items"] == 1
+    assert resumen["clusters_nuevos"] == 1
+    # DURABILIDAD: el stub del cluster nuevo se upserteó ANTES de asignarle items.
+    tipos = [t for t, _ in eventos]
+    assert tipos.index("upsert") < tipos.index("asignar")
+    # La asignación fue en LOTE (cluster -> [item_ids]).
+    asignaciones = next(d for t, d in eventos if t == "asignar")
+    assert list(asignaciones.values()) == [["i1"]]
+    # El recálculo final fijó la marca por VOCABULARIO (claro-sports: futbol/gol/liga mx).
+    final = [d for t, d in eventos if t == "upsert"][-1]
+    assert final["marca"] == "claro-sports"
+    assert float(final.get("score") or 0.0) > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# paso_rescore: el score ENVEJECE (la frescura decae sin items nuevos)          #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_rescore_baja_el_score_de_una_historia_vieja(monkeypatch):
+    vieja = {
+        "id": "c-vieja", "titulo": "Historia de hace tres días", "resumen": "",
+        "marca": "", "n_fuentes": 2, "senal": 0, "breaking": 0, "estado": "nuevo",
+        "ultimo_visto": (datetime.now(UTC) - timedelta(hours=60)).isoformat(),
+        "score": 0.9,  # score persistido cuando era FRESCA (congelado desde entonces)
+    }
+    monkeypatch.setattr(ingesta_daemon.config, "perfil_editorial_activo", lambda: False)
+    monkeypatch.setattr(ingesta_daemon.config, "rendimiento_ranking_activo", lambda: False)
+    guardados: list[dict] = []
+    monkeypatch.setattr(ingesta_daemon.repos, "actualizar_scores_clusters",
+                        lambda scores: guardados.append(dict(scores)) or len(scores))
+
+    resumen = ingesta_daemon.paso_rescore([vieja], forzar=True)
+
+    assert resumen["revisados"] == 1
+    assert resumen["actualizados"] == 1
+    assert guardados and guardados[0]["c-vieja"] < 0.9  # la frescura decayó con el reloj
+
+
+def test_paso_rescore_ignora_historias_usadas(monkeypatch):
+    usada = {"id": "c-usada", "estado": "usado", "score": 0.5, "ultimo_visto": "", "titulo": "x"}
+    def _no_guardar(scores):  # noqa: ANN001
+        raise AssertionError("no debería re-puntuar historias usadas")
+    monkeypatch.setattr(ingesta_daemon.repos, "actualizar_scores_clusters", _no_guardar)
+    resumen = ingesta_daemon.paso_rescore([usada], forzar=True)
+    assert resumen == {"revisados": 0, "actualizados": 0}
+
+
+# --------------------------------------------------------------------------- #
+# _fusionar_grupo: anti-TOCTOU (no absorbe una historia ya promovida)           #
+# --------------------------------------------------------------------------- #
+
+
+def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(monkeypatch):
+    c1 = {"id": "c1", "titulo": "A", "n_fuentes": 2, "score": 0.6, "estado": "nuevo"}
+    c2 = {"id": "c2", "titulo": "B", "n_fuentes": 1, "score": 0.2, "estado": "nuevo"}
+    # Entre la lectura del lote y la fusión, el pipeline PROMOVIÓ c2 (contenido_id sellado).
+    promovida = dict(c2, estado="usado", contenido_id="tema-9")
+    monkeypatch.setattr(ingesta_daemon.repos, "obtener_noticia_cluster",
+                        lambda cid: {"c1": dict(c1), "c2": promovida}.get(cid))
+    def _no_tocar(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("no debería reasignar ni borrar una historia promovida")
+    monkeypatch.setattr(ingesta_daemon.repos, "asignar_cluster_items", _no_tocar)
+    monkeypatch.setattr(ingesta_daemon.repos, "borrar_noticia_cluster", _no_tocar)
+
+    fusionado = ingesta_daemon._fusionar_grupo(
+        ["c1", "c2"], {"c1": c1, "c2": c2},
+        pesos=None, breaking_fuentes=3, breaking_ventana_h=6,
+        fuentes_baja=frozenset(), perfil_activo=False, ahora=datetime.now(UTC),
+    )
+    assert fusionado is False  # nada que fundir: la única absorbible ya fue promovida

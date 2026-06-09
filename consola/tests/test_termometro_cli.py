@@ -74,6 +74,42 @@ def test_reunir_noticias_rss_sin_feeds_vacio(entorno):
     assert termometro_cli.reunir_noticias_rss() == ""
 
 
+_RSS_XML_B = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Crisis en África</title>
+      <link>https://example.com/africa</link>
+      <description>Negociaciones en curso.</description>
+    </item>
+    <item>
+      <title>Acuerdo en América</title>
+      <link>https://example.com/america</link>
+      <description>Firma histórica.</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+_URL_OK_B = "https://93.184.216.35/feed.xml"
+
+
+def test_reunir_noticias_rss_round_robin_entre_fuentes(entorno, monkeypatch):
+    """El límite global se reparte por TURNOS entre fuentes: el primer feed ya no se come el
+    cupo entero (antes, con límite 2, las 2 líneas salían de la primera fuente)."""
+    repos.crear_fuente_rss("Asia/Europa", _URL_OK, marca="")
+    repos.crear_fuente_rss("África/América", _URL_OK_B, marca="")
+    monkeypatch.setattr(
+        rss, "_DESCARGADOR", lambda url: _RSS_XML if "93.184.216.34" in url else _RSS_XML_B
+    )
+    texto = termometro_cli.reunir_noticias_rss(limite=2)
+    lineas = texto.splitlines()
+    assert len(lineas) == 2
+    # Una línea de CADA fuente (round-robin), no dos de la primera.
+    assert sum(1 for ln in lineas if "(Asia/Europa)" in ln) == 1
+    assert sum(1 for ln in lineas if "(África/América)" in ln) == 1
+
+
 # --------------------------------------------------------------------------- #
 # generar_termometro                                                          #
 # --------------------------------------------------------------------------- #

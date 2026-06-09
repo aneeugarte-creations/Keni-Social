@@ -306,3 +306,163 @@ def test_recalcular_fija_verificacion_e_idioma_representativo():
     # idioma del representativo (no hay 'es' -> el de mayor señal/título): inglés.
     assert rec["idioma"] == "en"
     assert "en" in rec["idiomas"]
+
+
+# --------------------------------------------------------------------------- #
+# Asignación determinista + Asignador (índice con blocking)                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_asignar_empate_exacto_gana_el_primero():
+    """A empate EXACTO de ratio gana el primer candidato (antes ganaba el último: no determinista)."""
+    c_a = {"id": "primero", "clave": "t:1", "titulo": "El presidente anuncia nueva reforma"}
+    c_b = {"id": "segundo", "clave": "t:2", "titulo": "El presidente anuncia nueva reforma"}
+    item = _item(url="", titulo="El presidente anuncia nueva reforma")
+    assert clustering.asignar(item, [c_a, c_b], umbral=0.8) == "primero"
+    # Invertir el orden invierte el ganador (decide el orden de entrada, no el azar del dict).
+    assert clustering.asignar(item, [c_b, c_a], umbral=0.8) == "segundo"
+
+
+def test_asignador_replica_las_decisiones_de_asignar():
+    clusters = [
+        {"id": "u1", "clave": "url:example.com/nota-1", "titulo": "Titular original"},
+        {"id": "f1", "clave": "t:abc", "titulo": "El presidente anuncia una nueva reforma para los estados"},
+    ]
+    asignador = clustering.Asignador(clusters, umbral=0.82)
+    # (a) cruce exacto por url canónica.
+    por_url = _item(url="https://example.com/nota-1?utm_source=tw", titulo="Algo distinto")
+    assert asignador.asignar(por_url) == "u1" == clustering.asignar(por_url, clusters)
+    # (b) fuzzy de título.
+    por_titulo = _item(url="", titulo="El presidente anuncia nueva reforma para los estados")
+    assert asignador.asignar(por_titulo) == "f1" == clustering.asignar(por_titulo, clusters, umbral=0.82)
+    # (c) nada casa -> None (cluster nuevo).
+    nuevo = _item(url="", titulo="Resultados de la jornada de fútbol del domingo")
+    assert asignador.asignar(nuevo) is None
+    assert clustering.asignar(nuevo, clusters, umbral=0.82) is None
+
+
+def test_asignador_agregar_une_items_del_mismo_barrido():
+    asignador = clustering.Asignador([], umbral=0.82)
+    asignador.agregar({"id": "n1", "clave": "t:x", "titulo": "Gran final del torneo de verano"})
+    assert asignador.asignar(_item(url="", titulo="Gran final del torneo de verano hoy")) == "n1"
+
+
+def test_asignador_titulos_cortos_no_entran_fuzzy():
+    asignador = clustering.Asignador([{"id": "c", "clave": "t:nfl", "titulo": "NFL"}], umbral=0.3)
+    assert asignador.asignar(_item(url="", titulo="F1")) is None
+
+
+# --------------------------------------------------------------------------- #
+# Relevancia de marca GRADUADA (saturación suave + límite de palabra)           #
+# --------------------------------------------------------------------------- #
+
+
+def test_relevancia_marca_gradua_por_numero_de_coincidencias():
+    pal = frozenset({"futbol", "gol", "liga mx"})
+    una = clustering._relevancia_marca({"titulo": "El futbol de hoy", "resumen": ""}, pal)
+    tres = clustering._relevancia_marca({"titulo": "Futbol: gol en la liga mx", "resumen": ""}, pal)
+    assert 0.0 < una < tres <= 1.0  # 1 keyword ya NO puntúa igual que 3 (escalón eliminado)
+
+
+def test_relevancia_marca_resumen_pesa_menos_que_titulo():
+    pal = frozenset({"reforma"})
+    en_titulo = clustering._relevancia_marca({"titulo": "Aprueban la reforma", "resumen": ""}, pal)
+    en_resumen = clustering._relevancia_marca({"titulo": "Noticia del día", "resumen": "sobre la reforma"}, pal)
+    assert en_titulo > en_resumen > 0.0
+
+
+def test_relevancia_marca_frases_casan_por_limite_de_palabra():
+    pal = frozenset({"box office"})
+    assert clustering._relevancia_marca({"titulo": "box office records", "resumen": ""}, pal) > 0.0
+    # La frase ya no casa por subcadena dentro de otra palabra.
+    assert clustering._relevancia_marca({"titulo": "boxofficemania total", "resumen": ""}, pal) == 0.0
+
+
+def test_puntuar_sigue_monotono_en_relevancia_graduada():
+    pal = frozenset({"futbol", "gol"})
+    poco = clustering.puntuar(_cluster(titulo="El futbol de hoy"), palabras_marca=pal, ahora=_T0)[0]
+    mucho = clustering.puntuar(_cluster(titulo="Futbol con gol agónico"), palabras_marca=pal, ahora=_T0)[0]
+    assert mucho > poco > clustering.puntuar(_cluster(titulo="Nada relacionado"), palabras_marca=pal, ahora=_T0)[0]
+
+
+# --------------------------------------------------------------------------- #
+# Marca por vocabulario (historias solo-Trends/agencias, sin marca dominante)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_marca_por_vocabulario_elige_la_mejor_sobre_el_umbral():
+    voc = {
+        "claro-sports": frozenset({"futbol", "gol"}),
+        "unotv": frozenset({"sismo", "cdmx"}),
+    }
+    cluster = {"titulo": "Futbol: gol de último minuto", "resumen": ""}
+    assert clustering.marca_por_vocabulario(cluster, voc) == "claro-sports"
+
+
+def test_marca_por_vocabulario_sin_encaje_queda_vacia():
+    voc = {"claro-sports": frozenset({"futbol"}), "unotv": frozenset({"sismo"})}
+    assert clustering.marca_por_vocabulario({"titulo": "Tema sin encaje alguno", "resumen": ""}, voc) == ""
+    # Coincidencia SOLO de resumen (0.2) no alcanza el umbral por defecto (0.3).
+    solo_resumen = {"titulo": "Tema neutro", "resumen": "se habló de futbol"}
+    assert clustering.marca_por_vocabulario(solo_resumen, voc) == ""
+
+
+def test_marca_por_vocabulario_empate_determinista():
+    voc = {"b-marca": frozenset({"futbol"}), "a-marca": frozenset({"futbol"})}
+    assert clustering.marca_por_vocabulario({"titulo": "El futbol manda", "resumen": ""}, voc) == "a-marca"
+
+
+# --------------------------------------------------------------------------- #
+# Insumos CURADOS: no secuestran el titular ni saturan la viralidad             #
+# --------------------------------------------------------------------------- #
+
+
+def test_representativo_prefiere_titular_periodistico_sobre_curado():
+    items = [
+        _item(fuente_id="cajon-ideas", titulo="nota curada del equipo", senal=1_000_000),
+        _item(fuente_id="rss1", titulo="Titular periodístico real de la noticia", senal=500),
+    ]
+    r = clustering.recalcular(_base_cluster(), items)
+    assert r["titulo"] == "Titular periodístico real de la noticia"
+    # La señal artificial del curado NO satura la viralidad de la historia mixta.
+    assert r["senal"] == 500
+
+
+def test_cluster_solo_curado_conserva_su_senal_y_titulo():
+    items = [_item(fuente_id="cajon-ideas", titulo="nota curada del equipo", senal=1_000_000)]
+    r = clustering.recalcular(_base_cluster(), items)
+    assert r["titulo"] == "nota curada del equipo"
+    assert r["senal"] == 1_000_000  # el auto-feed de curados sigue funcionando
+
+
+# --------------------------------------------------------------------------- #
+# seleccionar_diversos (MMR suave para la promoción CI)                         #
+# --------------------------------------------------------------------------- #
+
+
+def _c_div(cid, titulo):
+    return {"id": cid, "titulo": titulo}
+
+
+def test_seleccionar_diversos_salta_titulos_casi_identicos():
+    clusters = [
+        _c_div("a", "Messi gana el premio en París"),
+        _c_div("b", "Messi gana el premio en París hoy"),  # casi idéntico al primero
+        _c_div("c", "Sismo de magnitud en la capital"),
+    ]
+    out = clustering.seleccionar_diversos(clusters, maximo=2, umbral=0.8)
+    assert [c["id"] for c in out] == ["a", "c"]  # el macro-tema no se come las dos plazas
+
+
+def test_seleccionar_diversos_es_suave_rellena_si_faltan():
+    clusters = [
+        _c_div("a", "Messi gana el premio en París"),
+        _c_div("b", "Messi gana el premio en París hoy"),
+    ]
+    out = clustering.seleccionar_diversos(clusters, maximo=2, umbral=0.8)
+    assert [c["id"] for c in out] == ["a", "b"]  # nunca devuelve menos por diversificar
+
+
+def test_seleccionar_diversos_umbral_cero_es_top_n_puro():
+    clusters = [_c_div("a", "Mismo título repetido"), _c_div("b", "Mismo título repetido")]
+    assert [c["id"] for c in clustering.seleccionar_diversos(clusters, maximo=2, umbral=0.0)] == ["a", "b"]

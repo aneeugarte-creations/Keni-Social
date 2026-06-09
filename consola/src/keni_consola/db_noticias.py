@@ -218,13 +218,18 @@ def actualizar_fuente_rss(
 
 
 def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
-    """Anota la salud de una fuente (fecha de hoy + conteo + error). Best-effort."""
+    """Anota la salud de una fuente (instante UTC + conteo + error). Best-effort.
+
+    UTC ISO completo (no `date.today()` local): la columna `ultima_actualizacion` mezclaba
+    fechas locales sin hora con instantes UTC (`registrar_sondeo_feed`), y el `MAX()` /
+    las comparaciones de frescura salían de relojes distintos. Formato unificado.
+    """
     con = _conectar()
     try:
         con.execute(
             "UPDATE fuentes_rss SET ultima_actualizacion = ?, ultimo_conteo = ?, "
             "ultimo_error = ? WHERE id = ?",
-            (date.today().isoformat(), int(conteo), error or "", fuente_id),
+            (datetime.now(UTC).isoformat(), int(conteo), error or "", fuente_id),
         )
         con.commit()
     finally:
@@ -899,7 +904,9 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     Si falta `id`, lo genera. `idiomas` se serializa a JSON. `creado` se fija solo en el alta;
     `actualizado` siempre se sella al instante actual. Los agregados (`n_items`/`n_fuentes`/
     `senal`/`score`/`breaking`/`titulo`/...) los calcula el dominio (`clustering`) y aquí solo
-    se persisten. `estado`/`contenido_id` NO se pisan en un upsert salvo que vengan en el dict.
+    se persisten. `estado`/`contenido_id` se fijan SOLO en el alta: un upsert posterior NUNCA
+    los pisa (mutarlos es trabajo exclusivo de `actualizar_noticia_cluster`; protege contra el
+    TOCTOU daemon↔pipeline que revertía clusters promovidos a 'nuevo').
     """
     ahora = datetime.now(UTC).isoformat()
     cid = (cluster.get("id") or "").strip() or uuid.uuid4().hex[:12]
@@ -937,9 +944,15 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
-    # En conflicto por id, actualiza casi todo MENOS `id`/`creado` y los campos de TRADUCCIÓN
-    # (que escribe `marcar_cluster_traducido` y no deben perderse al recalcular el cluster).
-    _NO_PISAR = ("id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido")
+    # En conflicto por id, actualiza casi todo MENOS `id`/`creado`, los campos de TRADUCCIÓN
+    # (que escribe `marcar_cluster_traducido`) y `estado`/`contenido_id` (que muta SOLO
+    # `actualizar_noticia_cluster`): un recalc del daemon con datos leídos ANTES de que el
+    # pipeline promoviera la historia (TOCTOU daemon↔pipeline) ya no puede revertir un cluster
+    # 'usado' a 'nuevo' ni borrar su enlace al tema (lo que duplicaba el tema en el tablero).
+    _NO_PISAR = (
+        "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
+        "estado", "contenido_id",
+    )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
     marcadores = ", ".join("?" for _ in _COLS_NOTICIA_CLUSTER)
@@ -1228,6 +1241,81 @@ def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
         con.close()
 
 
+def asignar_cluster_items(asignaciones: dict[str, list[str]]) -> None:
+    """Fija `cluster_id` para LOTES de items en UNA conexión: un UPDATE por cluster (IN (...)).
+
+    `asignaciones` = `{cluster_id: [item_ids]}`. Sustituye el UPDATE-por-item del paso de
+    clustering (~cientos de round-trips por barrido) por un round-trip por cluster tocado.
+    Idempotente y best-effort: ids inexistentes simplemente no actualizan nada.
+    """
+    pares = {
+        cid: [i for i in dict.fromkeys(ids) if i]
+        for cid, ids in asignaciones.items()
+        if cid
+    }
+    pares = {cid: ids for cid, ids in pares.items() if ids}
+    if not pares:
+        return
+    con = _conectar()
+    try:
+        for cid, ids in pares.items():
+            marcadores = ",".join("?" for _ in ids)
+            con.execute(
+                f"UPDATE noticias_items SET cluster_id = ? WHERE id IN ({marcadores})",  # noqa: S608 -- marcadores parametrizados
+                (cid, *ids),
+            )
+        con.commit()
+    finally:
+        con.close()
+
+
+def limpiar_items_cluster_colgante() -> int:
+    """REPARA items cuyo `cluster_id` apunta a un cluster que ya no existe: los devuelve a ''.
+
+    Si el proceso muere entre asignar `cluster_id` a los items y persistir el cluster (o un
+    cluster se borró dejando items detrás), esos items quedaban invisibles PARA SIEMPRE (ni
+    `items_sin_cluster` ni `items_de_cluster` los recogían). Re-ponerlos a '' los devuelve al
+    paso de clustering (si siguen en la ventana) o los deja a tiro del GC (si ya no). Solo toca
+    items `estado='nuevo'` (los usados/descartados conservan su rastro). Devuelve nº reparados.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE noticias_items SET cluster_id = '' "
+            "WHERE estado = 'nuevo' AND cluster_id <> '' "
+            "AND cluster_id NOT IN (SELECT id FROM noticias_clusters)"
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
+def actualizar_scores_clusters(scores: dict[str, float]) -> int:
+    """Actualiza SOLO el `score` (+`actualizado`) de un lote de clusters en una conexión.
+
+    Para el RE-SCORE periódico de la ventana (la frescura decae con el tiempo aunque no entren
+    items nuevos): toca únicamente `score`, sin pisar agregados ni estado. Devuelve nº filas.
+    """
+    pares = [(cid, float(s)) for cid, s in scores.items() if cid]
+    if not pares:
+        return 0
+    ahora = datetime.now(UTC).isoformat()
+    n = 0
+    con = _conectar()
+    try:
+        for cid, score in pares:
+            cur = con.execute(
+                "UPDATE noticias_clusters SET score = ?, actualizado = ? WHERE id = ?",
+                (score, ahora, cid),
+            )
+            n += cur.rowcount or 0
+        con.commit()
+    finally:
+        con.close()
+    return n
+
+
 def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
     """Marca TODOS los items de un cluster como `usado` + enlaza el `contenido_id` (una escritura)."""
     con = _conectar()
@@ -1365,13 +1453,16 @@ def actualizar_fuente_algoritmo(
 
 
 def registrar_salud_fuente_algoritmo(fuente_id: str, *, conteo: int, error: str = "") -> None:
-    """Anota la salud de una fuente de algoritmo (fecha de hoy + conteo + error)."""
+    """Anota la salud de una fuente de algoritmo (instante UTC + conteo + error).
+
+    UTC ISO (unificado con el resto de columnas de salud; antes `date.today()` local).
+    """
     con = _conectar()
     try:
         con.execute(
             "UPDATE fuentes_algoritmo SET ultima_actualizacion = ?, ultimo_conteo = ?, "
             "ultimo_error = ? WHERE id = ?",
-            (date.today().isoformat(), int(conteo), error or "", fuente_id),
+            (datetime.now(UTC).isoformat(), int(conteo), error or "", fuente_id),
         )
         con.commit()
     finally:

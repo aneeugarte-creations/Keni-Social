@@ -136,44 +136,25 @@ def test_peso_viralidad_invalido_o_negativo_es_cero():
 
 
 # --------------------------------------------------------------------------- #
-# Fase 5: bonus de METRICAS (rendimiento historico por marca)                   #
+# peso_fecha: lo vencido DECAE (no se queda clavado arriba para siempre)        #
 # --------------------------------------------------------------------------- #
 
 
-def test_sin_bonus_de_metricas_puntua_como_antes():
-    """`bonus_metricas` None o 0 no cambia el score (flag OFF / metricas no disponibles)."""
-    sin = pr.score_contenido(_item(), hoy=HOY)
-    none = pr.score_contenido(_item(), hoy=HOY, bonus_metricas=None)
-    cero = pr.score_contenido(_item(), hoy=HOY, bonus_metricas=0)
-    assert sin == none == cero
+def test_vencido_reciente_es_lo_mas_urgente():
+    assert pr.peso_fecha("2026-05-30", HOY) == 150          # vencida ayer
+    assert pr.peso_fecha("2026-05-24", HOY) == 150          # vencida hace 7 dias (pleno)
 
 
-def test_bonus_de_metricas_sube_el_score_acotado():
-    base = pr.score_contenido(_item(), hoy=HOY)
-    con = pr.score_contenido(_item(), hoy=HOY, bonus_metricas=40)
-    tope = pr.score_contenido(_item(), hoy=HOY, bonus_metricas=10_000)  # se acota
-    assert con == base + 40
-    assert tope == base + pr.BONUS_METRICAS_MAX
+def test_vencido_viejo_decae_por_tramos():
+    pleno = pr.peso_fecha("2026-05-30", HOY)                 # atraso 1 dia
+    dos_semanas = pr.peso_fecha("2026-05-20", HOY)           # atraso 11 dias
+    un_mes = pr.peso_fecha("2026-05-05", HOY)                # atraso 26 dias
+    viejisimo = pr.peso_fecha("2026-03-01", HOY)             # atraso ~3 meses
+    assert pleno > dos_semanas > un_mes > viejisimo
+    # Vencido hace mas de un mes pesa como lo lejano: ya no urge.
+    assert viejisimo == pr.peso_fecha("2026-09-01", HOY)
 
 
-def test_peso_metricas_negativo_o_invalido_es_cero():
-    assert pr.peso_metricas(None) == 0
-    assert pr.peso_metricas(-3) == 0
-    assert pr.peso_metricas("x") == 0
-
-
-def test_ordenar_usa_el_bonus_por_marca():
-    """Con metricas, la marca que rinde mas sube su pieza por encima de una identica."""
-    items = [
-        _item(id="floja", marca="m_floja"),
-        _item(id="fuerte", marca="m_fuerte"),
-    ]
-    bonus = {"m_fuerte": 50.0}  # solo la marca fuerte recibe bonus
-    ordenados = pr.ordenar_por_score(items, hoy=HOY, bonus_metricas_por_marca=bonus)
-    assert ordenados[0]["id"] == "fuerte"
-
-
-def test_ordenar_sin_bonus_por_marca_no_cambia_nada():
-    items = [_item(id="a"), _item(id="b")]
-    ordenados = pr.ordenar_por_score(items, hoy=HOY, bonus_metricas_por_marca=None)
-    assert [i["id"] for i in ordenados] == ["a", "b"]
+def test_vencido_muy_viejo_no_supera_a_hoy():
+    hoy_peso = pr.peso_fecha(HOY.isoformat(), HOY)
+    assert pr.peso_fecha("2026-03-01", HOY) < hoy_peso

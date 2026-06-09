@@ -152,8 +152,23 @@ def _normalizar(texto: str) -> str:
 
 
 def _coincide(texto: str, variantes: tuple[str, ...]) -> bool:
-    """True si alguna variante (ya normalizada al vuelo) aparece en el texto normalizado."""
-    return any(_normalizar(v).strip() in texto for v in variantes)
+    """True si alguna variante aparece en el texto normalizado, por LÍMITE DE PALABRA.
+
+    Antes era subcadena tras `strip()`: la variante "new " perdía su espacio y casaba "news"
+    (inflando la importancia de todo agregador). Ahora toda variante exige límite de palabra
+    al inicio; las que traían espacio final ("new ", "rank ") lo exigen también al final
+    (palabra completa). Las variantes-prefijo ("penaliz", "monetiz") siguen casando sus
+    derivados ("penalización") porque no llevan espacio final.
+    """
+    for v in variantes:
+        vn = _normalizar(v).strip()
+        if not vn:
+            continue
+        palabra_completa = v != v.rstrip()
+        patron = r"\b" + re.escape(vn) + (r"\b" if palabra_completa else "")
+        if re.search(patron, texto):
+            return True
+    return False
 
 
 def clasificar(item: dict[str, Any], fuente: dict[str, Any]) -> dict[str, Any]:

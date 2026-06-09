@@ -27,6 +27,7 @@ Scoring (`puntuar`): ver la fórmula documentada en su docstring.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
@@ -173,10 +174,87 @@ def asignar(
     mejor_ratio = umbral
     for c in clusters_recientes:
         ratio = _ratio_titulos(titulo, str(c.get("titulo") or ""))
-        if ratio >= mejor_ratio:
+        # A EMPATE exacto de ratio gana el PRIMER candidato visto (determinista); antes el
+        # `>=` dejaba ganar al último, y el resultado dependía del orden de la lista.
+        if ratio >= umbral and (mejor_id is None or ratio > mejor_ratio):
             mejor_ratio = ratio
             mejor_id = str(c["id"])
     return mejor_id
+
+
+# Longitud mínima de un token para el BLOCKING del índice de asignación: el fuzzy solo se
+# evalúa contra clusters que comparten ≥1 token "significativo" con el item (dos títulos sin
+# tokens en común no alcanzan el umbral 0.82 en la práctica).
+_MIN_TOKEN_BLOCKING = 3
+
+
+class Asignador:
+    """Índice incremental de asignación item→cluster para un barrido. MISMA decisión que
+    `asignar`, pero O(items × candidatos) en vez de O(items × clusters):
+
+      - precomputa UNA vez la clave fuzzy del título de cada cluster (antes se recomputaba en
+        cada comparación item×cluster), y
+      - mantiene un índice invertido token→clusters (blocking): el ratio fuzzy solo se calcula
+        contra los clusters que comparten ≥1 token significativo con el item.
+
+    `agregar` mantiene el índice vivo durante el barrido (los clusters nuevos del mismo barrido
+    entran al índice). Determinista: a empate de ratio gana el cluster agregado primero. PURO.
+    """
+
+    def __init__(
+        self, clusters_recientes: list[dict[str, Any]], *, umbral: float = 0.82
+    ) -> None:
+        self.umbral = float(umbral)
+        self._orden: dict[str, int] = {}        # id -> orden de entrada (desempate estable)
+        self._por_clave_url: dict[str, str] = {}  # clave url -> id (cruce exacto)
+        self._fuzzy: dict[str, str] = {}        # id -> clave fuzzy del título (precomputada)
+        self._por_token: dict[str, set[str]] = {}  # token significativo -> ids
+        for c in clusters_recientes:
+            self.agregar(c)
+
+    def agregar(self, cluster: dict[str, Any]) -> None:
+        """Añade un cluster al índice (no-op si ya está o no tiene id)."""
+        cid = str(cluster.get("id") or "")
+        if not cid or cid in self._orden:
+            return
+        self._orden[cid] = len(self._orden)
+        clave = str(cluster.get("clave") or "")
+        if clave.startswith("url:") and clave not in self._por_clave_url:
+            self._por_clave_url[clave] = cid
+        kf = similitud.clave_fuzzy(str(cluster.get("titulo") or ""))
+        if len(kf) >= _MIN_LONGITUD_FUZZY:
+            self._fuzzy[cid] = kf
+            for token in set(kf.split()):
+                if len(token) >= _MIN_TOKEN_BLOCKING:
+                    self._por_token.setdefault(token, set()).add(cid)
+
+    def asignar(self, item: dict[str, Any]) -> str | None:
+        """Cluster destino para `item` (mismas reglas que `asignar`), o None si ninguno casa."""
+        clave = clave_cluster(item)
+        if not clave:
+            return None
+        if clave.startswith("url:"):
+            destino = self._por_clave_url.get(clave)
+            if destino:
+                return destino
+        titulo = str(item.get("titulo") or "")
+        if not titulo.strip():
+            return None
+        kf = similitud.clave_fuzzy(titulo)
+        if len(kf) < _MIN_LONGITUD_FUZZY:
+            return None
+        candidatos: set[str] = set()
+        for token in set(kf.split()):
+            if len(token) >= _MIN_TOKEN_BLOCKING:
+                candidatos |= self._por_token.get(token, set())
+        mejor_id: str | None = None
+        mejor_ratio = self.umbral
+        for cid in sorted(candidatos, key=lambda c: self._orden.get(c, 0)):
+            ratio = SequenceMatcher(None, kf, self._fuzzy[cid]).ratio()
+            if ratio >= self.umbral and (mejor_id is None or ratio > mejor_ratio):
+                mejor_ratio = ratio
+                mejor_id = cid
+        return mejor_id
 
 
 # --------------------------------------------------------------------------- #
@@ -225,17 +303,29 @@ def _marca_dominante(items: list[dict[str, Any]]) -> str:
     return max(orden, key=lambda m: conteo[m])
 
 
+def _es_curado(item: dict[str, Any]) -> bool:
+    """True si el item es material CURADO de cajón (fuente `cajon[-*]`, señal artificial alta).
+
+    Los curados llevan `senal = SENAL_CURADO` (1e6) para que su historia supere el umbral del
+    auto-feed, pero esa señal es ARTIFICIAL: no debe secuestrar el título representativo de un
+    cluster con prensa real ni saturar la viralidad de la historia mixta.
+    """
+    return str(item.get("fuente_id") or "").startswith("cajon")
+
+
 def _representativo(items: list[dict[str, Any]]) -> dict[str, Any]:
     """Item representativo: prefiere idioma 'es', luego mayor señal, luego título más largo.
 
     El título/resumen de la historia salen de aquí (el más informativo en el idioma del
-    piloto). Determinista para los mismos items.
+    piloto). Se prefiere el TITULAR PERIODÍSTICO real: los insumos curados de cajón (señal
+    artificial 1e6) solo representan la historia si no hay otra cosa. Determinista.
     """
     def llave(it: dict[str, Any]) -> tuple[int, int, int]:
         es = 1 if str(it.get("idioma") or "").lower().startswith("es") else 0
         return (es, int(it.get("senal") or 0), len(str(it.get("titulo") or "")))
 
-    return max(items, key=llave)
+    candidatos = [it for it in items if not _es_curado(it)] or items
+    return max(candidatos, key=llave)
 
 
 # --------------------------------------------------------------------------- #
@@ -352,7 +442,11 @@ def recalcular(
     rep = _representativo(items)
     fuentes = {str(it.get("fuente_id") or "") for it in items if str(it.get("fuente_id") or "")}
     idiomas = sorted({str(it.get("idioma") or "").lower() for it in items if it.get("idioma")})
-    senal = max(int(it.get("senal") or 0) for it in items)
+    # Señal de viralidad: el máximo de los items NO curados (la señal de los curados es
+    # artificial — SENAL_CURADO — y no debe saturar la viralidad de una historia mixta).
+    # Si la historia es SOLO curada, conserva su señal alta (es el diseño del auto-feed).
+    no_curados = [it for it in items if not _es_curado(it)]
+    senal = max(int(it.get("senal") or 0) for it in (no_curados or items))
 
     instantes = sorted(i for i in (_instante_item(it) for it in items) if i)
     primer_visto = instantes[0] if instantes else (cluster.get("primer_visto") or "")
@@ -429,36 +523,119 @@ def _sin_acentos(texto: str) -> str:
     return similitud.sin_acentos((texto or "").lower())
 
 
-def _relevancia_marca(cluster: dict[str, Any], palabras_marca: frozenset[str]) -> float:
-    """Relevancia de la historia para una marca [0,1] según sus palabras clave.
+# Saturación SUAVE de la señal de marca: ~3 coincidencias de vocabulario ≈ señal plena.
+# Antes la señal era ESCALONADA (1 keyword puntuaba igual que 12) y SATURADA (un vocabulario
+# genérico daba ~1.0 casi siempre); ahora el conteo gradúa y las frases casan por LÍMITE de
+# palabra (no por subcadena).
+_MARCA_SATURA_COINCIDENCIAS = 3.0
+_PESO_MARCA_RESUMEN = 0.6
 
-    1.0 si una palabra de la marca está en el TÍTULO; 0.6 si está en el resumen; 0.0 si no o
-    si no hay vocabulario. Mismo criterio que `parrilla._score_marca`, sobre el texto del
-    cluster. El texto se normaliza sin acentos para casar 'fútbol' con la keyword 'futbol'.
+
+def _relevancia_marca(cluster: dict[str, Any], palabras_marca: frozenset[str]) -> float:
+    """Relevancia GRADUADA de la historia para una marca [0,1] según sus palabras clave.
+
+    Cuenta las coincidencias de vocabulario (las del TÍTULO a peso pleno; las del resumen a
+    0.6) y satura suave: `min(1, n_ponderado / 3)`. 0.0 sin vocabulario o sin coincidencias.
+    El texto se normaliza sin acentos para casar 'fútbol' con la keyword 'futbol'. Monótona:
+    más coincidencias ⇒ más relevancia (hasta saturar).
     """
     if not palabras_marca:
         return 0.0
     titulo = _sin_acentos(str(cluster.get("titulo") or ""))
-    if _contiene(titulo, palabras_marca):
-        return 1.0
     resumen = _sin_acentos(str(cluster.get("resumen") or ""))
-    if _contiene(resumen, palabras_marca):
-        return 0.6
-    return 0.0
+    n = (
+        _cuenta_coincidencias(titulo, palabras_marca)
+        + _PESO_MARCA_RESUMEN * _cuenta_coincidencias(resumen, palabras_marca)
+    )
+    if n <= 0:
+        return 0.0
+    return min(1.0, n / _MARCA_SATURA_COINCIDENCIAS)
 
 
-def _contiene(texto: str, vocabulario: frozenset[str]) -> bool:
-    """True si alguna entrada del vocabulario (token o frase) está en el texto normalizado."""
-    if not texto:
-        return False
+def _cuenta_coincidencias(texto: str, vocabulario: frozenset[str]) -> int:
+    """Nº de entradas del vocabulario presentes en el texto normalizado.
+
+    Tokens sueltos casan por igualdad de token; FRASES por límite de palabra (regex), no por
+    subcadena: 'liga mx' ya no se cuela dentro de otra palabra. Determinista.
+    """
+    if not texto or not vocabulario:
+        return 0
     tokens = set(texto.split())
+    n = 0
     for termino in vocabulario:
         if " " in termino:
-            if termino in texto:
-                return True
+            if re.search(rf"(?<!\w){re.escape(termino)}(?!\w)", texto):
+                n += 1
         elif termino in tokens:
-            return True
-    return False
+            n += 1
+    return n
+
+
+# Umbral por defecto para ASIGNAR marca por vocabulario a una historia sin marca dominante.
+# Equivale a ≥1 keyword en el título (1/3 con la saturación suave); coincidencias solo de
+# resumen (0.2) no bastan. Si ninguna marca lo alcanza, la historia queda sin marca (honesto).
+UMBRAL_MARCA_VOCABULARIO = 0.3
+
+
+def marca_por_vocabulario(
+    cluster: dict[str, Any],
+    vocabularios: dict[str, frozenset[str]],
+    *,
+    umbral: float = UMBRAL_MARCA_VOCABULARIO,
+) -> str:
+    """Mejor marca para una historia SIN marca dominante, por matching de vocabulario. PURA.
+
+    Los clusters formados solo por items sin marca (Trends, agencias) quedaban con `marca=''`
+    y eran INVISIBLES para la promoción por marca. Esto evalúa la relevancia del título/resumen
+    contra el vocabulario de CADA marca y devuelve la mejor por encima de `umbral`; "" si
+    ninguna pasa (se queda sin marca, como antes). Determinista: a empate gana la marca
+    alfabéticamente menor.
+    """
+    mejor = ""
+    mejor_s = 0.0
+    for marca in sorted(vocabularios):
+        s = _relevancia_marca(cluster, vocabularios.get(marca) or frozenset())
+        if s >= umbral and s > mejor_s:
+            mejor_s = s
+            mejor = marca
+    return mejor
+
+
+def seleccionar_diversos(
+    clusters: list[dict[str, Any]], *, maximo: int, umbral: float = 0.80
+) -> list[dict[str, Any]]:
+    """Top-N con DIVERSIDAD (MMR simple) sobre una lista YA ordenada por score. PURA.
+
+    Recorre en orden y SALTA las historias cuyo título es muy parecido (ratio fuzzy ≥ `umbral`)
+    a alguna ya elegida en esta pasada, para que un macro-tema no se coma todas las plazas.
+    SUAVE: si al final faltan plazas, rellena con las saltadas en orden de score (nunca
+    devuelve menos historias por diversificar). Títulos cortos no entran al fuzzy (no se
+    penalizan entre sí). `umbral <= 0` desactiva (top-N puro).
+    """
+    if maximo <= 0:
+        return []
+    if umbral <= 0:
+        return clusters[:maximo]
+    elegidos: list[dict[str, Any]] = []
+    saltados: list[dict[str, Any]] = []
+    claves: list[str] = []
+    for c in clusters:
+        if len(elegidos) >= maximo:
+            break
+        kf = similitud.clave_fuzzy(str(c.get("titulo") or ""))
+        parecido = len(kf) >= _MIN_LONGITUD_FUZZY and any(
+            k and SequenceMatcher(None, kf, k).ratio() >= umbral for k in claves
+        )
+        if parecido:
+            saltados.append(c)
+            continue
+        elegidos.append(c)
+        claves.append(kf)
+    for c in saltados:
+        if len(elegidos) >= maximo:
+            break
+        elegidos.append(c)
+    return elegidos
 
 
 def _frescura(ultimo_visto: str, *, ahora: datetime | None = None) -> float:

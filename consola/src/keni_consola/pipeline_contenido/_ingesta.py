@@ -291,20 +291,34 @@ def _nota_de_cluster(titulo: str, resumen: str, enlaces: list[str]) -> str:
 
 
 def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
-    """Top-N historias (`estado='nuevo'`) de la marca por SCORE para promover a temas. Best-effort.
+    """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con DIVERSIDAD. Best-effort.
 
     Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
     score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
     —no un tema por cada item RSS—, que es lo que frena el volumen y respeta la jerarquización.
+
+    DIVERSIDAD (MMR suave): se sobremuestrea el top y `clustering.seleccionar_diversos` salta
+    las historias cuyo título es casi idéntico (ratio fuzzy ≥ `KENI_PROMOVER_DIVERSIDAD_UMBRAL`,
+    def 0.80) a una ya elegida en este barrido, para que un macro-tema no se coma todas las
+    plazas. Suave: si faltan plazas se rellenan con las saltadas (nunca devuelve menos). Con el
+    umbral a 0 se desactiva (top-N puro, comportamiento anterior).
     """
+    from .. import config
+    from ..dominio import clustering
+
+    umbral = config.promover_diversidad_umbral()
+    # Sobremuestra acotada: suficientes candidatas para diversificar sin recorrer el pool entero.
+    limite = maximo if umbral <= 0 else max(maximo * 4, maximo + 8)
     try:
         clusters, _total = repos.listar_noticia_clusters(
-            marca=marca, estado="nuevo", limite=maximo
+            marca=marca, estado="nuevo", limite=limite
         )
     except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no promueve nada
         _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
         return []
-    return clusters
+    if umbral <= 0:
+        return clusters[:maximo]
+    return clustering.seleccionar_diversos(clusters, maximo=maximo, umbral=umbral)
 
 
 def crear_tema_de_cluster(

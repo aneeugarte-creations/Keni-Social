@@ -43,6 +43,23 @@ def test_clasifica_nota_menor_como_baja_sin_cambio():
     assert clasif["nivel"] in ("baja", "media")
 
 
+def test_coincide_por_limite_de_palabra_no_subcadena():
+    """La variante "new " (con espacio) ya no casa "news" por subcadena; los prefijos
+    intencionados ("penaliz") siguen casando sus derivados."""
+    assert algoritmos._coincide(algoritmos._normalizar("breaking news today"), ("new ",)) is False
+    assert algoritmos._coincide(algoritmos._normalizar("a new feature arrives"), ("new ",)) is True
+    assert algoritmos._coincide(algoritmos._normalizar("penalización confirmada"), ("penaliz",)) is True
+    assert algoritmos._coincide(algoritmos._normalizar("crank it up"), ("rank ",)) is False
+
+
+def test_titular_news_no_dispara_senal_de_cambio():
+    # "News" en el titular no debe contar como la señal "new " (cambio): antes inflaba la
+    # importancia de TODO agregador de noticias.
+    item = {"titulo": "Platform news roundup", "resumen": "weekly industry summary"}
+    clasif = algoritmos.clasificar(item, _fuente())
+    assert "cambio" not in clasif["senales"]
+
+
 def test_fuente_oficial_pesa_mas_que_agregador():
     item = {"titulo": "New update", "resumen": "feature"}
     base = algoritmos.clasificar(item, _fuente(tipo="agregador"))["importancia"]

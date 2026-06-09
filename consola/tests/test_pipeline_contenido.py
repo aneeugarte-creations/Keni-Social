@@ -665,3 +665,43 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
     monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: False)
     assert pc.ejecutar_arte() == []
+
+
+# --------------------------------------------------------------------------- #
+# Diversidad en la promoción (MMR suave) + estado protegido en el upsert       #
+# --------------------------------------------------------------------------- #
+
+
+def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
+    """Un macro-tema (dos historias casi idénticas) no se come todas las plazas del barrido."""
+    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9)
+    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8)
+    _sembrar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5)
+
+    elegidos = pc.clusters_para_promover("unotv", maximo=2)
+
+    assert [c["id"] for c in elegidos] == ["dup1", "otra"]  # el casi-duplicado cede su plaza
+
+
+def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
+    """Si todo el pool es el mismo macro-tema, se rellena igual (nunca devuelve menos)."""
+    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9)
+    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8)
+    elegidos = pc.clusters_para_promover("unotv", maximo=2)
+    assert {c["id"] for c in elegidos} == {"dup1", "dup2"}
+
+
+def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
+    """Anti-TOCTOU daemon↔pipeline: un recalc del daemon (upsert con datos stale) NO puede
+    devolver a 'nuevo' una historia ya promovida ni borrar su enlace al tema."""
+    _sembrar_cluster("c1", titulo="Historia promovida", score=0.7)
+    repos.actualizar_noticia_cluster("c1", estado="usado", contenido_id="tema-77")
+
+    # El daemon recalcula con una foto VIEJA (estado 'nuevo', sin contenido_id) y upsertea.
+    stale = dict(repos.obtener_noticia_cluster("c1"), estado="nuevo", contenido_id="", score=0.9)
+    repos.upsert_noticia_cluster(stale)
+
+    tras = repos.obtener_noticia_cluster("c1")
+    assert tras["estado"] == "usado"          # el estado promovido NO se revierte
+    assert tras["contenido_id"] == "tema-77"  # el enlace al tema NO se pierde
+    assert tras["score"] == 0.9               # los agregados sí se actualizan

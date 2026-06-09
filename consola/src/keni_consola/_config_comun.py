@@ -139,13 +139,9 @@ ENV_MAQUINA = "KENI_MAQUINA"
 ENV_INVESTIGADOR = "KENI_INVESTIGADOR"
 ENV_INVESTIGADOR_INTERVALO_HORAS = "KENI_INVESTIGADOR_INTERVALO_HORAS"
 
-# Loop de aprendizaje (Fase 5): el score de priorizacion tiene en cuenta lo que
-# HISTORICAMENTE rinde por marca (engagement de la fachada de metricas). Gateado OFF por
-# defecto (conservador): sin el flag, la lista del dia ordena EXACTAMENTE como hoy. Con el
-# flag, las piezas de marcas que rinden mas reciben un pequeño bonus de score. Es ADITIVO y
-# DEGRADABLE: si las metricas no estan disponibles, se omite sin romper (vuelve al score base).
-ENV_PRIORIZA_METRICAS = "KENI_PRIORIZA_METRICAS"
-ENV_PRIORIZA_METRICAS_RANGO = "KENI_PRIORIZA_METRICAS_RANGO"
+# (El antiguo KENI_PRIORIZA_METRICAS / _RANGO del "loop de aprendizaje Fase 5" se RETIRO:
+# nunca tuvo llamador productivo. La señal de metricas en el ranking vive ahora en
+# KENI_RENDIMIENTO_RANKING + KENI_SCORE_PESO_RENDIMIENTO, sobre las historias del pool.)
 
 # Auto-refresco de Algoritmos (inteligencia de plataforma): ingiere periodicamente los
 # feeds de blogs oficiales/agregadores. Gateado OFF por defecto (la pagina Algoritmos tiene
@@ -795,8 +791,6 @@ __all__ = [
     'ENV_PIPELINE_AUTOGEN_MAX',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
-    'ENV_PRIORIZA_METRICAS',
-    'ENV_PRIORIZA_METRICAS_RANGO',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VALIDACION',

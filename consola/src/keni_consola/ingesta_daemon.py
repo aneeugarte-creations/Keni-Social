@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -115,19 +116,29 @@ def _sondear_feed(
 
 def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
     """Keywords de relevancia de la marca: perfil editorial (Haiku) si está activo y existe; si no,
-    el vocabulario semilla de `relevancia_marca`. Centraliza la elección perfil-vs-semilla."""
-    if perfil_activo and marca:
+    el vocabulario semilla de `relevancia_marca`. Centraliza la elección perfil-vs-semilla.
+
+    Respeta el toggle POR MARCA de `KENI_PIPELINE_RANKING`: una marca con el Ranking apagado
+    vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado (antes el toggle solo
+    frenaba el refresco, pero el perfil viejo seguía mandando en el score).
+    """
+    if (
+        perfil_activo and marca
+        and not config.marca_apagada(config.ENV_PIPELINE_RANKING, marca)
+    ):
         perfil = perfil_editorial.palabras(marca)
         if perfil:
             return perfil
     return relevancia_marca.palabras_de_marca(marca or None)
 
 
-def _rendimiento_top_lineas() -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:
-    """Precalcula (1 vez por barrido) las líneas TOP por engagement y el catálogo de líneas.
+def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:
+    """Precalcula (1 vez por marca y barrido) las líneas TOP por engagement DE ESA MARCA.
 
-    Gateado por `KENI_RENDIMIENTO_RANKING` (def OFF). Best-effort: ante cualquier fallo (sin
-    métricas, sin Metricool) devuelve vacío y la señal queda inerte. Devuelve
+    Por MARCA (antes era global: las líneas top se calculaban con las métricas de TODAS las
+    marcas, y el éxito de una marca premiaba historias de otra). Gateado por
+    `KENI_RENDIMIENTO_RANKING` (def OFF). Best-effort: ante cualquier fallo (sin métricas, sin
+    Metricool) devuelve vacío y la señal queda inerte. Devuelve
     `(nombres_top, {etiqueta_id: nombre}, etiquetas_vertical)`.
     """
     if not config.rendimiento_ranking_activo():
@@ -136,7 +147,9 @@ def _rendimiento_top_lineas() -> tuple[set[str], dict[str, str], list[dict[str, 
         from . import metricas_linea
         from .dominio import rendimiento_tema
 
-        data = metricas_linea.lineas_y_origenes("mes", None, None)
+        data = metricas_linea.lineas_y_origenes(
+            "mes", marca or None, marcas.id_metricas_de(marca) if marca else None
+        )
         top = rendimiento_tema.lineas_top(
             data.get("lineas", []),
             minimo_piezas=config.rendimiento_min_piezas(),
@@ -197,11 +210,20 @@ def paso_clustering() -> dict[str, Any]:
     Incremental: NO re-cluster el archivo entero. Carga (1) los clusters cuya `ultimo_visto`
     está en la ventana (`KENI_CLUSTER_VENTANA_H`) y (2) hasta `_CLUSTER_BATCH` items recientes
     sin `cluster_id`, en orden cronológico. Para cada item: lo une al cluster reciente que casa
-    (misma url canónica o título fuzzy ≥ `KENI_CLUSTER_UMBRAL`) o crea uno nuevo. Al final,
-    recalcula y `upsert`ea SOLO los clusters tocados (puntuándolos con su vocabulario de marca).
+    (misma url canónica o título fuzzy ≥ `KENI_CLUSTER_UMBRAL`) o crea uno nuevo. La decisión
+    usa `clustering.Asignador` (claves fuzzy precomputadas + blocking por tokens: O(items ×
+    candidatos), no O(items × clusters)). Las asignaciones se escriben en LOTE (un UPDATE por
+    cluster tocado, no uno por item). Al final, recalcula y `upsert`ea SOLO los clusters tocados
+    (puntuándolos con su vocabulario de marca; si la marca dominante queda VACÍA —historias
+    solo-Trends/agencias— se intenta el encaje por vocabulario de cada marca).
 
-    Devuelve `{items, clusters_nuevos, clusters_tocados}`. Un fallo de un item se loguea y no
-    aborta el paso. PURA la decisión (`clustering.asignar`); aquí solo orquesta I/O.
+    Durabilidad: un cluster NUEVO se persiste (stub) ANTES de asignarle items, así un proceso
+    que muera a mitad no deja items apuntando a un cluster que solo existía en memoria; además,
+    al inicio se REPARAN los items con `cluster_id` colgante de barridos anteriores.
+
+    Devuelve `{items, clusters_nuevos, clusters_tocados, clusters_ventana}` (`clusters_ventana`
+    = los clusters de la ventana ya actualizados, para que el barrido los REUTILICE en la
+    fusión/re-score sin re-leer la BD). Un fallo de un item se loguea y no aborta el paso.
     """
     ventana_h = config.cluster_ventana_h()
     umbral = config.cluster_umbral()
@@ -212,8 +234,18 @@ def paso_clustering() -> dict[str, Any]:
     perfil_activo = config.perfil_editorial_activo()  # relevancia desde la línea editorial (Haiku)
     perfil_ttl = config.perfil_editorial_ttl_horas()
     perfil_refrescadas: set[str] = set()  # 1 refresco por marca por barrido (Haiku acotado)
-    # Señal de RENDIMIENTO (Fase 2c, gateada): líneas top por engagement + clasificación léxica.
-    top_lineas, vert_id_a_nombre, vert_etiquetas = _rendimiento_top_lineas()
+    # Señal de RENDIMIENTO (Fase 2c, gateada): líneas top por engagement, POR MARCA y perezoso.
+    rendimiento_activo = config.rendimiento_ranking_activo()
+    rend_cache: dict[str, tuple[set[str], dict[str, str], list[dict[str, Any]]]] = {}
+
+    # REPARACIÓN: items con `cluster_id` colgante (cluster que ya no existe, p. ej. proceso
+    # muerto a mitad de un barrido antiguo) vuelven a '' y se re-clusterizan. Best-effort.
+    try:
+        reparados = repos.limpiar_items_cluster_colgante()
+        if reparados:
+            _log.info("ingesta_daemon: %d item(s) con cluster colgante reparados.", reparados)
+    except Exception:  # noqa: BLE001 -- la reparación es best-effort; nunca aborta el paso
+        _log.warning("ingesta_daemon: no se pudieron reparar items colgantes.", exc_info=True)
 
     ahora = datetime.now(UTC)
     desde = (ahora - timedelta(hours=ventana_h)).isoformat()
@@ -225,16 +257,19 @@ def paso_clustering() -> dict[str, Any]:
     # MISMO barrido se unan entre sí sin re-consultar la BD). id -> dict-resumen del cluster.
     recientes = repos.clusters_recientes(ventana_h)
     indice: dict[str, dict[str, Any]] = {c["id"]: c for c in recientes}
+    asignador = clustering.Asignador(recientes, umbral=umbral)
     tocados: set[str] = set()
+    asignaciones: dict[str, list[str]] = {}  # cluster_id -> item_ids (escritura en lote)
     nuevos = 0
 
     for item in pendientes:
         try:
-            destino = clustering.asignar(item, list(indice.values()), umbral=umbral)
+            destino = asignador.asignar(item)
             if destino is None:
                 # Cluster nuevo: lo funda este item (un cluster en blanco con su identidad).
+                # Se PERSISTE el stub ANTES de asignarle items (durabilidad ante caída).
                 destino = uuid.uuid4().hex[:12]
-                indice[destino] = {
+                stub = {
                     "id": destino,
                     "titulo": item.get("titulo") or "",
                     "clave": clustering.clave_cluster(item),
@@ -242,11 +277,26 @@ def paso_clustering() -> dict[str, Any]:
                     "contenido_id": "",
                     "creado": "",
                 }
+                repos.upsert_noticia_cluster(stub)
+                indice[destino] = stub
+                asignador.agregar(stub)
                 nuevos += 1
-            repos.asignar_cluster_item(item["id"], destino)
+            asignaciones.setdefault(destino, []).append(item["id"])
             tocados.add(destino)
         except Exception:  # noqa: BLE001 -- un item problemático no aborta el paso
             _log.exception("ingesta_daemon: fallo al clusterizar el item %s.", item.get("id"))
+
+    # Asignación en LOTE: un UPDATE por cluster tocado (antes, uno por item: ~500 round-trips).
+    try:
+        repos.asignar_cluster_items(asignaciones)
+    except Exception:  # noqa: BLE001 -- si el lote falla, los items siguen sin cluster (reintento próximo tick)
+        _log.exception("ingesta_daemon: fallo al asignar items a clusters (lote).")
+        return {
+            "items": len(pendientes), "clusters_nuevos": nuevos, "clusters_tocados": 0,
+            "clusters_ventana": list(indice.values()),
+        }
+
+    vocabularios: dict[str, frozenset[str]] | None = None  # perezoso (encaje sin marca)
 
     # Recalcula + puntúa SOLO los clusters tocados, leyendo sus items ya persistidos.
     for cid in tocados:
@@ -263,6 +313,18 @@ def paso_clustering() -> dict[str, Any]:
                 fuentes_baja_confianza=fuentes_baja,
             )
             marca_c = recalc.get("marca") or ""
+            if not marca_c:
+                # Encaje por VOCABULARIO: una historia formada SOLO por items sin marca
+                # (Trends/agencias) quedaba con marca='' e INVISIBLE para la promoción por
+                # marca. Se le asigna la marca cuyo vocabulario mejor casa (sobre umbral);
+                # si ninguna pasa, queda sin marca como antes (honesto).
+                if vocabularios is None:
+                    vocabularios = {
+                        m: _palabras_relevancia(m, perfil_activo) for m in marcas.ids()
+                    }
+                marca_c = clustering.marca_por_vocabulario(recalc, vocabularios)
+                if marca_c:
+                    recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
             # el toggle "Ranking"); si no, semilla.
             if (
@@ -280,20 +342,113 @@ def paso_clustering() -> dict[str, Any]:
                     ),
                 )
             palabras = _palabras_relevancia(marca_c, perfil_activo)
-            # Señal de rendimiento (Fase 2c): 1 si la historia cae en una línea top por engagement.
-            if top_lineas:
-                recalc["bonus_rendimiento"] = _rendimiento_bonus(
-                    recalc, top_lineas, vert_id_a_nombre, vert_etiquetas
-                )
+            # Señal de rendimiento (Fase 2c): 1 si la historia cae en una línea top POR MARCA.
+            if rendimiento_activo and marca_c:
+                if marca_c not in rend_cache:
+                    rend_cache[marca_c] = _rendimiento_top_lineas(marca_c)
+                top_lineas, vert_id_a_nombre, vert_etiquetas = rend_cache[marca_c]
+                if top_lineas:
+                    recalc["bonus_rendimiento"] = _rendimiento_bonus(
+                        recalc, top_lineas, vert_id_a_nombre, vert_etiquetas
+                    )
             score, _razon = clustering.puntuar(
                 recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
             )
             recalc["score"] = score
-            repos.upsert_noticia_cluster(recalc)
+            indice[cid] = repos.upsert_noticia_cluster(recalc)
         except Exception:  # noqa: BLE001 -- recalcular un cluster no aborta el paso
             _log.exception("ingesta_daemon: fallo al recalcular el cluster %s.", cid)
 
-    return {"items": len(pendientes), "clusters_nuevos": nuevos, "clusters_tocados": len(tocados)}
+    return {
+        "items": len(pendientes),
+        "clusters_nuevos": nuevos,
+        "clusters_tocados": len(tocados),
+        "clusters_ventana": list(indice.values()),
+    }
+
+
+# Re-score periódico de la ventana: como MÍNIMO cada tantos segundos se repuntúa la ventana
+# completa, aunque no entren items nuevos (la frescura decae con el reloj).
+_RESCORE_INTERVALO_SEG = 900.0
+_ultimo_rescore = 0.0  # time.monotonic() de la última pasada completada
+
+
+def paso_rescore(
+    clusters_ventana: list[dict[str, Any]] | None = None, *, forzar: bool = False
+) -> dict[str, Any]:
+    """Re-puntúa periódicamente las historias `nuevo` de la ventana (score que ENVEJECE).
+
+    DECISIÓN (score congelado): la FRESCURA (peso 0.25) solo se evaluaba al re-puntuar — es
+    decir, cuando un item nuevo tocaba el cluster — y el score quedaba PERSISTIDO; el listado,
+    la promoción CI y el GC ordenan/filtran por ese score obsoleto, así que una historia de
+    hace 3 días podía outrankear a las nuevas para siempre. De las dos opciones (A: re-score
+    periódico de la ventana en el barrido; B: persistir `score_base` sin frescura y computar
+    `score_base + w·frescura(ultimo_visto, now())` en cada ORDER BY) elegimos la A: `puntuar`
+    es pura, los clusters de la ventana ya se cargan por barrido, y el score persistido sigue
+    siendo LA verdad única que leen UI/promoción/GC sin tocar esquema ni consultas.
+
+    Throttle: como mucho una pasada por `_RESCORE_INTERVALO_SEG` (la frescura decae despacio).
+    Solo escribe los scores que CAMBIAN (≥ 0.001), en una sola conexión. Best-effort.
+    """
+    global _ultimo_rescore
+    ahora_mono = time.monotonic()
+    if not forzar and _ultimo_rescore and (ahora_mono - _ultimo_rescore) < _RESCORE_INTERVALO_SEG:
+        return {"revisados": 0, "actualizados": 0}
+    try:
+        clusters = (
+            clusters_ventana
+            if clusters_ventana is not None
+            else repos.clusters_recientes(config.cluster_ventana_h())
+        )
+    except Exception:  # noqa: BLE001 -- sin pool legible no se re-puntúa nada (no actualiza el throttle)
+        _log.warning("ingesta_daemon: no se pudo leer la ventana para el re-score.", exc_info=True)
+        return {"revisados": 0, "actualizados": 0}
+
+    pesos = config.score_pesos()
+    perfil_activo = config.perfil_editorial_activo()
+    rendimiento_activo = config.rendimiento_ranking_activo()
+    ahora = datetime.now(UTC)
+    palabras_cache: dict[str, frozenset[str]] = {}
+    rend_cache: dict[str, tuple[set[str], dict[str, str], list[dict[str, Any]]]] = {}
+    cambios: dict[str, float] = {}
+    revisados = 0
+    for c in clusters:
+        if (c.get("estado") or "nuevo") != "nuevo":
+            continue  # usados/descartados ya no compiten en el ranking
+        revisados += 1
+        try:
+            marca_c = str(c.get("marca") or "")
+            if marca_c not in palabras_cache:
+                palabras_cache[marca_c] = _palabras_relevancia(marca_c, perfil_activo)
+            cl = dict(c)
+            # `bonus_rendimiento` no se persiste: se recomputa si la señal está activa.
+            if rendimiento_activo and marca_c:
+                if marca_c not in rend_cache:
+                    rend_cache[marca_c] = _rendimiento_top_lineas(marca_c)
+                top_lineas, vert_id_a_nombre, vert_etiquetas = rend_cache[marca_c]
+                if top_lineas:
+                    cl["bonus_rendimiento"] = _rendimiento_bonus(
+                        cl, top_lineas, vert_id_a_nombre, vert_etiquetas
+                    )
+            score, _razon = clustering.puntuar(
+                cl, palabras_marca=palabras_cache[marca_c], ahora=ahora, pesos=pesos
+            )
+            if abs(score - float(c.get("score") or 0.0)) >= 0.001:
+                cambios[str(c["id"])] = score
+        except Exception:  # noqa: BLE001 -- una historia problemática no aborta la pasada
+            _log.exception("ingesta_daemon: fallo al re-puntuar el cluster %s.", c.get("id"))
+
+    actualizados = 0
+    if cambios:
+        try:
+            actualizados = repos.actualizar_scores_clusters(cambios)
+        except Exception:  # noqa: BLE001 -- persistir el re-score es best-effort
+            _log.exception("ingesta_daemon: fallo al persistir el re-score de la ventana.")
+            return {"revisados": revisados, "actualizados": 0}
+    _ultimo_rescore = ahora_mono
+    if actualizados:
+        _log.info("ingesta_daemon: re-score de la ventana: %d historia(s) repuntuadas.", actualizados)
+    return {"revisados": revisados, "actualizados": actualizados}
 
 
 def _fusionar_grupo(
@@ -311,19 +466,40 @@ def _fusionar_grupo(
 
     Reasigna los items de las absorbidas a la canónica, borra las absorbidas (vacías) y recalcula
     + repuntúa la canónica (n_fuentes/score reales). Devuelve True si fusionó (≥2 historias).
+
+    Salvaguardas:
+      - ANTI-TOCTOU: antes de absorber, RE-LEE cada cluster absorbible; si entre la lectura del
+        lote y ahora adquirió `contenido_id` o dejó de ser `nuevo` (el pipeline lo promovió),
+        NO se absorbe (se conserva intacto).
+      - SIN HUÉRFANOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
+        tope de 500 dejaba items colgando del cluster borrado si había más).
     """
     clusters = [por_id[i] for i in ids if i in por_id]
     if len(clusters) < 2:
         return False
     canon = max(clusters, key=lambda c: (int(c.get("n_fuentes") or 0), float(c.get("score") or 0.0)))
     canon_id = str(canon["id"])
+    absorbidas = 0
     for c in clusters:
         cid = str(c["id"])
         if cid == canon_id:
             continue
-        for it in repos.items_de_cluster(cid, limite=500):
-            repos.asignar_cluster_item(it["id"], canon_id)
+        # Re-verificación anti-TOCTOU: el absorbido pudo ser promovido entre lectura y fusión.
+        actual = repos.obtener_noticia_cluster(cid)
+        if actual is None:
+            continue
+        if (actual.get("contenido_id") or "") or (actual.get("estado") or "nuevo") != "nuevo":
+            continue
+        # Reasigna TODOS los items, por lotes, hasta vaciar (cota dura de seguridad: 100 lotes).
+        for _ in range(100):
+            lote = repos.items_de_cluster(cid, limite=500)
+            if not lote:
+                break
+            repos.asignar_cluster_items({canon_id: [it["id"] for it in lote]})
         repos.borrar_noticia_cluster(cid)
+        absorbidas += 1
+    if not absorbidas:
+        return False
     items = repos.items_de_cluster(canon_id, limite=500)
     if not items:
         return False
@@ -340,12 +516,19 @@ def _fusionar_grupo(
     return True
 
 
-def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) -> dict[str, Any]:
+def paso_fusion_semantica(
+    *,
+    ejecutor: fusion_semantica.Ejecutor | None = None,
+    recientes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Funde con IA (Haiku) las historias del MISMO evento, por marca. Gateado `KENI_PIPELINE_FUSION`.
 
     Por marca, manda hasta `KENI_FUSION_SEMANTICA_MAX` historias `nuevo` recientes a Haiku para que
     agrupe las del mismo acontecimiento, y funde cada grupo (`_fusionar_grupo`). Best-effort: un
     fallo por marca/grupo se loguea y no aborta el paso. Devuelve `{grupos, fusionadas}`.
+
+    `recientes` (opcional): los clusters de la ventana YA cargados por el paso de clustering del
+    MISMO barrido (evita re-leer la BD). None = leer de `repos.clusters_recientes`.
     """
     if not config.fusion_semantica_activa():
         return {"grupos": 0, "fusionadas": 0}
@@ -358,11 +541,14 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
     perfil_activo = config.perfil_editorial_activo()
     ahora = datetime.now(UTC)
 
-    try:
-        recientes_todas = repos.clusters_recientes(ventana_h)
-    except Exception:  # noqa: BLE001 -- sin pool legible, no se funde nada
-        _log.exception("ingesta_daemon: no se pudieron leer historias para fusión.")
-        return {"grupos": 0, "fusionadas": 0}
+    if recientes is not None:
+        recientes_todas = recientes
+    else:
+        try:
+            recientes_todas = repos.clusters_recientes(ventana_h)
+        except Exception:  # noqa: BLE001 -- sin pool legible, no se funde nada
+            _log.exception("ingesta_daemon: no se pudieron leer historias para fusión.")
+            return {"grupos": 0, "fusionadas": 0}
 
     por_marca: dict[str, list[dict[str, Any]]] = {}
     for c in recientes_todas:
@@ -531,15 +717,19 @@ def ejecutar_barrido() -> dict[str, Any]:
         # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
         # con marca vacía es False. Best-effort: no toca clustering/traducción (pasos globales).
         feeds = [f for f in feeds if not config.marca_apagada(config.ENV_PIPELINE_SELECCION, str(f.get("marca") or ""))]
-        if not feeds:
-            return {"feeds": 0, "items_nuevos": 0, "errores": 0}
 
+        # OJO: sin feeds RSS vencidos el barrido NO termina aquí: los pasos post-RSS (agencias,
+        # clustering, fusión, re-score, traducción) corren IGUAL. Antes un `return` temprano
+        # dejaba los items de Trends/agencias sin clusterizar indefinidamente si ningún RSS
+        # estaba vencido (Trends inserta por su propio daemon, fuera de este planificador).
         max_items = config.ingesta_max_items()
-        resultados = http_feed.mapear_en_paralelo(
-            lambda f: _sondear_feed(f, max_items=max_items),
-            feeds,
-            max_workers=config.ingesta_workers(),
-        )
+        resultados = []
+        if feeds:
+            resultados = http_feed.mapear_en_paralelo(
+                lambda f: _sondear_feed(f, max_items=max_items),
+                feeds,
+                max_workers=config.ingesta_workers(),
+            )
 
         max_errores = config.ingesta_max_errores()
         items_nuevos = 0
@@ -616,11 +806,21 @@ def ejecutar_barrido() -> dict[str, Any]:
             cluster_resumen = paso_clustering()
         except Exception:  # noqa: BLE001 -- el clustering es aditivo; nunca tumba la ingesta
             _log.exception("ingesta_daemon: fallo en el paso de clustering.")
+        # Ventana ya cargada/actualizada por el clustering (si la hay): se REUTILIZA en el
+        # re-score y la fusión del mismo barrido, sin re-leer la BD.
+        clusters_ventana = cluster_resumen.pop("clusters_ventana", None)
+
+        # Paso de RE-SCORE (score que envejece): repuntúa periódicamente la ventana para que
+        # la frescura DECAIGA aunque no entren items nuevos (ver `paso_rescore`). Best-effort.
+        try:
+            paso_rescore(clusters_ventana)
+        except Exception:  # noqa: BLE001 -- el re-score es aditivo; nunca tumba la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de re-score.")
 
         # Paso de FUSIÓN SEMÁNTICA (Fase 2b): funde con Haiku las historias del mismo evento que el
         # léxico no unió (titulares distintos). Gateado `KENI_PIPELINE_FUSION` (def OFF). Best-effort.
         try:
-            paso_fusion_semantica()
+            paso_fusion_semantica(recientes=clusters_ventana)
         except Exception:  # noqa: BLE001 -- la fusión es aditiva; nunca tumba la ingesta
             _log.exception("ingesta_daemon: fallo en el paso de fusión semántica.")
 

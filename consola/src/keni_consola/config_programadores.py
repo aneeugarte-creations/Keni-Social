@@ -22,8 +22,6 @@ from ._config_comun import (
     ENV_METRICAS_PIEZAS_REFRESCO_HORAS,
     ENV_METRICAS_REFRESCO_HORAS,
     ENV_MIN_APROBACIONES,
-    ENV_PRIORIZA_METRICAS,
-    ENV_PRIORIZA_METRICAS_RANGO,
     ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
     ENV_SUGERENCIAS_EDITORIALES,
@@ -241,25 +239,6 @@ def investigador_activo() -> bool:
 def investigador_intervalo_horas() -> int:
     """Cada cuantas horas barre el Investigador (`KENI_INVESTIGADOR_INTERVALO_HORAS`, def 6, min 1)."""
     return _entero(ENV_INVESTIGADOR_INTERVALO_HORAS, INVESTIGADOR_INTERVALO_HORAS_DEF, minimo=1)
-
-
-def prioriza_metricas_activo() -> bool:
-    """True si el score de priorizacion debe usar las metricas historicas (`KENI_PRIORIZA_METRICAS`).
-
-    Def OFF (conservador): la lista del dia ordena EXACTAMENTE como hoy. Con el flag a un valor
-    afirmativo, las piezas de marcas que historicamente RINDEN mas reciben un pequeño bonus de
-    score. Aditivo y DEGRADABLE: si la fachada de metricas no esta disponible, se omite sin romper.
-    """
-    return _crudo(ENV_PRIORIZA_METRICAS).lower() in _VERDADEROS
-
-
-def prioriza_metricas_rango() -> str:
-    """Rango de metricas para el bonus de priorizacion (`KENI_PRIORIZA_METRICAS_RANGO`, def "mes").
-
-    Es uno de los rangos que entiende la fachada de metricas ("semana"/"mes"/...). Si el valor
-    es invalido, el llamante lo trata best-effort (degrada a sin bonus); no se valida aqui.
-    """
-    return _crudo(ENV_PRIORIZA_METRICAS_RANGO) or "mes"
 
 
 def algoritmos_auto_activo() -> bool:

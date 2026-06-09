@@ -278,6 +278,18 @@ def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
     return db.asignar_cluster_item(item_id, cluster_id)
 
 
+def asignar_cluster_items(asignaciones: dict[str, list[str]]) -> None:
+    return db.asignar_cluster_items(asignaciones)
+
+
+def limpiar_items_cluster_colgante() -> int:
+    return db.limpiar_items_cluster_colgante()
+
+
+def actualizar_scores_clusters(scores: dict[str, float]) -> int:
+    return db.actualizar_scores_clusters(scores)
+
+
 def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
     return db.marcar_items_cluster_usados(cluster_id, contenido_id)
 

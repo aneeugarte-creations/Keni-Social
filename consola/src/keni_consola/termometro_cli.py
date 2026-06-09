@@ -111,28 +111,41 @@ def reunir_noticias_rss(*, marca: str = "", limite: int = _MAX_NOTICIAS_RSS) -> 
     Toma los feeds `activo`; si hay `marca`, se queda con los de esa marca o sin marca
     (generales/internacionales). Aplica los filtros incluir/excluir de cada feed. Un
     feed que falla se OMITE (no rompe el cron). Devuelve hasta `limite` lineas.
+
+    ROUND-ROBIN entre fuentes: se toma 1 titular de cada feed por turnos hasta llenar el
+    limite (antes el primer feed con muchos items se comia el cupo global y el termometro
+    salia de UNA sola fuente, sin la cobertura multi-region que pide la galeria).
     """
     fuentes = [f for f in repos.listar_fuentes_rss() if f.get("activo", True)]
     if marca:
         fuentes = [f for f in fuentes if f.get("marca") in ("", None, marca)]
-    lineas: list[str] = []
+    # 1) Lee y filtra los items de CADA fuente (best-effort por feed).
+    colas: list[list[str]] = []
     for fuente in fuentes:
-        if len(lineas) >= limite:
-            break
         try:
             items = rss.leer_items_fuente(fuente)
         except Exception:  # noqa: BLE001 -- un feed roto no debe tumbar el cron
             continue
         incluir = str(fuente.get("incluir", ""))
         excluir = str(fuente.get("excluir", ""))
-        for item in items:
+        cola = [
+            _formatear_item(item)
+            for item in items[:limite]
+            if str(item.get("titulo", "")).strip()
+            and rss.item_pasa_filtros(item, incluir, excluir)
+        ]
+        if cola:
+            colas.append(cola)
+    # 2) Intercala por turnos (1 titular por fuente y ronda) hasta el limite.
+    lineas: list[str] = []
+    ronda = 0
+    while len(lineas) < limite and any(ronda < len(c) for c in colas):
+        for cola in colas:
             if len(lineas) >= limite:
                 break
-            if not str(item.get("titulo", "")).strip():
-                continue
-            if not rss.item_pasa_filtros(item, incluir, excluir):
-                continue
-            lineas.append(_formatear_item(item))
+            if ronda < len(cola):
+                lineas.append(cola[ronda])
+        ronda += 1
     return "\n".join(lineas)
 
 

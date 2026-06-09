@@ -211,23 +211,63 @@ def _peso01(env_flag: str, defecto: float) -> float:
     return min(1.0, max(0.0, valor))
 
 
+# Peso AUTOMÁTICO de la señal de rendimiento cuando `KENI_RENDIMIENTO_RANKING` está ON pero
+# `KENI_SCORE_PESO_RENDIMIENTO` no se fijó explícitamente. Antes, encender el flag sin fijar el
+# peso podía dejar la señal multiplicada por cero (flag muerto). Con el auto-peso, los demás
+# pesos se RENORMALIZAN por (1 - auto) para que la combinación lineal siga sumando ~1.
+SCORE_PESO_RENDIMIENTO_AUTO = 0.10
+
+
 def score_pesos():
     """Pesos del algoritmo de ponderación del score de cluster, como `clustering.PesosScore`.
 
     Lee cada peso del store/env (clamp [0,1]; default = los de `clustering`). El daemon de ingesta
     inyecta el resultado en `clustering.puntuar` para que el equipo afine la jerarquización desde
     la consola sin tocar código. Import perezoso de `dominio.clustering` para evitar ciclos.
+
+    Señal de RENDIMIENTO (Fase 2c): si el flag `KENI_RENDIMIENTO_RANKING` está ON y el peso NO
+    se fijó explícitamente, se aplica `SCORE_PESO_RENDIMIENTO_AUTO` (0.10) renormalizando la
+    combinación lineal (corroboración/frescura/viralidad/marca × 0.90): encender el flag SIEMPRE
+    tiene efecto. Un peso explícito (store/env) manda y no renormaliza nada.
     """
     from .dominio.clustering import PesosScore
 
+    corroboracion = _peso01(ENV_SCORE_PESO_CORROBORACION, SCORE_PESO_CORROBORACION_DEF)
+    frescura = _peso01(ENV_SCORE_PESO_FRESCURA, SCORE_PESO_FRESCURA_DEF)
+    viralidad = _peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF)
+    marca = _peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF)
+    rendimiento = _peso01(ENV_SCORE_PESO_RENDIMIENTO, SCORE_PESO_RENDIMIENTO_DEF)
+    if rendimiento_ranking_activo() and not _crudo(ENV_SCORE_PESO_RENDIMIENTO).strip():
+        rendimiento = SCORE_PESO_RENDIMIENTO_AUTO
+        factor = 1.0 - rendimiento
+        corroboracion *= factor
+        frescura *= factor
+        viralidad *= factor
+        marca *= factor
     return PesosScore(
-        corroboracion=_peso01(ENV_SCORE_PESO_CORROBORACION, SCORE_PESO_CORROBORACION_DEF),
-        frescura=_peso01(ENV_SCORE_PESO_FRESCURA, SCORE_PESO_FRESCURA_DEF),
-        viralidad=_peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF),
-        marca=_peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF),
+        corroboracion=corroboracion,
+        frescura=frescura,
+        viralidad=viralidad,
+        marca=marca,
         breaking=_peso01(ENV_SCORE_BONUS_BREAKING, SCORE_BONUS_BREAKING_DEF),
-        rendimiento=_peso01(ENV_SCORE_PESO_RENDIMIENTO, SCORE_PESO_RENDIMIENTO_DEF),
+        rendimiento=rendimiento,
     )
+
+
+# Umbral de DIVERSIDAD de la promoción CI (MMR suave sobre el top-N de historias): dos títulos
+# con ratio fuzzy >= umbral se consideran el mismo macro-tema y el segundo cede su plaza (si
+# quedan plazas libres al final, se rellenan igual). 0 desactiva. Activado SUAVE por defecto.
+ENV_PROMOVER_DIVERSIDAD_UMBRAL = "KENI_PROMOVER_DIVERSIDAD_UMBRAL"
+PROMOVER_DIVERSIDAD_UMBRAL_DEF = 0.80
+
+
+def promover_diversidad_umbral() -> float:
+    """Umbral [0,1] de similitud de título para la selección DIVERSA de la promoción CI.
+
+    (`KENI_PROMOVER_DIVERSIDAD_UMBRAL`, def 0.80.) `0` desactiva la diversidad (top-N puro por
+    score). Valor inválido → def. Suave: nunca reduce el número de historias promovidas.
+    """
+    return _peso01(ENV_PROMOVER_DIVERSIDAD_UMBRAL, PROMOVER_DIVERSIDAD_UMBRAL_DEF)
 
 
 # --------------------------------------------------------------------------- #

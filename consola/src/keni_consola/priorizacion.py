@@ -90,14 +90,32 @@ def _fecha_iso(valor: object) -> date | None:
         return None
 
 
+# Tras cuantos dias de atraso un vencido DEJA de ser "lo mas urgente" y empieza a decaer:
+# una pieza con fecha vencida hace semanas ya no es urgente, es basura vieja que no debe
+# quedarse clavada arriba de la lista del dia para siempre.
+_VENCIDO_DIAS_PLENO = 7
+
+
 def peso_fecha(fecha_objetivo: object, hoy: date) -> int:
-    """Cuanto pesa la cercania de la fecha objetivo: vencido/hoy urge, lejano pesa poco."""
+    """Cuanto pesa la cercania de la fecha objetivo: vencido/hoy urge, lejano pesa poco.
+
+    Un vencido RECIENTE (hasta `_VENCIDO_DIAS_PLENO` dias) es lo mas urgente (150); a partir
+    de ahi DECAE por tramos (100 → 40 → 10): lo vencido hace semanas baja en vez de quedarse
+    arriba indefinidamente.
+    """
     f = _fecha_iso(fecha_objetivo)
     if f is None:
         return 0
     dias = (f - hoy).days
     if dias < 0:
-        return 150  # vencido: lo mas urgente
+        atraso = -dias
+        if atraso <= _VENCIDO_DIAS_PLENO:
+            return 150  # vencido reciente: lo mas urgente
+        if atraso <= 14:
+            return 100
+        if atraso <= 30:
+            return 40
+        return 10  # vencido hace mas de un mes: ya no urge, pesa como lo lejano
     if dias == 0:
         return 120  # hoy
     if dias <= 3:
@@ -124,44 +142,22 @@ def peso_frescura(creado: object, hoy: date) -> int:
     return 0
 
 
-# Tope del bonus por rendimiento historico de la marca (Fase 5). Acotado al MISMO orden que
-# la evergreen list / flujo: empuja lo que historicamente rinde, sin pisar al compromiso humano.
-BONUS_METRICAS_MAX = 80
-
-
-def peso_metricas(bonus_marca: object) -> int:
-    """Bonus por rendimiento historico de la marca, ya resuelto por el llamante. 0 si no hay.
-
-    El llamante pasa un numero (0..`BONUS_METRICAS_MAX`) que mide cuanto rinde la marca de la
-    pieza frente al resto (lo resuelve el llamante desde la fachada de metricas, o
-    None/0 si las metricas no estan). PURA: aqui solo se acota. Negativo/invalido => 0.
-    """
-    try:
-        valor = int(round(float(bonus_marca)))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0
-    if valor <= 0:
-        return 0
-    return min(valor, BONUS_METRICAS_MAX)
-
-
 def score_contenido(
     item: dict[str, Any],
     *,
     etiquetas: list[str] | None = None,
     hoy: date,
-    bonus_metricas: float | None = None,
 ) -> int:
     """Score de un contenido del tablero. `etiquetas` = NOMBRES (no ids) ya resueltos.
 
     Mayor score = mas arriba en la lista del dia. Determinista; depende solo de sus argumentos.
 
-    Fase 5 (loop de aprendizaje), ambos ADITIVOS y DEGRADABLES:
+    Fase 5 (loop de aprendizaje), ADITIVO y DEGRADABLE:
       - `senal_viralidad` del item (señal del Radar persistida): suma `peso_viralidad`. Ausente
         o 0 (la mayoria de piezas) => no cambia nada.
-      - `bonus_metricas` (rendimiento historico de la marca, ya resuelto por el llamante): suma
-        `peso_metricas`. None/0 (metricas no disponibles o flag OFF) => no cambia nada.
-    Asi una BD/entorno sin señal ni metricas puntua EXACTAMENTE como antes de la Fase 5.
+    (El antiguo `bonus_metricas` por marca se RETIRO: nunca tuvo un llamador productivo —
+    codigo muerto desde su introduccion. La señal de rendimiento por metricas vive hoy en el
+    ranking de historias del pool: `clustering.puntuar` + `KENI_RENDIMIENTO_RANKING`.)
     """
     etiquetas = etiquetas or []
     score = PESO_PRIORIDAD.get(item.get("prioridad") or "media", PESO_PRIORIDAD["media"])
@@ -169,7 +165,6 @@ def score_contenido(
     score += peso_fecha(item.get("fecha_objetivo") or "", hoy)
     score += peso_frescura(item.get("creado") or "", hoy)
     score += peso_viralidad(item.get("senal_viralidad"))
-    score += peso_metricas(bonus_metricas)
     if any(_norm(e) == ETIQUETA_COMPROMISO for e in etiquetas):
         score += BONUS_COMPROMISO
     if any(_norm(e) == ETIQUETA_EVERGREEN for e in etiquetas):
@@ -182,27 +177,20 @@ def ordenar_por_score(
     *,
     etiquetas_por_item: dict[str, list[str]] | None = None,
     hoy: date,
-    bonus_metricas_por_marca: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Devuelve `items` ordenados por score descendente (estable: empates conservan el orden).
 
     `etiquetas_por_item`: id de contenido -> lista de NOMBRES de etiqueta. `sorted` es estable,
     asi que dos items con el mismo score mantienen el orden de entrada (que ya viene del tablero
     por prioridad+fecha). No muta la lista de entrada.
-
-    `bonus_metricas_por_marca` (Fase 5, OPCIONAL): id de marca -> bonus de rendimiento historico
-    (lo resuelve el llamante desde la fachada de metricas). None o marca ausente => bonus 0 (la
-    pieza puntua como sin metricas). Aditivo y degradable.
     """
     etiquetas_por_item = etiquetas_por_item or {}
-    bonus_metricas_por_marca = bonus_metricas_por_marca or {}
     return sorted(
         items,
         key=lambda it: score_contenido(
             it,
             etiquetas=etiquetas_por_item.get(it.get("id", ""), []),
             hoy=hoy,
-            bonus_metricas=bonus_metricas_por_marca.get(it.get("marca") or ""),
         ),
         reverse=True,
     )
