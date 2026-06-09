@@ -1124,7 +1124,9 @@ def test_sesion_renueva_expiracion_con_uso(entorno):
         con.close()
     # Ya NO es la fecha 2030 forzada: el uso la reescribio a ~ahora + horas_sesion().
     assert despues != "2030-01-01T00:00:00+00:00"
-    esperada = datetime.now(UTC) + timedelta(hours=auth.horas_sesion())
+    # `expira` se guarda en el canon UTC-SIN-OFFSET (iso_utc): `despues` es naive. Comparamos
+    # contra un `esperada` tambien naive-UTC (no aware), o restar naive-aware reventaria.
+    esperada = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=auth.horas_sesion())
     obtenida = datetime.fromisoformat(despues)
     assert abs((obtenida - esperada).total_seconds()) < 60
 
