@@ -156,7 +156,6 @@ export function Lienzo({
     safeLeft,
     safeRight,
   });
-  const [rectSel, setRectSel] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [editando, setEditando] = useState<{ id: string; x: number; y: number; w: number; fontPx: number } | null>(null);
   const [textoEdit, setTextoEdit] = useState("");
 
@@ -191,31 +190,6 @@ export function Lienzo({
     tr.nodes(nodos);
     tr.getLayer()?.batchDraw();
   }, [seleccionMulti, documento, zoom, modoImagen]);
-
-  // Rect en pantalla que ENVUELVE la selección (para la barra flotante). Unión de las capas
-  // seleccionadas; recalcula al cambiar selección/documento/zoom.
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage || seleccionMulti.length === 0) {
-      setRectSel(null);
-      return;
-    }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const id of seleccionMulti) {
-      const nodo = stage.findOne<Konva.Node>(`#${id}`);
-      if (!nodo) continue;
-      const r = nodo.getClientRect();
-      minX = Math.min(minX, r.x);
-      minY = Math.min(minY, r.y);
-      maxX = Math.max(maxX, r.x + r.width);
-      maxY = Math.max(maxY, r.y + r.height);
-    }
-    if (minX === Infinity) {
-      setRectSel(null);
-      return;
-    }
-    setRectSel({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
-  }, [seleccionMulti, documento, zoom]);
 
   // Atajos de teclado (ignora si se está escribiendo en un input/textarea). Hook extraído.
   useAtajosTeclado({ store, setZoom, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte });
@@ -328,7 +302,16 @@ export function Lienzo({
 
   return (
     <div className="flex h-full w-full items-stretch gap-2">
-    <div ref={medirRef} className="flex min-w-0 flex-1 items-center justify-center overflow-hidden">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+    {/* Franja superior fija: aloja la barra de acciones ARRIBA de la imagen (fuera del lienzo),
+        en un sitio estable que NO sigue a la selección —igual que el raíl de zoom va a la derecha—.
+        La altura va reservada siempre para que el lienzo no se recoloque al aparecer/desaparecer. */}
+    <div className="flex h-9 shrink-0 items-center justify-center px-1">
+      {acciones.length > 0 && !arrastrando && !editando && !modoImagen && (
+        <BarraAcciones acciones={acciones} />
+      )}
+    </div>
+    <div ref={medirRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
     <div className="relative" style={{ width: baseFit * w, height: baseFit * h }}>
       <div
         ref={scrollRef}
@@ -443,11 +426,6 @@ export function Lienzo({
       {/* Banner de recorte (crop visual). */}
       {capaRecorte && <BannerRecorte onListo={onSalirRecorte} />}
 
-      {/* Barra de acciones flotante sobre la capa seleccionada. */}
-      {rectSel && !arrastrando && !editando && !modoImagen && (
-        <BarraAcciones acciones={acciones} rectSel={rectSel} />
-      )}
-
       {/* Edición de texto en línea. */}
       {editando && (
         <textarea
@@ -464,6 +442,7 @@ export function Lienzo({
         />
       )}
 
+    </div>
     </div>
     </div>
 
