@@ -4,7 +4,9 @@
 tablero de la Consola por HTTP a traves de `keni_tablero.cliente.ClienteConsola`.
 NO comparte codigo con la Consola: la unica cosa que los une es la FORMA de estos
 endpoints. Si alguien renombra/borra una de estas rutas en `api/contenido.py`, el
-MCP se rompe en silencio (no hay CI propio de mcp-tablero).
+MCP se rompe en silencio (sus propios tests —`mcp-tablero/tests`, que SI corren en
+CI via `.woodpecker/tests-python.yml`— mockean el HTTP, asi que no detectan un
+endpoint renombrado en la Consola).
 
 Este test es el guardarrail barato: falla AQUI, en la suite de la Consola, en el
 mismo commit que toca la ruta, recordando que hay un consumidor externo. Es puro
