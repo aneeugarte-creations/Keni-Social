@@ -72,7 +72,46 @@ def _item_a_dict(item: dict[str, Any]) -> dict[str, Any]:
 _MAX_ENLACES_HISTORIA = 8
 
 
-def _historia_a_dict(cluster: dict[str, Any], enlaces: list[dict[str, Any]]) -> dict[str, Any]:
+def _pieza_estado(estado: str, contenido_id: str, resumen: dict[str, str]) -> str:
+    """Estado REAL de la historia DE CARA AL FEED, derivado de la pieza (no solo del cluster).
+
+    El cluster `usado` significa "promovida a la máquina de contenido", NO "en el feed": la
+    pieza sale REAL en el feed solo cuando existe su fila `contenido_plataforma` CON copy. Para
+    que el badge no mienta, derivamos 5 estados:
+      - 'en_pool'    -> aún no promovida (cluster 'nuevo'),
+      - 'descartada' -> cluster 'descartado',
+      - 'en_cola'    -> promovida pero SIN pieza en el feed todavía (dedup, sin redes, o copy
+                        aún por encolar / etapa de copy detenida),
+      - 'generando'  -> pieza creada, copy en proceso (fila sin `copy` aún),
+      - 'en_feed'    -> pieza con copy: visible REAL en el feed.
+    `resumen` = mapa `contenido_id -> 'lista'|'generando'` de `repos.estado_pieza_por_contenido`.
+    """
+    if estado == "descartado":
+        return "descartada"
+    if estado != "usado":
+        return "en_pool"
+    pieza = resumen.get(contenido_id) if contenido_id else None
+    if pieza == "lista":
+        return "en_feed"
+    if pieza == "generando":
+        return "generando"
+    return "en_cola"
+
+
+def _pieza_estado_de(cluster: dict[str, Any]) -> str:
+    """`_pieza_estado` para UN cluster (un lookup); en listados usa la versión batch."""
+    cid = cluster.get("contenido_id") or ""
+    return _pieza_estado(
+        cluster.get("estado") or "nuevo", cid, repos.estado_pieza_por_contenido([cid])
+    )
+
+
+def _historia_a_dict(
+    cluster: dict[str, Any],
+    enlaces: list[dict[str, Any]],
+    *,
+    pieza_estado: str = "en_pool",
+) -> dict[str, Any]:
     """Serializa una historia (cluster) a la forma `Historia` (snake_case) del contrato.
 
     `enlaces` = hasta `_MAX_ENLACES_HISTORIA` items del cluster como fuentes corroborantes
@@ -136,6 +175,9 @@ def _historia_a_dict(cluster: dict[str, Any], enlaces: list[dict[str, Any]]) -> 
         "ultimo_visto": cluster.get("ultimo_visto") or "",
         "estado": cluster.get("estado") or "nuevo",
         "contenido_id": cluster.get("contenido_id") or "",
+        # Estado REAL de cara al feed (derivado de la pieza, no solo del cluster). El front
+        # pinta el badge con ESTE campo: nunca dice "En el feed" si la pieza no está.
+        "pieza_estado": pieza_estado,
         "enlaces": enlaces_pub,
     }
 
@@ -437,8 +479,18 @@ async def listar_historias(request: Request) -> Response:
         limite=limite,
         desplazamiento=desplazamiento,
     )
+    # Estado REAL de cara al feed: una sola query batch (evita N+1) para los temas enlazados.
+    resumen_pieza = repos.estado_pieza_por_contenido(
+        [c.get("contenido_id") or "" for c in clusters]
+    )
     historias = [
-        _historia_a_dict(c, repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA))
+        _historia_a_dict(
+            c,
+            repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
+            pieza_estado=_pieza_estado(
+                c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
+            ),
+        )
         for c in clusters
     ]
     return JSONResponse({"historias": historias, "total": total})
@@ -451,7 +503,7 @@ async def detalle_historia(request: Request) -> Response:
     if cluster is None:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
-    historia = _historia_a_dict(cluster, items)
+    historia = _historia_a_dict(cluster, items, pieza_estado=_pieza_estado_de(cluster))
     return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})
 
 
@@ -539,7 +591,12 @@ async def descartar_historia(request: Request) -> Response:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     cluster = repos.actualizar_noticia_cluster(cluster_id, estado="descartado")
     items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA) if cluster else []
-    return JSONResponse({"historia": _historia_a_dict(cluster, items) if cluster else None})
+    historia = (
+        _historia_a_dict(cluster, items, pieza_estado=_pieza_estado_de(cluster))
+        if cluster
+        else None
+    )
+    return JSONResponse({"historia": historia})
 
 
 RUTAS = [

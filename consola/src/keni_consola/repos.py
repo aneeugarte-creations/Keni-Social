@@ -96,6 +96,7 @@ from .repos_contenido import (  # noqa: F401
     crear_insumo_items,
     crear_insumo_lote,
     dias_con_insumos,
+    estado_pieza_por_contenido,
     etiquetas_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,

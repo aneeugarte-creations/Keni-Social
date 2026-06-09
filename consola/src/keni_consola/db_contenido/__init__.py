@@ -63,6 +63,7 @@ from ._plataforma import (
     actualizar_contenido_plataforma,
     borrar_contenido_plataforma,
     crear_contenido_plataforma,
+    estado_pieza_por_contenido,
     listar_contenido_plataforma,
     obtener_contenido_plataforma,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "_CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA",
     "_fila_a_contenido_plataforma",
     "crear_contenido_plataforma",
+    "estado_pieza_por_contenido",
     "listar_contenido_plataforma",
     "obtener_contenido_plataforma",
     "actualizar_contenido_plataforma",

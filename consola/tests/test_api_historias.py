@@ -127,6 +127,74 @@ def test_historias_estado_invalido_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# pieza_estado — transparencia del feed (el badge NO miente)                    #
+# Una historia 'usado' solo significa "promovida", NO "en el feed": la pieza sale REAL  #
+# en el feed cuando existe su fila contenido_plataforma CON copy. `pieza_estado` deriva  #
+# ese estado real para que la UI nunca diga "En el feed" si la pieza no está.            #
+# --------------------------------------------------------------------------- #
+
+
+def _usar_sin_pieza(cid):
+    """Enlaza el cluster a un `contenido` usado SIN filas de plataforma (no sale en el feed)."""
+    cont = repos.crear_contenido(clase="contenido", titulo="Tema", marca="unotv")
+    repos.actualizar_noticia_cluster(cid, estado="usado", contenido_id=cont["id"])
+    return cont
+
+
+def _anadir_pieza(contenido_id, *, falta_copy):
+    repos.crear_contenido_plataforma(
+        contenido_id=contenido_id, red="x", falta_copy=falta_copy, falta_imagen=True
+    )
+
+
+def _pieza_estado(cliente, cid):
+    # Vía detalle: devuelve la historia sea cual sea su estado (no la filtra el listado).
+    return cliente.get(f"/api/noticias/historias/{cid}").json()["historia"]["pieza_estado"]
+
+
+def test_pieza_estado_en_pool_si_nueva(cliente):
+    _sembrar_cluster("c1")  # estado 'nuevo'
+    assert _pieza_estado(cliente, "c1") == "en_pool"
+
+
+def test_pieza_estado_descartada(cliente):
+    _sembrar_cluster("c1", estado="descartado")
+    assert _pieza_estado(cliente, "c1") == "descartada"
+
+
+def test_pieza_estado_en_cola_si_usada_sin_pieza(cliente):
+    # Usada pero sin fila de plataforma (dedup / sin redes / copy por encolar): NO está en el
+    # feed -> 'en_cola'. Es el bug del piloto: antes el badge decía "En el feed" igualmente.
+    _sembrar_cluster("c1")
+    _usar_sin_pieza("c1")
+    assert _pieza_estado(cliente, "c1") == "en_cola"
+
+
+def test_pieza_estado_generando_si_pieza_sin_copy(cliente):
+    _sembrar_cluster("c1")
+    cont = _usar_sin_pieza("c1")
+    _anadir_pieza(cont["id"], falta_copy=True)
+    assert _pieza_estado(cliente, "c1") == "generando"
+
+
+def test_pieza_estado_en_feed_solo_con_pieza_y_copy(cliente):
+    _sembrar_cluster("c1")
+    cont = _usar_sin_pieza("c1")
+    _anadir_pieza(cont["id"], falta_copy=False)
+    assert _pieza_estado(cliente, "c1") == "en_feed"
+
+
+def test_pieza_estado_en_listado_batch(cliente):
+    # El listado computa `pieza_estado` en batch (sin N+1): una usada-sin-pieza y una nueva.
+    _sembrar_cluster("c1", score=0.9)
+    _usar_sin_pieza("c1")
+    _sembrar_cluster("c2", score=0.1)
+    historias = cliente.get("/api/noticias/historias").json()["historias"]
+    por_id = {h["id"]: h["pieza_estado"] for h in historias}
+    assert por_id == {"c1": "en_cola", "c2": "en_pool"}
+
+
+# --------------------------------------------------------------------------- #
 # detalle                                                                       #
 # --------------------------------------------------------------------------- #
 

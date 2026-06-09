@@ -103,6 +103,17 @@ export interface Historia {
   estado: "nuevo" | "usado" | "descartado" | string;
   /** Id del contenido en el tablero cuando `estado='usado'`. '' si no. */
   contenido_id: string;
+  /**
+   * Estado REAL de cara al feed (derivado de la PIEZA, no solo del cluster). El badge se
+   * pinta con esto para no mentir: `estado='usado'` solo significa "promovida".
+   *  - 'en_pool'    → aún no promovida
+   *  - 'en_cola'    → promovida pero SIN pieza en el feed todavía (dedup, sin redes, o copy
+   *                   aún por encolar / etapa de copy detenida)
+   *  - 'generando'  → pieza creada, copy en proceso
+   *  - 'en_feed'    → pieza con copy: visible REAL en el feed
+   *  - 'descartada' → descartada
+   */
+  pieza_estado?: "en_pool" | "en_cola" | "generando" | "en_feed" | "descartada" | string;
   /** Hasta ~8 artículos corroborantes del cluster. */
   enlaces: { titulo: string; url: string; fuente: string }[];
   // ── Ola D: verificación + traducción ─────────────────────────────────────

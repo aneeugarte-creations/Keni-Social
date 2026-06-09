@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock,
   ExternalLink,
   Flame,
   Globe,
@@ -185,8 +186,12 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
   });
 
   const enCurso = usarMut.isPending || descartarMut.isPending;
-  const esUsada = historia.estado === "usado";
   const esDescartada = historia.estado === "descartado";
+  // Estado REAL de cara al feed (lo deriva el back desde la PIEZA, no solo el cluster): así el
+  // badge no miente. Fallback al `estado` del cluster si el back aún no envía `pieza_estado`.
+  const piezaEstado =
+    historia.pieza_estado ??
+    (historia.estado === "usado" ? "en_feed" : esDescartada ? "descartada" : "en_pool");
   const tieneEnlaces = historia.enlaces && historia.enlaces.length > 0;
 
   return (
@@ -203,10 +208,28 @@ function TarjetaHistoria({ historia, queryKey }: PropsTarjetaHistoria) {
 
           {/* Acciones */}
           <div className="flex shrink-0 items-center gap-1">
-            {esUsada ? (
+            {piezaEstado === "en_feed" ? (
               <Badge variant="ok" className="gap-1 text-xs">
                 <CheckCircle2 className="h-3 w-3" />
                 En el feed
+              </Badge>
+            ) : piezaEstado === "generando" ? (
+              <Badge
+                variant="aviso"
+                className="gap-1 text-xs"
+                title="La pieza ya existe; la IA está redactando el copy. Aparecerá en el feed al terminar."
+              >
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Generando…
+              </Badge>
+            ) : piezaEstado === "en_cola" ? (
+              <Badge
+                variant="aviso"
+                className="gap-1 text-xs"
+                title="Promovida, pero aún SIN pieza en el feed (copy por encolar, sin redes, o duplicada). Si no avanza, revisa que «Generar copy» esté activo y el worker en marcha."
+              >
+                <Clock className="h-3 w-3" />
+                En cola
               </Badge>
             ) : esDescartada ? (
               <Badge variant="secondary" className="text-xs">Descartada</Badge>

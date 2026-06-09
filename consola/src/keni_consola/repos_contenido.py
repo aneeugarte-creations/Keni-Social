@@ -223,6 +223,10 @@ def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:
     return db.obtener_contenido_plataforma(plataforma_id)
 
 
+def estado_pieza_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+    return db.estado_pieza_por_contenido(contenido_ids)
+
+
 def actualizar_contenido_plataforma(
     plataforma_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:

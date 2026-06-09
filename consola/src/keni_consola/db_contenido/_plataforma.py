@@ -330,6 +330,33 @@ def listar_contenido_plataforma(
     return [_fila_a_contenido_plataforma(f) for f in filas]
 
 
+def estado_pieza_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+    """Estado de la PIEZA de feed por contenido: 'generando' | 'lista' (los ausentes = 'sin_pieza').
+
+    Una pieza de feed es una fila `contenido_plataforma` (el feed = esas filas unidas a su
+    `contenido`). Por cada `contenido_id` con AL MENOS una fila devuelve:
+      - 'lista'      -> tiene >=1 fila con copy (`falta_copy=0`): sale REAL en el feed,
+      - 'generando'  -> tiene fila(s) pero TODAS sin copy aún (`falta_copy=1`).
+    Los ids SIN ninguna fila NO aparecen en el dict: el caller los trata como 'sin_pieza'
+    (el tema se promovió pero no produjo pieza: dedup, sin redes, o copy aún por encolar).
+    Batch (una sola query) para evitar N+1 al listar historias. PURA salvo I/O.
+    """
+    ids = [i for i in dict.fromkeys(contenido_ids) if i]
+    if not ids:
+        return {}
+    marcadores = ",".join("?" for _ in ids)
+    sql = (
+        "SELECT contenido_id, MAX(CASE WHEN falta_copy = 0 THEN 1 ELSE 0 END) AS tiene_copy "
+        f"FROM contenido_plataforma WHERE contenido_id IN ({marcadores}) GROUP BY contenido_id"
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(ids)).fetchall()
+    finally:
+        con.close()
+    return {f["contenido_id"]: ("lista" if f["tiene_copy"] else "generando") for f in filas}
+
+
 def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:
     """Una fila por plataforma por id (None si no existe)."""
     con = _conectar()

@@ -134,11 +134,27 @@ function historiaItem(overrides: Partial<Historia> = {}): Historia {
 const RESPUESTA_HISTORIAS_VACIA = { historias: [], total: 0 };
 const RESPUESTA_UNA_HISTORIA = { historias: [historiaItem()], total: 1 };
 const RESPUESTA_HISTORIA_USADA = {
-  historias: [historiaItem({ estado: "usado", contenido_id: "c-hist-99" })],
+  // Pieza REAL en el feed: el back deriva `pieza_estado='en_feed'` (pieza con copy).
+  historias: [
+    historiaItem({ estado: "usado", contenido_id: "c-hist-99", pieza_estado: "en_feed" }),
+  ],
+  total: 1,
+};
+const RESPUESTA_HISTORIA_EN_COLA = {
+  // Promovida (cluster 'usado') pero SIN pieza en el feed todavía: el badge NO debe mentir.
+  historias: [
+    historiaItem({ estado: "usado", contenido_id: "c-hist-98", pieza_estado: "en_cola" }),
+  ],
+  total: 1,
+};
+const RESPUESTA_HISTORIA_GENERANDO = {
+  historias: [
+    historiaItem({ estado: "usado", contenido_id: "c-hist-97", pieza_estado: "generando" }),
+  ],
   total: 1,
 };
 const RESPUESTA_HISTORIA_DESCARTADA = {
-  historias: [historiaItem({ estado: "descartado" })],
+  historias: [historiaItem({ estado: "descartado", pieza_estado: "descartada" })],
   total: 1,
 };
 const RESPUESTA_HISTORIA_BREAKING = {
@@ -288,7 +304,7 @@ describe("Cobertura · Historias — renderizado de clusters", () => {
     expect(badge.textContent).toMatch(/6 fuentes/i);
   });
 
-  it("muestra 'En el feed' cuando la historia está usada", async () => {
+  it("muestra 'En el feed' SOLO cuando hay pieza con copy (pieza_estado='en_feed')", async () => {
     mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_USADA);
     renderConProviders(<Cobertura />);
     await waitFor(() => {
@@ -296,6 +312,27 @@ describe("Cobertura · Historias — renderizado de clusters", () => {
     });
     // El botón "Empujar ya" no debe aparecer para historias ya en el feed
     expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
+  });
+
+  it("muestra 'En cola' (NO 'En el feed') cuando está usada pero sin pieza en el feed", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_EN_COLA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText(/En cola/i)).toBeTruthy();
+    });
+    // Transparencia: NO debe decir "En el feed" si la pieza no está en el feed.
+    expect(screen.queryByText(/En el feed/i)).toBeNull();
+    // Ya está en curso: tampoco ofrece "Empujar ya".
+    expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
+  });
+
+  it("muestra 'Generando…' cuando la pieza existe pero el copy está en proceso", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_GENERANDO);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText(/Generando/i)).toBeTruthy();
+    });
+    expect(screen.queryByText(/En el feed/i)).toBeNull();
   });
 
   it("muestra 'Descartada' cuando la historia está descartada", async () => {

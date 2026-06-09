@@ -196,6 +196,7 @@ from .db_contenido import (  # noqa: F401
     crear_contenido,
     crear_contenido_plataforma,
     crear_etiqueta,
+    estado_pieza_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
     listar_contenido,
