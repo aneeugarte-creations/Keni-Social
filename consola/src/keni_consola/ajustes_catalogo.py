@@ -101,15 +101,12 @@ def _maestros_etapa() -> list[Ajuste]:
 
 
 def _global_de_etapa(env_flag: str) -> bool:
-    """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca)."""
-    return {
-        config.ENV_PIPELINE_FUSION: config.fusion_semantica_activa,
-        config.ENV_PIPELINE_EDITORIAL: config.perfil_editorial_activo,
-        config.ENV_PIPELINE_SELECCION: config.ingesta_activa,
-        config.ENV_PIPELINE_VALIDACION: config.qa_activo,
-        config.ENV_PIPELINE_COPY: config.pipeline_activo,
-        config.ENV_PIPELINE_ARTE: config.autogen_arte_activo,
-    }[env_flag]()
+    """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca).
+
+    Delegado en el resolver ÚNICO (`config.etapa_global_activa`): la misma lectura que usan
+    el daemon y la vista Pipelines, para que el toggle nunca muestre otra cosa que el estado real.
+    """
+    return config.etapa_global_activa(env_flag)
 
 
 def _ajustes_por_marca() -> list[Ajuste]:

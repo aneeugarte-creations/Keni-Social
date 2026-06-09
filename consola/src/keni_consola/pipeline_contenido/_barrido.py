@@ -78,10 +78,10 @@ def _ejecutar_barrido() -> dict[str, Any]:
     # (no un tema por item RSS), ordenadas por el score del algoritmo de ponderación. Esto frena el
     # volumen y respeta la jerarquización. El clustering del pool lo alimenta el daemon de ingesta.
     temas_nuevos: list[dict[str, Any]] = []
-    for marca in marcas.ids() if config.ingesta_activa() else []:
-        # Exclusión por marca: si "Crear noticias" de ESTA marca se apagó a mano, no se promueve
-        # nada suyo (no entran temas nuevos). Sin override, sigue al maestro (global).
-        if config.marca_apagada(config.ENV_PIPELINE_SELECCION, marca):
+    for marca in marcas.ids():
+        # FUENTE ÚNICA de verdad (config.etapa_activa): maestro global ON y marca no excluida.
+        # La misma lectura que pinta la etapa en /api/pipelines y el toggle en el catálogo.
+        if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
             continue
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin
         # cribar/sin copy). Promueve solo hasta llenar su cupo; si está lleno, salta. Así cada item
@@ -121,13 +121,13 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     if autor is None:
         autor = _ref._autor_pipeline()
     cribados: list[dict[str, Any]] = []
-    qa_global = config.qa_activo()
     for tema in temas_sin_qa():
         marca_t = tema.get("marca") or ""
         # Etapa QA desactivada (`KENI_PIPELINE_VALIDACION` off, global o `::marca`): se SALTA la criba.
         # No se lanza `claude -p`; se marca el tema `saltada` para que CD lo recoja igual (sin
         # verificar) y la vista Pipelines pinte QA como "saltada". No cuenta para el cap ni rompe.
-        if not qa_global or config.marca_apagada(config.ENV_PIPELINE_VALIDACION, marca_t):
+        # Misma FUENTE ÚNICA (config.etapa_activa) que la vista y el catálogo de ajustes.
+        if not config.etapa_activa(config.ENV_PIPELINE_VALIDACION, marca_t):
             try:
                 repos.actualizar_contenido(tema.get("id", "") or "", {"qa_veredicto": QA_SALTADA})
             except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no debe matar la fase
@@ -184,8 +184,8 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     lanzados: list[dict[str, Any]] = []
     for tema in temas_para_copy():
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
-        # ya estuvieran ingeridos antes de apagarla).
-        if config.marca_apagada(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
+        # ya estuvieran ingeridos antes de apagarla). Misma FUENTE ÚNICA que la vista/catálogo.
+        if not config.etapa_activa(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
             continue
         # Reintentos acotados: un copy fallido conserva `copy_pendiente` (dedup al éxito) y se
         # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).

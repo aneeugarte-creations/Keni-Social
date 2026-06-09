@@ -38,34 +38,43 @@ from ..pipeline_contenido import (
 _ESTADO_SALTADA = "saltada"
 
 
+def _etapa_off(env_flag: str, marca: str) -> bool:
+    """Etapa desactivada para `marca`: la negación del resolver ÚNICO (`config.etapa_activa`).
+
+    Antes esta vista tenía SEIS helpers propios (una lectura paralela por etapa) que podían
+    divergir del daemon y del catálogo de ajustes; ahora los tres consumen la misma función.
+    """
+    return not config.etapa_activa(env_flag, marca)
+
+
 def _fusion_off(marca: str) -> bool:
     """Etapa "Fusión" desactivada para `marca` (maestro `KENI_PIPELINE_FUSION` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_FUSION, marca) or not config.fusion_semantica_activa()
+    return _etapa_off(config.ENV_PIPELINE_FUSION, marca)
 
 
 def _editorial_off(marca: str) -> bool:
     """Etapa "Editorial" desactivada para `marca` (maestro `KENI_PIPELINE_EDITORIAL` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca) or not config.perfil_editorial_activo()
+    return _etapa_off(config.ENV_PIPELINE_EDITORIAL, marca)
 
 
 def _ci_off(marca: str) -> bool:
     """Etapa "Selección"/CI desactivada para `marca` (maestro `KENI_PIPELINE_SELECCION` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_SELECCION, marca) or not config.ingesta_activa()
+    return _etapa_off(config.ENV_PIPELINE_SELECCION, marca)
 
 
 def _qa_off(marca: str) -> bool:
     """Etapa QA desactivada para `marca` (maestro `KENI_PIPELINE_VALIDACION` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_VALIDACION, marca) or not config.qa_activo()
+    return _etapa_off(config.ENV_PIPELINE_VALIDACION, marca)
 
 
 def _cd_off(marca: str) -> bool:
     """Etapa "Generar copy"/CD desactivada para `marca` (maestro `KENI_PIPELINE_COPY` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_COPY, marca) or not config.pipeline_activo()
+    return _etapa_off(config.ENV_PIPELINE_COPY, marca)
 
 
 def _arte_off(marca: str) -> bool:
     """Etapa "Generar arte" desactivada para `marca` (maestro `KENI_PIPELINE_ARTE` off o por-marca)."""
-    return config.marca_apagada(config.ENV_PIPELINE_ARTE, marca) or not config.autogen_arte_activo()
+    return _etapa_off(config.ENV_PIPELINE_ARTE, marca)
 
 
 # Tope por defecto de runs por página (alineado con el resto de la consola).

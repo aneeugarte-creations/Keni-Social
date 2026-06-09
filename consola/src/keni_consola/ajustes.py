@@ -170,3 +170,66 @@ def borrar(clave: str) -> None:
     if clave in datos:
         datos.pop(clave, None)
         _escribir(datos)
+
+
+# --------------------------------------------------------------------------- #
+# Migracion de claves RENOMBRADAS (renames de env sin retrocompat en caliente) #
+# --------------------------------------------------------------------------- #
+#
+# Los renames "limpios" de las etapas del pipeline (consolidacion etapa = variable = toggle)
+# dejaron HUERFANAS las claves ya guardadas en el store: el toggle que el equipo encendio con
+# el nombre viejo (p. ej. `KENI_QA::unotv = 1`) dejaba de leerse y la etapa aparecia APAGADA
+# aunque la UI la hubiera mostrado encendida. Esta tabla viejo -> nuevo permite migrar el store
+# al arranque. Cubre tambien las variantes por marca (`VIEJO::marca` -> `NUEVO::marca`).
+#
+# ORDEN: ante una CADENA de renames hacia el mismo destino (PERFIL_EDITORIAL -> PIPELINE_RANKING
+# -> PIPELINE_EDITORIAL), va PRIMERO el alias mas RECIENTE (gana la intencion mas nueva; el
+# alias mas viejo solo aplica si el destino sigue ausente tras migrar el reciente).
+CLAVES_LEGADO: tuple[tuple[str, str], ...] = (
+    ("KENI_PIPELINE_RANKING", "KENI_PIPELINE_EDITORIAL"),
+    ("KENI_PERFIL_EDITORIAL", "KENI_PIPELINE_EDITORIAL"),
+    ("KENI_FUSION_SEMANTICA", "KENI_PIPELINE_FUSION"),
+    ("KENI_INGESTA", "KENI_PIPELINE_SELECCION"),
+    ("KENI_QA", "KENI_PIPELINE_VALIDACION"),
+    ("KENI_PIPELINE", "KENI_PIPELINE_COPY"),
+    ("KENI_AUTOGEN_ARTE", "KENI_PIPELINE_ARTE"),
+)
+
+# Separador de las claves por-marca (`KENI_PIPELINE_COPY::unotv`). Literal a proposito: es el
+# mismo `config.SEP_MARCA`, pero este modulo no puede importar `config` (ciclo de import).
+_SEP_MARCA = "::"
+
+
+def migrar_claves_legado() -> int:
+    """Migra al nombre NUEVO las claves del store guardadas bajo un nombre RENOMBRADO.
+
+    Para cada par (viejo, nuevo) de `CLAVES_LEGADO`, mueve la clave global `VIEJO` y cada
+    variante por marca `VIEJO::marca`:
+      - si el destino NO existe en el store, copia el valor (se conserva la intencion del
+        equipo: lo que estaba encendido sigue encendido bajo el nombre nuevo);
+      - si el destino YA existe, NO lo pisa (lo escrito con el nombre nuevo es mas reciente);
+      - en ambos casos BORRA la clave legada (el store queda sin huerfanos que confundan).
+
+    OJO con los prefijos: `KENI_PIPELINE` es prefijo de los nombres nuevos, por eso el match
+    es EXACTO o `VIEJO + "::"` (nunca un startswith del nombre desnudo). Idempotente (la
+    segunda pasada no encuentra claves legadas). Devuelve cuantas claves MOVIO (no cuenta
+    las legadas descartadas por destino ya escrito).
+    """
+    datos = leer()
+    if not datos:
+        return 0
+    movidas = 0
+    cambiado = False
+    for viejo, nuevo in CLAVES_LEGADO:
+        for clave in list(datos):
+            if clave != viejo and not clave.startswith(viejo + _SEP_MARCA):
+                continue
+            valor = datos.pop(clave)
+            cambiado = True
+            destino = nuevo + clave[len(viejo):]
+            if destino not in datos:
+                datos[destino] = valor
+                movidas += 1
+    if cambiado:
+        _escribir(datos)
+    return movidas

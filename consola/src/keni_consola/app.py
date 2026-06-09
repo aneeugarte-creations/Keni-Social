@@ -235,6 +235,19 @@ def crear_app(
     except OSError:
         pass
 
+    # Migra las claves del store de ajustes guardadas bajo nombres RENOMBRADOS (las etapas
+    # del pipeline consolidaron sus env sin retrocompat y los toggles guardados quedaban
+    # huerfanos: la UI los habia mostrado encendidos y la etapa corria/se pintaba apagada).
+    # Idempotente y best-effort: corre en back Y daemons (mismo volumen), antes de leer config.
+    try:
+        from . import ajustes
+
+        movidas = ajustes.migrar_claves_legado()
+        if movidas:
+            _logger.info("Ajustes: %d clave(s) legada(s) migradas al nombre nuevo.", movidas)
+    except OSError:
+        _logger.warning("No se pudieron migrar las claves legadas de ajustes.", exc_info=True)
+
     # SEGURIDAD del cutover (#130): crea el esquema y, en hosted (Postgres), REHUSA arrancar
     # si el Postgres esta vacio pero hay un SQLite local CON datos (evita orfanar datos
     # vivos). El error SE PROPAGA a proposito (no lo tragamos): un cutover pendiente debe

@@ -135,3 +135,70 @@ def test_cache_no_relee_si_mtime_igual(store, monkeypatch):
     ajustes.leer()
     ajustes.leer()
     assert llamadas["n"] == 0  # mtime no cambio: no se releyo el disco
+
+
+# --------------------------------------------------------------------------- #
+# Migracion de claves RENOMBRADAS (renames sin retrocompat -> store huerfano)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_migrar_claves_legado_mueve_global_y_por_marca(store):
+    """El toggle guardado con el nombre VIEJO (global + `::marca`) se mueve al nombre NUEVO.
+
+    Es el bug real de prod: el equipo encendio `KENI_QA`/`KENI_QA::unotv` desde la UI, el
+    rename a `KENI_PIPELINE_VALIDACION` dejo esas claves huerfanas y la etapa aparecia
+    apagada aunque la UI la habia mostrado encendida.
+    """
+    ajustes.guardar("KENI_QA", "1")
+    ajustes.guardar("KENI_QA::unotv", "1")
+    ajustes.guardar("KENI_QA::claro-sports", "0")
+    # Prefijo PARECIDO pero clave distinta (no es la etapa): NO se toca.
+    ajustes.guardar("KENI_QA_FUENTE_TIMEOUT", "120")
+    assert ajustes.migrar_claves_legado() == 3
+    assert ajustes.obtener("KENI_PIPELINE_VALIDACION") == "1"
+    assert ajustes.obtener("KENI_PIPELINE_VALIDACION::unotv") == "1"
+    assert ajustes.obtener("KENI_PIPELINE_VALIDACION::claro-sports") == "0"
+    assert ajustes.obtener("KENI_QA") is None
+    assert ajustes.obtener("KENI_QA::unotv") is None
+    assert ajustes.obtener("KENI_QA_FUENTE_TIMEOUT") == "120"
+
+
+def test_migrar_no_pisa_el_nombre_nuevo_pero_limpia_el_viejo(store):
+    """Si el nombre NUEVO ya esta escrito, gana (es mas reciente); el huerfano se borra igual."""
+    ajustes.guardar("KENI_PIPELINE", "1")       # legado (Copy)
+    ajustes.guardar("KENI_PIPELINE_COPY", "0")  # nuevo ya escrito: NO se pisa
+    assert ajustes.migrar_claves_legado() == 0
+    assert ajustes.obtener("KENI_PIPELINE_COPY") == "0"
+    assert ajustes.obtener("KENI_PIPELINE") is None
+
+
+def test_migrar_prefijo_pipeline_no_confunde_los_nombres_nuevos(store):
+    """`KENI_PIPELINE` es PREFIJO de los nombres nuevos: solo migra la clave exacta o `::marca`."""
+    ajustes.guardar("KENI_PIPELINE::unotv", "1")
+    ajustes.guardar("KENI_PIPELINE_COPY::claro-sports", "0")  # ya es nombre nuevo: intacta
+    ajustes.guardar("KENI_PIPELINE_MAX", "4")                 # knob, no etapa: intacta
+    assert ajustes.migrar_claves_legado() == 1
+    assert ajustes.obtener("KENI_PIPELINE_COPY::unotv") == "1"
+    assert ajustes.obtener("KENI_PIPELINE_COPY::claro-sports") == "0"
+    assert ajustes.obtener("KENI_PIPELINE_MAX") == "4"
+    assert ajustes.obtener("KENI_PIPELINE::unotv") is None
+
+
+def test_migrar_cadena_el_alias_mas_reciente_gana(store):
+    """Cadena PERFIL_EDITORIAL -> PIPELINE_RANKING -> PIPELINE_EDITORIAL: gana el mas nuevo."""
+    ajustes.guardar("KENI_PERFIL_EDITORIAL", "0")        # intencion vieja
+    ajustes.guardar("KENI_PIPELINE_RANKING", "1")        # intencion mas reciente
+    ajustes.guardar("KENI_PIPELINE_RANKING::unotv", "1")
+    assert ajustes.migrar_claves_legado() == 2
+    assert ajustes.obtener("KENI_PIPELINE_EDITORIAL") == "1"
+    assert ajustes.obtener("KENI_PIPELINE_EDITORIAL::unotv") == "1"
+    assert ajustes.obtener("KENI_PERFIL_EDITORIAL") is None
+    assert ajustes.obtener("KENI_PIPELINE_RANKING") is None
+
+
+def test_migrar_idempotente_y_sin_store(store):
+    assert ajustes.migrar_claves_legado() == 0  # store vacio: no-op
+    ajustes.guardar("KENI_INGESTA", "1")
+    assert ajustes.migrar_claves_legado() == 1
+    assert ajustes.migrar_claves_legado() == 0  # segunda pasada: nada legado
+    assert ajustes.obtener("KENI_PIPELINE_SELECCION") == "1"

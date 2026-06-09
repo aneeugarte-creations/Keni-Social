@@ -397,6 +397,8 @@ from .config_noticias import (  # noqa: F401
     cluster_breaking_ventana_h,
     cluster_umbral,
     cluster_ventana_h,
+    etapa_activa,
+    etapa_global_activa,
     feed_sla_min,
     fuentes_baja_confianza,
     fusion_semantica_activa,

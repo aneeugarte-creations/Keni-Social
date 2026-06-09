@@ -69,3 +69,41 @@ def test_publicar_real_para_maestro_y_excepcion(monkeypatch):
     monkeypatch.setenv(config.ENV_PUBLICAR_REAL, "1")
     assert config.publicar_real_para("claro-sports") is True   # sin override: sigue al maestro
     assert config.publicar_real_para("fundacion") is False     # excluida explícitamente
+
+
+def test_etapa_activa_es_la_fuente_unica(monkeypatch):
+    """`config.etapa_activa` = maestro global ON y marca no excluida (la MISMA lectura para
+    daemon, vista Pipelines y catalogo de ajustes)."""
+    # Maestro OFF: apagada para todas las marcas aunque no haya override.
+    _store(monkeypatch, {})
+    monkeypatch.delenv(config.ENV_PIPELINE_COPY, raising=False)
+    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "unotv") is False
+
+    # Maestro ON sin override: activa.
+    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
+    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "unotv") is True
+
+    # Override falsy por marca: apagada SOLO para esa marca.
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_COPY, "unotv"): "0"})
+    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "unotv") is False
+    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "claro-sports") is True
+
+
+def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
+    _store(monkeypatch, {})
+    etapas = (
+        config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL, config.ENV_PIPELINE_SELECCION,
+        config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+    )
+    for env in etapas:
+        monkeypatch.setenv(env, "1")
+        assert config.etapa_global_activa(env) is True
+        monkeypatch.setenv(env, "0")
+        assert config.etapa_global_activa(env) is False
+
+
+def test_etapa_global_activa_env_desconocida():
+    import pytest
+
+    with pytest.raises(ValueError):
+        config.etapa_global_activa("KENI_NO_ES_UNA_ETAPA")

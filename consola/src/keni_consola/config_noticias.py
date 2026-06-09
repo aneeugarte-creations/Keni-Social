@@ -537,6 +537,45 @@ def autogen_arte_activo() -> bool:
     return _crudo(ENV_PIPELINE_ARTE).lower() in _VERDADEROS
 
 
+def _accesor_global_de_etapa(env_flag: str):
+    """Accesor del maestro GLOBAL de una etapa del pipeline por su env (`KENI_PIPELINE_<ETAPA>`).
+
+    Mapa ÚNICO etapa→accesor: lo comparten el resolver de abajo y el catálogo de ajustes
+    (que usa el global como defecto del toggle por marca). `ValueError` si la env no es
+    una etapa del pipeline (error de programación, no de datos).
+    """
+    try:
+        return {
+            ENV_PIPELINE_FUSION: fusion_semantica_activa,
+            ENV_PIPELINE_EDITORIAL: perfil_editorial_activo,
+            ENV_PIPELINE_SELECCION: ingesta_activa,
+            ENV_PIPELINE_VALIDACION: qa_activo,
+            ENV_PIPELINE_COPY: pipeline_activo,
+            ENV_PIPELINE_ARTE: autogen_arte_activo,
+        }[env_flag]
+    except KeyError:
+        raise ValueError(f"'{env_flag}' no es una etapa del pipeline de contenido.") from None
+
+
+def etapa_global_activa(env_flag: str) -> bool:
+    """Maestro GLOBAL de la etapa `env_flag` (ON/OFF para todas las marcas). Lectura única."""
+    return _accesor_global_de_etapa(env_flag)()
+
+
+def etapa_activa(env_flag: str, marca: str) -> bool:
+    """FUENTE ÚNICA de verdad de «¿la etapa `env_flag` está encendida para `marca`?».
+
+    Una etapa corre para una marca si su maestro global está ON y la marca NO está excluida
+    a mano (override `KENI_PIPELINE_<ETAPA>::marca` falsy en el store). La MISMA lectura la
+    usan el daemon (qué barre), la vista Pipelines (qué se pinta «saltada») y el catálogo de
+    ajustes (qué muestra el toggle): si una de las tres dijera otra cosa, sería un bug aquí,
+    no tres semánticas paralelas.
+    """
+    from .config_produccion import marca_apagada  # local: evita ciclo de import en el barrel
+
+    return etapa_global_activa(env_flag) and not marca_apagada(env_flag, marca)
+
+
 def auto_programar_activo() -> bool:
     """True si una pieza APROBADA debe encolarse SOLA a su próximo hueco (`KENI_AUTO_PROGRAMAR`).
 
