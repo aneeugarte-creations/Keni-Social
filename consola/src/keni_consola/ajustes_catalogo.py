@@ -27,9 +27,11 @@ _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
 _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
-# el de aparición en la UI: PRIMERO el interruptor general de la máquina de contenido (kill-switch
-# global), luego los maestros de etapa, las excepciones por marca, después Publicación, y los
-# automatismos generales (barridos del sistema) al final.
+# el de aparición en la UI. Repartidos por OBJETIVO: la MÁQUINA DE CONTENIDO (interruptor general +
+# maestros de etapa + excepciones por marca + cadencia/topes) vive en el Monitor; Publicación, los
+# automatismos de fondo (daemons on/off), el MOTOR DE NOTICIAS (ingesta/agrupación/traducción), el
+# RANKING DE NOTICIAS (master + pesos del score) y los Ajustes finos operacionales (jobs, limpieza,
+# alertas) viven en Configuración.
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido (interruptor general)"),
     ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
@@ -38,7 +40,9 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("publicacion", "Publicación"),
     ("publicacion_marca", "Publicación · excepciones por marca"),
     ("automatismos_generales", "Automatismos generales"),
-    ("tuning", "Ajustes finos"),
+    ("noticias_motor", "Motor de noticias · ingesta, agrupación y traducción"),
+    ("noticias_ranking", "Ranking de noticias · jerarquización del pool"),
+    ("tuning", "Ajustes finos · sistema, limpieza y alertas"),
 )
 
 # Grupos de la MÁQUINA DE CONTENIDO: el interruptor general, los maestros de etapa, sus excepciones
@@ -256,17 +260,9 @@ def _construir_catalogo() -> list[Ajuste]:
         ),
         # NOTA: Fusión (KENI_PIPELINE_FUSION) y Ranking/encaje (KENI_PIPELINE_RANKING) ya NO viven
         # aquí: ahora son ETAPAS del pipeline (grupo `maestros_etapa` + excepción por marca), 1
-        # toggle = 1 etapa, como el resto. Ver `_ETAPA_FUSION`/`_ETAPA_RANKING`.
-        Ajuste(
-            clave=config.ENV_RENDIMIENTO_RANKING,
-            tipo="bool",
-            etiqueta="Priorizar por rendimiento (Metricool)",
-            ayuda="El ranking de noticias da un empujón a las historias de las líneas editoriales "
-            "que MEJOR funcionan en redes. Anti-sesgo: una línea solo cuenta con una muestra "
-            "mínima de piezas medidas y se limita a un top-N (no monotematiza).",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
+        # toggle = 1 etapa, como el resto. Ver `_ETAPA_FUSION`/`_ETAPA_RANKING`. El master
+        # «Priorizar por rendimiento» (KENI_RENDIMIENTO_RANKING) tampoco: NO es un daemon on/off,
+        # sino un modulador del ranking, así que vive con sus pesos en `noticias_ranking`.
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -373,10 +369,11 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
             tipo="float",
             etiqueta="Alertas: umbral de engagement (%)",
-            ayuda="Engagement (%) por debajo del cual una pieza publicada dispara una alerta de bajo rendimiento.",
+            ayuda="Engagement (%) por debajo del cual una pieza publicada dispara una alerta de bajo "
+            "rendimiento. Debe ser > 0 (un umbral nulo desactivaría la señal; usa el toggle maestro para eso).",
             grupo="tuning",
             defecto=config.ALERTAS_UMBRAL_ENGAGEMENT_DEF,
-            minimo=0,
+            minimo=0.1,
         ),
         Ajuste(
             clave=config.ENV_MAX_JOBS,
@@ -442,7 +439,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Perfil editorial: refresco (horas)",
             ayuda="Cada cuántas horas se re-extrae con IA el perfil editorial de cada marca "
             "(también se refresca antes si cambia la línea editorial).",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
             minimo=1,
         ),
@@ -452,17 +449,31 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Fusión semántica: historias por marca/barrido",
             ayuda="Máximo de historias por marca que se mandan a la IA a agrupar en cada barrido "
             "(acota coste y tamaño de contexto).",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.FUSION_SEMANTICA_MAX_DEF,
             minimo=2,
+        ),
+        # --- Ranking de noticias · jerarquización del pool (grupo `noticias_ranking`) ----- #
+        # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
+        # daemon, modula el ranking. Debajo, los pesos de la combinación lineal del score.
+        Ajuste(
+            clave=config.ENV_RENDIMIENTO_RANKING,
+            tipo="bool",
+            etiqueta="Priorizar por rendimiento (Metricool)",
+            ayuda="El ranking da un empujón a las historias de las líneas editoriales que MEJOR "
+            "funcionan en redes. Anti-sesgo: una línea solo cuenta con una muestra mínima de piezas "
+            "medidas y se limita a un top-N (no monotematiza). Activa los tres ajustes de abajo.",
+            grupo="noticias_ranking",
+            defecto=False,
         ),
         Ajuste(
             clave=config.ENV_SCORE_PESO_RENDIMIENTO,
             tipo="float",
             etiqueta="Ranking: peso rendimiento (líneas top)",
-            ayuda="Cuánto pesa que la historia caiga en una línea editorial de alto rendimiento. "
-            "Solo cuenta con «Priorizar por rendimiento» activo. [0-1].",
-            grupo="tuning",
+            ayuda="Cuánto pesa que la historia caiga en una línea editorial de alto rendimiento. Solo "
+            "cuenta con «Priorizar por rendimiento» activo; si lo dejas vacío con esa opción activa, "
+            "se aplica un auto-peso de 0.10 (renormalizando los demás pesos). [0-1].",
+            grupo="noticias_ranking",
             defecto=config.SCORE_PESO_RENDIMIENTO_DEF,
             minimo=0,
             maximo=1,
@@ -471,8 +482,9 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_RENDIMIENTO_TOP_N,
             tipo="int",
             etiqueta="Rendimiento: nº de líneas top",
-            ayuda="Cuántas líneas (las de mejor engagement) reciben el empujón de rendimiento.",
-            grupo="tuning",
+            ayuda="Cuántas líneas (las de mejor engagement) reciben el empujón de rendimiento. Solo "
+            "con «Priorizar por rendimiento» activo.",
+            grupo="noticias_ranking",
             defecto=config.RENDIMIENTO_TOP_N_DEF,
             minimo=1,
         ),
@@ -480,9 +492,9 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_RENDIMIENTO_MIN_PIEZAS,
             tipo="int",
             etiqueta="Rendimiento: muestra mínima por línea",
-            ayuda="Una línea solo cuenta como top si tiene al menos estas piezas medidas "
-            "(anti-sesgo: evita encaramar una línea que «funcionó una vez»).",
-            grupo="tuning",
+            ayuda="Una línea solo cuenta como top si tiene al menos estas piezas medidas (anti-sesgo: "
+            "evita encaramar una línea que «funcionó una vez»). Solo con «Priorizar por rendimiento» activo.",
+            grupo="noticias_ranking",
             defecto=config.RENDIMIENTO_MIN_PIEZAS_DEF,
             minimo=1,
         ),
@@ -492,7 +504,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Ingesta: feeds por barrido",
             ayuda="Máximo de feeds RSS a sondear por barrido del motor de ingesta.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.INGESTA_BATCH_DEF,
             minimo=1,
         ),
@@ -501,7 +513,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Ingesta: descargas en paralelo",
             ayuda="Conexiones simultáneas para descargar feeds en un mismo barrido.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.INGESTA_WORKERS_DEF,
             minimo=1,
         ),
@@ -510,7 +522,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Ingesta: artículos por feed",
             ayuda="Máximo de artículos a archivar por feed y sondeo.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.INGESTA_MAX_ITEMS_DEF,
             minimo=1,
         ),
@@ -520,7 +532,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Ingesta: errores seguidos para auto-desactivar feed",
             ayuda="Tras este número de errores consecutivos el daemon apaga el feed "
             "automáticamente (Ola D). Se reintenta a mano desde la UI.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.INGESTA_MAX_ERRORES_DEF,
             minimo=1,
         ),
@@ -531,7 +543,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Clustering: ventana de agrupación (horas)",
             ayuda="Solo se cargan los clusters con actividad en esta ventana para "
             "decidir si un item nuevo pertenece a uno existente. Acota el trabajo.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.CLUSTER_VENTANA_H_DEF,
             minimo=1,
         ),
@@ -541,7 +553,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Clustering: fuentes mínimas para marcar breaking",
             ayuda="Número de fuentes distintas requeridas para que una historia se "
             "marque automáticamente como breaking en la ventana de breaking.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.CLUSTER_BREAKING_FUENTES_DEF,
             minimo=2,
         ),
@@ -551,18 +563,18 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Clustering: ventana breaking (horas)",
             ayuda="Ventana de tiempo (horas) en la que deben coincidir las fuentes "
             "para que un cluster se marque como breaking.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.CLUSTER_BREAKING_VENTANA_H_DEF,
             minimo=1,
         ),
-        # --- Jerarquización: pesos del algoritmo de ponderación del score -------- #
+        # --- Jerarquización: pesos del algoritmo de ponderación del score (suman ~1) -------- #
         Ajuste(
             clave=config.ENV_SCORE_PESO_CORROBORACION,
             tipo="float",
             etiqueta="Ranking: peso corroboración (nº fuentes)",
             ayuda="Cuánto pesa que varias fuentes se hagan eco de una historia (señal de "
             "tendencia). Más alto = prioriza lo que cubren muchas fuentes. [0-1].",
-            grupo="tuning",
+            grupo="noticias_ranking",
             defecto=config.SCORE_PESO_CORROBORACION_DEF,
             minimo=0,
             maximo=1,
@@ -573,7 +585,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Ranking: peso relevancia de marca",
             ayuda="Cuánto pesa el encaje de la historia con la línea editorial de la marca "
             "(p. ej. UnoTV nacional MX, Claro Sports deporte MX). [0-1].",
-            grupo="tuning",
+            grupo="noticias_ranking",
             defecto=config.SCORE_PESO_MARCA_DEF,
             minimo=0,
             maximo=1,
@@ -583,7 +595,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="Ranking: peso frescura (recencia)",
             ayuda="Cuánto pesa que la historia sea reciente. Más alto = favorece lo nuevo. [0-1].",
-            grupo="tuning",
+            grupo="noticias_ranking",
             defecto=config.SCORE_PESO_FRESCURA_DEF,
             minimo=0,
             maximo=1,
@@ -593,7 +605,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="Ranking: peso viralidad",
             ayuda="Cuánto pesa la señal de viralidad agregada de la historia. [0-1].",
-            grupo="tuning",
+            grupo="noticias_ranking",
             defecto=config.SCORE_PESO_VIRALIDAD_DEF,
             minimo=0,
             maximo=1,
@@ -602,8 +614,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_SCORE_BONUS_BREAKING,
             tipo="float",
             etiqueta="Ranking: bonus breaking",
-            ayuda="Empujón extra al score de las historias marcadas como breaking. [0-1].",
-            grupo="tuning",
+            ayuda="Empujón extra (aditivo) al score de las historias marcadas como breaking. [0-1].",
+            grupo="noticias_ranking",
             defecto=config.SCORE_BONUS_BREAKING_DEF,
             minimo=0,
             maximo=1,
@@ -615,7 +627,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Traducción: score mínimo de cluster",
             ayuda="Score mínimo de un cluster extranjero para entrar a traducción. "
             "0 = traducir todo cluster reciente; sube el valor para limitar a los más relevantes.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.TRAD_MIN_SCORE_DEF,
             minimo=0,
         ),
@@ -625,7 +637,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Traducción: clusters por barrido",
             ayuda="Máximo de clusters extranjeros a traducir por barrido. "
             "El backlog pendiente se procesa en barridos sucesivos.",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.TRAD_LOTE_DEF,
             minimo=1,
         ),
@@ -636,7 +648,7 @@ def _construir_catalogo() -> list[Ajuste]:
             etiqueta="Ingesta: SLA de frescura por feed (minutos)",
             ayuda="Un feed activo sin items nuevos en más de este margen aparece como "
             "'stale' en el panel de salud (/salud).",
-            grupo="tuning",
+            grupo="noticias_motor",
             defecto=config.FEED_SLA_MIN_DEF,
             minimo=1,
         ),

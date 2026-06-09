@@ -138,13 +138,15 @@ def test_grupos_estables(store):
     ids = {g[0] for g in ajustes_catalogo.GRUPOS}
     assert ids == {
         "maquina_global", "maestros_etapa", "automatizacion_marca", "pipeline_topes",
-        "publicacion", "publicacion_marca", "automatismos_generales", "tuning",
+        "publicacion", "publicacion_marca", "automatismos_generales",
+        "noticias_motor", "noticias_ranking", "tuning",
     }
 
 
-def test_motor_noticias_tuning_int(store):
-    """Los knobs de tuning del motor de noticias son int con minimo >= 1 (NO son de la máquina)."""
-    claves_int = [
+def test_motor_noticias_en_su_grupo(store):
+    """El motor de noticias (ingesta/clustering/traducción + perfil/fusión) vive en `noticias_motor`,
+    no en `tuning`; todos int/float con minimo definido."""
+    claves = [
         config.ENV_INGESTA_BATCH,
         config.ENV_INGESTA_WORKERS,
         config.ENV_INGESTA_MAX_ITEMS,
@@ -152,15 +154,55 @@ def test_motor_noticias_tuning_int(store):
         config.ENV_CLUSTER_VENTANA_H,
         config.ENV_CLUSTER_BREAKING_FUENTES,
         config.ENV_CLUSTER_BREAKING_VENTANA_H,
+        config.ENV_TRAD_MIN_SCORE,
         config.ENV_TRAD_LOTE,
         config.ENV_FEED_SLA_MIN,
+        config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
+        config.ENV_FUSION_SEMANTICA_MAX,
     ]
-    for clave in claves_int:
+    for clave in claves:
         a = ajustes_catalogo.por_clave(clave)
         assert a is not None, f"falta la clave {clave}"
-        assert a.tipo == "int", f"{clave} debe ser int"
-        assert a.grupo == "tuning", f"{clave} debe estar en grupo tuning"
-        assert a.minimo is not None and a.minimo >= 1, f"{clave} debe tener minimo >= 1"
+        assert a.tipo in ("int", "float"), f"{clave} debe ser int/float"
+        assert a.grupo == "noticias_motor", f"{clave} debe estar en grupo noticias_motor"
+        assert a.minimo is not None, f"{clave} debe tener minimo"
+
+
+def test_ranking_noticias_en_su_grupo(store):
+    """El master de rendimiento + los pesos del score + los parámetros de rendimiento forman el
+    grupo `noticias_ranking`. El master NO debe seguir en `automatismos_generales`."""
+    esperadas = {
+        config.ENV_RENDIMIENTO_RANKING,
+        config.ENV_SCORE_PESO_RENDIMIENTO,
+        config.ENV_RENDIMIENTO_TOP_N,
+        config.ENV_RENDIMIENTO_MIN_PIEZAS,
+        config.ENV_SCORE_PESO_CORROBORACION,
+        config.ENV_SCORE_PESO_MARCA,
+        config.ENV_SCORE_PESO_FRESCURA,
+        config.ENV_SCORE_PESO_VIRALIDAD,
+        config.ENV_SCORE_BONUS_BREAKING,
+    }
+    en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "noticias_ranking"}
+    assert en_grupo == esperadas
+    # El master es un bool; ya no es un daemon de `automatismos_generales`.
+    master = ajustes_catalogo.por_clave(config.ENV_RENDIMIENTO_RANKING)
+    assert master is not None and master.tipo == "bool" and master.grupo == "noticias_ranking"
+
+
+def test_tuning_solo_operacional(store):
+    """`tuning` queda solo con los finos operacionales (jobs, limpieza GC, alertas), int/float min>=0."""
+    claves = [
+        config.ENV_MAX_JOBS,
+        config.ENV_ALERTAS_INTERVALO_HORAS,
+        config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
+        config.ENV_MEDIA_GC_INTERVALO_HORAS,
+        config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
+        config.ENV_NOTICIAS_GC_INTERVALO_HORAS,
+        config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
+        config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
+    ]
+    en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "tuning"}
+    assert en_grupo == set(claves)
 
 
 # Los 8 topes de la máquina viven en su propio grupo `pipeline_topes` (sección «Máquina de
@@ -200,11 +242,11 @@ def test_grupos_maquina_son_los_del_monitor(store):
 
 
 def test_motor_noticias_trad_min_score_float(store):
-    """KENI_TRAD_MIN_SCORE es float en el grupo tuning con minimo 0."""
+    """KENI_TRAD_MIN_SCORE es float en el grupo del motor de noticias con minimo 0."""
     a = ajustes_catalogo.por_clave(config.ENV_TRAD_MIN_SCORE)
     assert a is not None
     assert a.tipo == "float"
-    assert a.grupo == "tuning"
+    assert a.grupo == "noticias_motor"
     assert a.minimo == 0
 
 
