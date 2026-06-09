@@ -156,7 +156,7 @@ export function Lienzo({
     safeLeft,
     safeRight,
   });
-  const [rectSel, setRectSel] = useState<{ x: number; y: number; w: number } | null>(null);
+  const [rectSel, setRectSel] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [editando, setEditando] = useState<{ id: string; x: number; y: number; w: number; fontPx: number } | null>(null);
   const [textoEdit, setTextoEdit] = useState("");
 
@@ -200,7 +200,7 @@ export function Lienzo({
       setRectSel(null);
       return;
     }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const id of seleccionMulti) {
       const nodo = stage.findOne<Konva.Node>(`#${id}`);
       if (!nodo) continue;
@@ -208,12 +208,13 @@ export function Lienzo({
       minX = Math.min(minX, r.x);
       minY = Math.min(minY, r.y);
       maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
     }
     if (minX === Infinity) {
       setRectSel(null);
       return;
     }
-    setRectSel({ x: minX, y: minY, w: maxX - minX });
+    setRectSel({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
   }, [seleccionMulti, documento, zoom]);
 
   // Atajos de teclado (ignora si se está escribiendo en un input/textarea). Hook extraído.
