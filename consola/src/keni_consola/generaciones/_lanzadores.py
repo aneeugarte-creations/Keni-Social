@@ -242,25 +242,20 @@ def encolar_job_claude(
     fakes que NO tocan `claude` ni la cola (ejecutan `procesar` sincronicamente o dejan el
     registro `ejecutando`). En produccion, el default encola el `spec`.
 
-    TOPE DE COLA (#137, PERMANENTE): la admision se decide AQUI, SINCRONAMENTE: si el
-    sistema esta saturado (`runner.admitir()` lanza `ColaLlenaError`) propagamos al llamante,
-    que responde 429. Asi el backpressure es inmediato (no se encola un job que no cabe). El
-    worker, al clavar el job, llama a `slot(ya_admitido=True)` para heredar y liberar el cupo.
+    TOPE DE COLA (PERMANENTE): el backpressure lo decide `cola.encolar`, SINCRONAMENTE y contra
+    el conteo REAL de la cola en Postgres (`repos.contar_jobs_activos`): si ya hay
+    `max_jobs+max_cola` jobs en vuelo, lanza `ColaLlenaError` (-> 429) ANTES de insertar. El tope
+    es COMPARTIDO entre procesos y se autolibera al marcar un job `terminado`. (Antes el gate era
+    un contador en memoria de `runner.admitir()`, roto en hosted: back y worker en contenedores
+    distintos, asi que solo subia y nunca bajaba; ver `cola.encolar`.)
     """
     if spec is None:
         # Defensa: sin spec no se puede reconstruir el job en el worker. El llamante real
         # SIEMPRE pasa spec; un test que inyecte su fake no llega aqui (reasigna la funcion).
         raise ValueError("encolar_job_claude requiere un spec serializable")
-    # Admision SINCRONA (mismo tope que el flujo in-process): rechaza con ColaLlenaError
-    # ANTES de encolar si el sistema esta al tope (-> 429). El worker hereda esta admision.
-    runner.admitir()
-    try:
-        from .. import cola
+    from .. import cola
 
-        cola.encolar(gen_id, spec)
-    except Exception:  # noqa: BLE001 -- si el encolado falla, no fugar el cupo de admision
-        runner.liberar_admision()
-        raise
+    cola.encolar(gen_id, spec)  # gate de cola COMPARTIDO: puede lanzar ColaLlenaError (-> 429)
     # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p`. Se expone
     # SOLO en el detalle (`GET /api/generaciones/{id}`), nunca en el listado (lo quita
     # `_todas_ordenadas`). Best-effort: el job ya está encolado; un fallo al persistir el
@@ -289,8 +284,8 @@ def encolar_job_proceso(
     en vez de correr `claude` (ver `worker.procesar_job`). El ejecutor reporta progreso/estado/
     errores via `actualizar(...)`.
 
-    Reutiliza el MISMO cupo de admision que el camino claude (`runner.admitir()` -> 429 si esta
-    saturado; el worker hereda con `slot(ya_admitido=True)`). Si `gen_id` no se pasa, se crea uno.
+    Reutiliza el MISMO gate de cola COMPARTIDO que el camino claude (`cola.encolar` -> 429 si la
+    cola esta al tope, contra `repos.contar_jobs_activos`). Si `gen_id` no se pasa, se crea uno.
     Devuelve el registro publico de la generacion (incluye su `id`).
     """
     from ..dominio import jobspec
@@ -304,16 +299,9 @@ def encolar_job_proceso(
         "etiqueta": etiqueta or kind,
     })
     spec = jobspec.construir_proceso(kind, params or {})
-    # Admision SINCRONA (mismo tope que el flujo claude): rechaza con ColaLlenaError ANTES de
-    # encolar si el sistema esta al tope (-> 429). El worker hereda esta admision al clavar.
-    runner.admitir()
-    try:
-        from .. import cola
+    from .. import cola
 
-        cola.encolar(reg["id"], spec)
-    except Exception:  # noqa: BLE001 -- si el encolado falla, no fugar el cupo de admision
-        runner.liberar_admision()
-        raise
+    cola.encolar(reg["id"], spec)  # gate de cola COMPARTIDO: puede lanzar ColaLlenaError (-> 429)
     return reg
 
 

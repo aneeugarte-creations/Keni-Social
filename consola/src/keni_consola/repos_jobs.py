@@ -18,6 +18,10 @@ def encolar_job(gen_id: str, spec: str) -> str:
     return db.encolar_job(gen_id, spec)
 
 
+def contar_jobs_activos() -> int:
+    return db.contar_jobs_activos()
+
+
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     return db.reclamar_job(worker)
 

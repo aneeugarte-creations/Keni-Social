@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import cola, generaciones, worker
+from keni_consola import cola, generaciones, repos, worker
 from keni_consola.dominio import jobspec
 from keni_consola.motores import estudio_video, transcripcion
 
@@ -34,8 +34,8 @@ def test_encolar_job_proceso_crea_generacion_y_job(entorno):
     assert "procesar" not in clavado["spec"]
     assert jobspec.es_kind_proceso(clavado["spec"]) is True
     cola.terminar(clavado["id"])
-    # El cupo de admision se libera al limpiar (el dispatch del worker lo haria; aqui lo soltamos).
-    generaciones.runner.liberar_admision()
+    # Al terminar el job, la cola COMPARTIDA queda libre (sin contador en memoria que liberar).
+    assert repos.contar_jobs_activos() == 0
 
 
 def test_encolar_job_proceso_kind_invalido_revienta(entorno):
@@ -73,7 +73,7 @@ def test_worker_despacha_job_proceso_al_ejecutor(entorno, monkeypatch):
     assert g["estado"] == generaciones.ESTADO_COMPLETADO
     assert g["resultado"] == {"media_id": "render/x.mp4"}
     # El cupo de admision quedo liberado (no se fuga).
-    assert generaciones.runner.admitidos() == 0
+    assert repos.contar_jobs_activos() == 0
 
 
 def test_stub_render_marca_error(entorno):
@@ -87,7 +87,7 @@ def test_stub_render_marca_error(entorno):
     assert g["estado"] == generaciones.ESTADO_ERROR
     # Ejecutor real (ya no es stub): valida y reporta en español que la composicion no existe.
     assert "composicion" in g["error"].lower()
-    assert generaciones.runner.admitidos() == 0
+    assert repos.contar_jobs_activos() == 0
 
 
 def test_stub_transcripcion_marca_error(entorno):
@@ -114,7 +114,7 @@ def test_worker_ejecutor_que_revienta_marca_error(entorno, monkeypatch):
     worker.procesar_job(job, "w")
     g = generaciones.obtener(reg["id"])
     assert g["estado"] == generaciones.ESTADO_ERROR
-    assert generaciones.runner.admitidos() == 0
+    assert repos.contar_jobs_activos() == 0
 
 
 def test_camino_claude_sigue_intacto(entorno):

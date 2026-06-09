@@ -70,6 +70,26 @@ def encolar_job(gen_id: str, spec: str) -> str:
     return fila["id"] if fila is not None else job_id
 
 
+def contar_jobs_activos() -> int:
+    """Nº de jobs EN VUELO en la cola COMPARTIDA: `pendiente` (esperando) + `reclamado` (corriendo).
+
+    Es la cuenta AUTORITATIVA del backpressure (#130 Fase 2): vive en Postgres, asi que la ven
+    TODOS los procesos que encolan (back, daemons) y se AUTOLIBERA cuando un worker marca el job
+    `terminado`. Reemplaza al contador en memoria por-proceso de `runner` (que en hosted —back y
+    worker son contenedores distintos— solo subia y nunca bajaba, saturando el back tras
+    `max_jobs+max_cola` generaciones). El gate de admision (`cola.encolar`) compara este valor con
+    el tope antes de insertar.
+    """
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT count(*) AS n FROM jobs WHERE estado <> ?", (JOB_TERMINADO,)
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 

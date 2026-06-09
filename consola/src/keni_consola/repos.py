@@ -176,6 +176,7 @@ from .repos_historial import (  # noqa: F401
 )
 from .repos_jobs import (  # noqa: F401
     cancelar_job,
+    contar_jobs_activos,
     encolar_job,
     job_cancelado,
     reclamar_job,

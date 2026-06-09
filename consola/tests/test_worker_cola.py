@@ -79,6 +79,52 @@ def test_encolar_idempotente_por_gen_id(entorno):
     assert cola.reclamar() is None  # no habia un segundo job
 
 
+def test_gate_cola_rechaza_al_tope_y_se_libera(entorno, monkeypatch):
+    """`cola.encolar` rechaza con ColaLlenaError al llegar al tope (max_jobs+max_cola).
+
+    El gate cuenta los jobs EN VUELO en la cola compartida; al terminar uno, vuelve a haber sitio.
+    """
+    monkeypatch.setenv("KENI_MAX_JOBS", "1")
+    monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
+    assert cola.tope_cola() == 2
+
+    def _encolar_nuevo():
+        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        return cola.encolar(gen["id"], spec)
+
+    j1 = _encolar_nuevo()
+    _encolar_nuevo()  # 2do: la cola queda al tope
+    # 3ro: rechazo SINCRONO (la cola esta llena) -> el llamante responde 429.
+    with pytest.raises(generaciones.ColaLlenaError):
+        _encolar_nuevo()
+    # Al terminar un job, se libera capacidad y vuelve a admitir.
+    cola.terminar(j1)
+    assert _encolar_nuevo()  # ya cabe de nuevo
+
+
+def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
+    """REGRESION del leak de admision: encolar->reclamar->terminar MUCHAS veces NO satura.
+
+    El gate de admision vivia en un contador EN MEMORIA por-proceso (`runner.admitir`): en hosted
+    el back sumaba al encolar y el worker restaba al terminar, en memorias SEPARADAS, asi que el
+    contador del back solo subia y nunca bajaba — tras `max_jobs+max_cola` generaciones rechazaba
+    TODO para siempre aunque la cola real estuviera vacia. Ahora el gate cuenta la cola REAL
+    (Postgres, compartida) y se autolibera: tras N >> tope ciclos completos seguimos pudiendo
+    encolar. Antes, este bucle reventaba con ColaLlenaError pasada la vuelta `tope`.
+    """
+    monkeypatch.setenv("KENI_MAX_JOBS", "1")
+    monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
+    for i in range(2 * cola.tope_cola() + 3):  # 7 ciclos completos, muy por encima del tope
+        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": f"X{i}"})
+        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        job_id = cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError nunca
+        clavado = cola.reclamar(f"w{i}")
+        assert clavado is not None
+        cola.terminar(job_id)  # libera la capacidad para la siguiente vuelta
+    assert repos.contar_jobs_activos() == 0
+
+
 def test_reclama_job_huerfano_de_worker_muerto(entorno):
     """Un job `reclamado` cuyo worker murio (claimed_at viejo) lo RE-RECLAMA otro worker.
 
@@ -425,9 +471,9 @@ def _esperar_terminal(gid: str, timeout: float = 10.0) -> str:
 def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
     """Encolar -> el worker clava y corre `claude` (mockeado) -> el registro completa.
 
-    Es el camino del desacoplo entero, salvo el binario real: el back encola (via admision
-    + cola), el worker reclama, reconstruye el `procesar` de hashtags desde el spec y corre
-    el runner #137; el registro queda `completado` con el resultado parseado.
+    Es el camino del desacoplo entero, salvo el binario real: el back encola (via el gate de
+    cola COMPARTIDO), el worker reclama, reconstruye el `procesar` de hashtags desde el spec y
+    corre el runner #137; el registro queda `completado` con el resultado parseado.
     """
     monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
     monkeypatch.setattr(
@@ -436,7 +482,7 @@ def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
 
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Tags"})
     spec = jobspec.construir(prompt="sugiere", procesar=jobspec.construir_hashtags())
-    # El encolado toma el cupo de admision (como el endpoint real).
+    # El encolado pasa el gate de cola COMPARTIDO (como el endpoint real).
     _ENCOLAR_REAL(
         gen["id"], prompt="sugiere", cwd=entorno, procesar=lambda s, m: {}, spec=spec
     )
@@ -449,21 +495,24 @@ def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
     g = generaciones.obtener(gen["id"])
     assert g["estado"] == generaciones.ESTADO_COMPLETADO
     assert g["resultado"] == {"hashtags": ["#uno", "#dos"]}
-    # El cupo de admision quedo liberado (no se fuga).
-    assert generaciones.runner.admitidos() == 0
+    # La cola COMPARTIDA quedo drenada (el job paso a `terminado`, libera capacidad).
+    assert repos.contar_jobs_activos() == 0
 
 
 @pytest.mark.timeout(20)
 def test_worker_spec_corrupto_marca_error_y_libera_cupo(entorno):
-    """Un job con spec corrupto NO llama a `claude`: queda en error y libera el cupo."""
+    """Un job con spec corrupto NO llama a `claude`: queda en error y LIBERA la cola.
+
+    El worker marca el registro en error y `cola.terminar` saca el job de la cola, asi su
+    cupo (que ocupaba como `pendiente`) se libera y no satura el gate compartido.
+    """
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    generaciones.runner.admitir()  # el encolado real lo habria tomado
     repos.encolar_job(gen["id"], "{ corrupto")
     job = cola.reclamar()
     worker.procesar_job(job, "w")
     g = generaciones.obtener(gen["id"])
     assert g["estado"] == generaciones.ESTADO_ERROR
-    assert generaciones.runner.admitidos() == 0
+    assert repos.contar_jobs_activos() == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -644,7 +693,7 @@ def test_cancelar_job_pendiente_no_lanza_claude(entorno, monkeypatch):
     g = generaciones.obtener(gen["id"])
     assert g["estado"] == generaciones.ESTADO_ERROR
     assert g["motivo"] == generaciones.MOTIVO_CANCELADO
-    assert generaciones.runner.admitidos() == 0
+    assert repos.contar_jobs_activos() == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -728,8 +777,8 @@ def test_spec_no_se_puede_encolar_sin_spec(entorno):
         _ENCOLAR_REAL(
             gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=None
         )
-    # El cupo de admision NO se fuga aunque falle el encolado.
-    assert generaciones.runner.admitidos() == 0
+    # El gate de cola NO consume cupo si el encolado falla (nunca se inserto el job).
+    assert repos.contar_jobs_activos() == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -893,8 +942,8 @@ def test_pool_detener_cancela_todos_los_en_vuelo_y_son_reclamables(entorno, monk
         g = generaciones.obtener(gid)
         assert g["estado"] == generaciones.ESTADO_ERROR
         assert g["motivo"] == generaciones.MOTIVO_INTERRUMPIDO
-    # No se fuga el cupo de admision.
-    assert generaciones.runner.admitidos() == 0
+    # La cola COMPARTIDA quedo libre (cada job en vuelo salio con `cola.terminar`).
+    assert repos.contar_jobs_activos() == 0
 
     # RE-RECLAMABLES tras el umbral de huerfano: envejecemos claimed_at y otro worker los clava.
     # (cola.terminar saco el job, pero el reaper/segunda vida cubre el caso general; aqui

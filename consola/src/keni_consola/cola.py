@@ -15,12 +15,34 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import repos
-from .dominio import jobspec
+from . import config, repos
+from .dominio import jobspec, runner
+
+
+def tope_cola() -> int:
+    """Tope TOTAL de jobs en vuelo admitidos: `max_jobs` (corriendo) + `max_cola` (esperando)."""
+    return config.max_jobs() + config.max_cola()
 
 
 def encolar(gen_id: str, spec: dict[str, Any]) -> str:
-    """Encola el job de `gen_id` con su `spec` (dict). Devuelve el job id. NO bloquea."""
+    """Encola el job de `gen_id` con su `spec` (dict). Devuelve el job id. NO bloquea.
+
+    BACKPRESSURE COMPARTIDO (#130 Fase 2): el gate de admision se decide AQUI contra el conteo
+    REAL de la cola en Postgres (`repos.contar_jobs_activos`), no contra un contador en memoria
+    por-proceso. Asi el tope lo respetan TODOS los procesos que encolan (back, daemons) y se
+    AUTOLIBERA cuando un worker marca un job `terminado`. Si ya hay `tope_cola()` jobs en vuelo,
+    rechaza con `ColaLlenaError` (el llamante lo traduce a 429) ANTES de insertar.
+
+    POR QUE CAMBIO: el contador en memoria de `runner.admitir()` solo funcionaba en el perfil
+    LOCAL (back y worker en el MISMO proceso). En hosted son contenedores distintos: el back
+    sumaba al encolar y el worker restaba al terminar, en memorias separadas, asi que el contador
+    del back solo subia y nunca bajaba — tras `max_jobs+max_cola` generaciones el back rechazaba
+    TODO para siempre ("Hay demasiadas generaciones en curso") aunque la cola real estuviera vacia.
+    """
+    if repos.contar_jobs_activos() >= tope_cola():
+        raise runner.ColaLlenaError(
+            "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
+        )
     return repos.encolar_job(gen_id, jobspec.serializar(spec))
 
 
