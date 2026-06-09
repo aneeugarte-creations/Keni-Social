@@ -59,7 +59,7 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
 
 export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
-  { ruta: "/datos/analiticas/comercial", etiqueta: "Comercial", icono: Megaphone },
+  { ruta: "/datos/analiticas/comercial", etiqueta: "Campañas", icono: Megaphone },
 ];
 
 // El antiguo hub "Parrilla" se separó en "Feed" (feed de ideación + Lista de contenido).

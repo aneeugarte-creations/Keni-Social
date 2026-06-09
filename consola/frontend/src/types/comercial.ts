@@ -125,3 +125,90 @@ export type ReporteComercial = ReportePublicacionComercial | ReporteCampaniaCome
 export interface RespuestaReporteComercial {
   reporte: ReporteComercial;
 }
+
+// --- Campañas (agrupan piezas por hashtag; analítica al vuelo) ----------------
+// Tipos a mano (como las rutas ad-hoc): el backend de campañas no está en el
+// subconjunto estable generado, así que estos no salen de `types.gen`.
+
+export interface CampaniaComercial {
+  id: string;
+  marca: string;
+  marca_nombre: string;
+  nombre: string;
+  /** Hashtags normalizados (sin '#', en minúsculas). */
+  hashtags: string[];
+  activa: boolean;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
+
+export interface RespuestaCampanias {
+  campanias: CampaniaComercial[];
+  fuente: string;
+  es_muestra: boolean;
+}
+
+export interface RespuestaCampania {
+  campania: CampaniaComercial;
+}
+
+/** Una pieza del periodo que entra en la campaña (fila de la tabla). */
+export interface PiezaCampania {
+  id: string;
+  red: string;
+  titulo: string;
+  publicado: string;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  url: string;
+  formato: string;
+}
+
+export interface KpisCampania {
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  piezas: number;
+}
+
+/** Un KPI comparado contra el periodo anterior (`variacion_pct` null si no hay base). */
+export interface ComparativaKpi {
+  actual: number;
+  anterior: number;
+  delta: number;
+  variacion_pct: number | null;
+}
+
+export type ClaveKpiCampania = "visualizaciones" | "interacciones" | "engagement_pct" | "piezas";
+
+export interface PuntoTendenciaCampania {
+  fecha: string;
+  visualizaciones: number;
+  interacciones: number;
+}
+
+export interface AnaliticaCampania {
+  campania: CampaniaComercial;
+  rango: string;
+  periodo: { desde: string; hasta: string };
+  fuente: string;
+  es_muestra: boolean;
+  kpis: KpisCampania;
+  comparativa: Record<ClaveKpiCampania, ComparativaKpi>;
+  tendencia: { puntos: PuntoTendenciaCampania[] };
+  piezas: PiezaCampania[];
+  generado_en: string;
+}
+
+export interface CuerpoCrearCampania {
+  marca: string;
+  nombre: string;
+  hashtags: string[];
+}
+
+export interface CuerpoActualizarCampania {
+  nombre?: string;
+  hashtags?: string[];
+  activa?: boolean;
+}
