@@ -23,7 +23,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import config, generaciones, marcas, redes, repos
-from .._http_json import _entero_query
+from .._http_json import _entero_query, envoltura_paginacion
 from ..pipeline_contenido import (
     ORIGEN_PIPELINE,
     QA_SALTADA,
@@ -71,6 +71,15 @@ _ETAPAS = (
     ("cd", "Copy + placa"),
     ("aprobacion", "Aprobación"),
 )
+# Claves válidas para el filtro `?etapa=` (la etapa donde la run está parada). Catálogo de
+# `_ETAPAS`, sin duplicar la fuente de verdad.
+_ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
+# Valores válidos del filtro `?estado=` (el `estado_global` de la run).
+_ESTADOS_GLOBAL = frozenset({"ok", "en_curso", "pendiente", "revisar", "fallo"})
+# Tope de runs a MATERIALIZAR antes de filtrar/paginar en memoria. El tablero del equipo es
+# pequeño en el piloto; esto acota el coste si el histórico de runs creciera mucho (se sirven los
+# más recientes). `log()` no aplica aquí: la paginación reporta el `total` ya acotado a esto.
+_UNIVERSO_MAX = 500
 
 # Verificación por corroboración (Ola D) -> texto legible para la etapa Jerarquización.
 _VERIFICACION_TEXTO = {
@@ -308,6 +317,18 @@ def _estado_global(etapas: list[dict]) -> str:
     return "ok"
 
 
+def _etapa_actual(etapas: list[dict]) -> str:
+    """Clave de la etapa donde la run está «parada» (la 1ª no-{ok,saltada}); "" si todas hechas.
+
+    Es lo que filtra `?etapa=`: «enséñame todo lo que espera en Aprobación / en QA». Coherente
+    con `_estado_global`, que toma el estado de esa misma etapa. "" cuando todo está ok/saltada.
+    """
+    for etapa in etapas:
+        if etapa["estado"] not in ("ok", _ESTADO_SALTADA):
+            return etapa["clave"]
+    return ""
+
+
 def _qa_fuente_de(item: dict) -> dict:
     """Veredicto ESTRUCTURADO de la criba de la fuente (rediseño QPC), para la UI.
 
@@ -365,6 +386,8 @@ def _run_de(
         "creado": item.get("creado", "") or "",
         "actualizado": item.get("actualizado", "") or "",
         "estado_global": _estado_global(etapas),
+        # Etapa donde la run está «parada» (para el filtro `?etapa=` y el resaltado en la UI).
+        "etapa_actual": _etapa_actual(etapas),
         "etapas": etapas,
         # Criba de la fuente (⚠️/❗ + hallazgos): la señal de QA pre-copy del tema.
         "qa_fuente": _qa_fuente_de(item),
@@ -374,12 +397,12 @@ def _run_de(
     }
 
 
-def _runs_del_pipeline(marca: str | None, limite: int) -> list[dict]:
-    """Contenidos `origen='pipeline'`, más recientes primero, recortados a `limite`.
+def _runs_del_pipeline(marca: str | None) -> list[dict]:
+    """Contenidos `origen='pipeline'`, más recientes primero, acotados a `_UNIVERSO_MAX`.
 
-    `listar_contenido` no filtra por `origen`, así que filtramos en memoria. El listado
-    de contenido ya viene acotado al tablero del equipo; recortamos a `limite` tras
-    reordenar por recencia (`creado` desc) para no servir un histórico enorme.
+    `listar_contenido` no filtra por `origen`, así que filtramos en memoria. El listado de
+    contenido ya viene acotado al tablero del equipo; reordenamos por recencia (`creado` desc) y
+    acotamos al universo máximo (los filtros y la paginación se aplican sobre este conjunto).
 
     NO oculta runs por el toggle de la marca: un tema que NACIÓ del pipeline sigue siendo
     localizable aunque luego apaguen "Crear noticias" (antes se ocultaban y aparecían posts en
@@ -393,32 +416,57 @@ def _runs_del_pipeline(marca: str | None, limite: int) -> list[dict]:
         if (it.get("origen") or "") == ORIGEN_PIPELINE
     ]
     pipeline.sort(key=lambda it: (it.get("creado", "") or "", it.get("id", "")), reverse=True)
-    return pipeline[:limite]
+    return pipeline[:_UNIVERSO_MAX]
 
 
 async def listar(request: Request) -> Response:
-    """GET /api/pipelines?marca=&limite=50: runs del pipeline (recientes primero)."""
+    """GET /api/pipelines?marca=&etapa=&estado=&limite=50&desplazamiento=0.
+
+    Runs del pipeline (recientes primero) con FILTROS (por etapa donde está parada / por estado
+    global) y PAGINACIÓN offset (envelope `paginacion:{total, limite, desplazamiento}`). Mantiene
+    la clave `pipelines` retrocompatible. Los filtros se aplican sobre el objeto run DERIVADO
+    (etapa_actual/estado_global), por eso se materializa el universo y se filtra/pagina en memoria.
+    """
     qp = request.query_params
     marca = (qp.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    # Filtros (se IGNORAN si el valor no es válido: el cliente ve el conjunto sin filtrar, no un 400).
+    etapa = (qp.get("etapa") or "").strip()
+    if etapa and etapa not in _ETAPA_CLAVES:
+        etapa = ""
+    estado = (qp.get("estado") or "").strip()
+    if estado and estado not in _ESTADOS_GLOBAL:
+        estado = ""
     limite = _entero_query(qp.get("limite"), minimo=1)
     if limite is None:
         limite = _LIMITE_DEF
     limite = min(limite, _LIMITE_MAX)
+    desplazamiento = _entero_query(qp.get("desplazamiento"), minimo=0) or 0
 
-    runs_items = _runs_del_pipeline(marca or None, limite)
+    runs_items = _runs_del_pipeline(marca or None)
     # Una sola lectura de TODAS las plataformas, agrupadas por contenido (evita N consultas).
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma():
         por_contenido.setdefault(plat.get("contenido_id", ""), []).append(plat)
     # Una sola lectura de las HISTORIAS (clusters) de estos temas (procedencia IA; evita N consultas).
     clusters = repos.clusters_por_contenidos([it.get("id", "") or "" for it in runs_items])
-    pipelines = [
+    todas = [
         _run_de(it, por_contenido.get(it.get("id", ""), []), cluster=clusters.get(it.get("id", "")))
         for it in runs_items
     ]
-    return JSONResponse({"pipelines": pipelines})
+    if etapa:
+        todas = [r for r in todas if r["etapa_actual"] == etapa]
+    if estado:
+        todas = [r for r in todas if r["estado_global"] == estado]
+    total = len(todas)
+    pagina = todas[desplazamiento : desplazamiento + limite]
+    return JSONResponse(
+        {
+            "pipelines": pagina,
+            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+        }
+    )
 
 
 def _generacion_publica(gen_id: str) -> dict | None:

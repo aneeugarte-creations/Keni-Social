@@ -17,6 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
@@ -53,6 +61,25 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
 const ETAPA_A_EVENTO: Record<string, string> = { ci: "CI", cd: "CD", qa: "QA" };
+
+// Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
+const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
+  { clave: "jerarquia", nombre: "Jerarquización" },
+  { clave: "ci", nombre: "Ingesta" },
+  { clave: "qa", nombre: "Criba de la fuente" },
+  { clave: "cd", nombre: "Copy + placa" },
+  { clave: "aprobacion", nombre: "Aprobación" },
+];
+// Valores del filtro `?estado=` (el `estado_global` de la run).
+const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
+  { clave: "pendiente", nombre: "Pendiente" },
+  { clave: "en_curso", nombre: "En curso" },
+  { clave: "revisar", nombre: "Revisar" },
+  { clave: "fallo", nombre: "Fallo" },
+  { clave: "ok", nombre: "Completado" },
+];
+// Tamaño de página del botón «Cargar más» (se pide `limite = páginas * PAGINA`, offset 0).
+const PAGINA = 20;
 
 // Fase de progreso de la generación (`claude -p`) -> etiqueta humana para la cabecera del
 // stream. Espeja las fases del dominio (stream.FASE_*): razonando → generando → completado.
@@ -553,14 +580,27 @@ export default function Pipelines() {
   // propio). `marcaActiva` es el id canónico (o null = "Todas", solo admin) que el back
   // valida; null → sin filtro de marca.
   const { marcaActiva } = useMarcaActiva();
+  // Filtros (etapa donde está parada / estado global) y paginación incremental.
+  const [etapa, setEtapa] = React.useState("");
+  const [estado, setEstado] = React.useState("");
+  const [paginas, setPaginas] = React.useState(1);
+  // Al cambiar un filtro (o la marca activa), volvemos a la 1ª página.
+  React.useEffect(() => { setPaginas(1); }, [etapa, estado, marcaActiva]);
+
   const q = useQuery({
-    queryKey: ["pipelines", "lista", marcaActiva ?? "todas"],
+    queryKey: ["pipelines", "lista", marcaActiva ?? "todas", etapa, estado, paginas],
     queryFn: ({ signal }) =>
-      api.pipelines({ marca: marcaActiva ?? undefined, limite: 50 }, signal),
+      api.pipelines(
+        { marca: marcaActiva ?? undefined, etapa, estado, limite: paginas * PAGINA },
+        signal,
+      ),
     refetchInterval: 30_000,
+    placeholderData: (prev) => prev,  // no parpadea al «Cargar más» ni al cambiar de filtro
   });
   const datos = q.data as RespuestaPipelines | undefined;
   const runs = datos?.pipelines ?? [];
+  const total = datos?.paginacion?.total ?? runs.length;
+  const hayFiltro = !!(etapa || estado);
 
   return (
     <div className="space-y-5">
@@ -571,6 +611,38 @@ export default function Pipelines() {
           </ItemMenu>
         </MenuAcciones>
       </AccionesPagina>
+
+      {/* Filtros: por la etapa donde está parada la run y por su estado global. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={etapa || "todas"} onValueChange={(v) => setEtapa(v === "todas" ? "" : v)}>
+          <SelectTrigger className="h-9 w-[200px]"><SelectValue placeholder="Etapa" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas las etapas</SelectItem>
+            {ETAPAS_FILTRO.map((e) => (
+              <SelectItem key={e.clave} value={e.clave}>{e.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={estado || "todos"} onValueChange={(v) => setEstado(v === "todos" ? "" : v)}>
+          <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="Estado" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Cualquier estado</SelectItem>
+            {ESTADOS_FILTRO.map((e) => (
+              <SelectItem key={e.clave} value={e.clave}>{e.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hayFiltro && (
+          <Button variant="ghost" size="sm" onClick={() => { setEtapa(""); setEstado(""); }}>
+            Limpiar
+          </Button>
+        )}
+        {!q.isPending && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {total} {total === 1 ? "run" : "runs"}{hayFiltro ? " (filtrado)" : ""}
+          </span>
+        )}
+      </div>
 
       {q.isPending ? (
         <div className="space-y-3">
@@ -586,15 +658,32 @@ export default function Pipelines() {
       ) : runs.length === 0 ? (
         <EstadoVacio
           icono={GitBranch}
-          titulo="Aún no hay pipelines"
-          texto="Cuando el pipeline automático ingiera temas (RSS/tendencias), cada pieza aparecerá aquí con sus etapas. Actívalo con KENI_PIPELINE."
+          titulo={hayFiltro ? "Sin runs con ese filtro" : "Aún no hay pipelines"}
+          texto={
+            hayFiltro
+              ? "Ninguna run coincide con la etapa/estado elegidos. Prueba a quitar el filtro."
+              : "Cuando el pipeline automático ingiera temas (RSS/tendencias), cada pieza aparecerá aquí con sus etapas. Actívalo con KENI_PIPELINE."
+          }
         />
       ) : (
-        <div className="space-y-3">
-          {runs.map((run) => (
-            <FilaPipeline key={run.id} run={run} onAbrir={setAbierto} />
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {runs.map((run) => (
+              <FilaPipeline key={run.id} run={run} onAbrir={setAbierto} />
+            ))}
+          </div>
+          {runs.length < total && (
+            <div className="flex justify-center pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setPaginas((p) => p + 1)}
+                disabled={q.isFetching}
+              >
+                {q.isFetching ? "Cargando…" : `Cargar más (${runs.length} de ${total})`}
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <DetalleRun id={abierto} onCerrar={cerrar} />

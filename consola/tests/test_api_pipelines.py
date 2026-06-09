@@ -226,6 +226,50 @@ def test_marca_invalida_400(cliente):
     assert cliente.get("/api/pipelines?marca=no-existe").status_code == 400
 
 
+def test_paginacion_envelope_y_offset(cliente):
+    """La lista trae `paginacion:{total,limite,desplazamiento}` y respeta offset+limite (sin solape)."""
+    for i in range(5):
+        _tema_pipeline(f"Pag {i}")
+    base = cliente.get("/api/pipelines").json()
+    assert base["paginacion"]["total"] >= 5
+    p1 = cliente.get("/api/pipelines?limite=2&desplazamiento=0").json()
+    assert len(p1["pipelines"]) == 2
+    assert p1["paginacion"]["limite"] == 2
+    assert p1["paginacion"]["desplazamiento"] == 0
+    p2 = cliente.get("/api/pipelines?limite=2&desplazamiento=2").json()
+    ids1 = {x["id"] for x in p1["pipelines"]}
+    ids2 = {x["id"] for x in p2["pipelines"]}
+    assert ids1.isdisjoint(ids2)  # páginas distintas, sin solape
+
+
+def test_etapa_actual_y_filtro_por_etapa(cliente):
+    """`etapa_actual` = la etapa donde está parada; `?etapa=` filtra por ella."""
+    aprob = _tema_pipeline("Run aprobada", qa_veredicto="no_verificado")
+    repos.crear_contenido_plataforma(
+        contenido_id=aprob["id"], red="x", estado="aprobado", copy="C.", veredicto="no_verificado",
+    )
+    _tema_pipeline("Run en QA")  # sin veredicto: la QA queda 'pendiente'
+    en_qa = _run_por_titulo(cliente, "Run en QA")
+    assert en_qa["etapa_actual"] == "qa"
+    aprobada = _run_por_titulo(cliente, "Run aprobada")
+    assert aprobada["etapa_actual"] == ""  # todo ok/saltada: no está parada en ninguna
+
+    titulos_qa = {x["titulo"] for x in cliente.get("/api/pipelines?etapa=qa").json()["pipelines"]}
+    assert "Run en QA" in titulos_qa
+    assert "Run aprobada" not in titulos_qa
+
+
+def test_filtro_por_estado_global_e_invalido_se_ignora(cliente):
+    """`?estado=` filtra por estado_global; un valor inválido se ignora (no 400)."""
+    _tema_pipeline("Run pendiente")  # QA pendiente -> estado_global 'pendiente'
+    pend = {x["titulo"] for x in cliente.get("/api/pipelines?estado=pendiente").json()["pipelines"]}
+    assert "Run pendiente" in pend
+    # Filtro inválido: se ignora, devuelve 200 con el conjunto sin filtrar (no rompe la UI).
+    r = cliente.get("/api/pipelines?estado=zzz&etapa=no-existe")
+    assert r.status_code == 200
+    assert "Run pendiente" in {x["titulo"] for x in r.json()["pipelines"]}
+
+
 def test_detalle_run(cliente):
     tema = _tema_pipeline("Tema detalle")
     repos.crear_contenido_plataforma(

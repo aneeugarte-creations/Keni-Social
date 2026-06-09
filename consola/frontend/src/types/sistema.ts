@@ -1,4 +1,4 @@
-import type { MetricasRun, ResultadoEstado } from "../types.gen";
+import type { MetricasRun, Paginacion, ResultadoEstado } from "../types.gen";
 
 // --- Estado (autodiagnostico del sistema) ---
 
@@ -174,6 +174,8 @@ export interface Pipeline {
   creado: string;
   actualizado: string;
   estado_global: "ok" | "en_curso" | "pendiente" | "revisar" | "fallo";
+  /** Clave de la etapa donde la run está «parada» (1ª no-ok/saltada); "" si todo está hecho. */
+  etapa_actual: string;
   etapas: PipelineEtapa[];
   /** Criba de la fuente (⚠️/❗ + hallazgos). Siempre presente desde el back. */
   qa_fuente?: PipelineQaFuente;
@@ -192,6 +194,8 @@ export interface PipelineActividad {
 
 export interface RespuestaPipelines {
   pipelines: Pipeline[];
+  /** Envelope de paginación offset (`{total, limite, desplazamiento}`). */
+  paginacion: Paginacion;
 }
 
 /** El STREAM (proceso de pensamiento de `claude -p`) de la generación de una etapa.
