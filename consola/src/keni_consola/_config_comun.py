@@ -224,6 +224,12 @@ ENV_PIPELINE_COPY = "KENI_PIPELINE_COPY"
 ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
 ENV_PIPELINE_INTERVALO_MIN = "KENI_PIPELINE_INTERVALO_MIN"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
+# Topes por barrido del pipeline (antes constantes fijas en `pipeline_contenido`; ahora ajustables).
+ENV_PIPELINE_EN_VUELO_MAX = "KENI_PIPELINE_EN_VUELO_MAX"  # gate serial: temas en vuelo por marca
+ENV_PIPELINE_QA_MAX = "KENI_PIPELINE_QA_MAX"  # cribas QA (claude -p) lanzadas por barrido
+ENV_PIPELINE_QA_REVISAR_MAX = "KENI_PIPELINE_QA_REVISAR_MAX"  # temas pendientes que mira cada fase
+ENV_PIPELINE_COPY_MAX = "KENI_PIPELINE_COPY_MAX"  # copies lanzados por barrido
+ENV_PIPELINE_AUTOGEN_MAX = "KENI_PIPELINE_AUTOGEN_MAX"  # autogen del news-pool por barrido
 
 # Etapa de QA del pipeline: "Validar (QA)" (`KENI_PIPELINE_VALIDACION`, toggle de etapa por marca). Es la criba
 # de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de generar copy. Toggle
@@ -537,6 +543,13 @@ PIPELINE_INTERVALO_HORAS_DEF = 1
 # compatibilidad). 20 min = barrido ágil sin saturar el worker (los caps por barrido frenan ráfagas).
 PIPELINE_INTERVALO_MIN_DEF = 20
 PIPELINE_MAX_DEF = 3
+# Defectos de los topes por barrido (8 lanzamientos/barrido drenan ~24/h con el sweep de 20 min;
+# 50 = cota de seguridad de cuántos pendientes mira cada fase, sobre los FILTRADOS no la cruda).
+PIPELINE_EN_VUELO_MAX_DEF = 8
+PIPELINE_QA_MAX_DEF = 8
+PIPELINE_QA_REVISAR_MAX_DEF = 50
+PIPELINE_COPY_MAX_DEF = 8
+PIPELINE_AUTOGEN_MAX_DEF = 8
 
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
@@ -775,6 +788,11 @@ __all__ = [
     'ENV_PIPELINE_INTERVALO_HORAS',
     'ENV_PIPELINE_INTERVALO_MIN',
     'ENV_PIPELINE_MAX',
+    'ENV_PIPELINE_EN_VUELO_MAX',
+    'ENV_PIPELINE_QA_MAX',
+    'ENV_PIPELINE_QA_REVISAR_MAX',
+    'ENV_PIPELINE_COPY_MAX',
+    'ENV_PIPELINE_AUTOGEN_MAX',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
     'ENV_PRIORIZA_METRICAS',
@@ -860,6 +878,11 @@ __all__ = [
     'PIPELINE_INTERVALO_HORAS_DEF',
     'PIPELINE_INTERVALO_MIN_DEF',
     'PIPELINE_MAX_DEF',
+    'PIPELINE_EN_VUELO_MAX_DEF',
+    'PIPELINE_QA_MAX_DEF',
+    'PIPELINE_QA_REVISAR_MAX_DEF',
+    'PIPELINE_COPY_MAX_DEF',
+    'PIPELINE_AUTOGEN_MAX_DEF',
     'PORT_DEF',
     'Path',
     'REAPER_INTERVALO_MIN_DEF',

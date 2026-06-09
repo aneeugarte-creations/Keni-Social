@@ -35,9 +35,6 @@ __all__ = [
     "ETAPA_CI",
     "ETAPA_CD",
     "ETAPA_QA",
-    "_QA_REVISAR_MAX",
-    "_QA_LANZAR_MAX",
-    "_CD_LANZAR_MAX",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
     "PROMPT_QA_ID",
@@ -47,7 +44,6 @@ __all__ = [
     "VERDICTO_NO_VERIFICADO",
     "VERDICTO_PROBLEMA",
     "_DEFAULT_QA_CRITERIOS",
-    "_AUTOGEN_LANZAR_MAX",
     # og:image
     "_RE_OG_IMAGE",
     "_RE_CONTENT",
@@ -86,21 +82,9 @@ ETAPA_CD = "CD"
 ETAPA_QA = "QA"
 ETAPA_ARTE = "ARTE"
 
-# Cuantos temas PENDIENTES (sin QA / listos para copy) revisa cada fase por barrido. Cota de
-# seguridad para no recorrer un histórico enorme. OJO: se aplica SOBRE LOS PENDIENTES (tras
-# filtrar), nunca sobre la lista cruda de temas; recortar la lista cruda a los N más viejos
-# dejaba fuera de la ventana los temas nuevos y mataba de hambre al pipeline.
-_QA_REVISAR_MAX = 50
-
-# CAP de LANZAMIENTOS de Validación (QA) de la FUENTE (`claude -p`) por barrido. Cada uno es un
-# job del worker (KENI_MAX_JOBS); sin tope, una pasada que encuentra muchos temas sin veredicto
-# dispara una RÁFAGA que satura el worker. Con el tope, cada barrido lanza pocos y el resto se
-# valida en el siguiente; con el sweep cada 20 min, 8/barrido drenan ~24/h por etapa.
-_QA_LANZAR_MAX = 8
-
-# CAP de LANZAMIENTOS de COPY (CD) por barrido: la fase CD también encola `claude -p` (uno por
-# tema validado); mismo motivo de anti-ráfaga que la Validación. El resto entra en el siguiente.
-_CD_LANZAR_MAX = 8
+# Los TOPES por barrido del pipeline (cuántos pendientes mira cada fase, cribas QA, copies, autogen
+# y el gate serial en vuelo) ya NO son constantes: son ajustables en la config (`config.pipeline_*`,
+# env `KENI_PIPELINE_*`, editables en avatar → Sistema → Ajustes). Cada fase los lee al ejecutarse.
 
 # DEDUP de contenido: ventana (días) hacia atrás para considerar que una noticia "ya está" en la
 # marca. Un tema nuevo cuyo título coincide (normalizado) con otro contenido de la MISMA marca
@@ -179,10 +163,6 @@ Tras el semáforo, cierra con un bloque ```json con la forma:
                 "fragmento": "...", "explicacion": "...", "sugerencia": "..."}]}
 Usa gravedad "error" SOLO para lo de peso (lo que hace 🔴). Sin emojis en el cuerpo.
 """
-
-# Tope de temas del news-pool (origen autogen) a los que la etapa de copy genera copy por
-# barrido. Mismo motivo anti-ráfaga que `_CD_LANZAR_MAX`: cada uno encola un `claude -p`.
-_AUTOGEN_LANZAR_MAX = 8
 
 
 # --------------------------------------------------------------------------- #
@@ -356,7 +336,7 @@ def _tiene_copy(tema_id: str) -> bool:
 def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
     """TODOS los temas del pipeline (origen `pipeline`), en orden FIFO. [] si la lectura falla.
 
-    NO recorta aquí: el recorte (`_QA_REVISAR_MAX`) lo aplican los consumidores SOBRE LOS
+    NO recorta aquí: el recorte (`config.pipeline_qa_revisar_max()`) lo aplican los consumidores SOBRE LOS
     TEMAS PENDIENTES (sin QA / listos para copy), no sobre la lista cruda. Recortar la lista
     cruda a los N más viejos hacía que, en cuanto el backlog superaba N y esos N más viejos ya
     estaban procesados, los temas NUEVOS quedaran FUERA de la ventana y QA/CD no los vieran

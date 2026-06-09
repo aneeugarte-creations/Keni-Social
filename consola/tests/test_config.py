@@ -407,6 +407,33 @@ def test_pipeline_intervalo_min_default_y_clamp(limpio):
     assert config.pipeline_intervalo_min() == 5
 
 
+def test_pipeline_topes_por_barrido_default_y_clamp(limpio):
+    """Los topes por barrido del pipeline son ajustables por env, con default y clamp min 1."""
+    # Defaults (antes constantes fijas en `pipeline_contenido`).
+    assert config.pipeline_max() == 3
+    assert config.pipeline_en_vuelo_max() == 8
+    assert config.pipeline_qa_max() == 8
+    assert config.pipeline_copy_max() == 8
+    assert config.pipeline_autogen_max() == 8
+    assert config.pipeline_qa_revisar_max() == 50
+    # Ajustables por env.
+    limpio.setenv(config.ENV_PIPELINE_EN_VUELO_MAX, "12")
+    assert config.pipeline_en_vuelo_max() == 12
+    limpio.setenv(config.ENV_PIPELINE_QA_MAX, "4")
+    assert config.pipeline_qa_max() == 4
+    limpio.setenv(config.ENV_PIPELINE_COPY_MAX, "6")
+    assert config.pipeline_copy_max() == 6
+    limpio.setenv(config.ENV_PIPELINE_AUTOGEN_MAX, "2")
+    assert config.pipeline_autogen_max() == 2
+    limpio.setenv(config.ENV_PIPELINE_QA_REVISAR_MAX, "100")
+    assert config.pipeline_qa_revisar_max() == 100
+    # Clamp min 1 (un 0/negativo no apaga la fase).
+    limpio.setenv(config.ENV_PIPELINE_EN_VUELO_MAX, "0")
+    assert config.pipeline_en_vuelo_max() == 1
+    limpio.setenv(config.ENV_PIPELINE_QA_MAX, "-3")
+    assert config.pipeline_qa_max() == 1
+
+
 def test_pipeline_intervalo_min_compat_horas(limpio):
     # Compatibilidad: solo el viejo de HORAS -> se respeta (en minutos).
     limpio.setenv(config.ENV_PIPELINE_INTERVALO_HORAS, "2")

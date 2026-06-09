@@ -34,7 +34,7 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
     `problema` (algo de peso: NO se genera copy; el tema se marca ❗ con los hallazgos). Por
     defecto `no_verificado` cuando hay duda (permisivo). El veredicto + hallazgos se PERSISTEN
     sobre el tema (`qa_veredicto`/`qa_hallazgos`). Cota de lanzamientos por barrido
-    (`_QA_LANZAR_MAX`). Registra etapa="QA" por tema, enlazada a la generación (stream).
+    (`config.pipeline_qa_max()`). Registra etapa="QA" por tema, enlazada a la generación (stream).
   - CD — CREACIÓN DE CONTENIDO: por cada tema cuya QA salió `no_verificado` y que aún no tiene
     copy, lanza la generación de copy por el camino PROBADO (`dominio.generar.lanzar_copy`) con
     los parámetros guardados (`imagen_fuente` para marca propia). NUNCA genera copy de un tema
@@ -94,16 +94,12 @@ from ._barrido import (
     iniciar_pipeline,
 )
 from ._comun import (
-    _AUTOGEN_LANZAR_MAX,
-    _CD_LANZAR_MAX,
     _DEFAULT_QA_CRITERIOS,
     _DIAS_DEDUP,
     _FETCH_OG_IMAGE,
     _FORMATO_PIPELINE,
     _OG_MAX_BYTES,
     _OG_TIMEOUT_S,
-    _QA_LANZAR_MAX,
-    _QA_REVISAR_MAX,
     _RE_CONTENT,
     _RE_OG_IMAGE,
     _TITULO_QA,
@@ -198,14 +194,10 @@ __all__ = [
     "QA_SALTADA",
     "VERDICTO_NO_VERIFICADO",
     "VERDICTO_PROBLEMA",
-    "_QA_REVISAR_MAX",
-    "_QA_LANZAR_MAX",
-    "_CD_LANZAR_MAX",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
     "_TITULO_QA",
     "_DEFAULT_QA_CRITERIOS",
-    "_AUTOGEN_LANZAR_MAX",
     # og:image (seams inyectables)
     "_RE_OG_IMAGE",
     "_RE_CONTENT",

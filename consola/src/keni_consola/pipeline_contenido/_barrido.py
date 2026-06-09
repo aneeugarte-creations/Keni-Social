@@ -35,10 +35,10 @@ def ejecutar_barrido() -> dict[str, Any]:
       1) CI: por cada marca con feeds activos, crea temas SIN copy (`crear_tema_de`) y marca los
          items usados (dedup).
       2) QA: lanza la criba de la FUENTE (`claude -p`) de los temas nuevos sin veredicto, con tope
-         `_QA_LANZAR_MAX`. ASÍNCRONA: marca el tema `en_curso` y el `procesar` persiste el veredicto
-         (`no_verificado`/`problema`) al completar (normalmente en un barrido posterior).
+         `config.pipeline_qa_max()`. ASÍNCRONA: marca el tema `en_curso` y el `procesar` persiste el
+         veredicto (`no_verificado`/`problema`) al completar (normalmente en un barrido posterior).
       3) CD: genera copy SOLO de los temas cuya QA salió `no_verificado` y que aún no tienen copy
-         (`temas_para_copy`), con tope `_CD_LANZAR_MAX`. Los `problema` NO generan copy (ahorro).
+         (`temas_para_copy`), con tope `config.pipeline_copy_max()`. Los `problema` NO generan copy.
 
     Best-effort: un fallo por marca/tema se loguea y se sigue; si la cola de generación está
     llena, se corta la fase en curso (reintenta el siguiente barrido). Devuelve un resumen
@@ -78,7 +78,7 @@ def _ejecutar_barrido() -> dict[str, Any]:
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin
         # cribar/sin copy). Promueve solo hasta llenar su cupo; si está lleno, salta. Así cada item
         # que entró se COMPLETA (QA→copy) antes de meter nuevos, en vez de atascar QA con backlog.
-        cupo = _ingesta._PIPELINE_EN_VUELO_MAX - _ingesta.temas_en_vuelo(marca)
+        cupo = config.pipeline_en_vuelo_max() - _ingesta.temas_en_vuelo(marca)
         if cupo <= 0:
             continue
         try:
@@ -104,8 +104,8 @@ def _ejecutar_barrido() -> dict[str, Any]:
 def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """Fase QA del barrido: lanza la CRIBA de la fuente (`claude -p`) de los temas sin veredicto.
 
-    Con TOPE de lanzamientos por barrido (`_QA_LANZAR_MAX`): evita la ráfaga de `claude -p` que
-    satura el worker e inunda Actividad de QA "en curso". Los temas restantes se criban en el
+    Con TOPE de lanzamientos por barrido (`config.pipeline_qa_max()`): evita la ráfaga de `claude -p`
+    que satura el worker e inunda Actividad de QA "en curso". Los temas restantes se criban en el
     siguiente barrido (drenaje gradual). Si la cola se llena, corta la fase (reintenta luego).
     Best-effort por tema. Devuelve los temas cuya QA se lanzó.
     """
@@ -127,7 +127,7 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             else:
                 cribados.append({"id": tema.get("id", ""), "gen_id": "", "verdicto": QA_SALTADA})
             continue
-        if lanzados >= _ref._QA_LANZAR_MAX:
+        if lanzados >= config.pipeline_qa_max():
             break
         try:
             gen = lanzar_qa_fuente(tema, autor=autor)
@@ -153,8 +153,8 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
       2) temas que las FUENTES de noticias metieron al tablero sin copy
          (`temas_autogen_sin_copy` → `autogen_copy.lanzar_para_topic`), FUNDIENDO aquí la
          selección del antiguo daemon suelto `autogen_copy`.
-    Con TOPE por barrido (`_CD_LANZAR_MAX` para 1, `_AUTOGEN_LANZAR_MAX` dentro de la selección
-    para 2). Si la cola se llena, corta la fase (reintenta luego). Best-effort por tema.
+    Con TOPE por barrido (`config.pipeline_copy_max()` para 1, `config.pipeline_autogen_max()` dentro
+    de la selección para 2). Si la cola se llena, corta la fase (reintenta luego). Best-effort por tema.
     Devuelve las generaciones de copy lanzadas.
     """
     if autor is None:
@@ -166,7 +166,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     lanzados: list[dict[str, Any]] = []
     contador = 0
     for tema in temas_para_copy():
-        if contador >= _ref._CD_LANZAR_MAX:
+        if contador >= config.pipeline_copy_max():
             break
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
         # ya estuvieran ingeridos antes de apagarla).

@@ -240,6 +240,75 @@ def _construir_catalogo() -> list[Ajuste]:
             peligroso=True,
         ),
         # --- Tuning (int/float/select) --------------------------------------------- #
+        # --- Pipeline de contenido: cadencia, volumen y topes por barrido ---------- #
+        Ajuste(
+            clave=config.ENV_PIPELINE_INTERVALO_MIN,
+            tipo="int",
+            etiqueta="Pipeline: intervalo (minutos)",
+            ayuda="Cada cuántos minutos barre el pipeline de contenido (CI→Validación→Copy→Arte).",
+            grupo="tuning",
+            defecto=config.PIPELINE_INTERVALO_MIN_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_MAX,
+            tipo="int",
+            etiqueta="Pipeline: historias por marca/barrido",
+            ayuda="Máximo de historias que la Selección intenta promover a temas por marca y barrido "
+            "(acotado además por el gate serial: nunca mete más de lo que cabe en vuelo).",
+            grupo="tuning",
+            defecto=config.PIPELINE_MAX_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_EN_VUELO_MAX,
+            tipo="int",
+            etiqueta="Pipeline: temas en vuelo por marca (gate serial)",
+            ayuda="Tope de temas sin terminar (Validación pendiente o sin copy) por marca. Mientras "
+            "una marca tenga estos en cola, la Selección no le mete más: primero completa lo que entró.",
+            grupo="tuning",
+            defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_QA_MAX,
+            tipo="int",
+            etiqueta="Pipeline: cribas de validación por barrido",
+            ayuda="Máximo de cribas de Validación (`claude -p`) lanzadas por barrido. Evita la "
+            "ráfaga que satura el worker; el resto se valida en el siguiente barrido.",
+            grupo="tuning",
+            defecto=config.PIPELINE_QA_MAX_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_COPY_MAX,
+            tipo="int",
+            etiqueta="Pipeline: copies por barrido",
+            ayuda="Máximo de generaciones de copy (`claude -p`) lanzadas por barrido en la etapa Copy.",
+            grupo="tuning",
+            defecto=config.PIPELINE_COPY_MAX_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_AUTOGEN_MAX,
+            tipo="int",
+            etiqueta="Pipeline: copies del pool de noticias por barrido",
+            ayuda="Máximo de temas del pool de noticias (no ingeridos por el propio pipeline) a los "
+            "que la etapa Copy redacta por barrido.",
+            grupo="tuning",
+            defecto=config.PIPELINE_AUTOGEN_MAX_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_QA_REVISAR_MAX,
+            tipo="int",
+            etiqueta="Pipeline: temas pendientes revisados por barrido",
+            ayuda="Cota de cuántos temas PENDIENTES mira cada fase por barrido (sobre los filtrados, "
+            "no la lista cruda). Sube si tienes mucho backlog y quieres que cada barrido alcance más.",
+            grupo="tuning",
+            defecto=config.PIPELINE_QA_REVISAR_MAX_DEF,
+            minimo=1,
+        ),
         Ajuste(
             clave=config.ENV_AUTOGEN_ARTE_MAX,
             tipo="int",

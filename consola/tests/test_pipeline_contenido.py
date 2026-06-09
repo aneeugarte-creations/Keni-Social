@@ -368,7 +368,7 @@ def test_temas_sin_qa_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
     prod: 126 historias 'usado' atascadas sin veredicto). Ahora el recorte se aplica sobre los
     PENDIENTES, así que el nuevo entra aunque los viejos llenen el crudo.
     """
-    monkeypatch.setattr(pc._qa, "_QA_REVISAR_MAX", 2)
+    monkeypatch.setenv("KENI_PIPELINE_QA_REVISAR_MAX", "2")
     _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _tema_pipeline(titulo="Nuevo", id="n1")  # sin veredicto -> pendiente
@@ -377,7 +377,7 @@ def test_temas_sin_qa_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
 
 def test_temas_para_copy_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
     """Mismo anti-inanición para CD: un tema nuevo listo entra aunque los viejos llenen el crudo."""
-    monkeypatch.setattr(pc._copy, "_QA_REVISAR_MAX", 2)
+    monkeypatch.setenv("KENI_PIPELINE_QA_REVISAR_MAX", "2")
     # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de CD),
     # ocuparían la ventana cruda. El nuevo (no_verificado + copy_pendiente + sin pieza) es el listo.
     _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
@@ -387,10 +387,10 @@ def test_temas_para_copy_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
 
 
 def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
-    """El cap por barrido de QA (`_QA_LANZAR_MAX`) acota los lanzamientos de criba."""
+    """El cap por barrido de QA (`config.pipeline_qa_max()`) acota los lanzamientos de criba."""
     monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")  # etapa QA activa para que el cap aplique a lanzamientos
     cliente = _cliente()  # noqa: F841 -- lanzador noop: deja la QA en `ejecutando` (en_curso)
-    monkeypatch.setattr(pc, "_QA_LANZAR_MAX", 2)
+    monkeypatch.setenv("KENI_PIPELINE_QA_MAX", "2")
     for i in range(4):
         _tema_pipeline(titulo=f"T{i}", id=f"tqa{i}")
 
@@ -399,10 +399,10 @@ def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
 
 
 def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
-    """El cap por barrido de CD (`_CD_LANZAR_MAX`) acota los lanzamientos de copy."""
+    """El cap por barrido de CD (`config.pipeline_copy_max()`) acota los lanzamientos de copy."""
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa para que el cap aplique
     llamadas = _mock_lanzar_copy(monkeypatch)
-    monkeypatch.setattr(pc, "_CD_LANZAR_MAX", 2)
+    monkeypatch.setenv("KENI_PIPELINE_COPY_MAX", "2")
     import json
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
@@ -505,7 +505,7 @@ def test_ci_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
     """Gate SERIAL: si la marca ya tiene >= cupo en vuelo, CI no promueve clusters nuevos."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")  # ingesta_activa: CI corre
-    monkeypatch.setattr(pc._ingesta, "_PIPELINE_EN_VUELO_MAX", 2)
+    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "2")
     # 2 temas en vuelo (pendientes de QA) -> cupo 0 para unotv.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)
@@ -523,7 +523,7 @@ def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "3")  # pipeline_max alto: el límite real es el cupo
-    monkeypatch.setattr(pc._ingesta, "_PIPELINE_EN_VUELO_MAX", 3)
+    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "3")
     # 2 en vuelo -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)

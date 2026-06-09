@@ -14,13 +14,11 @@ from .. import config, marcas, redes, repos
 from ..dominio import generar as gen_dom
 from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ._comun import (
-    _AUTOGEN_LANZAR_MAX,
     _FORMATO_PIPELINE,
     ETAPA_CD,
     QA_SALTADA,
     TIPO_COPY,
     VERDICTO_NO_VERIFICADO,
-    _QA_REVISAR_MAX,
     _copy_pendiente_leido,
     _log,
     _tiene_copy,
@@ -117,7 +115,7 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
         listos.append(tema)
         # Recorte SOBRE LOS LISTOS (no sobre la lista cruda): así un backlog grande no deja
         # fuera de la ventana a los temas nuevos, y se acota el nº de `_tiene_copy` (1 query/tema).
-        if len(listos) >= _QA_REVISAR_MAX:
+        if len(listos) >= config.pipeline_qa_revisar_max():
             break
     return listos
 
@@ -133,7 +131,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
       - con marca válida y título no vacío,
       - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_COPY`),
       - dedup: salta los ya encolados (etiqueta `autogen`) y los que ya tienen copy,
-      - cap `_AUTOGEN_LANZAR_MAX` por barrido.
+      - cap `config.pipeline_autogen_max()` por barrido.
     Best-effort: una lectura fallida devuelve []. Import diferido de `autogen_copy` para reusar su
     dedup por etiqueta sin acoplar la carga del módulo.
     """
@@ -146,7 +144,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     ya_generados = autogen_copy.ids_ya_generados()
     elegidos: list[dict[str, Any]] = []
     for item in items:
-        if len(elegidos) >= _AUTOGEN_LANZAR_MAX:
+        if len(elegidos) >= config.pipeline_autogen_max():
             break
         if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
             continue

@@ -26,12 +26,6 @@ from ._comun import (
     temas_pipeline,
 )
 
-# Tope de temas EN VUELO POR MARCA (sin terminar las fases de IA: QA o copy). El gate SERIAL de CI
-# no promueve más historias de UNA marca mientras ésta tenga >= esto en cola: primero se COMPLETA lo
-# que entró (QA→copy), luego entran nuevos. Antes CI promovía `pipeline_max` por marca y barrido sin
-# mirar el backlog → QA se atascaba (CI iba más rápido que QA). Es POR MARCA: cada una drena la suya.
-_PIPELINE_EN_VUELO_MAX = 8
-
 __all__ = [
     "items_ingeribles",
     "_leer_items_fuente",
@@ -46,7 +40,6 @@ __all__ = [
     "clusters_para_promover",
     "promover_clusters_marca",
     "temas_en_vuelo",
-    "_PIPELINE_EN_VUELO_MAX",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",

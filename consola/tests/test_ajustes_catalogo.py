@@ -53,6 +53,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_NOTICIAS_GC,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
+        # Tuning · pipeline de contenido (cadencia, volumen y topes por barrido).
+        config.ENV_PIPELINE_INTERVALO_MIN, config.ENV_PIPELINE_MAX,
+        config.ENV_PIPELINE_EN_VUELO_MAX, config.ENV_PIPELINE_QA_MAX,
+        config.ENV_PIPELINE_COPY_MAX, config.ENV_PIPELINE_AUTOGEN_MAX,
+        config.ENV_PIPELINE_QA_REVISAR_MAX,
         # Tuning.
         config.ENV_AUTOGEN_ARTE_MAX,
         config.ENV_ALERTAS_INTERVALO_HORAS, config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
@@ -149,6 +154,13 @@ def test_motor_noticias_tuning_int(store):
         config.ENV_TRAD_LOTE,
         config.ENV_FEED_SLA_MIN,
         config.ENV_AUTOGEN_ARTE_MAX,
+        config.ENV_PIPELINE_INTERVALO_MIN,
+        config.ENV_PIPELINE_MAX,
+        config.ENV_PIPELINE_EN_VUELO_MAX,
+        config.ENV_PIPELINE_QA_MAX,
+        config.ENV_PIPELINE_COPY_MAX,
+        config.ENV_PIPELINE_AUTOGEN_MAX,
+        config.ENV_PIPELINE_QA_REVISAR_MAX,
     ]
     for clave in claves_int:
         a = ajustes_catalogo.por_clave(clave)
