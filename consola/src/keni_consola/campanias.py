@@ -184,6 +184,39 @@ def _agregar(piezas: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _desglose_por_red(piezas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Agrega las piezas por red: nº, visualizaciones, interacciones y el desglose de
+    interacciones (likes/comentarios/compartidos/guardados), con engagement %. Ordenado por
+    visualizaciones desc. Permite ver POR QUÉ RED rinde la campaña sin salir del panel.
+
+    Los granulares ausentes (la fuente no siempre los trae por pieza) cuentan como 0: es una
+    suma honesta del subconjunto, coherente con las tarjetas de KPIs.
+    """
+    por_red: dict[str, dict[str, Any]] = {}
+    for p in piezas:
+        red = p.get("red") or ""
+        acc = por_red.setdefault(
+            red,
+            {
+                "red": red, "piezas": 0, "visualizaciones": 0, "interacciones": 0,
+                "likes": 0, "comentarios": 0, "compartidos": 0, "guardados": 0,
+            },
+        )
+        acc["piezas"] += 1
+        acc["visualizaciones"] += int(p.get("visualizaciones") or 0)
+        acc["interacciones"] += int(p.get("interacciones") or 0)
+        acc["likes"] += int(p.get("likes") or 0)
+        acc["comentarios"] += int(p.get("comentarios") or 0)
+        acc["compartidos"] += int(p.get("compartidos") or 0)
+        acc["guardados"] += int(p.get("guardados") or 0)
+    filas = list(por_red.values())
+    for acc in filas:
+        vis = acc["visualizaciones"]
+        acc["engagement_pct"] = round(acc["interacciones"] / vis * 100, 2) if vis else 0.0
+    filas.sort(key=lambda f: f["visualizaciones"], reverse=True)
+    return filas
+
+
 def _comparar(actual: dict[str, Any], anterior: dict[str, Any]) -> dict[str, Any]:
     """Delta y variación % de cada KPI entre el periodo actual y el anterior.
 
@@ -307,6 +340,7 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "kpis": actual,
         "comparativa": _comparar(actual, anterior),
         "tendencia": {"puntos": _tendencia(piezas, rango)},
+        "desglose_red": _desglose_por_red(piezas),
         "piezas": tabla,
         "generado_en": datetime.now().isoformat(timespec="seconds"),
     }

@@ -102,10 +102,45 @@ def test_analitica_devuelve_forma_kpis_tabla_tendencia_comparativa(cliente):
     assert isinstance(datos["tendencia"]["puntos"], list)
     assert {"visualizaciones", "interacciones", "engagement_pct", "piezas"} <= datos["comparativa"].keys()
     assert "delta" in datos["comparativa"]["visualizaciones"]
+    # Desglose por red presente (lista de filas con la forma esperada).
+    assert isinstance(datos["desglose_red"], list)
     # Invariante: la suma de la tendencia diaria cuadra con el total de visualizaciones
     # (cada pieza se atribuye a su día de publicación, una sola vez). Vale aun con 0 piezas.
     suma_tend = sum(p["visualizaciones"] for p in datos["tendencia"]["puntos"])
     assert suma_tend == datos["kpis"]["visualizaciones"]
+
+
+def test_desglose_por_red_agrega_e_iguala_los_kpis(cliente, monkeypatch):
+    """El desglose por red suma una fila por red, con sus granulares, y el total cuadra
+    con los KPIs (cada pieza cuenta una vez)."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+
+    def _listado_falso(rango, marca=None):
+        base = {"titulo": "x", "publicado": "2026-06-01", "url": "", "engagement_pct": 5.0}
+        return [
+            {**base, "id": "ig1", "red": "instagram", "formato": "reel", "texto": "a #chihuahua",
+             "visualizaciones": 1000, "interacciones": 100, "likes": 80, "comentarios": 10,
+             "compartidos": 7, "guardados": 3},
+            {**base, "id": "ig2", "red": "instagram", "formato": "foto", "texto": "b #chihuahua",
+             "visualizaciones": 500, "interacciones": 50, "likes": 40, "comentarios": 5,
+             "compartidos": 3, "guardados": 2},
+            {**base, "id": "tk1", "red": "tiktok", "formato": "video", "texto": "c #chihuahua",
+             "visualizaciones": 2000, "interacciones": 300, "likes": 250, "comentarios": 30,
+             "compartidos": 20, "guardados": 0},
+        ]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    desglose = {f["red"]: f for f in datos["desglose_red"]}
+    assert set(desglose) == {"instagram", "tiktok"}
+    # Ordenado por visualizaciones desc: tiktok (2000) antes que instagram (1500).
+    assert [f["red"] for f in datos["desglose_red"]] == ["tiktok", "instagram"]
+    assert desglose["instagram"]["piezas"] == 2
+    assert desglose["instagram"]["visualizaciones"] == 1500
+    assert desglose["instagram"]["likes"] == 120
+    # El total del desglose cuadra con los KPIs.
+    assert sum(f["visualizaciones"] for f in datos["desglose_red"]) == datos["kpis"]["visualizaciones"]
+    assert sum(f["piezas"] for f in datos["desglose_red"]) == datos["kpis"]["piezas"]
 
 
 def test_analitica_matchea_hashtag_sin_importar_casing(cliente, monkeypatch):

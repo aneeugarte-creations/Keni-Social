@@ -190,6 +190,19 @@ export interface PuntoTendenciaCampania {
   interacciones: number;
 }
 
+/** Una fila del desglose por red: agregados de la campaña en esa red. */
+export interface DesgloseRedCampania {
+  red: string;
+  piezas: number;
+  visualizaciones: number;
+  interacciones: number;
+  likes: number;
+  comentarios: number;
+  compartidos: number;
+  guardados: number;
+  engagement_pct: number;
+}
+
 export interface AnaliticaCampania {
   campania: CampaniaComercial;
   rango: string;
@@ -199,6 +212,7 @@ export interface AnaliticaCampania {
   kpis: KpisCampania;
   comparativa: Record<ClaveKpiCampania, ComparativaKpi>;
   tendencia: { puntos: PuntoTendenciaCampania[] };
+  desglose_red: DesgloseRedCampania[];
   piezas: PiezaCampania[];
   generado_en: string;
 }
