@@ -20,6 +20,7 @@ from ._comun import (
     QA_SALTADA,
     TIPO_COPY,
     VERDICTO_NO_VERIFICADO,
+    _QA_REVISAR_MAX,
     _copy_pendiente_leido,
     _log,
     _tiene_copy,
@@ -114,6 +115,10 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
         if _tiene_copy(tema.get("id", "") or ""):
             continue
         listos.append(tema)
+        # Recorte SOBRE LOS LISTOS (no sobre la lista cruda): así un backlog grande no deja
+        # fuera de la ventana a los temas nuevos, y se acota el nº de `_tiene_copy` (1 query/tema).
+        if len(listos) >= _QA_REVISAR_MAX:
+            break
     return listos
 
 

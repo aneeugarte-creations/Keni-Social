@@ -360,6 +360,32 @@ def test_qa_no_relanza_tema_ya_cribado(entorno, monkeypatch):
     assert pc.temas_sin_qa() == []
 
 
+def test_temas_sin_qa_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
+    """Regresión de INANICIÓN: con backlog > ventana, los temas NUEVOS sin QA SÍ entran.
+
+    Antes `temas_pipeline` recortaba la lista CRUDA a los N más viejos; en cuanto esos N ya
+    estaban cribados, los temas nuevos quedaban FUERA de la ventana y QA no los veía jamás (en
+    prod: 126 historias 'usado' atascadas sin veredicto). Ahora el recorte se aplica sobre los
+    PENDIENTES, así que el nuevo entra aunque los viejos llenen el crudo.
+    """
+    monkeypatch.setattr(pc._qa, "_QA_REVISAR_MAX", 2)
+    _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Nuevo", id="n1")  # sin veredicto -> pendiente
+    assert [t["id"] for t in pc.temas_sin_qa()] == ["n1"]
+
+
+def test_temas_para_copy_no_se_mata_de_hambre_con_backlog(entorno, monkeypatch):
+    """Mismo anti-inanición para CD: un tema nuevo listo entra aunque los viejos llenen el crudo."""
+    monkeypatch.setattr(pc._copy, "_QA_REVISAR_MAX", 2)
+    # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de CD),
+    # ocuparían la ventana cruda. El nuevo (no_verificado + copy_pendiente + sin pieza) es el listo.
+    _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
+    _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
+    _tema_pipeline(titulo="Nuevo", id="n1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    assert [t["id"] for t in pc.temas_para_copy()] == ["n1"]
+
+
 def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
     """El cap por barrido de QA (`_QA_LANZAR_MAX`) acota los lanzamientos de criba."""
     monkeypatch.setenv("KENI_QA", "1")  # etapa QA activa para que el cap aplique a lanzamientos

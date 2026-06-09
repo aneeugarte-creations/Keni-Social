@@ -20,6 +20,7 @@ from ._comun import (
     ETAPA_QA,
     PROMPT_QA_ID,
     QA_EN_CURSO,
+    _QA_REVISAR_MAX,
     _copy_pendiente_leido,
     _log,
     registrar_etapa,
@@ -190,5 +191,8 @@ def temas_sin_qa(marca: str | None = None) -> list[dict[str, Any]]:
     """Temas del pipeline SIN veredicto de QA todavía (criba pendiente). Best-effort.
 
     Excluye los `en_curso` (su QA está en vuelo) y los ya cribados (`no_verificado`/`problema`).
+    El recorte `_QA_REVISAR_MAX` se aplica AQUÍ, sobre los PENDIENTES (no sobre la lista cruda),
+    así los temas nuevos siempre entran y el pipeline no se mata de hambre con backlog grande.
     """
-    return [t for t in temas_pipeline(marca) if not (t.get("qa_veredicto") or "").strip()]
+    pendientes = [t for t in temas_pipeline(marca) if not (t.get("qa_veredicto") or "").strip()]
+    return pendientes[:_QA_REVISAR_MAX]

@@ -86,8 +86,10 @@ ETAPA_CD = "CD"
 ETAPA_QA = "QA"
 ETAPA_ARTE = "ARTE"
 
-# Cuantos temas recientes (origen pipeline) revisa cada fase por barrido. Cota de seguridad
-# para no recorrer un histórico enorme.
+# Cuantos temas PENDIENTES (sin QA / listos para copy) revisa cada fase por barrido. Cota de
+# seguridad para no recorrer un histórico enorme. OJO: se aplica SOBRE LOS PENDIENTES (tras
+# filtrar), nunca sobre la lista cruda de temas; recortar la lista cruda a los N más viejos
+# dejaba fuera de la ventana los temas nuevos y mataba de hambre al pipeline.
 _QA_REVISAR_MAX = 50
 
 # CAP de LANZAMIENTOS de QA de la FUENTE (`claude -p`) por barrido. Cada uno es un job del worker
@@ -352,10 +354,17 @@ def _tiene_copy(tema_id: str) -> bool:
 
 
 def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
-    """Temas del pipeline (origen `pipeline`), recientes acotados. [] si la lectura falla."""
+    """TODOS los temas del pipeline (origen `pipeline`), en orden FIFO. [] si la lectura falla.
+
+    NO recorta aquí: el recorte (`_QA_REVISAR_MAX`) lo aplican los consumidores SOBRE LOS
+    TEMAS PENDIENTES (sin QA / listos para copy), no sobre la lista cruda. Recortar la lista
+    cruda a los N más viejos hacía que, en cuanto el backlog superaba N y esos N más viejos ya
+    estaban procesados, los temas NUEVOS quedaran FUERA de la ventana y QA/CD no los vieran
+    nunca (inanición del pipeline). `listar_contenido` ya ordena por prioridad y
+    `fecha_objetivo/creado ASC`, así que el más antiguo PENDIENTE se atiende primero (justo).
+    """
     try:
         items = repos.listar_contenido(marca=marca)
     except Exception:  # noqa: BLE001 -- sin temas legibles, el barrido no hace nada
         return []
-    pipeline = [it for it in items if (it.get("origen") or "") == ORIGEN_PIPELINE]
-    return pipeline[:_QA_REVISAR_MAX]
+    return [it for it in items if (it.get("origen") or "") == ORIGEN_PIPELINE]
