@@ -4,6 +4,9 @@
 # Contexto de build: la RAIZ del repo (ver deploy/docker-compose.yml).
 
 # --- build del bundle ---
+# ⚠ DEPLOY: la VERSIÓN de esta imagen es un hash de SUS entradas (deploy/deploy.sh,
+# hash_entradas: consola/frontend + deploy/front). Si COPIAS aquí una ruta nueva, añádela a
+# ese hash; si no, un cambio en ella no reconstruiría el SPA y quedaría código viejo en prod.
 FROM node:20-slim AS build
 WORKDIR /app
 COPY consola/frontend/package.json consola/frontend/package-lock.json ./

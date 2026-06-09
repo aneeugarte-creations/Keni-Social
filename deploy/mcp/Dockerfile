@@ -11,6 +11,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
+# ⚠ DEPLOY: la VERSIÓN de esta imagen es un hash de SUS entradas (deploy/deploy.sh,
+# hash_entradas: keni-shared + mcp-metricas + deploy/mcp). Si COPIAS aquí una ruta nueva,
+# añádela a ese hash; si no, un cambio en ella no reconstruiría la imagen (deploy perdido).
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 RUN pip install ./keni-shared ./mcp-metricas

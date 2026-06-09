@@ -33,6 +33,10 @@ WORKDIR /app
 # Los tres paquetes Python del monorepo, de mas baja a mas alta dependencia.
 # keni-shared no tiene deps; mcp-metricas usa httpx/pydantic/mcp; consola usa
 # starlette/uvicorn. Ninguno se publica en PyPI: se instalan desde la ruta local.
+# ⚠ DEPLOY: la VERSIÓN de esta imagen es un hash de estas mismas entradas (deploy/deploy.sh,
+# hash_entradas: keni-shared + mcp-metricas + consola, menos consola/frontend). Si AÑADES
+# aquí un `COPY` de OTRA ruta, AÑÁDELA también a ese hash; si no, un cambio en ella no
+# reconstruiría la imagen y el código viejo se quedaría en prod (deploy perdido).
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/

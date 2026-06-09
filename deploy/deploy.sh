@@ -28,22 +28,35 @@ VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-socia
 # corre en el dir estable del host, cuyo .git puede no estar sincronizado). El janitor sigue
 # conservando N por repo (ordena por CreatedAt); una imagen sin cambios no se reconstruye.
 RAIZ="$(cd .. && pwd)"   # raíz del repo (deploy/ es el cwd; el contexto de build es `..`)
-hash_entradas() {  # $@ = paths relativos a la raíz -> 12 hex del CONTENIDO (orden estable)
-  ( cd "$RAIZ" && find "$@" -type d \( -name node_modules -o -name .git -o -name __pycache__ \
+# SEGURIDAD ante "deploy perdido": el hash debe incluir TODO lo que afecta al runtime de la
+# imagen; si se dejara una entrada fuera, un cambio real no cambiaría el hash y el código viejo
+# se quedaría en prod. Por eso solo PODAMOS artefactos/VCS que NUNCA son fuente (node_modules,
+# __pycache__, .git, caches, y las salidas de build webapp/dist) y, vía `$2`, la ÚNICA exclusión
+# de fuente justificada: `consola/frontend` para las imágenes Python (ver abajo). Todo lo demás
+# se hashea, incluidos ficheros NUEVOS a nivel `consola/` (p.ej. un MANIFEST.in futuro).
+hash_entradas() {  # $1 = prefijo de path a EXCLUIR (o "") ; $2.. = paths -> 12 hex del contenido
+  excl="$1"; shift
+  # Post-filtro con `grep -v` (no inyectamos args en find: evita depender del word-splitting
+  # del shell). El `find` imprime paths RELATIVOS a la raíz; `^$excl` ancla el prefijo a excluir.
+  ( cd "$RAIZ" && find "$@" \( -name node_modules -o -name .git -o -name __pycache__ \
         -o -name '.venv*' -o -name .ruff_cache -o -name webapp -o -name dist \) -prune \
-        -o -type f -print 2>/dev/null | LC_ALL=C sort | xargs sha1sum 2>/dev/null ) \
-    | sha1sum | cut -c1-12
+        -o -type f -print 2>/dev/null \
+    | if [ -n "$excl" ]; then grep -v "^$excl"; else cat; fi \
+    | LC_ALL=C sort | xargs sha1sum 2>/dev/null ) | sha1sum | cut -c1-12
 }
-# Entradas de build de cada imagen (ver los Dockerfile en deploy/<svc>/). OJO: para back/worker
-# hasheamos el PAQUETE Python (consola/src + consola/pyproject.toml), NO `consola` entero: el
-# Dockerfile copia `consola/` completo pero solo `pip install ./consola`, así que `consola/frontend`
-# y `consola/tests` NO afectan al runtime. Si los incluyéramos, un cambio de SOLO front recrearía
-# back+worker —justo lo que queremos evitar—. front sí bundlea consola/frontend. Se añade el dir
-# deploy/<svc> (Dockerfile + entrypoint/nginx.conf) para que un cambio en la receta reconstruya.
-FRONT_VERSION="$(hash_entradas consola/frontend deploy/front)"
-BACK_VERSION="$(hash_entradas keni-shared mcp-metricas consola/src consola/pyproject.toml deploy/back)"
-WORKER_VERSION="$(hash_entradas keni-shared mcp-metricas consola/src consola/pyproject.toml deploy/worker)"
-MCP_VERSION="$(hash_entradas keni-shared mcp-metricas deploy/mcp)"
+# Entradas de build de cada imagen (ver los Dockerfile en deploy/<svc>/). Para back/worker se
+# hashea `consola` ENTERO MENOS `consola/frontend`: el Dockerfile copia `consola/` completo, así
+# que cualquier fichero suyo (src, pyproject, README, o uno nuevo) puede acabar en la imagen y
+# DEBE contar. La ÚNICA exclusión es `consola/frontend`: es el código FUENTE del SPA (TypeScript),
+# que en prod sirve nginx (front) y el back/worker NUNCA leen en runtime (sirven `webapp/`, la
+# salida de vite, no el fuente). Excluirla es lo que permite que un deploy de SOLO front no recree
+# el worker, y es seguro porque NO es entrada de runtime de las imágenes Python. `consola/tests`
+# SÍ se incluye (no es runtime, pero incluirlo no puede causar un deploy perdido: como mucho una
+# recreación de más, el lado seguro). front sí bundlea consola/frontend (sin exclusión).
+FRONT_VERSION="$(hash_entradas "" consola/frontend deploy/front)"
+BACK_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/back)"
+WORKER_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/worker)"
+MCP_VERSION="$(hash_entradas "" keni-shared mcp-metricas deploy/mcp)"
 export FRONT_VERSION BACK_VERSION WORKER_VERSION MCP_VERSION
 echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION mcp=$MCP_VERSION"
 

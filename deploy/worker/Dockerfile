@@ -37,6 +37,10 @@ RUN apt-get update \
 WORKDIR /app
 
 # Los tres paquetes Python del monorepo (mismo layout que el back).
+# ⚠ DEPLOY: la VERSIÓN de esta imagen es un hash de estas entradas + deploy/worker (deploy/
+# deploy.sh, hash_entradas: keni-shared + mcp-metricas + consola, menos consola/frontend). Si
+# AÑADES aquí un `COPY` de OTRA ruta, AÑÁDELA también a ese hash; si no, un cambio en ella no
+# reconstruiría la imagen y el worker seguiría con código viejo en prod (deploy perdido).
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
