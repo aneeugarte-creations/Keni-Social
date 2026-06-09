@@ -85,21 +85,6 @@ const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
 // Tamaño de página del botón «Cargar más» (se pide `limite = páginas * PAGINA`, offset 0).
 const PAGINA = 20;
 
-// Fase de progreso de la generación (`claude -p`) -> etiqueta humana para la cabecera del
-// stream. Espeja las fases del dominio (stream.FASE_*): razonando → generando → completado.
-const FASE_TEXTO: Record<string, string> = {
-  razonando: "Razonando…",
-  generando: "Escribiendo…",
-  completado: "Completado",
-};
-
-/** Etiqueta legible del estado/fase de una generación del agente (para la cabecera). */
-function faseTexto(gen: PipelineGeneracion): string {
-  if (gen.estado === "error") return "Error";
-  if (gen.estado === "ejecutando") return FASE_TEXTO[gen.fase] ?? "En curso…";
-  return FASE_TEXTO[gen.fase] ?? "Completado";
-}
-
 function aspecto(estado: string) {
   return ASPECTO[estado] ?? ASPECTO.pendiente;
 }
@@ -318,33 +303,36 @@ function EventosEtapa({ eventos }: { eventos: PipelineActividad[] }) {
   );
 }
 
-/** Stream del agente (`claude -p`) de una etapa: el PROCESO DE PENSAMIENTO (lo que el agente
- *  dijo/hizo), no solo el resultado. Bloque monoespaciado, desplazable y prominente: es la
- *  cabecera del paso. Si la generación sigue en curso, muestra la `salida` parcial tal cual
- *  (sin sondeo en vivo: el detalle se lee una vez al abrir). */
-function ProcesoAgente({ gen, titulo = "Proceso del agente (Claude)" }: { gen: PipelineGeneracion; titulo?: string }) {
-  const enCurso = gen.estado === "ejecutando";
-  const salida = gen.salida.trim();
-  const prompt = (gen.prompt ?? "").trim();
+/** Bloque de TRANSPARENCIA de una etapa IA: el PROMPT de entrada (real si corrió; plantilla si
+ *  no), el RAZONAMIENTO (proceso de pensamiento, stream del agente) y el RESULTADO. Se enseña
+ *  SIEMPRE en etapas IA, aunque aún no se haya ejecutado (entonces el prompt es la plantilla y el
+ *  proceso/resultado quedan "pendiente"). `gen` es la generación real (si existe). */
+function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: string }) {
+  const enCurso = gen?.estado === "ejecutando";
+  const salida = (gen?.salida ?? "").trim();
+  const prompt = (gen?.prompt || plantilla || "").trim();
+  const esPlantilla = !gen?.prompt && !!plantilla;
   return (
-    <div className="space-y-1.5 rounded-md border bg-muted/30 p-2.5">
+    <div className="space-y-1.5 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-foreground">{titulo}</span>
-        <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
-        <span className="text-xs text-muted-foreground">{faseTexto(gen)}</span>
+        <Sparkles className="h-3 w-3 text-violet-600" aria-hidden="true" />
+        <span className="text-xs font-semibold text-foreground">IA</span>
+        {gen
+          ? <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
+          : <span className="text-[11px] text-muted-foreground">aún no ejecutado</span>}
       </div>
-      {/* PROMPT enviado a la IA (plegado por defecto: suele ser largo). */}
-      {prompt && (
+      {/* 1) PROMPT de entrada (real o plantilla). */}
+      {prompt ? (
         <details className="rounded bg-background/60">
           <summary className="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
-            Prompt
+            Prompt{esPlantilla ? " (plantilla)" : ""}
           </summary>
           <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words border-t px-2 py-2 font-mono text-[11px] leading-relaxed text-foreground/80">
             {prompt}
           </pre>
         </details>
-      )}
-      {/* RAZONAMIENTO + RESULTADO: el stream token a token del agente (lo que pensó y produjo). */}
+      ) : <p className="text-[11px] text-muted-foreground">Prompt no disponible.</p>}
+      {/* 2) RAZONAMIENTO + RESULTADO (el stream del agente). */}
       <div className="text-[11px] font-medium text-muted-foreground">Razonamiento + resultado</div>
       {salida ? (
         <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/90">
@@ -352,35 +340,38 @@ function ProcesoAgente({ gen, titulo = "Proceso del agente (Claude)" }: { gen: P
         </pre>
       ) : (
         <p className="text-xs italic text-muted-foreground">
-          {enCurso ? "El agente está arrancando…" : "Sin proceso registrado para esta etapa."}
+          {enCurso ? "En curso…" : "Pendiente: esta etapa aún no se ha ejecutado."}
         </p>
       )}
     </div>
   );
 }
 
-/** Contenido COMPLETO específico de cada etapa (lo que ocurrió de verdad). */
+/** Contenido COMPLETO específico de cada etapa. Las etapas IA enseñan SIEMPRE el BloqueIA
+ *  (prompt + razonamiento + resultado); las no-IA muestran su dato propio. */
 function ContenidoEtapa({
   clave,
   run,
   generacion,
+  plantilla,
 }: {
   clave: string;
   run: Pipeline;
   generacion?: PipelineGeneracion;
+  plantilla?: string;
 }) {
   if (clave === "fusion" || clave === "ranking") {
-    // Pool de noticias: dedup (Fusión) y score (Ranking). Señales del cluster + Haiku si lo hubo.
-    const modo = clave;
     return (
       <div className="space-y-2 text-xs">
-        {run.cluster ? <ProcedenciaIA cluster={run.cluster} modo={modo} /> : <p className="text-muted-foreground">Sin historia.</p>}
-        {generacion && <ProcesoAgente gen={generacion} titulo="Haiku del pool (lote)" />}
+        {run.cluster
+          ? <ProcedenciaIA cluster={run.cluster} modo={clave} />
+          : <p className="text-muted-foreground">Sin historia.</p>}
+        <BloqueIA gen={generacion} plantilla={plantilla} />
       </div>
     );
   }
   if (clave === "ci") {
-    // Selección: crea el tema (no es IA). Mínimo: la nota de origen.
+    // Selección: crea el tema en BD (no es IA). Solo la nota de origen.
     return (
       <div className="space-y-1 text-xs text-muted-foreground">
         {run.descripcion && <p className="line-clamp-4">{run.descripcion}</p>}
@@ -390,7 +381,7 @@ function ContenidoEtapa({
   if (clave === "cd") {
     return (
       <div className="space-y-3">
-        {generacion && <ProcesoAgente gen={generacion} />}
+        <BloqueIA gen={generacion} plantilla={plantilla} />
         {run.piezas.map((p, i) => (
           <div key={`${p.red}-${i}`} className="rounded-md border p-2">
             <div className="mb-1 flex items-center gap-2">
@@ -406,20 +397,17 @@ function ContenidoEtapa({
     );
   }
   if (clave === "arte") {
-    // Arte: generación de imagen por IA. Su prompt (vía la generación) + las imágenes producidas.
     const imagenes = run.piezas.filter((p) => p.imagen_url);
     return (
       <div className="space-y-2">
-        {generacion && <ProcesoAgente gen={generacion} titulo="Generación de imagen" />}
-        {imagenes.length > 0 ? (
+        <BloqueIA gen={generacion} plantilla={plantilla} />
+        {imagenes.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {imagenes.map((p, i) => (
               <img key={`${p.red}-${i}`} src={p.imagen_url} alt={p.red_nombre} loading="lazy"
                 className="h-24 w-24 rounded border object-cover" />
             ))}
           </div>
-        ) : (
-          !generacion && <p className="text-xs text-muted-foreground">Sin arte.</p>
         )}
       </div>
     );
@@ -428,15 +416,13 @@ function ContenidoEtapa({
     const qa = run.qa_fuente;
     return (
       <div className="space-y-2">
-        {generacion && <ProcesoAgente gen={generacion} />}
-        {qa && (qa.no_verificado || qa.problema) ? (
+        <BloqueIA gen={generacion} plantilla={plantilla} />
+        {qa && (qa.no_verificado || qa.problema) && (
           <div className="space-y-2 rounded-md border p-2">
             <BadgeQaFuente qa={qa} />
             {qa.resumen && <p className="text-xs text-foreground/90">{qa.resumen}</p>}
             <ListaHallazgos hallazgos={qa.hallazgos} />
           </div>
-        ) : (
-          !generacion && <p className="text-xs text-muted-foreground">Sin resolver.</p>
         )}
       </div>
     );
@@ -465,12 +451,14 @@ function PanelEtapa({
   run,
   eventos,
   generacion,
+  plantilla,
   defaultOpen,
 }: {
   etapa: PipelineEtapa;
   run: Pipeline;
   eventos: PipelineActividad[];
   generacion?: PipelineGeneracion;
+  plantilla?: string;
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -485,6 +473,16 @@ function PanelEtapa({
         <span className="flex items-center gap-2">
           <Punto estado={etapa.estado} />
           <span className="text-sm font-semibold">{etapa.nombre}</span>
+          {/* Marca clara IA vs no-IA (Selección = Sistema/BD; Aprobación = Humano). */}
+          {etapa.es_ia ? (
+            <Badge variant="outline" className="gap-1 border-violet-500/30 text-[10px] text-violet-600">
+              <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />IA
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              {etapa.clave === "aprobacion" ? "Humano" : "Sistema"}
+            </Badge>
+          )}
           <ChipEstado estado={etapa.estado} />
         </span>
         <ChevronDown
@@ -494,9 +492,9 @@ function PanelEtapa({
       </button>
       {open && (
         <div className="space-y-3 border-t p-3">
-          <p className="text-xs text-muted-foreground">{etapa.detalle}</p>
+          {etapa.detalle && <p className="text-xs text-muted-foreground">{etapa.detalle}</p>}
           <EventosEtapa eventos={eventos} />
-          <ContenidoEtapa clave={etapa.clave} run={run} generacion={generacion} />
+          <ContenidoEtapa clave={etapa.clave} run={run} generacion={generacion} plantilla={plantilla} />
         </div>
       )}
     </div>
@@ -515,10 +513,15 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
     const cod = ETAPA_A_EVENTO[clave];
     return cod && datos ? datos.actividad.filter((e) => e.etapa === cod) : [];
   };
-  // Stream del agente (`claude -p`) de la etapa, si la run lo correlacionó (CD/QA).
+  // Stream del agente (`claude -p`) de la etapa, si la run lo correlacionó.
   const generacionDe = (clave: string): PipelineGeneracion | undefined => {
     const cod = ETAPA_A_EVENTO[clave];
     return cod ? datos?.generaciones_por_etapa?.[cod] : undefined;
+  };
+  // Plantilla del prompt de la etapa IA (para enseñar el prompt aunque aún no haya corrido).
+  const plantillaDe = (clave: string): string | undefined => {
+    const cod = ETAPA_A_EVENTO[clave];
+    return cod ? datos?.prompts_por_etapa?.[cod] : undefined;
   };
 
   return (
@@ -551,6 +554,7 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
                 run={run}
                 eventos={eventosDe(e.clave)}
                 generacion={generacionDe(e.clave)}
+                plantilla={plantillaDe(e.clave)}
                 // Abre por defecto la PRIMERA etapa no completada (donde está la acción);
                 // si todas están ok, abre la última (Aprobación). El resto, plegadas.
                 defaultOpen={

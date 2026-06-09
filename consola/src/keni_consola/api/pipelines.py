@@ -78,6 +78,18 @@ _ETAPAS = (
 # Claves válidas para el filtro `?etapa=` (la etapa donde la run está parada). Catálogo de
 # `_ETAPAS`, sin duplicar la fuente de verdad.
 _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
+# Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
+# Selección (crea el tema en BD) y Aprobación (humana) NO lo son.
+_ETAPAS_IA = frozenset({"fusion", "ranking", "qa", "cd", "arte"})
+# Prompt de la Biblioteca de Texto que usa cada etapa IA (código de etapa → id editable). Permite
+# enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
+_PROMPT_POR_ETAPA = {
+    "FUSION": "prompt/noticias/fusion-historias",
+    "RANKING": "prompt/noticias/perfil-editorial",
+    "QA": "prompt/qa-fuente",
+    "CD": "prompt/copy-desde-nota",
+    "ARTE": "prompt/imagen/arte-noticia",
+}
 # Valores válidos del filtro `?estado=` (el `estado_global` de la run).
 _ESTADOS_GLOBAL = frozenset({"ok", "en_curso", "pendiente", "revisar", "fallo"})
 # Tope de runs a MATERIALIZAR antes de filtrar/paginar en memoria. El tablero del equipo es
@@ -264,7 +276,10 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
         "detalle": ap_detalle, "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    return [fusion, ranking, ci, qa, cd, arte, aprobacion]
+    etapas = [fusion, ranking, ci, qa, cd, arte, aprobacion]
+    for e in etapas:
+        e["es_ia"] = e["clave"] in _ETAPAS_IA
+    return etapas
 
 
 def _estado_global(etapas: list[dict]) -> str:
@@ -457,23 +472,42 @@ def _generacion_publica(gen_id: str) -> dict | None:
     }
 
 
-def _generacion_pool_de_marca(marca: str, *, prefijo: str) -> dict | None:
+def _prompts_plantilla() -> dict[str, str]:
+    """Plantilla (texto) del prompt de cada etapa IA, desde la Biblioteca de Texto (editable).
+
+    Permite que la UI enseñe SIEMPRE el prompt de entrada de una etapa IA, aunque aún no haya
+    corrido (entonces es la plantilla; cuando corre, se prefiere el prompt REAL de la generación).
+    Best-effort: una etapa cuyo prompt no resuelva simplemente no aparece.
+    """
+    out: dict[str, str] = {}
+    for code, pid in _PROMPT_POR_ETAPA.items():
+        try:
+            from .. import libtexto
+
+            cuerpo = (libtexto.cuerpo_efectivo(pid) or "").strip()
+        except Exception:  # noqa: BLE001 -- sin Biblioteca legible, esa etapa no trae plantilla
+            cuerpo = ""
+        if cuerpo:
+            out[code] = cuerpo
+    return out
+
+
+def _generacion_pool_de_marca(marca: str, gens: list[dict], *, prefijo: str) -> dict | None:
     """La generación `noticias-ia` más reciente de `marca` cuya etiqueta empieza por `prefijo`.
 
     La IA del POOL (Fusión / Encaje) corre por LOTE de marca, no 1:1 con cada pieza. Para dar
     transparencia del Haiku REAL en las etapas Fusión/Ranking, enlazamos su generación de pool más
     reciente (con prompt+salida reales). `prefijo` distingue "Fusión de historias" (→ Fusión) de
-    "Encaje editorial" (→ Ranking). El front lo rotula «a nivel de lote». None si no hay ninguna.
+    "Encaje editorial" (→ Ranking). `gens` es la lista YA leída (evita re-escanear el almacén).
+    None si no hay ninguna.
     """
     if not marca:
         return None
-    try:
-        recientes = generaciones.listar(limite=None, marca=marca)
-    except Exception:  # noqa: BLE001 -- best-effort: sin pool legible, la etapa no enseña Haiku
-        return None
     pool = [
-        g for g in recientes
-        if (g.get("tipo") or "") == "noticias-ia" and (g.get("etiqueta", "") or "").startswith(prefijo)
+        g for g in gens
+        if (g.get("marca", "") or "") == marca
+        and (g.get("tipo") or "") == "noticias-ia"
+        and (g.get("etiqueta", "") or "").startswith(prefijo)
     ]
     if not pool:
         return None
@@ -481,7 +515,7 @@ def _generacion_pool_de_marca(marca: str, *, prefijo: str) -> dict | None:
     return _generacion_publica(pool[0].get("id", "") or "")
 
 
-def _actividad_y_generaciones(contenido_id: str) -> tuple[list[dict], dict[str, dict]]:
+def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list[dict], dict[str, dict]]:
     """Log de etapas (`tipo='pipeline'`) de un contenido + sus generaciones por etapa.
 
     Lee TODAS las generaciones-marcador del pipeline y filtra por el `contenido_id` que
@@ -498,7 +532,7 @@ def _actividad_y_generaciones(contenido_id: str) -> tuple[list[dict], dict[str, 
     # Recolectamos (etapa, fecha, gen_pub) para quedarnos con la generación más reciente por
     # etapa (los eventos vienen recientes-primero tras ordenar; iteramos sobre esa lista).
     gens_por_etapa: dict[str, dict] = {}
-    for gen in generaciones.listar(limite=None):
+    for gen in gens:
         if gen.get("tipo") != TIPO_ACTIVIDAD:
             continue
         if (gen.get("contenido_id") or "") != contenido_id:
@@ -533,23 +567,28 @@ async def detalle(request: Request) -> Response:
         return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
     piezas = repos.listar_contenido_plataforma(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
-    actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id)
+    # UNA sola lectura del almacén de generaciones (antes 3×, ~3 s cada una); se reparte.
+    gens = generaciones.listar(limite=None)
+    actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
     # Fusión/Ranking: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
     # reciente para enseñar el prompt+salida REALES del Haiku en cada etapa (por su etiqueta).
     marca_tema = item.get("marca", "") or ""
-    gen_fusion = _generacion_pool_de_marca(marca_tema, prefijo="Fusión")
+    gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo="Fusión")
     if gen_fusion is not None:
         generaciones_por_etapa.setdefault("FUSION", gen_fusion)
-    gen_encaje = _generacion_pool_de_marca(marca_tema, prefijo="Encaje")
+    gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo="Encaje")
     if gen_encaje is not None:
         generaciones_por_etapa.setdefault("RANKING", gen_encaje)
     return JSONResponse(
         {
             "pipeline": _run_de(item, piezas, completo=True, cluster=cluster),
             "actividad": actividad,
-            # Stream del agente (`claude -p`) por código de etapa (CI/CD/QA). Aditivo y
-            # back-compat: vacío si ninguna etapa tiene una generación correlacionada.
+            # Stream del agente (`claude -p`) por código de etapa. Aditivo y back-compat: vacío si
+            # ninguna etapa tiene una generación correlacionada.
             "generaciones_por_etapa": generaciones_por_etapa,
+            # Plantilla del prompt de cada etapa IA (para enseñar el prompt de ENTRADA aunque la
+            # etapa aún no haya corrido; cuando corre, se prefiere el prompt real de la generación).
+            "prompts_por_etapa": _prompts_plantilla(),
         }
     )
 

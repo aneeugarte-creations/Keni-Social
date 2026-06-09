@@ -38,6 +38,12 @@ from ._comun import (
     nuevo_id,
 )
 
+# Loader RÁPIDO (libyaml) cuando está disponible. Parsear los ~800 YAML de generaciones con el
+# parser PURO de Python costaba ~3 s por petición (Actividad IA y el detalle de Pipelines lo
+# hacían en cada carga → "tarda muchísimo"); `CSafeLoader` (libyaml) lo baja a ~130 ms (23×). Es
+# API-compatible con `SafeLoader`; si no hay libyaml en la build, cae al loader puro.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
 __all__ = [
     "actualizar",
     "clave_idempotencia",
@@ -128,7 +134,7 @@ def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:
     except OSError:
         return None
     try:
-        datos = yaml.safe_load(texto)
+        datos = yaml.load(texto, Loader=_YAML_LOADER)  # noqa: S506 -- loader SAFE (libyaml o puro)
     except yaml.YAMLError:
         return None
     if not isinstance(datos, dict):

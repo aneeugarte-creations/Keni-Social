@@ -27,6 +27,11 @@ from keni_shared.esquema_yaml import migrar, sellar
 from .. import marcas, repos
 from ..io_atomico import escribir_atomico
 
+# Loader RÁPIDO (libyaml) cuando está disponible: igual que en `generaciones._almacen`, parsear
+# los YAML de los runs con el parser PURO costaba segundos en Actividad IA; CSafeLoader lo baja
+# ~20×. API-compatible; cae al loader puro si no hay libyaml.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
 __all__ = [
     # imports re-exportados (paridad de superficie del modulo original)
     "Any",
@@ -220,7 +225,7 @@ def _leer_yaml(ruta: Path, *, tipo: str) -> dict[str, Any] | None:
     except OSError:
         return None
     try:
-        datos = yaml.safe_load(texto)
+        datos = yaml.load(texto, Loader=_YAML_LOADER)  # noqa: S506 -- loader SAFE (libyaml o puro)
     except yaml.YAMLError:
         return None
     if not isinstance(datos, dict):

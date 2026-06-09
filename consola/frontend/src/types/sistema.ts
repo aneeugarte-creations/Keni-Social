@@ -102,6 +102,8 @@ export interface PipelineEtapa {
   estado: string;
   detalle: string;
   ts: string;
+  /** `true` si la etapa es una llamada a un LLM (la UI la marca «IA» y enseña prompt+proceso). */
+  es_ia: boolean;
 }
 
 /** Una pieza por plataforma dentro de una run del pipeline.
@@ -215,8 +217,11 @@ export interface PipelineGeneracion {
 export interface RespuestaPipelineDetalle {
   pipeline: Pipeline;
   actividad: PipelineActividad[];
-  /** Stream del agente por código de etapa ("CI"/"CD"/"QA"). Ausente/{} si no hay. */
+  /** Stream del agente por código de etapa ("FUSION"/"RANKING"/"QA"/"CD"/"ARTE"). {} si no hay. */
   generaciones_por_etapa?: Record<string, PipelineGeneracion>;
+  /** Plantilla del prompt de cada etapa IA (para enseñar el prompt de entrada aunque no haya
+   *  corrido aún; cuando corre, se prefiere el prompt real de la generación). */
+  prompts_por_etapa?: Record<string, string>;
 }
 
 // ── Ajustes de funcionalidad (admin, toggles + tuning en caliente) ──────────

@@ -333,6 +333,19 @@ def test_etapa_arte_ok_con_imagen_y_toggle(cliente, monkeypatch):
     assert arte2["estado"] == "ok"
 
 
+def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
+    """Cada etapa trae `es_ia` (IA vs no-IA: Selección/Aprobación NO); el detalle expone
+    `prompts_por_etapa` (plantilla del prompt de cada etapa IA)."""
+    tema = _tema_pipeline("Tema ia flags")
+    run = _run_por_titulo(cliente, "Tema ia flags")
+    ia = {e["clave"]: e["es_ia"] for e in run["etapas"]}
+    assert ia["fusion"] is True and ia["ranking"] is True
+    assert ia["qa"] is True and ia["cd"] is True and ia["arte"] is True
+    assert ia["ci"] is False and ia["aprobacion"] is False
+    body = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    assert isinstance(body["prompts_por_etapa"], dict)
+
+
 def test_detalle_404(cliente):
     assert cliente.get("/api/pipelines/no-existe-xyz").status_code == 404
 
