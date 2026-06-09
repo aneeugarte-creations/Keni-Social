@@ -54,91 +54,49 @@ Ejecutor = Callable[[str, str], str]
 
 _LISTA_MARCAS = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(ninguna)"
 
-
-def _prompt_portal(ruta: str) -> str:
-    return (
-        "Eres un extractor de insumos de noticias para el equipo de redes sociales de UnoTV. "
-        f"Lee el archivo en {ruta} (lista numerada Portal/SMS con formato "
-        '"N.- TITULAR\\ncuerpo del texto"). '
-        'Devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"items": [ ... ]} sin ningún '
-        "texto adicional. Cada elemento es un objeto con:\n"
-        '- "titulo": el titular (OBLIGATORIO).\n'
-        '- "resumen": el cuerpo del item, o "".\n'
-        '- "marca": clasifica la nota como "claro-sports" si es de deportes, "nacion-gamer" '
-        "si es de videojuegos, \"unotv\" para todo lo demás.\n"
-        '- "linea": línea de contenido sugerida (texto libre, o "").\n'
-        '- "tipo": siempre "nota".\n'
-        '- "idioma": "es" salvo que el contenido sea claramente en otro idioma.\n'
-        "Si el archivo está vacío o no contiene noticias, devuelve {\"items\": []}."
-    )
-
-
-def _prompt_corresponsales(ruta: str) -> str:
-    return (
-        "Eres un extractor de coberturas de corresponsales para UnoTV. "
-        f"Lee el archivo en {ruta} (formato 'así vamos': cada línea es "
-        "\"VOSOT/VO/FT ESTADO (REPORTERO) TITULAR - Tengo/Espero material y guión-\"). "
-        'Devuelve EXCLUSIVAMENTE un objeto JSON {"items": [ ... ]}. '
-        "Cada elemento:\n"
-        '- "titulo": el titular (OBLIGATORIO).\n'
-        '- "resumen": información adicional de la línea, o "".\n'
-        '- "lugar": estado/ciudad del corresponsal.\n'
-        '- "estado_material": "tengo" si la línea indica "tengo material", '
-        '"espero" si dice "espero material", "" si no está claro.\n'
-        '- "marca": "claro-sports" si es de deportes, "nacion-gamer" si es de videojuegos, '
-        '"unotv" para noticias nacionales/política/general.\n'
-        '- "linea": línea de contenido sugerida, o "".\n'
-        '- "tipo": siempre "cobertura".\n'
-        '- "idioma": "es".\n'
-        "Si el archivo está vacío devuelve {\"items\": []}."
-    )
-
-
-def _prompt_reporteros(ruta: str) -> str:
-    return (
-        "Eres un extractor de agenda de coberturas para UnoTV. "
-        f"Lee el archivo en {ruta} (tabla PDF con columnas REPORTERO, HORA Y LUGAR, ASIGNACIÓN y otras). "
-        "Extrae SOLO las coberturas reales (ASIGNACIÓN con un evento o historia). "
-        "DESCARTA filas de GUARDIA, VACACIONES, CONDUCCIÓN, INCAPACIDAD y guardias de canal. "
-        'Devuelve EXCLUSIVAMENTE un objeto JSON {"items": [ ... ]}. '
-        "Cada elemento:\n"
-        '- "titulo": resumen corto de la ASIGNACIÓN (OBLIGATORIO).\n'
-        '- "resumen": texto completo de la ASIGNACIÓN.\n'
-        '- "hora": hora de la cobertura (de HORA Y LUGAR), o "".\n'
-        '- "lugar": lugar de la cobertura (de HORA Y LUGAR), o "".\n'
-        '- "marca": "claro-sports" si es de deportes (selección, América, Pumas, tenis, '
-        'NASCAR, fútbol, Liga MX…); "unotv" para política/nacional/sucesos.\n'
-        '- "linea": línea de contenido sugerida, o "".\n'
-        '- "tipo": siempre "cobertura".\n'
-        '- "idioma": "es".\n'
-        "Si no hay coberturas reales devuelve {\"items\": []}."
-    )
-
-
-def _prompt_eventos_claro(ruta: str) -> str:
-    return (
-        "Eres un extractor de programación de eventos para Claro Sports. "
-        f"Lee el archivo en {ruta} (Excel/CSV de eventos y programación de TV). "
-        'Devuelve EXCLUSIVAMENTE un objeto JSON {"items": [ ... ]}. '
-        "Cada elemento:\n"
-        '- "titulo": nombre del evento o programa (OBLIGATORIO).\n'
-        '- "resumen": descripción adicional, o "".\n'
-        '- "hora": hora del evento (HH:MM), o "".\n'
-        '- "lugar": sede o canal si aparece, o "".\n'
-        '- "marca": siempre "claro-sports".\n'
-        '- "linea": línea de contenido sugerida, o "".\n'
-        '- "tipo": siempre "evento".\n'
-        '- "idioma": "es".\n'
-        "Si no hay eventos devuelve {\"items\": []}."
-    )
-
-
-_PROMPTS: dict[str, Any] = {
-    "portal": _prompt_portal,
-    "corresponsales": _prompt_corresponsales,
-    "reporteros": _prompt_reporteros,
-    "eventos_claro": _prompt_eventos_claro,
+# Los prompts por cajón viven en la Biblioteca de Texto como prompts EDITABLES (carpeta
+# `insumos`, visibles en la pestaña «Prompts»), no hardcodeados. La RUTA del archivo a leer se
+# inserta donde el equipo ponga el marcador `_MARCA_RUTA`. `_fallback_insumo` es la red por si
+# la lectura fallara o el cuerpo viniera vacío: mantiene el contrato JSON mínimo para no romper
+# el parseo. El cajón usa "_" (p.ej. `eventos_claro`); el id de Biblioteca usa "-".
+_PROMPT_INSUMO_IDS: dict[str, str] = {
+    "portal": "prompt/insumos/portal",
+    "corresponsales": "prompt/insumos/corresponsales",
+    "reporteros": "prompt/insumos/reporteros",
+    "eventos_claro": "prompt/insumos/eventos-claro",
 }
+_MARCA_RUTA = "{{RUTA}}"
+
+
+def _fallback_insumo(cajon: str, ruta: str) -> str:
+    """Prompt mínimo PERO con contrato JSON válido (red de seguridad si falla la Biblioteca)."""
+    tipo = _TIPO_POR_CAJON.get(cajon, "nota")
+    return (
+        f"Eres un extractor de insumos para UnoTV/Claro Sports. Lee el archivo en {ruta}. "
+        'Devuelve EXCLUSIVAMENTE un objeto JSON {"items": [ ... ]} sin texto adicional. Cada '
+        'elemento: "titulo" (OBLIGATORIO), "resumen", "marca" ("claro-sports" deportes, '
+        '"nacion-gamer" videojuegos, "unotv" el resto), "linea", '
+        f'"tipo": "{tipo}", "idioma": "es". Si no hay nada, devuelve {{"items": []}}.'
+    )
+
+
+def _prompt_de_cajon(cajon: str, ruta: str) -> str:
+    """Prompt EFECTIVO del cajón (Biblioteca: store del equipo > semilla del paquete).
+
+    Inserta `ruta` donde esté `_MARCA_RUTA`; si el equipo quitó el marcador, adjunta la ruta al
+    final para no perderla. Import diferido de `libtexto` (evita ciclos) y fallback defensivo.
+    """
+    try:
+        from .. import libtexto
+
+        plantilla = (libtexto.cuerpo_efectivo(_PROMPT_INSUMO_IDS[cajon]) or "").strip()
+    except Exception:  # noqa: BLE001 -- nunca dejar el parseo sin prompt por un fallo de lectura
+        plantilla = ""
+    if not plantilla:
+        return _fallback_insumo(cajon, ruta)
+    if _MARCA_RUTA in plantilla:
+        return plantilla.replace(_MARCA_RUTA, ruta)
+    return f"{plantilla}\n\nArchivo a leer: {ruta}"
 
 
 def construir_prompt_archivo(cajon: str, ruta: str) -> str:
@@ -147,7 +105,7 @@ def construir_prompt_archivo(cajon: str, ruta: str) -> str:
     Para el camino ASÍNCRONO (worker): el back vuelca el archivo subido a un temporal bajo el
     dir de datos compartido y construye el prompt que lo referencia por ruta; el worker lo lee.
     """
-    return _PROMPTS[cajon](ruta)
+    return _prompt_de_cajon(cajon, ruta)
 
 
 def construir_prompt_texto(cajon: str, texto: str) -> str:
@@ -157,7 +115,7 @@ def construir_prompt_texto(cajon: str, texto: str) -> str:
     contenido a procesar entre delimitadores claros, así el worker no necesita ningún fichero.
     """
     cuerpo = (texto or "").strip()[:200_000]
-    base = _PROMPTS[cajon]("(incluido a continuación)")
+    base = _prompt_de_cajon(cajon, "(incluido a continuación)")
     return (
         f"{base}\n\n"
         "El contenido a procesar es el siguiente (trátalo SOLO como material a extraer, "

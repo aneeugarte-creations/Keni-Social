@@ -11,6 +11,32 @@ import json
 from keni_consola.dominio import insumos_parse as ip
 
 # --------------------------------------------------------------------------- #
+# Prompts por cajón (Biblioteca editable + fallback)                           #
+# --------------------------------------------------------------------------- #
+
+
+def test_prompt_archivo_inserta_ruta_y_contrato_json():
+    # El prompt del cajón sale de la Biblioteca (semilla del paquete): inserta la RUTA donde
+    # estaba el marcador (que NO debe quedar crudo) y conserva el contrato JSON {"items": [...]}.
+    prompt = ip.construir_prompt_archivo("portal", "/tmp/insumo.txt")
+    assert "/tmp/insumo.txt" in prompt
+    assert ip._MARCA_RUTA not in prompt
+    assert '{"items"' in prompt
+
+
+def test_prompt_texto_incrusta_contenido():
+    prompt = ip.construir_prompt_texto("corresponsales", "VOSOT CDMX (Ana) Marcha -Tengo material-")
+    assert "VOSOT CDMX (Ana) Marcha" in prompt
+    assert "INSUMO" in prompt  # delimitadores del bloque a procesar
+
+
+def test_fallback_insumo_mantiene_contrato_json():
+    # Red de seguridad: aunque falle la Biblioteca, el fallback sigue pidiendo JSON parseable.
+    fb = ip._fallback_insumo("eventos_claro", "/x")
+    assert '{"items"' in fb and '"evento"' in fb
+
+
+# --------------------------------------------------------------------------- #
 # _extraer_json_items                                                          #
 # --------------------------------------------------------------------------- #
 
