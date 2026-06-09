@@ -45,8 +45,11 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/copy-desde-nota": ["Pipeline · generación de copy desde la nota"],
     "prompt/qa-editorial": ["QA editorial del copy (revisión manual y aprobador automático)"],
     "prompt/brainstorming-evergreen": ["Taller evergreen · brainstorming de ideas"],
-    "prompt/brief-tendencias": ["Brief de tendencias"],
-    "prompt/termometro-mundial": ["Termómetro mundial"],
+    # De LANZAMIENTO MANUAL (no se inyectan en un proceso de fondo; se ejecutan a demanda).
+    "prompt/termometro-mundial": ["Se lanza a mano · sección Termómetro (descubrimiento de tendencias)"],
+    "prompt/brief-tendencias": [
+        "Se lanza a mano · brief de tendencias desde el estudio (no cableado a ningún proceso)",
+    ],
 }
 
 
