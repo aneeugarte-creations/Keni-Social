@@ -67,6 +67,7 @@ from starlette.routing import Route
 from .. import auth, marcas, permisos, repos
 from .. import rota as dominio
 from .._http_json import leer_json
+from ..motor_db import IntegrityError
 from ..estados import (
     ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_ACEPTADO,
@@ -1017,19 +1018,27 @@ async def crear_turno(request: Request) -> Response:
     if err is not None:
         return err
 
-    turno = repos.crear_turno_rota(
-        semana,
-        fecha,
-        miembro_id=miembro_id,
-        miembro_nombre=nombres.get(miembro_id, ""),
-        franja_id=franja_id,
-        estado=campos.get("estado", ESTADO_ROTA_PROPUESTO),
-        override=override,
-        motivo=campos.get("motivo", ""),
-        nota_relevo=campos.get("nota_relevo", ""),
-        # GRID POR MARCA: la marca la fija la franja elegida (ver `_validar_y_resolver_turno`).
-        marca=campos.get("marca", ""),
-    )
+    try:
+        turno = repos.crear_turno_rota(
+            semana,
+            fecha,
+            miembro_id=miembro_id,
+            miembro_nombre=nombres.get(miembro_id, ""),
+            franja_id=franja_id,
+            estado=campos.get("estado", ESTADO_ROTA_PROPUESTO),
+            override=override,
+            motivo=campos.get("motivo", ""),
+            nota_relevo=campos.get("nota_relevo", ""),
+            # GRID POR MARCA: la marca la fija la franja elegida (ver `_validar_y_resolver_turno`).
+            marca=campos.get("marca", ""),
+        )
+    except IntegrityError:
+        # Carrera del check-then-insert: dos peticiones simultaneas pasaron ambas el
+        # pre-check de arriba; el indice unico `idx_rota_turnos_uniq` para a la segunda.
+        return JSONResponse(
+            {"error": "Ya hay un turno para ese miembro en esa fecha y franja."},
+            status_code=409,
+        )
     return JSONResponse({"turno": _turno_a_dict(turno, nombres, franjas_por_id)}, status_code=201)
 
 
@@ -1208,7 +1217,18 @@ async def crear_turnos_lote(request: Request) -> Response:
             status_code=409,
         )
 
-    creados = repos.crear_turnos_rota_lote(preparados)
+    try:
+        creados = repos.crear_turnos_rota_lote(preparados)
+    except IntegrityError:
+        # Carrera del pre-indice: otro cliente inserto uno de estos turnos entre el chequeo
+        # y el INSERT; el indice unico `idx_rota_turnos_uniq` corta el lote (sin medias).
+        return JSONResponse(
+            {
+                "error": "Alguno de los turnos ya existe (lo creó otra petición); recarga la semana.",
+                "creados": 0,
+            },
+            status_code=409,
+        )
     # Componer el mapa global de franjas (uniendo todas las semanas tocadas) para
     # serializar `franja_nombre` en cada turno devuelto.
     franjas_global: dict[str, dict[str, Any]] = {}
@@ -1429,14 +1449,21 @@ async def duplicar_turno(request: Request) -> Response:
     if err is not None:
         return err
 
-    clon = repos.duplicar_turno_rota(
-        turno_id,
-        fecha=fecha,
-        miembro_id=miembro_id,
-        miembro_nombre=nombres.get(miembro_id, ""),
-        franja_id=franja_id,
-        semana=semana,
-    )
+    try:
+        clon = repos.duplicar_turno_rota(
+            turno_id,
+            fecha=fecha,
+            miembro_id=miembro_id,
+            miembro_nombre=nombres.get(miembro_id, ""),
+            franja_id=franja_id,
+            semana=semana,
+        )
+    except IntegrityError:
+        # Carrera del check-then-insert (mismo backstop que crear_turno): 409 accionable.
+        return JSONResponse(
+            {"error": "Ya hay un turno para ese miembro en esa fecha y franja."},
+            status_code=409,
+        )
     if clon is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
     return JSONResponse(

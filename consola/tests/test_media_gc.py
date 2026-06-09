@@ -306,3 +306,26 @@ def test_daemon_barre_si_gate_encendido(monkeypatch):
         _max_vueltas=1,
     )
     assert llamadas["n"] == 1  # encendido -> barrio de inmediato
+
+
+def test_limpiar_reverifica_referencias_antes_de_borrar(monkeypatch, repos_vacios):
+    """Anti-TOCTOU: si un objeto se vuelve REFERENCIADO entre el calculo de huerfanos y el
+    borrado (una pieza nueva lo fija como imagen), el barrido lo RESCATA (no lo borra)."""
+    _objetos(monkeypatch, [("rescatado.png", _VIEJO), ("huerfano.png", _VIEJO)])
+    borrados = _captura_borrados(monkeypatch)
+
+    # 1a llamada (dentro de `huerfanos`): nada referenciado. 2a llamada (re-verificacion
+    # previa al borrado): "rescatado.png" ya esta referenciado por una pieza nueva.
+    llamadas = {"n": 0}
+
+    def _vivas_cambiantes():
+        llamadas["n"] += 1
+        return set() if llamadas["n"] == 1 else {"rescatado.png"}
+
+    monkeypatch.setattr(media_gc, "referencias_vivas", _vivas_cambiantes)
+
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == ["huerfano.png"]  # el rescatado NO se borro
+    assert res["borrados"] == 1
+    assert res["conservados"] == 1  # el rescatado cuenta como conservado
+    assert "rescatado.png" not in res["nombres"]

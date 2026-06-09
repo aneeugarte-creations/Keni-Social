@@ -28,12 +28,25 @@ from starlette.routing import Route
 from .. import marcas, permisos, redes, repos
 import os
 
-from .._http_json import cursor_query, envoltura_paginacion, leer_json, paginacion_query
+from .._http_json import (
+    cursor_query,
+    envoltura_paginacion,
+    leer_json,
+    paginacion_query,
+    tope_listado,
+)
 from ..dominio import cadencia as dom_cadencia
 from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
-from ..estados import ESTADO_APROBADO, ESTADO_EN_REVISION, ESTADO_PROGRAMADO
+from ..estados import (
+    ESTADO_APROBADO,
+    ESTADO_BORRADOR,
+    ESTADO_EN_REVISION,
+    ESTADO_PROGRAMADO,
+    ESTADO_PUBLICADO,
+)
 from ..motor_db import IntegrityError
+from ..tiempo import iso_utc
 from ..seguridad import autor_de_peticion
 from . import franjas as api_franjas
 
@@ -57,6 +70,48 @@ _MARCAS_IDS = {m[0] for m in _MARCAS}
 # (`dominio.publicaciones.publicacion_a_dict`): asi `api/skills.py` la consume desde un
 # sitio comun y publico, sin importar un simbolo privado de este handler (H6/N7).
 _publicacion_a_dict = publicacion_a_dict
+
+
+# MAQUINA DE ESTADOS del PUT generico (#estados): transiciones validas desde cada estado.
+# Antes el PUT aceptaba CUALQUIER estado del catalogo sin mirar el actual, bypasseando los
+# gates de los endpoints de flujo (enviar-a-revision/aprobar/encolar). Politica:
+#   - AVANZAR en el flujo (borrador -> en_revision -> aprobado -> programado -> publicado)
+#     se permite TAMBIEN a saltos: el operador puede marcar "ya lo publique a mano" sin
+#     recorrer estados intermedios (es el uso real de la UI y del MCP).
+#   - RETROCEDER solo a `borrador` (rechazo/reset de la pieza) o `programado -> aprobado`
+#     (desprogramar). Otros retrocesos pasan por los endpoints de flujo.
+#   - `publicado` es TERMINAL: una pieza ya publicada no se mueve por el PUT (evita
+#     re-programar/duplicar un post que ya salio; el camino legitimo es duplicar/reciclar).
+_TRANSICIONES_PUT: dict[str, frozenset[str]] = {
+    ESTADO_BORRADOR: frozenset({ESTADO_EN_REVISION, ESTADO_APROBADO, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
+    ESTADO_EN_REVISION: frozenset({ESTADO_BORRADOR, ESTADO_APROBADO, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
+    ESTADO_APROBADO: frozenset({ESTADO_BORRADOR, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
+    ESTADO_PROGRAMADO: frozenset({ESTADO_BORRADOR, ESTADO_APROBADO, ESTADO_PUBLICADO}),
+    ESTADO_PUBLICADO: frozenset(),
+}
+
+
+def _normalizar_fecha_programada(valor: str) -> tuple[str | None, str | None]:
+    """Valida y normaliza una `fecha_programada` al canon `YYYY-MM-DDTHH:MM` (minutos, UTC).
+
+    Devuelve `(normalizada, None)` o `(None, error)`. El UNIQUE anti-doble-reserva de la
+    parrilla (`idx_parrilla_slot_uniq`) compara el TEXT crudo: sin canon, "T18:00" y
+    "T18:00:00" reservaban el mismo slot sin chocar. Reglas:
+      - "" -> "" (sin programar; valido).
+      - ISO naive -> se ASUME UTC (convencion del sistema) y se trunca a minutos.
+      - ISO con zona (la UI manda el instante UTC con offset) -> se convierte a UTC y se
+        despoja el offset.
+      - No parseable -> error en espanol (400 en el handler).
+    """
+    if not valor:
+        return "", None
+    try:
+        dt = datetime.fromisoformat(valor)
+    except ValueError:
+        return None, "La fecha programada no es válida (usa AAAA-MM-DDTHH:MM)."
+    # `iso_utc` canoniza a segundos; el canon de parrilla es a MINUTOS (lo que generan
+    # franjas/cadencias y el picker de la UI): truncamos el sufijo ":SS".
+    return iso_utc(dt)[:16], None
 
 
 def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -97,6 +152,12 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
         if not isinstance(valor, str):
             return None, f"{etiqueta} debe ser texto."
 
+    # Canon de `fecha_programada` (minutos, UTC sin offset): el UNIQUE de parrilla compara
+    # el TEXT crudo, asi que el formato se normaliza ANTES de persistir.
+    fecha_norm, err_fecha = _normalizar_fecha_programada(fecha_programada.strip())
+    if err_fecha is not None:
+        return None, err_fecha
+
     return (
         {
             "titulo": titulo.strip(),
@@ -106,7 +167,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
             "copy_in": copy_in,
             "estado": estado,
             "veredicto": veredicto,
-            "fecha_programada": fecha_programada.strip(),
+            "fecha_programada": fecha_norm,
             "origen": origen.strip(),
             "imagen": imagen.strip(),
         },
@@ -202,18 +263,20 @@ async def listar(request: Request) -> Response:
         limite = _feed_pagina_defecto()
     # FOCO POR DEFECTO (no es restriccion): si la sesion tiene marcas preferentes y NO se pidio
     # marca explicita, el feed se ENFOCA en SUS marcas para reducir la mezcla de contexto. Es
-    # siempre sobreescribible: con `?marca=` (cualquiera) se ve esa marca. `listar_publicaciones`
-    # y `contar_publicaciones` aceptan UNA sola marca; con una sola marca preferente se empuja al
-    # repo (paginacion/total exactos), con varias se post-filtra la pagina en memoria. Sin
-    # preferencia (admin/token/sin marcas): sin cambios, ve todas las marcas.
+    # siempre sobreescribible: con `?marca=` (cualquiera) se ve esa marca. El foco multi-marca
+    # se empuja al SQL (`marca IN (...)`): el post-filtro en memoria previo ROMPIA el keyset
+    # (paginas cortas + cursor que saltaba filas) y mentia en el `total`. Sin preferencia
+    # (admin/token/sin marcas): sin cambios, ve todas las marcas.
     preferentes = permisos.marcas_preferentes(request)
-    marca_efectiva = marca
-    post_filtrar: set[str] | None = None
+    marca_efectiva: str | list[str] | None = marca
     if marca is None and preferentes is not None:
-        if len(preferentes) == 1:
-            marca_efectiva = next(iter(preferentes))  # empuja al repo: total/paginacion exactos
-        else:
-            post_filtrar = preferentes  # >1 marca: filtro en memoria sobre la pagina
+        marca_efectiva = sorted(preferentes)  # 1 o N marcas: siempre via SQL (total exacto)
+    # CAP DE SERVIDOR (`KENI_LISTADO_MAX`, def 1000): ningun GET devuelve un conjunto sin
+    # tope. Sin `?limite=` el modo "completo" queda acotado al cap (solo se nota con
+    # universos enormes); un `?limite=` explicito mayor que el cap se recorta.
+    tope = tope_listado()
+    sin_limite = limite is None
+    limite = tope if limite is None else min(limite, tope)
     pubs = repos.listar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
         limite=limite, desplazamiento=desplazamiento, cursor=cursor,
@@ -221,11 +284,6 @@ async def listar(request: Request) -> Response:
     total = repos.contar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea
     )
-    if post_filtrar is not None:
-        pubs = [p for p in pubs if not p.get("marca") or p.get("marca") in post_filtrar]
-        # `total` queda como el total SIN el post-filtro (el repo no lo conoce); es el
-        # numero de piezas de la pagina cruda. Aceptable para el piloto (universo pequeño);
-        # un set-scoping exacto requeriria db.py.
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la
     # última fila vista (`<creado>|<id>`). Si vino corta (o vacía), es la última página y omitimos
@@ -234,11 +292,14 @@ async def listar(request: Request) -> Response:
     if modo_feed and limite is not None and len(pubs) >= limite and pubs:
         ultima = pubs[-1]
         cursor_siguiente = f"{ultima.get('fecha_creacion', '')}|{ultima.get('id', '')}"
+    # Envelope retrocompatible: sin `?limite=` y sin truncado por el cap, se reporta como
+    # antes (`limite = total`); si el cap recorto de verdad, se reporta el cap (honesto).
+    limite_reportado = None if (sin_limite and not modo_feed and total <= limite) else limite
     return JSONResponse(
         {
             "publicaciones": [_publicacion_a_dict(p) for p in pubs],
             "paginacion": envoltura_paginacion(
-                total, limite, desplazamiento, cursor_siguiente=cursor_siguiente
+                total, limite_reportado, desplazamiento, cursor_siguiente=cursor_siguiente
             ),
         }
     )
@@ -331,6 +392,21 @@ async def actualizar(request: Request) -> Response:
         estado = datos.get("estado")
         if not isinstance(estado, str) or estado not in repos.ESTADOS_PUBLICACION:
             return JSONResponse({"error": "Estado no permitido."}, status_code=400)
+        # MAQUINA DE ESTADOS: la transicion debe ser valida DESDE el estado actual (tabla
+        # `_TRANSICIONES_PUT`). Mismo estado = no-op permitido (PUT idempotente).
+        estado_desde = pieza.get("estado") or ESTADO_BORRADOR
+        if estado != estado_desde and estado not in _TRANSICIONES_PUT.get(
+            estado_desde, frozenset()
+        ):
+            return JSONResponse(
+                {
+                    "error": (
+                        f"Transición de estado no permitida: de '{estado_desde}' "
+                        f"a '{estado}'."
+                    )
+                },
+                status_code=400,
+            )
         campos["estado"] = estado
     if "fecha_programada" in datos:
         fecha = datos.get("fecha_programada")
@@ -340,7 +416,12 @@ async def actualizar(request: Request) -> Response:
         if fecha is None:
             campos["fecha_programada"] = ""
         elif isinstance(fecha, str):
-            campos["fecha_programada"] = fecha.strip()
+            # Canon de parrilla (minutos, UTC sin offset): el UNIQUE anti-doble-reserva
+            # compara el TEXT crudo; sin canon "T18:00" y "T18:00:00" no chocaban.
+            fecha_norm, err_fecha = _normalizar_fecha_programada(fecha.strip())
+            if err_fecha is not None:
+                return JSONResponse({"error": err_fecha}, status_code=400)
+            campos["fecha_programada"] = fecha_norm
         else:
             return JSONResponse(
                 {"error": "La fecha programada debe ser texto o nula."}, status_code=400
@@ -433,8 +514,17 @@ async def actualizar(request: Request) -> Response:
             fecha_programada="",
         )
 
+    # CAS de estado: si la peticion mueve el estado (o el reset lo fuerza), la escritura solo
+    # aplica si la pieza SIGUE en el estado desde el que se valido la transicion. Cierra el
+    # TOCTOU del PUT (otro flujo —aprobacion, programador— pudo moverla entre lectura y
+    # escritura, y la transicion validada dejaria de ser valida).
+    estado_esperado: str | None = None
+    if "estado" in campos:
+        estado_esperado = estado_actual if resetear else (pieza.get("estado") or ESTADO_BORRADOR)
     try:
-        pub = repos.actualizar_publicacion(publicacion_id, campos)
+        pub = repos.actualizar_publicacion(
+            publicacion_id, campos, estado_esperado=estado_esperado
+        )
     except IntegrityError:
         # Backstop de doble-reserva de parrilla (índice parcial `idx_parrilla_slot_uniq`): la
         # edición dejaría dos piezas programadas en el mismo (red, fecha). 409 accionable.
@@ -443,7 +533,13 @@ async def actualizar(request: Request) -> Response:
             status_code=409,
         )
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        if repos.obtener_publicacion(publicacion_id) is None:
+            return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        # Existe pero el CAS no aplico: otro flujo movio el estado entre lectura y escritura.
+        return JSONResponse(
+            {"error": "La publicación cambió de estado mientras editabas; recarga e intenta de nuevo."},
+            status_code=409,
+        )
     if resetear:
         # Limpia la cadena (borra todos los niveles): las aprobaciones previas dejan de existir.
         plat = repos.obtener_contenido_plataforma(publicacion_id)

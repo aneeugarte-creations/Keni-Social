@@ -241,8 +241,25 @@ def limpiar(antiguedad_horas: float = 24, dry_run: bool = False) -> dict[str, An
             "nombres": list(a_borrar),
         }
 
+    # RE-VERIFICACION anti-TOCTOU: entre el calculo de `huerfanos()` y el borrado pudo
+    # nacer una referencia nueva (una pieza que fija `imagen`/`foto` a uno de estos
+    # objetos). Se recalcula el set de referencias JUSTO antes del bucle de borrado y se
+    # re-comprueba cada objeto contra ese snapshot fresco: el que se volvio referenciado
+    # se CONSERVA (y se descuenta de los huerfanos reportados).
+    vivas_ahora = referencias_vivas()
+    rescatados = [n for n in a_borrar if n in vivas_ahora]
+    if rescatados:
+        _log.info(
+            "GC media: %d objeto(s) referenciados durante el barrido; se conservan.",
+            len(rescatados),
+        )
+        a_borrar = [n for n in a_borrar if n not in vivas_ahora]
+        conservados = total - len(a_borrar)
+
     borrados = 0
     for nombre in a_borrar:
+        if nombre in vivas_ahora:  # defensa redundante (lista ya filtrada)
+            continue
         try:
             almacen_media.borrar_objeto(nombre)
             borrados += 1

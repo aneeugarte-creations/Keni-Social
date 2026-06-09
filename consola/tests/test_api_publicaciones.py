@@ -457,3 +457,125 @@ def test_cadenas_lote_id_inexistente_sale_vacia_no_404(cliente):
 def test_cadenas_lote_sin_ids_400(cliente):
     assert cliente.get("/api/publicaciones/cadenas").status_code == 400
     assert cliente.get("/api/publicaciones/cadenas?ids=,,").status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Maquina de estados del PUT generico (tabla de transiciones)                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_put_publicado_es_terminal_400(cliente):
+    """Una pieza `publicado` NO se mueve por el PUT generico (ni a borrador ni a otro)."""
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    assert cliente.put(f"/api/publicaciones/{pid}", json={"estado": "publicado"}).status_code == 200
+    for destino in ("borrador", "en_revision", "aprobado", "programado"):
+        r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": destino})
+        assert r.status_code == 400, destino
+        assert "Transición" in r.json()["error"]
+
+
+def test_put_retroceso_invalido_400(cliente):
+    """Retroceder solo se permite a `borrador` (o programado->aprobado): `aprobado ->
+    en_revision` por el PUT generico se rechaza (eso lo hace el flujo de revision)."""
+    pid = _crear(cliente, estado="aprobado").json()["publicacion"]["id"]
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "en_revision"})
+    assert r.status_code == 400
+    assert "Transición" in r.json()["error"]
+
+
+def test_put_mismo_estado_es_noop_permitido(cliente):
+    pid = _crear(cliente, estado="aprobado").json()["publicacion"]["id"]
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "aprobado"})
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["estado"] == "aprobado"
+
+
+def test_put_desprogramar_a_aprobado_permitido(cliente):
+    pid = _crear(cliente, estado="programado").json()["publicacion"]["id"]
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "aprobado"})
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["estado"] == "aprobado"
+
+
+# --------------------------------------------------------------------------- #
+# Canon de fecha_programada (minutos, UTC sin offset)                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_fecha_programada_se_normaliza_a_minutos(cliente):
+    """El UNIQUE de parrilla compara el TEXT crudo: 'T18:00:00' y 'T18:00' deben quedar
+    iguales tras la normalizacion (antes no chocaban y se doble-reservaba el slot)."""
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.put(
+        f"/api/publicaciones/{pid}",
+        json={"estado": "programado", "fecha_programada": "2026-06-10T18:00:00"},
+    )
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["fecha_programada"] == "2026-06-10T18:00"
+
+
+def test_fecha_programada_con_offset_se_convierte_a_utc(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.put(
+        f"/api/publicaciones/{pid}",
+        json={"estado": "programado", "fecha_programada": "2026-06-10T12:00:00-06:00"},
+    )
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["fecha_programada"] == "2026-06-10T18:00"
+
+
+def test_fecha_programada_invalida_400(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.put(
+        f"/api/publicaciones/{pid}", json={"fecha_programada": "manana a las 6"}
+    )
+    assert r.status_code == 400
+    assert "fecha" in r.json()["error"].lower()
+
+
+def test_crear_normaliza_fecha_programada(cliente):
+    pub = _crear(
+        cliente, estado="programado", fecha_programada="2026-06-11T09:30:15"
+    ).json()["publicacion"]
+    assert pub["fecha_programada"] == "2026-06-11T09:30"
+
+
+def test_doble_reserva_mismo_slot_con_formatos_distintos_409(cliente):
+    """Dos piezas al MISMO instante con formatos distintos ('T18:00' vs 'T18:00:00')
+    chocan tras el canon: la segunda recibe 409 (antes pasaban ambas)."""
+    a = _crear(cliente).json()["publicacion"]["id"]
+    b = _crear(cliente).json()["publicacion"]["id"]
+    r1 = cliente.put(
+        f"/api/publicaciones/{a}",
+        json={"estado": "programado", "fecha_programada": "2026-06-12T18:00"},
+    )
+    assert r1.status_code == 200
+    r2 = cliente.put(
+        f"/api/publicaciones/{b}",
+        json={"estado": "programado", "fecha_programada": "2026-06-12T18:00:00"},
+    )
+    assert r2.status_code == 409
+
+
+# --------------------------------------------------------------------------- #
+# Topes del servidor: cap de listado y body JSON maximo                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_listado_respeta_cap_de_servidor(cliente, monkeypatch):
+    monkeypatch.setenv("KENI_LISTADO_MAX", "2")
+    for i in range(4):
+        _crear(cliente, titulo=f"Cap{i}")
+    datos = cliente.get("/api/publicaciones").json()
+    assert len(datos["publicaciones"]) == 2  # acotado por el cap
+    assert datos["paginacion"]["total"] == 4  # el total sigue siendo exacto
+    assert datos["paginacion"]["limite"] == 2  # cap reportado (hubo truncado)
+
+
+def test_body_json_gigante_413(cliente, monkeypatch):
+    monkeypatch.setenv("KENI_JSON_MAX_BYTES", "1024")
+    r = cliente.post(
+        "/api/publicaciones",
+        json={"marca": "unotv", "red": "x", "titulo": "T", "contenido": "x" * 5000},
+    )
+    assert r.status_code == 413

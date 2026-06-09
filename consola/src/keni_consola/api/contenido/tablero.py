@@ -111,9 +111,11 @@ async def listar(request: Request) -> Response:
     if etiqueta_id:
         con_etiqueta = repos.ids_contenido_con_etiqueta(etiqueta_id)
         items = [it for it in items if it["id"] in con_etiqueta]
-    # Una sola lectura de todas las plataformas y etiquetas, agrupadas por contenido.
+    # Una sola lectura de las plataformas y etiquetas, agrupadas por contenido. Si el GET
+    # acota por `?marca=` (workspace), el filtro se empuja al SQL via la marca denormalizada
+    # de `contenido_plataforma` (antes se traia la tabla ENTERA en cada GET del tablero).
     por_contenido: dict[str, list[dict]] = {}
-    for plat in repos.listar_contenido_plataforma():
+    for plat in repos.listar_contenido_plataforma(marca=q.get("marca") or None):
         por_contenido.setdefault(plat["contenido_id"], []).append(plat)
     etiquetas_de = repos.etiquetas_por_contenido()
     return JSONResponse(

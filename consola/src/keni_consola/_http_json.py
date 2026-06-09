@@ -21,9 +21,26 @@ USO (lo consumiran las features en otra ola):
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
+
+# Tope del BODY JSON aceptado (bytes). Un body sin limite dejaba al servidor parsear
+# payloads arbitrarios (memoria + CPU) en cualquier endpoint que use `leer_json`.
+# Configurable por entorno (`KENI_JSON_MAX_BYTES`); default 2 MB, de sobra para
+# cualquier cuerpo legitimo de la consola (los binarios van por /api/media, no por JSON).
+_JSON_MAX_BYTES_DEF = 2 * 1024 * 1024
+
+
+def _json_max_bytes() -> int:
+    """Tope de bytes del body JSON (env `KENI_JSON_MAX_BYTES`, fallback 2 MB)."""
+    try:
+        n = int(os.environ.get("KENI_JSON_MAX_BYTES", "") or _JSON_MAX_BYTES_DEF)
+    except (TypeError, ValueError):
+        return _JSON_MAX_BYTES_DEF
+    return n if n >= 1 else _JSON_MAX_BYTES_DEF
 
 
 async def leer_json(request: Request) -> dict[str, Any]:
@@ -31,8 +48,32 @@ async def leer_json(request: Request) -> dict[str, Any]:
 
     Si el body falta, esta malformado o no es un objeto JSON, devuelve `{}` en vez
     de lanzar. El llamante valida los campos que espera sobre el dict resultante.
+
+    EXCEPCION (unica) al "nunca lanza": un body MAS GRANDE que el tope del servidor
+    (`KENI_JSON_MAX_BYTES`, def 2 MB) se rechaza con 413 via `HTTPException` ANTES de
+    parsear (primero por `Content-Length` si viene, y siempre por el tamaño real leido).
+    Tratarlo como `{}` seria mentirle al cliente ("falta el campo X" en vez de "tu
+    payload es enorme") y el parseo en si ya es el coste que se quiere evitar.
     """
+    tope = _json_max_bytes()
+    largo = request.headers.get("content-length")
     try:
+        if largo is not None and int(largo) > tope:
+            raise HTTPException(
+                status_code=413, detail="El cuerpo JSON supera el tamaño máximo permitido."
+            )
+    except (TypeError, ValueError):
+        pass  # Content-Length ilegible: decide el tamaño real del body, abajo.
+    try:
+        cuerpo = await request.body()
+    except Exception:  # noqa: BLE001 -- body ilegible => dict vacio, sin lanzar
+        return {}
+    if len(cuerpo) > tope:
+        raise HTTPException(
+            status_code=413, detail="El cuerpo JSON supera el tamaño máximo permitido."
+        )
+    try:
+        # `request.json()` reutiliza el body ya leido (Starlette lo cachea en `_body`).
         datos = await request.json()
     except Exception:  # noqa: BLE001 -- body invalido/ausente => dict vacio, sin lanzar
         return {}
@@ -50,6 +91,22 @@ def _entero_query(valor: str | None, *, minimo: int = 0) -> int | None:
     except (TypeError, ValueError):
         return None
     return n if n >= minimo else None
+
+
+# Cap de SERVIDOR para los listados grandes (publicaciones/contenido): sin `?limite=`
+# explicito, los endpoints devolvian el conjunto COMPLETO (full scan + serializacion sin
+# tope). 1000 no rompe a ningun cliente actual del piloto (universos muy por debajo) y
+# acota el peor caso; el SPA pagina la vista de lista por su cuenta.
+_TOPE_LISTADO_DEF = 1000
+
+
+def tope_listado() -> int:
+    """Cap de filas de un listado grande (env `KENI_LISTADO_MAX`, fallback 1000)."""
+    try:
+        n = int(os.environ.get("KENI_LISTADO_MAX", "") or _TOPE_LISTADO_DEF)
+    except (TypeError, ValueError):
+        return _TOPE_LISTADO_DEF
+    return n if n >= 1 else _TOPE_LISTADO_DEF
 
 
 def paginacion_query(request: Request) -> tuple[int | None, int]:
