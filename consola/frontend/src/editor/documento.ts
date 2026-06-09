@@ -325,9 +325,7 @@ export function documentoVacio(
   // Un lienzo nuevo nace LIMPIO y TRANSPARENTE (fondo `#00000000` => se ve el tablero y exporta con
   // alfa). Trae su HUECO DE FOTO (obligatorio para guardar plantilla) pero OCULTO: así no pinta el
   // placeholder gris que tapaba todo y parecía "prediseñado". El usuario lo muestra (ojo en el panel
-  // de capas) cuando quiere colocar la foto. La SUPERFICIE GRIS sobre la que se diseña la aporta la
-  // "Vista con muestra" (encendida por defecto), que rellena el hueco con un degradado gris neutro
-  // (ver `muestra.ts`); es solo PRESENTACIÓN y no se guarda en el documento.
+  // de capas) cuando quiere colocar la foto.
   const hueco = nuevaCapaImagen("", {
     id: "foto",
     x: 0,
