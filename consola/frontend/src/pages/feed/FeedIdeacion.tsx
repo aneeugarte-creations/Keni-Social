@@ -435,14 +435,14 @@ export default function FeedIdeacion() {
             role="group"
             aria-label="Posts por fila"
           >
-            <span className="px-1 text-xs text-muted-foreground">Por fila</span>
+            <span className="px-1 text-xs text-foreground">Por fila</span>
             <button
               type="button"
               onClick={() => ajustarColumnas(-1)}
               disabled={columnas <= COLUMNAS_MIN}
               title="Menos columnas (posts más grandes)"
               aria-label="Menos columnas"
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
@@ -453,7 +453,7 @@ export default function FeedIdeacion() {
               disabled={columnas >= COLUMNAS_MAX}
               title="Más columnas (posts más pequeños)"
               aria-label="Más columnas"
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -465,18 +465,18 @@ export default function FeedIdeacion() {
             role="group"
             aria-label="Tamaño de los posts"
           >
-            <span className="px-1 text-xs text-muted-foreground">Zoom</span>
+            <span className="px-1 text-xs text-foreground">Zoom</span>
             <button
               type="button"
               onClick={() => ajustarEscala(-0.1)}
               disabled={escala <= ESCALA_MIN}
               title="Posts más pequeños"
               aria-label="Reducir tamaño"
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
-            <span className="w-9 text-center text-xs tabular-nums text-muted-foreground">
+            <span className="w-9 text-center text-xs tabular-nums text-foreground">
               {Math.round(escala * 100)}%
             </span>
             <button
@@ -485,7 +485,7 @@ export default function FeedIdeacion() {
               disabled={escala >= ESCALA_MAX}
               title="Posts más grandes"
               aria-label="Aumentar tamaño"
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
+              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>

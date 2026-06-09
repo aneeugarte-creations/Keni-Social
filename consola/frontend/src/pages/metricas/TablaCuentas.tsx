@@ -27,7 +27,9 @@ import type { CuentaMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { METRICAS, valorMetrica, type ClaveMetrica } from "./metricas-meta";
+import { PieMostrarMas } from "./PieMostrarMas";
 import { SeccionColapsable } from "./SeccionColapsable";
+import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
@@ -46,10 +48,17 @@ function calcularTotales(cuentas: CuentaMetrica[]): {
 export function TablaCuentas({
   cuentas,
   onVerPiezas,
+  desnudo = false,
 }: {
   cuentas: CuentaMetrica[];
   /** Drill-down: ver las piezas de esta marca (id crudo de métricas). */
   onVerPiezas?: (marcaId: string) => void;
+  /**
+   * `true` => renderiza SOLO la tabla (sin el `SeccionColapsable` de título/recuadro), para
+   * mostrarla directamente bajo el gráfico de "Por marca". Mantiene el recorte a 5 filas +
+   * "Mostrar más".
+   */
+  desnudo?: boolean;
 }) {
   const navigate = useNavigate();
 
@@ -64,8 +73,10 @@ export function TablaCuentas({
 
   const totales = calcularTotales(cuentas);
 
-  return (
-    <SeccionColapsable titulo="Detalle por cuenta" contentClassName="p-0">
+  // Recorte a 5 filas (sobre el conjunto YA ORDENADO): el "top 5" sigue el orden activo.
+  const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
+
+  const tabla = (
       <Table>
           <TableHeader>
             <TableRow>
@@ -98,7 +109,7 @@ export function TablaCuentas({
               </TableRow>
             ) : (
               <>
-                {filasOrdenadas.map((c) => {
+                {visibles.map((c) => {
                   const acciones: EntradaMenuContextual[] = [
                     {
                       etiqueta: "Generar copy",
@@ -157,7 +168,20 @@ export function TablaCuentas({
               </>
             )}
           </TableBody>
+          {hayMas && (
+            <PieMostrarMas
+              expandido={expandido}
+              onAlternar={alternar}
+              colSpan={METRICAS.length + 2}
+            />
+          )}
         </Table>
+  );
+
+  if (desnudo) return tabla;
+  return (
+    <SeccionColapsable titulo="Detalle por cuenta" contentClassName="p-0">
+      {tabla}
     </SeccionColapsable>
   );
 }

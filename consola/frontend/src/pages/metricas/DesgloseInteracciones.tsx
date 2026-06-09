@@ -12,7 +12,6 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
-import { Heart } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
@@ -44,7 +43,8 @@ import type { CeldaDesglose, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { PieMostrarMas } from "./PieMostrarMas";
+import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 // Componentes del engagement bruto: orden y color estables en la barra apilada.
@@ -111,13 +111,15 @@ export function DesgloseInteracciones({
   );
 
   return (
-    <SeccionColapsable
-      titulo="Desglose de interacciones"
-      icono={Heart}
-      descripcion="De qué se compone el engagement de cada marca y red: likes, comentarios, compartidos, guardados y reproducciones del periodo."
-      acciones={acciones}
-      contentClassName="space-y-6"
-    >
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold tracking-tight">Desglose de interacciones</h2>
+        <div className="flex flex-wrap items-center gap-2">{acciones}</div>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        De qué se compone el engagement de cada marca y red: likes, comentarios, compartidos,
+        guardados y reproducciones del periodo.
+      </p>
       {isPending ? (
         <Skeleton className="h-72 w-full rounded-lg" />
       ) : isError ? (
@@ -139,7 +141,7 @@ export function DesgloseInteracciones({
           />
         </>
       )}
-    </SeccionColapsable>
+    </section>
   );
 }
 
@@ -246,6 +248,9 @@ function TablaDesglose({
     } as Record<ClaveDesglose, (e: EntradaRejilla) => number | string | null>,
   );
 
+  // Recorte a 5 filas (post-orden): las visibles son el top 5 según la columna activa.
+  const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -275,7 +280,7 @@ function TablaDesglose({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filasOrdenadas.map(({ marca, red, celda }) => (
+          {visibles.map(({ marca, red, celda }) => (
             <TableRow
               key={`${marca}-${red}`}
               className={celda ? undefined : "text-muted-foreground"}
@@ -303,6 +308,13 @@ function TablaDesglose({
             </TableCell>
           </TableRow>
         </TableBody>
+        {hayMas && (
+          <PieMostrarMas
+            expandido={expandido}
+            onAlternar={alternar}
+            colSpan={COMPONENTES.length + 3}
+          />
+        )}
       </Table>
     </div>
   );

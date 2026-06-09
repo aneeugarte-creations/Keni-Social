@@ -28,13 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  nombreRed,
-  numeroCompacto,
-  numeroCompleto,
-  porcentaje,
-  REDES_CANONICAS,
-} from "@/lib/formato";
+import { nombreRed, numeroCompleto, porcentaje, REDES_CANONICAS } from "@/lib/formato";
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -72,7 +66,14 @@ function calcularTotales(redes: RedMetrica[]): {
   return { visualizaciones, interacciones, engagement_pct };
 }
 
-export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
+export function TablaRedes({
+  redes,
+  desnudo = false,
+}: {
+  redes: RedMetrica[];
+  /** `true` => solo la tabla + reparto, sin el `SeccionColapsable` (para deslizar). */
+  desnudo?: boolean;
+}) {
   const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
   // TODAS las redes canónicas en el selector (no solo las que traen datos): el operador
   // puede enfocar cualquiera y, si no tiene datos en el rango, la tabla lo dice con "—".
@@ -97,16 +98,6 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
   const conDatos = new Set(visibles.map((r) => r.red.toLowerCase()));
   const redesFaltantes = objetivoRedes.filter((r) => !conDatos.has(r));
 
-  // Reparto "% de vistas por red", ordenado de mayor a menor (como GraficaMarcas).
-  const totalVis = totales.visualizaciones;
-  const reparto = [...visibles]
-    .sort((a, b) => b.visualizaciones - a.visualizaciones)
-    .map((r) => ({
-      red: r.red,
-      visualizaciones: r.visualizaciones,
-      pct: totalVis > 0 ? Math.round((r.visualizaciones / totalVis) * 100) : 0,
-    }));
-
   const filtroRed = (
     <Select value={redFiltro} onValueChange={setRedFiltro}>
       <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
@@ -123,8 +114,8 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
     </Select>
   );
 
-  return (
-    <SeccionColapsable titulo="Detalle por red" acciones={filtroRed} contentClassName="p-0">
+  const cuerpo = (
+      <>
       <Table>
           <TableHeader>
             <TableRow>
@@ -185,37 +176,20 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
             )}
           </TableBody>
         </Table>
+      </>
+  );
 
-        {visibles.length > 0 && (
-          <div className="space-y-3 border-t border-border px-6 py-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Reparto de vistas por red
-            </p>
-            <ul className="space-y-3">
-              {reparto.map((it) => (
-                <li key={it.red}>
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm text-foreground">
-                      {nombreRed(it.red)}
-                    </span>
-                    <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                      {numeroCompacto(it.visualizaciones)}
-                      <span className="ml-1.5 text-xs text-muted-foreground/70">
-                        {it.pct}%
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-[#1e3a8a] transition-all dark:bg-[#1e3a8a]"
-                      style={{ width: `${it.pct}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+  if (desnudo) {
+    return (
+      <div className="space-y-3">
+        <div className="flex justify-end">{filtroRed}</div>
+        {cuerpo}
+      </div>
+    );
+  }
+  return (
+    <SeccionColapsable titulo="Detalle por red" acciones={filtroRed} contentClassName="p-0">
+      {cuerpo}
     </SeccionColapsable>
   );
 }

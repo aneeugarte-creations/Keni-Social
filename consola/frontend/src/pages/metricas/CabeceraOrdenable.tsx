@@ -39,7 +39,7 @@ export function CabeceraOrdenable({
         type="button"
         onClick={onClick}
         className={cn(
-          "group inline-flex w-full items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:text-foreground",
+          "group inline-flex w-full items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:text-foreground",
           alinear === "right" ? "justify-end" : "justify-start",
         )}
       >

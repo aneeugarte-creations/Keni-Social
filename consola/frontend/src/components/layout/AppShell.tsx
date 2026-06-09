@@ -146,10 +146,10 @@ export function AppShell() {
               en toda la consola: la MARCA filtra implícitamente lo que se ve (deriva del
               perfil, ver SwitchMarca); RED y LÍNEA filtran la superficie de contenido/feed
               y solo se pintan en sus rutas (SwitchFiltrosContenido decide su visibilidad). */}
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
             <SwitchFiltrosContenido />
-            <CampanaNotificaciones />
             <SwitchMarca />
+            <CampanaNotificaciones />
           </div>
         </header>
 

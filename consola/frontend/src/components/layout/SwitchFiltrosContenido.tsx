@@ -33,13 +33,13 @@ export function SwitchFiltrosContenido() {
   if (!rutaUsaFiltrosContenido(pathname)) return null;
 
   return (
-    <div className="hidden items-center gap-1.5 sm:flex">
+    <div className="hidden items-center gap-2 sm:flex">
       <SelectorRed
         redes={redes}
         valor={red}
         onCambio={cambiarRed}
         ariaLabel="Filtrar por red"
-        className="h-8 w-[150px]"
+        className="h-8 w-[170px]"
       />
       <Select value={linea} onValueChange={cambiarLinea}>
         <SelectTrigger aria-label="Filtrar por línea editorial" className="h-8 w-[170px] gap-1.5">
