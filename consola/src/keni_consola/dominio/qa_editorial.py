@@ -10,25 +10,12 @@ reescribe. Aqui solo vive el PARSEO de la salida del prompt en ese informe estru
 
 from __future__ import annotations
 
-import hashlib
 import json
 
 from . import stream
 
 # Id del prompt que hace el QA editorial.
 PROMPT_ID = "qa-editorial"
-
-
-def hash_copy(texto: str) -> str:
-    """Hash estable del copy revisado (para invalidar el veredicto si el copy cambia; item D).
-
-    Normaliza espacios al borde antes de hashear (un cambio cosmetico de whitespace al final
-    no invalida el QA). PURA. `""` para texto vacio (sin copy que atar).
-    """
-    norm = (texto or "").strip()
-    if not norm:
-        return ""
-    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
 # Valores permitidos del informe estructurado (defensa: ignoramos cualquier otro).
 _TIPOS = frozenset({"ortografia", "dato", "legal", "voz"})

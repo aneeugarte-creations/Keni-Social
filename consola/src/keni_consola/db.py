@@ -170,8 +170,6 @@ from .db_colaboracion import (  # noqa: F401
     obtener_comentario,
     obtener_copy_version,
     registrar_copy_version,
-    registrar_veredicto_qa,
-    ultimo_veredicto_qa,
 )
 from .db_comercial import (  # noqa: F401
     actualizar_campania_comercial,

@@ -329,9 +329,7 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
         return JSONResponse({"error": "Las etiquetas no son válidas."}, status_code=400)
     if not etiquetas:
         return JSONResponse({"error": "La cadena necesita al menos un nivel."}, status_code=400)
-    # El nivel "QA Editorial" (si el flag lo activa) se antepone DENTRO de `montar_cadena`,
-    # asi que cuenta para el limite de niveles.
-    if len(etiquetas) + (1 if config.auto_qa_editorial() else 0) > _MAX_NIVELES:
+    if len(etiquetas) > _MAX_NIVELES:
         return JSONResponse(
             {"error": f"Demasiados niveles (máximo {_MAX_NIVELES})."}, status_code=400
         )
@@ -355,14 +353,11 @@ def montar_cadena_aprobacion(
     Punto unico compartido por `crear_aprobacion_cadena` (recrear la cadena del tablero) y
     por `api/aprobacion.enviar_a_revision` (mandar al flujo "dale el OK" del feed). Pasos:
 
-      1. item D — QA Editorial como PRIMER nivel automatico, si `KENI_AUTO_QA_EDITORIAL` lo
-         activa (la "aprobacion de IA"). El ultimo nivel queda SIEMPRE humano.
-      2. cargos por nivel: si `con_cargos`, se exige el cargo del organigrama derivado de la
+      1. cargos por nivel: si `con_cargos`, se exige el cargo del organigrama derivado de la
          etiqueta (Coordinación→coordinador, etc.); si no, ningun nivel exige cargo (el flujo
          "dale el OK" del feed se abre a cualquiera del equipo, salvo el autor).
-      3. crea la cadena (todos los niveles `pendiente`) via `repos.crear_cadena_aprobacion`.
-      4. aplica el veredicto de QA al nivel automatico (best-effort) y la pre-aprobacion de
-         piezas de bajo riesgo (ambos gateados por sus flags, def OFF).
+      2. crea la cadena (todos los niveles `pendiente`) via `repos.crear_cadena_aprobacion`.
+      3. pre-aprobacion de piezas de bajo riesgo (gateada por su flag, def OFF).
 
     `solo_si_ausente` (idempotencia): si la pieza YA tiene cadena, NO la recrea (devuelve
     False). Lo usa `enviar_a_revision` para que dos envios a revision concurrentes no monten
@@ -371,8 +366,6 @@ def montar_cadena_aprobacion(
     """
     if solo_si_ausente and repos.existe_cadena_aprobacion(plataforma_id):
         return False
-    if config.auto_qa_editorial():
-        etiquetas = colaboracion.cadena_con_qa(etiquetas)
     cargos = [colaboracion.cargo_requerido_para(e) for e in etiquetas] if con_cargos else None
     repos.crear_cadena_aprobacion(
         plataforma_id=plataforma_id,
@@ -380,8 +373,6 @@ def montar_cadena_aprobacion(
         etiquetas=etiquetas,
         cargos=cargos,
     )
-    if config.auto_qa_editorial():
-        _aplicar_qa_automatico(plataforma_id, plat)
     # fase3 (auto-planificacion): pre-aprobacion de piezas de bajo riesgo (gateada, def OFF).
     # Auto-aprueba los niveles INFERIORES, dejando el ULTIMO a un humano (trazable, decisor
     # "auto"). Si todo lo demas queda aprobado, la cadena solo espera el OK final.
@@ -409,33 +400,6 @@ def _aplicar_preaprobacion_bajo_riesgo(
         cadena, activa=True, bajo_riesgo=True
     ):
         repos.actualizar_aprobacion(nivel_id, campos)
-
-
-def _aplicar_qa_automatico(plataforma_id: str, plat: dict[str, object]) -> None:
-    """Aplica el veredicto del QA editorial al PRIMER nivel "QA Editorial" de la cadena (item D).
-
-    Best-effort y gateado (el llamante ya verifico el flag). Busca el ULTIMO veredicto de QA
-    de la pieza (`repos.ultimo_veredicto_qa`) y lo traduce a la decision del nivel automatico:
-    🟢 aprueba, 🟡 lo deja pendiente (a un humano), 🔴 lo rechaza (para la cadena). Si no hay
-    veredicto disponible, el nivel queda `pendiente` (CONSERVADOR: nada se auto-decide sin
-    evidencia de QA). El ULTIMO nivel de la cadena es humano y este nunca se toca.
-    """
-    cadena = repos.listar_aprobaciones(plataforma_id)
-    # El nivel QA es el PRIMERO (nivel 1) y nunca el ultimo (hay al menos un humano detras).
-    primero = colaboracion.nivel_actual(cadena)
-    if (
-        primero is None
-        or len(cadena) <= 1
-        or (primero.get("etiqueta") or "").strip().lower() != colaboracion.ETIQUETA_QA.lower()
-    ):
-        return
-    veredicto = repos.ultimo_veredicto_qa(
-        plataforma_id, plat.get("contenido_id", "") or ""
-    )
-    if not veredicto:
-        return  # sin veredicto de QA: el nivel sigue pendiente, lo decide un humano.
-    campos = colaboracion.campos_nivel_qa(veredicto.get("verdicto", ""), resumen=veredicto.get("resumen", ""))
-    repos.actualizar_aprobacion(primero["id"], campos)
 
 
 async def decidir_nivel(request: Request) -> Response:

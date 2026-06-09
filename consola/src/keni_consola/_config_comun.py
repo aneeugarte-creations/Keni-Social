@@ -123,12 +123,6 @@ ENV_AUTO_PREAPROBACION = "KENI_AUTO_PREAPROBACION"
 # "cuatro ojos" reales). `KENI_MIN_APROBACIONES=0` desactiva el gate; valor invalido -> def.
 ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"
 
-# QA Editorial como APROBADOR AUTOMATICO (item D). Flag admin, CONSERVADOR por defecto (OFF):
-# cuando se activa, la cadena de aprobacion nace con un PRIMER nivel automatico "QA Editorial"
-# que aprueba/pendiente/rechaza segun el veredicto 🟢/🟡/🔴 de la skill de QA. El ULTIMO nivel
-# sigue siendo humano. `KENI_AUTO_QA_EDITORIAL=1` lo enciende.
-ENV_AUTO_QA_EDITORIAL = "KENI_AUTO_QA_EDITORIAL"
-
 # INTERRUPTOR GENERAL de la maquina de contenido (kill-switch GLOBAL). `KENI_MAQUINA`
 # afirmativo ENCIENDE la maquina; ausente/falso la deja APAGADA (def OFF). Cuando esta OFF,
 # NINGUN daemon de automatizacion de CONTENIDO corre, aunque su toggle individual este ON: es
@@ -695,7 +689,6 @@ __all__ = [
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
-    'ENV_AUTO_QA_EDITORIAL',
     'ENV_TEXTO_DIR',
     'ENV_CLAUDE_DISALLOWED_TOOLS',
     'ENV_CLAUDE_MAX_TURNS',

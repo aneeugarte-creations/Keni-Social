@@ -350,8 +350,7 @@ CADENA_APROBACION_DEFECTO: tuple[str, ...] = (
 # (el flujo "dale el OK"): DOS niveles humanos = los DOS OK que la pieza necesita para
 # quedar lista, uno de "Edición" y otro de "Coordinación". Cada nivel aprobado es un "like"
 # del equipo; con los dos OK (de personas distintas, nunca el autor) la pieza pasa SOLA a
-# `aprobado`. Si el QA editorial actua como aprobador automatico (`KENI_AUTO_QA_EDITORIAL`),
-# se antepone ademas el nivel "QA Editorial" (la "aprobacion de IA"). Cadena vacia = sin
+# `aprobado`. Cadena vacia = sin
 # aprobacion. (Historicamente era un unico nivel "Revisión"; los dos OK lo sustituyen para
 # que el gate "minimo de aprobaciones" = 2 sea alcanzable y refleje "cuatro ojos" reales.)
 CADENA_APROBACION_SIMPLE: tuple[str, ...] = ("Edición", "Coordinación")

@@ -12,7 +12,6 @@ from ._config_comun import (
     ENV_ALGORITMOS_AUTO,
     ENV_ALGORITMOS_INTERVALO_HORAS,
     ENV_AUTO_PREAPROBACION,
-    ENV_AUTO_QA_EDITORIAL,
     ENV_COMERCIAL_INTERVALO_HORAS,
     ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     ENV_EVENTOS_INTERVALO_SEGUNDOS,
@@ -226,16 +225,6 @@ def min_aprobaciones() -> int:
     aprobada se puede programar, comportamiento legado). Valor no entero -> def. Min 0.
     """
     return _entero(ENV_MIN_APROBACIONES, MIN_APROBACIONES_DEF, minimo=0)
-
-
-def auto_qa_editorial() -> bool:
-    """True si el QA editorial actua como aprobador AUTOMATICO de la cadena (`KENI_AUTO_QA_EDITORIAL`).
-
-    Def OFF (conservador): la cadena nace toda humana. Con el flag, al crear la cadena se
-    antepone un nivel automatico "QA Editorial" cuyo veredicto (🟢/🟡/🔴) aprueba/deja
-    pendiente/rechaza ese primer nivel. El ultimo nivel sigue siendo humano.
-    """
-    return _crudo(ENV_AUTO_QA_EDITORIAL).lower() in _VERDADEROS
 
 
 def investigador_activo() -> bool:

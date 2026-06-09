@@ -347,49 +347,6 @@ def test_cumple_minimo_cero_desactiva_el_gate():
 
 
 # --------------------------------------------------------------------------- #
-# Item D: QA editorial como aprobador automatico                               #
-# --------------------------------------------------------------------------- #
-
-
-def test_decision_por_veredicto_qa_mapea_semaforo():
-    assert colaboracion.decision_por_veredicto_qa("listo") == "aprobado"
-    assert colaboracion.decision_por_veredicto_qa("no_publicar") == "rechazado"
-    # 🟡 y cualquier desconocido caen a pendiente (lo decide un humano).
-    assert colaboracion.decision_por_veredicto_qa("revisar") == "pendiente"
-    assert colaboracion.decision_por_veredicto_qa("") == "pendiente"
-    assert colaboracion.decision_por_veredicto_qa("???") == "pendiente"
-
-
-def test_campos_nivel_qa_aprobado_sella_decisor():
-    campos = colaboracion.campos_nivel_qa("listo", resumen="todo ok")
-    assert campos["decision"] == "aprobado"
-    assert campos["decisor_id"] == colaboracion.DECISOR_QA_ID
-    assert campos["decisor_nombre"] == colaboracion.DECISOR_QA_NOMBRE
-    assert campos["decidido_en"]
-
-
-def test_campos_nivel_qa_pendiente_no_sella_decisor():
-    campos = colaboracion.campos_nivel_qa("revisar")
-    assert campos["decision"] == "pendiente"
-    assert "decisor_id" not in campos
-
-
-def test_cadena_con_qa_antepone_y_es_idempotente():
-    base = ["Edición", "Dirección"]
-    con_qa = colaboracion.cadena_con_qa(base)
-    assert con_qa[0] == colaboracion.ETIQUETA_QA
-    assert con_qa[1:] == base
-    # Idempotente: no duplica el nivel de QA.
-    assert colaboracion.cadena_con_qa(con_qa) == con_qa
-
-
-def test_cadena_con_qa_nunca_deja_qa_como_unico_nivel():
-    # Hay siempre al menos un nivel humano detras del QA automatico.
-    con_qa = colaboracion.cadena_con_qa(["Revisión"])
-    assert len(con_qa) >= 2 and con_qa[-1] != colaboracion.ETIQUETA_QA
-
-
-# --------------------------------------------------------------------------- #
 # Item C: cargo requerido por nivel                                           #
 # --------------------------------------------------------------------------- #
 

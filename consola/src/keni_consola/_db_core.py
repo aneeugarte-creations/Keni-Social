@@ -659,27 +659,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON contenido_aprobaciones (plataforma_id)",
     "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON contenido_aprobaciones (decision)",
-    # QA EDITORIAL como APROBADOR AUTOMATICO (item D): veredicto de la skill `qa-editorial`
-    # ATADO a una pieza (`contenido_plataforma`). Cada vez que se corre el QA sobre una pieza
-    # concreta se guarda aqui un registro inmutable con el `verdicto` (listo/revisar/no_publicar),
-    # un `resumen` legible y el `copy_hash` (hash del copy revisado en ese momento). El consumidor
-    # (`repos.ultimo_veredicto_qa`) lee el ULTIMO veredicto de la pieza para resolver el nivel
-    # automatico "QA Editorial" de la cadena de aprobacion; compara `copy_hash` con el copy actual
-    # para INVALIDAR el veredicto si el copy cambio despues del QA (entonces el nivel queda
-    # pendiente, lo decide un humano). Append-only: nunca se pisa, solo se inserta y se lee el ultimo.
-    """
-    CREATE TABLE IF NOT EXISTS contenido_qa_veredictos (
-        id            TEXT PRIMARY KEY,
-        plataforma_id TEXT NOT NULL DEFAULT '',
-        contenido_id  TEXT NOT NULL DEFAULT '',
-        verdicto      TEXT NOT NULL DEFAULT '',
-        resumen       TEXT NOT NULL DEFAULT '',
-        copy_hash     TEXT NOT NULL DEFAULT '',
-        historial_id  TEXT NOT NULL DEFAULT '',
-        creado        TEXT NOT NULL DEFAULT ''
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_qaver_plataforma ON contenido_qa_veredictos (plataforma_id)",
     # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los

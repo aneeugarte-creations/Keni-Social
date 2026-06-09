@@ -172,8 +172,6 @@ from .repos_historial import (  # noqa: F401
     listar_historial_prompts,
     obtener_historial_prompt,
     registrar_historial_prompt,
-    registrar_veredicto_qa,
-    ultimo_veredicto_qa,
 )
 from .repos_jobs import (  # noqa: F401
     cancelar_job,
