@@ -26,6 +26,7 @@ import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
 import { confirmar } from "@/components/comunes/confirmar";
+import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
@@ -254,9 +255,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     // El editor se abre SOLO al pulsar la imagen (área interactiva de la pieza). La cabecera, el
     // copy (con su "leer más"), las acciones y los comentarios NO abren el editor.
     <div className="rounded-xl border border-border bg-background text-left shadow-sm">
-      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · tiempo. La MARCA y el FORMATO ya van en el
-          titular del grupo (cabecera de la idea), la RED como distintivo sobre la imagen y el
-          formato como icono sobre la imagen (lado opuesto a la red), así que aquí NO se repiten. */}
+      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó (IA/autor) + distintivo de plataforma/formato ·
+          tiempo. El distintivo (logo de red + icono de foto/vídeo, sin nombre ni dos burbujas) va
+          JUNTO al logo de IA/autor, no sobre la imagen, para no taparla. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         {generadaPorIA ? (
           <span
@@ -273,6 +274,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             className="text-xs font-medium text-foreground"
           />
         )}
+        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}
@@ -288,7 +290,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         contenido={cuerpo}
         copy_in={publicacion.copy_in}
         imagen_url={imagen || undefined}
-        formato={publicacion.formato}
         onAbrir={() => void abrirEditor()}
         variante="limpia"
       />

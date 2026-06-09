@@ -34,6 +34,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { MARCA_TODAS, marcaParam } from "@/components/comunes/selectores";
@@ -198,9 +199,10 @@ function TarjetaFeed({
 
   return (
     <article className="snap-start border-b border-border bg-background pb-3">
-      {/* Cabecera EN UNA LÍNEA: quién posteó · tiempo (igual que el feed de escritorio). La RED ya
-          va como distintivo sobre la imagen y el FORMATO como icono sobre la imagen (lado opuesto),
-          y la marca la fija el selector global de arriba, así que aquí NO se repiten. */}
+      {/* Cabecera EN UNA LÍNEA: quién posteó (IA/autor) + distintivo de plataforma/formato ·
+          tiempo (igual que el feed de escritorio). El distintivo (logo de red + icono de
+          foto/vídeo, sin nombre ni dos burbujas) va JUNTO al logo de IA/autor, no sobre la
+          imagen; la marca la fija el selector global de arriba. */}
       <header className="flex items-center gap-2 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         {publicacion.autor_nombre?.trim() ? (
           <Autor
@@ -217,6 +219,7 @@ function TarjetaFeed({
             IA
           </span>
         )}
+        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">
             {tiempoRelativo(publicacion.enviado_a_revision_en)}
@@ -224,15 +227,14 @@ function TarjetaFeed({
         )}
       </header>
 
-      {/* Tarjeta uniforme (imagen 4:5 a sangre + distintivo de plataforma + copy), igual que el
-          feed de escritorio: scroll multiplataforma consistente. */}
+      {/* Tarjeta uniforme (imagen 4:5 a sangre + copy), igual que el feed de escritorio:
+          scroll multiplataforma consistente. El distintivo de plataforma va en la cabecera. */}
       <VistaPreviaRed
         red={publicacion.red}
         marca={publicacion.marca_nombre}
         contenido={publicacion.contenido}
         copy_in={publicacion.copy_in}
         imagen_url={publicacion.imagen_url || publicacion.imagen}
-        formato={publicacion.formato}
         onAbrir={() => onComentar(publicacion)}
         variante="limpia"
       />

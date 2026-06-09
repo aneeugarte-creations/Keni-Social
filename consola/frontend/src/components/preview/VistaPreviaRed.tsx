@@ -13,7 +13,6 @@
  */
 import {
   Bookmark,
-  Camera,
   Heart,
   ImageIcon,
   MessageCircle,
@@ -24,7 +23,6 @@ import {
   Send,
   Share2,
   ThumbsUp,
-  Video,
 } from "lucide-react";
 import * as React from "react";
 
@@ -41,12 +39,6 @@ export interface VistaPreviaRedProps {
   copy_in?: string;
   /** Nombre del archivo o URL de la imagen; vacío = sin imagen. */
   imagen_url?: string;
-  /**
-   * Formato de la pieza (`foto`|`video`; "" -> foto). En la variante `"limpia"` se muestra como
-   * un icono sobre la imagen (cámara/vídeo), en el lado opuesto al distintivo de la red. Sin
-   * valor, no se pinta el icono.
-   */
-  formato?: string | null;
   /**
    * Variante `"limpia"`: callback al activar la IMAGEN (clic o teclado). Cuando se pasa, SOLO la
    * imagen abre la acción (p. ej. el editor); el copy y su "leer más" quedan fuera. Sin valor, la
@@ -480,21 +472,15 @@ export function VistaPreviaRed({
   contenido,
   copy_in,
   imagen_url,
-  formato,
   onAbrir,
   variante = "completa",
 }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
   const Icono = iconoRed(red);
-  // Icono de formato sobre la imagen (solo si se pasa `formato`): vídeo o cámara (foto, el default).
-  const tieneFormato = formato != null && formato !== "";
-  const esVideo = (formato ?? "").trim().toLowerCase() === "video";
-  const IconoFormato = esVideo ? Video : Camera;
 
   // FEED (variante limpia): tarjeta UNIFORME para TODAS las redes — misma caja, imagen a
-  // 4:5 a ancho completo y un distintivo de plataforma (icono + nombre) sobre la imagen.
-  // Así el feed se lee como un scroll multiplataforma consistente (no maquetas de ancho
-  // variable por red) y siempre queda claro de qué plataforma es cada pieza.
+  // 4:5 a ancho completo, SIN nada superpuesto que tape la imagen. El distintivo de
+  // plataforma + formato va en la CABECERA (junto al logo de IA/autor), no aquí.
   if (variante === "limpia") {
     return (
       <div>
@@ -529,21 +515,6 @@ export function VistaPreviaRed({
           )}
           {/* El copy-in solo cuando NO hay imagen: si hay placa compuesta, el texto va horneado. */}
           <CapaCopyIn texto={imagen ? "" : copy_in} />
-          {/* Distintivo de plataforma, siempre visible sobre la imagen (feed multiplataforma). */}
-          <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-            <Icono className="h-3.5 w-3.5" aria-hidden="true" />
-            {nombreRed(red)}
-          </span>
-          {/* Formato (foto/vídeo) como icono, a la altura del distintivo de la red pero en el lado
-              opuesto: el icono basta, sin texto. */}
-          {tieneFormato && (
-            <span
-              className="absolute right-2.5 top-2.5 inline-flex items-center rounded-full bg-black/65 p-1.5 text-white backdrop-blur-sm"
-              title={esVideo ? "Video" : "Foto"}
-            >
-              <IconoFormato className="h-3.5 w-3.5" aria-hidden="true" />
-            </span>
-          )}
         </div>
         {/* Copy (caption) bajo la imagen, idéntico para toda red: recortado a 2 líneas con "leer
             más" estilo red social, y alto reservado para que todas las tarjetas midan igual. */}
