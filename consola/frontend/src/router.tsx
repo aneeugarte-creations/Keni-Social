@@ -48,6 +48,7 @@ const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioCont
 const Actividad = lazy(() => import("@/pages/Actividad"));
 const Pipelines = lazy(() => import("@/pages/Pipelines"));
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
+const Monitor = lazy(() => import("@/pages/Monitor"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -257,6 +258,8 @@ export const router = createBrowserRouter([
               { index: true, element: <Actividad /> },
               { path: "pipelines", element: <Pipelines /> },
               { path: "pipelines/:id", element: <PipelineDetalle /> },
+              // Monitor: cola de generación en vivo (workers, claude -p, daemons) + control admin.
+              { path: "monitor", element: <Monitor /> },
             ],
           },
           // Compat: la antigua ruta plana /datos/pipelines ahora es pestaña de Actividad IA.

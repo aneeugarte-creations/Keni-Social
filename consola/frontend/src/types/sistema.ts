@@ -93,6 +93,62 @@ export interface ActividadAgregados {
   por_dia: ActividadPorDia[];
 }
 
+// --- Monitor de cola (`GET /api/actividad/cola` y `/cola/series`) ---
+
+/** Un job EN VUELO (pendiente o reclamado) enriquecido con su registro de generación. */
+export interface ColaJob {
+  job_id: string;
+  gen_id: string;
+  estado: string; // "pendiente" | "reclamado"
+  worker: string;
+  etiqueta: string;
+  tipo: string;
+  marca: string;
+  gen_estado: string;
+  fase: string;
+  encolado_hace_s: number | null;
+  corriendo_hace_s: number | null;
+}
+
+/** Estado ON/OFF de un daemon de fondo. `activo: null` = desconocido. */
+export interface ColaDaemon {
+  clave: string;
+  etiqueta: string;
+  activo: boolean | null;
+  descripcion: string;
+}
+
+/** Snapshot en vivo de la cola de generación + workers + daemons. */
+export interface ColaMonitor {
+  capacidad: { max_jobs: number; max_cola: number; tope: number };
+  conteo: { pendientes: number; reclamados: number; terminados: number; activos: number };
+  cola_llena: boolean;
+  procesando: number;
+  slots_libres: number;
+  workers_activos: string[];
+  en_curso: ColaJob[];
+  esperando: ColaJob[];
+  daemons: ColaDaemon[];
+}
+
+/** Serie por día de la cola: encolados (entrada) y resultados (salida). */
+export interface ColaSerie {
+  dias: number;
+  encolados: { dia: string; n: number }[];
+  resultados: { dia: string; completados: number; errores: number; cola_llena: number }[];
+}
+
+/** Respuesta de purgar la cola (admin). */
+export interface RespuestaPurgarCola {
+  purgados: number;
+}
+
+/** Respuesta de reencolar un job (admin). */
+export interface RespuestaReencolarCola {
+  reencolado: boolean;
+  gen_id: string;
+}
+
 // --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
 
 /** Una etapa de una run del pipeline (CI/CD/QA/Aprobación). */

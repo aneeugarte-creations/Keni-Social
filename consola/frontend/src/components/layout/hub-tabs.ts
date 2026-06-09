@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   BookText,
+  Gauge,
   GitBranch,
   LayoutGrid,
   ListTodo,
@@ -94,6 +95,8 @@ export const TABS_ACTIVIDAD: ItemTabHub[] = [
   // marca activo en la coincidencia exacta del índice.
   { ruta: "/datos/actividad", etiqueta: "Actividad", icono: Activity, end: true },
   { ruta: "/datos/actividad/pipelines", etiqueta: "Pipelines", icono: GitBranch },
+  // Monitor: estado EN VIVO de la cola de generación (workers, claude -p, daemons) + control.
+  { ruta: "/datos/actividad/monitor", etiqueta: "Monitor", icono: Gauge },
 ];
 
 /**

@@ -3,7 +3,11 @@
 import { peticion, query } from "./_core";
 import type {
   ActividadAgregados,
+  ColaMonitor,
+  ColaSerie,
   RespuestaActividad,
+  RespuestaPurgarCola,
+  RespuestaReencolarCola,
 } from "@/types";
 
 export const apiActividad = {
@@ -36,4 +40,16 @@ export const apiActividad = {
       { signal },
     ),
 
+  // --- Monitor de cola (snapshot en vivo + serie por día + acciones admin) ---
+  cola: (signal?: AbortSignal) => peticion<ColaMonitor>("/actividad/cola", { signal }),
+  colaSeries: (dias = 14, signal?: AbortSignal) =>
+    peticion<ColaSerie>(`/actividad/cola/series${query({ dias: String(dias) })}`, { signal }),
+  // Acciones ADMIN (el backend devuelve 403 si no es una sesión admin).
+  colaPurgar: () =>
+    peticion<RespuestaPurgarCola>("/actividad/cola/purgar", { metodo: "POST" }),
+  colaReencolar: (genId: string) =>
+    peticion<RespuestaReencolarCola>("/actividad/cola/reencolar", {
+      metodo: "POST",
+      json: { gen_id: genId },
+    }),
 };

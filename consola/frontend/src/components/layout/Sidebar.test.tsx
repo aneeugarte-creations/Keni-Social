@@ -330,9 +330,10 @@ describe("apps-scope · helpers", () => {
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",
-      // /datos/actividad (hub) → el feed (índice) + Pipelines (pestaña, antes entrada suelta)
+      // /datos/actividad (hub) → el feed (índice) + Pipelines + Monitor (cola en vivo)
       "/datos/actividad",
       "/datos/actividad/pipelines",
+      "/datos/actividad/monitor",
     ]);
   });
 
