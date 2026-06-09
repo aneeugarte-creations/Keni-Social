@@ -16,23 +16,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from keni_shared.estados import (
+    CLASES_CONTENIDO as CLASES,
+    ESTADOS_CONTENIDO,
+    ESTADOS_CONTENIDO_PLATAFORMA as ESTADOS_PLATAFORMA,
+    FLUJOS_CONTENIDO as FLUJOS,
+)
 from mcp.server.fastmcp import FastMCP
 
 from .cliente import ClienteConsola, ErrorConsola
 
-# Estados validos de una fila por plataforma (espejo de `estados.ESTADOS_CONTENIDO_PLATAFORMA`
-# de la Consola). Se valida aqui para dar un error claro ANTES de tocar la red.
-ESTADOS_PLATAFORMA = (
-    "pendiente",
-    "en_curso",
-    "en_revision",
-    "aprobado",
-    "programado",
-    "publicado",
-)
-ESTADOS_CONTENIDO = ("pendiente", "en_curso", "hecha")
-FLUJOS = ("importante", "evergreen", "evento")
-CLASES = ("contenido", "tarea")
+# Las allowlists del tablero (CLASES/ESTADOS_*/FLUJOS) vienen de keni-shared
+# (`keni_shared.estados`), la MISMA fuente que re-exporta `keni_consola.estados`.
+# Antes eran un espejo a mano que podia desincronizarse en silencio de la Consola.
+# Se valida aqui para dar un error claro ANTES de tocar la red.
 
 
 def _resumen_item(item: dict[str, Any]) -> dict[str, Any]:

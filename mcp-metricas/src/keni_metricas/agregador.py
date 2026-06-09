@@ -67,6 +67,11 @@ class FuenteCompuesta:
         self._cuentas = cuentas
         self._adaptadores = adaptadores
         self._presupuesto = presupuesto
+        # Cobertura de la ULTIMA llamada a `mejores_piezas` (que plataformas aportaron
+        # piezas vs. se omitieron y por que). Las tools la leen via `cobertura_piezas()`
+        # para exponer la degradacion parcial en vez de callarla (un top con menos
+        # plataformas de las configuradas debe decirlo).
+        self._cobertura_piezas: Cobertura | None = None
 
     def _consumir(self, plat: Plataforma) -> bool:
         """True si hay presupuesto para consultar la plataforma; si no, avisa y False."""
@@ -199,10 +204,36 @@ class FuenteCompuesta:
         cc = self._buscar(cuenta_id)
         desde, hasta, _ = resolver_rango(rango)
         todas: list[Pieza] = []
+        cobertura = Cobertura()
         for plat, handle in cc.plataformas.items():
             ad = self._adaptadores.get(plat)
-            if ad is None or not self._consumir(plat):
+            if ad is None:
+                self._omitir(cobertura, plat, MotivoOmision.sin_credenciales)
                 continue
-            todas.extend(ad.piezas(handle, desde, hasta, n))
+            if not self._consumir(plat):
+                self._omitir(cobertura, plat, MotivoOmision.presupuesto_agotado)
+                continue
+            piezas_plat = ad.piezas(handle, desde, hasta, n)
+            # Los adaptadores degradan a [] tanto si NO hay piezas como si la API
+            # fallo; `fallo_ultimo` (AdaptadorBase) distingue el segundo caso para
+            # que el top parcial no pase por completo.
+            if getattr(ad, "fallo_ultimo", False):
+                self._omitir(cobertura, plat, MotivoOmision.error_api)
+                continue
+            todas.extend(piezas_plat)
+            cobertura.ok.append(plat)
+        self._cobertura_piezas = cobertura
+        if cobertura.omitidas:
+            log.warning(
+                "mejores_piezas %s/%s: cobertura parcial (%d/%d plataformas omitidas)",
+                cuenta_id,
+                rango,
+                len(cobertura.omitidas),
+                len(cc.plataformas),
+            )
         todas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return todas[:n]
+
+    def cobertura_piezas(self) -> Cobertura | None:
+        """Cobertura de la ultima llamada a `mejores_piezas` (None si aun no se llamo)."""
+        return self._cobertura_piezas

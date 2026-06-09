@@ -262,3 +262,77 @@ def test_mejores_piezas_recorta_a_n():
     piezas = _fuente().mejores_piezas("marca", "semana", 1)
     assert len(piezas) == 1
     assert piezas[0].plataforma is Plataforma.tiktok  # mayor engagement
+
+
+# --- cobertura de mejores_piezas (degradacion EXPLICITA, no silenciosa) ------
+class AdaptadorQueFalla(AdaptadorFalso):
+    """Simula la degradacion de AdaptadorBase: piezas -> [] con `fallo_ultimo=True`."""
+
+    def __init__(self, plataforma: Plataforma):
+        super().__init__(plataforma, 1000, 20)
+        self.fallo_ultimo = False
+
+    def piezas(self, handle, desde, hasta, n):
+        self.fallo_ultimo = True  # la "API" fallo: degrada a [] pero lo marca
+        return []
+
+
+def test_mejores_piezas_expone_cobertura_de_omisiones():
+    """`cobertura_piezas()` registra POR QUE falta cada plataforma del top (antes la
+    degradacion era silenciosa: un [] por API caida pasaba por 'no hay piezas')."""
+    from keni_metricas.schema import MotivoOmision
+
+    cuenta = CuentaConfig(
+        id="marca",
+        nombre="Marca",
+        plataformas={
+            Plataforma.facebook: "h1",
+            Plataforma.tiktok: "h2",
+            Plataforma.x: "h3",
+        },
+    )
+    fuente = FuenteCompuesta(
+        [cuenta],
+        {
+            Plataforma.facebook: AdaptadorFalso(Plataforma.facebook, 1000, 20),
+            Plataforma.x: AdaptadorQueFalla(Plataforma.x),
+            # tiktok sin adaptador (sin credenciales)
+        },
+    )
+    assert fuente.cobertura_piezas() is None  # aun no se llamo
+    piezas = fuente.mejores_piezas("marca", "semana", 5)
+    assert [p.plataforma for p in piezas] == [Plataforma.facebook]
+    cob = fuente.cobertura_piezas()
+    assert cob is not None
+    assert cob.ok == [Plataforma.facebook]
+    assert set(cob.omitidas) == {Plataforma.tiktok, Plataforma.x}
+    assert cob.motivo["tiktok"] is MotivoOmision.sin_credenciales
+    assert cob.motivo["x"] is MotivoOmision.error_api
+
+
+def test_mejores_piezas_cobertura_presupuesto_agotado():
+    from keni_metricas.schema import MotivoOmision
+
+    cuenta = CuentaConfig(
+        id="marca",
+        nombre="Marca",
+        plataformas={Plataforma.facebook: "h1", Plataforma.tiktok: "h2"},
+    )
+    fuente = FuenteCompuesta(
+        [cuenta],
+        {
+            Plataforma.facebook: AdaptadorFalso(Plataforma.facebook, 1000, 20),
+            Plataforma.tiktok: AdaptadorFalso(Plataforma.tiktok, 4000, 320),
+        },
+        Presupuesto(caps={Plataforma.tiktok: 0}),
+    )
+    fuente.mejores_piezas("marca", "semana", 5)
+    cob = fuente.cobertura_piezas()
+    assert cob is not None and cob.motivo["tiktok"] is MotivoOmision.presupuesto_agotado
+
+
+def test_mejores_piezas_cobertura_completa_cuando_todo_responde():
+    fuente = _fuente()
+    fuente.mejores_piezas("marca", "semana", 5)
+    cob = fuente.cobertura_piezas()
+    assert cob is not None and cob.completa

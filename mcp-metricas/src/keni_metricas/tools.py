@@ -47,13 +47,28 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             piezas = fuente.mejores_piezas(cuenta, rango, n)
         except (CuentaNoEncontrada, ValueError) as e:
             return {"error": str(e)}
-        return {
+        respuesta: dict = {
             "cuenta": cuenta,
             "rango": rango,
             "n": n,
             "piezas": [p.model_dump(mode="json") for p in piezas],
             "fuente": fuente.nombre,
         }
+        # Degradacion EXPLICITA (antes silenciosa): si alguna plataforma configurada no
+        # aporto piezas (API caida, sin credenciales, presupuesto), se adjunta la
+        # cobertura (mismo modelo que metricas_resumen) y una nota legible. Capacidad
+        # opcional de la fuente: muestra y dobles de test no la exponen (sin nota).
+        cob_fn = getattr(fuente, "cobertura_piezas", None)
+        cob = cob_fn() if callable(cob_fn) else None
+        if cob is not None and cob.omitidas:
+            from .formato import partes_cobertura
+
+            respuesta["cobertura"] = cob.model_dump(mode="json")
+            partes = partes_cobertura(cob) or []
+            respuesta["nota"] = (
+                "Resultado PARCIAL: sin piezas de " + ", ".join(partes) + "."
+            )
+        return respuesta
 
     @mcp.tool()
     def comparar_periodos(cuenta: str, rango_a: str = "semana", rango_b: str = "mes") -> dict:
@@ -64,12 +79,14 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
         except (CuentaNoEncontrada, ValueError) as e:
             return {"error": str(e)}
 
-        def pct(x: int, y: int) -> float:
-            return round((x - y) / y * 100, 1) if y else 0.0
-
-        diferencia: dict = {
-            "visualizaciones_pct": pct(a.visualizaciones, b.visualizaciones),
-        }
+        diferencia: dict = {}
+        # Sin baseline (b = 0 visualizaciones) no hay % defendible: se OMITE la clave
+        # en vez de devolver 0.0 (que era indistinguible de "sin variacion real").
+        # Mismo patron que engagement_pct justo debajo.
+        if b.visualizaciones:
+            diferencia["visualizaciones_pct"] = round(
+                (a.visualizaciones - b.visualizaciones) / b.visualizaciones * 100, 1
+            )
         # delta de engagement en PUNTOS. Misma clave que historico.variacion y
         # variacion_vs_anterior del esquema: una sola convencion en todo el MCP.
         # Si alguno de los engagement es None (no comparable entre plataformas,

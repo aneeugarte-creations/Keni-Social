@@ -90,6 +90,10 @@ class AdaptadorBase:
         self._creds = creds
         self._token = self._leer_token(creds)
         self._cli = cliente or cliente_http()
+        # True si la ULTIMA operacion via `_intentar` degrado por una excepcion (la API
+        # fallo). Permite al agregador distinguir "[] porque no hay piezas" de "[] porque
+        # la API cayo" y marcarlo en la cobertura, en vez de degradar en silencio.
+        self.fallo_ultimo = False
 
     def _leer_token(self, creds: dict) -> str | None:
         for clave in self.claves_token:
@@ -117,10 +121,12 @@ class AdaptadorBase:
         """
         if not self.disponible():
             return defecto
+        self.fallo_ultimo = False
         try:
             return con_refresh(accion, self._refrescar)
         except Exception as e:  # noqa: BLE001
             log.warning("%s falló: %s", contexto, e)
+            self.fallo_ultimo = True
             return defecto
 
 

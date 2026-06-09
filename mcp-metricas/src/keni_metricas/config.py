@@ -422,6 +422,15 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.mejores_piezas(cuenta_id, rango, n)
 
+    def cobertura_piezas(self):
+        """Delega la cobertura de la ultima `mejores_piezas` si la envuelta la expone.
+
+        Capacidad OPCIONAL (la implementan FuenteCompuesta y Metricool): devuelve None
+        si la fuente envuelta no la tiene, igual que hace la tool al leerla por getattr.
+        """
+        fn = getattr(self._fuente, "cobertura_piezas", None)
+        return fn() if callable(fn) else None
+
     def serie_diaria(self, cuenta_id: str, rango: str):
         """Delega la serie diaria si la fuente envuelta la expone (dispatch opcional).
 

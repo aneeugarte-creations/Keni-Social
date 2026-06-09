@@ -11,6 +11,11 @@ por una simple allowlist (E5/H2, riesgo R5 del plan de persistencia).
 
 from __future__ import annotations
 
+# Allowlists del tablero de contenido: la fuente CANONICA vive en keni-shared (la
+# comparten esta Consola y el MCP de tablero); este modulo las re-exporta con sus
+# nombres de siempre para que ningun import existente cambie.
+from keni_shared import estados as _estados_compartidos
+
 # Estados validos de una tarea/pendiente (operacional; vive en SQLite). El orden
 # es el ciclo de vida: pendiente -> en curso -> hecha (#145, F5). "en_curso" se
 # anadio al pasar el tablero a multiusuario; las tareas legadas solo tenian
@@ -211,14 +216,17 @@ PRIORIDAD_EVENTO_DEFECTO = "media"
 # vive en Postgres. Ver `db.py` y `api/contenido.py`.
 
 # `clase` de un item del tablero: contenido publicable (con filas por plataforma) o
-# una tarea libre del equipo (relevo/recado, sin plataformas).
-CLASES_CONTENIDO: tuple[str, ...] = ("contenido", "tarea")
+# una tarea libre del equipo (relevo/recado, sin plataformas). Tupla CANONICA en
+# keni-shared (`keni_shared.estados`): la comparte el MCP de tablero; aqui se
+# RE-EXPORTA para no romper a los consumidores existentes de este modulo.
+CLASES_CONTENIDO: tuple[str, ...] = _estados_compartidos.CLASES_CONTENIDO
 CLASE_CONTENIDO = "contenido"
 CLASE_TAREA = "tarea"
 
 # `flujo` editorial de un contenido: lo importante del dia, evergreen (always-on) o
-# cobertura de un evento previsto. "" para tareas libres (clase=tarea).
-FLUJOS_CONTENIDO: tuple[str, ...] = ("importante", "evergreen", "evento")
+# cobertura de un evento previsto. "" para tareas libres (clase=tarea). Canonica en
+# keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
+FLUJOS_CONTENIDO: tuple[str, ...] = _estados_compartidos.FLUJOS_CONTENIDO
 FLUJO_IMPORTANTE = "importante"
 FLUJO_EVERGREEN = "evergreen"
 FLUJO_EVENTO = "evento"
@@ -294,7 +302,8 @@ ORIGEN_PIEZA_DEFECTO = "interno"
 
 # Estado de un contenido a nivel PADRE (resumen editable / estado directo de una tarea
 # libre). Cubre el ciclo de una tarea (pendiente/en_curso/hecha) y sirve de resumen.
-ESTADOS_CONTENIDO: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
+# Canonica en keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
+ESTADOS_CONTENIDO: tuple[str, ...] = _estados_compartidos.ESTADOS_CONTENIDO
 
 # Estado de UNA fila por plataforma (`contenido_plataforma.estado`). Ciclo unificado que
 # fusiona el de pieza (pendiente/en_curso/listo/publicado) y el editorial de publicacion
@@ -303,14 +312,8 @@ ESTADOS_CONTENIDO: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 #   pendiente -> en_curso -> en_revision -> aprobado -> programado -> publicado
 #
 # Mapeos de migracion: `borrador` -> `pendiente`; `listo` (pieza) -> `aprobado`.
-ESTADOS_CONTENIDO_PLATAFORMA: tuple[str, ...] = (
-    "pendiente",
-    "en_curso",
-    "en_revision",
-    "aprobado",
-    "programado",
-    "publicado",
-)
+# Canonica en keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
+ESTADOS_CONTENIDO_PLATAFORMA: tuple[str, ...] = _estados_compartidos.ESTADOS_CONTENIDO_PLATAFORMA
 
 # Items del checklist "falta X" que se siguen por plataforma. Cada uno es un booleano en
 # `contenido_plataforma` (`falta_copy`, `falta_imagen`, `falta_revision`, `falta_publicar`).

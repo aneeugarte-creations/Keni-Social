@@ -325,3 +325,43 @@ async def test_picos_refleja_cobertura_parcial():
     out = await _llamar(_mcp(_fuente_parcial()), "picos", rango="semana", umbral_pct=50)
     assert out["cobertura"]["completa"] is False
     assert out["cobertura"]["cuentas_parciales"] == ["marca"]
+
+
+# --- degradacion EXPLICITA --------------------------------------------------
+
+
+async def test_comparar_periodos_sin_baseline_omite_visualizaciones_pct():
+    """Con baseline 0 (b sin visualizaciones) la clave se OMITE: un 0.0 era
+    indistinguible de 'sin variacion real' (mismo patron que engagement_pct)."""
+    vacia = CuentaConfig(id="vacia", nombre="Vacia", plataformas={})
+    out = await _llamar(
+        _mcp(FuenteCompuesta([vacia], {})),
+        "comparar_periodos",
+        cuenta="vacia",
+        rango_a="semana",
+        rango_b="mes",
+    )
+    assert "visualizaciones_pct" not in out["diferencia"]
+    assert "engagement_pct" not in out["diferencia"]  # ambos None: tampoco hay delta
+
+
+async def test_mejores_piezas_expone_cobertura_parcial_con_nota():
+    """Si una plataforma configurada no aporto piezas (p. ej. sin credenciales), la
+    respuesta lo dice (`cobertura` + `nota`), en vez de degradar en silencio."""
+    cuenta = CuentaConfig(
+        id="marca", nombre="Marca", plataformas={Plataforma.tiktok: "h1"}
+    )
+    out = await _llamar(
+        _mcp(FuenteCompuesta([cuenta], {})), "mejores_piezas", cuenta="marca", n=3
+    )
+    assert out["piezas"] == []
+    assert out["cobertura"]["omitidas"] == ["tiktok"]
+    assert out["cobertura"]["motivo"]["tiktok"] == "sin_credenciales"
+    assert "PARCIAL" in out["nota"] and "tiktok" in out["nota"]
+
+
+async def test_mejores_piezas_sin_degradacion_no_anade_nota():
+    """La muestra responde todo: ni `nota` ni `cobertura` (la respuesta no cambia)."""
+    out = await _llamar(_mcp(FuenteMuestra()), "mejores_piezas", cuenta="claro_sports", n=2)
+    assert "nota" not in out
+    assert "cobertura" not in out

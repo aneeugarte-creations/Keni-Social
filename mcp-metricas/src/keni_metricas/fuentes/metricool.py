@@ -396,6 +396,10 @@ class FuenteMetricool:
         # cache cuenta_id -> set[Plataforma] conectadas (de simpleProfiles); None si la
         # consulta de perfiles falló (entonces no se filtra por conexión: se intenta todo).
         self._conectadas_cache: dict[str, set[Plataforma] | None] = {}
+        # Cobertura de la ÚLTIMA llamada a `mejores_piezas` (igual que en FuenteCompuesta):
+        # qué plataformas aportaron piezas vs. fallaron. Las tools la leen vía
+        # `cobertura_piezas()` para exponer la degradación parcial en vez de callarla.
+        self._cobertura_piezas: Cobertura | None = None
 
     # --- identidad / HTTP (resuelta POR MARCA) ------------------------------
     def _headers(self, cuenta_id: str) -> dict:
@@ -684,13 +688,32 @@ class FuenteMetricool:
         marca = self._marca(cuenta_id)
         desde, hasta, _ = resolver_rango(rango)
         piezas: list[Pieza] = []
+        cobertura = Cobertura()
         for plat in self._plataformas(marca):
-            piezas.extend(self._piezas_plataforma(cuenta_id, plat, desde, hasta, n))
+            # A diferencia de `_piezas_plataforma` (que degrada a [] en silencio para
+            # otros agregados), aquí el fallo del fetch se REGISTRA en la cobertura:
+            # un top sin una plataforma configurada no debe pasar por completo.
+            try:
+                posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
+            except Exception as e:  # noqa: BLE001
+                log.warning("metricool: piezas %s/%s fallaron: %s", plat.value, cuenta_id, e)
+                cobertura.omitidas.append(plat)
+                cobertura.motivo[plat.value] = MotivoOmision.error_api
+                continue
+            piezas.extend(self._parsear_posts(posts, plat, cuenta_id, desde, hasta))
+            cobertura.ok.append(plat)
             # Reels (FB/IG) viven en un endpoint aparte que `/posts` no cubre: añádelos.
+            # Si SOLO fallan los reels (los posts respondieron), degrada a [] con log;
+            # la plataforma sigue contando como ok (cobertura de grano por red).
             if plat in _RED_CON_REELS:
                 piezas.extend(self._reels_plataforma(cuenta_id, plat, desde, hasta))
+        self._cobertura_piezas = cobertura
         piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return piezas[:n]
+
+    def cobertura_piezas(self) -> Cobertura | None:
+        """Cobertura de la última llamada a `mejores_piezas` (None si aún no se llamó)."""
+        return self._cobertura_piezas
 
     def _fetch_posts(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date

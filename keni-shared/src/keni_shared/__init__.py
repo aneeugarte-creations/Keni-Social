@@ -11,6 +11,8 @@ importable de lo que antes estaba espejado (con guards) entre modulos (H3/E1):
   - `io_atomico`          `escribir_atomico`: escritura atomica de texto a fichero.
   - `metricas`            `engagement_pct`: la formula unica de engagement.
   - `esquema_yaml`        `migrar`/`sellar`: versionado de esquema de los YAML.
+  - `estados`             allowlists canonicas del tablero de contenido (estados,
+                          clases y flujos; las re-exporta `keni_consola.estados`).
   - `video`               presets de formato + validador de la composicion de video.
 
 Tanto keni-metricas como keni-consola dependen de este paquete e importan de el;
@@ -19,7 +21,7 @@ los guards de skills y del frontend verifican contra esta fuente unica.
 
 from __future__ import annotations
 
-from . import cliente, cuentas, esquema_yaml, io_atomico, limites_plataforma, marcas, metricas, video
+from . import cliente, cuentas, esquema_yaml, estados, io_atomico, limites_plataforma, marcas, metricas, video
 from .cliente import Cliente, ClienteInvalido, cargar_cliente
 from .esquema_yaml import migrar, sellar
 from .io_atomico import escribir_atomico
@@ -37,6 +39,7 @@ __all__ = [
     "engagement_pct",
     "escribir_atomico",
     "esquema_yaml",
+    "estados",
     "io_atomico",
     "limites_plataforma",
     "marcas",
