@@ -90,6 +90,66 @@ def contar_jobs_activos() -> int:
     return int(fila["n"]) if fila is not None else 0
 
 
+def contar_jobs_por_estado() -> dict[str, int]:
+    """Conteo de jobs por estado de cola (`pendiente`/`reclamado`/`terminado`). Para el monitor."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT estado, count(*) AS n FROM jobs GROUP BY estado"
+        ).fetchall()
+    finally:
+        con.close()
+    return {f["estado"]: int(f["n"]) for f in filas}
+
+
+def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
+    """Jobs EN VUELO (`pendiente` + `reclamado`) con sus metadatos de despacho, mas antiguos primero.
+
+    Para el monitor de cola: cada fila lleva `id`, `gen_id`, `estado`, `worker` (quien lo clavo),
+    `creado` (cuando se encolo) y `claimed_at` (cuando empezo a correr). El front deriva la EDAD
+    y enriquece con el registro de generacion (etiqueta/tipo/marca). NO incluye `spec` (pesado).
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, gen_id, estado, worker, creado, claimed_at FROM jobs "
+            "WHERE estado <> ? ORDER BY creado ASC, id ASC LIMIT ?",
+            (JOB_TERMINADO, int(limite)),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "id": f["id"],
+            "gen_id": f["gen_id"],
+            "estado": f["estado"],
+            "worker": f["worker"] or "",
+            "creado": f["creado"],
+            "claimed_at": f["claimed_at"],
+        }
+        for f in filas
+    ]
+
+
+def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
+    """Jobs ENCOLADOS por dia (de `jobs.creado`) en la ventana `dias`, dia ascendente.
+
+    Throughput de ENTRADA de la cola: cuanto se pidio cada dia (incluye los ya `terminado`,
+    que se conservan). El dia se deriva con `substr(creado,1,10)` (ISO `YYYY-MM-DD`), portable
+    SQLite/Postgres. El corte se compara lexicograficamente (ISO ordena por texto)."""
+    corte = (datetime.now() - timedelta(days=max(0, int(dias)))).isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT substr(creado, 1, 10) AS dia, count(*) AS n FROM jobs "
+            "WHERE creado >= ? GROUP BY substr(creado, 1, 10) ORDER BY dia ASC",
+            (corte,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [{"dia": f["dia"], "n": int(f["n"])} for f in filas]
+
+
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
@@ -181,6 +241,26 @@ def terminar_job(job_id: str) -> None:
     try:
         con.execute("UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, job_id))
         con.commit()
+    finally:
+        con.close()
+
+
+def reencolar_job(gen_id: str) -> bool:
+    """Devuelve a `pendiente` el job de `gen_id` (reintento admin de un job atascado).
+
+    Limpia `worker`/`claimed_at` y el flag `cancelado`, de modo que un worker lo vuelva a clavar
+    y a correr `claude` con el MISMO `spec`. El llamante (capa API) debe ademas reabrir el
+    registro de generacion a `ejecutando` (si no, el guardia anti-duplicado de `reclamar_job` lo
+    cerraria al verlo en estado terminal). Devuelve False si no hay fila para ese `gen_id`."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE jobs SET estado = ?, worker = NULL, claimed_at = NULL, cancelado = 0 "
+            "WHERE gen_id = ?",
+            (JOB_PENDIENTE, gen_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
     finally:
         con.close()
 

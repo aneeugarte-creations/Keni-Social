@@ -6,6 +6,11 @@ from ._repos_comun import (
     db,
 )
 
+# Estados del ciclo de la cola, re-exportados desde la capa de persistencia (fuente unica).
+JOB_PENDIENTE = db.JOB_PENDIENTE
+JOB_RECLAMADO = db.JOB_RECLAMADO
+JOB_TERMINADO = db.JOB_TERMINADO
+
 # --------------------------------------------------------------------------- #
 # Cola de jobs de generacion (OPERACIONAL: persistencia via db.py; #130 Fase 2) #
 # --------------------------------------------------------------------------- #
@@ -20,6 +25,22 @@ def encolar_job(gen_id: str, spec: str) -> str:
 
 def contar_jobs_activos() -> int:
     return db.contar_jobs_activos()
+
+
+def contar_jobs_por_estado() -> dict[str, int]:
+    return db.contar_jobs_por_estado()
+
+
+def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
+    return db.jobs_activos(limite)
+
+
+def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
+    return db.encolados_por_dia(dias)
+
+
+def reencolar_job(gen_id: str) -> bool:
+    return db.reencolar_job(gen_id)
 
 
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:

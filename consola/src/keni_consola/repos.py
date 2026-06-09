@@ -175,11 +175,18 @@ from .repos_historial import (  # noqa: F401
     registrar_historial_prompt,
 )
 from .repos_jobs import (  # noqa: F401
+    JOB_PENDIENTE,
+    JOB_RECLAMADO,
+    JOB_TERMINADO,
     cancelar_job,
     contar_jobs_activos,
+    contar_jobs_por_estado,
+    encolados_por_dia,
     encolar_job,
     job_cancelado,
+    jobs_activos,
     reclamar_job,
+    reencolar_job,
     terminar_job,
 )
 from .repos_metricas import (  # noqa: F401

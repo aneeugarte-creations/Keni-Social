@@ -1,0 +1,166 @@
+"""Tests de la API del MONITOR DE COLA (/api/actividad/cola*). OFFLINE.
+
+Cubre el contrato del snapshot en vivo (capacidad/conteo/en_curso/esperando/daemons), la
+serie por dia (encolados vs resultados) y las acciones ADMIN (purgar/reencolar) con su cerrojo
+de rol (editor / token de mantenimiento -> 403). Nada toca `claude` ni red: encolamos jobs a
+mano en la cola (SQLite del entorno aislado) y leemos el registro de generacion (YAML).
+"""
+
+from __future__ import annotations
+
+from starlette.testclient import TestClient
+
+from keni_consola import app as app_modulo
+from keni_consola import auth, cola, generaciones, repos
+from keni_consola.dominio import jobspec
+
+from .conftest import TOKEN_PRUEBA
+
+_ORIGIN = {"Origin": "http://testserver"}
+CLAVE = "clave-de-prueba"
+_MARCA = "unotv"
+
+
+def _app():
+    return app_modulo.crear_app(token=TOKEN_PRUEBA)
+
+
+def _cli() -> TestClient:
+    return TestClient(_app())
+
+
+def _login(c: TestClient, usuario: str, password: str):
+    return c.post(
+        "/api/auth/login", json={"usuario": usuario, "password": password}, headers=_ORIGIN
+    )
+
+
+def _cli_como(rol: str) -> TestClient:
+    """TestClient autenticado por SESION con un usuario del rol dado (admin/editor)."""
+    auth.crear_usuario("u", CLAVE, rol)
+    c = _cli()
+    assert _login(c, "u", CLAVE).status_code == 200
+    return c
+
+
+def _cli_token() -> TestClient:
+    """TestClient que entra por el TOKEN de mantenimiento (pasa /api, NO es admin)."""
+    c = _cli()
+    c.headers.update({"Authorization": f"Bearer {TOKEN_PRUEBA}"})
+    return c
+
+
+def _encolar(etiqueta: str = "Copy de nota") -> str:
+    """Crea una generacion + encola su job (pendiente). Devuelve el gen_id."""
+    gen = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": etiqueta})
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    cola.encolar(gen["id"], spec)
+    return gen["id"]
+
+
+# --------------------------------------------------------------------------- #
+# Snapshot en vivo                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_cola_snapshot_contrato(entorno):
+    gen_id = _encolar("QA fuente · UnoTV")
+    r = _cli_token().get("/api/actividad/cola")
+    assert r.status_code == 200
+    data = r.json()
+    # Capacidad y conteo.
+    assert data["capacidad"]["tope"] == data["capacidad"]["max_jobs"] + data["capacidad"]["max_cola"]
+    assert data["conteo"]["pendientes"] >= 1
+    assert data["conteo"]["activos"] == data["conteo"]["pendientes"] + data["conteo"]["reclamados"]
+    assert data["cola_llena"] is False
+    # El job pendiente aparece en `esperando` con su etiqueta enriquecida desde el registro.
+    esperando = data["esperando"]
+    assert any(j["gen_id"] == gen_id and j["etiqueta"] == "QA fuente · UnoTV" for j in esperando)
+    # Daemons: lista no vacia con el reaper SIEMPRE activo.
+    claves = {d["clave"] for d in data["daemons"]}
+    assert "reaper" in claves
+    assert next(d for d in data["daemons"] if d["clave"] == "reaper")["activo"] is True
+
+
+def test_cola_snapshot_marca_reclamado_como_procesando(entorno):
+    _encolar()
+    # Un worker clava el job: pasa a `reclamado` -> cuenta como `procesando`.
+    clavado = cola.reclamar("worker-1")
+    assert clavado is not None
+    data = _cli_token().get("/api/actividad/cola").json()
+    assert data["conteo"]["reclamados"] == 1
+    assert data["procesando"] == 1
+    assert "worker-1" in data["workers_activos"]
+    assert any(j["gen_id"] == clavado["gen_id"] for j in data["en_curso"])
+
+
+# --------------------------------------------------------------------------- #
+# Serie por dia                                                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_cola_series_contrato(entorno):
+    _encolar()
+    r = _cli_token().get("/api/actividad/cola/series?dias=7")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["dias"] == 7
+    # Hay al menos un dia con un encolado (el de hoy).
+    assert sum(d["n"] for d in data["encolados"]) >= 1
+    assert isinstance(data["resultados"], list)
+
+
+# --------------------------------------------------------------------------- #
+# Acciones admin: purgar / reencolar (cerrojo de rol)                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_purgar_libera_la_cola_admin(entorno):
+    _encolar()
+    _encolar()
+    assert repos.contar_jobs_activos() == 2
+    r = _cli_como("admin").post("/api/actividad/cola/purgar", headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["purgados"] == 2
+    # La cola quedo libre: vuelve a haber capacidad.
+    assert repos.contar_jobs_activos() == 0
+
+
+def test_purgar_requiere_admin(entorno):
+    _encolar()
+    assert _cli_como("editor").post("/api/actividad/cola/purgar", headers=_ORIGIN).status_code == 403
+    assert _cli_token().post("/api/actividad/cola/purgar", headers=_ORIGIN).status_code == 403
+    # El editor/token no purgaron nada.
+    assert repos.contar_jobs_activos() == 1
+
+
+def test_reencolar_reintenta_job_terminado_admin(entorno):
+    gen_id = _encolar()
+    # Simula un job ya procesado: clavado + terminado (sale de la cola activa).
+    job = cola.reclamar("w")
+    cola.terminar(job["id"])
+    generaciones.actualizar(gen_id, {"estado": generaciones.ESTADO_ERROR})
+    assert repos.contar_jobs_activos() == 0
+
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/reencolar", json={"gen_id": gen_id}, headers=_ORIGIN
+    )
+    assert r.status_code == 200 and r.json()["reencolado"] is True
+    # El job volvio a la cola (pendiente) y el registro se reabrio a `ejecutando`.
+    assert repos.contar_jobs_activos() == 1
+    assert generaciones.obtener(gen_id)["estado"] == generaciones.ESTADO_EJECUTANDO
+
+
+def test_reencolar_gen_inexistente_404(entorno):
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/reencolar", json={"gen_id": "no-existe"}, headers=_ORIGIN
+    )
+    assert r.status_code == 404
+
+
+def test_reencolar_requiere_admin(entorno):
+    gen_id = _encolar()
+    r = _cli_como("editor").post(
+        "/api/actividad/cola/reencolar", json={"gen_id": gen_id}, headers=_ORIGIN
+    )
+    assert r.status_code == 403

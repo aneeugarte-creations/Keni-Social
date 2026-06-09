@@ -389,6 +389,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_mcp_operativo": "app_operacion",
     # App A · Produccion (actividad, generaciones, skills, rss, radar, termometro...).
     "test_actividad": "app_produccion",
+    "test_api_cola_monitor": "app_produccion",
     "test_pipeline_contenido": "app_produccion",
     "test_pipeline_qa_editorial": "app_produccion",
     "test_api_pipelines": "app_produccion",
