@@ -9,6 +9,7 @@
  * se lean como "221.6 M" en lugar de notación cruda.
  */
 import { BarChart, type CustomTooltipProps } from "@tremor/react";
+import type { ReactNode } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CuentaMetrica } from "@/types";
@@ -16,7 +17,14 @@ import type { CuentaMetrica } from "@/types";
 import { numeroCompacto, numeroCompleto } from "./formato";
 import { SeccionColapsable } from "./SeccionColapsable";
 
-export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
+export function GraficaMarcas({
+  cuentas,
+  desnudo = false,
+}: {
+  cuentas: CuentaMetrica[];
+  /** `true` => solo las gráficas, sin el `SeccionColapsable` (título/colapso). */
+  desnudo?: boolean;
+}) {
   // Una entrada por cuenta. Acortamos nombres muy largos para el eje.
   const datosBarras = cuentas.map((c) => ({
     marca: c.marca,
@@ -33,19 +41,25 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
       pct: totalVis > 0 ? Math.round((c.visualizaciones / totalVis) * 100) : 0,
     }));
 
-  if (cuentas.length === 0) {
-    return (
-      <SeccionColapsable titulo="Comparativa por marca">
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No hay cuentas para mostrar en este rango.
-        </p>
+  const envolver = (hijo: ReactNode) =>
+    desnudo ? (
+      hijo
+    ) : (
+      <SeccionColapsable titulo="Comparativa por marca" sinCaja>
+        {hijo}
       </SeccionColapsable>
+    );
+
+  if (cuentas.length === 0) {
+    return envolver(
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        No hay cuentas para mostrar en este rango.
+      </p>,
     );
   }
 
-  return (
-    <SeccionColapsable titulo="Comparativa por marca" contentClassName="p-0">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+  return envolver(
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
       <Card className="lg:col-span-3">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Visualizaciones e interacciones por cuenta</CardTitle>
@@ -92,8 +106,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
           </ul>
         </CardContent>
       </Card>
-      </div>
-    </SeccionColapsable>
+      </div>,
   );
 }
 

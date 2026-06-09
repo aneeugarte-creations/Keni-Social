@@ -42,7 +42,7 @@ interface SelectorRangoProps {
 export function SelectorRango({ rangos, valor, onCambio, id, ariaLabel }: SelectorRangoProps) {
   return (
     <Select value={valor} onValueChange={onCambio}>
-      <SelectTrigger id={id} className="w-full sm:w-[200px]" aria-label={ariaLabel ?? "Rango"}>
+      <SelectTrigger id={id} className="h-8 w-full text-xs sm:w-[200px]" aria-label={ariaLabel ?? "Rango"}>
         <SelectValue placeholder="Rango" />
       </SelectTrigger>
       <SelectContent>
@@ -115,7 +115,7 @@ export function SelectorTiempo({
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <Select value={modo} onValueChange={(v) => cambiarModo(v as ModoTiempo)}>
-        <SelectTrigger className="w-full sm:w-[140px]" aria-label="Modo de tiempo">
+        <SelectTrigger className="h-8 w-full text-xs sm:w-[200px]" aria-label="Modo de tiempo">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

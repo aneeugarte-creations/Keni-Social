@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react";
-import { type Plugin, defineConfig } from "vite";
+import { type Plugin, type ProxyOptions, defineConfig } from "vite";
 
 // Identificador único de ESTE build. Cambia en cada `vite build` (cada deploy), así el
 // SPA en una pestaña vieja detecta que hay una versión nueva comparando su `__BUILD_ID__`
@@ -59,10 +59,34 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8765",
-        changeOrigin: true,
-      },
+      // Por defecto proxeamos `/api` al backend Starlette LOCAL (127.0.0.1:8765).
+      // Para desarrollar el front contra un backend REMOTO (p. ej. el hosted
+      // `https://social.kenitech.io`, que YA tiene Postgres y datos reales) sin
+      // levantar Postgres en local, exporta `VITE_API_TARGET` al arrancar:
+      //   VITE_API_TARGET=https://social.kenitech.io npm run dev
+      // Cuando el target es remoto reescribimos el dominio de la cookie de sesión
+      // a localhost y las cabeceras Origin/Referer al host remoto (por si el back
+      // valida CSRF). Esto es SOLO para dev; no afecta al build de producción.
+      "/api": ((): ProxyOptions => {
+        const target = process.env.VITE_API_TARGET || "http://127.0.0.1:8765";
+        const esRemoto = /^https:\/\//.test(target);
+        const opciones: ProxyOptions = {
+          target,
+          changeOrigin: true,
+          secure: esRemoto,
+          cookieDomainRewrite: esRemoto ? "" : undefined,
+        };
+        if (esRemoto) {
+          // Reescribe Origin/Referer al host remoto (por si el backend valida CSRF).
+          opciones.configure = (proxy) => {
+            proxy.on("proxyReq", (proxyReq) => {
+              proxyReq.setHeader("origin", target);
+              proxyReq.setHeader("referer", `${target}/`);
+            });
+          };
+        }
+        return opciones;
+      })(),
     },
   },
   test: {

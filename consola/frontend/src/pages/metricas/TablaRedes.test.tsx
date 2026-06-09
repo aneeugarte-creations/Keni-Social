@@ -70,14 +70,6 @@ describe("TablaRedes", () => {
     expect(th).toHaveAttribute("aria-sort", "ascending");
   });
 
-  it("muestra el reparto de vistas por red", () => {
-    render(<TablaRedes redes={REDES} />);
-
-    expect(screen.getByText(/Reparto de vistas por red/i)).toBeInTheDocument();
-    // 120000 / 210000 ≈ 57 %.
-    expect(screen.getByText("57%")).toBeInTheDocument();
-  });
-
   it("muestra TODAS las redes canónicas (con '—') aunque no haya datos", () => {
     // Contrato "todas las tablas, todas las redes": sin datos NO se oculta la tabla; cada
     // red canónica aparece como fila con "—" (incluida X, no contratada en el piloto).

@@ -37,7 +37,9 @@ import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { PieMostrarMas } from "./PieMostrarMas";
 import { SeccionColapsable } from "./SeccionColapsable";
+import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 /**
@@ -143,6 +145,9 @@ function TablaCrosstab({
     }
   }
 
+  // Recorte a 5 filas CON DATOS (post-orden); los placeholders "—" solo al desplegar.
+  const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -186,7 +191,7 @@ function TablaCrosstab({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filasOrdenadas.map((c) => (
+          {visibles.map((c) => (
             <TableRow key={`${c.marca}-${c.red}-${c.formato ?? "sin"}`}>
               <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
               <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>
@@ -209,8 +214,10 @@ function TablaCrosstab({
               </TableCell>
             </TableRow>
           ))}
-          {/* Marca×red canónica sin datos en el periodo: fila presente con "—" (no se omite). */}
-          {filasVacias.map(({ marca, red }) => (
+          {/* Marca×red canónica sin datos en el periodo: fila presente con "—" (no se omite).
+              Solo se muestran al desplegar (o si la tabla no se recorta). */}
+          {(expandido || !hayMas) &&
+            filasVacias.map(({ marca, red }) => (
             <TableRow key={`vacia-${marca}-${red}`} className="text-muted-foreground">
               <TableCell className="font-medium">{nombreMarca(marca, marcas)}</TableCell>
               <TableCell>{nombreRed(red)}</TableCell>
@@ -220,8 +227,11 @@ function TablaCrosstab({
               <TableCell className="text-right tabular-nums">—</TableCell>
               <TableCell className="text-right tabular-nums">—</TableCell>
             </TableRow>
-          ))}
+            ))}
         </TableBody>
+        {hayMas && (
+          <PieMostrarMas expandido={expandido} onAlternar={alternar} colSpan={7} />
+        )}
       </Table>
     </div>
   );

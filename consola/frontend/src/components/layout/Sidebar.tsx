@@ -40,7 +40,7 @@ function clasesItem({ isActive }: { isActive: boolean }) {
     "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
     isActive
       ? "bg-accent font-medium text-foreground"
-      : "font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
+      : "font-normal text-foreground hover:bg-accent hover:text-foreground",
   );
 }
 
@@ -167,7 +167,7 @@ export function Sidebar({
         {bloques.map((bloque, i) => (
           <div key={bloque.etiqueta || i} className="space-y-0.5">
             {bloque.etiqueta && (
-              <p className="px-3 pb-1 pt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
+              <p className="px-3 pb-1 pt-1 text-xs font-medium tracking-wide text-muted-foreground/70">
                 {bloque.etiqueta}
               </p>
             )}

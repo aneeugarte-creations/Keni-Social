@@ -23,10 +23,12 @@ import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
 import { Descargas } from "./metricas/Descargas";
 import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
+import { EvolucionRedes } from "./metricas/EvolucionRedes";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
+import { PanoramaPiezas } from "./metricas/PanoramaPiezas";
 import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
@@ -168,22 +170,25 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           {/* Por marca: la comparativa visual y la tabla detallada son dos lecturas
               del MISMO corte (cada cuenta), así que van juntas bajo un solo
               encabezado. La tabla permite drill-down a las piezas de cada marca. */}
-          <div className="space-y-3">
+          {/* Por marca: gráfico + tabla SIEMPRE visibles (los datos por cuenta son
+              importantes). La tabla recorta a 5 con "Mostrar más" cuando hay más. */}
+          <section className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">Por marca</h2>
-            <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
+            <GraficaMarcas cuentas={reporteQuery.data.cuentas} desnudo />
             <TablaCuentas
               cuentas={reporteQuery.data.cuentas}
               onVerPiezas={verPiezasDeMarca}
+              desnudo
             />
-          </div>
+          </section>
           {/* Por red: agrega las plataformas de todas las marcas del reporte. */}
-          <div className="space-y-3">
+          {/* Por red: gráfico + tabla + cobertura SIEMPRE visibles (datos importantes). */}
+          <section className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">Por red</h2>
-            <TablaRedes redes={reporteQuery.data.por_red} />
-            {/* Auditoría: TODAS las redes de cada marca (aunque no tengan datos) con
-                el motivo de por qué no aportan. Hace visibles las redes vacías. */}
+            <EvolucionRedes marcaActual={marca} rangoActual={rango} desnudo />
+            <TablaRedes redes={reporteQuery.data.por_red} desnudo />
             <CoberturaRedes marcas={reporteQuery.data.cobertura_redes} />
-          </div>
+          </section>
 
           {/* Estrategia digital: lectura de alto nivel (más allá del día a día),
               ANTES del detalle granular de piezas. Crecimiento de audiencia, de qué
@@ -209,7 +214,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               red + búsqueda, stats media/mediana, orden por columna (Vistas desc=top,
               asc=peores), paginación por día y drill-down. El drill-down desde la tabla
               por marca fija su filtro de marca. */}
-          <div ref={piezasRef} className="scroll-mt-6">
+          <div ref={piezasRef} className="scroll-mt-6 space-y-3">
+            {/* Panorama visual (scatter temporal "que brilla") + tabla detallada: dos
+                lecturas del mismo conjunto de piezas. Comparten la query (misma caché). */}
+            <PanoramaPiezas marcaActual={marca} />
             <PiezasConsolidada marcaActual={marca} rangoActual={rango} marcas={marcas} />
           </div>
           {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la

@@ -73,6 +73,11 @@ import { MARCA_TODAS } from "./Controles";
 import { DetallePieza } from "./DetallePieza";
 import { useOrdenTabla } from "./useOrdenTabla";
 
+/** Piezas de ejemplo en la vista compacta. */
+const PREVIEW = 5;
+/** Piezas por página al desplegar (listado completo paginado, sin scroll infinito). */
+const POR_PAGINA = 20;
+
 type ClaveOrden =
   | "publicado"
   | "visualizaciones"
@@ -104,9 +109,6 @@ const COLS_INTERACCION: Array<{ clave: ClaveOrden; etiqueta: string; icono: Luci
 
 const TODAS = "__todas__";
 const SIN_LINEA = "Sin línea";
-
-/** Piezas por página del listado (top N del rango, no por día). */
-const POR_PAGINA = 50;
 
 /** Media aritmética (null si no hay datos). */
 function media(nums: number[]): number | null {
@@ -148,7 +150,6 @@ export function PiezasConsolidada({
   const [busqueda, setBusqueda] = React.useState("");
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
-  const [paginaIdx, setPaginaIdx] = React.useState(0);
   const [seleccion, setSeleccion] = React.useState<PiezaListado | null>(null);
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
 
@@ -212,18 +213,20 @@ export function PiezasConsolidada({
     { clave: "visualizaciones", direccion: "desc" },
   );
 
-  // Paginación de 50 piezas sobre el conjunto ya ordenado. Al cambiar filtros u orden
-  // (cambia la lista ordenada) volvemos a la primera página.
-  const totalPaginas = Math.max(1, Math.ceil(filasOrdenadas.length / POR_PAGINA));
+  // Vista compacta: 5 piezas de ejemplo (el "top 5" del orden activo). "Mostrar más"
+  // despliega el listado COMPLETO pero PAGINADO (páginas de 20 con pager), sin scroll infinito.
+  const [expandido, setExpandido] = React.useState(false);
+  const [paginaIdx, setPaginaIdx] = React.useState(0);
   React.useEffect(() => {
     setPaginaIdx(0);
   }, [filasOrdenadas]);
+  const totalPaginas = Math.max(1, Math.ceil(filasOrdenadas.length / POR_PAGINA));
   const paginaActual = Math.min(paginaIdx, totalPaginas - 1);
   const desde = paginaActual * POR_PAGINA;
-  const filasPagina = React.useMemo(
-    () => filasOrdenadas.slice(desde, desde + POR_PAGINA),
-    [filasOrdenadas, desde],
-  );
+  const filasMostradas = expandido
+    ? filasOrdenadas.slice(desde, desde + POR_PAGINA)
+    : filasOrdenadas.slice(0, PREVIEW);
+  const hayMas = filasOrdenadas.length > PREVIEW;
 
   function abrir(pieza: PiezaListado) {
     setSeleccion(pieza);
@@ -231,15 +234,13 @@ export function PiezasConsolidada({
   }
 
   const variasMarcas = marcasDisponibles.length > 1;
-  const hayFiltros =
-    busqueda.trim() !== "" || redFiltro !== TODAS || lineaFiltro !== TODAS;
 
   return (
     <>
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del rango (de la marca activa) en páginas de 50. Filtra por línea o red; ordena por columna (Vistas desc = top del rango, Día = orden cronológico); toca una pieza para su detalle."
+        descripcion="Todas las piezas del rango (de la marca activa): 5 de ejemplo, «Ver las N piezas» para todas. Filtra por línea o red; ordena por columna (Vistas desc = top del rango, Día = orden cronológico); toca una pieza para su detalle."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">
@@ -324,36 +325,6 @@ export function PiezasConsolidada({
           </p>
         ) : (
           <>
-            {/* Pager de 50 en 50 sobre el conjunto filtrado+ordenado */}
-            <div className="flex items-center justify-between gap-3 px-6 pb-3">
-              <p className="text-xs text-muted-foreground">
-                {desde + 1}–{Math.min(desde + POR_PAGINA, filasOrdenadas.length)} de{" "}
-                {filasOrdenadas.length} piezas · página {paginaActual + 1} de {totalPaginas}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setPaginaIdx((i) => Math.max(0, i - 1))}
-                  disabled={paginaActual <= 0}
-                  aria-label="Página anterior"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setPaginaIdx((i) => Math.min(totalPaginas - 1, i + 1))}
-                  disabled={paginaActual >= totalPaginas - 1}
-                  aria-label="Página siguiente"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
             <Table>
               <TableHeader>
                 <TableRow>
@@ -403,7 +374,7 @@ export function PiezasConsolidada({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filasPagina.map((p) => (
+                {filasMostradas.map((p) => (
                   <FilaPieza
                     key={p.id}
                     pieza={p}
@@ -414,11 +385,56 @@ export function PiezasConsolidada({
                 ))}
               </TableBody>
             </Table>
-            <p className="px-6 py-3 text-xs text-muted-foreground">
-              {hayFiltros
-                ? `${filtradas.length} de ${piezas.length} piezas (filtrado)`
-                : `${piezas.length} piezas`}
-            </p>
+            {hayMas && (
+              <div className="flex items-center justify-between gap-3 px-6 py-3">
+                {expandido ? (
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    Página {paginaActual + 1} de {totalPaginas}
+                  </p>
+                ) : (
+                  <span />
+                )}
+                <div className="flex items-center gap-1">
+                  {expandido && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setPaginaIdx((i) => Math.max(0, i - 1))}
+                        disabled={paginaActual <= 0}
+                        aria-label="Página anterior"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setPaginaIdx((i) => Math.min(totalPaginas - 1, i + 1))}
+                        disabled={paginaActual >= totalPaginas - 1}
+                        aria-label="Página siguiente"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="font-normal text-muted-foreground hover:text-foreground"
+                    aria-expanded={expandido}
+                    onClick={() => {
+                      setExpandido((v) => !v);
+                      setPaginaIdx(0);
+                    }}
+                  >
+                    {expandido ? "Mostrar menos" : "Mostrar más"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </SeccionColapsable>

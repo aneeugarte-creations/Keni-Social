@@ -40,7 +40,7 @@ export function EncabezadoSeccion({
     <nav
       aria-label="Cabecera de sección"
       className={cn(
-        "mb-6 flex min-h-9 flex-wrap items-center gap-1 border-border",
+        "mb-8 flex min-h-9 flex-wrap items-center gap-1 border-border pb-2.5",
         visible ? "border-b" : "hidden",
       )}
     >

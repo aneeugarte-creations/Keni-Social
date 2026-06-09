@@ -62,7 +62,7 @@ export function SwitchMarca() {
         <SelectTrigger
           aria-label="Marca activa"
           className={cn(
-            "h-8 w-[180px] gap-1.5",
+            "h-8 w-[170px] gap-1.5",
             fueraDeCasa &&
               "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400",
           )}

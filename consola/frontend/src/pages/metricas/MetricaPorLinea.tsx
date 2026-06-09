@@ -28,7 +28,9 @@ import type { FilaMetricaLinea } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { PieMostrarMas } from "./PieMostrarMas";
 import { SeccionColapsable } from "./SeccionColapsable";
+import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 type ClaveOrden = "piezas" | "visualizaciones" | "interacciones" | "engagement_pct";
@@ -109,6 +111,9 @@ function TablaLineas({
     { clave: "visualizaciones", direccion: "desc" },
   );
 
+  // Recorte a 5 filas (post-orden); la de "Por origen" (2-3 filas) no se recorta (umbral).
+  const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold tracking-tight">{titulo}</h3>
@@ -157,7 +162,7 @@ function TablaLineas({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filasOrdenadas.map((f) => (
+              {visibles.map((f) => (
                 <TableRow key={f.id}>
                   <TableCell className="font-medium">{f.nombre}</TableCell>
                   <TableCell className="text-right tabular-nums">{f.piezas}</TableCell>
@@ -186,6 +191,9 @@ function TablaLineas({
                 </TableCell>
               </TableRow>
             </TableBody>
+            {hayMas && (
+              <PieMostrarMas expandido={expandido} onAlternar={alternar} colSpan={5} />
+            )}
           </Table>
         </div>
       )}
