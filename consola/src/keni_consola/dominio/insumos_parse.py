@@ -391,7 +391,6 @@ def extraer_insumos(
     if cajon not in CAJONES:
         return [], [{"fila": 0, "motivo": f"Cajón desconocido: {cajon!r}. Válidos: {CAJONES}."}]
     correr = ejecutor or _ejecutar_claude_json
-    build_prompt = _PROMPTS[cajon]
     salida = ""
     with tempfile.TemporaryDirectory(prefix="keni-insumos-") as carpeta:
         nombre_seguro = os.path.basename(nombre or "") or "insumo.txt"
@@ -399,7 +398,7 @@ def extraer_insumos(
         with open(ruta, "wb") as fh:
             fh.write(data)
         try:
-            salida = correr(build_prompt(ruta), carpeta)
+            salida = correr(construir_prompt_archivo(cajon, ruta), carpeta)
         except Exception as exc:  # noqa: BLE001 -- cualquier fallo del asistente => error legible
             _log.warning("extraer_insumos [%s] falló: %s", cajon, exc)
             return [], [{"fila": 0, "motivo": f"No se pudo interpretar el archivo con IA: {exc}"}]
