@@ -53,22 +53,26 @@ def _cd_off(marca: str) -> bool:
     return config.marca_apagada(config.ENV_PIPELINE, marca) or not config.pipeline_activo()
 
 
+def _arte_off(marca: str) -> bool:
+    """Etapa "Generar arte" desactivada para `marca` (maestro `KENI_AUTOGEN_ARTE` off o por-marca)."""
+    return config.marca_apagada(config.ENV_AUTOGEN_ARTE, marca) or not config.autogen_arte_activo()
+
+
 # Tope por defecto de runs por página (alineado con el resto de la consola).
 _LIMITE_DEF = 50
 _LIMITE_MAX = 200
 
-# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo: documenta el contrato que
-# emite `_etapas_de_run`. Jerarquización es el paso de IA del POOL de noticias (dedup/fusión por
-# Haiku + ranking por score) que ocurre ANTES de promover la historia a tema; se DERIVA de la
-# historia (cluster) enlazada al tema, no de un toggle. Las tres siguientes (CI/QA/CD) son
-# TOGGLABLES por marca (1 toggle = 1 etapa): activa muestra su estado real, desactivada se pinta
-# "saltada". Aprobación es el gate humano (siempre). `estado_global` toma la primera no-{ok,
-# saltada}. La QA (criba de la fuente) va ANTES del copy.
+# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo. Fusión y Ranking son el
+# trabajo del POOL (dedup + score), DERIVADO de la historia (cluster), no de un toggle. Selección/
+# Validación/Copy son TOGGLABLES por marca (activa = estado real; desactivada = "saltada").
+# Aprobación es el gate humano. `estado_global` toma la primera no-{ok,saltada}.
 _ETAPAS = (
-    ("jerarquia", "Ranking"),
+    ("fusion", "Fusión"),
+    ("ranking", "Ranking"),
     ("ci", "Selección"),
-    ("qa", "Criba"),
+    ("qa", "Validación"),
     ("cd", "Copy"),
+    ("arte", "Arte"),
     ("aprobacion", "Aprobación"),
 )
 # Claves válidas para el filtro `?etapa=` (la etapa donde la run está parada). Catálogo de
@@ -158,54 +162,44 @@ def _cluster_publico(cluster: dict | None) -> dict | None:
     }
 
 
-def _jerarquia_de(cluster: dict | None) -> dict:
-    """Etapa "Jerarquización": el paso de IA del pool (dedup/fusión + ranking) que precede al tema.
-
-    Se DERIVA de la historia enlazada al tema (no de un toggle): si el tema nació de un cluster
-    rankeado, la etapa es "ok" y su detalle resume las señales reales (corroboración, fusión,
-    score, verificación, breaking). Si el tema NO tiene historia (creado a mano o por la ingesta
-    item-a-item anterior al ranking), se pinta "saltada" (no bloquea: no es un fallo).
-    """
+def _fusion_de(cluster: dict | None) -> dict:
+    """Etapa "Fusión": dedup del pool (agrupar historias del mismo evento). Derivada del cluster."""
     if not cluster:
-        return {
-            "clave": "jerarquia",
-            "nombre": "Ranking",
-            "estado": _ESTADO_SALTADA,
-            "detalle": "Sin historia asociada: tema creado a mano o anterior al ranking por IA.",
-            "ts": "",
-        }
+        return {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     n_fuentes = int(cluster.get("n_fuentes", 0) or 0)
     n_items = int(cluster.get("n_items", 0) or 0)
-    score = round(float(cluster.get("score", 0.0) or 0.0), 2)
-    verif = _VERIFICACION_TEXTO.get(cluster.get("verificacion", "") or "", "")
-    partes = [
-        f"Historia jerarquizada por IA: {n_fuentes} fuente(s)",
-        f"{n_items} nota(s) agrupadas" if n_items > 1 else "",
-        f"score {score}",
-        verif,
-        "🔥 breaking" if cluster.get("breaking") else "",
-    ]
-    detalle = " · ".join(p for p in partes if p) + "."
+    detalle = f"{n_fuentes} fuentes" + (f" · {n_items} notas" if n_items > 1 else "")
     return {
-        "clave": "jerarquia",
-        "nombre": "Ranking",
-        "estado": "ok",
-        "detalle": detalle,
-        "ts": cluster.get("primer_visto", "") or "",
+        "clave": "fusion", "nombre": "Fusión", "estado": "ok",
+        "detalle": detalle, "ts": cluster.get("primer_visto", "") or "",
+    }
+
+
+def _ranking_de(cluster: dict | None) -> dict:
+    """Etapa "Ranking": score/jerarquización de la historia. Derivada del cluster."""
+    if not cluster:
+        return {"clave": "ranking", "nombre": "Ranking", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
+    score = round(float(cluster.get("score", 0.0) or 0.0), 2)
+    detalle = f"Score {score}" + (" · 🔥" if cluster.get("breaking") else "")
+    return {
+        "clave": "ranking", "nombre": "Ranking", "estado": "ok",
+        "detalle": detalle, "ts": cluster.get("primer_visto", "") or "",
     }
 
 
 def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) -> list[dict]:
-    """Deriva las 5 etapas de una run: Jerarquización (historia) + TOGGLES + ESTADO REAL del tema.
+    """Deriva las 7 etapas de una run: Fusión + Ranking (pool) + Selección/Validación/Copy/Arte
+    (toggles) + Aprobación (humana).
 
-    Jerarquización se deriva de la HISTORIA enlazada (cluster): es el paso de IA del pool (dedup/
-    fusión + ranking) previo al tema. Las togglables (CI/Noticias, QA, CD/Copy) están activas o
-    "saltada" según su toggle por-marca; si activas, su estado se deriva del estado real (no de
-    logs): el `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La QA de
-    la FUENTE (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el
+    Fusión y Ranking se derivan de la HISTORIA enlazada (cluster): el dedup y el score del pool,
+    previos al tema. Las togglables (Selección/Validación/Copy/Arte) están activas o "saltada"
+    según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
+    `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La Validación
+    (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
     """
-    jerarquia = _jerarquia_de(cluster)
+    fusion = _fusion_de(cluster)
+    ranking = _ranking_de(cluster)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     marca = item.get("marca", "") or ""
@@ -213,93 +207,64 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
     qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
-    # --- CI · Ingesta (toggle "Crear noticias"): saltada si está off para la marca. -----
+    # --- Selección (toggle "Crear noticias"): saltada si está off para la marca. -----
     if _ci_off(marca):
-        ci = {"clave": "ci", "nombre": "Selección", "estado": _ESTADO_SALTADA,
-              "detalle": "Etapa «Crear noticias» desactivada para esta marca.", "ts": creado}
-    elif cluster is not None:
-        n_f = int(cluster.get("n_fuentes", 0) or 0)
-        ci = {"clave": "ci", "nombre": "Selección", "estado": "ok",
-              "detalle": f"Historia promovida a tema ({n_f} fuente(s) corroboran).", "ts": creado}
+        ci = {"clave": "ci", "nombre": "Selección", "estado": _ESTADO_SALTADA, "detalle": "", "ts": creado}
     else:
-        ci = {"clave": "ci", "nombre": "Selección", "estado": "ok",
-              "detalle": "Nota de origen ingerida de las fuentes.", "ts": creado}
+        ci = {"clave": "ci", "nombre": "Selección", "estado": "ok", "detalle": "", "ts": creado}
 
-    # --- QA · Criba de la fuente (toggle "Validar (QA)"): saltada si está off para la marca. --
-    # Con la etapa activa, por el veredicto persistido en el TEMA: 'en_curso' = criba en vuelo;
-    # 'no_verificado' (⚠️) = apta, sigue; 'problema' (❗) = algo de peso, NO se genera copy.
+    # --- Validación (toggle "Validar (QA)"): por el veredicto persistido en el TEMA. --
     if _qa_off(marca) or qa_veredicto == QA_SALTADA:
-        qa_estado = _ESTADO_SALTADA
-        qa_detalle = "Etapa QA desactivada para esta marca: el copy se genera sin criba."
+        qa_estado, qa_detalle = _ESTADO_SALTADA, ""
     elif qa_veredicto == VERDICTO_PROBLEMA:
-        qa_estado = "revisar"
-        qa_detalle = "La criba encontró un problema de peso: no se generó copy (revisa los hallazgos)."
+        qa_estado, qa_detalle = "revisar", "Problema en la fuente"
     elif qa_veredicto == "en_curso":
-        qa_estado = "en_curso"
-        qa_detalle = "Criba de la fuente en curso (el agente está revisando la nota de origen)."
+        qa_estado, qa_detalle = "en_curso", ""
     elif qa_veredicto == VERDICTO_NO_VERIFICADO:
-        qa_estado = "ok"
-        qa_detalle = "Fuente apta (no verificada a fondo): el copy llevará un aviso de no verificado."
+        qa_estado, qa_detalle = "ok", "No verificado"
     else:
-        qa_estado = "pendiente"
-        qa_detalle = "Sin cribar todavía."
-    qa = {
-        "clave": "qa",
-        "nombre": "Criba",
-        "estado": qa_estado,
-        "detalle": qa_detalle,
-        "ts": "",
-    }
+        qa_estado, qa_detalle = "pendiente", ""
+    qa = {"clave": "qa", "nombre": "Validación", "estado": qa_estado, "detalle": qa_detalle, "ts": ""}
 
-    # --- CD · Copy + placa (toggle "Generar copy"): saltada si está off para la marca. --
-    # Si la etapa está activa: ok con ≥1 pieza con copy; 'problema' de QA omite el copy.
+    # --- Copy (toggle "Generar copy"): ok con ≥1 pieza con copy; 'problema' de Validación lo omite.
     con_copy = sum(1 for p in piezas if not p["falta_copy"])
     if _cd_off(marca):
-        cd_estado = _ESTADO_SALTADA
-        cd_detalle = "Etapa «Generar copy» desactivada para esta marca."
+        cd_estado, cd_detalle = _ESTADO_SALTADA, ""
     elif es_problema:
-        cd_estado = "pendiente"
-        cd_detalle = "Copy omitido: la criba marcó un problema de peso en la fuente."
+        cd_estado, cd_detalle = "pendiente", "Omitido"
     elif con_copy:
-        cd_estado = "ok"
-        cd_detalle = f"Copy generado en {con_copy}/{total} red(es)."
+        cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
     else:
-        # "pendiente": el job de copy puede seguir en cola o aún no haberse lanzado (la QA
-        # debe pasar antes). Heurística por copy presente, conservadora.
-        cd_estado = "pendiente"
-        cd_detalle = "Copy aún sin generar."
-    cd = {
-        "clave": "cd",
-        "nombre": "Copy",
-        "estado": cd_estado,
-        "detalle": cd_detalle,
-        "ts": "",
-    }
+        cd_estado, cd_detalle = "pendiente", ""
+    cd = {"clave": "cd", "nombre": "Copy", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
+
+    # --- Arte (toggle "Generar arte"): ok con ≥1 pieza con imagen; corre tras el copy. --
+    con_arte = sum(1 for p in piezas if not p["falta_imagen"])
+    if _arte_off(marca):
+        arte_estado, arte_detalle = _ESTADO_SALTADA, ""
+    elif con_arte:
+        arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
+    else:
+        arte_estado, arte_detalle = "pendiente", ""
+    arte = {"clave": "arte", "nombre": "Arte", "estado": arte_estado, "detalle": arte_detalle, "ts": ""}
 
     # --- Aprobación: del estado de las piezas (revisión humana en la parrilla). ---------
     aprobadas = sum(1 for p in piezas if p["estado"] in _ESTADOS_APROBADOS)
     en_curso = any(p["estado"] in _ESTADOS_EN_CURSO for p in piezas)
     if total and aprobadas == total:
-        ap_estado = "ok"
-        ap_detalle = "Todas las piezas aprobadas."
+        ap_estado, ap_detalle = "ok", ""
     elif aprobadas:
-        ap_estado = "en_curso"
-        ap_detalle = f"{aprobadas}/{total} pieza(s) aprobada(s)."
+        ap_estado, ap_detalle = "en_curso", f"{aprobadas}/{total}"
     elif en_curso:
-        ap_estado = "en_curso"
-        ap_detalle = "En revisión por el equipo."
+        ap_estado, ap_detalle = "en_curso", ""
     else:
-        ap_estado = "pendiente"
-        ap_detalle = "Pendiente de aprobación humana."
+        ap_estado, ap_detalle = "pendiente", ""
     aprobacion = {
-        "clave": "aprobacion",
-        "nombre": "Aprobación",
-        "estado": ap_estado,
-        "detalle": ap_detalle,
-        "ts": actualizado if ap_estado == "ok" else "",
+        "clave": "aprobacion", "nombre": "Aprobación", "estado": ap_estado,
+        "detalle": ap_detalle, "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    return [jerarquia, ci, qa, cd, aprobacion]
+    return [fusion, ranking, ci, qa, cd, arte, aprobacion]
 
 
 def _estado_global(etapas: list[dict]) -> str:
@@ -492,13 +457,13 @@ def _generacion_publica(gen_id: str) -> dict | None:
     }
 
 
-def _generacion_pool_de_marca(marca: str) -> dict | None:
-    """La generación `noticias-ia` (Haiku fusión/encaje) más reciente de `marca`, o None.
+def _generacion_pool_de_marca(marca: str, *, prefijo: str) -> dict | None:
+    """La generación `noticias-ia` más reciente de `marca` cuya etiqueta empieza por `prefijo`.
 
-    La IA del POOL (dedup/encaje) corre por LOTE de marca, no 1:1 con cada pieza: no hay un
-    `gen_id` por run. Para dar transparencia del Haiku REAL en la etapa Ranking, enlazamos la
-    generación de pool más reciente de la marca (con su prompt+salida reales). El front lo rotula
-    «a nivel de lote», para no fingir que es exclusivo de esta pieza. None si no hay ninguna.
+    La IA del POOL (Fusión / Encaje) corre por LOTE de marca, no 1:1 con cada pieza. Para dar
+    transparencia del Haiku REAL en las etapas Fusión/Ranking, enlazamos su generación de pool más
+    reciente (con prompt+salida reales). `prefijo` distingue "Fusión de historias" (→ Fusión) de
+    "Encaje editorial" (→ Ranking). El front lo rotula «a nivel de lote». None si no hay ninguna.
     """
     if not marca:
         return None
@@ -506,7 +471,10 @@ def _generacion_pool_de_marca(marca: str) -> dict | None:
         recientes = generaciones.listar(limite=None, marca=marca)
     except Exception:  # noqa: BLE001 -- best-effort: sin pool legible, la etapa no enseña Haiku
         return None
-    pool = [g for g in recientes if (g.get("tipo") or "") == "noticias-ia"]
+    pool = [
+        g for g in recientes
+        if (g.get("tipo") or "") == "noticias-ia" and (g.get("etiqueta", "") or "").startswith(prefijo)
+    ]
     if not pool:
         return None
     pool.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "", reverse=True)
@@ -566,11 +534,15 @@ async def detalle(request: Request) -> Response:
     piezas = repos.listar_contenido_plataforma(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
     actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id)
-    # Ranking (Jerarquía): la IA del pool (fusión/encaje Haiku) es a nivel de marca/lote; enlazamos
-    # su generación más reciente para enseñar el prompt+salida REALES del Haiku en esa etapa.
-    gen_pool = _generacion_pool_de_marca(item.get("marca", "") or "")
-    if gen_pool is not None:
-        generaciones_por_etapa.setdefault("JERARQUIA", gen_pool)
+    # Fusión/Ranking: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
+    # reciente para enseñar el prompt+salida REALES del Haiku en cada etapa (por su etiqueta).
+    marca_tema = item.get("marca", "") or ""
+    gen_fusion = _generacion_pool_de_marca(marca_tema, prefijo="Fusión")
+    if gen_fusion is not None:
+        generaciones_por_etapa.setdefault("FUSION", gen_fusion)
+    gen_encaje = _generacion_pool_de_marca(marca_tema, prefijo="Encaje")
+    if gen_encaje is not None:
+        generaciones_por_etapa.setdefault("RANKING", gen_encaje)
     return JSONResponse(
         {
             "pipeline": _run_de(item, piezas, completo=True, cluster=cluster),

@@ -60,14 +60,18 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
 };
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
-const ETAPA_A_EVENTO: Record<string, string> = { jerarquia: "JERARQUIA", ci: "CI", cd: "CD", qa: "QA" };
+const ETAPA_A_EVENTO: Record<string, string> = {
+  fusion: "FUSION", ranking: "RANKING", ci: "CI", qa: "QA", cd: "CD", arte: "ARTE",
+};
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
 const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
-  { clave: "jerarquia", nombre: "Ranking" },
+  { clave: "fusion", nombre: "Fusión" },
+  { clave: "ranking", nombre: "Ranking" },
   { clave: "ci", nombre: "Selección" },
-  { clave: "qa", nombre: "Criba" },
+  { clave: "qa", nombre: "Validación" },
   { clave: "cd", nombre: "Copy" },
+  { clave: "arte", nombre: "Arte" },
   { clave: "aprobacion", nombre: "Aprobación" },
 ];
 // Valores del filtro `?estado=` (el `estado_global` de la run).
@@ -121,7 +125,7 @@ function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: s
         title={qa.resumen || "La criba encontró un problema de peso; no se generó copy."}
       >
         <OctagonAlert className="h-3 w-3" aria-hidden="true" />
-        QA: problema
+        Problema
       </Badge>
     );
   }
@@ -170,28 +174,36 @@ function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
   );
 }
 
-/** Chips de PROCEDENCIA IA: las señales reales del pool (corroboración, fusión, score,
- *  verificación, breaking) que la IA usó para deduplicar y jerarquizar la historia. */
-function ProcedenciaIA({ cluster }: { cluster: PipelineCluster }) {
+/** Chips de las señales del cluster. `modo` decide cuáles: "fusion" (dedup: fuentes/notas) o
+ *  "ranking" (score/verificación/viralidad). */
+function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fusion" | "ranking" }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      <Badge variant="outline" className="text-[10px]">{cluster.n_fuentes} fuente(s)</Badge>
-      {cluster.n_items > 1 && (
-        <Badge variant="outline" className="text-[10px]">{cluster.n_items} notas agrupadas</Badge>
+      {modo === "fusion" && (
+        <>
+          <Badge variant="outline" className="text-[10px]">{cluster.n_fuentes} fuentes</Badge>
+          {cluster.n_items > 1 && (
+            <Badge variant="outline" className="text-[10px]">{cluster.n_items} notas</Badge>
+          )}
+        </>
       )}
-      <Badge variant="outline" className="text-[10px]">score {cluster.score.toFixed(2)}</Badge>
-      {cluster.verificacion && (
-        <Badge variant="outline" className="text-[10px]">
-          {VERIFICACION_TEXTO[cluster.verificacion] ?? cluster.verificacion}
-        </Badge>
-      )}
-      {cluster.breaking && (
-        <Badge variant="secondary" className="gap-1 border border-amber-500/30 bg-amber-500/15 text-[10px] text-amber-600">
-          🔥 breaking
-        </Badge>
-      )}
-      {cluster.senal > 0 && (
-        <Badge variant="outline" className="text-[10px]">viralidad {cluster.senal.toLocaleString("es-MX")}</Badge>
+      {modo === "ranking" && (
+        <>
+          <Badge variant="outline" className="text-[10px]">Score {cluster.score.toFixed(2)}</Badge>
+          {cluster.verificacion && (
+            <Badge variant="outline" className="text-[10px]">
+              {VERIFICACION_TEXTO[cluster.verificacion] ?? cluster.verificacion}
+            </Badge>
+          )}
+          {cluster.breaking && (
+            <Badge variant="secondary" className="border border-amber-500/30 bg-amber-500/15 text-[10px] text-amber-600">
+              🔥 breaking
+            </Badge>
+          )}
+          {cluster.senal > 0 && (
+            <Badge variant="outline" className="text-[10px]">viralidad {cluster.senal.toLocaleString("es-MX")}</Badge>
+          )}
+        </>
       )}
     </div>
   );
@@ -325,7 +337,7 @@ function ProcesoAgente({ gen, titulo = "Proceso del agente (Claude)" }: { gen: P
       {prompt && (
         <details className="rounded bg-background/60">
           <summary className="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
-            Ver prompt enviado a la IA
+            Prompt
           </summary>
           <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words border-t px-2 py-2 font-mono text-[11px] leading-relaxed text-foreground/80">
             {prompt}
@@ -357,118 +369,87 @@ function ContenidoEtapa({
   run: Pipeline;
   generacion?: PipelineGeneracion;
 }) {
-  if (clave === "jerarquia") {
-    // Paso de IA del POOL de noticias: dedup/fusión (Haiku) + ranking por score. Mostramos las
-    // señales reales de la historia y, si existe, el PROCESO Haiku real del pool para esa marca.
+  if (clave === "fusion" || clave === "ranking") {
+    // Pool de noticias: dedup (Fusión) y score (Ranking). Señales del cluster + Haiku si lo hubo.
+    const modo = clave;
     return (
-      <div className="space-y-3 text-xs">
-        {run.cluster ? (
-          <div className="space-y-2">
-            <p className="text-muted-foreground">
-              La IA del pool de noticias deduplicó (fusión semántica) y jerarquizó esta historia
-              antes de crear el tema. Estas son las señales que usó:
-            </p>
-            <ProcedenciaIA cluster={run.cluster} />
-          </div>
-        ) : (
-          <p className="text-muted-foreground">
-            Este tema no nació de una historia rankeada (creado a mano o antes del ranking por IA).
-          </p>
-        )}
-        {generacion && (
-          <div className="space-y-1">
-            <p className="text-[11px] text-muted-foreground">
-              IA del pool (Haiku) para esta marca — a nivel de LOTE de la fusión/encaje, no
-              exclusivo de esta pieza:
-            </p>
-            <ProcesoAgente gen={generacion} titulo="IA del pool (Haiku)" />
-          </div>
-        )}
+      <div className="space-y-2 text-xs">
+        {run.cluster ? <ProcedenciaIA cluster={run.cluster} modo={modo} /> : <p className="text-muted-foreground">Sin historia.</p>}
+        {generacion && <ProcesoAgente gen={generacion} titulo="Haiku del pool (lote)" />}
       </div>
     );
   }
   if (clave === "ci") {
+    // Selección: crea el tema (no es IA). Mínimo: la nota de origen.
     return (
       <div className="space-y-1 text-xs text-muted-foreground">
-        <p><span className="font-medium text-foreground">Tema:</span> {run.titulo}</p>
-        {run.origen && <p><span className="font-medium text-foreground">Origen:</span> {run.origen}</p>}
-        {run.descripcion && <p className="line-clamp-3">{run.descripcion}</p>}
+        {run.descripcion && <p className="line-clamp-4">{run.descripcion}</p>}
       </div>
     );
   }
   if (clave === "cd") {
     return (
       <div className="space-y-3">
-        {/* Headline: el proceso de pensamiento del agente que generó el copy. */}
         {generacion && <ProcesoAgente gen={generacion} />}
-        {/* Secundario: el resultado (copy + placa) que produjo. */}
         {run.piezas.map((p, i) => (
           <div key={`${p.red}-${i}`} className="rounded-md border p-2">
             <div className="mb-1 flex items-center gap-2">
               <span className="text-xs font-semibold">{p.red_nombre}</span>
               {p.copy_in && <Badge variant="outline" className="text-[10px]">placa: {p.copy_in}</Badge>}
             </div>
-            {p.copy ? (
-              <p className="whitespace-pre-wrap text-xs text-foreground/90">{p.copy}</p>
-            ) : (
-              <p className="text-xs italic text-muted-foreground">Sin copy todavía.</p>
-            )}
-            {p.imagen_url && (
-              <img
-                src={p.imagen_url}
-                alt={`Placa ${p.red_nombre}`}
-                loading="lazy"
-                className="mt-2 h-24 w-24 rounded border object-cover"
-              />
-            )}
+            {p.copy
+              ? <p className="whitespace-pre-wrap text-xs text-foreground/90">{p.copy}</p>
+              : <p className="text-xs italic text-muted-foreground">Sin copy.</p>}
           </div>
         ))}
       </div>
     );
   }
-  if (clave === "qa") {
-    // Criba de la FUENTE (pre-copy, por tema): veredicto estructurado + hallazgos, NO por pieza.
-    const qa = run.qa_fuente;
+  if (clave === "arte") {
+    // Arte: generación de imagen por IA. Su prompt (vía la generación) + las imágenes producidas.
+    const imagenes = run.piezas.filter((p) => p.imagen_url);
     return (
       <div className="space-y-2">
-        {/* Headline: el proceso de pensamiento del agente que cribó la nota de origen. */}
-        {generacion && <ProcesoAgente gen={generacion} />}
-        {qa && (qa.no_verificado || qa.problema) ? (
-          <div className="space-y-2 rounded-md border p-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <BadgeQaFuente qa={qa} />
-              {qa.copy_omitido && (
-                <span className="text-xs text-muted-foreground">
-                  Copy omitido: no se gastó generación en una fuente con problemas.
-                </span>
-              )}
-            </div>
-            {qa.resumen && <p className="text-xs text-foreground/90">{qa.resumen}</p>}
-            <ListaHallazgos hallazgos={qa.hallazgos} />
-            {qa.no_verificado && qa.hallazgos.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                Sin hallazgos de peso: la fuente es apta, pero no se verificó a fondo.
-              </p>
-            )}
+        {generacion && <ProcesoAgente gen={generacion} titulo="Generación de imagen" />}
+        {imagenes.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {imagenes.map((p, i) => (
+              <img key={`${p.red}-${i}`} src={p.imagen_url} alt={p.red_nombre} loading="lazy"
+                className="h-24 w-24 rounded border object-cover" />
+            ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">Criba de la fuente aún sin resolver.</p>
+          !generacion && <p className="text-xs text-muted-foreground">Sin arte.</p>
         )}
       </div>
     );
   }
-  // aprobacion
+  if (clave === "qa") {
+    const qa = run.qa_fuente;
+    return (
+      <div className="space-y-2">
+        {generacion && <ProcesoAgente gen={generacion} />}
+        {qa && (qa.no_verificado || qa.problema) ? (
+          <div className="space-y-2 rounded-md border p-2">
+            <BadgeQaFuente qa={qa} />
+            {qa.resumen && <p className="text-xs text-foreground/90">{qa.resumen}</p>}
+            <ListaHallazgos hallazgos={qa.hallazgos} />
+          </div>
+        ) : (
+          !generacion && <p className="text-xs text-muted-foreground">Sin resolver.</p>
+        )}
+      </div>
+    );
+  }
+  // aprobacion — gate HUMANO (no IA).
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {run.piezas.map((p, i) => (
         <div key={`${p.red}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
           <span className="font-semibold">{p.red_nombre}</span>
           <div className="flex flex-col items-end gap-0.5 text-muted-foreground">
             <Badge variant="outline">{p.estado}</Badge>
-            {p.revisor_nombre && <span>Revisó: {p.revisor_nombre} · {tiempoRelativo(p.revisado_en || "")}</span>}
-            {!p.revisor_nombre && p.enviado_a_revision_en && (
-              <span>En revisión {tiempoRelativo(p.enviado_a_revision_en)}</span>
-            )}
+            {p.revisor_nombre && <span>{p.revisor_nombre} · {tiempoRelativo(p.revisado_en || "")}</span>}
           </div>
         </div>
       ))}

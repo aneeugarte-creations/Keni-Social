@@ -84,6 +84,7 @@ TIPO_COPY = "pipeline"
 ETAPA_CI = "CI"
 ETAPA_CD = "CD"
 ETAPA_QA = "QA"
+ETAPA_ARTE = "ARTE"
 
 # Cuantos temas recientes (origen pipeline) revisa cada fase por barrido. Cota de seguridad
 # para no recorrer un histórico enorme.

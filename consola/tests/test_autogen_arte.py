@@ -225,6 +225,35 @@ def test_lanzar_para_topic_adjunta_imagen(monkeypatch):
     assert asignadas == [("c1", "et1")]
 
 
+def test_lanzar_para_topic_registra_actividad(monkeypatch):
+    """El arte deja constancia: una generación `tipo='imagen'` con su PROMPT + la etapa ARTE
+    correlacionada al tema (gen_id), para que sea visible en Actividad IA y el detalle del pipeline."""
+    monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")])
+    monkeypatch.setattr(aa.media, "guardar_bytes", lambda datos, ext="png": "arte.png")
+    monkeypatch.setattr(
+        aa.repos, "actualizar_contenido_plataforma", lambda pid, campos: {"id": pid, **campos}
+    )
+    monkeypatch.setattr(aa.repos, "listar_etiquetas", lambda: [])
+    monkeypatch.setattr(aa.repos, "crear_etiqueta", lambda *, nombre: {"id": "et1", "nombre": nombre})
+    monkeypatch.setattr(aa.repos, "asignar_etiqueta", lambda cid, eid: None)
+    gens: list[dict] = []
+    monkeypatch.setattr(aa.generaciones, "crear", lambda d: gens.append(d) or {"id": "g1"})
+    import keni_consola.pipeline_contenido as pc
+    etapas: list[tuple] = []
+    monkeypatch.setattr(pc, "registrar_etapa", lambda *a, **k: etapas.append((a, k)))
+
+    aa.lanzar_para_topic(_item(), generar=lambda prompt: b"PNGBYTES")
+
+    assert len(gens) == 1
+    assert gens[0]["tipo"] == "imagen"
+    assert gens[0]["contenido_id"] == "c1"
+    assert gens[0]["prompt"]  # el prompt REAL del arte
+    assert len(etapas) == 1
+    assert etapas[0][0][0] == "ARTE"  # registrar_etapa(ETAPA_ARTE, ...)
+    assert etapas[0][1]["gen_id"] == "g1"
+
+
 def test_lanzar_para_topic_sin_proveedor_no_genera(monkeypatch):
     monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: False)
     llamado = []

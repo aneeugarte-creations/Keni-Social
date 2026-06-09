@@ -52,11 +52,14 @@ def test_run_qa_no_verificado_con_copy(cliente):
     )
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
-    assert [e["clave"] for e in run["etapas"]] == ["jerarquia", "ci", "qa", "cd", "aprobacion"]
+    assert [e["clave"] for e in run["etapas"]] == [
+        "fusion", "ranking", "ci", "qa", "cd", "arte", "aprobacion"
+    ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    # Sin historia (cluster) asociada, la Jerarquización se pinta "saltada" (no bloquea).
+    # Sin cluster -> Fusión/Ranking saltadas; Arte saltada (toggle off). Ninguna bloquea.
     assert etapas == {
-        "jerarquia": "saltada", "ci": "ok", "qa": "ok", "cd": "ok", "aprobacion": "pendiente"
+        "fusion": "saltada", "ranking": "saltada", "ci": "ok", "qa": "ok",
+        "cd": "ok", "arte": "saltada", "aprobacion": "pendiente",
     }
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
@@ -124,7 +127,8 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
     assert run is not None
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas == {
-        "jerarquia": "saltada", "ci": "ok", "qa": "saltada", "cd": "ok", "aprobacion": "pendiente"
+        "fusion": "saltada", "ranking": "saltada", "ci": "ok", "qa": "saltada",
+        "cd": "ok", "arte": "saltada", "aprobacion": "pendiente",
     }
     assert run["estado_global"] == "pendiente"
 
@@ -159,30 +163,27 @@ def _historia_de(tema_id: str, marca: str = "unotv", **campos) -> dict:
     return repos.upsert_noticia_cluster(base)
 
 
-def test_jerarquia_ok_desde_historia(cliente):
-    """Un tema promovido de una HISTORIA muestra Jerarquización 'ok' + la procedencia IA real
-    (corroboración, fusión, score, verificación), y la etapa CI refleja la promoción."""
+def test_fusion_y_ranking_ok_desde_historia(cliente):
+    """Un tema de una HISTORIA: Fusión y Ranking 'ok' con sus señales (fuentes/notas, score)."""
     tema = _tema_pipeline("Tema con historia")
     _historia_de(
         tema["id"], n_items=5, n_fuentes=3, score=0.82, breaking=1, verificacion="corroborada",
     )
     run = _run_por_titulo(cliente, "Tema con historia")
     assert run is not None
-    etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas["jerarquia"] == "ok"
-    assert etapas["ci"] == "ok"
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["fusion"]["estado"] == "ok"
+    assert etapas["ranking"]["estado"] == "ok"
     cl = run["cluster"]
     assert cl is not None
     assert cl["n_fuentes"] == 3
     assert cl["n_items"] == 5
     assert cl["breaking"] is True
-    assert cl["verificacion"] == "corroborada"
     assert cl["score"] == pytest.approx(0.82)
-    jer = next(e for e in run["etapas"] if e["clave"] == "jerarquia")
-    assert "3 fuente" in jer["detalle"]
-    assert "breaking" in jer["detalle"]
-    ci = next(e for e in run["etapas"] if e["clave"] == "ci")
-    assert "promovida a tema" in ci["detalle"].lower()
+    # Fusión = dedup (fuentes/notas); Ranking = score (+ breaking).
+    assert "3 fuentes" in etapas["fusion"]["detalle"]
+    assert "5 notas" in etapas["fusion"]["detalle"]
+    assert "0.82" in etapas["ranking"]["detalle"]
 
 
 def test_cluster_por_contenido_reverso(cliente):
@@ -280,7 +281,7 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "jerarquia", "ci", "qa", "cd", "aprobacion"
+        "fusion", "ranking", "ci", "qa", "cd", "arte", "aprobacion"
     ]
     assert "actividad" in body
     assert "qa_fuente" in body["pipeline"]
@@ -291,24 +292,45 @@ def test_detalle_run(cliente):
     assert "copy_in" in pieza and "imagen_url" in pieza
 
 
-def test_detalle_enlaza_haiku_del_pool_en_ranking(cliente):
-    """El detalle enlaza la generación Haiku del pool (noticias-ia) de la marca bajo «JERARQUIA»,
-    con su prompt + salida REALES (transparencia del Ranking)."""
+def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
+    """El detalle enlaza el Haiku del pool por etapa: 'Fusión...' -> FUSION, 'Encaje...' -> RANKING,
+    cada uno con su prompt + salida REALES."""
     tema = _tema_pipeline("Tema con pool", marca="unotv")
     generaciones.crear({
-        "tipo": "noticias-ia",
-        "marca": "unotv",
-        "etiqueta": "Fusión de historias — UnoTV",
-        "prompt": "PROMPT-FUSION-REAL",
-        "salida": "SALIDA-HAIKU-REAL",
-        "estado": generaciones.ESTADO_COMPLETADO,
-        "fase": generaciones.FASE_COMPLETADO,
+        "tipo": "noticias-ia", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "prompt": "PROMPT-FUSION", "salida": "SALIDA-FUSION",
+        "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
-    body = cliente.get(f"/api/pipelines/{tema['id']}").json()
-    jer = body["generaciones_por_etapa"].get("JERARQUIA")
-    assert jer is not None
-    assert jer["prompt"] == "PROMPT-FUSION-REAL"
-    assert jer["salida"] == "SALIDA-HAIKU-REAL"
+    generaciones.crear({
+        "tipo": "noticias-ia", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
+        "prompt": "PROMPT-ENCAJE", "salida": "SALIDA-ENCAJE",
+        "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
+    })
+    por_etapa = cliente.get(f"/api/pipelines/{tema['id']}").json()["generaciones_por_etapa"]
+    assert por_etapa["FUSION"]["prompt"] == "PROMPT-FUSION"
+    assert por_etapa["FUSION"]["salida"] == "SALIDA-FUSION"
+    assert por_etapa["RANKING"]["prompt"] == "PROMPT-ENCAJE"
+    assert por_etapa["RANKING"]["salida"] == "SALIDA-ENCAJE"
+
+
+def test_etapa_arte_ok_con_imagen_y_toggle(cliente, monkeypatch):
+    """La etapa Arte aparece: 'saltada' si el toggle está off; 'ok' si on y hay imagen en una pieza."""
+    # Toggle Arte off (default): saltada.
+    tema = _tema_pipeline("Tema arte off")
+    repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", estado="borrador", copy="C.")
+    run = _run_por_titulo(cliente, "Tema arte off")
+    arte = next(e for e in run["etapas"] if e["clave"] == "arte")
+    assert arte["estado"] == "saltada"
+    # Toggle Arte on + una pieza con imagen -> ok.
+    monkeypatch.setenv(config.ENV_AUTOGEN_ARTE, "1")
+    tema2 = _tema_pipeline("Tema arte ok")
+    repos.crear_contenido_plataforma(
+        contenido_id=tema2["id"], red="x", estado="borrador", copy="C.",
+        imagen="foto.png", falta_imagen=False,
+    )
+    run2 = _run_por_titulo(cliente, "Tema arte ok")
+    arte2 = next(e for e in run2["etapas"] if e["clave"] == "arte")
+    assert arte2["estado"] == "ok"
 
 
 def test_detalle_404(cliente):

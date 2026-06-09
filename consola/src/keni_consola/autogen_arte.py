@@ -37,7 +37,7 @@ import logging
 from datetime import date
 from typing import Any
 
-from . import config, marcas, media, priorizacion, repos
+from . import config, generaciones, marcas, media, priorizacion, repos
 from .estados import CLASE_CONTENIDO
 
 _log = logging.getLogger("keni_consola.autogen_arte")
@@ -258,7 +258,38 @@ def lanzar_para_topic(
         repos.asignar_etiqueta(item_id, et_id)
     if actualizado is None:
         return None
+    _registrar_actividad_arte(item, str(item_id), prompt, nombre)
     return {"contenido_id": item_id, "plataforma_id": objetivo["id"], "imagen": nombre}
+
+
+def _registrar_actividad_arte(item: dict[str, Any], item_id: str, prompt: str, imagen: str) -> None:
+    """Deja la generación de arte VISIBLE: una generación `tipo='imagen'` (con su PROMPT real) +
+    el marcador de etapa ARTE correlacionado al tema (para Actividad IA y el detalle del pipeline).
+
+    Best-effort: un fallo de traza no rompe la generación de arte. Import diferido de
+    `pipeline_contenido` para no acoplar el módulo en carga (evita ciclo con `_barrido`).
+    """
+    marca = item.get("marca", "") or ""
+    try:
+        from .pipeline_contenido import ETAPA_ARTE, registrar_etapa
+
+        gen = generaciones.crear({
+            "tipo": "imagen",
+            "marca": marca,
+            "contenido_id": item_id,
+            "prompt": prompt[:20000],
+            "salida": f"Imagen generada: {imagen}",
+            "etiqueta": f"Arte — {(item.get('titulo') or '')[:80]}",
+            "estado": generaciones.ESTADO_COMPLETADO,
+            "fase": generaciones.FASE_COMPLETADO,
+            "fecha_fin": generaciones.ahora_iso(),
+        })
+        registrar_etapa(
+            ETAPA_ARTE, marca, "Generación de arte",
+            contenido_id=item_id, gen_id=(gen.get("id", "") if gen else ""),
+        )
+    except Exception:  # noqa: BLE001 -- la traza de actividad no debe romper el arte
+        _log.warning("Auto-arte: no se pudo registrar la actividad del arte.", exc_info=True)
 
 
 def _plataformas_por_item(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
