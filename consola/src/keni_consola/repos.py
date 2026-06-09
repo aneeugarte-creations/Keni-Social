@@ -200,6 +200,7 @@ from .repos_noticias import (  # noqa: F401
     actualizar_noticia_cluster,
     actualizar_noticia_item,
     asignar_cluster_item,
+    borrar_clusters_con_items,
     borrar_fuente_algoritmo,
     borrar_fuente_rss,
     borrar_noticia_cluster,
@@ -243,6 +244,7 @@ from .repos_noticias import (  # noqa: F401
     resumen_cobertura,
     salud_feeds,
     upsert_noticia_cluster,
+    vaciar_clusters,
 )
 from .repos_notificaciones import (  # noqa: F401
     actualizar_aprobacion,

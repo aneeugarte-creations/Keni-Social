@@ -301,6 +301,7 @@ from .db_noticias import (  # noqa: F401
     actualizar_noticia_cluster,
     actualizar_noticia_item,
     asignar_cluster_item,
+    borrar_clusters_con_items,
     borrar_fuente_algoritmo,
     borrar_fuente_rss,
     borrar_noticia_cluster,
@@ -344,6 +345,7 @@ from .db_noticias import (  # noqa: F401
     resumen_cobertura,
     salud_feeds,
     upsert_noticia_cluster,
+    vaciar_clusters,
 )
 from .db_notificaciones import (  # noqa: F401
     contar_notificaciones_no_leidas,
@@ -485,6 +487,7 @@ __all__ = [
     "borrar_evento_rota",
     "borrar_franja",
     "borrar_franja_semana",
+    "borrar_clusters_con_items",
     "borrar_fuente_rss",
     "borrar_noticia_cluster",
     "borrar_grupo_hashtags",
@@ -593,6 +596,8 @@ __all__ = [
     "conteos_items_recientes",
     # Clustering de historias (Ola B).
     "upsert_noticia_cluster",
+    "borrar_clusters_con_items",
+    "vaciar_clusters",
     "listar_noticia_clusters",
     "obtener_noticia_cluster",
     "actualizar_noticia_cluster",

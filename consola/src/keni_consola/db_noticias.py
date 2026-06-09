@@ -309,6 +309,65 @@ def borrar_noticia_cluster(cluster_id: str) -> bool:
         con.close()
 
 
+def borrar_clusters_con_items(cluster_ids: list[str]) -> int:
+    """Borra HARD varias historias (clusters) Y sus artículos del archivo. Devuelve nº borradas.
+
+    A diferencia de `borrar_noticia_cluster` (que solo quita la fila del cluster), esta SÍ borra
+    los `noticias_items` de esos clusters: si no, el clustering los reagruparía y la historia
+    reaparecería. Idempotente: ignora ids vacíos/repetidos/inexistentes.
+    """
+    ids = [i for i in dict.fromkeys(cluster_ids) if i]
+    if not ids:
+        return 0
+    marcadores = ",".join("?" for _ in ids)
+    con = _conectar()
+    try:
+        con.execute(f"DELETE FROM noticias_items WHERE cluster_id IN ({marcadores})", tuple(ids))
+        cur = con.execute(f"DELETE FROM noticias_clusters WHERE id IN ({marcadores})", tuple(ids))
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
+def vaciar_clusters(marca: str | None = None, estado: str | None = None) -> int:
+    """Borra HARD TODAS las historias que casan `marca`/`estado` Y sus artículos. Devuelve nº borradas.
+
+    Es el "dejar a 0": vacía el pool de la marca (y, si se pasa, solo de un estado). SIN filtro de
+    estado borra ADEMÁS los artículos sueltos (sin cluster) de la marca, para que el clustering no
+    reforme historias y la marca quede de verdad en 0. CON filtro de estado solo toca los clusters
+    de ese estado y sus artículos (los items no tienen estado; van por pertenencia al cluster).
+    """
+    cond: list[str] = []
+    params: list[Any] = []
+    if marca:
+        cond.append("marca = ?")
+        params.append(marca)
+    if estado:
+        cond.append("estado = ?")
+        params.append(estado)
+    where = (" WHERE " + " AND ".join(cond)) if cond else ""
+    con = _conectar()
+    try:
+        if estado:
+            # Los items no tienen estado: se borran por pertenencia a los clusters que se van.
+            con.execute(
+                "DELETE FROM noticias_items WHERE cluster_id IN "
+                f"(SELECT id FROM noticias_clusters{where})",
+                tuple(params),
+            )
+        elif marca:
+            # A 0 de verdad: TODOS los artículos de la marca (en cluster + sueltos).
+            con.execute("DELETE FROM noticias_items WHERE marca = ?", (marca,))
+        else:
+            con.execute("DELETE FROM noticias_items")
+        cur = con.execute(f"DELETE FROM noticias_clusters{where}", tuple(params))
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     """Marca/desmarca un item de una fuente como usado (idempotente).
 

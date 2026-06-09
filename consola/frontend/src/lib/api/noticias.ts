@@ -149,6 +149,27 @@ export const apiNoticias = {
         { metodo: "POST", json: { ids }, muestrear: false },
       ),
 
+    /**
+     * BORRA HARD (irreversible) varias historias + sus artículos del archivo.
+     * POST /api/noticias/historias/borrar-lote  →  { borradas: n }
+     */
+    borrarHistoriasLote: (ids: string[]) =>
+      peticion<{ borradas: number }>(
+        `/noticias/historias/borrar-lote`,
+        { metodo: "POST", json: { ids }, muestrear: false },
+      ),
+
+    /**
+     * VACÍA (hard, irreversible) el pool — "dejar a 0". Con `marca` solo esa marca; con
+     * `estado` limita al filtro de la vista.
+     * POST /api/noticias/historias/borrar-todo  →  { borradas: n }
+     */
+    borrarTodasHistorias: (body: { marca?: string; estado?: string } = {}) =>
+      peticion<{ borradas: number }>(
+        `/noticias/historias/borrar-todo`,
+        { metodo: "POST", json: body, muestrear: false },
+      ),
+
     // --- Ola D: salud de fuentes ---
 
     /**

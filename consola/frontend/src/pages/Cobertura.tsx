@@ -15,6 +15,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Archive,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -509,6 +510,57 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // BORRAR HARD (irreversible): elimina el cluster Y sus artículos del archivo.
+  const borrarLoteMut = useMutation({
+    mutationFn: (ids: string[]) => api.noticias.borrarHistoriasLote(ids),
+    onSuccess: (d) => {
+      void queryClient.invalidateQueries({ queryKey: clave });
+      setSeleccion(new Set());
+      const n = d.borradas;
+      toast.success(`${n} historia${n !== 1 ? "s" : ""} borrada${n !== 1 ? "s" : ""}.`);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // "Dejar a 0": vacía el pool de la marca activa (respeta el filtro de estado).
+  const borrarTodoMut = useMutation({
+    mutationFn: () =>
+      api.noticias.borrarTodasHistorias({
+        marca: marcaActiva ?? undefined,
+        estado: estado || undefined,
+      }),
+    onSuccess: (d) => {
+      void queryClient.invalidateQueries({ queryKey: clave });
+      setSeleccion(new Set());
+      const n = d.borradas;
+      toast.success(`Pool vaciado: ${n} historia${n !== 1 ? "s" : ""} borrada${n !== 1 ? "s" : ""}.`);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const confirmarYBorrarSeleccion = () => {
+    const n = seleccion.size;
+    if (
+      !window.confirm(
+        `¿Borrar definitivamente ${n} historia${n !== 1 ? "s" : ""} y sus artículos? No se puede deshacer.`,
+      )
+    )
+      return;
+    borrarLoteMut.mutate([...seleccion]);
+  };
+
+  const confirmarYVaciarPool = () => {
+    const ambito = marcaActiva ? "de esta marca" : "de TODAS las marcas";
+    const filtro = estado ? ` en estado «${estado}»` : "";
+    if (
+      !window.confirm(
+        `¿Borrar definitivamente TODAS las historias ${ambito}${filtro} y sus artículos? Deja el pool a 0 y no se puede deshacer.`,
+      )
+    )
+      return;
+    borrarTodoMut.mutate();
+  };
+
   return (
     <>
       {/* Filtros — la jerarquización es por marca/línea editorial, no por categoría */}
@@ -526,15 +578,35 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
           </SelectContent>
         </Select>
 
-        {/* Totales */}
-        {query.data && (
-          <span className="ml-auto text-xs text-muted-foreground self-center">
-            {total.toLocaleString("es-MX")} historia{total !== 1 ? "s" : ""}
-            {query.isFetching && !query.isPending && (
-              <Loader2 className="inline ml-1 h-3 w-3 animate-spin" />
-            )}
-          </span>
-        )}
+        {/* Totales + vaciar pool (dejar a 0) */}
+        <div className="ml-auto flex items-center gap-3 self-center">
+          {query.data && (
+            <span className="text-xs text-muted-foreground">
+              {total.toLocaleString("es-MX")} historia{total !== 1 ? "s" : ""}
+              {query.isFetching && !query.isPending && (
+                <Loader2 className="inline ml-1 h-3 w-3 animate-spin" />
+              )}
+            </span>
+          )}
+          {!query.isError && historias.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+              onClick={confirmarYVaciarPool}
+              disabled={borrarTodoMut.isPending}
+              title="Borra TODAS las historias de la marca activa (y sus artículos). Irreversible."
+              data-testid="btn-borrar-todo"
+            >
+              {borrarTodoMut.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+              Borrar todo
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Barra de selección (papelera estilo correo): seleccionar todo / descartar lo marcado */}
@@ -567,17 +639,32 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                className="h-7 gap-1 text-xs"
                 onClick={() => descartarLoteMut.mutate([...seleccion])}
-                disabled={descartarLoteMut.isPending}
+                disabled={descartarLoteMut.isPending || borrarLoteMut.isPending}
                 data-testid="btn-descartar-seleccion"
               >
                 {descartarLoteMut.isPending ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
-                  <Trash2 className="h-3 w-3" />
+                  <Archive className="h-3 w-3" />
                 )}
                 Descartar {seleccion.size}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-xs border-destructive/50 text-destructive hover:text-destructive"
+                onClick={confirmarYBorrarSeleccion}
+                disabled={borrarLoteMut.isPending || descartarLoteMut.isPending}
+                data-testid="btn-borrar-seleccion"
+              >
+                {borrarLoteMut.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                Borrar {seleccion.size}
               </Button>
             </div>
           )}

@@ -305,3 +305,55 @@ def test_descartar_lote_lista_vacia_no_borra_nada(cliente):
 def test_descartar_lote_ids_no_lista_400(cliente):
     r = cliente.post("/api/noticias/historias/descartar-lote", json={"ids": "a"})
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# borrar-lote / borrar-todo (HARD delete: cluster + artículos; "dejar a 0")      #
+# --------------------------------------------------------------------------- #
+
+
+def test_borrar_lote_elimina_clusters_y_articulos(cliente):
+    _sembrar_cluster("a", items=[{"url": "https://a.com/1"}])
+    _sembrar_cluster("b")
+    r = cliente.post("/api/noticias/historias/borrar-lote", json={"ids": ["a", "nope"]})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"borradas": 1}  # 'nope' inexistente, ignorada
+    assert repos.obtener_noticia_cluster("a") is None
+    assert repos.obtener_noticia_cluster("b") is not None
+    assert repos.items_de_cluster("a") == []  # los artículos también se fueron
+
+
+def test_borrar_lote_ids_no_lista_400(cliente):
+    assert (
+        cliente.post("/api/noticias/historias/borrar-lote", json={"ids": "a"}).status_code == 400
+    )
+
+
+def test_borrar_todo_vacia_solo_la_marca(cliente):
+    _sembrar_cluster("u1", marca="unotv", items=[{"url": "https://a.com/1"}])
+    _sembrar_cluster("u2", marca="unotv")
+    _sembrar_cluster("c1", marca="claro-sports")
+    r = cliente.post("/api/noticias/historias/borrar-todo", json={"marca": "unotv"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"borradas": 2}
+    assert repos.obtener_noticia_cluster("u1") is None
+    assert repos.obtener_noticia_cluster("u2") is None
+    assert repos.items_de_cluster("u1") == []  # artículos de la marca, fuera
+    assert repos.obtener_noticia_cluster("c1") is not None  # otra marca intacta
+
+
+def test_borrar_todo_respeta_filtro_estado(cliente):
+    _sembrar_cluster("n", marca="unotv", estado="nuevo")
+    _sembrar_cluster("d", marca="unotv", estado="descartado")
+    r = cliente.post(
+        "/api/noticias/historias/borrar-todo", json={"marca": "unotv", "estado": "descartado"}
+    )
+    assert r.status_code == 200
+    assert r.json() == {"borradas": 1}
+    assert repos.obtener_noticia_cluster("d") is None
+    assert repos.obtener_noticia_cluster("n") is not None  # 'nuevo' no tocado
+
+
+def test_borrar_todo_marca_invalida_400(cliente):
+    r = cliente.post("/api/noticias/historias/borrar-todo", json={"marca": "no-existe"})
+    assert r.status_code == 400

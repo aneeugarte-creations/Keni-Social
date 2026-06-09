@@ -78,6 +78,14 @@ def borrar_noticia_cluster(cluster_id: str) -> bool:
     return db.borrar_noticia_cluster(cluster_id)
 
 
+def borrar_clusters_con_items(cluster_ids: list[str]) -> int:
+    return db.borrar_clusters_con_items(cluster_ids)
+
+
+def vaciar_clusters(marca: str | None = None, estado: str | None = None) -> int:
+    return db.vaciar_clusters(marca, estado)
+
+
 def purgar_pool_irrelevante(
     *, score_umbral: float, inactividad_horas: int, dry_run: bool = False
 ) -> dict[str, int]:

@@ -172,6 +172,10 @@ let mockUsarHistoria: any;
 let mockDescartarHistoria: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarLote: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockBorrarLote: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockBorrarTodo: any;
 
 beforeEach(() => {
   vi.spyOn(apiMod.api.noticias, "cobertura").mockResolvedValue(RESUMEN_COBERTURA);
@@ -187,6 +191,12 @@ beforeEach(() => {
   mockDescartarLote = vi
     .spyOn(apiMod.api.noticias, "descartarHistoriasLote")
     .mockResolvedValue({ descartadas: 1 });
+  mockBorrarLote = vi
+    .spyOn(apiMod.api.noticias, "borrarHistoriasLote")
+    .mockResolvedValue({ borradas: 1 });
+  mockBorrarTodo = vi
+    .spyOn(apiMod.api.noticias, "borrarTodasHistorias")
+    .mockResolvedValue({ borradas: 3 });
 });
 
 afterEach(() => {
@@ -412,6 +422,48 @@ describe("Cobertura · Historias — selección múltiple (papelera estilo corre
     fireEvent.click(screen.getByTestId("btn-descartar-seleccion"));
     await waitFor(() => {
       expect(mockDescartarLote).toHaveBeenCalledWith(["h-1"]);
+    });
+  });
+
+  it("'Borrar' seleccionadas pide confirmación y llama a borrarHistoriasLote", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todas/i }));
+    fireEvent.click(screen.getByTestId("btn-borrar-seleccion"));
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockBorrarLote).toHaveBeenCalledWith(["h-1"]);
+    });
+  });
+
+  it("'Borrar' cancelado en el confirm NO llama a la API", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todas/i }));
+    fireEvent.click(screen.getByTestId("btn-borrar-seleccion"));
+    expect(mockBorrarLote).not.toHaveBeenCalled();
+  });
+
+  it("'Borrar todo' vacía el pool de la marca activa (con confirmación)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />, usuario(), "unotv");
+    await waitFor(() => {
+      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("btn-borrar-todo"));
+    await waitFor(() => {
+      expect(mockBorrarTodo).toHaveBeenCalledWith(
+        expect.objectContaining({ marca: "unotv" }),
+      );
     });
   });
 });

@@ -628,14 +628,51 @@ async def descartar_historias_lote(request: Request) -> Response:
     return JSONResponse({"descartadas": descartadas})
 
 
+async def borrar_historias_lote(request: Request) -> Response:
+    """POST /api/noticias/historias/borrar-lote: BORRA HARD (irreversible) varias historias + artículos.
+
+    Cuerpo `{ids: [cluster_id, ...]}`. A diferencia de `descartar-lote` (que solo marca el estado),
+    esto ELIMINA del archivo el cluster Y sus `noticias_items` (si no, el clustering los reagrupa y
+    la historia reaparece). Idempotente; tope de seguridad `_MAX_LOTE_DESCARTE`. Devuelve `{borradas:n}`.
+    """
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list):
+        return JSONResponse({"error": "Se esperaba una lista de ids."}, status_code=400)
+    limpios = [c for c in ids if isinstance(c, str) and c][:_MAX_LOTE_DESCARTE]
+    borradas = repos.borrar_clusters_con_items(limpios)
+    return JSONResponse({"borradas": borradas})
+
+
+async def borrar_todas_historias(request: Request) -> Response:
+    """POST /api/noticias/historias/borrar-todo: VACÍA (hard, irreversible) el pool — "dejar a 0".
+
+    Cuerpo `{marca?, estado?}`. Borra todas las historias que casan marca/estado Y sus artículos.
+    Con `marca` (lo normal, la marca activa) vacía SOLO esa marca; sin `marca`, TODAS. `estado`
+    (opcional) limita a un estado (respeta el filtro de la vista). Devuelve `{borradas:n}`.
+    """
+    datos = await leer_json(request)
+    marca = (datos.get("marca") or "").strip() or None
+    if marca is not None and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    estado = (datos.get("estado") or "").strip() or None
+    if estado is not None and estado not in repos.ESTADOS_NOTICIA_CLUSTER:
+        return JSONResponse({"error": "Estado no permitido."}, status_code=400)
+    borradas = repos.vaciar_clusters(marca, estado)
+    return JSONResponse({"borradas": borradas})
+
+
 RUTAS = [
     Route("/api/noticias", listar, methods=["GET"]),
     Route("/api/noticias/cobertura", cobertura, methods=["GET"]),
     Route("/api/noticias/salud", salud, methods=["GET"]),
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
-    # El lote va ANTES de `/historias/{cluster_id}` para que `descartar-lote` no se confunda
-    # con un cluster_id (aunque difieren en método, el orden lo deja explícito y a prueba de futuros GET).
+    # Los lotes van ANTES de `/historias/{cluster_id}` para que `descartar-lote`/`borrar-lote`/
+    # `borrar-todo` no se confundan con un cluster_id (difieren en método, pero el orden lo deja
+    # explícito y a prueba de futuros GET).
     Route("/api/noticias/historias/descartar-lote", descartar_historias_lote, methods=["POST"]),
+    Route("/api/noticias/historias/borrar-lote", borrar_historias_lote, methods=["POST"]),
+    Route("/api/noticias/historias/borrar-todo", borrar_todas_historias, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}", detalle_historia, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}/usar", usar_historia, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}/descartar", descartar_historia, methods=["POST"]),
