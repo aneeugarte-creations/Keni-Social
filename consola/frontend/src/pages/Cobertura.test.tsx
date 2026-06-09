@@ -170,6 +170,7 @@ let mockHistorias: any;
 let mockUsarHistoria: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarHistoria: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarLote: any;
 
 beforeEach(() => {
