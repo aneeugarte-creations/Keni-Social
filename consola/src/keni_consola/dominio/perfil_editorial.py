@@ -190,7 +190,7 @@ def refrescar_si_corresponde(
     ttl_horas: int,
     ahora: datetime | None = None,
     ejecutor: Ejecutor | None = None,
-    al_refrescar: Callable[[str, list[str]], None] | None = None,
+    al_refrescar: Callable[[str, list[str], str, str], None] | None = None,
 ) -> frozenset[str]:
     """Refresca el perfil de `marca` si el cache falta, caducó (TTL) o cambió la editorial (hash).
 
@@ -198,9 +198,10 @@ def refrescar_si_corresponde(
     editorial, no hace nada. Best-effort: ante fallo conserva el cache previo. Devuelve las
     keywords vigentes tras el (posible) refresco.
 
-    `al_refrescar(marca, keywords)`: callback OPCIONAL que se invoca SOLO cuando Haiku refrescó de
-    verdad el perfil (no en aciertos de cache). El daemon lo usa para registrar la actividad IA del
-    encaje editorial; un fallo del callback no rompe el refresco (es observabilidad).
+    `al_refrescar(marca, keywords, prompt, salida)`: callback OPCIONAL que se invoca SOLO cuando
+    Haiku refrescó de verdad el perfil (no en aciertos de cache), con el PROMPT y la SALIDA reales
+    de la llamada. El daemon lo usa para registrar la actividad IA del encaje editorial con el
+    Haiku real; un fallo del callback no rompe el refresco (es observabilidad).
     """
     texto = _texto_editorial(marca)
     if not texto:
@@ -219,9 +220,10 @@ def refrescar_si_corresponde(
             return frozenset(entrada.get("keywords") or [])  # fresco: sin Haiku
 
     correr = ejecutor or _ejecutar_haiku
+    prompt = _construir_prompt(marca, texto)
     try:
         with tempfile.TemporaryDirectory(prefix="keni-perfil-") as carpeta:
-            salida = correr(_construir_prompt(marca, texto), carpeta)
+            salida = correr(prompt, carpeta)
     except Exception as e:  # noqa: BLE001 -- best-effort: conserva el cache previo
         _log.warning("perfil_editorial(%s): falló la llamada a Haiku: %s", marca, e)
         return palabras(marca)
@@ -236,7 +238,7 @@ def refrescar_si_corresponde(
     _log.info("perfil_editorial(%s): perfil refrescado (%d keywords).", marca, len(kws))
     if al_refrescar is not None:
         try:
-            al_refrescar(marca, kws)
+            al_refrescar(marca, kws, prompt, salida)
         except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
             _log.warning("perfil_editorial(%s): fallo en al_refrescar.", marca, exc_info=True)
     return frozenset(kws)

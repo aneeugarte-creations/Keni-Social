@@ -47,15 +47,19 @@ def test_fresco_no_relanza_haiku(monkeypatch, tmp_path):
 
 
 def test_al_refrescar_solo_en_refresco_real(monkeypatch, tmp_path):
-    """`al_refrescar(marca, kws)` se llama cuando Haiku refresca, NO en aciertos de cache."""
+    """`al_refrescar(marca, kws, prompt, salida)` se llama al refrescar (con el Haiku REAL), NO en cache."""
     _preparar(monkeypatch, tmp_path)
-    llamadas: list[tuple[str, list[str]]] = []
-    cb = lambda m, kws: llamadas.append((m, list(kws)))  # noqa: E731
-    # 1er refresco (cache vacío): Haiku corre -> callback con marca + keywords normalizadas.
+    llamadas: list[tuple[str, list[str], str, str]] = []
+    cb = lambda m, kws, prompt, salida: llamadas.append((m, list(kws), prompt, salida))  # noqa: E731
+    # 1er refresco (cache vacío): Haiku corre -> callback con marca, keywords, prompt y salida reales.
     pe.refrescar_si_corresponde(
         "unotv", ttl_horas=24, ejecutor=_ejecutor(["mexico", "cdmx"]), al_refrescar=cb
     )
-    assert llamadas == [("unotv", ["mexico", "cdmx"])]
+    assert len(llamadas) == 1
+    m, kws, prompt, salida = llamadas[0]
+    assert (m, kws) == ("unotv", ["mexico", "cdmx"])
+    assert "unotv" in prompt  # el prompt real menciona la marca
+    assert "mexico" in salida  # la salida real es la respuesta de Haiku (keywords)
     # 2º con cache fresco (mismo hash, dentro de TTL): NO corre Haiku -> NO callback.
     pe.refrescar_si_corresponde(
         "unotv", ttl_horas=24, ejecutor=_ejecutor(["otro"]), al_refrescar=cb

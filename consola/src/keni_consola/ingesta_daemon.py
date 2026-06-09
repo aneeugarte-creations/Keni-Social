@@ -165,13 +165,14 @@ def _rendimiento_bonus(
     return rendimiento_tema.bonus_de_historia(nombre, top_lineas)
 
 
-def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str) -> None:
+def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: str = "") -> None:
     """Sella una GENERACIÓN-actividad (`tipo='noticias-ia'`) de un paso IA del pool (best-effort).
 
-    Hace VISIBLES en «Actividad IA» los pasos Haiku del pool de noticias —fusión de historias
-    (dedup) y encaje editorial— que antes corrían mudos. Es un registro ya COMPLETADO (no encola
-    trabajo: el Haiku ya corrió); `salida` es el detalle humano de lo ocurrido. Un fallo al
-    registrar NUNCA aborta el barrido: la actividad es observabilidad, no parte del trabajo.
+    Hace VISIBLES en «Actividad IA» (y en la etapa Ranking del pipeline) los pasos Haiku del pool
+    —fusión de historias (dedup) y encaje editorial— que antes corrían mudos. Es un registro ya
+    COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los REALES de la
+    llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no se pasan,
+    queda solo el resumen. Un fallo al registrar NUNCA aborta el barrido (es observabilidad).
     """
     try:
         generaciones.crear(
@@ -179,7 +180,8 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str) -> None:
                 "tipo": "noticias-ia",
                 "marca": marca,
                 "etiqueta": etiqueta,
-                "salida": (salida or "")[:4000],
+                "prompt": (prompt or "")[:20000],
+                "salida": (salida or "")[:20000],
                 "estado": generaciones.ESTADO_COMPLETADO,
                 "fase": generaciones.FASE_COMPLETADO,
                 "fecha_fin": datetime.now(UTC).isoformat(),
@@ -266,11 +268,11 @@ def paso_clustering() -> dict[str, Any]:
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(
                     marca_c, ttl_horas=perfil_ttl, ahora=ahora,
-                    al_refrescar=lambda m, kws: _registrar_actividad_ia(
+                    al_refrescar=lambda m, kws, prompt, salida: _registrar_actividad_ia(
                         m,
                         f"Encaje editorial — {marcas.etiqueta_de(m)}: {len(kws)} temas clave",
-                        "Perfil de cobertura de la marca extraído de su línea editorial por IA "
-                        "(Haiku), para puntuar qué noticias le encajan:\n\n" + ", ".join(kws),
+                        salida,  # la respuesta REAL de Haiku (keywords del perfil)
+                        prompt=prompt,
                     ),
                 )
             palabras = _palabras_relevancia(marca_c, perfil_activo)
@@ -370,8 +372,13 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
             continue
         lote = recientes[:maximo]
         por_id = {str(c["id"]): c for c in lote}
+        # Capturamos el PROMPT y la SALIDA reales de Haiku (para la transparencia de la actividad).
+        haiku: dict[str, str] = {"prompt": "", "salida": ""}
         try:
-            grupos = fusion_semantica.proponer_fusiones(lote, ejecutor=ejecutor)
+            grupos = fusion_semantica.proponer_fusiones(
+                lote, ejecutor=ejecutor,
+                al_ejecutar=lambda p, s, _h=haiku: _h.update(prompt=p, salida=s),
+            )
         except Exception:  # noqa: BLE001 -- un fallo de Haiku por marca no aborta el paso
             _log.exception("ingesta_daemon: fallo proponiendo fusiones de una marca.")
             continue
@@ -393,14 +400,21 @@ def paso_fusion_semantica(*, ejecutor: fusion_semantica.Ejecutor | None = None) 
                     descripciones.append(" + ".join(t for t in titulos if t))
             except Exception:  # noqa: BLE001 -- una fusión problemática no aborta el paso
                 _log.exception("ingesta_daemon: fallo al fundir un grupo de historias.")
-        # Actividad IA: deja constancia VISIBLE de la dedup semántica por marca (qué se unió).
+        # Actividad IA: deja constancia VISIBLE de la dedup semántica por marca, con el Haiku REAL
+        # (prompt + salida) y un resumen humano de qué historias se unieron.
         if grupos_marca:
+            resumen = (
+                "Historias del mismo acontecimiento unidas por IA (dedup semántico):\n"
+                + "\n".join(f"• {d}" for d in descripciones)
+            )
+            salida_real = haiku["salida"].strip()
+            salida = (f"{salida_real}\n\n— — —\n{resumen}" if salida_real else resumen)
             _registrar_actividad_ia(
                 marca_f,
                 f"Fusión de historias — {marcas.etiqueta_de(marca_f)}: "
                 f"{fusionadas_marca} absorbida(s) en {grupos_marca} grupo(s)",
-                "Historias del mismo acontecimiento unidas por IA (dedup semántico):\n\n"
-                + "\n".join(f"• {d}" for d in descripciones),
+                salida,
+                prompt=haiku["prompt"],
             )
     if grupos_total:
         _log.info(

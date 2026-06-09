@@ -60,14 +60,14 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
 };
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
-const ETAPA_A_EVENTO: Record<string, string> = { ci: "CI", cd: "CD", qa: "QA" };
+const ETAPA_A_EVENTO: Record<string, string> = { jerarquia: "JERARQUIA", ci: "CI", cd: "CD", qa: "QA" };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
 const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
-  { clave: "jerarquia", nombre: "Jerarquización" },
-  { clave: "ci", nombre: "Ingesta" },
-  { clave: "qa", nombre: "Criba de la fuente" },
-  { clave: "cd", nombre: "Copy + placa" },
+  { clave: "jerarquia", nombre: "Ranking" },
+  { clave: "ci", nombre: "Selección" },
+  { clave: "qa", nombre: "Criba" },
+  { clave: "cd", nombre: "Copy" },
   { clave: "aprobacion", nombre: "Aprobación" },
 ];
 // Valores del filtro `?estado=` (el `estado_global` de la run).
@@ -310,16 +310,30 @@ function EventosEtapa({ eventos }: { eventos: PipelineActividad[] }) {
  *  dijo/hizo), no solo el resultado. Bloque monoespaciado, desplazable y prominente: es la
  *  cabecera del paso. Si la generación sigue en curso, muestra la `salida` parcial tal cual
  *  (sin sondeo en vivo: el detalle se lee una vez al abrir). */
-function ProcesoAgente({ gen }: { gen: PipelineGeneracion }) {
+function ProcesoAgente({ gen, titulo = "Proceso del agente (Claude)" }: { gen: PipelineGeneracion; titulo?: string }) {
   const enCurso = gen.estado === "ejecutando";
   const salida = gen.salida.trim();
+  const prompt = (gen.prompt ?? "").trim();
   return (
     <div className="space-y-1.5 rounded-md border bg-muted/30 p-2.5">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-foreground">Proceso del agente (Claude)</span>
+        <span className="text-xs font-semibold text-foreground">{titulo}</span>
         <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
         <span className="text-xs text-muted-foreground">{faseTexto(gen)}</span>
       </div>
+      {/* PROMPT enviado a la IA (plegado por defecto: suele ser largo). */}
+      {prompt && (
+        <details className="rounded bg-background/60">
+          <summary className="cursor-pointer select-none px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground">
+            Ver prompt enviado a la IA
+          </summary>
+          <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words border-t px-2 py-2 font-mono text-[11px] leading-relaxed text-foreground/80">
+            {prompt}
+          </pre>
+        </details>
+      )}
+      {/* RAZONAMIENTO + RESULTADO: el stream token a token del agente (lo que pensó y produjo). */}
+      <div className="text-[11px] font-medium text-muted-foreground">Razonamiento + resultado</div>
       {salida ? (
         <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/90">
           {salida}
@@ -344,22 +358,32 @@ function ContenidoEtapa({
   generacion?: PipelineGeneracion;
 }) {
   if (clave === "jerarquia") {
-    // Paso de IA del POOL de noticias: dedup/fusión (Haiku) + ranking por score. Si el tema
-    // nació de una historia, mostramos sus señales reales; si no, lo decimos claramente.
-    if (!run.cluster) {
-      return (
-        <p className="text-xs text-muted-foreground">
-          Este tema no nació de una historia rankeada (creado a mano o antes del ranking por IA).
-        </p>
-      );
-    }
+    // Paso de IA del POOL de noticias: dedup/fusión (Haiku) + ranking por score. Mostramos las
+    // señales reales de la historia y, si existe, el PROCESO Haiku real del pool para esa marca.
     return (
-      <div className="space-y-2 text-xs">
-        <p className="text-muted-foreground">
-          La IA del pool de noticias deduplicó (fusión semántica) y jerarquizó esta historia
-          antes de crear el tema. Estas son las señales que usó:
-        </p>
-        <ProcedenciaIA cluster={run.cluster} />
+      <div className="space-y-3 text-xs">
+        {run.cluster ? (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              La IA del pool de noticias deduplicó (fusión semántica) y jerarquizó esta historia
+              antes de crear el tema. Estas son las señales que usó:
+            </p>
+            <ProcedenciaIA cluster={run.cluster} />
+          </div>
+        ) : (
+          <p className="text-muted-foreground">
+            Este tema no nació de una historia rankeada (creado a mano o antes del ranking por IA).
+          </p>
+        )}
+        {generacion && (
+          <div className="space-y-1">
+            <p className="text-[11px] text-muted-foreground">
+              IA del pool (Haiku) para esta marca — a nivel de LOTE de la fusión/encaje, no
+              exclusivo de esta pieza:
+            </p>
+            <ProcesoAgente gen={generacion} titulo="IA del pool (Haiku)" />
+          </div>
+        )}
       </div>
     );
   }

@@ -65,10 +65,10 @@ _LIMITE_MAX = 200
 # "saltada". Aprobación es el gate humano (siempre). `estado_global` toma la primera no-{ok,
 # saltada}. La QA (criba de la fuente) va ANTES del copy.
 _ETAPAS = (
-    ("jerarquia", "Jerarquización"),
-    ("ci", "Ingesta"),
-    ("qa", "Criba de la fuente"),
-    ("cd", "Copy + placa"),
+    ("jerarquia", "Ranking"),
+    ("ci", "Selección"),
+    ("qa", "Criba"),
+    ("cd", "Copy"),
     ("aprobacion", "Aprobación"),
 )
 # Claves válidas para el filtro `?etapa=` (la etapa donde la run está parada). Catálogo de
@@ -169,7 +169,7 @@ def _jerarquia_de(cluster: dict | None) -> dict:
     if not cluster:
         return {
             "clave": "jerarquia",
-            "nombre": "Jerarquización",
+            "nombre": "Ranking",
             "estado": _ESTADO_SALTADA,
             "detalle": "Sin historia asociada: tema creado a mano o anterior al ranking por IA.",
             "ts": "",
@@ -188,7 +188,7 @@ def _jerarquia_de(cluster: dict | None) -> dict:
     detalle = " · ".join(p for p in partes if p) + "."
     return {
         "clave": "jerarquia",
-        "nombre": "Jerarquización",
+        "nombre": "Ranking",
         "estado": "ok",
         "detalle": detalle,
         "ts": cluster.get("primer_visto", "") or "",
@@ -215,14 +215,14 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
 
     # --- CI · Ingesta (toggle "Crear noticias"): saltada si está off para la marca. -----
     if _ci_off(marca):
-        ci = {"clave": "ci", "nombre": "Ingesta", "estado": _ESTADO_SALTADA,
+        ci = {"clave": "ci", "nombre": "Selección", "estado": _ESTADO_SALTADA,
               "detalle": "Etapa «Crear noticias» desactivada para esta marca.", "ts": creado}
     elif cluster is not None:
         n_f = int(cluster.get("n_fuentes", 0) or 0)
-        ci = {"clave": "ci", "nombre": "Ingesta", "estado": "ok",
+        ci = {"clave": "ci", "nombre": "Selección", "estado": "ok",
               "detalle": f"Historia promovida a tema ({n_f} fuente(s) corroboran).", "ts": creado}
     else:
-        ci = {"clave": "ci", "nombre": "Ingesta", "estado": "ok",
+        ci = {"clave": "ci", "nombre": "Selección", "estado": "ok",
               "detalle": "Nota de origen ingerida de las fuentes.", "ts": creado}
 
     # --- QA · Criba de la fuente (toggle "Validar (QA)"): saltada si está off para la marca. --
@@ -245,7 +245,7 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
         qa_detalle = "Sin cribar todavía."
     qa = {
         "clave": "qa",
-        "nombre": "Criba de la fuente",
+        "nombre": "Criba",
         "estado": qa_estado,
         "detalle": qa_detalle,
         "ts": "",
@@ -270,7 +270,7 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
         cd_detalle = "Copy aún sin generar."
     cd = {
         "clave": "cd",
-        "nombre": "Copy + placa",
+        "nombre": "Copy",
         "estado": cd_estado,
         "detalle": cd_detalle,
         "ts": "",
@@ -485,9 +485,32 @@ def _generacion_publica(gen_id: str) -> dict | None:
         "id": gen.get("id", "") or "",
         "estado": gen.get("estado", "") or "",
         "fase": gen.get("fase", "") or "",
+        # Prompt EXACTO que se le mandó a la IA (transparencia: qué se le pidió).
+        "prompt": gen.get("prompt", "") or "",
         "salida": gen.get("salida", "") or "",
         "metricas": gen.get("metricas"),
     }
+
+
+def _generacion_pool_de_marca(marca: str) -> dict | None:
+    """La generación `noticias-ia` (Haiku fusión/encaje) más reciente de `marca`, o None.
+
+    La IA del POOL (dedup/encaje) corre por LOTE de marca, no 1:1 con cada pieza: no hay un
+    `gen_id` por run. Para dar transparencia del Haiku REAL en la etapa Ranking, enlazamos la
+    generación de pool más reciente de la marca (con su prompt+salida reales). El front lo rotula
+    «a nivel de lote», para no fingir que es exclusivo de esta pieza. None si no hay ninguna.
+    """
+    if not marca:
+        return None
+    try:
+        recientes = generaciones.listar(limite=None, marca=marca)
+    except Exception:  # noqa: BLE001 -- best-effort: sin pool legible, la etapa no enseña Haiku
+        return None
+    pool = [g for g in recientes if (g.get("tipo") or "") == "noticias-ia"]
+    if not pool:
+        return None
+    pool.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "", reverse=True)
+    return _generacion_publica(pool[0].get("id", "") or "")
 
 
 def _actividad_y_generaciones(contenido_id: str) -> tuple[list[dict], dict[str, dict]]:
@@ -543,6 +566,11 @@ async def detalle(request: Request) -> Response:
     piezas = repos.listar_contenido_plataforma(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
     actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id)
+    # Ranking (Jerarquía): la IA del pool (fusión/encaje Haiku) es a nivel de marca/lote; enlazamos
+    # su generación más reciente para enseñar el prompt+salida REALES del Haiku en esa etapa.
+    gen_pool = _generacion_pool_de_marca(item.get("marca", "") or "")
+    if gen_pool is not None:
+        generaciones_por_etapa.setdefault("JERARQUIA", gen_pool)
     return JSONResponse(
         {
             "pipeline": _run_de(item, piezas, completo=True, cluster=cluster),

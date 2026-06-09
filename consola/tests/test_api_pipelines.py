@@ -291,6 +291,26 @@ def test_detalle_run(cliente):
     assert "copy_in" in pieza and "imagen_url" in pieza
 
 
+def test_detalle_enlaza_haiku_del_pool_en_ranking(cliente):
+    """El detalle enlaza la generación Haiku del pool (noticias-ia) de la marca bajo «JERARQUIA»,
+    con su prompt + salida REALES (transparencia del Ranking)."""
+    tema = _tema_pipeline("Tema con pool", marca="unotv")
+    generaciones.crear({
+        "tipo": "noticias-ia",
+        "marca": "unotv",
+        "etiqueta": "Fusión de historias — UnoTV",
+        "prompt": "PROMPT-FUSION-REAL",
+        "salida": "SALIDA-HAIKU-REAL",
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "fase": generaciones.FASE_COMPLETADO,
+    })
+    body = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    jer = body["generaciones_por_etapa"].get("JERARQUIA")
+    assert jer is not None
+    assert jer["prompt"] == "PROMPT-FUSION-REAL"
+    assert jer["salida"] == "SALIDA-HAIKU-REAL"
+
+
 def test_detalle_404(cliente):
     assert cliente.get("/api/pipelines/no-existe-xyz").status_code == 404
 

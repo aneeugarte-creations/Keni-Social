@@ -399,7 +399,7 @@ def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
 
 
 def test_paso_fusion_semantica_registra_actividad_ia(monkeypatch):
-    """Cuando la fusión une historias, sella una generación `noticias-ia` (visible en Actividad)."""
+    """Al fundir, sella `noticias-ia` con el Haiku REAL (prompt + salida) + el resumen humano."""
     monkeypatch.setattr(ingesta_daemon.config, "fusion_semantica_activa", lambda: True)
     recientes = [
         {"id": "c1", "titulo": "Remontada épica", "estado": "nuevo", "marca": "unotv"},
@@ -407,21 +407,29 @@ def test_paso_fusion_semantica_registra_actividad_ia(monkeypatch):
     ]
     monkeypatch.setattr(ingesta_daemon.repos, "clusters_recientes",
                         lambda ventana_h, *a, **k: list(recientes))
-    monkeypatch.setattr(ingesta_daemon.fusion_semantica, "proponer_fusiones",
-                        lambda lote, **kw: [["c1", "c2"]])
+
+    def _fake_proponer(lote, *, ejecutor=None, al_ejecutar=None):
+        if al_ejecutar:  # el daemon captura el prompt+salida reales de Haiku
+            al_ejecutar("PROMPT-HAIKU-FUSION", '{"grupos": [["c1","c2"]]}')
+        return [["c1", "c2"]]
+    monkeypatch.setattr(ingesta_daemon.fusion_semantica, "proponer_fusiones", _fake_proponer)
     monkeypatch.setattr(ingesta_daemon, "_fusionar_grupo", lambda *a, **k: True)
-    registradas: list[tuple[str, str, str]] = []
-    monkeypatch.setattr(ingesta_daemon, "_registrar_actividad_ia",
-                        lambda marca, etiqueta, salida: registradas.append((marca, etiqueta, salida)))
+    registradas: list[tuple[str, str, str, str]] = []
+    monkeypatch.setattr(
+        ingesta_daemon, "_registrar_actividad_ia",
+        lambda marca, etiqueta, salida, *, prompt="":
+            registradas.append((marca, etiqueta, salida, prompt)),
+    )
 
     resumen = ingesta_daemon.paso_fusion_semantica()
     assert resumen == {"grupos": 1, "fusionadas": 1}
     assert len(registradas) == 1
-    marca, etiqueta, salida = registradas[0]
+    marca, etiqueta, salida, prompt = registradas[0]
     assert marca == "unotv"
     assert "Fusión de historias" in etiqueta
-    # La salida muestra QUÉ se dedupó (los títulos unidos).
-    assert "Remontada épica" in salida and "Remontada increíble" in salida
+    assert prompt == "PROMPT-HAIKU-FUSION"  # el prompt REAL de Haiku
+    assert '{"grupos"' in salida  # la salida REAL de Haiku
+    assert "Remontada épica" in salida  # + el resumen humano de qué se unió
 
 
 def test_paso_fusion_semantica_sin_fusiones_no_registra(monkeypatch):

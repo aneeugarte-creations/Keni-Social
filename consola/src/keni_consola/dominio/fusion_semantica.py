@@ -99,12 +99,19 @@ def _extraer_grupos(texto: str) -> list[list[str]]:
 
 
 def proponer_fusiones(
-    clusters: list[dict[str, Any]], *, ejecutor: Ejecutor | None = None
+    clusters: list[dict[str, Any]],
+    *,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
 ) -> list[list[str]]:
     """Propone grupos de ids de historias del MISMO evento (Haiku). PURO de repos.
 
     `clusters`: dicts con al menos `{id, titulo, resumen}`. Devuelve grupos VÁLIDOS y DISJUNTOS
     (ids del input, sin repetir entre grupos, tamaño ≥ 2). [] ante <2 historias o cualquier fallo.
+
+    `al_ejecutar(prompt, salida)`: callback OPCIONAL que se invoca con el PROMPT y la SALIDA reales
+    de Haiku tras la llamada (antes de parsear). El daemon lo usa para registrar la actividad IA de
+    la fusión con el Haiku real; un fallo del callback no afecta a la fusión (es observabilidad).
     """
     validos = [c for c in clusters if (c.get("id") and (c.get("titulo") or "").strip())][:_MAX_CLUSTERS]
     if len(validos) < 2:
@@ -120,12 +127,18 @@ def proponer_fusiones(
         for c in validos
     ]
     correr = ejecutor or _ejecutar_haiku
+    prompt = _construir_prompt(json.dumps(payload, ensure_ascii=False))
     try:
         with tempfile.TemporaryDirectory(prefix="keni-fusion-") as carpeta:
-            salida = correr(_construir_prompt(json.dumps(payload, ensure_ascii=False)), carpeta)
+            salida = correr(prompt, carpeta)
     except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> no fusiona nada
         _log.warning("fusion_semantica: falló la llamada a Haiku: %s", e)
         return []
+    if al_ejecutar is not None:
+        try:
+            al_ejecutar(prompt, salida)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("fusion_semantica: fallo en al_ejecutar.", exc_info=True)
 
     vistos: set[str] = set()
     salida_grupos: list[list[str]] = []

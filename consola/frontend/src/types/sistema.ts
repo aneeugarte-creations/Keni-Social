@@ -205,6 +205,9 @@ export interface PipelineGeneracion {
   id: string;
   estado: string;
   fase: string;
+  /** Prompt EXACTO enviado a la IA (lo que se le pidió). "" si no se registró. */
+  prompt: string;
+  /** Stream token a token: el razonamiento del agente + el resultado final. */
   salida: string;
   metricas: MetricasRun | null;
 }
