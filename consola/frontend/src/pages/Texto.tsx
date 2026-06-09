@@ -15,6 +15,7 @@ import {
   FileText,
   Folder,
   History,
+  Lock,
   Plus,
   RotateCcw,
   Send,
@@ -57,6 +58,29 @@ function pestanaDeDoc(d: DocumentoTexto): Pestana {
   return CLASES_MARCA.has(d.clase || "") ? "marca" : "reglas";
 }
 
+// Marcadores `{{VARIABLE}}` que la consola SUSTITUYE al inyectar el prompt (el tema, la ruta del
+// archivo, el roster…). Se detectan en el cuerpo para mostrarlos y resaltarlos.
+const RE_VARIABLE = /\{\{[A-Z_]+\}\}/g;
+
+/** Vista de LECTURA de un prompt: el texto LITERAL que se inyecta, con sus variables resaltadas.
+ *  No es markdown renderizado: muestra exactamente lo que recibe el modelo (incluidos los `{{…}}`). */
+function PromptLeible({ texto }: { texto: string }) {
+  const partes = texto.split(/(\{\{[A-Z_]+\}\})/g);
+  return (
+    <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
+      {partes.map((p, i) =>
+        /^\{\{[A-Z_]+\}\}$/.test(p) ? (
+          <code key={i} className="rounded bg-keni/15 px-1 py-0.5 font-medium text-keni">
+            {p}
+          </code>
+        ) : (
+          <React.Fragment key={i}>{p}</React.Fragment>
+        ),
+      )}
+    </pre>
+  );
+}
+
 export default function Texto() {
   const qc = useQueryClient();
   // Marca activa del workspace: default del filtro (con "Todas" disponible: la
@@ -75,6 +99,8 @@ export default function Texto() {
   const [historialAbierto, setHistorialAbierto] = React.useState(false);
   const [carpetasCerradas, setCarpetasCerradas] = React.useState<Set<string>>(new Set());
   const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
+  // Candado de los prompts protegidos: la edición arranca BLOQUEADA y hay que forzarla (popup).
+  const [forzarEdicion, setForzarEdicion] = React.useState(false);
   // Frontmatter del cuerpo que ocultamos en el editor (se readjunta al guardar).
   const [frontmatterOculto, setFrontmatterOculto] = React.useState("");
   // Arrastrar y soltar para mover documentos entre carpetas.
@@ -198,6 +224,7 @@ export default function Texto() {
     }
     setLanzarAbierto(false);
     setHistorialAbierto(false);
+    setForzarEdicion(false); // cada documento arranca bloqueado si está protegido
   }, [seleccionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const guardarTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -333,6 +360,31 @@ export default function Texto() {
       qc.invalidateQueries({ queryKey: ["texto-papelera"] });
     },
   });
+
+  // --- Candado de prompts ---
+  // Un prompt está PROTEGIDO si el catálogo lo marca como inyectado/usado en la IA (`procesos`):
+  // se inyecta directo a un agente, así que no debe editarse a la ligera. Arranca en LECTURA;
+  // editar requiere forzar el candado (popup). Los documentos editoriales y los prompts propios
+  // (sin procesos) se editan como siempre.
+  const esPrompt = borrador?.tipo === "prompt";
+  const protegido = esPrompt && (borrador?.procesos?.length ?? 0) > 0;
+  const editable = !protegido || forzarEdicion;
+  // Variables `{{…}}` que la consola sustituye al inyectar (para mostrarlas en la vista de lectura).
+  const variablesPrompt = React.useMemo(
+    () => Array.from(new Set(borrador?.cuerpo.match(RE_VARIABLE) ?? [])),
+    [borrador?.cuerpo],
+  );
+  const onForzarEdicion = async () => {
+    const ok = await confirmar({
+      titulo: "Editar un prompt protegido",
+      mensaje:
+        "Este prompt se inyecta directamente en la IA en los procesos indicados arriba. Editarlo " +
+        "cambia el comportamiento del sistema en producción. ¿Seguro que quieres editarlo?",
+      textoConfirmar: "Sí, forzar edición",
+      textoCancelar: "Cancelar",
+    });
+    if (ok) setForzarEdicion(true);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 md:flex-row">
@@ -494,24 +546,41 @@ export default function Texto() {
           </div>
         ) : (
           <>
-            {/* Barra mínima: título + estado + Lanzar (prompt) + historial + borrar. La marca y
-                la organización salen de la CARPETA (explorador del lateral); no hay metadatos. */}
+            {/* Cabecera: título (editable o, si está protegido y en lectura, solo texto) + badge
+                de candado + estado + Lanzar (prompt) + historial + borrar. Las acciones de EDICIÓN
+                (título, estado, borrar) se ocultan en un prompt protegido hasta forzar el candado. */}
             <div className="flex flex-wrap items-center gap-2">
-              <Input
-                value={borrador.titulo}
-                onChange={(e) => editar({ titulo: e.target.value })}
-                className="min-w-[12rem] flex-1 text-base font-medium"
-                placeholder="Título"
-              />
-              <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
-                <SelectTrigger className="h-8 w-28 text-xs" title="Estado"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ESTADOS_DOC.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {borrador.tipo === "prompt" ? (
+              {editable ? (
+                <Input
+                  value={borrador.titulo}
+                  onChange={(e) => editar({ titulo: e.target.value })}
+                  className="min-w-[12rem] flex-1 text-base font-medium"
+                  placeholder="Título"
+                />
+              ) : (
+                <h2 className="min-w-[12rem] flex-1 truncate text-base font-medium" title={borrador.titulo}>
+                  {borrador.titulo}
+                </h2>
+              )}
+              {protegido ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+                  title="Prompt del sistema: protegido contra ediciones accidentales"
+                >
+                  <Lock className="h-3 w-3" /> Protegido
+                </span>
+              ) : null}
+              {editable ? (
+                <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
+                  <SelectTrigger className="h-8 w-28 text-xs" title="Estado"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ESTADOS_DOC.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+              {esPrompt ? (
                 <Button variant="brand" size="sm" onClick={() => setLanzarAbierto(true)}>
                   <Send className="mr-1 h-3.5 w-3.5" /> Lanzar
                 </Button>
@@ -524,53 +593,99 @@ export default function Texto() {
               >
                 <History className="mr-1 h-3.5 w-3.5" /> Historial
               </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Eliminar documento"
-                title="Eliminar (mover a la papelera)"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={async () => {
-                  if (await confirmar({ mensaje: "¿Mover este documento a la papelera?", destructivo: true, textoConfirmar: "Mover" }))
-                    eliminarMut.mutate(borrador.id);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {editable ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Eliminar documento"
+                  title="Eliminar (mover a la papelera)"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={async () => {
+                    if (await confirmar({ mensaje: "¿Mover este documento a la papelera?", destructivo: true, textoConfirmar: "Mover" }))
+                      eliminarMut.mutate(borrador.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              ) : null}
             </div>
 
-            {/* Transparencia (solo lectura): a qué PROCESOS se inyecta este prompt en la IA. Sale
-                del catálogo en código (`prompts_procesos`), no del contenido editable. */}
-            {borrador.tipo === "prompt" && (borrador.procesos?.length ?? 0) > 0 ? (
-              <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
-                <div className="mb-1 flex items-center gap-1.5 font-medium text-muted-foreground">
-                  <Zap className="h-3.5 w-3.5" /> Se inyecta en
+            {/* Panel de INYECCIÓN (solo prompts): el objetivo de esta vista es ENTENDER qué se
+                inyecta y DÓNDE. Sale del catálogo en código (`procesos`), no del contenido editable. */}
+            {esPrompt ? (
+              <div className="rounded-lg border border-border bg-card text-sm">
+                <div className="border-b border-border px-4 py-2.5">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <Zap className="h-4 w-4 text-keni" />
+                    {protegido ? "Dónde entra a la IA" : "Prompt propio"}
+                  </div>
+                  {protegido ? (
+                    <ul className="mt-1.5 space-y-1">
+                      {borrador.procesos!.map((p) => (
+                        <li key={p} className="flex gap-2 text-foreground">
+                          <span className="text-keni">→</span>
+                          <span>{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No está cableado a ningún proceso automático: se ejecuta a mano con «Lanzar».
+                    </p>
+                  )}
                 </div>
-                <ul className="space-y-0.5">
-                  {borrador.procesos!.map((p) => (
-                    <li key={p} className="text-foreground">
-                      · {p}
-                    </li>
-                  ))}
-                </ul>
+                {variablesPrompt.length > 0 ? (
+                  <div className="px-4 py-2.5">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Variables que la consola sustituye al inyectar
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {variablesPrompt.map((v) => (
+                        <code key={v} className="rounded bg-keni/10 px-1.5 py-0.5 text-xs font-medium text-keni">
+                          {v}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            {/* Cuerpo: WYSIWYG (escribes con formato aplicado). El cuerpo se guarda como markdown. */}
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
-              <EditorWysiwyg
-                value={borrador.cuerpo}
-                onContenido={(md) => editar({ cuerpo: md })}
-                placeholder={
-                  borrador.tipo === "prompt"
-                    ? "Escribe el prompt…"
-                    : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
-                }
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {guardarMut.isPending ? "Guardando…" : `Actualizado ${borrador.actualizado || "—"}`}
-            </p>
+            {/* Cuerpo. Prompt protegido = LECTURA por defecto (ves el texto LITERAL que se inyecta,
+                con sus variables resaltadas); editar exige forzar el candado. El resto: editor WYSIWYG. */}
+            {editable ? (
+              <>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
+                  <EditorWysiwyg
+                    value={borrador.cuerpo}
+                    onContenido={(md) => editar({ cuerpo: md })}
+                    placeholder={
+                      esPrompt
+                        ? "Escribe el prompt…"
+                        : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
+                    }
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {protegido ? "⚠️ Edición forzada — afecta a lo que se inyecta en la IA. " : ""}
+                  {guardarMut.isPending ? "Guardando…" : `Actualizado ${borrador.actualizado || "—"}`}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-4">
+                  <PromptLeible texto={borrador.cuerpo} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => void onForzarEdicion()}>
+                    <Lock className="mr-1 h-3.5 w-3.5" /> Editar (forzar)
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Prompt protegido en modo lectura. Edítalo solo si sabes qué cambias.
+                  </p>
+                </div>
+              </>
+            )}
           </>
         )}
       </main>
