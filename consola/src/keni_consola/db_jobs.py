@@ -251,11 +251,14 @@ def reencolar_job(gen_id: str) -> bool:
     Limpia `worker`/`claimed_at` y el flag `cancelado`, de modo que un worker lo vuelva a clavar
     y a correr `claude` con el MISMO `spec`. El llamante (capa API) debe ademas reabrir el
     registro de generacion a `ejecutando` (si no, el guardia anti-duplicado de `reclamar_job` lo
-    cerraria al verlo en estado terminal). Devuelve False si no hay fila para ese `gen_id`."""
+    cerraria al verlo en estado terminal). Devuelve False si no hay fila para ese `gen_id`.
+
+    "Limpio" aqui es '' (no NULL): ambas columnas son NOT NULL DEFAULT '' en el esquema,
+    el mismo convenio que usa el encolado."""
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE jobs SET estado = ?, worker = NULL, claimed_at = NULL, cancelado = 0 "
+            "UPDATE jobs SET estado = ?, worker = '', claimed_at = '', cancelado = 0 "
             "WHERE gen_id = ?",
             (JOB_PENDIENTE, gen_id),
         )
