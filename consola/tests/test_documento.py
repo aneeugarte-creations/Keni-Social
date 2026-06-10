@@ -94,11 +94,14 @@ def test_validar_capa_imagen_forma_elipse_y_radio():
                                  "forma": "elipse", "radio": 24}]))
     capa = doc["capas"][0]
     assert capa["forma"] == "elipse" and capa["radio"] == 24
-    # Forma inválida => "rect"; radio negativo => 0 (acotado). ("triangulo" ya es válido en el
-    # catálogo de formas; usamos un token que NO existe para probar el fallback.)
+    # Forma inválida => "rect" fallback ("triangulo" ya es válido en el catálogo; usamos un token
+    # que NO existe para probar el fallback).
     malo = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
-                                  "forma": "trapecio", "radio": -5}]))
+                                  "forma": "trapecio", "radio": 0}]))
     assert malo["capas"][0]["forma"] == "rect" and malo["capas"][0]["radio"] == 0
+    # Radio negativo => DocumentoError (límite [0, ∞); ya no se acota en silencio a 0).
+    with pytest.raises(d.DocumentoError, match="radio.*no puede ser menor"):
+        d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10, "radio": -5}]))
 
 
 def test_validar_filtros_solo_si_no_neutro():

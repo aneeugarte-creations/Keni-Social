@@ -21,10 +21,10 @@ def _render_mock(monkeypatch):
     )
 
 
-def _pieza(entorno):
+def _pieza(entorno, contenido_id="c1"):
     """Crea una fila por plataforma y devuelve (contenido_id, plataforma_id)."""
-    plat = repos.crear_contenido_plataforma(contenido_id="c1", red="facebook")
-    return "c1", plat["id"]
+    plat = repos.crear_contenido_plataforma(contenido_id=contenido_id, red="facebook")
+    return contenido_id, plat["id"]
 
 
 def test_pieza_documento_vacio(cliente, entorno):
@@ -108,8 +108,8 @@ def test_guardar_pieza_inexistente_404(cliente, entorno, _render_mock):
 
 def test_guardar_plataforma_no_pertenece_contenido_404(cliente, entorno, _render_mock):
     """Guardar documento para plataforma que no pertenece al contenido -> 404."""
-    _cid1, pid1 = _pieza(entorno)
-    _cid2, pid2 = _pieza(entorno)
+    _cid1, pid1 = _pieza(entorno, "c1")
+    _cid2, pid2 = _pieza(entorno, "c2")
 
     # Intentar guardar documento en plataforma que pertenece a cid2 bajo cid1 -> 404.
     r = cliente.post(f"/api/imagen/pieza/{_cid1}/{pid2}", json={"documento": _DOC})

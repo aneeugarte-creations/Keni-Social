@@ -91,19 +91,22 @@ def _entero(valor: Any, campo: str, minimo: int | None = None, maximo: int | Non
 
     Valida que esté en rango [minimo, maximo] si se especifican.
     """
+    if valor is None or valor == "":
+        return defecto
+    # Solo el CAST va en el try: `DocumentoError` hereda de `ValueError`, así que si las
+    # comprobaciones de rango se hicieran aquí dentro, el `except` las recazaría como "número
+    # entero válido" y perderíamos el mensaje específico de límite. Por eso van fuera del try.
     try:
-        if valor is None or valor == "":
-            return defecto
         num = int(valor)
-        if not math.isfinite(num):
-            raise DocumentoError(f"'{campo}' debe ser un número válido.")
-        if minimo is not None and num < minimo:
-            raise DocumentoError(f"'{campo}' no puede ser menor a {minimo}.")
-        if maximo is not None and num > maximo:
-            raise DocumentoError(f"'{campo}' no puede ser mayor a {maximo}.")
-        return num
     except (ValueError, TypeError, OverflowError):
         raise DocumentoError(f"'{campo}' debe ser un número entero válido.")
+    if not math.isfinite(num):
+        raise DocumentoError(f"'{campo}' debe ser un número válido.")
+    if minimo is not None and num < minimo:
+        raise DocumentoError(f"'{campo}' no puede ser menor a {minimo}.")
+    if maximo is not None and num > maximo:
+        raise DocumentoError(f"'{campo}' no puede ser mayor a {maximo}.")
+    return num
 
 
 def _flotante(valor: Any, campo: str, minimo: float | None = None, maximo: float | None = None, defecto: float = 0.0) -> float:
@@ -111,19 +114,21 @@ def _flotante(valor: Any, campo: str, minimo: float | None = None, maximo: float
 
     Valida que esté en rango [minimo, maximo] si se especifican.
     """
+    if valor is None or valor == "":
+        return defecto
+    # Igual que en `_entero`: el cast va en el try y las comprobaciones de rango fuera, para no
+    # recazar el `DocumentoError` de límite (es `ValueError`) y perder su mensaje específico.
     try:
-        if valor is None or valor == "":
-            return defecto
         num = float(valor)
-        if not math.isfinite(num):
-            raise DocumentoError(f"'{campo}' debe ser un número válido.")
-        if minimo is not None and num < minimo:
-            raise DocumentoError(f"'{campo}' no puede ser menor a {minimo}.")
-        if maximo is not None and num > maximo:
-            raise DocumentoError(f"'{campo}' no puede ser mayor a {maximo}.")
-        return num
     except (ValueError, TypeError, OverflowError):
         raise DocumentoError(f"'{campo}' debe ser un número válido.")
+    if not math.isfinite(num):
+        raise DocumentoError(f"'{campo}' debe ser un número válido.")
+    if minimo is not None and num < minimo:
+        raise DocumentoError(f"'{campo}' no puede ser menor a {minimo}.")
+    if maximo is not None and num > maximo:
+        raise DocumentoError(f"'{campo}' no puede ser mayor a {maximo}.")
+    return num
 
 
 def _id(c: dict[str, Any]) -> str:
@@ -143,7 +148,9 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
     caja = _caja(c, "La capa")
     op = c.get("opacidad", 1)
     nombre = c.get("nombre")
-    rotacion_val = c.get("rotacion", 0) or 0
+    # Sin `or 0`: un valor inválido como `{}` (falsy) NO debe coalescer a 0 y colarse; `_flotante`
+    # ya trata None/"" como 0 vía `defecto`, y un tipo no numérico lanza DocumentoError (400).
+    rotacion_val = c.get("rotacion", 0)
     opacidad_val = _flotante(op, "opacidad", minimo=0.0, maximo=1.0, defecto=1.0)
     base = {
         "id": _id(c),

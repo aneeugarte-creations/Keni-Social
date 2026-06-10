@@ -325,7 +325,9 @@ def validar_capas(capas: Any) -> list[dict[str, Any]]:
     Reusa el validador del Documento envolviendo las capas en un documento mínimo. Lanza
     EstudioError si alguna capa no valida.
     """
-    doc = validar_documento({"formato": {"w": 1, "h": 1}, "capas": capas})
+    # Formato dummy DENTRO del rango válido [16, 8000]: las capas no dependen de él, pero el
+    # validador del Documento exige un formato con límites (DoS), así que no puede ser 1x1.
+    doc = validar_documento({"formato": {"w": 1080, "h": 1080}, "capas": capas})
     return doc["capas"]
 
 
