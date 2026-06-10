@@ -10,6 +10,7 @@ import {
   clampZoom,
   etiquetaGrados,
   etiquetaTamano,
+  franjasZonaSegura,
 } from "./lib";
 
 describe("clampZoom", () => {
@@ -79,5 +80,49 @@ describe("clampMarco", () => {
     expect(clampMarco(-300, 1200, 1000)).toBe(-200);
     expect(clampMarco(50, 1200, 1000)).toBe(0);
     expect(clampMarco(-100, 1200, 1000)).toBe(-100);
+  });
+});
+
+describe("franjasZonaSegura", () => {
+  it("devuelve null si el formato no define ninguna zona segura (overlay solo con safe_* > 0)", () => {
+    expect(franjasZonaSegura(1080, 1080, { safe_top: 0, safe_bottom: 0 })).toBeNull();
+    expect(franjasZonaSegura(1080, 1080, {})).toBeNull();
+    // Valores negativos o ausentes cuentan como 0 (retrocompat con formatos sin laterales).
+    expect(franjasZonaSegura(1080, 1080, { safe_top: -10, safe_left: undefined })).toBeNull();
+  });
+
+  it("para una story (solo top/bottom) vela las dos franjas horizontales con su límite", () => {
+    const r = franjasZonaSegura(1080, 1920, { safe_top: 220, safe_bottom: 420 });
+    expect(r).not.toBeNull();
+    expect(r!.velos).toEqual([
+      { x: 0, y: 0, w: 1080, h: 220 },
+      { x: 0, y: 1500, w: 1080, h: 420 },
+    ]);
+    expect(r!.limites).toEqual([
+      [0, 220, 1080, 220],
+      [0, 1500, 1080, 1500],
+    ]);
+  });
+
+  it("con laterales, los velos NO se solapan en las esquinas (las laterales solo cubren la franja central)", () => {
+    const r = franjasZonaSegura(1080, 1920, { safe_top: 220, safe_bottom: 420, safe_left: 60, safe_right: 60 });
+    expect(r!.velos).toContainEqual({ x: 0, y: 220, w: 60, h: 1280 });
+    expect(r!.velos).toContainEqual({ x: 1020, y: 220, w: 60, h: 1280 });
+    // Área total velada == suma exacta de franjas sin solape (esquinas contadas UNA vez).
+    const area = r!.velos.reduce((acc, v) => acc + v.w * v.h, 0);
+    expect(area).toBe(1080 * 220 + 1080 * 420 + 2 * 60 * (1920 - 220 - 420));
+  });
+
+  it("solo lados definidos: un único velo y un único límite por lado activo", () => {
+    const r = franjasZonaSegura(1600, 900, { safe_top: 0, safe_bottom: 72 });
+    expect(r!.velos).toEqual([{ x: 0, y: 828, w: 1600, h: 72 }]);
+    expect(r!.limites).toEqual([[0, 828, 1600, 828]]);
+  });
+
+  it("es pura: no muta el formato que recibe", () => {
+    const f = { safe_top: 220, safe_bottom: 420, safe_left: 0, safe_right: 0 };
+    const copia = { ...f };
+    franjasZonaSegura(1080, 1920, f);
+    expect(f).toEqual(copia);
   });
 });

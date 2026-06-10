@@ -33,7 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Group, Layer, Line, Rect, Stage, Transformer } from "react-konva";
+import { Group, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
 import { toast } from "sonner";
 
 import { api, urlMedia } from "@/lib/api";
@@ -56,6 +56,7 @@ import {
   clampZoom,
   etiquetaGrados,
   etiquetaTamano,
+  franjasZonaSegura,
   guardarPref,
   prefBool,
   prefNum,
@@ -231,14 +232,19 @@ export function Lienzo({
   //     el movimiento es libre). El imán tiene PRIORIDAD sobre la rejilla.
   //   · tamCelda: tamaño de celda de la rejilla en px del documento (fina/media/gruesa).
   //   · dentroMarco: al mover/transformar, acota la caja para que no se salga del lienzo.
+  //   · zonas: overlay de ZONAS SEGURAS del formato (patrón Canva/IG): vela las franjas donde la
+  //     UI de la plataforma tapa el diseño. Solo visual (Layer sin listening); el export renderiza
+  //     en el servidor desde el documento (render_node/dibujar.mjs), así que nunca sale al archivo.
   const [iman, setIman] = useState(() => prefBool("keni.encuadre.iman", true));
   const [grid, setGrid] = useState(() => prefBool("keni.encuadre.grid", false));
   const [tamCelda, setTamCelda] = useState(() => prefNum("keni.encuadre.celda", 16));
   const [dentroMarco, setDentroMarco] = useState(() => prefBool("keni.encuadre.dentro", false));
+  const [zonas, setZonas] = useState(() => prefBool("keni.encuadre.zonas", false));
   useEffect(() => guardarPref("keni.encuadre.iman", iman), [iman]);
   useEffect(() => guardarPref("keni.encuadre.grid", grid), [grid]);
   useEffect(() => guardarPref("keni.encuadre.celda", tamCelda), [tamCelda]);
   useEffect(() => guardarPref("keni.encuadre.dentro", dentroMarco), [dentroMarco]);
+  useEffect(() => guardarPref("keni.encuadre.zonas", zonas), [zonas]);
   // Paso de la rejilla: tamaño de celda configurable (mín. 4px), no w/12.
   const paso = Math.max(4, Math.round(tamCelda));
   // Márgenes (encuadre) del formato: lados con default 0 (retrocompat con formatos sin laterales).
@@ -247,6 +253,9 @@ export function Lienzo({
   const safeLeft = documento.formato.safe_left || 0;
   const safeRight = documento.formato.safe_right || 0;
   const hayMargenes = safeTop > 0 || safeBottom > 0 || safeLeft > 0 || safeRight > 0;
+  // Franjas del overlay de zonas seguras (`null` si el formato no define ningún safe_* > 0: con
+  // toggle activo pero formato sin zonas, no se pinta nada).
+  const franjasZonas = zonas ? franjasZonaSegura(w, h, documento.formato) : null;
 
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -1060,6 +1069,40 @@ export function Lienzo({
                 {safeRight > 0 && <Rect x={w - safeRight} y={0} width={1 / escala} height={h} fill="#22d3ee" opacity={0.45} />}
               </>
             )}
+            {/* ZONAS SEGURAS (patrón Canva/IG): velo sutil sobre las franjas FUERA de la zona
+                segura del formato (donde la UI de la plataforma tapa el diseño) + borde
+                discontinuo fino en el límite + etiqueta discreta si cabe. Solo visual: vive en
+                esta Layer sin listening y el export se renderiza en el SERVIDOR a partir del
+                documento (render_node/dibujar.mjs), nunca del Stage => jamás sale al archivo. */}
+            {franjasZonas && (
+              <>
+                {franjasZonas.velos.map((r, i) => (
+                  <Rect key={`zsv${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#000000" opacity={0.13} />
+                ))}
+                {franjasZonas.limites.map((p, i) => (
+                  <Line
+                    key={`zsl${i}`}
+                    points={p}
+                    stroke="#ffffff"
+                    strokeWidth={1 / escala}
+                    dash={[6 / escala, 4 / escala]}
+                    opacity={0.85}
+                  />
+                ))}
+                {/* Etiqueta solo si la franja superior mide al menos ~26 px de PANTALLA (si no,
+                    estorbaría más de lo que aclara). */}
+                {safeTop * escala >= 26 && (
+                  <Text
+                    text="Zona segura"
+                    x={8 / escala}
+                    y={safeTop - 17 / escala}
+                    fontSize={11 / escala}
+                    fill="#ffffff"
+                    opacity={0.75}
+                  />
+                )}
+              </>
+            )}
             {guias.x !== null && <Line points={[guias.x, 0, guias.x, h]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
             {guias.y !== null && <Line points={[0, guias.y, w, guias.y]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
             {/* ESPACIADO IGUAL (estilo Canva): un segmento con topes en cada hueco equidistante
@@ -1204,8 +1247,8 @@ export function Lienzo({
     </div>
 
     {/* Controles de ENCUADRE + zoom: raíl vertical AL LADO del lienzo (fuera de la foto, no tapa
-        el campo visual). Imán, rejilla (+ tamaño de celda) y "dentro del marco" son toggles
-        INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
+        el campo visual). Imán, rejilla (+ tamaño de celda), "dentro del marco" y "zonas seguras"
+        son toggles INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
     <ControlesEncuadre
       iman={iman}
       setIman={setIman}
@@ -1215,6 +1258,8 @@ export function Lienzo({
       setTamCelda={setTamCelda}
       dentroMarco={dentroMarco}
       setDentroMarco={setDentroMarco}
+      zonas={zonas}
+      setZonas={setZonas}
       escala={escala}
       alejar={alejar}
       acercar={acercar}

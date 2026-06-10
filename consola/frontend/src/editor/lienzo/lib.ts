@@ -84,3 +84,51 @@ export function clampMarco(pos: number, tam: number, total: number): number {
   const max = Math.max(0, total - tam);
   return Math.max(min, Math.min(max, pos));
 }
+
+// ── Zonas seguras (patrón Canva/IG) ─────────────────────────────────────────
+// Geometría del overlay de ZONAS SEGURAS del formato: franjas FUERA de la zona segura (donde la UI
+// de la plataforma —avatar, caption, barra de respuesta…— tapa el diseño) + segmentos del límite.
+// Todo en px del DOCUMENTO. Pura y solo-lectura (no muta el formato). Devuelve `null` si el formato
+// no define ninguna zona segura (todos los safe_* a 0): el overlay no se pinta.
+export interface FranjasZonaSegura {
+  // Velos (rectángulos NO solapados: las laterales no repintan las esquinas).
+  velos: { x: number; y: number; w: number; h: number }[];
+  // Límite de la zona segura: segmentos [x0, y0, x1, y1] para el borde discontinuo.
+  limites: [number, number, number, number][];
+}
+
+export function franjasZonaSegura(
+  w: number,
+  h: number,
+  f: { safe_top?: number; safe_bottom?: number; safe_left?: number; safe_right?: number },
+): FranjasZonaSegura | null {
+  const top = Math.max(0, f.safe_top || 0);
+  const bottom = Math.max(0, f.safe_bottom || 0);
+  const left = Math.max(0, f.safe_left || 0);
+  const right = Math.max(0, f.safe_right || 0);
+  if (top <= 0 && bottom <= 0 && left <= 0 && right <= 0) return null;
+  const velos: FranjasZonaSegura["velos"] = [];
+  const limites: FranjasZonaSegura["limites"] = [];
+  if (top > 0) {
+    velos.push({ x: 0, y: 0, w, h: top });
+    limites.push([0, top, w, top]);
+  }
+  if (bottom > 0) {
+    velos.push({ x: 0, y: h - bottom, w, h: bottom });
+    limites.push([0, h - bottom, w, h - bottom]);
+  }
+  // Laterales: solo la franja CENTRAL (entre las horizontales), para no oscurecer dos veces las
+  // esquinas. Si top+bottom devoran el alto (formato degenerado) no hay franja central que velar.
+  const alto = h - top - bottom;
+  if (alto > 0) {
+    if (left > 0) {
+      velos.push({ x: 0, y: top, w: left, h: alto });
+      limites.push([left, top, left, top + alto]);
+    }
+    if (right > 0) {
+      velos.push({ x: w - right, y: top, w: right, h: alto });
+      limites.push([w - right, top, w - right, top + alto]);
+    }
+  }
+  return { velos, limites };
+}

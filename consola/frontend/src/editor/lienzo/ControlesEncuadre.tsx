@@ -1,12 +1,12 @@
 // Controles de ENCUADRE + zoom (raíl vertical al lado del lienzo, FUERA de la foto para no tapar
-// el campo visual). Imán, rejilla (+ tamaño de celda) y "dentro del marco" son toggles
-// INDEPENDIENTES; sus preferencias se guardan en localStorage en el componente padre.
+// el campo visual). Imán, rejilla (+ tamaño de celda), "dentro del marco" y "zonas seguras" son
+// toggles INDEPENDIENTES; sus preferencias se guardan en localStorage en el componente padre.
 // Presentacional: recibe el estado y los setters/handlers por props.
 //
 // El botón del PORCENTAJE abre un menú de niveles estilo Canva (10–300 %, "Ajustar" y "100 %" =
 // 1 px del documento : 1 px de pantalla). Todos los iconos llevan tooltip con su atajo.
 
-import { Check, Frame, Grid3x3, Magnet, Maximize, Minus, Plus } from "lucide-react";
+import { Check, Frame, Grid3x3, Magnet, Maximize, Minus, Plus, Shield } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 
@@ -24,6 +24,8 @@ export function ControlesEncuadre({
   setTamCelda,
   dentroMarco,
   setDentroMarco,
+  zonas,
+  setZonas,
   escala,
   alejar,
   acercar,
@@ -39,6 +41,9 @@ export function ControlesEncuadre({
   setTamCelda: (px: number) => void;
   dentroMarco: boolean;
   setDentroMarco: Dispatch<SetStateAction<boolean>>;
+  // Zonas seguras del formato: velo sobre las franjas que la UI de la plataforma tapa.
+  zonas: boolean;
+  setZonas: Dispatch<SetStateAction<boolean>>;
   escala: number;
   alejar: () => void;
   acercar: () => void;
@@ -113,6 +118,15 @@ export function ControlesEncuadre({
           className={`rounded p-1 hover:bg-accent ${dentroMarco ? "bg-accent text-foreground" : "text-muted-foreground"}`}
         >
           <Frame className="h-3.5 w-3.5" />
+        </button>
+      </TooltipFlotante>
+      <TooltipFlotante label="Zonas seguras: la interfaz de la red puede tapar lo sombreado" side="left">
+        <button
+          onClick={() => setZonas((v) => !v)}
+          aria-pressed={zonas}
+          className={`rounded p-1 hover:bg-accent ${zonas ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+        >
+          <Shield className="h-3.5 w-3.5" />
         </button>
       </TooltipFlotante>
       <div className="my-0.5 h-px w-4 bg-border" />

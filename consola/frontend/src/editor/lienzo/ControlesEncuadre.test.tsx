@@ -1,15 +1,16 @@
 // Menú de NIVELES DE ZOOM de ControlesEncuadre: tratamiento visual coherente en todas las filas
 // (atajo en <kbd> cuando lo hay + check del nivel actual con hueco SIEMPRE reservado) y el alias
-// ⌥⌘0 de «Ajustar a la pantalla» reflejado en tooltip y menú.
+// ⌥⌘0 de «Ajustar a la pantalla» reflejado en tooltip y menú. Más el toggle de ZONAS SEGURAS.
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ControlesEncuadre } from "./ControlesEncuadre";
 
-function montar(escala = 1) {
+function montar(escala = 1, opts: { zonas?: boolean } = {}) {
   const fijarEscala = vi.fn();
   const ajustarPantalla = vi.fn();
+  const setZonas = vi.fn();
   render(
     <ControlesEncuadre
       iman={false}
@@ -20,6 +21,8 @@ function montar(escala = 1) {
       setTamCelda={vi.fn()}
       dentroMarco={false}
       setDentroMarco={vi.fn()}
+      zonas={opts.zonas ?? false}
+      setZonas={setZonas}
       escala={escala}
       alejar={vi.fn()}
       acercar={vi.fn()}
@@ -28,7 +31,7 @@ function montar(escala = 1) {
       fijarEscala={fijarEscala}
     />,
   );
-  return { fijarEscala, ajustarPantalla };
+  return { fijarEscala, ajustarPantalla, setZonas };
 }
 
 const abrirMenu = () => {
@@ -73,5 +76,27 @@ describe("ControlesEncuadre — menú de zoom", () => {
     expect(
       screen.getByRole("button", { name: "Ajustar a la pantalla (⌘0 · ⌥⌘0)" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ControlesEncuadre — zonas seguras", () => {
+  const nombre = "Zonas seguras: la interfaz de la red puede tapar lo sombreado";
+
+  it("expone el toggle con tooltip explicativo y estado aria-pressed", () => {
+    montar(1);
+    const boton = screen.getByRole("button", { name: nombre });
+    expect(boton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("refleja el estado activo en aria-pressed", () => {
+    montar(1, { zonas: true });
+    expect(screen.getByRole("button", { name: nombre })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("el clic alterna el toggle a través del setter (sin tocar nada más)", () => {
+    const { setZonas, fijarEscala } = montar(1);
+    fireEvent.click(screen.getByRole("button", { name: nombre }));
+    expect(setZonas).toHaveBeenCalledTimes(1);
+    expect(fijarEscala).not.toHaveBeenCalled();
   });
 });
