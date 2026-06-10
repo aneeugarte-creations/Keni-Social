@@ -258,7 +258,10 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         "autor_nombre": autor.get("usuario", "") or "",
         "origen": campos.get("origen") or "",
         "notas": campos.get("notas") or "",
-        "categoria": (campos.get("categoria") or "").strip().lower(),
+        # LÍNEA del plan: la explícita o, si nace EVERGREEN (banco/taller/alta manual con ese
+        # flujo), su propia línea 'evergreen' — cualquier camino de creación cuenta en el plan.
+        "categoria": (campos.get("categoria") or "").strip().lower()
+        or ("evergreen" if (campos.get("flujo") or "") == "evergreen" else ""),
         "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
         # FORMATO de la pieza (foto|video): decide las redes destino (`redes.redes_de_formato`).
         # Se normaliza (vacío/desconocido -> 'foto') para no persistir valores fuera de catálogo.
@@ -482,14 +485,18 @@ def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str
     """
     con = _conectar()
     try:
+        # `cat`: la categoría persistida o, como red de seguridad para filas anteriores a la
+        # normalización (o de escritores externos), 'evergreen' derivada del flujo.
         filas = con.execute(
-            "SELECT c.categoria AS cat, COUNT(*) AS generados, "
+            "SELECT CASE WHEN c.categoria <> '' THEN c.categoria ELSE 'evergreen' END AS cat, "
+            "COUNT(*) AS generados, "
             "SUM(CASE WHEN EXISTS (SELECT 1 FROM contenido_plataforma p "
             "WHERE p.contenido_id = c.id AND p.estado = 'publicado') THEN 1 ELSE 0 END) "
             "AS publicados "
             "FROM contenido c "
-            "WHERE c.marca = ? AND c.clase = 'contenido' AND c.categoria <> '' "
-            "AND c.creado >= ? GROUP BY c.categoria",
+            "WHERE c.marca = ? AND c.clase = 'contenido' "
+            "AND (c.categoria <> '' OR c.flujo = 'evergreen') "
+            "AND c.creado >= ? GROUP BY 1",
             (marca, desde_iso),
         ).fetchall()
     finally:
@@ -615,6 +622,13 @@ def actualizar_contenido(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CONTENIDO}
     if not cambios:
         return obtener_contenido(contenido_id)
+    # Una pieza CONVERTIDA a evergreen adopta su línea del plan (si no trae una explícita y
+    # no tenía ya otra): el conteo y los horarios por categoría la ven igual que una nacida
+    # evergreen. No se pisa una categoría existente (p. ej. una mx reconvertida conserva mx).
+    if cambios.get("flujo") == "evergreen" and "categoria" not in cambios:
+        actual = obtener_contenido(contenido_id)
+        if actual is not None and not (actual.get("categoria") or ""):
+            cambios["categoria"] = "evergreen"
     ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")

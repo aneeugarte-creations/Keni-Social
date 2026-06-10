@@ -92,6 +92,37 @@ def test_produccion_dia_lineas_del_plan(entorno, monkeypatch):
     assert lineas["breaking"]["generados"] == 0 and lineas["breaking"]["objetivo"] == 2
 
 
+def test_evergreen_cuenta_en_su_linea_desde_cualquier_camino(entorno, monkeypatch):
+    """Una pieza EVERGREEN cuenta en su línea nazca como nazca (banco/taller/alta manual).
+
+    La normalización vive en el núcleo: crear con flujo='evergreen' fija la línea; convertir
+    una pieza a evergreen también (sin pisar una línea existente); y el contador tiene red de
+    seguridad para filas legadas con flujo evergreen y categoría vacía.
+    """
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1,mx:4")
+    # 1) Nace evergreen SIN categoría explícita (el camino del banco evergreen).
+    nacida = repos.crear_contenido(
+        clase="contenido", titulo="RFC: para qué sirve", marca="unotv",
+        flujo="evergreen", origen="evergreen",
+    )
+    assert nacida["categoria"] == "evergreen"
+    # 2) Una pieza normal CONVERTIDA a evergreen adopta la línea…
+    convertida = repos.crear_contenido(clase="contenido", titulo="Normal", marca="unotv")
+    tras = repos.actualizar_contenido(convertida["id"], {"flujo": "evergreen"})
+    assert tras["categoria"] == "evergreen"
+    # …pero una con línea propia (mx) la CONSERVA al reconvertirse.
+    mx = repos.crear_contenido(
+        clase="contenido", titulo="Nacional", marca="unotv", categoria="mx"
+    )
+    tras_mx = repos.actualizar_contenido(mx["id"], {"flujo": "evergreen"})
+    assert tras_mx["categoria"] == "mx"
+
+    data = _cli().get("/api/produccion/dia?marca=unotv").json()
+    lineas = {l["categoria"]: l for l in data["por_categoria"]}
+    assert lineas["evergreen"]["generados"] == 2  # la nacida + la convertida
+    assert lineas["mx"]["generados"] == 1
+
+
 def test_produccion_dia_filtra_por_marca(entorno):
     cli = _cli()
     _crear(cli, marca="unotv", titulo="De UnoTV")
