@@ -277,6 +277,14 @@ ORIGEN_EQUIPO = "equipo"
 # curación HUMANA explícita (el equipo empujó esa historia, a menudo una breaking).
 ORIGEN_HISTORIA = "historia"
 
+# Tema creado desde el cajón PRESIDENCIA (`api/presidencia`): nota que llega por WhatsApp
+# desde presidencia (texto + 4-5 imágenes y algún video) y que el equipo vuelca tal cual.
+# Genera AUTOMÁTICAMENTE una pieza `formato='carrusel'` en el feed (portada con placa +
+# resto del media en crudo). Es una publicación IMPUESTA desde fuera del área (la clase de
+# etiqueta `origen` la distingue como `peticion_externa`). NO está en `ORIGENES_AUTOGEN`:
+# su copy se lanza directo al crear la nota (como evergreen), no via el daemon de selección.
+ORIGEN_PRESIDENCIA = "presidencia"
+
 # Orígenes de FUENTE que la auto-generación de copy trata como "tema redactable" (un
 # borrador se encola solo). Incluye las fuentes externas históricas + el alta creativa del
 # equipo (`equipo`) + las historias curadas desde el panel (`historia`: sin esto, si su

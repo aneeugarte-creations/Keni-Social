@@ -201,6 +201,7 @@ def crear_contenido_plataforma(
     plantilla_diseno_id: str = "",
     foto_encuadre: str = "",
     fotos: str = "",
+    carrusel: str = "",
     qa_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
@@ -240,6 +241,7 @@ def crear_contenido_plataforma(
         plantilla_diseno_id=plantilla_diseno_id,
         foto_encuadre=foto_encuadre,
         fotos=fotos,
+        carrusel=carrusel,
         qa_auto_hash=qa_auto_hash,
         hora_post=hora_post,
         creado=creado,
@@ -277,23 +279,25 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
 def ajustar_plataformas_por_formato(
     contenido_id: str, formato: str
 ) -> dict[str, list[str]]:
-    """Reconcilia las filas por plataforma de una pieza con su `formato` (FLIP foto<->video).
+    """Reconcilia las filas por plataforma de una pieza con su `formato` (FLIP foto/video/carrusel).
 
-    El FORMATO de una pieza decide a qué redes va (`redes.redes_de_formato`: foto=3, video=5).
-    Cuando el formato cambia hay que AÑADIR las filas que falten y, en `video->foto`, RETIRAR las
-    redes extra (youtube/tiktok) SIN PERDER trabajo. Reglas (contrato F-video):
+    El FORMATO de una pieza decide a qué redes va (`redes.redes_de_formato`: foto=3, video=5,
+    carrusel=2). Cuando el formato cambia hay que AÑADIR las filas que falten y RETIRAR las
+    redes extra SIN PERDER trabajo. Reglas (contrato F-video, extendido a carrusel):
 
-      - `foto->video`: crea las filas que falten de las 5 redes (youtube/tiktok) con
+      - hacia `video`: crea las filas que falten de las 5 redes (youtube/tiktok) con
         `falta_copy=1`. En TODAS las filas, si no hay `video`, marca `falta_video=1` (el asset es
         obligatorio); `falta_imagen=0` (la imagen pasa a opcional: portada/thumbnail).
-      - `video->foto`: deja las 3 redes de foto. Las extra (youtube/tiktok) se ELIMINAN solo si
-        están VACÍAS (sin copy ni video); si tienen contenido, se CONSERVAN (no perder trabajo) y
-        se reportan en `conservadas`. En las filas que quedan, `falta_video=0` (N/A) y, si no hay
-        imagen real, `falta_imagen=1`.
+      - hacia un formato de IMAGEN (`foto`/`carrusel`): deja las redes de ese formato. Las extra
+        se ELIMINAN solo si están VACÍAS (sin copy ni video); si tienen contenido, se CONSERVAN
+        (no perder trabajo) y se reportan en `conservadas`. En las filas que quedan,
+        `falta_video=0` (N/A) y, si no hay imagen real, `falta_imagen=1`.
 
     Además, cambiar de formato cambia la PARTE VISUAL de la pieza, así que en CADA fila restante:
-      - se BORRA el asset del formato anterior (`foto->video` borra foto/collage/encuadre/placa;
-        `video->foto` borra el vídeo). El COPY no se toca (es independiente del formato).
+      - se BORRA el asset del formato anterior (hacia `video` borra foto/collage/encuadre/placa;
+        hacia imagen borra el vídeo). Los formatos de IMAGEN comparten la portada (foto+placa):
+        el flip `foto<->carrusel` la CONSERVA; al salir de `carrusel` se limpian sus slides
+        extra (`carrusel`). El COPY no se toca (es independiente del formato).
       - se LIMPIA la `plantilla_diseno_id` (la plantilla foto no aplica a vídeo —que va con
         miniatura— ni al revés); el render la re-deriva por marca/tipo.
       - la pieza vuelve a BORRADOR (`estado=pendiente`, `falta_revision/publicar=1`), salvo lo ya
@@ -306,6 +310,7 @@ def ajustar_plataformas_por_formato(
 
     formato = redes.normalizar_formato(formato)
     es_video = formato == redes.FORMATO_VIDEO
+    es_carrusel = formato == redes.FORMATO_CARRUSEL
     objetivo = set(redes.redes_de_formato(formato))
     existentes = {
         p.get("red", ""): p for p in db.listar_contenido_plataforma(contenido_id)
@@ -368,13 +373,20 @@ def ajustar_plataformas_por_formato(
                 "falta_imagen": False,
             }
             if not publicada:
-                # foto -> video: borra la foto (cruda, collage, encuadre) y la placa horneada.
-                campos.update({"foto": "", "fotos": "", "foto_encuadre": "", "imagen": ""})
+                # imagen -> video: borra la foto (cruda, collage, encuadre), la placa horneada
+                # y los slides extra de carrusel (parte visual del formato anterior).
+                campos.update(
+                    {"foto": "", "fotos": "", "foto_encuadre": "", "imagen": "", "carrusel": ""}
+                )
         else:
             campos = {"falta_video": False, "falta_imagen": not tiene_imagen}
             if not publicada:
-                # video -> foto: borra el vídeo; la foto (si la hay) se conserva.
+                # video -> imagen: borra el vídeo; la foto (si la hay) se conserva.
                 campos["video"] = ""
+                # Los slides extra son EXCLUSIVOS del formato carrusel: al salir de él se
+                # limpian; el flip foto<->carrusel conserva la portada (foto+placa).
+                if not es_carrusel:
+                    campos["carrusel"] = ""
         if not publicada:
             # La plantilla del formato anterior ya no aplica: se limpia (el render la re-deriva).
             campos["plantilla_diseno_id"] = ""

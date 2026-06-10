@@ -596,6 +596,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         plantilla_diseno_id   TEXT NOT NULL DEFAULT '',
         foto_encuadre         TEXT NOT NULL DEFAULT '',
         fotos                 TEXT NOT NULL DEFAULT '',
+        -- `carrusel`: slides EXTRA de una pieza `formato='carrusel'` (la portada es la
+        -- imagen compuesta de siempre). JSON array `[{"tipo":"imagen"|"video","objeto":id}, …]`
+        -- en el ORDEN de publicación; "" = sin slides extra (o pieza de otro formato).
+        carrusel              TEXT NOT NULL DEFAULT '',
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
@@ -1794,6 +1798,15 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS fotos TEXT NOT NULL DEFAULT ''"
+        )
+    # `carrusel`: slides EXTRA de una pieza `formato='carrusel'` (JSON array
+    # `[{"tipo":"imagen"|"video","objeto":id}, …]` en orden de publicación). La portada
+    # sigue siendo la imagen compuesta (`foto` + plantilla -> `imagen`); estos slides van
+    # EN CRUDO detrás de ella en el post multi-media (Metricool `media[]`).
+    if "carrusel" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS carrusel TEXT NOT NULL DEFAULT ''"
         )
     # `video` / `falta_video` (Ola VIDEO): asset de video y su checklist, espejo de
     # `imagen`/`falta_imagen`. Una pieza `formato='video'` necesita este asset; en piezas `foto`

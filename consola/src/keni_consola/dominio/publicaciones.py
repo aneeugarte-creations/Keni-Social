@@ -186,6 +186,10 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # COLLAGE multi-hueco: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco de la
         # plantilla (en orden de `capas`). "" = sin collage (hueco único derivado de `foto`).
         "fotos": pub.get("fotos") or "",
+        # CARRUSEL: slides EXTRA en crudo (JSON `[{tipo:"imagen"|"video",objeto}, …]`, en orden
+        # de publicación). La PORTADA del carrusel es la imagen compuesta de siempre (slide 1);
+        # estos van detrás tal cual en el post multi-media. "" = sin slides / otro formato.
+        "carrusel": pub.get("carrusel") or "",
         # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
         # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
         "etapa_ia": etapa_ia,
@@ -336,6 +340,11 @@ def crear_borrador_en(
         `es_publicacion=1`), igual que cualquier borrador, y
       - se muestra en la tarjeta del tema (es una fila por plataforma de ESE `contenido`).
 
+    RELLENA antes de crear: si el tema YA tiene una fila VACÍA de esa red (placeholder sin
+    copy, pre-creada al promover el tema —usar noticia, cajón presidencia—), el borrador se
+    DEPOSITA en ella (conservando su media adjunta: foto/carrusel/imagen_fuente) en vez de
+    crear una fila hermana duplicada de la misma red.
+
     Sigue siendo el contrato de C: la pieza nace `borrador` (estado `pendiente` de
     plataforma); el resto del flujo (revision/programacion/publicacion) es de C. Devuelve la
     forma publica de la publicacion, o `None` si el tema no existe (no nidamos en el vacio:
@@ -344,22 +353,52 @@ def crear_borrador_en(
     """
     if not contenido_id or repos.obtener_contenido(contenido_id) is None:
         return None
-    plat = repos.crear_contenido_plataforma(
-        contenido_id=contenido_id,
-        red=red,
-        estado="pendiente",
-        # DERIVADO del copy real (no `False` fijo): un copy vacío => falta_copy=True. Evita el
-        # drift "copy listo" sin copy que mentía en el label del feed y el gate de auto-avance.
-        falta_copy=not (contenido or "").strip(),
-        # Con imagen de fuente (URL del artículo) la pieza YA tiene imagen.
-        falta_imagen=False if imagen_fuente else None,
-        copy=contenido,
-        copy_in=copy_in,
-        imagen=imagen,
-        imagen_fuente=imagen_fuente,
-        veredicto=veredicto,
-        evergreen=evergreen,
-        es_publicacion=True,
+    falta_copy = not (contenido or "").strip()
+    # Fila VACÍA pre-existente de la misma red (sin copy ni video, en borrador): se rellena.
+    hueco = next(
+        (
+            p
+            for p in repos.listar_contenido_plataforma(contenido_id)
+            if (p.get("red") or "") == red
+            and (p.get("estado") or "pendiente") == "pendiente"
+            and not str(p.get("copy") or "").strip()
+            and not str(p.get("video") or "").strip()
+        ),
+        None,
     )
+    if hueco is not None:
+        campos: dict[str, Any] = {
+            "falta_copy": falta_copy,
+            "copy": contenido,
+            "copy_in": copy_in,
+            "veredicto": veredicto,
+            "evergreen": evergreen,
+        }
+        # La media del placeholder (foto/carrusel adjuntos al promover) se CONSERVA; la del
+        # copy solo se escribe si trae algo (no pisar con "").
+        if imagen:
+            campos["imagen"] = imagen
+        if imagen_fuente:
+            campos["imagen_fuente"] = imagen_fuente
+            campos["falta_imagen"] = False
+        plat = repos.actualizar_contenido_plataforma(hueco["id"], campos) or hueco
+    else:
+        plat = repos.crear_contenido_plataforma(
+            contenido_id=contenido_id,
+            red=red,
+            estado="pendiente",
+            # DERIVADO del copy real (no `False` fijo): un copy vacío => falta_copy=True. Evita el
+            # drift "copy listo" sin copy que mentía en el label del feed y el gate de auto-avance.
+            falta_copy=falta_copy,
+            # Con imagen de fuente (URL del artículo) la pieza YA tiene imagen.
+            falta_imagen=False if imagen_fuente else None,
+            copy=contenido,
+            copy_in=copy_in,
+            imagen=imagen,
+            imagen_fuente=imagen_fuente,
+            veredicto=veredicto,
+            evergreen=evergreen,
+            es_publicacion=True,
+        )
     pub = repos.obtener_publicacion(plat["id"])
     return publicacion_a_dict(pub) if pub is not None else None

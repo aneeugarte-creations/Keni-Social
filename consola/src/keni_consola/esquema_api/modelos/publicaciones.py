@@ -88,9 +88,10 @@ class Publicacion(TypedDict):
     # Origen de la imagen: "ia"|"galeria"|"fuente". Si es "fuente", `imagen_fuente` trae la
     # URL original del articulo (p.ej. RSS de marca propia); el editor ofrece usarla.
     tipo_contenido: str
-    # FORMATO de la pieza: "foto" (3 redes: IG/X/FB) o "video" (las 5). Lo hereda del
-    # `contenido` padre. Decide a qué redes va (`redes.redes_de_formato`, fuente única). El
-    # flujo automático crea piezas "foto". La UI lo muestra como badge ("Foto"/"Video").
+    # FORMATO de la pieza: "foto" (3 redes: IG/X/FB), "video" (las 5) o "carrusel" (IG/FB,
+    # portada compuesta + slides extra en crudo). Lo hereda del `contenido` padre. Decide a qué
+    # redes va (`redes.redes_de_formato`, fuente única). El flujo automático crea piezas "foto".
+    # La UI lo muestra como badge ("Foto"/"Video"/"Carrusel").
     formato: str
     # ESPEJO entre redes (propiedad de la idea, default ON): editar el contenido de esta pieza
     # propaga copy/copy-in/foto/plantilla a sus redes hermanas (saltando las ya publicadas).
@@ -146,6 +147,10 @@ class Publicacion(TypedDict):
     # COLLAGE multi-hueco: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco de la plantilla.
     # "" = sin collage (hueco único derivado de `foto`). Opcional. Frontera API->frontend.
     fotos: NotRequired[str]
+    # CARRUSEL: slides EXTRA en crudo, JSON array `[{tipo:"imagen"|"video",objeto}, …]` en orden
+    # de publicación (la portada es la imagen compuesta de siempre). "" = sin slides / otro
+    # formato. Opcional. Frontera API->frontend.
+    carrusel: NotRequired[str]
 
 
 class RespuestaPublicaciones(TypedDict):

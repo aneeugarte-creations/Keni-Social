@@ -32,6 +32,7 @@ from keni_consola.programador import (
     piezas_vencidas,
     preparar_vencidas,
     programar_pieza_metricool,
+    slides_de_carrusel,
 )
 
 # --------------------------------------------------------------------------- #
@@ -176,6 +177,69 @@ def test_borrador_video_construye_media_video(monkeypatch):
     assert len(borrador.media) == 1
     assert borrador.media[0].tipo == TipoMedia.video
     assert borrador.media[0].url == "https://social.kenitech.io/api/media/videos/abc.mp4"
+
+
+def test_slides_de_carrusel_parsea_y_sanea():
+    """`slides_de_carrusel` (pura): orden preservado, tipo desconocido -> imagen, basura -> []."""
+    crudo = (
+        '[{"tipo":"imagen","objeto":"a.jpg"},{"tipo":"video","objeto":"videos/b.mp4"},'
+        '{"tipo":"","objeto":"c.png"},{"objeto":""},"no-dict"]'
+    )
+    slides = slides_de_carrusel(crudo)
+    assert slides == [
+        {"tipo": "imagen", "objeto": "a.jpg"},
+        {"tipo": "video", "objeto": "videos/b.mp4"},
+        {"tipo": "imagen", "objeto": "c.png"},
+    ]
+    assert slides_de_carrusel("") == []
+    assert slides_de_carrusel(None) == []
+    assert slides_de_carrusel("{json roto") == []
+    assert slides_de_carrusel('{"no":"lista"}') == []
+
+
+def test_borrador_carrusel_portada_mas_slides(monkeypatch):
+    """Pieza formato=carrusel: media = portada compuesta + slides extra EN ORDEN (multi-media)."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    pub = {
+        "id": "c1", "red": "instagram", "contenido": "nota de presidencia",
+        "formato": "carrusel", "imagen": "portada.png",
+        "carrusel": (
+            '[{"tipo":"imagen","objeto":"slide2.jpg"},'
+            '{"tipo":"video","objeto":"videos/slide3.mp4"},'
+            '{"tipo":"imagen","objeto":"slide4.jpg"}]'
+        ),
+        "fecha_programada": "2026-06-10T18:00",
+    }
+    from keni_metricas.publicacion.metricool import BorradorMetricool
+    from keni_metricas.publicacion.modelos import TipoMedia
+
+    borrador = _borrador_de_publicacion(pub)
+    assert isinstance(borrador, BorradorMetricool)
+    assert [m.url for m in borrador.media] == [
+        "https://social.kenitech.io/api/media/portada.png",
+        "https://social.kenitech.io/api/media/slide2.jpg",
+        "https://social.kenitech.io/api/media/videos/slide3.mp4",
+        "https://social.kenitech.io/api/media/slide4.jpg",
+    ]
+    # La portada y los slides de imagen son imagen; el clip intermedio viaja como video.
+    assert [m.tipo for m in borrador.media] == [
+        TipoMedia.imagen, TipoMedia.imagen, TipoMedia.video, TipoMedia.imagen,
+    ]
+
+
+def test_borrador_carrusel_sin_slides_va_solo_con_portada(monkeypatch):
+    """Carrusel sin slides extra (o ilegibles) publica al menos la portada, sin romper."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    pub = {
+        "id": "c2", "red": "facebook", "contenido": "texto",
+        "formato": "carrusel", "imagen": "portada.png", "carrusel": "{roto",
+        "fecha_programada": "2026-06-10T18:00",
+    }
+    borrador = _borrador_de_publicacion(pub)
+    assert borrador is not None
+    assert [m.url for m in borrador.media] == [
+        "https://social.kenitech.io/api/media/portada.png"
+    ]
 
 
 def test_borrador_video_sin_asset_omite(monkeypatch):

@@ -365,7 +365,7 @@ async def detalle(request: Request) -> Response:
 # pieza: copy + copy-in + foto/collage + plantilla). Estado, fechas y flags NO se espejan.
 # También es la lista de campos cuyo cambio invalida aprobaciones (junto con `titulo`).
 _CAMPOS_ESPEJO: tuple[str, ...] = (
-    "contenido", "copy_in", "imagen", "foto", "fotos",
+    "contenido", "copy_in", "imagen", "foto", "fotos", "carrusel",
     "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
 )
 
@@ -554,6 +554,15 @@ async def actualizar(request: Request) -> Response:
                 {"error": "Las fotos del collage deben ser texto (JSON)."}, status_code=400
             )
         campos["fotos"] = fotos.strip()
+    if "carrusel" in datos:
+        # CARRUSEL: slides extra en crudo, JSON `[{tipo:"imagen"|"video",objeto}, …]` serializado
+        # por el editor (mismo trato que `fotos`: el backend lo persiste como texto).
+        carrusel = datos.get("carrusel")
+        if not isinstance(carrusel, str):
+            return JSONResponse(
+                {"error": "Los slides del carrusel deben ser texto (JSON)."}, status_code=400
+            )
+        campos["carrusel"] = carrusel.strip()
     if "espejo" in datos:
         # ESPEJO entre redes (vive en el padre: es de la idea). El editor lo togglea desde
         # cualquier pieza hermana; OFF = cada red se edita por separado.
@@ -947,6 +956,7 @@ async def clonar(request: Request) -> Response:
         imagen_fuente=original.get("imagen_fuente") or "",
         foto=original.get("foto") or "",
         fotos=original.get("fotos") or "",
+        carrusel=original.get("carrusel") or "",
         plantilla_diseno_id=original.get("plantilla_diseno_id") or "",
         foto_encuadre=original.get("foto_encuadre") or "",
         placa_oculta=bool(original.get("placa_oculta")),

@@ -141,3 +141,69 @@ def test_flip_no_revierte_ni_borra_lo_publicado(entorno):
     p = db.obtener_contenido_plataforma(plat["id"])
     assert p["estado"] == "publicado"
     assert p["foto"] == "fotos/pub.jpg" and p["plantilla_diseno_id"] == "pl-1"
+
+
+# --------------------------------------------------------------------------- #
+# Formato CARRUSEL: columna `carrusel` (slides extra) y sus flips              #
+# --------------------------------------------------------------------------- #
+
+_SLIDES = '[{"tipo":"imagen","objeto":"fotos/b.jpg"},{"tipo":"video","objeto":"videos/c.mp4"}]'
+
+
+def test_columna_carrusel_se_persiste(entorno):
+    """`crear_contenido_plataforma` persiste los slides extra del carrusel (JSON)."""
+    item = db.crear_contenido(titulo="Carrusel", formato="carrusel")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram", foto="fotos/a.jpg", carrusel=_SLIDES
+    )
+    assert plat["carrusel"] == _SLIDES
+    leido = db.obtener_contenido_plataforma(plat["id"])
+    assert leido["carrusel"] == _SLIDES
+    # Y es editable por la lista blanca (el editor reordena/añade slides).
+    db.actualizar_contenido_plataforma(plat["id"], {"carrusel": ""})
+    assert db.obtener_contenido_plataforma(plat["id"])["carrusel"] == ""
+
+
+def test_flip_foto_a_carrusel_quita_x_y_conserva_portada(entorno):
+    """foto->carrusel: deja IG+FB (x vacía se elimina) y CONSERVA la portada (foto/placa)."""
+    item = db.crear_contenido(titulo="P", formato="foto")
+    plat_ig = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram", foto="fotos/portada.jpg"
+    )
+    db.crear_contenido_plataforma(contenido_id=item["id"], red="x")
+    db.crear_contenido_plataforma(contenido_id=item["id"], red="facebook")
+    res = repos.ajustar_plataformas_por_formato(item["id"], "carrusel")
+    assert res["creadas"] == []
+    assert res["eliminadas"] == ["x"]
+    redes_ = {p["red"] for p in db.listar_contenido_plataforma(item["id"])}
+    assert redes_ == {"instagram", "facebook"}
+    p = db.obtener_contenido_plataforma(plat_ig["id"])
+    # La portada (foto cruda) sobrevive al flip foto->carrusel: misma parte visual.
+    assert p["foto"] == "fotos/portada.jpg"
+    assert p["falta_video"] is False and p["falta_imagen"] is False
+
+
+def test_flip_carrusel_a_foto_limpia_slides_y_anade_x(entorno):
+    """carrusel->foto: añade x y limpia los slides extra; la portada se conserva."""
+    item = db.crear_contenido(titulo="C", formato="carrusel")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram", foto="fotos/portada.jpg", carrusel=_SLIDES
+    )
+    db.crear_contenido_plataforma(contenido_id=item["id"], red="facebook", carrusel=_SLIDES)
+    res = repos.ajustar_plataformas_por_formato(item["id"], "foto")
+    assert res["creadas"] == ["x"]
+    p = db.obtener_contenido_plataforma(plat["id"])
+    assert p["carrusel"] == ""  # los slides son EXCLUSIVOS del carrusel
+    assert p["foto"] == "fotos/portada.jpg"  # la portada se conserva
+
+
+def test_flip_carrusel_a_video_borra_portada_y_slides(entorno):
+    """carrusel->video: borra la parte visual entera (portada + slides) y exige video."""
+    item = db.crear_contenido(titulo="C", formato="carrusel")
+    plat = db.crear_contenido_plataforma(
+        contenido_id=item["id"], red="instagram", foto="fotos/portada.jpg", carrusel=_SLIDES
+    )
+    repos.ajustar_plataformas_por_formato(item["id"], "video")
+    p = db.obtener_contenido_plataforma(plat["id"])
+    assert p["foto"] == "" and p["carrusel"] == ""
+    assert p["falta_video"] is True and p["falta_imagen"] is False

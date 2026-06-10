@@ -71,8 +71,12 @@ def opciones() -> list[dict[str, object]]:
 # --------------------------------------------------------------------------- #
 #
 # Regla del dueño: el FORMATO de la pieza decide a qué redes va.
-#   - FOTO  -> 3 redes (instagram, x, facebook).
-#   - VIDEO -> las 5 (instagram, x, facebook, tiktok, youtube).
+#   - FOTO     -> 3 redes (instagram, x, facebook).
+#   - VIDEO    -> las 5 (instagram, x, facebook, tiktok, youtube).
+#   - CARRUSEL -> 2 redes (instagram, facebook): las que publican carruseles
+#     nativos vía el scheduler de Metricool (varias media en un solo post). La
+#     pieza lleva PORTADA compuesta (placa) como primer slide y el resto del
+#     media va EN CRUDO (campo `carrusel` de la fila por plataforma).
 #
 # El flujo automático (auto-feed + pipeline) no sabe de antemano si un ítem será
 # foto o video, así que crea piezas de FOTO (3 redes) explícitamente. El mapeo de
@@ -81,22 +85,29 @@ def opciones() -> list[dict[str, object]]:
 
 FORMATO_FOTO = "foto"
 FORMATO_VIDEO = "video"
+FORMATO_CARRUSEL = "carrusel"
+
+# Formatos cuyo asset principal es una IMAGEN (portada/placa): comparten checklist
+# (`falta_imagen`) y parte visual (foto cruda + plantilla); el video es N/A en ellos.
+FORMATOS_IMAGEN: tuple[str, ...] = (FORMATO_FOTO, FORMATO_CARRUSEL)
 
 # Subconjunto de redes por formato (ids canónicos; el orden lo fija `REDES`).
 _REDES_POR_FORMATO: dict[str, tuple[str, ...]] = {
     FORMATO_FOTO: ("instagram", "x", "facebook"),
     FORMATO_VIDEO: ("instagram", "x", "facebook", "tiktok", "youtube"),
+    FORMATO_CARRUSEL: ("instagram", "facebook"),
 }
 
 # Etiquetas humanas del formato para la UI.
 _ETIQUETA_FORMATO: dict[str, str] = {
     FORMATO_FOTO: "Foto",
     FORMATO_VIDEO: "Video",
+    FORMATO_CARRUSEL: "Carrusel",
 }
 
 
 def normalizar_formato(formato: str | None) -> str:
-    """Formato canónico (`foto`|`video`); cae a `foto` ante vacío/desconocido (PURO)."""
+    """Formato canónico (`foto`|`video`|`carrusel`); cae a `foto` ante vacío/desconocido (PURO)."""
     f = (formato or "").strip().lower()
     return f if f in _REDES_POR_FORMATO else FORMATO_FOTO
 
@@ -104,7 +115,8 @@ def normalizar_formato(formato: str | None) -> str:
 def redes_de_formato(formato: str | None) -> tuple[str, ...]:
     """Redes destino de un FORMATO de pieza, en el orden de `REDES` (PURO, testeable).
 
-    `foto` -> (instagram, x, facebook); `video` -> las 5. Vacío/desconocido -> `foto`.
+    `foto` -> (instagram, x, facebook); `video` -> las 5; `carrusel` -> (instagram,
+    facebook). Vacío/desconocido -> `foto`.
     Filtra por `es_red` (si el catálogo cambiara, las redes inexistentes se omiten).
     """
     pedidas = set(_REDES_POR_FORMATO[normalizar_formato(formato)])
@@ -112,5 +124,5 @@ def redes_de_formato(formato: str | None) -> tuple[str, ...]:
 
 
 def etiqueta_formato(formato: str | None) -> str:
-    """Etiqueta humana del formato para la UI ("Foto"/"Video"). Desconocido -> "Foto"."""
+    """Etiqueta humana del formato para la UI ("Foto"/"Video"/"Carrusel"). Desconocido -> "Foto"."""
     return _ETIQUETA_FORMATO[normalizar_formato(formato)]

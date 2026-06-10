@@ -156,6 +156,52 @@ def _url_media_publica(nombre_imagen: str) -> str | None:
     return f"{base}/api/media/{nombre_imagen}"
 
 
+def slides_de_carrusel(crudo: object) -> list[dict[str, str]]:
+    """Parsea el campo `carrusel` (JSON) a una lista saneada de slides (PURA, testeable).
+
+    Forma de entrada: `[{"tipo":"imagen"|"video","objeto":"<media id>"}, …]`. Devuelve solo
+    los elementos bien formados, preservando el orden; tipo desconocido/vacío cae a "imagen"
+    (el caso abrumadoramente común). Entrada ilegible -> lista vacía (degrada sin romper).
+    """
+    import json
+
+    try:
+        datos = json.loads(crudo) if isinstance(crudo, str) and crudo.strip() else []
+    except ValueError:
+        return []
+    if not isinstance(datos, list):
+        return []
+    slides: list[dict[str, str]] = []
+    for el in datos:
+        if not isinstance(el, dict):
+            continue
+        objeto = str(el.get("objeto") or "").strip()
+        if not objeto:
+            continue
+        tipo = str(el.get("tipo") or "").strip().lower()
+        slides.append({"tipo": tipo if tipo == "video" else "imagen", "objeto": objeto})
+    return slides
+
+
+def _slides_carrusel(pub: dict[str, Any], media_ref: Any, tipo_media: Any) -> list[Any]:
+    """MediaRefs de los slides extra de un carrusel (tras la portada), en orden.
+
+    Slides sin URL pública (falta `KENI_CONSOLA_URL_PUBLICA`) se omiten con warning.
+    """
+    refs: list[Any] = []
+    for slide in slides_de_carrusel(pub.get("carrusel")):
+        url = _url_media_publica(slide["objeto"])
+        if not url:
+            _log.warning(
+                "Pieza %r (carrusel): slide %r sin URL publica; se omite del post.",
+                pub.get("id"), slide["objeto"],
+            )
+            continue
+        tipo = tipo_media.video if slide["tipo"] == "video" else tipo_media.imagen
+        refs.append(media_ref(tipo=tipo, url=url))
+    return refs
+
+
 def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     """Construye un `BorradorMetricool` desde la fila de publicacion, o None si no aplica.
 
@@ -225,11 +271,12 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
             )
             return None
 
-    # Imagen publicable: si está horneada (`imagen`) se usa; si no, se RENDERIZA on-demand
-    # desde la receta (placa de marca / plantilla del estudio) y se MATERIALIZA en este momento
-    # (content-addressed, una sola vez) para que Metricool la ingiera por una URL estable
-    # `/api/media/{id}`. Tolerante: si el render falla, se publica sin media (warning), igual
-    # que cuando no hay imagen.
+    # Imagen publicable (formatos FOTO y CARRUSEL): si está horneada (`imagen`) se usa; si no,
+    # se RENDERIZA on-demand desde la receta (placa de marca / plantilla del estudio) y se
+    # MATERIALIZA en este momento (content-addressed, una sola vez) para que Metricool la
+    # ingiera por una URL estable `/api/media/{id}`. Tolerante: si el render falla, se publica
+    # sin media (warning), igual que cuando no hay imagen. En CARRUSEL esa imagen compuesta es
+    # la PORTADA (slide 1) y detrás van EN CRUDO los slides extra del campo `carrusel`.
     from . import repos
     from .dominio import estudio_imagen, render_pieza
 
@@ -263,6 +310,13 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
             "se publicara sin media. Configura la variable para incluirla.",
             pub.get("id"), nombre_imagen,
         )
+
+    # CARRUSEL: detrás de la portada van los slides EXTRA en crudo (campo `carrusel`,
+    # JSON `[{tipo:"imagen"|"video",objeto}, …]` en orden de publicación). El cuerpo de
+    # Metricool ya admite varias URLs en `media[]` (un solo post multi-media). Slides
+    # ilegibles o sin URL pública se OMITEN con warning (no rompen el posteo del resto).
+    if redes.normalizar_formato(pub.get("formato")) == redes.FORMATO_CARRUSEL:
+        media.extend(_slides_carrusel(pub, MediaRef, TipoMedia))
 
     # Parsear la fecha programada como datetime (ya paso la validacion de vencimiento,
     # pero la reusamos para el campo publicar_en del borrador).
