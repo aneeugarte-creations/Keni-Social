@@ -11,6 +11,7 @@
 import * as React from "react";
 
 import { Input } from "@/components/ui/input";
+import { hoyCDMX } from "@/lib/fecha";
 import {
   Select,
   SelectContent,
@@ -62,10 +63,23 @@ const MESES_ES = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-/** Años elegibles en el selector de mes: el actual y los 3 anteriores. */
+/** Años elegibles en el selector de mes: el actual (corte CDMX) y los 3 anteriores. */
 function aniosRecientes(): number[] {
-  const actual = new Date().getFullYear();
+  const actual = Number(hoyCDMX().slice(0, 4));
   return [0, 1, 2, 3].map((d) => actual - d);
+}
+
+/**
+ * ¿Se puede elegir `mes` (1-12) de `anio` en el selector? Los meses FUTUROS del año
+ * en curso (corte de día CDMX, no la zona del navegador) se deshabilitan: consultar
+ * un mes sin días transcurridos solo devuelve vacío y confunde. El mes en curso sí
+ * se ofrece (tiene datos parciales legítimos).
+ */
+export function mesSeleccionable(anio: number, mes: number): boolean {
+  const hoy = hoyCDMX(); // "AAAA-MM-DD"
+  const anioHoy = Number(hoy.slice(0, 4));
+  const mesHoy = Number(hoy.slice(5, 7));
+  return anio < anioHoy || (anio === anioHoy && mes <= mesHoy);
 }
 
 /**
@@ -89,10 +103,12 @@ export function SelectorTiempo({
   // Preset por defecto al volver a "Periodos comunes" (el valor actual si es preset, si no el 1º).
   const presetActual = modoDesdeToken(valor) === "atajos" ? valor : (rangos[0]?.id ?? "mes");
 
+  // Mes/año por defecto: los de HOY en CDMX (no la zona del navegador, que entre las
+  // 18:00 y la medianoche CDMX ya iría un día —y a fin de mes, un MES— por delante).
   const mesActual = partesMes(valor);
-  const hoy = new Date();
-  const anio = mesActual?.anio ?? hoy.getFullYear();
-  const mes = mesActual?.mes ?? hoy.getMonth() + 1;
+  const hoy = hoyCDMX();
+  const anio = mesActual?.anio ?? Number(hoy.slice(0, 4));
+  const mes = mesActual?.mes ?? Number(hoy.slice(5, 7));
 
   const rangoActual = partesRango(valor);
   const [desde, setDesde] = React.useState(rangoActual?.desde ?? "");
@@ -148,14 +164,30 @@ export function SelectorTiempo({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {/* Meses futuros (corte CDMX) deshabilitados: consultan vacío. */}
               {MESES_ES.map((nombre, i) => (
-                <SelectItem key={nombre} value={String(i + 1)}>
+                <SelectItem
+                  key={nombre}
+                  value={String(i + 1)}
+                  disabled={!mesSeleccionable(anio, i + 1)}
+                >
                   {nombre}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Select value={String(anio)} onValueChange={(a) => onCambio(tokenMes(Number(a), mes))}>
+          <Select
+            value={String(anio)}
+            onValueChange={(a) => {
+              const anioNuevo = Number(a);
+              // Si al cambiar de año el mes elegido queda en el futuro (p. ej. nov 2025
+              // → 2026 estando en junio), se recorta al mes en curso: nunca un token futuro.
+              const mesValido = mesSeleccionable(anioNuevo, mes)
+                ? mes
+                : Number(hoyCDMX().slice(5, 7));
+              onCambio(tokenMes(anioNuevo, mesValido));
+            }}
+          >
             <SelectTrigger className="h-8 w-full text-xs sm:w-[100px]" aria-label="Año">
               <SelectValue />
             </SelectTrigger>

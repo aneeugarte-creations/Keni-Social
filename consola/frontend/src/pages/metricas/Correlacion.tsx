@@ -5,7 +5,9 @@
  * publicaron: un SCATTER (recharts) muestra todos los puntos del periodo filtrado
  * (x = piezas del día, y = seguidores ganados, color = red) y la tabla queda como
  * drill-down del día, con `seguidores_por_post` como ratio crudo y un enlace a la pieza
- * estrella. RENDERIZA la `nota` del backend (correlación ≠ causalidad) de forma visible
+ * estrella. Sobre los pares visibles se muestra el COEFICIENTE de correlación (ρ de
+ * Spearman con su n; ver estadistica.ts), suprimido cuando n es insuficiente.
+ * RENDERIZA la `nota` del backend (correlación ≠ causalidad) de forma visible
  * para no inducir lecturas causales. La tabla es ORDENABLE por columna numérica y
  * FILTRABLE por red (cliente).
  *
@@ -59,6 +61,7 @@ import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
+import { N_MINIMA_CORRELACION, spearman } from "./estadistica";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 
@@ -73,6 +76,37 @@ function ratio(v: number | null): string {
 function seguidoresNeto(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "0";
   return `${n > 0 ? "+" : "−"}${numeroCompleto(Math.abs(n))}`;
+}
+
+/**
+ * Resumen estadístico del scatter: ρ de Spearman sobre los pares día–red visibles
+ * (x = piezas del día, y = seguidores ganados). Spearman y no Pearson porque son
+ * conteos con outliers (ver estadistica.ts). Con n < N_MINIMA_CORRELACION el
+ * coeficiente se SUPRIME («n insuficiente»): nunca un número espurio.
+ */
+function ResumenCorrelacion({ items }: { items: ItemCorrelacion[] }) {
+  const n = items.length;
+  const rho = React.useMemo(
+    () =>
+      n >= N_MINIMA_CORRELACION
+        ? spearman(
+            items.map((it) => it.n_posts),
+            items.map((it) => it.seguidores_ganados),
+          )
+        : null,
+    [items, n],
+  );
+  const pares = plural(n, "par día–red", "pares día–red");
+  const texto =
+    n < N_MINIMA_CORRELACION
+      ? `n insuficiente para estimar correlación (${pares}; mínimo ${N_MINIMA_CORRELACION}).`
+      : rho == null
+        ? `Correlación no calculable: sin variación en los datos (${pares}).`
+        : `Correlación (ρ de Spearman, robusta a valores extremos): ${rho.toLocaleString(
+            "es-MX",
+            { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+          )} · n = ${pares}.`;
+  return <p className="text-xs text-muted-foreground tabular-nums">{texto}</p>;
 }
 
 /** "Lun 1 jun 2026" a partir de una fecha ISO (AAAA-MM-DD), en es-MX (cabecera del pager). */
@@ -165,6 +199,8 @@ export function Correlacion({
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{data.nota.replace("'seguidores_por_post'", "«Seg. por pieza»")}</span>
           </p>
+          {/* Coeficiente (o su supresión honesta) sobre los pares visibles del filtro. */}
+          {visibles.length > 0 && <ResumenCorrelacion items={visibles} />}
           {/* Scatter con TODOS los puntos del periodo filtrado; la tabla de abajo es el
               drill-down del día. */}
           {visibles.length > 0 && <GraficaCorrelacion items={visibles} marcas={marcas} />}

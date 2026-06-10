@@ -1,13 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import * as React from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 import type { CompararMetricas, TotalMetricas } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { Kpis } from "./Kpis";
+
+// "Hoy" fijo (corte CDMX) para que la guarda de comparabilidad sea determinista:
+// 10 de junio de 2026 → mes:2026-06 está EN CURSO con 10 días transcurridos.
+vi.mock("@/lib/fecha", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/fecha")>();
+  return { ...real, hoyCDMX: vi.fn(() => "2026-06-10") };
+});
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -17,6 +25,10 @@ beforeAll(() => {
       disconnect() {}
     };
   }
+});
+
+beforeEach(() => {
+  vi.mocked(hoyCDMX).mockReturnValue("2026-06-10");
 });
 
 const TOTAL: TotalMetricas = {
@@ -93,6 +105,81 @@ describe("Kpis", () => {
 
     expect(await screen.findByText("Nuevo")).toBeInTheDocument();
     expect(screen.queryByText("0.0 %")).not.toBeInTheDocument();
+  });
+
+  it("mes EN CURSO: compara los días transcurridos con los mismos días del mes anterior", async () => {
+    const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue({
+      ...COMPARAR,
+      rango_a: "rango:2026-05-01_2026-05-10",
+      rango_b: "rango:2026-06-01_2026-06-10",
+      etiqueta_a: "1 may – 10 may 2026",
+      etiqueta_b: "1 jun – 10 jun 2026",
+    });
+    renderConProviders(
+      <Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="mes:2026-06" />,
+    );
+
+    expect(await screen.findByText("+39.0 %")).toBeInTheDocument();
+    // NUNCA 10 días contra los 31 de mayo: tramos de la MISMA duración (1–10 vs 1–10).
+    const { rango_a = "", rango_b = "" } = espia.mock.calls[0][0];
+    expect(rango_b).toBe("rango:2026-06-01_2026-06-10");
+    expect(rango_a).toBe("rango:2026-05-01_2026-05-10");
+    // El contexto es visible (leyenda) y accesible (tooltip de la insignia).
+    expect(
+      screen.getByText(/Periodo en curso: las variaciones comparan los días transcurridos/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByTitle(/Periodo en curso: se comparan los días transcurridos/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("mes CERRADO: compara contra los primeros N días del mes anterior, sin leyenda de en curso", async () => {
+    const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue({
+      ...COMPARAR,
+      rango_a: "rango:2026-03-01_2026-03-30",
+      rango_b: "mes:2026-04",
+      etiqueta_a: "1 mar – 30 mar 2026",
+      etiqueta_b: "Abril 2026",
+    });
+    renderConProviders(
+      <Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="mes:2026-04" />,
+    );
+
+    expect(await screen.findByText("+39.0 %")).toBeInTheDocument();
+    // Abril (30 d) vs 1–30 de marzo: misma duración, nunca 30 vs 31 días.
+    const { rango_a = "", rango_b = "" } = espia.mock.calls[0][0];
+    expect(rango_b).toBe("mes:2026-04");
+    expect(rango_a).toBe("rango:2026-03-01_2026-03-30");
+    expect(screen.queryByText(/Periodo en curso/)).not.toBeInTheDocument();
+    expect(
+      screen.getAllByTitle("vs periodo anterior (1 mar – 30 mar 2026)").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("semana CERRADA: compara contra la semana natural anterior (7 vs 7 días)", async () => {
+    const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
+    renderConProviders(
+      <Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="semana_cerrada" />,
+    );
+
+    expect(await screen.findByText("+39.0 %")).toBeInTheDocument();
+    // Hoy mié 10 jun → semana cerrada = 1–7 jun; anterior = 25–31 may (7 días).
+    const { rango_a = "", rango_b = "" } = espia.mock.calls[0][0];
+    expect(rango_b).toBe("semana_cerrada");
+    expect(rango_a).toBe("rango:2026-05-25_2026-05-31");
+    expect(screen.queryByText(/Periodo en curso/)).not.toBeInTheDocument();
+  });
+
+  it("mes FUTURO (sin datos): ni insignias ni consulta — nunca un porcentaje espurio", () => {
+    const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
+    renderConProviders(
+      <Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="mes:2026-07" />,
+    );
+
+    expect(screen.getByText("Vistas")).toBeInTheDocument();
+    expect(screen.queryByText("+39.0 %")).not.toBeInTheDocument();
+    expect(screen.queryByText(/pts/)).not.toBeInTheDocument();
+    expect(espia).not.toHaveBeenCalled();
   });
 
   it("sin rangoActual: pinta los KPIs sin insignias y NO consulta la comparativa", () => {

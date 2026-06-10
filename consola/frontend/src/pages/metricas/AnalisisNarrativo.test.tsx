@@ -92,7 +92,7 @@ describe("AnalisisNarrativo", () => {
     expect(await screen.findByText("Datos de muestra")).toBeInTheDocument();
   });
 
-  it("muestra «Nuevo» (no «0.0 %») cuando una marca arranca desde base cero", async () => {
+  it("redacta el arranque desde cero en castellano natural, con el badge fuera de la frase", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
       ...RESP,
       movimientos: [
@@ -110,7 +110,13 @@ describe("AnalisisNarrativo", () => {
     });
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
-    expect(await screen.findByText("Nuevo")).toBeInTheDocument();
+    // Frase natural: «UnoTV estrenó vistas (antes 0) · 250 vistas en el periodo».
+    expect(await screen.findByText(/estrenó vistas \(antes 0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/250 vistas en el periodo/)).toBeInTheDocument();
+    // El badge sigue existiendo pero FUERA de la frase (nada de «subió [Nuevo] en vistas»).
+    expect(screen.getByText("Nuevo")).toBeInTheDocument();
+    expect(screen.queryByText(/subió/)).not.toBeInTheDocument();
+    // Y nunca un «0.0 %» que oculte el arranque.
     expect(screen.queryByText(/0\.0 %/)).not.toBeInTheDocument();
   });
 

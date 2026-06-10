@@ -150,6 +150,40 @@ describe("Correlacion (seguidores vs publicación)", () => {
     expect(screen.queryByText("UnoTV")).not.toBeInTheDocument();
   });
 
+  it("con menos de 8 pares suprime el coeficiente: «n insuficiente para estimar correlación»", async () => {
+    vi.spyOn(api, "metricasCorrelacion").mockResolvedValue(RESP); // 2 pares
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    expect(
+      await screen.findByText(/n insuficiente para estimar correlación \(2 pares día–red; mínimo 8\)/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ρ de Spearman/)).not.toBeInTheDocument();
+  });
+
+  it("con n suficiente muestra ρ de Spearman etiquetado y su n", async () => {
+    // 8 pares día–red con relación monótona perfecta (más piezas → más seguidores).
+    const items = Array.from({ length: 8 }, (_, i) => ({
+      ...RESP.items[0],
+      fecha: `2026-05-2${i + 1}`,
+      n_posts: i + 1,
+      seguidores_ganados: (i + 1) * 40,
+      seguidores_por_post: 40,
+      post_estrella: null,
+    }));
+    vi.spyOn(api, "metricasCorrelacion").mockResolvedValue({ ...RESP, items });
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    expect(
+      await screen.findByText(/Correlación \(ρ de Spearman, robusta a valores extremos\): 1\.00 · n = 8 pares día–red/),
+    ).toBeInTheDocument();
+    // La nota anti-causal sigue visible junto al coeficiente.
+    expect(screen.getByText(NOTA)).toBeInTheDocument();
+  });
+
   it("dice con honestidad cuando no hay seguidores", async () => {
     vi.spyOn(api, "metricasCorrelacion").mockResolvedValue({ ...RESP, items: [] });
     renderConProviders(

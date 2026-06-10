@@ -54,7 +54,9 @@ function EnlacePieza({ url, children }: { url: string; children: React.ReactNode
  * Un movimiento del periodo: icono de dirección + lectura en una frase y, si la hay,
  * la pieza que lo explica. GUARDIA: el backend emite `variacion_vis_pct = 0.0` cuando
  * la base es 0 (división imposible); "subió 0.0 %" OCULTARÍA un arranque desde cero,
- * así que en ese caso se muestra la insignia "Nuevo" (mismo criterio que Comparar).
+ * así que ese caso se redacta como castellano natural —«estrenó vistas (antes 0)»—
+ * con la insignia "Nuevo" FUERA de la frase, al final de la línea (incrustar el badge
+ * dentro de la oración se leía «subió [Nuevo] en vistas»).
  */
 function Movimiento({ m }: { m: MovimientoAnalisis }) {
   const sube = m.direccion === "sube";
@@ -75,17 +77,19 @@ function Movimiento({ m }: { m: MovimientoAnalisis }) {
         {/* div (no <p>): la insignia "Nuevo" es un <div> y anidarlo en <p> es HTML inválido. */}
         <div className="text-sm">
           <span className="font-medium">{m.marca}</span>{" "}
-          {!sube && !baja ? (
-            "se mantuvo estable"
-          ) : esArranque ? (
-            <>
-              {verbo} <Badge variant="ok">Nuevo</Badge> en vistas
-            </>
-          ) : (
-            `${verbo} ${variacion(m.variacion_vis_pct)} en vistas`
-          )}
+          {!sube && !baja
+            ? "se mantuvo estable"
+            : esArranque
+              ? "estrenó vistas (antes 0)"
+              : `${verbo} ${variacion(m.variacion_vis_pct)} en vistas`}
           {` · ${numeroCompacto(m.visualizaciones)} vistas en el periodo`}
           {m.engagement_pct != null && ` · ${porcentaje(m.engagement_pct)} de engagement`}
+          {esArranque && (
+            <>
+              {" "}
+              <Badge variant="ok">Nuevo</Badge>
+            </>
+          )}
         </div>
         {m.pieza && (
           <p className="text-sm text-muted-foreground">
