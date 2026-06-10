@@ -14,10 +14,14 @@ causas externas, y qué falta para tener un producto vendible a AMX.
 Construido, probado y en uso, sin depender de ninguna aprobación externa.
 
 - **Copy desde texto con tropicalización es-MX y auto-verificación.** A partir de una nota o
-  varios cables, una variante por plataforma (X, Instagram, Facebook, TikTok, YouTube) con conteo
-  de caracteres, en la voz de cada marca. La salida **abre con el semáforo de veredicto y su
-  leyenda** (🟢 listo / 🟡 revísalo tú / 🔴 no publicar) antes del copy, y cierra con la
-  auto-verificación detallada que marca fechas, nombres, cifras y reglas legales.
+  varios cables, un copy **unificado** listo para todas las redes pedidas (el modo del
+  pipeline; los formatos especiales —galería, termómetro— siguen generando variante por red)
+  con conteo de caracteres, en la voz de cada marca y dentro de las **bandas medidas** de su
+  perfil de patrones. La salida **abre con la línea de veredicto y su leyenda** (LISTO PARA
+  APROBAR / REVISAR ANTES DE PUBLICAR / NO PUBLICAR) antes del copy, y cierra con la
+  auto-verificación detallada que marca fechas, nombres, cifras y reglas legales; después,
+  la verificación de voz determinista contrasta el resultado contra el patrón real de la
+  marca y degrada el veredicto si algo se sale.
 - **Clip → copy 100% local.** De un video o audio a copy por plataforma **más las mejores citas
   con marca de tiempo** (punto de corte exacto). La transcripción corre en la máquina con
   whisper.cpp; el audio no sale. El texto de transcripción se trata como **no verificado** y se
@@ -31,6 +35,15 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   picos. Lee dato real **vía Metricool** (`FuenteMetricol`, API REST; AMX en plan Advanced) como
   una fuente más detrás de `FuenteMetricas`; sin token configurado **degrada a datos de muestra**
   representativos de las cinco marcas (nunca inventa cifras).
+- **MCP operativo sobre la Consola.** Toda la operación (catálogo, contenido, pool de
+  noticias, generación de copy, aprobación hasta aprobar/rechazar, métricas, patrones
+  medidos por marca + verificación de voz, cola de generación) expuesta como tools MCP en
+  `/mcp` del back, tras bearer propio y con las acciones atribuidas al dueño. Publicar
+  real queda fuera a propósito (gated en la UI).
+- **Patrones editoriales derivados de datos (ADR 0009).** Perfil medido por marca (cuartil
+  top vs fondo sobre el año de piezas reales de Metricool: longitud, emojis, hashtags,
+  gancho, pregunta, formatos) que se inyecta al prompt de copy, verificación de voz
+  determinista antes de la revisión humana y re-derivación periódica (CLI + daemon gateado).
 - **Catálogo de apps con fronteras verificadas (separación A/B/C + shell).** La Consola está
   organizada como catálogo de apps de producto (Producción · Métricas · Operación) + un shell
   transversal, cada una activable por flag, con un **lint de fronteras en CI** que impide que una

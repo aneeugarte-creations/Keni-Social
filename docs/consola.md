@@ -4,6 +4,12 @@ La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y
 
 > **No reemplaza a Claude Code, lo envuelve.** Si prefieres escribirle a Claude directamente, puedes seguir haciéndolo; la consola es la opción para quien quiere botones en vez de comandos.
 
+> Este documento describe el **modo local** (una persona, su máquina). El piloto corre además
+> una instancia **alojada multiusuario** (`https://social.kenitech.io`, con usuarios/sesiones,
+> Postgres y worker propio) descrita en [`despliegue-hosted.md`](despliegue-hosted.md); ahí la
+> misma capacidad se expone también como **tools MCP** en `/mcp` (ver
+> [`arquitectura.md`](arquitectura.md) §3).
+
 ---
 
 ## Cómo se arranca

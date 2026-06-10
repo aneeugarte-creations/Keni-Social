@@ -239,9 +239,12 @@ class ServidorMcp:
             instructions=(
                 "Operación de redes sociales de keni-social (piloto AMX: UnoTV / Claro "
                 "Sports). Con estas tools puedes consultar el catálogo de marcas y redes, "
-                "crear y gestionar contenido, generar copy, mover piezas por el flujo de "
-                "aprobación (hasta aprobar/rechazar) y leer métricas. Empieza por "
-                "`keni_contexto` para conocer marcas, redes y estados válidos."
+                "crear y gestionar contenido, trabajar el pool de noticias (usar/descartar), "
+                "generar copy, verificar la voz de un texto contra los patrones medidos de "
+                "su marca, mover piezas por el flujo de aprobación (hasta aprobar/rechazar), "
+                "leer métricas (incl. líneas editoriales, comparativas y Ads) y vigilar la "
+                "cola de generación. Empieza por `keni_contexto` para conocer marcas, redes "
+                "y estados válidos."
             ),
         )
         _registrar_tools(self._mcp, self.holder)
@@ -548,3 +551,196 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.get("/api/metricas/pieza-historico", id=id)
+
+    @mcp.tool()
+    async def keni_metricas_comparar(
+        rango_a: str = "semana", rango_b: str = "mes", marca: str = ""
+    ) -> dict:
+        """Comparativa de DOS periodos (A vs B): totales, desglose de interacciones y
+        seguidores de ambos, para ver qué cambió. `rango_a`/`rango_b` ∈ {semana,mes,7d,30d}
+        o un token de mes/rango (ver keni_metricas_opciones)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/metricas/comparar", rango_a=rango_a, rango_b=rango_b, marca=marca
+        )
+
+    @mcp.tool()
+    async def keni_metricas_lineas(rango: str = "mes", marca: str = "") -> dict:
+        """Rendimiento del periodo por LÍNEA editorial (etiqueta de clase `vertical`) y por
+        ORIGEN: nº de piezas, visualizaciones, interacciones y engagement medio por cubo.
+        Responde "qué línea funciona" (p. ej. Liga MX vs NFL en Claro Sports)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/lineas", rango=rango, marca=marca)
+
+    @mcp.tool()
+    async def keni_metricas_ads(rango: str = "mes", marca: str = "") -> dict:
+        """Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): impresiones, gasto
+        y clics por campaña + totales. Lista vacía = sin Ads conectado o sin entrega en el
+        periodo."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/ads", rango=rango, marca=marca)
+
+    # ---- Patrones editoriales y verificación de voz (ADR 0009) ---------- #
+
+    @mcp.tool()
+    async def keni_patrones_marca(marca: str = "") -> dict:
+        """Perfil de PATRONES medidos de una marca (derivado de su rendimiento real en
+        Metricool): por red, bandas del cuartil TOP vs FONDO (longitud, emojis, hashtags,
+        gancho en MAYÚSCULAS, pregunta, formatos) y las reglas del lint de voz. Sin
+        `marca`, devuelve qué marcas tienen perfil. Úsalo para escribir copy dentro del
+        patrón real de la marca."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/patrones", marca=marca)
+
+    @mcp.tool()
+    async def keni_verificar_voz(
+        marca: str, texto: str, redes: list[str] | None = None, copy_unico: bool = True
+    ) -> dict:
+        """Verifica un TEXTO contra los patrones medidos de su marca (la misma verificación
+        determinista que corre tras generar copy): emojis, longitud, hashtags, gancho y
+        pregunta fuera del patrón real. `redes` acota la verificación (sin ella, todas);
+        `copy_unico` aplica además el contrato del copy unificado (sin hashtags). Devuelve
+        `{avisos, dentro_de_patron}` — un texto con avisos merece revisión, no es un
+        bloqueo."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"marca": marca, "texto": texto, "copy_unico": copy_unico}
+        if redes:
+            cuerpo["redes"] = redes
+        return await cli.post("/api/patrones/verificar-voz", cuerpo)
+
+    # ---- Noticias (pool de ingesta -> tablero) -------------------------- #
+
+    @mcp.tool()
+    async def keni_listar_noticias(
+        marca: str = "", estado: str = "", q: str = "", desde: str = "", limite: int = 20
+    ) -> dict:
+        """Pool de noticias ingeridas (RSS/tendencias), más nuevas primero. `estado` ∈
+        {nuevo,usado,descartado}; `q` busca en título+resumen; `desde` es fecha ISO sobre
+        la captura. Cada item trae título, resumen, url, marca sugerida y relevancia. Para
+        convertir una en contenido usa `keni_usar_noticia`."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/noticias", marca=marca, estado=estado, q=q, desde=desde, limit=limite
+        )
+
+    @mcp.tool()
+    async def keni_usar_noticia(
+        item_id: str, redes: list[str] | None = None, generar: bool = True
+    ) -> dict:
+        """Lleva una noticia del pool al tablero: crea el contenido (origen=noticia) y, si
+        `generar` (def True) y la noticia tiene marca, encola el copy en segundo plano.
+        Idempotente: si ya estaba usada devuelve el contenido enlazado sin duplicar."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"generar": generar}
+        if redes:
+            cuerpo["redes"] = redes
+        return await cli.post(f"/api/noticias/{item_id}/usar", cuerpo)
+
+    @mcp.tool()
+    async def keni_descartar_noticia(item_id: str) -> dict:
+        """Descarta una noticia del pool (estado=descartado): no aparecerá como candidata."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/noticias/{item_id}/descartar")
+
+    @mcp.tool()
+    async def keni_noticias_cobertura() -> dict:
+        """Salud del motor de ingesta de noticias: cuántos items hay por marca/estado y
+        qué tan fresca es la captura (para detectar marcas sin pool que alimentar)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/noticias/cobertura")
+
+    # ---- Apoyos editoriales: hashtags, franjas, evergreen, algoritmos --- #
+
+    @mcp.tool()
+    async def keni_hashtags() -> dict:
+        """Grupos de hashtags de la casa, por marca (los que el equipo añade al copy donde
+        corresponde, p. ej. Instagram/TikTok). El copy unificado se genera SIN hashtags;
+        estos grupos son la fuente para añadirlos después."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/hashtags")
+
+    @mcp.tool()
+    async def keni_franjas() -> dict:
+        """Franjas horarias de publicación configuradas (día de semana + hora, por marca y
+        red): las ventanas en las que el equipo programa."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/franjas")
+
+    @mcp.tool()
+    async def keni_evergreen_ideas(marca: str = "", estado: str = "") -> dict:
+        """Catálogo de ideas EVERGREEN (contenido reutilizable sin caducidad) con su estado.
+        Útil para llenar huecos de parrilla cuando no hay actualidad."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/evergreen/ideas", marca=marca, estado=estado)
+
+    @mcp.tool()
+    async def keni_algoritmos(plataforma: str = "", nivel: str = "", limite: int = 20) -> dict:
+        """Inteligencia de PLATAFORMA: cambios de algoritmo y tendencias por red
+        (Instagram/TikTok/Facebook/YouTube/X), ordenadas por importancia. `nivel` filtra
+        por importancia; `solo cambios` los confirmados. Para saber a qué jugarle hoy."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/algoritmos", plataforma=plataforma, nivel=nivel, limite=limite
+        )
+
+    @mcp.tool()
+    async def keni_sugerencias_editoriales(estado: str = "") -> dict:
+        """Propuestas de cambio a la línea editorial generadas a partir de las noticias de
+        algoritmo (digest diario): qué ficha de plataforma tocar y por qué. `estado` ∈
+        {nueva,aplicada,descartada}. Las aplica/descarta un humano desde la Consola."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/algoritmos/sugerencias", estado=estado)
+
+    # ---- Observabilidad de la generación --------------------------------- #
+
+    @mcp.tool()
+    async def keni_cola_estado(marca: str = "") -> dict:
+        """Snapshot EN VIVO de la cola de generación de IA: jobs en curso/esperando (con su
+        marca y tipo), capacidad de workers, daemons y presupuesto/gasto del día. Para
+        saber por qué algo tarda o si la máquina está saturada."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/actividad/cola", marca=marca)
+
+    # ---- Verificación de video (datar un viral) -------------------------- #
+
+    @mcp.tool()
+    async def keni_verificar_video(enlace: str, contexto: str = "") -> dict:
+        """Lanza la verificación de un VIDEO viral (datarlo: nuevo vs reciclado): descarga
+        metadatos, OCR de fechas en pantalla y enlaces de búsqueda inversa. Corre en
+        segundo plano: devuelve una generación; sigue su avance con
+        `keni_estado_generacion` (el resultado junta la evidencia, el veredicto lo pone el
+        humano)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post("/api/verificar", {"enlace": enlace, "contexto": contexto})

@@ -49,6 +49,8 @@ modulos_backend = [
   "insumos",
   "algoritmos",
   "pipelines",
+  # Patrones editoriales medidos + verificación de voz (ADR 0009): api/patrones.py.
+  "patrones",
   # Motor de video (Ola VIDEO): api/video.py (lo crea otro agente). Declarado aqui para que
   # el lint de fronteras mapee el router a esta app.
   "video",

@@ -45,7 +45,8 @@ Servidor MCP (Python/FastMCP), ejecutable por **stdio** (local) o **HTTP** (aloj
 
 ```
 tools (listar_cuentas, metricas_resumen, mejores_piezas, comparar_periodos,
-       tendencia_historica, reporte_consolidado, picos)
+       tendencia_historica, reporte_consolidado, picos, serie_seguidores,
+       desglose_interacciones, crosstab, correlacion_seguidores, analisis_diario)
    ├─ FuenteMetricas
    │    ├─ FuenteMuestra        (datos offline deterministas; default / fallback)
    │    ├─ FuenteMetricol       (API REST de Metricool; AMX en plan Advanced)
@@ -73,8 +74,8 @@ Distribución: el MCP se instala y actualiza como **plugin de Claude Code** desd
 Capa de gestión opcional para máquinas no técnicas (community managers): una UI web local que
 **orquesta** la generación de copy/imagen (Texto + lanzador) y el MCP de métricas, sin
 reemplazarlos. Backend Starlette
-(Python) + frontend React/TS/Vite/shadcn (bundle vendorizado en
-`consola/src/keni_consola/webapp/`). La generación corre **en segundo plano con `claude -p`**
+(Python) + frontend React/TS/Vite/shadcn (el SPA se compila desde fuente en CI/deploy;
+`webapp/` es el outDir local y NO se versiona). La generación corre **en segundo plano con `claude -p`**
 (stream-json, token a token), con un semáforo de concurrencia (`KENI_MAX_JOBS`, def. 4).
 
 ```
@@ -87,6 +88,17 @@ Consola (Starlette + React, local 127.0.0.1)
 
 El lanzador lee solo variables de entorno; la Consola **exporta** la clave del almacén único
 (`secretos.toml`) al subproceso al lanzar una generación. Detalle en [`consola.md`](consola.md).
+
+**MCP operativo (`/mcp` del back).** La misma capacidad de la API JSON, expuesta como tools
+MCP a un cliente tipo Claude Code (`mcp_operativo.py`): catálogo y contexto, contenido
+(crear/listar/actualizar), pool de noticias (listar/usar/descartar/cobertura), generación de
+copy y seguimiento de generaciones, flujo de aprobación (hasta aprobar/rechazar; **publicar
+queda fuera**), métricas (reporte, análisis, piezas, seguidores, desglose, crosstab,
+correlación, histórico por pieza, comparativas, líneas editoriales, Ads), patrones medidos por
+marca + verificación de voz (ADR 0009), apoyos editoriales (hashtags, franjas, evergreen,
+inteligencia de algoritmos y sugerencias) y observabilidad de la cola de generación. Va tras
+`Authorization: Bearer KENI_MCP_BEARER` y opera por dentro con la sesión del dueño
+(`KENI_MCP_USUARIO`); sin bearer configurado, no se monta.
 
 **Persistencia operacional (ADR 0004): Postgres único.** Las tareas, el seguimiento comercial,
 la rota, los usuarios/sesiones y la cola de jobs viven en **Postgres** (`DATABASE_URL`

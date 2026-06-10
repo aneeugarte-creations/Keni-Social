@@ -13,6 +13,11 @@ Servidor **MCP** que lee métricas de redes sociales (Meta FB/IG, YouTube, X, Ti
 | `tendencia_historica(cuenta, rango, n)` | Evolución de las últimas n lecturas guardadas. |
 | `reporte_consolidado(rango, top)` | Informe de TODAS las marcas en un rango (total + desglose + mejores piezas). |
 | `picos(rango, umbral_pct)` | Alerta proactiva: piezas que despuntan sobre la media y cuentas que se desvían de su baseline. |
+| `serie_seguidores(rango)` | Crecimiento de seguidores por día y por red (stock diario + neto del periodo). |
+| `desglose_interacciones(rango)` | Likes, comentarios, compartidos, guardados y video_views por marca×red, con totales. |
+| `crosstab(rango)` | Rendimiento cruzado marca×red×formato (piezas, visualizaciones, engagement, rendimiento relativo). |
+| `correlacion_seguidores(rango)` | Seguidores ganados ↔ piezas publicadas por marca×red×día (correlación, no causalidad). |
+| `analisis_diario(rango, marca)` | Narrativa accionable del periodo: qué subió/bajó, la pieza que lo explica y el siguiente paso. |
 
 ## Histórico
 
