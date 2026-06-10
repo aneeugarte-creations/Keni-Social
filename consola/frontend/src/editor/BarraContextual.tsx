@@ -10,6 +10,8 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  ChevronsLeftRight,
+  ChevronsUpDown,
   Crop,
   Replace,
   Settings2,
@@ -23,6 +25,12 @@ import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignJustify } as const;
 const ALIN_CICLO = ["izquierda", "centro", "derecha", "justificado"] as const;
+
+// Presets de INTERLINEADO (line-height relativo, patrón Canva). El valor actual del documento se
+// añade como opción extra si no coincide con ninguno (p. ej. el 1.14 por defecto de las plantillas).
+const INTERLINEADOS = [1.0, 1.15, 1.3, 1.5, 2.0] as const;
+// "1" -> "1.0", "1.15" -> "1.15" (siempre con al menos un decimal, legible como factor).
+const fmtInterlineado = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
 function Sep() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
@@ -57,21 +65,28 @@ function BotonIcono({
   );
 }
 
-// Pequeño stepper numérico (−/valor/+) intuitivo para tamaños.
-function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12" }: {
+// Pequeño stepper numérico (−/valor/+) intuitivo para tamaños y espaciados.
+function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12", etiqueta = "Tamaño de letra", icono }: {
   valor: number;
   onChange: (v: number) => void;
   min?: number;
   max?: number;
   paso?: number;
   ancho?: string;
+  // Etiqueta accesible y tooltip del control (qué magnitud edita este stepper).
+  etiqueta?: string;
+  // Icono opcional delante del «−» para distinguir steppers vecinos de un vistazo.
+  icono?: React.ReactNode;
 }) {
   const [edicion, setEdicion] = useState<string>(String(Math.round(valor)));
 
-  // Sincroniza el estado local cuando `valor` cambia desde fuera.
-  const val = Math.round(valor);
-  if (edicion !== String(val) && edicion === String(Math.round(Number(edicion) || 0))) {
-    setEdicion(String(val));
+  // Sincroniza el estado local SOLO cuando `valor` cambia desde fuera (undo, −/+, otra capa…),
+  // nunca mientras se teclea. (El patrón anterior comparaba contra `edicion` y machacaba lo
+  // tecleado en cuanto era un número "limpio": teclear en el stepper no funcionaba.)
+  const [valorPrevio, setValorPrevio] = useState(valor);
+  if (valor !== valorPrevio) {
+    setValorPrevio(valor);
+    setEdicion(String(Math.round(valor)));
   }
 
   const fija = (v: number) => onChange(Math.max(min, Math.min(max, v)));
@@ -82,8 +97,9 @@ function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12
   };
 
   return (
-    <div className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-input">
-      <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor - paso)} title="Menos">−</button>
+    <div title={etiqueta} className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-input">
+      {icono && <span className="pl-1.5 text-muted-foreground">{icono}</span>}
+      <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor - paso)} title={`${etiqueta}: menos`}>−</button>
       <input
         type="number"
         value={edicion}
@@ -93,10 +109,10 @@ function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12
           if (e.key === "Enter") commitear();
           if (e.key === "Escape") setEdicion(String(Math.round(valor)));
         }}
-        aria-label="Tamaño de letra"
+        aria-label={etiqueta}
         className={`${ancho} bg-background px-1 text-center text-sm outline-none`}
       />
-      <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor + paso)} title="Más">+</button>
+      <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor + paso)} title={`${etiqueta}: más`}>+</button>
     </div>
   );
 }
@@ -192,6 +208,41 @@ export function BarraContextual({
               </BotonIcono>
             );
           })()}
+          {/* INTERLINEADO (line-height relativo): presets estilo Canva. Soportado end-to-end:
+              `interlineado` viaja en el documento y lo pinta igual el editor (Konva `lineHeight`)
+              y el export del servidor (`dibujar.mjs`). */}
+          {(() => {
+            const v = (capa as CapaTexto).interlineado;
+            const opciones: number[] = INTERLINEADOS.includes(v as (typeof INTERLINEADOS)[number])
+              ? [...INTERLINEADOS]
+              : [...INTERLINEADOS, v].sort((a, b) => a - b);
+            return (
+              <label title="Interlineado" className="flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-input bg-background pl-1.5 pr-1">
+                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <select
+                  aria-label="Interlineado"
+                  value={String(v)}
+                  onChange={(e) => set({ interlineado: Number(e.target.value) } as Partial<Capa>)}
+                  className="h-full bg-background text-sm outline-none"
+                >
+                  {opciones.map((o) => (
+                    <option key={o} value={String(o)}>{fmtInterlineado(o)}</option>
+                  ))}
+                </select>
+              </label>
+            );
+          })()}
+          {/* ESPACIADO ENTRE LETRAS (tracking, px): también end-to-end (`interletra` en el
+              documento; Konva `letterSpacing` y `ctx.letterSpacing` en el render del servidor). */}
+          <Stepper
+            valor={(capa as CapaTexto).interletra || 0}
+            min={-20}
+            max={200}
+            ancho="w-10"
+            etiqueta="Espaciado entre letras"
+            icono={<ChevronsLeftRight className="h-3.5 w-3.5" />}
+            onChange={(v) => set({ interletra: v } as Partial<Capa>)}
+          />
         </>
       )}
 

@@ -5,8 +5,10 @@
 //                    [barra contextual flotante (solo con selección)]
 //
 // - RAIL de herramientas: tira vertical de iconos (izquierda en escritorio, barra inferior en
-//   móvil). Cada icono abre/cierra un FLYOUT con su panel (Plantillas, Elementos, Galería, Capas)
-//   y «Ajustes» abre el inspector.
+//   móvil), orden estilo Canva: Diseño (plantillas) SIEMPRE primero, luego Elementos, Galería y
+//   Capas. Cada icono abre/cierra un FLYOUT (~350px) con su panel y «Ajustes» abre el inspector.
+//   «Diseño» pinta el panel que aporta la página (`panelDiseno`); si la página solo da
+//   `onPlantillas` (overlay de vídeo), el botón cae al modal clásico.
 // - ACCIONES: un único clúster (deshacer/rehacer, vista con muestra, menú «Más», Exportar) que con
 //   `accionesEnCabecera` se PORTALIZA a la barra de cabecera unificada del shell (vía
 //   `AccionesPagina`); sin ella (p. ej. overlay de vídeo) se pinta como fila fina propia. La página
@@ -66,7 +68,7 @@ import { Telon, useCerrarConEscape } from "./Telon";
 import { useFuentesMarca } from "./useFuentesMarca";
 
 // El generador de IA NO va en el editor: era solo para las imágenes del feed (sobra aquí).
-type Herramienta = "elementos" | "texto" | "capas";
+type Herramienta = "diseno" | "elementos" | "texto" | "capas";
 
 // Preferencias de "Vista con muestra" (toggles de PRESENTACIÓN del editor) en localStorage. Foto y
 // copy son INDEPENDIENTES. Por defecto ENCENDIDOS: al abrir una plantilla se ve de inmediato cómo
@@ -88,6 +90,9 @@ function leerToggle(clave: string): boolean {
 }
 
 const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
+  // Orden Canva: «Diseño» (plantillas) SIEMPRE primero. Solo aparece si la página aporta
+  // `panelDiseno` u `onPlantillas` (se filtra en el componente).
+  { clave: "diseno", etiqueta: "Diseño", Icono: LayoutTemplate },
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
   // `clave: "texto"` es el id INTERNO histórico del panel (antes «Biblioteca»); la etiqueta visible
   // es «Galería» (galería de imágenes/activos de la marca), que es lo que de verdad es este panel.
@@ -100,6 +105,7 @@ export function EditorDocumento({
   marca,
   exportar,
   onPlantillas,
+  panelDiseno,
   avisaHueco,
   onAbrirAdaptado,
   accionesEnCabecera,
@@ -115,6 +121,9 @@ export function EditorDocumento({
   // «Guardar en pieza»).
   exportar?: { bindings?: Record<string, string>; nombre?: string; primario?: boolean };
   onPlantillas?: () => void;
+  // Panel «Diseño» del rail (galería de plantillas como COLUMNA, estilo Canva). Si está, el botón
+  // «Diseño» abre este panel; si solo hay `onPlantillas`, cae al modal clásico (overlay de vídeo).
+  panelDiseno?: ReactNode;
   // Si la pestaña está atada a plantilla, avisa cuando NO hay capa marcada como hueco de foto.
   avisaHueco?: boolean;
   // «Adaptar a…»: abre el documento reencuadrado en una pestaña nueva (lo cablea Imagen).
@@ -173,6 +182,16 @@ export function EditorDocumento({
     !!avisaHueco && !store.getState().documento.capas.some((c) => c.tipo === "imagen" && c.es_foto);
 
   const abrirTool = (t: Herramienta) => setTool((prev) => (prev === t ? null : t));
+
+  // Herramientas visibles del rail: «Diseño» solo si la página aporta su panel o el modal clásico.
+  const herramientas = HERRAMIENTAS.filter(
+    (h) => h.clave !== "diseno" || panelDiseno !== undefined || onPlantillas !== undefined,
+  );
+  // «Diseño» abre su PANEL si la página lo aporta; si solo hay `onPlantillas`, cae al modal.
+  const pulsarTool = (t: Herramienta) => {
+    if (t === "diseno" && panelDiseno === undefined) return onPlantillas?.();
+    abrirTool(t);
+  };
 
   // ESCAPE cierra el overlay ABIERTO más "alto" (menú > flyout > inspector), esté donde
   // esté el foco. Los backdrops (`Telon`) cubren además teclado con foco en ellos.
@@ -264,6 +283,7 @@ export function EditorDocumento({
 
   const panel = (() => {
     switch (tool) {
+      case "diseno": return panelDiseno ?? null;
       case "elementos": return <PanelElementos />;
       case "texto": return <PanelGaleria marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
       case "capas": return <PanelCapas />;
@@ -400,13 +420,11 @@ export function EditorDocumento({
   return (
     <ProveedorEditor store={store}>
       <div className="flex h-full min-h-0 w-full bg-background">
-        {/* RAIL (escritorio: vertical izquierda). «Ajustes» (inspector) al fondo. */}
-        <nav className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex">
-          {onPlantillas && (
-            <RailBtn etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />
-          )}
-          {HERRAMIENTAS.map((h) => (
-            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
+        {/* RAIL (escritorio: vertical izquierda), orden Canva: Diseño · Elementos · Galería ·
+            Capas. «Ajustes» (inspector) al fondo. */}
+        <nav aria-label="Herramientas del editor" className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex">
+          {herramientas.map((h) => (
+            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} />
           ))}
           <div className="mt-auto w-full">
             <RailBtn etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
@@ -421,7 +439,8 @@ export function EditorDocumento({
               etiqueta="Cerrar panel de herramienta"
               className="fixed inset-0 z-20 bg-black/30 md:hidden"
             />
-            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-r">
+            {/* ~350px (patrón Canva) en escritorio; hoja inferior en móvil (colapso intacto). */}
+            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-[350px] md:border-r">
               <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
                 <span className="text-sm font-semibold">{tituloTool}</span>
@@ -486,7 +505,7 @@ export function EditorDocumento({
               etiqueta="Cerrar ajustes"
               className="fixed inset-0 z-20 bg-black/30 md:hidden"
             />
-            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-l">
+            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-[350px] md:border-l">
               <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
                 <span className="text-sm font-semibold">{seleccion ? "Ajustes de la capa" : "Lienzo y fondo"}</span>
@@ -502,10 +521,9 @@ export function EditorDocumento({
         )}
 
         {/* RAIL móvil (barra inferior fija, respetando el safe-area del notch inferior). */}
-        <nav className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] ${onPlantillas ? "grid-cols-5" : "grid-cols-4"} border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden`}>
-          {onPlantillas && <RailBtnMovil etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />}
-          {HERRAMIENTAS.map((h) => (
-            <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
+        <nav aria-label="Herramientas del editor (móvil)" className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] ${herramientas.length >= 4 ? "grid-cols-5" : "grid-cols-4"} border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden`}>
+          {herramientas.map((h) => (
+            <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} />
           ))}
           <RailBtnMovil etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
         </nav>

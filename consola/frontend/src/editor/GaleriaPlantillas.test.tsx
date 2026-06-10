@@ -3,11 +3,13 @@
  *  - Diferenciación foto / miniatura: filtro por tipo, badge de tipo, `tipoFijo`.
  *  - Organización estilo Canva: búsqueda (nombre/categoría), chips de categoría, agrupación por
  *    categoría y badge-selector de categoría (modo gestión vs selector).
+ *  - Vacío de búsqueda con salida de un clic («Borrar búsqueda»).
+ *  - `ContenidoPlantillas` reutilizable como panel «Diseño» del rail (sin envoltorio modal).
  */
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { GaleriaPlantillas } from "./GaleriaPlantillas";
+import { ContenidoPlantillas, GaleriaPlantillas } from "./GaleriaPlantillas";
 import type { PlantillaDiseno } from "@/lib/api";
 
 // Plantillas de prueba
@@ -159,6 +161,19 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
     expect(screen.getByText(/sin resultados/i)).toBeInTheDocument();
   });
 
+  it("el vacío de búsqueda ofrece «Borrar búsqueda», que restaura la rejilla", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA, MARCADOR]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    // Búsqueda sin resultados + chip activo: el botón limpia AMBOS filtros.
+    fireEvent.click(screen.getByRole("button", { name: "Marcador" }));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zzz-nada" } });
+    expect(screen.getByText(/sin resultados/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Borrar búsqueda" }));
+    expect(screen.queryByText(/sin resultados/i)).not.toBeInTheDocument();
+    expect(screen.getByTitle(`Cargar «${ULTIMA.nombre}»`)).toBeInTheDocument();
+    expect(screen.getByTitle(`Cargar «${MARCADOR.nombre}»`)).toBeInTheDocument();
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("");
+  });
+
   it("chips: «Todas» + las categorías presentes; un chip filtra la rejilla", () => {
     render(<GaleriaPlantillas plantillas={[ULTIMA, MARCADOR]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Todas" })).toBeInTheDocument();
@@ -201,5 +216,32 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
     );
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "marcador" } });
     expect(onCategorizar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "marcador");
+  });
+});
+
+// ── ContenidoPlantillas como panel «Diseño» del rail (sin modal) ────────────────────────────────
+
+describe("ContenidoPlantillas — modo panel del rail", () => {
+  it("renderiza búsqueda + tarjetas SIN envoltorio de diálogo y cargar funciona", () => {
+    const onCargar = vi.fn();
+    render(<ContenidoPlantillas compacto plantillas={[ULTIMA, MARCADOR]} onCargar={onCargar} />);
+    // No hay modal: ni role dialog ni backdrop de cierre.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Cerrar galería de plantillas")).not.toBeInTheDocument();
+    // Búsqueda y chips presentes (fijos arriba del scroll, estilo Canva).
+    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Todas" })).toBeInTheDocument();
+    // Un clic en la tarjeta aplica la plantilla.
+    fireEvent.click(screen.getByTitle(`Cargar «${ULTIMA.nombre}»`));
+    expect(onCargar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }));
+  });
+
+  it("en modo compacto la rejilla es fija de 2 columnas", () => {
+    const { container } = render(
+      <ContenidoPlantillas compacto plantillas={[ULTIMA]} onCargar={vi.fn()} />,
+    );
+    const rejilla = container.querySelector(".grid");
+    expect(rejilla?.className).toContain("grid-cols-2");
+    expect(rejilla?.className).not.toContain("md:grid-cols-4");
   });
 });

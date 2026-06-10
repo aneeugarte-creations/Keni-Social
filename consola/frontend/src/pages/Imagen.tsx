@@ -38,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { EditorDocumento } from "@/editor/EditorDocumento";
-import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
+import { ContenidoPlantillas } from "@/editor/GaleriaPlantillas";
 import { documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -142,7 +142,6 @@ export default function Imagen() {
   const [pestanas, setPestanas] = useState<Pestana[]>([]);
   const [activa, setActiva] = useState<string | null>(null);
   const stores = useRef<Map<string, StoreEditor>>(new Map());
-  const [galeria, setGaleria] = useState(false);
   // Diálogo de «Guardar como» (nombre de plantilla nueva + tipo + categoría).
   const [dialogo, setDialogo] = useState<{ nombre: string; tipo: TipoPlantilla; categoria: string } | null>(null);
   // Edición inline del nombre de una pestaña (doble-clic en su título).
@@ -197,7 +196,6 @@ export default function Imagen() {
       nombre: p.nombre,
       plantillaId: p.id,
     });
-    setGaleria(false);
     if (usarBorrador) {
       setDirty((d) => ({ ...d, [id]: true }));
       toast.info(`Plantilla «${p.nombre}»: se recuperó un borrador local más reciente que lo guardado.`);
@@ -834,7 +832,20 @@ export default function Imagen() {
                 <SaveAll className="h-4 w-4 text-muted-foreground" /> Guardar como plantilla…
               </button>
             }
-            onPlantillas={() => setGaleria(true)}
+            // Panel «Diseño» del rail (galería de plantillas como COLUMNA estilo Canva, no modal):
+            // aplicar una plantilla a la pestaña activa + gestión (renombrar/duplicar/borrar/rotar).
+            panelDiseno={
+              <ContenidoPlantillas
+                compacto
+                plantillas={plantillas}
+                onCargar={(p) => void cargarPlantillaEnActiva(p)}
+                onBorrar={(p) => void pedirBorrarPlantilla(p)}
+                onDuplicar={(p) => duplicarPlantilla.mutate(p)}
+                onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
+                onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
+                onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
+              />
+            }
             // «Adaptar a…»: abre el documento reencuadrado en una PESTAÑA NUEVA (no machaca la actual).
             onAbrirAdaptado={(docAdaptado, nombre) =>
               nuevaPestana(pestanaActiva.marca, docAdaptado, { nombre })
@@ -860,20 +871,6 @@ export default function Imagen() {
           </div>
         )}
       </div>
-
-      {/* Galería modal: aplicar una plantilla a la pestaña ACTIVA (desde el rail). */}
-      {galeria && (
-        <GaleriaPlantillas
-          plantillas={plantillas}
-          onCargar={(p) => { void cargarPlantillaEnActiva(p); setGaleria(false); }}
-          onBorrar={(p) => void pedirBorrarPlantilla(p)}
-          onDuplicar={(p) => duplicarPlantilla.mutate(p)}
-          onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
-          onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
-          onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
-          onCerrar={() => setGaleria(false)}
-        />
-      )}
 
       {/* Diálogo «Guardar como» (nombre de plantilla nueva). */}
       <Dialog open={!!dialogo} onOpenChange={(o) => !o && setDialogo(null)}>
@@ -1102,9 +1099,10 @@ function GaleriaInline({
   };
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      {/* Búsqueda + chips de categoría (estilo Canva), arriba del todo. */}
+      {/* Búsqueda + chips de categoría (estilo Canva), STICKY: quedan fijos al hacer scroll por la
+          galería (márgenes negativos para cubrir el padding del contenedor al pegarse arriba). */}
       {!cargando && plantillas.length > 0 && (
-        <div className="mb-4 space-y-2">
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 space-y-2 border-b border-border bg-background px-4 py-3 sm:-mx-6 sm:-mt-6 sm:px-6">
           <BuscadorPlantillas valor={q} onCambiar={setQ} />
           <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} />
         </div>
@@ -1113,7 +1111,13 @@ function GaleriaInline({
         <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
       ) : plantillas.length > 0 && filtradas.length === 0 ? (
         <div className="space-y-8">
-          <p className="py-4 text-center text-sm text-muted-foreground">Sin resultados para esa búsqueda.</p>
+          {/* VACÍO de búsqueda: mensaje + salida de un clic (limpia búsqueda y chip). */}
+          <div className="space-y-3 py-4 text-center">
+            <p className="text-sm text-muted-foreground">Sin resultados para esa búsqueda.</p>
+            <Button variant="outline" size="sm" onClick={() => { setQ(""); setCategoria(""); }}>
+              Borrar búsqueda
+            </Button>
+          </div>
           <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       ) : agruparPorMarca ? (
