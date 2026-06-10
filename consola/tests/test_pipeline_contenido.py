@@ -679,6 +679,53 @@ def test_crear_tema_de_cluster_fecha_cae_a_primer_visto(entorno, monkeypatch):
     assert (guardado.get("fecha_fuente") or "") == "2026-06-01T00:00:00+00:00"
 
 
+def test_crear_tema_de_cluster_resuelve_og_image_de_fuente_propia(entorno, monkeypatch):
+    """Cluster con item de fuente PROPIA sin foto en el feed: se RESUELVE la og:image del artículo.
+
+    Así la pieza nace con arte (`copy_pendiente.imagen` + `tipo_contenido='fuente'`) en vez de
+    "Falta imagen". La og:image solo se resuelve para fuentes propias (derechos)."""
+    import json
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    fuente = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
+    _mock_og_image(monkeypatch, "https://casa.test/foto-nota.jpg")
+    cluster = _sembrar_cluster("cp1", titulo="Historia propia", score=0.7)
+    items = [{
+        "titulo": "Historia propia", "url": "https://unotv.test/nota", "url_canonica": "unotv.test/nota",
+        "fuente_id": fuente["id"], "fuente_nombre": "UnoTV", "publicado_en": "", "imagen": "",
+    }]
+
+    tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
+
+    assert tema is not None
+    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    assert pend["imagen"] == "https://casa.test/foto-nota.jpg"
+    assert pend["tipo_contenido"] == "fuente"
+
+
+def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, monkeypatch):
+    """Fuente NO propia (medio ajeno): no resolvemos su og:image (sin derechos). Sin foto en el
+    feed, el tema nace sin imagen aunque la resolución estuviera disponible."""
+    import json
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    fuente = repos.crear_fuente_rss("Ajeno", _URL_OK, marca="unotv", propia=False)
+    # Si llegara a resolverse, sería esta URL; el test verifica que NO se usa.
+    _mock_og_image(monkeypatch, "https://ajeno.test/foto.jpg")
+    cluster = _sembrar_cluster("ca1", titulo="Historia ajena", score=0.7)
+    items = [{
+        "titulo": "Historia ajena", "url": "https://medio.test/nota", "url_canonica": "medio.test/nota",
+        "fuente_id": fuente["id"], "fuente_nombre": "Medio", "publicado_en": "", "imagen": "",
+    }]
+
+    tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
+
+    assert tema is not None
+    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    assert pend["imagen"] == ""
+    assert pend["tipo_contenido"] == ""
+
+
 def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):
     """`temas_en_vuelo` cuenta los temas sin terminar las fases de IA (QA pendiente o sin copy).
 

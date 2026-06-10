@@ -233,7 +233,9 @@ def construir_procesar_copy(
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
-        parsed = stream.parsear_salida(salida, redes_ids)
+        # Copy UNIFICADO: UN solo copy + copy_in se replica a TODAS las redes pedidas (incluida
+        # X, que así nunca nace sin copy_in). El equipo añade los hashtags aparte por grupos.
+        parsed = stream.parsear_salida_unificada(salida, redes_ids)
         titulo = titulo_dado or stream.derivar_titulo(texto_base or str(parsed["resultado"]))
         historial_id = repos.registrar_historial_prompt(
             prompt_id, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,

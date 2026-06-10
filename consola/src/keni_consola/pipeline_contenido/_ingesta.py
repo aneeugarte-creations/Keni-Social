@@ -324,6 +324,49 @@ def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     return clustering.seleccionar_diversos(clusters, maximo=maximo, umbral=umbral)
 
 
+def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:
+    """True si `fuente_id` es de una fuente RSS de marca PROPIA. Memoiza por barrido (cache)."""
+    fuente_id = (fuente_id or "").strip()
+    if not fuente_id:
+        return False
+    if fuente_id not in cache:
+        try:
+            fuente = repos.obtener_fuente_rss(fuente_id)
+        except Exception:  # noqa: BLE001 -- sin la fuente, no la tratamos como propia
+            fuente = None
+        cache[fuente_id] = bool(fuente and fuente.get("propia"))
+    return cache[fuente_id]
+
+
+def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
+    """Arte del tema desde los items del cluster, PRIORIZANDO fuentes PROPIAS (derechos).
+
+    Para un item de fuente PROPIA (`unotv.com`, `clarosports.com`…) reutilizamos su foto: la
+    `imagen` del feed si la trae o, si no, RESOLVEMOS la `og:image` del artículo (la foto real
+    de la nota) —igual que `ingerir_marca`—. Solo de fuentes propias bajamos a resolver la
+    og:image (no tenemos derechos sobre la foto de un medio ajeno). Si ninguna propia da
+    imagen, caemos a cualquier imagen ya capturada en los items (comportamiento previo). "".
+    """
+    cache: dict[str, bool] = {}
+    # 1) Fuente PROPIA: foto del feed o, en su defecto, og:image resuelta del artículo.
+    for it in items:
+        if not _es_fuente_propia(it.get("fuente_id") or "", cache):
+            continue
+        img = (it.get("imagen") or "").strip()
+        if img:
+            return img
+        enlace = (it.get("url") or "").strip()
+        if enlace:
+            try:
+                resuelta = (_ref._FETCH_OG_IMAGE(enlace) or "").strip()
+            except Exception:  # noqa: BLE001 -- og:image best-effort; nunca rompe el barrido
+                resuelta = ""
+            if resuelta:
+                return resuelta
+    # 2) Fallback: cualquier imagen ya presente en los items (feed media-tag), sin resolver.
+    return next((it["imagen"].strip() for it in items if (it.get("imagen") or "").strip()), "")
+
+
 def crear_tema_de_cluster(
     cluster: dict[str, Any], items: list[dict[str, Any]], *, claves_vistas: set[str] | None = None
 ) -> dict[str, Any] | None:
@@ -357,7 +400,7 @@ def crear_tema_de_cluster(
     enlaces = [it.get("url") or "" for it in items if it.get("url")]
     nota = _nota_de_cluster(titulo, resumen, enlaces)[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
-    imagen = next((it["imagen"].strip() for it in items if (it.get("imagen") or "").strip()), "")
+    imagen = _imagen_de_cluster(items)
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
     trabajo = {"fuente": {}, "item": {"clave": ""}, "imagen": imagen}
     url_fuente = (items[0].get("url_canonica") if items else "") or ""

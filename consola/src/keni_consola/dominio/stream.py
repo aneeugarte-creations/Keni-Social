@@ -739,6 +739,63 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
     return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
 
 
+def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, object]:
+    """Variante de `parsear_salida` para copy UNIFICADO: UN copy + UN copy_in para TODAS las redes.
+
+    A diferencia de `parsear_salida` (una pieza por red, vía el array `piezas`), aquí el bloque
+    ```json final trae un OBJETO PLANO `{"texto","copy_in"}`; ese mismo copy + copy_in se EMITE
+    para CADA red de `redes_ids`. Así X nunca queda sin `copy_in` (lo hereda como las demás).
+
+    Resiliente: si el modelo emite el array `piezas` (forma vieja), toma la PRIMERA pieza con
+    `texto`. Si no hay JSON utilizable, el copy es el texto limpio entero (fallback). `resultado`
+    y el `contenido` salen sin emojis (`quitar_emojis`); el `copy_in` se emite tal cual.
+    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}` (misma forma que `parsear_salida`).
+    """
+    salida = salida or ""
+    verdicto = derivar_verdicto(salida)
+
+    coincidencias = list(_RE_BLOQUE_JSON.finditer(salida))
+    datos = None
+    limpio = salida.strip()
+    if coincidencias:
+        ultima = coincidencias[-1]
+        try:
+            datos = json.loads(ultima.group(1))
+        except (json.JSONDecodeError, ValueError):
+            datos = None
+        else:
+            limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
+
+    texto_base: str | None = None
+    copy_in_base = ""
+    if isinstance(datos, dict):
+        if isinstance(datos.get("texto"), str):
+            texto_base = datos["texto"]
+            ci = datos.get("copy_in")
+            copy_in_base = ci if isinstance(ci, str) else ""
+        else:
+            # Resiliencia: el modelo emitió el array `piezas`; usamos la PRIMERA con `texto`.
+            crudas = datos.get("piezas")
+            if isinstance(crudas, list):
+                for cruda in crudas:
+                    if isinstance(cruda, dict) and isinstance(cruda.get("texto"), str):
+                        texto_base = cruda["texto"]
+                        ci = cruda.get("copy_in")
+                        copy_in_base = ci if isinstance(ci, str) else ""
+                        break
+
+    # FALLBACK: sin JSON utilizable, el copy es el texto limpio entero.
+    if texto_base is None:
+        texto_base = limpio
+
+    contenido = quitar_emojis(texto_base)
+    piezas: list[dict[str, object]] = [
+        {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
+        for r in redes_ids
+    ]
+    return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
+
+
 # --------------------------------------------------------------------------- #
 # Titulo derivado de la nota                                                   #
 # --------------------------------------------------------------------------- #

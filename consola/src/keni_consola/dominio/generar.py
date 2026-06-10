@@ -131,6 +131,28 @@ def instruccion_redes(redes_ids: list[str]) -> str:
     )
 
 
+def instruccion_copy_unico(redes_ids: list[str]) -> str:
+    """Instrucción ADITIVA (copy UNIFICADO): UN solo copy + UN solo texto-en-imagen para TODAS.
+
+    El mismo `texto` y el mismo `copy_in` se reutilizan en cada red pedida (X, Instagram,
+    Facebook, TikTok, YouTube): NO una variante por plataforma. Así X nunca queda sin copy_in
+    (heredaba el "" cuando el modelo la trataba como red sin imagen). El copy sale SIN hashtags:
+    el equipo los añade aparte por grupos donde corresponde (Instagram/TikTok). Pide un único
+    bloque ```json con un OBJETO PLANO (sin array `piezas` por red)."""
+    etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
+    return (
+        f"Este copy se publicará TAL CUAL en estas redes: {etiquetas}. Escribe UN SOLO copy "
+        "que sirva igual para todas (NO una variante por red) y UN SOLO texto-en-imagen. "
+        "NO añadas hashtags: el equipo los pone aparte por grupos donde corresponde. "
+        "Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu "
+        "respuesta, añade un único bloque de código cercado ```json con esta forma exacta: "
+        '{"texto": "<el copy>", "copy_in": "<texto que va DENTRO de la imagen: titular/claim '
+        'corto, sin emojis; \\"\\" si no lleva imagen>"}. El `copy_in` es el texto SOBRE la '
+        "imagen, distinto del `texto` que la acompaña; respeta la línea editorial de "
+        "texto-en-imagen de la marca adjunta."
+    )
+
+
 def componer(
     cuerpo_prompt: str,
     adjuntos: list[libtexto.Documento],
@@ -138,12 +160,17 @@ def componer(
     *,
     sin_emojis: bool = False,
     redes_ids: list[str] | None = None,
+    copy_unico: bool = False,
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
     `sin_emojis`/`redes_ids` son ADITIVOS y OPT-IN (específicos de copy): por defecto NO se
     añaden, para que un prompt cualquiera de la Texto no quede forzado a "sin emojis"
     ni al bloque de piezas por red. Las features de copy los activan.
+
+    `copy_unico` (solo copy-desde-nota): cuando es True, en vez de pedir una pieza por red
+    (`instruccion_redes`) pide UN SOLO copy + copy_in reutilizado en todas (`instruccion_copy_unico`).
+    Lo activa `lanzar_copy`; la galería/termómetro y la Texto manual siguen pidiendo por red.
     """
     # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos (cuerpo del
     # prompt + instrucciones fijas + editorial de la marca) va ANTES; lo VARIABLE (la nota/
@@ -155,7 +182,9 @@ def componer(
     if sin_emojis:
         partes.append(INSTRUCCION_SIN_EMOJIS)
     if redes_ids:
-        partes.append(instruccion_redes(redes_ids))
+        partes.append(
+            instruccion_copy_unico(redes_ids) if copy_unico else instruccion_redes(redes_ids)
+        )
     if adjuntos:
         bloques = [f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos]
         partes.append(
@@ -331,7 +360,7 @@ def lanzar_copy(
         raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")
     prompt = componer(
         cuerpo, libtexto.editoriales_de_marca(marca, pipeline="copy"), contexto,
-        sin_emojis=True, redes_ids=redes_ids,
+        sin_emojis=True, redes_ids=redes_ids, copy_unico=True,
     )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Saneamos y enviamos ambos o ninguno.

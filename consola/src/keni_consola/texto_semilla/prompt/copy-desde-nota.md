@@ -43,18 +43,14 @@ línea, en pocas palabras, qué hay que revisar si no está listo.
    lo común y **cruza los datos** (cifras, fechas, nombres, cargos). Si discrepan, usa la
    formulación más prudente o ninguna cifra, y anota la discrepancia para la verificación.
 2. **Marca:** úsala tal cual se indica. Si no se indica, infiérela del tema y dilo explícito.
-3. **Redacta una variante por plataforma PEDIDA, y solo las pedidas**: si se te indica una
-   lista de redes, genera EXCLUSIVAMENTE esas; si no se indica ninguna, cubre X/Twitter,
-   Instagram, Facebook, TikTok y YouTube. Sigue la línea editorial de plataformas adjunta.
-   Para fuentes con varios puntos añade además, SOLO si la red correspondiente está pedida,
-   un **carrusel** (Instagram/Facebook, 3–7 slides numeradas: slide 1 = gancho, última = CTA)
-   y/o un **hilo** para X (2–5 tuits ≤280, numerados `1/n`; el 1/n es el gancho). Respeta los
-   límites estrictos por plataforma (X y cada tuit = 280, título de YouTube = 70); no hace
-   falta mostrar conteos de caracteres.
+3. **Redacta UN SOLO copy, listo para publicar, que sirva igual en TODAS las redes pedidas**
+   (NO una variante por plataforma): el mismo `texto` se reutiliza en X/Twitter, Instagram,
+   Facebook, TikTok y YouTube. Sigue la línea editorial de plataformas adjunta y respeta el
+   límite más estricto que aplique (X = 280 caracteres) para que valga en todas. **NO añadas
+   hashtags**: el equipo los añade aparte por grupos donde corresponde (Instagram/TikTok).
 4. **Voz + tropicalización:** impregna el tono de la marca y de la voz personal adjunta;
    sustituye giros de España por mexicanos; elimina acentos/léxico de fuentes españolas.
-   **Emojis: según la plataforma y la marca** (ver `plataformas.md`): sobrios en X/Facebook/
-   YouTube (0–2), 0–2 en Instagram, con naturalidad en TikTok; **cero en marcas sobrias**
+   **Emojis: según la marca** (ver `plataformas.md`): sobrios (0–2) y **cero en marcas sobrias**
    (UnoTV, Fundación). El texto-en-imagen (`copy_in`) va SIEMPRE sin emojis.
 5. **Auto-verificación (OBLIGATORIO, al final)**, marcando cada punto listo / a revisar /
    problema: fechas y números (¿coinciden con la fuente?, ¿alguno inventado?); nombres y
@@ -66,23 +62,23 @@ línea, en pocas palabras, qué hay que revisar si no está listo.
 
 Las publicaciones con imagen llevan DOS textos distintos:
 
-- **`texto`**: el copy que ACOMPAÑA a la publicación (lo que ya redactas por plataforma).
+- **`texto`**: el copy que ACOMPAÑA a la publicación (el único copy que redactas, igual en
+  todas las redes).
 - **`copy_in`**: el texto que va DENTRO de la imagen (titular/claim sobre la placa). Es
   corto y de impacto, jerarquiza el dato más fuerte, y **respeta la línea editorial de
   texto-en-imagen de la marca adjunta** (longitud, mayúsculas, qué nunca poner). No repite
-  literal el `texto`. Si la pieza de esa red no lleva imagen, deja `copy_in` en `""`.
+  literal el `texto`. Si la pieza no lleva imagen, deja `copy_in` en `""`.
 
 El `copy_in` también sale **sin emojis** y respeta las mismas reglas legales que el copy.
 
 ## Bloque final para la Consola (OBLIGATORIO)
 
 Al FINAL de toda tu respuesta, añade un único bloque de código cercado ```json con esta
-forma exacta, una pieza por cada plataforma pedida:
+forma exacta (UN solo objeto, NO un array por red): el mismo `texto` y `copy_in` se reutilizan
+en todas las redes pedidas.
 
 ```json
-{"piezas": [{"red": "<id>", "texto": "<copy de esa red>", "copy_in": "<texto en la imagen>"}, ...]}
+{"texto": "<el copy, igual para todas las redes>", "copy_in": "<texto en la imagen>"}
 ```
 
-Usa como `<id>` únicamente: `x`, `instagram`, `facebook`, `tiktok`, `youtube`, y SOLO los de
-las redes pedidas (ni una pieza más). Incluye siempre `copy_in` en cada pieza (`""` si esa
-red no lleva imagen).
+Incluye siempre `copy_in` (`""` si la pieza no lleva imagen).
