@@ -40,12 +40,12 @@ import { METRICAS } from "./metricas-meta";
  * conteos, así que se formatean con separador de miles.
  */
 const ETIQUETAS_EXTRA: Record<string, string> = {
-  likes: "Likes",
+  likes: "Me gusta",
   comentarios: "Comentarios",
   compartidos: "Compartidos",
   guardados: "Guardados",
   video_views: "Reproducciones",
-  clics_enlace: "Clicks",
+  clics_enlace: "Clics enlace",
   seguidores_netos: "Seguidores netos",
 };
 

@@ -52,7 +52,7 @@ describe("TablaCuentas", () => {
   it("ordena por una columna al clicar su cabecera (con aria-sort)", () => {
     renderTabla();
 
-    const cabeceraVistas = screen.getByRole("button", { name: /Visualizaciones/ });
+    const cabeceraVistas = screen.getByRole("button", { name: /Vistas/ });
     fireEvent.click(cabeceraVistas); // desc: Claro Sports (300k) primero
     let cuerpoFilas = screen
       .getAllByRole("row")
@@ -76,12 +76,12 @@ describe("TablaCuentas", () => {
     expect(onVerPiezas).toHaveBeenCalledWith("unotv");
   });
 
-  it("dice con honestidad cuando no hay cuentas", () => {
+  it("dice con honestidad cuando no hay marcas", () => {
     render(
       <MemoryRouter>
         <TablaCuentas cuentas={[]} />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/No hay cuentas para mostrar/i)).toBeInTheDocument();
+    expect(screen.getByText(/No hay marcas para mostrar en este periodo/i)).toBeInTheDocument();
   });
 });

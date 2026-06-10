@@ -141,7 +141,7 @@ function TablaLineas({
                   onClick={() => alClicar("visualizaciones")}
                   alinear="right"
                 >
-                  Visualizaciones
+                  Vistas
                 </CabeceraOrdenable>
                 <CabeceraOrdenable
                   activa={estado.clave === "interacciones"}

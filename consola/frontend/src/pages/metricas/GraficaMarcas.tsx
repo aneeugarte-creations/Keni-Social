@@ -1,7 +1,8 @@
 /**
- * Comparativa visual por cuenta/marca con Tremor.
+ * Comparativa visual por marca con Tremor.
  *
- * - BarChart: visualizaciones vs interacciones por cuenta (escala compacta).
+ * - BarChart: UNA métrica a la vez (vistas o interacciones, conmutable) por marca,
+ *   con su propia escala — superponer ambas con escalas tan dispares engañaría.
  * - Reparto: lista ordenada con barras de progreso (en lugar de una dona
  *   multicolor), coherente con el sistema de diseño monocromo (estilo Vercel).
  *
@@ -9,13 +10,59 @@
  * se lean como "221.6 M" en lugar de notación cruda.
  */
 import { BarChart, type CustomTooltipProps } from "@tremor/react";
+import * as React from "react";
 import type { ReactNode } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { CuentaMetrica } from "@/types";
 
 import { numeroCompacto, numeroCompleto } from "./formato";
 import { SeccionColapsable } from "./SeccionColapsable";
+
+type Metrica = "visualizaciones" | "interacciones";
+
+const ETIQUETA: Record<Metrica, string> = {
+  visualizaciones: "Vistas",
+  interacciones: "Interacciones",
+};
+/** Colores por métrica (nombres Tremor), los mismos de METRICAS en metricas-meta. */
+const COLOR: Record<Metrica, "orange" | "violet"> = {
+  visualizaciones: "orange",
+  interacciones: "violet",
+};
+/** Punto de color del tooltip, coherente con `COLOR`. */
+const PUNTO: Record<Metrica, string> = {
+  visualizaciones: "bg-orange-500",
+  interacciones: "bg-violet-500",
+};
+
+/**
+ * Porcentajes enteros que suman EXACTAMENTE 100 (redondeo por mayor resto):
+ * floor de cada exacto y el sobrante repartido de uno en uno a las mayores fracciones.
+ */
+function porcentajesMayorResto(valores: number[]): number[] {
+  const total = valores.reduce((s, v) => s + v, 0);
+  if (total <= 0) return valores.map(() => 0);
+  const exactos = valores.map((v) => (v * 100) / total);
+  const pisos = exactos.map(Math.floor);
+  let resto = 100 - pisos.reduce((s, p) => s + p, 0);
+  const porFraccion = exactos
+    .map((e, i) => ({ fraccion: e - pisos[i], i }))
+    .sort((a, b) => b.fraccion - a.fraccion || a.i - b.i);
+  for (const { i } of porFraccion) {
+    if (resto <= 0) break;
+    pisos[i] += 1;
+    resto -= 1;
+  }
+  return pisos;
+}
 
 export function GraficaMarcas({
   cuentas,
@@ -25,21 +72,22 @@ export function GraficaMarcas({
   /** `true` => solo las gráficas, sin el `SeccionColapsable` (título/colapso). */
   desnudo?: boolean;
 }) {
-  // Una entrada por cuenta. Acortamos nombres muy largos para el eje.
+  const [metrica, setMetrica] = React.useState<Metrica>("visualizaciones");
+  const etiqueta = ETIQUETA[metrica];
+
+  // Una entrada por marca, con la métrica activa como única categoría.
   const datosBarras = cuentas.map((c) => ({
     marca: c.marca,
-    Visualizaciones: c.visualizaciones,
-    Interacciones: c.interacciones,
+    [etiqueta]: c[metrica],
   }));
 
-  const totalVis = cuentas.reduce((suma, c) => suma + c.visualizaciones, 0);
-  const datosReparto = [...cuentas]
-    .sort((a, b) => b.visualizaciones - a.visualizaciones)
-    .map((c) => ({
-      marca: c.marca,
-      visualizaciones: c.visualizaciones,
-      pct: totalVis > 0 ? Math.round((c.visualizaciones / totalVis) * 100) : 0,
-    }));
+  const ordenadas = [...cuentas].sort((a, b) => b.visualizaciones - a.visualizaciones);
+  const pcts = porcentajesMayorResto(ordenadas.map((c) => c.visualizaciones));
+  const datosReparto = ordenadas.map((c, i) => ({
+    marca: c.marca,
+    visualizaciones: c.visualizaciones,
+    pct: pcts[i],
+  }));
 
   const envolver = (hijo: ReactNode) =>
     desnudo ? (
@@ -53,7 +101,7 @@ export function GraficaMarcas({
   if (cuentas.length === 0) {
     return envolver(
       <p className="py-8 text-center text-sm text-muted-foreground">
-        No hay cuentas para mostrar en este rango.
+        No hay marcas para mostrar en este periodo.
       </p>,
     );
   }
@@ -62,27 +110,38 @@ export function GraficaMarcas({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
       <Card className="lg:col-span-3">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Visualizaciones e interacciones por cuenta</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">Vistas e interacciones por marca</CardTitle>
+            <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
+              <SelectTrigger className="w-[170px]" aria-label="Métrica de la comparativa">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="visualizaciones">Vistas</SelectItem>
+                <SelectItem value="interacciones">Interacciones</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <BarChart
             className="h-72"
             data={datosBarras}
             index="marca"
-            categories={["Visualizaciones", "Interacciones"]}
-            colors={["#1e3a8a", "#93c5fd"]}
+            categories={[etiqueta]}
+            colors={[COLOR[metrica]]}
             valueFormatter={numeroCompacto}
             yAxisWidth={56}
             showAnimation
-            noDataText="Sin datos para este rango."
-            customTooltip={TooltipBarras}
+            noDataText="Sin datos para este periodo."
+            customTooltip={(props) => <TooltipBarras {...props} punto={PUNTO[metrica]} />}
           />
         </CardContent>
       </Card>
 
       <Card className="lg:col-span-2">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Reparto de visualizaciones</CardTitle>
+          <CardTitle className="text-base">Reparto de vistas</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="space-y-4">
@@ -92,12 +151,12 @@ export function GraficaMarcas({
                   <span className="truncate text-sm text-foreground">{it.marca}</span>
                   <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
                     {numeroCompacto(it.visualizaciones)}
-                    <span className="ml-1.5 text-xs text-muted-foreground/70">{it.pct}%</span>
+                    <span className="ml-1.5 text-xs text-muted-foreground">{it.pct}%</span>
                   </span>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-[#1e3a8a] transition-all dark:bg-[#1e3a8a]"
+                    className="h-full rounded-full bg-orange-500 transition-all dark:bg-orange-400"
                     style={{ width: `${it.pct}%` }}
                   />
                 </div>
@@ -111,7 +170,12 @@ export function GraficaMarcas({
 }
 
 /** Tooltip de la gráfica de barras con valores completos es-MX. */
-function TooltipBarras({ payload, active, label }: CustomTooltipProps) {
+function TooltipBarras({
+  payload,
+  active,
+  label,
+  punto,
+}: CustomTooltipProps & { punto: string }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-md">
@@ -119,10 +183,7 @@ function TooltipBarras({ payload, active, label }: CustomTooltipProps) {
       <ul className="space-y-1">
         {payload.map((item, i) => (
           <li key={i} className="flex items-center gap-2 text-xs">
-            <span
-              className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: colorTooltip(String(item.dataKey ?? "")) }}
-            />
+            <span className={`inline-block h-2 w-2 rounded-full ${punto}`} aria-hidden />
             <span className="text-muted-foreground">{item.name}</span>
             <span className="ml-auto font-medium tabular-nums">
               {numeroCompleto(Number(item.value ?? 0))}
@@ -132,16 +193,4 @@ function TooltipBarras({ payload, active, label }: CustomTooltipProps) {
       </ul>
     </div>
   );
-}
-
-/** Mapa de las categorías de la gráfica a su hex para el punto del tooltip (monocromo). */
-function colorTooltip(dataKey: string): string {
-  switch (dataKey) {
-    case "Visualizaciones":
-      return "#1e3a8a";
-    case "Interacciones":
-      return "#93c5fd";
-    default:
-      return "#9ca3af";
-  }
 }

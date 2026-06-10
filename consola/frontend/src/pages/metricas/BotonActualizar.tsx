@@ -74,6 +74,9 @@ export function BotonActualizar({
     setDisparando(true);
     try {
       await api.metricasRefrescar({ rango, marca });
+      // Purga el estado cacheado de la sesión de polling anterior: si quedara en caché,
+      // el efecto lo evaluaría al instante y cortaría este polling antes de arrancar.
+      queryClient.removeQueries({ queryKey: ["metricas", "estado"] });
       setSolicitado(base); // ahora sí: el refresco está en marcha, empieza el polling
     } catch (e) {
       // El disparo falló: avisa (antes se silenciaba) y no te quedes polleando.

@@ -59,6 +59,8 @@ const TableHead = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <th
     ref={ref}
+    // Cabecera de columna por defecto (sobrescribible vía props para cabeceras de fila).
+    scope="col"
     className={cn(
       "h-10 px-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
       className,

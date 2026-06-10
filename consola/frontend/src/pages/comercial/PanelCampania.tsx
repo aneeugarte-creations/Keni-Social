@@ -144,7 +144,7 @@ export function PanelCampania({
           comp={comparativa.piezas}
         />
         <TarjetaKpiComparada
-          etiqueta={ocultarAds ? "Visualizaciones" : "Visualizaciones (orgánicas)"}
+          etiqueta={ocultarAds ? "Vistas" : "Vistas (orgánicas)"}
           valor={numeroCompacto(kpis.visualizaciones + (ocultarAds ? inorganico.visualizaciones : 0))}
           titulo={numeroCompleto(kpis.visualizaciones + (ocultarAds ? inorganico.visualizaciones : 0))}
           comp={comparativa.visualizaciones}
@@ -186,7 +186,7 @@ function BloqueInorganico({ inorganico }: { inorganico: AnaliticaCampania["inorg
           <span className="text-sm font-medium">Inorgánico (Meta Ads)</span>
         </div>
         <div className="space-y-0.5">
-          <p className="text-xs text-muted-foreground">Visualizaciones pagadas</p>
+          <p className="text-xs text-muted-foreground">Vistas pagadas</p>
           <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(inorganico.visualizaciones)}>
             {numeroCompacto(inorganico.visualizaciones)}
           </p>
@@ -256,9 +256,9 @@ function DesgloseRedTabla({ filas }: { filas: DesgloseRedCampania[] }) {
             <TableRow>
               <TableHead className="pl-6">Red</TableHead>
               {col("piezas", "Publicaciones")}
-              {col("visualizaciones", "Visualizaciones")}
+              {col("visualizaciones", "Vistas")}
               {col("interacciones", "Interacciones")}
-              {col("likes", "Likes")}
+              {col("likes", "Me gusta")}
               {col("comentarios", "Comentarios")}
               {col("compartidos", "Compartidos")}
               {col("guardados", "Guardados")}
@@ -428,7 +428,7 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
               {col("marca", "Marca", "left")}
               {col("formato", "Formato", "left")}
               {col("publicado", "Fecha")}
-              {col("visualizaciones", "Visualizaciones")}
+              {col("visualizaciones", "Vistas")}
               {!ocultarAds && col("visualizaciones_pagadas", "Ads")}
               {col("interacciones", "Interacciones")}
               {col("engagement_pct", "Engagement", "right", "pr-6")}

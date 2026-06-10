@@ -27,7 +27,7 @@ import { fechaCorta } from "./formato";
 type Metrica = "visualizaciones" | "interacciones";
 
 const ETIQUETA: Record<Metrica, string> = {
-  visualizaciones: "Visualizaciones",
+  visualizaciones: "Vistas",
   interacciones: "Interacciones",
 };
 const COLOR: Record<Metrica, string> = { visualizaciones: "orange", interacciones: "violet" };
@@ -50,7 +50,7 @@ export function GraficaTendencia({ puntos }: { puntos: PuntoTendenciaCampania[] 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="visualizaciones">Visualizaciones</SelectItem>
+              <SelectItem value="visualizaciones">Vistas</SelectItem>
               <SelectItem value="interacciones">Interacciones</SelectItem>
             </SelectContent>
           </Select>

@@ -15,6 +15,7 @@
  * redes (por vistas / interacciones / engagement) con un orden global elegido por el
  * usuario que se aplica dentro de cada bloque de marca.
  */
+import { Radar } from "lucide-react";
 import * as React from "react";
 
 import {
@@ -43,7 +44,7 @@ import type { DireccionOrden } from "./useOrdenTabla";
 const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }> = {
   con_datos: {
     etiqueta: "Con datos",
-    texto: "text-emerald-700 dark:text-emerald-400",
+    texto: "text-emerald-700 dark:text-emerald-300",
     punto: "bg-emerald-500",
   },
   sin_metricas: {
@@ -58,8 +59,8 @@ const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }>
   },
   sin_lectura: {
     etiqueta: "Sin lectura",
-    texto: "text-rose-700 dark:text-rose-400",
-    punto: "bg-rose-500",
+    texto: "text-red-700 dark:text-red-300",
+    punto: "bg-red-500",
   },
   no_configurada: {
     etiqueta: "No configurada",
@@ -68,8 +69,8 @@ const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }>
   },
   sin_credenciales: {
     etiqueta: "Sin credenciales",
-    texto: "text-rose-700 dark:text-rose-400",
-    punto: "bg-rose-500",
+    texto: "text-red-700 dark:text-red-300",
+    punto: "bg-red-500",
   },
   presupuesto_agotado: {
     etiqueta: "Límite de API",
@@ -88,7 +89,11 @@ function metaEstado(estado: string) {
   return ESTADO[estado] ?? ESTADO_FALLBACK;
 }
 
-/** Resumen "3/5 con datos" para la cabecera de cada marca. */
+/**
+ * Resumen "3/5 con datos" para la cabecera de cada marca. Recibe SIEMPRE el universo
+ * completo de redes de la marca (no la lista filtrada por el selector de red): el
+ * conteo describe la cobertura real de la marca, no lo que la tabla muestra.
+ */
 function conteo(redes: RedCobertura[]): string {
   const con = redes.filter((r) => r.estado === "con_datos").length;
   return `${con}/${redes.length} con datos`;
@@ -182,7 +187,7 @@ function BloqueMarca({
     <div>
       <div className="flex items-baseline justify-between gap-3 px-6 pb-2">
         <h3 className="text-sm font-semibold text-foreground">{marca.marca}</h3>
-        <span className="shrink-0 text-xs text-muted-foreground">{conteo(redes)}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{conteo(marca.redes)}</span>
       </div>
       <Table>
         <TableHeader>
@@ -296,7 +301,8 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
   return (
     <SeccionColapsable
       titulo="Cobertura por marca y red"
-      descripcion="Todas las redes de cada marca y por qué aportan (o no) datos en este rango."
+      icono={Radar}
+      descripcion="Todas las redes de cada marca y por qué aportan (o no) datos en este periodo."
       acciones={acciones}
       contentClassName="space-y-8 p-0 pb-2"
     >

@@ -9,9 +9,9 @@
  *     guardados / clics a enlace, estas con icono en la cabecera) reusando `useOrdenTabla`.
  *     El día es UNA columna más (ordenable), no el eje de la vista. Los clics a enlace
  *     (tráfico fuera de la red) absorben la antigua tabla "Tráfico web".
- *   - Paginación de 50 piezas por página sobre el conjunto filtrado+ordenado (pager
- *     Prev/Siguiente). Orden por defecto = Vistas desc, así la página 1 es el top 50
- *     del rango (p. ej. el top 50 del mes), no de un solo día.
+ *   - Paginación de 20 piezas por página sobre el conjunto filtrado+ordenado (pager
+ *     Prev/Siguiente). Orden por defecto = Vistas desc, así la página 1 es el top 20
+ *     del rango (p. ej. el top 20 del mes), no de un solo día.
  *   - Cada fila muestra "Plataforma · Línea (· Marca)" + badge de rendimiento relativo y
  *     es ABRIBLE: drill-down al `DetallePieza` (métricas + granulares + histórico + velocidad).
  *
@@ -206,7 +206,7 @@ export function PiezasConsolidada({
   }, [filtradas]);
 
   // Orden sobre TODO el conjunto filtrado (el día es solo una columna ordenable más).
-  // Por defecto Vistas desc → la página 1 es el top del rango (top 50 del mes).
+  // Por defecto Vistas desc → la página 1 es el top del rango (top 20 del mes).
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<PiezaListado, ClaveOrden>(
     filtradas,
     ACCESORES,
@@ -240,7 +240,7 @@ export function PiezasConsolidada({
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del rango (de la marca activa): 5 de ejemplo, «Ver las N piezas» para todas. Filtra por línea o red; ordena por columna (Vistas desc = top del rango, Día = orden cronológico); toca una pieza para su detalle."
+        descripcion="Todas las piezas del periodo (de la marca activa): 5 de ejemplo, «Ver las N piezas» para todas. Filtra por línea o red; ordena por columna (Vistas desc = top del periodo, Día = orden cronológico); toca una pieza para su detalle."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">

@@ -25,13 +25,15 @@ export interface MetaMetrica {
   completo: (v: number) => string;
   /** Color Tremor asociado (para gráficas / acentos). */
   color: "orange" | "sky" | "violet" | "emerald";
+  /** Aclaración breve de cómo se calcula (solo para métricas derivadas). */
+  descripcion?: string;
 }
 
 /** Las 4 métricas en el orden en que se muestran en toda la página. */
 export const METRICAS: MetaMetrica[] = [
   {
     clave: "visualizaciones",
-    etiqueta: "Visualizaciones",
+    etiqueta: "Vistas",
     metrica: "visualizaciones",
     compacto: numeroCompacto,
     completo: numeroCompleto,
@@ -52,6 +54,7 @@ export const METRICAS: MetaMetrica[] = [
     compacto: porcentaje,
     completo: porcentaje,
     color: "emerald",
+    descripcion: "Interacciones ÷ vistas, en porcentaje",
   },
 ];
 

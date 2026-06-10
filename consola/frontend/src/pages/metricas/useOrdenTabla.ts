@@ -30,7 +30,9 @@ export function ariaSort<Clave extends string>(
  * Ordena `filas` según una columna seleccionable por el usuario.
  *
  * - `accesores`: mapa clave -> función que extrae el valor comparable de una fila
- *   (número o string; `null`/`undefined` van al final).
+ *   (número o string; `null`/`undefined` van al final). DEBE tener identidad estable
+ *   entre renders (constante de módulo o `useMemo`): es dependencia del `useMemo`
+ *   interno y un literal inline lo anularía, re-ordenando en cada render.
  * - `inicial`: orden por defecto (clave + dirección). Si se omite, no ordena.
  *
  * Devuelve la lista ordenada (estable), el estado actual y `alClicar(clave)` para

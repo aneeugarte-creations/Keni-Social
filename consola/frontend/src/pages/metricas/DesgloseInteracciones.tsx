@@ -1,17 +1,19 @@
 /**
  * Desglose de interacciones por marca×red (estrategia digital).
  *
- * Descompone el engagement bruto del periodo en sus partes (likes, comentarios,
- * compartidos, guardados, video_views) por cada celda marca×red. Pinta un BarChart
- * apilado (una barra por marca×red, segmentada por tipo de interacción) y una tabla
- * con el detalle y los `totales` del periodo. Separación clara por marca y por red.
+ * Descompone las interacciones del periodo en sus partes (me gusta, comentarios,
+ * compartidos, guardados, reproducciones) por cada celda marca×red. Pinta un BarChart
+ * apilado (una barra por marca×red, segmentada SOLO por interacciones: las
+ * reproducciones son consumo, no interacción, y aplastarían al resto) y una tabla con
+ * las 5 columnas, el detalle y los `totales` del periodo.
  *
  * Mismo stack (Tremor) y estados honestos (carga / vacío / error) que el resto de
  * Métricas: si la fuente no expone celdas, lo dice en vez de inventar. La sección es
- * colapsable y filtra client-side por red y por marca (selectores en la cabecera).
+ * colapsable y filtra client-side por red (selector en la cabecera).
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
+import { Activity } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
@@ -36,6 +38,7 @@ import {
   nombreMarca,
   nombreRed,
   numeroCompacto,
+  numeroCompleto,
   REDES_CANONICAS,
   type RedCanonica,
 } from "@/lib/formato";
@@ -44,20 +47,29 @@ import type { CeldaDesglose, MarcaDisponible } from "@/types";
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
 import { PieMostrarMas } from "./PieMostrarMas";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
-// Componentes del engagement bruto: orden y color estables en la barra apilada.
-const COMPONENTES: Array<{ clave: keyof CeldaDesglose; etiqueta: string; color: string }> = [
-  { clave: "likes", etiqueta: "Likes", color: "rose" },
-  { clave: "comentarios", etiqueta: "Comentarios", color: "blue" },
-  { clave: "compartidos", etiqueta: "Compartidos", color: "emerald" },
-  { clave: "guardados", etiqueta: "Guardados", color: "amber" },
-  { clave: "video_views", etiqueta: "Reproducciones", color: "violet" },
+// Componentes que la GRÁFICA apila: solo interacciones (orden y color estables).
+// Las reproducciones (video_views) son consumo, no interacción, y su volumen
+// aplastaría al resto de segmentos; viven solo en la tabla.
+const COMPONENTES_GRAFICA: Array<{ clave: keyof CeldaDesglose; etiqueta: string; color: string }> =
+  [
+    { clave: "likes", etiqueta: "Me gusta", color: "rose" },
+    { clave: "comentarios", etiqueta: "Comentarios", color: "blue" },
+    { clave: "compartidos", etiqueta: "Compartidos", color: "emerald" },
+    { clave: "guardados", etiqueta: "Guardados", color: "amber" },
+  ];
+
+// La TABLA sí conserva las 5 columnas (reproducciones incluidas).
+const COMPONENTES_TABLA: Array<{ clave: keyof CeldaDesglose; etiqueta: string }> = [
+  ...COMPONENTES_GRAFICA,
+  { clave: "video_views", etiqueta: "Reproducciones" },
 ];
 
-const ETIQUETAS = COMPONENTES.map((c) => c.etiqueta);
-const COLORES = COMPONENTES.map((c) => c.color);
+const ETIQUETAS = COMPONENTES_GRAFICA.map((c) => c.etiqueta);
+const COLORES = COMPONENTES_GRAFICA.map((c) => c.color);
 
 /** Centinela "sin filtro" para los selectores de red/marca. */
 const TODAS = "__todas__";
@@ -111,15 +123,12 @@ export function DesgloseInteracciones({
   );
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">Desglose de interacciones</h2>
-        <div className="flex flex-wrap items-center gap-2">{acciones}</div>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        De qué se compone el engagement de cada marca y red: likes, comentarios, compartidos,
-        guardados y reproducciones del periodo.
-      </p>
+    <SeccionColapsable
+      titulo="Desglose de interacciones"
+      icono={Activity}
+      descripcion="De qué se componen las interacciones de cada marca y red: me gusta, comentarios, compartidos, guardados y reproducciones del periodo. La gráfica apila solo las interacciones; las reproducciones van en la tabla."
+      acciones={acciones}
+    >
       {isPending ? (
         <Skeleton className="h-72 w-full rounded-lg" />
       ) : isError ? (
@@ -128,10 +137,11 @@ export function DesgloseInteracciones({
         </p>
       ) : data.celdas.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          La fuente activa no expone el desglose de interacciones para este periodo.
+          Aún no hay desglose de interacciones para este periodo (la fuente de métricas no
+          lo entrega).
         </p>
       ) : (
-        <>
+        <div className="space-y-4">
           <GraficaApilada celdas={celdas} marcas={marcas} redFiltro={redFiltro} />
           <TablaDesglose
             celdas={celdas}
@@ -139,9 +149,9 @@ export function DesgloseInteracciones({
             marcas={marcas}
             redFiltro={redFiltro}
           />
-        </>
+        </div>
       )}
-    </section>
+    </SeccionColapsable>
   );
 }
 
@@ -186,13 +196,13 @@ function GraficaApilada({
 }) {
   // Una barra por marca×red canónica: las redes sin datos quedan en 0 (sin barra) pero
   // conservan su entrada/etiqueta en el eje, para no "desaparecer" de la gráfica.
+  // Solo interacciones: las reproducciones quedan fuera de la pila (ver COMPONENTES_GRAFICA).
   const datos = construirRejilla(celdas, redFiltro).map(({ marca, red, celda }) => ({
     grupo: `${nombreMarca(marca, marcas)} · ${nombreRed(red)}`,
-    Likes: celda?.likes ?? 0,
+    "Me gusta": celda?.likes ?? 0,
     Comentarios: celda?.comentarios ?? 0,
     Compartidos: celda?.compartidos ?? 0,
     Guardados: celda?.guardados ?? 0,
-    Reproducciones: celda?.video_views ?? 0,
   }));
   return (
     <BarChart
@@ -209,6 +219,24 @@ function GraficaApilada({
 }
 
 type ClaveDesglose = keyof CeldaDesglose;
+
+// Accesores de orden como constante de módulo: identidad ESTABLE entre renders,
+// requisito de `useOrdenTabla` para no anular su memo interno. Para entradas sin
+// celda devolvemos `null`: el hook las manda al final en cualquier dirección.
+const ACCESORES_DESGLOSE = {
+  likes: (e) => e.celda?.likes ?? null,
+  comentarios: (e) => e.celda?.comentarios ?? null,
+  compartidos: (e) => e.celda?.compartidos ?? null,
+  guardados: (e) => e.celda?.guardados ?? null,
+  video_views: (e) => e.celda?.video_views ?? null,
+  n_piezas: (e) => e.celda?.n_piezas ?? null,
+  // El resto de claves de CeldaDesglose no se usan como orden, pero el tipo las exige.
+  marca: (e) => e.marca,
+  red: (e) => e.red,
+  interacciones: (e) => e.celda?.interacciones ?? null,
+  visualizaciones: (e) => e.celda?.visualizaciones ?? null,
+  engagement_pct: (e) => e.celda?.engagement_pct ?? null,
+} as Record<ClaveDesglose, (e: EntradaRejilla) => number | string | null>;
 
 function TablaDesglose({
   celdas,
@@ -228,24 +256,10 @@ function TablaDesglose({
     [celdas, redFiltro],
   );
 
-  // Cada componente del engagement + nº de piezas es ordenable. Para entradas sin celda
-  // devolvemos `null`: `useOrdenTabla` las manda al final en cualquier dirección.
+  // Cada componente del desglose + nº de piezas es ordenable (accesores estables arriba).
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<EntradaRejilla, ClaveDesglose>(
     rejilla,
-    {
-      likes: (e) => e.celda?.likes ?? null,
-      comentarios: (e) => e.celda?.comentarios ?? null,
-      compartidos: (e) => e.celda?.compartidos ?? null,
-      guardados: (e) => e.celda?.guardados ?? null,
-      video_views: (e) => e.celda?.video_views ?? null,
-      n_piezas: (e) => e.celda?.n_piezas ?? null,
-      // El resto de claves de CeldaDesglose no se usan como orden, pero el tipo las exige.
-      marca: (e) => e.marca,
-      red: (e) => e.red,
-      interacciones: (e) => e.celda?.interacciones ?? null,
-      visualizaciones: (e) => e.celda?.visualizaciones ?? null,
-      engagement_pct: (e) => e.celda?.engagement_pct ?? null,
-    } as Record<ClaveDesglose, (e: EntradaRejilla) => number | string | null>,
+    ACCESORES_DESGLOSE,
   );
 
   // Recorte a 5 filas (post-orden): las visibles son el top 5 según la columna activa.
@@ -258,7 +272,7 @@ function TablaDesglose({
           <TableRow>
             <TableHead>Marca</TableHead>
             <TableHead>Red</TableHead>
-            {COMPONENTES.map((c) => (
+            {COMPONENTES_TABLA.map((c) => (
               <CabeceraOrdenable
                 key={c.clave as string}
                 activa={estado.clave === c.clave}
@@ -287,9 +301,9 @@ function TablaDesglose({
             >
               <TableCell className="font-medium">{nombreMarca(marca, marcas)}</TableCell>
               <TableCell className="text-muted-foreground">{nombreRed(red)}</TableCell>
-              {COMPONENTES.map((comp) => (
+              {COMPONENTES_TABLA.map((comp) => (
                 <TableCell key={comp.clave} className="text-right tabular-nums">
-                  {celda ? numeroCompacto(celda[comp.clave] as number) : "—"}
+                  {celda ? numeroCompleto(celda[comp.clave] as number) : "—"}
                 </TableCell>
               ))}
               <TableCell className="text-right tabular-nums">{celda ? celda.n_piezas : "—"}</TableCell>
@@ -298,9 +312,9 @@ function TablaDesglose({
           <TableRow className="border-t-2 font-medium">
             <TableCell>Total</TableCell>
             <TableCell />
-            {COMPONENTES.map((comp) => (
+            {COMPONENTES_TABLA.map((comp) => (
               <TableCell key={comp.clave} className="text-right tabular-nums">
-                {numeroCompacto(totales[comp.clave] ?? 0)}
+                {numeroCompleto(totales[comp.clave] ?? 0)}
               </TableCell>
             ))}
             <TableCell className="text-right tabular-nums">
@@ -312,7 +326,7 @@ function TablaDesglose({
           <PieMostrarMas
             expandido={expandido}
             onAlternar={alternar}
-            colSpan={COMPONENTES.length + 3}
+            colSpan={COMPONENTES_TABLA.length + 3}
           />
         )}
       </Table>

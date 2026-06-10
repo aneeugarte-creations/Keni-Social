@@ -92,7 +92,7 @@ export function SeccionAds({
         <>
           {total && (
             <div className="flex flex-wrap gap-x-8 gap-y-2 border-b px-6 py-4">
-              <Kpi etiqueta="Visualizaciones pagadas" valor={numeroCompacto(total.visualizaciones)} titulo={numeroCompleto(total.visualizaciones)} />
+              <Kpi etiqueta="Vistas pagadas" valor={numeroCompacto(total.visualizaciones)} titulo={numeroCompleto(total.visualizaciones)} />
               <Kpi etiqueta="Gasto" valor={dinero(total.gasto, total.moneda)} />
               <Kpi etiqueta="Campañas" valor={String(total.campanias)} />
               <Kpi etiqueta="Clics" valor={numeroCompacto(total.clics)} />

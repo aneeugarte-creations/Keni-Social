@@ -94,7 +94,7 @@ describe("DetallePieza", () => {
 
     // Título + desglose granular (likes presentes; clics nulos -> "—").
     expect(screen.getByText("Reel viral")).toBeInTheDocument();
-    expect(screen.getByText("Likes")).toBeInTheDocument();
+    expect(screen.getByText("Me gusta")).toBeInTheDocument();
     // KPIs de velocidad aparecen tras cargar el histórico.
     expect(await screen.findByText("En 24 h")).toBeInTheDocument();
     expect(screen.getByText("Snapshots")).toBeInTheDocument();

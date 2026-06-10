@@ -4,9 +4,9 @@
  *
  * Cada punto es una pieza, en su FECHA REAL de publicación:
  *   - X  = fecha de publicación (eje temporal; etiquetas por semana y por mes).
- *   - Y  = visualizaciones en escala LOGARÍTMICA (altura = alcance).
+ *   - Y  = vistas en escala LOGARÍTMICA (altura = vistas).
  *   - Tamaño = engagement %.
- *   - Color  = red social.
+ *   - Color y FORMA = red social (la forma hace la red legible sin depender del color).
  *
  * Un ÚNICO <Scatter> con el color por punto (así ninguna red tapa a otra) y un jitter
  * pequeño y determinista que separa piezas del mismo día sin falsear su posición. Antes se
@@ -17,8 +17,9 @@
  * El panel y los colores se adaptan al TEMA (claro = fondo blanco; oscuro = casi negro con
  * glow), vía las variables del sistema de diseño.
  *
- * Reúsa la MISMA query que `PiezasConsolidada` (misma `queryKey`): caché compartida, sin
- * coste de API extra.
+ * Tiene query y periodo PROPIOS (selector 7 d / 30 d / 90 d / 1 año, independiente del
+ * rango global de arriba), así que paga sus propias llamadas a la API. Solo
+ * `EvolucionRedes` comparte caché (misma `queryKey`) con `PiezasConsolidada`.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Telescope } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import { nombreRed, numeroCompacto, numeroCompleto, porcentaje, redCanonica } from "@/lib/formato";
 import type { PiezaListado } from "@/types";
@@ -65,7 +67,7 @@ const PERIODOS: Array<{ dias: number; label: string }> = [
 /** Punto del scatter ya preparado para recharts. */
 interface PuntoDato {
   x: number; // timestamp (ms) — FECHA REAL de publicación
-  y: number; // log10(visualizaciones) — eje vertical (alcance)
+  y: number; // log10(vistas) — eje vertical
   r: number; // radio en px (deriva de engagement)
   jx: number; // jitter horizontal (px) — separa piezas del mismo día
   jy: number; // jitter vertical (px)
@@ -118,18 +120,78 @@ function hash01(s: string): number {
   return (h >>> 0) / 4294967296;
 }
 
-/** Forma de cada punto: un círculo con su color (de `payload.fill`) y brillo propio acotado. */
+/**
+ * Figura SVG de una red centrada en (cx, cy): además del color, la FORMA codifica la red
+ * (accesible sin depender del color) — facebook: círculo; instagram: cuadrado; tiktok:
+ * triángulo; youtube: rombo; x: cruz. Trazo sutil de contraste para el modo claro.
+ */
+function FormaRed(props: {
+  red: string;
+  cx: number;
+  cy: number;
+  r: number;
+  fill: string;
+  fillOpacity?: number;
+  style?: React.CSSProperties;
+}) {
+  const { red, cx, cy, r, fill, fillOpacity = 0.85, style } = props;
+  const comunes = {
+    fill,
+    fillOpacity,
+    stroke: "hsl(var(--foreground))",
+    strokeOpacity: 0.25,
+    strokeWidth: 1,
+    style,
+  } as const;
+  switch (red) {
+    case "instagram": // cuadrado
+      return <rect x={cx - r} y={cy - r} width={2 * r} height={2 * r} {...comunes} />;
+    case "tiktok": // triángulo
+      return (
+        <path d={`M ${cx} ${cy - r} L ${cx + r} ${cy + r} L ${cx - r} ${cy + r} Z`} {...comunes} />
+      );
+    case "youtube": // rombo (cuadrado rotado 45°)
+      return (
+        <rect
+          x={cx - r}
+          y={cy - r}
+          width={2 * r}
+          height={2 * r}
+          transform={`rotate(45 ${cx} ${cy})`}
+          {...comunes}
+        />
+      );
+    case "x": {
+      // cruz (medio grosor del brazo = 40 % del radio)
+      const w = r * 0.4;
+      return (
+        <path
+          d={
+            `M ${cx - w} ${cy - r} H ${cx + w} V ${cy - w} H ${cx + r} V ${cy + w} ` +
+            `H ${cx + w} V ${cy + r} H ${cx - w} V ${cy + w} H ${cx - r} V ${cy - w} ` +
+            `H ${cx - w} Z`
+          }
+          {...comunes}
+        />
+      );
+    }
+    default: // facebook (y redes fuera del catálogo): círculo
+      return <circle cx={cx} cy={cy} r={r} {...comunes} />;
+  }
+}
+
+/** Forma de cada punto: la figura de su red, con su color (de `payload.fill`) y brillo acotado. */
 function Punto(props: { cx?: number; cy?: number; payload?: PuntoDato; glow?: boolean }) {
   const { cx, cy, payload, glow = true } = props;
   if (cx == null || cy == null || !payload) return null;
-  const { r, fill } = payload;
+  const { r, fill, red } = payload;
   return (
-    <circle
+    <FormaRed
+      red={red}
       cx={cx + payload.jx}
       cy={cy + payload.jy}
       r={r}
       fill={fill}
-      fillOpacity={0.85}
       style={glow ? { filter: `drop-shadow(0 0 ${Math.min(2, r * 0.45)}px ${fill})` } : undefined}
     />
   );
@@ -178,17 +240,16 @@ export function PanoramaPiezas({
 
   // El Panorama tiene su PROPIO selector de periodo (no usa el rango global de arriba): pide
   // los últimos `dias` días (máx. 366 por el límite del backend). Por eso usa su propia queryKey.
+  // El ancla es el día CDMX (no el del navegador) y entra en las deps del memo: si la pestaña
+  // queda abierta de un día para otro, el rango —y con él la queryKey— rota con el día.
   const [dias, setDias] = React.useState(364);
+  const hoyDia = hoyCDMX();
   const rangoPeriodo = React.useMemo(() => {
-    const iso = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-        d.getDate(),
-      ).padStart(2, "0")}`;
-    const hoy = new Date();
-    const desde = new Date(hoy);
-    desde.setDate(desde.getDate() - dias);
-    return tokenRango(iso(desde), iso(hoy));
-  }, [dias]);
+    // Anclado a mediodía UTC: restar días enteros nunca cruza de día por husos horarios.
+    const desde = new Date(`${hoyDia}T12:00:00Z`);
+    desde.setUTCDate(desde.getUTCDate() - dias);
+    return tokenRango(desde.toISOString().slice(0, 10), hoyDia);
+  }, [dias, hoyDia]);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas-listado-periodo", rangoPeriodo, marca_ ?? "todas"],
@@ -336,7 +397,7 @@ export function PanoramaPiezas({
           onClick={() => setDias(p.dias)}
           aria-pressed={dias === p.dias}
           className={cn(
-            "rounded px-2 py-1 text-xs transition-colors",
+            "rounded px-2.5 py-1.5 text-xs transition-colors",
             dias === p.dias
               ? "bg-accent font-medium text-foreground"
               : "text-muted-foreground hover:text-foreground",
@@ -356,32 +417,43 @@ export function PanoramaPiezas({
         </p>
       ) : total === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Sin piezas con fecha en este periodo.
+          Aún no hay piezas publicadas en este periodo.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card p-4 dark:border-white/5 dark:bg-[#0b0b12]">
-          {/* Leyenda: redes presentes con su color. */}
+        <div className="overflow-hidden rounded-xl border border-border bg-card p-6">
+          {/* Leyenda: redes presentes (color + forma) y la clave de lectura de la escala. */}
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
             {redesPresentes.map((red) => (
               <span
                 key={red}
                 className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
               >
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: colorDe(red) }}
-                />
+                {/* Sin ring en la caja del svg: las formas no circulares (triángulo, rombo,
+                    cruz) ya llevan su trazo de contraste foreground/25 DENTRO de la figura;
+                    un ring dibujaría un halo circular ajeno a la forma. */}
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                  <FormaRed red={red} cx={5} cy={5} r={3.5} fill={colorDe(red)} fillOpacity={1} />
+                </svg>
                 {nombreRed(red)}
               </span>
             ))}
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
+              <span className="h-3 w-3 rounded-full bg-muted-foreground" aria-hidden="true" />
+              <span className="text-xs text-muted-foreground">
+                Eje vertical: vistas en escala logarítmica · tamaño del punto = engagement
+              </span>
+            </span>
           </div>
 
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={384}>
             <ScatterChart margin={{ top: 12, right: 22, bottom: 4, left: 8 }}>
               <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.5} strokeDasharray="3 3" />
-              {/* Eje de SEMANAS (día del lunes), pegado al gráfico. */}
+              {/* Eje de DÍAS, pegado al gráfico. Oculto en periodos > 90 días: ahí era
+                  una fila de números 1-31 sin valor de lectura. */}
               <XAxis
                 xAxisId="sem"
+                hide={dias > 90}
                 type="number"
                 dataKey="x"
                 domain={domainX}
@@ -442,7 +514,7 @@ export function PanoramaPiezas({
     <SeccionColapsable
       titulo="Panorama de piezas"
       icono={Telescope}
-      descripcion="Cada punto es una pieza publicada. Elige el periodo con el selector."
+      descripcion="Cada punto es una pieza: altura = vistas (escala logarítmica), tamaño = engagement, color = red. Este panorama usa su propio periodo (selector de la derecha), independiente del periodo global de arriba."
       acciones={selectorPeriodo}
     >
       {contenido}

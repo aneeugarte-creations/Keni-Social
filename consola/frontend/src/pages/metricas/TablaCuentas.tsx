@@ -32,6 +32,13 @@ import { SeccionColapsable } from "./SeccionColapsable";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
+/** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
+const ACCESORES: Record<ClaveMetrica, (c: CuentaMetrica) => number> = {
+  visualizaciones: (c) => c.visualizaciones,
+  interacciones: (c) => c.interacciones,
+  engagement_pct: (c) => c.engagement_pct,
+};
+
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
 function calcularTotales(cuentas: CuentaMetrica[]): {
   visualizaciones: number;
@@ -64,11 +71,7 @@ export function TablaCuentas({
 
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CuentaMetrica, ClaveMetrica>(
     cuentas,
-    {
-      visualizaciones: (c) => c.visualizaciones,
-      interacciones: (c) => c.interacciones,
-      engagement_pct: (c) => c.engagement_pct,
-    },
+    ACCESORES,
   );
 
   const totales = calcularTotales(cuentas);
@@ -80,7 +83,7 @@ export function TablaCuentas({
       <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-6">Cuenta</TableHead>
+              <TableHead className="pl-6">Marca</TableHead>
               {METRICAS.map((m) => (
                 <CabeceraOrdenable
                   key={m.clave}
@@ -104,7 +107,7 @@ export function TablaCuentas({
                   colSpan={METRICAS.length + 2}
                   className="py-8 text-center text-muted-foreground"
                 >
-                  No hay cuentas para mostrar en este rango.
+                  No hay marcas para mostrar en este periodo.
                 </TableCell>
               </TableRow>
             ) : (
@@ -180,7 +183,7 @@ export function TablaCuentas({
 
   if (desnudo) return tabla;
   return (
-    <SeccionColapsable titulo="Detalle por cuenta" contentClassName="p-0">
+    <SeccionColapsable titulo="Detalle por marca" contentClassName="p-0">
       {tabla}
     </SeccionColapsable>
   );

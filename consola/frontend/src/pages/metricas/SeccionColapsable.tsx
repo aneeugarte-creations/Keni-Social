@@ -17,7 +17,7 @@ import { ChevronDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import * as React from "react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function SeccionColapsable({
@@ -56,7 +56,7 @@ export function SeccionColapsable({
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
-        className="group flex min-w-0 items-center gap-2 text-left focus-visible:outline-none"
+        className="group flex min-w-0 items-center gap-2 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         <ChevronDown
           className={cn(
@@ -68,7 +68,7 @@ export function SeccionColapsable({
         {Icono ? (
           <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         ) : null}
-        <CardTitle className="truncate text-base group-hover:underline">{titulo}</CardTitle>
+        <h3 className="truncate text-base font-semibold leading-none tracking-tight group-hover:underline">{titulo}</h3>
       </button>
       {acciones ? <div className="flex flex-wrap items-center gap-2">{acciones}</div> : null}
     </div>

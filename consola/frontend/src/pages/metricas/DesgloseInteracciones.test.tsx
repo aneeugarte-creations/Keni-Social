@@ -71,7 +71,9 @@ describe("DesgloseInteracciones", () => {
     expect(screen.queryByText("instagram")).not.toBeInTheDocument();
     // fila de totales.
     expect(screen.getByText("Total")).toBeInTheDocument();
-    // valor sin compactar (comentarios = 300) presente en celda y total.
+    // valores COMPLETOS (no compactados): likes = 5000 → "5,000" en celda y total.
+    expect(screen.getAllByText("5,000").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/5\s*mil/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("300").length).toBeGreaterThan(0);
   });
 
@@ -89,7 +91,7 @@ describe("DesgloseInteracciones", () => {
     );
 
     await screen.findByText("Total");
-    const cabLikes = screen.getByRole("button", { name: /Likes/ });
+    const cabLikes = screen.getByRole("button", { name: /Me gusta/ });
     fireEvent.click(cabLikes); // desc -> Facebook (9000) primero
     const filasDatos = () =>
       screen
@@ -105,6 +107,8 @@ describe("DesgloseInteracciones", () => {
       <DesgloseInteracciones marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
     );
 
-    expect(await screen.findByText(/no expone el desglose/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Aún no hay desglose de interacciones para este periodo/i),
+    ).toBeInTheDocument();
   });
 });

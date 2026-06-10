@@ -9,6 +9,7 @@ import {
   marcaParam,
 } from "@/components/comunes/selectores";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
@@ -112,8 +113,8 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   // Drill-down: al clicar una marca en "Por marca", enfocamos TODO el dashboard en esa
   // marca cambiando el switch global (lectura: del agregado al detalle) y hacemos scroll
-  // a la tabla de piezas.
-  const piezasRef = React.useRef<HTMLDivElement>(null);
+  // a la sección de piezas.
+  const piezasRef = React.useRef<HTMLElement>(null);
   const verPiezasDeMarca = React.useCallback(
     (marcaId: string) => {
       cambiarMarca(marcaCanonicaDesdeMetricas(marcaId));
@@ -130,6 +131,18 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     // re-pedirlo cada 30 s. El botón "Actualizar" lo invalida cuando hay dato fresco.
     staleTime: 5 * 60_000,
   });
+
+  // Sin rangos del backend no hay nada que consultar: error honesto en vez del
+  // esqueleto infinito que dejaría la query deshabilitada (enabled: false).
+  if (!rango) {
+    return (
+      <BloqueError
+        titulo="No hay periodos disponibles"
+        mensaje="El backend no devolvió periodos de consulta para métricas."
+        onReintentar={() => window.location.reload()}
+      />
+    );
+  }
 
   const acciones = (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -176,21 +189,25 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               encabezado. La tabla permite drill-down a las piezas de cada marca. */}
           {/* Por marca: gráfico + tabla SIEMPRE visibles (los datos por cuenta son
               importantes). La tabla recorta a 5 con "Mostrar más" cuando hay más. */}
-          <section className="space-y-3">
+          <section className="space-y-4">
             <h2 className="text-lg font-semibold tracking-tight">Por marca</h2>
             <GraficaMarcas cuentas={reporteQuery.data.cuentas} desnudo />
-            <TablaCuentas
-              cuentas={reporteQuery.data.cuentas}
-              onVerPiezas={verPiezasDeMarca}
-              desnudo
-            />
+            <Card className="overflow-hidden py-2">
+              <TablaCuentas
+                cuentas={reporteQuery.data.cuentas}
+                onVerPiezas={verPiezasDeMarca}
+                desnudo
+              />
+            </Card>
           </section>
           {/* Por red: agrega las plataformas de todas las marcas del reporte. */}
           {/* Por red: gráfico + tabla + cobertura SIEMPRE visibles (datos importantes). */}
-          <section className="space-y-3">
+          <section className="space-y-4">
             <h2 className="text-lg font-semibold tracking-tight">Por red</h2>
             <EvolucionRedes marcaActual={marca} rangoActual={rango} desnudo />
-            <TablaRedes redes={reporteQuery.data.por_red} desnudo />
+            <Card className="overflow-hidden py-2">
+              <TablaRedes redes={reporteQuery.data.por_red} desnudo />
+            </Card>
             <CoberturaRedes marcas={reporteQuery.data.cobertura_redes} />
           </section>
 
@@ -203,13 +220,20 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <div className="space-y-1">
               <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
               <p className="text-sm text-muted-foreground">
-                Crecimiento de audiencia, composición del engagement y qué formatos
-                rinden mejor.
+                Crecimiento de audiencia, de qué se componen las interacciones y qué
+                formatos rinden mejor.
               </p>
             </div>
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
+                BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
+            <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
+            {/* Rendimiento por LÍNEA de contenido (vertical) y por ORIGEN del periodo:
+                dos tablas con piezas/visualizaciones/interacciones/engagement. Sigue
+                marca/rango global como el resto del dashboard. */}
+            <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <SeccionAds marcaActual={marca} rangoActual={rango} />
           </section>
@@ -219,19 +243,13 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               red + búsqueda, stats media/mediana, orden por columna (Vistas desc=top,
               asc=peores), paginación por día y drill-down. El drill-down desde la tabla
               por marca fija su filtro de marca. */}
-          <div ref={piezasRef} className="scroll-mt-6 space-y-3">
-            {/* Panorama visual (scatter temporal "que brilla") + tabla detallada: dos
-                lecturas del mismo conjunto de piezas. Comparten la query (misma caché). */}
+          <section ref={piezasRef} className="scroll-mt-6 space-y-4">
+            <h2 className="text-lg font-semibold tracking-tight">Piezas</h2>
+            {/* El Panorama usa query y periodo PROPIOS (selector 7d/30d/90d/1año); solo
+                EvolucionRedes comparte caché con PiezasConsolidada. */}
             <PanoramaPiezas marcaActual={marca} />
             <PiezasConsolidada marcaActual={marca} rangoActual={rango} marcas={marcas} />
-          </div>
-          {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
-              BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
-          <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
-          {/* Rendimiento por LÍNEA de contenido (vertical) y por ORIGEN del periodo:
-              dos tablas con piezas/visualizaciones/interacciones/engagement. Sigue
-              marca/rango global como el resto del dashboard. */}
-          <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
+          </section>
 
           <CompararPeriodos opciones={opciones} rangoActual={rango} />
         </div>
@@ -240,15 +258,19 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   );
 }
 
-/** Esqueleto de carga que imita la estructura del dashboard. */
+/** Esqueleto de carga que imita la estructura del dashboard (KPIs, rango, Tendencia…). */
 function EsqueletoDashboard() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-28 w-full rounded-xl" />
         ))}
       </div>
+      {/* Fila de rango temporal. */}
+      <Skeleton className="h-8 w-48" />
+      {/* Tendencia diaria (Card completa → rounded-xl). */}
+      <Skeleton className="h-72 w-full rounded-xl" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <Skeleton className="h-80 w-full rounded-xl lg:col-span-3" />
         <Skeleton className="h-80 w-full rounded-xl lg:col-span-2" />

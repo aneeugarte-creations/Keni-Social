@@ -39,7 +39,7 @@ export function CabeceraOrdenable({
         type="button"
         onClick={onClick}
         className={cn(
-          "group inline-flex w-full items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:text-foreground",
+          "group inline-flex w-full items-center gap-1 rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
           alinear === "right" ? "justify-end" : "justify-start",
         )}
       >
@@ -47,7 +47,7 @@ export function CabeceraOrdenable({
         <Icono
           className={cn(
             "h-3.5 w-3.5 shrink-0 transition-opacity",
-            activa ? "opacity-100" : "opacity-40 group-hover:opacity-70",
+            activa ? "opacity-100" : "opacity-40 group-hover:opacity-70 group-focus-visible:opacity-70",
             alinear === "right" && "order-1",
           )}
           aria-hidden="true"

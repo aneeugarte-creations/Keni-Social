@@ -28,7 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { nombreRed, numeroCompleto, porcentaje, REDES_CANONICAS } from "@/lib/formato";
+import { nombreRed, numeroCompleto, porcentaje, redCanonica, REDES_CANONICAS } from "@/lib/formato";
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -45,6 +45,13 @@ const COLUMNAS: Array<{ clave: ClaveRed; etiqueta: string }> = [
   { clave: "interacciones", etiqueta: "Interacciones" },
   { clave: "engagement_pct", etiqueta: "Engagement" },
 ];
+
+/** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
+const ACCESORES: Record<ClaveRed, (r: RedMetrica) => number> = {
+  visualizaciones: (r) => r.visualizaciones,
+  interacciones: (r) => r.interacciones,
+  engagement_pct: (r) => r.engagement_pct,
+};
 
 /** Formatea el valor de una columna. */
 function valorCelda(r: RedMetrica, clave: ClaveRed): string {
@@ -82,11 +89,10 @@ export function TablaRedes({
   // Filas tras aplicar el filtro de red (cliente). `visibles` alimenta orden, totales y reparto.
   const visibles = redFiltro === RED_TODAS ? redes : redes.filter((r) => r.red === redFiltro);
 
-  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<RedMetrica, ClaveRed>(visibles, {
-    visualizaciones: (r) => r.visualizaciones,
-    interacciones: (r) => r.interacciones,
-    engagement_pct: (r) => r.engagement_pct,
-  });
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<RedMetrica, ClaveRed>(
+    visibles,
+    ACCESORES,
+  );
 
   const totales = calcularTotales(visibles);
 
@@ -95,7 +101,7 @@ export function TablaRedes({
   // que en el piloto no está contratada en Metricool—. Así ninguna red desaparece.
   const objetivoRedes =
     redFiltro === RED_TODAS ? REDES_CANONICAS : REDES_CANONICAS.filter((r) => r === redFiltro);
-  const conDatos = new Set(visibles.map((r) => r.red.toLowerCase()));
+  const conDatos = new Set(visibles.map((r) => redCanonica(r.red)));
   const redesFaltantes = objetivoRedes.filter((r) => !conDatos.has(r));
 
   const filtroRed = (

@@ -1,18 +1,19 @@
 /**
- * Evolución por red: barras APILADAS por mes — una capa por red social (color), altura =
- * alcance (visualizaciones). Cuenta la COMPOSICIÓN y la tendencia: cómo crece el alcance
- * total mes a mes y qué red lo empuja (lo que la tabla "Detalle por red", agregada de todo
- * el periodo, no muestra). Estética del Panorama (panel tematizado, colores neón).
+ * Evolución por red: barras APILADAS por tramo de tiempo — una capa por red social (color),
+ * altura = vistas. Cuenta la COMPOSICIÓN y la tendencia: cómo crecen las vistas totales
+ * tramo a tramo y qué red las empuja (lo que la tabla "Detalle por red", agregada de todo
+ * el periodo, no muestra). El tamaño del tramo se adapta al periodo real de los datos:
+ * día (≤45 días), semana (≤180) o mes. Estética del Panorama (panel tematizado, neón).
  *
- * Reúsa la MISMA query que `PiezasConsolidada`/`PanoramaPiezas` (misma `queryKey`): caché
- * compartida, sin coste de API extra.
+ * Reúsa la MISMA query que `PiezasConsolidada` (misma `queryKey`): caché compartida, sin
+ * coste de API extra.
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3 } from "lucide-react";
 import * as React from "react";
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -33,11 +34,14 @@ import { SeccionColapsable } from "./SeccionColapsable";
 /** Orden canónico de redes (color y apilado estables). */
 const ORDEN_REDES = ["facebook", "instagram", "tiktok", "youtube", "x"];
 
-/** Una fila = un mes; además de `mes` (etiqueta) lleva la suma por red. */
-interface FilaMes {
-  mes: string;
+/** Una fila = un tramo (día, semana o mes); además de `tramo` (etiqueta) lleva la suma por red. */
+interface FilaTramo {
+  tramo: string;
   [red: string]: number | string;
 }
+
+/** Tamaño del tramo de agregación, adaptativo al span real de los datos. */
+type Granularidad = "dia" | "semana" | "mes";
 
 /** "May 2021" capitalizado a partir de año/mes (0-index). */
 function etiquetaMes(anio: number, mes0: number): string {
@@ -46,7 +50,45 @@ function etiquetaMes(anio: number, mes0: number): string {
   return `${m.charAt(0).toUpperCase()}${m.slice(1)} ${anio}`;
 }
 
-/** Tooltip (tematizado): desglose por red del mes + total. */
+/** "1 jun" en es-MX (sin punto del mes abreviado). */
+function etiquetaDia(f: Date): string {
+  return f.toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "");
+}
+
+/** `Date` local anclado a MEDIODÍA a partir de "AAAA-MM-DD" (la aritmética de días no deriva). */
+function fechaDeISO(iso: string): Date | null {
+  const [a, m, d] = (iso || "").split("-").map((n) => parseInt(n, 10));
+  if (!a || !m || !d) return null;
+  return new Date(a, m - 1, d, 12);
+}
+
+/** Inicio del tramo que contiene `f`: el propio día, su lunes (ISO) o el día 1 del mes. */
+function inicioTramo(f: Date, gran: Granularidad): Date {
+  if (gran === "mes") return new Date(f.getFullYear(), f.getMonth(), 1, 12);
+  if (gran === "semana") {
+    const lunes = new Date(f);
+    lunes.setDate(lunes.getDate() - ((lunes.getDay() + 6) % 7));
+    return lunes;
+  }
+  return new Date(f);
+}
+
+/** Inicio del tramo SIGUIENTE (para rellenar con 0 los tramos intermedios vacíos). */
+function siguienteTramo(f: Date, gran: Granularidad): Date {
+  const d = new Date(f);
+  if (gran === "mes") d.setMonth(d.getMonth() + 1);
+  else d.setDate(d.getDate() + (gran === "semana" ? 7 : 1));
+  return d;
+}
+
+/** Etiqueta del tramo: día → "1 jun"; semana → "Sem del 1 jun"; mes → "Jun 2026". */
+function etiquetaTramo(f: Date, gran: Granularidad): string {
+  if (gran === "mes") return etiquetaMes(f.getFullYear(), f.getMonth());
+  if (gran === "semana") return `Sem del ${etiquetaDia(f)}`;
+  return etiquetaDia(f);
+}
+
+/** Tooltip (tematizado): desglose por red del tramo + total. */
 function TooltipEvolucion(props: {
   active?: boolean;
   label?: string | number;
@@ -94,7 +136,8 @@ export function EvolucionRedes({
 }) {
   const marca_ = marcaParam(marcaActual);
 
-  // MISMA queryKey que PiezasConsolidada/PanoramaPiezas => caché compartida (sin coste extra).
+  // MISMA queryKey que PiezasConsolidada => caché compartida (sin coste extra).
+  // (PanoramaPiezas ya no: usa periodo y queryKey propios.)
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas"],
     queryFn: ({ signal }) =>
@@ -106,28 +149,35 @@ export function EvolucionRedes({
   const piezas = React.useMemo<PiezaListado[]>(() => data?.piezas ?? [], [data]);
 
   const { filas, redesPresentes } = React.useMemo(() => {
-    // Agrega visualizaciones por (mes, red). Clave de mes = AAAA-MM.
-    const porMes = new Map<string, Record<string, number>>();
+    // Piezas válidas: con fecha parseable y vistas finitas.
+    const validas: Array<{ f: Date; red: string; vistas: number }> = [];
     const redes = new Set<string>();
-    let minClave: string | null = null;
-    let maxClave: string | null = null;
-
     for (const p of piezas) {
-      const [a, m] = (p.publicado || "").split("-").map((n) => parseInt(n, 10));
-      if (!a || !m) continue;
-      if (!Number.isFinite(p.visualizaciones)) continue;
-      const clave = `${a}-${String(m).padStart(2, "0")}`;
+      const f = fechaDeISO(p.publicado);
+      if (!f || !Number.isFinite(p.visualizaciones)) continue;
       const red = redCanonica(p.plataforma) || "otra";
       redes.add(red);
-      const fila = porMes.get(clave) ?? {};
-      fila[red] = (fila[red] ?? 0) + p.visualizaciones;
-      porMes.set(clave, fila);
-      if (minClave === null || clave < minClave) minClave = clave;
-      if (maxClave === null || clave > maxClave) maxClave = clave;
+      validas.push({ f, red, vistas: p.visualizaciones });
+    }
+    if (!validas.length) {
+      return { filas: [] as FilaTramo[], redesPresentes: [] as string[] };
     }
 
-    if (minClave === null || maxClave === null) {
-      return { filas: [] as FilaMes[], redesPresentes: [] as string[] };
+    // Granularidad adaptativa según el span REAL de los datos: con el rango por defecto
+    // (~30 días) la agregación mensual daba 1-2 barras; en día/semana sí hay tendencia.
+    const tiempos = validas.map((v) => v.f.getTime());
+    const minT = Math.min(...tiempos);
+    const maxT = Math.max(...tiempos);
+    const spanDias = Math.round((maxT - minT) / 86_400_000);
+    const gran: Granularidad = spanDias <= 45 ? "dia" : spanDias <= 180 ? "semana" : "mes";
+
+    // Agrega vistas por (tramo, red). Clave = timestamp del inicio del tramo.
+    const porTramo = new Map<number, Record<string, number>>();
+    for (const v of validas) {
+      const clave = inicioTramo(v.f, gran).getTime();
+      const fila = porTramo.get(clave) ?? {};
+      fila[v.red] = (fila[v.red] ?? 0) + v.vistas;
+      porTramo.set(clave, fila);
     }
 
     // Redes presentes ordenadas (canónicas primero) — orden estable del apilado/leyenda.
@@ -135,29 +185,24 @@ export function EvolucionRedes({
       (a, b) => (ORDEN_REDES.indexOf(a) + 1 || 99) - (ORDEN_REDES.indexOf(b) + 1 || 99),
     );
 
-    // Recorre TODOS los meses del rango (rellena con 0 los vacíos) para una serie continua.
-    const [aMin, mMin] = minClave.split("-").map((n) => parseInt(n, 10));
-    const [aMax, mMax] = maxClave.split("-").map((n) => parseInt(n, 10));
-    const out: FilaMes[] = [];
-    let yy = aMin;
-    let mm = mMin - 1; // 0-index
-    while (yy < aMax || (yy === aMax && mm <= mMax - 1)) {
-      const clave = `${yy}-${String(mm + 1).padStart(2, "0")}`;
-      const sumas = porMes.get(clave) ?? {};
-      const fila: FilaMes = { mes: etiquetaMes(yy, mm) };
+    // Recorre TODOS los tramos del rango (rellena con 0 los vacíos) para una serie continua.
+    const out: FilaTramo[] = [];
+    const fin = inicioTramo(new Date(maxT), gran).getTime();
+    for (
+      let cur = inicioTramo(new Date(minT), gran);
+      cur.getTime() <= fin;
+      cur = siguienteTramo(cur, gran)
+    ) {
+      const sumas = porTramo.get(cur.getTime()) ?? {};
+      const fila: FilaTramo = { tramo: etiquetaTramo(cur, gran) };
       for (const red of presentes) fila[red] = sumas[red] ?? 0;
       out.push(fila);
-      mm++;
-      if (mm > 11) {
-        mm = 0;
-        yy++;
-      }
     }
 
     return { filas: out, redesPresentes: presentes };
   }, [piezas]);
 
-  // Muestra ~8 etiquetas de mes como máximo (interval = nº de categorías a saltar).
+  // Muestra ~8 etiquetas de tramo como máximo en el eje X (interval = categorías a saltar).
   const intervalo = Math.max(0, Math.ceil(filas.length / 8) - 1);
 
   const contenido = isPending ? (
@@ -168,17 +213,19 @@ export function EvolucionRedes({
         </p>
       ) : filas.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Sin piezas con fecha en este periodo.
+          Aún no hay piezas publicadas en este periodo.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card p-4 dark:border-white/5 dark:bg-[#0b0b12]">
+        <div className="rounded-xl border border-border bg-card p-6">
           {/* Rótulo de la métrica (título + aclaración honesta) + leyenda, dentro del gráfico. */}
           <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
             <div className="space-y-1">
               <p className="text-base font-medium leading-none tracking-tight text-foreground">
-                Visualizaciones por aplicación
+                Vistas por red
               </p>
-              <p className="text-xs text-muted-foreground">Alcance de lo publicado cada mes</p>
+              <p className="text-xs text-muted-foreground">
+                Vistas de lo publicado en cada tramo
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5">
               {redesPresentes.map((red) => (
@@ -186,18 +233,22 @@ export function EvolucionRedes({
                   key={red}
                   className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
                 >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorDe(red) }} />
+                  <span
+                    className="h-2.5 w-2.5 rounded-full ring-1 ring-foreground/25"
+                    style={{ backgroundColor: colorDe(red) }}
+                  />
                   {nombreRed(red)}
                 </span>
               ))}
             </div>
           </div>
 
-          <ResponsiveContainer width="100%" height={360}>
-            <AreaChart data={filas} margin={{ top: 12, right: 18, bottom: 4, left: 8 }}>
+          <ResponsiveContainer width="100%" height={288}>
+            {/* Barras apiladas (no áreas): son sumas DISCRETAS por tramo, no un continuo. */}
+            <BarChart data={filas} margin={{ top: 12, right: 18, bottom: 4, left: 8 }}>
               <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.5} strokeDasharray="3 3" vertical={false} />
               <XAxis
-                dataKey="mes"
+                dataKey="tramo"
                 interval={intervalo}
                 tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
                 tickLine={false}
@@ -211,30 +262,33 @@ export function EvolucionRedes({
                 width={48}
               />
               <Tooltip
-                cursor={{ stroke: "hsl(var(--muted-foreground))", strokeOpacity: 0.3 }}
+                cursor={{ fill: "hsl(var(--muted-foreground))", fillOpacity: 0.12 }}
                 content={<TooltipEvolucion />}
               />
               {redesPresentes.map((red) => (
-                <Area
+                <Bar
                   key={red}
-                  type="monotone"
                   dataKey={red}
                   stackId="redes"
-                  stroke={colorDe(red)}
-                  strokeWidth={2}
                   fill={colorDe(red)}
-                  fillOpacity={0.3}
+                  stroke="hsl(var(--foreground))"
+                  strokeOpacity={0.25}
+                  strokeWidth={1}
                   name={nombreRed(red)}
                 />
               ))}
-            </AreaChart>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       );
 
   if (desnudo) return contenido;
   return (
-    <SeccionColapsable titulo="Evolución por red" icono={BarChart3} descripcion="Alcance por mes, apilado por red.">
+    <SeccionColapsable
+      titulo="Evolución por red"
+      icono={BarChart3}
+      descripcion="Vistas por tramo (día, semana o mes según el periodo), apiladas por red."
+    >
       {contenido}
     </SeccionColapsable>
   );
