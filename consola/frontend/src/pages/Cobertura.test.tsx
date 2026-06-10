@@ -20,7 +20,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -364,13 +364,17 @@ describe("Cobertura · Historias — renderizado de clusters", () => {
     await waitFor(() => {
       expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
     });
+    // El RESUMEN de fuentes vive en la propia tarjeta (sin expandir): etiqueta — tema.
+    expect(screen.getByTestId("fuentes-resumen").textContent).toMatch(/Reforma/);
     const botonExpandir = screen.getByRole("button", { name: /Ver fuentes corroborantes/i });
     fireEvent.click(botonExpandir);
     await waitFor(() => {
       expect(screen.getByTestId("lista-enlaces")).toBeTruthy();
     });
-    expect(screen.getByText("Fuente 1")).toBeTruthy();
-    expect(screen.getByText(/Reforma/)).toBeTruthy();
+    // Dentro de la lista expandida (el resumen de la tarjeta también nombra a Reforma).
+    const lista = within(screen.getByTestId("lista-enlaces"));
+    expect(lista.getByText("Fuente 1")).toBeTruthy();
+    expect(lista.getByText(/Reforma/)).toBeTruthy();
   });
 });
 
