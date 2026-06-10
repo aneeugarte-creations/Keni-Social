@@ -133,3 +133,34 @@ def test_borrar_evergreen_idea(entorno):
     assert db.borrar_evergreen_idea(idea["id"]) is True
     assert db.obtener_evergreen_idea(idea["id"]) is None
     assert db.borrar_evergreen_idea(idea["id"]) is False
+
+
+# --------------------------------------------------------------------------- #
+# Generar pieza desde una idea: terminal feliz `generada` (cajón histórico)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_generar_pieza_sella_la_idea_como_generada(cliente, monkeypatch):
+    """POST /generar crea la pieza y deja la idea en `generada` + enlazada: sale del flujo
+    activo del taller (sin botones de Generar/Descartar; cajón histórico)."""
+    from keni_consola import repos
+    from keni_consola.api import evergreen as api_evergreen
+
+    monkeypatch.setattr(
+        api_evergreen.gen_dom, "lanzar_copy", lambda **kw: {"id": "gen-stub"}
+    )
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="Explicador RFC", descripcion="guía", estado="aprobada"
+    )
+    r = cliente.post(f"/api/evergreen/ideas/{idea['id']}/generar", json={})
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    assert datos["idea"]["estado"] == "generada"
+    assert datos["idea"]["contenido_id"]
+    # La pieza nace evergreen con su LÍNEA del plan persistida (cuenta y hereda horarios).
+    cont = repos.obtener_contenido(datos["idea"]["contenido_id"])
+    assert cont["flujo"] == "evergreen" and cont["categoria"] == "evergreen"
+    # Una idea ya generada NO se puede volver a generar (no está `aprobada`).
+    assert cliente.post(
+        f"/api/evergreen/ideas/{idea['id']}/generar", json={}
+    ).status_code == 400

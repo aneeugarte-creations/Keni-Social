@@ -40,6 +40,7 @@ from ..dominio import generar as gen_dom
 from ..dominio import stream
 from ..estados import (
     ESTADO_EVERGREEN_APROBADA,
+    ESTADO_EVERGREEN_GENERADA,
     ESTADO_EVERGREEN_PROPUESTA,
     ESTADOS_EVERGREEN_IDEA,
     FLUJO_EVERGREEN,
@@ -260,7 +261,11 @@ async def generar_pieza(request: Request) -> Response:
             status_code=429,
         )
 
-    actualizada = repos.actualizar_evergreen_idea(idea_id, {"contenido_id": contenido["id"]})
+    # TERMINAL feliz: la idea pasa a `generada` (cajón histórico del taller, sin más
+    # acciones) y queda enlazada a su pieza. Volver a generarla = duplicar contenido.
+    actualizada = repos.actualizar_evergreen_idea(
+        idea_id, {"contenido_id": contenido["id"], "estado": ESTADO_EVERGREEN_GENERADA}
+    )
     return JSONResponse(
         {"idea": _idea_a_dict(actualizada or idea), "generacion": gen}
     )

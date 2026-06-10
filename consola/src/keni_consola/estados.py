@@ -238,9 +238,12 @@ PRIORIDAD_CONTENIDO_DEFECTO = PRIORIDAD_EVENTO_DEFECTO
 # Taller EVERGREEN / brainstorming: estados de una IDEA de contenido evergreen. La IA (o una
 # persona) PROPONE; el equipo APRUEBA o DESCARTA; solo para las aprobadas se genera la pieza
 # (`flujo='evergreen'` en el tablero). Operacional; vive en Postgres (`evergreen_ideas.estado`).
-ESTADOS_EVERGREEN_IDEA: tuple[str, ...] = ("propuesta", "aprobada", "descartada")
+ESTADOS_EVERGREEN_IDEA: tuple[str, ...] = ("propuesta", "aprobada", "generada", "descartada")
 ESTADO_EVERGREEN_PROPUESTA = "propuesta"
 ESTADO_EVERGREEN_APROBADA = "aprobada"
+# La idea YA produjo su pieza (terminal feliz): sale del flujo activo al cajón histórico del
+# taller — sin más acciones; el contenido vive su propio ciclo en el tablero.
+ESTADO_EVERGREEN_GENERADA = "generada"
 ESTADO_EVERGREEN_DESCARTADA = "descartada"
 
 # Origen de una idea evergreen, todas en el MISMO banco (Contenidos):

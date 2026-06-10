@@ -64,8 +64,15 @@ const ESTADO_TODOS = "__todos__";
 const ESTADO_LABEL: Record<string, string> = {
   propuesta: "Propuesta",
   aprobada: "Aprobada",
+  generada: "Generada",
   descartada: "Descartada",
 };
+
+/** ¿La idea ya está en su terminal feliz? (estado nuevo `generada`; las anteriores al estado
+ *  solo llevan `contenido_id`). Sin acciones: vive en el cajón Histórico. */
+function esGenerada(idea: IdeaEvergreen): boolean {
+  return idea.estado === "generada" || Boolean(idea.contenido_id);
+}
 
 /** Etiqueta del origen de la idea (badge). `manual` no lleva badge (alta rápida sin matiz). */
 const ORIGEN_LABEL: Record<string, string> = {
@@ -142,11 +149,12 @@ export function TallerEvergreen({
               className="py-4"
             />
           ) : (
-            <div className="space-y-3">
-              {ideas.map((idea) => (
-                <FilaIdea key={idea.id} idea={idea} marcas={marcas} redes={redes} />
-              ))}
-            </div>
+            <ListaIdeas
+              ideas={ideas}
+              marcas={marcas}
+              redes={redes}
+              separarHistorico={estadoFiltro === ESTADO_TODOS}
+            />
           )}
         </CardContent>
       </Card>
@@ -366,6 +374,51 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   );
 }
 
+/** Lista del banco: las ACTIVAS arriba y, plegado, el cajón HISTÓRICO (generadas y
+ *  descartadas — ya no piden acción; quedan consultables sin estorbar). Con un filtro de
+ *  estado concreto se pinta plano (el filtro ya dice qué quieres ver). */
+function ListaIdeas({
+  ideas,
+  marcas,
+  redes,
+  separarHistorico,
+}: {
+  ideas: IdeaEvergreen[];
+  marcas: MarcaDisponible[];
+  redes: RedPublicacion[];
+  separarHistorico: boolean;
+}) {
+  const historico = separarHistorico
+    ? ideas.filter((i) => esGenerada(i) || i.estado === "descartada")
+    : [];
+  const activas = separarHistorico ? ideas.filter((i) => !historico.includes(i)) : ideas;
+  return (
+    <div className="space-y-3">
+      {activas.map((idea) => (
+        <FilaIdea key={idea.id} idea={idea} marcas={marcas} redes={redes} />
+      ))}
+      {activas.length === 0 && historico.length > 0 && (
+        <EstadoVacioTexto
+          texto="No hay ideas activas. Propón algunas con la IA o crea una a mano."
+          className="py-4"
+        />
+      )}
+      {historico.length > 0 && (
+        <details className="rounded-md border border-border/60">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm text-muted-foreground">
+            Histórico ({historico.length}) — generadas y descartadas
+          </summary>
+          <div className="space-y-3 p-3 pt-1">
+            {historico.map((idea) => (
+              <FilaIdea key={idea.id} idea={idea} marcas={marcas} redes={redes} />
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /** Una idea con su estado y acciones (aprobar / descartar / generar / borrar). */
 function FilaIdea({
   idea,
@@ -443,7 +496,8 @@ function FilaIdea({
   }, [generacion, navigate, queryClient]);
 
   const generando = generar.isPending || ejecutando;
-  const aprobada = idea.estado === "aprobada";
+  const generada = esGenerada(idea);
+  const aprobada = idea.estado === "aprobada" && !generada;
   const descartada = idea.estado === "descartada";
 
   const acciones: EntradaMenuContextual[] = [
@@ -491,7 +545,7 @@ function FilaIdea({
             {ORIGEN_LABEL[idea.origen]}
           </Badge>
         )}
-        {idea.contenido_id && (
+        {idea.contenido_id && idea.estado !== "generada" && (
           <Badge variant="outline" className="font-normal">
             Generada
           </Badge>
@@ -503,6 +557,7 @@ function FilaIdea({
         <p className="line-clamp-3 text-sm text-muted-foreground">{idea.descripcion}</p>
       )}
 
+      {!generada && (
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {!aprobada && !descartada && (
           <Button
@@ -548,6 +603,7 @@ function FilaIdea({
           </Button>
         )}
       </div>
+      )}
 
       {generacion && (ejecutando || generacion.estado === "error") && (
         <ProgresoGeneracion
