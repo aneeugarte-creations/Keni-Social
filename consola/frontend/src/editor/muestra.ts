@@ -3,30 +3,78 @@
 // Al diseñar una PLANTILLA el hueco de foto está vacío y los textos con `binding` muestran texto
 // genérico, así que el equipo "diseña de memoria": no ve el recorte/encuadre/filtros/duotono sobre
 // una foto real ni la longitud real de un titular. Este módulo provee:
-//   · una SUPERFICIE GRIS de muestra (degradado lineal neutro) generada en cliente y cacheada a
-//     nivel de módulo, offline-safe (sin depender de assets remotos), para rellenar el hueco solo
-//     visualmente en el lienzo. Es una superficie de trabajo NEUTRA (no una foto sintética de
-//     colores): el equipo pidió diseñar sobre gris, no sobre una "foto" de ejemplo.
-//   · COPY DE MUESTRA representativo para los bindings de texto (titular largo, pleca tipo "EN
-//     VIVO"), para ver saltos de línea y el auto-encogido.
-
-// ── Superficie gris de muestra ──────────────────────────────────────────────────────────────────
+//   · una FOTO de muestra EDITABLE: por defecto una superficie gris neutra (degradado lineal)
+//     generada en cliente, pero el equipo puede subir/pegar una foto real para diseñar VIENDO el
+//     recorte/encuadre/forma/filtros sobre ella. La elección se guarda en localStorage (solo
+//     presentación; nunca entra al documento ni al export).
+//   · un COPY de muestra EDITABLE (titular + pleca) para los bindings de texto, para ver saltos de
+//     línea y el auto-encogido con un texto representativo (o el que el equipo prefiera).
 //
-// Generamos UNA imagen gris neutra: un degradado lineal a 45° (claro `#bababa` en la esquina
-// inferior-izquierda → oscuro `#363636` en la superior-derecha). Misma dirección/colores que el
-// resto de superficies grises del editor. No es una "foto" de ejemplo: es la superficie de trabajo
-// sobre la que se diseña la plantilla mientras el hueco está vacío. Tamaño cuadrado (1280×1280) para
-// que el `cover` de cualquier caja se vea nítido; al recortar a cualquier formato (16:9, 4:5, 9:16)
-// el degradado conserva su dirección.
+// Foto y copy de muestra son INDEPENDIENTES (dos toggles distintos en la barra del editor) y
+// EDITABLES. Persisten en localStorage; los cambios notifican a los suscriptores para que el lienzo
+// se redibuje en vivo.
+
+// ── Persistencia (localStorage) ──────────────────────────────────────────────────────────────────
+
+const CLAVE_FOTO_SRC = "keni.editor.muestra.foto.src"; // dataURL/URL; "" => superficie gris por defecto
+const CLAVE_TITULAR = "keni.editor.muestra.copy.titular";
+const CLAVE_ETIQUETA = "keni.editor.muestra.copy.etiqueta";
+
+// Valores por DEFECTO (los de siempre): titular largo para ver saltos de línea + pleca "EN VIVO".
+export const TITULAR_MUESTRA_DEFECTO =
+  "Tormenta histórica deja sin luz a miles de familias en el norte del país esta madrugada";
+export const ETIQUETA_MUESTRA_DEFECTO = "EN VIVO";
+
+function leer(clave: string, def: string): string {
+  try {
+    const v = localStorage.getItem(clave);
+    return v == null ? def : v;
+  } catch {
+    return def;
+  }
+}
+function guardar(clave: string, valor: string): void {
+  try {
+    localStorage.setItem(clave, valor);
+  } catch {
+    /* almacenamiento no disponible: la preferencia no se persiste, sin romper. */
+  }
+}
+
+let _fotoSrc = leer(CLAVE_FOTO_SRC, "");
+let _titular = leer(CLAVE_TITULAR, TITULAR_MUESTRA_DEFECTO);
+let _etiqueta = leer(CLAVE_ETIQUETA, ETIQUETA_MUESTRA_DEFECTO);
+
+// Pub/sub: el editor se suscribe para redibujar el lienzo cuando cambia la foto/copy de muestra.
+const _subs = new Set<() => void>();
+export function suscribirMuestra(cb: () => void): () => void {
+  _subs.add(cb);
+  return () => {
+    _subs.delete(cb);
+  };
+}
+function notificar(): void {
+  for (const cb of _subs) {
+    try {
+      cb();
+    } catch {
+      /* un suscriptor roto no debe tumbar a los demás */
+    }
+  }
+}
+
+// ── Superficie gris de muestra (foto por defecto) ────────────────────────────────────────────────
+//
+// Degradado lineal a 45° (claro `#bababa` abajo-izquierda → oscuro `#363636` arriba-derecha), misma
+// dirección/colores que el resto de superficies grises del editor. NO es una "foto" de ejemplo: es
+// la superficie de trabajo NEUTRA sobre la que se diseña la plantilla cuando no hay foto real.
+// Cuadrada (1280×1280) para que el `cover` de cualquier caja se vea nítido a cualquier formato.
 
 const TAM_MUESTRA = 1280;
 
-let _imgMuestra: HTMLImageElement | null = null;
-let _pendiente: Promise<HTMLImageElement> | null = null;
-
-// Dibuja la superficie gris en un canvas y devuelve su dataURL. Determinista (sin aleatoriedad), así
-// la imagen es estable entre renders.
-function pintarMuestra(): string | null {
+let _grisSrc: string | null = null;
+function grisMuestraSrc(): string | null {
+  if (_grisSrc) return _grisSrc;
   if (typeof document === "undefined") return null;
   const cv = document.createElement("canvas");
   cv.width = TAM_MUESTRA;
@@ -35,66 +83,102 @@ function pintarMuestra(): string | null {
   if (!ctx) return null;
   const W = TAM_MUESTRA;
   const H = TAM_MUESTRA;
-
-  // Degradado lineal a 45°: claro (#bababa) en la esquina inferior-izquierda → oscuro (#363636) en
-  // la superior-derecha. En un cuadrado es exactamente esquina-a-esquina (start=(0,H), end=(W,0)).
   const g = ctx.createLinearGradient(0, H, W, 0);
   g.addColorStop(0, "#bababa");
   g.addColorStop(1, "#363636");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
-
   try {
-    return cv.toDataURL("image/png");
+    _grisSrc = cv.toDataURL("image/png");
   } catch {
     return null;
   }
+  return _grisSrc;
 }
 
-// Devuelve la foto de muestra YA cargada (o null si aún no lo está / no hay DOM). Dispara la
-// generación/carga la primera vez. Cuando termina, llama a `alCargar` (para forzar un redibujo del
-// lienzo). La imagen se cachea a nivel de módulo: se genera una sola vez por sesión.
+// `src` efectivo de la foto de muestra: el elegido por el equipo, o la superficie gris por defecto.
+function srcEfectivo(): string | null {
+  return _fotoSrc || grisMuestraSrc();
+}
+
+// ── Foto de muestra (imagen cargada, cacheada por src) ───────────────────────────────────────────
+
+let _img: HTMLImageElement | null = null;
+let _imgSrc: string | null = null; // qué `src` corresponde a `_img` (para invalidar al cambiar)
+let _pendiente: Promise<HTMLImageElement> | null = null;
+
+// Devuelve la foto de muestra YA cargada (o null si aún no lo está / no hay DOM). Dispara la carga la
+// primera vez (y de nuevo si el src cambió). Cuando termina, llama a `alCargar` (para forzar un
+// redibujo del lienzo). La imagen se cachea por src.
 export function fotoMuestra(alCargar?: () => void): HTMLImageElement | null {
-  if (_imgMuestra) return _imgMuestra;
   if (typeof window === "undefined") return null;
+  const src = srcEfectivo();
+  if (!src) return null;
+  if (_img && _imgSrc === src) return _img;
+  // src nuevo (o aún sin cargar): invalida la cache y (re)carga.
+  if (_imgSrc !== src) {
+    _img = null;
+    _imgSrc = src;
+    _pendiente = null;
+  }
   if (!_pendiente) {
+    const objetivo = src;
     _pendiente = new Promise<HTMLImageElement>((resolve, reject) => {
-      const src = pintarMuestra();
-      if (!src) {
-        reject(new Error("sin-canvas"));
-        return;
-      }
       const el = new window.Image();
       el.onload = () => {
-        _imgMuestra = el;
+        // Ignora si el src volvió a cambiar mientras cargaba (carrera).
+        if (_imgSrc === objetivo) _img = el;
         resolve(el);
       };
       el.onerror = () => reject(new Error("carga-fallida"));
-      el.src = src;
+      el.src = objetivo;
     });
     _pendiente.catch(() => {
-      // generación fallida (entorno sin canvas): se queda sin muestra, sin romper.
       _pendiente = null;
     });
   }
   if (alCargar) _pendiente.then(alCargar).catch(() => {});
-  return _imgMuestra;
+  return _img;
 }
 
-// ── Copy de muestra ─────────────────────────────────────────────────────────────────────────────
+// ── Getters/setters de la foto y el copy de muestra ──────────────────────────────────────────────
 
-// Titular de ejemplo MÁS BIEN LARGO: hace visibles los saltos de línea y el auto-encogido del
-// titular dentro de su caja, que es justo lo que no se ve al diseñar "de memoria".
-export const TITULAR_MUESTRA =
-  "Tormenta histórica deja sin luz a miles de familias en el norte del país esta madrugada";
+export function getFotoMuestraSrc(): string {
+  return _fotoSrc;
+}
+// Fija la foto de muestra (dataURL o URL). "" => vuelve a la superficie gris por defecto.
+export function setFotoMuestra(src: string): void {
+  _fotoSrc = src;
+  guardar(CLAVE_FOTO_SRC, src);
+  // Invalida la imagen cacheada para forzar la recarga del nuevo src.
+  _img = null;
+  _imgSrc = null;
+  _pendiente = null;
+  notificar();
+}
 
-// Pleca/etiqueta de ejemplo (binding etiqueta_default): banda tipo "EN VIVO" / "ÚLTIMA HORA".
-export const ETIQUETA_MUESTRA = "EN VIVO";
+export function getTitularMuestra(): string {
+  return _titular;
+}
+export function setTitularMuestra(v: string): void {
+  _titular = v;
+  guardar(CLAVE_TITULAR, v);
+  notificar();
+}
 
-// Texto de muestra para una capa de texto con binding, en modo "Vista con muestra". Devuelve null
-// si el binding no es uno de los bindeables (el llamador usa entonces su texto normal).
+export function getEtiquetaMuestra(): string {
+  return _etiqueta;
+}
+export function setEtiquetaMuestra(v: string): void {
+  _etiqueta = v;
+  guardar(CLAVE_ETIQUETA, v);
+  notificar();
+}
+
+// Texto de muestra para una capa de texto con binding, en modo "Vista con muestra (copy)". Devuelve
+// null si el binding no es uno de los bindeables (el llamador usa entonces su texto normal).
 export function copyMuestra(binding: "copy_in" | "etiqueta_default" | null | undefined): string | null {
-  if (binding === "copy_in") return TITULAR_MUESTRA;
-  if (binding === "etiqueta_default") return ETIQUETA_MUESTRA;
+  if (binding === "copy_in") return _titular;
+  if (binding === "etiqueta_default") return _etiqueta;
   return null;
 }

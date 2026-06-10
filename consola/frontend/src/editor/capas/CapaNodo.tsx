@@ -117,9 +117,11 @@ export interface CapaNodoProps {
   onGesto: () => void;
   // Hijas de un grupo: no son arrastrables ni transformables por separado (el grupo manda).
   interactivo?: boolean;
-  // "Vista con muestra": rellena el hueco de foto con una foto de muestra y los bindings de texto
-  // con copy de ejemplo. Solo PRESENTACIÓN; no muta la capa ni afecta al export.
-  muestra?: boolean;
+  // "Vista con muestra": INDEPENDIENTES. `muestraFoto` rellena el hueco de foto con la foto de
+  // muestra; `muestraCopy` rellena los bindings de texto con el copy de ejemplo. Solo PRESENTACIÓN;
+  // no mutan la capa ni afectan al export.
+  muestraFoto?: boolean;
+  muestraCopy?: boolean;
 }
 
 const ALIN: Record<string, string> = {
@@ -340,11 +342,12 @@ function NodoImagenAjustada({
   );
 }
 
-function textoMuestra(c: CapaTexto, muestra = false): string {
-  // En "Vista con muestra" los bindings usan copy de ejemplo REPRESENTATIVO (titular largo, pleca
-  // "EN VIVO") para ver saltos de línea y auto-encogido — aunque la capa ya tenga `texto`. Fuera de
-  // ese modo, comportamiento de hoy: respeta `texto` y cae a un placeholder genérico si está vacío.
-  const ejemplo = muestra ? copyMuestra(c.binding) : null;
+function textoMuestra(c: CapaTexto, muestraCopy = false): string {
+  // En "Vista con muestra (copy)" los bindings usan copy de ejemplo (titular largo, pleca "EN VIVO"
+  // por defecto, o el que el equipo edite) para ver saltos de línea y auto-encogido — aunque la capa
+  // ya tenga `texto`. Fuera de ese modo, comportamiento de hoy: respeta `texto` y cae a un
+  // placeholder genérico si está vacío.
+  const ejemplo = muestraCopy ? copyMuestra(c.binding) : null;
   const base = ejemplo
     ? ejemplo
     : c.binding === "copy_in"
@@ -355,7 +358,7 @@ function textoMuestra(c: CapaTexto, muestra = false): string {
   return c.mayusculas ? base.toUpperCase() : base;
 }
 
-export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestra = false }: CapaNodoProps) {
+export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestraFoto = false, muestraCopy = false }: CapaNodoProps) {
   // Hook SIEMPRE llamado (regla de hooks); null para capas sin imagen.
   const objetoImg = capa.tipo === "imagen" ? capa.objeto : capa.tipo === "logo" ? capa.media_id : null;
   const img = useImagen(objetoImg);
@@ -427,7 +430,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
   // OJO: SOLO el hueco `es_foto`, no cualquier imagen vacía: si no, una imagen vacía OCULTA de z alto
   // se forzaría a pintar y taparía el diseño (pleca/titular) con la muestra opaca al activarla.
   const esHuecoImg = capa.tipo === "imagen" && (capa as CapaImagen).es_foto === true;
-  if (capa.visible === false && !(muestra && esHuecoImg)) return null;
+  if (capa.visible === false && !(muestraFoto && esHuecoImg)) return null;
 
   switch (capa.tipo) {
     case "imagen": {
@@ -437,7 +440,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       // real (objeto cargado) manda; la muestra es fallback. No se rellena cualquier imagen vacía:
       // una imagen vacía por encima del diseño taparía la pleca/titular con la muestra opaca.
       const esHueco = c.es_foto === true;
-      const imgEfectiva = img ?? (muestra && esHueco ? fotoMuestra(() => redibujar()) : null);
+      const imgEfectiva = img ?? (muestraFoto && esHueco ? fotoMuestra(() => redibujar()) : null);
       if (!imgEfectiva) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
@@ -538,7 +541,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           <TextPath
             {...props}
             data={pathArco(c.curva.radio, c.w, ancla)}
-            text={textoMuestra(c, muestra)}
+            text={textoMuestra(c, muestraCopy)}
             fontFamily={familiaReal(c.familia)}
             fontSize={c.tamano}
             fontStyle={c.peso >= 600 ? "bold" : "normal"}
@@ -568,7 +571,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       const nodoTexto = (
         <Text
           {...(c.chip ? {} : props)}
-          text={textoMuestra(c, muestra)}
+          text={textoMuestra(c, muestraCopy)}
           width={c.w}
           height={enCaja ? c.h : undefined}
           verticalAlign={enCaja ? (c.valign === "centro" ? "middle" : c.valign === "abajo" ? "bottom" : "top") : undefined}

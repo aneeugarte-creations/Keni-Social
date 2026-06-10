@@ -17,15 +17,15 @@ import {
   DollarSign,
   Eye,
   ImageOff,
-  ImagePlay,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
   Loader2,
   Maximize2,
+  Minimize2,
+  MoreHorizontal,
   Redo2,
   Shapes,
-  Sparkles,
   Undo2,
   X,
 } from "lucide-react";
@@ -35,10 +35,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 import { BarraContextual } from "./BarraContextual";
+import { BotonesMuestra } from "./BotonesMuestra";
 import { Lienzo } from "./Lienzo";
 import { PanelTexto } from "./PanelTexto";
 import { PanelElementos } from "./PanelElementos";
-import { PanelIA } from "./PanelIA";
 import { Inspector, PanelCapas } from "./Paneles";
 import { adaptarDocumento } from "./adaptar";
 import { ProveedorEditor } from "./contexto";
@@ -50,19 +50,28 @@ import {
   muestreadorDeStage,
   type Correccion,
 } from "./legibilidad";
+import { suscribirMuestra } from "./muestra";
 import type { StoreEditor } from "./store";
 import { Telon, useCerrarConEscape } from "./Telon";
 import { useFuentesMarca } from "./useFuentesMarca";
 
-type Herramienta = "elementos" | "texto" | "ia" | "capas";
+// El generador de IA NO va en el editor: era solo para las imágenes del feed (sobra aquí).
+type Herramienta = "elementos" | "texto" | "capas";
 
-// Preferencia de "Vista con muestra" (toggle de PRESENTACIÓN del editor) en localStorage. Por
-// defecto ENCENDIDO: al abrir una plantilla se ve de inmediato cómo cae la foto y un titular real.
-const CLAVE_MUESTRA = "keni.editor.muestra";
-function leerMuestra(): boolean {
+// Preferencias de "Vista con muestra" (toggles de PRESENTACIÓN del editor) en localStorage. Foto y
+// copy son INDEPENDIENTES. Por defecto ENCENDIDOS: al abrir una plantilla se ve de inmediato cómo
+// cae la foto y un titular real.
+const CLAVE_MUESTRA_FOTO = "keni.editor.muestra.foto.on";
+const CLAVE_MUESTRA_COPY = "keni.editor.muestra.copy.on";
+function leerToggle(clave: string): boolean {
   try {
-    const v = localStorage.getItem(CLAVE_MUESTRA);
-    return v === null ? true : v === "1";
+    const v = localStorage.getItem(clave);
+    // Migración: si no hay valor propio, hereda la antigua clave única `keni.editor.muestra`.
+    if (v === null) {
+      const legado = localStorage.getItem("keni.editor.muestra");
+      return legado === null ? true : legado === "1";
+    }
+    return v === "1";
   } catch {
     return true;
   }
@@ -73,7 +82,6 @@ const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes
   // `clave: "texto"` es el id INTERNO histórico del panel (antes «Biblioteca»); la etiqueta visible
   // es «Galería» (galería de imágenes/activos de la marca), que es lo que de verdad es este panel.
   { clave: "texto", etiqueta: "Galería", Icono: ImageIcon },
-  { clave: "ia", etiqueta: "IA", Icono: Sparkles, costo: true },
   { clave: "capas", etiqueta: "Capas", Icono: Layers },
 ];
 
@@ -97,10 +105,14 @@ export function EditorDocumento({
   onAbrirAdaptado?: (doc: Documento, nombre: string) => void;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
+  // Raíz del editor: objetivo de "pantalla completa" (foco total en la imagen, sin el resto del shell).
+  const raizRef = useRef<HTMLDivElement | null>(null);
   // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
   const stageInfo = useRef<{ stage: Konva.Stage | null; escala: number }>({ stage: null, escala: 1 });
-  // Menú «Adaptar a…» abierto.
-  const [menuAdaptar, setMenuAdaptar] = useState(false);
+  // Menú «Más…» (acciones secundarias plegadas: adaptar + legibilidad) abierto.
+  const [menuMas, setMenuMas] = useState(false);
+  // Pantalla completa (Fullscreen API) del editor.
+  const [pantallaCompleta, setPantallaCompleta] = useState(false);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
   const [ajustes, setAjustes] = useState(false);
@@ -108,21 +120,48 @@ export function EditorDocumento({
   const [reencuadreId, setReencuadreId] = useState<string | null>(null);
   const [recorteId, setRecorteId] = useState<string | null>(null);
   const [reemplazarId, setReemplazarId] = useState<string | null>(null);
-  // "Vista con muestra": overlay de PRESENTACIÓN (rellena el hueco con una foto de muestra y los
-  // bindings con copy de ejemplo). NO muta el documento ni afecta al export; solo el render del
-  // lienzo. Preferencia persistida en localStorage.
-  const [muestra, setMuestra] = useState(leerMuestra);
+  // "Vista con muestra": dos toggles INDEPENDIENTES de PRESENTACIÓN (foto y copy). NO mutan el
+  // documento ni el export; solo el render del lienzo. Preferencias persistidas en localStorage.
+  const [muestraFoto, setMuestraFoto] = useState(() => leerToggle(CLAVE_MUESTRA_FOTO));
+  const [muestraCopy, setMuestraCopy] = useState(() => leerToggle(CLAVE_MUESTRA_COPY));
   useEffect(() => {
     try {
-      localStorage.setItem(CLAVE_MUESTRA, muestra ? "1" : "0");
+      localStorage.setItem(CLAVE_MUESTRA_FOTO, muestraFoto ? "1" : "0");
     } catch {
       /* almacenamiento no disponible: la preferencia no se persiste, sin romper. */
     }
-  }, [muestra]);
+  }, [muestraFoto]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_MUESTRA_COPY, muestraCopy ? "1" : "0");
+    } catch {
+      /* almacenamiento no disponible */
+    }
+  }, [muestraCopy]);
 
   const puedeDeshacer = store.getState().pasado.length > 0; // se refresca abajo con suscripción
   const [, force] = useState(0);
   useEffect(() => store.subscribe(() => force((n) => n + 1)), [store]);
+  // Redibuja el lienzo cuando el equipo edita la foto/copy de muestra (estado fuera del store).
+  useEffect(() => suscribirMuestra(() => force((n) => n + 1)), []);
+
+  // Pantalla completa: refleja el estado real (entrar/salir con tecla Esc o el botón del navegador).
+  useEffect(() => {
+    const onCambio = () => setPantallaCompleta(document.fullscreenElement === raizRef.current);
+    document.addEventListener("fullscreenchange", onCambio);
+    return () => document.removeEventListener("fullscreenchange", onCambio);
+  }, []);
+  const alternarPantallaCompleta = () => {
+    const el = raizRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.();
+    } else {
+      void el.requestFullscreen?.().catch(() => {
+        toast.error("Tu navegador no permitió la pantalla completa.");
+      });
+    }
+  };
 
   const seleccion = store.getState().seleccion;
   // Hueco de foto ausente: el componente se re-renderiza con cada cambio del store (suscripción
@@ -134,8 +173,8 @@ export function EditorDocumento({
 
   // ESCAPE cierra el overlay ABIERTO más "alto" (menú > flyout > inspector), esté donde
   // esté el foco. Los backdrops (`Telon`) cubren además teclado con foco en ellos.
-  useCerrarConEscape(menuAdaptar || tool !== null || ajustes, () => {
-    if (menuAdaptar) setMenuAdaptar(false);
+  useCerrarConEscape(menuMas || tool !== null || ajustes, () => {
+    if (menuMas) setMenuMas(false);
     else if (tool !== null) setTool(null);
     else setAjustes(false);
   });
@@ -150,11 +189,14 @@ export function EditorDocumento({
     }
   };
   // RECORTAR (crop visual con tiradores): entra al modo recorte sobre la capa imagen seleccionada.
+  // Cierra los paneles (en móvil la hoja inferior tapaba el lienzo y el recorte no se veía).
   const abrirRecorte = () => {
     const sel = store.getState().seleccion;
     if (sel) {
       setRecorteId(sel);
       setReencuadreId(null);
+      setAjustes(false);
+      setTool(null);
     }
   };
   const abrirReemplazo = () => {
@@ -167,7 +209,7 @@ export function EditorDocumento({
 
   // ADAPTAR a otro formato/red: genera el documento reencuadrado y lo abre en pestaña nueva.
   const adaptarA = (preset: (typeof PRESETS_FORMATO)[number]) => {
-    setMenuAdaptar(false);
+    setMenuMas(false);
     const doc = store.getState().documento;
     const adaptado = adaptarDocumento(doc, preset.f);
     if (!onAbrirAdaptado) {
@@ -212,7 +254,6 @@ export function EditorDocumento({
     switch (tool) {
       case "elementos": return <PanelElementos />;
       case "texto": return <PanelTexto marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
-      case "ia": return <PanelIA marca={marca} />;
       case "capas": return <PanelCapas />;
       default: return null;
     }
@@ -221,7 +262,7 @@ export function EditorDocumento({
 
   return (
     <ProveedorEditor store={store}>
-      <div className="flex h-full min-h-0 w-full">
+      <div ref={raizRef} className="flex h-full min-h-0 w-full bg-background">
         {/* RAIL (escritorio: vertical izquierda). */}
         <nav className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex">
           {onPlantillas && (
@@ -275,25 +316,44 @@ export function EditorDocumento({
                   Falta hueco de foto
                 </span>
               )}
-              {/* ADAPTAR A… — reencuadra el diseño a otra red en una pestaña nueva. */}
+              {/* VISTA CON MUESTRA — dos botones INDEPENDIENTES (foto/copy), editables. Solo
+                  presentación: no tocan el documento ni el export. */}
+              <BotonesMuestra
+                verFoto={muestraFoto}
+                setVerFoto={setMuestraFoto}
+                verCopy={muestraCopy}
+                setVerCopy={setMuestraCopy}
+              />
+              {/* MÁS — acciones secundarias plegadas (adaptar a otra red + revisar legibilidad). */}
               <div className="relative">
                 <button
-                  title="Adaptar el diseño a otra red/formato (abre pestaña nueva)"
-                  onClick={() => setMenuAdaptar((v) => !v)}
-                  className="flex items-center gap-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+                  title="Más acciones"
+                  aria-label="Más acciones"
+                  aria-expanded={menuMas}
+                  onClick={() => setMenuMas((v) => !v)}
+                  className={`flex items-center rounded-md p-1.5 hover:bg-accent ${
+                    menuMas ? "bg-accent text-foreground" : "text-muted-foreground"
+                  }`}
                 >
-                  <Maximize2 className="h-4 w-4" />
-                  <span className="hidden text-xs sm:inline">Adaptar</span>
+                  <MoreHorizontal className="h-4 w-4" />
                 </button>
-                {menuAdaptar && (
+                {menuMas && (
                   <>
                     <Telon
-                      onCerrar={() => setMenuAdaptar(false)}
-                      etiqueta="Cerrar menú de adaptar"
+                      onCerrar={() => setMenuMas(false)}
+                      etiqueta="Cerrar menú de más acciones"
                       className="fixed inset-0 z-30"
                     />
-                    <div className="absolute right-0 top-full z-40 mt-1 w-52 overflow-hidden rounded-md border border-border bg-popover shadow-md">
-                      <div className="border-b border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <div className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md">
+                      {/* Revisar legibilidad. */}
+                      <button
+                        onClick={() => { setMenuMas(false); revisarLegibilidad(); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <Eye className="h-4 w-4 text-muted-foreground" /> Revisar legibilidad
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         Adaptar a…
                       </div>
                       {PRESETS_FORMATO.map((p) => {
@@ -305,7 +365,9 @@ export function EditorDocumento({
                             disabled={actual}
                             className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
                           >
-                            <span>{p.nombre}</span>
+                            <span className="flex items-center gap-2">
+                              <Maximize2 className="h-4 w-4 text-muted-foreground" /> {p.nombre}
+                            </span>
                             {actual && <span className="text-[10px] text-muted-foreground">actual</span>}
                           </button>
                         );
@@ -314,32 +376,6 @@ export function EditorDocumento({
                   </>
                 )}
               </div>
-              {/* VISTA CON MUESTRA — rellena el hueco con una foto de muestra y los bindings con
-                  copy de ejemplo. Solo presentación: no toca el documento ni el export. */}
-              <button
-                title={
-                  muestra
-                    ? "Vista con muestra activa: foto y titular de ejemplo (no se guarda)"
-                    : "Activar vista con muestra: rellena el hueco y los bindings para previsualizar"
-                }
-                aria-pressed={muestra}
-                onClick={() => setMuestra((v) => !v)}
-                className={`flex items-center gap-1 rounded-md p-1.5 hover:bg-accent ${
-                  muestra ? "bg-accent text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                <ImagePlay className="h-4 w-4" />
-                <span className="hidden text-xs sm:inline">Muestra</span>
-              </button>
-              {/* REVISAR LEGIBILIDAD — contraste WCAG de los titulares sobre la foto. */}
-              <button
-                title="Revisar legibilidad de los titulares (contraste WCAG)"
-                onClick={revisarLegibilidad}
-                className="flex items-center gap-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
-              >
-                <Eye className="h-4 w-4" />
-                <span className="hidden text-xs sm:inline">Legibilidad</span>
-              </button>
               <button
                 title="Deshacer (⌘Z)"
                 disabled={!puedeDeshacer}
@@ -356,6 +392,15 @@ export function EditorDocumento({
               >
                 <Redo2 className="h-4 w-4" />
               </button>
+              {/* PANTALLA COMPLETA — foco total en la imagen (oculta el resto del shell). */}
+              <button
+                title={pantallaCompleta ? "Salir de pantalla completa (Esc)" : "Pantalla completa — centrarse en la imagen"}
+                aria-pressed={pantallaCompleta}
+                onClick={alternarPantallaCompleta}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+              >
+                {pantallaCompleta ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
               {onExportar && (
                 <Button size="sm" className="ml-1" onClick={onExportar} disabled={exportando}>
                   {exportando && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
@@ -371,7 +416,8 @@ export function EditorDocumento({
               onSalirReencuadre={() => setReencuadreId(null)}
               recorteId={recorteId}
               onSalirRecorte={() => setRecorteId(null)}
-              muestra={muestra}
+              muestraFoto={muestraFoto}
+              muestraCopy={muestraCopy}
               onStage={(stage, escala) => { stageInfo.current = { stage, escala }; }}
             />
           </div>

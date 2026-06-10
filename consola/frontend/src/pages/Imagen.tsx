@@ -13,7 +13,7 @@ import { Check, Copy, FileUp, Image, Loader2, Plus, Repeat, Save, SaveAll, Video
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -476,62 +476,57 @@ export default function Imagen() {
     <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Imagen" icono={Image} />
-      {/* Barra superior del editor: acciones (guardar / guardar como / pieza) + estado + export.
-          La MARCA la manda el selector global del workspace. Con una marca concreta activa la
-          etiqueta es redundante (la dice el switch global) y se omite; solo en la vista «Todas»
-          (admin, `marcaActiva === null`) se muestra, y entonces refleja la marca REAL de la pieza
-          abierta (`marcaPanel`), para poder distinguir piezas de marcas distintas. */}
-      {/* Solo se pinta si tiene algo que mostrar; si no, no dejes una barra vacía con borde
-          (línea horizontal huérfana) entre el título y las pestañas. */}
+      {/* Acciones de guardado/export PORTALIZADAS al hueco derecho de la barra de cabecera del shell
+          (la misma del título): así NO hay una barra «Guardar» apilada aparte —que dejaba un hueco
+          antes de la imagen— sino una sola barra superior, minimalista. */}
       {(!!pestanaActiva || !!exportUrl) && (
-      <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-        {/* En «Todas», la marca de la PIEZA abierta (no una etiqueta general: la galería vacía
-            ya se divide por marca en secciones aparte). */}
-        {marcaActiva === null && !!marcaPanel && (
-          <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {marcas.find((m) => m.id === marcaPanel)?.nombre ?? marcaPanel}
-          </span>
-        )}
-        {pestanaActiva && (
-          <>
-            <div className="mx-1 h-5 w-px bg-border" />
-            {pestanaActiva.contenido && (
-              <Button size="icon" disabled={guardarEnPieza.isPending} onClick={() => guardarEnPieza.mutate()} title="Guardar en la publicación">
-                <FileUp className="h-4 w-4" />
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={guardando}
-              onClick={() => guardar.mutate()}
-              title={sucia ? "Guardar (cambios sin guardar)" : "Guardado — se autoguarda a los 3 s"}
-            >
-              <span className="relative mr-1 inline-flex">
-                <Save className="h-4 w-4" />
-                {/* Estado EN el icono: punto rojo si hay cambios; check verde si está guardado. */}
-                {guardando ? (
-                  <Loader2 className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 animate-spin text-muted-foreground" />
-                ) : sucia ? (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-1 ring-background" />
-                ) : (
-                  <Check className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full bg-background text-emerald-500" />
-                )}
+        <AccionesPagina>
+          <div className="flex items-center gap-1.5">
+            {/* En «Todas», la marca de la PIEZA abierta (admin): distingue piezas de marcas distintas. */}
+            {marcaActiva === null && !!marcaPanel && (
+              <span className="hidden rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground sm:inline">
+                {marcas.find((m) => m.id === marcaPanel)?.nombre ?? marcaPanel}
               </span>
-              Guardar
-            </Button>
-            <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "", tipo: "foto" })} title="Guardar como… (plantilla nueva)">
-              <SaveAll className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-        <span className="ml-auto" />
-        {exportUrl && (
-          <a href={exportUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
-            Ver PNG exportado
-          </a>
-        )}
-      </div>
+            )}
+            {exportUrl && (
+              <a href={exportUrl} target="_blank" rel="noreferrer" className="hidden text-sm text-primary underline sm:inline">
+                Ver PNG
+              </a>
+            )}
+            {pestanaActiva && (
+              <>
+                {pestanaActiva.contenido && (
+                  <Button size="icon" variant="ghost" disabled={guardarEnPieza.isPending} onClick={() => guardarEnPieza.mutate()} title="Guardar en la publicación">
+                    <FileUp className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={guardando}
+                  onClick={() => guardar.mutate()}
+                  title={sucia ? "Guardar (cambios sin guardar)" : "Guardado — se autoguarda a los 3 s"}
+                >
+                  <span className="relative mr-1 inline-flex">
+                    <Save className="h-4 w-4" />
+                    {/* Estado EN el icono: punto rojo si hay cambios; check verde si está guardado. */}
+                    {guardando ? (
+                      <Loader2 className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 animate-spin text-muted-foreground" />
+                    ) : sucia ? (
+                      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-1 ring-background" />
+                    ) : (
+                      <Check className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full bg-background text-emerald-500" />
+                    )}
+                  </span>
+                  Guardar
+                </Button>
+                <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "", tipo: "foto" })} title="Guardar como… (plantilla nueva)">
+                  <SaveAll className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        </AccionesPagina>
       )}
 
       {/* Pestañas abiertas. El «+» (lienzo nuevo) solo aparece cuando ya hay alguna pestaña. */}
@@ -743,19 +738,9 @@ function GaleriaInline({
                   )}
                 </div>
               </button>
-              {/* Badge de tipo */}
-              <div className="absolute left-1.5 top-1.5">
-                {(p.tipo ?? "foto") === "miniatura" ? (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                    <Video className="h-2.5 w-2.5" />Miniatura
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
-                    <Image className="h-2.5 w-2.5" />Foto
-                  </span>
-                )}
-              </div>
-              {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
+              {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). El
+                  TIPO (foto/miniatura) va en la misma fila del título, a la izquierda, como un
+                  chip — ya no flota sobre la imagen. */}
               {editId === p.id ? (
                 <input
                   autoFocus
@@ -769,13 +754,30 @@ function GaleriaInline({
                   className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
                 />
               ) : (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
-                  title="Clic para renombrar"
-                  className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
-                >
-                  {p.nombre || "(sin nombre)"}
-                </button>
+                <div className="flex items-center gap-1.5 px-1.5 py-1">
+                  {(p.tipo ?? "foto") === "miniatura" ? (
+                    <span
+                      title="Miniatura (portada de vídeo)"
+                      className="inline-flex shrink-0 items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                    >
+                      <Video className="h-2.5 w-2.5" />Miniatura
+                    </span>
+                  ) : (
+                    <span
+                      title="Foto (post de imagen)"
+                      className="inline-flex shrink-0 items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+                    >
+                      <Image className="h-2.5 w-2.5" />Foto
+                    </span>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
+                    title="Clic para renombrar"
+                    className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {p.nombre || "(sin nombre)"}
+                  </button>
+                </div>
               )}
               {/* Rotación: incluir la plantilla en el grupo que rota automáticamente por la marca
                   (cada post nuevo se lleva la siguiente; necesita ≥2 marcadas). */}

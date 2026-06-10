@@ -4,9 +4,10 @@
 // fracciones 0..1 de la FUENTE (= fracciones de la imagen mostrada, que se ve entera). Todo el
 // gesto cuenta como UN paso de deshacer (como el reencuadre).
 
-import { type PointerEvent as PointerEventReact, useRef } from "react";
+import { type PointerEvent as PointerEventReact, useReducer, useRef } from "react";
 
 import type { Capa, CapaImagen, Crop } from "../documento";
+import { fotoMuestra } from "../muestra";
 import { type AsaRecorte, moverAsa } from "../recorte";
 import type { StoreEditor } from "../store";
 import { useImagen } from "../useImagen";
@@ -15,12 +16,20 @@ export function CropOverlay({
   capa,
   escala,
   store,
+  muestraFoto = false,
 }: {
   capa: CapaImagen;
   escala: number;
   store: StoreEditor;
+  // Si el hueco de foto está VACÍO pero la "Vista con muestra (foto)" está activa, recortamos sobre
+  // la foto de muestra (lo mismo que pinta el lienzo), para que el recorte sea VISIBLE y se aplique.
+  muestraFoto?: boolean;
 }) {
-  const img = useImagen(capa.objeto || null);
+  // Redibuja cuando la foto de muestra (generada/cargada async) ya está lista.
+  const [, redibujar] = useReducer((n: number) => n + 1, 0);
+  const imgReal = useImagen(capa.objeto || null);
+  // Imagen EFECTIVA: la foto real del hueco o, si está vacío y la muestra está activa, la de muestra.
+  const img = imgReal ?? (muestraFoto && capa.es_foto ? fotoMuestra(() => redibujar()) : null);
   const drag = useRef<{ asa: AsaRecorte; crop: Crop; px: number; py: number } | null>(null);
   const gestoActivo = useRef(false);
 
