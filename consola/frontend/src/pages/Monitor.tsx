@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Coins, Cpu, Layers, RefreshCw, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Coins, Cpu, Layers, RefreshCw, RotateCcw, Target, Trash2, XCircle } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -322,6 +322,83 @@ function PanelPresupuesto({
 // aquí porque es el Monitor quien vigila sus efectos (cola, daemons, salud).
 const GRUPOS_SISTEMA = new Set(["automatismos_generales", "tuning"]);
 
+// Etiquetas legibles de las líneas del plan editorial (fallback: la categoría capitalizada).
+const ETIQUETA_LINEA: Record<string, string> = {
+  mx: "Nacional",
+  internacional: "Internacional",
+  breaking: "Breaking",
+  entretenimiento: "Entretenimiento",
+  evergreen: "Evergreen",
+};
+
+/** Producción del día por LÍNEA del plan (producido vs objetivo), para la marca activa. */
+function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: string }) {
+  const produccion = useQuery({
+    queryKey: ["produccion", "dia", marca],
+    queryFn: ({ signal }) => api.produccionDia(marca, signal),
+    refetchInterval: 60_000,
+  });
+  const lineas = produccion.data?.por_categoria ?? [];
+  if (!produccion.data || lineas.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Target className="h-4 w-4 text-emerald-600" />
+          Producción del día por línea
+          <Badge variant="outline" className="text-[10px]">
+            {nombre}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-2">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {lineas.map((l) => {
+            const completo = l.objetivo != null && l.producido >= l.objetivo;
+            const exceso = l.objetivo != null && l.producido > l.objetivo;
+            return (
+              <div key={l.categoria} className="rounded-lg border border-border/60 p-3">
+                <div className="text-xs text-muted-foreground">
+                  {ETIQUETA_LINEA[l.categoria] ??
+                    l.categoria.charAt(0).toUpperCase() + l.categoria.slice(1)}
+                </div>
+                <div
+                  className={cn(
+                    "mt-1 text-lg font-semibold tabular-nums",
+                    exceso ? "text-amber-600" : completo ? "text-emerald-600" : undefined,
+                  )}
+                >
+                  {l.producido}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {l.objetivo != null ? ` / ${l.objetivo}` : " (fuera de plan)"}
+                  </span>
+                </div>
+                {l.objetivo != null && (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        exceso ? "bg-amber-500" : completo ? "bg-emerald-500" : "bg-sky-500",
+                      )}
+                      style={{
+                        width: `${Math.min(100, (l.producido / Math.max(1, l.objetivo)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Ventana móvil de 24 h, el mismo conteo que usa la admisión del plan. «Evergreen» se
+          llena desde Reciclaje (manual); «Breaking» también cuenta lo empujado desde el panel.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Monitor() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
@@ -487,6 +564,11 @@ export default function Monitor() {
                 {esAdmin && " Puedes purgar la cola para vaciarla."}
               </span>
             </div>
+          )}
+
+          {/* Líneas del plan editorial (solo con marca activa; oculto si la marca no tiene plan) */}
+          {marcaActiva && (
+            <PanelLineasPlan marca={marcaActiva} nombre={nombreActiva ?? marcaActiva} />
           )}
 
           {/* KPIs en vivo */}

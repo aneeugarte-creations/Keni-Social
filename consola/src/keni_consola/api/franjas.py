@@ -51,6 +51,9 @@ def _franja_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
         "red_nombre": redes.nombre_por_id(franja["red"]) if franja["red"] else "",
         "dia_semana": franja["dia_semana"],
         "hora": franja["hora"],
+        # Categoría del plan a la que sirve la franja ('' = genérica). Los horarios del plan
+        # editorial (internacional/mx/entretenimiento/evergreen…) son franjas con categoría.
+        "categoria": franja.get("categoria", ""),
     }
 
 
@@ -94,7 +97,15 @@ async def crear(request: Request) -> Response:
     if red and not redes.es_red(red):
         return JSONResponse({"error": "Red no permitida."}, status_code=400)
 
-    franja = repos.crear_franja(dia, hora, marca=marca, red=red)
+    categoria = datos.get("categoria", "")
+    if categoria is None:
+        categoria = ""
+    if not isinstance(categoria, str) or len(categoria) > 40:
+        return JSONResponse({"error": "La categoría debe ser texto corto."}, status_code=400)
+
+    franja = repos.crear_franja(
+        dia, hora, marca=marca, red=red, categoria=categoria.strip().lower()
+    )
     return JSONResponse({"franja": _franja_a_dict(franja)})
 
 

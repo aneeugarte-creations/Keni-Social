@@ -55,9 +55,9 @@ def listar_franjas() -> list[dict[str, Any]]:
 
 
 def crear_franja(
-    dia_semana: int, hora: str, marca: str = "", red: str = ""
+    dia_semana: int, hora: str, marca: str = "", red: str = "", categoria: str = ""
 ) -> dict[str, Any]:
-    return db.crear_franja(dia_semana, hora, marca=marca, red=red)
+    return db.crear_franja(dia_semana, hora, marca=marca, red=red, categoria=categoria)
 
 
 def borrar_franja(franja_id: str) -> bool:

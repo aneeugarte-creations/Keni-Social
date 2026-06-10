@@ -5,6 +5,7 @@ import type {
   ActividadAgregados,
   ColaMonitor,
   ColaSerie,
+  ProduccionDia,
   RespuestaActividad,
   RespuestaPriorizarCola,
   RespuestaPurgarCola,
@@ -61,4 +62,7 @@ export const apiActividad = {
       metodo: "POST",
       json: { gen_id: genId },
     }),
+  // Producción del día (líneas del plan editorial) para el Monitor.
+  produccionDia: (marca: string, signal?: AbortSignal) =>
+    peticion<ProduccionDia>(`/produccion/dia${query({ marca })}`, { signal }),
 };

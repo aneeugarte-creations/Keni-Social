@@ -65,6 +65,28 @@ def test_produccion_dia_contrato_y_embudo(entorno):
     assert data["por_vertical"][0]["total"] == 2
 
 
+def test_produccion_dia_lineas_del_plan(entorno, monkeypatch):
+    """`por_categoria` (monitor de líneas): producido vs objetivo por categoría del plan."""
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
+    cli = _cli()
+    pieza = _crear(cli, titulo="Nacional promovida")
+    plat = repos.obtener_contenido_plataforma(pieza["id"])
+    repos.upsert_noticia_cluster({
+        "id": "cl-prod", "titulo": "Nacional promovida", "resumen": "", "marca": "unotv",
+        "categoria": "mx", "geo": "MX", "clave": "t:cl-prod", "n_items": 1, "n_fuentes": 2,
+        "idiomas": ["es"], "senal": 0, "score": 0.7, "breaking": 0,
+        "primer_visto": "2026-06-01T00:00:00", "ultimo_visto": "2026-06-01T00:00:00",
+        "estado": "usado", "verificacion": "corroborada",
+    })
+    repos.actualizar_noticia_cluster("cl-prod", contenido_id=plat["contenido_id"])
+
+    data = _cli().get("/api/produccion/dia?marca=unotv").json()
+
+    lineas = {l["categoria"]: l for l in data["por_categoria"]}
+    assert lineas["mx"]["producido"] == 1 and lineas["mx"]["objetivo"] == 4
+    assert lineas["breaking"]["producido"] == 0 and lineas["breaking"]["objetivo"] == 2
+
+
 def test_produccion_dia_filtra_por_marca(entorno):
     cli = _cli()
     _crear(cli, marca="unotv", titulo="De UnoTV")

@@ -18,7 +18,7 @@ SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from starlette.concurrency import run_in_threadpool
@@ -693,43 +693,82 @@ async def cadenas_lote(request: Request) -> Response:
     return JSONResponse({"cadenas": cadenas})
 
 
+def categoria_de_pieza(pub: dict[str, Any]) -> str:
+    """Categoría del PLAN con la que programa una pieza. Best-effort ('' si no aplica).
+
+    - 'evergreen' si su tema es de flujo evergreen (reciclaje),
+    - la categoría de la HISTORIA de la que nació ('breaking' si lo era) en el resto,
+    - '' para piezas manuales sin historia: usan las franjas genéricas.
+    """
+    try:
+        plat = repos.obtener_contenido_plataforma(pub.get("id") or "") or {}
+        cid = str(plat.get("contenido_id") or "")
+        if not cid:
+            return ""
+        item = repos.obtener_contenido(cid) or {}
+        if (item.get("flujo") or "") == "evergreen":
+            return "evergreen"
+        return repos.categoria_promovida_de_contenido(cid)
+    except Exception:  # noqa: BLE001 -- la categoría es refinamiento; sin ella, genéricas
+        return ""
+
+
+# Margen (min) con el que se programa una pieza BREAKING: ya, pero con aire para el último
+# vistazo humano en la parrilla. Búsqueda acotada de minuto libre por la unicidad de slot.
+_BREAKING_MARGEN_MIN = 2
+_BREAKING_BUSQUEDA_MIN = 240
+
+
 def calcular_hueco_para(
     pub: dict[str, Any], ahora: datetime | None = None
 ) -> str | None:
-    """Calcula el proximo hueco futuro para `pub` segun las franjas configuradas.
+    """Calcula el proximo hueco futuro para `pub` segun cadencias/franjas configuradas.
 
     Devuelve el datetime ISO ('YYYY-MM-DDTHH:MM') del hueco, o None si no hay NINGUNA
-    franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
+    cadencia/franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
     para tests; por defecto es `datetime.now()`. Los huecos ya ocupados por OTRAS
-    publicaciones en estado `programado` (su `fecha_programada`) se evitan.
+    publicaciones `programado` de la MISMA (marca, red) se evitan — espejo del indice de
+    unicidad de slot (`idx_parrilla_slot_uniq`, por marca+red+fecha): las piezas de un MISMO
+    tema en redes distintas salen a la MISMA hora.
+
+    CATEGORÍA del plan: una pieza BREAKING no espera franja (se programa a ahora+margen, en
+    el primer minuto libre); el resto busca primero las franjas de SU categoría (los horarios
+    del plan) y cae a las genéricas si su categoría no tiene horario.
     """
     if ahora is None:
         ahora = datetime.now()
     programadas = repos.listar_publicaciones(estado="programado")
-    # 1) CADENCIA por margen (preferente): si hay una cadencia ACTIVA que aplique a la
-    # (marca, red), reparte por margen dentro de su ventana. El espaciado es POR (marca, red):
-    # solo cuentan como ocupadas las piezas de la MISMA marca y red.
-    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
-    if cad is not None:
-        ocupados_mr = {
-            otra["fecha_programada"]
-            for otra in programadas
-            if otra["id"] != pub["id"]
-            and otra["fecha_programada"]
-            and otra["marca"] == pub["marca"]
-            and otra["red"] == pub["red"]
-        }
-        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
-    # 2) Fallback: franjas-caja (modelo previo) si no hay cadencia para esta marca/red.
-    aplican = api_franjas.franjas_aplicables(repos.listar_franjas(), pub["marca"], pub["red"])
-    if not aplican:
-        return None
-    ocupados = {
+    ocupados_mr = {
         otra["fecha_programada"]
         for otra in programadas
-        if otra["id"] != pub["id"] and otra["fecha_programada"]
+        if otra["id"] != pub["id"]
+        and otra["fecha_programada"]
+        and otra["marca"] == pub["marca"]
+        and otra["red"] == pub["red"]
     }
-    return api_franjas.proximo_hueco(aplican, ahora, ocupados)
+    categoria = categoria_de_pieza(pub)
+    # 0) BREAKING: la última hora no espera al siguiente hueco del plan — sale YA (con un
+    # margen corto), en el primer minuto libre de su (marca, red).
+    if categoria == "breaking":
+        cand = (ahora + timedelta(minutes=_BREAKING_MARGEN_MIN)).replace(second=0, microsecond=0)
+        for _ in range(_BREAKING_BUSQUEDA_MIN):
+            clave = cand.strftime("%Y-%m-%dT%H:%M")
+            if clave not in ocupados_mr:
+                return clave
+            cand += timedelta(minutes=1)
+        return None  # parrilla patológicamente saturada
+    # 1) CADENCIA por margen (preferente): si hay una cadencia ACTIVA que aplique a la
+    # (marca, red), reparte por margen dentro de su ventana.
+    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
+    if cad is not None:
+        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
+    # 2) Franjas-caja: los horarios del plan (por categoría) o los genéricos.
+    aplican = api_franjas.franjas_aplicables(
+        repos.listar_franjas(), pub["marca"], pub["red"], categoria
+    )
+    if not aplican:
+        return None
+    return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
 
 
 async def encolar(request: Request) -> Response:

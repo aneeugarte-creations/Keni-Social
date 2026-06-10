@@ -151,6 +151,11 @@ def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:
     return db.feeds_vencidos(ahora, limite)
 
 
+def categoria_promovida_de_contenido(contenido_id: str) -> str:
+    """Categoría del plan de un contenido promovido ('' si no aplica). Delegado en `db.py`."""
+    return db.categoria_promovida_de_contenido(contenido_id)
+
+
 def contar_promovidos_por_categoria(marca: str, desde_iso: str) -> dict[str, int]:
     """Historias promovidas por categoría desde un instante (plan diario). Delegado en `db.py`."""
     return db.contar_promovidos_por_categoria(marca, desde_iso)

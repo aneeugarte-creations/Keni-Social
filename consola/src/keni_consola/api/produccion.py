@@ -162,6 +162,28 @@ async def dia(request: Request) -> Response:
         "plan": config.plan_dia(marca) or None,
     }
 
+    # CANTIDADES POR LÍNEA del plan (monitor): producido en la ventana vs objetivo, por
+    # categoría — el MISMO conteo que usa la admisión (cluster→contenido, breaking aparte).
+    # Incluye las categorías del plan aunque vayan a 0 y las producidas fuera de plan.
+    por_categoria: list[dict[str, Any]] = []
+    if marca:
+        plan = config.plan_dia(marca)
+        try:
+            producidos = repos.contar_promovidos_por_categoria(marca, desde_iso)
+        except Exception:  # noqa: BLE001 -- el panel no casca por un contador
+            _log.exception("produccion: fallo el conteo por categoría (%s).", marca)
+            producidos = {}
+        categorias = sorted(set(plan) | set(producidos))
+        por_categoria = [
+            {
+                "categoria": cat,
+                "producido": producidos.get(cat, 0),
+                "objetivo": plan.get(cat) or None,
+            }
+            for cat in categorias
+            if cat  # sin categoría ('') no es una línea del plan
+        ]
+
     # Cola de generación (conteo global; el detalle vive en /api/actividad/cola).
     estados_jobs = repos.contar_jobs_por_estado()
     cola = {
@@ -201,6 +223,7 @@ async def dia(request: Request) -> Response:
             "marca": marca,
             "ventana": {"desde": desde_iso, "hasta": ahora.isoformat(timespec="seconds")},
             "objetivo": objetivo,
+            "por_categoria": por_categoria,
             "embudo": embudo,
             "por_vertical": [
                 {"vertical": k, **v}

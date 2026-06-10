@@ -195,6 +195,20 @@ export interface RespuestaPriorizarCola {
   gen_id: string;
 }
 
+/** Una línea del plan editorial diario: producido vs objetivo en la ventana. */
+export interface ProduccionLinea {
+  categoria: string;
+  producido: number;
+  objetivo: number | null;
+}
+
+/** Resumen mínimo de /api/produccion/dia que consume el Monitor (líneas del plan). */
+export interface ProduccionDia {
+  marca: string;
+  objetivo: { dia: number | null; plan: Record<string, number> | null };
+  por_categoria: ProduccionLinea[];
+}
+
 // --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
 
 /** Una etapa de una run del pipeline (CI/CD/QA/Aprobación). */

@@ -136,6 +136,28 @@ def contar_promovidos_por_categoria(marca: str, desde_iso: str) -> dict[str, int
     return {str(f["cat"]): int(f["n"]) for f in filas}
 
 
+def categoria_promovida_de_contenido(contenido_id: str) -> str:
+    """Categoría del PLAN con la que nació un contenido promovido de una historia.
+
+    'breaking' si su cluster es breaking; si no, la categoría del feed del cluster (en
+    minúsculas). '' si el contenido no vino de una historia (alta manual/equipo) o el
+    cluster ya no existe. Para los HORARIOS por categoría del plan (franjas editoriales).
+    """
+    if not contenido_id:
+        return ""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT CASE WHEN breaking = 1 THEN 'breaking' "
+            "ELSE LOWER(COALESCE(categoria, '')) END AS cat "
+            "FROM noticias_clusters WHERE contenido_id = ? LIMIT 1",
+            (contenido_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return str(fila["cat"]) if fila is not None else ""
+
+
 def contar_fuentes_rss() -> int:
     """Total de fuentes RSS (para el `total` de paginacion)."""
     con = _conectar()

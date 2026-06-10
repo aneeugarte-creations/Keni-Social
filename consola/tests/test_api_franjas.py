@@ -69,8 +69,9 @@ def test_borrar(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def _f(fid, marca, red, dia, hora):
-    return {"id": fid, "marca": marca, "red": red, "dia_semana": dia, "hora": hora}
+def _f(fid, marca, red, dia, hora, categoria=""):
+    return {"id": fid, "marca": marca, "red": red, "dia_semana": dia, "hora": hora,
+            "categoria": categoria}
 
 
 def test_aplicables_especifica_gana():
@@ -100,6 +101,49 @@ def test_aplicables_solo_general():
 def test_aplicables_ninguna():
     franjas = [_f("otra", "piso-15", "x", 0, "09:00")]
     assert af.franjas_aplicables(franjas, "unotv", "instagram") == []
+
+
+def test_aplicables_categoria_usa_sus_horarios():
+    """Una pieza con categoría usa las franjas de SU categoría (los horarios del plan)."""
+    franjas = [
+        _f("intl", "unotv", "", 0, "14:45", "internacional"),
+        _f("mx", "unotv", "", 0, "15:45", "mx"),
+        _f("gen", "unotv", "", 0, "12:00"),
+    ]
+    ids = [f["id"] for f in af.franjas_aplicables(franjas, "unotv", "x", "internacional")]
+    assert ids == ["intl"]
+
+
+def test_aplicables_categoria_sin_horario_cae_a_genericas():
+    franjas = [
+        _f("intl", "unotv", "", 0, "14:45", "internacional"),
+        _f("gen", "unotv", "", 0, "12:00"),
+    ]
+    ids = [f["id"] for f in af.franjas_aplicables(franjas, "unotv", "x", "deportes")]
+    assert ids == ["gen"]
+
+
+def test_aplicables_sin_categoria_solo_genericas():
+    """Una pieza sin categoría no se cuela en los horarios del plan de una categoría."""
+    franjas = [
+        _f("intl", "unotv", "", 0, "14:45", "internacional"),
+        _f("gen", "unotv", "", 0, "12:00"),
+    ]
+    ids = [f["id"] for f in af.franjas_aplicables(franjas, "unotv", "x")]
+    assert ids == ["gen"]
+
+
+def test_crear_franja_con_categoria(cliente):
+    r = cliente.post(
+        "/api/franjas",
+        json={"dia_semana": 2, "hora": "14:45", "marca": "unotv", "categoria": "Internacional"},
+    )
+    assert r.status_code == 200
+    f = r.json()["franja"]
+    assert f["categoria"] == "internacional"  # normalizada a minúsculas
+    # Y se lista con su categoría.
+    listadas = cliente.get("/api/franjas").json()["franjas"]
+    assert any(x["categoria"] == "internacional" for x in listadas)
 
 
 # --------------------------------------------------------------------------- #

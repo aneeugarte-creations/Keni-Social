@@ -151,7 +151,7 @@ def borrar_grupo_hashtags(grupo_id: str) -> bool:
 
 # --- Franjas editoriales --------------------------------------------------- #
 # Dict publico (paridad con `ficheros._leer_franjas_marca`): `id, marca, red, dia_semana, hora`.
-_COLS_FRANJA_EDIT = ("id", "marca", "red", "dia_semana", "hora")
+_COLS_FRANJA_EDIT = ("id", "marca", "red", "dia_semana", "hora", "categoria")
 _SELECT_FRANJA_EDIT = f"SELECT {', '.join(_COLS_FRANJA_EDIT)} FROM franjas_editoriales"
 
 
@@ -163,6 +163,7 @@ def _fila_a_franja(fila: Any) -> dict[str, Any]:
         "red": fila["red"] or "",
         "dia_semana": int(fila["dia_semana"] or 0),
         "hora": fila["hora"] or "",
+        "categoria": fila["categoria"] or "",
     }
 
 
@@ -179,26 +180,29 @@ def listar_franjas() -> list[dict[str, Any]]:
 
 
 def crear_franja(
-    dia_semana: int, hora: str, marca: str = "", red: str = ""
+    dia_semana: int, hora: str, marca: str = "", red: str = "", categoria: str = ""
 ) -> dict[str, Any]:
-    """Crea una franja editorial y la devuelve."""
+    """Crea una franja editorial y la devuelve. `categoria` '' = genérica (vale para todo)."""
     franja = {
         "id": uuid.uuid4().hex[:12],
         "marca": marca or "",
         "red": red or "",
         "dia_semana": int(dia_semana),
         "hora": hora or "",
+        "categoria": (categoria or "").strip().lower(),
     }
     con = _conectar()
     try:
-        # ON CONFLICT (marca, red, dia_semana, hora) DO NOTHING: idempotente frente a un alta
-        # repetida de la misma franja (mismo patron que `rota_franjas`). Requiere el indice
-        # unico `idx_franjas_editoriales_uniq` (lo crea `_crear_indices_unicos_idempotencia`);
+        # ON CONFLICT (...) DO NOTHING: idempotente frente a un alta repetida de la misma
+        # franja (mismo patron que `rota_franjas`). Requiere el indice unico
+        # `idx_franjas_editoriales_uniq2` (lo crea `_crear_indices_unicos_idempotencia`);
         # PRECONDICION: una BD con duplicados previos impide crearlo -> limpiar antes.
         con.execute(
-            "INSERT INTO franjas_editoriales (id, marca, red, dia_semana, hora) "
-            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (marca, red, dia_semana, hora) DO NOTHING",
-            (franja["id"], franja["marca"], franja["red"], franja["dia_semana"], franja["hora"]),
+            "INSERT INTO franjas_editoriales (id, marca, red, dia_semana, hora, categoria) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (marca, red, dia_semana, hora, categoria) DO NOTHING",
+            (franja["id"], franja["marca"], franja["red"], franja["dia_semana"],
+             franja["hora"], franja["categoria"]),
         )
         con.commit()
     finally:

@@ -1218,6 +1218,14 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_franjas_editoriales_marca ON franjas_editoriales (marca)",
+    # CATEGORÍA del plan editorial a la que sirve la franja ('' = genérica, vale para todo).
+    # Con el plan diario por categoría, los horarios de publicación también son por categoría
+    # (p. ej. UnoTV: internacional 14:45 UTC, mx 15:45 UTC…): la pieza busca hueco en las
+    # franjas de SU categoría y cae a las genéricas si no hay.
+    "ALTER TABLE franjas_editoriales ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT ''",
+    # El índice único de idempotencia ahora incluye `categoria` (dos franjas a la misma hora
+    # con categorías distintas son legítimas): retira el viejo antes de crear el nuevo.
+    "DROP INDEX IF EXISTS idx_franjas_editoriales_uniq",
     # CADENCIA por (marca?, red?): scheduling por MARGEN entre posts (sustituye a las
     # franjas-caja para alto volumen). margen_min = minutos entre posts; hora_inicio/fin =
     # ventana activa 24h; dias = CSV "0..6" (0=lunes). UNIQUE(marca, red): una cadencia por
@@ -3027,7 +3035,7 @@ def _dedup_turnos_rota(con: Any) -> None:
 # rompia ese caso de uso legitimo.
 _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
-    ("idx_franjas_editoriales_uniq", "franjas_editoriales (marca, red, dia_semana, hora)"),
+    ("idx_franjas_editoriales_uniq2", "franjas_editoriales (marca, red, dia_semana, hora, categoria)"),
     # GRID POR MARCA: el NOMBRE de una franja es unico por (marca, lunes) — dos marcas pueden
     # tener su propia "Mañana" la misma semana. Sustituye al viejo UNIQUE(lunes,nombre) inline
     # (que `_asegurar_marca_grid_rota` dropa). El ON CONFLICT (marca,lunes,nombre) de la siembra

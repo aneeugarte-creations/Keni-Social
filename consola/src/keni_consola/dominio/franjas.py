@@ -32,27 +32,33 @@ def hora_valida(hora: Any) -> bool:
 
 
 def franjas_aplicables(
-    franjas: list[dict[str, Any]], marca: str, red: str
+    franjas: list[dict[str, Any]], marca: str, red: str, categoria: str = ""
 ) -> list[dict[str, Any]]:
-    """Franjas que aplican a una (marca, red), con prioridad por especificidad.
+    """Franjas que aplican a una (marca, red[, categoria]), con prioridad por especificidad.
 
-    Prioridad (la primera con resultados gana, no se mezclan niveles):
+    Prioridad marca/red (la primera con resultados gana, no se mezclan niveles):
       1. franjas con ESA marca Y ESA red,
       2. si no hay, franjas que coincidan en marca (red='') o en red (marca=''),
-         o generales (ambas ''),
-    Devuelve la lista del nivel ganador (puede estar vacia si no aplica ninguna).
+         o generales (ambas '').
+    CATEGORÍA (plan editorial): dentro del nivel ganador, una pieza con categoría busca
+    primero las franjas de SU categoría (los horarios del plan: internacional a sus horas,
+    mx a las suyas…) y cae a las GENÉRICAS (categoria='') si su categoría no tiene horario.
+    Una pieza sin categoría solo usa las genéricas: los horarios de una categoría son de esa
+    categoría. Devuelve la lista ganadora (puede estar vacía si no aplica ninguna).
     """
     especificas = [f for f in franjas if f["marca"] == marca and f["red"] == red]
-    if especificas:
-        return especificas
-    parciales = [
+    nivel = especificas or [
         f
         for f in franjas
         if (f["marca"] == marca and f["red"] == "")
         or (f["red"] == red and f["marca"] == "")
         or (f["marca"] == "" and f["red"] == "")
     ]
-    return parciales
+    genericas = [f for f in nivel if not (f.get("categoria") or "")]
+    if not categoria:
+        return genericas
+    de_categoria = [f for f in nivel if (f.get("categoria") or "") == categoria]
+    return de_categoria or genericas
 
 
 def _candidato(ahora: datetime, dia_semana: int, hora: str) -> datetime:

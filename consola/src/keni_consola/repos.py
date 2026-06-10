@@ -262,6 +262,7 @@ from .repos_noticias import (  # noqa: F401
     caducar_pool,
     registrar_salud_fuente_algoritmo,
     registrar_salud_fuente_rss,
+    categoria_promovida_de_contenido,
     contar_promovidos_por_categoria,
     registrar_sondeo_feed,
     resumen_cobertura,
