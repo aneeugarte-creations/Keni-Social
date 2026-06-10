@@ -92,10 +92,18 @@ export function Tooltip({ label, side = "top", children, className }: TooltipPro
       onMouseLeave={ocultar}
       onFocus={() => mostrar(true)}
       onBlur={ocultar}
+      // WCAG 1.4.13: el rótulo se puede descartar con Escape SIN abandonar el disparador.
+      // Sin stopPropagation: el Escape sigue subiendo (no se come el de diálogos abiertos).
+      onKeyDown={(e) => {
+        if (e.key === "Escape") ocultar();
+      }}
     >
       {hijo}
+      {/* `aria-hidden`: el nombre accesible ya viaja por el aria-label clonado al hijo; el
+          rótulo (siempre montado, solo opacity-0) duplicaba el texto en el árbol de
+          accesibilidad de CADA botón del feed. */}
       <span
-        role="tooltip"
+        aria-hidden="true"
         className={cn(
           "pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md transition-opacity duration-150",
           visible ? "opacity-100" : "opacity-0",
@@ -156,12 +164,18 @@ export function TooltipFlotante({ label, side = "top", children, className }: To
       onBlur={ocultar}
       // Al pulsar, el rótulo estorba (la acción ya se está ejecutando): se oculta.
       onMouseDown={ocultar}
+      // WCAG 1.4.13: descartable con Escape sin mover el foco; sin stopPropagation (el Escape
+      // de diálogos sigue funcionando).
+      onKeyDown={(e) => {
+        if (e.key === "Escape") ocultar();
+      }}
     >
       {hijo}
       {pos &&
         createPortal(
+          // `aria-hidden`: el nombre accesible ya viaja por el aria-label clonado al hijo.
           <span
-            role="tooltip"
+            aria-hidden="true"
             style={{ left: pos.x, top: pos.y, transform: TRANSFORM_FLOTANTE[side] }}
             className="pointer-events-none fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md"
           >

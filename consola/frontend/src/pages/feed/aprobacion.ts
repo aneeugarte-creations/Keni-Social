@@ -52,3 +52,24 @@ export function elegibilidadOK(
   const puedeDar = !!nivelActual && tocaHumano && !yaDioOK && (esAdmin || !esAutor);
   return { puedeDar, motivo: "" };
 }
+
+/**
+ * UMBRAL de dislikes que rechaza la pieza: dos (de dos personas), o tantos como niveles
+ * humanos tenga una cadena más corta. Espeja `dominio.colaboracion.umbral_rechazo` del
+ * backend — FUENTE ÚNICA en frontend (la consume también el panel `CadenaAprobacion`).
+ */
+export function umbralDislikes(cadena: Pick<CadenaAprobacion, "niveles">): number {
+  const humanos = (cadena.niveles ?? []).filter((n) => !esNivelIA(n));
+  return Math.min(2, humanos.length || 1);
+}
+
+/**
+ * ¿El PRÓXIMO dislike rechaza la pieza (la devuelve a redacción y resetea la cadena)?
+ * Es el gate de la confirmación del botón "No me gusta": el dislike decisivo es
+ * irreversible con un clic y los OK ya dados se pierden.
+ */
+export function esDislikeDecisivo(cadena: Pick<CadenaAprobacion, "niveles">): boolean {
+  const humanos = (cadena.niveles ?? []).filter((n) => !esNivelIA(n));
+  const disDados = humanos.filter((n) => n.decision === "rechazado");
+  return disDados.length + 1 >= umbralDislikes(cadena);
+}

@@ -43,7 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFechaHoraCorta } from "@/lib/fecha";
+import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import {
@@ -55,10 +55,10 @@ import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion, RespuestaPublicacion } from "@/types";
 
-import { elegibilidadOK } from "./aprobacion";
+import { elegibilidadOK, esDislikeDecisivo } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
-import { TEXTO_ERROR, TEXTO_OK } from "./formato";
+import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 import { BadgeEtapa } from "./TarjetaEtapa";
 import { CadenasLoteContexto } from "./use-cadenas-lote";
 
@@ -124,6 +124,14 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const actualizarCaches = (res?: RespuestaPublicacion) => {
     if (res?.publicacion) {
       remplazarPublicacionEnCaches(queryClient, res.publicacion);
+      if (res.publicacion.estado !== publicacion.estado) {
+        // El cambio de ESTADO mueve la pieza de pestaña: refresca los conteos exactos de los
+        // badges (3 queries `limite=1`, baratas; lo mismo que hace el botón Actualizar). Si no,
+        // el número viejo desmiente la acción que el usuario acaba de ver.
+        void queryClient.invalidateQueries({
+          queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"],
+        });
+      }
     } else {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
     }
@@ -173,9 +181,14 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     onSuccess: (res) => {
       actualizarCaches(res);
       if (res?.publicacion?.estado === "borrador") {
+        // Rechazo definitivo: la tarjeta sale de la vista filtrada al instante; no se abre el
+        // hilo (el confirm previo ya invitó a comentar antes).
         toast.success("Pieza rechazada: vuelve a redacción.");
         return;
       }
+      // Primer dislike: la objeción sin porqué no le sirve a quien arregla la pieza — se abre
+      // el hilo (hace scroll y deja el textarea a mano) para apuntar el motivo.
+      setComentariosAbierto(true);
       toast.success("Dislike registrado; con un segundo dislike la pieza se rechaza.", {
         action: { label: "Deshacer", onClick: () => deshacer.mutate(undefined) },
       });
@@ -309,19 +322,33 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
 
   // "No me gusta" (toggle de TU dislike): si ya está puesto, lo quita; desde neutro, si te toca,
   // marca tu dislike (rechaza el nivel actual). Con tu LIKE puesto ya NO lo deshace (cada botón
-  // togglea solo su propia reacción): un toast te manda al "Me gusta". Dos dislikes de dos
-  // personas rechazan la pieza (lo decide el backend). Marcar dislike NO depende de comentarios
-  // sin resolver (ese gate es para publicar, no para objetar).
-  const onDislike = () => {
+  // togglea solo su propia reacción): un toast te manda al "Me gusta" (con la acción directa de
+  // quitarlo, simétrica al "Dar OK" del camino inverso). Dos dislikes de dos personas rechazan
+  // la pieza (lo decide el backend). Marcar dislike NO depende de comentarios sin resolver (ese
+  // gate es para publicar, no para objetar). El dislike DECISIVO (el que rechaza y resetea la
+  // cadena: los OK dados se pierden) pide confirmación —es irreversible con un clic, igual que
+  // "Forzar"—; el primer dislike va directo (cero fricción en el caso común).
+  const onDislike = async () => {
     if (miReaccion === "dislike") {
       deshacer.mutate(undefined); // toggle off: quita tu dislike
       return;
     }
     if (miReaccion === "like") {
-      toast("Tu OK está puesto; vuelve a pulsar «Me gusta» para quitarlo.");
+      toast("Tu OK está puesto; vuelve a pulsar «Me gusta» para quitarlo.", {
+        action: { label: "Quitar mi OK", onClick: () => deshacer.mutate("ok") },
+      });
       return;
     }
     if (puedeDar) {
+      if (cadena && esDislikeDecisivo(cadena)) {
+        const ok = await confirmar({
+          titulo: "Rechazar la pieza",
+          mensaje:
+            "Tu dislike es el decisivo: la pieza se rechaza y vuelve a redacción, y los OK dados se pierden. ¿Continuar?",
+          textoConfirmar: "Rechazar",
+        });
+        if (!ok) return;
+      }
       rechazar.mutate(); // "se marca con dislike"
       return;
     }
@@ -442,40 +469,51 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           zona NO abre el editor (para la propagación). Like y dislike son un TOGGLE de tu
           reacción; marcar OK / marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
       <div
-        className="flex items-center gap-2 px-4 pb-2 pt-1"
+        className="flex flex-wrap items-center gap-2 gap-y-1 px-4 pb-2 pt-1"
         onClick={(e) => e.stopPropagation()}
       >
         <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
-        {/* Cuándo sale/salió: la fecha de salida con el patrón de la Lista (CalendarClock +
-            ámbar mientras está programada; neutra una vez publicada). El `sr-only` dice QUÉ
-            fecha es; el visible va `aria-hidden` para no leerla dos veces. */}
-        {(etapa === "programada" || etapa === "publicada") && publicacion.fecha_programada && (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 text-xs tabular-nums",
-              etapa === "programada"
-                ? "text-amber-700 dark:text-amber-300"
-                : "text-muted-foreground",
-            )}
-            title={
-              etapa === "programada"
-                ? `Programada para ${formatearFechaHoraCorta(publicacion.fecha_programada)}`
-                : `Publicada el ${formatearFechaHoraCorta(publicacion.fecha_programada)}`
-            }
-          >
-            <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-            <span aria-hidden="true">{formatearFechaHoraCorta(publicacion.fecha_programada)}</span>
-            <span className="sr-only">
-              {etapa === "programada"
-                ? `Programada para ${formatearFechaHoraCorta(publicacion.fecha_programada)}`
-                : `Publicada el ${formatearFechaHoraCorta(publicacion.fecha_programada)}`}
+        {/* Cuándo sale/salió: la fecha de salida con CalendarClock, SIEMPRE en gris neutro (el
+            ámbar semántico de "programada" ya lo porta el badge de etapa: dos señales cromáticas
+            idénticas del mismo dato eran doble codificación). El hover (`title`/tooltip) da la
+            fecha COMPLETA con año. En piezas programadas la fecha es el PUENTE a Programación
+            (mismo tratamiento discreto que el enlace del proceso IA de la cabecera). */}
+        {(etapa === "programada" || etapa === "publicada") &&
+          publicacion.fecha_programada &&
+          (etapa === "programada" ? (
+            <Tooltip label="Ver en Programación">
+              <Link
+                to="/operacion/programacion"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-md text-xs tabular-nums text-muted-foreground hover:text-foreground"
+                aria-label={`Programada para ${formatearFechaHora(publicacion.fecha_programada)} — ver en Programación`}
+              >
+                <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+                {formatearFechaHoraCorta(publicacion.fecha_programada)}
+              </Link>
+            </Tooltip>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
+              title={`Publicada el ${formatearFechaHora(publicacion.fecha_programada)}`}
+            >
+              <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+              <span aria-hidden="true">
+                {formatearFechaHoraCorta(publicacion.fecha_programada)}
+              </span>
+              <span className="sr-only">
+                {`Publicada el ${formatearFechaHora(publicacion.fecha_programada)}`}
+              </span>
             </span>
-          </span>
-        )}
+          ))}
         {/* En estados cerrados el botón de like NO se pinta (sería un falso affordance): el
-            dato del último OK se conserva aquí, como metadato legible. */}
+            dato del último OK se conserva aquí, como metadato legible (truncado: en celdas
+            estrechas un nombre largo no debe desbordar la tarjeta). */}
         {yaAprobada && publicacion.revisor_nombre && (
-          <span className="text-xs text-muted-foreground" title="Último OK">
+          <span
+            className="min-w-0 max-w-[12rem] truncate text-xs text-muted-foreground"
+            title="Último OK"
+          >
             OK: {publicacion.revisor_nombre}
           </span>
         )}
@@ -548,7 +586,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
                   miReaccion === "dislike" &&
                     cn(TEXTO_ERROR, "hover:text-red-700 dark:hover:text-red-300"),
                 )}
-                onClick={onDislike}
+                onClick={() => void onDislike()}
                 disabled={ocupado}
                 aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
                 aria-pressed={miReaccion === "dislike"}
@@ -566,14 +604,18 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           {/* Comentar: SIEMPRE el mismo icono (identidad estable del botón). Con hilos SIN
               RESOLVER se tiñe de ámbar y muestra la burbuja con el conteo: conversación
               pendiente que bloquea publicar (como en un PR). Abierto, queda marcado con
-              `bg-accent` (el hilo puede abrirse fuera del viewport en tarjetas altas). */}
+              `bg-accent` (el hilo puede abrirse fuera del viewport en tarjetas altas). Sin
+              `contenido_id` no hay hilo donde escribir: visible pero DESHABILITADO (la fila
+              se mantiene estable, mismo criterio que el dislike) y el rótulo lo explica. */}
           <Tooltip
             label={
-              sinResolver > 0
-                ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
-                : comentariosAbierto
-                  ? "Ocultar comentarios"
-                  : "Comentar"
+              !publicacion.contenido_id
+                ? "Esta pieza no tiene hilo de comentarios"
+                : sinResolver > 0
+                  ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
+                  : comentariosAbierto
+                    ? "Ocultar comentarios"
+                    : "Comentar"
             }
           >
             <Button
@@ -581,15 +623,18 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               size="icon"
               className={cn(
                 "relative h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
-                sinResolver > 0 && "text-amber-700 dark:text-amber-300",
+                sinResolver > 0 && TEXTO_AVISO,
                 comentariosAbierto && "bg-accent text-foreground",
               )}
               onClick={() => setComentariosAbierto((v) => !v)}
+              disabled={!publicacion.contenido_id}
               aria-expanded={comentariosAbierto}
               aria-label={
-                sinResolver > 0
-                  ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
-                  : "Comentar"
+                !publicacion.contenido_id
+                  ? "Esta pieza no tiene hilo de comentarios"
+                  : sinResolver > 0
+                    ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
+                    : "Comentar"
               }
             >
               <MessageSquare className="h-4 w-4" />

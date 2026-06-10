@@ -3,10 +3,13 @@
  *
  * Visión (#qa-movil-feed): el equipo (revisores/productores/editores) revisa en el
  * móvil un FEED tipo red social —una columna, tarjetas a ancho completo— en vez de
- * la consola completa de administración (que opera una sola persona). Aquí solo se
+ * la consola completa de administración (que opera una sola persona). Aquí se
  * APRUEBA, RECHAZA, COMENTA y CREA; nada de sidebar ni navegación lateral.
  *
- * Reutiliza lo existente (MISMA tarjeta que el feed de escritorio):
+ * Reutiliza lo existente (MISMA tarjeta y MISMA partición que el feed de escritorio):
+ *  - `VISTAS` (vistas.tsx): las 4 pestañas-partición del ciclo, con conteos exactos
+ *    (`useConteosFeed`) y el mismo vocabulario. Aquí el DEFAULT sin parámetro es
+ *    "Por aprobar" (el trabajo del revisor móvil), no "Todo".
  *  - `PostFeed` por pieza: cadena de aprobación visible, like/dislike como toggle con sus
  *    gates (`elegibilidadOK`, comentarios sin resolver), badge de etapa, editor y
  *    comentarios en línea. Sin duplicar lógica de aprobación aquí.
@@ -23,7 +26,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Loader2, Plus, RefreshCw, Send, ThumbsUp } from "lucide-react";
+import { Loader2, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -50,17 +53,17 @@ import { api, mensajeError } from "@/lib/api";
 import { PieFeed, SkeletonPost, useSentinelInfinito } from "@/pages/feed/infinito";
 import { PostFeed } from "@/pages/feed/PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "@/pages/feed/use-cadenas-lote";
+import {
+  ContenidoPestanaVista,
+  ESTADO_SERVIDOR_DE_VISTA,
+  PAGINAS_POR_LOTE,
+  useConteosFeed,
+  VISTAS,
+  vistaDesdeParam,
+  type Vista,
+} from "@/pages/feed/vistas";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import type { CuerpoCrearContenido } from "@/types";
-
-/** Estados que ve el revisor en el feed: lo pendiente de su aprobación y lo ya aprobado. */
-type Bandeja = "en_revision" | "aprobado";
-
-const BANDEJAS: { id: Bandeja; etiqueta: string }[] = [
-  // Mismo vocabulario que el feed de escritorio: "Por aprobar" (el OK), no "Por revisar".
-  { id: "en_revision", etiqueta: "Por aprobar" },
-  { id: "aprobado", etiqueta: "Aprobadas" },
-];
 
 // Mismo padding para el skeleton y el listado real: el propósito de `SkeletonPost` es que el
 // contenido aterrice SIN desplazarse (antes 4px de salto entre p-4 y p-3).
@@ -174,16 +177,23 @@ export default function MobileFeed() {
   const { usuario } = useSesion();
   const queryClient = useQueryClient();
 
-  // La bandeja vive en la URL (`?bandeja=aprobado`; ausente/otro = por aprobar), igual que
-  // `?vista=` en el feed de escritorio: sobrevive al refresco y es compartible.
+  // La vista vive en la URL (`?vista=`), igual que en el feed de escritorio: sobrevive al
+  // refresco y es compartible. DEFAULT MÓVIL deliberado: sin parámetro se arranca en
+  // "Por aprobar" (el trabajo del revisor), no en "Todo". El parámetro LEGADO
+  // `?bandeja=aprobado` (deep-links compartidos antes de unificar) mapea a "publicado".
   const [searchParams, setSearchParams] = useSearchParams();
-  const bandeja: Bandeja = searchParams.get("bandeja") === "aprobado" ? "aprobado" : "en_revision";
-  const cambiarBandeja = React.useCallback(
-    (v: Bandeja) => {
+  const vista: Vista = vistaDesdeParam(
+    searchParams.get("vista") ??
+      (searchParams.get("bandeja") === "aprobado" ? "publicado" : null),
+    "por_aprobar",
+  );
+  const cambiarVista = React.useCallback(
+    (v: Vista) => {
       setSearchParams(
         (prev) => {
-          if (v === "en_revision") prev.delete("bandeja");
-          else prev.set("bandeja", v);
+          prev.delete("bandeja"); // migra el parámetro legado al canónico
+          if (v === "por_aprobar") prev.delete("vista");
+          else prev.set("vista", v);
           return prev;
         },
         { replace: true },
@@ -191,22 +201,27 @@ export default function MobileFeed() {
     },
     [setSearchParams],
   );
-  // Pre-filtra por las marcas del usuario: si tiene exactamente una, arranca en ella;
-  // si tiene varias o ninguna asignada, arranca en "todas" (sus marcas). Memoizado
-  // para no recalcular el array (y no invalidar dependencias) en cada render.
+  // Marcas del usuario: si tiene exactamente una, esa es la marca por defecto; con varias o
+  // ninguna asignada, "todas" (sus marcas). Memoizado para no recalcular el array por render.
   const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
-  const [marca, setMarca] = React.useState<string>(
-    marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS,
+  // La MARCA también vive en la URL (`?marca=`), DERIVADA en cada render: sin parámetro vale
+  // el default calculado, así la sesión que aterriza tarde (carga fría) preselecciona sola la
+  // única marca del usuario sin workarounds de estado.
+  const marcaDefecto = marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS;
+  const marca = searchParams.get("marca") ?? marcaDefecto;
+  const cambiarMarca = React.useCallback(
+    (v: string) => {
+      setSearchParams(
+        (prev) => {
+          if (v === marcaDefecto) prev.delete("marca");
+          else prev.set("marca", v);
+          return prev;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams, marcaDefecto],
   );
-  // En carga fría la sesión llega DESPUÉS del mount y el `useState` ya quedó en "todas":
-  // cuando aterricen las marcas, si el usuario tiene UNA y aún no tocó el selector, se
-  // preselecciona (si no, el alta rápida crearía piezas sin marca, huérfanas).
-  const [marcaTocada, setMarcaTocada] = React.useState(false);
-  React.useEffect(() => {
-    if (!marcaTocada && marcasUsuario.length === 1 && marca !== marcasUsuario[0]) {
-      setMarca(marcasUsuario[0]);
-    }
-  }, [marcaTocada, marcasUsuario, marca]);
 
   const [crearAbierto, setCrearAbierto] = React.useState(false);
 
@@ -222,15 +237,20 @@ export default function MobileFeed() {
       ? catalogoMarcas.filter((m) => marcasUsuario.includes(m.id))
       : catalogoMarcas;
 
+  // CONSULTA DEDICADA por estado (misma mecánica que el escritorio, ver vistas.tsx): "En
+  // preparación" y "Por aprobar" llegan filtradas del servidor; "Todo" y "Aprobadas y
+  // publicadas" comparten la query base sin `estado` y la última filtra en cliente.
+  const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
+
   // SCROLL INFINITO (feed tipo red social): primera página pequeña e instantánea por keyset
   // `creado DESC`; se piden más al hacer scroll (sentinel + IntersectionObserver). El backend
   // devuelve `paginacion.cursor_siguiente` mientras haya más; al omitirlo se apaga `hasNextPage`.
   const feedQuery = useInfiniteQuery({
-    queryKey: [...CLAVE_PUBLICACIONES, "feed", bandeja, marca],
+    queryKey: [...CLAVE_PUBLICACIONES, "feed", estadoServidor ?? "todos", marca],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
       api.publicaciones(
-        { estado: bandeja, marca: marcaParam(marca), feed: "1", cursor: pageParam },
+        { estado: estadoServidor, marca: marcaParam(marca), feed: "1", cursor: pageParam },
         signal,
       ),
     getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
@@ -240,43 +260,106 @@ export default function MobileFeed() {
     refetchOnWindowFocus: false,
   });
 
-  // Aplana todas las páginas cargadas. Si el usuario tiene marcas asignadas y el filtro está en
-  // "todas", restringimos el listado a sus marcas en cliente (defensa extra al pre-filtro).
+  // Conteos exactos de los badges (compartidos con el escritorio; ver vistas.tsx).
+  const { totalRevision, conteoVista } = useConteosFeed({ marca: marcaParam(marca) });
+
+  // Aplana todas las páginas cargadas y aplica el filtro de la vista (idempotente en las
+  // dedicadas; el filtro REAL de "Aprobadas y publicadas"). Si el usuario tiene marcas
+  // asignadas y el filtro está en "todas", restringimos a sus marcas (defensa extra).
+  const vistaActual = VISTAS.find((v) => v.id === vista) ?? VISTAS[0];
   const piezas = React.useMemo(() => {
-    const todas = (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones);
+    let todas = (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones);
+    todas = todas.filter(vistaActual.filtra);
     if (marca === MARCA_TODAS && marcasUsuario.length > 0) {
       return todas.filter((p) => marcasUsuario.includes(p.marca));
     }
     return todas;
-  }, [feedQuery.data, marca, marcasUsuario]);
+  }, [feedQuery.data, vistaActual, marca, marcasUsuario]);
 
   // ANTI-N+1: las cadenas de aprobación de la página en UN lote; los `PostFeed` las
   // consumen vía contexto (igual que en el feed de escritorio).
   const cadenasLote = useCadenasLote(piezas);
 
-  // Sentinel del fondo del feed (compartido con escritorio, ver `pages/feed/infinito.tsx`).
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
-  const sentinelRef = useSentinelInfinito({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
   // SCROLL MAGNÉTICO POR PIEZA estilo Reels/Shorts. OJO: el snap ya NO va en el documento.
   // El CSS global (index.css) bloquea el scroll de html/body (`overflow: hidden`, para
   // matar el rubber-band/pull-to-refresh de iOS), así que el documento nunca se mueve y
   // un scroll-snap puesto ahí es INERTE (así se perdió el imán del feed). Esta pantalla
   // scrollea en su PROPIO contenedor (`scrollerRef`, el div raíz: overflow-y-auto +
-  // snap-y snap-mandatory + scroll-pt para la cabecera sticky). Cada pieza ocupa un SLOT
-  // de un viewport (ver el wrapper de la lista): se ve UNA pieza encuadrada y el scroll
-  // aterriza exacto en la siguiente; una tarjeta más larga scrollea POR DENTRO de su slot.
+  // snap-y snap-mandatory). Cada pieza ocupa un SLOT de un viewport (ver el wrapper de la
+  // lista): se ve UNA pieza encuadrada y el scroll aterriza exacto en la siguiente; una
+  // tarjeta más larga scrollea POR DENTRO de su slot.
   const scrollerRef = React.useRef<HTMLDivElement | null>(null);
+
+  // TOPE de la búsqueda encadenada (mismo mecanismo que el escritorio): SOLO en la vista que
+  // filtra en cliente ("Aprobadas y publicadas"). Con la vista vacía, el sentinel encadena
+  // hasta `lotesBusqueda × PAGINAS_POR_LOTE` páginas; ahí se para y ofrece "Seguir buscando".
+  // Cambio de contexto (vista o marca): el lote se reinicia y se vuelve arriba.
+  const [lotesBusqueda, setLotesBusqueda] = React.useState(1);
+  React.useEffect(() => {
+    setLotesBusqueda(1);
+    // Llamada opcional: jsdom no implementa scrollTo en elementos.
+    scrollerRef.current?.scrollTo?.(0, 0);
+  }, [vista, marca]);
+  const vistaVacia = piezas.length === 0 && !feedQuery.isLoading && !feedQuery.isError;
+  const paginasCargadas = feedQuery.data?.pages.length ?? 0;
+  const topeAlcanzado =
+    estadoServidor === undefined &&
+    vistaVacia &&
+    hasNextPage &&
+    paginasCargadas >= lotesBusqueda * PAGINAS_POR_LOTE;
+  // ¿El listado visible puede perder filas EN CLIENTE? Pasa en la vista de 3 estados (filtra
+  // `vistaActual.filtra`) y también en "todas mis marcas" (defensa por `marcasUsuario`): la
+  // página cargada pudo venir entera de otras marcas/estados, así que el pie dice "buscando"
+  // (no "cargando", que afirmaría que ya hay resultados en camino).
+  const filtraEnCliente =
+    estadoServidor === undefined || (marca === MARCA_TODAS && marcasUsuario.length > 0);
+
+  // Sentinel del fondo del feed (compartido con escritorio, ver `pages/feed/infinito.tsx`).
+  const sentinelRef = useSentinelInfinito({
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    habilitado: !topeAlcanzado,
+  });
+
+  // GEOMETRÍA MEDIDA, no hardcodeada: la cabecera sticky puede tener 1 o 2 filas (selector de
+  // marca) y la barra inferior fija crece con el safe-area de iOS. Un ResizeObserver escribe
+  // las alturas REALES en variables CSS del scroller (`--feed-top` / `--feed-bottom`); el
+  // scroll-padding y el alto del slot las consumen. Así ningún slot queda ocluido por la barra
+  // fija ni deja hueco bajo la cabecera. Los fallbacks (6rem/4.5rem, en el style del
+  // contenedor) cubren jsdom/SSR, donde el RO no dispara.
+  const headerRef = React.useRef<HTMLElement | null>(null);
+  const barraRef = React.useRef<HTMLDivElement | null>(null);
+  React.useLayoutEffect(() => {
+    const raiz = scrollerRef.current;
+    if (!raiz) return;
+    const medir = () => {
+      const top = headerRef.current?.offsetHeight ?? 0;
+      const bottom = barraRef.current?.offsetHeight ?? 0;
+      // Solo con medidas reales (>0): en jsdom el layout no existe y los fallbacks valen.
+      if (top > 0) raiz.style.setProperty("--feed-top", `${top}px`);
+      if (bottom > 0) raiz.style.setProperty("--feed-bottom", `${bottom}px`);
+    };
+    medir();
+    if (typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(medir);
+    if (headerRef.current) ro.observe(headerRef.current);
+    if (barraRef.current) ro.observe(barraRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   // El spinner del botón Actualizar SOLO en un refresco real, no en cada página del scroll
   // (mismo comportamiento que el feed de escritorio). "Actualizar" = volver arriba + refrescar
   // la PRIMERA página (reset, no refetch en serie de todas las cargadas); el resto de
-  // superficies solo se marca stale.
+  // superficies solo se marca stale y los conteos de las pestañas sí refrescan.
   const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
   const refrescar = () => {
-    scrollerRef.current?.scrollTo(0, 0);
+    scrollerRef.current?.scrollTo?.(0, 0);
     void queryClient.resetQueries({ queryKey: [...CLAVE_PUBLICACIONES, "feed"] });
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES, refetchType: "none" });
+    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"] });
   };
   const botonActualizar = (
     <Button
@@ -293,16 +376,21 @@ export default function MobileFeed() {
   // Con UNA sola marca asignada el selector no es una decisión (dos opciones idénticas): se
   // oculta y las pestañas comparten fila con Actualizar. Con varias (o admin), dos filas.
   const conSelectorMarca = marcasUsuario.length !== 1;
+  // Las MISMAS 4 vistas que el escritorio (vistas.tsx), con sus conteos exactos.
   const tabs = (
     <Tabs
-      value={bandeja}
-      onValueChange={(v) => cambiarBandeja(v as Bandeja)}
+      value={vista}
+      onValueChange={(v) => cambiarVista(v as Vista)}
       className={conSelectorMarca ? undefined : "min-w-0 flex-1"}
     >
-      <TabsList className="w-full" aria-label="Bandeja">
-        {BANDEJAS.map((b) => (
-          <TabsTrigger key={b.id} value={b.id} className="flex-1">
-            {b.etiqueta}
+      <TabsList className="w-full" aria-label="Vista del feed">
+        {VISTAS.map((v) => (
+          <TabsTrigger key={v.id} value={v.id} className="flex-1 gap-1.5">
+            <ContenidoPestanaVista
+              vista={v}
+              conteo={conteoVista[v.id]}
+              enfasis={v.id === "por_aprobar" && (totalRevision ?? 0) > 0}
+            />
           </TabsTrigger>
         ))}
       </TabsList>
@@ -312,13 +400,23 @@ export default function MobileFeed() {
   return (
     /* SCROLLER PROPIO de la pantalla (el documento está bloqueado por el CSS global):
        alto fijo de un viewport, scroll vertical interno y el imán Reels aquí mismo
-       (snap-y mandatory + scroll-pt-24 = 6rem de cabecera sticky). */
+       (snap-y mandatory + scroll-padding con la altura REAL de la cabecera sticky). */
     <div
       ref={scrollerRef}
-      className="flex h-dvh w-full max-w-full snap-y snap-mandatory flex-col overflow-y-auto overflow-x-hidden scroll-pt-24 bg-background"
+      className="flex h-dvh w-full max-w-full snap-y snap-mandatory flex-col overflow-y-auto overflow-x-hidden bg-background"
+      style={
+        {
+          scrollPaddingTop: "var(--feed-top)",
+          "--feed-top": "6rem",
+          "--feed-bottom": "4.5rem",
+        } as React.CSSProperties
+      }
     >
       {/* Cabecera sticky COMPACTA (sin fila de título: se va un tercio del viewport en chrome). */}
-      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur"
+      >
         <h1 className="sr-only">Feed de revisión</h1>
         {conSelectorMarca ? (
           <>
@@ -326,10 +424,7 @@ export default function MobileFeed() {
               <SelectorMarca
                 marcas={marcas}
                 valor={marca}
-                onCambio={(v) => {
-                  setMarcaTocada(true);
-                  setMarca(v);
-                }}
+                onCambio={cambiarMarca}
                 incluirTodas
                 etiquetaTodas={marcasUsuario.length > 0 ? "Todas mis marcas" : "Todas las marcas"}
                 className="min-w-0 flex-1"
@@ -355,7 +450,9 @@ export default function MobileFeed() {
                 <SkeletonPost key={i} />
               ))}
             </div>
-          ) : feedQuery.isError ? (
+          ) : feedQuery.isError && piezas.length === 0 ? (
+            // El BloqueError a pantalla completa queda para el PRIMER load: con páginas ya
+            // cargadas un fallo de "cargar más" NO descarta el feed (el pie ofrece reintentar).
             <div className="p-4">
               <BloqueError
                 titulo="No se pudo cargar el feed"
@@ -372,43 +469,67 @@ export default function MobileFeed() {
                    Mismo padding que el skeleton: sin salto de 4px al aterrizar. */
                 <div className={CLASES_LISTA} role="feed" aria-busy={isFetchingNextPage}>
                   {piezas.map((p) => (
-                    /* SLOT estilo Reels: un viewport por pieza (alto = pantalla menos
-                       cabecera sticky y padding), snap obligatorio sin saltarse piezas
-                       (`snap-always`). Una tarjeta más larga que el slot scrollea POR
-                       DENTRO; al llegar a su borde, el gesto encadena al feed y el imán
-                       encuadra la siguiente pieza. */
+                    /* SLOT estilo Reels: un viewport por pieza (alto = pantalla menos la
+                       cabecera y la barra fija MEDIDAS, no estimadas: la fila de like/dislike
+                       nunca scrollea hacia la franja ocluida por la barra), snap obligatorio
+                       sin saltarse piezas (`snap-always`). Una tarjeta más larga que el slot
+                       scrollea POR DENTRO; `tabIndex` hace ese scroll interno operable por
+                       teclado (WCAG 2.1.1: Firefox/Safari no enfocan scrollers solos). */
                     <div
                       key={p.id}
-                      className="h-[calc(100dvh-7rem)] snap-start snap-always overflow-y-auto"
+                      tabIndex={0}
+                      role="group"
+                      aria-label={p.titulo}
+                      className="h-[calc(100dvh-var(--feed-top)-var(--feed-bottom))] snap-start snap-always overflow-y-auto"
                     >
                       <PostFeed publicacion={p} />
                     </div>
                   ))}
                 </div>
+              ) : feedQuery.isError ? (
+                // Hay datos base pero la vista filtrada quedó vacía y "cargar más" falló.
+                <PieFeed estado="error" onReintentar={() => void fetchNextPage()} />
+              ) : topeAlcanzado ? (
+                // Tope del lote en la vista filtrada EN CLIENTE: mismo trato que el escritorio.
+                <div className="p-6">
+                  <EstadoVacio
+                    icono={vistaActual.icono}
+                    titulo={vistaActual.vacio.titulo}
+                    texto="Puede haber piezas más antiguas aún sin cargar."
+                    accion={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLotesBusqueda((n) => n + 1)}
+                      >
+                        Seguir buscando
+                      </Button>
+                    }
+                  />
+                </div>
               ) : hasNextPage ? (
                 // VACÍO HONESTO: la página cargada puede ser toda de otras marcas (filtro en
                 // cliente); mientras queden páginas se busca, no se afirma "nada por aprobar".
-                <PieFeed estado="buscando" />
+                <PieFeed estado={filtraEnCliente ? "buscando" : "cargando"} />
               ) : (
                 <div className="p-6">
                   <EstadoVacio
-                    icono={bandeja === "en_revision" ? ThumbsUp : Send}
-                    titulo={bandeja === "en_revision" ? "Nada por aprobar" : "Sin piezas aprobadas"}
-                    texto={
-                      bandeja === "en_revision"
-                        ? "Cuando haya piezas en revisión para tus marcas, aparecerán aquí."
-                        : // La bandeja lista el estado `aprobado` del servidor: al programarse o
-                          // publicarse, la pieza deja esta bandeja (no «desaparece» sin más).
-                          "Las piezas aprobadas pendientes de programarse salen aquí; al programarse o publicarse dejan esta bandeja."
-                    }
+                    icono={vistaActual.icono}
+                    titulo={vistaActual.vacio.titulo}
+                    texto={vistaActual.vacio.texto}
                   />
                 </div>
               )}
               {/* SCROLL INFINITO: el sentinel se monta SIEMPRE que queden páginas (también con
-                  el listado filtrado vacío) + pie de estado compartido. */}
-              {hasNextPage && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
+                  el listado filtrado vacío) + pie de estado compartido; un error de "cargar
+                  más" lo apaga y el pie ofrece reintentar SOLO la página fallida. */}
+              {hasNextPage && !feedQuery.isError && (
+                <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+              )}
               {piezas.length > 0 &&
-                (isFetchingNextPage ? (
+                (feedQuery.isError ? (
+                  <PieFeed estado="error" onReintentar={() => void fetchNextPage()} />
+                ) : isFetchingNextPage ? (
                   <PieFeed estado="cargando" />
                 ) : !hasNextPage ? (
                   <PieFeed estado="fin" />
@@ -419,8 +540,11 @@ export default function MobileFeed() {
       </main>
 
       {/* Barra de acciones inferior fija (thumb-reachable): alta de pieza. El padding inferior
-          respeta el safe-area de iOS (home indicator). */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
+          respeta el safe-area de iOS (home indicator); su altura REAL la mide el RO de arriba. */}
+      <div
+        ref={barraRef}
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur"
+      >
         <div className="mx-auto flex w-full max-w-xl">
           <Button className="w-full" onClick={() => setCrearAbierto(true)}>
             <Plus className="h-4 w-4" />

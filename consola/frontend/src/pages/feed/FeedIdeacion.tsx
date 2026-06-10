@@ -7,14 +7,8 @@
  *
  * UN feed por fecha (keyset `feed=1` + `cursor`, `creado DESC`, scroll infinito) con 4 PESTAÑAS
  * que PARTICIONAN el ciclo por ESTADO (toda pieza cae en exactamente una; "Todo el feed" es la
- * unión):
- *   - "Todo el feed": el listado base, sin filtro de estado (la vista por defecto).
- *   - "En preparación": consulta DEDICADA al servidor (`estado=borrador`) — el filtro llega
- *     ya aplicado, sin rastrear páginas en cliente.
- *   - "Por aprobar": consulta DEDICADA (`estado=en_revision`), ídem.
- *   - "Aprobado y publicado": agrupa 3 estados (aprobado/programado/publicado) y el parámetro
- *     `estado` del backend admite UNO, así que COMPARTE la consulta base de "Todo" (misma query
- *     cacheada) y filtra en cliente, con tope de búsqueda encadenada + "Seguir buscando".
+ * unión). La partición, el mapeo vista→estado del servidor y los conteos de los badges viven en
+ * `vistas.tsx`, COMPARTIDOS con el feed móvil (`MobileFeed`).
  * La vista activa vive SOLO en la URL (`?vista=`): compartible, sobrevive al refresco y a
  * atrás/adelante del navegador (no hay estado duplicado en memoria).
  * Los badges de las pestañas cuentan PIEZAS con el total EXACTO del servidor
@@ -29,16 +23,7 @@
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ImagePlus,
-  LayoutGrid,
-  Minus,
-  Plus,
-  RefreshCw,
-  Send,
-  ThumbsUp,
-  type LucideIcon,
-} from "lucide-react";
+import { Columns3, Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -46,23 +31,30 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { plural } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
-import type { Publicacion } from "@/types";
 
 import { GRID_COLS, MAX_W_FEED, REDES_POR_FORMATO } from "./formato";
 import { CabeceraIdea, GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PieFeed, SkeletonPost, useSentinelInfinito } from "./infinito";
 import { PostFeed } from "./PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
+import {
+  ContenidoPestanaVista,
+  ESTADO_SERVIDOR_DE_VISTA,
+  PAGINAS_POR_LOTE,
+  TOPE_PAGINAS_PIEZA,
+  useConteosFeed,
+  VISTAS,
+  vistaDesdeParam,
+  type Vista,
+} from "./vistas";
 
 // Nº de posts por fila (preferencia local, por dispositivo). Hasta 5 columnas: una pieza VIDEO
 // va a las 5 redes, así que en "Todas las redes" se puede ver la idea entera en UNA fila.
@@ -71,12 +63,6 @@ const COLUMNAS_MAX = 5;
 // Ancho mínimo OPERABLE de una celda (~px): por debajo, la fila de acciones de la tarjeta
 // desborda. Las columnas EFECTIVAS se acotan a las que caben en el ancho real del contenedor.
 const ANCHO_MIN_CELDA = 240;
-// Tope de la búsqueda encadenada de la vista filtrada EN CLIENTE vacía ("Aprobado y publicado"):
-// cada "lote" permite traer hasta N páginas más antes de parar y ofrecer "Seguir buscando".
-const PAGINAS_POR_LOTE = 5;
-// Tope del deep-link `?pieza=`: páginas máximas que se encadenan buscando la idea enlazada
-// antes de renunciar (y avisar), para no descargar el feed entero persiguiendo un enlace viejo.
-const TOPE_PAGINAS_PIEZA = 3 * PAGINAS_POR_LOTE;
 
 /**
  * Id del ancla DOM de una idea en el feed (deep-link desde las notificaciones). El cajón
@@ -104,80 +90,6 @@ function guardarPref(clave: string, valor: number): void {
   } catch {
     /* sin localStorage: la preferencia simplemente no persiste */
   }
-}
-
-/**
- * Pestañas del feed: una PARTICIÓN del ciclo por ESTADO (borrador → en revisión →
- * aprobado/programado/publicado); "Todo el feed" es la unión. "En preparación" y "Por aprobar"
- * mapean 1:1 a un estado y van con consulta DEDICADA (el servidor filtra); `filtra` mantiene la
- * misma regla en cliente (idempotente en las dedicadas; el filtro real de "Aprobado y
- * publicado"). `etiquetaCorta` es el texto visible en <sm (el aria-label conserva el completo).
- */
-type Vista = "todo" | "preparacion" | "por_aprobar" | "publicado";
-
-const VISTAS: {
-  id: Vista;
-  etiqueta: string;
-  /** Etiqueta corta EXPLÍCITA para <sm: las 4 pestañas caben en una fila a 320px. */
-  etiquetaCorta: string;
-  icono: LucideIcon;
-  filtra: (p: Publicacion) => boolean;
-  vacio: { titulo: string; texto: string };
-}[] = [
-  {
-    id: "todo",
-    etiqueta: "Todo el feed",
-    etiquetaCorta: "Todo",
-    icono: LayoutGrid,
-    filtra: () => true,
-    vacio: {
-      titulo: "El feed está vacío",
-      texto:
-        "El equipo postea material y la IA lo convierte en piezas; aparecerán aquí, las más recientes primero, y aprobarás en línea cuando alguna esté lista.",
-    },
-  },
-  {
-    // TODO lo anterior a revisión: copy en curso, falta la foto/el clip, borradores completos
-    // que entran solos y piezas devueltas a redacción. Es la bandeja del trabajo del equipo.
-    id: "preparacion",
-    etiqueta: "En preparación",
-    etiquetaCorta: "Prep.",
-    icono: ImagePlus,
-    filtra: (p) => p.estado === "borrador",
-    vacio: {
-      titulo: "Nada en preparación",
-      texto:
-        "Cuando una pieza esté en manos del equipo o de la IA (copy en curso, falta la foto o el video, o devuelta a redacción), aparecerá aquí.",
-    },
-  },
-  {
-    id: "por_aprobar",
-    etiqueta: "Por aprobar",
-    etiquetaCorta: "Aprobar",
-    icono: ThumbsUp,
-    filtra: (p) => p.estado === "en_revision",
-    vacio: {
-      titulo: "Nada por aprobar",
-      // El detalle de cuántos OK lleva cada pieza lo enseña `CadenaAprobacion` pieza a pieza.
-      texto: "Cuando la IA deje una pieza lista, aparecerá aquí para los OK del equipo.",
-    },
-  },
-  {
-    id: "publicado",
-    etiqueta: "Aprobado y publicado",
-    etiquetaCorta: "Publicado",
-    icono: Send,
-    filtra: (p) => ["aprobado", "programado", "publicado"].includes(p.estado),
-    vacio: {
-      titulo: "Nada aprobado ni publicado",
-      texto: "Las piezas aprobadas, las programadas con hueco y las ya publicadas salen aquí.",
-    },
-  },
-];
-
-/** Vista válida desde la URL (`?vista=`); ausente o desconocida → "todo". */
-function vistaDesdeParam(v: string | null): Vista {
-  return VISTAS.some((x) => x.id === v) ? (v as Vista) : "todo";
 }
 
 export default function FeedIdeacion() {
@@ -287,12 +199,10 @@ export default function FeedIdeacion() {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
 
-  // CONSULTA DEDICADA por estado: "En preparación" y "Por aprobar" mapean 1:1 a un estado del
-  // backend y el SERVIDOR filtra (cada página llega ya filtrada: ni rastreo en cliente ni tope).
-  // "Todo" y "Aprobado y publicado" comparten el listado base (`estado` ausente → misma query
-  // cacheada); la vista de 3 estados filtra en cliente (el parámetro admite UNO).
-  const estadoServidor =
-    vista === "por_aprobar" ? "en_revision" : vista === "preparacion" ? "borrador" : undefined;
+  // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "En
+  // preparación" y "Por aprobar" llegan filtradas del servidor; "Todo" y "Aprobadas y
+  // publicadas" comparten el listado base.
+  const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
 
   // SCROLL INFINITO (feed social): primera página pequeña (instantánea) por keyset `creado DESC`
   // y más al hacer scroll (sentinel + IntersectionObserver). El backend devuelve
@@ -304,7 +214,7 @@ export default function FeedIdeacion() {
       marcaActiva ?? MARCA_ACTIVA_TODAS,
       red,
       linea,
-      // "todos" agrupa "Todo el feed" y "Aprobado y publicado" en LA MISMA query cacheada.
+      // "todos" agrupa "Todo el feed" y "Aprobadas y publicadas" en LA MISMA query cacheada.
       estadoServidor ?? "todos",
     ],
     initialPageParam: undefined as string | undefined,
@@ -331,54 +241,12 @@ export default function FeedIdeacion() {
     refetchOnWindowFocus: false,
   });
 
-  // CONTEOS para los badges de las pestañas: el total EXACTO del servidor con cualquier filtro
-  // (`limite=1` activa el modo offset: 1 fila + `paginacion.total`). Tres consultas ligeras:
-  // todos / borrador / en_revision; "Aprobado y publicado" es la RESTA exacta (las 4 vistas son
-  // una partición). Se cuentan PIEZAS (la unidad canónica del hub), no ideas: deliberado.
-  const filtrosConteo = {
+  // Conteos exactos de los badges de las pestañas (compartidos con el móvil; ver vistas.tsx).
+  const { totalBorrador, totalRevision, conteoVista } = useConteosFeed({
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
-  };
-  const claveConteo = (estado?: string) =>
-    [
-      ...CLAVE_PUBLICACIONES,
-      "conteo-feed",
-      marcaActiva ?? MARCA_ACTIVA_TODAS,
-      red,
-      linea,
-      estado ?? "todos",
-    ] as const;
-  const conteoTodos = useQuery({
-    queryKey: claveConteo(),
-    queryFn: ({ signal }) => api.publicaciones({ ...filtrosConteo, limite: "1" }, signal),
-    staleTime: 30_000,
   });
-  const conteoBorrador = useQuery({
-    queryKey: claveConteo("borrador"),
-    queryFn: ({ signal }) =>
-      api.publicaciones({ ...filtrosConteo, estado: "borrador", limite: "1" }, signal),
-    staleTime: 30_000,
-  });
-  const conteoRevision = useQuery({
-    queryKey: claveConteo("en_revision"),
-    queryFn: ({ signal }) =>
-      api.publicaciones({ ...filtrosConteo, estado: "en_revision", limite: "1" }, signal),
-    staleTime: 30_000,
-  });
-  const totalTodos = conteoTodos.data?.paginacion?.total;
-  const totalBorrador = conteoBorrador.data?.paginacion?.total;
-  const totalRevision = conteoRevision.data?.paginacion?.total;
-  // El badge solo se pinta con su número RESUELTO (nada de parpadeos de 0 mientras carga).
-  const conteoVista: Record<Vista, number | undefined> = {
-    todo: totalTodos,
-    preparacion: totalBorrador,
-    por_aprobar: totalRevision,
-    publicado:
-      totalTodos != null && totalBorrador != null && totalRevision != null
-        ? Math.max(0, totalTodos - totalBorrador - totalRevision)
-        : undefined,
-  };
 
   // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).
   // Aplanamos TODAS las páginas cargadas en un único listado que el resto de la UI consume igual.
@@ -500,8 +368,8 @@ export default function FeedIdeacion() {
     [grupos, vistaActual],
   );
 
-  // TOPE de la búsqueda encadenada: SOLO en la vista que filtra en cliente ("Aprobado y
-  // publicado", `estadoServidor === undefined`); en las dedicadas el servidor filtra y cada
+  // TOPE de la búsqueda encadenada: SOLO en la vista que filtra en cliente ("Aprobadas y
+  // publicadas", `estadoServidor === undefined`); en las dedicadas el servidor filtra y cada
   // página trae resultados. Con la vista vacía, el sentinel encadena hasta `lotesBusqueda ×
   // PAGINAS_POR_LOTE` páginas; después se para y ofrece "Seguir buscando".
   const vistaVacia = gruposVista.length === 0 && !feedQuery.isLoading && !feedQuery.isError;
@@ -535,9 +403,44 @@ export default function FeedIdeacion() {
     void queryClient.invalidateQueries({ queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"] });
   };
 
+  // El número del stepper "por fila" NO miente: cuando el ancho real acota la preferencia,
+  // enseña "efectivas/preferidas" (2/5) con la explicación en title + sr-only, en vez de
+  // esconder la verdad en un tooltip sobre un span no enfocable.
+  const topado = colsEfectivas < columnas;
   const valorColumnas = (
-    <span className="w-5 text-center text-xs font-medium tabular-nums">{columnas}</span>
+    <span
+      aria-live="polite"
+      title={topado ? `Mostrando ${colsEfectivas} de ${columnas} por el ancho disponible` : undefined}
+      className="min-w-5 px-0.5 text-center text-xs font-medium tabular-nums"
+    >
+      {topado ? `${colsEfectivas}/${columnas}` : columnas}
+      <span className="sr-only">
+        {topado
+          ? ` (mostrando ${colsEfectivas} de ${columnas} por el ancho disponible)`
+          : " por fila"}
+      </span>
+    </span>
   );
+
+  // SALIDA de los vacíos de las vistas dedicadas/filtradas: un vacío sin acción es un punto
+  // muerto. "Por aprobar" manda a donde está el trabajo (preparación si lo hay); el resto, al
+  // feed completo.
+  const accionVacio =
+    vista === "por_aprobar" ? (
+      (totalBorrador ?? 0) > 0 ? (
+        <Button variant="outline" size="sm" onClick={() => cambiarVista("preparacion")}>
+          Ver en preparación
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => cambiarVista("todo")}>
+          Ver todo el feed
+        </Button>
+      )
+    ) : vista === "preparacion" || vista === "publicado" ? (
+      <Button variant="outline" size="sm" onClick={() => cambiarVista("todo")}>
+        Ver todo el feed
+      </Button>
+    ) : undefined;
 
   return (
     <CadenasLoteContexto.Provider value={cadenasLote}>
@@ -545,39 +448,38 @@ export default function FeedIdeacion() {
       <AccionesPagina>
         <div className="flex items-center gap-1">
           {/* "Por fila" directo en la barra: con el zoom retirado era el único ajuste y un
-              popover no se justificaba. Mismo tratamiento gris que el resto de la barra. */}
-          <Tooltip label="Menos por fila">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => ajustarColumnas(-1)}
-              disabled={columnas <= COLUMNAS_MIN}
-              aria-label="Menos por fila"
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          {colsEfectivas < columnas ? (
-            // La preferencia supera lo que cabe: el valor explica el tope (no es un control roto).
-            <Tooltip label={`Mostrando ${colsEfectivas} por fila (límite del ancho)`}>
-              {valorColumnas}
+              popover no se justificaba. El GRUPO rotulado + icono Columns3 le dan significado
+              sin depender de tooltips de hover (inexistentes en táctil). */}
+          <div role="group" aria-label="Piezas por fila" className="flex items-center gap-1">
+            <Columns3 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <Tooltip label="Menos por fila">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => ajustarColumnas(-1)}
+                disabled={columnas <= COLUMNAS_MIN}
+                aria-label="Menos por fila"
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
             </Tooltip>
-          ) : (
-            valorColumnas
-          )}
-          <Tooltip label="Más por fila">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => ajustarColumnas(1)}
-              disabled={columnas >= COLUMNAS_MAX}
-              aria-label="Más por fila"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </Tooltip>
+            {valorColumnas}
+            <Tooltip label="Más por fila">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => ajustarColumnas(1)}
+                disabled={columnas >= COLUMNAS_MAX}
+                aria-label="Más por fila"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          </div>
+          {/* Frontera con "Actualizar": acción de otra naturaleza (refresco, no densidad). */}
+          <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
           {/* Actualizar (el verbo de la casa): gira y se deshabilita SOLO durante un refresco
               real, no en cada página del scroll infinito. */}
           <Tooltip label="Actualizar">
@@ -595,171 +497,185 @@ export default function FeedIdeacion() {
         </div>
       </AccionesPagina>
 
-      {/* Pestañas (control segmentado en UNA fila), solas en su fila. El scroll horizontal de
-          emergencia vive FUERA del rail (dentro recortaba el anillo de foco y pintaba scrollbar
-          sobre las píldoras). El badge cuenta PIEZAS con el total real del servidor y se pinta
-          en cuanto su número está resuelto, no solo con el feed agotado. */}
-      <div className="mb-4 overflow-x-auto">
-        <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
-          <TabsList className="w-fit gap-1" aria-label="Vista del feed">
-            {VISTAS.map((v) => (
-              <TabsTrigger key={v.id} value={v.id} className="gap-1.5" aria-label={v.etiqueta}>
-                <span className="sm:hidden">{v.etiquetaCorta}</span>
-                <span className="hidden sm:inline">{v.etiqueta}</span>
-                {conteoVista[v.id] != null && (
-                  <Badge
-                    variant="secondary"
-                    className="border border-border bg-background px-1.5 py-0 tabular-nums"
-                    title={plural(conteoVista[v.id] as number, "pieza")}
-                  >
-                    {conteoVista[v.id]}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
+      {/* UN SOLO EJE de composición: pestañas, estados (skeleton/error/vacío), feed y pie viven
+          en la MISMA columna centrada (`MAX_W_FEED` por columnas efectivas). Antes las pestañas
+          iban pegadas al borde y los vacíos a TODO el ancho: la página saltaba de eje al
+          cambiar de pestaña en monitores anchos. */}
+      <div className={cn("mx-auto w-full", MAX_W_FEED[colsEfectivas])}>
+        <h2 className="sr-only">Feed de ideación</h2>
+        {/* Pestañas (control segmentado en UNA fila), solas en su fila. El scroll horizontal de
+            emergencia vive FUERA del rail (dentro recortaba el anillo de foco y pintaba scrollbar
+            sobre las píldoras). El badge cuenta PIEZAS con el total real del servidor y se pinta
+            en cuanto su número está resuelto, no solo con el feed agotado. */}
+        <div className="mb-4 overflow-x-auto">
+          <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
+            <TabsList className="w-fit gap-1" aria-label="Vista del feed">
+              {VISTAS.map((v) => (
+                <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
+                  <ContenidoPestanaVista
+                    vista={v}
+                    conteo={conteoVista[v.id]}
+                    // Énfasis pasivo "te toca decidir" (mismo acento keni que el pulgar de
+                    // PostFeed) cuando hay piezas esperando OK; en cero, neutro.
+                    enfasis={v.id === "por_aprobar" && (totalRevision ?? 0) > 0}
+                  />
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
 
-      {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla
-          con sus redes generadas y la franja "Falta generar") — así no se mezclan ideas en una
-          fila. Filtrado a UNA red: rejilla PLANA con microcabecera por celda. `colsEfectivas`
-          fija cuántas por fila (la preferencia, acotada al ancho real); `MAX_W_FEED` impide que
-          una celda se desparrame en monitores anchos. */}
-      {feedQuery.isLoading || cargandoCatalogo ? (
-        // El skeleton ESPEJA el contenedor final (misma retícula/anchos) y la ANATOMÍA de la
-        // tarjeta (cabecera + imagen 4:5 + copy + acciones): sin salto de layout al aterrizar.
-        // También cubre la espera del catálogo de /opciones (sin él, la matriz mentiría).
-        <div
-          className={cn(
-            "mx-auto w-full",
-            MAX_W_FEED[colsEfectivas],
-            colsEfectivas === 1 ? "space-y-4" : cn("grid items-start gap-4", GRID_COLS[colsEfectivas]),
-          )}
-        >
-          {Array.from({ length: Math.max(3, colsEfectivas) }, (_, i) => (
-            <SkeletonPost key={i} />
-          ))}
-        </div>
-      ) : feedQuery.isError ? (
-        <BloqueError
-          titulo="No se pudo cargar el feed"
-          mensaje={mensajeError(feedQuery.error)}
-          onReintentar={() => void feedQuery.refetch()}
-          cargando={feedQuery.isFetching}
-        />
-      ) : gruposVista.length === 0 ? (
-        // VACÍO HONESTO: solo se afirma "no hay nada" cuando el feed está agotado. En la vista
-        // filtrada en cliente, si quedan páginas el sentinel encadena HASTA EL TOPE del lote;
-        // ahí se para y el vacío (con el lenguaje de la casa) ofrece "Seguir buscando".
-        topeAlcanzado ? (
-          <EstadoVacio
-            icono={vistaActual.icono}
-            titulo={vistaActual.vacio.titulo}
-            texto="Puede haber piezas más antiguas aún sin cargar."
-            accion={
-              <Button variant="outline" size="sm" onClick={() => setLotesBusqueda((n) => n + 1)}>
-                Seguir buscando
-              </Button>
+        {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla
+            con sus redes generadas y la franja "Falta generar") — así no se mezclan ideas en una
+            fila. Filtrado a UNA red: rejilla PLANA con microcabecera por celda. `colsEfectivas`
+            fija cuántas por fila (la preferencia, acotada al ancho real). */}
+        {feedQuery.isLoading || cargandoCatalogo ? (
+          // El skeleton ESPEJA el contenedor final (misma retícula/anchos) y la ANATOMÍA de la
+          // tarjeta (cabecera + imagen 4:5 + copy + acciones): sin salto de layout al aterrizar.
+          // También cubre la espera del catálogo de /opciones (sin él, la matriz mentiría).
+          <div
+            className={
+              colsEfectivas === 1
+                ? "space-y-4"
+                : cn("grid items-start gap-4", GRID_COLS[colsEfectivas])
             }
+          >
+            {Array.from({ length: Math.max(3, colsEfectivas) }, (_, i) => (
+              <SkeletonPost key={i} />
+            ))}
+          </div>
+        ) : feedQuery.isError && piezas.length === 0 ? (
+          // El BloqueError a página completa queda para el PRIMER load: con páginas ya cargadas
+          // un fallo de `fetchNextPage` NO descarta el feed visible (el pie ofrece reintentar).
+          <BloqueError
+            titulo="No se pudo cargar el feed"
+            mensaje={mensajeError(feedQuery.error)}
+            onReintentar={() => void feedQuery.refetch()}
+            cargando={feedQuery.isFetching}
           />
-        ) : hasNextPage ? (
-          <PieFeed estado={estadoServidor === undefined ? "buscando" : "cargando"} />
-        ) : (
-          <EstadoVacio
-            icono={vistaActual.icono}
-            titulo={vistaActual.vacio.titulo}
-            texto={vistaActual.vacio.texto}
-          />
-        )
-      ) : agrupar ? (
-        // Sin role="feed" aquí: sus hijos directos no son <article> (cada grupo agrupa varios).
-        <div
-          className={cn("mx-auto w-full space-y-8", MAX_W_FEED[colsEfectivas])}
-          aria-busy={isFetchingNextPage}
-        >
-          {gruposVista.map((g) => (
-            <div
-              key={g.id}
-              id={anclaFeed(g.id)}
-              className={cn(
-                // NO snap aquí: el snap va por POST (dentro de GrupoIdea), no por idea.
-                "scroll-mt-20 rounded-xl transition-shadow",
-                g.id === piezaDestacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-              )}
-            >
-              <GrupoIdea
-                grupo={g}
-                redes={redesAMostrar}
-                columnas={colsEfectivas}
-                // Con una marca activa en la topbar, repetirla en cada grupo compite con el título.
-                mostrarMarca={marcaActiva == null}
-                // En las vistas filtradas el grupo enseña SOLO lo que cumple el filtro (sin
-                // tarjetas ajenas); la matriz completa es de "Todo el feed".
-                filtra={vista === "todo" ? undefined : vistaActual.filtra}
-              />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div
-          className={cn(
-            "mx-auto w-full",
-            MAX_W_FEED[colsEfectivas],
-            colsEfectivas === 1 ? "space-y-4" : cn("grid items-start gap-4", GRID_COLS[colsEfectivas]),
-          )}
-          role="feed"
-          aria-busy={isFetchingNextPage}
-        >
-          {gruposVista.map((g) => {
-            const p = g.piezas.find(
-              (x) =>
-                x.red === redesAMostrar[0] && (vista === "todo" || vistaActual.filtra(x)),
-            );
-            return (
+        ) : gruposVista.length === 0 ? (
+          feedQuery.isError ? (
+            // Hay datos base pero la vista filtrada quedó vacía y el último "cargar más" falló.
+            <PieFeed estado="error" onReintentar={() => void fetchNextPage()} />
+          ) : topeAlcanzado ? (
+            // VACÍO HONESTO: solo se afirma "no hay nada" cuando el feed está agotado. En la
+            // vista filtrada en cliente, si quedan páginas el sentinel encadena HASTA EL TOPE
+            // del lote; ahí se para y el vacío ofrece "Seguir buscando".
+            <EstadoVacio
+              icono={vistaActual.icono}
+              titulo={vistaActual.vacio.titulo}
+              texto="Puede haber piezas más antiguas aún sin cargar."
+              accion={
+                <Button variant="outline" size="sm" onClick={() => setLotesBusqueda((n) => n + 1)}>
+                  Seguir buscando
+                </Button>
+              }
+            />
+          ) : hasNextPage ? (
+            <PieFeed estado={estadoServidor === undefined ? "buscando" : "cargando"} />
+          ) : (
+            <EstadoVacio
+              icono={vistaActual.icono}
+              titulo={vistaActual.vacio.titulo}
+              texto={vistaActual.vacio.texto}
+              accion={accionVacio}
+            />
+          )
+        ) : agrupar ? (
+          // Sin role="feed" aquí: sus hijos directos no son <article> (cada grupo agrupa varios).
+          <div className="space-y-8" aria-busy={isFetchingNextPage}>
+            {gruposVista.map((g) => (
               <div
                 key={g.id}
                 id={anclaFeed(g.id)}
                 className={cn(
-                  // Cada pieza es un punto de snap (sin margen superior: encaja arriba del todo).
-                  "snap-start rounded-xl transition-shadow",
-                  g.id === piezaDestacada &&
-                    "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                  // NO snap aquí: el snap va por POST (dentro de GrupoIdea), no por idea.
+                  "scroll-mt-20 rounded-xl transition-shadow",
+                  g.id === piezaDestacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
                 )}
               >
-                {/* Microcabecera de la idea: filtrado a una red no hay cabecera de grupo y sin
-                    esto no se sabe de qué marca/tema es cada pieza sin abrirla. */}
-                <CabeceraIdea
-                  marca={g.marca_nombre}
-                  titulo={g.titulo}
+                <GrupoIdea
+                  grupo={g}
+                  redes={redesAMostrar}
+                  columnas={colsEfectivas}
+                  // Con una marca activa en la topbar, repetirla en cada grupo compite con el título.
                   mostrarMarca={marcaActiva == null}
+                  // En las vistas filtradas el grupo enseña SOLO lo que cumple el filtro (sin
+                  // tarjetas ajenas); la matriz completa es de "Todo el feed".
+                  filtra={vista === "todo" ? undefined : vistaActual.filtra}
                 />
-                {p ? (
-                  <PostFeed publicacion={p} />
-                ) : (
-                  <PlaceholderRed red={redesAMostrar[0]} titulo={g.titulo} />
-                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        ) : (
+          <div
+            className={
+              colsEfectivas === 1
+                ? "space-y-4"
+                : cn("grid items-start gap-4", GRID_COLS[colsEfectivas])
+            }
+            role="feed"
+            aria-busy={isFetchingNextPage}
+          >
+            {gruposVista.map((g) => {
+              const p = g.piezas.find(
+                (x) =>
+                  x.red === redesAMostrar[0] && (vista === "todo" || vistaActual.filtra(x)),
+              );
+              return (
+                <div
+                  key={g.id}
+                  id={anclaFeed(g.id)}
+                  className={cn(
+                    // Cada pieza es un punto de snap (sin margen superior: encaja arriba del todo).
+                    "snap-start rounded-xl transition-shadow",
+                    g.id === piezaDestacada &&
+                      "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                  )}
+                >
+                  {/* Microcabecera de la idea: filtrado a una red no hay cabecera de grupo y sin
+                      esto no se sabe de qué marca/tema es cada pieza sin abrirla. Variante
+                      "micro": se repite en CADA celda y no debe gritar como inicio de sección. */}
+                  <CabeceraIdea
+                    marca={g.marca_nombre}
+                    titulo={g.titulo}
+                    mostrarMarca={marcaActiva == null}
+                    tamano="micro"
+                  />
+                  {p ? (
+                    <PostFeed publicacion={p} />
+                  ) : (
+                    <PlaceholderRed red={redesAMostrar[0]} titulo={g.titulo} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-      {/* SCROLL INFINITO: el sentinel (invisible) dispara la carga de la siguiente página al
-          acercarse al fondo. Se monta SIEMPRE que queden páginas (también con la vista filtrada
-          vacía: así la paginación no muere afirmando un vacío falso); el tope del lote lo
-          apaga sin desmontarlo. El pie (`PieFeed`) da feedback sin saltos de layout. */}
-      {!feedQuery.isLoading && !cargandoCatalogo && !feedQuery.isError && (
-        <>
-          {hasNextPage && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
-          {gruposVista.length > 0 &&
-            (isFetchingNextPage ? (
-              <PieFeed estado="cargando" />
-            ) : !hasNextPage ? (
-              <PieFeed estado="fin" />
-            ) : null)}
-        </>
-      )}
+        {/* SCROLL INFINITO: el sentinel (invisible) dispara la carga de la siguiente página al
+            acercarse al fondo. Se monta SIEMPRE que queden páginas (también con la vista filtrada
+            vacía: así la paginación no muere afirmando un vacío falso); el tope del lote y un
+            error de "cargar más" lo apagan sin tirar el feed. El pie (`PieFeed`) da feedback sin
+            saltos de layout, y en error ofrece reintentar SOLO la página fallida. */}
+        {!feedQuery.isLoading &&
+          !cargandoCatalogo &&
+          !(feedQuery.isError && piezas.length === 0) && (
+            <>
+              {hasNextPage && !feedQuery.isError && (
+                <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+              )}
+              {gruposVista.length > 0 &&
+                (feedQuery.isError ? (
+                  <PieFeed estado="error" onReintentar={() => void fetchNextPage()} />
+                ) : isFetchingNextPage ? (
+                  <PieFeed estado="cargando" />
+                ) : !hasNextPage ? (
+                  <PieFeed estado="fin" />
+                ) : null)}
+            </>
+          )}
+      </div>
     </div>
     </CadenasLoteContexto.Provider>
   );

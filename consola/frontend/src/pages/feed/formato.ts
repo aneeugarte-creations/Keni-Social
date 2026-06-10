@@ -31,7 +31,10 @@ export const GRID_COLS: Record<number, string> = {
  * los TRES contenedores del feed (skeleton, grupos y rejilla plana) con `mx-auto w-full`.
  */
 export const MAX_W_FEED: Record<number, string> = {
-  1: "max-w-2xl",
+  // A 1 columna el tope respeta la regla de arriba: 576px (cercano al canon de feed social
+  // ~600px) e igualado con el `max-w-xl` del feed móvil. Con `max-w-2xl` (672px) la imagen
+  // 4:5 medía ~840px de alto y la línea de copy llegaba a ~90 caracteres.
+  1: "max-w-xl",
   2: "max-w-4xl",
   3: "max-w-6xl",
   4: "max-w-screen-2xl",
@@ -39,9 +42,10 @@ export const MAX_W_FEED: Record<number, string> = {
 };
 
 // Pares de tono CANÓNICOS del design system (mismos 700/300 que `ui/badge.tsx` y
-// `META_ESTADOS`): un solo verde para "OK/lista" y un solo rojo para "rechazo/error"
-// en toda la tarjeta del feed.
+// `META_ESTADOS`): un solo verde para "OK/lista", un solo ámbar para "pendiente/atención"
+// y un solo rojo para "rechazo/error" en toda la tarjeta del feed.
 export const TEXTO_OK = "text-emerald-700 dark:text-emerald-300";
+export const TEXTO_AVISO = "text-amber-700 dark:text-amber-300";
 export const TEXTO_ERROR = "text-red-700 dark:text-red-300";
 
 /**

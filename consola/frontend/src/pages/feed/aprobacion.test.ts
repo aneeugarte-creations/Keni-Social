@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CadenaAprobacion, NivelAprobacion } from "@/types";
 
-import { elegibilidadOK } from "./aprobacion";
+import { elegibilidadOK, esDislikeDecisivo, umbralDislikes } from "./aprobacion";
 
 function nivel(over: Partial<NivelAprobacion>): NivelAprobacion {
   return {
@@ -96,5 +96,42 @@ describe("elegibilidadOK · quién puede dar el OK (me gusta)", () => {
     const e = elegibilidadOK(c, { id: "u1", rol: "editor" }, "autorX");
     expect(e.puedeDar).toBe(false);
     expect(e.motivo).toMatch(/verificación de la IA/i);
+  });
+});
+
+describe("umbralDislikes / esDislikeDecisivo · cuándo el dislike rechaza la pieza", () => {
+  it("umbral 2 con dos (o más) niveles humanos; 1 en cadenas de un solo humano", () => {
+    expect(umbralDislikes(cadenaOK())).toBe(2);
+    expect(umbralDislikes({ niveles: [nivel({ id: "n1" })] })).toBe(1);
+  });
+
+  it("el nivel de IA (QA Editorial) no cuenta como humano para el umbral", () => {
+    const c = {
+      niveles: [
+        nivel({ id: "qa", etiqueta: "QA Editorial" }),
+        nivel({ id: "n1", nivel: 2, etiqueta: "Edición" }),
+      ],
+    };
+    expect(umbralDislikes(c)).toBe(1);
+    // Y al ser umbral 1, el primer dislike ya es decisivo.
+    expect(esDislikeDecisivo(c)).toBe(true);
+  });
+
+  it("con dos humanos y sin dislikes, el PRIMER dislike no es decisivo", () => {
+    expect(esDislikeDecisivo(cadenaOK())).toBe(false);
+  });
+
+  it("con un dislike ya puesto (dos humanos), el siguiente ES decisivo", () => {
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", etiqueta: "Edición", decision: "rechazado", decisor_id: "ana" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
+      ],
+    });
+    expect(esDislikeDecisivo(c)).toBe(true);
+  });
+
+  it("cadena de UN nivel humano: el primer dislike ya es decisivo", () => {
+    expect(esDislikeDecisivo({ niveles: [nivel({ id: "n1" })] })).toBe(true);
   });
 });

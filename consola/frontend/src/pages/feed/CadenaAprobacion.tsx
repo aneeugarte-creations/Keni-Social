@@ -19,7 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { plural } from "@/lib/formato";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
-import { TEXTO_ERROR, TEXTO_OK } from "./formato";
+import { umbralDislikes } from "./aprobacion";
+import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 
 /** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada. */
 const ETIQUETA_QA = "qa editorial";
@@ -61,9 +62,9 @@ export function CadenaAprobacion({
   const okDados = humanos.filter((n) => n.decision === "aprobado");
   const disDados = humanos.filter((n) => n.decision === "rechazado");
   const totalOK = humanos.length || 1;
-  // Dos dislikes (de dos personas) rechazan la pieza; en una cadena más corta basta con tantos
-  // como niveles tenga. Espeja `dominio.colaboracion.umbral_rechazo`.
-  const umbralDislike = Math.min(2, humanos.length || 1);
+  // Dos dislikes (de dos personas) rechazan la pieza; la regla vive en `aprobacion.ts`
+  // (fuente única, junto a `esDislikeDecisivo`).
+  const umbralDislike = umbralDislikes(cadena);
   const ia = pintaIA(nivelIA, veredictoIA);
 
   const lista = cadena.estado === "aprobado";
@@ -128,7 +129,7 @@ export function CadenaAprobacion({
 
       {/* Lo que falta: comentarios sin resolver (bloquean publicar, como en un PR). */}
       {sinResolver > 0 && (
-        <p className="mt-2 flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-300">
+        <p className={`mt-2 flex items-center gap-1.5 text-sm ${TEXTO_AVISO}`}>
           <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
           Falta resolver {plural(sinResolver, "comentario")} antes de publicar
         </p>

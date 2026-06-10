@@ -99,7 +99,8 @@ function PlaceholderImagen({ className }: { className?: string }) {
       )}
     >
       <ImageIcon className="h-7 w-7 opacity-70" />
-      <span className="text-[11px] font-medium">Sin imagen</span>
+      {/* text-xs (no text-[11px]): en escala con el "No generado" del PlaceholderRed contiguo. */}
+      <span className="text-xs font-medium">Sin imagen</span>
     </div>
   );
 }
@@ -277,7 +278,7 @@ function PreviaX({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
           {(imagen || copyIn?.trim()) && (
             <div className="relative mt-3 aspect-[4/5] w-full overflow-hidden rounded-2xl border border-border">
               {imagen ? (
-                <img src={imagen} alt="" className="h-full w-full object-cover" />
+                <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
               ) : (
                 <PlaceholderImagen className="h-full w-full" />
               )}
@@ -321,7 +322,7 @@ function PreviaInstagram({ marca, contenido, copyIn, imagen, limpia }: MockupPro
       </div>
       <div className="relative aspect-[4/5] w-full overflow-hidden">
         {imagen ? (
-          <img src={imagen} alt="" className="h-full w-full object-cover" />
+          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
         ) : (
           <PlaceholderImagen className="h-full w-full" />
         )}
@@ -365,7 +366,7 @@ function PreviaFacebook({ marca, contenido, copyIn, imagen, limpia }: MockupProp
       </div>
       {imagen ? (
         <div className="relative aspect-[4/5] w-full overflow-hidden">
-          <img src={imagen} alt="" className="h-full w-full object-cover" />
+          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
           <CapaCopyIn texto={copyIn} />
         </div>
       ) : null}
@@ -392,7 +393,7 @@ function PreviaTikTok({ marca, contenido, copyIn, imagen, limpia }: MockupProps)
     <div className="mx-auto w-full max-w-sm">
       <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-black">
         {imagen ? (
-          <img src={imagen} alt="" className="h-full w-full object-cover" />
+          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-neutral-800 to-black text-neutral-500">
             <Play className="h-12 w-12" />
@@ -438,7 +439,7 @@ function PreviaYouTube({ marca, contenido, copyIn, imagen, limpia }: MockupProps
     <div className="mx-auto max-w-md text-sm">
       <div className="relative aspect-[4/5] overflow-hidden rounded-xl border border-border bg-muted">
         {imagen ? (
-          <img src={imagen} alt="" className="h-full w-full object-cover" />
+          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
         ) : (
           <PlaceholderImagen className="h-full w-full" />
         )}
@@ -524,18 +525,19 @@ export function VistaPreviaRed({
           }
         >
           {imagen ? (
-            <img src={imagen} alt={titulo ?? ""} className="h-full w-full object-cover" />
+            <img src={imagen} alt={titulo ?? ""} loading="lazy" decoding="async" className="h-full w-full object-cover" />
           ) : (
             <PlaceholderImagen className="h-full w-full" />
           )}
           {/* El copy-in solo cuando NO hay imagen: si hay placa compuesta, el texto va horneado. */}
           <CapaCopyIn texto={imagen ? "" : copy_in} />
-          {/* Affordance de edición: el área interactiva se anuncia al hover/focus (en táctil la
-              guía la dan los toasts con acción "Abrir"). Decorativo: el nombre accesible ya lo
-              lleva el contenedor. */}
+          {/* Affordance de edición: el área interactiva se anuncia al hover/focus y, en
+              dispositivos SIN hover (táctil), queda SIEMPRE visible — es la única señal de que
+              la imagen abre el editor. Decorativo: el nombre accesible ya lo lleva el
+              contenedor. */}
           {onAbrir && (
             <span
-              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
               aria-hidden="true"
             >
               <Pencil className="h-3 w-3" />

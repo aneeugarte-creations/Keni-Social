@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
-import { formatearFechaHoraCorta } from "@/lib/fecha";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
+import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import type { Publicacion, UsuarioSesion } from "@/types";
 
 import { PostFeed } from "./PostFeed";
@@ -71,17 +72,22 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
     refrescar: vi.fn(),
   };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const res = render(
     <MemoryRouter>
       <QueryClientProvider client={client}>
         <SesionContexto.Provider value={valor}>
-          <PostFeed publicacion={publicacion} />
-          {/* La confirmación imperativa (`confirmar`) necesita su contenedor montado. */}
-          <ContenedorConfirmacion />
+          {/* Comentarios (el hilo en línea) consume la marca activa. */}
+          <MarcaActivaProvider>
+            <PostFeed publicacion={publicacion} />
+            {/* La confirmación imperativa (`confirmar`) necesita su contenedor montado. */}
+            <ContenedorConfirmacion />
+          </MarcaActivaProvider>
         </SesionContexto.Provider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
+  // `client` expuesto para espiar invalidaciones de caché (p. ej. los conteos de pestañas).
+  return { ...res, client };
 }
 
 /** Stub de fetch para los flujos de aprobación: cadena de UN nivel humano pendiente (el
@@ -499,20 +505,29 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
   });
 
-  it("fecha de salida: programada en ámbar con CalendarClock y nombre accesible; publicada neutra", () => {
+  it("fecha de salida: neutra (el ámbar lo porta el badge) y, programada, es el puente a Programación", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
     const fecha = "2026-06-12T10:00:00Z";
+    const corta = formatearFechaHoraCorta(fecha);
+    const completa = formatearFechaHora(fecha); // el hover/nombre lleva el dato COMPLETO (con año)
     const { unmount } = renderPost(
       pub({ estado: "programado", etapa_ia: "programada", fecha_programada: fecha }),
     );
-    const texto = formatearFechaHoraCorta(fecha);
-    // El sr-only dice QUÉ fecha es; el title la refuerza al hover; el tono es ámbar (pendiente).
-    expect(screen.getByText(`Programada para ${texto}`)).toBeInTheDocument();
-    expect(screen.getByTitle(`Programada para ${texto}`).className).toContain("text-amber-700");
+    // Programada: la fecha enlaza a la página de Programación (tratamiento discreto, sin
+    // duplicar el ámbar que ya lleva el badge de etapa).
+    const enlace = screen.getByRole("link", {
+      name: `Programada para ${completa} — ver en Programación`,
+    });
+    expect(enlace).toHaveAttribute("href", "/operacion/programacion");
+    expect(enlace).toHaveTextContent(corta);
+    expect(enlace.className).toContain("text-muted-foreground");
+    expect(enlace.className).not.toContain("amber");
     unmount();
     renderPost(pub({ estado: "publicado", etapa_ia: "publicada", fecha_programada: fecha }));
-    expect(screen.getByText(`Publicada el ${texto}`)).toBeInTheDocument();
-    expect(screen.getByTitle(`Publicada el ${texto}`).className).toContain("text-muted-foreground");
+    // Publicada: span inerte (no hay a dónde ir), con la fecha completa en title y sr-only.
+    expect(screen.getByText(`Publicada el ${completa}`)).toBeInTheDocument();
+    expect(screen.getByTitle(`Publicada el ${completa}`).className).toContain("text-muted-foreground");
+    expect(screen.queryByRole("link", { name: /Programación/ })).not.toBeInTheDocument();
   });
 
   it("editar una pieza PUBLICADA avisa con el mensaje específico (ya salió a la red)", async () => {
@@ -523,5 +538,247 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     renderPost(pub({ estado: "publicado", etapa_ia: "publicada" }));
     fireEvent.click(screen.getByRole("button", { name: /abrir para editar/i }));
     expect(await screen.findByText(/ya salió a la red/i)).toBeInTheDocument();
+  });
+
+  it("el metadato del último OK trunca (no desborda la celda con nombres largos)", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    renderPost(
+      pub({
+        estado: "aprobado",
+        etapa_ia: "aprobada",
+        revisor_nombre: "Coordinadora Editorial Larguísima De Verdad",
+      }),
+    );
+    const ok = screen.getByTitle("Último OK");
+    expect(ok.className).toContain("truncate");
+    expect(ok.className).toContain("max-w-[12rem]");
+  });
+
+  it("el dislike DECISIVO pide confirmación (los OK se pierden) antes de rechazar", async () => {
+    // Cadena de UN nivel humano: el umbral de rechazo es 1, así que el primer dislike ya es
+    // decisivo. OJO al orden del stub: /aprobacion/p1/rechazar contiene también "/aprobacion".
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        urls.push(ruta);
+        if (ruta.includes("/rechazar")) {
+          return new Response(
+            JSON.stringify({ publicacion: pub({ estado: "borrador" }) }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({
+              niveles: [
+                {
+                  id: "n1",
+                  plataforma_id: "p1",
+                  contenido_id: "c1",
+                  nivel: 1,
+                  etiqueta: "Edición",
+                  decision: "pendiente",
+                  decisor_id: "",
+                  decisor_nombre: "",
+                  comentario: "",
+                  creado: "",
+                  decidido_en: "",
+                  cargo_requerido: "",
+                },
+              ],
+              estado: "pendiente",
+              nivel_actual: "n1",
+              aprobados: 0,
+              minimo_aprobaciones: 0,
+              comentarios_sin_resolver: 0,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    expect(await screen.findByText("0/1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "No me gusta" }));
+    // El confirm de la casa, ANTES de pedir nada al backend.
+    expect(await screen.findByText("Rechazar la pieza")).toBeInTheDocument();
+    expect(urls.some((u) => u.includes("/rechazar"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Rechazar" }));
+    await waitFor(() => expect(urls.some((u) => u.includes("/rechazar"))).toBe(true));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Pieza rechazada: vuelve a redacción."),
+    );
+  });
+
+  it("el PRIMER dislike (no decisivo) va directo y abre el hilo para apuntar el motivo", async () => {
+    // Cadena de DOS niveles humanos sin dislikes: el primero NO es decisivo (umbral 2):
+    // ni confirmación ni fricción, pero el hilo se abre (la objeción necesita su porqué).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/rechazar")) {
+          return new Response(
+            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({
+              niveles: [
+                {
+                  id: "n1",
+                  plataforma_id: "p1",
+                  contenido_id: "c1",
+                  nivel: 1,
+                  etiqueta: "Edición",
+                  decision: "pendiente",
+                  decisor_id: "",
+                  decisor_nombre: "",
+                  comentario: "",
+                  creado: "",
+                  decidido_en: "",
+                  cargo_requerido: "",
+                },
+                {
+                  id: "n2",
+                  plataforma_id: "p1",
+                  contenido_id: "c1",
+                  nivel: 2,
+                  etiqueta: "Coordinación",
+                  decision: "pendiente",
+                  decisor_id: "",
+                  decisor_nombre: "",
+                  comentario: "",
+                  creado: "",
+                  decidido_en: "",
+                  cargo_requerido: "",
+                },
+              ],
+              estado: "pendiente",
+              nivel_actual: "n1",
+              aprobados: 0,
+              minimo_aprobaciones: 0,
+              comentarios_sin_resolver: 0,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    expect(await screen.findByText("0/2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "No me gusta" }));
+    // Sin confirmación (caso común, cero fricción)…
+    expect(screen.queryByText("Rechazar la pieza")).not.toBeInTheDocument();
+    // …el toast cuenta el desenlace real con Deshacer y el hilo queda abierto con el
+    // textarea a mano.
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Dislike registrado; con un segundo dislike la pieza se rechaza.",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Deshacer" }) }),
+      ),
+    );
+    expect(
+      await screen.findByPlaceholderText(/comentario para el equipo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("dislike con tu OK puesto: el toast trae la acción directa «Quitar mi OK» (toggle simétrico)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/deshacer")) {
+          return new Response(
+            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({
+              niveles: [
+                {
+                  id: "n1",
+                  plataforma_id: "p1",
+                  contenido_id: "c1",
+                  nivel: 1,
+                  etiqueta: "Edición",
+                  decision: "aprobado",
+                  decisor_id: "u1",
+                  decisor_nombre: "Revisor",
+                  comentario: "",
+                  creado: "",
+                  decidido_en: "",
+                  cargo_requerido: "",
+                },
+              ],
+              estado: "pendiente",
+              nivel_actual: "",
+              aprobados: 1,
+              minimo_aprobaciones: 0,
+              comentarios_sin_resolver: 0,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    // Con TU OK puesto el like es "Quitar tu OK"; el dislike no destruye nada por sí solo.
+    expect(await screen.findByRole("button", { name: "Quitar tu OK" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "No me gusta" }));
+    expect(toast).toHaveBeenCalledWith(
+      "Tu OK está puesto; vuelve a pulsar «Me gusta» para quitarlo.",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Quitar mi OK" }) }),
+    );
+  });
+
+  it("sin contenido_id, Comentar queda visible pero DESHABILITADO y lo explica", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    renderPost(pub({ contenido_id: "" }));
+    const boton = screen.getByRole("button", {
+      name: "Esta pieza no tiene hilo de comentarios",
+    });
+    expect(boton).toBeDisabled();
+  });
+
+  it("una reacción que CAMBIA el estado invalida los conteos de las pestañas (el badge no miente)", async () => {
+    stubFetchAprobacion("aprobado"); // la pieza pasa de en_revision -> aprobado
+    const { client } = renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    const spy = vi.spyOn(client, "invalidateQueries");
+    expect(await screen.findByText("0/1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Dale tu OK" }));
+    await waitFor(() =>
+      expect(
+        spy.mock.calls.some((c) =>
+          JSON.stringify((c[0] as { queryKey?: unknown })?.queryKey ?? []).includes("conteo-feed"),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("una reacción que NO cambia el estado deja los conteos en paz (3 fetch ahorrados)", async () => {
+    stubFetchAprobacion("en_revision"); // OK parcial: la pieza sigue en revisión
+    const { client } = renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    const spy = vi.spyOn(client, "invalidateQueries");
+    expect(await screen.findByText("0/1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Dale tu OK" }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(
+      spy.mock.calls.some((c) =>
+        JSON.stringify((c[0] as { queryKey?: unknown })?.queryKey ?? []).includes("conteo-feed"),
+      ),
+    ).toBe(false);
   });
 });

@@ -119,11 +119,11 @@ function sesion(usuario: Partial<UsuarioSesion> = {}): ValorSesion {
   };
 }
 
-function arbol(valor: ValorSesion, client: QueryClient) {
+function arbol(valor: ValorSesion, client: QueryClient, ruta = "/") {
   return (
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={valor}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[ruta]}>
           <MobileFeed />
         </MemoryRouter>
       </SesionContexto.Provider>
@@ -131,9 +131,9 @@ function arbol(valor: ValorSesion, client: QueryClient) {
   );
 }
 
-function renderFeed(usuario: Partial<UsuarioSesion> = {}) {
+function renderFeed(usuario: Partial<UsuarioSesion> = {}, ruta = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(arbol(sesion(usuario), client));
+  return render(arbol(sesion(usuario), client, ruta));
 }
 
 describe("MobileFeed · feed móvil de revisión", () => {
@@ -144,13 +144,21 @@ describe("MobileFeed · feed móvil de revisión", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera compacta, las bandejas y el botón de crear", async () => {
+  it("muestra la cabecera compacta, las MISMAS 4 vistas del escritorio y el botón de crear", async () => {
     stubFetch();
     renderFeed();
     // El título queda solo para lectores de pantalla (sr-only): la cabecera no gasta una fila.
     expect(await screen.findByText("Feed de revisión")).toBeInTheDocument();
-    // Mismo vocabulario que el feed de escritorio: "Por aprobar" (el OK), no "Por revisar".
-    expect(screen.getByRole("tab", { name: "Por aprobar" })).toBeInTheDocument();
+    // La partición compartida (vistas.tsx): el móvil ya no es una superficie capada con 2
+    // bandejas; mismo vocabulario que el escritorio. Por defecto manda "Por aprobar".
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    expect(screen.getByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /En preparación/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Actualizar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear pieza/i })).toBeInTheDocument();
     // Con UNA sola marca asignada el selector de marca no es una decisión: no se pinta.
@@ -177,33 +185,42 @@ describe("MobileFeed · feed móvil de revisión", () => {
     expect(screen.queryByRole("button", { name: /^aprobar$/i })).not.toBeInTheDocument();
   });
 
-  it("el imán Reels vive en el SCROLLER propio de la pantalla, no en el documento", async () => {
+  it("el imán Reels vive en el SCROLLER propio de la pantalla, con geometría MEDIDA", async () => {
     // El CSS global bloquea el scroll de html/body (anti rubber-band iOS): un snap puesto
     // en el documento es INERTE (así se perdió el imán del feed). Contrato: el div raíz
     // del feed es el scroller (un viewport de alto, scroll interno) y lleva el snap
-    // obligatorio + scroll-padding para la cabecera sticky.
+    // obligatorio + scroll-padding con la altura REAL de la cabecera (variable CSS escrita
+    // por ResizeObserver; aquí en jsdom valen los fallbacks del style).
     stubFetch();
     renderFeed();
     const titulo = await screen.findByText("Feed de revisión");
-    const raiz = titulo.closest(".snap-y");
+    const raiz = titulo.closest(".snap-y") as HTMLElement | null;
     expect(raiz).not.toBeNull();
     expect(raiz!.className).toContain("snap-mandatory");
     expect(raiz!.className).toContain("h-dvh");
     expect(raiz!.className).toContain("overflow-y-auto");
-    expect(raiz!.className).toContain("scroll-pt-24");
+    expect(raiz!.style.scrollPaddingTop).toBe("var(--feed-top)");
+    expect(raiz!.style.getPropertyValue("--feed-top")).toBe("6rem");
+    expect(raiz!.style.getPropertyValue("--feed-bottom")).toBe("4.5rem");
     // El documento queda intacto (ya no hay estilos que poner/revertir ahí).
     expect(document.documentElement.style.scrollSnapType).toBe("");
   });
 
-  it("cada pieza vive en un slot de un viewport con snap obligatorio (estilo Reels)", async () => {
+  it("cada pieza vive en un slot de un viewport MEDIDO (sin franja ocluida) y operable por teclado", async () => {
     stubFetch();
     renderFeed();
     const post = await screen.findByText("¡Increíble remontada!");
     const slot = post.closest(".snap-start");
     expect(slot).not.toBeNull();
     expect(slot!.className).toContain("snap-always");
-    expect(slot!.className).toContain("h-[calc(100dvh-7rem)]");
+    // Alto = viewport menos cabecera y barra inferior REALES (variables medidas): la fila de
+    // acciones nunca scrollea hacia la zona tapada por la barra fija "Crear pieza".
+    expect(slot!.className).toContain("h-[calc(100dvh-var(--feed-top)-var(--feed-bottom))]");
     expect(slot!.className).toContain("overflow-y-auto");
+    // El scroll INTERNO del slot es operable por teclado (WCAG 2.1.1) y se anuncia con nombre.
+    expect(slot).toHaveAttribute("tabindex", "0");
+    expect(slot).toHaveAttribute("role", "group");
+    expect(slot).toHaveAttribute("aria-label", "Gol de último minuto");
   });
 
   it("feed agotado con piezas: pinta el fin del feed", async () => {
@@ -315,5 +332,43 @@ describe("MobileFeed · feed móvil de revisión", () => {
     // y el listado pasa a pedirse acotado a esa marca (las altas rápidas ya no nacen huérfanas).
     rerender(arbol(sesion({ marcas: ["unotv"] }), client));
     await waitFor(() => expect(urls.some((u) => u.includes("marca=unotv"))).toBe(true));
+  });
+
+  it("deep-link ?vista= y ?marca=: arranca en la vista y marca de la URL", async () => {
+    stubFetch();
+    const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      urls.push(String(url));
+      return base(url);
+    });
+    renderFeed({ marcas: ["unotv", "claro-sports"] }, "/?vista=preparacion&marca=claro-sports");
+    await screen.findByText("Feed de revisión");
+    expect(screen.getByRole("tab", { name: /En preparación/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // La consulta dedicada va al servidor con el estado de la vista Y la marca de la URL.
+    await waitFor(() =>
+      expect(
+        urls.some((u) => u.includes("estado=borrador") && u.includes("marca=claro-sports")),
+      ).toBe(true),
+    );
+  });
+
+  it("el parámetro LEGADO ?bandeja=aprobado mapea a la vista 'Aprobadas y publicadas'", async () => {
+    stubFetch();
+    renderFeed({}, "/?bandeja=aprobado");
+    await screen.findByText("Feed de revisión");
+    // Los deep-links compartidos antes de unificar las superficies siguen aterrizando bien.
+    expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // La única pieza del stub está en revisión y el feed está agotado: vacío honesto de la
+    // vista, con el MISMO vocabulario que el escritorio.
+    expect(
+      await screen.findByText("Sin piezas aprobadas ni publicadas"),
+    ).toBeInTheDocument();
   });
 });

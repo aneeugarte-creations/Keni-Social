@@ -7,6 +7,7 @@
 import { Loader2 } from "lucide-react";
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -47,15 +48,40 @@ export function useSentinelInfinito({
 }
 
 /**
- * Pie del feed, con UN solo estilo para los tres estados: "buscando" (vista filtrada vacía
- * rastreando páginas), "cargando" (scroll infinito trayendo más) y "fin" (feed agotado).
+ * Pie del feed, con UN solo estilo para sus estados: "buscando" (vista filtrada vacía
+ * rastreando páginas), "cargando" (scroll infinito trayendo más), "fin" (feed agotado) y
+ * "error" (falló el "cargar más": el feed visible se conserva y aquí se reintenta SOLO la
+ * página fallida, no un refetch en serie de todas las cargadas).
  */
-export function PieFeed({ estado }: { estado: "buscando" | "cargando" | "fin" }) {
+export function PieFeed({
+  estado,
+  onReintentar,
+}: {
+  estado: "buscando" | "cargando" | "fin" | "error";
+  /** Reintento de la página fallida (estado "error"): normalmente `fetchNextPage`. */
+  onReintentar?: () => void;
+}) {
   if (estado === "fin") {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
         Has llegado al final del feed.
       </p>
+    );
+  }
+  if (estado === "error") {
+    return (
+      <div
+        className="flex items-center justify-center gap-3 py-6 text-sm text-muted-foreground"
+        role="status"
+        aria-live="polite"
+      >
+        <span>No se pudo cargar más.</span>
+        {onReintentar && (
+          <Button variant="outline" size="sm" onClick={onReintentar}>
+            Reintentar
+          </Button>
+        )}
+      </div>
     );
   }
   return (
@@ -77,17 +103,25 @@ export function PieFeed({ estado }: { estado: "buscando" | "cargando" | "fin" })
  */
 export function SkeletonPost() {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="px-4 py-3">
+    // Paddings y sombra ESPEJO de la anatomía de PostFeed/PlaceholderRed (shadow-sm; header
+    // px-4 pb-2 pt-3; copy px-4 pt-3 pb-1 + fila h-5 del "leer más"; acciones px-4 pt-1 pb-2):
+    // si cambia uno, cambiar el otro — el contenido debe aterrizar sin micro-saltos de altura
+    // ni cambio de relieve.
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="px-4 pb-2 pt-3">
         <Skeleton className="h-4 w-1/3" />
       </div>
       <Skeleton className="aspect-[4/5] w-full rounded-none" />
-      <div className="space-y-2 px-4 py-3">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-2/3" />
+      <div className="px-4 pb-1 pt-3">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+        {/* Fila reservada del "leer más" (ver CopyConLeerMas). */}
+        <div className="h-5" />
       </div>
       {/* Pie con la anatomía real de la fila de acciones: badge de etapa (izq) + iconos (der). */}
-      <div className="flex items-center justify-between px-4 pb-3">
+      <div className="flex items-center justify-between px-4 pb-2 pt-1">
         <Skeleton className="h-5 w-24 rounded-md" />
         <div className="flex gap-1">
           <Skeleton className="h-8 w-8 rounded-md" />

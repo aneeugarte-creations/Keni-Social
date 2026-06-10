@@ -80,12 +80,20 @@ export function CabeceraIdea({
   titulo,
   mostrarMarca = true,
   derecha,
+  tamano = "grupo",
 }: {
   marca: string;
   titulo: string;
   mostrarMarca?: boolean;
   /** Metadatos a la derecha (fecha/fuente de la nota original). */
   derecha?: React.ReactNode;
+  /**
+   * "grupo" (default): cabecera de SECCIÓN de la matriz por idea (16px semibold, 2 líneas).
+   * "micro": la microcabecera que se repite sobre CADA celda de la rejilla plana — más
+   * pequeña y a 1 línea para no gritar como un inicio de sección a 3-5 columnas (el `title`
+   * conserva el texto completo). El color no cambia: sigue siendo el ancla de la celda.
+   */
+  tamano?: "grupo" | "micro";
 }) {
   return (
     <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pb-2 text-xs text-muted-foreground">
@@ -95,10 +103,16 @@ export function CabeceraIdea({
           <span aria-hidden="true">·</span>
         </>
       )}
-      {/* <h3>: los lectores de pantalla saltan de idea en idea. `line-clamp-2` (no truncate):
-          en pantallas estrechas el ancla de lectura no se queda en 2-4 caracteres. */}
+      {/* <h3>: los lectores de pantalla saltan de idea en idea. En "grupo", `line-clamp-2`
+          (no truncate): en pantallas estrechas el ancla de lectura no se queda en 2-4
+          caracteres. */}
       <h3
-        className="min-w-0 flex-1 line-clamp-2 text-base font-semibold text-foreground"
+        className={cn(
+          "min-w-0 flex-1 text-foreground",
+          tamano === "micro"
+            ? "line-clamp-1 text-sm font-medium"
+            : "line-clamp-2 text-base font-semibold",
+        )}
         title={titulo}
       >
         {titulo || "Sin título"}
