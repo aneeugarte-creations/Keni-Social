@@ -142,7 +142,7 @@ def test_crud_grupos_hashtags(entorno):
 
 def test_crud_franjas_editoriales(entorno):
     f = db.crear_franja(2, "09:00", marca="unotv", red="x")
-    assert set(f) == {"id", "marca", "red", "dia_semana", "hora"}
+    assert set(f) == {"id", "marca", "red", "dia_semana", "hora", "categoria"}
     assert f["dia_semana"] == 2
     assert any(x["id"] == f["id"] for x in db.listar_franjas())
     # Orden determinista por (dia_semana, hora, id).
