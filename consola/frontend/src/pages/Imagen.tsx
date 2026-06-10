@@ -20,7 +20,7 @@
 // de autoguardado local (claveAuto) o del servidor.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plug, FileUp, Image, Plus, Save, SaveAll, Video, X } from "lucide-react";
+import { FileUp, Image, Plus, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -37,9 +37,6 @@ import { documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
-import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
-import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import { CATEGORIAS_PLANTILLA } from "@/lib/categoriasPlantilla";
 import { prepararDocumento } from "@/lib/placa/docPieza";
 
@@ -135,7 +132,6 @@ export default function Imagen() {
   const marcaInicial = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : marcas[0]?.id;
 
   const [searchParams] = useSearchParams();
-  const [conexionAbierta, setConexionAbierta] = useState(false);
 
   const [pestanas, setPestanas] = useState<Pestana[]>([]);
   const [activa, setActiva] = useState<string | null>(null);
@@ -933,21 +929,6 @@ export default function Imagen() {
         </DialogContent>
       </Dialog>
 
-      {/* Ajuste CONTEXTUAL (admin): la clave/modelo del proveedor de imagen alimenta el
-          «Generar con IA» de ESTE estudio; se configura aquí, en un diálogo (reparto:
-          cada ajuste en su página). El propio panel se oculta a un editor. */}
-      <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu icono={Plug} onClick={() => setConexionAbierta(true)}>
-            Proveedor de imagen…
-          </ItemMenu>
-        </MenuAcciones>
-      </AccionesPagina>
-      <Dialog open={conexionAbierta} onOpenChange={setConexionAbierta}>
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-          <SeccionImagen />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

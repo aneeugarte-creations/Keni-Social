@@ -46,6 +46,7 @@ import {
   useGuardarAjuste,
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionEsfuerzo } from "@/pages/configuracion/SeccionEsfuerzo";
+import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import { PanelSalud } from "@/pages/sistema/PanelSalud";
 import type { ColaJob, ColaSerie, PresupuestoIA } from "@/types";
 
@@ -431,6 +432,10 @@ export default function Monitor() {
            conexiones). */
         <div className="space-y-4">
           <PanelMaquinaContenido />
+          {/* El proveedor de imagen IA alimenta la etapa ARTE del pipeline (autogen-arte
+              y el «Generar con IA»): se configura junto a la máquina que lo consume, no
+              en el editor de plantillas. Se oculta solo a un editor. */}
+          <SeccionImagen />
           <PanelAjustes
             ids={GRUPOS_SISTEMA}
             titulo="Sistema"
