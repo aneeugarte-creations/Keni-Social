@@ -808,6 +808,82 @@ def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):
     assert pc.temas_en_vuelo("unotv") == 4
 
 
+# --------------------------------------------------------------------------- #
+# FRESCURA: caducidad TTL de temas en vuelo (ventana deslizante)               #
+# --------------------------------------------------------------------------- #
+
+
+def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
+    """Un tema EN VUELO que supera el TTL caduca: sale del gate serial (libera hueco para lo
+    fresco del ranking) y NINGUNA fase lo retoma (ni QA lo criba ni CD le genera copy)."""
+    from datetime import datetime, timedelta, timezone
+
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="Atascado", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Apto viejo", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    assert pc.temas_en_vuelo("unotv") == 2
+
+    futuro = datetime.now(timezone.utc) + timedelta(hours=25)  # > TTL (def 24 h)
+    assert pc.caducar_temas_viejos(ahora=futuro) == 2
+
+    # Liberan el gate, no se re-criban ni generan copy, y quedan marcados con el motivo.
+    assert pc.temas_en_vuelo("unotv") == 0
+    assert pc.temas_sin_qa() == []
+    assert pc.temas_para_copy() == []
+    temas = {t["titulo"]: t for t in pc.temas_pipeline()}
+    assert temas["Atascado"]["qa_veredicto"] == pc.QA_CADUCADA
+    assert "Caducada" in (temas["Atascado"].get("notas") or "")
+
+
+def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
+    """La caducidad NO toca lo fresco (dentro del TTL) ni lo que ya salió del vuelo
+    ('problema' terminal, o apto CON copy ya generado)."""
+    from datetime import datetime, timedelta, timezone
+
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="Fresco", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Problema viejo", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
+    con_copy = _tema_pipeline(
+        titulo="Con copy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+    )
+    repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
+
+    # Dentro del TTL: nada caduca (lo en vuelo sigue siendo fresco).
+    pronto = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert pc.caducar_temas_viejos(ahora=pronto) == 0
+    # Pasado el TTL: solo caduca el EN VUELO; terminal y con-copy intactos.
+    futuro = datetime.now(timezone.utc) + timedelta(hours=25)
+    assert pc.caducar_temas_viejos(ahora=futuro) == 1
+    temas = {t["titulo"]: t for t in pc.temas_pipeline()}
+    assert temas["Problema viejo"]["qa_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert temas["Con copy"]["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+
+
+def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
+    """Tras caducar el backlog, la admisión vuelve a tener cupo: entra lo fresco del ranking
+    (la historia top de HOY), no lo que quedó atascado ayer (sin colas intermedias)."""
+    from datetime import datetime, timedelta, timezone
+
+    from keni_consola.pipeline_contenido import _ingesta
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "1")
+    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)
+    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="Backlog vencido", qa_veredicto="", copy_pendiente=pend)
+    _sembrar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
+    # Con el backlog en vuelo, el cupo (1) está agotado: no entra nada.
+    assert pc._ejecutar_barrido()["temas"] == []
+    # Caduca el backlog (reloj adelantado > TTL) y el siguiente tick admite lo fresco.
+    assert _ingesta.caducar_temas_viejos(
+        ahora=datetime.now(timezone.utc) + timedelta(hours=25)
+    ) == 1
+    res = pc._ejecutar_barrido()
+    assert [t["titulo"] for t in res["temas"]] == ["Lo fresco de hoy"]
+
+
 def test_ci_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
     """Gate SERIAL: si la marca ya tiene >= cupo en vuelo, CI no promueve clusters nuevos."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)

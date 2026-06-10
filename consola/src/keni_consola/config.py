@@ -444,6 +444,7 @@ from .config_noticias import (  # noqa: F401
     perfil_editorial_ttl_horas,
     pipeline_activo,
     pipeline_en_vuelo_max,
+    pipeline_tema_ttl_horas,
     pipeline_max,
     promover_diversidad_umbral,
     promover_min_marca,

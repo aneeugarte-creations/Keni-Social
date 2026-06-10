@@ -804,6 +804,31 @@ def test_endpoint_responde_429_si_la_cola_esta_llena(entorno):
     assert "error" in r.json()
 
 
+def test_cola_llena_no_deja_cadaver_en_actividad(entorno, monkeypatch):
+    """Un lanzamiento rechazado por la admisión (cola llena/presupuesto/pausa) NO deja un
+    registro en error: el `claude -p` nunca ocurrió y el tick del pipeline reintenta cada
+    pocos segundos — dejarlo mintaba un "fallo" nuevo por intento y llenaba la Actividad
+    de cadáveres (la avalancha de 'QA fuente · Error' del piloto)."""
+    from keni_consola.dominio import generar as gen_dom
+    from keni_consola.dominio import jobspec
+
+    def _encolar_lleno(gen_id, **_kw):  # noqa: ANN001
+        raise runner.ColaLlenaError("La cola de generaciones está llena.")
+
+    monkeypatch.setattr(generaciones, "encolar_job_claude", _encolar_lleno)
+    antes = generaciones.contar()
+    with pytest.raises(runner.ColaLlenaError):
+        gen_dom.lanzar(
+            tipo="pipeline", titulo="Validación de la fuente", marca=_MARCA, prompt="p",
+            procesar=lambda salida, metricas: {}, procesar_spec=jobspec.construir_hashtags(),
+        )
+    # El registro del intento se BORRÓ: la Actividad queda limpia (mismo conteo que antes).
+    assert generaciones.contar() == antes
+    assert all(
+        g.get("motivo") != generaciones.MOTIVO_COLA_LLENA for g in generaciones.listar(limite=None)
+    )
+
+
 def test_endpoint_cancelar_404_si_no_existe(entorno):
     r = _cliente().post("/api/generaciones/noexiste/cancelar")
     assert r.status_code == 404

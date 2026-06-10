@@ -41,6 +41,7 @@ __all__ = [
     "_TITULO_QA",
     "QA_EN_CURSO",
     "QA_SALTADA",
+    "QA_CADUCADA",
     "VERDICTO_NO_VERIFICADO",
     "VERDICTO_PROBLEMA",
     "_DEFAULT_QA_CRITERIOS",
@@ -113,6 +114,10 @@ _FORMATO_PIPELINE = redes.FORMATO_FOTO
 # slug del título): "QA fuente" -> "prompt/qa-fuente". DISTINTO del QA de COPY (`prompt/qa-editorial`).
 PROMPT_QA_ID = "prompt/qa-fuente"
 _TITULO_QA = "QA fuente"
+# Etiqueta HUMANA de la generación de la criba (Actividad IA). DISTINTA del título del prompt
+# (`_TITULO_QA`, que NO puede cambiar: sluggea al id `prompt/qa-fuente`): en la vista Pipelines
+# la etapa se llama "Validación", y la actividad debe llamarse igual para no desconcertar.
+_ETIQUETA_QA = "Validación de la fuente"
 
 # Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
 # vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
@@ -124,6 +129,11 @@ QA_EN_CURSO = "en_curso"
 # igual que un `no_verificado`, así el copy se genera sin criba. La vista Pipelines pinta QA como
 # "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
 QA_SALTADA = "saltada"
+
+# Veredicto TERMINAL de FRESCURA: el tema superó el TTL en vuelo (`KENI_PIPELINE_TEMA_TTL_HORAS`)
+# sin completar sus fases y CADUCA: sale del gate serial (libera hueco de admisión), no se criba
+# ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
+QA_CADUCADA = "caducada"
 
 # Veredictos ESTRUCTURADOS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.

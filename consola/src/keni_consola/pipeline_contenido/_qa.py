@@ -16,6 +16,7 @@ from ..dominio import qa_editorial as dom_qa
 from . import _ref
 from ._comun import (
     _DEFAULT_QA_CRITERIOS,
+    _ETIQUETA_QA,
     _TITULO_QA,
     ETAPA_QA,
     PROMPT_QA_ID,
@@ -183,7 +184,10 @@ def lanzar_qa_fuente(
         _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
     gen = gen_dom.lanzar(
         tipo=TIPO_PIPELINE,
-        titulo=_TITULO_QA,
+        # Etiqueta HUMANA en Actividad: igual que la etapa de la vista Pipelines ("Validación"),
+        # no el nombre interno del prompt ("QA fuente"): la actividad y las etapas deben hablar
+        # el mismo idioma para el equipo.
+        titulo=_ETIQUETA_QA,
         marca=marca,
         prompt=prompt,
         procesar=dom_qa.construir_procesar_qa_fuente(

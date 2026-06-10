@@ -139,8 +139,9 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
 
 
 def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
-    """Una marca con 'Crear noticias' (CI) apagada SIGUE listando sus runs (la etapa CI se pinta
-    'saltada', pero la run NO desaparece): así no quedan posts en el feed sin pipeline que hallar.
+    """Una marca con 'Crear noticias' (CI) apagada SIGUE listando sus runs, y la etapa CI se
+    pinta por la EVIDENCIA, no por el toggle de hoy: el tema EXISTE, luego la selección corrió
+    ('ok'). Apagar el interruptor después no re-pinta la historia de la run.
     """
     monkeypatch.setattr(
         "keni_consola.ajustes.obtener",
@@ -154,7 +155,42 @@ def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
     assert "Run claro" in titulos  # ya NO se oculta
     claro = next(x for x in pipelines if x["titulo"] == "Run claro")
     ci = next(e for e in claro["etapas"] if e["clave"] == "ci")
-    assert ci["estado"] == "saltada"
+    assert ci["estado"] == "ok"  # la run existe: la selección CORRIÓ, diga lo que diga el toggle
+
+
+def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
+    """Una run COMPLETADA pinta sus etapas por lo EJECUTADO aunque hoy TODOS los toggles estén
+    apagados: encender/apagar interruptores no ilumina ni apaga la historia de las runs."""
+    tema = _tema_pipeline("Run histórica", qa_veredicto="no_verificado")
+    _historia_de(tema["id"], n_fuentes=3, n_items=4, score=0.8)
+    repos.crear_contenido_plataforma(
+        contenido_id=tema["id"], red="x", estado="aprobado",
+        copy="Copy hecho.", veredicto="no_verificado",
+    )
+    for env in (config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL,
+                config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+                config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE):
+        monkeypatch.delenv(env, raising=False)
+    run = _run_por_titulo(cliente, "Run histórica")
+    estados = {e["clave"]: e["estado"] for e in run["etapas"]}
+    assert estados["fusion"] == "ok"      # hay historia enlazada: la fusión corrió
+    assert estados["editorial"] == "ok"   # hay score: el encaje corrió
+    assert estados["ci"] == "ok"          # el tema existe: la selección corrió
+    assert estados["qa"] == "ok"          # veredicto persistido: la criba corrió
+    assert estados["cd"] == "ok"          # hay copy persistido: la etapa corrió
+
+
+def test_run_caducada_se_pinta_cerrada(cliente):
+    """Una run CADUCADA (TTL de frescura) queda CERRADA sin producto: Validación 'saltada' con
+    el motivo, Copy/Aprobación 'saltada' (no un 'pendiente' eterno) y estado_global 'ok'."""
+    _tema_pipeline("Run caducada", qa_veredicto="caducada")
+    run = _run_por_titulo(cliente, "Run caducada")
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["qa"]["estado"] == "saltada"
+    assert "Caducada" in etapas["qa"]["detalle"]
+    assert etapas["cd"]["estado"] == "saltada"
+    assert etapas["aprobacion"]["estado"] == "saltada"
+    assert run["estado_global"] == "ok"  # cerrada: no bloquea ni queda pendiente
 
 
 def _historia_de(tema_id: str, marca: str = "unotv", **campos) -> dict:

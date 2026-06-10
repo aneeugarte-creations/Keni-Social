@@ -308,6 +308,32 @@ def _leer_idem(ruta_idx: Path) -> str:
         return ""
 
 
+def borrar_registro(gen_id: str) -> bool:
+    """Borra EN DURO el registro de una generacion que NUNCA llego a encolarse.
+
+    Para el caso "el lanzamiento no ocurrio": el registro se crea ANTES de encolar
+    (idempotencia) y, si la admision lo rechaza (cola llena / presupuesto / pausa), dejarlo
+    en `error` llena la Actividad de cadaveres que no son fallos reales — el tick del
+    pipeline reintenta cada pocos segundos y mintaria uno nuevo cada vez. Borrarlo deja la
+    Actividad limpia; el indice de idempotencia que apunte a el se auto-recicla (un indice
+    cuyo gen no existe se RECLAMA en `crear_idempotente`). Devuelve True si se borro.
+
+    NO usar para registros que ya corrieron (su historial/gasto importa): solo el llamante
+    que acaba de crearlo y vio fallar el encolado sabe que es seguro borrarlo.
+    """
+    if not isinstance(gen_id, str) or not gen_id.strip():
+        return False
+    try:
+        ruta_fichero = _ruta(gen_id)
+    except ValueError:
+        return False
+    try:
+        ruta_fichero.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
     """Mezcla `cambios` sobre el registro existente y lo reescribe (atomico).
 

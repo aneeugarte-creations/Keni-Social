@@ -339,14 +339,21 @@ def lanzar(
             gen["id"], prompt=prompt, cwd=cwd_generacion(), procesar=procesar,
             dir_temporal=dir_temporal, spec=spec,
         )
-    except generaciones.ColaLlenaError:
+    except generaciones.ColaLlenaError as e:
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)
-        generaciones.actualizar(gen["id"], {
-            "estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
-            "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
-            "fecha_fin": generaciones.ahora_iso(),
-        })
+        # El lanzamiento NO ocurrió (la admisión lo rechazó: cola llena, presupuesto o pausa):
+        # BORRAMOS el registro recién creado en vez de dejarlo en `error`. Dejarlo llenaba la
+        # Actividad de "fallos" que no lo son: el tick del pipeline reintenta cada pocos
+        # segundos y mintaba un cadáver nuevo por intento. El 429 al llamante (con el motivo
+        # REAL en `str(e)`, que distingue cola llena de presupuesto/pausa) sigue informando;
+        # si el borrado fallara, degradamos al comportamiento previo para no perder la traza.
+        if not generaciones.borrar_registro(gen["id"]):
+            generaciones.actualizar(gen["id"], {
+                "estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
+                "error": str(e) or "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
+                "fecha_fin": generaciones.ahora_iso(),
+            })
         raise
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos el error en el registro
         # No propagamos (el usuario ve el error reflejado en el registro), pero dejamos

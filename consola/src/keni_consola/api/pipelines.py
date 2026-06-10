@@ -27,6 +27,7 @@ from .. import config, generaciones, marcas, redes, repos
 from .._http_json import _entero_query, envoltura_paginacion
 from ..pipeline_contenido import (
     ORIGEN_PIPELINE,
+    QA_CADUCADA,
     QA_SALTADA,
     TIPO_ACTIVIDAD,
     VERDICTO_NO_VERIFICADO,
@@ -43,39 +44,26 @@ _ESTADO_SALTADA = "saltada"
 def _etapa_off(env_flag: str, marca: str) -> bool:
     """Etapa desactivada para `marca`: la negación del resolver ÚNICO (`config.etapa_activa`).
 
-    Antes esta vista tenía SEIS helpers propios (una lectura paralela por etapa) que podían
-    divergir del daemon y del catálogo de ajustes; ahora los tres consumen la misma función.
+    OJO: el toggle SOLO decide el estado de etapas FUTURAS (sin evidencia persistida en la
+    run). Una etapa que YA corrió se pinta por lo que dejó escrito (cluster, veredicto,
+    copy, arte), no por el interruptor de hoy: encender/apagar un toggle no re-pinta la
+    historia de las runs.
     """
     return not config.etapa_activa(env_flag, marca)
 
 
-def _fusion_off(marca: str) -> bool:
-    """Etapa "Fusión" desactivada para `marca` (maestro `KENI_PIPELINE_FUSION` off o por-marca)."""
-    return _etapa_off(config.ENV_PIPELINE_FUSION, marca)
-
-
-def _editorial_off(marca: str) -> bool:
-    """Etapa "Editorial" desactivada para `marca` (maestro `KENI_PIPELINE_EDITORIAL` off o por-marca)."""
-    return _etapa_off(config.ENV_PIPELINE_EDITORIAL, marca)
-
-
-def _ci_off(marca: str) -> bool:
-    """Etapa "Selección"/CI desactivada para `marca` (maestro `KENI_PIPELINE_SELECCION` off o por-marca)."""
-    return _etapa_off(config.ENV_PIPELINE_SELECCION, marca)
-
-
 def _qa_off(marca: str) -> bool:
-    """Etapa QA desactivada para `marca` (maestro `KENI_PIPELINE_VALIDACION` off o por-marca)."""
+    """Etapa QA desactivada para `marca` (solo aplica a runs SIN veredicto persistido)."""
     return _etapa_off(config.ENV_PIPELINE_VALIDACION, marca)
 
 
 def _cd_off(marca: str) -> bool:
-    """Etapa "Generar copy"/CD desactivada para `marca` (maestro `KENI_PIPELINE_COPY` off o por-marca)."""
+    """Etapa Copy desactivada para `marca` (solo aplica a runs SIN copy persistido)."""
     return _etapa_off(config.ENV_PIPELINE_COPY, marca)
 
 
 def _arte_off(marca: str) -> bool:
-    """Etapa "Generar arte" desactivada para `marca` (maestro `KENI_PIPELINE_ARTE` off o por-marca)."""
+    """Etapa Arte desactivada para `marca` (solo aplica a runs SIN arte persistido)."""
     return _etapa_off(config.ENV_PIPELINE_ARTE, marca)
 
 
@@ -196,8 +184,9 @@ def _cluster_publico(cluster: dict | None) -> dict | None:
 
 
 def _fusion_de(cluster: dict | None, marca: str) -> dict:
-    """Etapa "Fusión": dedup IA del pool. Saltada si su toggle está off para la marca."""
-    if _fusion_off(marca) or not cluster:
+    """Etapa "Fusión": dedup IA del pool. SOLO evidencia persistida: con historia (cluster)
+    enlazada corrió (ok); sin ella, no corrió (saltada). El toggle de hoy no re-pinta runs."""
+    if not cluster:
         return {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     n_fuentes = int(cluster.get("n_fuentes", 0) or 0)
     n_items = int(cluster.get("n_items", 0) or 0)
@@ -209,8 +198,9 @@ def _fusion_de(cluster: dict | None, marca: str) -> dict:
 
 
 def _editorial_de(cluster: dict | None, marca: str) -> dict:
-    """Etapa "Editorial": encaje editorial IA + score. Saltada si su toggle está off para la marca."""
-    if _editorial_off(marca) or not cluster:
+    """Etapa "Editorial": encaje editorial IA + score. SOLO evidencia persistida (el score del
+    cluster); el toggle de hoy no re-pinta runs."""
+    if not cluster:
         return {"clave": "editorial", "nombre": "Editorial", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     score = round(float(cluster.get("score", 0.0) or 0.0), 2)
     detalle = f"Score {score}" + (" · 🔥" if cluster.get("breaking") else "")
@@ -240,43 +230,50 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
     qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
-    # --- Selección (toggle "Selección"/KENI_PIPELINE_SELECCION): saltada si está off para la marca. -----
-    if _ci_off(marca):
-        ci = {"clave": "ci", "nombre": "Selección", "estado": _ESTADO_SALTADA, "detalle": "", "ts": creado}
-    else:
-        ci = {"clave": "ci", "nombre": "Selección", "estado": "ok", "detalle": "", "ts": creado}
+    # --- Selección: el tema EXISTE, luego la selección CORRIÓ (evidencia, no toggle). --------
+    ci = {"clave": "ci", "nombre": "Selección", "estado": "ok", "detalle": "", "ts": creado}
 
-    # --- Validación (toggle "Validar (QA)"): por el veredicto persistido en el TEMA. --
-    if _qa_off(marca) or qa_veredicto == QA_SALTADA:
+    # --- Validación: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
+    # toggle solo decide el estado de una run que AÚN no tiene veredicto (futuro).
+    if qa_veredicto == QA_SALTADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
+    elif qa_veredicto == QA_CADUCADA:
+        qa_estado, qa_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
     elif qa_veredicto == VERDICTO_PROBLEMA:
         qa_estado, qa_detalle = "revisar", "Problema en la fuente"
     elif qa_veredicto == "en_curso":
         qa_estado, qa_detalle = "en_curso", ""
     elif qa_veredicto == VERDICTO_NO_VERIFICADO:
         qa_estado, qa_detalle = "ok", "No verificado"
+    elif _qa_off(marca):
+        qa_estado, qa_detalle = _ESTADO_SALTADA, ""
     else:
         qa_estado, qa_detalle = "pendiente", ""
     qa = {"clave": "qa", "nombre": "Validación", "estado": qa_estado, "detalle": qa_detalle, "ts": ""}
 
-    # --- Copy (toggle "Generar copy"): ok con ≥1 pieza con copy; 'problema' de Validación lo omite.
+    # --- Copy: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
+    # toggle de hoy); 'problema'/'caducada' lo omiten; el toggle solo pinta el futuro.
     con_copy = sum(1 for p in piezas if not p["falta_copy"])
-    if _cd_off(marca):
-        cd_estado, cd_detalle = _ESTADO_SALTADA, ""
+    if con_copy:
+        cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
     elif es_problema:
         cd_estado, cd_detalle = "pendiente", "Omitido"
-    elif con_copy:
-        cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
+    elif qa_veredicto == QA_CADUCADA:
+        cd_estado, cd_detalle = _ESTADO_SALTADA, "Caducada"
+    elif _cd_off(marca):
+        cd_estado, cd_detalle = _ESTADO_SALTADA, ""
     else:
         cd_estado, cd_detalle = "pendiente", ""
     cd = {"clave": "cd", "nombre": "Copy", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
 
-    # --- Arte (toggle "Generar arte"): ok con ≥1 pieza con imagen; corre tras el copy. --
+    # --- Arte: PRIMERO el arte persistido; el toggle solo pinta el futuro. -------------------
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
-    if _arte_off(marca):
-        arte_estado, arte_detalle = _ESTADO_SALTADA, ""
-    elif con_arte:
+    if con_arte:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
+    elif qa_veredicto == QA_CADUCADA:
+        arte_estado, arte_detalle = _ESTADO_SALTADA, "Caducada"
+    elif _arte_off(marca):
+        arte_estado, arte_detalle = _ESTADO_SALTADA, ""
     else:
         arte_estado, arte_detalle = "pendiente", ""
     arte = {"clave": "arte", "nombre": "Arte", "estado": arte_estado, "detalle": arte_detalle, "ts": ""}
@@ -290,6 +287,9 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
         ap_estado, ap_detalle = "en_curso", f"{aprobadas}/{total}"
     elif en_curso:
         ap_estado, ap_detalle = "en_curso", ""
+    elif qa_veredicto == QA_CADUCADA and not total:
+        # Run CADUCADA sin piezas: cerrada sin producto (no quede "pendiente" para siempre).
+        ap_estado, ap_detalle = _ESTADO_SALTADA, "Caducada"
     else:
         ap_estado, ap_detalle = "pendiente", ""
     aprobacion = {

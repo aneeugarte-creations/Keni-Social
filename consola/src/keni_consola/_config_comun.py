@@ -233,6 +233,9 @@ ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (QA/Copy/autogen/revisar):
 # el volumen lo regula la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la cola.
 ENV_PIPELINE_EN_VUELO_MAX = "KENI_PIPELINE_EN_VUELO_MAX"  # gate serial: temas en vuelo por marca
+# Frescura del pipeline (ventana deslizante sobre el ranking): TTL en horas de un tema EN VUELO.
+# Lo que no se completó a tiempo CADUCA y libera su hueco; hoy entra lo de hoy, no el backlog.
+ENV_PIPELINE_TEMA_TTL_HORAS = "KENI_PIPELINE_TEMA_TTL_HORAS"  # caducidad de temas en vuelo
 
 # Etapa de QA del pipeline: "Validar (QA)" (`KENI_PIPELINE_VALIDACION`, toggle de etapa por marca). Es la criba
 # de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de generar copy. Toggle
@@ -574,6 +577,9 @@ PIPELINE_MAX_DEF = 3
 # WIP del gate serial: piezas EN VUELO (sin terminar QA→Copy) por marca. ES el regulador del
 # flujo continuo: in=out (no se admite más hasta que algo sale por el otro lado).
 PIPELINE_EN_VUELO_MAX_DEF = 8
+# TTL por defecto de un tema EN VUELO (horas): un día. "Lo que no entró ayer no entra hoy":
+# el pipeline prioriza siempre lo fresco del ranking, nunca arrastra backlog.
+PIPELINE_TEMA_TTL_HORAS_DEF = 24
 
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
@@ -813,6 +819,7 @@ __all__ = [
     'ENV_PIPELINE_COPY',
     'ENV_PIPELINE_MAX',
     'ENV_PIPELINE_EN_VUELO_MAX',
+    'ENV_PIPELINE_TEMA_TTL_HORAS',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
     'ENV_PRESUPUESTO_MARGEN_MANUAL',
@@ -910,6 +917,7 @@ __all__ = [
     'PERFIL_EDITORIAL_TTL_HORAS_DEF',
     'PIPELINE_MAX_DEF',
     'PIPELINE_EN_VUELO_MAX_DEF',
+    'PIPELINE_TEMA_TTL_HORAS_DEF',
     'PORT_DEF',
     'Path',
     'REAPER_INTERVALO_MIN_DEF',

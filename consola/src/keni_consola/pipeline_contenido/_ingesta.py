@@ -7,9 +7,10 @@ y solo si la QA de la fuente pasa. Marca los items usados (dedup) y registra la 
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .. import marcas, redes, repos
+from .. import config, marcas, redes, repos
 from ..dominio import dedup
 from ..dominio import generar as gen_dom
 from ..tiempo import hoy_utc
@@ -19,6 +20,7 @@ from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_CI,
     ORIGEN_PIPELINE,
+    QA_CADUCADA,
     QA_EN_CURSO,
     QA_SALTADA,
     VERDICTO_NO_VERIFICADO,
@@ -41,6 +43,7 @@ __all__ = [
     "clusters_para_promover",
     "promover_clusters_marca",
     "temas_en_vuelo",
+    "caducar_temas_viejos",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",
@@ -469,33 +472,95 @@ def crear_tema_de_cluster(
     return tema
 
 
-def temas_en_vuelo(marca: str) -> int:
-    """Cuántos temas del pipeline de `marca` están EN VUELO (sin terminar las fases de IA).
+def _temas_en_vuelo_de(marca: str) -> list[dict[str, Any]]:
+    """Temas del pipeline de `marca` EN VUELO (sin terminar las fases de IA). [] si falla.
 
     En vuelo = pendiente de QA (veredicto ''/'en_curso') O cribado-apto/saltado pero SIN copy aún.
-    Es lo que el gate SERIAL de CI mira para no promover más historias de esa marca hasta drenarlas
-    (así cada item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
+    Compartido por el gate SERIAL (cuenta) y la CADUCIDAD (caduca los que superan el TTL): una
+    sola definición de "en vuelo" para ambos.
     """
     try:
         temas = temas_pipeline(marca)
     except Exception:  # noqa: BLE001 -- sin temas legibles, no bloqueamos la promoción
-        return 0
+        return []
     if not temas:
-        return 0
+        return []
     try:
         # WHERE en SQL por marca (antes: tabla `contenido_plataforma` ENTERA por cada marca
         # y barrido, filtrada en Python).
         con_copy = repos.ids_contenido_con_copy(marca)
     except Exception:  # noqa: BLE001 -- sin plataformas, contamos solo los pendientes de QA
         con_copy = set()
-    n = 0
+    en_vuelo: list[dict[str, Any]] = []
     for t in temas:
         veredicto = (t.get("qa_veredicto") or "").strip()
         if veredicto in ("", QA_EN_CURSO):
-            n += 1  # pendiente de QA
+            en_vuelo.append(t)  # pendiente de QA
         elif veredicto in (VERDICTO_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
-            n += 1  # cribado pero pendiente de copy
-    return n
+            en_vuelo.append(t)  # cribado pero pendiente de copy
+    return en_vuelo
+
+
+def temas_en_vuelo(marca: str) -> int:
+    """Cuántos temas del pipeline de `marca` están EN VUELO (gate serial de la admisión).
+
+    Es lo que CI mira para no promover más historias de esa marca hasta drenarlas (así cada
+    item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
+    """
+    return len(_temas_en_vuelo_de(marca))
+
+
+def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
+    """FRESCURA (ventana deslizante): caduca los temas EN VUELO que superaron el TTL.
+
+    El pipeline no arrastra backlog: un tema que no completó sus fases (QA→copy) dentro de
+    `KENI_PIPELINE_TEMA_TTL_HORAS` (def 24 h) se marca `qa_veredicto='caducada'` — sale del
+    gate serial (libera hueco de admisión para lo fresco del ranking), la fase QA no lo criba
+    y la fase CD no le genera copy. Lo de ayer no entra hoy; hoy entra lo de hoy.
+
+    Corre al inicio de cada barrido (barato: lecturas indexadas + updates puntuales).
+    Best-effort por tema; devuelve cuántos caducaron.
+    """
+    momento = ahora or datetime.now(timezone.utc)
+    ttl = timedelta(hours=config.pipeline_tema_ttl_horas())
+    caducados = 0
+    for marca in marcas.ids():
+        for tema in _temas_en_vuelo_de(marca):
+            creado = _fecha_aware(str(tema.get("creado") or ""))
+            if creado is None or momento - creado < ttl:
+                continue
+            tema_id = str(tema.get("id") or "")
+            if not tema_id:
+                continue
+            nota = (
+                f"⏳ Caducada ({config.pipeline_tema_ttl_horas()} h en vuelo sin completar): "
+                "el pipeline prioriza lo fresco del ranking."
+            )
+            try:
+                previas = str(tema.get("notas") or "").strip()
+                repos.actualizar_contenido(
+                    tema_id,
+                    {
+                        "qa_veredicto": QA_CADUCADA,
+                        "notas": f"{previas}\n{nota}" if previas else nota,
+                    },
+                )
+                caducados += 1
+            except Exception:  # noqa: BLE001 -- un tema ilegible no debe frenar la caducidad
+                _log.exception("pipeline: no se pudo caducar el tema %s", tema_id)
+    if caducados:
+        _log.info("pipeline: %d tema(s) caducados (TTL %d h): hueco libre para lo fresco.",
+                  caducados, config.pipeline_tema_ttl_horas())
+    return caducados
+
+
+def _fecha_aware(crudo: str) -> datetime | None:
+    """Parsea un ISO del tema a datetime CON tz (naive = UTC); None si no es parseable."""
+    try:
+        valor = datetime.fromisoformat(crudo)
+    except (TypeError, ValueError):
+        return None
+    return valor.replace(tzinfo=timezone.utc) if valor.tzinfo is None else valor
 
 
 def promover_clusters_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:

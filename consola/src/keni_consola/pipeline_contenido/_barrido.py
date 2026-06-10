@@ -71,6 +71,14 @@ def _ejecutar_barrido() -> dict[str, Any]:
     """Cuerpo del barrido del pipeline (ya bajo el single-flight de `ejecutar_barrido`)."""
     autor = _ref._autor_pipeline()
     maximo = config.pipeline_max()
+    # --- Fase 0 · FRESCURA: caduca los temas en vuelo que superaron el TTL. ------------------
+    # El pipeline es VENTANA DESLIZANTE sobre el ranking (sin colas intermedias): lo que no se
+    # completó a tiempo caduca y libera su hueco del gate serial; hoy entra lo de hoy. Sin esto,
+    # un backlog (p. ej. una etapa apagada unos días) bloquea la admisión para siempre.
+    try:
+        _ingesta.caducar_temas_viejos()
+    except Exception:  # noqa: BLE001 -- la caducidad es saneo; nunca rompe el barrido
+        _log.exception("pipeline: fallo la caducidad de temas en vuelo.")
     # --- Fase CI · "Crear noticias": crea los temas (sin copy) por marca. --------------------
     # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_SELECCION`), 1 toggle = 1 etapa: si el maestro está
     # OFF no entran temas nuevos (aunque el daemon barra por otra etapa, p. ej. Copy de temas ya
@@ -84,6 +92,9 @@ def _ejecutar_barrido() -> dict[str, Any]:
         # La misma lectura que pinta la etapa en /api/pipelines y el toggle en el catálogo.
         if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
             continue
+        # NOTA (frescura): con la etapa Copy apagada para la marca, lo admitido queda "apto sin
+        # copy" (curación manual en el tablero) y, si nadie lo trabaja, CADUCA al TTL — el gate
+        # serial se libera solo y al día siguiente entra lo fresco del ranking, nunca el backlog.
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin
         # cribar/sin copy). Promueve solo hasta llenar su cupo; si está lleno, salta. Así cada item
         # que entró se COMPLETA (QA→copy) antes de meter nuevos, en vez de atascar QA con backlog.
@@ -150,8 +161,10 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             continue
         try:
             gen = lanzar_qa_fuente(tema, autor=autor)
-        except generaciones.ColaLlenaError:
-            _log.info("pipeline: cola llena en QA; el resto entra en el próximo tick.")
+        except generaciones.ColaLlenaError as e:
+            # El mensaje distingue cola llena de pausa/presupuesto (subclases): que el log diga
+            # la verdad ("presupuesto agotado" no es "demasiadas generaciones").
+            _log.info("pipeline: QA en pausa por admisión (%s); el resto entra en el próximo tick.", e)
             break
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase QA
             _log.exception(
@@ -208,8 +221,8 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             continue
         try:
             gen = lanzar_copy_de_tema(tema, autor=autor)
-        except generaciones.ColaLlenaError:
-            _log.info("pipeline: cola llena en CD; el resto entra en el próximo tick.")
+        except generaciones.ColaLlenaError as e:
+            _log.info("pipeline: CD en pausa por admisión (%s); el resto entra en el próximo tick.", e)
             return lanzados
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
             _log.exception(
@@ -229,8 +242,8 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     for item in temas_autogen_sin_copy():
         try:
             gen = autogen_copy.lanzar_para_topic(item)
-        except generaciones.ColaLlenaError:
-            _log.info("pipeline: cola llena en CD (pool); el resto entra en el próximo barrido.")
+        except generaciones.ColaLlenaError as e:
+            _log.info("pipeline: CD (pool) en pausa por admisión (%s); el resto entra en el próximo barrido.", e)
             break
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
             _log.exception(

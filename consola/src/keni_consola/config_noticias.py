@@ -40,6 +40,7 @@ from ._config_comun import (
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
+    ENV_PIPELINE_TEMA_TTL_HORAS,
     ENV_PIPELINE_FUSION,
     ENV_PIPELINE_MAX,
     ENV_PIPELINE_SELECCION,
@@ -82,6 +83,7 @@ from ._config_comun import (
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
     PERFIL_EDITORIAL_TTL_HORAS_DEF,
     PIPELINE_EN_VUELO_MAX_DEF,
+    PIPELINE_TEMA_TTL_HORAS_DEF,
     PIPELINE_MAX_DEF,
     QA_EN_CURSO_TTL_MIN_DEF,
     QA_FUENTE_TIMEOUT_DEF,
@@ -523,6 +525,16 @@ def pipeline_en_vuelo_max() -> int:
     COMPLETA lo que entró, luego entran nuevas.
     """
     return _entero(ENV_PIPELINE_EN_VUELO_MAX, PIPELINE_EN_VUELO_MAX_DEF, minimo=1)
+
+
+def pipeline_tema_ttl_horas() -> int:
+    """TTL (horas) de un tema EN VUELO del pipeline (`KENI_PIPELINE_TEMA_TTL_HORAS`, def 24, min 1).
+
+    El pipeline es una VENTANA DESLIZANTE sobre el ranking de noticias frescas, sin colas
+    intermedias: lo que no completó sus fases dentro del TTL CADUCA (libera su hueco del gate
+    serial y no genera copy). Lo de ayer no entra hoy; hoy entra lo de hoy.
+    """
+    return _entero(ENV_PIPELINE_TEMA_TTL_HORAS, PIPELINE_TEMA_TTL_HORAS_DEF, minimo=1)
 
 
 def qa_activo() -> bool:
