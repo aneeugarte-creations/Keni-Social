@@ -298,13 +298,28 @@ def _leer_idem(ruta_idx: Path) -> str:
 
 
 def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
-    """Mezcla `cambios` sobre el registro existente y lo reescribe (atomico)."""
+    """Mezcla `cambios` sobre el registro existente y lo reescribe (atomico).
+
+    HOOK DE CIERRE (economia de tokens): cuando `cambios` lleva el registro a un estado
+    TERMINAL, vuelca su gasto (tokens/coste de `metricas`) al ledger `gasto_ia` via
+    `presupuesto_ia.registrar_cierre`. Este es el embudo UNICO por el que TODOS los caminos
+    (claude, imagen, procesos, fakes de tests) fijan el terminal, asi que el ledger no
+    depende de cada lanzador. Best-effort e idempotente (UPSERT por gen_id): un re-cierre
+    (reintento/re-encolado tras deploy) actualiza la fila, no duplica gasto.
+    """
     ruta_fichero = _ruta(gen_id)
     with bloqueo_archivo(ruta_fichero):
         actual = _leer_yaml(ruta_fichero) or {}
         fusion = {**actual, **cambios}
         pub = _publico(fusion, gen_id)
         _escribir_yaml_atomico(ruta_fichero, _cuerpo(pub))
+    if cambios.get("estado") in _ESTADOS_TERMINALES:
+        try:
+            from .. import presupuesto_ia
+
+            presupuesto_ia.registrar_cierre(pub)
+        except Exception:  # noqa: BLE001 -- el ledger nunca debe romper la escritura del registro
+            _log.warning("generacion %s: fallo el volcado al ledger de gasto", gen_id, exc_info=True)
     return pub
 
 

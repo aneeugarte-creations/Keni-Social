@@ -32,7 +32,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import actividad, agentes, ajustes_catalogo, config, generaciones, marcas, permisos, repos
+from .. import (
+    actividad,
+    agentes,
+    ajustes_catalogo,
+    config,
+    generaciones,
+    marcas,
+    permisos,
+    presupuesto_ia,
+    repos,
+)
 from .._http_json import _entero_query
 from ..tiempo import hoy_utc
 
@@ -283,6 +293,10 @@ async def cola(request: Request) -> Response:
             "en_curso": en_curso,
             "esperando": esperando,
             "daemons": _daemons_estado(),
+            # Economia de tokens (presupuesto_ia): presupuesto diario, gasto del dia UTC,
+            # nivel de corte vigente (normal/solo_manual/agotado/pausado) y kill switch.
+            # CONTRATO de visibilidad para humanos (Monitor) y agentes (observabilidad).
+            "presupuesto": presupuesto_ia.estado(),
         }
     )
 
@@ -319,6 +333,9 @@ async def cola_series(request: Request) -> Response:
             "dias": dias,
             "encolados": repos.encolados_por_dia(dias),
             "resultados": _resultados_por_dia(dias),
+            # Lado de CONSUMO (ledger gasto_ia): tokens/coste/generaciones cerradas por dia,
+            # para correlacionar el volumen de la cola con el gasto real de la suscripcion.
+            "gasto": repos.gasto_ia_por_dia(dias),
         }
     )
 

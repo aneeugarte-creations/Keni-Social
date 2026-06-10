@@ -165,12 +165,16 @@ def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     return [{"dia": f["dia"], "n": int(f["n"])} for f in filas]
 
 
-def reclamar_job(worker: str = "") -> dict[str, Any] | None:
+def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
     `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE a
     `reclamado`: otro worker que corra a la vez SALTA esa fila (no la doble-ejecuta).
     Devuelve `{id, gen_id, spec}` del job clavado.
+
+    `prioridad_minima` (corte del presupuesto, ver `presupuesto_ia`): si viene, solo se
+    consideran filas con `prioridad >= prioridad_minima` (el fondo cortado queda `pendiente`
+    en la cola, listo para cuando el presupuesto vuelva; lo manual sigue saliendo).
 
     RE-RECLAMO DE HUERFANOS: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
@@ -191,6 +195,8 @@ def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     limite_huerfano = iso_utc(
         datetime.now(UTC) - timedelta(seconds=config.claude_timeout() + _RECLAIM_STALE_MARGEN_S)
     )
+    filtro_prioridad = "" if prioridad_minima is None else "AND prioridad >= ? "
+    params_prio: tuple[int, ...] = () if prioridad_minima is None else (int(prioridad_minima),)
     con = _conectar()
     try:
         # Acotamos los saltos: descartamos huerfanos ya-terminados (terminando su job) y
@@ -198,10 +204,11 @@ def reclamar_job(worker: str = "") -> dict[str, Any] | None:
         for _ in range(_MAX_SALTOS_RECLAMO):
             fila = con.execute(
                 "SELECT id, gen_id, spec, estado FROM jobs "
-                "WHERE estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?) "
+                "WHERE (estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?)) "
+                + filtro_prioridad +
                 # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
                 "ORDER BY prioridad DESC, creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano),
+                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano, *params_prio),
             ).fetchone()
             if fila is None:
                 con.commit()
@@ -312,3 +319,103 @@ def job_cancelado(job_id: str) -> bool:
     finally:
         con.close()
     return bool(fila["cancelado"]) if fila is not None else False
+
+
+# --------------------------------------------------------------------------- #
+# Ledger de gasto de IA (economia de tokens; ver `presupuesto_ia.py`)          #
+# --------------------------------------------------------------------------- #
+#
+# Una fila por generacion CERRADA (estado terminal) con sus tokens/coste. UPSERT por
+# `gen_id`: re-cerrar la misma generacion (reintento, re-encolado tras deploy) ACTUALIZA la
+# fila en vez de duplicar gasto. La suma del `dia` es la cuenta autoritativa del presupuesto
+# diario, compartida por todos los procesos (back/worker/daemons) via Postgres.
+
+
+def registrar_gasto_ia(
+    gen_id: str,
+    *,
+    dia: str,
+    tipo: str = "",
+    marca: str = "",
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    coste_usd: float = 0.0,
+) -> None:
+    """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
+
+    `dia` es el dia UTC (YYYY-MM-DD) en que se CERRO la generacion (cuando se gasto). Un
+    re-cierre sobreescribe tokens/coste con los ultimos valores (nunca suma dos veces).
+    """
+    if not gen_id:
+        return
+    ahora = ahora_iso()
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO gasto_ia (gen_id, dia, tipo, marca, tokens_in, tokens_out, "
+            "coste_usd, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (gen_id) DO UPDATE SET "
+            "dia = EXCLUDED.dia, tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, "
+            "tokens_in = EXCLUDED.tokens_in, tokens_out = EXCLUDED.tokens_out, "
+            "coste_usd = EXCLUDED.coste_usd, actualizado = EXCLUDED.actualizado",
+            (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd), ahora),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
+    """Gasto AGREGADO de un dia UTC: `{tokens, tokens_in, tokens_out, coste_usd, generaciones}`.
+
+    Es la lectura del corte automatico (`presupuesto_ia.nivel()`): tokens = in + out del dia.
+    """
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT COALESCE(SUM(tokens_in), 0) AS tin, COALESCE(SUM(tokens_out), 0) AS tout, "
+            "COALESCE(SUM(coste_usd), 0) AS coste, COUNT(*) AS n "
+            "FROM gasto_ia WHERE dia = ?",
+            (dia,),
+        ).fetchone()
+    finally:
+        con.close()
+    tin = int(fila["tin"]) if fila is not None else 0
+    tout = int(fila["tout"]) if fila is not None else 0
+    return {
+        "tokens": tin + tout,
+        "tokens_in": tin,
+        "tokens_out": tout,
+        "coste_usd": float(fila["coste"]) if fila is not None else 0.0,
+        "generaciones": int(fila["n"]) if fila is not None else 0,
+    }
+
+
+def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
+    """Serie de gasto por dia (ventana `dias`, dia ascendente): tokens/coste/generaciones.
+
+    Para el monitor y el agente de observabilidad (lado de CONSUMO de la cola, en tokens).
+    El corte se compara lexicograficamente (ISO ordena por texto), como `encolados_por_dia`.
+    """
+    corte = iso_utc(datetime.now(UTC) - timedelta(days=max(0, int(dias))))[:10]
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT dia, COALESCE(SUM(tokens_in), 0) AS tin, "
+            "COALESCE(SUM(tokens_out), 0) AS tout, COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COUNT(*) AS n FROM gasto_ia WHERE dia >= ? GROUP BY dia ORDER BY dia ASC",
+            (corte,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "dia": f["dia"],
+            "tokens": int(f["tin"]) + int(f["tout"]),
+            "tokens_in": int(f["tin"]),
+            "tokens_out": int(f["tout"]),
+            "coste_usd": float(f["coste"]),
+            "generaciones": int(f["n"]),
+        }
+        for f in filas
+    ]

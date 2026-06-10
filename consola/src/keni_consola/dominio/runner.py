@@ -87,6 +87,25 @@ class ColaLlenaError(RuntimeError):
     llamante captura esta excepcion y devuelve una respuesta clara (429) al cliente.
     """
 
+
+class GeneracionPausadaError(ColaLlenaError):
+    """KILL SWITCH humano activo (`KENI_GENERACION_PAUSADA`): no se admite NADA nuevo.
+
+    SUBCLASE de `ColaLlenaError` a proposito: los llamantes existentes (el manejador
+    central 429 de la app, el backpressure del pipeline) ya la tratan correctamente como
+    "ahora no; reintenta luego" sin tocarlos. El mensaje (str(exc)) distingue el porque.
+    """
+
+
+class PresupuestoAgotadoError(ColaLlenaError):
+    """Presupuesto DIARIO de tokens superado (corte automatico de `presupuesto_ia`).
+
+    Misma razon para subclasear `ColaLlenaError` que `GeneracionPausadaError`: el corte se
+    comporta como backpressure (el pipeline reintenta en su siguiente tick y fluira de nuevo
+    al rotar el dia UTC o al subir el presupuesto), con un mensaje claro para humanos.
+    """
+
+
 # Cada cuanto (s) se persiste el avance: con parciales llegan muchos eventos por
 # segundo; throttlear evita martillear el disco sin perder la sensacion de "en vivo".
 THROTTLE_S = 0.4

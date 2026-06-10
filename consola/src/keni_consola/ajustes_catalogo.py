@@ -306,6 +306,41 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=config.AUTOGEN_ARTE_MAX_DEF,
             minimo=1,
         ),
+        # --- Economía de tokens (presupuesto diario + kill switch; `presupuesto_ia.py`) --- #
+        # La generación usa la MISMA suscripción `claude` que el equipo: estos knobs evitan que
+        # una avalancha de fondo agote los tokens de todos. Editables en caliente (Monitor).
+        Ajuste(
+            clave=config.ENV_GENERACION_PAUSADA,
+            tipo="bool",
+            etiqueta="Generación con IA: pausada",
+            ayuda="Freno de mano: no se encola nada nuevo y el worker deja de ejecutar jobs "
+            "(lo encolado espera; lo que corre termina). Para emergencias de consumo o "
+            "comportamiento inesperado.",
+            grupo="maquina_global",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PRESUPUESTO_TOKENS_DIA,
+            tipo="int",
+            etiqueta="Presupuesto diario de tokens (0 = sin límite)",
+            ayuda="Tokens (entrada+salida) de generación por día UTC. Al agotarse se corta el "
+            "trabajo automático (lo manual sigue hasta el margen). La suscripción es compartida "
+            "con el equipo: este tope protege su cupo.",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_TOKENS_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_PRESUPUESTO_MARGEN_MANUAL,
+            tipo="int",
+            etiqueta="Margen extra para lanzamientos manuales (%)",
+            ayuda="Con el presupuesto agotado, lo manual sigue funcionando hasta presupuesto + "
+            "este margen; superado, corte total hasta el día siguiente.",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_MARGEN_MANUAL_DEF,
+            minimo=0,
+            maximo=100,
+        ),
         # --- Tuning (int/float/select) --------------------------------------------- #
         Ajuste(
             clave=config.ENV_ALERTAS_INTERVALO_HORAS,

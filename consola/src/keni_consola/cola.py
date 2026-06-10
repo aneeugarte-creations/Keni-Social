@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import config, repos
+from . import config, presupuesto_ia, repos
 from .dominio import jobspec, runner
 
 
@@ -48,6 +48,30 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     # por prioridad (un copy manual del equipo no espera detras del lote del pipeline/autogen).
     prio = jobspec.prioridad(spec)
     es_fondo = prio < jobspec.PRIORIDAD_MANUAL
+
+    # ECONOMIA DE TOKENS (presupuesto_ia): el kill switch y el corte automatico se deciden
+    # ANTES que el tope de capacidad. Pausado (humano): NADA entra, ni manual ni procesos
+    # (es el freno de mano de toda la maquinaria IA). Agotado (presupuesto + margen): no
+    # entra nada QUE GASTE TOKENS (un job de PROCESO —render ffmpeg/ASR— no toca la
+    # suscripcion y queda exento del corte por presupuesto). Solo-manual: el FONDO se corta
+    # y lo manual del equipo sigue entrando hasta el margen. Todas las excepciones son
+    # subclase de ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline.
+    nivel = presupuesto_ia.nivel()
+    if nivel == presupuesto_ia.NIVEL_PAUSADO:
+        raise runner.GeneracionPausadaError(
+            "La generación con IA está pausada por un administrador."
+        )
+    gasta_tokens = not jobspec.es_kind_proceso(spec)
+    if gasta_tokens and nivel == presupuesto_ia.NIVEL_AGOTADO:
+        raise runner.PresupuestoAgotadoError(
+            "El presupuesto diario de IA está agotado; la generación se reanuda al rotar el día."
+        )
+    if gasta_tokens and es_fondo and nivel == presupuesto_ia.NIVEL_SOLO_MANUAL:
+        raise runner.PresupuestoAgotadoError(
+            "El presupuesto diario de IA está agotado para el trabajo automático; "
+            "los lanzamientos manuales siguen disponibles."
+        )
+
     if es_fondo and repos.contar_jobs_activos() >= tope_cola():
         raise runner.ColaLlenaError(
             "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
@@ -55,13 +79,18 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     return repos.encolar_job(gen_id, jobspec.serializar(spec), prio)
 
 
-def reclamar(worker: str = "") -> dict[str, Any] | None:
+def reclamar(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
     """Clava UN job pendiente (concurrente-seguro) y devuelve `{id, gen_id, spec}` o None.
 
     `spec` se devuelve YA DESERIALIZADO (dict). Si el JSON guardado estuviera corrupto, el
     job se devuelve con `spec=None` para que el worker lo marque en error (no lo ejecuta).
+
+    `prioridad_minima` (corte del presupuesto, ver `presupuesto_ia`): si viene, SOLO se
+    clavan jobs con `prioridad >= prioridad_minima`. Asi una avalancha de fondo YA ENCOLADA
+    deja de ejecutarse al agotarse el presupuesto (queda `pendiente`, no se pierde) mientras
+    lo manual sigue saliendo.
     """
-    fila = repos.reclamar_job(worker)
+    fila = repos.reclamar_job(worker, prioridad_minima=prioridad_minima)
     if fila is None:
         return None
     try:

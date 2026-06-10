@@ -187,10 +187,13 @@ from .repos_jobs import (  # noqa: F401
     contar_jobs_por_estado,
     encolados_por_dia,
     encolar_job,
+    gasto_ia_del_dia,
+    gasto_ia_por_dia,
     job_cancelado,
     jobs_activos,
     reclamar_job,
     reencolar_job,
+    registrar_gasto_ia,
     terminar_job,
 )
 from .repos_metricas import (  # noqa: F401

@@ -234,10 +234,13 @@ from .db_jobs import (  # noqa: F401
     contar_jobs_por_estado,
     encolados_por_dia,
     encolar_job,
+    gasto_ia_del_dia,
+    gasto_ia_por_dia,
     job_cancelado,
     jobs_activos,
     reclamar_job,
     reencolar_job,
+    registrar_gasto_ia,
     terminar_job,
 )
 from .db_latidos import (  # noqa: F401
@@ -473,6 +476,9 @@ __all__ = [
     "contar_jobs_activos",
     "contar_jobs_por_estado",
     "encolados_por_dia",
+    "gasto_ia_del_dia",
+    "gasto_ia_por_dia",
+    "registrar_gasto_ia",
     "jobs_activos",
     "reencolar_job",
     "actualizar_fuente_algoritmo",

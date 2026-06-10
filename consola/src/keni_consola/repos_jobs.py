@@ -43,8 +43,8 @@ def reencolar_job(gen_id: str) -> bool:
     return db.reencolar_job(gen_id)
 
 
-def reclamar_job(worker: str = "") -> dict[str, Any] | None:
-    return db.reclamar_job(worker)
+def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
+    return db.reclamar_job(worker, prioridad_minima=prioridad_minima)
 
 
 def terminar_job(job_id: str) -> None:
@@ -57,3 +57,18 @@ def cancelar_job(gen_id: str) -> bool:
 
 def job_cancelado(job_id: str) -> bool:
     return db.job_cancelado(job_id)
+
+
+# Ledger de gasto de IA (economia de tokens; ver `presupuesto_ia.py`).
+
+
+def registrar_gasto_ia(gen_id: str, **kwargs: Any) -> None:
+    return db.registrar_gasto_ia(gen_id, **kwargs)
+
+
+def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
+    return db.gasto_ia_del_dia(dia)
+
+
+def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
+    return db.gasto_ia_por_dia(dias)

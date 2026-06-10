@@ -42,6 +42,7 @@ _TABLAS = (
     "comercial_snapshots",
     "comercial_publicaciones",
     "comercial_campanias",
+    "gasto_ia",
     "metricas_pieza_snapshots",
     "rota_turnos",
     "rota_franjas",

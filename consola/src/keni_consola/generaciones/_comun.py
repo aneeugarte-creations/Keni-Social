@@ -22,11 +22,17 @@ from typing import Any
 
 from .. import config
 from ..dominio import stream
-from ..dominio.runner import ColaLlenaError  # noqa: F401  (re-export; ver nota arriba)
+from ..dominio.runner import (  # noqa: F401  (re-export; ver nota arriba)
+    ColaLlenaError,
+    GeneracionPausadaError,
+    PresupuestoAgotadoError,
+)
 from ..tiempo import ahora_iso
 
 __all__ = [
     "ColaLlenaError",
+    "GeneracionPausadaError",
+    "PresupuestoAgotadoError",
     "ESTADO_EJECUTANDO",
     "ESTADO_COMPLETADO",
     "ESTADO_ERROR",

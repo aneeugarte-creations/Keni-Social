@@ -132,6 +132,8 @@ from ._comun import (
     MOTIVO_TIMEOUT,
     TIPOS,
     ColaLlenaError,
+    GeneracionPausadaError,
+    PresupuestoAgotadoError,
     Procesar,
     _log,
     _timeout,
@@ -165,6 +167,8 @@ __all__ = [
     "MOTIVO_INTERRUMPIDO",
     "TIPOS",
     "ColaLlenaError",
+    "GeneracionPausadaError",
+    "PresupuestoAgotadoError",
     "Procesar",
     # Almacén / CRUD / idempotencia / poda / reaper.
     "raiz",

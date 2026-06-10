@@ -838,6 +838,25 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS prioridad INTEGER NOT NULL DEFAULT 0",
     "CREATE INDEX IF NOT EXISTS idx_jobs_estado_prioridad "
     "ON jobs (estado, prioridad DESC, creado ASC)",
+    # LEDGER de gasto de IA (economia de tokens, ver `presupuesto_ia.py`): una fila por
+    # GENERACION CERRADA (terminal completado/error) con sus tokens/coste. La escribe el
+    # hook de cierre del almacen de generaciones (UPSERT por gen_id: idempotente ante
+    # re-cierres por reintentos/re-encolados; un re-cierre actualiza, no duplica). Es la
+    # cuenta AUTORITATIVA del presupuesto diario (compartida por back/worker/daemons via
+    # Postgres). `dia` (UTC, YYYY-MM-DD) indexado para el SUM del dia del corte automatico.
+    """
+    CREATE TABLE IF NOT EXISTS gasto_ia (
+        gen_id      TEXT PRIMARY KEY,
+        dia         TEXT NOT NULL DEFAULT '',
+        tipo        TEXT NOT NULL DEFAULT '',
+        marca       TEXT NOT NULL DEFAULT '',
+        tokens_in   BIGINT NOT NULL DEFAULT 0,
+        tokens_out  BIGINT NOT NULL DEFAULT 0,
+        coste_usd   DOUBLE PRECISION NOT NULL DEFAULT 0,
+        actualizado TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_gasto_ia_dia ON gasto_ia (dia)",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
     # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
     # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un

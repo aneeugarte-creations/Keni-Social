@@ -190,6 +190,15 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_IMAGEN_PROVEEDOR", raising=False)
     monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
+    # Economia de tokens (presupuesto_ia): deterministas — sin presupuesto, sin pausa, y la
+    # cache del gasto del dia invalidada (es estado de MODULO; lo leido por un test previo
+    # no debe contaminar al siguiente).
+    monkeypatch.delenv("KENI_PRESUPUESTO_TOKENS_DIA", raising=False)
+    monkeypatch.delenv("KENI_PRESUPUESTO_MARGEN_MANUAL", raising=False)
+    monkeypatch.delenv("KENI_GENERACION_PAUSADA", raising=False)
+    from keni_consola import presupuesto_ia as _presupuesto_ia
+
+    _presupuesto_ia.invalidar_cache()
     # Almacen de generaciones (trabajos de IA en background) aislado en tmp.
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     # Almacen de la Texto (prompts + linea editorial) aislado en tmp: ningun test

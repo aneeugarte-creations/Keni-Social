@@ -153,6 +153,7 @@ from ._config_comun import (  # noqa: F401
     ENV_FFMPEG_BIN,
     ENV_FUENTES_BAJA_CONFIANZA,
     ENV_FUSION_SEMANTICA_MAX,
+    ENV_GENERACION_PAUSADA,
     ENV_GENERACIONES,
     ENV_GENERACIONES_TTL_HORAS,
     ENV_HOST,
@@ -212,6 +213,8 @@ from ._config_comun import (  # noqa: F401
     ENV_PIPELINE_VALIDACION,
     ENV_PORT,
     ENV_PREFERENCIAS,
+    ENV_PRESUPUESTO_MARGEN_MANUAL,
+    ENV_PRESUPUESTO_TOKENS_DIA,
     ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
     ENV_QA_EN_CURSO_TTL_MIN,
@@ -284,6 +287,8 @@ from ._config_comun import (  # noqa: F401
     LOG_LEVEL_DEF,
     MAX_COLA_DEF,
     MAX_JOBS_DEF,
+    PRESUPUESTO_MARGEN_MANUAL_DEF,
+    PRESUPUESTO_TOKENS_DIA_DEF,
     MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
     MEDIA_GC_INTERVALO_HORAS_DEF,
     METRICAS_HISTORICO_RETENCION_DIAS_DEF,
@@ -378,8 +383,11 @@ from .config_hosted import (  # noqa: F401
     video_max_mb,
 )
 from .config_jobs import (  # noqa: F401
+    generacion_pausada,
     max_cola,
     max_jobs,
+    presupuesto_margen_manual_pct,
+    presupuesto_tokens_dia,
     worker_externo,
     worker_sondeo_segundos,
 )

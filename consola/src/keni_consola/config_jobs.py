@@ -3,12 +3,17 @@ from __future__ import annotations
 
 from ._config_comun import (
     _VERDADEROS,
+    ENV_GENERACION_PAUSADA,
     ENV_MAX_COLA,
     ENV_MAX_JOBS,
+    ENV_PRESUPUESTO_MARGEN_MANUAL,
+    ENV_PRESUPUESTO_TOKENS_DIA,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
     MAX_COLA_DEF,
     MAX_JOBS_DEF,
+    PRESUPUESTO_MARGEN_MANUAL_DEF,
+    PRESUPUESTO_TOKENS_DIA_DEF,
     WORKER_SONDEO_SEGUNDOS_DEF,
     _crudo,
     _entero,
@@ -27,6 +32,45 @@ def max_jobs() -> int:
 def max_cola() -> int:
     """Maximo de jobs ESPERANDO un slot (`KENI_MAX_COLA`, def 16, minimo 0)."""
     return _entero(ENV_MAX_COLA, MAX_COLA_DEF, minimo=0)
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: economia de tokens (presupuesto diario + kill switch)             #
+# --------------------------------------------------------------------------- #
+#
+# La generacion corre `claude -p` con la MISMA suscripcion que usa el equipo a diario: una
+# avalancha de jobs de fondo puede agotar los tokens de TODOS sin que nadie lo vea venir.
+# Estos knobs (editables en caliente via el store de ajustes) gobiernan el corte automatico
+# (`presupuesto_ia.py`) y la pausa manual de la generacion. Todos se leen EN CALIENTE.
+
+
+def presupuesto_tokens_dia() -> int:
+    """Presupuesto DIARIO de tokens de generacion (`KENI_PRESUPUESTO_TOKENS_DIA`, def 0).
+
+    Tokens in+out sumados de todas las generaciones cerradas en el dia UTC. `0` = SIN
+    limite (el corte automatico queda apagado; el kill switch manual sigue funcionando).
+    """
+    return _entero(ENV_PRESUPUESTO_TOKENS_DIA, PRESUPUESTO_TOKENS_DIA_DEF, minimo=0)
+
+
+def presupuesto_margen_manual_pct() -> int:
+    """Margen extra (%) SOLO para lanzamientos manuales tras el corte del fondo.
+
+    `KENI_PRESUPUESTO_MARGEN_MANUAL`, def 20: agotado el presupuesto, lo manual sigue
+    funcionando hasta `presupuesto * (1 + margen/100)`; superado eso, corte TOTAL.
+    """
+    return _entero(ENV_PRESUPUESTO_MARGEN_MANUAL, PRESUPUESTO_MARGEN_MANUAL_DEF, minimo=0)
+
+
+def generacion_pausada() -> bool:
+    """KILL SWITCH humano de la generacion (`KENI_GENERACION_PAUSADA`, def off).
+
+    Encendido: NO se encola NADA nuevo (fondo ni manual; 429 claro) y el worker DEJA de
+    reclamar jobs (lo ya encolado espera; lo que corre termina). Editable en caliente desde
+    la UI (store de ajustes compartido por back/worker/daemons via /data): es el freno de
+    mano cuando la suscripcion compartida esta al limite o algo se desboca.
+    """
+    return _crudo(ENV_GENERACION_PAUSADA).lower() in _VERDADEROS
 
 
 

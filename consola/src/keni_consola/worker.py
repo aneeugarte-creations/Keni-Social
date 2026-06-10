@@ -50,7 +50,7 @@ import threading
 import time
 import uuid
 
-from . import cola, config, generaciones
+from . import cola, config, generaciones, presupuesto_ia
 from .dominio import jobspec
 
 _log = logging.getLogger("keni_consola.worker")
@@ -368,8 +368,26 @@ def _bucle(parar: threading.Event, worker_id: str) -> None:
     sondeo = config.worker_sondeo_segundos()
     espera = sondeo
     while not parar.is_set():
+        # GATE DE ECONOMIA (presupuesto_ia): se decide ANTES de reclamar, asi una avalancha
+        # YA ENCOLADA tambien se corta (el gate de admision solo frena lo nuevo). Pausado
+        # (kill switch) o agotado (presupuesto + margen): no se reclama NADA (lo encolado
+        # queda `pendiente`, listo para la reanudacion). Solo-manual: se reclama unicamente
+        # prioridad >= MANUAL (el fondo espera). El gate es barato (lectura cacheada ~3 s).
         try:
-            job = cola.reclamar(worker_id)
+            nivel = presupuesto_ia.nivel()
+        except Exception:  # noqa: BLE001 -- ante un fallo del gate, preferimos NO cortar
+            _log.warning("worker: fallo el gate de presupuesto; sigo sin corte", exc_info=True)
+            nivel = presupuesto_ia.NIVEL_NORMAL
+        if nivel in (presupuesto_ia.NIVEL_PAUSADO, presupuesto_ia.NIVEL_AGOTADO):
+            if parar.wait(espera):
+                return
+            espera = min(espera * 1.5, max(sondeo, _SONDEO_MAX_S))
+            continue
+        prioridad_minima = (
+            jobspec.PRIORIDAD_MANUAL if nivel == presupuesto_ia.NIVEL_SOLO_MANUAL else None
+        )
+        try:
+            job = cola.reclamar(worker_id, prioridad_minima=prioridad_minima)
         except Exception:  # noqa: BLE001 -- un fallo de la cola no debe matar el worker
             _log.exception("worker: fallo al reclamar un job de la cola")
             if parar.wait(espera):

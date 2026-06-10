@@ -72,6 +72,12 @@ ENV_MAX_COLA = "KENI_MAX_COLA"
 ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
 ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 
+# Economia de tokens de la generacion (la suscripcion `claude` es COMPARTIDA con el equipo):
+# presupuesto DIARIO de tokens con corte automatico + kill switch humano (`presupuesto_ia.py`).
+ENV_PRESUPUESTO_TOKENS_DIA = "KENI_PRESUPUESTO_TOKENS_DIA"
+ENV_PRESUPUESTO_MARGEN_MANUAL = "KENI_PRESUPUESTO_MARGEN_MANUAL"
+ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
+
 # Generacion `claude -p`.
 ENV_CLAUDE_TIMEOUT = "KENI_CLAUDE_TIMEOUT"
 ENV_CLAUDE_MAX_USD = "KENI_CLAUDE_MAX_USD"
@@ -442,6 +448,12 @@ QA_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
 WORKER_SONDEO_SEGUNDOS_DEF = 0.5
+# Presupuesto DIARIO de tokens de la generacion (in+out, dia UTC). 0 = SIN limite (defecto:
+# no cambia el comportamiento de un deploy existente; se enciende fijando un valor > 0).
+PRESUPUESTO_TOKENS_DIA_DEF = 0
+# Margen EXTRA (%) sobre el presupuesto que se concede SOLO a los lanzamientos manuales del
+# equipo cuando el fondo ya esta cortado. Al superarlo, corte TOTAL (tambien lo manual).
+PRESUPUESTO_MARGEN_MANUAL_DEF = 20
 # Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
 # 4h da margen sin golpear las APIs externas en cada apertura.
 METRICAS_REFRESCO_HORAS_DEF = 4
@@ -790,6 +802,9 @@ __all__ = [
     'ENV_PIPELINE_EN_VUELO_MAX',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
+    'ENV_PRESUPUESTO_MARGEN_MANUAL',
+    'ENV_PRESUPUESTO_TOKENS_DIA',
+    'ENV_GENERACION_PAUSADA',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VALIDACION',
@@ -862,6 +877,8 @@ __all__ = [
     'LOG_LEVEL_DEF',
     'MAX_COLA_DEF',
     'MAX_JOBS_DEF',
+    'PRESUPUESTO_MARGEN_MANUAL_DEF',
+    'PRESUPUESTO_TOKENS_DIA_DEF',
     'MEDIA_GC_ANTIGUEDAD_HORAS_DEF',
     'MEDIA_GC_INTERVALO_HORAS_DEF',
     'METRICAS_HISTORICO_RETENCION_DIAS_DEF',
