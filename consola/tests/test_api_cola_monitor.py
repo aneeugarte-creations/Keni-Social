@@ -188,14 +188,22 @@ def test_purgar_requiere_admin(entorno):
     assert repos.contar_jobs_activos() == 1
 
 
-def test_lanzar_urgente_encola_con_prioridad_breaking(entorno):
+def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):
     """`dominio.generar.lanzar(urgente=True)` en tipo de FONDO encola a PRIORIDAD_BREAKING.
 
     Es el carril de las historias CURADAS desde el panel (breaking empujada por un humano):
     su copy adelanta al lote de fondo sin pisar los lanzamientos manuales (10 > 5 > 0).
+    Se captura el SPEC en el seam de encolado (`encolar_job_claude`): en tests el worker
+    in-proceso correría el job al instante y la fila no quedaría observable en la cola.
     """
     from keni_consola.dominio import generar as dom_generar
 
+    specs: dict[str, dict] = {}
+
+    def captura(gen_id, *, prompt, cwd, procesar, dir_temporal=None, spec=None):
+        specs[gen_id] = spec or {}
+
+    monkeypatch.setattr(dom_generar.generaciones, "encolar_job_claude", captura)
     spec_proc = jobspec.construir_hashtags()
     comunes = dict(
         titulo="t", marca=_MARCA, prompt="p",
@@ -205,10 +213,9 @@ def test_lanzar_urgente_encola_con_prioridad_breaking(entorno):
     urgente = dom_generar.lanzar(tipo="autogen", urgente=True, clave_idem="k1", **comunes)
     fondo = dom_generar.lanzar(tipo="autogen", clave_idem="k2", **comunes)
     manual = dom_generar.lanzar(tipo="copy", clave_idem="k3", **comunes)
-    prios = {j["gen_id"]: j["prioridad"] for j in repos.jobs_activos()}
-    assert prios[urgente["id"]] == jobspec.PRIORIDAD_BREAKING
-    assert prios[fondo["id"]] == jobspec.PRIORIDAD_PIPELINE
-    assert prios[manual["id"]] == jobspec.PRIORIDAD_MANUAL
+    assert jobspec.prioridad(specs[urgente["id"]]) == jobspec.PRIORIDAD_BREAKING
+    assert jobspec.prioridad(specs[fondo["id"]]) == jobspec.PRIORIDAD_PIPELINE
+    assert jobspec.prioridad(specs[manual["id"]]) == jobspec.PRIORIDAD_MANUAL
 
 
 def test_priorizar_adelanta_job_pendiente_admin(entorno):
