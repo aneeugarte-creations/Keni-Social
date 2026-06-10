@@ -37,6 +37,7 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ARTE,
+    ENV_PIPELINE_AVANCE,
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
@@ -666,6 +667,7 @@ def alguna_etapa_pipeline_activa() -> bool:
         or qa_activo()
         or pipeline_activo()
         or autogen_arte_activo()
+        or avance_revision_activo()
     )
 
 
@@ -677,6 +679,20 @@ def autogen_arte_activo() -> bool:
     la adjunta. Sin proveedor de imagen configurado, no hace nada (degrada).
     """
     return _crudo(ENV_PIPELINE_ARTE).lower() in _VERDADEROS
+
+
+def avance_revision_activo() -> bool:
+    """True si los borradores COMPLETOS pasan SOLOS a revisión (`KENI_PIPELINE_AVANCE`).
+
+    Def ON (como la auto-programación, a diferencia de las etapas que gastan `claude -p`):
+    mover a la cola de revisión es bookkeeping interno, reversible (una devolución la saca)
+    y NO publica — el gate humano (los OK) queda intacto, solo se ahorra el clic de envío.
+    Respeta precedencia store>env>defecto; `KENI_PIPELINE_AVANCE=0`/`no`/`off` lo apaga.
+    """
+    crudo = _crudo(ENV_PIPELINE_AVANCE).lower()
+    if not crudo:
+        return True
+    return crudo not in _FALSOS
 
 
 def _accesor_global_de_etapa(env_flag: str):
@@ -694,6 +710,7 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PIPELINE_VALIDACION: qa_activo,
             ENV_PIPELINE_COPY: pipeline_activo,
             ENV_PIPELINE_ARTE: autogen_arte_activo,
+            ENV_PIPELINE_AVANCE: avance_revision_activo,
         }[env_flag]
     except KeyError:
         raise ValueError(f"'{env_flag}' no es una etapa del pipeline de contenido.") from None

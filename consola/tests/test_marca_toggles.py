@@ -96,11 +96,12 @@ def test_etapa_activa_es_la_fuente_unica(monkeypatch):
     assert config.etapa_activa(config.ENV_PIPELINE_COPY, "claro-sports") is True
 
 
-def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
+def test_etapa_global_activa_cubre_las_siete_etapas(monkeypatch):
     _store(monkeypatch, {})
     etapas = (
         config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL, config.ENV_PIPELINE_SELECCION,
         config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+        config.ENV_PIPELINE_AVANCE,
     )
     for env in etapas:
         monkeypatch.setenv(env, "1")

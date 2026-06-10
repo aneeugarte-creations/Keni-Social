@@ -10,7 +10,7 @@ símbolos privados que algún consumidor importa directamente), de modo que `ken
   - `_ingesta` — CI: selección pura de items + creación de temas (sin copy) + dedup.
   - `_qa`      — QA: criba de la FUENTE (pre-copy, `claude -p`) + veredicto léxico.
   - `_copy`    — CD: lanza copy de los temas con QA `no_verificado` (+ news-pool autogen).
-  - `_barrido` — orquesta CI→QA→CD→arte bajo single-flight, y el hilo demonio.
+  - `_barrido` — orquesta CI→QA→CD→arte→avance bajo single-flight, y el hilo demonio.
 
 PROBLEMA QUE RESUELVE
 =====================
@@ -88,6 +88,7 @@ from ._barrido import (
     _ejecutar_barrido,
     _intervalo_segundos,
     ejecutar_arte,
+    ejecutar_avance,
     ejecutar_barrido,
     ejecutar_cd,
     ejecutar_qa,
@@ -269,6 +270,7 @@ __all__ = [
     "ejecutar_qa",
     "ejecutar_cd",
     "ejecutar_arte",
+    "ejecutar_avance",
     "_intervalo_segundos",
     "iniciar_pipeline",
 ]

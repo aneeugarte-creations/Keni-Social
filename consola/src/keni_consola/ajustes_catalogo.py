@@ -87,28 +87,38 @@ GRUPOS_MAQUINA: tuple[str, ...] = (
 #   - KENI_PIPELINE_SELECCION  → "Selección"     (ingiere/agrupa y promueve las top a temas; no IA),
 #   - KENI_PIPELINE_VALIDACION → "Validación IA" (criba la fuente con IA antes del copy),
 #   - KENI_PIPELINE_COPY       → "Copy IA"       (genera el copy automático),
-#   - KENI_PIPELINE_ARTE       → "Arte IA"       (genera la imagen por IA).
+#   - KENI_PIPELINE_ARTE       → "Arte IA"       (genera la imagen por IA),
+#   - KENI_PIPELINE_AVANCE     → "Avance a revisión" (borrador completo → cola de revisión).
 # La tupla es (env, etiqueta, descripción). El maestro vive en `maestros_etapa`; las excepciones
-# por marca en `automatizacion_marca`. (Aprobación es gate humano: no tiene toggle.)
+# por marca en `automatizacion_marca`. (La APROBACIÓN sigue siendo gate humano sin toggle: el
+# avance solo ahorra el clic de "enviar a revisión", nunca el OK.)
 _ETAPA_FUSION = (config.ENV_PIPELINE_FUSION, "Fusión IA", "une con IA las historias del mismo evento (dedup semántico)")
 _ETAPA_EDITORIAL = (config.ENV_PIPELINE_EDITORIAL, "Editorial IA", "encaje con la marca vía perfil editorial IA")
 _ETAPA_SELECCION = (config.ENV_PIPELINE_SELECCION, "Selección", "ingiere y promueve historias a temas (no IA)")
 _ETAPA_VALIDACION = (config.ENV_PIPELINE_VALIDACION, "Validación IA", "criba la fuente con IA antes de generar copy")
 _ETAPA_COPY = (config.ENV_PIPELINE_COPY, "Copy IA", "genera copy automático de los temas que aún no lo tienen")
 _ETAPA_ARTE = (config.ENV_PIPELINE_ARTE, "Arte IA", "genera imagen por IA para los temas con copy y sin imagen")
+_ETAPA_AVANCE = (config.ENV_PIPELINE_AVANCE, "Avance a revisión", "manda solas a la cola de revisión las piezas completas (copy + foto)")
 
-# Las 6 etapas en orden de flujo (Fusión → Editorial → Selección → Validación → Copy → Arte).
+# Las 7 etapas en orden de flujo (Fusión → Editorial → Selección → Validación → Copy → Arte →
+# Avance). La de Avance no gasta IA ni publica (solo mueve el borrador completo a la cola del
+# equipo), por eso es la única con defecto ON; el gate humano —los OK— queda intacto.
 _ETAPAS: tuple[tuple[str, str, str], ...] = (
     _ETAPA_FUSION, _ETAPA_EDITORIAL, _ETAPA_SELECCION, _ETAPA_VALIDACION, _ETAPA_COPY, _ETAPA_ARTE,
+    _ETAPA_AVANCE,
 )
 
-# Etapas CON excepción por marca (`_ajustes_por_marca`). Las SEIS: apagar una marca la excluye de
+# Etapas CON excepción por marca (`_ajustes_por_marca`). Las SIETE: apagar una marca la excluye de
 # esa etapa, las demás siguen.
 _ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = _ETAPAS
 
+# Defecto del maestro por etapa: todas OFF (conservador: gastan `claude -p`/imagen) salvo
+# Avance, que es bookkeeping reversible y va ON (espejo de su accesor `avance_revision_activo`).
+_ETAPAS_DEFECTO_ON = frozenset({config.ENV_PIPELINE_AVANCE})
+
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Maestro GLOBAL de cada una de las 6 etapas. Apagar el maestro deja la etapa en espera para
+    """Maestro GLOBAL de cada una de las 7 etapas. Apagar el maestro deja la etapa en espera para
     TODAS las marcas; las excepciones por marca solo restan con el maestro encendido."""
     return [
         Ajuste(
@@ -117,7 +127,7 @@ def _maestros_etapa() -> list[Ajuste]:
             etiqueta=etiqueta,
             ayuda=f"Para todas las marcas: {desc}.",
             grupo="maestros_etapa",
-            defecto=False,
+            defecto=env_flag in _ETAPAS_DEFECTO_ON,
         )
         for env_flag, etiqueta, desc in _ETAPAS
     ]

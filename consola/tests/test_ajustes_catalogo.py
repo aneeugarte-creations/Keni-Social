@@ -5,7 +5,7 @@ por tipo/min/max, y la precedencia STORE > ENV > DEFECTO via `config._crudo`. To
 aislado con monkeypatch de env y del store (sin DB ni red).
 
 Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 6 etapas con nombres consolidados
-(`KENI_PIPELINE_<ETAPA>`: Fusión/Ranking/Selección/Validación/Copy/Arte). Las seis tienen
+(`KENI_PIPELINE_<ETAPA>`: Fusión/Ranking/Selección/Validación/Copy/Arte/Avance). Todas tienen
 excepción por marca (1 toggle = 1 etapa).
 """
 
@@ -101,17 +101,21 @@ def test_catalogo_tiene_las_claves_esperadas(store):
 _ETAPAS_ENV = {
     config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL, config.ENV_PIPELINE_SELECCION,
     config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+    config.ENV_PIPELINE_AVANCE,
 }
 
 
-def test_maestros_etapa_son_las_seis(store):
-    """El grupo `maestros_etapa` tiene EXACTAMENTE las 6 etapas (1 toggle = 1 etapa), bool, def False."""
+def test_maestros_etapa_son_las_siete(store):
+    """El grupo `maestros_etapa` tiene EXACTAMENTE las 7 etapas (1 toggle = 1 etapa), bool.
+
+    Defecto: OFF en las que gastan IA/publican contenido nuevo; ON solo en Avance (bookkeeping
+    reversible: mueve el borrador completo a la cola de revisión sin tocar el gate humano)."""
     maestros = [a for a in ajustes_catalogo.catalogo() if a.grupo == "maestros_etapa"]
     claves = {a.clave for a in maestros}
     assert claves == _ETAPAS_ENV
     for a in maestros:
         assert a.tipo == "bool"
-        assert a.defecto is False
+        assert a.defecto is (a.clave == config.ENV_PIPELINE_AVANCE)
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_PIPELINE_FUSION] == "Fusión IA"
     assert etiquetas[config.ENV_PIPELINE_EDITORIAL] == "Editorial IA"
@@ -119,10 +123,11 @@ def test_maestros_etapa_son_las_seis(store):
     assert etiquetas[config.ENV_PIPELINE_VALIDACION] == "Validación IA"
     assert etiquetas[config.ENV_PIPELINE_COPY] == "Copy IA"
     assert etiquetas[config.ENV_PIPELINE_ARTE] == "Arte IA"
+    assert etiquetas[config.ENV_PIPELINE_AVANCE] == "Avance a revisión"
 
 
 def test_etapas_tienen_excepcion_por_marca(store):
-    """Las SEIS etapas generan excepciones por marca (apagar una marca la excluye de esa etapa)."""
+    """Las SIETE etapas generan excepciones por marca (apagar una marca la excluye de esa etapa)."""
     por_marca = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo == "automatizacion_marca" and config.SEP_MARCA in a.clave

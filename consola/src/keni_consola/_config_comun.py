@@ -252,6 +252,13 @@ ENV_PIPELINE_VALIDACION = "KENI_PIPELINE_VALIDACION"
 ENV_PIPELINE_ARTE = "KENI_PIPELINE_ARTE"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
+# Etapa de AVANCE del pipeline: un borrador COMPLETO (copy + foto real) pasa SOLO a la cola
+# de revisión, con la misma cadena que el envío humano. Como la auto-programación (y a
+# diferencia de las etapas que gastan `claude -p`), es bookkeeping interno, reversible y NO
+# publica: default ON. `KENI_PIPELINE_AVANCE=0` lo apaga; sigue bajo el maestro KENI_MAQUINA
+# y excluible por marca (`KENI_PIPELINE_AVANCE::<marca>`).
+ENV_PIPELINE_AVANCE = "KENI_PIPELINE_AVANCE"
+
 # Auto-programación: una pieza APROBADA (cerrada toda su cadena humana) pasa SOLA a `programado`
 # en su próximo hueco de franja. A diferencia del resto de etapas de auto-producción (que gastan
 # `claude -p` o podrían postear), programar es bookkeeping interno, reversible y NO publica (el
@@ -735,6 +742,7 @@ __all__ = [
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
     'ENV_PIPELINE_ARTE',
+    'ENV_PIPELINE_AVANCE',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',

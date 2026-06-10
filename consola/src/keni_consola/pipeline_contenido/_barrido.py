@@ -23,6 +23,7 @@ from ._comun import (
     intentos_de,
     marcar_fallo_etapa,
 )
+from ._avance import ejecutar_avance
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
 from ._ingesta import promover_clusters_marca
 from ._qa import lanzar_qa_fuente, temas_sin_qa
@@ -33,6 +34,7 @@ __all__ = [
     "ejecutar_qa",
     "ejecutar_cd",
     "ejecutar_arte",
+    "ejecutar_avance",
     "_intervalo_segundos",
     "iniciar_pipeline",
 ]
@@ -63,7 +65,7 @@ def ejecutar_barrido() -> dict[str, Any]:
     with db.lock_barrido("pipeline_contenido") as ok:
         if not ok:
             _log.debug("pipeline: otro barrido en curso; se omite este.")
-            return {"temas": [], "cribados": [], "lanzados": [], "artes": []}
+            return {"temas": [], "cribados": [], "lanzados": [], "artes": [], "avances": []}
         return _ejecutar_barrido()
 
 
@@ -121,13 +123,22 @@ def _ejecutar_barrido() -> dict[str, Any]:
     # Etapa de arte (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
     # toggle "Generar arte" (KENI_PIPELINE_ARTE) + máquina; si está OFF, devuelve [].
     artes = ejecutar_arte()
-    if temas_nuevos or cribados or lanzados or artes:
+    # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
+    # cola de revisión. Gateada por KENI_PIPELINE_AVANCE (def ON) + máquina; si está OFF, [].
+    avances = ejecutar_avance()
+    if temas_nuevos or cribados or lanzados or artes or avances:
         _log.info(
             "pipeline: %d tema(s) ingerido(s) (CI), %d cribado(s) (QA), %d copy encolado(s) (CD), "
-            "%d arte(s) (etapa arte).",
-            len(temas_nuevos), len(cribados), len(lanzados), len(artes),
+            "%d arte(s) (etapa arte), %d avance(s) (a revisión).",
+            len(temas_nuevos), len(cribados), len(lanzados), len(artes), len(avances),
         )
-    return {"temas": temas_nuevos, "cribados": cribados, "lanzados": lanzados, "artes": artes}
+    return {
+        "temas": temas_nuevos,
+        "cribados": cribados,
+        "lanzados": lanzados,
+        "artes": artes,
+        "avances": avances,
+    }
 
 
 def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
