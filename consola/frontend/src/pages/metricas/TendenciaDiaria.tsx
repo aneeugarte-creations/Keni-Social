@@ -73,7 +73,7 @@ export function TendenciaDiaria({
       icono={LineChartIcon}
       acciones={
         <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
-          <SelectTrigger className="w-[170px]" aria-label="Métrica de la tendencia">
+          <SelectTrigger className="w-[150px] sm:w-[170px]" aria-label="Métrica de la tendencia">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

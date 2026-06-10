@@ -4,6 +4,7 @@ import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { AccionesPagina } from "@/components/layout/encabezado";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import { FiltrosContenidoProvider } from "@/hooks/use-filtros-contenido";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
@@ -147,6 +148,58 @@ describe("AppShell · sidebar siempre presente", () => {
     await screen.findByText("contenido app");
     // El breadcrumb "Hub › Pestaña" se eliminó: no existe la región de navegación "Ruta".
     expect(screen.queryByRole("navigation", { name: /^ruta$/i })).not.toBeInTheDocument();
+  });
+
+  it("en MÓVIL las acciones de página van a su fila bajo el header, no a la topbar", async () => {
+    // matchMedia simulado: viewport < md (la query "(min-width: 768px)" NO casa).
+    const mq = (consulta: string): MediaQueryList =>
+      ({
+        matches: false,
+        media: consulta,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+    vi.stubGlobal("matchMedia", mq);
+
+    stubFetch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <SesionContexto.Provider value={sesion}>
+          <MarcaActivaProvider>
+          <FiltrosContenidoProvider>
+          <MemoryRouter initialEntries={["/generacion"]}>
+            <Routes>
+              <Route path="/" element={<AppShell />}>
+                <Route
+                  path="generacion"
+                  element={
+                    <div>
+                      contenido app
+                      <AccionesPagina>
+                        <button type="button">accion-de-pagina</button>
+                      </AccionesPagina>
+                    </div>
+                  }
+                />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+          </FiltrosContenidoProvider>
+          </MarcaActivaProvider>
+        </SesionContexto.Provider>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("contenido app");
+    const boton = await screen.findByRole("button", { name: "accion-de-pagina" });
+    // El portal aterriza en la fila móvil (md:hidden bajo el header), no en el <header>.
+    expect(boton.closest("header")).toBeNull();
+    expect(boton.parentElement?.className).toContain("md:hidden");
   });
 
   it("persiste el estado colapsado del rail en localStorage", async () => {

@@ -46,7 +46,7 @@ export function GraficaTendencia({ puntos }: { puntos: PuntoTendenciaCampania[] 
             <h3 className="text-sm font-medium">Tendencia diaria</h3>
           </div>
           <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
-            <SelectTrigger className="w-[170px]" aria-label="Métrica de la tendencia">
+            <SelectTrigger className="w-[150px] sm:w-[170px]" aria-label="Métrica de la tendencia">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
