@@ -140,6 +140,35 @@ async def listar(request: Request) -> Response:
         items_serializados = [_item_a_dict(i, hoy=hoy) for i in items]
         if solo_frescos:
             items_serializados = [i for i in items_serializados if i.get("frescura") != "caduco"]
+        # Badge HONESTO de cara al feed (mismo patrón que las historias del pool): un ítem
+        # `usado` significa "pieza creada", NO "en el feed" — la pieza sale real solo cuando
+        # tiene copy. Derivamos `pieza_estado` (en_cola/generando/en_feed) en batch para los
+        # usados NO-evento (en eventos `contenido_id` guarda el id del EVENTO de la rota, no
+        # una pieza). Best-effort: si falla la lectura, el campo no viaja y la UI cae al texto
+        # de siempre.
+        try:
+            ids_pieza = [
+                str(i.get("contenido_id") or "")
+                for i in items_serializados
+                if i.get("usado") and i.get("contenido_id")
+                and cajon != "eventos_claro" and str(i.get("tipo") or "") != "evento"
+            ]
+            if ids_pieza:
+                resumen_pieza = repos.estado_pieza_por_contenido(ids_pieza)
+                for i in items_serializados:
+                    cid = str(i.get("contenido_id") or "")
+                    if not (i.get("usado") and cid):
+                        continue
+                    if cajon == "eventos_claro" or str(i.get("tipo") or "") == "evento":
+                        continue
+                    pieza = resumen_pieza.get(cid)
+                    i["pieza_estado"] = (
+                        "en_feed" if pieza == "lista"
+                        else "generando" if pieza == "generando"
+                        else "en_cola"
+                    )
+        except Exception:  # noqa: BLE001 -- el badge es informativo; nunca rompe el listado
+            pass
         cajones_resultado.append({
             "cajon": cajon,
             "lotes": [_lote_a_dict(lt) for lt in lotes],

@@ -15,6 +15,7 @@ import {
   Calendar,
   CalendarPlus,
   CheckCircle2,
+  Clock,
   Edit2,
   EyeOff,
   Inbox,
@@ -347,11 +348,39 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 )}
               </>
             )}
-            {item.usado && (
+            {item.usado && esEvento && (
               <Badge variant="ok" className="gap-1">
                 <CheckCircle2 className="h-3 w-3" />
-                {esEvento ? "Evento creado" : "En el feed"}
+                Evento creado
               </Badge>
+            )}
+            {/* Badge HONESTO de la pieza (lo deriva el back, igual que en el pool de
+                noticias): "usado" = pieza creada, no necesariamente visible en el feed. */}
+            {item.usado && !esEvento && (
+              item.pieza_estado === "generando" ? (
+                <Badge
+                  variant="aviso"
+                  className="gap-1"
+                  title="La pieza existe; la IA está redactando el copy. Saldrá en el feed al terminar."
+                >
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Generando…
+                </Badge>
+              ) : item.pieza_estado === "en_cola" ? (
+                <Badge
+                  variant="aviso"
+                  className="gap-1"
+                  title="Pieza creada pero aún sin copy en el feed (en cola). Si no avanza, revisa que «Generar copy» esté activo."
+                >
+                  <Clock className="h-3 w-3" />
+                  En cola
+                </Badge>
+              ) : (
+                <Badge variant="ok" className="gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  En el feed
+                </Badge>
+              )
             )}
           </div>
         </div>

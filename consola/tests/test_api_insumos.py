@@ -315,6 +315,21 @@ def test_usar_item_crea_contenido():
     assert data["item"]["contenido_id"] == data["contenido_id"]
 
 
+def test_listar_expone_pieza_estado_honesto_del_item_usado():
+    """Un ítem usado expone `pieza_estado` derivado de la PIEZA (en_cola sin copy aún):
+    el badge del cajón no dice "En el feed" hasta que la pieza tiene copy de verdad."""
+    cli = _cliente_con_items([{"titulo": "Nota con badge honesto", "marca": "unotv"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal", fecha="2026-06-05")
+    cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
+
+    datos = cli.get("/api/insumos?fecha=2026-06-05").json()
+    portal = next(c for c in datos["cajones"] if c["cajon"] == "portal")
+    item = next(i for i in portal["items"] if i["id"] == item_id)
+    assert item["usado"] is True
+    # La pieza existe pero no tiene copy todavía -> en_cola (no "en el feed").
+    assert item["pieza_estado"] == "en_cola"
+
+
 def test_usar_item_doble_es_idempotente():
     cli = _cliente_con_items([{"titulo": "Nota idempotente", "marca": "unotv"}])
     _, item_id = _aportar_un_item(cli, cajon="portal")

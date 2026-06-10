@@ -147,6 +147,12 @@ export interface InsumoItem {
   creado: string;
   /** Estado de frescura según la TTL de la línea. "caduco" = ítem vencido. */
   frescura?: "fresco" | "caduco";
+  /**
+   * Estado REAL de la pieza de cara al feed (solo ítems usados no-evento; lo deriva el
+   * backend de la pieza, igual que en el pool de noticias, para que el badge no mienta):
+   * 'en_cola' | 'generando' | 'en_feed'. Ausente = sin información (UI cae al texto genérico).
+   */
+  pieza_estado?: "en_cola" | "generando" | "en_feed" | string;
 }
 
 /** Un cajón con sus lotes e ítems para un día concreto. */
