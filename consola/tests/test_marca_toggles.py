@@ -43,12 +43,19 @@ def test_catalogo_expone_toggles_por_marca():
     assert config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "unotv") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_VALIDACION, "unotv") in claves
     # Las cuatro etapas (ingesta + QA + copy + arte) van en `automatizacion_marca`; la publicación,
-    # en su propio grupo `publicacion_marca`. Todos los toggles por marca son `bool`.
+    # en su propio grupo `publicacion_marca`. Esos toggles por marca son `bool`; los CUPOS de
+    # producción por marca (KENI_CUPO_DIA/KENI_CUPO_FRANJA::marca) son `int` en su propio grupo
+    # `noticias_produccion_marca`.
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
-    assert por_marca and all(
-        a.tipo == "bool" and a.grupo in {"automatizacion_marca", "publicacion_marca"}
-        for a in por_marca
-    )
+    toggles = [a for a in por_marca if a.grupo in {"automatizacion_marca", "publicacion_marca"}]
+    cupos = [a for a in por_marca if a.grupo == "noticias_produccion_marca"]
+    assert toggles and all(a.tipo == "bool" for a in toggles)
+    assert cupos and all(a.tipo == "int" for a in cupos)
+    assert {a.grupo for a in por_marca} == {
+        "automatizacion_marca", "publicacion_marca", "noticias_produccion_marca"
+    }
+    assert config.clave_por_marca(config.ENV_CUPO_DIA, "unotv") in claves
+    assert config.clave_por_marca(config.ENV_CUPO_FRANJA, "claro-sports") in claves
 
 
 def test_catalogo_expone_publicacion_por_marca():
