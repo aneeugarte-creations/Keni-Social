@@ -472,7 +472,7 @@ PROMPT_MAX_CHARS_DEF = 200_000
 PROMPT_AVISO_CHARS_DEF = 80_000
 # Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
 # 4h da margen sin golpear las APIs externas en cada apertura.
-METRICAS_REFRESCO_HORAS_DEF = 4
+METRICAS_REFRESCO_HORAS_DEF = 6
 # Cadencia del refresco proactivo de la cache POR PIEZA (tablero). Casa con el TTL de
 # `metricas_pieza` (4h): un post no cambia minuto a minuto.
 METRICAS_PIEZAS_REFRESCO_HORAS_DEF = 4

@@ -127,7 +127,14 @@ async def ingesta(request: Request) -> Response:
         if f > ult_marca.get(cuenta, date.min):
             ult_marca[cuenta] = f
 
-    hoy = date.today()
+    # Referencia temporal: el FIN del periodo del listado (no el reloj de pared). Si la
+    # entrada de cache viene con retraso, medir contra "hoy" inflaría dias_sin_piezas con
+    # días que el feed ni siquiera cubre (y acusaría a Metricool de un hueco nuestro).
+    referencia = (
+        _fecha((payload.get("periodo") or {}).get("hasta"))
+        or max(ult_marca.values(), default=None)
+        or date.today()
+    )
     alertas = []
     for (cuenta, red, formato), f_combo in ult_combo.items():
         f_marca = ult_marca.get(cuenta)
@@ -140,7 +147,7 @@ async def ingesta(request: Request) -> Response:
                 "red": red,
                 "formato": formato,
                 "ultima_pieza": f_combo.isoformat(),
-                "dias_sin_piezas": (hoy - f_combo).days,
+                "dias_sin_piezas": (referencia - f_combo).days,
                 "rezago_dias": rezago,
             })
     alertas.sort(key=lambda a: a["rezago_dias"], reverse=True)

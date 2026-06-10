@@ -101,13 +101,17 @@ def _validar_rango(rango: str) -> str:
     """Acepta presets y tokens de fecha; lo demás cae a 'mes'.
 
     Los tokens (`mes:AAAA-MM`, `rango:AAAA-MM-DD_AAAA-MM-DD`) pasan tal cual: la fachada
-    valida su formato y lanza ValueError (→400) si está mal. Un rango basura cualquiera
-    cae a 'mes' (compat con el comportamiento previo, sin romper la vista).
+    valida su formato y lanza ValueError (→400) si está mal. Un `AAAA-MM` desnudo se
+    normaliza a `mes:AAAA-MM` — antes caía al fallback y "mayo 2026" devolvía en silencio
+    los últimos 30 días (números de otro periodo, peor que un error). Un rango basura
+    cualquiera cae a 'mes' (compat con el comportamiento previo, sin romper la vista).
     """
     if rango in RANGOS_VALIDOS:
         return rango
     if rango.startswith(("mes:", "rango:")):
         return rango
+    if len(rango) == 7 and rango[:4].isdigit() and rango[4] == "-" and rango[5:].isdigit():
+        return f"mes:{rango}"
     return "mes"
 
 

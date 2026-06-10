@@ -8,7 +8,7 @@ en serie por cuenta y plataforma: un consolidado podia tardar 30-120 s. Aqui se
 persiste el resultado en Postgres (`metricas_cache`, ver `db.py`) y la UI lo lee
 instantaneamente. El dato se refresca por dos vias:
 
-  - Un DAEMON cada N horas (def 4h; `metricas_refresco.py`) — "1 vez al dia importa".
+  - Un DAEMON cada N horas (def 6h; `metricas_refresco.py`) — "1 vez al dia importa".
   - El boton "Actualizar" de la UI -> `POST /api/metricas/refrescar`, que dispara un
     refresco EN SEGUNDO PLANO priorizando el combo (rango, marca) que se esta viendo;
     la UI POLLea `GET /api/metricas/estado` hasta que el dato del combo cambia.
@@ -25,6 +25,16 @@ REGLAS
   - LAZY FILL: si un combo no esta en cache, se calcula al vuelo, se guarda y se
     devuelve (la 1a apertura puede tardar; las siguientes son instantaneas). Nunca
     pantalla vacia.
+  - FRESCURA GARANTIZADA: el barrido refresca TODOS los tipos de TODOS los combos
+    (presets + meses recientes). Ademas, una entrada mas vieja que el TTL (1.25x el
+    intervalo del daemon) se sirve al instante PERO dispara un refresco en fondo
+    (stale-while-revalidate): aunque el daemon muera o el combo no entre al barrido
+    (meses historicos), ninguna vista se queda con datos viejos mas de un ciclo.
+  - VERSION DE ESQUEMA en la clave (`v{N}:`): si cambia la FORMA del payload de la
+    fachada, se sube `_VERSION_ESQUEMA` y todas las entradas viejas dejan de leerse
+    (se recalculan); sin esto, un payload viejo servia campos nuevos como 0/None
+    (p.ej. "Piezas publicadas: 0" en meses cacheados antes del KPI). La purga del
+    barrido borra las filas huerfanas.
   - Estado de refresco EN MEMORIA (un solo proceso del back; el daemon y el POST
     viven en el mismo proceso uvicorn): un Lock + un dict. Se resetea al reiniciar.
   - Conexion por operacion (via `repos`), segura entre hilos (igual que el resto).
@@ -35,11 +45,23 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+from datetime import datetime, timedelta
 
 from keni_metricas import servicio
 
-from . import repos
-from .tiempo import ahora_iso
+from . import config, repos
+from .tiempo import ahora_iso, hoy_utc
+
+# Version del ESQUEMA de los payloads cacheados. Subir cuando cambie la forma de lo
+# que devuelve `keni_metricas.servicio` (campos nuevos en reporte/series/listados):
+# invalida toda la cache previa de golpe (las claves viejas dejan de leerse y la
+# purga del barrido las borra), en vez de servir el campo nuevo como 0/None.
+_VERSION_ESQUEMA = 2
+
+# Las entradas de rangos AD-HOC (`rango:AAAA-MM-DD_AAAA-MM-DD`, las genera el comparador
+# con fechas que se desplazan cada dia) caducan y se purgan pasado este margen: sus claves
+# cambian a diario y las viejas son basura que solo engorda la tabla.
+_PURGA_RANGOS_ADHOC_HORAS = 48
 
 _log = logging.getLogger("keni_consola.metricas_cache")
 
@@ -83,6 +105,10 @@ _ESTADO: dict[str, object] = {
 _LOCKS_GUARDIAN = threading.Lock()
 _LOCKS_COMBO: dict[str, threading.Lock] = {}
 
+# Claves con un refresco en FONDO en vuelo (stale-while-revalidate): evita que N lecturas
+# de la misma entrada caducada disparen N recalculos. Protegido por `_LOCKS_GUARDIAN`.
+_SWR_EN_VUELO: set[str] = set()
+
 
 def _lock_combo(clave: str) -> threading.Lock:
     """Lock dedicado a una clave de combo (creado al vuelo, bajo el lock guardián)."""
@@ -104,7 +130,53 @@ def _marca_norm(marca: str | None) -> str:
 
 
 def _clave(tipo: str, rango: str, marca: str | None) -> str:
-    return f"{tipo}:{rango}:{_marca_norm(marca) or 'todas'}"
+    return f"v{_VERSION_ESQUEMA}:{tipo}:{rango}:{_marca_norm(marca) or 'todas'}"
+
+
+def _ttl_segundos() -> float:
+    """Edad maxima de una entrada antes de revalidarla en fondo (1.25x el intervalo).
+
+    Con el daemon sano ninguna entrada del barrido supera el intervalo (re-estampa
+    `generado_en` en cada pasada): el TTL solo salta si el daemon murio o el combo no
+    entra al barrido (meses historicos poco visitados). El 1.25 evita revalidar justo
+    por detras del daemon.
+    """
+    return config.metricas_refresco_horas() * 3600.0 * 1.25
+
+
+def _caducada(generado_en: str) -> bool:
+    """True si la entrada supera el TTL (o su timestamp es ilegible)."""
+    try:
+        edad = datetime.fromisoformat(_ahora()) - datetime.fromisoformat(generado_en)
+    except (TypeError, ValueError):
+        return True
+    return edad.total_seconds() > _ttl_segundos()
+
+
+def _revalidar_en_fondo(tipo: str, rango: str, marca: str | None) -> None:
+    """Dispara UN refresco en fondo del combo (idempotente mientras este en vuelo).
+
+    Stale-while-revalidate: el llamante ya devolvio la entrada caducada (la UI no
+    espera); aqui se recalcula en un hilo daemon y la SIGUIENTE lectura ve el dato
+    fresco. Un fallo se loguea y no se propaga (quedara la entrada vieja y se
+    reintentara en la proxima lectura o barrido).
+    """
+    clave = _clave(tipo, rango, marca)
+    with _LOCKS_GUARDIAN:
+        if clave in _SWR_EN_VUELO:
+            return
+        _SWR_EN_VUELO.add(clave)
+
+    def _trabajo() -> None:
+        try:
+            _refrescar(tipo, rango, marca)
+        except Exception:  # noqa: BLE001 -- en fondo: se loguea y la entrada vieja sobrevive
+            _log.exception("Fallo el refresco en fondo de %s.", clave)
+        finally:
+            with _LOCKS_GUARDIAN:
+                _SWR_EN_VUELO.discard(clave)
+
+    threading.Thread(target=_trabajo, name="revalida-metricas", daemon=True).start()
 
 
 # --------------------------------------------------------------------------- #
@@ -186,6 +258,10 @@ def _leer_o_calcular(tipo: str, rango: str, marca: str | None) -> tuple[dict, st
     """
     entrada = _leer(tipo, rango, marca)
     if entrada is not None:
+        # Caducada: se sirve igual (instantaneo) pero se revalida en fondo, asi ningun
+        # combo —tampoco los que no entran al barrido— sirve datos viejos mas de un ciclo.
+        if _caducada(entrada["generado_en"]):
+            _revalidar_en_fondo(tipo, rango, marca)
         return entrada["payload"], entrada["generado_en"]
     with _lock_combo(_clave(tipo, rango, marca)):
         # Re-lee dentro del lock: otro hilo pudo haber rellenado la cache mientras esperábamos.
@@ -319,21 +395,33 @@ async def ads_async(rango: str, marca: str | None) -> tuple[dict, str]:
 # --------------------------------------------------------------------------- #
 
 
-def refrescar_combo(rango: str, marca: str | None) -> None:
-    """Recalcula reporte + analisis + piezas + tendencia de UN combo (best-effort).
+# TODOS los tipos que sirve la cache: el barrido refresca el combo COMPLETO. Antes solo
+# refrescaba reporte/analisis/piezas/tendencia (y el listado solo por-marca): seguidores,
+# desgloses, crosstab, correlacion y el listado de "todas" se llenaban una vez por lazy-fill
+# y se servian PARA SIEMPRE — la alerta de ingesta y el grafico de seguidores del dashboard
+# global ensenaban datos congelados de hace semanas como si fueran de hoy.
+_TIPOS_BARRIDO = (
+    TIPO_REPORTE,
+    TIPO_ANALISIS,
+    TIPO_PIEZAS,
+    TIPO_TENDENCIA,
+    TIPO_SEGUIDORES,
+    TIPO_DESGLOSE,
+    TIPO_CROSSTAB,
+    TIPO_CORRELACION,
+    TIPO_PIEZAS_LISTADO,
+    TIPO_ADS,
+)
 
-    Para una marca CONCRETA refresca también el listado de piezas (`TIPO_PIEZAS_LISTADO`) y
-    las campañas de Ads (`TIPO_ADS`, el inorgánico): es lo que consumen las Campañas (filtran
-    piezas por hashtag sobre el listado y atribuyen boosts sobre los ads). Sin incluirlos
-    aquí, la primera versión cacheada por lazy-fill se servía para siempre —ni una pieza
-    nueva ni un cambio de forma del payload aparecían jamás—. Se OMITEN para `marca=None`
-    ("todas"): ninguna vista lo pide (las campañas son por-marca) y agregaría TODAS las
-    cuentas, caro e inútil; esos combos se quedan en lazy-fill bajo demanda.
+
+def refrescar_combo(rango: str, marca: str | None) -> None:
+    """Recalcula TODOS los tipos de UN combo (best-effort por tipo).
+
+    Incluye tambien `marca=None` ("todas") al completo: la alerta de ingesta lee el
+    listado global y el dashboard sin filtro lee seguidores/desgloses globales; dejarlos
+    en lazy-fill los congelaba en su primera version cacheada.
     """
-    tipos = [TIPO_REPORTE, TIPO_ANALISIS, TIPO_PIEZAS, TIPO_TENDENCIA]
-    if _marca_norm(marca):
-        tipos.extend((TIPO_PIEZAS_LISTADO, TIPO_ADS))
-    for tipo in tipos:
+    for tipo in _TIPOS_BARRIDO:
         try:
             _refrescar(tipo, rango, marca)
         except Exception:  # noqa: BLE001 -- un combo que falla no aborta el barrido
@@ -342,12 +430,26 @@ def refrescar_combo(rango: str, marca: str | None) -> None:
             )
 
 
+def _tokens_meses_recientes() -> list[str]:
+    """Tokens `mes:AAAA-MM` del mes en curso y el anterior.
+
+    Son los filtros de mes que el equipo mira a diario (el mes corriente y el recien
+    cerrado) y cuyas cifras aun se mueven (el engagement de las piezas sigue sumando):
+    entran al barrido para estar siempre frescos. Meses mas viejos quedan en lazy-fill
+    + revalidacion por TTL al leerse (sus cifras ya apenas cambian).
+    """
+    hoy = hoy_utc()
+    primero_de_mes = hoy.replace(day=1)
+    anterior = primero_de_mes - timedelta(days=1)
+    return [f"mes:{hoy:%Y-%m}", f"mes:{anterior:%Y-%m}"]
+
+
 def _combos_a_refrescar(prioritario: tuple[str, str | None] | None) -> list[tuple[str, str | None]]:
     """Lista de combos `(rango, marca)` del barrido, con el prioritario primero.
 
     Marcas = "todas" (None) + las que la fuente activa puede servir
-    (`servicio.cuentas_disponibles`); rangos = `servicio.RANGOS_VALIDOS`. Se evita
-    duplicar el combo prioritario.
+    (`servicio.cuentas_disponibles`); rangos = `servicio.RANGOS_VALIDOS` + los tokens
+    de mes recientes (en curso y anterior). Se evita duplicar el combo prioritario.
     """
     marcas: list[str | None] = [None]
     for cid, _nombre in servicio.cuentas_disponibles():
@@ -365,19 +467,37 @@ def _combos_a_refrescar(prioritario: tuple[str, str | None] | None) -> list[tupl
 
     if prioritario is not None:
         _add(prioritario[0], prioritario[1])
-    for rango in servicio.RANGOS_VALIDOS:
+    for rango in [*servicio.RANGOS_VALIDOS, *_tokens_meses_recientes()]:
         for marca in marcas:
             _add(rango, marca)
     return combos
 
 
+def _purgar_obsoletas() -> None:
+    """Borra entradas muertas: claves de esquemas viejos y rangos ad-hoc caducados.
+
+    Best-effort (un fallo se loguea y el barrido sigue): es higiene de la tabla, no
+    correctitud — las claves viejas ya no se leen (el prefijo de version cambio).
+    """
+    corte = datetime.fromisoformat(_ahora()) - timedelta(hours=_PURGA_RANGOS_ADHOC_HORAS)
+    try:
+        n = repos.purgar_metricas_cache(
+            f"v{_VERSION_ESQUEMA}:", corte.isoformat(timespec="seconds"), _TIPOS_BARRIDO
+        )
+        if n:
+            _log.info("Purga de cache de metricas: %d entrada(s) obsoleta(s).", n)
+    except Exception:  # noqa: BLE001 -- higiene, no correctitud
+        _log.exception("Fallo la purga de la cache de metricas.")
+
+
 def refrescar_todo(prioritario: tuple[str, str | None] | None = None) -> int:
-    """Refresca TODOS los combos (reporte+analisis), el prioritario primero.
+    """Refresca TODOS los combos (todos los tipos), el prioritario primero.
 
     Devuelve cuantos combos se procesaron. Best-effort por combo (un fallo se loguea
     y no aborta el barrido). Lo llaman el daemon (sin prioritario) y el disparo manual
     (con el combo que se esta viendo como prioritario, para que la UI lo vea antes).
     """
+    _purgar_obsoletas()
     combos = _combos_a_refrescar(prioritario)
     for rango, marca in combos:
         refrescar_combo(rango, marca)

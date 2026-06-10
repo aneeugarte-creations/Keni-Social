@@ -475,59 +475,65 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
     desde, hasta, _ = resolver_rango(rango)
     series = _serie_seguidores_cuentas(fuente, rango)
 
-    # Suma el stock por (fecha, red) sobre todas las cuentas en alcance.
-    por_dia: dict[str, dict[str, int]] = {}
-    for puntos in series.values():
+    # Stock REPORTADO por (cuenta, red) y fecha (lo que trajo Metricool ese día, si lo trajo).
+    reportado: dict[tuple[str, str], dict[str, int]] = {}
+    for cuenta, puntos in series.items():
         for punto in puntos:
             fecha = punto["fecha"]
-            dest = por_dia.setdefault(fecha, {})
             for red, valor in (punto.get("por_red") or {}).items():
-                dest[red] = dest.get(red, 0) + int(valor)
+                reportado.setdefault((cuenta, red), {})[fecha] = int(valor)
 
-    fechas = sorted(por_dia)
-    todas_redes = set().union(*(set(d) for d in por_dia.values())) if por_dia else set()
-    # Stock REPORTADO por red y fecha (lo que trajo Metricool ese día, si lo trajo).
-    reportado: dict[str, dict[str, int]] = {}
-    for f in fechas:
-        for red, v in por_dia[f].items():
-            reportado.setdefault(red, {})[f] = int(v)
+    fechas = sorted({f for fv in reportado.values() for f in fv})
 
     # VALIDEZ de un punto: la serie de followers es un STOCK enorme y estable; un valor 0 o
-    # ANÓMALAMENTE BAJO (< la mitad de la mediana de la red) es un día INCOMPLETO de Metricool
-    # —típicamente HOY, aún sin consolidar—, no una pérdida real de seguidores. Sin esto, el
-    # último día caía a ~0 y el neto salía absurdo (p.ej. −14M en 3 días).
-    umbral: dict[str, float] = {
-        red: (0.5 * statistics.median(list(fv.values())) if fv else 0.0)
-        for red, fv in reportado.items()
+    # ANÓMALAMENTE BAJO (< la mitad de la mediana de SU serie) es un día INCOMPLETO de
+    # Metricool —típicamente HOY, aún sin consolidar—, no una pérdida real de seguidores.
+    # El umbral es POR CUENTA×RED, no por red agregada: cuando a una cuenta grande le faltan
+    # snapshots (p.ej. el TikTok de una marca deja de reportar 2 semanas) la suma de la red
+    # baja un 30-40% —por encima de cualquier umbral agregado— y el total pintaba precipicios
+    # falsos de millones; mirando cada cuenta por separado el hueco es inconfundible (ausente).
+    umbral: dict[tuple[str, str], float] = {
+        clave: (0.5 * statistics.median(list(fv.values())) if fv else 0.0)
+        for clave, fv in reportado.items()
     }
 
-    def _valido(red: str, v: int) -> bool:
-        return v > 0 and v >= umbral.get(red, 0.0)
+    def _valido(clave: tuple[str, str], v: int) -> bool:
+        return v > 0 and v >= umbral.get(clave, 0.0)
 
-    # Chart: stock por día con CARRY-FORWARD. Los followers PERSISTEN día a día; si un día no
-    # es válido para una red (incompleto), se arrastra su último valor válido en vez de hundir
-    # el total. La red no aparece hasta su primer valor válido (no se inventa stock previo).
-    puntos_out: list[PuntoSeguidores] = []
-    ultimo: dict[str, int] = {}
+    # Chart: CARRY-FORWARD por cuenta×red ANTES de sumar. Los followers PERSISTEN día a día;
+    # si una cuenta no reporta (o reporta un valor inválido) se arrastra su último valor
+    # válido en vez de hundir el total de la red. Una cuenta no aparece hasta su primer
+    # valor válido (no se inventa stock previo).
+    arrastrado: dict[str, dict[str, int]] = {}  # fecha -> red -> suma de cuentas arrastradas
+    ultimo: dict[tuple[str, str], int] = {}
+    claves_orden = sorted(reportado)
     for f in fechas:
-        por_red_dia: dict[str, int] = {}
-        for red in sorted(todas_redes):
-            v = por_dia[f].get(red)
-            if v is not None and _valido(red, int(v)):
-                ultimo[red] = int(v)
-            if red in ultimo:
-                por_red_dia[red] = ultimo[red]
-        puntos_out.append(
-            PuntoSeguidores(fecha=f, total=sum(por_red_dia.values()), por_red=por_red_dia)
-        )
+        dest = arrastrado.setdefault(f, {})
+        for clave in claves_orden:
+            v = reportado[clave].get(f)
+            if v is not None and _valido(clave, v):
+                ultimo[clave] = v
+            if clave in ultimo:
+                red = clave[1]
+                dest[red] = dest.get(red, 0) + ultimo[clave]
 
-    # Neto del periodo POR RED: último − primer valor VÁLIDO de cada red (ignora días
-    # incompletos). El neto global = suma de los netos por red. Una red con <2 puntos válidos
-    # -> 0 (sin variación medible), pero SE CONSERVA para el desglose del gráfico.
+    puntos_out: list[PuntoSeguidores] = [
+        PuntoSeguidores(
+            fecha=f,
+            total=sum(arrastrado[f].values()),
+            por_red=dict(sorted(arrastrado[f].items())),
+        )
+        for f in fechas
+    ]
+
+    # Neto del periodo POR RED sobre la serie YA arrastrada: último − primer día en que la
+    # red tiene valor (los huecos quedaron rellenos, así que una cuenta que deja de reportar
+    # ya no resta su stock al total). El neto global = suma de los netos por red. Una red con
+    # un solo día -> 0 (sin variación medible), pero SE CONSERVA para el desglose del gráfico.
     neto_por_red: dict[str, int] = {}
-    for red, fv in reportado.items():
-        validos = [fv[f] for f in sorted(fv) if _valido(red, fv[f])]
-        neto_por_red[red] = (validos[-1] - validos[0]) if len(validos) >= 2 else 0
+    for red in sorted({red for _cuenta, red in reportado}):
+        valores = [arrastrado[f][red] for f in fechas if red in arrastrado[f]]
+        neto_por_red[red] = (valores[-1] - valores[0]) if len(valores) >= 2 else 0
     neto = sum(neto_por_red.values())
 
     serie = SerieSeguidores(

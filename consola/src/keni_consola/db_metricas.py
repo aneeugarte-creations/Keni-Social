@@ -371,3 +371,35 @@ def guardar_metricas_cache(
         con.commit()
     finally:
         con.close()
+
+
+def purgar_metricas_cache(
+    prefijo_vigente: str, corte_rangos_adhoc: str, tipos: tuple[str, ...]
+) -> int:
+    """Borra entradas de cache muertas; devuelve cuantas filas cayeron.
+
+    Acotado a `tipos` (los combos de `metricas_cache.py`): la tabla es COMPARTIDA con la
+    cache por-pieza del tablero (`metricas_pieza.py`, tipo `pieza_contenido`, claves sin
+    version), que NO debe tocarse. Dos clases de basura (las decide `metricas_cache.py`):
+      - Claves que NO llevan el prefijo de version vigente (`v{N}:`): esquema viejo,
+        ya nadie las lee tras subir la version.
+      - Rangos AD-HOC (`rango:...`, los genera el comparador con fechas que se
+        desplazan a diario) con `generado_en` anterior al corte: claves de un solo uso.
+    `generado_en` es ISO canonico (UTC sin offset), asi que compara lexicograficamente.
+    """
+    marcas_tipos = ", ".join("?" for _ in tipos)
+    con = _conectar()
+    try:
+        c1 = con.execute(
+            f"DELETE FROM metricas_cache WHERE tipo IN ({marcas_tipos}) AND clave NOT LIKE ?",
+            (*tipos, prefijo_vigente + "%"),
+        )
+        c2 = con.execute(
+            f"DELETE FROM metricas_cache WHERE tipo IN ({marcas_tipos}) "
+            "AND rango LIKE 'rango:%' AND generado_en < ?",
+            (*tipos, corte_rangos_adhoc),
+        )
+        con.commit()
+        return max(c1.rowcount or 0, 0) + max(c2.rowcount or 0, 0)
+    finally:
+        con.close()

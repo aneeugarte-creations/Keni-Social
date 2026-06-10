@@ -65,3 +65,9 @@ def guardar_metricas_cache(
     return db.guardar_metricas_cache(
         clave, tipo, rango, marca, payload, fuente, generado_en
     )
+
+
+def purgar_metricas_cache(
+    prefijo_vigente: str, corte_rangos_adhoc: str, tipos: tuple[str, ...]
+) -> int:
+    return db.purgar_metricas_cache(prefijo_vigente, corte_rangos_adhoc, tipos)

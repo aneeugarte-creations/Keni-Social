@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -46,14 +47,15 @@ def test_lazy_fill_guarda_la_primera_vez_y_relee_de_cache(entorno, monkeypatch):
 
 
 def test_refrescar_combo_actualiza_generado_en(entorno, monkeypatch):
-    # Timestamps deterministas: dos instantes distintos.
-    tiempos = iter(["2026-05-29T10:00:00", "2026-05-29T11:00:00"])
-    monkeypatch.setattr(mc, "_ahora", lambda: next(tiempos))
+    # Timestamps deterministas: el lazy fill estampa 10:00; el refresco posterior, 11:00.
+    reloj = {"valor": "2026-05-29T10:00:00"}
+    monkeypatch.setattr(mc, "_ahora", lambda: reloj["valor"])
 
     rep1, gen1 = mc.reporte("semana", None)
     assert gen1 == "2026-05-29T10:00:00"
 
     # Refrescar el combo lo recalcula (bypass cache) y reestampa el timestamp.
+    reloj["valor"] = "2026-05-29T11:00:00"
     mc.refrescar_combo("semana", None)
     entrada = repos.leer_metricas_cache(mc._clave(mc.TIPO_REPORTE, "semana", None))
     assert entrada["generado_en"] == "2026-05-29T11:00:00"
@@ -72,13 +74,81 @@ def test_refrescar_combo_marca_concreta_incluye_listado(entorno):
     assert "piezas" in entrada["payload"]
 
 
-def test_refrescar_combo_todas_no_incluye_listado(entorno):
-    """`marca=None` ("todas") NO prewarmea el listado: ninguna vista lo pide y agregaría
-    todas las cuentas. Queda en lazy-fill bajo demanda."""
+def test_refrescar_combo_todas_incluye_el_combo_completo(entorno):
+    """`marca=None` ("todas") también refresca el combo COMPLETO (listado y series).
+
+    Regresión del dashboard global congelado: la alerta de ingesta lee el listado de
+    "todas" y el gráfico de seguidores sin filtro lee la serie global; al quedar ambos
+    fuera del barrido se llenaban una vez por lazy-fill y servían PARA SIEMPRE su primera
+    versión (piezas de hace semanas como "última pieza", precipicios viejos en el chart).
+    """
     mc.refrescar_combo("semana", None)
-    # El reporte de "todas" sí se refresca; el listado de "todas" no.
-    assert repos.leer_metricas_cache(mc._clave(mc.TIPO_REPORTE, "semana", None)) is not None
-    assert repos.leer_metricas_cache(mc._clave(mc.TIPO_PIEZAS_LISTADO, "semana", None)) is None
+    for tipo in (mc.TIPO_REPORTE, mc.TIPO_PIEZAS_LISTADO, mc.TIPO_SEGUIDORES, mc.TIPO_DESGLOSE):
+        assert repos.leer_metricas_cache(mc._clave(tipo, "semana", None)) is not None, tipo
+
+
+def test_clave_lleva_version_de_esquema(entorno):
+    """La clave lleva `v{N}:`: subir la versión invalida los payloads de forma vieja.
+
+    Regresión "Piezas publicadas: 0": un reporte cacheado ANTES de añadir el campo
+    `publicaciones` se servía tal cual y el serializador rellenaba el hueco con 0. Con la
+    versión en la clave, el payload viejo simplemente deja de leerse y se recalcula.
+    """
+    assert mc._clave(mc.TIPO_REPORTE, "mes", None).startswith(f"v{mc._VERSION_ESQUEMA}:")
+    # Una entrada escrita con OTRO esquema (clave sin versión) no la lee nadie.
+    repos.guardar_metricas_cache(
+        "reporte:mes:todas", mc.TIPO_REPORTE, "mes", "", {"fuente": "muestra"}, "muestra",
+        "2026-05-01T00:00:00",
+    )
+    rep, gen = mc.reporte("mes", None)
+    assert gen != "2026-05-01T00:00:00"  # recalculó: no sirvió la entrada huérfana
+
+
+def test_purga_borra_huerfanas_y_rangos_adhoc_viejos(entorno, monkeypatch):
+    """La purga del barrido borra claves de esquema viejo y rangos ad-hoc caducados,
+    sin tocar la cache por-pieza del tablero (misma tabla, tipo `pieza_contenido`)."""
+    monkeypatch.setattr(mc, "_ahora", lambda: "2026-06-10T12:00:00")
+    # Huérfana de esquema viejo + rango ad-hoc caducado + pieza del tablero (intocable).
+    repos.guardar_metricas_cache(
+        "reporte:mes:todas", mc.TIPO_REPORTE, "mes", "", {}, "muestra", "2026-05-01T00:00:00"
+    )
+    repos.guardar_metricas_cache(
+        mc._clave(mc.TIPO_REPORTE, "rango:2026-05-01_2026-05-07", None),
+        mc.TIPO_REPORTE, "rango:2026-05-01_2026-05-07", "", {}, "muestra",
+        "2026-06-01T00:00:00",  # > 48h respecto al reloj congelado
+    )
+    repos.guardar_metricas_cache(
+        "pieza:claro-sports:tiktok:99", "pieza_contenido", "", "claro-sports", {}, "real",
+        "2026-05-01T00:00:00",
+    )
+    mc._purgar_obsoletas()
+    assert repos.leer_metricas_cache("reporte:mes:todas") is None
+    assert (
+        repos.leer_metricas_cache(mc._clave(mc.TIPO_REPORTE, "rango:2026-05-01_2026-05-07", None))
+        is None
+    )
+    assert repos.leer_metricas_cache("pieza:claro-sports:tiktok:99") is not None
+
+
+def test_lectura_caducada_se_sirve_y_revalida_en_fondo(entorno, monkeypatch):
+    """Una entrada más vieja que el TTL se sirve al instante PERO se revalida en fondo.
+
+    Red de seguridad para combos fuera del barrido (meses históricos) o con el daemon
+    caído: ninguna vista se queda con datos viejos más de un ciclo. La revalidación se
+    observa por el hook (sin hilos reales en el test)."""
+    revalidados: list = []
+    monkeypatch.setattr(mc, "_revalidar_en_fondo", lambda *a: revalidados.append(a))
+
+    rep, gen = mc.reporte("mes", "claro_sports")  # lazy fill, fresca
+    rep2, gen2 = mc.reporte("mes", "claro_sports")
+    assert gen2 == gen and revalidados == []  # fresca: ni recalcula ni revalida
+
+    # Envejece el reloj más allá del TTL: la lectura sirve la entrada vieja y revalida.
+    futuro = datetime.fromisoformat(gen) + timedelta(seconds=mc._ttl_segundos() + 60)
+    monkeypatch.setattr(mc, "_ahora", lambda: futuro.isoformat(timespec="seconds"))
+    rep3, gen3 = mc.reporte("mes", "claro_sports")
+    assert gen3 == gen  # sirvió la cacheada (instantáneo)
+    assert revalidados == [(mc.TIPO_REPORTE, "mes", "claro_sports")]
 
 
 def test_estado_reporta_generado_en_del_combo(entorno):

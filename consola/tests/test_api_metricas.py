@@ -251,6 +251,19 @@ def test_analisis_rango_invalido_devuelve_400(cliente):
     assert r.json()["fuente"] == "muestra"
 
 
+def test_rango_mes_desnudo_se_normaliza(cliente):
+    """`?rango=2026-05` (AAAA-MM sin prefijo) se normaliza a `mes:2026-05`.
+
+    Regresión: caía al fallback 'mes' (últimos 30 días) EN SILENCIO, así que pedir
+    "mayo" devolvía números de otro periodo sin ningún aviso — p.ej. el contador de
+    piezas de un mes cerrado salía con el del rango rodante."""
+    r = cliente.get("/api/metricas/reporte?rango=2026-05")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["rango"] == "mes:2026-05"
+    assert data["etiqueta_rango"] == "Mayo 2026"
+
+
 def test_analisis_y_comparar_llevan_generado_en(cliente):
     # Igual que /reporte, las lecturas cacheadas exponen cuándo se calcularon.
     a = cliente.get("/api/metricas/analisis?rango=semana")

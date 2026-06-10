@@ -414,3 +414,48 @@ def test_serie_seguidores_descarta_dia_incompleto():
     # El chart NO se hunde el último día: arrastra el último facebook válido (8.71M).
     assert s["puntos"][-1]["por_red"]["facebook"] == 8_710_000
     assert s["puntos"][-1]["total"] == 8_710_000 + 4_970_000
+
+
+def test_serie_seguidores_cuenta_sin_snapshots_no_hunde_el_agregado():
+    """UNA cuenta que deja de reportar no debe hundir la red agregada (caso "−2.2M").
+
+    Regresión del precipicio de mayo-2026: el TikTok de Claro Sports (~2.3M) dejó de
+    traer snapshots en Metricool del 19-may al 02-jun mientras el TikTok de UnoTV (~3.2M)
+    seguía reportando. La suma de la red caía un 35-40% —por ENCIMA del umbral agregado
+    de 0.5×mediana— y el chart pintaba una pérdida falsa de millones, con neto de −2.2M.
+    El carry-forward debe ser POR CUENTA antes de sumar: la cuenta muda arrastra su último
+    stock y el total sigue plano."""
+
+    class _CuentaA:
+        id = "unotv"
+
+    class _CuentaB:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "stub"
+
+        def cuentas(self):
+            return [_CuentaA(), _CuentaB()]
+
+        def serie_seguidores(self, cuenta_id, rango):
+            if cuenta_id == "unotv":  # reporta TODOS los días
+                return [
+                    {"fecha": "2026-05-18", "por_red": {"tiktok": 3_158_000}},
+                    {"fecha": "2026-05-19", "por_red": {"tiktok": 3_169_000}},
+                    {"fecha": "2026-05-20", "por_red": {"tiktok": 3_176_000}},
+                ]
+            return [  # claro_sports: deja de reportar tras el 18-may
+                {"fecha": "2026-05-18", "por_red": {"tiktok": 2_317_000}},
+            ]
+
+    s = servicio.serie_seguidores_desde_fuente(_Fuente(), "mes:2026-05")
+    # Los días sin snapshot de claro_sports arrastran su último stock: sin precipicios.
+    assert [p["por_red"]["tiktok"] for p in s["puntos"]] == [
+        3_158_000 + 2_317_000,
+        3_169_000 + 2_317_000,
+        3_176_000 + 2_317_000,
+    ]
+    # Neto = crecimiento real de unotv (+18k), NO −2.3M por la cuenta muda.
+    assert s["neto_por_red"]["tiktok"] == 18_000
+    assert s["neto"] == 18_000

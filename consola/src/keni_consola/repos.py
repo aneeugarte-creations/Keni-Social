@@ -202,6 +202,7 @@ from .repos_metricas import (  # noqa: F401
     leer_metricas_cache,
     listar_snapshots_piezas,
     podar_snapshots_piezas,
+    purgar_metricas_cache,
     registrar_snapshot_pieza,
     serie_pieza,
 )

@@ -2,7 +2,7 @@
 
 Un hilo demonio que mantiene caliente la cache de metricas (`metricas_cache.py`):
 refresca TODOS los combos (rango × marca, reporte+analisis) al arrancar (rellena la
-cache fria) y luego cada N horas (def 4h; `KENI_METRICAS_REFRESCO_HORAS`). Asi la UI
+cache fria) y luego cada N horas (def 6h; `KENI_METRICAS_REFRESCO_HORAS`). Asi la UI
 lee siempre datos ya calculados (instantaneo) y nadie espera a las APIs externas en
 una apertura. El boton "Actualizar" de la UI dispara un refresco extra a demanda
 (via `metricas_cache.disparar_refresco`), que reusa el MISMO barrido.

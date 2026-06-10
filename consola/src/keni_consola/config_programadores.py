@@ -97,7 +97,7 @@ def programador_intervalo_segundos() -> float | None:
 
 
 def metricas_refresco_horas() -> int:
-    """Cada cuantas horas refresca la cache de metricas el daemon (`KENI_METRICAS_REFRESCO_HORAS`, def 4, min 1)."""
+    """Cada cuantas horas refresca la cache de metricas el daemon (`KENI_METRICAS_REFRESCO_HORAS`, def 6, min 1)."""
     return _entero(ENV_METRICAS_REFRESCO_HORAS, METRICAS_REFRESCO_HORAS_DEF, minimo=1)
 
 
