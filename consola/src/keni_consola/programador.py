@@ -515,6 +515,18 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
         while True:
             t0 = time.monotonic()
             try:
+                # RESCATE de aprobadas sin hueco: la auto-programación síncrona (al aprobar)
+                # se queda sin efecto si EN ESE MOMENTO no había cadencia/franja aplicable
+                # (p. ej. se configuró después). Sin este barrido no había NINGÚN reintento:
+                # la pieza moría en `aprobado`. Best-effort e idempotente (solo toca piezas
+                # `aprobado` que pasan los mismos gates que el encolado manual); gateado por
+                # `KENI_AUTO_PROGRAMAR` dentro de `barrer_aprobadas`.
+                try:
+                    from . import auto_programar
+
+                    auto_programar.barrer_aprobadas()
+                except Exception:  # noqa: BLE001 -- el rescate nunca rompe el barrido principal
+                    _log.exception("Fallo el barrido de piezas aprobadas sin programar.")
                 n = preparar_vencidas()
                 if n:
                     _log.info(
