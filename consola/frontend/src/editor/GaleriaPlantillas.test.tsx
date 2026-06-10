@@ -5,12 +5,43 @@
  *    categoría y badge-selector de categoría (modo gestión vs selector).
  *  - Vacío de búsqueda con salida de un clic («Borrar búsqueda»).
  *  - `ContenidoPlantillas` reutilizable como panel «Diseño» del rail (sin envoltorio modal).
+ *  - Masonry (2 columnas en compacto, aspecto real del documento) + carga perezosa por lotes
+ *    (sentinel + IntersectionObserver falso controlable).
  */
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContenidoPlantillas, GaleriaPlantillas } from "./GaleriaPlantillas";
+import { ratioPlantilla, repartirMasonry } from "@/components/plantillas/FiltroPlantillas";
 import type { PlantillaDiseno } from "@/lib/api";
+
+// IntersectionObserver controlable: jsdom no lo trae; capturamos el callback de cada instancia
+// para disparar la intersección a mano (mismo patrón que FeedIdeacion.test).
+const disparadoresIO: (() => void)[] = [];
+class IOFalso {
+  cb: IntersectionObserverCallback;
+  constructor(cb: IntersectionObserverCallback) {
+    this.cb = cb;
+    disparadoresIO.push(() =>
+      this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver),
+    );
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+beforeEach(() => {
+  disparadoresIO.length = 0;
+  vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+/** Dispara la intersección del ÚLTIMO observador vivo (el del sentinel actual). */
+const dispararIO = () =>
+  act(() => {
+    disparadoresIO[disparadoresIO.length - 1]?.();
+  });
 
 // Plantillas de prueba
 const FOTO: PlantillaDiseno = {
@@ -236,12 +267,87 @@ describe("ContenidoPlantillas — modo panel del rail", () => {
     expect(onCargar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }));
   });
 
-  it("en modo compacto la rejilla es fija de 2 columnas", () => {
+  it("en modo compacto el masonry es fijo de 2 columnas", () => {
     const { container } = render(
       <ContenidoPlantillas compacto plantillas={[ULTIMA]} onCargar={vi.fn()} />,
     );
-    const rejilla = container.querySelector(".grid");
-    expect(rejilla?.className).toContain("grid-cols-2");
-    expect(rejilla?.className).not.toContain("md:grid-cols-4");
+    const masonry = container.querySelector("[data-masonry]");
+    expect(masonry).toHaveAttribute("data-masonry", "2");
+    expect(masonry?.querySelectorAll("[data-col]")).toHaveLength(2);
+  });
+});
+
+// ── Masonry (aspecto real + reparto) y carga perezosa por lotes ─────────────────────────────────
+
+const MUCHAS: PlantillaDiseno[] = Array.from({ length: 30 }, (_, i) => ({
+  ...FOTO,
+  id: `lote-${i}`,
+  nombre: `Plantilla ${i}`,
+}));
+
+describe("ContenidoPlantillas — masonry y carga perezosa", () => {
+  it("reparte las tarjetas entre las 2 columnas del panel compacto", () => {
+    const { container } = render(
+      <ContenidoPlantillas compacto plantillas={MUCHAS.slice(0, 4)} onCargar={vi.fn()} />,
+    );
+    const cols = container.querySelectorAll("[data-col]");
+    expect(cols).toHaveLength(2);
+    // Mismo aspecto en las 4 => reparto equilibrado 2/2 (greedy a la columna más corta).
+    expect(cols[0].querySelectorAll("img")).toHaveLength(2);
+    expect(cols[1].querySelectorAll("img")).toHaveLength(2);
+  });
+
+  it("la miniatura reserva la relación de aspecto REAL del documento (sin layout shift)", () => {
+    const VERTICAL: PlantillaDiseno = {
+      ...FOTO,
+      id: "vert-1",
+      nombre: "Story vertical",
+      documento: { formato: { w: 1080, h: 1920 } },
+    };
+    render(<ContenidoPlantillas compacto plantillas={[VERTICAL]} onCargar={vi.fn()} />);
+    const caja = screen.getByTitle("Cargar «Story vertical»").firstElementChild as HTMLElement;
+    expect(caja.style.aspectRatio).toBe(String(1080 / 1920));
+  });
+
+  it("sin formato en el documento cae al 4/5 histórico", () => {
+    render(<ContenidoPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
+    const caja = screen.getByTitle(`Cargar «${FOTO.nombre}»`).firstElementChild as HTMLElement;
+    expect(caja.style.aspectRatio).toBe(String(4 / 5));
+    expect(ratioPlantilla(FOTO)).toBeCloseTo(0.8);
+  });
+
+  it("repartirMasonry es estable por prefijo: cargar un lote no recoloca lo ya pintado", () => {
+    const antes = repartirMasonry(MUCHAS.slice(0, 24), 2);
+    const despues = repartirMasonry(MUCHAS, 2);
+    expect(despues[0].slice(0, antes[0].length)).toEqual(antes[0]);
+    expect(despues[1].slice(0, antes[1].length)).toEqual(antes[1]);
+  });
+
+  it("renderiza el primer lote (24) con sentinel; la intersección suelta el resto", () => {
+    const { container } = render(
+      <ContenidoPlantillas compacto plantillas={MUCHAS} onCargar={vi.fn()} />,
+    );
+    expect(screen.getAllByTitle(/^Cargar «/)).toHaveLength(24);
+    expect(container.querySelector("[data-sentinela]")).toBeInTheDocument();
+    dispararIO();
+    expect(screen.getAllByTitle(/^Cargar «/)).toHaveLength(30);
+    // Sin más pendientes, el sentinel desaparece (y con él el observador).
+    expect(container.querySelector("[data-sentinela]")).not.toBeInTheDocument();
+  });
+
+  it("buscar reinicia el lote: una plantilla más allá del primer lote aparece al filtrar", () => {
+    render(<ContenidoPlantillas compacto plantillas={MUCHAS} onCargar={vi.fn()} />);
+    expect(screen.queryByTitle("Cargar «Plantilla 29»")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Plantilla 29" } });
+    expect(screen.getByTitle("Cargar «Plantilla 29»")).toBeInTheDocument();
+  });
+
+  it("hover de tarjeta: elevación + escala sutil en ~150ms y foco visible por teclado", () => {
+    render(<ContenidoPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
+    const tarjeta = screen.getByTitle(`Cargar «${FOTO.nombre}»`);
+    expect(tarjeta.className).toContain("duration-150");
+    expect(tarjeta.className).toContain("hover:shadow-lg");
+    expect(tarjeta.className).toContain("motion-safe:hover:scale-[1.02]");
+    expect(tarjeta.className).toContain("focus-visible:ring-2");
   });
 });

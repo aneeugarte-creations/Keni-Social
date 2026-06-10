@@ -15,7 +15,11 @@ import {
   BadgeCategoria,
   BuscadorPlantillas,
   ChipsCategoria,
+  MasonryPlantillas,
+  ratioPlantilla,
+  useColumnasGaleria,
   useFiltroPlantillas,
+  useLotes,
 } from "@/components/plantillas/FiltroPlantillas";
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 import { agruparPorCategoria } from "@/lib/categoriasPlantilla";
@@ -88,6 +92,27 @@ export function ContenidoPlantillas({
     useFiltroPlantillas(plantillasTipo);
   const grupos = agruparPorCategoria(filtradas);
 
+  // Carga perezosa por lotes (los datos YA están en memoria; esto solo limita el DOM). El corte
+  // sigue el ORDEN DE PINTADO (grupo a grupo), así cada lote nuevo solo AÑADE al final y el
+  // scroll no salta. Cambiar búsqueda/chip/tipo reinicia el contador.
+  const { visibles, hayMas, refSentinela } = useLotes(
+    filtradas.length,
+    `${tipoEfectivo}|${categoria}|${q}`,
+  );
+  const gruposVisibles: typeof grupos = [];
+  let resto = visibles;
+  for (const g of grupos) {
+    if (resto <= 0) break;
+    const corte = g.plantillas.slice(0, resto);
+    resto -= corte.length;
+    gruposVisibles.push({ ...g, plantillas: corte });
+  }
+
+  // En panel estrecho (~350px) el masonry es SIEMPRE de 2 columnas (estilo Canva); en el diálogo
+  // ancho acompaña al viewport (2/3/4).
+  const columnasGaleria = useColumnasGaleria();
+  const columnas = compacto ? 2 : columnasGaleria;
+
   const commit = (p: PlantillaDiseno) => {
     // Si el commit ya se hizo, noop. Así evitamos doble PATCH: Enter ejecuta commit,
     // luego onBlur sería un noop.
@@ -99,11 +124,116 @@ export function ContenidoPlantillas({
     setEditId(null);
   };
 
-  // En panel estrecho (~350px) la rejilla es SIEMPRE de 2 columnas (masonry estilo Canva).
   const padX = compacto ? "px-3" : "px-4";
-  const rejilla = compacto
-    ? "grid grid-cols-2 gap-3"
-    : "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4";
+
+  // Tarjeta de plantilla: miniatura con la relación de aspecto REAL del documento (la caja
+  // reserva el alto exacto antes de cargar la imagen: placeholder sin layout shift y altura
+  // variable del masonry) + título/acciones debajo. Hover: elevación + scale sutil (~150ms).
+  const tarjeta = (p: PlantillaDiseno) => (
+    <div key={p.id} className="group relative">
+      <button
+        onClick={() => onCargar(p)}
+        title={`Cargar «${p.nombre}»`}
+        className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[transform,box-shadow] duration-150 hover:shadow-lg hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-safe:hover:scale-[1.02]"
+      >
+        <div className="w-full" style={{ aspectRatio: String(ratioPlantilla(p)) }}>
+          {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
+              plantillas creadas por API/agente—, el render on-demand del documento. */}
+          {imagenRota.has(p.id) ? (
+            <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+              Sin vista previa
+            </div>
+          ) : (
+            <img
+              src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
+              alt={p.nombre}
+              loading="lazy"
+              onError={() => setImagenRota((prev) => new Set([...prev, p.id]))}
+              className="h-full w-full object-contain"
+            />
+          )}
+        </div>
+      </button>
+      {/* Badges de tipo + categoría sobre la tarjeta */}
+      <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
+        <BadgeTipo tipo={p.tipo ?? "foto"} />
+        <BadgeCategoria
+          categoria={p.categoria}
+          onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
+        />
+      </div>
+      {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
+      {onRenombrar && editId === p.id ? (
+        <input
+          autoFocus
+          value={editVal}
+          onChange={(e) => setEditVal(e.target.value)}
+          onBlur={() => commit(p)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.stopPropagation();
+              commit(p);
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
+              setEditId(null);
+              commitHecho.current = false;
+            }
+          }}
+          className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
+        />
+      ) : onRenombrar ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditId(p.id);
+            setEditVal(p.nombre || "");
+            commitHecho.current = false;
+          }}
+          title="Clic para renombrar"
+          className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+        >
+          {p.nombre || "(sin nombre)"}
+        </button>
+      ) : (
+        <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
+      )}
+      {/* Rotación: marca la plantilla para entrar en la ROTACIÓN automática de la marca
+          (cada post nuevo se lleva la siguiente del grupo; mismo color en todas las redes).
+          Necesita ≥2 plantillas marcadas para activarse. */}
+      {onRotar && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
+          title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
+          className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] font-medium transition-colors ${
+            p.rotar
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Repeat className="h-3 w-3" />
+          {p.rotar ? "En rotación" : "Rotación"}
+        </button>
+      )}
+      {onDuplicar && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
+          title="Duplicar plantilla"
+          className="absolute right-8 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {onBorrar && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onBorrar(p); }}
+          title="Borrar plantilla"
+          className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -157,125 +287,28 @@ export function ContenidoPlantillas({
             </button>
           </div>
         ) : (
-          // Agrupación por CATEGORÍA (cabecera solo si hay más de un grupo).
-          <div className="space-y-5">
-            {grupos.map((grupo) => (
-              <section key={grupo.slug}>
-                {grupos.length > 1 && (
-                  <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {grupo.etiqueta}
-                  </h3>
-                )}
-                <div className={rejilla}>
-                  {grupo.plantillas.map((p) => (
-              <div key={p.id} className="group relative">
-                <button
-                  onClick={() => onCargar(p)}
-                  title={`Cargar «${p.nombre}»`}
-                  className="block w-full overflow-hidden rounded border border-border bg-muted/40 hover:ring-2 hover:ring-primary"
-                >
-                  <div className="aspect-[4/5] w-full">
-                    {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
-                        plantillas creadas por API/agente—, el render on-demand del documento. */}
-                    {imagenRota.has(p.id) ? (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                        Sin vista previa
-                      </div>
-                    ) : (
-                      <img
-                        src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
-                        alt={p.nombre}
-                        loading="lazy"
-                        onError={() => setImagenRota((prev) => new Set([...prev, p.id]))}
-                        className="h-full w-full object-contain"
-                      />
-                    )}
-                  </div>
-                </button>
-                {/* Badges de tipo + categoría sobre la tarjeta */}
-                <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
-                  <BadgeTipo tipo={p.tipo ?? "foto"} />
-                  <BadgeCategoria
-                    categoria={p.categoria}
-                    onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
+          // Agrupación por CATEGORÍA (cabecera solo si hay más de un grupo; se decide sobre los
+          // grupos COMPLETOS para que no aparezcan cabeceras de golpe al soltar un lote).
+          <>
+            <div className="space-y-5">
+              {gruposVisibles.map((grupo) => (
+                <section key={grupo.slug}>
+                  {grupos.length > 1 && (
+                    <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {grupo.etiqueta}
+                    </h3>
+                  )}
+                  <MasonryPlantillas
+                    plantillas={grupo.plantillas}
+                    columnas={columnas}
+                    render={tarjeta}
                   />
-                </div>
-                {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
-                {onRenombrar && editId === p.id ? (
-                  <input
-                    autoFocus
-                    value={editVal}
-                    onChange={(e) => setEditVal(e.target.value)}
-                    onBlur={() => commit(p)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.stopPropagation();
-                        commit(p);
-                      } else if (e.key === "Escape") {
-                        e.stopPropagation();
-                        setEditId(null);
-                        commitHecho.current = false;
-                      }
-                    }}
-                    className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
-                  />
-                ) : onRenombrar ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditId(p.id);
-                      setEditVal(p.nombre || "");
-                      commitHecho.current = false;
-                    }}
-                    title="Clic para renombrar"
-                    className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {p.nombre || "(sin nombre)"}
-                  </button>
-                ) : (
-                  <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
-                )}
-                {/* Rotación: marca la plantilla para entrar en la ROTACIÓN automática de la marca
-                    (cada post nuevo se lleva la siguiente del grupo; mismo color en todas las redes).
-                    Necesita ≥2 plantillas marcadas para activarse. */}
-                {onRotar && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
-                    title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
-                    className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] font-medium transition-colors ${
-                      p.rotar
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Repeat className="h-3 w-3" />
-                    {p.rotar ? "En rotación" : "Rotación"}
-                  </button>
-                )}
-                {onDuplicar && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
-                    title="Duplicar plantilla"
-                    className="absolute right-8 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {onBorrar && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onBorrar(p); }}
-                    title="Borrar plantilla"
-                    className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+                </section>
+              ))}
+            </div>
+            {/* Sentinel de scroll infinito: al acercarse, suelta el siguiente lote. */}
+            {hayMas && <div ref={refSentinela} data-sentinela aria-hidden className="h-px" />}
+          </>
         )}
       </div>
     </div>

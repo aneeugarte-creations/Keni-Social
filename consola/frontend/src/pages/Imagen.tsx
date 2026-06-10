@@ -32,7 +32,11 @@ import {
   BadgeCategoria,
   BuscadorPlantillas,
   ChipsCategoria,
+  MasonryPlantillas,
+  ratioPlantilla,
+  useColumnasGaleria,
   useFiltroPlantillas,
+  useLotes,
 } from "@/components/plantillas/FiltroPlantillas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -978,6 +982,17 @@ function GaleriaInline({
   const [editVal, setEditVal] = useState("");
   // Búsqueda (nombre/categoría) + chip de categoría activa, client-side.
   const { q, setQ, categoria, setCategoria, presentes, filtradas } = useFiltroPlantillas(plantillas);
+  // Masonry responsive (2/3/4 columnas según viewport) + carga perezosa por lotes: el corte
+  // sigue el ORDEN DE PINTADO (marca → categoría), así cada lote solo AÑADE al final y el scroll
+  // no salta. Los datos ya están en memoria; esto solo limita el DOM.
+  const columnas = useColumnasGaleria();
+  const { visibles, hayMas, refSentinela } = useLotes(filtradas.length, `${categoria}|${q}`);
+  const listasOrden = agruparPorMarca
+    ? agruparPlantillasPorMarca(filtradas).flatMap((g) => agruparPorCategoria(g))
+    : agruparPorCategoria(filtradas);
+  const enLote = new Set(
+    listasOrden.flatMap((g) => g.plantillas).slice(0, visibles).map((p) => p.id),
+  );
   const commit = (p: PlantillaDiseno) => {
     const n = editVal.trim();
     if (n && n !== p.nombre) onRenombrar(p, n);
@@ -998,11 +1013,14 @@ function GaleriaInline({
               <button
                 onClick={() => onAbrir(p)}
                 title={`Abrir «${p.nombre}»`}
-                className="block w-full overflow-hidden rounded border border-border bg-muted/40 hover:ring-2 hover:ring-primary"
+                className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[transform,box-shadow] duration-150 hover:shadow-lg hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-safe:hover:scale-[1.02]"
               >
-                <div className="aspect-[4/5] w-full">
+                {/* Caja con la relación de aspecto REAL del documento: reserva el alto exacto
+                    antes de que cargue la miniatura (sin layout shift) y da la altura variable
+                    del masonry. */}
+                <div className="w-full" style={{ aspectRatio: String(ratioPlantilla(p)) }}>
                   {p.miniatura ? (
-                    <img src={urlMedia(p.miniatura)} alt={p.nombre} draggable={false} className="pointer-events-none h-full w-full object-contain" />
+                    <img src={urlMedia(p.miniatura)} alt={p.nombre} loading="lazy" draggable={false} className="pointer-events-none h-full w-full object-contain" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">Sin vista previa</div>
                   )}
@@ -1080,18 +1098,30 @@ function GaleriaInline({
             </div>
   );
   // Secciones por CATEGORÍA dentro de una lista (de una marca o de todo): cabecera de categoría
-  // solo cuando hay más de un grupo (un único grupo sería ruido).
+  // solo cuando hay más de un grupo (un único grupo sería ruido). La ESTRUCTURA (número de
+  // grupos) se decide sobre la lista COMPLETA y el corte por lotes se aplica al final: así las
+  // cabeceras no aparecen de golpe POR ENCIMA del scroll al soltar un lote.
   const seccionesCategoria = (lista: PlantillaDiseno[]) => {
     const grupos = agruparPorCategoria(lista);
-    if (grupos.length <= 1) return <div className={REJILLA}>{lista.map(tarjeta)}</div>;
+    const gruposLote = grupos
+      .map((g) => ({ ...g, plantillas: g.plantillas.filter((p) => enLote.has(p.id)) }))
+      .filter((g) => g.plantillas.length > 0);
+    if (grupos.length <= 1)
+      return (
+        <MasonryPlantillas
+          plantillas={gruposLote[0]?.plantillas ?? []}
+          columnas={columnas}
+          render={tarjeta}
+        />
+      );
     return (
       <div className="space-y-5">
-        {grupos.map((g) => (
+        {gruposLote.map((g) => (
           <section key={g.slug}>
             <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {g.etiqueta}
             </h4>
-            <div className={REJILLA}>{g.plantillas.map(tarjeta)}</div>
+            <MasonryPlantillas plantillas={g.plantillas} columnas={columnas} render={tarjeta} />
           </section>
         ))}
       </div>
@@ -1122,20 +1152,27 @@ function GaleriaInline({
         </div>
       ) : agruparPorMarca ? (
         <div className="space-y-8">
-          {agruparPlantillasPorMarca(filtradas).map((grupo) => (
-            <section key={grupo[0].marca}>
-              <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
-                {grupo[0].marca_nombre || grupo[0].marca}
-              </h3>
-              {seccionesCategoria(grupo)}
-            </section>
-          ))}
+          {agruparPlantillasPorMarca(filtradas)
+            // Las marcas cuyo lote aún no ha llegado entran después, siempre POR DEBAJO.
+            .filter((grupo) => grupo.some((p) => enLote.has(p.id)))
+            .map((grupo) => (
+              <section key={grupo[0].marca}>
+                <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
+                  {grupo[0].marca_nombre || grupo[0].marca}
+                </h3>
+                {seccionesCategoria(grupo)}
+              </section>
+            ))}
+          {/* Sentinel de scroll infinito: al acercarse, suelta el siguiente lote. */}
+          {hayMas && <div ref={refSentinela} data-sentinela aria-hidden className="h-px" />}
           {/* «Lienzo en blanco» va al FINAL de la galería (no el primero). */}
           <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       ) : (
         <div className="space-y-8">
           {seccionesCategoria(filtradas)}
+          {/* Sentinel de scroll infinito: al acercarse, suelta el siguiente lote. */}
+          {hayMas && <div ref={refSentinela} data-sentinela aria-hidden className="h-px" />}
           {/* «Lienzo en blanco» va al FINAL de la lista (no el primero). */}
           <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
