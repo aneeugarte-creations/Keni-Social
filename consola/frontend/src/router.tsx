@@ -46,7 +46,6 @@ const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
 const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
 const Actividad = lazy(() => import("@/pages/Actividad"));
-const Pipelines = lazy(() => import("@/pages/Pipelines"));
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
 
@@ -61,7 +60,6 @@ const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 const Usuarios = lazy(() => import("@/pages/Usuarios"));
-const Sistema = lazy(() => import("@/pages/Sistema"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
@@ -256,9 +254,11 @@ export const router = createBrowserRouter([
             path: "actividad",
             children: [
               { index: true, element: <Actividad /> },
-              { path: "pipelines", element: <Pipelines /> },
+              // Pipelines es ahora una VISTA de Actividad (?vista=pipelines): la antigua
+              // pestaña redirige. El detalle de una run sigue siendo página propia.
+              { path: "pipelines", element: <Navigate to="/datos/actividad?vista=pipelines" replace /> },
               { path: "pipelines/:id", element: <PipelineDetalle /> },
-              // Monitor: cola de generación en vivo (workers, claude -p, daemons) + control admin.
+              // Monitor: cola en vivo (todo el equipo) + pestaña Salud (infra, admin).
               { path: "monitor", element: <Monitor /> },
             ],
           },
@@ -277,9 +277,9 @@ export const router = createBrowserRouter([
       // Gestion de usuarios: solo admin (el backend devuelve 403 si no, y la
       // propia pagina muestra el aviso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },
-      // Panel de sistema: solo admin (el backend devuelve 403 si no, y la propia
-      // página muestra el aviso al entrar por URL directa).
-      { path: "sistema", element: <Sistema /> },
+      // La página Sistema se CONSOLIDÓ como pestaña «Salud» del Monitor (una sola
+      // superficie de monitorización); la ruta vieja redirige para enlaces/bookmarks.
+      { path: "sistema", element: <Navigate to="/datos/actividad/monitor?tab=salud" replace /> },
 
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando

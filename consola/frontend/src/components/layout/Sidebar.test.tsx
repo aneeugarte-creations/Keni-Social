@@ -330,9 +330,9 @@ describe("apps-scope · helpers", () => {
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",
-      // /datos/actividad (hub) → el feed (índice) + Pipelines + Monitor (cola en vivo)
+      // /datos/actividad (hub) → el histórico (índice; vistas Feed/Pipelines) + Monitor
+      // (en vivo + salud). Pipelines y la página Sistema se consolidaron dentro.
       "/datos/actividad",
-      "/datos/actividad/pipelines",
       "/datos/actividad/monitor",
     ]);
   });

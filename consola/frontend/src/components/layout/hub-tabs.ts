@@ -3,7 +3,6 @@ import {
   BarChart3,
   BookText,
   Gauge,
-  GitBranch,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -87,15 +86,13 @@ export const TABS_TEXTO: ItemTabHub[] = [
   { ruta: "/contenido/texto/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
-// Actividad IA es un hub: el feed de actividad (índice del hub) y los Pipelines (vista
-// CI/CD del pipeline de contenido, etapa a etapa). Pipelines deja de ser una entrada suelta
-// del sidebar para vivir como pestaña aquí.
+// Actividad IA es un hub de DOS pestañas: Actividad (el histórico, con sus vistas
+// Feed/Pipelines en ?vista=) y Monitor (en vivo + salud de la infra). Pipelines y la
+// página Sistema se CONSOLIDARON dentro de ellas.
 export const TABS_ACTIVIDAD: ItemTabHub[] = [
-  // `end: true`: comparte prefijo con `/pipelines`, así que el tab raíz (el feed) solo se
-  // marca activo en la coincidencia exacta del índice.
+  // `end: true`: comparte prefijo con las sub-rutas, así que el tab raíz (el histórico)
+  // solo se marca activo en la coincidencia exacta del índice.
   { ruta: "/datos/actividad", etiqueta: "Actividad", icono: Activity, end: true },
-  { ruta: "/datos/actividad/pipelines", etiqueta: "Pipelines", icono: GitBranch },
-  // Monitor: estado EN VIVO de la cola de generación (workers, claude -p, daemons) + control.
   { ruta: "/datos/actividad/monitor", etiqueta: "Monitor", icono: Gauge },
 ];
 

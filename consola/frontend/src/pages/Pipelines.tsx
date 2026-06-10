@@ -465,7 +465,11 @@ export function PanelEtapa({
   );
 }
 
-export default function Pipelines() {
+/** Vista «Pipelines» del hub Actividad IA (runs del pipeline por contenido, etapa a
+ * etapa). Era una página propia; CONSOLIDADA como vista de Actividad (?vista=pipelines):
+ * una sola superficie de histórico con dos lentes (Feed / Pipelines). El detalle de una
+ * run sigue siendo página aparte (/datos/actividad/pipelines/:id). */
+export function VistaPipelines() {
   // Cada run abre su PÁGINA dedicada (estilo GitLab/Azure), no un pop-up.
   const navigate = useNavigate();
   const abrir = React.useCallback(

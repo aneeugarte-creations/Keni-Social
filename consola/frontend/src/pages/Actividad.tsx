@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { GitBranch, Activity, RefreshCw } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate , useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VistaPipelines } from "./Pipelines";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
@@ -422,7 +424,7 @@ function EsqueletoActividad() {
  * la tabla, con filtro por `tipo`. Cada bloque maneja su carga; un error en
  * cualquiera de las dos consultas se muestra como bloque de error.
  */
-export default function Actividad() {
+function VistaFeed() {
   const navigate = useNavigate();
   // La marca la MANDA el switch global de la barra superior (workspace); Actividad no
   // tiene selector propio: respeta el global. `marcaActiva` es el id canónico (o null =
@@ -575,6 +577,32 @@ function Contenido({
         onVerEnVivo={onVerEnVivo}
         onVerResultado={onVerResultado}
       />
+    </div>
+  );
+}
+
+
+/** Hub de HISTÓRICO de la IA con dos lentes sobre el mismo trabajo: el FEED plano de
+ * generaciones/runs y los PIPELINES por contenido (etapa a etapa). Antes eran dos
+ * páginas; consolidadas aquí (?vista=pipelines) — cada vista monta su propio menú de
+ * acciones, así que solo hay un «Actualizar» a la vez. */
+export default function Actividad() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const vista = searchParams.get("vista") === "pipelines" ? "pipelines" : "feed";
+  return (
+    <div className="space-y-4">
+      <Tabs
+        value={vista}
+        onValueChange={(v) =>
+          setSearchParams(v === "feed" ? {} : { vista: v }, { replace: true })
+        }
+      >
+        <TabsList>
+          <TabsTrigger value="feed">Feed</TabsTrigger>
+          <TabsTrigger value="pipelines">Pipelines</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {vista === "feed" ? <VistaFeed /> : <VistaPipelines />}
     </div>
   );
 }

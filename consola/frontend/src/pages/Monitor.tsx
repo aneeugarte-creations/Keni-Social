@@ -7,13 +7,13 @@ import {
   Clock,
   Cpu,
   Layers,
-  Power,
   RefreshCw,
   RotateCcw,
   Trash2,
   XCircle,
 } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -39,8 +40,9 @@ import { haceSegundos } from "@/lib/fecha";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
-import { PanelMaquinaContenido, useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import type { ColaJob, ColaMonitor, ColaSerie, PresupuestoIA } from "@/types";
+import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
+import { PanelSalud } from "@/pages/sistema/PanelSalud";
+import type { ColaJob, ColaSerie, PresupuestoIA } from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
 function Kpi({
@@ -215,61 +217,6 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
   );
 }
 
-/** Daemons de fondo: TOGGLE real (escribe en config vía /api/ajustes) cuando el daemon es
- *  editable; badge de solo lectura si no (reaper sin toggle, o `publicar_real` que es peligroso y
- *  se controla en su flujo propio). El estado `activo` lo refresca el sondeo en vivo de la cola. */
-function PanelDaemons({
-  daemons,
-  onToggle,
-  guardandoClave,
-  esAdmin,
-}: {
-  daemons: ColaMonitor["daemons"];
-  onToggle: (clave: string, valor: boolean) => void;
-  guardandoClave: string | null;
-  esAdmin: boolean;
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {daemons.map((d) => {
-        // Editable solo para admin: un editor ve el estado pero no conmuta (coherente con #153).
-        const conmutable = d.editable && esAdmin;
-        const guardando = guardandoClave === d.clave_ajuste;
-        return (
-          <div
-            key={d.clave}
-            className="flex items-start justify-between gap-2 rounded-lg border p-3"
-          >
-            <div className="min-w-0">
-              <div className="text-sm font-medium">{d.etiqueta}</div>
-              <div className="text-xs text-muted-foreground">{d.descripcion}</div>
-            </div>
-            {conmutable ? (
-              <Switch
-                checked={d.activo === true}
-                disabled={guardando}
-                onCheckedChange={(v) => onToggle(d.clave_ajuste, v)}
-                aria-label={`${d.etiqueta}: ${d.activo ? "apagar" : "encender"}`}
-              />
-            ) : (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "shrink-0",
-                  d.activo === true && "border-emerald-500/30 bg-emerald-500/15 text-emerald-600",
-                  d.activo === false && "text-muted-foreground",
-                  d.activo == null && "border-dashed text-muted-foreground/70",
-                )}
-              >
-                {d.activo === true ? "Activo" : d.activo === false ? "Apagado" : "—"}
-              </Badge>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /**
  * Monitor de la cola de generación (pestaña del hub Actividad IA): qué ocurre AHORA en la
@@ -281,8 +228,7 @@ function PanelDaemons({
  * El estado (nivel/gasto/restante) viene en el mismo snapshot de la cola; el control
  * rápido es el kill switch (KENI_GENERACION_PAUSADA, ajuste editable en caliente). Los
  * knobs finos (presupuesto diario, margen manual, tope de contexto) viven en el panel
- * «Máquina de contenido» de abajo (grupo `pipeline_topes`); el panel Sistema OBSERVA
- * este mismo estado en modo lectura y enlaza aquí. */
+ * Configuración → «Máquina de contenido» (grupo `pipeline_topes`). */
 function PanelPresupuesto({
   presupuesto,
   esAdmin,
@@ -326,7 +272,7 @@ function PanelPresupuesto({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Sin presupuesto diario configurado (se fija en «Máquina de contenido»).
+              Sin presupuesto diario configurado (se fija en Configuración → Máquina de contenido).
             </p>
           )}
           {conPresupuesto && pct != null && (
@@ -362,6 +308,11 @@ function PanelPresupuesto({
 export default function Monitor() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
+  // Pestañas del Monitor: «En vivo» (la cola, para todo el equipo) y «Salud» (la infra,
+  // solo admin: era la página Sistema del avatar, consolidada aquí). El tab viaja en la
+  // URL (?tab=salud) para que /sistema pueda redirigir y los enlaces profundos funcionen.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = esAdmin && searchParams.get("tab") === "salud" ? "salud" : "vivo";
   const qc = useQueryClient();
   // El Monitor respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
   // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
@@ -409,8 +360,8 @@ export default function Monitor() {
   // máquina (una sola implementación del control); su onSuccess ya invalida ajustes + cola +
   // pipelines, así el estado «Activo/Apagado» y las vistas derivadas reflejan el cambio al
   // instante. `guardandoClave` se deriva de la mutación en vuelo (sin estado local paralelo).
-  const toggleDaemon = useGuardarAjuste();
-  const guardandoClave = toggleDaemon.isPending ? (toggleDaemon.variables?.clave ?? null) : null;
+  const guardarAjuste = useGuardarAjuste();
+  const guardandoClave = guardarAjuste.isPending ? (guardarAjuste.variables?.clave ?? null) : null;
 
   return (
     <>
@@ -445,7 +396,24 @@ export default function Monitor() {
         )}
       </AccionesPagina>
 
-      {cola.isError ? (
+      {esAdmin && (
+        <Tabs
+          value={tab}
+          onValueChange={(v) =>
+            setSearchParams(v === "vivo" ? {} : { tab: v }, { replace: true })
+          }
+          className="mb-4"
+        >
+          <TabsList>
+            <TabsTrigger value="vivo">En vivo</TabsTrigger>
+            <TabsTrigger value="salud">Salud</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {tab === "salud" ? (
+        <PanelSalud />
+      ) : cola.isError ? (
         <BloqueError
           titulo="No se pudo leer la cola"
           mensaje={mensajeError(cola.error)}
@@ -510,11 +478,11 @@ export default function Monitor() {
               presupuesto={cola.data.presupuesto}
               esAdmin={esAdmin}
               pausando={
-                toggleDaemon.isPending &&
+                guardarAjuste.isPending &&
                 guardandoClave === "KENI_GENERACION_PAUSADA"
               }
               onPausar={(valor) =>
-                toggleDaemon.mutate({ clave: "KENI_GENERACION_PAUSADA", valor })
+                guardarAjuste.mutate({ clave: "KENI_GENERACION_PAUSADA", valor })
               }
             />
           )}
@@ -596,27 +564,10 @@ export default function Monitor() {
             </CardContent>
           </Card>
 
-          {/* Controles de la máquina de contenido (etapas + por marca + topes). Solo admin: el
-              endpoint /api/ajustes exige rol admin, así que para un editor ni se monta. */}
-          {esAdmin && <PanelMaquinaContenido />}
-
-          {/* Daemons */}
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Power className="h-4 w-4 text-muted-foreground" />
-                Daemons de fondo
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-2">
-              <PanelDaemons
-                daemons={cola.data.daemons}
-                esAdmin={esAdmin}
-                guardandoClave={guardandoClave}
-                onToggle={(clave, valor) => toggleDaemon.mutate({ clave, valor })}
-              />
-            </CardContent>
-          </Card>
+          {/* SIN formularios aquí: la máquina de contenido y los toggles de daemons se
+              CONFIGURAN en Configuración (pestañas Máquina/Ajustes); la SALUD de los
+              daemons se observa en la pestaña Salud. El Monitor opera: cancelar, purgar
+              y el kill switch de arriba. */}
         </div>
       )}
     </>

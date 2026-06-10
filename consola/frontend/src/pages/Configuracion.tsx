@@ -29,7 +29,7 @@ import {
 } from "./configuracion/lib";
 import { SeccionApariencia } from "./configuracion/SeccionApariencia";
 import { SeccionEsfuerzo } from "./configuracion/SeccionEsfuerzo";
-import { SeccionFuncionalidad } from "./configuracion/SeccionFuncionalidad";
+import { PanelMaquinaContenido, SeccionFuncionalidad } from "./configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "./configuracion/SeccionImagen";
 import { SeccionMetricool } from "./configuracion/SeccionMetricool";
 
@@ -75,6 +75,9 @@ export default function Configuracion() {
         <Tabs defaultValue="ajustes" className="space-y-4">
           <TabsList>
             <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
+            {puedeVerConexiones && (
+              <TabsTrigger value="maquina">Máquina de contenido</TabsTrigger>
+            )}
             {puedeVerConexiones && <TabsTrigger value="conexiones">Conexiones</TabsTrigger>}
           </TabsList>
 
@@ -82,6 +85,15 @@ export default function Configuracion() {
             {puedeVerConexiones && <SeccionFuncionalidad />}
             <SeccionEsfuerzo />
           </TabsContent>
+
+          {/* TODA la parametrización vive en Configuración: también la máquina de
+              contenido (etapas, excepciones por marca, topes y economía de tokens),
+              que antes era un panel del Monitor. El Monitor solo OPERA (acciones). */}
+          {puedeVerConexiones && (
+            <TabsContent value="maquina" className="space-y-4">
+              <PanelMaquinaContenido />
+            </TabsContent>
+          )}
 
           {puedeVerConexiones && (
             <TabsContent value="conexiones" className="space-y-4">
