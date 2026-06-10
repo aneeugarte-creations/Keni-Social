@@ -21,6 +21,24 @@ export interface ObjetivoIman {
   ref?: CajaIman;
 }
 
+// Caja ENVOLVENTE de un conjunto de cajas: el rect que se imanta al arrastrar una MULTI-selección
+// (sus bordes y centro contra página, márgenes y capas no seleccionadas; el ajuste se reparte como
+// delta a todas las capas del grupo). Lista vacía => null.
+export function cajaEnvolvente(cajas: CajaIman[]): CajaIman | null {
+  if (cajas.length === 0) return null;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const c of cajas) {
+    x0 = Math.min(x0, c.x);
+    y0 = Math.min(y0, c.y);
+    x1 = Math.max(x1, c.x + c.w);
+    y1 = Math.max(y1, c.y + c.h);
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
 export interface SnapEje {
   pos: number; // nueva posición de la caja en el eje
   guia: number; // posición de la línea guía

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type CajaIman,
   type ObjetivoIman,
+  cajaEnvolvente,
   calcularEspaciado,
   calcularImanEje,
   huecoPerpendicular,
@@ -39,6 +40,41 @@ describe("calcularImanEje", () => {
     // Los objetivos del lienzo (sin ref) no llevan caja.
     const s2 = calcularImanEje(98, 50, [{ t: 100 }], 6);
     expect(s2?.ref).toBeUndefined();
+  });
+});
+
+describe("cajaEnvolvente (rect que se imanta en multi-selección)", () => {
+  it("abraza todas las cajas del grupo", () => {
+    const cajas: CajaIman[] = [
+      { x: 10, y: 20, w: 100, h: 50 },
+      { x: 200, y: 0, w: 50, h: 200 },
+    ];
+    expect(cajaEnvolvente(cajas)).toEqual({ x: 10, y: 0, w: 240, h: 200 });
+  });
+
+  it("con una sola caja devuelve esa misma geometría", () => {
+    expect(cajaEnvolvente([{ x: 5, y: 7, w: 30, h: 40 }])).toEqual({ x: 5, y: 7, w: 30, h: 40 });
+  });
+
+  it("lista vacía => null (grupo degenerado, sin imán)", () => {
+    expect(cajaEnvolvente([])).toBeNull();
+  });
+
+  it("la envolvente se imanta con calcularImanEje y el delta se reparte a las capas", () => {
+    // Grupo de dos capas cuya envolvente es [843..1083]: el borde derecho queda a 3 px del borde
+    // del lienzo (1080) => snap con delta -3, que se aplica POR IGUAL a todas las capas del grupo.
+    const capas: CajaIman[] = [
+      { x: 843, y: 100, w: 100, h: 50 },
+      { x: 983, y: 200, w: 100, h: 50 },
+    ];
+    const env = cajaEnvolvente(capas);
+    expect(env).toEqual({ x: 843, y: 100, w: 240, h: 150 });
+    const s = calcularImanEje(env!.x, env!.w, [{ t: 0 }, { t: 540 }, { t: 1080 }], 6);
+    expect(s).not.toBeNull();
+    expect(s?.pos).toBe(840);
+    expect(s?.guia).toBe(1080);
+    const delta = s!.pos - env!.x;
+    expect(capas.map((c) => c.x + delta)).toEqual([840, 980]);
   });
 });
 

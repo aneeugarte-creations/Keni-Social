@@ -260,6 +260,7 @@ export function Lienzo({
   // HTML que el hook de arrastre muta directamente por frame (sin setState), como la etiqueta viva.
   const etiquetasImanRef = useRef<HTMLDivElement | null>(null);
   // Arrastre de capas con SMART GUIDES y movimiento en grupo: hook extraído (owns el ref multiDrag).
+  // En multi-selección el imán actúa sobre la CAJA ENVOLVENTE del grupo (mismas guías y etiquetas).
   const { arrastrando, guias, onDragStart, onDragMove, onDragEnd } = useArrastreCapas({
     store,
     stageRef,

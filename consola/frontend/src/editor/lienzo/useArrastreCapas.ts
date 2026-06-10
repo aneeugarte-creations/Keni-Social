@@ -11,6 +11,9 @@
 //   · ESPACIADO IGUAL (estilo Canva): al arrastrar entre capas alineadas, snap cuando la
 //     separación iguala la de otro par, con guías con topes + etiquetas px en cada hueco.
 //   · Ctrl (o ⌘ en Mac) MANTENIDA durante el arrastre SUSPENDE imán y rejilla (movimiento libre).
+//   · MULTI-selección: el rect que se imanta es la CAJA ENVOLVENTE del grupo (bordes y centro del
+//     conjunto contra página, márgenes y capas NO seleccionadas), y el ajuste se aplica como delta
+//     a todas las capas del grupo. Mismas guías, etiquetas y suspensión con Ctrl/⌘.
 
 import type Konva from "konva";
 import { type RefObject, useRef, useState } from "react";
@@ -22,6 +25,7 @@ import {
   type ObjetivoIman,
   type SnapEspaciado,
   UMBRAL_IMAN_PANTALLA,
+  cajaEnvolvente,
   calcularEspaciado,
   calcularImanEje,
   huecoPerpendicular,
@@ -131,36 +135,68 @@ export function useArrastreCapas({
     }
   };
 
-  // SMART GUIDES al arrastrar (y MOVER en grupo si hay selección múltiple).
+  // SMART GUIDES al arrastrar: con UNA capa se imanta su caja; con selección MÚLTIPLE, la CAJA
+  // ENVOLVENTE del grupo (y el ajuste se reparte como delta a todas las capas seleccionadas).
   const onDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
     const nodo = e.target;
     const md = multiDrag.current;
-    if (md && md.dragId === nodo.id()) {
+    const esMulti = !!(md && md.dragId === nodo.id());
+
+    // Posiciona TODAS las capas del grupo en su posición inicial + delta (incluida la arrastrada,
+    // por si el imán ajustó la envolvente).
+    const aplicarDeltaGrupo = (dx: number, dy: number) => {
+      if (!md) return;
+      const stage = stageRef.current;
+      md.ini.forEach((p, sid) => {
+        const n = sid === nodo.id() ? nodo : stage?.findOne<Konva.Node>(`#${sid}`);
+        if (n) {
+          n.x(p.x + dx);
+          n.y(p.y + dy);
+        }
+      });
+    };
+
+    // Rect que se IMANTA (caja de la capa o envolvente del grupo) y capas EXCLUIDAS como objetivo
+    // (la arrastrada, o todas las del grupo: una capa seleccionada no es objetivo de otra).
+    let caja: CajaIman;
+    let excluidas: ReadonlySet<string>;
+    let dxBase = 0;
+    let dyBase = 0;
+    if (esMulti && md) {
       const start = md.ini.get(nodo.id());
-      if (start) {
-        const dx = nodo.x() - start.x;
-        const dy = nodo.y() - start.y;
-        const stage = stageRef.current;
-        md.ini.forEach((p, sid) => {
-          if (sid === nodo.id()) return;
-          const n = stage?.findOne<Konva.Node>(`#${sid}`);
-          if (n) {
-            n.x(p.x + dx);
-            n.y(p.y + dy);
-          }
-        });
+      if (!start) return;
+      dxBase = nodo.x() - start.x;
+      dyBase = nodo.y() - start.y;
+      const cajas: CajaIman[] = [];
+      md.ini.forEach((p, sid) => {
+        const c = documento.capas.find((x) => x.id === sid);
+        if (c) cajas.push({ x: p.x + dxBase, y: p.y + dyBase, w: c.w, h: c.h });
+      });
+      const env = cajaEnvolvente(cajas);
+      if (!env) {
+        // Grupo sin cajas conocidas (degenerado): movimiento en bloque sin imán, como antes.
+        aplicarDeltaGrupo(dxBase, dyBase);
+        setGuias(SIN_GUIAS);
+        pintarEtiquetas([]);
+        return;
       }
-      setGuias(SIN_GUIAS);
-      pintarEtiquetas([]);
-      return;
+      caja = env;
+      excluidas = new Set(md.ini.keys());
+    } else {
+      const capa = documento.capas.find((c) => c.id === nodo.id());
+      if (!capa) return;
+      caja = { x: nodo.x(), y: nodo.y(), w: capa.w, h: capa.h };
+      excluidas = new Set([capa.id]);
     }
-    const capa = documento.capas.find((c) => c.id === nodo.id());
-    if (!capa) return;
     // Umbral del imán CONSTANTE en píxeles de PANTALLA: a cualquier zoom se "siente" igual.
     const umbral = UMBRAL_IMAN_PANTALLA / escala;
     // Ctrl (o ⌘) mantenida SUSPENDE imán y rejilla durante el arrastre (movimiento libre, estilo
     // Canva). Se evalúa por evento: basta pulsarla a mitad de gesto para liberar el snap.
     const suspendido = !!(e.evt && (e.evt.ctrlKey || e.evt.metaKey));
+    // Posición AJUSTADA del rect (la caja o la envolvente): el imán/espaciado/rejilla la van
+    // refinando y al final se vuelca al nodo (o como delta a todo el grupo).
+    let px = caja.x;
+    let py = caja.y;
     let lx: number | null = null;
     let ly: number | null = null;
     let espX: SnapEspaciado | null = null;
@@ -178,31 +214,31 @@ export function useArrastreCapas({
       if (safeBottom > 0) objY.push({ t: h - safeBottom });
       const otras: CajaIman[] = [];
       for (const c of documento.capas) {
-        if (c.id === capa.id) continue;
+        if (excluidas.has(c.id)) continue;
         const cajaC: CajaIman = { x: c.x, y: c.y, w: c.w, h: c.h };
         objX.push({ t: c.x, ref: cajaC }, { t: c.x + c.w / 2, ref: cajaC }, { t: c.x + c.w, ref: cajaC });
         objY.push({ t: c.y, ref: cajaC }, { t: c.y + c.h / 2, ref: cajaC }, { t: c.y + c.h, ref: cajaC });
         otras.push(cajaC);
       }
-      const sx = calcularImanEje(nodo.x(), capa.w, objX, umbral);
+      const sx = calcularImanEje(px, caja.w, objX, umbral);
       if (sx) {
-        nodo.x(sx.pos);
+        px = sx.pos;
         lx = sx.guia;
       }
-      const sy = calcularImanEje(nodo.y(), capa.h, objY, umbral);
+      const sy = calcularImanEje(py, caja.h, objY, umbral);
       if (sy) {
-        nodo.y(sy.pos);
+        py = sy.pos;
         ly = sy.guia;
       }
-      const cajaActual = (): CajaIman => ({ x: nodo.x(), y: nodo.y(), w: capa.w, h: capa.h });
+      const cajaActual = (): CajaIman => ({ x: px, y: py, w: caja.w, h: caja.h });
       // ESPACIADO IGUAL (estilo Canva): solo en el eje que el imán NO haya fijado.
       if (lx === null) {
         espX = calcularEspaciado(cajaActual(), otras, "x", umbral);
-        if (espX) nodo.x(espX.pos);
+        if (espX) px = espX.pos;
       }
       if (ly === null) {
         espY = calcularEspaciado(cajaActual(), otras, "y", umbral);
-        if (espY) nodo.y(espY.pos);
+        if (espY) py = espY.pos;
       }
       // Etiquetas de distancia (px del documento): junto a la guía del imán, la separación con la
       // capa alineada; en el espaciado igual, el tamaño (idéntico) de cada hueco.
@@ -230,19 +266,26 @@ export function useArrastreCapas({
     // líneas el movimiento es libre y no pelea con el imán.
     if (grid && !suspendido) {
       if (lx === null && !espX) {
-        const linea = Math.round(nodo.x() / paso) * paso;
-        if (Math.abs(nodo.x() - linea) <= umbral) nodo.x(linea);
+        const linea = Math.round(px / paso) * paso;
+        if (Math.abs(px - linea) <= umbral) px = linea;
       }
       if (ly === null && !espY) {
-        const linea = Math.round(nodo.y() / paso) * paso;
-        if (Math.abs(nodo.y() - linea) <= umbral) nodo.y(linea);
+        const linea = Math.round(py / paso) * paso;
+        if (Math.abs(py - linea) <= umbral) py = linea;
       }
     }
-    // MANTENER DENTRO DEL MARCO: acota la caja al lienzo. Si la capa es mayor que el lienzo en un
-    // eje, no se fuerzan negativos absurdos (se permite el rango [w - cw, 0], que queda invertido).
+    // MANTENER DENTRO DEL MARCO: acota la caja (o la envolvente del grupo) al lienzo. Si es mayor
+    // que el lienzo en un eje, no se fuerzan negativos absurdos (rango [w - cw, 0], invertido).
     if (dentroMarco) {
-      nodo.x(clampMarco(nodo.x(), capa.w, w));
-      nodo.y(clampMarco(nodo.y(), capa.h, h));
+      px = clampMarco(px, caja.w, w);
+      py = clampMarco(py, caja.h, h);
+    }
+    if (esMulti) {
+      // Delta final del grupo = delta del puntero + el ajuste que el imán aplicó a la envolvente.
+      aplicarDeltaGrupo(dxBase + px - caja.x, dyBase + py - caja.y);
+    } else {
+      nodo.x(px);
+      nodo.y(py);
     }
     setGuias({ x: lx, y: ly, espX, espY });
     pintarEtiquetas(etiquetas);
