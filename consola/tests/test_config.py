@@ -525,23 +525,20 @@ def test_qa_activo_afirmativo(limpio, store_aislado, valor):
     assert config.qa_activo() is True
 
 
-def test_alguna_etapa_pipeline_activa_or_de_las_etapas(limpio, store_aislado):
-    """El barrido del daemon corre si CUALQUIER etapa está activa.
+def test_alguna_etapa_pipeline_activa_siempre_true(limpio, store_aislado):
+    """El barrido del daemon corre siempre que la máquina esté ON.
 
-    OJO con el defecto: Avance (`KENI_PIPELINE_AVANCE`) es default ON (no gasta IA), así que
-    SIN ninguna env el barrido ya corre — por el avance, no por las etapas de IA. Para probar
-    el OR de las demás se apaga el avance explícitamente."""
-    assert config.alguna_etapa_pipeline_activa() is True  # avance default ON
-    store_aislado.setenv(config.ENV_PIPELINE_AVANCE, "0")
-    assert config.alguna_etapa_pipeline_activa() is False  # ahora sí: todas off
+    La etapa de AVANCE (borradores completos → revisión) corre INCONDICIONALMENTE (ya no es un
+    toggle), así que `alguna_etapa_pipeline_activa` es siempre True: el daemon nunca se duerme
+    mientras la máquina esté encendida. Las fases que gastan IA (CI/QA/Copy/Arte) se auto-gatean
+    DENTRO del barrido; el maestro general (`KENI_MAQUINA`) se aplica aparte en el `activo_fn`."""
+    assert config.alguna_etapa_pipeline_activa() is True  # sin ninguna env
     for env in (
         config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
         config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
     ):
-        store_aislado.setenv(env, "1")
-        assert config.alguna_etapa_pipeline_activa() is True
-        store_aislado.delenv(env, raising=False)
-    assert config.alguna_etapa_pipeline_activa() is False  # de nuevo todas off (avance=0)
+        store_aislado.setenv(env, "0")
+    assert config.alguna_etapa_pipeline_activa() is True  # incluso con todas las de IA OFF
 
 
 # --------------------------------------------------------------------------- #

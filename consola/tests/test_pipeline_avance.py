@@ -1,9 +1,10 @@
 """Etapa de AVANCE del pipeline: borradores COMPLETOS pasan solos a revisión. OFFLINE, DB tmp.
 
-Cubre la selección (completas sí; incompletas, devueltas, recién editadas y marcas excluidas
-no), la transición real (en_revision + cadena simple, idéntica al envío humano) y el gateado
-(toggle de etapa + interruptor general). Reusa el aislamiento de `entorno` y el patrón de
-login real de `test_api_aprobacion` (la pieza se crea por el API, como en producción).
+Cubre la selección (completas sí; incompletas, devueltas y recién editadas no), la transición
+real (en_revision + cadena simple, idéntica al envío humano) y el gateado (SOLO el interruptor
+general `KENI_MAQUINA`: el avance ya no tiene toggle propio ni exclusión por marca). Reusa el
+aislamiento de `entorno` y el patrón de login real de `test_api_aprobacion` (la pieza se crea
+por el API, como en producción).
 """
 
 from __future__ import annotations
@@ -42,9 +43,8 @@ def _crear_borrador(cli: TestClient, *, con_foto: bool = True, **campos) -> dict
 
 
 def _encender(monkeypatch, *, reposo_cero: bool = True):
-    """Máquina ON; el toggle de avance queda en su DEFECTO (ON). Reposo a 0 para no esperar."""
+    """Máquina ON (único gate del avance). Reposo a 0 para no esperar."""
     monkeypatch.setenv("KENI_MAQUINA", "1")
-    monkeypatch.delenv(config.ENV_PIPELINE_AVANCE, raising=False)
     if reposo_cero:
         monkeypatch.setattr(_avance, "_REPOSO_MINUTOS", 0)
 
@@ -105,31 +105,32 @@ def test_avance_respeta_reposo(entorno, monkeypatch):
     assert repos.obtener_publicacion(pub["id"])["estado"] == "borrador"
 
 
-def test_avance_respeta_marca_apagada(entorno, monkeypatch):
-    """El override por-marca (`KENI_PIPELINE_AVANCE::<marca>` falsy) excluye esa marca."""
+def test_avance_no_tiene_exclusion_por_marca(entorno, monkeypatch):
+    """Ya NO hay opt-out por marca: el avance es incondicional. Un override legado en el store
+    (cualquier `KENI_PIPELINE_AVANCE::<marca>`) se IGNORA y la pieza avanza igual."""
     _encender(monkeypatch)
     pub = _crear_borrador(_cli_usuario())
-    clave = config.clave_por_marca(config.ENV_PIPELINE_AVANCE, _MARCA)
-    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda c: "0" if c == clave else None)
+    # Un valor legado en el store no debe apagar el avance (la etapa ya no lo lee).
+    legado = f"KENI_PIPELINE_AVANCE{config.SEP_MARCA}{_MARCA}"
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda c: "0" if c == legado else None)
 
-    assert _avance.ejecutar_avance() == []
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "borrador"
+    enviadas = _avance.ejecutar_avance()
+    assert [p["id"] for p in enviadas] == [pub["id"]]
+    assert repos.obtener_publicacion(pub["id"])["estado"] == "en_revision"
 
 
-def test_avance_gateado_por_toggle_y_maquina(entorno, monkeypatch):
-    """`KENI_PIPELINE_AVANCE=0` apaga la etapa; sin `KENI_MAQUINA` tampoco corre (def ON solo
-    del toggle: el maestro general sigue mandando)."""
+def test_avance_gateado_solo_por_maquina(entorno, monkeypatch):
+    """El único gate es el maestro general `KENI_MAQUINA`: con la máquina OFF no corre; ON sí."""
     pub = _crear_borrador(_cli_usuario())
     monkeypatch.setattr(_avance, "_REPOSO_MINUTOS", 0)
 
-    # Máquina ON pero toggle explícitamente OFF.
-    monkeypatch.setenv("KENI_MAQUINA", "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_AVANCE, "0")
-    assert _avance.ejecutar_avance() == []
-
-    # Toggle ON (defecto) pero máquina OFF.
-    monkeypatch.delenv(config.ENV_PIPELINE_AVANCE, raising=False)
+    # Máquina OFF: no avanza.
     monkeypatch.delenv("KENI_MAQUINA", raising=False)
     assert _avance.ejecutar_avance() == []
-
     assert repos.obtener_publicacion(pub["id"])["estado"] == "borrador"
+
+    # Máquina ON: avanza (sin ningún toggle de etapa de por medio).
+    monkeypatch.setenv("KENI_MAQUINA", "1")
+    enviadas = _avance.ejecutar_avance()
+    assert [p["id"] for p in enviadas] == [pub["id"]]
+    assert repos.obtener_publicacion(pub["id"])["estado"] == "en_revision"

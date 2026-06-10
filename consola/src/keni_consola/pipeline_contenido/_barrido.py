@@ -134,7 +134,7 @@ def _ejecutar_barrido() -> dict[str, Any]:
     # toggle "Generar arte" (KENI_PIPELINE_ARTE) + máquina; si está OFF, devuelve [].
     artes = ejecutar_arte()
     # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
-    # cola de revisión. Gateada por KENI_PIPELINE_AVANCE (def ON) + máquina; si está OFF, [].
+    # cola de revisión. Incondicional bajo el maestro KENI_MAQUINA (sin toggle propio).
     avances = ejecutar_avance()
     if temas_nuevos or cribados or lanzados or artes or avances:
         _log.info(
@@ -386,11 +386,12 @@ def iniciar_pipeline(intervalo_segundos: float | None = None) -> threading.Threa
     """Arranca el hilo demonio del pipeline de contenido (GATEADO EN VIVO).
 
     Pensado para el servidor real (`daemons`/`__main__`), NO para `crear_app` (los tests no lo
-    arrancan, igual que el resto de daemons). El hilo arranca SIEMPRE y comprueba en cada ciclo si
-    ALGUNA etapa está activa (`alguna_etapa_pipeline_activa`): con solo "Crear noticias" encendida
-    barre para ingerir (CI) aunque Copy esté OFF; cada fase del barrido se auto-gatea por su propio
-    toggle. Apagar/encender en runtime aplica sin reiniciar. El hilo es daemon; un fallo de barrido
-    se loguea y NO lo mata.
+    arrancan, igual que el resto de daemons). El hilo arranca SIEMPRE y barre en cada ciclo
+    mientras la máquina (`KENI_MAQUINA`) esté encendida: la etapa de AVANCE (borradores completos
+    → revisión) corre incondicionalmente, así que el daemon nunca se duerme con la máquina ON;
+    cada fase que gasta IA (CI/QA/Copy/Arte) se auto-gatea dentro del barrido por su propio
+    toggle. Apagar/encender en runtime aplica sin reiniciar. El hilo es daemon; un fallo de
+    barrido se loguea y NO lo mata.
     """
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
@@ -404,7 +405,7 @@ def iniciar_pipeline(intervalo_segundos: float | None = None) -> threading.Threa
 
     hilo = threading.Thread(target=bucle, name="pipeline-contenido-daemon", daemon=True)
     hilo.start()
-    estado = "ACTIVO" if config.alguna_etapa_pipeline_activa() else "EN ESPERA (todas las etapas off)"
+    estado = "ACTIVO" if config.maquina_activa() else "EN ESPERA (máquina apagada)"
     _log.info(
         "Pipeline de contenido %s, cada %.0f h (max/barrido=%d).",
         estado, intervalo / 3600.0, config.pipeline_max(),

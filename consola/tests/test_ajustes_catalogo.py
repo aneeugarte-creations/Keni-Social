@@ -43,7 +43,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     esperadas = {
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
-        # Los DOS interruptores de la máquina: «Generar» (virtual: agrupa las seis etapas
+        # Los DOS interruptores de la máquina: «Generar» (virtual: agrupa las cinco etapas
         # del tramo noticia→copy) y «Arte» (la única etapa con coste externo).
         config.ENV_GENERAR, config.ENV_PIPELINE_ARTE,
         # Automatismos generales (barridos de mantenimiento).
@@ -103,7 +103,7 @@ _MAESTROS_ENV = {config.ENV_GENERAR, config.ENV_PIPELINE_ARTE}
 def test_maestros_son_generar_y_arte(store):
     """El grupo `maestros_etapa` tiene EXACTAMENTE dos interruptores: «Generar» y «Arte».
 
-    «Generar» es la clave VIRTUAL `KENI_GENERAR`: agrupa las seis etapas internas del tramo
+    «Generar» es la clave VIRTUAL `KENI_GENERAR`: agrupa las cinco etapas internas del tramo
     noticia→copy (la API la escribe con fan-out, ver `claves_fisicas`). Las etapas dejaron de
     ser botones; la única con interruptor propio es Arte (coste externo real)."""
     maestros = [a for a in ajustes_catalogo.catalogo() if a.grupo == "maestros_etapa"]
@@ -117,8 +117,8 @@ def test_maestros_son_generar_y_arte(store):
     assert etiquetas[config.ENV_PIPELINE_ARTE] == "Arte IA"
 
 
-def test_generar_fan_out_a_las_seis_etapas(store):
-    """`claves_fisicas`: la virtual «Generar» escribe las SEIS etapas del tramo (global y
+def test_generar_fan_out_a_las_cinco_etapas(store):
+    """`claves_fisicas`: la virtual «Generar» escribe las CINCO etapas del tramo (global y
     por marca); cualquier otra clave se escribe a sí misma."""
     assert ajustes_catalogo.claves_fisicas(config.ENV_GENERAR) == list(config.ETAPAS_GENERAR)
     con_marca = ajustes_catalogo.claves_fisicas(

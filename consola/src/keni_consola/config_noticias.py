@@ -37,7 +37,6 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ARTE,
-    ENV_PIPELINE_AVANCE,
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
@@ -673,19 +672,16 @@ def qa_en_curso_ttl_seg() -> int:
 
 
 def alguna_etapa_pipeline_activa() -> bool:
-    """True si ALGUNA etapa del pipeline (Noticias/QA/Copy/Arte) está activa globalmente.
+    """Siempre True bajo el maestro: el daemon del pipeline barre siempre que la máquina
+    (`KENI_MAQUINA`) esté encendida.
 
-    El daemon del pipeline barre si CUALQUIERA de sus etapas está encendida (no solo Copy):
-    con "Noticias" sola, debe barrer para crear temas (CI) aunque Copy esté OFF. Cada fase del
-    barrido se auto-gatea luego por su propio flag global + override por-marca.
+    La etapa de AVANCE (borradores completos → cola de revisión) corre INCONDICIONALMENTE, así
+    que siempre hay trabajo de pipeline que considerar y el daemon nunca debe quedarse dormido
+    mientras la máquina esté ON. Las fases que sí gastan `claude -p` (CI/QA/Copy/Arte) se
+    auto-gatean DENTRO del barrido por su propio flag global + override por-marca: si están OFF,
+    no hacen nada, pero el barrido igual corre para drenar los borradores completos a revisión.
     """
-    return (
-        ingesta_activa()
-        or qa_activo()
-        or pipeline_activo()
-        or autogen_arte_activo()
-        or avance_revision_activo()
-    )
+    return True
 
 
 def autogen_arte_activo() -> bool:
@@ -696,20 +692,6 @@ def autogen_arte_activo() -> bool:
     la adjunta. Sin proveedor de imagen configurado, no hace nada (degrada).
     """
     return _crudo(ENV_PIPELINE_ARTE).lower() in _VERDADEROS
-
-
-def avance_revision_activo() -> bool:
-    """True si los borradores COMPLETOS pasan SOLOS a revisión (`KENI_PIPELINE_AVANCE`).
-
-    Def ON (como la auto-programación, a diferencia de las etapas que gastan `claude -p`):
-    mover a la cola de revisión es bookkeeping interno, reversible (una devolución la saca)
-    y NO publica — el gate humano (los OK) queda intacto, solo se ahorra el clic de envío.
-    Respeta precedencia store>env>defecto; `KENI_PIPELINE_AVANCE=0`/`no`/`off` lo apaga.
-    """
-    crudo = _crudo(ENV_PIPELINE_AVANCE).lower()
-    if not crudo:
-        return True
-    return crudo not in _FALSOS
 
 
 # --------------------------------------------------------------------------- #
@@ -724,16 +706,16 @@ def avance_revision_activo() -> bool:
 # lecturas siguen siendo por etapa; la API de ajustes escribe las cinco claves a la vez.
 ENV_GENERAR = "KENI_GENERAR"
 
-# Las SEIS etapas que agrupa «Generar», en orden de pipeline (de la ingesta al avance a
-# revisión). ARTE queda fuera a propósito: es la única con coste externo real (proveedor de
-# imagen) y conserva su interruptor propio.
+# Las CINCO etapas que agrupa «Generar», en orden de pipeline (de la ingesta al copy). ARTE
+# queda fuera a propósito: es la única con coste externo real (proveedor de imagen) y conserva
+# su interruptor propio. El AVANCE a revisión NO entra: corre incondicionalmente (no es un
+# toggle), así que «Generar» no lo gobierna.
 ETAPAS_GENERAR: tuple[str, ...] = (
     ENV_PIPELINE_FUSION,
     ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_SELECCION,
     ENV_PIPELINE_VALIDACION,
     ENV_PIPELINE_COPY,
-    ENV_PIPELINE_AVANCE,
 )
 
 
@@ -752,7 +734,6 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PIPELINE_VALIDACION: qa_activo,
             ENV_PIPELINE_COPY: pipeline_activo,
             ENV_PIPELINE_ARTE: autogen_arte_activo,
-            ENV_PIPELINE_AVANCE: avance_revision_activo,
         }[env_flag]
     except KeyError:
         raise ValueError(f"'{env_flag}' no es una etapa del pipeline de contenido.") from None

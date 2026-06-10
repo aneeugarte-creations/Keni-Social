@@ -85,7 +85,7 @@ def _maestros_etapa() -> list[Ajuste]:
     """Los DOS interruptores de la máquina: «Generar» (noticia → copy en revisión) y «Arte».
 
     `KENI_GENERAR` es una clave VIRTUAL (no se lee en runtime): al guardarla, la API escribe
-    las seis etapas internas del tramo (`config.ETAPAS_GENERAR`) con el mismo valor — o llega
+    las cinco etapas internas del tramo (`config.ETAPAS_GENERAR`) con el mismo valor — o llega
     copy o no empieza, sin botones por etapa. Su valor mostrado es el de la etapa de Copy (el
     final del embudo). ARTE conserva interruptor propio: es la única etapa con coste externo
     real (proveedor de imagen). El tercer interruptor clave, «Publicar», vive en su grupo
@@ -97,8 +97,8 @@ def _maestros_etapa() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Generar",
             ayuda="Para todas las marcas: todo el tramo de noticia a copy listo para revisar "
-            "(ingesta, ranking, criba de la fuente, copy y avance a revisión). Un solo "
-            "interruptor: o llega copy o no empieza.",
+            "(ingesta, ranking, criba de la fuente y copy). Un solo interruptor: o llega copy "
+            "o no empieza.",
             grupo="maestros_etapa",
             defecto=False,
         ),
@@ -125,7 +125,7 @@ def _global_de_etapa(env_flag: str) -> bool:
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por marca para «Generar» (virtual: fan-out a las seis etapas) y «Arte».
+    """Toggles `bool` por marca para «Generar» (virtual: fan-out a las cinco etapas) y «Arte».
 
     Apagar «Generar» en una marca la excluye de TODO el tramo noticia→copy; apagar «Arte»
     deja a esa marca sin imagen por IA. Se generan en caliente desde el catálogo de marcas."""
@@ -860,8 +860,8 @@ def claves_fisicas(clave: str) -> list[str]:
     """Claves REALES del store que escribe/borra un ajuste del catálogo.
 
     Para casi todos es su propia clave. Para la VIRTUAL «Generar» (`KENI_GENERAR`, global o
-    `::marca`) son las seis etapas internas del tramo noticia→copy (`config.ETAPAS_GENERAR`)
-    con el mismo sufijo de marca: un solo botón, seis claves coherentes — las etapas no pueden
+    `::marca`) son las cinco etapas internas del tramo noticia→copy (`config.ETAPAS_GENERAR`)
+    con el mismo sufijo de marca: un solo botón, cinco claves coherentes — las etapas no pueden
     divergir desde la UI.
     """
     base, sep, marca = clave.partition(config.SEP_MARCA)
@@ -874,7 +874,7 @@ def claves_fisicas(clave: str) -> list[str]:
 def _clave_lectura(clave: str) -> str:
     """Clave que REPRESENTA el valor de un ajuste: la propia, salvo la virtual «Generar»,
     cuyo estado mostrado es el de la etapa de COPY (el final del embudo; tras cualquier
-    escritura desde la UI las seis etapas coinciden)."""
+    escritura desde la UI las cinco etapas coinciden)."""
     base, sep, marca = clave.partition(config.SEP_MARCA)
     if base != config.ENV_GENERAR:
         return clave

@@ -8,10 +8,10 @@ solo a la cola de revisión con su cadena simple, exactamente igual que si lo en
 persona (mismo CAS, misma cadena de "dale el OK").
 
 EL GATE HUMANO NO CAMBIA: nada se aprueba ni publica solo. Solo se mueve la pieza a la
-cola donde el equipo da (o niega) sus OK. Por eso —como la auto-programación— su toggle
-(`KENI_PIPELINE_AVANCE`) es default ON: no gasta IA, no publica y es reversible (una
-devolución la saca de la cola). Sigue gateado por el interruptor general (`KENI_MAQUINA`)
-y excluible por marca (`KENI_PIPELINE_AVANCE::<marca>`).
+cola donde el equipo da (o niega) sus OK. Por eso esta etapa NO tiene toggle: corre
+INCONDICIONALMENTE —«borrador» dejó de ser un estado donde descanse una pieza completa—,
+bajo el único maestro general (`KENI_MAQUINA`). No gasta IA, no publica y es reversible
+(una devolución la saca de la cola). No hay exclusión por marca.
 
 REGLAS DE SELECCIÓN (`piezas_para_avance`, pura):
   - Estado `borrador` y COMPLETA de verdad: la misma derivación que pinta el feed
@@ -72,9 +72,6 @@ def piezas_para_avance(
     for pub in pubs:
         if pub.get("estado") != "borrador":
             continue
-        marca = str(pub.get("marca") or "").strip()
-        if marca and config.marca_apagada(config.ENV_PIPELINE_AVANCE, marca):
-            continue
         if not _en_reposo(pub, ahora):
             continue
         # Completa DE VERDAD (copy + asset del formato): la misma derivación del feed.
@@ -118,10 +115,10 @@ def _enviar(pub: dict[str, Any]) -> bool:
 def ejecutar_avance() -> list[dict[str, Any]]:
     """Etapa de AVANCE del barrido (tras arte): borradores completos -> cola de revisión.
 
-    Gateada por `KENI_PIPELINE_AVANCE` (def ON) + el maestro `KENI_MAQUINA`. Best-effort:
-    un fallo por pieza se loguea y se sigue. Devuelve las piezas enviadas.
+    Incondicional bajo el único maestro `KENI_MAQUINA` (sin toggle propio ni exclusión por
+    marca). Best-effort: un fallo por pieza se loguea y se sigue. Devuelve las piezas enviadas.
     """
-    if not config.gate_maquina(config.avance_revision_activo)():
+    if not config.maquina_activa():
         return []
     try:
         pubs = repos.listar_publicaciones(estado="borrador")
