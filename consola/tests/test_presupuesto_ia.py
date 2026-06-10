@@ -210,6 +210,23 @@ def test_excepciones_son_cola_llena(entorno):
 # --------------------------------------------------------------------------- #
 
 
+def test_prioridad_breaking_adelanta_al_fondo_pero_no_al_equipo(entorno, monkeypatch):
+    """CONTRATO de los 3 niveles: breaking adelanta al pipeline ordinario, nunca a una persona,
+    y para la economia de tokens SIGUE siendo fondo (el corte solo_manual tambien lo frena)."""
+    j_pipe = _encolar(jobspec.PRIORIDAD_PIPELINE)
+    j_break = _encolar(jobspec.PRIORIDAD_BREAKING)
+    j_manual = _encolar(jobspec.PRIORIDAD_MANUAL)
+    assert cola.reclamar("w")["id"] == j_manual  # la persona primero
+    assert cola.reclamar("w")["id"] == j_break   # breaking adelanta al lote ordinario
+    assert cola.reclamar("w")["id"] == j_pipe
+    # Con el presupuesto agotado (solo_manual), breaking NO se encola ni se reclama: es fondo.
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=0)
+    presupuesto_ia.invalidar_cache()
+    with pytest.raises(generaciones.PresupuestoAgotadoError):
+        _encolar(jobspec.PRIORIDAD_BREAKING)
+
+
 def test_reclamar_prioridad_minima_corta_el_fondo_encolado(entorno):
     """La avalancha YA encolada deja de salir: con el corte, solo se reclama lo manual."""
     _encolar(jobspec.PRIORIDAD_PIPELINE)
