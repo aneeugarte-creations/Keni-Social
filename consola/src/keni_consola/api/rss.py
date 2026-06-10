@@ -172,7 +172,31 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
         "ultimo_conteo": fuente.get("ultimo_conteo", 0),
         # Sitio de marca propia: su imagen original es reutilizable al generar.
         "propia": bool(fuente.get("propia", False)),
+        # Categoría del feed: manda la CADENCIA de sondeo del motor y la cobertura de /salud.
+        "categoria": fuente.get("categoria", ""),
     }
+
+
+# Categorías VÁLIDAS de un feed: las del catálogo de presets + 'breaking' (la cadencia más
+# agresiva del motor). La categoría manda la cadencia de sondeo (`config.
+# ingesta_intervalo_categoria`) y la detección de huecos de /salud; '' = sin categoría
+# (cadencia por defecto).
+def _categorias_validas() -> frozenset[str]:
+    from ..dominio import fuentes_presets
+
+    return frozenset([*fuentes_presets.categorias(), "breaking"])
+
+
+def _validar_categoria(valor: Any) -> tuple[str | None, str | None]:
+    """Valida la categoría del cuerpo: '' o una de la allowlist. `(categoria, error)`."""
+    if valor is None:
+        valor = ""
+    if not isinstance(valor, str):
+        return None, "La categoría debe ser texto."
+    valor = valor.strip().lower()
+    if valor and valor not in _categorias_validas():
+        return None, "Categoría no permitida."
+    return valor, None
 
 
 async def listar_fuentes(request: Request) -> Response:
@@ -212,6 +236,9 @@ async def crear_fuente(request: Request) -> Response:
     redes_def, error = _validar_redes_def(datos.get("redes_def"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    categoria, error = _validar_categoria(datos.get("categoria"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
 
     fuente = repos.crear_fuente_rss(
         nombre.strip(),
@@ -221,6 +248,7 @@ async def crear_fuente(request: Request) -> Response:
         excluir=excluir,
         redes_def=redes_def,
         propia=bool(datos.get("propia")),
+        categoria=categoria or "",
     )
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
 
@@ -273,6 +301,11 @@ async def actualizar_fuente(request: Request) -> Response:
         campos["redes_def"] = redes_def
     if "propia" in datos:
         campos["propia"] = bool(datos.get("propia"))
+    if "categoria" in datos:
+        categoria, error = _validar_categoria(datos.get("categoria"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["categoria"] = categoria
 
     fuente = repos.actualizar_fuente_rss(fuente_id, campos)
     if fuente is None:

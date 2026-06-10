@@ -74,6 +74,8 @@ export function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
       void queryClient.invalidateQueries({ queryKey: ["fuentes", "presets"] });
       void queryClient.invalidateQueries({ queryKey: CLAVE_FUENTES });
       void queryClient.invalidateQueries({ queryKey: ["fuentes", "hub"] });
+      // Los feeds recién activados deben aparecer YA en la pestaña Salud (otra query).
+      void queryClient.invalidateQueries({ queryKey: ["noticias", "salud"] });
       setSeleccionados(new Set());
       toast.success(
         data.creadas === 0

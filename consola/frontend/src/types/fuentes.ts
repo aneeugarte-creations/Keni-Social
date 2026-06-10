@@ -300,6 +300,9 @@ export interface FuenteRss {
   /** `true` si es un sitio de MARCA PROPIA: su imagen original es reutilizable, así que las
    *  piezas generadas desde sus items nacen con la imagen del artículo (`tipo_contenido='fuente'`). */
   propia: boolean;
+  /** Categoría del feed (mx | regional | internacional | deportes | ciencia-tech | gaming |
+   *  negocios | tendencias | breaking | ""): manda la CADENCIA de sondeo del motor. */
+  categoria: string;
 }
 
 export interface RespuestaFuentesRss {
@@ -324,6 +327,8 @@ export interface CuerpoCrearFuenteRss {
   redes_def?: string[];
   /** `true` si es un sitio de marca propia (su imagen original es reutilizable). */
   propia?: boolean;
+  /** Categoría del feed (opcional): manda la cadencia de sondeo del motor. */
+  categoria?: string;
 }
 
 /** Cuerpo parcial para actualizar una fuente RSS. */
@@ -336,6 +341,7 @@ export interface CuerpoActualizarFuenteRss {
   excluir?: string;
   redes_def?: string[];
   propia?: boolean;
+  categoria?: string;
 }
 
 /** Un elemento (item) de un feed RSS. */

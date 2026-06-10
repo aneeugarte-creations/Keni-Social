@@ -28,6 +28,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -589,7 +590,19 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
                       size="sm"
                       variant="ghost"
                       className="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => borrarLoteMut.mutate(l.id)}
+                      onClick={async () => {
+                        // Borrar un lote arrastra TODOS sus apuntes (también los no usados):
+                        // confirmación explícita antes del destructivo.
+                        if (
+                          await confirmar({
+                            mensaje:
+                              "¿Borrar este lote y todos sus apuntes (incluidos los no usados)?",
+                            destructivo: true,
+                            textoConfirmar: "Borrar lote",
+                          })
+                        )
+                          borrarLoteMut.mutate(l.id);
+                      }}
                       disabled={borrarLoteMut.isPending}
                       aria-label={`Borrar lote ${l.id}`}
                     >

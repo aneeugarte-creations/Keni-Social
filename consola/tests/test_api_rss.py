@@ -137,6 +137,34 @@ def test_listar_fuentes_filtra_por_marca(cliente):
     assert cliente.get("/api/rss/fuentes?marca=marca_falsa").status_code == 400
 
 
+def test_crear_fuente_con_categoria_y_editarla(cliente):
+    """La categoría (manda la cadencia de sondeo del motor) se crea, expone y edita por la API."""
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Depor", "url": _URL_OK, "marca": "claro-sports", "categoria": "deportes"},
+    )
+    assert r.status_code == 200
+    f = r.json()["fuente"]
+    assert f["categoria"] == "deportes"
+
+    r2 = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"categoria": "breaking"})
+    assert r2.status_code == 200
+    assert r2.json()["fuente"]["categoria"] == "breaking"
+
+    # Quitar la categoría ('' = cadencia por defecto) también es válido.
+    r3 = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"categoria": ""})
+    assert r3.status_code == 200
+    assert r3.json()["fuente"]["categoria"] == ""
+
+
+def test_crear_fuente_categoria_invalida_400(cliente):
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "X", "url": _URL_OK, "categoria": "no-existe"},
+    )
+    assert r.status_code == 400
+
+
 def test_crear_fuente_nombre_obligatorio_400(cliente):
     assert (
         cliente.post("/api/rss/fuentes", json={"url": _URL_OK}).status_code == 400

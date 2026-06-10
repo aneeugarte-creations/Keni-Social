@@ -16,11 +16,35 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { FuenteRss, MarcaDisponible, RedPublicacion } from "@/types";
 
 import { CLAVE_FUENTES, CLAVE_ITEMS } from "./lib";
+
+/**
+ * Categorías canónicas de feed (espejo del catálogo de presets + breaking). La categoría
+ * manda la CADENCIA de sondeo del motor de ingesta — un feed de deportes se sondea cada
+ * ~3 min, uno de gaming cada ~30 — y alimenta la cobertura/huecos de Salud.
+ */
+const CATEGORIAS_FEED: { id: string; nombre: string; cadencia: string }[] = [
+  { id: "mx", nombre: "México (nacional)", cadencia: "~10 min" },
+  { id: "regional", nombre: "Regional (estados)", cadencia: "~10 min" },
+  { id: "internacional", nombre: "Internacional", cadencia: "~10 min" },
+  { id: "deportes", nombre: "Deportes", cadencia: "~3 min" },
+  { id: "ciencia-tech", nombre: "Ciencia y tecnología", cadencia: "~30 min" },
+  { id: "gaming", nombre: "Gaming", cadencia: "~30 min" },
+  { id: "negocios", nombre: "Negocios", cadencia: "~10 min" },
+  { id: "tendencias", nombre: "Tendencias", cadencia: "~10 min" },
+  { id: "breaking", nombre: "Breaking (máxima cadencia)", cadencia: "~3 min" },
+];
 
 /** Diálogo de alta / edición de un feed. */
 export function DialogoFuente({
@@ -91,6 +115,7 @@ function FormularioFuente({
   const [excluir, setExcluir] = React.useState(fuente?.excluir ?? "");
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
   const [propia, setPropia] = React.useState(fuente?.propia ?? false);
+  const [categoria, setCategoria] = React.useState(fuente?.categoria ?? "");
   const [redesDef, setRedesDef] = React.useState<Set<string>>(
     () => new Set(fuente?.redes_def ?? []),
   );
@@ -109,6 +134,7 @@ function FormularioFuente({
           excluir: excluir.trim(),
           redes_def: redesArr,
           propia,
+          categoria,
         });
       }
       return api.crearFuenteRss({
@@ -119,11 +145,15 @@ function FormularioFuente({
         excluir: excluir.trim() || undefined,
         redes_def: redesArr.length > 0 ? redesArr : undefined,
         propia: propia || undefined,
+        categoria: categoria || undefined,
       });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_FUENTES });
       void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
+      // La SALUD del motor (pestaña Salud de fuentes) lee otra query: sin invalidarla, un
+      // alta/edición no se refleja allí hasta el siguiente refetch (45 s) — parecía un bug.
+      void queryClient.invalidateQueries({ queryKey: ["noticias", "salud"] });
       toast.success(fuente ? "Feed actualizado" : "Feed añadido");
       onListo();
     },
@@ -171,9 +201,33 @@ function FormularioFuente({
           inputMode="url"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label>Marca</Label>
-        <p className="text-sm text-muted-foreground">{nombreMarcaFuente}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Marca</Label>
+          <p className="text-sm text-muted-foreground pt-1.5">{nombreMarcaFuente}</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="fuente-categoria">Categoría</Label>
+          <Select
+            value={categoria || "__sin__"}
+            onValueChange={(v) => setCategoria(v === "__sin__" ? "" : v)}
+          >
+            <SelectTrigger id="fuente-categoria" aria-label="Categoría del feed">
+              <SelectValue placeholder="Sin categoría" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__sin__">Sin categoría (cadencia normal)</SelectItem>
+              {CATEGORIAS_FEED.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nombre} · {c.cadencia}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Marca la frecuencia con la que el motor sondea este feed.
+          </p>
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">

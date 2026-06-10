@@ -88,26 +88,48 @@ export function SaludFeeds() {
     return `${Math.floor(h / 24)} día${Math.floor(h / 24) !== 1 ? "s" : ""}`;
   }
 
-  /** Etiqueta y variante para el estado de un feed. */
+  /** Etiqueta, variante, SEVERIDAD (0 = peor) y tinte de fila para el estado de un feed. */
   function estadoFeed(feed: (typeof feeds)[number]): {
     label: string;
     className: string;
+    severidad: number;
+    fila: string;
   } {
     if (feed.desactivado_auto === 1) {
-      return { label: "Auto-desactivado", className: "border-red-400 text-red-600" };
-    }
-    if (!feed.activo) {
-      return { label: "Inactivo", className: "text-muted-foreground" };
+      return {
+        label: "Auto-desactivado", className: "border-red-400 text-red-600",
+        severidad: 0, fila: "bg-red-50/40",
+      };
     }
     const slaMin = 180; // KENI_FEED_SLA_MIN por defecto
-    if (feed.frescura_min !== null && feed.frescura_min > slaMin) {
-      return { label: "Stale", className: "border-amber-400 text-amber-600" };
+    if (feed.activo && feed.errores_seguidos > 0) {
+      return {
+        label: "Con error", className: "border-amber-400 text-amber-600",
+        severidad: 1, fila: "bg-amber-50/40",
+      };
     }
-    if (feed.errores_seguidos > 0) {
-      return { label: "Con error", className: "border-amber-400 text-amber-600" };
+    if (feed.activo && feed.frescura_min !== null && feed.frescura_min > slaMin) {
+      return {
+        label: "Stale", className: "border-amber-400 text-amber-600",
+        severidad: 2, fila: "bg-amber-50/30",
+      };
     }
-    return { label: "Activo", className: "border-evergreen-500 text-evergreen-700" };
+    if (!feed.activo) {
+      return {
+        label: "Inactivo", className: "text-muted-foreground", severidad: 3, fila: "opacity-60",
+      };
+    }
+    return {
+      label: "Activo", className: "border-evergreen-500 text-evergreen-700",
+      severidad: 4, fila: "",
+    };
   }
+
+  // PROBLEMAS PRIMERO: esta tabla es un monitor, no un listado — lo roto debe verse arriba
+  // sin buscarlo. A igual severidad, los de menos items en 24 h antes (los que menos aportan).
+  const feedsOrdenados = [...feeds]
+    .map((f) => ({ feed: f, est: estadoFeed(f) }))
+    .sort((a, b) => a.est.severidad - b.est.severidad || a.feed.items_24h - b.feed.items_24h);
 
   return (
     <div className="space-y-6">
@@ -196,10 +218,9 @@ export function SaludFeeds() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {feeds.map((feed) => {
-                const est = estadoFeed(feed);
+              {feedsOrdenados.map(({ feed, est }) => {
                 return (
-                  <TableRow key={feed.id}>
+                  <TableRow key={feed.id} className={est.fila}>
                     <TableCell className="font-medium text-xs">{feed.nombre}</TableCell>
                     <TableCell className="text-xs">{feed.categoria || "—"}</TableCell>
                     <TableCell className="text-xs">{feed.marca_nombre || feed.marca || "—"}</TableCell>

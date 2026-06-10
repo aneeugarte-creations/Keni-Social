@@ -127,6 +127,9 @@ function FilaFuente({
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_FUENTES });
     void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
+    // La pestaña Salud lee otra query: activar/desactivar/borrar debe reflejarse allí YA
+    // (sin esperar al refetch de 45 s).
+    void queryClient.invalidateQueries({ queryKey: ["noticias", "salud"] });
   };
 
   const alternarActivo = useMutation({
@@ -195,6 +198,15 @@ function FilaFuente({
           {fuente.marca && (
             <Badge variant="outline" className="font-normal">
               {fuente.marca_nombre || fuente.marca}
+            </Badge>
+          )}
+          {fuente.categoria && (
+            <Badge
+              variant="secondary"
+              className="font-normal"
+              title="Categoría del feed: marca la cadencia con la que el motor lo sondea"
+            >
+              {fuente.categoria}
             </Badge>
           )}
           {!fuente.activo && (

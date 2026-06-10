@@ -185,6 +185,19 @@ describe("SaludFeeds · tabla de feeds", () => {
     expect(screen.getByText("Feed caído")).toBeTruthy();
   });
 
+  it("ordena PROBLEMAS PRIMERO: el feed auto-desactivado va antes que el sano", async () => {
+    mockSalud.mockResolvedValue(SALUD_COBERTURA);
+    renderSalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("salud-tabla-feeds")).toBeTruthy();
+    });
+    const filas = screen.getAllByRole("row").map((r) => r.textContent ?? "");
+    const iCaido = filas.findIndex((t) => t.includes("Feed caído"));
+    const iSano = filas.findIndex((t) => t.includes("Reforma RSS"));
+    expect(iCaido).toBeGreaterThan(0);
+    expect(iCaido).toBeLessThan(iSano); // el monitor enseña lo roto arriba
+  });
+
   it("muestra el botón Reactivar solo para feeds auto-desactivados", async () => {
     mockSalud.mockResolvedValue(SALUD_COBERTURA);
     renderSalud();
