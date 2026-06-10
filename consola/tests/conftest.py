@@ -180,6 +180,13 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_CONSOLA_PREFERENCIAS", str(tmp_path / "preferencias.toml"))
     monkeypatch.setenv("KENI_CONSOLA_SUGERENCIAS", str(tmp_path / "sugerencias.json"))
     monkeypatch.setenv("KENI_CONSOLA_TERMOMETRO", str(tmp_path / "termometro.json"))
+    # Store de AJUSTES editables aislado en tmp. Sin esto caia a la ruta COMPARTIDA
+    # `${XDG_CONFIG_HOME:-~/.config}/keni-social/ajustes.toml`: con xdist, un test que
+    # ESCRIBE un ajuste (knobs de economia, kill switch, media_gc...) contaminaba a los
+    # tests de OTRO worker en pleno vuelo (el store tiene precedencia sobre env), p.ej.
+    # una pausa de generacion escrita en gw2 hacia fallar el corte por presupuesto en
+    # gw5 con la excepcion equivocada. Flaky real desde que los knobs son editables.
+    monkeypatch.setenv("KENI_CONSOLA_AJUSTES", str(tmp_path / "ajustes.toml"))
     # Token de sesion (#134): lo borramos del entorno para que `crear_app` use el que
     # le pasamos (TOKEN_PRUEBA) y no uno del shell del usuario. Determinismo en tests.
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
