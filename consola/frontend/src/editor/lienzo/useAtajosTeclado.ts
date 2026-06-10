@@ -3,9 +3,10 @@
 // Ignora si el foco está en un campo editable o un <select>.
 
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import type { Capa } from "../documento";
+import { nuevoId } from "../documento";
 import { aplicarEstilo } from "../estilo";
 import { copiarEstiloPortapapeles, estiloPortapapeles } from "../estilos-guardados";
 import type { StoreEditor } from "../store";
@@ -26,6 +27,8 @@ export function useAtajosTeclado({
   recorteId: string | null;
   onSalirRecorte?: () => void;
 }) {
+  const ultimoNudgeRef = useRef<number>(0);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -106,10 +109,9 @@ export function useAtajosTeclado({
         if (!portapapeles.capas.length) return;
         e.preventDefault();
         let z = Math.max(0, ...st.documento.capas.map((c) => c.z));
-        const t0 = Date.now().toString(36);
-        const copias = portapapeles.capas.map((c, i) => ({
+        const copias = portapapeles.capas.map((c) => ({
           ...structuredClone(c),
-          id: `${c.tipo}-${t0}-${i}-${Math.floor(performance.now())}`,
+          id: nuevoId(c.tipo),
           x: c.x + 24,
           y: c.y + 24,
           z: ++z,
@@ -123,6 +125,12 @@ export function useAtajosTeclado({
       if (meta && e.key === "[") { e.preventDefault(); return st.enviarAlFondo(sel); }
       if (capa && e.key.startsWith("Arrow")) {
         e.preventDefault();
+        const ahora = Date.now();
+        // Coalesce por ráfaga: si han pasado >500ms desde el último nudge, comienza un gesto nuevo.
+        if (ahora - ultimoNudgeRef.current > 500) {
+          st.comenzarGesto();
+        }
+        ultimoNudgeRef.current = ahora;
         const d = e.shiftKey ? 10 : 1;
         const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
         const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
@@ -132,6 +140,7 @@ export function useAtajosTeclado({
             .map((id) => st.documento.capas.find((c) => c.id === id))
             .filter((c): c is Capa => !!c)
             .map((c) => ({ id: c.id, x: c.x + dx, y: c.y + dy })),
+          false, // No registrar en historial: la ráfaga se trata como un gesto
         );
       }
     };

@@ -7,6 +7,7 @@
 import { createStore } from "zustand/vanilla";
 
 import type { Capa, CapaImagen, CapaMarco, Documento, Forma } from "./documento";
+import { nuevoId } from "./documento";
 
 const LIMITE_HISTORIAL = 50;
 
@@ -31,7 +32,7 @@ export interface EstadoEditor {
   // Operaciones sobre la selección múltiple (un solo paso de historial).
   quitarMulti: () => void;
   duplicarMulti: () => void;
-  aplicarPosiciones: (pos: { id: string; x: number; y: number }[]) => void;
+  aplicarPosiciones: (pos: { id: string; x: number; y: number }[], registrar?: boolean) => void;
   alinearMulti: (modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => void;
   distribuir: (eje: "h" | "v") => void;
   agregar: (capa: Capa) => void;
@@ -128,9 +129,9 @@ export function crearStoreEditor(inicial: Documento) {
       insertarBloque: (capas) =>
         aplicar((doc) => {
           let z = doc.capas.reduce((m, c) => Math.max(m, c.z), 0);
-          const frescas = capas.map((c, i) => ({
+          const frescas = capas.map((c) => ({
             ...clonar(c),
-            id: `${c.tipo}-${Date.now().toString(36)}-${i}`,
+            id: nuevoId(c.tipo),
             z: ++z,
           })) as Capa[];
           return conCapas(doc, [...doc.capas, ...frescas]);
@@ -231,7 +232,7 @@ export function crearStoreEditor(inicial: Documento) {
         if (!orig) return;
         const copia = {
           ...clonar(orig),
-          id: `${orig.tipo}-${Date.now().toString(36)}-${Math.floor(performance.now())}`,
+          id: nuevoId(orig.tipo),
           x: orig.x + 24,
           y: orig.y + 24,
           z: Math.max(0, ...get().documento.capas.map((c) => c.z)) + 1,
@@ -303,9 +304,9 @@ export function crearStoreEditor(inicial: Documento) {
         if (sel.length === 0) return;
         const capas = get().documento.capas.filter((c) => sel.includes(c.id));
         let z = get().documento.capas.reduce((m, c) => Math.max(m, c.z), 0);
-        const copias = capas.map((c, i) => ({
+        const copias = capas.map((c) => ({
           ...clonar(c),
-          id: `${c.tipo}-${Date.now().toString(36)}-${i}`,
+          id: nuevoId(c.tipo),
           x: c.x + 24,
           y: c.y + 24,
           z: ++z,
@@ -314,7 +315,7 @@ export function crearStoreEditor(inicial: Documento) {
         set({ seleccionMulti: copias.map((c) => c.id), seleccion: copias[copias.length - 1]?.id ?? null });
       },
 
-      aplicarPosiciones: (pos) => {
+      aplicarPosiciones: (pos, registrar = true) => {
         const mapa = new Map(pos.map((p) => [p.id, p]));
         aplicar((doc) =>
           conCapas(
@@ -324,6 +325,7 @@ export function crearStoreEditor(inicial: Documento) {
               return p ? ({ ...c, x: p.x, y: p.y } as Capa) : c;
             }),
           ),
+          registrar,
         );
       },
 
@@ -374,14 +376,32 @@ export function crearStoreEditor(inicial: Documento) {
         if (sel.length < 2) return;
         const elegidas = get().documento.capas.filter((c) => sel.includes(c.id)).sort((a, b) => a.z - b.z);
         if (elegidas.length < 2) return;
-        // BBox que envuelve a las hijas (coordenadas absolutas, que se conservan dentro del grupo).
-        const minX = Math.min(...elegidas.map((c) => c.x));
-        const minY = Math.min(...elegidas.map((c) => c.y));
-        const maxX = Math.max(...elegidas.map((c) => c.x + c.w));
-        const maxY = Math.max(...elegidas.map((c) => c.y + c.h));
+        // BBox que envuelve a las hijas considerando rotación (coordenadas absolutas, que se conservan dentro del grupo).
+        // Calcula las 4 esquinas de cada capa rotada y toma min/max.
+        const todos = elegidas.flatMap((c) => {
+          const x = c.x, y = c.y, w = c.w, h = c.h, rot = c.rotacion || 0;
+          const rad = (rot * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          // 4 esquinas: [x, y], [x+w, y], [x+w, y+h], [x, y+h] rotadas alrededor de (x, y)
+          const esquinas = [
+            [0, 0],
+            [w, 0],
+            [w, h],
+            [0, h],
+          ];
+          return esquinas.map(([dx, dy]) => [
+            x + dx * cos - dy * sin,
+            y + dx * sin + dy * cos,
+          ]);
+        });
+        const minX = Math.min(...todos.map(([px]) => px));
+        const minY = Math.min(...todos.map(([_, py]) => py));
+        const maxX = Math.max(...todos.map(([px]) => px));
+        const maxY = Math.max(...todos.map(([_, py]) => py));
         const z = Math.max(...elegidas.map((c) => c.z));
         const grupo = {
-          id: `grupo-${Date.now().toString(36)}`,
+          id: nuevoId("grupo"),
           tipo: "grupo" as const,
           x: minX, y: minY, w: maxX - minX, h: maxY - minY,
           rotacion: 0, opacidad: 1, z, visible: true, bloqueada: false,
@@ -411,10 +431,17 @@ export function crearStoreEditor(inicial: Documento) {
         set((s) => {
           if (s.pasado.length === 0) return {};
           const previo = s.pasado[s.pasado.length - 1];
+          const idsPresentes = new Set(previo.capas.map((c) => c.id));
+          // Sanea la selección: filtra seleccionMulti a ids que existan en el documento restaurado,
+          // y pone seleccion a null si ya no existe.
+          const seleccionMulti = s.seleccionMulti.filter((id) => idsPresentes.has(id));
+          const seleccion = s.seleccion && idsPresentes.has(s.seleccion) ? s.seleccion : null;
           return {
             documento: previo,
             pasado: s.pasado.slice(0, -1),
             futuro: [s.documento, ...s.futuro].slice(0, LIMITE_HISTORIAL),
+            seleccionMulti,
+            seleccion,
           };
         }),
 
@@ -422,10 +449,17 @@ export function crearStoreEditor(inicial: Documento) {
         set((s) => {
           if (s.futuro.length === 0) return {};
           const siguiente = s.futuro[0];
+          const idsPresentes = new Set(siguiente.capas.map((c) => c.id));
+          // Sanea la selección: filtra seleccionMulti a ids que existan en el documento restaurado,
+          // y pone seleccion a null si ya no existe.
+          const seleccionMulti = s.seleccionMulti.filter((id) => idsPresentes.has(id));
+          const seleccion = s.seleccion && idsPresentes.has(s.seleccion) ? s.seleccion : null;
           return {
             documento: siguiente,
             pasado: [...s.pasado, s.documento].slice(-LIMITE_HISTORIAL),
             futuro: s.futuro.slice(1),
+            seleccionMulti,
+            seleccion,
           };
         }),
 

@@ -238,7 +238,7 @@ export const CATALOGO_FUENTES = [
 // ---------------------------------------------------------------------------
 
 let _seq = 0;
-function nuevoId(prefijo: string): string {
+export function nuevoId(prefijo: string): string {
   _seq += 1;
   return `${prefijo}-${Date.now().toString(36)}-${_seq}`;
 }
