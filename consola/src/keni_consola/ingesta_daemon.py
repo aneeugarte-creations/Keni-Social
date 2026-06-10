@@ -737,6 +737,31 @@ def paso_agencias() -> dict[str, Any]:
     return {"items": nuevos}
 
 
+def _particion_por_plan(
+    feeds: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Separa los feeds en (dentro_del_plan, fuera_del_plan) según el plan de su marca. PURA-ish.
+
+    Fuera de plan = la marca TIENE plan (`config.plan_dia`), el feed tiene categoría y esa
+    categoría no está en el plan. Sin marca, sin plan o sin categoría → dentro (fail-open).
+    Memoiza el plan por marca (una lectura de config por barrido y marca).
+    """
+    planes: dict[str, dict[str, int]] = {}
+    dentro: list[dict[str, Any]] = []
+    fuera: list[dict[str, Any]] = []
+    for f in feeds:
+        marca = str(f.get("marca") or "")
+        categoria = str(f.get("categoria") or "").strip().lower()
+        if not marca or not categoria:
+            dentro.append(f)
+            continue
+        if marca not in planes:
+            planes[marca] = config.plan_dia(marca)
+        plan = planes[marca]
+        (dentro if not plan or categoria in plan else fuera).append(f)
+    return dentro, fuera
+
+
 def ejecutar_barrido() -> dict[str, Any]:
     """Un barrido: elige feeds vencidos, los sondea en paralelo, persiste y replanifica.
 
@@ -756,6 +781,24 @@ def ejecutar_barrido() -> dict[str, Any]:
         # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
         # con marca vacía es False. Best-effort: no toca clustering/traducción (pasos globales).
         feeds = [f for f in feeds if not config.marca_apagada(config.ENV_PIPELINE_SELECCION, str(f.get("marca") or ""))]
+        # PLAN EDITORIAL DIARIO: una marca con plan solo digiere los feeds de las categorías
+        # de su plan — sondear lo que jamás competirá por una plaza es carga (red + archivo +
+        # clustering) sin salida. Los feeds fuera de plan se APLAZAN (proximo_sondeo += 6 h)
+        # para no re-evaluarlos en cada barrido. FAIL-OPEN: un feed SIN categoría o sin marca
+        # no se filtra (sin clasificar no hay criterio; mejor digerir de más que quedar ciego).
+        feeds, fuera_de_plan = _particion_por_plan(feeds)
+        for f in fuera_de_plan:
+            try:
+                repos.registrar_sondeo_feed(
+                    f["id"], proximo_sondeo=iso_utc(ahora + timedelta(hours=6))
+                )
+            except Exception:  # noqa: BLE001 -- aplazar es best-effort; el feed solo re-aparece
+                _log.debug("ingesta_daemon: no se pudo aplazar el feed fuera de plan %s.", f.get("id"))
+        if fuera_de_plan:
+            _log.info(
+                "ingesta_daemon: %d feed(s) fuera del plan editorial de su marca, aplazados.",
+                len(fuera_de_plan),
+            )
 
         # OJO: sin feeds RSS vencidos el barrido NO termina aquí: los pasos post-RSS (agencias,
         # clustering, fusión, re-score, traducción) corren IGUAL. Antes un `return` temprano

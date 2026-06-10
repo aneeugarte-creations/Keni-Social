@@ -88,6 +88,18 @@ def _youtube(channel_id: str) -> str:
 _PRESETS: list[dict[str, Any]] = [
     # ================================================================ MX ==== #
     # --- Diarios / medios nacionales (RSS directo, verificado) -------------- #
+    # --- UnoTV (portal propio): secciones del medio ------------------------- #
+    {
+        "id": "unotv-entretenimiento",
+        "nombre": "UnoTV — Portal Entretenimiento",
+        "url": "https://unotv.com/feed/entretenimiento.xml",
+        "categoria": "entretenimiento",
+        "marca_sugerida": "unotv",
+        "linea_sugerida": "Entretenimiento",
+        "idioma": "es",
+        "region": "MX",
+        "descripcion": "Sección de entretenimiento del portal de UnoTV (fuente propia).",
+    },
     {
         "id": "jornada-mx",
         "nombre": "La Jornada — Edición",

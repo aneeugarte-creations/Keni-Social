@@ -100,7 +100,7 @@ def _envejecer_intento(tema_id, campo):
 def _sembrar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
-    verificacion="corroborada", n_fuentes=2,
+    verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema.
 
@@ -112,9 +112,9 @@ def _sembrar_cluster(
 
     repos.upsert_noticia_cluster({
         "id": cid, "titulo": titulo, "resumen": resumen, "marca": marca,
-        "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1,
+        "categoria": categoria, "geo": "MX", "clave": f"t:{cid}", "n_items": 1,
         "n_fuentes": n_fuentes, "idiomas": ["es"], "senal": 100, "score": score,
-        "breaking": 0, "primer_visto": "2026-06-01T00:00:00+00:00",
+        "breaking": breaking, "primer_visto": "2026-06-01T00:00:00+00:00",
         "ultimo_visto": ultimo_visto
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         "estado": estado, "verificacion": verificacion,
@@ -922,40 +922,16 @@ def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Cupos de VOLUMEN (día móvil + franja horaria): anclan la producción a la     #
-# cadencia real de la marca y dejan plazas libres para lo fresco de cada franja. #
+# Volumen: PLAN EDITORIAL DIARIO (cupos por categoría, lo mejor de cada tipo) o,    #
+# sin plan, cupo diario simple (24 h móviles).                                       #
 # --------------------------------------------------------------------------- #
 
 
-def test_cupo_franja_corta_la_admision(entorno, monkeypatch):
-    """Con el cupo de franja lleno (temas ya creados en el bloque actual), CI no admite más."""
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.setenv("KENI_CUPO_DIA", "0")        # aísla: solo la franja limita
-    monkeypatch.setenv("KENI_CUPO_FRANJA", "2")
-    monkeypatch.setenv("KENI_FRANJA_HORAS", "24")   # bloque único: lo creado hoy cuenta seguro
-    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    # 2 temas auto-producidos en la franja (con copy generado: NO cuentan como en-vuelo,
-    # así el gate serial no interfiere y se prueba el cupo de volumen aislado).
-    for n in (1, 2):
-        t = _tema_pipeline(
-            titulo=f"Producido {n}", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
-        )
-        repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
-    _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
-
-    res = pc._ejecutar_barrido()
-
-    assert res["temas"] == []  # cupo de franja lleno: la plaza es de la franja siguiente
-    assert repos.obtener_noticia_cluster("hot")["estado"] == "nuevo"  # sigue en el pool
-
-
 def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
-    """Con el cupo DIARIO (24 h móviles) agotado, CI no admite aunque la franja tenga hueco."""
+    """Sin plan, con el cupo DIARIO (24 h móviles) agotado, CI no admite más."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
     monkeypatch.setenv("KENI_CUPO_DIA", "1")
-    monkeypatch.setenv("KENI_CUPO_FRANJA", "0")     # aísla: solo el día limita
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     t = _tema_pipeline(
         titulo="Producido hoy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
@@ -969,43 +945,86 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("hot")["estado"] == "nuevo"
 
 
-def test_cupo_admite_solo_las_plazas_restantes(entorno, monkeypatch):
-    """Con plazas parciales, CI promueve solo las restantes (las mejores por score)."""
+def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
+    """Con plan, cada categoría se lleva SUS mejores historias y las demás no compiten."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
-    monkeypatch.setenv("KENI_CUPO_DIA", "0")
-    monkeypatch.setenv("KENI_CUPO_FRANJA", "2")
-    monkeypatch.setenv("KENI_FRANJA_HORAS", "24")
-    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    t = _tema_pipeline(
-        titulo="Producido antes", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,internacional:1")
+    _sembrar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx")
+    _sembrar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx")
+    _sembrar_cluster(
+        "int1", titulo="Internacional unica historia", score=0.4, categoria="internacional",
+        resumen="México observa la cumbre internacional",
     )
-    repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
-    _sembrar_cluster("c1", titulo="Hist 1", score=0.9)
-    _sembrar_cluster("c2", titulo="Hist 2", score=0.8)
+    _sembrar_cluster("dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="deportes")
 
     res = pc._ejecutar_barrido()
 
-    assert [t["titulo"] for t in res["temas"]] == ["Hist 1"]  # 1 plaza restante, la top
+    titulos = {t["titulo"] for t in res["temas"]}
+    # La mejor de mx + la única de internacional; la deportiva (sin cupo en el plan) NO entra.
+    assert titulos == {"Nacional top", "Internacional unica historia"}
+    assert repos.obtener_noticia_cluster("dep1")["estado"] == "nuevo"
+    assert repos.obtener_noticia_cluster("mx1")["estado"] == "nuevo"
 
 
-def test_cupo_por_marca_override(entorno, monkeypatch):
-    """`KENI_CUPO_FRANJA::marca` (store) gana al global para esa marca."""
-    overrides = {"KENI_CUPO_FRANJA::unotv": "0"}  # unotv sin cupo de franja
+def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
+    """Una historia BREAKING compite por el cupo 'breaking', no por el de su categoría."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
+    monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
+    _sembrar_cluster("br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1)
+    _sembrar_cluster("mx9", titulo="Nacional normal", score=0.9, categoria="mx")
+
+    res = pc._ejecutar_barrido()
+
+    assert [t["titulo"] for t in res["temas"]] == ["Ultima hora corroborada"]
+
+
+def test_plan_descuenta_lo_ya_promovido_hoy(entorno, monkeypatch):
+    """El cupo de una categoría descuenta lo promovido en 24 h (cluster→contenido)."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    # Promoción previa: cluster ya usado y enlazado a un contenido creado HOY.
+    previo = repos.crear_contenido(clase="contenido", titulo="Ya promovida", marca="unotv")
+    repos.upsert_noticia_cluster({
+        "id": "ayer", "titulo": "Ya promovida", "resumen": "", "marca": "unotv",
+        "categoria": "mx", "geo": "MX", "clave": "t:ayer", "n_items": 1, "n_fuentes": 2,
+        "idiomas": ["es"], "senal": 0, "score": 0.7, "breaking": 0,
+        "primer_visto": "2026-06-01T00:00:00+00:00",
+        "ultimo_visto": "2026-06-01T00:00:00+00:00",
+        "estado": "usado", "verificacion": "corroborada",
+    })
+    repos.actualizar_noticia_cluster("ayer", contenido_id=previo["id"])
+    _sembrar_cluster("hoy", titulo="Nacional nueva", score=0.9, categoria="mx")
+
+    res = pc._ejecutar_barrido()
+
+    assert res["temas"] == []  # cupo mx (1) ya consumido por la promoción previa
+    assert repos.obtener_noticia_cluster("hoy")["estado"] == "nuevo"
+
+
+def test_plan_por_marca_gana_al_global(entorno, monkeypatch):
+    """`KENI_PLAN_DIA::marca` (store) SUSTITUYE al plan global para esa marca."""
+    overrides = {"KENI_PLAN_DIA::unotv": "internacional:2"}
     monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
-    monkeypatch.setenv("KENI_CUPO_FRANJA", "2")
-    assert config.cupo_franja("unotv") == 0
-    assert config.cupo_franja("claro-sports") == 2
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:4")
+    assert config.plan_dia("unotv") == {"internacional": 2}
+    assert config.plan_dia("claro-sports") == {"mx": 4}
+    assert config.parsear_plan("mx:4, breaking:2, malformado, x:abc, vacio:0") == {
+        "mx": 4, "breaking": 2,
+    }
 
 
 def test_cupo_produccion_restante_none_sin_cupos(entorno, monkeypatch):
-    """Ambos cupos a 0 -> None (la admisión queda solo con el gate serial)."""
+    """Cupo diario a 0 -> None (la admisión queda solo con el gate serial)."""
     monkeypatch.setenv("KENI_CUPO_DIA", "0")
-    monkeypatch.setenv("KENI_CUPO_FRANJA", "0")
     from keni_consola.pipeline_contenido import _ingesta
 
     assert _ingesta.cupo_produccion_restante("unotv") is None
+    assert _ingesta.cupos_categoria_restantes("unotv") is None  # sin plan
 
 
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):

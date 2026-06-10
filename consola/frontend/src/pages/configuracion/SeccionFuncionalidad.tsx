@@ -157,6 +157,32 @@ function FilaAjuste({
     );
   }
 
+  // texto (p. ej. el plan editorial diario): se guarda al salir del campo si cambió.
+  if (ajuste.tipo === "texto") {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 py-3 last:border-0 sm:gap-4">
+        {cabecera}
+        <Input
+          type="text"
+          value={num}
+          placeholder="categoria:n, categoria:n…"
+          onChange={(e) => setNum(e.target.value)}
+          onBlur={() => {
+            if (num !== String(ajuste.valor ?? "")) {
+              onGuardar({ clave: ajuste.clave, valor: num.trim() });
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          disabled={guardando}
+          className="w-[260px] font-mono text-xs"
+          aria-label={ajuste.etiqueta}
+        />
+      </div>
+    );
+  }
+
   // int / float: se guarda al salir del campo (blur) si cambió.
   const guardarNumero = () => {
     if (num !== String(ajuste.valor) && num.trim() !== "") {

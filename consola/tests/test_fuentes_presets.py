@@ -72,6 +72,7 @@ _CATEGORIAS_VALIDAS = {
     "ciencia-tech",
     "gaming",
     "tendencias",
+    "entretenimiento",
 }
 
 

@@ -41,7 +41,9 @@ __all__ = [
     "crear_tema_de",
     "crear_tema_de_cluster",
     "clusters_para_promover",
+    "categoria_efectiva",
     "cupo_produccion_restante",
+    "cupos_categoria_restantes",
     "promover_clusters_marca",
     "temas_en_vuelo",
     "caducar_temas_viejos",
@@ -297,7 +299,9 @@ def _nota_de_cluster(titulo: str, resumen: str, enlaces: list[str]) -> str:
     return nota
 
 
-def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+def clusters_para_promover(
+    marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None
+) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con LISTÓN y DIVERSIDAD. Best-effort.
 
     Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
@@ -323,7 +327,9 @@ def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
 
     umbral = config.promover_diversidad_umbral()
     # Sobremuestra acotada: suficientes candidatas para listón+diversidad sin recorrer el pool.
-    limite = max(maximo * 4, maximo + 8)
+    # Con PLAN (cupos por categoría) la muestra crece: las categorías minoritarias del plan
+    # pueden vivir lejos del top global del pool.
+    limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
     try:
         clusters, _total = repos.listar_noticia_clusters(
             marca=marca, estado="nuevo", limite=limite
@@ -352,6 +358,26 @@ def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
             "(quedan en el pool, visibles en el panel).",
             bajo_liston, marca,
         )
+    if cupos_categoria is not None:
+        # PLAN EDITORIAL: greedy por score con cupo por categoría — el pool viene rankeado,
+        # así que cada cupo se lleva LAS MEJORES historias de su categoría. Historias de
+        # categorías fuera del plan (o de cupo ya lleno) no compiten: se quedan en el pool.
+        # DIVERSIDAD antes del reparto: reordena empujando los casi-duplicados al final
+        # (relleno suave de `seleccionar_diversos` con maximo=len = misma lista reordenada),
+        # de modo que un macro-tema no se coma su cupo con dos titulares casi iguales.
+        if umbral > 0:
+            aptas = clustering.seleccionar_diversos(aptas, maximo=len(aptas), umbral=umbral)
+        elegidos: list[dict[str, Any]] = []
+        huecos = dict(cupos_categoria)
+        for c in aptas:
+            if len(elegidos) >= maximo:
+                break
+            cat = categoria_efectiva(c)
+            if huecos.get(cat, 0) <= 0:
+                continue
+            huecos[cat] -= 1
+            elegidos.append(c)
+        return elegidos
     if umbral <= 0:
         return aptas[:maximo]
     return clustering.seleccionar_diversos(aptas, maximo=maximo, umbral=umbral)
@@ -514,53 +540,74 @@ def temas_en_vuelo(marca: str) -> int:
 def cupo_produccion_restante(
     marca: str, *, ahora: datetime | None = None
 ) -> int | None:
-    """Plazas de ADMISIÓN que le quedan a `marca` por sus cupos de volumen; None = sin cupos.
+    """Plazas de ADMISIÓN que le quedan a `marca` por su cupo diario simple; None = sin cupo.
 
-    Dos cupos, gana el más restrictivo (ambos cuentan temas `origen=pipeline` por `creado`):
-      - DIARIO (`KENI_CUPO_DIA`, ventana MÓVIL de 24 h): ancla el volumen auto-producido a la
-        cadencia real de publicación de la marca.
-      - POR FRANJA (`KENI_CUPO_FRANJA` en bloques fijos de `KENI_FRANJA_HORAS` alineados al
-        día UTC): reparte ese volumen a lo largo del día, de modo que SIEMPRE queden plazas
-        para las noticias frescas y muy relevantes de cada franja (una mañana cargada no se
-        come las plazas de la tarde).
-
-    `None` cuando ambos cupos están desactivados (0): la admisión queda como antes (solo el
-    gate serial en vuelo). FAIL-CLOSED ante un contador ilegible: promover gasta tokens, así
-    que sin lectura fiable se devuelve 0 (no se admite; el siguiente tick reintenta).
+    Solo aplica a marcas SIN plan editorial (`config.plan_dia`): un techo de temas
+    auto-producidos en 24 h MÓVILES (`KENI_CUPO_DIA`, cuenta temas `origen=pipeline` por
+    `creado`). Con plan, el volumen lo gobiernan los cupos POR CATEGORÍA
+    (`cupos_categoria_restantes`). `None` = cupo desactivado (0): la admisión queda solo con
+    el gate serial en vuelo. FAIL-CLOSED ante un contador ilegible: promover gasta tokens,
+    así que sin lectura fiable se devuelve 0 (el siguiente tick reintenta).
     """
     from ..tiempo import iso_utc
 
     momento = ahora or datetime.now(timezone.utc)
     if momento.tzinfo is not None:
         momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
-    restantes: list[int] = []
     cupo_d = config.cupo_dia(marca)
-    if cupo_d > 0:
-        try:
-            usados = repos.contar_contenido_origen_desde(
-                marca, ORIGEN_PIPELINE, iso_utc(momento - timedelta(hours=24))
-            )
-        except Exception:  # noqa: BLE001 -- fail-closed: sin contador fiable no se admite
-            _log.warning("pipeline: no se pudo contar el cupo diario (%s)", marca, exc_info=True)
-            return 0
-        restantes.append(cupo_d - usados)
-    cupo_f = config.cupo_franja(marca)
-    if cupo_f > 0:
-        horas = config.franja_horas()
-        inicio_franja = momento.replace(
-            hour=momento.hour - (momento.hour % horas), minute=0, second=0, microsecond=0
-        )
-        try:
-            usados_f = repos.contar_contenido_origen_desde(
-                marca, ORIGEN_PIPELINE, iso_utc(inicio_franja)
-            )
-        except Exception:  # noqa: BLE001 -- fail-closed (mismo rationale que el cupo diario)
-            _log.warning("pipeline: no se pudo contar el cupo de franja (%s)", marca, exc_info=True)
-            return 0
-        restantes.append(cupo_f - usados_f)
-    if not restantes:
+    if cupo_d <= 0:
         return None
-    return max(0, min(restantes))
+    try:
+        usados = repos.contar_contenido_origen_desde(
+            marca, ORIGEN_PIPELINE, iso_utc(momento - timedelta(hours=24))
+        )
+    except Exception:  # noqa: BLE001 -- fail-closed: sin contador fiable no se admite
+        _log.warning("pipeline: no se pudo contar el cupo diario (%s)", marca, exc_info=True)
+        return 0
+    return max(0, cupo_d - usados)
+
+
+def cupos_categoria_restantes(
+    marca: str, *, ahora: datetime | None = None
+) -> dict[str, int] | None:
+    """Cupos del PLAN EDITORIAL DIARIO que aún quedan por llenar, por categoría; None = sin plan.
+
+    El plan (`config.plan_dia`, p. ej. "mx:4,internacional:4,breaking:2,entretenimiento:2,
+    evergreen:1") fija el objetivo del día por categoría. Se descuenta lo ya producido en
+    24 h MÓVILES contando las historias PROMOVIDAS (cluster→contenido), donde una historia
+    breaking consume el cupo 'breaking' sea cual sea la categoría de su feed — los slots de
+    breaking son para la última hora, también la que el equipo empuja a mano desde el panel.
+    Devuelve solo las categorías CON hueco (dict vacío = plan completo: hoy ya no entra más).
+    FAIL-CLOSED ante un contador ilegible (dict vacío: no se admite, el tick siguiente
+    reintenta)."""
+    from ..tiempo import iso_utc
+
+    plan = config.plan_dia(marca)
+    if not plan:
+        return None
+    momento = ahora or datetime.now(timezone.utc)
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    try:
+        usados = repos.contar_promovidos_por_categoria(
+            marca, iso_utc(momento - timedelta(hours=24))
+        )
+    except Exception:  # noqa: BLE001 -- fail-closed (promover gasta tokens)
+        _log.warning("pipeline: no se pudo contar el plan diario (%s)", marca, exc_info=True)
+        return {}
+    return {
+        cat: hueco
+        for cat, cupo in plan.items()
+        if (hueco := cupo - usados.get(cat, 0)) > 0
+    }
+
+
+def categoria_efectiva(cluster: dict[str, Any]) -> str:
+    """Categoría con la que una historia COMPITE en el plan: 'breaking' si lo es, si no la
+    de su feed (en minúsculas; '' si sus fuentes no están categorizadas). PURA."""
+    if bool(int(cluster.get("breaking") or 0)):
+        return "breaking"
+    return str(cluster.get("categoria") or "").strip().lower()
 
 
 def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
@@ -616,13 +663,15 @@ def _fecha_aware(crudo: str) -> datetime | None:
     return valor.replace(tzinfo=timezone.utc) if valor.tzinfo is None else valor
 
 
-def promover_clusters_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+def promover_clusters_marca(
+    marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None
+) -> list[dict[str, Any]]:
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
     Reemplaza la lectura directa de feeds RSS (que creaba un tema por item): ahora consume el pool
     ya fusionado/rankeado (Ola B). Devuelve los temas creados. Best-effort por historia.
     """
-    clusters = clusters_para_promover(marca, maximo=maximo)
+    clusters = clusters_para_promover(marca, maximo=maximo, cupos_categoria=cupos_categoria)
     claves_vistas = _claves_dedup_marca(marca)
     temas: list[dict[str, Any]] = []
     for cluster in clusters:

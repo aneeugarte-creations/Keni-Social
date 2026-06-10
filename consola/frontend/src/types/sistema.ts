@@ -336,7 +336,7 @@ export interface OpcionAjuste {
 
 export interface AjusteAdmin {
   clave: string;
-  tipo: "bool" | "int" | "float" | "select";
+  tipo: "bool" | "int" | "float" | "select" | "texto";
   etiqueta: string;
   ayuda: string;
   grupo: string;

@@ -50,7 +50,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("noticias_rendimiento", "Priorizar lo que mejor funciona en redes"),
     ("noticias_breaking", "Qué cuenta como última hora"),
     ("noticias_produccion", "Cuándo se produce en automático"),
-    ("noticias_produccion_marca", "Cupos de producción por marca"),
+    ("noticias_produccion_marca", "Plan editorial diario por marca"),
     ("noticias_tecnico", "Ajustes técnicos · capacidad y ritmo del motor"),
     ("tuning", "Ajustes finos · sistema, limpieza y alertas"),
 )
@@ -79,57 +79,39 @@ GRUPOS_MAQUINA: tuple[str, ...] = (
     "pipeline_topes",
 )
 
-# Las 6 ETAPAS de la máquina de contenido (grupo `maestros_etapa`), con NOMBRES CONSOLIDADOS:
-# etapa = variable = toggle. La env de cada una es `KENI_PIPELINE_<ETAPA>` y su label "<Etapa> IA"
-# (Selección no es IA), igual que la etapa en la vista de runs — 1 toggle = 1 etapa:
-#   - KENI_PIPELINE_FUSION     → "Fusión IA"     (dedup IA de historias del mismo evento),
-#   - KENI_PIPELINE_EDITORIAL  → "Editorial IA"  (perfil editorial IA para el encaje con la marca),
-#   - KENI_PIPELINE_SELECCION  → "Selección"     (ingiere/agrupa y promueve las top a temas; no IA),
-#   - KENI_PIPELINE_VALIDACION → "Validación IA" (criba la fuente con IA antes del copy),
-#   - KENI_PIPELINE_COPY       → "Copy IA"       (genera el copy automático),
-#   - KENI_PIPELINE_ARTE       → "Arte IA"       (genera la imagen por IA),
-#   - KENI_PIPELINE_AVANCE     → "Avance a revisión" (borrador completo → cola de revisión).
-# La tupla es (env, etiqueta, descripción). El maestro vive en `maestros_etapa`; las excepciones
-# por marca en `automatizacion_marca`. (La APROBACIÓN sigue siendo gate humano sin toggle: el
-# avance solo ahorra el clic de "enviar a revisión", nunca el OK.)
-_ETAPA_FUSION = (config.ENV_PIPELINE_FUSION, "Fusión IA", "une con IA las historias del mismo evento (dedup semántico)")
-_ETAPA_EDITORIAL = (config.ENV_PIPELINE_EDITORIAL, "Editorial IA", "encaje con la marca vía perfil editorial IA")
-_ETAPA_SELECCION = (config.ENV_PIPELINE_SELECCION, "Selección", "ingiere y promueve historias a temas (no IA)")
-_ETAPA_VALIDACION = (config.ENV_PIPELINE_VALIDACION, "Validación IA", "criba la fuente con IA antes de generar copy")
-_ETAPA_COPY = (config.ENV_PIPELINE_COPY, "Copy IA", "genera copy automático de los temas que aún no lo tienen")
-_ETAPA_ARTE = (config.ENV_PIPELINE_ARTE, "Arte IA", "genera imagen por IA para los temas con copy y sin imagen")
-_ETAPA_AVANCE = (config.ENV_PIPELINE_AVANCE, "Avance a revisión", "manda solas a la cola de revisión las piezas completas (copy + foto)")
-
-# Las 7 etapas en orden de flujo (Fusión → Editorial → Selección → Validación → Copy → Arte →
-# Avance). La de Avance no gasta IA ni publica (solo mueve el borrador completo a la cola del
-# equipo), por eso es la única con defecto ON; el gate humano —los OK— queda intacto.
-_ETAPAS: tuple[tuple[str, str, str], ...] = (
-    _ETAPA_FUSION, _ETAPA_EDITORIAL, _ETAPA_SELECCION, _ETAPA_VALIDACION, _ETAPA_COPY, _ETAPA_ARTE,
-    _ETAPA_AVANCE,
-)
-
-# Etapas CON excepción por marca (`_ajustes_por_marca`). Las SIETE: apagar una marca la excluye de
-# esa etapa, las demás siguen.
-_ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = _ETAPAS
-
-# Defecto del maestro por etapa: todas OFF (conservador: gastan `claude -p`/imagen) salvo
-# Avance, que es bookkeeping reversible y va ON (espejo de su accesor `avance_revision_activo`).
-_ETAPAS_DEFECTO_ON = frozenset({config.ENV_PIPELINE_AVANCE})
 
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Maestro GLOBAL de cada una de las 7 etapas. Apagar el maestro deja la etapa en espera para
-    TODAS las marcas; las excepciones por marca solo restan con el maestro encendido."""
+    """Los DOS interruptores de la máquina: «Generar» (noticia → copy en revisión) y «Arte».
+
+    `KENI_GENERAR` es una clave VIRTUAL (no se lee en runtime): al guardarla, la API escribe
+    las seis etapas internas del tramo (`config.ETAPAS_GENERAR`) con el mismo valor — o llega
+    copy o no empieza, sin botones por etapa. Su valor mostrado es el de la etapa de Copy (el
+    final del embudo). ARTE conserva interruptor propio: es la única etapa con coste externo
+    real (proveedor de imagen). El tercer interruptor clave, «Publicar», vive en su grupo
+    `publicacion` de siempre.
+    """
     return [
         Ajuste(
-            clave=env_flag,
+            clave=config.ENV_GENERAR,
             tipo="bool",
-            etiqueta=etiqueta,
-            ayuda=f"Para todas las marcas: {desc}.",
+            etiqueta="Generar",
+            ayuda="Para todas las marcas: todo el tramo de noticia a copy listo para revisar "
+            "(ingesta, ranking, criba de la fuente, copy y avance a revisión). Un solo "
+            "interruptor: o llega copy o no empieza.",
             grupo="maestros_etapa",
-            defecto=env_flag in _ETAPAS_DEFECTO_ON,
-        )
-        for env_flag, etiqueta, desc in _ETAPAS
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_ARTE,
+            tipo="bool",
+            etiqueta="Arte IA",
+            ayuda="Para todas las marcas: genera imagen por IA para los temas con copy y sin "
+            "imagen. Es la única etapa con coste externo (proveedor de imagen), por eso "
+            "conserva interruptor propio.",
+            grupo="maestros_etapa",
+            defecto=False,
+        ),
     ]
 
 
@@ -143,57 +125,55 @@ def _global_de_etapa(env_flag: str) -> bool:
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por (marca × etapa) para las SEIS etapas (Fusión/Editorial/Selección/Validación/
-    Copy/Arte). Se generan en caliente desde el catálogo de marcas, así que añadir una marca añade
-    sus toggles sin código."""
-    salida: list[Ajuste] = []
-    for mid, nombre in marcas.opciones():
-        for env_flag, etiqueta_etapa, _desc in _ETAPAS_MARCA:
-            salida.append(
-                Ajuste(
-                    clave=config.clave_por_marca(env_flag, mid),
-                    tipo="bool",
-                    etiqueta=f"{nombre} · {etiqueta_etapa}",
-                    ayuda=f"Apaga «{etiqueta_etapa}» solo para esta marca.",
-                    grupo="automatizacion_marca",
-                    defecto=_global_de_etapa(env_flag),
-                )
-            )
-    return salida
+    """Toggles `bool` por marca para «Generar» (virtual: fan-out a las seis etapas) y «Arte».
 
-
-def _cupos_por_marca() -> list[Ajuste]:
-    """Overrides POR MARCA de los cupos de producción (`KENI_CUPO_DIA::marca` /
-    `KENI_CUPO_FRANJA::marca`). El cupo global es el defecto; el override ancla cada marca a
-    SU cadencia real de publicación (Metricool): no postea lo mismo un medio de última hora
-    que una marca de nicho. Se generan en caliente desde el catálogo de marcas."""
+    Apagar «Generar» en una marca la excluye de TODO el tramo noticia→copy; apagar «Arte»
+    deja a esa marca sin imagen por IA. Se generan en caliente desde el catálogo de marcas."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
         salida.append(
             Ajuste(
-                clave=config.clave_por_marca(config.ENV_CUPO_DIA, mid),
-                tipo="int",
-                etiqueta=f"{nombre} · cupo diario",
-                ayuda=f"Temas auto-producidos al día para «{nombre}» (24 h móviles). "
-                "Sin tocarlo, usa el cupo diario global. 0 = sin cupo.",
-                grupo="noticias_produccion_marca",
-                defecto=config.cupo_dia(),
-                minimo=0,
+                clave=config.clave_por_marca(config.ENV_GENERAR, mid),
+                tipo="bool",
+                etiqueta=f"{nombre} · Generar",
+                ayuda=f"Apaga TODO el tramo de noticia a copy solo para «{nombre}».",
+                grupo="automatizacion_marca",
+                defecto=_global_de_etapa(config.ENV_PIPELINE_COPY),
             )
         )
         salida.append(
             Ajuste(
-                clave=config.clave_por_marca(config.ENV_CUPO_FRANJA, mid),
-                tipo="int",
-                etiqueta=f"{nombre} · cupo por franja",
-                ayuda=f"Temas auto-producidos por franja horaria para «{nombre}». "
-                "Sin tocarlo, usa el cupo por franja global. 0 = sin cupo.",
-                grupo="noticias_produccion_marca",
-                defecto=config.cupo_franja(),
-                minimo=0,
+                clave=config.clave_por_marca(config.ENV_PIPELINE_ARTE, mid),
+                tipo="bool",
+                etiqueta=f"{nombre} · Arte IA",
+                ayuda=f"Apaga la imagen por IA solo para «{nombre}».",
+                grupo="automatizacion_marca",
+                defecto=_global_de_etapa(config.ENV_PIPELINE_ARTE),
             )
         )
     return salida
+
+
+def _plan_por_marca() -> list[Ajuste]:
+    """PLAN EDITORIAL DIARIO por marca (`KENI_PLAN_DIA::marca`, texto "categoria:n,…").
+
+    Es EL ajuste de volumen: cuántos temas auto-producir al día y de qué tipo, llenando cada
+    cupo con lo mejor de su categoría (p. ej. UnoTV: "mx:4,internacional:4,breaking:2,
+    entretenimiento:2,evergreen:1" = 13/día). Sustituye a los cupos por franja. Vacío = sin
+    plan (cae al cupo diario global). Se generan en caliente desde el catálogo de marcas."""
+    return [
+        Ajuste(
+            clave=config.clave_por_marca(config.ENV_PLAN_DIA, mid),
+            tipo="texto",
+            etiqueta=f"{nombre} · plan diario",
+            ayuda="Cupos por categoría, formato «categoria:n» separados por comas (categorías "
+            "= las de sus fuentes RSS, más «breaking» para última hora corroborada y "
+            "«evergreen» reservado al reciclaje manual). Vacío = sin plan.",
+            grupo="noticias_produccion_marca",
+            defecto="",
+        )
+        for mid, nombre in marcas.opciones()
+    ]
 
 
 def _publicacion_por_marca() -> list[Ajuste]:
@@ -322,9 +302,9 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # NOTA: Fusión (KENI_PIPELINE_FUSION) y Editorial/encaje (KENI_PIPELINE_EDITORIAL) ya NO viven
-        # aquí: ahora son ETAPAS del pipeline (grupo `maestros_etapa` + excepción por marca), 1
-        # toggle = 1 etapa, como el resto. Ver `_ETAPA_FUSION`/`_ETAPA_EDITORIAL`. El master
+        # NOTA: las etapas del tramo noticia→copy (Fusión/Editorial/Selección/Validación/Copy/
+        # Avance) NO tienen toggle propio: las agrupa el interruptor único «Generar»
+        # (`KENI_GENERAR`, virtual con fan-out; ver `claves_fisicas`). El master
         # «Priorizar por rendimiento» (KENI_RENDIMIENTO_RANKING) tampoco: NO es un daemon on/off,
         # sino un modulador del ranking, así que vive con sus pesos en `noticias_ranking`.
         # --- Publicacion (peligroso) ----------------------------------------------- #
@@ -584,35 +564,24 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_CUPO_DIA,
             tipo="int",
-            etiqueta="Cupo diario de producción automática",
-            ayuda="Máximo de temas auto-producidos por marca en las últimas 24 horas, para "
-            "publicar un volumen similar al real de la marca (cada tema abre ~3 piezas). "
-            "Se puede afinar por marca en «Cupos de producción por marca». 0 = sin cupo.",
+            etiqueta="Cupo diario sin plan",
+            ayuda="Techo de temas auto-producidos por marca en las últimas 24 horas cuando la "
+            "marca NO tiene plan diario. Con plan, mandan los cupos por categoría del plan. "
+            "0 = sin cupo.",
             grupo="noticias_produccion",
             defecto=config.CUPO_DIA_DEF,
             minimo=0,
         ),
         Ajuste(
-            clave=config.ENV_CUPO_FRANJA,
-            tipo="int",
-            etiqueta="Cupo por franja horaria",
-            ayuda="Máximo de temas auto-producidos por marca en la franja horaria en curso. "
-            "Reparte el cupo diario a lo largo del día: cada franja nueva trae plazas libres "
-            "para las noticias frescas y muy relevantes de ese momento. 0 = sin cupo.",
+            clave=config.ENV_PLAN_DIA,
+            tipo="texto",
+            etiqueta="Plan diario por defecto",
+            ayuda="Cupos por categoría para las marcas sin plan propio, formato «categoria:n» "
+            "separados por comas (p. ej. «mx:4,internacional:4,breaking:2»). La admisión llena "
+            "cada cupo con lo MEJOR de su categoría; «breaking» reserva huecos a la última hora "
+            "corroborada. Vacío = sin plan (manda el cupo diario).",
             grupo="noticias_produccion",
-            defecto=config.CUPO_FRANJA_DEF,
-            minimo=0,
-        ),
-        Ajuste(
-            clave=config.ENV_FRANJA_HORAS,
-            tipo="int",
-            etiqueta="Duración de la franja (horas)",
-            ayuda="Tamaño de los bloques horarios del cupo por franja (bloques fijos del día "
-            "UTC; p. ej. 3 = 00-03, 03-06…).",
-            grupo="noticias_produccion",
-            defecto=config.FRANJA_HORAS_DEF,
-            minimo=1,
-            maximo=24,
+            defecto="",
         ),
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
         # daemon, modula el ranking. Sus tres parámetros van debajo, en el mismo grupo.
@@ -832,7 +801,7 @@ def catalogo() -> list[Ajuste]:
         _maestros_etapa()
         + _construir_catalogo()
         + _ajustes_por_marca()
-        + _cupos_por_marca()
+        + _plan_por_marca()
         + _publicacion_por_marca()
     )
 
@@ -850,11 +819,17 @@ def por_clave(clave: str) -> Ajuste | None:
 # --------------------------------------------------------------------------- #
 
 
+# Tope de longitud de un ajuste de tipo "texto" (defensa de la API; un plan real usa ~60).
+_TEXTO_MAX = 500
+
+
 def _castea(ajuste: Ajuste, crudo: str) -> Any:
     """Castea un valor CRUDO (str) al tipo del ajuste. Tolerante: ante un crudo invalido
     cae al `defecto` del ajuste (mismo espiritu que los accesores de `config`)."""
     if ajuste.tipo == "bool":
         return crudo.strip().lower() in _VERDADEROS
+    if ajuste.tipo == "texto":
+        return crudo.strip()
     if ajuste.tipo == "int":
         try:
             valor = int(crudo)
@@ -881,15 +856,42 @@ def _castea(ajuste: Ajuste, crudo: str) -> Any:
     return valor if valor in ids else ajuste.defecto
 
 
+def claves_fisicas(clave: str) -> list[str]:
+    """Claves REALES del store que escribe/borra un ajuste del catálogo.
+
+    Para casi todos es su propia clave. Para la VIRTUAL «Generar» (`KENI_GENERAR`, global o
+    `::marca`) son las seis etapas internas del tramo noticia→copy (`config.ETAPAS_GENERAR`)
+    con el mismo sufijo de marca: un solo botón, seis claves coherentes — las etapas no pueden
+    divergir desde la UI.
+    """
+    base, sep, marca = clave.partition(config.SEP_MARCA)
+    if base != config.ENV_GENERAR:
+        return [clave]
+    sufijo = f"{sep}{marca}" if sep else ""
+    return [f"{etapa}{sufijo}" for etapa in config.ETAPAS_GENERAR]
+
+
+def _clave_lectura(clave: str) -> str:
+    """Clave que REPRESENTA el valor de un ajuste: la propia, salvo la virtual «Generar»,
+    cuyo estado mostrado es el de la etapa de COPY (el final del embudo; tras cualquier
+    escritura desde la UI las seis etapas coinciden)."""
+    base, sep, marca = clave.partition(config.SEP_MARCA)
+    if base != config.ENV_GENERAR:
+        return clave
+    return f"{config.ENV_PIPELINE_COPY}{sep}{marca}" if sep else config.ENV_PIPELINE_COPY
+
+
 def valor_y_fuente(ajuste: Ajuste) -> tuple[Any, str]:
     """Valor EFECTIVO (tipado) + su FUENTE ('store' | 'env' | 'defecto').
 
-    Misma precedencia que `config._crudo`: store (UI) > env > defecto del catalogo.
+    Misma precedencia que `config._crudo`: store (UI) > env > defecto del catalogo. La clave
+    virtual «Generar» se resuelve desde su clave de lectura (etapa de Copy).
     """
-    desde_store = ajustes.obtener(ajuste.clave)
+    clave = _clave_lectura(ajuste.clave)
+    desde_store = ajustes.obtener(clave)
     if desde_store is not None:
         return _castea(ajuste, desde_store), "store"
-    desde_env = os.environ.get(ajuste.clave)
+    desde_env = os.environ.get(clave)
     if desde_env is not None and desde_env.strip() != "":
         return _castea(ajuste, desde_env), "env"
     return ajuste.defecto, "defecto"
@@ -947,6 +949,23 @@ def validar_valor(ajuste: Ajuste, valor: Any) -> tuple[str | None, str | None]:
             if v in _FALSOS:
                 return "0", None
         return None, f"'{ajuste.clave}' espera un valor booleano (true/false)."
+
+    if ajuste.tipo == "texto":
+        if not isinstance(valor, str):
+            return None, f"'{ajuste.clave}' espera texto."
+        texto = valor.strip()
+        if len(texto) > _TEXTO_MAX:
+            return None, f"'{ajuste.clave}' admite hasta {_TEXTO_MAX} caracteres."
+        # Un PLAN DIARIO se valida por forma: cada segmento no vacío debe ser «categoria:n».
+        if ajuste.clave.split(config.SEP_MARCA, 1)[0] == config.ENV_PLAN_DIA and texto:
+            for trozo in texto.split(","):
+                cat, sep, n = trozo.partition(":")
+                if not sep or not cat.strip() or not n.strip().isdigit():
+                    return None, (
+                        "El plan se escribe como «categoria:n» separados por comas "
+                        "(p. ej. «mx:4,internacional:4,breaking:2»)."
+                    )
+        return texto, None
 
     if ajuste.tipo == "int":
         if isinstance(valor, bool):  # bool es subtipo de int: rechazar explicito

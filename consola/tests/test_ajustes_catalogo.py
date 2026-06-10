@@ -43,10 +43,9 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     esperadas = {
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
-        # Las 6 etapas (maestros): Fusión / Ranking / Selección / Validación / Copy / Arte.
-        config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL,
-        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+        # Los DOS interruptores de la máquina: «Generar» (virtual: agrupa las seis etapas
+        # del tramo noticia→copy) y «Arte» (la única etapa con coste externo).
+        config.ENV_GENERAR, config.ENV_PIPELINE_ARTE,
         # Automatismos generales (barridos de mantenimiento).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
@@ -85,9 +84,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # + maduración y cupos de volumen (día móvil / franja horaria).
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
         config.ENV_PROMOVER_MADURACION_MIN,
-        config.ENV_CUPO_DIA, config.ENV_CUPO_FRANJA, config.ENV_FRANJA_HORAS,
-        # Etapa de avance: borrador completo -> cola de revisión (default ON; sin IA).
-        config.ENV_PIPELINE_AVANCE,
+        config.ENV_CUPO_DIA, config.ENV_PLAN_DIA,
         # Filtro de ENTRADA por agenda de marca (la puerta del pool).
         config.ENV_INGESTA_FILTRO,
         # Caducidad del pool: TTL (lo viejo expira solo) + retención (techo del archivo).
@@ -100,42 +97,55 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     assert por_marca, "deben existir toggles de copy/arte por marca"
 
 
-_ETAPAS_ENV = {
-    config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL, config.ENV_PIPELINE_SELECCION,
-    config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
-    config.ENV_PIPELINE_AVANCE,
-}
+_MAESTROS_ENV = {config.ENV_GENERAR, config.ENV_PIPELINE_ARTE}
 
 
-def test_maestros_etapa_son_las_siete(store):
-    """El grupo `maestros_etapa` tiene EXACTAMENTE las 7 etapas (1 toggle = 1 etapa), bool.
+def test_maestros_son_generar_y_arte(store):
+    """El grupo `maestros_etapa` tiene EXACTAMENTE dos interruptores: «Generar» y «Arte».
 
-    Defecto: OFF en las que gastan IA/publican contenido nuevo; ON solo en Avance (bookkeeping
-    reversible: mueve el borrador completo a la cola de revisión sin tocar el gate humano)."""
+    «Generar» es la clave VIRTUAL `KENI_GENERAR`: agrupa las seis etapas internas del tramo
+    noticia→copy (la API la escribe con fan-out, ver `claves_fisicas`). Las etapas dejaron de
+    ser botones; la única con interruptor propio es Arte (coste externo real)."""
     maestros = [a for a in ajustes_catalogo.catalogo() if a.grupo == "maestros_etapa"]
     claves = {a.clave for a in maestros}
-    assert claves == _ETAPAS_ENV
+    assert claves == _MAESTROS_ENV
     for a in maestros:
         assert a.tipo == "bool"
-        assert a.defecto is (a.clave == config.ENV_PIPELINE_AVANCE)
+        assert a.defecto is False
     etiquetas = {a.clave: a.etiqueta for a in maestros}
-    assert etiquetas[config.ENV_PIPELINE_FUSION] == "Fusión IA"
-    assert etiquetas[config.ENV_PIPELINE_EDITORIAL] == "Editorial IA"
-    assert etiquetas[config.ENV_PIPELINE_SELECCION] == "Selección"
-    assert etiquetas[config.ENV_PIPELINE_VALIDACION] == "Validación IA"
-    assert etiquetas[config.ENV_PIPELINE_COPY] == "Copy IA"
+    assert etiquetas[config.ENV_GENERAR] == "Generar"
     assert etiquetas[config.ENV_PIPELINE_ARTE] == "Arte IA"
-    assert etiquetas[config.ENV_PIPELINE_AVANCE] == "Avance a revisión"
 
 
-def test_etapas_tienen_excepcion_por_marca(store):
-    """Las SIETE etapas generan excepciones por marca (apagar una marca la excluye de esa etapa)."""
+def test_generar_fan_out_a_las_seis_etapas(store):
+    """`claves_fisicas`: la virtual «Generar» escribe las SEIS etapas del tramo (global y
+    por marca); cualquier otra clave se escribe a sí misma."""
+    assert ajustes_catalogo.claves_fisicas(config.ENV_GENERAR) == list(config.ETAPAS_GENERAR)
+    con_marca = ajustes_catalogo.claves_fisicas(
+        config.clave_por_marca(config.ENV_GENERAR, "unotv")
+    )
+    assert con_marca == [config.clave_por_marca(e, "unotv") for e in config.ETAPAS_GENERAR]
+    assert config.ENV_PIPELINE_ARTE not in config.ETAPAS_GENERAR  # Arte va aparte
+    assert ajustes_catalogo.claves_fisicas(config.ENV_CUPO_DIA) == [config.ENV_CUPO_DIA]
+
+
+def test_generar_se_lee_desde_la_etapa_de_copy(store):
+    """El valor mostrado de «Generar» es el de la etapa de Copy (el final del embudo)."""
+    ajustes.guardar(config.ENV_PIPELINE_COPY, "1")
+    a = _ajuste(config.ENV_GENERAR)
+    valor, fuente = ajustes_catalogo.valor_y_fuente(a)
+    assert valor is True and fuente == "store"
+
+
+
+def test_toggles_por_marca_son_generar_y_arte(store):
+    """Las excepciones por marca del grupo `automatizacion_marca` son Generar y Arte."""
     por_marca = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo == "automatizacion_marca" and config.SEP_MARCA in a.clave
     ]
     bases = {a.clave.split(config.SEP_MARCA, 1)[0] for a in por_marca}
-    assert bases == _ETAPAS_ENV
+    assert bases == _MAESTROS_ENV
 
 
 def test_maquina_global_kill_switch(store):
@@ -201,8 +211,7 @@ def test_noticias_reparto_en_secciones(store):
             config.ENV_PROMOVER_MIN_MARCA,
             config.ENV_PROMOVER_MADURACION_MIN,
             config.ENV_CUPO_DIA,
-            config.ENV_CUPO_FRANJA,
-            config.ENV_FRANJA_HORAS,
+            config.ENV_PLAN_DIA,
         },
         "noticias_tecnico": {
             config.ENV_INGESTA_BATCH,
@@ -318,7 +327,7 @@ def test_motor_noticias_trad_min_score_float(store):
 
 def test_publicar_real_es_peligroso(store):
     assert _ajuste(config.ENV_PUBLICAR_REAL).peligroso is True
-    assert _ajuste(config.ENV_PIPELINE_COPY).peligroso is False
+    assert _ajuste(config.ENV_GENERAR).peligroso is False
 
 
 def test_por_clave_desconocida(store):
@@ -353,8 +362,8 @@ def test_valor_desde_store_gana_a_env(store, monkeypatch):
 
 
 def test_bool_efectivo_tipado(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
-    a = _ajuste(config.ENV_PIPELINE_COPY)
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    a = _ajuste(config.ENV_PIPELINE_ARTE)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert valor is True and fuente == "env"
 
@@ -379,7 +388,7 @@ def test_a_dict_int_tiene_min(store):
 
 
 def test_a_dict_bool_sin_min_ni_opciones(store):
-    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE_COPY))
+    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE_ARTE))
     assert d["tipo"] == "bool" and "min" not in d and "opciones" not in d
 
 
@@ -393,12 +402,12 @@ def test_a_dict_bool_sin_min_ni_opciones(store):
     ("true", "1"), ("0", "0"), ("YES", "1"), ("off", "0"),
 ])
 def test_validar_bool_ok(store, entrada, guardado):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_COPY), entrada)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_ARTE), entrada)
     assert err is None and val == guardado
 
 
 def test_validar_bool_invalido(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_COPY), "quizas")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_ARTE), "quizas")
     assert val is None and err is not None
 
 

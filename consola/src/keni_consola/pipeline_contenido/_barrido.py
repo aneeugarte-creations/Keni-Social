@@ -103,17 +103,27 @@ def _ejecutar_barrido() -> dict[str, Any]:
         cupo = config.pipeline_en_vuelo_max() - _ingesta.temas_en_vuelo(marca)
         if cupo <= 0:
             continue
-        # CUPOS DE VOLUMEN (día móvil + franja horaria): anclan la producción a la cadencia
-        # real de publicación de la marca y convierten la admisión en SELECCIÓN (pocas plazas
-        # por franja, para las mejores historias del ranking en ese momento). None = sin cupos.
-        cupo_volumen = _ingesta.cupo_produccion_restante(marca)
-        if cupo_volumen is not None:
-            if cupo_volumen <= 0:
-                _log.debug("pipeline: cupo de volumen agotado para %s; franja/día llenos.", marca)
+        # VOLUMEN: con PLAN EDITORIAL DIARIO, la admisión llena los cupos POR CATEGORÍA que
+        # queden hoy (lo mejor de cada tipo, con slots explícitos para breaking); sin plan,
+        # cae al cupo diario simple (24 h móviles). En ambos casos la admisión es SELECCIÓN,
+        # no goteo: pocas plazas para las mejores historias del ranking en ese momento.
+        cupos_cat = _ingesta.cupos_categoria_restantes(marca)
+        if cupos_cat is not None:
+            if not cupos_cat:
+                _log.debug("pipeline: plan diario de %s completo; hoy no entra más.", marca)
                 continue
-            cupo = min(cupo, cupo_volumen)
+            cupo = min(cupo, sum(cupos_cat.values()))
+        else:
+            cupo_volumen = _ingesta.cupo_produccion_restante(marca)
+            if cupo_volumen is not None:
+                if cupo_volumen <= 0:
+                    _log.debug("pipeline: cupo diario agotado para %s.", marca)
+                    continue
+                cupo = min(cupo, cupo_volumen)
         try:
-            temas_nuevos.extend(promover_clusters_marca(marca, maximo=min(maximo, cupo)))
+            temas_nuevos.extend(promover_clusters_marca(
+                marca, maximo=min(maximo, cupo), cupos_categoria=cupos_cat,
+            ))
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
             _log.exception("pipeline: fallo la promoción de historias (CI) de la marca %s", marca)
             continue

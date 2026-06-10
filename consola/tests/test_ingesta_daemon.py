@@ -222,6 +222,35 @@ def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
     assert "off" not in registrados
 
 
+def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
+    """PLAN EDITORIAL: una marca con plan solo digiere los feeds de las categorías del plan.
+
+    El feed fuera de plan NO se sondea y se APLAZA (registrar_sondeo_feed con proximo_sondeo
+    futuro). Fail-open: un feed sin categoría se sondea aunque la marca tenga plan."""
+    en_plan = {"id": "mx1", "nombre": "MX", "url": "https://93.184.216.34/a",
+               "categoria": "mx", "marca": "unotv", "errores_seguidos": 0}
+    fuera = {"id": "dep1", "nombre": "Dep", "url": "https://93.184.216.34/b",
+             "categoria": "deportes", "marca": "unotv", "errores_seguidos": 0}
+    sin_categoria = {"id": "sc1", "nombre": "SC", "url": "https://93.184.216.34/c",
+                     "categoria": "", "marca": "unotv", "errores_seguidos": 0}
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
+
+    registrados = {}
+    _parchear_comun(monkeypatch, feeds=[en_plan, fuera, sin_categoria], fetcher=lambda _u: _FEED_OK)
+    monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
+                        lambda fid, **kw: registrados.setdefault(fid, kw))
+    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+
+    resumen = ingesta_daemon.ejecutar_barrido()
+
+    assert resumen["feeds"] == 2  # mx1 + sin_categoria; dep1 fuera de plan
+    # El fuera-de-plan quedó APLAZADO: solo se le registró el proximo_sondeo (sin conteo).
+    assert "dep1" in registrados and registrados["dep1"].get("proximo_sondeo")
+    assert "conteo" not in registrados["dep1"]
+
+
 # --------------------------------------------------------------------------- #
 # FILTRO DE ENTRADA por vocabulario de marca (la puerta del pool)               #
 # --------------------------------------------------------------------------- #

@@ -316,18 +316,14 @@ def promover_min_marca() -> float:
 # --------------------------------------------------------------------------- #
 
 # La admisión CI sin cupo produce al ritmo de la ingesta (cientos de noticias/día → cientos de
-# temas/día), muy por encima de lo que una marca publica de verdad. Estos cupos anclan el
-# volumen auto-producido a la CADENCIA REAL de publicación (medida en Metricool) y convierten
-# la admisión en una SELECCIÓN: pocas plazas por franja, para las mejores historias del
-# momento — y cada franja nueva trae plazas frescas para lo que acaba de pasar.
+# temas/día), muy por encima de lo que una marca publica de verdad. El PLAN EDITORIAL DIARIO
+# (`plan_dia`) reparte el objetivo del día en cupos POR CATEGORÍA («lo mejor de cada tipo»,
+# con slots explícitos para breaking); para marcas sin plan, `cupo_dia` pone un techo simple.
 ENV_PROMOVER_MADURACION_MIN = "KENI_PROMOVER_MADURACION_MIN"
 PROMOVER_MADURACION_MIN_DEF = 45
 ENV_CUPO_DIA = "KENI_CUPO_DIA"
 CUPO_DIA_DEF = 16
-ENV_CUPO_FRANJA = "KENI_CUPO_FRANJA"
-CUPO_FRANJA_DEF = 3
-ENV_FRANJA_HORAS = "KENI_FRANJA_HORAS"
-FRANJA_HORAS_DEF = 3
+ENV_PLAN_DIA = "KENI_PLAN_DIA"
 
 
 def promover_maduracion_min() -> int:
@@ -358,21 +354,42 @@ def cupo_dia(marca: str = "") -> int:
     return _entero_marca(ENV_CUPO_DIA, marca, CUPO_DIA_DEF, minimo=0)
 
 
-def cupo_franja(marca: str = "") -> int:
-    """Máx. temas AUTO-PRODUCIDOS por marca en la FRANJA HORARIA actual
-    (`KENI_CUPO_FRANJA`, def 3, min 0; `0` = sin cupo por franja). Override por marca:
-    `KENI_CUPO_FRANJA::<marca>`. Reparte el cupo diario a lo largo del día: una franja
-    llena NO hipoteca las siguientes, que quedan libres para las noticias frescas y muy
-    relevantes de su momento."""
-    return _entero_marca(ENV_CUPO_FRANJA, marca, CUPO_FRANJA_DEF, minimo=0)
+def parsear_plan(crudo: str) -> dict[str, int]:
+    """Parsea un plan editorial "categoria:n, categoria:n, …" a dict. PURA y tolerante.
+
+    Segmentos malformados o con n<=0 se IGNORAN (un plan a medias vale más que ninguno).
+    Las categorías se normalizan a minúsculas. {} si el texto no aporta ningún cupo.
+    """
+    plan: dict[str, int] = {}
+    for trozo in (crudo or "").split(","):
+        if ":" not in trozo:
+            continue
+        cat, _, n = trozo.partition(":")
+        cat = cat.strip().lower()
+        try:
+            cupo = int(n.strip())
+        except ValueError:
+            continue
+        if cat and cupo > 0:
+            plan[cat] = cupo
+    return plan
 
 
-def franja_horas() -> int:
-    """Duración (horas) de las franjas del cupo (`KENI_FRANJA_HORAS`, def 3, min 1, máx 24).
+def plan_dia(marca: str = "") -> dict[str, int]:
+    """PLAN EDITORIAL DIARIO de una marca: cupos por CATEGORÍA (`KENI_PLAN_DIA[::marca]`).
 
-    Las franjas son bloques FIJOS alineados al día UTC (p. ej. con 3 h: 00-03, 03-06, …):
-    deterministas y baratas de contar. Global (no por marca): es la rejilla, no el cupo."""
-    return min(24, _entero(ENV_FRANJA_HORAS, FRANJA_HORAS_DEF, minimo=1))
+    Formato "categoria:n,…" (p. ej. "mx:4,internacional:4,breaking:2,entretenimiento:2,
+    evergreen:1" = el objetivo diario de UnoTV). Con plan, la admisión CI llena cada cupo
+    con LAS MEJORES historias de esa categoría (las breaking corroboradas consumen el cupo
+    'breaking' sea cual sea su categoría de feed) y la ingesta salta los feeds de categorías
+    fuera del plan. Categorías sin pool (p. ej. 'evergreen') reservan el hueco para el flujo
+    manual/reciclaje: la auto-producción no las llena. {} = sin plan (cae al cupo diario
+    global, `cupo_dia`). El override por marca SUSTITUYE al global (no se mezclan)."""
+    if marca:
+        propio = _crudo(f"{ENV_PLAN_DIA}::{marca}")
+        if propio:
+            return parsear_plan(propio)
+    return parsear_plan(_crudo(ENV_PLAN_DIA))
 
 
 # --------------------------------------------------------------------------- #
@@ -693,6 +710,31 @@ def avance_revision_activo() -> bool:
     if not crudo:
         return True
     return crudo not in _FALSOS
+
+
+# --------------------------------------------------------------------------- #
+# Toggle ÚNICO «Generar» (noticia → copy)                                       #
+# --------------------------------------------------------------------------- #
+
+# CLAVE VIRTUAL del catálogo/UI: el equipo enciende/apaga UN solo interruptor «Generar»
+# («o llega copy o no empieza») y la capa de ajustes lo TRADUCE a las cinco etapas internas
+# del tramo noticia→copy. Las etapas siguen existiendo como mecanismo (daemons, vista
+# Pipelines, tests) pero dejan de ser botones: la única etapa con interruptor propio es
+# ARTE (la única con coste externo real). `KENI_GENERAR` nunca se lee en runtime: las
+# lecturas siguen siendo por etapa; la API de ajustes escribe las cinco claves a la vez.
+ENV_GENERAR = "KENI_GENERAR"
+
+# Las SEIS etapas que agrupa «Generar», en orden de pipeline (de la ingesta al avance a
+# revisión). ARTE queda fuera a propósito: es la única con coste externo real (proveedor de
+# imagen) y conserva su interruptor propio.
+ETAPAS_GENERAR: tuple[str, ...] = (
+    ENV_PIPELINE_FUSION,
+    ENV_PIPELINE_EDITORIAL,
+    ENV_PIPELINE_SELECCION,
+    ENV_PIPELINE_VALIDACION,
+    ENV_PIPELINE_COPY,
+    ENV_PIPELINE_AVANCE,
+)
 
 
 def _accesor_global_de_etapa(env_flag: str):

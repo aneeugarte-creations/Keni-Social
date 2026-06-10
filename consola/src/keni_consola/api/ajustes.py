@@ -85,7 +85,9 @@ async def guardar(request: Request) -> Response:
 
     if datos.get("reset") is True:
         try:
-            ajustes.borrar(clave)
+            # La clave virtual «Generar» abarca varias claves físicas (fan-out); el resto, una.
+            for fisica in ajustes_catalogo.claves_fisicas(clave):
+                ajustes.borrar(fisica)
         except OSError as e:
             return JSONResponse(
                 {"error": f"No se pudo restablecer el ajuste: {e}"}, status_code=400
@@ -101,7 +103,10 @@ async def guardar(request: Request) -> Response:
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
     try:
-        ajustes.guardar(clave, a_guardar)
+        # La clave virtual «Generar» escribe sus seis etapas internas con el MISMO valor
+        # (coherencia garantizada desde la UI); el resto escribe su única clave.
+        for fisica in ajustes_catalogo.claves_fisicas(clave):
+            ajustes.guardar(fisica, a_guardar)
     except OSError as e:
         return JSONResponse(
             {"error": f"No se pudo guardar el ajuste: {e}"}, status_code=400
