@@ -38,7 +38,7 @@ import { toast } from "sonner";
 import { api, urlMedia } from "@/lib/api";
 
 import { CapaNodo } from "./capas/CapaNodo";
-import type { Capa, CapaImagen, CapaTexto } from "./documento";
+import type { Capa, CapaImagen, CapaOverlay, CapaTexto } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 import { leerDimensionesUrl } from "./useImagen";
@@ -50,16 +50,17 @@ import { CropOverlay } from "./lienzo/CropOverlay";
 import { FondoNodo } from "./lienzo/FondoNodo";
 import {
   RATIO_FIJO,
-  ZOOM_MAX,
-  ZOOM_MIN,
   clampMarco,
+  clampZoom,
+  etiquetaGrados,
+  etiquetaTamano,
   guardarPref,
   prefBool,
   prefNum,
 } from "./lienzo/lib";
 import { ReframeOverlay } from "./lienzo/ReframeOverlay";
 import { useArrastreCapas } from "./lienzo/useArrastreCapas";
-import { useAtajosTeclado } from "./lienzo/useAtajosTeclado";
+import { type ZoomApi, useAtajosTeclado } from "./lienzo/useAtajosTeclado";
 
 // Lee las dimensiones naturales (px) de un fichero de imagen sin subirlo, para respetar su
 // aspect-ratio al insertarlo. Tolerante: devuelve `null` si el navegador no puede decodificarlo.
@@ -199,6 +200,13 @@ export function Lienzo({
   const anclaZoom = useRef<{ docX: number; docY: number; sx: number; sy: number } | null>(null);
   // El aviso de "texto con binding" se muestra una sola vez por vida del componente.
   const avisoBinding = useRef(false);
+  // HOVER affordance (estilo Canva): capa bajo el cursor, para dibujarle un contorno fino de
+  // acento ANTES de seleccionar. Solo cambia al entrar/salir de un nodo (mouseover/mouseout de
+  // Konva burbujean), no en cada movimiento => coste despreciable.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  // Etiqueta VIVA del gesto ("W × H px" al redimensionar, grados al rotar): overlay HTML ligero
+  // actualizado por mutación directa del DOM (textContent/transform), sin setState por frame.
+  const etiquetaGestoRef = useRef<HTMLDivElement | null>(null);
 
   const capas: Capa[] = [...documento.capas].sort((a, b) => a.z - b.z);
   const capaSel = documento.capas.find((c) => c.id === seleccion) ?? null;
@@ -232,8 +240,34 @@ export function Lienzo({
     tr.getLayer()?.batchDraw();
   }, [seleccionMulti, documento, zoom, modoImagen]);
 
+  // ── Zoom (estilo Canva) ──────────────────────────────────────────────────
+  // Todos los cambios de zoom SIN gesto de puntero (botones, menú de %, atajos) se anclan al
+  // CENTRO del viewport: el punto del documento que estaba en el centro sigue en el centro tras
+  // el cambio de escala. (El zoom con rueda se ancla al cursor en `onWheel`.)
+  const anclarCentro = () => {
+    const cont = scrollRef.current;
+    if (!cont) return;
+    const sx = cont.clientWidth / 2;
+    const sy = cont.clientHeight / 2;
+    anclaZoom.current = { docX: (cont.scrollLeft + sx) / escala, docY: (cont.scrollTop + sy) / escala, sx, sy };
+  };
+  const acercar = () => { anclarCentro(); setZoom((z) => clampZoom(z * 1.1, baseFit)); };
+  const alejar = () => { anclarCentro(); setZoom((z) => clampZoom(z * 0.9, baseFit)); };
+  // "Ajustar a pantalla" = el lienzo entero cabe en el espacio disponible. Como `escala = baseFit *
+  // zoom` y `baseFit` ya encaja el documento, ajustar a pantalla equivale a zoom=1.
+  const ajustarPantalla = () => setZoom(1);
+  // "100%" = un píxel del documento ocupa un píxel de pantalla, i.e. escala efectiva 1 => zoom =
+  // 1/baseFit (acotado al rango permitido).
+  const zoomReal = () => { anclarCentro(); setZoom(clampZoom(1 / baseFit, baseFit)); };
+  // Nivel ABSOLUTO del menú de zoom (0.1 => escala efectiva 10 %).
+  const fijarEscala = (esc: number) => { anclarCentro(); setZoom(clampZoom(esc / baseFit, baseFit)); };
+  // API de zoom para los atajos de teclado, en un ref: el hook no se re-registra en cada render
+  // pero siempre ejecuta los handlers frescos (con `baseFit`/`escala` actuales).
+  const zoomApi = useRef<ZoomApi>({ acercar, alejar, ajustar: ajustarPantalla, real: zoomReal });
+  zoomApi.current = { acercar, alejar, ajustar: ajustarPantalla, real: zoomReal };
+
   // Atajos de teclado (ignora si se está escribiendo en un input/textarea). Hook extraído.
-  useAtajosTeclado({ store, setZoom, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte });
+  useAtajosTeclado({ store, zoom: zoomApi, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte });
 
   // Zoom con ctrl/cmd + rueda, CENTRADO EN EL CURSOR: calcula el punto del documento bajo el puntero
   // y deja anotada un ancla; tras re-renderizar con la nueva escala, el efecto de abajo ajusta el
@@ -254,7 +288,7 @@ export function Lienzo({
         sy,
       };
     }
-    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * factor)));
+    setZoom((z) => clampZoom(z * factor, baseFit));
   };
 
   // Aplica el ancla de zoom-al-cursor tras commit (la nueva escala ya está en el DOM, así el scroll
@@ -489,13 +523,6 @@ export function Lienzo({
     window.addEventListener("mouseup", onUp);
   };
 
-  // "Ajustar a pantalla" = el lienzo entero cabe en el espacio disponible. Como `escala = baseFit *
-  // zoom` y `baseFit` ya encaja el documento, ajustar a pantalla equivale a zoom=1.
-  const ajustarPantalla = () => setZoom(1);
-  // "100%" = un píxel del documento ocupa un píxel de pantalla, i.e. escala efectiva 1 => zoom =
-  // 1/baseFit (acotado al rango permitido).
-  const zoomReal = () => setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, 1 / baseFit)));
-
   // Soltar en el lienzo. Dos orígenes:
   //   1) Activo interno arrastrado desde la galería (mimetype `application/x-keni-activo`): se inserta
   //      como capa DONDE se suelta (flujo intacto).
@@ -552,6 +579,88 @@ export function Lienzo({
     return out;
   };
 
+  // ── Etiqueta viva del gesto (Transformer) ────────────────────────────────
+  // Durante el gesto el Transformer muta scaleX/Y y rotation del nodo (w/h se hornean al soltar
+  // en onTransformEnd), así que las dimensiones vivas del DOCUMENTO son tamaño base × escala viva.
+  const moverEtiquetaGesto = () => {
+    const div = etiquetaGestoRef.current;
+    const tr = trRef.current;
+    const stage = stageRef.current;
+    if (!div || !tr || !stage) return;
+    const pos = stage.getPointerPosition();
+    const nodos = tr.nodes();
+    if (!pos || nodos.length === 0) return;
+    let texto: string;
+    if (tr.getActiveAnchor() === "rotater") {
+      texto = etiquetaGrados(nodos[0].rotation());
+    } else if (nodos.length === 1) {
+      const capa = documento.capas.find((c) => c.id === nodos[0].id());
+      if (!capa) return;
+      // Texto sin caja (h<=0): alto visual de una línea, igual que hornea onTransformEnd.
+      const hBase = capa.tipo === "texto" && capa.h <= 0
+        ? (capa as CapaTexto).tamano * (capa as CapaTexto).interlineado
+        : capa.h;
+      texto = etiquetaTamano(Math.abs(capa.w * nodos[0].scaleX()), Math.abs(hBase * nodos[0].scaleY()));
+    } else {
+      // Multi-selección: caja envolvente del conjunto en coords del documento.
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const n of nodos) {
+        const r = n.getClientRect({ relativeTo: stage, skipShadow: true, skipStroke: true });
+        x0 = Math.min(x0, r.x);
+        y0 = Math.min(y0, r.y);
+        x1 = Math.max(x1, r.x + r.width);
+        y1 = Math.max(y1, r.y + r.height);
+      }
+      texto = etiquetaTamano(x1 - x0, y1 - y0);
+    }
+    // Mutación directa del DOM (sin setState): 60 fps durante el gesto.
+    div.textContent = texto;
+    div.style.display = "block";
+    div.style.transform = `translate(${Math.round(pos.x + 14)}px, ${Math.round(pos.y + 18)}px)`;
+  };
+  const ocultarEtiquetaGesto = () => {
+    const div = etiquetaGestoRef.current;
+    if (div) div.style.display = "none";
+  };
+
+  // ── Hover affordance ─────────────────────────────────────────────────────
+  // Sube hasta el hijo directo de la Layer: las capas de primer nivel llevan ahí su id (las hijas
+  // de un grupo resuelven al grupo). Fondo/Transformer no tienen id => null (sin hover).
+  const onMouseOverStage = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    const stage = stageRef.current;
+    if (!stage || espacioRef.current || modoImagen) return;
+    let n: Konva.Node | null = e.target === stage ? null : e.target;
+    while (n && !(n.getParent() instanceof Konva.Layer)) n = n.getParent();
+    const id = n?.id() || null;
+    setHoverId(id && documento.capas.some((c) => c.id === id) ? id : null);
+  };
+  // Contorno de hover: caja de la capa bajo el cursor (si no está ya seleccionada ni hay gesto en
+  // curso). Sin rotación usamos la caja REAL renderizada (clientRect del nodo: con imágenes
+  // "contain" abraza la foto exacta, igual que el marco de selección); con rotación, la caja del
+  // modelo rotada (overlay/texto sin caja ajustan su alto visual).
+  const hoverBox = (() => {
+    if (!hoverId || arrastrando || marquee || modoImagen || espacio) return null;
+    if (seleccionMulti.includes(hoverId)) return null;
+    const c = documento.capas.find((x) => x.id === hoverId);
+    if (!c || c.visible === false) return null;
+    if (!c.rotacion) {
+      const stage = stageRef.current;
+      const nodo = stage?.findOne<Konva.Node>(`#${c.id}`);
+      if (stage && nodo) {
+        const r = nodo.getClientRect({ relativeTo: stage, skipShadow: true, skipStroke: true });
+        return { x: r.x, y: r.y, w: r.width, h: r.height, rot: 0 };
+      }
+    }
+    const alto =
+      c.tipo === "overlay"
+        ? Math.max(1, c.h * (c as CapaOverlay).alto_frac)
+        : c.tipo === "texto" && c.h <= 0
+          ? (c as CapaTexto).tamano * (c as CapaTexto).interlineado
+          : c.h;
+    const y = c.tipo === "overlay" ? c.y + c.h - alto : c.y;
+    return { x: c.x, y, w: c.w, h: alto, rot: c.rotacion };
+  })();
+
   const multi = seleccionMulti.length > 1;
   const alinearFn = (modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => {
     const st = store.getState();
@@ -575,12 +684,12 @@ export function Lienzo({
             : []),
           ...(!multi && seleccion
             ? [
-                { icono: BringToFront, titulo: "Traer al frente", onClick: () => store.getState().traerAlFrente(seleccion) },
-                { icono: SendToBack, titulo: "Enviar al fondo", onClick: () => store.getState().enviarAlFondo(seleccion) },
+                { icono: BringToFront, titulo: "Traer al frente", atajo: "⌘]", onClick: () => store.getState().traerAlFrente(seleccion) },
+                { icono: SendToBack, titulo: "Enviar al fondo", atajo: "⌘[", onClick: () => store.getState().enviarAlFondo(seleccion) },
               ]
             : []),
-          { icono: Copy, titulo: "Duplicar", onClick: () => store.getState().duplicarMulti() },
-          { icono: Trash2, titulo: "Borrar", onClick: () => store.getState().quitarMulti() },
+          { icono: Copy, titulo: "Duplicar", atajo: "⌘D", onClick: () => store.getState().duplicarMulti() },
+          { icono: Trash2, titulo: "Borrar", atajo: "Supr", onClick: () => store.getState().quitarMulti() },
         ]
       : [];
 
@@ -637,6 +746,8 @@ export function Lienzo({
           // vez de mover capas. Sin espacio, interacción normal de capas.
           listening={!espacio}
           onMouseDown={onMouseDownStage}
+          onMouseOver={onMouseOverStage}
+          onMouseLeave={() => setHoverId(null)}
           onWheel={onWheel}
           onDblClick={(e) => { const id = e.target.id?.(); if (id) abrirEdicionTexto(id); }}
           onDblTap={(e) => { const id = e.target.id?.(); if (id) abrirEdicionTexto(id); }}
@@ -687,6 +798,20 @@ export function Lienzo({
             )}
             {guias.x !== null && <Line points={[guias.x, 0, guias.x, h]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
             {guias.y !== null && <Line points={[0, guias.y, w, guias.y]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
+            {/* HOVER (estilo Canva): contorno fino de acento sobre la capa bajo el cursor ANTES de
+                seleccionarla. Solo visual (Layer sin listening). */}
+            {hoverBox && (
+              <Rect
+                x={hoverBox.x}
+                y={hoverBox.y}
+                width={hoverBox.w}
+                height={hoverBox.h}
+                rotation={hoverBox.rot}
+                stroke="#3b82f6"
+                strokeWidth={1.5 / escala}
+                listening={false}
+              />
+            )}
             {/* Rectángulo de selección (marquee): caja punteada en coords del documento. */}
             {marquee && (
               <Rect
@@ -710,6 +835,13 @@ export function Lienzo({
               keepRatio={ratioFijo}
               enabledAnchors={esGrupo ? [] : ratioFijo ? ["top-left", "top-right", "bottom-left", "bottom-right"] : undefined}
               ignoreStroke
+              // Snap SUAVE de la rotación a 0/45/90… (estilo Canva); fuera del umbral gira libre.
+              rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+              rotationSnapTolerance={5}
+              // Etiqueta viva junto al cursor: "W × H px" al redimensionar, grados al rotar.
+              onTransformStart={moverEtiquetaGesto}
+              onTransform={moverEtiquetaGesto}
+              onTransformEnd={ocultarEtiquetaGesto}
               boundBoxFunc={(o, n) => (n.width < 8 || n.height < 8 ? o : n)}
             />
           </Layer>
@@ -729,6 +861,14 @@ export function Lienzo({
             muestraFoto={muestraFoto}
           />
         )}
+        {/* Etiqueta VIVA del gesto: rótulo junto al cursor durante resize/rotación. Movido por
+            mutación directa del DOM (solo transform durante el gesto => 60 fps). */}
+        <div
+          ref={etiquetaGestoRef}
+          aria-hidden
+          className="pointer-events-none absolute left-0 top-0 z-30 rounded border border-border bg-popover px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-popover-foreground shadow-md will-change-transform"
+          style={{ display: "none" }}
+        />
        </div>
       </div>
 
@@ -771,10 +911,11 @@ export function Lienzo({
       dentroMarco={dentroMarco}
       setDentroMarco={setDentroMarco}
       escala={escala}
-      alejar={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))}
-      acercar={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.1))}
+      alejar={alejar}
+      acercar={acercar}
       zoomReal={zoomReal}
       ajustarPantalla={ajustarPantalla}
+      fijarEscala={fijarEscala}
     />
     </div>
   );

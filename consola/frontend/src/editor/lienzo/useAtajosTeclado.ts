@@ -2,7 +2,7 @@
 // mismo handler `keydown` sobre `window`, mismas dependencias del efecto y mismo orden de ramas.
 // Ignora si el foco está en un campo editable o un <select>.
 
-import type { Dispatch, SetStateAction } from "react";
+import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
 
 import type { Capa } from "../documento";
@@ -10,18 +10,27 @@ import { nuevoId } from "../documento";
 import { aplicarEstilo } from "../estilo";
 import { copiarEstiloPortapapeles, estiloPortapapeles } from "../estilos-guardados";
 import type { StoreEditor } from "../store";
-import { ZOOM_MAX, ZOOM_MIN, portapapeles } from "./lib";
+import { portapapeles } from "./lib";
+
+// Acciones de zoom que aporta el Lienzo (ya ancladas al centro del viewport y acotadas a los
+// límites de escala). Van en un ref para que el efecto no se re-registre en cada render.
+export type ZoomApi = {
+  acercar: () => void;
+  alejar: () => void;
+  ajustar: () => void;
+  real: () => void;
+};
 
 export function useAtajosTeclado({
   store,
-  setZoom,
+  zoom,
   reencuadreId,
   onSalirReencuadre,
   recorteId,
   onSalirRecorte,
 }: {
   store: StoreEditor;
-  setZoom: Dispatch<SetStateAction<number>>;
+  zoom: RefObject<ZoomApi>;
   reencuadreId: string | null;
   onSalirReencuadre?: () => void;
   recorteId: string | null;
@@ -44,20 +53,28 @@ export function useAtajosTeclado({
         else st.deshacer();
         return;
       }
-      // Zoom: ⌘0 ajusta a pantalla (escala = baseFit => zoom 1), ⌘+ acerca, ⌘− aleja.
-      if (meta && e.key === "0") { e.preventDefault(); return setZoom(1); }
+      // Zoom: ⌘0 ajusta a pantalla, ⌘+ acerca, ⌘− aleja, ⇧0 = 100 % (1 px del documento : 1 px de
+      // pantalla). ⇧0 usa e.code para ser independiente de la distribución del teclado.
+      if (meta && e.key === "0") { e.preventDefault(); return zoom.current?.ajustar(); }
       if (meta && (e.key === "+" || e.key === "=")) {
         e.preventDefault();
-        return setZoom((z) => Math.min(ZOOM_MAX, z * 1.1));
+        return zoom.current?.acercar();
       }
       if (meta && (e.key === "-" || e.key === "_")) {
         e.preventDefault();
-        return setZoom((z) => Math.max(ZOOM_MIN, z * 0.9));
+        return zoom.current?.alejar();
+      }
+      if (!meta && !e.altKey && e.shiftKey && e.code === "Digit0") {
+        e.preventDefault();
+        return zoom.current?.real();
       }
       if (e.key === "Escape") {
+        // CASCADA estilo Canva: cerrar modo de imagen (recorte/reencuadre) → deseleccionar →
+        // (si no hay nada que hacer aquí) dejar pasar para que el editor cierre paneles/overlays.
         if (recorteId) return onSalirRecorte?.();
         if (reencuadreId) return onSalirReencuadre?.();
-        return st.seleccionar(null);
+        if (st.seleccion || st.seleccionMulti.length > 0) return st.seleccionar(null);
+        return;
       }
       // Copiar/pegar ESTILO (⌘⌥C / ⌘⌥V): subconjunto de estilo de la capa, no la capa entera.
       // Va ANTES de ⌘C/⌘V (que copian capas) porque añade Alt.
@@ -146,5 +163,5 @@ export function useAtajosTeclado({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, setZoom, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte]);
+  }, [store, zoom, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte]);
 }

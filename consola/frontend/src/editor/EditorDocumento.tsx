@@ -176,11 +176,18 @@ export function EditorDocumento({
 
   // ESCAPE cierra el overlay ABIERTO más "alto" (menú > flyout > inspector), esté donde
   // esté el foco. Los backdrops (`Telon`) cubren además teclado con foco en ellos.
-  useCerrarConEscape(menuMas || tool !== null || ajustes, () => {
-    if (menuMas) setMenuMas(false);
-    else if (tool !== null) setTool(null);
-    else setAjustes(false);
-  });
+  // CASCADA estilo Canva: con un modo de imagen activo o una capa seleccionada, ese Escape lo
+  // consume el Lienzo (salir del modo → deseleccionar); los paneles solo se cierran en el
+  // siguiente Escape. El menú «Más» sí se cierra siempre (es el overlay más alto).
+  const seleccionActiva = !!seleccion || store.getState().seleccionMulti.length > 0;
+  useCerrarConEscape(
+    menuMas || ((tool !== null || ajustes) && !seleccionActiva && !reencuadreId && !recorteId),
+    () => {
+      if (menuMas) setMenuMas(false);
+      else if (tool !== null) setTool(null);
+      else setAjustes(false);
+    },
+  );
 
   const abrirReencuadre = () => {
     const sel = store.getState().seleccion;
