@@ -32,7 +32,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
+import { Group, Layer, Line, Rect, Stage, Transformer } from "react-konva";
 import { toast } from "sonner";
 
 import { api, urlMedia } from "@/lib/api";
@@ -233,6 +233,9 @@ export function Lienzo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escala, documento, onStage]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Etiquetas de DISTANCIA del imán/espaciado igual (px del documento) junto a las guías: overlay
+  // HTML que el hook de arrastre muta directamente por frame (sin setState), como la etiqueta viva.
+  const etiquetasImanRef = useRef<HTMLDivElement | null>(null);
   // Arrastre de capas con SMART GUIDES y movimiento en grupo: hook extraído (owns el ref multiDrag).
   const { arrastrando, guias, onDragStart, onDragMove, onDragEnd } = useArrastreCapas({
     store,
@@ -249,6 +252,7 @@ export function Lienzo({
     safeBottom,
     safeLeft,
     safeRight,
+    etiquetasRef: etiquetasImanRef,
   });
   const [editando, setEditando] = useState<{ id: string; x: number; y: number; w: number; fontPx: number } | null>(null);
   const [textoEdit, setTextoEdit] = useState("");
@@ -896,6 +900,22 @@ export function Lienzo({
             )}
             {guias.x !== null && <Line points={[guias.x, 0, guias.x, h]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
             {guias.y !== null && <Line points={[0, guias.y, w, guias.y]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
+            {/* ESPACIADO IGUAL (estilo Canva): un segmento con topes en cada hueco equidistante
+                (la etiqueta px va en el overlay HTML de etiquetas, mutado por el hook). */}
+            {guias.espX?.segmentos.map((s, i) => (
+              <Group key={`espx${i}`}>
+                <Line points={[s.desde, s.perp, s.hasta, s.perp]} stroke="#ec4899" strokeWidth={1.5 / escala} />
+                <Line points={[s.desde, s.perp - 6 / escala, s.desde, s.perp + 6 / escala]} stroke="#ec4899" strokeWidth={1.5 / escala} />
+                <Line points={[s.hasta, s.perp - 6 / escala, s.hasta, s.perp + 6 / escala]} stroke="#ec4899" strokeWidth={1.5 / escala} />
+              </Group>
+            ))}
+            {guias.espY?.segmentos.map((s, i) => (
+              <Group key={`espy${i}`}>
+                <Line points={[s.perp, s.desde, s.perp, s.hasta]} stroke="#ec4899" strokeWidth={1.5 / escala} />
+                <Line points={[s.perp - 6 / escala, s.desde, s.perp + 6 / escala, s.desde]} stroke="#ec4899" strokeWidth={1.5 / escala} />
+                <Line points={[s.perp - 6 / escala, s.hasta, s.perp + 6 / escala, s.hasta]} stroke="#ec4899" strokeWidth={1.5 / escala} />
+              </Group>
+            ))}
             {/* HOVER (estilo Canva): contorno fino de acento sobre la capa bajo el cursor ANTES de
                 seleccionarla. Solo visual (Layer sin listening). */}
             {hoverBox && (
@@ -967,6 +987,9 @@ export function Lienzo({
           className="pointer-events-none absolute left-0 top-0 z-30 rounded border border-border bg-popover px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-popover-foreground shadow-md will-change-transform"
           style={{ display: "none" }}
         />
+        {/* Etiquetas de DISTANCIA del imán/espaciado igual: contenedor que `useArrastreCapas` puebla
+            por mutación directa del DOM durante el arrastre (sin setState por frame). */}
+        <div ref={etiquetasImanRef} aria-hidden className="pointer-events-none absolute inset-0 z-30" />
        </div>
       </div>
 
