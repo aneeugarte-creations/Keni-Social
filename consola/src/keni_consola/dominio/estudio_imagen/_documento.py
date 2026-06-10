@@ -26,6 +26,7 @@ from ._comun import (
 __all__ = [
     "_refs_imagenes",
     "_fuentes_extra_de_marca",
+    "normalizar_opciones_export",
     "renderizar_documento_bytes",
     "renderizar_documento",
     "_fotos_de",
@@ -83,14 +84,58 @@ def _fuentes_extra_de_marca(marca: str, carpeta: Path) -> dict[str, str]:
     return extra
 
 
+# Opciones de EXPORT del editor (descarga con formato/calidad/escala). El render por defecto
+# (miniaturas, bake de pieza, composición de feed) NO pasa opciones -> PNG a escala 1.
+_EXPORT_FORMATOS = ("png", "jpg")
+
+
+def normalizar_opciones_export(opciones: dict[str, Any] | None) -> dict[str, Any]:
+    """Valida/normaliza las opciones de exportación -> `{formato, calidad, escala}` (defaults png/90/1).
+
+    `formato`: "png"|"jpg" (acepta "jpeg" como alias). `calidad`: 1-100 (solo aplica a jpg).
+    `escala`: 0.25-4. `None` o `{}` -> defaults. Lanza `EstudioError` (mensaje en español) si algún
+    valor está fuera de rango o no es numérico; lo recoge la API como 400.
+    """
+    op = opciones or {}
+    if not isinstance(op, dict):
+        raise EstudioError("Las opciones de exportación no son válidas.")
+
+    formato = str(op.get("formato") or "png").strip().lower()
+    if formato == "jpeg":
+        formato = "jpg"
+    if formato not in _EXPORT_FORMATOS:
+        raise EstudioError("Formato de exportación no soportado. Usa: png o jpg.")
+
+    try:
+        escala = float(op.get("escala", 1))
+    except (TypeError, ValueError) as exc:
+        raise EstudioError("La escala de exportación debe ser un número.") from exc
+    if not (0.25 <= escala <= 4):
+        raise EstudioError("La escala de exportación debe estar entre 0.25 y 4.")
+
+    try:
+        calidad = int(op.get("calidad", 90))
+    except (TypeError, ValueError) as exc:
+        raise EstudioError("La calidad de exportación debe ser un número entero.") from exc
+    if not (1 <= calidad <= 100):
+        raise EstudioError("La calidad de exportación debe estar entre 1 y 100.")
+
+    return {"formato": formato, "calidad": calidad, "escala": escala}
+
+
 def renderizar_documento_bytes(
-    documento: dict[str, Any], *, bindings: dict[str, str] | None = None,
+    documento: dict[str, Any],
+    *,
+    bindings: dict[str, str] | None = None,
+    opciones: dict[str, Any] | None = None,
 ) -> bytes:
-    """Valida y renderiza un DOCUMENTO de capas a los BYTES del PNG (motor Node), SIN persistir.
+    """Valida y renderiza un DOCUMENTO de capas a los BYTES del archivo (motor Node), SIN persistir.
 
     Materializa cada imagen referenciada a un temporal y corre Node; devuelve los bytes. Lo usa el
-    render ON-DEMAND (sirve por HTTP sin generar objetos). Lanza `EstudioError` si no valida/falla.
+    render ON-DEMAND (sirve por HTTP sin generar objetos). `opciones` (formato/calidad/escala) controla
+    el encoding y la resolución del export (def PNG a escala 1). Lanza `EstudioError` si no valida/falla.
     """
+    opciones = normalizar_opciones_export(opciones)
     try:
         doc = doc_capas.validar(documento)
     except doc_capas.DocumentoError as exc:
@@ -112,29 +157,36 @@ def renderizar_documento_bytes(
 
         fuentes_extra = _ref._fuentes_extra_de_marca(doc.get("marca", ""), carpeta)
 
-        out = carpeta / "salida.png"
+        out = carpeta / "salida"
         payload = {
             "documento": doc,
             "assets": assets,
             "fuentes": doc.get("fuentes"),
             "fuentes_extra": fuentes_extra,
             "bindings": bindings or {},
+            "opciones": opciones,
         }
         _ref._correr_render_documento(payload, out)
         return out.read_bytes()
 
 
 def renderizar_documento(
-    documento: dict[str, Any], *, bindings: dict[str, str] | None = None,
+    documento: dict[str, Any],
+    *,
+    bindings: dict[str, str] | None = None,
+    opciones: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Renderiza un DOCUMENTO de capas y PERSISTE el PNG (content-addressed) -> `{id, url}`.
+    """Renderiza un DOCUMENTO de capas y PERSISTE el archivo (content-addressed) -> `{id, url}`.
 
-    Para flujos con asset DURABLE referenciado (bake del editor pro). El render on-demand usa
-    `renderizar_documento_bytes` (sin persistir).
+    Para flujos con asset DURABLE referenciado (bake del editor pro, export con descarga). El render
+    on-demand usa `renderizar_documento_bytes` (sin persistir). `opciones` (formato/calidad/escala)
+    fija el encoding: el media se persiste con la extensión/mimetype correctos (png o jpg).
     """
-    datos = renderizar_documento_bytes(documento, bindings=bindings)
+    opciones = normalizar_opciones_export(opciones)
+    datos = renderizar_documento_bytes(documento, bindings=bindings, opciones=opciones)
+    ext = "jpg" if opciones["formato"] == "jpg" else "png"
     try:
-        nombre = media.guardar_bytes_contenido(datos, ext="png")
+        nombre = media.guardar_bytes_contenido(datos, ext=ext)
     except media.MediaError as e:
         raise EstudioError(str(e)) from e
     return {"id": nombre, "url": f"/api/media/{nombre}"}

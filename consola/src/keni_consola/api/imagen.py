@@ -54,17 +54,26 @@ def _bindings_de_pieza(cid: str, pid: str) -> dict[str, str]:
 
 
 async def render(request: Request) -> Response:
-    """Renderiza un documento de capas a PNG -> `{id, url}` (400 si el documento no valida)."""
+    """Renderiza un documento de capas a imagen -> `{id, url}` (400 si no valida).
+
+    `opciones` (opcional) `{formato:"png"|"jpg", calidad:1-100, escala:0.25-4}` controla el export
+    (formato/calidad/escala); fuera de rango -> 400 en español. El media se persiste con el
+    mimetype correcto (image/png o image/jpeg).
+    """
     datos = await leer_json(request)
     if not isinstance(datos, dict):
         return JSONResponse({"error": "Cuerpo JSON inválido."}, status_code=400)
     doc = datos.get("documento") if "documento" in datos else datos
     bindings = datos.get("bindings") if isinstance(datos.get("bindings"), dict) else None
+    opciones = datos.get("opciones") if isinstance(datos.get("opciones"), dict) else None
     if not isinstance(doc, dict):
         return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
     try:
+        opciones = estudio_imagen.normalizar_opciones_export(opciones)
         # Render es bloqueante (subprocess.run); ejecutar en threadpool para no bloquear el event loop.
-        res = await run_in_threadpool(estudio_imagen.renderizar_documento, doc, bindings=bindings)
+        res = await run_in_threadpool(
+            estudio_imagen.renderizar_documento, doc, bindings=bindings, opciones=opciones
+        )
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse(res)

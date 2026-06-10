@@ -223,24 +223,6 @@ export default function Imagen() {
     });
   };
 
-  const exportar = useMutation({
-    mutationFn: () => {
-      const store = activa ? stores.current.get(activa) : null;
-      if (!store) throw new Error("No hay pestaña activa.");
-      // Pieza: inyecta el titular/pleca REAL (binding). Plantilla suelta: sin bindings → texto de muestra.
-      const bindings = pestanaActiva?.contenido ? pestanaActiva.bindings : undefined;
-      return api.imagenRender(store.getState().documento, bindings);
-    },
-    onSuccess: (res) => {
-      const url = `/api/media/${res.id}`;
-      setExportUrl(url);
-      // Abre el PNG en una pestaña nueva (lo más simple/robusto): el usuario ve el resultado ya.
-      window.open(url, "_blank", "noopener,noreferrer");
-      toast.success("PNG generado.");
-    },
-    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo exportar."),
-  });
-
   // Al editar: marca "sin guardar", autoguarda local (crash-safety, ~0.8 s) y, si la pestaña está
   // atada a una plantilla, AUTOGUARDA en la plantilla tras 3 s de inactividad (estilo Word).
   useEffect(() => {
@@ -578,8 +560,12 @@ export default function Imagen() {
             key={pestanaActiva.id}
             store={storeActivo}
             marca={pestanaActiva.marca}
-            onExportar={() => exportar.mutate()}
-            exportando={exportar.isPending}
+            // EXPORTAR: el diálogo lee el documento del store y descarga con formato/calidad/escala.
+            // Pieza anclada → titular/pleca REAL (bindings); plantilla suelta → texto de muestra.
+            exportar={{
+              bindings: pestanaActiva.contenido ? pestanaActiva.bindings : undefined,
+              nombre: pestanaActiva.nombre,
+            }}
             onPlantillas={() => setGaleria(true)}
             // «Adaptar a…»: abre el documento reencuadrado en una PESTAÑA NUEVA (no machaca la actual).
             onAbrirAdaptado={(docAdaptado, nombre) =>

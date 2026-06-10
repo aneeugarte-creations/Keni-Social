@@ -5,11 +5,16 @@
 // `componer.mjs`, pero sobre un documento de capas arbitrarias en vez del spec de slots fijos.
 // Protocolo:
 //   - argv: `--salida <out.png>`
-//   - stdin: `{documento, assets:{<objeto|media_id>: ruta_png}, fuentes?, bindings?, fuentes_extra?}`
-//   - salida: escribe el PNG en `out.png` (rc 0). En error: stderr + rc≠0.
+//   - stdin: `{documento, assets:{<objeto|media_id>: ruta_png}, fuentes?, bindings?, fuentes_extra?,
+//             opciones?:{formato:"png"|"jpg", calidad:1-100, escala:0.25-4}}`
+//   - salida: escribe el archivo en `out` (rc 0; PNG por defecto, JPEG si `opciones.formato==="jpg"`).
+//             En error: stderr + rc≠0.
 //
 // El render real lo hace `dibujar.mjs::dibujarDocumento` (única fuente de verdad, compartida con
-// el editor). Aquí solo se registran fuentes, se cargan las imágenes de las capas y se vuelca el PNG.
+// el editor). Aquí solo se registran fuentes, se cargan las imágenes de las capas, se aplica la
+// ESCALA y el ENCODING (png/jpg) del export, y se vuelca el archivo. La escala se aplica agrandando
+// el canvas y escalando el contexto ANTES de delegar en `dibujarDocumento`: el motor sigue pintando
+// en coordenadas de DOCUMENTO sin enterarse (no se toca `dibujar.mjs`).
 
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import { writeFileSync } from "node:fs";
@@ -65,9 +70,23 @@ async function main() {
     imgs[clave] = await cargar(ruta);
   }
 
+  // Opciones de EXPORT (formato/calidad/escala). La capa Python ya las valida y normaliza; aquí
+  // las re-acotamos por robustez (el wrapper puede invocarse fuera de ese camino).
+  const opciones = payload.opciones || {};
+  let escala = Number(opciones.escala);
+  if (!Number.isFinite(escala) || escala <= 0) escala = 1;
+  escala = Math.min(4, Math.max(0.25, escala));
+  const formato = String(opciones.formato || "png").toLowerCase() === "jpg"
+    || String(opciones.formato || "").toLowerCase() === "jpeg"
+    ? "jpg"
+    : "png";
+
   const { w, h } = documento.formato;
-  const canvas = createCanvas(w, h);
+  // Canvas en píxeles FINALES (w*escala × h*escala); escalamos el contexto para que el motor pinte
+  // en coordenadas de documento (0..w, 0..h) sin saber nada de la escala.
+  const canvas = createCanvas(Math.round(w * escala), Math.round(h * escala));
   const ctx = canvas.getContext("2d");
+  if (escala !== 1) ctx.scale(escala, escala);
 
   dibujarDocumento(ctx, {
     documento,
@@ -79,9 +98,23 @@ async function main() {
     final: true,
   });
 
-  writeFileSync(salida, canvas.toBuffer("image/png"));
+  let buffer;
+  if (formato === "jpg") {
+    let calidad = Number(opciones.calidad);
+    if (!Number.isFinite(calidad)) calidad = 90;
+    calidad = Math.min(100, Math.max(1, Math.round(calidad)));
+    buffer = canvas.toBuffer("image/jpeg", calidad);
+  } else {
+    buffer = canvas.toBuffer("image/png");
+  }
+  writeFileSync(salida, buffer);
   process.stdout.write(
-    "DATOS " + JSON.stringify({ salida, tamano: `${w}x${h}`, capas: (documento.capas || []).length }) + "\n",
+    "DATOS " + JSON.stringify({
+      salida,
+      formato,
+      tamano: `${Math.round(w * escala)}x${Math.round(h * escala)}`,
+      capas: (documento.capas || []).length,
+    }) + "\n",
   );
   return 0;
 }

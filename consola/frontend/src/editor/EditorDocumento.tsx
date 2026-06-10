@@ -20,7 +20,6 @@ import {
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
-  Loader2,
   Maximize2,
   MoreHorizontal,
   Redo2,
@@ -31,9 +30,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-
 import { BarraContextual } from "./BarraContextual";
+import { ExportarDialogo } from "./ExportarDialogo";
 import { BotonesMuestra } from "./BotonesMuestra";
 import { Lienzo } from "./Lienzo";
 import { PanelGaleria } from "./PanelGaleria";
@@ -87,16 +85,16 @@ const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes
 export function EditorDocumento({
   store,
   marca,
-  onExportar,
-  exportando,
+  exportar,
   onPlantillas,
   avisaHueco,
   onAbrirAdaptado,
 }: {
   store: StoreEditor;
   marca: string;
-  onExportar?: () => void;
-  exportando?: boolean;
+  // Config de EXPORTACIÓN: presente => muestra el botón «Exportar» (diálogo de descarga con
+  // formato/calidad/escala). Ausente (p. ej. overlay de vídeo) => sin botón de export.
+  exportar?: { bindings?: Record<string, string>; nombre?: string };
   onPlantillas?: () => void;
   // Si la pestaña está atada a plantilla, avisa cuando NO hay capa marcada como hueco de foto.
   avisaHueco?: boolean;
@@ -369,11 +367,8 @@ export function EditorDocumento({
               >
                 <Redo2 className="h-4 w-4" />
               </button>
-              {onExportar && (
-                <Button size="sm" className="ml-1" onClick={onExportar} disabled={exportando}>
-                  {exportando && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-                  Exportar
-                </Button>
+              {exportar && (
+                <ExportarDialogo store={store} bindings={exportar.bindings} nombre={exportar.nombre} />
               )}
             </div>
           </div>

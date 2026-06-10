@@ -92,6 +92,7 @@ from ._documento import (
     componer_desde_plantilla_bytes,
     documento_desde_plantilla,
     documento_tiene_hueco,
+    normalizar_opciones_export,
     parsear_encuadre,
     renderizar_documento,
     renderizar_documento_bytes,
@@ -132,6 +133,7 @@ __all__ = [
     "componer_bytes",
     "previsualizar_spec_bytes",
     # Documento de capas / plantilla con fotos / fronteras
+    "normalizar_opciones_export",
     "renderizar_documento",
     "renderizar_documento_bytes",
     "componer_desde_plantilla",

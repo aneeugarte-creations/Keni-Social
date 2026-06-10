@@ -2,16 +2,28 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion } from "./_core";
 
+// Opciones de EXPORT del editor (descarga con formato/calidad/escala). Sin opciones -> PNG a escala 1.
+export interface OpcionesExport {
+  formato?: "png" | "jpg";
+  calidad?: number; // 1-100, solo aplica a jpg
+  escala?: number; // 0.25-4
+}
+
 export const apiImagen = {
   // --- Editor profesional (Documento de capas) ---
-  // Re-render server-side de un documento de capas a PNG (fidelidad exacta de fuentes/cover/
+  // Re-render server-side de un documento de capas a imagen (fidelidad exacta de fuentes/cover/
   // degradados). El `documento` se valida en el backend (`motores/estudio_imagen/documento.py`).
   // `bindings` (opcional): titular/pleca REAL de la pieza (`copy_in`/`etiqueta_default`) para que
   // las capas con `binding` rendericen el texto real en vez del de muestra. Sin pieza no se pasa.
-  imagenRender: (documento: unknown, bindings?: Record<string, string>) =>
+  // `opciones` (opcional): formato/calidad/escala del export (def PNG a escala 1); el back valida.
+  imagenRender: (
+    documento: unknown,
+    bindings?: Record<string, string>,
+    opciones?: OpcionesExport,
+  ) =>
     peticion<{ id: string; url: string }>("/imagen/render", {
       metodo: "POST",
-      json: { documento, bindings },
+      json: { documento, bindings, opciones },
       timeoutMs: 120_000,
     }),
   // Documento de capas editable derivado de la plantilla de una marca (punto de partida del editor).
