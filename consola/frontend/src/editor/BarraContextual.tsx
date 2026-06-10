@@ -16,6 +16,7 @@ import {
   Italic,
   Replace,
   Settings2,
+  Strikethrough,
   Underline,
 } from "lucide-react";
 
@@ -228,19 +229,31 @@ export function BarraContextual({
           })()}
           {(() => {
             const c = capa as CapaTexto;
-            // El texto en ARCO (curva) no se subraya en ningún lado (ni Konva TextPath ni el
-            // export): el botón se apaga para no prometer nada que la pieza final no tenga.
+            // El texto en ARCO (curva) no se subraya NI se tacha en ningún lado (ni Konva
+            // TextPath ni el export): ambos botones se apagan para no prometer nada que la pieza
+            // final no tenga.
             const enArco = !!c.curva?.radio;
             return (
-              <BotonIcono
-                titulo={enArco ? "El texto en arco no admite subrayado" : "Subrayado"}
-                ariaLabel="Subrayado"
-                activo={!enArco && !!c.subrayado}
-                deshabilitado={enArco}
-                onClick={() => set({ subrayado: !c.subrayado } as Partial<Capa>)}
-              >
-                <Underline className="h-4 w-4" />
-              </BotonIcono>
+              <>
+                <BotonIcono
+                  titulo={enArco ? "El texto en arco no admite subrayado" : "Subrayado"}
+                  ariaLabel="Subrayado"
+                  activo={!enArco && !!c.subrayado}
+                  deshabilitado={enArco}
+                  onClick={() => set({ subrayado: !c.subrayado } as Partial<Capa>)}
+                >
+                  <Underline className="h-4 w-4" />
+                </BotonIcono>
+                <BotonIcono
+                  titulo={enArco ? "El texto en arco no admite tachado" : "Tachado"}
+                  ariaLabel="Tachado"
+                  activo={!enArco && !!c.tachado}
+                  deshabilitado={enArco}
+                  onClick={() => set({ tachado: !c.tachado } as Partial<Capa>)}
+                >
+                  <Strikethrough className="h-4 w-4" />
+                </BotonIcono>
+              </>
             );
           })()}
           <Swatch color={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} titulo="Color del texto" />

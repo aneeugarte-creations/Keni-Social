@@ -162,9 +162,14 @@ export interface CapaTexto extends CapaBase {
   // renders ignoran el flag (nadie sintetiza oblicuas). Opcional; default false (solo se persiste si true).
   cursiva?: boolean;
   // SUBRAYADO: línea bajo cada línea de texto (grosor ∝ tamaño, color del relleno), pintada igual
-  // por el editor (Konva `textDecoration`) y el export (`dibujarSubrayadoLinea` en dibujar.mjs).
+  // por el editor (Konva `textDecoration`) y el export (`dibujarDecoracionLinea` en dibujar.mjs).
   // El texto en arco (`curva`) no se subraya en ningún lado. Opcional; default false (solo se persiste si true).
   subrayado?: boolean;
+  // TACHADO: línea a MEDIA altura de cada línea de texto (misma geometría que el `textDecoration:
+  // "line-through"` de Konva; combinable con el subrayado), pintada igual por el editor y el
+  // export (`dibujarDecoracionLinea` en dibujar.mjs). El texto en arco no se tacha en ningún lado.
+  // Opcional; default false (solo se persiste si true).
+  tachado?: boolean;
   color: string;
   alineacion: Alineacion;
   mayusculas: boolean;

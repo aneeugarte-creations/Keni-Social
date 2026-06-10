@@ -14,14 +14,15 @@ describe("estiloDe", () => {
     expect("w" in e.campos).toBe(false);
   });
 
-  it("texto: cursiva y subrayado son parte del estilo (si están presentes en la capa)", () => {
-    const t = nuevaCapaTexto({ cursiva: true, subrayado: true });
+  it("texto: cursiva, subrayado y tachado son parte del estilo (si están presentes en la capa)", () => {
+    const t = nuevaCapaTexto({ cursiva: true, subrayado: true, tachado: true });
     const e = estiloDe(t);
-    expect(e.campos).toMatchObject({ cursiva: true, subrayado: true });
+    expect(e.campos).toMatchObject({ cursiva: true, subrayado: true, tachado: true });
     // Una capa sin esos flags (opcionales) no los inyecta como `undefined`.
     const sin = estiloDe(nuevaCapaTexto());
     expect("cursiva" in sin.campos).toBe(false);
     expect("subrayado" in sin.campos).toBe(false);
+    expect("tachado" in sin.campos).toBe(false);
   });
 
   it("imagen: NO copia objeto/crop/foco/zoom/es_foto", () => {

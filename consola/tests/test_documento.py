@@ -251,6 +251,21 @@ def test_validar_capa_texto_cursiva_subrayado_solo_si_true():
     assert redoc["cursiva"] is True and redoc["subrayado"] is True
 
 
+def test_validar_capa_texto_tachado_solo_si_true():
+    # Tachado (line-through, combinable con el subrayado): mismo contrato que cursiva/subrayado —
+    # opcional, default False, solo se persiste si True (round-trip editor -> servidor -> render).
+    base = {"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0, "texto": "hola", "color": "#FFFFFF"}
+    sin = d.validar(_doc(capas=[dict(base)]))["capas"][0]
+    assert "tachado" not in sin
+    falso = d.validar(_doc(capas=[dict(base, tachado=False)]))["capas"][0]
+    assert "tachado" not in falso
+    con = d.validar(_doc(capas=[dict(base, tachado=True, subrayado=True)]))["capas"][0]
+    assert con["tachado"] is True and con["subrayado"] is True
+    # Re-validar el documento ya validado no lo pierde (idempotente).
+    redoc = d.validar(_doc(capas=[con]))["capas"][0]
+    assert redoc["tachado"] is True and redoc["subrayado"] is True
+
+
 def test_validar_marco_y_overlay_y_grupo():
     doc = d.validar(_doc(capas=[
         {"tipo": "marco", "x": 0, "y": 0, "w": 100, "h": 100, "forma": "rect",

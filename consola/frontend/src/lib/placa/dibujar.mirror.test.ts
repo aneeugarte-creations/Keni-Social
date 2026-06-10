@@ -940,3 +940,88 @@ describe("subrayado (espejo de la geometría de Konva)", () => {
     expect(ctx.strokes).toHaveLength(0);
   });
 });
+
+describe("tachado (line-through, espejo de la geometría de Konva)", () => {
+  // Capa por defecto de `docConTexto`: "HOLA" en (100,200) w=800 h=0, tamaño 100, interlineado 1
+  // => top de línea 200, altoLinea 100; tachado a MEDIA altura: y = 200 + 100/2 = 250; ancho
+  // medido 4×100×0.5 = 200 (stub). Grosor = tam/15; color = relleno.
+  it("traza la línea a media altura: grosor tam/15, color del relleno, ancho de la línea", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({ tachado: true }), imgs: {}, bindings: {} } as never);
+    expect(ctx.strokes).toHaveLength(1);
+    expect(ctx.strokes[0].lineWidth).toBeCloseTo(100 / 15, 5);
+    expect(ctx.strokes[0].estilo).toBe("#FFFFFF");
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,250")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "300,250")).toBe(true);
+  });
+
+  it("RETROCOMPAT: sin `tachado` no se traza nada (cero strokes)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({}), imgs: {}, bindings: {} } as never);
+    expect(ctx.strokes).toHaveLength(0);
+  });
+
+  it("COMBINABLE con subrayado: dos trazos, subrayado bajo la línea (300) y tachado a media (250)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ subrayado: true, tachado: true }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.strokes).toHaveLength(2);
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,300")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,250")).toBe(true);
+  });
+
+  it("respeta la alineación: centrado, la línea queda centrada en la caja", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ tachado: true, alineacion: "centro" }), imgs: {}, bindings: {} } as never,
+    );
+    // tx = 100 + 800/2 = 500; ancho 200 => de 400 a 600, a media altura (250).
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "400,250")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "600,250")).toBe(true);
+  });
+
+  it("con sombra LEGADA pinta primero la copia desplazada en el color de la sombra", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ tachado: true, sombra: { dx: 4, dy: 6, color: "#000000" } }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.strokes).toHaveLength(2);
+    expect(ctx.strokes[0].estilo).toBe("#000000");
+    expect(ctx.strokes[1].estilo).toBe("#FFFFFF");
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "104,256")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,250")).toBe(true);
+  });
+
+  it("JUSTIFICADO: las líneas no-últimas se tachan a todo el ancho de la caja; la última, a su medida", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      {
+        // Wrap del stub: "AAAA BBBB CCCC" (700px) + "DDDD" (200px) en caja de 800.
+        documento: docConTexto({ tachado: true, alineacion: "justificado", texto: "AAAA BBBB CCCC DDDD" }),
+        imgs: {},
+        bindings: {},
+      } as never,
+    );
+    expect(ctx.strokes).toHaveLength(2);
+    // Línea 1 (no última): ancho completo de la caja, de x=100 a x=900, en y=250 (media altura).
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,250")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "900,250")).toBe(true);
+    // Línea 2 (última): solo su ancho medido (200), de x=100 a x=300, en y=350.
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,350")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "300,350")).toBe(true);
+  });
+
+  it("el texto en ARCO no se tacha (paridad con el editor, que tampoco lo pinta)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ tachado: true, curva: { radio: 600 } }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.strokes).toHaveLength(0);
+  });
+});

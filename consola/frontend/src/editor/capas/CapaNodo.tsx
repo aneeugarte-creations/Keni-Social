@@ -617,10 +617,11 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           fontFamily={familiaReal(c.familia)}
           fontSize={c.tamano}
           fontStyle={estiloFuente(c)}
-          // SUBRAYADO end-to-end: Konva pinta la línea bajo cada línea de texto; el export replica
-          // su geometría exacta (`dibujarSubrayadoLinea` en dibujar.mjs). El texto en arco
-          // (TextPath, arriba) NO lo recibe: el export tampoco lo subraya (paridad previa==final).
-          textDecoration={c.subrayado ? "underline" : ""}
+          // SUBRAYADO y TACHADO end-to-end: Konva pinta la línea bajo cada línea de texto
+          // ("underline") y/o a media altura ("line-through", combinables); el export replica su
+          // geometría exacta (`dibujarDecoracionLinea` en dibujar.mjs). El texto en arco
+          // (TextPath, arriba) NO los recibe: el export tampoco los pinta (paridad previa==final).
+          textDecoration={[c.subrayado ? "underline" : "", c.tachado ? "line-through" : ""].filter(Boolean).join(" ")}
           fill={gradTexto ? undefined : c.color}
           {...(gradTexto ?? {})}
           align={ALIN[c.alineacion] ?? "left"}

@@ -134,3 +134,25 @@ describe("BarraContextual — cursiva (I) y subrayado (U)", () => {
     expect(capaTexto(store).subrayado).toBeUndefined();
   });
 });
+
+describe("BarraContextual — tachado (S)", () => {
+  it("S conmuta `tachado` (combinable con el subrayado)", () => {
+    const store = montarConTexto({ subrayado: true });
+    const btn = screen.getByRole("button", { name: "Tachado" });
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(capaTexto(store).tachado).toBe(true);
+    expect(capaTexto(store).subrayado).toBe(true); // no se pisan
+    fireEvent.click(btn);
+    expect(capaTexto(store).tachado).toBe(false);
+  });
+
+  it("S queda DESHABILITADO para el texto en arco (curva), con tooltip (mismo trato que U)", () => {
+    const store = montarConTexto({ curva: { radio: 600 } });
+    const btn = screen.getByRole("button", { name: "Tachado" });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("title", "El texto en arco no admite tachado");
+    fireEvent.click(btn);
+    expect(capaTexto(store).tachado).toBeUndefined();
+  });
+});

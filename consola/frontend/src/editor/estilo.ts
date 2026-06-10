@@ -4,8 +4,9 @@
 //
 // Reglas de diseño:
 // - Común a todas las capas: `opacidad`, `mezcla`.
-// - Texto: tipografía y efectos (familia, tamaño, peso, cursiva, subrayado, color, alineación,
-//   valign, mayúsculas, interlineado, interletra, contorno, sombra, chip, relleno_degradado, curva).
+// - Texto: tipografía y efectos (familia, tamaño, peso, cursiva, subrayado, tachado, color,
+//   alineación, valign, mayúsculas, interlineado, interletra, contorno, sombra, chip,
+//   relleno_degradado, curva).
 // - Marco: forma, relleno, borde, radio(s), relleno_degradado, sombra.
 // - Imagen: forma, radio(s), ajuste, filtros, sombra. NUNCA copia `objeto`/`crop`/`foco`/`zoom`/
 //   `es_foto` (son contenido/encuadre de ESA foto, no estilo transferible).
@@ -27,8 +28,8 @@ const COMUNES = ["opacidad", "mezcla"] as const;
 // Campos de estilo por tipo de capa (además de los comunes). Mantener alineado con `documento.ts`.
 const POR_TIPO: Partial<Record<TipoCapa, readonly string[]>> = {
   texto: [
-    "familia", "tamano", "peso", "cursiva", "subrayado", "color", "alineacion", "valign", "mayusculas",
-    "interlineado", "interletra", "contorno", "sombra", "chip", "relleno_degradado", "curva",
+    "familia", "tamano", "peso", "cursiva", "subrayado", "tachado", "color", "alineacion", "valign",
+    "mayusculas", "interlineado", "interletra", "contorno", "sombra", "chip", "relleno_degradado", "curva",
   ],
   marco: ["forma", "relleno", "borde", "radio", "radios", "relleno_degradado", "sombra"],
   imagen: ["forma", "radio", "radios", "ajuste", "filtros", "sombra"],

@@ -486,11 +486,16 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
     if (t.chip && ln.trim()) {
       dibujarChipLinea(ctx, t, ctx.measureText(ln).width, y, altoLinea, tx);
     }
-    // SUBRAYADO: una línea bajo CADA línea de texto, ANTES de los glifos (como el `textDecoration`
-    // de Konva, cuya geometría espeja `dibujarSubrayadoLinea`). El texto curvo no se subraya en
-    // ninguno de los dos lados (el camino curvo retorna antes de llegar aquí).
+    // SUBRAYADO y TACHADO: líneas decorativas por CADA línea de texto, ANTES de los glifos (mismo
+    // orden que el `textDecoration` de Konva, cuya geometría espeja `dibujarDecoracionLinea`:
+    // subrayado a `altoLinea/2 + round(tam/2)` del tope de la línea; tachado a MEDIA altura,
+    // `altoLinea/2`). El texto curvo no se decora en ninguno de los dos lados (el camino curvo
+    // retorna antes de llegar aquí).
     if (t.subrayado && ln.trim()) {
-      dibujarSubrayadoLinea(ctx, t, ln, y, altoLinea, tam, tx, relleno, sombra, sombraReal, justif && !ultima);
+      dibujarDecoracionLinea(ctx, t, ln, y + altoLinea / 2 + Math.round(tam / 2), tam, tx, relleno, sombra, sombraReal, justif && !ultima);
+    }
+    if (t.tachado && ln.trim()) {
+      dibujarDecoracionLinea(ctx, t, ln, y + altoLinea / 2, tam, tx, relleno, sombra, sombraReal, justif && !ultima);
     }
     if (justif && !ultima) {
       dibujarLineaJustificada(ctx, ln, t.x, y, t.w, relleno, sombra, contorno);
@@ -543,18 +548,19 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   if (interletra) ctx.letterSpacing = "0px";
 }
 
-// Subraya UNA línea de texto. ESPEJO de la geometría del `textDecoration: "underline"` de Konva
-// Text (lo que pinta el editor): grosor `tam/15`, color del relleno (sólido o degradado), a
-// `altoLinea/2 + round(tam/2)` bajo el tope de la línea, con el ancho MEDIDO de la línea según la
-// alineación — salvo en justificado, donde las líneas no-últimas se subrayan a todo el ancho de la
-// caja (`anchoCompleto`). La sombra sigue el mismo doble camino que el texto: LEGADA = copia
-// desplazada en el color de la sombra; REAL = la proyecta el propio trazo (blur/opacidad nativos).
-function dibujarSubrayadoLinea(ctx, t, ln, lineTop, altoLinea, tam, tx, relleno, sombra, sombraReal, anchoCompleto) {
+// Subraya o tacha UNA línea de texto: traza una línea horizontal a la altura `uy` (px de lienzo,
+// la calcula el llamador). ESPEJO de la geometría del `textDecoration` de Konva Text ("underline"
+// a `altoLinea/2 + round(tam/2)` del tope de la línea; "line-through" a media altura,
+// `altoLinea/2`): grosor `tam/15`, color del relleno (sólido o degradado), con el ancho MEDIDO de
+// la línea según la alineación — salvo en justificado, donde las líneas no-últimas se decoran a
+// todo el ancho de la caja (`anchoCompleto`). La sombra sigue el mismo doble camino que el texto:
+// LEGADA = copia desplazada en el color de la sombra; REAL = la proyecta el propio trazo
+// (blur/opacidad nativos).
+function dibujarDecoracionLinea(ctx, t, ln, uy, tam, tx, relleno, sombra, sombraReal, anchoCompleto) {
   const ancho = anchoCompleto ? t.w : ctx.measureText(ln).width;
   const x = t.alineacion === "centro" ? tx - ancho / 2
     : t.alineacion === "derecha" ? tx - ancho
     : t.x;
-  const uy = lineTop + altoLinea / 2 + Math.round(tam / 2);
   const traza = (dx, dy, color) => {
     ctx.beginPath();
     ctx.moveTo(x + dx, uy + dy);
