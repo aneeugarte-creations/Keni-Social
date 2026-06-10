@@ -131,7 +131,7 @@ function FilaAjuste({
 
   if (ajuste.tipo === "select") {
     return (
-      <div className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 py-3 last:border-0 sm:gap-4">
         {cabecera}
         <Select
           value={String(ajuste.valor) || "_vacio"}
@@ -162,7 +162,7 @@ function FilaAjuste({
     }
   };
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 py-3 last:border-0 sm:gap-4">
       {cabecera}
       <Input
         type="number"

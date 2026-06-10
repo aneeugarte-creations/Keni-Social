@@ -92,8 +92,8 @@ function Contenido({ pieza }: { pieza: PiezaMetrica }) {
         </DialogDescription>
       </DialogHeader>
 
-      {/* Agregados principales. */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Agregados principales. En móvil apilados (3 columnas no caben en un diálogo de 360px). */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Kpi etiqueta="Vistas" valor={numeroCompacto(pieza.visualizaciones)} />
         <Kpi etiqueta="Interacciones" valor={numeroCompacto(pieza.interacciones)} />
         <Kpi etiqueta="Engagement" valor={porcentaje(pieza.engagement_pct)} />
@@ -186,7 +186,7 @@ function CurvaHistorica({
         className="h-44"
       />
       {data.velocidad ? (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Kpi
             etiqueta="En 24 h"
             valor={

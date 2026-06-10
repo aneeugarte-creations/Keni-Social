@@ -403,7 +403,11 @@ function VistaMes({
   const celdas = celdasDelMes(ancla);
   const mesActual = ancla.getMonth();
   return (
-    <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
+    // MÓVIL: 7 columnas no caben en 360-430px (celdas de ~50px, ilegibles). La cuadrícula
+    // conserva un ancho mínimo legible y scrollea en horizontal dentro de su contenedor;
+    // el `main` global clampa el eje X, así que el swipe queda acotado al calendario.
+    <div className="overflow-x-auto rounded-md border border-border">
+    <div className="grid min-w-[560px] grid-cols-7 gap-px bg-border">
       {DIAS_SEMANA.map((d) => (
         <div
           key={d}
@@ -464,6 +468,7 @@ function VistaMes({
         );
       })}
     </div>
+    </div>
   );
 }
 
@@ -494,7 +499,9 @@ function VistaSemana({
   ocupado: boolean;
 }) {
   return (
-    <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
+    // MÓVIL: mismo tratamiento que la vista MES — la semana scrollea en horizontal.
+    <div className="overflow-x-auto rounded-md border border-border">
+    <div className="grid min-w-[640px] grid-cols-7 gap-px bg-border">
       {dias.map((dia, i) => {
         const clave = claveDia(dia);
         const esHoy = clave === hoy;
@@ -553,6 +560,7 @@ function VistaSemana({
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

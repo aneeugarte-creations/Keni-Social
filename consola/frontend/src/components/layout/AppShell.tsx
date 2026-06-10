@@ -11,6 +11,7 @@ import { EncabezadoSeccion } from "@/components/layout/EncabezadoSeccion";
 import { ProveedorEncabezado, type EncabezadoCtx } from "@/components/layout/encabezado";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
+import { useEsEscritorio } from "@/hooks/use-media-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useDetectorActualizacion } from "@/lib/version";
@@ -66,10 +67,20 @@ export function AppShell() {
   // para no romper el contrato de `<TituloPagina/>`.
   const [slotInicio, setSlotInicio] = React.useState<HTMLElement | null>(null);
   const [slotAcciones, setSlotAcciones] = React.useState<HTMLElement | null>(null);
+  // MÓVIL: las acciones de página NO caben en la topbar (una sola fila de h-12 que ya
+  // lleva hamburguesa + sección + contexto + campana; un selector de 200px la desborda
+  // y quedaba CORTADO, p. ej. los atajos de Métricas). Bajo `md` el portal de acciones
+  // apunta a una FILA PROPIA debajo del header (oculta si la página no porta acciones).
+  const [slotAccionesMovil, setSlotAccionesMovil] = React.useState<HTMLElement | null>(null);
+  const esEscritorio = useEsEscritorio();
   const registrarTitulo = React.useCallback(() => () => {}, []);
   const ctxEncabezado = React.useMemo<EncabezadoCtx>(
-    () => ({ slotInicio, slotAcciones, registrarTitulo }),
-    [slotInicio, slotAcciones, registrarTitulo],
+    () => ({
+      slotInicio,
+      slotAcciones: esEscritorio ? slotAcciones : slotAccionesMovil,
+      registrarTitulo,
+    }),
+    [slotInicio, slotAcciones, slotAccionesMovil, esEscritorio, registrarTitulo],
   );
 
   // Hidrata la caché de límites de caracteres desde la fuente única del backend
@@ -147,6 +158,15 @@ export function AppShell() {
             <CampanaNotificaciones />
           </div>
         </header>
+
+        {/* Acciones de página en MÓVIL: fila propia bajo el header (el portal de
+            `AccionesPagina` apunta aquí bajo `md`). `empty:hidden` la colapsa del todo
+            en páginas sin acciones; `flex-wrap` deja que selectores y botones respiren
+            en columna o en varias líneas sin desbordar el viewport. */}
+        <div
+          ref={setSlotAccionesMovil}
+          className="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2 empty:hidden md:hidden"
+        />
 
         {/* `overflow-x-hidden`: el scroll real es VERTICAL. Sin esto, `overflow-y-auto`
             promueve el eje X a `auto` (regla CSS: si un eje no es `visible`, el otro `visible`

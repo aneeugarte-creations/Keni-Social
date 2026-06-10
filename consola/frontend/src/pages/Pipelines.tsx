@@ -542,7 +542,7 @@ export default function Pipelines() {
       {/* Filtros: por la etapa donde está parada la run y por su estado global. */}
       <div className="flex flex-wrap items-center gap-2">
         <Select value={etapa || "todas"} onValueChange={(v) => setEtapa(v === "todas" ? "" : v)}>
-          <SelectTrigger className="h-9 w-[200px]"><SelectValue placeholder="Etapa" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-full sm:w-[200px]"><SelectValue placeholder="Etapa" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todas">Todas las etapas</SelectItem>
             {ETAPAS_FILTRO.map((e) => (
@@ -551,7 +551,7 @@ export default function Pipelines() {
           </SelectContent>
         </Select>
         <Select value={estado || "todos"} onValueChange={(v) => setEstado(v === "todos" ? "" : v)}>
-          <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="Estado" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-full sm:w-[170px]"><SelectValue placeholder="Estado" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Cualquier estado</SelectItem>
             {ESTADOS_FILTRO.map((e) => (

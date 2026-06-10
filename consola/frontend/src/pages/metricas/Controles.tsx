@@ -130,9 +130,11 @@ export function SelectorTiempo({
       )}
 
       {modo === "mes" && (
-        <div className="flex gap-2">
+        // En móvil los dos selects comparten la fila a partes iguales (grid); en `sm+`
+        // vuelven a sus anchos naturales. Antes los 140px+100px fijos desbordaban la barra.
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <Select value={String(mes)} onValueChange={(m) => onCambio(tokenMes(anio, Number(m)))}>
-            <SelectTrigger className="w-[140px]" aria-label="Mes">
+            <SelectTrigger className="w-full sm:w-[140px]" aria-label="Mes">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -144,7 +146,7 @@ export function SelectorTiempo({
             </SelectContent>
           </Select>
           <Select value={String(anio)} onValueChange={(a) => onCambio(tokenMes(Number(a), mes))}>
-            <SelectTrigger className="w-[100px]" aria-label="Año">
+            <SelectTrigger className="w-full sm:w-[100px]" aria-label="Año">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -159,23 +161,25 @@ export function SelectorTiempo({
       )}
 
       {modo === "personalizado" && (
-        <div className="flex items-center gap-2">
+        // En móvil las dos fechas comparten la fila a partes iguales; el guion solo se
+        // pinta en `sm+` (en estrecho no aporta y robaba sitio a los inputs de 150px).
+        <div className="grid w-full grid-cols-2 items-center gap-2 sm:flex sm:w-auto">
           <Input
             type="date"
             value={desde}
             max={hasta || undefined}
             onChange={(e) => aplicarPersonalizado(e.target.value, hasta)}
             aria-label="Desde"
-            className="w-[150px]"
+            className="w-full sm:w-[150px]"
           />
-          <span className="text-muted-foreground">–</span>
+          <span className="hidden text-muted-foreground sm:inline">–</span>
           <Input
             type="date"
             value={hasta}
             min={desde || undefined}
             onChange={(e) => aplicarPersonalizado(desde, e.target.value)}
             aria-label="Hasta"
-            className="w-[150px]"
+            className="w-full sm:w-[150px]"
           />
         </div>
       )}
