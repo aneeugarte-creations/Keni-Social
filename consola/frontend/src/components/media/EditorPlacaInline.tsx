@@ -113,6 +113,10 @@ export function EditorPlacaInline({
     },
     [onFotosCambio],
   );
+  // Slot objetivo para trabajos en progreso (subida, IA). Capturado en el momento de iniciar
+  // el trabajo para evitar condiciones de carrera si el usuario cambia de hueco mientras genera.
+  const slotEnProgreso = React.useRef(slotActivo);
+
   // Cambia la FOTO (media id) del hueco activo. Al cambiar la imagen, reseteamos su reencuadre.
   const cambiarFotoActiva = React.useCallback(
     (id: string) => {
@@ -198,6 +202,7 @@ export function EditorPlacaInline({
         // Mientras se edita el titular in place, el canvas NO lo dibuja: lo muestra el overlay.
         bindings: { copy_in: editandoTitular ? "" : copyIn, etiqueta_default: "" },
         familiaReal: familiaRealDe(documento.fuentes),
+        final: true,
       });
     } else {
       // Sin plantilla: solo la foto cruda del hueco 0 (cover con su reencuadre) o un fondo neutro.
@@ -231,17 +236,37 @@ export function EditorPlacaInline({
 
   React.useEffect(() => {
     if (!fuentesListas) return;
-    const t = setTimeout(render, 120);
-    return () => clearTimeout(t);
+    let rafId: number | null = null;
+    const scheduleRender = () => {
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          render();
+          rafId = null;
+        });
+      }
+    };
+    scheduleRender();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, [render, fuentesListas]);
 
   // --- Origen de la FOTO (escribe en el hueco activo) --- //
   const subir = useMutation({
     mutationFn: (archivo: File) => api.subirMedia(archivo),
-    onSuccess: (d) => cambiarFotoActiva(d.id),
+    onSuccess: (d) => {
+      cambiarHueco(slotEnProgreso.current, { objeto: d.id, foco: null, zoom: 0 });
+      setFuenteAbierta(false);
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
   const { generacion: genIA, ejecutando: generandoIA, iniciar: iniciarIA } = useGeneracion();
+  // Handler para iniciar generación con IA: captura el slot activo en este momento.
+  const iniciarGeneracion = React.useCallback(() => {
+    slotEnProgreso.current = slotActivo;
+    generar.mutate();
+  }, [slotActivo]);
+
   const generar = useMutation({
     mutationFn: () => api.generarMedia({ prompt: prompt.trim() }),
     onSuccess: (d) => {
@@ -264,13 +289,14 @@ export function EditorPlacaInline({
       const r = genIA.resultado;
       if (r?.id) {
         setPrompt("");
-        cambiarFotoActiva(r.id);
+        cambiarHueco(slotEnProgreso.current, { objeto: r.id, foco: null, zoom: 0 });
+        setFuenteAbierta(false);
       }
     } else if (genIA.estado === "error") {
       iaTerminal.current = genIA.id;
       toast.error(genIA.error || "No se pudo generar la imagen.");
     }
-  }, [genIA, cambiarFotoActiva]);
+  }, [genIA, cambiarHueco]);
 
   // --- Reencuadre manual: arrastrar para encuadrar + zoom dentro del HUECO activo --- //
   // Caja (en px de lienzo) de un hueco i: su rect en el diseño, o el lienzo entero sin plantilla.
@@ -429,7 +455,10 @@ export function EditorPlacaInline({
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
-    if (archivo) subir.mutate(archivo);
+    if (archivo) {
+      slotEnProgreso.current = slotActivo;
+      subir.mutate(archivo);
+    }
     if (inputRef.current) inputRef.current.value = "";
   }
   function elegirArte(arte: Arte) {
@@ -523,7 +552,7 @@ export function EditorPlacaInline({
           setGaleriaAbierta(true);
         }}
         onSubir={() => inputRef.current?.click()}
-        onGenerar={() => generar.mutate()}
+        onGenerar={iniciarGeneracion}
       />
 
       <SelectorArtes

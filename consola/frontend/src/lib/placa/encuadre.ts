@@ -43,9 +43,12 @@ export function parsearEncuadre(json: string | undefined | null): EncuadreFoto |
     const datos = JSON.parse(json) as { foco?: unknown; zoom?: unknown };
     const foco = Array.isArray(datos.foco) && datos.foco.length === 2 ? datos.foco : null;
     if (!foco) return null;
+    const fx = Number(foco[0]);
+    const fy = Number(foco[1]);
+    const z = Number(datos.zoom);
     return normalizarEncuadre({
-      foco: [Number(foco[0]) || 0.5, Number(foco[1]) || 0.5],
-      zoom: Number(datos.zoom) || 1,
+      foco: [Number.isFinite(fx) ? pinza(fx, 0, 1) : 0.5, Number.isFinite(fy) ? pinza(fy, 0, 1) : 0.5],
+      zoom: Number.isFinite(z) ? pinza(z, 1, 6) : 1,
     });
   } catch {
     return null;
@@ -72,14 +75,16 @@ export function parsearFotos(json: string | undefined | null): FotoCollage[] {
     if (!Array.isArray(datos)) return [];
     return datos.map((d): FotoCollage => {
       const reg = (d ?? {}) as { objeto?: unknown; foco?: unknown; zoom?: unknown };
-      const foco =
-        Array.isArray(reg.foco) && reg.foco.length === 2
-          ? ([Number(reg.foco[0]) || 0.5, Number(reg.foco[1]) || 0.5] as [number, number])
-          : null;
+      const foco = Array.isArray(reg.foco) && reg.foco.length === 2 ? (reg.foco as [unknown, unknown]) : null;
+      const fx = foco ? Number(foco[0]) : NaN;
+      const fy = foco ? Number(foco[1]) : NaN;
+      const parsedFoco =
+        Number.isFinite(fx) && Number.isFinite(fy) ? ([pinza(fx, 0, 1), pinza(fy, 0, 1)] as [number, number]) : null;
+      const z = Number(reg.zoom);
       return {
         objeto: typeof reg.objeto === "string" ? reg.objeto : "",
-        foco,
-        zoom: Number(reg.zoom) || 0,
+        foco: parsedFoco,
+        zoom: Number.isFinite(z) && z > 0 ? pinza(z, 1, 6) : 0,
       };
     });
   } catch {

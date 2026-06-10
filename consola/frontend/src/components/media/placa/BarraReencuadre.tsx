@@ -45,7 +45,7 @@ export function BarraReencuadre({
         <input
           type="range"
           min={1}
-          max={3}
+          max={6}
           step={0.02}
           value={encActivo.zoom}
           onChange={(e) => onZoom(Number(e.target.value))}
