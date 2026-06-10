@@ -17,6 +17,7 @@ vi.mock("./Lienzo", () => ({ Lienzo: () => <div data-testid="lienzo" /> }));
 vi.mock("./PanelElementos", () => ({ PanelElementos: () => <div>panel-elementos</div> }));
 vi.mock("./PanelGaleria", () => ({ PanelGaleria: () => <div>panel-galeria</div> }));
 vi.mock("./PanelMarca", () => ({ PanelMarca: () => <div>panel-marca</div> }));
+vi.mock("./PanelSubidas", () => ({ PanelSubidas: () => <div>panel-subidas</div> }));
 vi.mock("./Paneles", () => ({
   Inspector: () => <div>inspector</div>,
   PanelCapas: () => <div>panel-capas</div>,
@@ -44,16 +45,26 @@ describe("EditorDocumento — rail estilo Canva", () => {
     montar({ panelDiseno: <div>panel-de-plantillas</div> });
     const botones = within(railEscritorio()).getAllByRole("button");
     expect(botones[0]).toHaveTextContent("Diseño");
-    // Orden completo del rail (estilo Canva): Diseño · Elementos · Galería · Marca · Capas ·
-    // Ajustes. «Marca» (Brand Kit) va tras Galería y antes de Capas.
+    // Orden completo del rail (estilo Canva): Diseño · Elementos · Galería · Marca · Subidas ·
+    // Capas · Ajustes. «Subidas» (tus propias fotos) va tras Marca y antes de Capas.
     expect(botones.map((b) => b.textContent)).toEqual([
       "Diseño",
       "Elementos",
       "Galería",
       "Marca",
+      "Subidas",
       "Capas",
       "Ajustes",
     ]);
+  });
+
+  it("«Subidas» abre el panel de subidas como flyout (y se cierra al re-pulsar)", () => {
+    montar();
+    const boton = within(railEscritorio()).getByTitle("Subidas");
+    fireEvent.click(boton);
+    expect(screen.getByText("panel-subidas")).toBeInTheDocument();
+    fireEvent.click(boton);
+    expect(screen.queryByText("panel-subidas")).not.toBeInTheDocument();
   });
 
   it("«Marca» abre el panel del kit de marca como flyout (y se cierra al re-pulsar)", () => {
