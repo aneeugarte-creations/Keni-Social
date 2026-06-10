@@ -48,6 +48,13 @@ export const apiPublicaciones = {
       metodo: "POST",
       json: cuerpo,
     }),
+  /** Clona el CONTENIDO (copy, copy-in, foto/collage, plantilla) a OTRA RED de la misma idea:
+   *  sobrescribe la pieza hermana de esa red o la crea si la idea no salía ahí. */
+  clonarPublicacion: (id: string, red: string) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/clonar`, {
+      metodo: "POST",
+      json: { red },
+    }),
   encolarPublicacion: (id: string) =>
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/encolar`, {
       metodo: "POST",

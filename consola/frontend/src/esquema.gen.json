@@ -2223,6 +2223,9 @@
         "formato": {
           "type": "string"
         },
+        "espejo": {
+          "type": "boolean"
+        },
         "imagen_fuente": {
           "type": "string"
         },

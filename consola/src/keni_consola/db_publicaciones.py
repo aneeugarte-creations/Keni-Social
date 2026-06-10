@@ -73,7 +73,7 @@ _SELECT_PUBLICACION = (
     "c.fecha_fuente AS fecha_fuente, "
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, "
-    "c.formato AS formato "
+    "c.formato AS formato, c.espejo AS espejo "
     "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una publicacion:
     # el muro `es_publicacion` se retiro al fusionar Tablero y Publicaciones (#fusion). La
@@ -108,6 +108,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # FORMATO de la pieza (foto|video): heredado del `contenido` padre. Decide a qué redes
         # va (`redes.redes_de_formato`). BD vieja / sin valor -> 'foto' (el flujo automático).
         "formato": f["formato"] or "foto",
+        # ESPEJO entre redes (propiedad del padre, default ON): editar el contenido de esta
+        # pieza propaga los mismos campos a sus redes hermanas (api/publicaciones lo aplica).
+        "espejo": bool(f["espejo"]) if f["espejo"] is not None else True,
         "imagen_fuente": f["imagen_fuente"] or "",
         # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
         # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
@@ -519,6 +522,10 @@ def actualizar_publicacion(
         cambios_padre["titulo"] = campos["titulo"]
     if "evergreen" in campos:
         cambios_padre["flujo"] = "evergreen" if campos["evergreen"] else ""
+    # ESPEJO entre redes: vive en el padre (es de la idea, no de una red). Se acepta desde
+    # cualquier pieza hermana (el editor lo togglea desde la red que tenga abierta).
+    if "espejo" in campos:
+        cambios_padre["espejo"] = 1 if campos["espejo"] else 0
 
     ahora = ahora_iso()
     con = _conectar()

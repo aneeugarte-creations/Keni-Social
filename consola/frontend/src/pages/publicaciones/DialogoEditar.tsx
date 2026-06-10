@@ -63,6 +63,10 @@ export function DialogoEditar({
   // es `[{objeto: foto, foco/zoom de foto_encuadre}]`. La pieza lo persiste como JSON en `fotos`.
   const [fotos, setFotos] = React.useState<FotoCollage[]>([]);
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
+  // ESPEJO entre redes (default ON): lo que se edita aquí se aplica también a las demás redes
+  // de la idea (el backend propaga copy/copy-in/foto al guardar). Vive en la idea (padre):
+  // togglearlo desde cualquier red afecta a todas. OFF = cada red se edita por separado.
+  const [espejo, setEspejo] = React.useState(true);
   // Ola F: formato de la pieza ("foto"|"video") + estado del video.
   const [formato, setFormato] = React.useState("foto");
   const [videoKey, setVideoKey] = React.useState("");
@@ -150,6 +154,24 @@ export function DialogoEditar({
     flipFormato.mutate(aVideo ? "video" : "foto");
   };
 
+  // Toggle del espejo: PUT inmediato (no espera al autoguardado debounced; es un ajuste de la
+  // idea, no una edición de contenido). Optimista: el switch responde al instante.
+  const cambiarEspejo = useMutation({
+    mutationFn: (v: boolean) => {
+      if (!publicacion) throw new Error("Sin publicación");
+      return api.actualizarPublicacion(publicacion.id, { espejo: v });
+    },
+    onSuccess: (data) => {
+      setEspejo(data.publicacion.espejo ?? true);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+    },
+    onError: (e, v) => {
+      setEspejo(!v); // revierte el optimismo: el backend no lo aplicó
+      toast.error(mensajeError(e));
+    },
+  });
+
   // Ola F: guardar video (PATCH plataforma con {video}).
   const guardarVideo = useMutation({
     mutationFn: ({ clave }: { clave: string; url: string }) => {
@@ -175,6 +197,7 @@ export function DialogoEditar({
     setImagenUrl(publicacion.imagen_url ?? "");
     setPlacaOculta(publicacion.placa_oculta ?? false);
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
+    setEspejo(publicacion.espejo ?? true);
     // Ola F: formato y video.
     setFormato(publicacion.formato || "foto");
     setVideoKey(publicacion.video ?? "");
@@ -325,7 +348,7 @@ export function DialogoEditar({
         <div className="space-y-4">
           {/* Ola F: toggle Foto/Video. Solo disponible cuando la pieza tiene contenido_id (no vacío). */}
           {publicacion && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Label htmlFor="editar-formato-toggle">Foto</Label>
               <Switch
                 id="editar-formato-toggle"
@@ -334,6 +357,26 @@ export function DialogoEditar({
                 disabled={flipFormato.isPending}
               />
               <Label htmlFor="editar-formato-toggle">Video</Label>
+              {/* ESPEJO entre redes: con él puesto, lo editado aquí se aplica también a las
+                  demás redes de la idea (las ya publicadas no se tocan). Apágalo para que
+                  cada red lleve su propio copy/foto. */}
+              <div className="ml-auto flex items-center gap-2">
+                <Switch
+                  id="editar-espejo-toggle"
+                  checked={espejo}
+                  onCheckedChange={(v) => {
+                    setEspejo(v);
+                    cambiarEspejo.mutate(v);
+                  }}
+                  disabled={cambiarEspejo.isPending}
+                />
+                <Label
+                  htmlFor="editar-espejo-toggle"
+                  title="Con el espejo puesto, lo que edites aquí (copy, texto en imagen, foto) se aplica también a las demás redes de la idea. Apágalo para editar cada red por separado."
+                >
+                  Espejo entre redes
+                </Label>
+              </div>
             </div>
           )}
 

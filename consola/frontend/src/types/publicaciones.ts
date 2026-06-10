@@ -105,6 +105,9 @@ export interface CuerpoActualizarPublicacion {
   foto_encuadre?: string;
   /** COLLAGE: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco. "" = sin collage. */
   fotos?: string;
+  /** ESPEJO entre redes (vive en la idea): editar el contenido de una pieza lo propaga a sus
+   *  redes hermanas. ON por defecto; OFF = cada red se edita por separado. */
+  espejo?: boolean;
 }
 
 /** Respuesta al reciclar una publicación evergreen. */

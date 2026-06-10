@@ -534,6 +534,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         formato             TEXT NOT NULL DEFAULT 'foto',
         id_post_metricool   TEXT NOT NULL DEFAULT '',
         senal_viralidad     INTEGER NOT NULL DEFAULT 0,
+        espejo              INTEGER NOT NULL DEFAULT 1,
         qa_veredicto        TEXT NOT NULL DEFAULT '',
         qa_hallazgos        TEXT NOT NULL DEFAULT '',
         copy_pendiente      TEXT NOT NULL DEFAULT '',
@@ -2586,6 +2587,11 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # (cabecera de grupo del feed) lo muestra junto a `fecha_fuente`; si va vacío (BD vieja,
     # alta manual) la serialización deriva el dominio de `url_fuente`. Legado -> "".
     ("fuente_nombre", "TEXT NOT NULL DEFAULT ''"),
+    # ESPEJO entre redes (default ON): al editar el contenido de una pieza por red (copy,
+    # copy-in, foto/collage, plantilla), los mismos campos se propagan a sus redes hermanas
+    # (las piezas suelen ir parejas en todas las redes). 0 = cada red se edita por separado.
+    # Lo aplica `api/publicaciones.actualizar` (no la capa db). BD vieja -> 1 (espejado).
+    ("espejo", "INTEGER NOT NULL DEFAULT 1"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),

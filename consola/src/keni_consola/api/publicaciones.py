@@ -361,6 +361,91 @@ async def detalle(request: Request) -> Response:
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
 
+# Campos de CONTENIDO que el espejo propaga entre redes hermanas (la "receta" completa de la
+# pieza: copy + copy-in + foto/collage + plantilla). Estado, fechas y flags NO se espejan.
+# También es la lista de campos cuyo cambio invalida aprobaciones (junto con `titulo`).
+_CAMPOS_ESPEJO: tuple[str, ...] = (
+    "contenido", "copy_in", "imagen", "foto", "fotos",
+    "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
+)
+
+# Reset al perder aprobaciones: la pieza vuelve a borrador con la revisión limpia (reentrará
+# sola a revisión cuando se reenvíe, exigiendo OK nuevos).
+_RESET_APROBACIONES: dict[str, Any] = {
+    "estado": "borrador",
+    "revisor_id": "",
+    "revisor_nombre": "",
+    "revisado_en": "",
+    "enviado_a_revision_en": "",
+    "fecha_programada": "",
+}
+
+
+def _pierde_aprobaciones(actual: dict[str, Any], campos: dict[str, Any]) -> bool:
+    """True si aplicar `campos` a la pieza `actual` invalida aprobaciones YA dadas.
+
+    Editar el CONTENIDO de una pieza que acumula aprobaciones las invalida (como reescribir
+    un PR aprobado). Solo cuando hay aprobaciones REALES que perder (aprobada/programada, o
+    en revisión con un OK humano). No aplica si la propia petición fija `estado` (el flujo
+    la está moviendo a propósito).
+    """
+    cambia_contenido = any(
+        clave in campos and campos[clave] != actual.get(clave)
+        for clave in ("titulo", *_CAMPOS_ESPEJO)
+    )
+    if not cambia_contenido or "estado" in campos:
+        return False
+    estado_actual = actual.get("estado") or ""
+    if estado_actual in (ESTADO_APROBADO, ESTADO_PROGRAMADO):
+        return True
+    if estado_actual == ESTADO_EN_REVISION:
+        cadena = repos.listar_aprobaciones(actual["id"])
+        return colaboracion.contar_aprobaciones_humanas(cadena) > 0
+    return False
+
+
+def _limpiar_cadena(publicacion_id: str) -> None:
+    """Recrea la cadena de aprobación VACÍA de la pieza (las aprobaciones previas se pierden)."""
+    plat = repos.obtener_contenido_plataforma(publicacion_id)
+    repos.crear_cadena_aprobacion(
+        plataforma_id=publicacion_id,
+        contenido_id=(plat or {}).get("contenido_id", "") or "",
+        etiquetas=[],
+    )
+
+
+def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
+    """ESPEJO entre redes: replica los campos de CONTENIDO editados a las redes hermanas.
+
+    Las piezas de una idea normalmente van parejas en todas sus redes, así que el espejo
+    nace ACTIVADO (`contenido.espejo`, toggle por pieza en el editor). `pub` es la pieza ya
+    actualizada (con su `espejo` vigente); solo se propagan los campos de `_CAMPOS_ESPEJO`
+    presentes en la edición. Las hermanas YA PUBLICADAS no se tocan (lo que salió a la red
+    no cambia desde aquí); una hermana con aprobaciones sufre el MISMO reset que la pieza
+    editada (su contenido cambió: exige OK nuevos).
+    """
+    espejo_campos = {k: campos[k] for k in _CAMPOS_ESPEJO if k in campos}
+    if not espejo_campos or not pub.get("espejo", True):
+        return
+    contenido_id = pub.get("contenido_id") or ""
+    if not contenido_id:
+        return
+    for plat in repos.listar_contenido_plataforma(contenido_id):
+        if plat["id"] == pub["id"]:
+            continue
+        hermana = repos.obtener_publicacion(plat["id"])
+        if hermana is None or (hermana.get("estado") or "") == ESTADO_PUBLICADO:
+            continue
+        campos_h: dict[str, Any] = dict(espejo_campos)
+        resetear = _pierde_aprobaciones(hermana, campos_h)
+        if resetear:
+            campos_h.update(_RESET_APROBACIONES)
+        if repos.actualizar_publicacion(plat["id"], campos_h) is None:
+            continue  # borrada en paralelo: nada que espejar
+        if resetear:
+            _limpiar_cadena(plat["id"])
+
+
 async def actualizar(request: Request) -> Response:
     """Edicion PARCIAL: titulo/contenido/copy_in/estado/fecha_programada (404 si no existe)."""
     publicacion_id = request.path_params["publicacion_id"]
@@ -469,6 +554,15 @@ async def actualizar(request: Request) -> Response:
                 {"error": "Las fotos del collage deben ser texto (JSON)."}, status_code=400
             )
         campos["fotos"] = fotos.strip()
+    if "espejo" in datos:
+        # ESPEJO entre redes (vive en el padre: es de la idea). El editor lo togglea desde
+        # cualquier pieza hermana; OFF = cada red se edita por separado.
+        espejo = datos.get("espejo")
+        if not isinstance(espejo, bool):
+            return JSONResponse(
+                {"error": "El campo espejo debe ser verdadero o falso."}, status_code=400
+            )
+        campos["espejo"] = espejo
 
     if not campos:
         return JSONResponse(
@@ -490,30 +584,10 @@ async def actualizar(request: Request) -> Response:
     actual = repos.obtener_publicacion(publicacion_id)
     if actual is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    cambia_contenido = any(
-        clave in campos and campos[clave] != actual.get(clave)
-        for clave in (
-            "titulo", "contenido", "copy_in", "imagen", "foto", "fotos",
-            "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
-        )
-    )
     estado_actual = actual.get("estado") or ""
-    resetear = False
-    if cambia_contenido and "estado" not in campos:
-        if estado_actual in (ESTADO_APROBADO, ESTADO_PROGRAMADO):
-            resetear = True
-        elif estado_actual == ESTADO_EN_REVISION:
-            cadena = repos.listar_aprobaciones(publicacion_id)
-            resetear = colaboracion.contar_aprobaciones_humanas(cadena) > 0
+    resetear = _pierde_aprobaciones(actual, campos)
     if resetear:
-        campos.update(
-            estado="borrador",
-            revisor_id="",
-            revisor_nombre="",
-            revisado_en="",
-            enviado_a_revision_en="",
-            fecha_programada="",
-        )
+        campos.update(_RESET_APROBACIONES)
 
     # CAS de estado: si la peticion mueve el estado (o el reset lo fuerza), la escritura solo
     # aplica si la pieza SIGUE en el estado desde el que se valido la transicion. Cierra el
@@ -543,12 +617,10 @@ async def actualizar(request: Request) -> Response:
         )
     if resetear:
         # Limpia la cadena (borra todos los niveles): las aprobaciones previas dejan de existir.
-        plat = repos.obtener_contenido_plataforma(publicacion_id)
-        repos.crear_cadena_aprobacion(
-            plataforma_id=publicacion_id,
-            contenido_id=(plat or {}).get("contenido_id", "") or "",
-            etiquetas=[],
-        )
+        _limpiar_cadena(publicacion_id)
+    # ESPEJO entre redes (default ON): los campos de contenido editados se replican a las
+    # redes hermanas de la idea, con su mismo reset de aprobaciones si lo necesitan.
+    _propagar_espejo(pub, campos)
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
 
@@ -765,6 +837,80 @@ async def duplicar(request: Request) -> Response:
         autor=autor_de_peticion(request),
     )
     return JSONResponse({"publicacion": _publicacion_a_dict(copia)})
+
+
+async def clonar(request: Request) -> Response:
+    """Clona el CONTENIDO de una pieza a OTRA RED de la misma idea (no crea otra idea).
+
+    `POST /api/publicaciones/{id}/clonar` con `{red}`: copia copy/copy-in/foto/collage/
+    plantilla (`_CAMPOS_ESPEJO`) a la pieza hermana de esa red —sobrescribiéndola, con el
+    mismo reset de aprobaciones que una edición— o la CREA como borrador si la idea aún no
+    salía en esa red. A diferencia de `duplicar` (que crea una idea nueva), aquí la pieza
+    destino queda colgada del MISMO `contenido` padre. -> `{publicacion}` (la pieza destino)
+    | 400 (red inválida / sin padre) | 404 | 409 (la hermana ya está publicada).
+    """
+    publicacion_id = request.path_params["publicacion_id"]
+    original = repos.obtener_publicacion(publicacion_id)
+    if original is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    red = datos.get("red")
+    if not isinstance(red, str) or not redes.es_red(red):
+        return JSONResponse({"error": "Red no permitida."}, status_code=400)
+    if red == original["red"]:
+        return JSONResponse(
+            {"error": "La pieza ya está en esa red; elige otra red destino."}, status_code=400
+        )
+    contenido_id = original.get("contenido_id") or ""
+    if not contenido_id:
+        return JSONResponse(
+            {"error": "Esta pieza no tiene idea padre: no se puede clonar entre redes."},
+            status_code=400,
+        )
+
+    campos: dict[str, Any] = {clave: original.get(clave) for clave in _CAMPOS_ESPEJO}
+    hermanas = [
+        p for p in repos.listar_contenido_plataforma(contenido_id) if (p.get("red") or "") == red
+    ]
+    if hermanas:
+        destino = repos.obtener_publicacion(hermanas[0]["id"])
+        if destino is None:
+            return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        if (destino.get("estado") or "") == ESTADO_PUBLICADO:
+            return JSONResponse(
+                {"error": "La pieza de esa red ya está publicada; no se sobrescribe."},
+                status_code=409,
+            )
+        resetear = _pierde_aprobaciones(destino, campos)
+        if resetear:
+            campos.update(_RESET_APROBACIONES)
+        pub = repos.actualizar_publicacion(destino["id"], campos)
+        if pub is None:
+            return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        if resetear:
+            _limpiar_cadena(destino["id"])
+        return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
+
+    # La idea no salía en esa red: nace la pieza (borrador) con el contenido clonado. El
+    # checklist (`falta_copy`/`falta_imagen`) se autodeduce del copy/imagen clonados.
+    plat = repos.crear_contenido_plataforma(
+        contenido_id=contenido_id,
+        red=red,
+        marca=original.get("marca") or None,
+        copy=original.get("contenido") or "",
+        copy_in=original.get("copy_in") or "",
+        imagen=original.get("imagen") or "",
+        imagen_fuente=original.get("imagen_fuente") or "",
+        foto=original.get("foto") or "",
+        fotos=original.get("fotos") or "",
+        plantilla_diseno_id=original.get("plantilla_diseno_id") or "",
+        foto_encuadre=original.get("foto_encuadre") or "",
+        placa_oculta=bool(original.get("placa_oculta")),
+    )
+    pub = repos.obtener_publicacion(plat["id"])
+    if pub is None:
+        return JSONResponse({"error": "No se pudo clonar la pieza."}, status_code=500)
+    return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
 
 async def reciclar(request: Request) -> Response:
@@ -1000,6 +1146,7 @@ RUTAS = [
     Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/clonar", clonar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/reciclar", reciclar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),

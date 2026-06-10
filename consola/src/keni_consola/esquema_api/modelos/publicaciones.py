@@ -92,6 +92,11 @@ class Publicacion(TypedDict):
     # `contenido` padre. Decide a qué redes va (`redes.redes_de_formato`, fuente única). El
     # flujo automático crea piezas "foto". La UI lo muestra como badge ("Foto"/"Video").
     formato: str
+    # ESPEJO entre redes (propiedad de la idea, default ON): editar el contenido de esta pieza
+    # propaga copy/copy-in/foto/plantilla a sus redes hermanas (saltando las ya publicadas).
+    # El editor lo togglea por pieza (PUT `{espejo}`); OFF = cada red se edita por separado.
+    # Opcional (NotRequired): los productores legados no lo traen y la UI lo lee como True.
+    espejo: NotRequired[bool]
     imagen_fuente: str
     # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`), espejo de `imagen`.
     # "" si la pieza no es video o aún no tiene asset. Lo publica el programador como TipoMedia.video.

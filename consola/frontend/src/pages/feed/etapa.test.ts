@@ -35,6 +35,7 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
     id_post_metricool: "",
     tipo_contenido: "",
     formato: "foto",
+    espejo: true,
     imagen_fuente: "",
     foto: "",
     falta_copy: false,

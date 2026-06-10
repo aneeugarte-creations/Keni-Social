@@ -154,6 +154,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # FORMATO de la pieza (foto|video): decide a qué redes va (`redes.redes_de_formato`).
         # "" / desconocido -> "foto" (el formato del flujo automático). La UI muestra el badge.
         "formato": redes.normalizar_formato(pub.get("formato")),
+        # ESPEJO entre redes (propiedad de la idea, default ON): editar el contenido de una
+        # pieza propaga los mismos campos a sus redes hermanas. El editor lo togglea.
+        "espejo": bool(pub.get("espejo", True)),
         "imagen_fuente": imagen_fuente,
         # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`) y su checklist,
         # espejo de `imagen`/`falta_imagen`. "" si la pieza no es video o no tiene asset aún.

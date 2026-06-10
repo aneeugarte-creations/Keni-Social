@@ -668,6 +668,7 @@ export interface Publicacion {
   id_post_metricool: string;
   tipo_contenido: string;
   formato: string;
+  espejo?: boolean;
   imagen_fuente: string;
   video: string;
   foto: string;
