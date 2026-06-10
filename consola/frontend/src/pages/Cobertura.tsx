@@ -206,6 +206,11 @@ function TarjetaHistoria({
     historia.pieza_estado ??
     (historia.estado === "usado" ? "en_feed" : esDescartada ? "descartada" : "en_pool");
   const tieneEnlaces = historia.enlaces && historia.enlaces.length > 0;
+  // Fuentes ÚNICAS de la historia (etiqueta — tema, p.ej. "La Jornada — Edición"), visibles
+  // en la propia tarjeta: identificar quién corrobora no debe exigir abrir el desplegable.
+  const fuentesUnicas = Array.from(
+    new Set((historia.enlaces ?? []).map((e) => e.fuente).filter(Boolean)),
+  );
 
   return (
     <Card
@@ -310,6 +315,16 @@ function TarjetaHistoria({
             <Radio className="h-3 w-3" />
             {historia.n_fuentes} fuente{historia.n_fuentes !== 1 ? "s" : ""}
           </Badge>
+          {fuentesUnicas.length > 0 && (
+            <span
+              className="text-xs text-muted-foreground truncate max-w-[28rem]"
+              data-testid="fuentes-resumen"
+              title={fuentesUnicas.join(" · ")}
+            >
+              {fuentesUnicas.slice(0, 3).join(" · ")}
+              {fuentesUnicas.length > 3 ? ` +${fuentesUnicas.length - 3}` : ""}
+            </span>
+          )}
 
           {/* Verificación (Ola D) */}
           {historia.verificacion === "corroborada" && (
