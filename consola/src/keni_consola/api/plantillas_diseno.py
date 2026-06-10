@@ -1,9 +1,11 @@
 """API Texto de PLANTILLAS DE DISEÑO: N plantillas reutilizables por marca (editor).
 
 Cada plantilla es un DOCUMENTO de capas completo (logo + textos + marcos + …) que el equipo
-guarda para reutilizar; se etiqueta por `categoria` (post | historia | reel | infografia | …) y
-por `lineas` (ids de `etiquetas` clase=vertical) para filtrar por línea editorial. A diferencia de
-`plantillas_marca` (1 plantilla POR DEFECTO por marca), aquí hay muchas.
+guarda para reutilizar; se etiqueta por `categoria` (texto LIBRE normalizado a slug: ultima-hora |
+marcador | efemerides | … con "general" como fallback; sin enum en BD) y por `lineas` (ids de
+`etiquetas` clase=vertical) para filtrar por línea editorial. A diferencia de `plantillas_marca`
+(1 plantilla POR DEFECTO por marca), aquí hay muchas. El catálogo legible de categorías vive en
+el frontend (`lib/categoriasPlantilla.ts`); el legado "post" se trata como "general".
 
   - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&tipo=&linea=&q=`).
   - `POST   /api/plantillas-diseno`        crea una plantilla a partir de un documento (validado).
@@ -19,6 +21,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -32,6 +36,16 @@ from ..seguridad import autor_de_peticion
 _MAX_NOMBRE = 120
 _MAX_LINEAS = 24
 _TIPOS_VALIDOS = frozenset({"foto", "miniatura"})
+
+
+def _normalizar_categoria(valor: object) -> str:
+    """Slug normalizado de la categoría (texto libre, SIN enum en BD): minúsculas, sin acentos,
+    separadores a guiones, máx 40. Vacío y el legado "post" caen a "general" (el fallback)."""
+    texto = valor if isinstance(valor, str) else ""
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c)).lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", texto).strip("-")[:40].strip("-")
+    return slug if slug and slug != "post" else "general"
 
 
 def _validar_marca(marca: object) -> tuple[str | None, str | None]:
@@ -77,7 +91,13 @@ def _plantilla_a_dict(item: dict) -> dict:
 
 
 def _coincide(p: dict, q: str) -> bool:
-    return q.lower() in (p.get("nombre") or "").lower()
+    """Búsqueda `q`: por nombre (substring, case-insensitive) y por categoría (slug normalizado,
+    así «Última hora» encuentra plantillas con categoria `ultima-hora`)."""
+    if q.lower() in (p.get("nombre") or "").lower():
+        return True
+    if not any(ch.isalnum() for ch in q):
+        return False
+    return _normalizar_categoria(q) in _normalizar_categoria(p.get("categoria"))
 
 
 async def listar(request: Request) -> Response:
@@ -90,10 +110,20 @@ async def listar(request: Request) -> Response:
         _plantilla_a_dict(item)
         for item in repos.listar_plantillas_diseno(
             marca=q.get("marca") or None,
-            categoria=q.get("categoria") or None,
             tipo=tipo_q,
         )
     ]
+    # Filtro de categoría: acepta el valor crudo (igualdad exacta, p. ej. el legado "post") o
+    # cualquier forma que normalice al mismo slug («Última hora» == `ultima-hora`). Se filtra en
+    # memoria, como `linea` y `q`, para no acoplar la normalización al SQL del repo.
+    cat_q = (q.get("categoria") or "").strip()
+    if cat_q:
+        cat_norm = _normalizar_categoria(cat_q)
+        plantillas = [
+            p
+            for p in plantillas
+            if p.get("categoria") == cat_q or _normalizar_categoria(p.get("categoria")) == cat_norm
+        ]
     linea = (q.get("linea") or "").strip()
     if linea:
         plantillas = [p for p in plantillas if linea in p.get("lineas", [])]
@@ -127,7 +157,7 @@ async def crear(request: Request) -> Response:
         return JSONResponse({"error": err}, status_code=400)
 
     nombre = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
-    categoria = (datos.get("categoria") or "post").strip()[:40] or "post"
+    categoria = _normalizar_categoria(datos.get("categoria"))
     tipo_raw = (datos.get("tipo") or "").strip()
     tipo = tipo_raw if tipo_raw in _TIPOS_VALIDOS else "foto"
     miniatura = (datos.get("miniatura") or "").strip() if isinstance(datos.get("miniatura"), str) else ""
@@ -169,7 +199,7 @@ async def actualizar(request: Request) -> Response:
     if "nombre" in datos:
         campos["nombre"] = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
     if "categoria" in datos:
-        campos["categoria"] = (datos.get("categoria") or "post").strip()[:40] or "post"
+        campos["categoria"] = _normalizar_categoria(datos.get("categoria"))
     if "tipo" in datos:
         tipo_raw = (datos.get("tipo") or "").strip()
         if tipo_raw and tipo_raw not in _TIPOS_VALIDOS:

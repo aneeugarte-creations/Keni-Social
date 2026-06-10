@@ -1,8 +1,8 @@
 /**
- * Tests de GaleriaPlantillas con diferenciación foto / miniatura:
- *  - Filtra por tipo al cambiar pestaña (solo se muestran las del tipo activo).
- *  - Muestra el badge de tipo en cada tarjeta.
- *  - `tipoFijo` bloquea el selector y muestra solo las del tipo indicado.
+ * Tests de GaleriaPlantillas:
+ *  - Diferenciación foto / miniatura: filtro por tipo, badge de tipo, `tipoFijo`.
+ *  - Organización estilo Canva: búsqueda (nombre/categoría), chips de categoría, agrupación por
+ *    categoría y badge-selector de categoría (modo gestión vs selector).
  */
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -130,5 +130,76 @@ describe("GaleriaPlantillas — filtro de tipo", () => {
   it("sin onRotar (modo selector) no muestra el control de rotación", () => {
     render(<GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
     expect(screen.queryByText("Rotación")).not.toBeInTheDocument();
+  });
+});
+
+// ── Búsqueda + chips + agrupación por categoría (estilo Canva) ─────────────────────────────────
+
+const ULTIMA: PlantillaDiseno = { ...FOTO, id: "cat-1", nombre: "Roja breaking", categoria: "ultima-hora" };
+const MARCADOR: PlantillaDiseno = { ...FOTO, id: "cat-2", nombre: "Final del partido", categoria: "marcador" };
+
+describe("GaleriaPlantillas — búsqueda y categorías", () => {
+  it("la búsqueda filtra por nombre", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA, MARCADOR]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "breaking" } });
+    expect(screen.getByTitle(`Cargar «${ULTIMA.nombre}»`)).toBeInTheDocument();
+    expect(screen.queryByTitle(`Cargar «${MARCADOR.nombre}»`)).not.toBeInTheDocument();
+  });
+
+  it("la búsqueda encuentra por categoría, acento-insensible", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA, MARCADOR]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "última hora" } });
+    expect(screen.getByTitle(`Cargar «${ULTIMA.nombre}»`)).toBeInTheDocument();
+    expect(screen.queryByTitle(`Cargar «${MARCADOR.nombre}»`)).not.toBeInTheDocument();
+  });
+
+  it("sin coincidencias muestra el mensaje de vacío de búsqueda", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zzz-nada" } });
+    expect(screen.getByText(/sin resultados/i)).toBeInTheDocument();
+  });
+
+  it("chips: «Todas» + las categorías presentes; un chip filtra la rejilla", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA, MARCADOR]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Todas" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Marcador" }));
+    expect(screen.getByTitle(`Cargar «${MARCADOR.nombre}»`)).toBeInTheDocument();
+    expect(screen.queryByTitle(`Cargar «${ULTIMA.nombre}»`)).not.toBeInTheDocument();
+  });
+
+  it("con una sola categoría no hay chips ni cabeceras de grupo", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Todas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Última hora" })).not.toBeInTheDocument();
+  });
+
+  it("con varias categorías agrupa con cabeceras de sección", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA, MARCADOR]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "Última hora" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Marcador" })).toBeInTheDocument();
+  });
+
+  it("el legado 'post' se muestra como badge «General»", () => {
+    render(<GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    expect(screen.getByText("General")).toBeInTheDocument();
+  });
+
+  it("sin onCategorizar (modo selector) el badge no es un selector", () => {
+    render(<GaleriaPlantillas plantillas={[ULTIMA]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("con onCategorizar el badge permite cambiar la categoría", () => {
+    const onCategorizar = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={onCategorizar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "marcador" } });
+    expect(onCategorizar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "marcador");
   });
 });

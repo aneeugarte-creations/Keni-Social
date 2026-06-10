@@ -28,6 +28,12 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import {
+  BadgeCategoria,
+  BuscadorPlantillas,
+  ChipsCategoria,
+  useFiltroPlantillas,
+} from "@/components/plantillas/FiltroPlantillas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -37,6 +43,7 @@ import { documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
+import { agruparPorCategoria, CATEGORIAS_PLANTILLA } from "@/lib/categoriasPlantilla";
 import { prepararDocumento } from "@/lib/placa/docPieza";
 
 type TipoPlantilla = "foto" | "miniatura";
@@ -136,8 +143,8 @@ export default function Imagen() {
   const [activa, setActiva] = useState<string | null>(null);
   const stores = useRef<Map<string, StoreEditor>>(new Map());
   const [galeria, setGaleria] = useState(false);
-  // Diálogo de «Guardar como» (nombre de plantilla nueva + tipo).
-  const [dialogo, setDialogo] = useState<{ nombre: string; tipo: TipoPlantilla } | null>(null);
+  // Diálogo de «Guardar como» (nombre de plantilla nueva + tipo + categoría).
+  const [dialogo, setDialogo] = useState<{ nombre: string; tipo: TipoPlantilla; categoria: string } | null>(null);
   // Edición inline del nombre de una pestaña (doble-clic en su título).
   const [editTab, setEditTab] = useState<{ id: string; valor: string } | null>(null);
   // Cambios sin guardar en la plantilla, por pestaña (estado «Guardado/Sin guardar» en cabecera).
@@ -509,7 +516,7 @@ export default function Imagen() {
     },
     onError: (e: unknown) => {
       if (e instanceof Error && e.message === "__sin_plantilla__") {
-        setDialogo({ nombre: pestanaActiva?.nombre ?? "", tipo: "foto" });
+        setDialogo({ nombre: pestanaActiva?.nombre ?? "", tipo: "foto", categoria: "" });
         return;
       }
       if (e instanceof Error && e.message === "__sin_hueco__") {
@@ -520,14 +527,22 @@ export default function Imagen() {
     },
   });
 
-  // GUARDAR COMO: crea una plantilla nueva con el nombre y tipo dados; ata la pestaña a ella.
+  // GUARDAR COMO: crea una plantilla nueva con nombre, tipo y categoría; ata la pestaña a ella.
+  // La categoría es texto libre (el backend la normaliza a slug); vacía cae a "general".
   const guardarComo = useMutation({
-    mutationFn: async ({ nombre, tipo }: { nombre: string; tipo: TipoPlantilla }) => {
+    mutationFn: async ({ nombre, tipo, categoria }: { nombre: string; tipo: TipoPlantilla; categoria: string }) => {
       if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
       const documento = storeActivo.getState().documento;
       if (!documento.capas.some((c) => c.tipo === "imagen" && c.es_foto)) throw new Error("__sin_hueco__");
       const miniatura = await miniaturaDe(documento);
-      return api.crearPlantillaDiseno({ marca: pestanaActiva.marca, nombre, categoria: "post", tipo, documento, miniatura });
+      return api.crearPlantillaDiseno({
+        marca: pestanaActiva.marca,
+        nombre,
+        categoria: categoria.trim() || undefined,
+        tipo,
+        documento,
+        miniatura,
+      });
     },
     onSuccess: (res, { nombre }) => {
       if (activa) {
@@ -549,7 +564,7 @@ export default function Imagen() {
   const confirmarNombre = () => {
     const nombre = dialogo?.nombre.trim();
     if (!nombre) return;
-    guardarComo.mutate({ nombre, tipo: dialogo?.tipo ?? "foto" });
+    guardarComo.mutate({ nombre, tipo: dialogo?.tipo ?? "foto", categoria: dialogo?.categoria ?? "" });
     setDialogo(null);
   };
 
@@ -600,7 +615,7 @@ export default function Imagen() {
       api.crearPlantillaDiseno({
         marca: p.marca,
         nombre: `Copia de ${p.nombre || "plantilla"}`,
-        categoria: p.categoria || "post",
+        categoria: p.categoria || undefined,
         tipo: p.tipo ?? "foto",
         documento: p.documento,
         miniatura: p.miniatura || undefined,
@@ -624,6 +639,17 @@ export default function Imagen() {
       toast.success(res.plantilla.rotar ? "Añadida a la rotación." : "Quitada de la rotación.");
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo cambiar la rotación."),
+  });
+
+  // CATEGORIZAR: cambia la categoría de una plantilla ya guardada (badge-selector de la galería).
+  const categorizarPlantilla = useMutation({
+    mutationFn: ({ id, categoria }: { id: string; categoria: string }) =>
+      api.actualizarPlantillaDiseno(id, { categoria }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+      toast.success("Categoría actualizada.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo cambiar la categoría."),
   });
 
   // RENOMBRAR una plantilla ya guardada (desde la galería). Persiste y refleja el nombre en
@@ -801,7 +827,7 @@ export default function Imagen() {
             }
             menuExtra={
               <button
-                onClick={() => setDialogo({ nombre: "", tipo: "foto" })}
+                onClick={() => setDialogo({ nombre: "", tipo: "foto", categoria: "" })}
                 disabled={guardando}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
               >
@@ -828,6 +854,7 @@ export default function Imagen() {
               onDuplicar={(p) => duplicarPlantilla.mutate(p)}
               onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
               onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
+              onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
               onBlanco={() => abrirPestana()}
             />
           </div>
@@ -843,6 +870,7 @@ export default function Imagen() {
           onDuplicar={(p) => duplicarPlantilla.mutate(p)}
           onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
           onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
+          onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
           onCerrar={() => setGaleria(false)}
         />
       )}
@@ -878,6 +906,25 @@ export default function Imagen() {
               </button>
             ))}
           </div>
+          {/* Categoría: combobox del catálogo (datalist) + texto libre. Vacía cae a «General». */}
+          <div className="space-y-1">
+            <label htmlFor="plantilla-categoria" className="text-xs text-muted-foreground">
+              Categoría (opcional; sin categoría va a «General»)
+            </label>
+            <Input
+              id="plantilla-categoria"
+              list="categorias-plantilla"
+              placeholder="Última hora, Marcador…"
+              value={dialogo?.categoria ?? ""}
+              onChange={(e) => setDialogo((d) => (d ? { ...d, categoria: e.target.value } : d))}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmarNombre(); }}
+            />
+            <datalist id="categorias-plantilla">
+              {CATEGORIAS_PLANTILLA.map((c) => (
+                <option key={c.slug} value={c.etiqueta} />
+              ))}
+            </datalist>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogo(null)}>Cancelar</Button>
             <Button onClick={confirmarNombre} disabled={!dialogo?.nombre.trim()}>Guardar</Button>
@@ -903,9 +950,10 @@ function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDise
   );
 }
 
-// Galería del estado vacío: rejilla de plantillas + tarjeta de «lienzo en blanco». Con una marca
-// concreta es una sola rejilla; en «Todas» (`agruparPorMarca`) se parte en secciones por marca.
-// La marca y «Plantillas» no se rotulan en el toolbar: aquí lo dicen las cabeceras de sección.
+// Galería del estado vacío: rejilla de plantillas + tarjeta de «lienzo en blanco», con búsqueda y
+// chips de categoría (estilo Canva). Con una marca concreta las secciones son por CATEGORÍA; en
+// «Todas» (`agruparPorMarca`) la agrupación es marca → categoría. La marca y «Plantillas» no se
+// rotulan en el toolbar: aquí lo dicen las cabeceras de sección.
 function GaleriaInline({
   plantillas,
   agruparPorMarca,
@@ -915,6 +963,7 @@ function GaleriaInline({
   onDuplicar,
   onRenombrar,
   onRotar,
+  onCategorizar,
   onBlanco,
 }: {
   plantillas: PlantillaDiseno[];
@@ -925,10 +974,13 @@ function GaleriaInline({
   onDuplicar: (p: PlantillaDiseno) => void;
   onRenombrar: (p: PlantillaDiseno, nombre: string) => void;
   onRotar: (p: PlantillaDiseno, rotar: boolean) => void;
+  onCategorizar: (p: PlantillaDiseno, categoria: string) => void;
   onBlanco: () => void;
 }) {
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
+  // Búsqueda (nombre/categoría) + chip de categoría activa, client-side.
+  const { q, setQ, categoria, setCategoria, presentes, filtradas } = useFiltroPlantillas(plantillas);
   const commit = (p: PlantillaDiseno) => {
     const n = editVal.trim();
     if (n && n !== p.nombre) onRenombrar(p, n);
@@ -991,6 +1043,8 @@ function GaleriaInline({
                       <Image className="h-2.5 w-2.5" />Foto
                     </span>
                   )}
+                  {/* Categoría: badge-selector (clic = cambiar de categoría, sin diálogo). */}
+                  <BadgeCategoria categoria={p.categoria} onCambiar={(slug) => onCategorizar(p, slug)} />
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
                     title="Clic para renombrar"
@@ -1028,28 +1082,58 @@ function GaleriaInline({
               </button>
             </div>
   );
+  // Secciones por CATEGORÍA dentro de una lista (de una marca o de todo): cabecera de categoría
+  // solo cuando hay más de un grupo (un único grupo sería ruido).
+  const seccionesCategoria = (lista: PlantillaDiseno[]) => {
+    const grupos = agruparPorCategoria(lista);
+    if (grupos.length <= 1) return <div className={REJILLA}>{lista.map(tarjeta)}</div>;
+    return (
+      <div className="space-y-5">
+        {grupos.map((g) => (
+          <section key={g.slug}>
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {g.etiqueta}
+            </h4>
+            <div className={REJILLA}>{g.plantillas.map(tarjeta)}</div>
+          </section>
+        ))}
+      </div>
+    );
+  };
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      {/* Búsqueda + chips de categoría (estilo Canva), arriba del todo. */}
+      {!cargando && plantillas.length > 0 && (
+        <div className="mb-4 space-y-2">
+          <BuscadorPlantillas valor={q} onCambiar={setQ} />
+          <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} />
+        </div>
+      )}
       {cargando ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
+      ) : plantillas.length > 0 && filtradas.length === 0 ? (
+        <div className="space-y-8">
+          <p className="py-4 text-center text-sm text-muted-foreground">Sin resultados para esa búsqueda.</p>
+          <div className={REJILLA}>{tarjetaBlanco}</div>
+        </div>
       ) : agruparPorMarca ? (
         <div className="space-y-8">
-          {agruparPlantillasPorMarca(plantillas).map((grupo) => (
+          {agruparPlantillasPorMarca(filtradas).map((grupo) => (
             <section key={grupo[0].marca}>
               <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
                 {grupo[0].marca_nombre || grupo[0].marca}
               </h3>
-              <div className={REJILLA}>{grupo.map(tarjeta)}</div>
+              {seccionesCategoria(grupo)}
             </section>
           ))}
           {/* «Lienzo en blanco» va al FINAL de la galería (no el primero). */}
           <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       ) : (
-        <div className={REJILLA}>
-          {plantillas.map(tarjeta)}
+        <div className="space-y-8">
+          {seccionesCategoria(filtradas)}
           {/* «Lienzo en blanco» va al FINAL de la lista (no el primero). */}
-          {tarjetaBlanco}
+          <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       )}
     </div>

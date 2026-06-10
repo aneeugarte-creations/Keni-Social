@@ -936,8 +936,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_marca_activos_tipo ON marca_activos (tipo)",
     # PLANTILLAS DE DISEÑO (editor profesional): N plantillas reutilizables por marca, cada una
     # un DOCUMENTO de capas completo (`documento`, JSON validado por `motores/estudio_imagen/
-    # documento.py`). Se etiquetan por `categoria` (post | historia | reel | infografia | …) y por
-    # `lineas` (JSON de ids de `etiquetas` clase=vertical) para filtrar por línea editorial.
+    # documento.py`). Se etiquetan por `categoria` (texto LIBRE normalizado a slug por la API:
+    # ultima-hora | marcador | efemerides | …; "general" es el fallback y el legado "post" se trata
+    # como "general") y por `lineas` (JSON de ids de `etiquetas` clase=vertical) para filtrar por
+    # línea editorial.
     # `miniatura` es el objeto de media (uuid+ext) de una previa, o "". A diferencia de
     # `plantillas_marca` (1 plantilla por defecto por marca), aquí hay MUCHAS.
     # `tipo` ("foto" | "miniatura") es un eje ORTOGONAL a `categoria`: foto = plantilla para
@@ -948,7 +950,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         id           TEXT PRIMARY KEY,
         marca        TEXT NOT NULL DEFAULT '',
         nombre       TEXT NOT NULL DEFAULT '',
-        categoria    TEXT NOT NULL DEFAULT 'post',
+        categoria    TEXT NOT NULL DEFAULT 'general',
         tipo         TEXT NOT NULL DEFAULT 'foto',
         documento    TEXT NOT NULL DEFAULT '{}',
         miniatura    TEXT NOT NULL DEFAULT '',
@@ -1812,7 +1814,8 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
 
 
 def _migrar_columnas_plantillas_diseno(con: Any) -> None:
-    """Anade `tipo` a `plantillas_diseno` si una BD ya creada no la tuviera (idempotente).
+    """Anade `tipo`/`rotar` a `plantillas_diseno` si una BD ya creada no los tuviera y alinea el
+    DEFAULT de `categoria` (idempotente).
 
     `tipo` ("foto" | "miniatura") es un eje ortogonal a `categoria`: foto = plantilla para
     fotos/imagenes del feed; miniatura = portada/thumbnail de video. Las plantillas
@@ -1832,6 +1835,10 @@ def _migrar_columnas_plantillas_diseno(con: Any) -> None:
         con.execute(
             "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS rotar INTEGER NOT NULL DEFAULT 0"
         )
+    # `categoria` pasa de DEFAULT 'post' a 'general' (el fallback del catálogo de categorías).
+    # Solo cambia el DEFAULT (metadato): las filas existentes NO se reescriben (el legado "post"
+    # se trata como "general" en API y frontend). Idempotente.
+    con.execute("ALTER TABLE plantillas_diseno ALTER COLUMN categoria SET DEFAULT 'general'")
 
 
 def _migrar_columnas_video_composiciones(con: Any) -> None:

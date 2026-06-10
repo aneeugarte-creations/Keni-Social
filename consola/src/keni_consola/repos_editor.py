@@ -138,7 +138,7 @@ def crear_plantilla_diseno(
     *,
     marca: str,
     nombre: str = "",
-    categoria: str = "post",
+    categoria: str = "general",
     tipo: str = "foto",
     documento: str = "{}",
     miniatura: str = "",

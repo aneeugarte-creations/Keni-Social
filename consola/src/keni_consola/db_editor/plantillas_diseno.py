@@ -45,7 +45,7 @@ def _fila_a_plantilla_diseno(fila: Any) -> dict[str, Any]:
     item["rotar"] = bool(fila["rotar"])
     item["documento"] = fila["documento"] or "{}"
     item["lineas"] = fila["lineas"] or "[]"
-    item["categoria"] = fila["categoria"] or "post"
+    item["categoria"] = fila["categoria"] or "general"
     item["tipo"] = fila["tipo"] if fila["tipo"] in ("foto", "miniatura") else "foto"
     return item
 
@@ -54,7 +54,7 @@ def crear_plantilla_diseno(
     *,
     marca: str,
     nombre: str = "",
-    categoria: str = "post",
+    categoria: str = "general",
     tipo: str = "foto",
     documento: str = "{}",
     miniatura: str = "",
@@ -73,7 +73,7 @@ def crear_plantilla_diseno(
         "id": id or uuid.uuid4().hex[:12],
         "marca": marca or "",
         "nombre": nombre or "",
-        "categoria": categoria or "post",
+        "categoria": categoria or "general",
         "tipo": tipo if tipo in ("foto", "miniatura") else "foto",
         "documento": documento or "{}",
         "miniatura": miniatura or "",

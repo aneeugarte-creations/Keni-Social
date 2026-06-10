@@ -19,19 +19,22 @@ def test_listar_vacio(cliente):
 
 def test_crear_y_listar(cliente):
     r = cliente.post("/api/plantillas-diseno", json={
-        "marca": "unotv", "nombre": "Última hora", "categoria": "post",
+        "marca": "unotv", "nombre": "Última hora", "categoria": "Última hora",
         "documento": _DOC, "lineas": ["linea-nacional", "linea-nacional"],
     })
     assert r.status_code == 200, r.text
     p = r.json()["plantilla"]
     assert p["marca"] == "unotv" and p["nombre"] == "Última hora"
+    assert p["categoria"] == "ultima-hora"  # texto libre normalizado a slug
     assert p["documento"]["formato"]["w"] == 1080
     assert p["documento"]["version"] == 1  # validado/normalizado por el dominio
     assert p["lineas"] == ["linea-nacional"]
     assert p["marca_nombre"]
 
     assert len(cliente.get("/api/plantillas-diseno?marca=unotv").json()["plantillas"]) == 1
-    assert len(cliente.get("/api/plantillas-diseno?categoria=post").json()["plantillas"]) == 1
+    # El filtro de categoría acepta el slug exacto Y cualquier forma que normalice a él.
+    assert len(cliente.get("/api/plantillas-diseno?categoria=ultima-hora").json()["plantillas"]) == 1
+    assert len(cliente.get("/api/plantillas-diseno?categoria=%C3%9Altima%20hora").json()["plantillas"]) == 1
     assert len(cliente.get("/api/plantillas-diseno?categoria=historia").json()["plantillas"]) == 0
     assert len(cliente.get("/api/plantillas-diseno?linea=linea-nacional").json()["plantillas"]) == 1
     assert len(cliente.get("/api/plantillas-diseno?linea=otra").json()["plantillas"]) == 0
@@ -78,6 +81,65 @@ def test_obtener_actualizar_borrar(cliente):
 
     assert cliente.delete(f"/api/plantillas-diseno/{pid}").status_code == 200
     assert cliente.delete(f"/api/plantillas-diseno/{pid}").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Tests de campo `categoria` (texto libre normalizado; fallback "general")      #
+# --------------------------------------------------------------------------- #
+
+def test_categoria_default_general(cliente):
+    """Sin enviar `categoria`, la plantilla cae en 'general' (el fallback del catálogo)."""
+    r = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": _DOC})
+    assert r.status_code == 200, r.text
+    assert r.json()["plantilla"]["categoria"] == "general"
+
+
+def test_categoria_legado_post_cae_a_general(cliente):
+    """El legado 'post' (categoría hardcodeada histórica) se normaliza a 'general' al escribir."""
+    r = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "categoria": "post", "documento": _DOC,
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["plantilla"]["categoria"] == "general"
+
+
+def test_categoria_texto_libre_se_normaliza(cliente):
+    """Texto libre con acentos/espacios/mayúsculas -> slug en minúsculas con guiones."""
+    r = cliente.post("/api/plantillas-diseno", json={
+        "marca": "claro-sports", "categoria": "  Previa de Partido!! ", "documento": _DOC,
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["plantilla"]["categoria"] == "previa-de-partido"
+
+
+def test_patch_categoria_normaliza_y_vacia_cae_a_general(cliente):
+    pid = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "categoria": "marcador", "documento": _DOC,
+    }).json()["plantilla"]["id"]
+
+    r = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"categoria": "Efemérides"})
+    assert r.status_code == 200
+    assert r.json()["plantilla"]["categoria"] == "efemerides"
+
+    r2 = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"categoria": ""})
+    assert r2.status_code == 200
+    assert r2.json()["plantilla"]["categoria"] == "general"
+
+
+def test_busqueda_q_por_nombre_y_categoria(cliente):
+    cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "nombre": "Placa roja", "categoria": "ultima-hora", "documento": _DOC,
+    })
+    cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "nombre": "Tabla general", "categoria": "marcador", "documento": _DOC,
+    })
+
+    # Por nombre (substring, case-insensitive).
+    assert [p["nombre"] for p in cliente.get("/api/plantillas-diseno?q=roja").json()["plantillas"]] == ["Placa roja"]
+    # Por categoría (forma legible -> slug normalizado).
+    assert [p["nombre"] for p in cliente.get("/api/plantillas-diseno?q=%C3%9Altima").json()["plantillas"]] == ["Placa roja"]
+    # Sin coincidencias.
+    assert cliente.get("/api/plantillas-diseno?q=nada-que-ver").json()["plantillas"] == []
 
 
 # --------------------------------------------------------------------------- #

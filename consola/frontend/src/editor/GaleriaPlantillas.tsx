@@ -1,11 +1,19 @@
 // Galería visual de plantillas de diseño: rejilla de miniaturas para elegir una de un vistazo
 // (mucho mejor que un desplegable). Filtra por la marca de la pestaña activa (el llamante).
 // Pestaña de tipo: "Fotos" (default) / "Miniaturas" (portadas de video).
+// Organización estilo Canva: búsqueda + chips de categoría + rejilla agrupada por categoría.
 
 import { Copy, Image, Repeat, Trash2, Video, X } from "lucide-react";
 import { useRef, useState } from "react";
 
+import {
+  BadgeCategoria,
+  BuscadorPlantillas,
+  ChipsCategoria,
+  useFiltroPlantillas,
+} from "@/components/plantillas/FiltroPlantillas";
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
+import { agruparPorCategoria } from "@/lib/categoriasPlantilla";
 
 import { Telon, useCerrarConEscape } from "./Telon";
 
@@ -33,6 +41,7 @@ export function GaleriaPlantillas({
   onDuplicar,
   onRenombrar,
   onRotar,
+  onCategorizar,
   onCerrar,
   /** Si se pasa, el selector de tipo queda fijo y no se puede cambiar (ej: DialogoEditar). */
   tipoFijo,
@@ -47,6 +56,8 @@ export function GaleriaPlantillas({
   onRenombrar?: (p: PlantillaDiseno, nombre: string) => void;
   /** Si se omite, no se ofrece marcar/desmarcar la plantilla para la ROTACIÓN (modo SELECTOR). */
   onRotar?: (p: PlantillaDiseno, rotar: boolean) => void;
+  /** Si se omite, el badge de categoría es solo informativo (modo SELECTOR). */
+  onCategorizar?: (p: PlantillaDiseno, categoria: string) => void;
   onCerrar: () => void;
   tipoFijo?: "foto" | "miniatura";
 }) {
@@ -59,7 +70,11 @@ export function GaleriaPlantillas({
   const commitHecho = useRef(false);
 
   const tipoEfectivo = tipoFijo ?? filtroTipo;
-  const plantillasFiltradas = plantillas.filter((p) => (p.tipo ?? "foto") === tipoEfectivo);
+  const plantillasTipo = plantillas.filter((p) => (p.tipo ?? "foto") === tipoEfectivo);
+  // Búsqueda + chip de categoría (client-side) SOBRE las del tipo activo.
+  const { q, setQ, categoria, setCategoria, presentes, filtradas } =
+    useFiltroPlantillas(plantillasTipo);
+  const grupos = agruparPorCategoria(filtradas);
 
   const commit = (p: PlantillaDiseno) => {
     // Si el commit ya se hizo, noop. Así evitamos doble PATCH: Enter ejecuta commit,
@@ -149,16 +164,37 @@ export function GaleriaPlantillas({
           </div>
         )}
 
+        {/* Búsqueda + chips de categoría (sticky: fuera del área con scroll, estilo Canva). */}
+        {plantillasTipo.length > 0 && (
+          <div className="space-y-2 border-b border-border px-4 py-2">
+            <BuscadorPlantillas valor={q} onCambiar={setQ} />
+            <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} />
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto p-4">
-          {plantillasFiltradas.length === 0 ? (
+          {plantillasTipo.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {tipoEfectivo === "miniatura"
                 ? "Aún no hay miniaturas para esta marca. Diseña una plantilla de tipo «Miniatura» y pulsa «Guardar plantilla»."
                 : "Aún no hay plantillas para esta marca. Diseña una y pulsa «Guardar plantilla»."}
             </p>
+          ) : filtradas.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Sin resultados para esa búsqueda.
+            </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {plantillasFiltradas.map((p) => (
+            // Agrupación por CATEGORÍA (cabecera solo si hay más de un grupo).
+            <div className="space-y-5">
+              {grupos.map((grupo) => (
+                <section key={grupo.slug}>
+                  {grupos.length > 1 && (
+                    <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {grupo.etiqueta}
+                    </h3>
+                  )}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                    {grupo.plantillas.map((p) => (
                 <div key={p.id} className="group relative">
                   <button
                     onClick={() => onCargar(p)}
@@ -183,9 +219,13 @@ export function GaleriaPlantillas({
                       )}
                     </div>
                   </button>
-                  {/* Badge de tipo sobre la tarjeta */}
-                  <div className="absolute left-1.5 top-1.5">
+                  {/* Badges de tipo + categoría sobre la tarjeta */}
+                  <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
                     <BadgeTipo tipo={p.tipo ?? "foto"} />
+                    <BadgeCategoria
+                      categoria={p.categoria}
+                      onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
+                    />
                   </div>
                   {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
                   {onRenombrar && editId === p.id ? (
@@ -258,6 +298,9 @@ export function GaleriaPlantillas({
                     </button>
                   )}
                 </div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}
