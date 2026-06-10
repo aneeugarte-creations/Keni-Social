@@ -76,6 +76,13 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_SCORE_BONUS_BREAKING,
         config.ENV_TRAD_MIN_SCORE, config.ENV_TRAD_LOTE,
         config.ENV_FEED_SLA_MIN,
+        # Economía de tokens de la generación (presupuesto_ia): kill switch + presupuesto
+        # diario + margen manual + tope de contexto. Editables en caliente desde el Monitor.
+        config.ENV_GENERACION_PAUSADA,
+        config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_MARGEN_MANUAL,
+        config.ENV_PROMPT_MAX_CHARS,
+        # Listón de auto-producción del ranking de noticias (umbrales de promoción a tema).
+        config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
     }
     # Los toggles por marca (clave `ENV::marca`) se generan en caliente; el resto del catálogo
     # son exactamente las claves globales esperadas.
@@ -178,6 +185,10 @@ def test_ranking_noticias_en_su_grupo(store):
         config.ENV_SCORE_PESO_FRESCURA,
         config.ENV_SCORE_PESO_VIRALIDAD,
         config.ENV_SCORE_BONUS_BREAKING,
+        # Listón de auto-producción (dominio.clustering.evaluar_liston): umbrales que deciden
+        # qué historias del pool disparan QA+copy automáticos (coste real de tokens).
+        config.ENV_PROMOVER_MIN_SCORE,
+        config.ENV_PROMOVER_MIN_MARCA,
     }
     en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "noticias_ranking"}
     assert en_grupo == esperadas
@@ -212,16 +223,44 @@ _PIPELINE_TOPES_INT = {
 }
 
 
+# Economía de tokens (presupuesto_ia): viven TAMBIÉN en `pipeline_topes` (el Monitor, junto a
+# la cola que gobiernan) pero su mínimo es 0 a propósito: 0 = «sin límite/sin tope» (apagado),
+# a diferencia de los knobs de admisión, donde 0 no tiene sentido (algo debe entrar).
+_PIPELINE_ECONOMIA_INT = {
+    config.ENV_PRESUPUESTO_TOKENS_DIA,
+    config.ENV_PRESUPUESTO_MARGEN_MANUAL,
+    config.ENV_PROMPT_MAX_CHARS,
+}
+
+
 def test_pipeline_topes_en_grupo_propio(store):
-    """Los knobs de admisión son int (min >= 1) y viven EXACTAMENTE en el grupo `pipeline_topes`."""
+    """Los knobs de admisión (int, min >= 1) y los de economía de tokens (int, min 0 =
+    apagado) viven EXACTAMENTE en el grupo `pipeline_topes`."""
     for clave in _PIPELINE_TOPES_INT:
         a = ajustes_catalogo.por_clave(clave)
         assert a is not None, f"falta la clave {clave}"
         assert a.tipo == "int", f"{clave} debe ser int"
         assert a.grupo == "pipeline_topes", f"{clave} debe estar en grupo pipeline_topes"
         assert a.minimo is not None and a.minimo >= 1, f"{clave} debe tener minimo >= 1"
+    for clave in _PIPELINE_ECONOMIA_INT:
+        a = ajustes_catalogo.por_clave(clave)
+        assert a is not None, f"falta la clave {clave}"
+        assert a.tipo == "int", f"{clave} debe ser int"
+        assert a.grupo == "pipeline_topes", f"{clave} debe estar en grupo pipeline_topes"
+        assert a.minimo == 0, f"{clave} debe tener minimo 0 (0 = sin límite)"
     en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "pipeline_topes"}
-    assert en_grupo == _PIPELINE_TOPES_INT
+    assert en_grupo == _PIPELINE_TOPES_INT | _PIPELINE_ECONOMIA_INT
+
+
+def test_generacion_pausada_es_kill_switch_de_maquina(store):
+    """El kill switch de generación es bool, defecto False, en `maquina_global` (junto al
+    interruptor general) y NO peligroso (el Monitor pinta su toggle editable)."""
+    a = ajustes_catalogo.por_clave(config.ENV_GENERACION_PAUSADA)
+    assert a is not None, "falta el kill switch KENI_GENERACION_PAUSADA"
+    assert a.tipo == "bool"
+    assert a.defecto is False
+    assert a.grupo == "maquina_global"
+    assert a.peligroso is False
 
 
 def test_grupos_maquina_son_los_del_monitor(store):
