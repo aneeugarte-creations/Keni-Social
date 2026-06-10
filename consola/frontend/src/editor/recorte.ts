@@ -104,3 +104,119 @@ export function vistaRecorte(
     escalaSrc,
   };
 }
+
+// ── Recorte LATERAL (tiradores laterales del marco de selección, estilo Canva) ──────────────────
+// En una capa de IMAGEN, arrastrar un tirador LATERAL no estira la foto: mueve ese borde de la
+// caja y COMPENSA el crop para que los píxeles visibles no se muevan ni cambien de escala
+// (= recorte progresivo desde ese borde). Hacia fuera DES-recorta hasta agotar el material
+// original; más allá la caja no crece. El resultado queda en forma canónica: el crop es
+// EXACTAMENTE lo visible (su proporción == la de la caja), zoom 1 y foco centrado, así
+// cover/contain + foco + zoom reproducen la misma vista y el export (dibujar.mjs, mismo contrato
+// {cx,cy,cw,ch}) pinta idéntico.
+
+// Tamaño mínimo del lado arrastrado, en px del documento (mismo suelo que el boundBoxFunc del
+// Transformer del lienzo).
+export const MIN_LADO_PX = 8;
+
+export type LadoCaja = "izq" | "der" | "arriba" | "abajo";
+
+// Estado de la capa al INICIO del gesto, en px del documento y coords LOCALES de la capa (sin
+// rotación: la rotación/zoom del lienzo los resuelve el llamador con localADoc/docALocal).
+export interface GestoLateral {
+  w: number; // caja de la capa
+  h: number;
+  iw: number; // bitmap natural de la fuente (px)
+  ih: number;
+  ajuste: Ajuste;
+  foco?: [number, number];
+  zoom?: number;
+  crop?: Crop | null;
+  flipH?: boolean;
+  flipV?: boolean;
+  // Rect que ABRAZAN los tiradores (coords locales de PANTALLA de la capa, con el flip ya
+  // aplicado): el rect visible de la foto en imágenes rectangulares simples, o la caja entera
+  // [0,0,w,h] cuando la silueta la ocupa (forma/duotono).
+  caja: { x: number; y: number; w: number; h: number };
+}
+
+export interface ResultadoLateral {
+  // Caja nueva en coords LOCALES de la capa de partida (mismo origen/ejes que `caja`).
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  crop: Crop; // normalizado: exactamente lo visible en la caja nueva
+  zoom: number; // 1 (el encuadre ya vive en el crop)
+  foco: [number, number]; // centrado (irrelevante: el crop llena la caja exacta)
+}
+
+// Aplica el arrastre de un tirador lateral: `borde` es la posición DESEADA del borde movido en
+// coords locales de pantalla (proyección del puntero sobre el eje del lado). Devuelve la caja y el
+// crop compensado, o `null` si el gesto no es recortable con exactitud (sin bitmap, o los
+// tiradores abrazan una región que la foto no cubre — p. ej. contain con letterbox + forma): el
+// llamador cae entonces al estiramiento por defecto.
+export function recorteLateral(g: GestoLateral, lado: LadoCaja, borde: number): ResultadoLateral | null {
+  const { w, h, iw, ih, caja } = g;
+  if (!(iw > 0) || !(ih > 0) || !(w > 0) || !(h > 0) || !(caja.w > 0) || !(caja.h > 0)) return null;
+  // Imagen ORIGINAL COMPLETA en coords de CONTENIDO de la caja (la geometría real del render)…
+  const v = vistaRecorte(iw, ih, w, h, g.ajuste, g.foco, g.zoom ?? 1, g.crop);
+  const k = v.escalaSrc; // px locales por px de fuente (uniforme en ambos ejes)
+  if (!(k > 0) || !(v.fw > 0) || !(v.fh > 0)) return null;
+  // …y en coords de PANTALLA locales (el flip espeja el contenido alrededor del centro de la caja).
+  const fx = g.flipH ? w - v.fx - v.fw : v.fx;
+  const fy = g.flipV ? h - v.fy - v.fh : v.fy;
+  // Solo es exacto si la foto CUBRE el rect de los tiradores: si la caja sobresale del material no
+  // hay píxeles que recortar/des-recortar en ese hueco.
+  const EPS = 0.5;
+  if (caja.x < fx - EPS || caja.y < fy - EPS || caja.x + caja.w > fx + v.fw + EPS || caja.y + caja.h > fy + v.fh + EPS) {
+    return null;
+  }
+  // Mueve SOLO el borde pedido, acotado: hacia dentro al tamaño mínimo (px y MIN_CROP de la
+  // fuente), hacia fuera al límite del material original (clamp en crop completo).
+  const minW = Math.min(caja.w, Math.max(MIN_LADO_PX, MIN_CROP * v.fw));
+  const minH = Math.min(caja.h, Math.max(MIN_LADO_PX, MIN_CROP * v.fh));
+  let { x: nx, y: ny, w: nw, h: nh } = caja;
+  if (lado === "der") {
+    nw = Math.max(minW, Math.min(fx + v.fw - caja.x, borde - caja.x));
+  } else if (lado === "izq") {
+    const izq = Math.max(fx, Math.min(caja.x + caja.w - minW, borde));
+    nw = caja.x + caja.w - izq;
+    nx = izq;
+  } else if (lado === "abajo") {
+    nh = Math.max(minH, Math.min(fy + v.fh - caja.y, borde - caja.y));
+  } else {
+    const arriba = Math.max(fy, Math.min(caja.y + caja.h - minH, borde));
+    nh = caja.y + caja.h - arriba;
+    ny = arriba;
+  }
+  // Crop normalizado = sub-rect de la FUENTE que queda visible en la caja nueva (deshaciendo el
+  // flip para volver a coords de contenido). Su proporción == la de la caja => mismos píxeles, a
+  // la misma escala, con zoom 1 y foco centrado.
+  const cxc = g.flipH ? w - nx - nw : nx;
+  const cyc = g.flipV ? h - ny - nh : ny;
+  const crop = clampCrop({
+    cx: (cxc - v.fx) / k / iw,
+    cy: (cyc - v.fy) / k / ih,
+    cw: nw / k / iw,
+    ch: nh / k / ih,
+  });
+  return { x: nx, y: ny, w: nw, h: nh, crop, zoom: 1, foco: [0.5, 0.5] };
+}
+
+// Punto en coords LOCALES de una capa (origen = su esquina sup. izq., ejes girados `rot`°, como el
+// nodo Konva) -> coords del DOCUMENTO, y la inversa (para proyectar el puntero sobre la capa).
+export function localADoc(x0: number, y0: number, rot: number, px: number, py: number): { x: number; y: number } {
+  const a = (rot * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  return { x: x0 + px * cos - py * sin, y: y0 + px * sin + py * cos };
+}
+
+export function docALocal(x0: number, y0: number, rot: number, px: number, py: number): { x: number; y: number } {
+  const a = (rot * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  const dx = px - x0;
+  const dy = py - y0;
+  return { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
+}

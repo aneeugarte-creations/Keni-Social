@@ -432,6 +432,13 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
     const nodo = e.target;
     const sx = nodo.scaleX();
     const sy = nodo.scaleY();
+    // Sin transformación PENDIENTE en el nodo no se hornea nada: tras el RECORTE LATERAL de una
+    // imagen (Lienzo) la caja y el crop ya fueron al store por frame y el nodo queda limpio
+    // (escala 1, attrs == capa); hornear aquí duplicaría el paso de deshacer. También cubre el
+    // mero clic en un tirador sin arrastre (que en texto sin caja activaría el modo caja).
+    if (sx === 1 && sy === 1 && nodo.x() === capa.x && nodo.y() === capa.y && nodo.rotation() === capa.rotacion) {
+      return;
+    }
     nodo.scaleX(1);
     nodo.scaleY(1);
     const base: Partial<Capa> = {

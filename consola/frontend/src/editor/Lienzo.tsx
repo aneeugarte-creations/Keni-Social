@@ -41,6 +41,7 @@ import { api, urlMedia } from "@/lib/api";
 import { CapaNodo } from "./capas/CapaNodo";
 import type { Capa, CapaImagen, CapaOverlay, CapaTexto, Crop } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
+import { type GestoLateral, type LadoCaja, docALocal, localADoc, recorteLateral } from "./recorte";
 import { useEditor, useStoreEditor } from "./usarEditor";
 import { leerDimensionesUrl } from "./useImagen";
 
@@ -62,6 +63,27 @@ import {
 import { ReframeOverlay } from "./lienzo/ReframeOverlay";
 import { useArrastreCapas } from "./lienzo/useArrastreCapas";
 import { type LienzoApi, type ZoomApi, useAtajosTeclado } from "./lienzo/useAtajosTeclado";
+
+// Anclas LATERALES del Transformer -> lado de la caja que mueven (gesto de recorte de imagen).
+const ANCLA_LADO: Record<string, LadoCaja> = {
+  "middle-left": "izq",
+  "middle-right": "der",
+  "top-center": "arriba",
+  "bottom-center": "abajo",
+};
+
+// Tiradores estilo Canva: laterales como PÍLDORA, esquinas como CÍRCULO (el rotador conserva su
+// forma). Konva aplica la función a cada ancla en cada update (API oficial, no por-hack).
+function estiloAncla(ancla: Konva.Rect) {
+  const nombre = ancla.name();
+  if (nombre.includes("middle-left") || nombre.includes("middle-right")) {
+    ancla.setAttrs({ width: 6, height: 16, offsetX: 3, offsetY: 8, cornerRadius: 3 });
+  } else if (nombre.includes("top-center") || nombre.includes("bottom-center")) {
+    ancla.setAttrs({ width: 16, height: 6, offsetX: 8, offsetY: 3, cornerRadius: 3 });
+  } else if (!nombre.includes("rotater")) {
+    ancla.setAttrs({ cornerRadius: ancla.width() / 2 });
+  }
+}
 
 // Lee las dimensiones naturales (px) de un fichero de imagen sin subirlo, para respetar su
 // aspect-ratio al insertarlo. Tolerante: devuelve `null` si el navegador no puede decodificarlo.
@@ -285,6 +307,9 @@ export function Lienzo({
   const ratioFijo = capaSel ? RATIO_FIJO.has(capaSel.tipo) : false;
   // El grupo solo se mueve (resize/rotación se hacen desagrupando).
   const esGrupo = capaSel?.tipo === "grupo";
+  // Una IMAGEN sola y no bloqueada gana además los 4 tiradores LATERALES (recorte desde ese borde,
+  // estilo Canva; ver `iniciarGestoLateral`). Las esquinas siguen escalando proporcional.
+  const lateralesImagen = seleccionMulti.length === 1 && capaSel?.tipo === "imagen" && !capaSel.bloqueada;
 
   // Las webfonts (catálogo + tipografías de marca) cargan async; Konva pinta con la fuente
   // disponible en ese instante. Redibuja cuando el navegador termina de cargar fuentes para que
@@ -735,6 +760,124 @@ export function Lienzo({
     if (div) div.style.display = "none";
   };
 
+  // ── Recorte LATERAL estilo Canva (tiradores laterales del Transformer en imágenes) ───────────
+  // En una capa de IMAGEN, los 4 tiradores laterales no estiran: RECORTAN desde ese borde (la foto
+  // mantiene su escala y encuadre; hacia fuera des-recortan hasta el material original). El gesto
+  // se deriva de una instantánea al inicio + el puntero en coords LOCALES de la capa (robusto ante
+  // rotación, flip y zoom del lienzo), se vuelca al store por frame SIN historial y cuenta como UN
+  // paso de deshacer (`comenzarGesto` en el primer movimiento; el `onTransformEnd` de la capa no
+  // hornea nada porque el nodo queda con escala 1 y attrs == capa). Las esquinas conservan el
+  // escalado proporcional de siempre (keepRatio); la geometría pura vive en `recorteLateral`.
+  const gestoLateral = useRef<{
+    id: string;
+    lado: LadoCaja;
+    x0: number;
+    y0: number;
+    rot: number;
+    // El borde se mueve RELATIVO a donde se agarró el tirador (borde inicial - puntero inicial),
+    // como el arrastre nativo de las anclas: sin salto al primer movimiento.
+    desfase: number;
+    params: GestoLateral;
+    registrado: boolean;
+  } | null>(null);
+
+  const iniciarGestoLateral = () => {
+    gestoLateral.current = null;
+    const tr = trRef.current;
+    const stage = stageRef.current;
+    const ancla = tr?.getActiveAnchor();
+    const lado = ancla ? ANCLA_LADO[ancla] : undefined;
+    if (!tr || !stage || !lado) return;
+    const nodos = tr.nodes();
+    if (nodos.length !== 1) return;
+    const nodo = nodos[0];
+    const capa = store.getState().documento.capas.find((c) => c.id === nodo.id());
+    if (!capa || capa.tipo !== "imagen" || capa.bloqueada) return;
+    const c = capa as CapaImagen;
+    // Bitmap EFECTIVO realmente pintado (la foto real o la de muestra del hueco): sin él no hay
+    // píxeles que recortar y el tirador cae al estiramiento por defecto (el placeholder vacío es
+    // un Rect, no un Group con imagen). El cast es seguro: el lienzo solo pinta
+    // HTMLImageElement/canvas (width/height numéricos), los mismos px que usa
+    // `geometriaImagenEnCaja` en CapaNodo.
+    const img =
+      nodo instanceof Konva.Group
+        ? (nodo.findOne<Konva.Image>("Image")?.image() as { width: number; height: number } | undefined)
+        : undefined;
+    if (!img || !(img.width > 0) || !(img.height > 0)) return;
+    // Rect que abrazan los tiradores, en coords locales de la capa: la misma base que usa el
+    // Transformer para su caja (clientRect local del nodo, sin sombra/trazo).
+    const r = nodo.getClientRect({ skipTransform: true, skipShadow: true, skipStroke: true });
+    const params: GestoLateral = {
+      w: c.w,
+      h: c.h,
+      iw: img.width,
+      ih: img.height,
+      ajuste: c.ajuste,
+      foco: c.foco,
+      zoom: c.zoom,
+      crop: c.crop,
+      flipH: c.flip_h,
+      flipV: c.flip_v,
+      caja: { x: r.x, y: r.y, w: r.width, h: r.height },
+    };
+    // Valida con un gesto nulo (el borde en su posición actual): si la geometría no es recortable
+    // (p. ej. contain con letterbox + forma: la foto no cubre la caja), no se arma y el tirador
+    // estira como hasta ahora.
+    const bordeActual =
+      lado === "izq" ? r.x : lado === "der" ? r.x + r.width : lado === "arriba" ? r.y : r.y + r.height;
+    if (!recorteLateral(params, lado, bordeActual)) return;
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+    const rot = c.rotacion || 0;
+    const local = docALocal(c.x, c.y, rot, pos.x / escala, pos.y / escala);
+    const desfase = bordeActual - (lado === "izq" || lado === "der" ? local.x : local.y);
+    gestoLateral.current = { id: c.id, lado, x0: c.x, y0: c.y, rot, desfase, params, registrado: false };
+  };
+
+  const moverGestoLateral = () => {
+    const g = gestoLateral.current;
+    const tr = trRef.current;
+    const stage = stageRef.current;
+    if (!g || !tr || !stage) return;
+    const nodo = tr.nodes()[0];
+    if (!nodo || nodo.id() !== g.id) return;
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+    // Puntero -> documento -> coords LOCALES de la capa al inicio del gesto (rotación incluida);
+    // el eje del lado da la posición deseada del borde (con el desfase del agarre inicial).
+    const local = docALocal(g.x0, g.y0, g.rot, pos.x / escala, pos.y / escala);
+    const borde = (g.lado === "izq" || g.lado === "der" ? local.x : local.y) + g.desfase;
+    const r = recorteLateral(g.params, g.lado, borde);
+    if (!r) return;
+    const origen = localADoc(g.x0, g.y0, g.rot, r.x, r.y);
+    // Deshace SIEMPRE la escala que el Transformer aplicó este frame: la caja/foto nuevas las
+    // pinta React desde el store (mismo patrón de escritura viva que el CropOverlay).
+    nodo.setAttrs({ x: origen.x, y: origen.y, rotation: g.rot, scaleX: 1, scaleY: 1 });
+    // Gesto totalmente CLAVADO (p. ej. hacia fuera sin material): ni historial ni escritura.
+    const actual = store.getState().documento.capas.find((x) => x.id === g.id);
+    if (!actual || actual.tipo !== "imagen") return;
+    const cropActual = (actual as CapaImagen).crop ?? { cx: 0, cy: 0, cw: 1, ch: 1 };
+    const sinCambio =
+      actual.x === origen.x &&
+      actual.y === origen.y &&
+      actual.w === r.w &&
+      actual.h === r.h &&
+      cropActual.cx === r.crop.cx &&
+      cropActual.cy === r.crop.cy &&
+      cropActual.cw === r.crop.cw &&
+      cropActual.ch === r.crop.ch;
+    if (sinCambio) return;
+    if (!g.registrado) {
+      store.getState().comenzarGesto();
+      g.registrado = true;
+    }
+    store.getState().actualizar(
+      g.id,
+      { x: origen.x, y: origen.y, w: r.w, h: r.h, crop: r.crop, zoom: r.zoom, foco: r.foco } as Partial<Capa>,
+      false,
+    );
+  };
+
   // ── Hover affordance ─────────────────────────────────────────────────────
   // Sube hasta el hijo directo de la Layer: las capas de primer nivel llevan ahí su id (las hijas
   // de un grupo resuelven al grupo). Fondo/Transformer no tienen id => null (sin hover).
@@ -963,15 +1106,37 @@ export function Lienzo({
               rotateEnabled={!esGrupo}
               resizeEnabled={!esGrupo}
               keepRatio={ratioFijo}
-              enabledAnchors={esGrupo ? [] : ratioFijo ? ["top-left", "top-right", "bottom-left", "bottom-right"] : undefined}
+              // Imágenes y logos: esquinas con proporción fija. Una imagen sola (no bloqueada)
+              // gana además los LATERALES, que recortan en vez de estirar (gesto lateral arriba).
+              enabledAnchors={
+                esGrupo
+                  ? []
+                  : lateralesImagen
+                    ? ["top-left", "top-right", "bottom-left", "bottom-right", "middle-left", "middle-right", "top-center", "bottom-center"]
+                    : ratioFijo
+                      ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+                      : undefined
+              }
+              anchorStyleFunc={estiloAncla}
               ignoreStroke
               // Snap SUAVE de la rotación a 0/45/90… (estilo Canva); fuera del umbral gira libre.
               rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
               rotationSnapTolerance={5}
-              // Etiqueta viva junto al cursor: "W × H px" al redimensionar, grados al rotar.
-              onTransformStart={moverEtiquetaGesto}
-              onTransform={moverEtiquetaGesto}
-              onTransformEnd={ocultarEtiquetaGesto}
+              // Etiqueta viva junto al cursor: "W × H px" al redimensionar, grados al rotar. El
+              // gesto LATERAL de imagen intercepta el transform ANTES de la etiqueta (recorta en
+              // vez de estirar) y se desarma al soltar.
+              onTransformStart={() => {
+                iniciarGestoLateral();
+                moverEtiquetaGesto();
+              }}
+              onTransform={() => {
+                moverGestoLateral();
+                moverEtiquetaGesto();
+              }}
+              onTransformEnd={() => {
+                gestoLateral.current = null;
+                ocultarEtiquetaGesto();
+              }}
               boundBoxFunc={(o, n) => (n.width < 8 || n.height < 8 ? o : n)}
             />
           </Layer>
