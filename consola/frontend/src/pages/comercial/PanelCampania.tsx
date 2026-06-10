@@ -93,7 +93,17 @@ function TarjetaKpiComparada({
   );
 }
 
-export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango: string }) {
+export function PanelCampania({
+  campaniaId,
+  rango,
+  ocultarAds = false,
+}: {
+  campaniaId: string;
+  rango: string;
+  /** Modo cliente: oculta TODO lo de Ads y suma las visualizaciones pagadas a las orgánicas
+   * (el cliente no debe ver que se usó pauta). */
+  ocultarAds?: boolean;
+}) {
   const consulta = useQuery({
     queryKey: [...CLAVE_COMERCIAL, "analitica", campaniaId, rango],
     queryFn: ({ signal }) => api.analiticaCampania(campaniaId, { rango }, signal),
@@ -134,9 +144,9 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
           comp={comparativa.piezas}
         />
         <TarjetaKpiComparada
-          etiqueta="Visualizaciones (orgánicas)"
-          valor={numeroCompacto(kpis.visualizaciones)}
-          titulo={numeroCompleto(kpis.visualizaciones)}
+          etiqueta={ocultarAds ? "Visualizaciones" : "Visualizaciones (orgánicas)"}
+          valor={numeroCompacto(kpis.visualizaciones + (ocultarAds ? inorganico.visualizaciones : 0))}
+          titulo={numeroCompleto(kpis.visualizaciones + (ocultarAds ? inorganico.visualizaciones : 0))}
           comp={comparativa.visualizaciones}
         />
         <TarjetaKpiComparada
@@ -152,13 +162,13 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
         />
       </div>
 
-      <BloqueInorganico inorganico={inorganico} />
+      {!ocultarAds && <BloqueInorganico inorganico={inorganico} />}
 
       <GraficaTendencia puntos={tendencia.puntos} />
 
       <DesgloseRedTabla filas={desglose_red} />
 
-      <TablaPiezas piezas={piezas} />
+      <TablaPiezas piezas={piezas} ocultarAds={ocultarAds} />
     </div>
   );
 }
@@ -302,8 +312,14 @@ type ClaveOrdenPieza =
   | "interacciones"
   | "engagement_pct";
 
+/** Visualizaciones a MOSTRAR de una pieza: en modo cliente (ocultarAds) se suman las pagadas
+ * a las orgánicas para que el inorgánico se vea como un post normal. */
+function visEfectivas(p: PiezaCampania, ocultarAds: boolean): number {
+  return p.visualizaciones + (ocultarAds ? p.visualizaciones_pagadas : 0);
+}
+
 /** Tabla de piezas del periodo: filtrable por red/formato y ordenable por columna. */
-function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
+function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarAds: boolean }) {
   const [red, setRed] = React.useState<string>(TODAS);
   const [formato, setFormato] = React.useState<string>(TODAS);
 
@@ -333,7 +349,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
       marca: (p) => p.marca,
       formato: (p) => nombreFormato(p.formato),
       publicado: (p) => p.publicado,
-      visualizaciones: (p) => p.visualizaciones,
+      visualizaciones: (p) => visEfectivas(p, ocultarAds),
       visualizaciones_pagadas: (p) => p.visualizaciones_pagadas,
       interacciones: (p) => p.interacciones,
       engagement_pct: (p) => p.engagement_pct,
@@ -413,7 +429,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
               {col("formato", "Formato", "left")}
               {col("publicado", "Fecha")}
               {col("visualizaciones", "Visualizaciones")}
-              {col("visualizaciones_pagadas", "Ads")}
+              {!ocultarAds && col("visualizaciones_pagadas", "Ads")}
               {col("interacciones", "Interacciones")}
               {col("engagement_pct", "Engagement", "right", "pr-6")}
             </TableRow>
@@ -421,7 +437,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
           <TableBody>
             {filtradas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={ocultarAds ? 8 : 9} className="py-8 text-center text-muted-foreground">
                   {piezas.length === 0
                     ? "No hay piezas con estos hashtags en el periodo."
                     : "Ninguna pieza coincide con los filtros."}
@@ -455,7 +471,7 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
                           cross-post
                         </Badge>
                       )}
-                      {p.es_inorganico && (
+                      {!ocultarAds && p.es_inorganico && (
                         <Badge
                           className="shrink-0 border-transparent bg-amber-100 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
                           title="Publicación inorgánica: un boost de Meta Ads de este contenido"
@@ -479,21 +495,26 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
                   <TableCell className="text-right text-muted-foreground tabular-nums">
                     {fechaCorta(p.publicado)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(p.visualizaciones)}>
-                    {numeroCompacto(p.visualizaciones)}
-                  </TableCell>
                   <TableCell
                     className="text-right tabular-nums"
-                    title={p.visualizaciones_pagadas ? numeroCompleto(p.visualizaciones_pagadas) : "Sin inversión"}
+                    title={numeroCompleto(visEfectivas(p, ocultarAds))}
                   >
-                    {p.visualizaciones_pagadas ? (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {numeroCompacto(p.visualizaciones_pagadas)}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                    {numeroCompacto(visEfectivas(p, ocultarAds))}
                   </TableCell>
+                  {!ocultarAds && (
+                    <TableCell
+                      className="text-right tabular-nums"
+                      title={p.visualizaciones_pagadas ? numeroCompleto(p.visualizaciones_pagadas) : "Sin inversión"}
+                    >
+                      {p.visualizaciones_pagadas ? (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          {numeroCompacto(p.visualizaciones_pagadas)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right tabular-nums" title={numeroCompleto(p.interacciones)}>
                     {numeroCompacto(p.interacciones)}
                   </TableCell>

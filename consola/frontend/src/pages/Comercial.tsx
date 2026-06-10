@@ -8,7 +8,7 @@
  * la fija el switch global de la barra superior; cada campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -62,6 +62,14 @@ export default function Comercial() {
   const queryClient = useQueryClient();
   const [rango, setRango] = React.useState("mes");
   const [seleccionada, setSeleccionada] = React.useState<string | null>(null);
+  // Modo cliente: oculta TODO lo de Ads (el cliente no debe ver que se usó pauta) y suma las
+  // visualizaciones pagadas a las orgánicas. Persiste para que aguante al recargar/compartir.
+  const [ocultarAds, setOcultarAds] = React.useState(
+    () => localStorage.getItem("keni:campanias:ocultarAds") === "1",
+  );
+  React.useEffect(() => {
+    localStorage.setItem("keni:campanias:ocultarAds", ocultarAds ? "1" : "0");
+  }, [ocultarAds]);
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState<CampaniaComercial | null>(null);
 
@@ -174,7 +182,22 @@ export default function Comercial() {
                 </MenuAcciones>
               )}
             </div>
-            <SelectorTiempo rangos={RANGOS} valor={rango} onCambio={setRango} />
+            <div className="flex items-center gap-2">
+              <Button
+                variant={ocultarAds ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setOcultarAds((v) => !v)}
+                title={
+                  ocultarAds
+                    ? "Modo cliente activo: lo de Ads está oculto y sumado a lo orgánico. Clic para mostrarlo."
+                    : "Oculta todo lo de Ads y suma las visualizaciones pagadas a las orgánicas (para enseñar al cliente)."
+                }
+              >
+                {ocultarAds ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {ocultarAds ? "Ads ocultos" : "Ocultar Ads"}
+              </Button>
+              <SelectorTiempo rangos={RANGOS} valor={rango} onCambio={setRango} />
+            </div>
           </div>
 
           {campaniaActual && (
@@ -195,7 +218,9 @@ export default function Comercial() {
             </div>
           )}
 
-          {seleccionada && <PanelCampania campaniaId={seleccionada} rango={rango} />}
+          {seleccionada && (
+            <PanelCampania campaniaId={seleccionada} rango={rango} ocultarAds={ocultarAds} />
+          )}
         </div>
       )}
 
