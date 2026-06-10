@@ -329,26 +329,33 @@ export function setClipPip(
   };
 }
 
-/** Mueve/redimensiona la ventana PiP (clamp dentro del lienzo). */
+/** Lado mínimo (px del lienzo) de la ventana PiP. */
+export const MIN_PIP_PX = 80;
+
+/**
+ * Mueve/redimensiona la ventana PiP: clamp dentro del lienzo, lado mínimo `MIN_PIP_PX` y
+ * redondeo a px enteros (el documento viaja al render server-side; sin decimales de gestos).
+ * Sin clip PiP o sin cambio real devuelve el MISMO objeto (los autoguardados comparan por
+ * referencia, igual que `setRecorteBase`).
+ */
 export function setCajaPip(
   doc: ComposicionVideo,
   caja: Partial<Pick<ClipVideo, "x" | "y" | "w" | "h">>,
 ): ComposicionVideo {
+  const clip = pistaPip(doc)?.clips[0];
+  if (!clip) return doc;
+  const w = Math.round(Math.max(MIN_PIP_PX, Math.min(caja.w ?? clip.w, doc.formato.w)));
+  const h = Math.round(Math.max(MIN_PIP_PX, Math.min(caja.h ?? clip.h, doc.formato.h)));
+  const x = Math.round(Math.max(0, Math.min(caja.x ?? clip.x, doc.formato.w - w)));
+  const y = Math.round(Math.max(0, Math.min(caja.y ?? clip.y, doc.formato.h - h)));
+  if (x === clip.x && y === clip.y && w === clip.w && h === clip.h) return doc;
   return {
     ...doc,
-    pistas: doc.pistas.map((p) => {
-      if (!(p.tipo === "video" && p.id === "pip")) return p;
-      return {
-        ...p,
-        clips: p.clips.map((c) => {
-          const w = Math.max(80, Math.min(caja.w ?? c.w, doc.formato.w));
-          const h = Math.max(80, Math.min(caja.h ?? c.h, doc.formato.h));
-          const x = Math.max(0, Math.min(caja.x ?? c.x, doc.formato.w - w));
-          const y = Math.max(0, Math.min(caja.y ?? c.y, doc.formato.h - h));
-          return { ...c, x, y, w, h };
-        }),
-      };
-    }),
+    pistas: doc.pistas.map((p) =>
+      p.tipo === "video" && p.id === "pip"
+        ? { ...p, clips: p.clips.map((c, i) => (i === 0 ? { ...c, x, y, w, h } : c)) }
+        : p,
+    ),
   };
 }
 

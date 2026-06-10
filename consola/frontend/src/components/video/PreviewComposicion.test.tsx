@@ -10,6 +10,10 @@
  *  - RECORTE: la reproducción lo respeta como el render (play desde fuera salta a `recorte_in`,
  *    al alcanzar `recorte_out` pausa clavada en el corte); el scrubbing recorre el clip entero
  *    y el reloj muestra el tiempo del VÍDEO FINAL con las zonas descartadas atenuadas.
+ *  - PiP EDITABLE: arrastrar mueve la caja en vivo (estado local) y COMMITEA x/y al soltar, con
+ *    clamp al lienzo y snap a bordes/centro con guías; la esquina inferior derecha redimensiona
+ *    manteniendo la proporción; las flechas mueven ±1 % (Shift ±5 %); sin `pipEditable` la caja
+ *    no es interactiva.
  *
  * jsdom no implementa HTMLMediaElement.play/pause: se mockean en el prototipo despachando los
  * eventos `play`/`pause` reales (los mismos que dispararía el navegador).
@@ -21,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   composicionVacia,
   setClipBase,
+  setClipPip,
   setRecorteBase,
   type ComposicionVideo,
   type SegmentoSub,
@@ -282,5 +287,119 @@ describe("PreviewComposicion (player)", () => {
     expect(screen.queryByTestId("barra-descarte-in")).not.toBeInTheDocument();
     expect(screen.queryByTestId("barra-descarte-out")).not.toBeInTheDocument();
     expect(screen.getByText("00:00 / 00:30")).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// PiP EDITABLE: arrastrar/redimensionar/flechas sobre el preview (estilo Canva).
+//
+// Geometría de los tests: lienzo 9:16 = 1080×1920; `altoMax` 960 → escala 0,5 EXACTA (jsdom no
+// mide anchos: el clamp por contenedor no aplica). La caja PiP por defecto de `setClipPip` es
+// w=367, h=206 en x=673, y=1674 (esquina inferior derecha con margen 40).
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("PreviewComposicion (PiP editable)", () => {
+  /** Doc con base de 30 s + PiP por defecto (x=673, y=1674, w=367, h=206). */
+  function docConPip(): ComposicionVideo {
+    return setClipPip(docConBase(30000), "videos/pip.mp4", 10000);
+  }
+
+  function renderPipEditable(onCajaPip = vi.fn()) {
+    render(
+      <PreviewComposicion
+        doc={docConPip()}
+        baseUrl="videos/abc.mp4"
+        pipUrl="videos/pip.mp4"
+        altoMax={960}
+        pipEditable
+        onCajaPip={onCajaPip}
+      />,
+    );
+    return { onCajaPip, caja: screen.getByRole("group", { name: "Ventana PiP" }) };
+  }
+
+  it("sin `pipEditable` la caja PiP se pinta pero NO es interactiva", () => {
+    render(<PreviewComposicion doc={docConPip()} baseUrl="videos/abc.mp4" altoMax={960} />);
+    const caja = screen.getByTestId("caja-pip");
+    expect(caja).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Ventana PiP" })).not.toBeInTheDocument();
+    expect(caja).not.toHaveAttribute("tabindex");
+    expect(screen.queryByTestId("pip-redimensionar")).not.toBeInTheDocument();
+  });
+
+  it("arrastrar mueve la caja EN VIVO (sin tocar el modelo) y commitea x/y al soltar", () => {
+    const { onCajaPip, caja } = renderPipEditable();
+    fireEvent.mouseDown(caja, { clientX: 500, clientY: 500 });
+    // Δpantalla (−50, −20) a escala 0,5 = Δlienzo (−100, −40): la caja sigue al puntero…
+    fireEvent.mouseMove(window, { clientX: 450, clientY: 480 });
+    expect(caja.style.left).toBe(`${(673 - 100) * 0.5}px`);
+    expect(caja.style.top).toBe(`${(1674 - 40) * 0.5}px`);
+    // …pero el modelo NO se toca durante el gesto (transform local, commit único al soltar).
+    expect(onCajaPip).not.toHaveBeenCalled();
+    fireEvent.mouseUp(window);
+    expect(onCajaPip).toHaveBeenCalledTimes(1);
+    expect(onCajaPip).toHaveBeenCalledWith({ x: 573, y: 1634 });
+    // Al soltar se quitan los listeners: mover el ratón ya no arrastra ni re-commitea.
+    fireEvent.mouseMove(window, { clientX: 300, clientY: 300 });
+    fireEvent.mouseUp(window);
+    expect(onCajaPip).toHaveBeenCalledTimes(1);
+  });
+
+  it("clamp + snap a BORDES: no sale del lienzo, se imanta y pinta guías que mueren al soltar", () => {
+    const { onCajaPip, caja } = renderPipEditable();
+    fireEvent.mouseDown(caja, { clientX: 500, clientY: 500 });
+    // Δlienzo (+30, +200): x=703 cae a ≤16 px (umbral 8/0,5) del borde derecho (713) → snap;
+    // y=1874 excede el lienzo → clamp a 1714 (que ES el borde inferior) → snap con guía.
+    fireEvent.mouseMove(window, { clientX: 515, clientY: 600 });
+    expect(screen.getByTestId("guia-snap-v").style.left).toBe(`${1080 * 0.5}px`);
+    expect(screen.getByTestId("guia-snap-h").style.top).toBe(`${1920 * 0.5}px`);
+    fireEvent.mouseUp(window);
+    expect(onCajaPip).toHaveBeenCalledWith({ x: 713, y: 1714 });
+    expect(screen.queryByTestId("guia-snap-v")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guia-snap-h")).not.toBeInTheDocument();
+  });
+
+  it("snap al CENTRO horizontal con guía en mitad del lienzo", () => {
+    const { onCajaPip, caja } = renderPipEditable();
+    fireEvent.mouseDown(caja, { clientX: 500, clientY: 500 });
+    // Δlienzo −316 → x=357, a 0,5 px del centrado ((1080−367)/2 = 356,5) → imanta al centro.
+    fireEvent.mouseMove(window, { clientX: 342, clientY: 500 });
+    expect(screen.getByTestId("guia-snap-v").style.left).toBe(`${540 * 0.5}px`);
+    fireEvent.mouseUp(window);
+    expect(onCajaPip).toHaveBeenCalledWith({ x: 357, y: 1674 });
+  });
+
+  it("la esquina inferior derecha REDIMENSIONA manteniendo la proporción (sin arrastrar la caja)", () => {
+    const { onCajaPip } = renderPipEditable();
+    const asa = screen.getByTestId("pip-redimensionar");
+    fireEvent.mouseDown(asa, { clientX: 300, clientY: 300 });
+    // Δlienzo +20 en X: w 367→387; h sigue la proporción (387·206/367 ≈ 217).
+    fireEvent.mouseMove(window, { clientX: 310, clientY: 300 });
+    fireEvent.mouseUp(window);
+    // Un solo commit y SOLO de tamaño: el mousedown del asa no arrancó también el arrastre.
+    expect(onCajaPip).toHaveBeenCalledTimes(1);
+    expect(onCajaPip).toHaveBeenCalledWith({ w: 387, h: 217 });
+  });
+
+  it("el redimensionado respeta el MÍNIMO (ningún lado por debajo de 80 px de lienzo)", () => {
+    const { onCajaPip } = renderPipEditable();
+    const asa = screen.getByTestId("pip-redimensionar");
+    fireEvent.mouseDown(asa, { clientX: 300, clientY: 300 });
+    // Encoger muchísimo: el alto clava en 80 y el ancho en 80·(367/206) ≈ 143.
+    fireEvent.mouseMove(window, { clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(window);
+    expect(onCajaPip).toHaveBeenCalledWith({ w: 143, h: 80 });
+  });
+
+  it("con foco, las flechas mueven ±1 % del lienzo y Shift ±5 %", () => {
+    const { onCajaPip, caja } = renderPipEditable();
+    // 1 % de 1080 = 10,8 → 11 px de lienzo a la izquierda.
+    fireEvent.keyDown(caja, { key: "ArrowLeft" });
+    expect(onCajaPip).toHaveBeenLastCalledWith({ x: 673 - 11 });
+    // Shift: 5 % de 1920 = 96 px hacia abajo (el clamp final lo aplica `setCajaPip`).
+    fireEvent.keyDown(caja, { key: "ArrowDown", shiftKey: true });
+    expect(onCajaPip).toHaveBeenLastCalledWith({ y: 1674 + 96 });
+    // Una tecla ajena no commitea nada.
+    fireEvent.keyDown(caja, { key: "Enter" });
+    expect(onCajaPip).toHaveBeenCalledTimes(2);
   });
 });

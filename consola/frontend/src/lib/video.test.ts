@@ -112,6 +112,29 @@ describe("PiP", () => {
     expect(clip.x + clip.w).toBeLessThanOrEqual(1080);
     expect(clip.y).toBeGreaterThanOrEqual(0);
   });
+
+  it("setCajaPip redondea a px enteros (los gestos del preview traen decimales)", () => {
+    const doc = setCajaPip(setClipPip(composicionVacia("9:16"), "videos/p.mp4", 5000), {
+      x: 100.4,
+      y: 50.6,
+      w: 320.5,
+      h: 180.2,
+    });
+    expect(pistaPip(doc)!.clips[0]).toMatchObject({ x: 100, y: 51, w: 321, h: 180 });
+  });
+
+  it("setCajaPip sin cambio real (o sin clip PiP) devuelve el MISMO doc (autoguardado por referencia)", () => {
+    const doc = setClipPip(composicionVacia("9:16"), "videos/p.mp4", 5000);
+    const clip = pistaPip(doc)!.clips[0];
+    // Mismos valores tras clamp/redondeo → misma referencia: el autoguardado no reguarda.
+    expect(setCajaPip(doc, { x: clip.x, y: clip.y })).toBe(doc);
+    // Empujar más allá del clamp cuando ya está en el borde tampoco es un cambio real.
+    const enBorde = setCajaPip(doc, { x: 99999 });
+    expect(setCajaPip(enBorde, { x: 99999 })).toBe(enBorde);
+    // Sin clip PiP no hay nada que mutar.
+    const vacia = composicionVacia("9:16");
+    expect(setCajaPip(vacia, { x: 10 })).toBe(vacia);
+  });
 });
 
 describe("setSubtitulos", () => {

@@ -26,6 +26,13 @@
  * y al alcanzar `recorte_out` se pausa clavada en el corte (play de nuevo = replay desde
  * `recorte_in`). El SCRUBBING sí recorre el clip completo (estilo Canva: lo descartado se ve
  * atenuado en la barra) y el reloj muestra el tiempo DEL VÍDEO FINAL, no el del clip crudo.
+ *
+ * PiP EDITABLE (estilo Canva, con `pipEditable` + `onCajaPip`): la ventana PiP se ARRASTRA con
+ * el puntero (mismo patrón window-mousemove del scrubbing) con clamp a los bordes del lienzo y
+ * SNAP a bordes/centro (umbral ~8 px de pantalla, con guías visuales). La esquina inferior
+ * derecha REDIMENSIONA manteniendo la proporción. Durante el gesto la caja transitoria vive en
+ * estado local: el documento se actualiza UNA vez al soltar (commit → autoguardado del padre).
+ * Con foco, las flechas mueven la ventana ±1 % del lienzo (Shift: ±5 %).
  */
 import { Pause, Play } from "lucide-react";
 import * as React from "react";
@@ -33,6 +40,7 @@ import * as React from "react";
 import { urlMedia } from "@/lib/api";
 import {
   formatearDuracionMs,
+  MIN_PIP_PX,
   pistaBase,
   pistaOverlay,
   pistaPip,
@@ -70,7 +78,17 @@ export interface PreviewComposicionProps {
   onDuracion?: (seg: number) => void;
   /** Expone `buscarA` para seeks externos (p. ej. arrastrar el playhead del timeline). */
   playerRef?: React.Ref<PreviewPlayerHandle>;
+  /**
+   * Habilita la edición DIRECTA de la ventana PiP sobre el preview (arrastrar/redimensionar/
+   * flechas). Actívala solo en la sección PiP para no sorprender desde otras secciones.
+   */
+  pipEditable?: boolean;
+  /** Commit de la caja PiP (px del lienzo) al soltar un gesto o pulsar una flecha. */
+  onCajaPip?: (caja: { x?: number; y?: number; w?: number; h?: number }) => void;
 }
+
+/** Umbral de SNAP del arrastre del PiP, en px de PANTALLA (constante a cualquier escala). */
+const UMBRAL_SNAP_PX = 8;
 
 export function PreviewComposicion({
   doc,
@@ -82,6 +100,8 @@ export function PreviewComposicion({
   onTiempo,
   onDuracion,
   playerRef,
+  pipEditable = false,
+  onCajaPip,
 }: PreviewComposicionProps) {
   const { w, h } = doc.formato;
 
@@ -312,6 +332,134 @@ export function PreviewComposicion({
 
   const clipPip = pip?.clips[0];
 
+  // ------------------------------------------------------------------ //
+  // PiP EDITABLE: arrastre + redimensionado + flechas sobre el preview   //
+  // ------------------------------------------------------------------ //
+  // Durante un gesto la caja TRANSITORIA (px del lienzo) y las guías de snap viven en estado
+  // local: el documento global no se toca hasta soltar (un único commit vía `onCajaPip`, que
+  // dispara el autoguardado del padre), igual que el trim del timeline.
+  const [gestoPip, setGestoPip] = React.useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    guiaV: number | null; // X del lienzo donde pintar la guía vertical (o null)
+    guiaH: number | null; // Y del lienzo donde pintar la guía horizontal (o null)
+  } | null>(null);
+
+  const pipInteractivo = pipEditable && !!onCajaPip && !!clipPip;
+
+  /** Arrastre de la ventana: mousedown en la caja; move/up en window (patrón del scrubbing). */
+  const iniciarArrastrePip = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (!clipPip || !onCajaPip || escala <= 0) return;
+      e.preventDefault(); // evita seleccionar texto / drag nativo del <video>
+      const origenX = e.clientX;
+      const origenY = e.clientY;
+      const { x: x0, y: y0, w: cw, h: ch } = clipPip;
+      const maxX = Math.max(0, w - cw);
+      const maxY = Math.max(0, h - ch);
+      const umbral = UMBRAL_SNAP_PX / escala; // px de pantalla → px del lienzo
+      // Imanes por eje: posición destino de la caja + coordenada del lienzo donde va la guía.
+      const imanesX: [number, number][] = [[0, 0], [maxX / 2, w / 2], [maxX, w]];
+      const imanesY: [number, number][] = [[0, 0], [maxY / 2, h / 2], [maxY, h]];
+      let ultima = { x: x0, y: y0 };
+      const mover = (ev: MouseEvent) => {
+        let x = Math.min(Math.max(0, x0 + (ev.clientX - origenX) / escala), maxX);
+        let y = Math.min(Math.max(0, y0 + (ev.clientY - origenY) / escala), maxY);
+        let guiaV: number | null = null;
+        let guiaH: number | null = null;
+        for (const [destino, guia] of imanesX) {
+          if (Math.abs(x - destino) <= umbral) {
+            x = destino;
+            guiaV = guia;
+            break;
+          }
+        }
+        for (const [destino, guia] of imanesY) {
+          if (Math.abs(y - destino) <= umbral) {
+            y = destino;
+            guiaH = guia;
+            break;
+          }
+        }
+        ultima = { x, y };
+        setGestoPip({ x, y, w: cw, h: ch, guiaV, guiaH });
+      };
+      const soltar = () => {
+        window.removeEventListener("mousemove", mover);
+        window.removeEventListener("mouseup", soltar);
+        setGestoPip(null);
+        // Commit ÚNICO al modelo (sin cambio real, `setCajaPip` devuelve el mismo doc).
+        onCajaPip({ x: Math.round(ultima.x), y: Math.round(ultima.y) });
+      };
+      window.addEventListener("mousemove", mover);
+      window.addEventListener("mouseup", soltar);
+    },
+    [clipPip, onCajaPip, escala, w, h],
+  );
+
+  /** Redimensionado desde la esquina inferior derecha, manteniendo la PROPORCIÓN de la caja. */
+  const iniciarRedimensionPip = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (!clipPip || !onCajaPip || escala <= 0) return;
+      e.preventDefault();
+      e.stopPropagation(); // que no arranque también el arrastre de la caja
+      const origenX = e.clientX;
+      const origenY = e.clientY;
+      const { x: x0, y: y0, w: w0, h: h0 } = clipPip;
+      const ratio = w0 > 0 && h0 > 0 ? w0 / h0 : 16 / 9;
+      // Mínimo: ningún lado por debajo de MIN_PIP_PX; máximo: que la caja no salga del lienzo.
+      const minW = Math.max(MIN_PIP_PX, MIN_PIP_PX * ratio);
+      const maxW = Math.max(minW, Math.min(w - x0, (h - y0) * ratio));
+      let ultima = { w: w0, h: h0 };
+      const mover = (ev: MouseEvent) => {
+        const dx = (ev.clientX - origenX) / escala;
+        const dy = (ev.clientY - origenY) / escala;
+        // Manda el delta dominante de la diagonal (estirar hacia abajo también agranda).
+        const nuevoW = Math.min(Math.max(w0 + Math.max(dx, dy * ratio), minW), maxW);
+        ultima = { w: nuevoW, h: nuevoW / ratio };
+        setGestoPip({ x: x0, y: y0, w: ultima.w, h: ultima.h, guiaV: null, guiaH: null });
+      };
+      const soltar = () => {
+        window.removeEventListener("mousemove", mover);
+        window.removeEventListener("mouseup", soltar);
+        setGestoPip(null);
+        onCajaPip({ w: Math.round(ultima.w), h: Math.round(ultima.h) });
+      };
+      window.addEventListener("mousemove", mover);
+      window.addEventListener("mouseup", soltar);
+    },
+    [clipPip, onCajaPip, escala, w, h],
+  );
+
+  /** Flechas con la caja enfocada: mueve ±1 % del lienzo (Shift: ±5 %). Clampa el modelo. */
+  const moverPipTeclado = React.useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!clipPip || !onCajaPip) return;
+      const paso = e.shiftKey ? 0.05 : 0.01;
+      const dx = Math.max(1, Math.round(w * paso));
+      const dy = Math.max(1, Math.round(h * paso));
+      const cambio =
+        e.key === "ArrowLeft"
+          ? { x: clipPip.x - dx }
+          : e.key === "ArrowRight"
+            ? { x: clipPip.x + dx }
+            : e.key === "ArrowUp"
+              ? { y: clipPip.y - dy }
+              : e.key === "ArrowDown"
+                ? { y: clipPip.y + dy }
+                : null;
+      if (!cambio) return;
+      e.preventDefault(); // sin scroll de página; el clamp lo aplica `setCajaPip` en el modelo
+      onCajaPip(cambio);
+    },
+    [clipPip, onCajaPip, w, h],
+  );
+
+  // Caja a PINTAR: la transitoria del gesto si lo hay; si no, la del documento.
+  const cajaPip = gestoPip ?? clipPip;
+
   const segActivo = segmentos && segmentos.length > 0 ? segmentoEn(segmentos, tiempo) : null;
   const progresoPct = durTotal > 0 ? Math.min(100, (tiempo / durTotal) * 100) : 0;
   // Reloj del VÍDEO FINAL: con recorte, el contador corre desde `recorte_in` y el total es la
@@ -392,15 +540,30 @@ export function PreviewComposicion({
             </div>
           ))}
 
-        {/* Ventana PiP */}
-        {clipPip && (
+        {/* Ventana PiP. Con `pipEditable` es un objeto manipulable estilo Canva: arrastrar
+            mueve, la esquina inferior derecha redimensiona y las flechas (con foco) desplazan.
+            z-20 sobre los controles del player: en la sección PiP posicionar es la tarea. */}
+        {clipPip && cajaPip && (
           <div
-            className="absolute overflow-hidden rounded border-2 border-white/80 shadow"
+            data-testid="caja-pip"
+            role={pipInteractivo ? "group" : undefined}
+            aria-label={pipInteractivo ? "Ventana PiP" : undefined}
+            aria-roledescription={
+              pipInteractivo ? "ventana arrastrable; flechas para mover" : undefined
+            }
+            tabIndex={pipInteractivo ? 0 : undefined}
+            onMouseDown={pipInteractivo ? iniciarArrastrePip : undefined}
+            onKeyDown={pipInteractivo ? moverPipTeclado : undefined}
+            className={`absolute overflow-hidden rounded border-2 border-white/80 shadow ${
+              pipInteractivo
+                ? "z-20 cursor-move hover:border-primary focus-visible:border-primary focus-visible:outline-none"
+                : ""
+            }`}
             style={{
-              left: clipPip.x * escala,
-              top: clipPip.y * escala,
-              width: clipPip.w * escala,
-              height: clipPip.h * escala,
+              left: cajaPip.x * escala,
+              top: cajaPip.y * escala,
+              width: cajaPip.w * escala,
+              height: cajaPip.h * escala,
             }}
           >
             {pipUrl ? (
@@ -418,7 +581,31 @@ export function PreviewComposicion({
                 PiP
               </div>
             )}
+            {pipInteractivo && (
+              <div
+                data-testid="pip-redimensionar"
+                title="Redimensionar (mantiene la proporción)"
+                onMouseDown={iniciarRedimensionPip}
+                className="absolute bottom-0 right-0 h-3.5 w-3.5 cursor-nwse-resize rounded-tl-md border-l-2 border-t-2 border-white/80 bg-primary/80"
+              />
+            )}
           </div>
+        )}
+
+        {/* Guías de SNAP del arrastre del PiP (finas, solo durante el gesto imantado). */}
+        {gestoPip?.guiaV != null && (
+          <div
+            data-testid="guia-snap-v"
+            className="pointer-events-none absolute inset-y-0 z-30 w-px bg-fuchsia-400"
+            style={{ left: gestoPip.guiaV * escala }}
+          />
+        )}
+        {gestoPip?.guiaH != null && (
+          <div
+            data-testid="guia-snap-h"
+            className="pointer-events-none absolute inset-x-0 z-30 h-px bg-fuchsia-400"
+            style={{ top: gestoPip.guiaH * escala }}
+          />
         )}
 
         {/* Caja de subtítulos (segmento activo en el tiempo actual del player) */}

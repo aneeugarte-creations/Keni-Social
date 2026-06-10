@@ -380,6 +380,14 @@ export default function Video() {
     });
   }
 
+  // Caja del PiP: el MISMO commit sirve a los inputs numéricos del panel y al arrastre/
+  // redimensionado directo sobre el preview (sincronía bidireccional vía el doc compartido).
+  const onCajaPip = React.useCallback(
+    (caja: { x?: number; y?: number; w?: number; h?: number }) =>
+      mutar((d) => setCajaPip(d, caja)),
+    [mutar],
+  );
+
   const tieneBase = !!baseKey;
   // Sin marca activa no se puede crear/guardar la composición: en vez de fallar con un toast al
   // primer cambio, se muestra un aviso claro y se desactiva la edición hasta elegir marca.
@@ -584,7 +592,7 @@ export default function Video() {
                   videoKey={pipKey}
                   videoUrl={pipUrl}
                   onCambioVideo={onCambioPip}
-                  onCaja={(caja) => mutar((d) => setCajaPip(d, caja))}
+                  onCaja={onCajaPip}
                   onQuitar={() => {
                     setPipKey("");
                     setPipUrl("");
@@ -629,6 +637,8 @@ export default function Video() {
             <h2 className="text-sm font-semibold text-foreground">Vista previa</h2>
             {/* `atajoEspacio` se apaga en Overlay: el Lienzo (Konva) ya usa la barra espaciadora
                 para el pan del lienzo y los dos atajos chocarían. */}
+            {/* El PiP solo es manipulable sobre el preview EN su sección (no sorprende al
+                editar base/overlay/subtítulos); sin marca la edición está desactivada. */}
             <PreviewConTimeline
               doc={doc}
               baseUrl={baseUrl}
@@ -639,6 +649,8 @@ export default function Video() {
               onTrim={(inMs, outMs, durMs) =>
                 mutar((d) => setRecorteBase(d, inMs, outMs, durMs > 0 ? durMs : undefined))
               }
+              pipEditable={seccion === "pip" && !sinMarca}
+              onCajaPip={onCajaPip}
             />
           </aside>
         </div>
@@ -662,6 +674,8 @@ function PreviewConTimeline({
   atajoEspacio,
   trimDeshabilitado,
   onTrim,
+  pipEditable,
+  onCajaPip,
 }: {
   doc: ComposicionVideo;
   baseUrl: string;
@@ -671,6 +685,10 @@ function PreviewConTimeline({
   trimDeshabilitado: boolean;
   /** Commit del trim del clip base; `durMs` = duración real del clip (0 si aún no se conoce). */
   onTrim: (inMs: number, outMs: number, durMs: number) => void;
+  /** Habilita arrastrar/redimensionar la ventana PiP directamente sobre el preview. */
+  pipEditable: boolean;
+  /** Commit de la caja PiP (compartido con los inputs numéricos del panel). */
+  onCajaPip: (caja: { x?: number; y?: number; w?: number; h?: number }) => void;
 }) {
   const playerRef = React.useRef<PreviewPlayerHandle>(null);
   const [tiempoSeg, setTiempoSeg] = React.useState(0);
@@ -687,6 +705,8 @@ function PreviewConTimeline({
         playerRef={playerRef}
         onTiempo={setTiempoSeg}
         onDuracion={setDurSeg}
+        pipEditable={pipEditable}
+        onCajaPip={onCajaPip}
       />
       {baseUrl ? (
         <LineaTiempo

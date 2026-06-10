@@ -13,7 +13,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
-import type { ComposicionVideo } from "@/lib/video";
+import { pistaPip, setClipPip, type ComposicionVideo } from "@/lib/video";
 
 import Video from "./Video";
 
@@ -321,6 +321,35 @@ describe("Video", () => {
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     expect(put.mock.calls[0][0]).toBe("comp-nueva");
     expect((put.mock.calls[0][1] as ComposicionVideo).formato.preset).toBe("16:9");
+  });
+
+  it("arrastrar el PiP en el preview SINCRONIZA los inputs numéricos y autoguarda (y viceversa)", async () => {
+    // Composición con base + PiP por defecto (x=673, y=1674, w=367, h=206 en el lienzo 9:16).
+    const docPip = setClipPip(docConBase(), "videos/pip.mp4", 10000);
+    vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
+      composicion: { id: "comp-7", documento: docPip, titulo: "T", estado: "borrador" },
+    });
+    const put = vi.spyOn(apiMod.api.video, "guardarComposicion").mockResolvedValue({} as never);
+    renderVideo("/contenido/video?composicion=comp-7");
+    const tabPip = await screen.findByRole("button", { name: /^pip$/i });
+    await waitFor(() => expect(tabPip).not.toBeDisabled());
+    fireEvent.click(tabPip);
+    // La caja del preview SOLO es interactiva en la sección PiP.
+    const caja = await screen.findByRole("group", { name: "Ventana PiP" });
+    // Arrastre: Δpantalla (−20, −10) a escala 520/1920 = Δlienzo (−73,8, −36,9) → (599, 1637).
+    fireEvent.mouseDown(caja, { clientX: 500, clientY: 500 });
+    fireEvent.mouseMove(window, { clientX: 480, clientY: 490 });
+    fireEvent.mouseUp(window);
+    // El commit fluye al MISMO doc que alimenta el panel: los inputs reflejan la nueva posición…
+    expect(screen.getByLabelText("PiP X")).toHaveValue(599);
+    expect(screen.getByLabelText("PiP Y")).toHaveValue(1637);
+    // …y se autoguarda (PUT con la caja movida).
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    const guardado = put.mock.calls[0][1] as ComposicionVideo;
+    expect(pistaPip(guardado)!.clips[0]).toMatchObject({ x: 599, y: 1637, w: 367, h: 206 });
+    // Y al revés: editar el input numérico recoloca la caja del preview (sincronía bidireccional).
+    fireEvent.change(screen.getByLabelText("PiP X"), { target: { value: "100" } });
+    expect(caja.style.left).toBe(`${100 * (520 / 1920)}px`);
   });
 
   it("'Marcar listo' hace PUT del estado='listo' sin reenviar documento", async () => {

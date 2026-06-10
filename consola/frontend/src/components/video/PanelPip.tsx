@@ -1,6 +1,8 @@
 /**
  * Panel de DOBLE PISTA / Picture-in-Picture: sube un segundo video y lo posiciona (x/y/w/h)
- * como ventana sobre el preview. Posicionamiento numérico (preview-only); el render server-side
+ * como ventana sobre el preview. La ventana también se ARRASTRA/REDIMENSIONA directamente
+ * sobre la vista previa (PreviewComposicion con `pipEditable`); estos inputs numéricos y el
+ * gesto editan el MISMO documento, así que quedan siempre sincronizados. El render server-side
  * compone con `overlay` en FFmpeg.
  */
 import { Trash2 } from "lucide-react";
@@ -69,6 +71,10 @@ export function PanelPip({
             <CampoNum etiqueta="Ancho" valor={clip.w} max={lienzoW} onCambio={(w) => onCaja({ w })} disabled={disabled} />
             <CampoNum etiqueta="Alto" valor={clip.h} max={lienzoH} onCambio={(h) => onCaja({ h })} disabled={disabled} />
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            También puedes arrastrar la ventana directamente sobre la vista previa (la esquina
+            inferior derecha redimensiona manteniendo la proporción).
+          </p>
         </div>
       )}
     </div>
