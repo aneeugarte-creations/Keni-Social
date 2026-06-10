@@ -17,17 +17,9 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   run: "Run",
   pipeline: "Pipeline",
   insumos: "Cajones del día",
-  // Etiqueta retenida para registros históricos: ya no se crean generaciones de
-  // investigación (Agentes retirados), pero el historial puede tener tipo='investigacion'.
-  investigacion: "Investigación",
   "import-calendario": "Importar calendario",
   "render-video": "Render de video",
   transcribir: "Transcripción",
-  // Etiquetas retenidas para registros HISTÓRICOS: todo el trabajo de la máquina se sella
-  // ahora tipo='pipeline' (criba QA, copy, arte, fusión/encaje del pool); estos tipos ya no
-  // se crean pero el historial los trae.
-  "noticias-ia": "IA de noticias",
-  "qa-fuente": "Criba de fuente",
 };
 
 /**

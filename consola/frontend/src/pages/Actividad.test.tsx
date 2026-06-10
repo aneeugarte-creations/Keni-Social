@@ -158,7 +158,8 @@ describe("Actividad (feed unificado de IA)", () => {
     expect(etiquetaTipoGeneracion("rss")).toBe("RSS");
     expect(etiquetaTipoGeneracion("imagen")).toBe("Imagen");
     expect(etiquetaTipoGeneracion("insumos")).toBe("Cajones del día");
-    expect(etiquetaTipoGeneracion("investigacion")).toBe("Investigación");
+    // Tipos retirados NO tienen etiqueta legacy: caen al raw (fallback).
+    expect(etiquetaTipoGeneracion("investigacion")).toBe("investigacion");
     expect(etiquetaTipoGeneracion("import-calendario")).toBe("Importar calendario");
     // Fallback para tipos desconocidos
     expect(etiquetaTipoGeneracion("desconocido")).toBe("desconocido");

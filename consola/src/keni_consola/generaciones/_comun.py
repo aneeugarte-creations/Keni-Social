@@ -77,17 +77,13 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
 TIPOS = (
     "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
-    "parrilla-import", "insumos", "investigacion", "import-calendario",
+    "parrilla-import", "insumos", "import-calendario",
     # Taller EVERGREEN / brainstorming: `evergreen-ideas` = la PROPUESTA de ideas evergreen (IA);
     # `evergreen` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
     "evergreen-ideas", "evergreen",
     # Jobs de PROCESO (no-claude) del motor de video (Ola VIDEO): render con ffmpeg y
     # transcripcion ASR. Se cuelgan de Actividad IA igual que el resto de generaciones.
     "render-video", "transcribir",
-    # HISTORICO: los pasos Haiku del pool (fusion/encaje) hoy se sellan `tipo='pipeline'`
-    # como el resto del trabajo de la maquina; se retiene para que los registros viejos
-    # sigan filtrables en «Actividad IA».
-    "noticias-ia",
 )
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
