@@ -30,10 +30,14 @@
     />
     <!-- Tipografias del CATALOGO del editor de plantillas (se aplican a las capas de texto en el
          lienzo Konva; deben estar cargadas en el navegador para no caer a una fuente de respaldo).
-         Las familias con CURSIVA real cargan tambien su eje `ital` (espejo de las caras *Italic*
-         registradas en el servidor); Anton/Archivo Black/Oswald no tienen italica. -->
+         La cobertura por familia es ESPEJO EXACTO de las caras estaticas que el servidor registra
+         en Skia (render_node/fuentes.mjs; guard en fuentes.mirror.test.ts): ni un peso mas (lo
+         pintaria la previa y el export no lo tiene) ni uno menos (un peso pedido resolveria a
+         caras distintas en cada lado). Montserrat carga 300..900 -> Light y los titulares
+         ExtraBold 800/Black 900 estilo Gotham de Claro Sports. Eje `ital` en las familias con
+         cursiva real (Anton/Archivo Black/Oswald no tienen italica). -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Barlow:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600;1,700&family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;1,600;1,700;1,800&family=Exo+2:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600;1,700;1,800&family=Lato:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600;1,700;1,800&family=Oswald:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Barlow:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&family=Exo+2:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600;1,700;1,800&family=Lato:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Oswald:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
     <title>Consola</title>

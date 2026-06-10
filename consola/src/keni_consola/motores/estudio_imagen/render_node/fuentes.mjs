@@ -13,8 +13,13 @@ import { dirname, join } from "node:path";
 const _aqui = dirname(fileURLToPath(import.meta.url));
 const DIR_FUENTES = join(_aqui, "..", "fuentes");
 
-// Familia real -> archivo(s). Las variables (Oswald/Montserrat/Lora) se registran una vez; Skia
-// elige el peso por el eje variable al pedir `<peso>px`. Barlow trae estáticas por peso.
+// Familia real -> archivo(s). TODAS las caras son ESTÁTICAS por peso: Skia NO instancia el eje
+// `wght` de un TTF variable (lo registra como una sola cara, la instancia por defecto, y pedir
+// `300 …px` o `900 …px` pintaba siempre lo mismo), así que cada peso ofrecido necesita su TTF.
+// Skia elige la cara más cercana al peso pedido (p. ej. Lato 900 -> Lato-Black.ttf; un peso sin
+// cara cae al vecino, igual que el font-matching del navegador en el lienzo Konva).
+// Montserrat trae 300..900 completos: Light (300) y los titulares ExtraBold (800) / Black (900)
+// estilo Gotham que usa Claro Sports en sus posts deportivos.
 // CURSIVA: las caras *Italic* se registran bajo la MISMA familia; Skia elige la itálica cuando el
 // font string lleva `italic` (Skia NUNCA sintetiza oblicuas, por eso hacen falta los TTF reales).
 // Anton / Archivo Black / Oswald no tienen itálica (ver FAMILIAS_CON_CURSIVA en dibujar.mjs).
@@ -33,13 +38,35 @@ const ARCHIVOS = [
   ["Barlow Condensed", "BarlowCondensed-ExtraBoldItalic.ttf"],
   ["Anton", "Anton-Regular.ttf"],
   ["Archivo Black", "ArchivoBlack-Regular.ttf"],
-  ["Oswald", "Oswald-Variable.ttf"],
-  ["Montserrat", "Montserrat-Variable.ttf"],
-  ["Montserrat", "Montserrat-Italic-Variable.ttf"],
-  ["Lora", "Lora-Variable.ttf"],
-  ["Lora", "Lora-Italic-Variable.ttf"],
-  ["Exo 2", "Exo2-Variable.ttf"],
-  ["Exo 2", "Exo2-Italic-Variable.ttf"],
+  ["Oswald", "Oswald-Regular.ttf"],
+  ["Oswald", "Oswald-SemiBold.ttf"],
+  ["Oswald", "Oswald-Bold.ttf"],
+  ["Montserrat", "Montserrat-Light.ttf"],
+  ["Montserrat", "Montserrat-Regular.ttf"],
+  ["Montserrat", "Montserrat-Medium.ttf"],
+  ["Montserrat", "Montserrat-SemiBold.ttf"],
+  ["Montserrat", "Montserrat-Bold.ttf"],
+  ["Montserrat", "Montserrat-ExtraBold.ttf"],
+  ["Montserrat", "Montserrat-Black.ttf"],
+  ["Montserrat", "Montserrat-LightItalic.ttf"],
+  ["Montserrat", "Montserrat-Italic.ttf"],
+  ["Montserrat", "Montserrat-MediumItalic.ttf"],
+  ["Montserrat", "Montserrat-SemiBoldItalic.ttf"],
+  ["Montserrat", "Montserrat-BoldItalic.ttf"],
+  ["Montserrat", "Montserrat-ExtraBoldItalic.ttf"],
+  ["Montserrat", "Montserrat-BlackItalic.ttf"],
+  ["Lora", "Lora-Regular.ttf"],
+  ["Lora", "Lora-Bold.ttf"],
+  ["Lora", "Lora-Italic.ttf"],
+  ["Lora", "Lora-BoldItalic.ttf"],
+  ["Exo 2", "Exo2-Regular.ttf"],
+  ["Exo 2", "Exo2-SemiBold.ttf"],
+  ["Exo 2", "Exo2-Bold.ttf"],
+  ["Exo 2", "Exo2-ExtraBold.ttf"],
+  ["Exo 2", "Exo2-Italic.ttf"],
+  ["Exo 2", "Exo2-SemiBoldItalic.ttf"],
+  ["Exo 2", "Exo2-BoldItalic.ttf"],
+  ["Exo 2", "Exo2-ExtraBoldItalic.ttf"],
   ["Lato", "Lato-Regular.ttf"],
   ["Lato", "Lato-Bold.ttf"],
   ["Lato", "Lato-Black.ttf"],

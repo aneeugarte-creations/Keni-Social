@@ -6,12 +6,13 @@ import Konva from "konva";
 import { useEffect, useReducer, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text, TextPath } from "react-konva";
 
-import { MAPA_MEZCLA, tieneCursiva } from "../../lib/placa/dibujar.mjs";
+import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
 import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado } from "../documento";
 import { copyMuestra, fotoMuestra } from "../muestra";
 import { useImagen } from "../useImagen";
 
 import { geometriaImagenEnCaja } from "./geometriaImagen";
+import { estiloFuente, familiaReal } from "./tipografia";
 
 // Traza, en COORDS LOCALES (0..w, 0..h), la silueta de `forma` — espejo EXACTO de `pathForma`
 // (dibujar.mjs) con origen en (0,0). Lo usan el clip de la imagen y el dibujo del marco en Konva,
@@ -212,25 +213,8 @@ function rellenoDegradadoKonva(deg: RellenoDegradado, w: number, h: number): Rec
   };
 }
 
-// Resuelve las familias LÓGICAS del documento ("sans"/"condensada") a fuentes reales, para que
-// el editor (Konva) pinte con la MISMA tipografía que el export del servidor (Barlow / Barlow
-// Condensed por defecto). Cualquier otra familia (nombre real) se pasa tal cual.
-function familiaReal(familia: string | undefined): string {
-  if (familia === "sans") return "Barlow";
-  if (familia === "condensada") return "Barlow Condensed";
-  return familia || "Barlow";
-}
-
-// `fontStyle` Konva de una capa de texto ("italic bold" / "italic" / "bold" / "normal"): la
-// negrita por peso (>=600, como siempre) y la CURSIVA solo si la familia REAL tiene itálica
-// registrada (`tieneCursiva`, la misma regla que aplica el export en `dibujar.mjs`): así la previa
-// nunca enseña una oblicua sintética del navegador que el servidor no pueda reproducir.
-function estiloFuente(c: CapaTexto): string {
-  const negrita = c.peso >= 600;
-  const cursiva = !!c.cursiva && tieneCursiva(familiaReal(c.familia));
-  if (cursiva) return negrita ? "italic bold" : "italic";
-  return negrita ? "bold" : "normal";
-}
+// `familiaReal` y `estiloFuente` (peso numérico real + cursiva, espejo del `fuenteCss` del
+// servidor) viven en `tipografia.ts` para poder testearlos sin montar Konva.
 
 type Filtros = CapaImagen["filtros"];
 
@@ -577,7 +561,8 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
               verticalAlign="middle"
               fontFamily={familiaReal(c.wordmark.familia)}
               fontSize={Math.round(c.h * 0.42)}
-              fontStyle={c.wordmark.peso >= 600 ? "bold" : "normal"}
+              // Peso numérico real, como el export (`dibujarLogo`: `${wm.peso || 700} …px`).
+              fontStyle={String(c.wordmark.peso || 700)}
               fill={c.wordmark.color}
             />
           </Group>

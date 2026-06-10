@@ -10,16 +10,19 @@
 interface ArchivoFuente {
   familia: string;
   archivo: string;
-  /** Peso CSS (o rango para variables). */
+  /** Peso CSS de la cara (todas son estáticas: un TTF por peso). */
   peso: string;
   /** Estilo CSS: "italic" para las caras itálicas (ausente = normal). */
   estilo?: "italic";
 }
 
-// Familia real -> archivos por peso (espejo de `ARCHIVOS` en fuentes.mjs). Las variables se
-// registran con rango de peso (el navegador interpola por el eje). Las caras *Italic* se
-// registran con `style: italic` bajo la MISMA familia: así `ctx.font = "italic …"` usa la
-// itálica REAL, igual que Skia en el servidor (que no sintetiza oblicuas).
+// Familia real -> archivos por peso (espejo de `ARCHIVOS` en fuentes.mjs). TODAS las caras son
+// ESTÁTICAS: Skia (el export) NO instancia el eje `wght` de un TTF variable —lo registra como una
+// sola cara—, así que el servidor solo puede pintar pesos con TTF propio y aquí registramos
+// EXACTAMENTE los mismos (un peso sin cara cae al vecino más cercano en ambos lados). Las caras
+// *Italic* se registran con `style: italic` bajo la MISMA familia: así `ctx.font = "italic …"`
+// usa la itálica REAL, igual que Skia en el servidor (que no sintetiza oblicuas).
+// Montserrat trae 300..900: Light y los titulares ExtraBold/Black estilo Gotham de Claro Sports.
 const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Barlow", archivo: "Barlow-Regular.ttf", peso: "400" },
   { familia: "Barlow", archivo: "Barlow-SemiBold.ttf", peso: "600" },
@@ -35,13 +38,35 @@ const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Barlow Condensed", archivo: "BarlowCondensed-ExtraBoldItalic.ttf", peso: "800", estilo: "italic" },
   { familia: "Anton", archivo: "Anton-Regular.ttf", peso: "400" },
   { familia: "Archivo Black", archivo: "ArchivoBlack-Regular.ttf", peso: "400" },
-  { familia: "Oswald", archivo: "Oswald-Variable.ttf", peso: "200 700" },
-  { familia: "Montserrat", archivo: "Montserrat-Variable.ttf", peso: "100 900" },
-  { familia: "Montserrat", archivo: "Montserrat-Italic-Variable.ttf", peso: "100 900", estilo: "italic" },
-  { familia: "Lora", archivo: "Lora-Variable.ttf", peso: "400 700" },
-  { familia: "Lora", archivo: "Lora-Italic-Variable.ttf", peso: "400 700", estilo: "italic" },
-  { familia: "Exo 2", archivo: "Exo2-Variable.ttf", peso: "100 900" },
-  { familia: "Exo 2", archivo: "Exo2-Italic-Variable.ttf", peso: "100 900", estilo: "italic" },
+  { familia: "Oswald", archivo: "Oswald-Regular.ttf", peso: "400" },
+  { familia: "Oswald", archivo: "Oswald-SemiBold.ttf", peso: "600" },
+  { familia: "Oswald", archivo: "Oswald-Bold.ttf", peso: "700" },
+  { familia: "Montserrat", archivo: "Montserrat-Light.ttf", peso: "300" },
+  { familia: "Montserrat", archivo: "Montserrat-Regular.ttf", peso: "400" },
+  { familia: "Montserrat", archivo: "Montserrat-Medium.ttf", peso: "500" },
+  { familia: "Montserrat", archivo: "Montserrat-SemiBold.ttf", peso: "600" },
+  { familia: "Montserrat", archivo: "Montserrat-Bold.ttf", peso: "700" },
+  { familia: "Montserrat", archivo: "Montserrat-ExtraBold.ttf", peso: "800" },
+  { familia: "Montserrat", archivo: "Montserrat-Black.ttf", peso: "900" },
+  { familia: "Montserrat", archivo: "Montserrat-LightItalic.ttf", peso: "300", estilo: "italic" },
+  { familia: "Montserrat", archivo: "Montserrat-Italic.ttf", peso: "400", estilo: "italic" },
+  { familia: "Montserrat", archivo: "Montserrat-MediumItalic.ttf", peso: "500", estilo: "italic" },
+  { familia: "Montserrat", archivo: "Montserrat-SemiBoldItalic.ttf", peso: "600", estilo: "italic" },
+  { familia: "Montserrat", archivo: "Montserrat-BoldItalic.ttf", peso: "700", estilo: "italic" },
+  { familia: "Montserrat", archivo: "Montserrat-ExtraBoldItalic.ttf", peso: "800", estilo: "italic" },
+  { familia: "Montserrat", archivo: "Montserrat-BlackItalic.ttf", peso: "900", estilo: "italic" },
+  { familia: "Lora", archivo: "Lora-Regular.ttf", peso: "400" },
+  { familia: "Lora", archivo: "Lora-Bold.ttf", peso: "700" },
+  { familia: "Lora", archivo: "Lora-Italic.ttf", peso: "400", estilo: "italic" },
+  { familia: "Lora", archivo: "Lora-BoldItalic.ttf", peso: "700", estilo: "italic" },
+  { familia: "Exo 2", archivo: "Exo2-Regular.ttf", peso: "400" },
+  { familia: "Exo 2", archivo: "Exo2-SemiBold.ttf", peso: "600" },
+  { familia: "Exo 2", archivo: "Exo2-Bold.ttf", peso: "700" },
+  { familia: "Exo 2", archivo: "Exo2-ExtraBold.ttf", peso: "800" },
+  { familia: "Exo 2", archivo: "Exo2-Italic.ttf", peso: "400", estilo: "italic" },
+  { familia: "Exo 2", archivo: "Exo2-SemiBoldItalic.ttf", peso: "600", estilo: "italic" },
+  { familia: "Exo 2", archivo: "Exo2-BoldItalic.ttf", peso: "700", estilo: "italic" },
+  { familia: "Exo 2", archivo: "Exo2-ExtraBoldItalic.ttf", peso: "800", estilo: "italic" },
   { familia: "Lato", archivo: "Lato-Regular.ttf", peso: "400" },
   { familia: "Lato", archivo: "Lato-Bold.ttf", peso: "700" },
   { familia: "Lato", archivo: "Lato-Black.ttf", peso: "900" },

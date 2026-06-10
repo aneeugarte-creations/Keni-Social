@@ -23,6 +23,7 @@ import { useState } from "react";
 
 import { tieneCursiva } from "../lib/placa/dibujar.mjs";
 
+import { familiaReal } from "./capas/tipografia";
 import type { Capa, CapaTexto } from "./documento";
 import { CATALOGO_FUENTES } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
@@ -195,8 +196,12 @@ export function BarraContextual({
             {!familias.includes((capa as CapaTexto).familia) && <option value={(capa as CapaTexto).familia}>{(capa as CapaTexto).familia}</option>}
           </select>
           <Stepper valor={(capa as CapaTexto).tamano} min={8} max={400} onChange={(v) => set({ tamano: v } as Partial<Capa>)} />
+          {/* NEGRITA: toggle grueso 400<->700 (caras reales en todo el catálogo; nada se
+              sintetiza). Los pesos finos (Ligera 300, Extranegrita 800, Black 900…) se eligen en
+              Ajustes -> Peso y la B los NORMALIZA al usarla (Black+B => 400, Light+B => 700):
+              mapeo honesto y predecible, igual que Canva/Docs. `activo` con peso >= 600. */}
           <BotonIcono
-            titulo="Negrita"
+            titulo="Negrita (pesos finos en Ajustes → Peso)"
             ariaLabel="Negrita"
             activo={(capa as CapaTexto).peso >= 600}
             onClick={() => set({ peso: (capa as CapaTexto).peso >= 600 ? 400 : 700 } as Partial<Capa>)}
@@ -207,9 +212,8 @@ export function BarraContextual({
             const c = capa as CapaTexto;
             // CURSIVA solo para familias con itálica REAL (la misma regla que `dibujar.mjs` y el
             // servidor): fuera de la lista el botón se apaga (patrón Canva) y nada se sintetiza.
-            // "sans"/"condensada" son las familias lógicas legadas (espejo de `familiaReal`).
-            const familia = c.familia === "sans" ? "Barlow" : c.familia === "condensada" ? "Barlow Condensed" : c.familia;
-            const hayCursiva = tieneCursiva(familia);
+            // `familiaReal` resuelve las familias lógicas legadas ("sans"/"condensada").
+            const hayCursiva = tieneCursiva(familiaReal(c.familia));
             return (
               <BotonIcono
                 titulo={hayCursiva ? "Cursiva" : "Esta fuente no tiene cursiva"}
