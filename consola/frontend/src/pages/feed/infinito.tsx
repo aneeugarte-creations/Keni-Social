@@ -86,8 +86,13 @@ export function SkeletonPost() {
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-2/3" />
       </div>
-      <div className="px-4 pb-3">
-        <Skeleton className="h-8 w-28" />
+      {/* Pie con la anatomía real de la fila de acciones: badge de etapa (izq) + iconos (der). */}
+      <div className="flex items-center justify-between px-4 pb-3">
+        <Skeleton className="h-5 w-24 rounded-md" />
+        <div className="flex gap-1">
+          <Skeleton className="h-8 w-8 rounded-md" />
+          <Skeleton className="h-8 w-8 rounded-md" />
+        </div>
       </div>
     </div>
   );

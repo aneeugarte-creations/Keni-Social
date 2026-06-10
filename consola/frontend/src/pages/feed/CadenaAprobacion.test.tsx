@@ -73,6 +73,15 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(onForzar).toHaveBeenCalledTimes(1);
   });
 
+  it("mientras se fuerza (`forzando`), el botón queda deshabilitado y con spinner", () => {
+    const onForzar = vi.fn();
+    render(<CadenaAprobacion cadena={cadenaOK()} onForzar={onForzar} forzando />);
+    const boton = screen.getByRole("button", { name: /forzar aprobación/i });
+    // Sin segundo clic que reabra la confirmación mientras la mutación está en vuelo.
+    expect(boton).toBeDisabled();
+    expect(boton.querySelector(".animate-spin")).not.toBeNull();
+  });
+
   it("con la cadena CERRADA no ofrece forzar aunque llegue `onForzar`", () => {
     const c = cadenaOK({
       niveles: [

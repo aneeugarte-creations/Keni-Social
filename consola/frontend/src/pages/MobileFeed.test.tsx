@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -228,6 +228,42 @@ describe("MobileFeed · feed móvil de revisión", () => {
     renderFeed({ marcas: ["unotv", "claro-sports"] });
     expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
     expect(screen.queryByText("Nada por aprobar")).not.toBeInTheDocument();
+  });
+
+  it("el alta rápida se envía con Enter (form de verdad) y el botón Crear es submit", async () => {
+    const creadas: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL, init?: RequestInit) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/contenido") && init?.method === "POST") {
+          creadas.push(String(init.body));
+          return new Response(JSON.stringify({ id: "c9" }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          return new Response(
+            JSON.stringify({ publicaciones: [], paginacion: { total: 0, limite: 50, desplazamiento: 0 } }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderFeed();
+    fireEvent.click(await screen.findByRole("button", { name: /crear pieza/i }));
+    const input = await screen.findByLabelText("Título");
+    fireEvent.change(input, { target: { value: "Idea desde el móvil" } });
+    // Enter/«ir» del teclado móvil = submit del form (no hace falta alcanzar el botón).
+    expect(screen.getByRole("button", { name: "Crear" })).toHaveAttribute("type", "submit");
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await waitFor(() => expect(creadas.length).toBe(1));
+    expect(creadas[0]).toContain("Idea desde el móvil");
   });
 
   it("preselecciona la única marca del usuario aunque la sesión llegue DESPUÉS del mount", async () => {

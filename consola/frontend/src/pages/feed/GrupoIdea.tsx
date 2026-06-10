@@ -53,7 +53,9 @@ export function PlaceholderRed({ red, titulo }: { red: string; titulo?: string }
         <div className="flex flex-col items-center gap-1.5 px-4 text-center text-muted-foreground">
           <Icono className="h-7 w-7 opacity-40" aria-hidden="true" />
           <span className="text-xs">No generado</span>
-          {titulo && <span className="line-clamp-2 text-[11px]">{titulo}</span>}
+          {/* El título se diferencia de «No generado» por color/peso (escala del sistema),
+              no por 1px de tamaño. */}
+          {titulo && <span className="line-clamp-2 text-xs font-medium text-foreground">{titulo}</span>}
         </div>
       </div>
       {/* Reserva el alto del copy plegado del post real (2 líneas + fila del "más"): la rejilla
@@ -63,6 +65,46 @@ export function PlaceholderRed({ red, titulo }: { red: string; titulo?: string }
         <div className="h-5" />
       </div>
     </div>
+  );
+}
+
+/**
+ * Cabecera de una idea (marca · TÍTULO): el ancla de lectura del feed. La usa la cabecera del
+ * grupo (con los metadatos de la nota original a la derecha) y, como MICROCABECERA, cada celda
+ * de la rejilla plana (vista filtrada a una red: sin ella no se sabe de qué marca/tema es cada
+ * pieza sin abrirla). Con `mostrarMarca: false` se omite el prefijo «marca ·» (cuando hay una
+ * marca activa en la topbar, repetirla en cada grupo compite con el título).
+ */
+export function CabeceraIdea({
+  marca,
+  titulo,
+  mostrarMarca = true,
+  derecha,
+}: {
+  marca: string;
+  titulo: string;
+  mostrarMarca?: boolean;
+  /** Metadatos a la derecha (fecha/fuente de la nota original). */
+  derecha?: React.ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pb-2 text-xs text-muted-foreground">
+      {mostrarMarca && (
+        <>
+          <span className="shrink-0">{marca}</span>
+          <span aria-hidden="true">·</span>
+        </>
+      )}
+      {/* <h3>: los lectores de pantalla saltan de idea en idea. `line-clamp-2` (no truncate):
+          en pantallas estrechas el ancla de lectura no se queda en 2-4 caracteres. */}
+      <h3
+        className="min-w-0 flex-1 line-clamp-2 text-base font-semibold text-foreground"
+        title={titulo}
+      >
+        {titulo || "Sin título"}
+      </h3>
+      {derecha}
+    </header>
   );
 }
 
@@ -78,12 +120,15 @@ export function GrupoIdea({
   redes,
   columnas,
   filtra,
+  mostrarMarca = true,
 }: {
   grupo: GrupoDeIdea;
   redes: string[];
   columnas: number;
   /** Vista filtrada: solo las piezas que cumplen, sin huecos "No generado" ni tarjetas ajenas. */
   filtra?: (p: Publicacion) => boolean;
+  /** false con una marca activa en la topbar: el dato ya vive en el switch global. */
+  mostrarMarca?: boolean;
 }) {
   const porRed = React.useMemo(() => {
     const m = new Map<string, Publicacion>();
@@ -114,34 +159,31 @@ export function GrupoIdea({
     // Sin caja-dentro-de-caja: el agrupamiento lo dan la cabecera de idea y el espaciado entre
     // grupos del feed (las tarjetas ya traen su propio borde).
     <section>
-      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pb-2 text-xs text-muted-foreground">
-        <span className="shrink-0">{grupo.marca_nombre}</span>
-        <span aria-hidden="true">·</span>
-        {/* <h3>: los lectores de pantalla saltan de idea en idea. `line-clamp-2` (no truncate):
-            en pantallas estrechas el ancla de lectura no se queda en 2-4 caracteres. */}
-        <h3
-          className="min-w-0 flex-1 line-clamp-2 text-sm font-semibold text-foreground"
-          title={grupo.titulo}
-        >
-          {grupo.titulo || "Sin título"}
-        </h3>
-        {(fechaNota || fuenteNota) && (
-          // En xs baja a una segunda línea; en sm+ se queda a la derecha como metadato.
-          <span className="flex basis-full items-center gap-2 sm:ml-auto sm:basis-auto">
-            {fechaNota && (
-              <span className="tabular-nums" title="Fecha de la nota original (hora CDMX)">
-                {formatearFechaHoraCorta(fechaNota)}
-              </span>
-            )}
-            {fechaNota && fuenteNota && <span aria-hidden="true">·</span>}
-            {fuenteNota && (
-              <span className="max-w-[10rem] truncate" title="Medio del que salió la nota original">
-                {fuenteNota}
-              </span>
-            )}
-          </span>
-        )}
-      </header>
+      <CabeceraIdea
+        marca={grupo.marca_nombre}
+        titulo={grupo.titulo}
+        mostrarMarca={mostrarMarca}
+        derecha={
+          (fechaNota || fuenteNota) && (
+            // En xs baja a una segunda línea; en sm+ se queda a la derecha como metadato.
+            <span className="flex basis-full items-center gap-2 sm:ml-auto sm:basis-auto">
+              {fechaNota && (
+                <span className="tabular-nums" title="Fecha de la nota original (hora CDMX)">
+                  <span className="sr-only">Fecha de la nota original (hora CDMX): </span>
+                  {formatearFechaHoraCorta(fechaNota)}
+                </span>
+              )}
+              {fechaNota && fuenteNota && <span aria-hidden="true">·</span>}
+              {fuenteNota && (
+                <span className="max-w-[10rem] truncate" title="Medio del que salió la nota original">
+                  <span className="sr-only">Medio del que salió la nota original: </span>
+                  {fuenteNota}
+                </span>
+              )}
+            </span>
+          )
+        }
+      />
       <div className={cn("grid items-start gap-4", GRID_COLS[columnas])}>
         {redesVisibles.map((r) => {
           const p = porRed.get(r);
@@ -156,7 +198,7 @@ export function GrupoIdea({
         })}
       </div>
       {redesFaltantes.length > 0 && (
-        <div className="mt-2 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+        <div className="mt-2 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
           <span>Falta generar:</span>
           {redesFaltantes.map((r) => {
             const Icono = iconoRed(r);

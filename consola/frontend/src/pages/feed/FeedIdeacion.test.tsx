@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -64,8 +64,12 @@ const PUBLICACION = {
   etapa_ia: "lista_para_revisar",
 };
 
-/** Stub de fetch: enruta opciones, listado, cadenas (lote e individual) y comentarios. */
-function stubFetch() {
+/**
+ * Stub de fetch: enruta opciones, cadenas (lote e individual), comentarios y el listado.
+ * El listado FILTRA por `estado=` como el backend (consultas dedicadas de las vistas y
+ * conteos con `limite=1`, que devuelven `paginacion.total` exacto del filtro).
+ */
+function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL) => {
@@ -110,10 +114,15 @@ function stubFetch() {
         return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
       }
       if (ruta.includes("/api/publicaciones")) {
+        const params = new URL(ruta, "http://localhost").searchParams;
+        const estado = params.get("estado");
+        const lista = estado
+          ? publicaciones.filter((p) => p.estado === estado)
+          : publicaciones;
         return new Response(
           JSON.stringify({
-            publicaciones: [PUBLICACION],
-            paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+            publicaciones: params.get("limite") === "1" ? lista.slice(0, 1) : lista,
+            paginacion: { total: lista.length, limite: 50, desplazamiento: 0 },
           }),
           { status: 200 },
         );
@@ -165,37 +174,35 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     window.localStorage.clear();
   });
 
-  it("tope responsivo: en móvil (<640px) la preferencia de 5 columnas se acota a 2 efectivas", async () => {
+  it("tope por ancho real: con ~500px de contenedor la preferencia de 5 columnas se acota a 2 efectivas", async () => {
     window.localStorage.setItem("keni_feed_columnas", "5");
-    // jsdom no trae matchMedia: lo simulamos diciendo que el viewport es <640px.
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn((query: string) => ({
-        matches: true,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    );
-    stubFetch();
-    renderFeed();
-    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // La rejilla plana usa las columnas EFECTIVAS (máx. 2 en móvil), no la preferencia (5).
-    const rejilla = screen.getByRole("feed");
-    expect(rejilla.className).toContain("grid-cols-2");
-    expect(rejilla.className).not.toContain("grid-cols-5");
+    // jsdom no calcula layout: simulamos que todo contenedor mide 500px de ancho. La medición
+    // inicial del layout-effect (la que vale en tests) acota 5 → floor(500/240) = 2.
+    const orig = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get: () => 500,
+    });
+    try {
+      stubFetch();
+      renderFeed();
+      expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+      // La rejilla plana usa las columnas EFECTIVAS (las que caben), no la preferencia (5).
+      const rejilla = screen.getByRole("feed");
+      expect(rejilla.className).toContain("grid-cols-2");
+      expect(rejilla.className).not.toContain("grid-cols-5");
+    } finally {
+      if (orig) Object.defineProperty(HTMLElement.prototype, "clientWidth", orig);
+      else delete (HTMLElement.prototype as { clientWidth?: unknown }).clientWidth;
+    }
   });
 
   it("muestra 4 pestañas-vista del mismo feed (todo / preparación / por aprobar / aprobado)", async () => {
     stubFetch();
     renderFeed();
-    // 4 vistas del mismo listado (no las bandejas viejas por estado). Es un hub: la barra
-    // son las PESTAÑAS, sin título de página propio. El nombre accesible es la etiqueta
-    // COMPLETA (aria-label), aunque en <sm el texto visible se acorte.
+    // 4 vistas-partición por estado. Es un hub: la barra son las PESTAÑAS, sin título de
+    // página propio. El nombre accesible es la etiqueta COMPLETA (aria-label), aunque en <sm
+    // el texto visible se acorte a `etiquetaCorta`.
     expect(await screen.findByRole("tab", { name: "Todo el feed" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "En preparación" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Por aprobar" })).toBeInTheDocument();
@@ -214,6 +221,30 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
   });
 
+  it("«Por aprobar» va con consulta DEDICADA (estado=en_revision) y pinta tarjetas reales, sin rastreo en cliente", async () => {
+    // El stub base enruta y filtra por estado; este wrapper solo captura las URLs pedidas.
+    stubFetch([
+      PUBLICACION,
+      { ...PUBLICACION, id: "p2", contenido_id: "c2", contenido: "Ya salió", estado: "publicado", etapa_ia: "publicada" },
+    ]);
+    const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      urls.push(String(url));
+      return base(url);
+    });
+
+    renderFeed({}, "/?vista=por_aprobar");
+    // El servidor filtra: la pieza en revisión se pinta como tarjeta REAL directamente.
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    expect(screen.queryByText("Ya salió")).not.toBeInTheDocument();
+    // Sin mecánica de rastreo en cliente: ni "Seguir buscando" ni "Buscando piezas…".
+    expect(screen.queryByText("Seguir buscando")).not.toBeInTheDocument();
+    expect(screen.queryByText("Buscando piezas…")).not.toBeInTheDocument();
+    // La petición del feed lleva el filtro de estado al backend.
+    expect(urls.some((u) => u.includes("feed=1") && u.includes("estado=en_revision"))).toBe(true);
+  });
+
   it("la pestaña filtra el feed en cliente: 'Aprobado y publicado' oculta lo que está por aprobar", async () => {
     stubFetch();
     renderFeed();
@@ -225,12 +256,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     await waitFor(() =>
       expect(screen.queryByText("¡Increíble remontada!")).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("Nada aprobado ni publicado")).toBeInTheDocument();
+    expect(await screen.findByText("Nada aprobado ni publicado")).toBeInTheDocument();
   });
 
-  it("las 3 vistas filtradas PARTICIONAN el ciclo: el borrador completo cae en 'En preparación' y el aprobado en 'Aprobado y publicado'", async () => {
-    // Tres piezas de tres ideas: borrador COMPLETO (antes invisible en toda vista filtrada),
-    // en revisión y aprobada SIN hueco (antes tampoco salía en ninguna).
+  it("las vistas PARTICIONAN el ciclo: el borrador cae en 'En preparación' (dedicada) y el aprobado en 'Aprobado y publicado'", async () => {
     const BORRADOR = {
       ...PUBLICACION,
       id: "p2",
@@ -247,6 +276,25 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       estado: "aprobado",
       etapa_ia: "aprobada",
     };
+    stubFetch([PUBLICACION, BORRADOR, APROBADA]);
+    renderFeed();
+    expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
+    // 'En preparación' = consulta dedicada estado=borrador: solo el borrador (con su badge
+    // honesto 'En borrador').
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "En preparación" }), { button: 0 });
+    expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Aprobada sin hueco")).not.toBeInTheDocument());
+    expect(screen.getByText("En borrador")).toBeInTheDocument();
+    // 'Aprobado y publicado' (filtro en cliente sobre el listado base) incluye lo aprobado
+    // SIN hueco todavía.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Aprobado y publicado" }), { button: 0 });
+    expect(await screen.findByText("Aprobada sin hueco")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument());
+  });
+
+  it("badges de pestañas: el total EXACTO del servidor (piezas), sin esperar a agotar el feed", async () => {
+    // El feed deja páginas pendientes (cursor_siguiente presente): antes los badges no se
+    // pintaban nunca; ahora salen de `paginacion.total` (limite=1) por estado.
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
@@ -267,10 +315,22 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
         if (ruta.includes("/api/publicaciones")) {
+          const params = new URL(ruta, "http://localhost").searchParams;
+          if (params.get("limite") === "1") {
+            const estado = params.get("estado");
+            const total = estado === "borrador" ? 2 : estado === "en_revision" ? 4 : 9;
+            return new Response(
+              JSON.stringify({
+                publicaciones: [PUBLICACION],
+                paginacion: { total, limite: 1, desplazamiento: 0 },
+              }),
+              { status: 200 },
+            );
+          }
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION, BORRADOR, APROBADA],
-              paginacion: { total: 3, limite: 50, desplazamiento: 0 },
+              publicaciones: [PUBLICACION],
+              paginacion: { total: 9, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },
           );
@@ -279,21 +339,19 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       }),
     );
     renderFeed();
-    expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
-    // 'En preparación' = todo lo anterior a revisión (incluye el borrador completo, con su
-    // badge honesto 'En borrador').
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "En preparación" }), { button: 0 });
-    await waitFor(() => expect(screen.queryByText("Aprobada sin hueco")).not.toBeInTheDocument());
-    expect(screen.getByText("Borrador completo")).toBeInTheDocument();
-    expect(screen.getByText("En borrador")).toBeInTheDocument();
-    // 'Aprobado y publicado' incluye lo aprobado SIN hueco todavía.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Aprobado y publicado" }), { button: 0 });
-    await waitFor(() => expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument());
-    expect(screen.getByText("Aprobada sin hueco")).toBeInTheDocument();
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Todo=9 · En preparación=2 · Por aprobar=4 · Aprobado y publicado=9−2−4=3 (partición).
+    expect(await within(screen.getByRole("tab", { name: "Todo el feed" })).findByText("9")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: "En preparación" })).getByText("2")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: "Por aprobar" })).getByText("4")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: "Aprobado y publicado" })).getByText("3")).toBeInTheDocument();
+    // El title habla de PIEZAS (unidad canónica), pluralizado de verdad (nada de "1 ideas").
+    expect(within(screen.getByRole("tab", { name: "En preparación" })).getByTitle("2 piezas")).toBeInTheDocument();
   });
 
   it("vista filtrada: 'Por aprobar' enseña SOLO las piezas que cumplen (sin tarjetas ajenas ni huecos)", async () => {
-    // Una IDEA (c1) con dos piezas: en revisión (X) y publicada (Instagram).
+    // Una IDEA (c1) con dos piezas: en revisión (X) y publicada (Instagram). El stub filtra por
+    // estado= como el backend: la vista dedicada solo recibe la pieza en revisión.
     const PUB_PUBLICADA = {
       ...PUBLICACION,
       id: "p2",
@@ -331,10 +389,14 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
         if (ruta.includes("/api/publicaciones")) {
+          const params = new URL(ruta, "http://localhost").searchParams;
+          const estado = params.get("estado");
+          const todas = [PUBLICACION, PUB_PUBLICADA];
+          const lista = estado ? todas.filter((p) => p.estado === estado) : todas;
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION, PUB_PUBLICADA],
-              paginacion: { total: 2, limite: 50, desplazamiento: 0 },
+              publicaciones: lista,
+              paginacion: { total: lista.length, limite: 50, desplazamiento: 0 },
             }),
             { status: 200 },
           );
@@ -348,12 +410,12 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(screen.getByText("Ya publicada")).toBeInTheDocument();
     // 'Por aprobar': solo la pieza en revisión; la publicada y los huecos no se pintan.
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Por aprobar/ }), { button: 0 });
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Ya publicada")).not.toBeInTheDocument());
-    expect(screen.getByText("¡Increíble remontada!")).toBeInTheDocument();
     expect(screen.queryByText("No generado")).not.toBeInTheDocument();
   });
 
-  it("vista filtrada vacía con más páginas: no afirma 'Nada por aprobar' y sigue pidiendo páginas", async () => {
+  it("vista filtrada EN CLIENTE vacía con más páginas: no afirma el vacío y sigue pidiendo páginas", async () => {
     // IntersectionObserver controlable (jsdom no lo implementa): registra disparadores a mano.
     const disparadores: Array<() => void> = [];
     class IOFalso {
@@ -374,14 +436,15 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
     vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
 
-    // Página 1: SOLO una pieza publicada + cursor. Página 2: la pieza en revisión, última.
-    const PUB_PUBLICADA = {
+    // 'Aprobado y publicado' filtra el listado base EN CLIENTE. Página 1: SOLO una pieza en
+    // revisión + cursor. Página 2: la aprobada, última.
+    const APROBADA = {
       ...PUBLICACION,
       id: "p2",
       contenido_id: "c2",
-      contenido: "Ya publicada",
-      estado: "publicado",
-      etapa_ia: "publicada",
+      contenido: "Aprobada sin hueco",
+      estado: "aprobado",
+      etapa_ia: "aprobada",
     };
     const urls: string[] = [];
     vi.stubGlobal(
@@ -407,14 +470,14 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           urls.push(ruta);
           if (ruta.includes("cursor=")) {
             return new Response(
-              JSON.stringify({ publicaciones: [PUBLICACION], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
+              JSON.stringify({ publicaciones: [APROBADA], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
               { status: 200 },
             );
           }
           return new Response(
             JSON.stringify({
-              publicaciones: [PUB_PUBLICADA],
-              paginacion: { total: 2, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p2" },
+              publicaciones: [PUBLICACION],
+              paginacion: { total: 2, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },
           );
@@ -424,15 +487,15 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
 
     renderFeed();
-    expect(await screen.findByText("Ya publicada")).toBeInTheDocument();
-    // 'Por aprobar' queda vacía PERO hay más páginas: nada de "Nada por aprobar"; se busca.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Por aprobar/ }), { button: 0 });
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // 'Aprobado y publicado' queda vacía PERO hay más páginas: nada de afirmar el vacío; se busca.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Aprobado y publicado" }), { button: 0 });
     expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
-    expect(screen.queryByText("Nada por aprobar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nada aprobado ni publicado")).not.toBeInTheDocument();
     // El sentinel sigue montado: al intersecar pide la página siguiente (?cursor=) y la pinta.
     await waitFor(() => expect(disparadores.length).toBeGreaterThan(0));
     disparadores[disparadores.length - 1]();
-    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    expect(await screen.findByText("Aprobada sin hueco")).toBeInTheDocument();
     expect(urls.some((u) => u.includes("cursor="))).toBe(true);
   });
 
@@ -461,11 +524,86 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
   });
 
+  it("/opciones caído (500): el feed degrada al catálogo estático y pinta tarjetas reales, no «No generado»", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify({ error: "boom" }), { status: 500 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          return new Response(
+            JSON.stringify({
+              publicaciones: [PUBLICACION],
+              paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderFeed();
+    // La tarjeta REAL (article de PostFeed) se pinta con el catálogo de respaldo…
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    expect(screen.getByRole("article")).toBeInTheDocument();
+    // …y nada se disfraza de hueco "No generado" (el bug que mentía con catálogo vacío).
+    expect(screen.queryByText("No generado")).not.toBeInTheDocument();
+  });
+
+  it("mientras /opciones está en vuelo se ve skeleton, no placeholders falsos", async () => {
+    let feedServido = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Promise<Response>(() => {}); // /opciones nunca aterriza
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return Promise.resolve(new Response(JSON.stringify({ cadenas: {} }), { status: 200 }));
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          feedServido = true;
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                publicaciones: [PUBLICACION],
+                paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }),
+    );
+    renderFeed();
+    await waitFor(() => expect(feedServido).toBe(true));
+    // El feed YA llegó pero el catálogo no: gate de skeleton (sin tarjetas ni huecos falsos).
+    await waitFor(() =>
+      expect(document.querySelector('[class*="animate-pulse"]')).not.toBeNull(),
+    );
+    expect(screen.queryByText("No generado")).not.toBeInTheDocument();
+    expect(screen.queryByText("¡Increíble remontada!")).not.toBeInTheDocument();
+  });
+
   it("scroll infinito: la 1ª página trae cursor; al intersectar el sentinel pide la siguiente (con ?cursor=)", async () => {
-    // IntersectionObserver controlable: capturamos su callback para disparar la intersección a mano
-    // (jsdom no lo implementa). Cada instancia registra su disparador en `disparadores` (un holder
-    // array: TS no estrecha el tipo del elemento a `null` como haría con una `let` asignada solo
-    // dentro del constructor anidado).
+    // IntersectionObserver controlable: capturamos su callback para disparar la intersección a
+    // mano (jsdom no lo implementa).
     const disparadores: Array<() => void> = [];
     class IOFalso {
       cb: IntersectionObserverCallback;
@@ -493,6 +631,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         const ruta = String(url);
         if (ruta.includes("/api/publicaciones/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
           return new Response(
@@ -661,7 +802,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(screen.queryByText("No generado")).toBeNull();
   });
 
-  it("tope de búsqueda: con 5 páginas cargadas y la vista vacía aparece «Seguir buscando» y NO se pide la 6ª sola", async () => {
+  it("tope de búsqueda (vista en cliente): con 5 páginas y la vista vacía aparece «Seguir buscando» y NO se pide la 6ª sola", async () => {
     // IntersectionObserver controlable que RESPETA disconnect(): un disparador de un observer
     // desconectado (sentinel apagado por el tope) no hace nada, como en el navegador.
     const observers: IOFalso[] = [];
@@ -691,8 +832,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
     vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
 
-    // Todas las páginas traen UNA pieza publicada y SIEMPRE hay cursor: la vista 'Por aprobar'
-    // nunca encuentra nada y el feed nunca se agota (el peor caso del rastreo encadenado).
+    // Todas las páginas del feed traen UNA pieza en revisión y SIEMPRE hay cursor: la vista
+    // 'Aprobado y publicado' (filtro EN CLIENTE) nunca encuentra nada y el feed nunca se agota
+    // (el peor caso del rastreo encadenado). Solo cuentan las peticiones del FEED (feed=1):
+    // los conteos de los badges (limite=1) van aparte.
     const urls: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -714,6 +857,13 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
         if (ruta.includes("/api/publicaciones")) {
+          if (!ruta.includes("feed=1")) {
+            // Conteos de badges: total fijo, sin cursor.
+            return new Response(
+              JSON.stringify({ publicaciones: [PUBLICACION], paginacion: { total: 99, limite: 1, desplazamiento: 0 } }),
+              { status: 200 },
+            );
+          }
           urls.push(ruta);
           const n = urls.length;
           return new Response(
@@ -723,9 +873,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
                   ...PUBLICACION,
                   id: `p${n}`,
                   contenido_id: `c${n}`,
-                  contenido: `Publicada ${n}`,
-                  estado: "publicado",
-                  etapa_ia: "publicada",
+                  contenido: `En revisión ${n}`,
                 },
               ],
               paginacion: { total: 99, limite: 1, desplazamiento: 0, cursor_siguiente: `cur-${n}` },
@@ -737,7 +885,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       }),
     );
 
-    renderFeed({}, "/?vista=por_aprobar");
+    renderFeed({}, "/?vista=publicado");
     // Página 1 cargada y vista vacía: se busca (no se afirma el vacío).
     expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
     // El sentinel encadena hasta el tope del lote (5 páginas).
@@ -746,9 +894,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       ultimo.fire();
       await waitFor(() => expect(urls.length).toBe(pagina));
     }
-    // Tope alcanzado: se ofrece reanudar y el rastreo se detiene.
+    // Tope alcanzado: el vacío de la casa (EstadoVacio) ofrece reanudar y el rastreo se detiene.
     expect(await screen.findByRole("button", { name: "Seguir buscando" })).toBeInTheDocument();
-    expect(screen.getByText("No hay piezas de esta vista entre lo ya cargado.")).toBeInTheDocument();
+    expect(screen.getByText("Nada aprobado ni publicado")).toBeInTheDocument();
+    expect(screen.getByText("Puede haber piezas más antiguas aún sin cargar.")).toBeInTheDocument();
     // Disparar lo que quede registrado no pide la 6ª página (los observers están apagados).
     observers.forEach((o) => o.fire());
     await waitFor(() => expect(urls.length).toBe(5));

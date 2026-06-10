@@ -13,9 +13,10 @@
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Loader2, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { plural } from "@/lib/formato";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
@@ -49,6 +50,7 @@ export function CadenaAprobacion({
   veredictoIA,
   sinResolver = 0,
   onForzar,
+  forzando = false,
 }: {
   cadena: TCadena;
   /** Veredicto de QA suelto (cuando la IA no es un nivel de la cadena). Pinta el badge. */
@@ -58,6 +60,9 @@ export function CadenaAprobacion({
   /** Override admin/coordinador: si llega y la cadena sigue abierta, pinta al pie el botón
    *  discreto "Forzar aprobación" (la confirmación la pone el llamador). */
   onForzar?: () => void;
+  /** Mutación de forzar en vuelo: deshabilita el botón (sin segundo clic que reabra el
+   *  confirm) y pinta el spinner. */
+  forzando?: boolean;
 }) {
   const niveles = [...cadena.niveles].sort((a, b) => a.nivel - b.nivel);
   const humanos = niveles.filter((n) => !esNivelIA(n));
@@ -139,15 +144,19 @@ export function CadenaAprobacion({
       )}
 
       {/* Override (admin/coordinador): discreto, al pie, fuera del camino del doble clic del
-          like. Solo mientras la cadena siga abierta. */}
+          like. Solo mientras la cadena siga abierta. Botón real (target ≥24px, WCAG 2.5.8);
+          el margen negativo compensa el padding para no mover el texto del pie. */}
       {onForzar && !lista && !rechazada && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onForzar}
-          className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:underline"
+          disabled={forzando}
+          className="-mx-2 mt-1 h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
         >
+          {forzando && <Loader2 className="h-3 w-3 animate-spin" />}
           Forzar aprobación (saltar la cadena)
-        </button>
+        </Button>
       )}
     </section>
   );

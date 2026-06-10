@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import type { Publicacion, UsuarioSesion } from "@/types";
 
 import { PostFeed } from "./PostFeed";
@@ -397,6 +398,120 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
       expect.stringMatching(/No se pudo cargar el estado de aprobación/),
     );
     expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/Espera tu turno/));
+  });
+
+  it("cuando te toca decidir, el like lleva el acento de marca (no el gris de reposo)", async () => {
+    stubFetchAprobacion("aprobado");
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    const like = await screen.findByRole("button", { name: "Dale tu OK" });
+    // `text-primary` era el MISMO gris que el reposo: la señal "te toca" no se veía.
+    expect(like.className).toContain("text-keni-600");
+  });
+
+  it("el «Deshacer» del toast de aprobar retira el OK (origen 'ok'), no un dislike genérico", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        urls.push(ruta);
+        // OJO al orden: /aprobacion/p1/deshacer contiene también "/aprobacion".
+        if (ruta.includes("/deshacer")) {
+          return new Response(
+            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/aprobar")) {
+          return new Response(
+            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({
+              niveles: [
+                {
+                  id: "n1",
+                  plataforma_id: "p1",
+                  contenido_id: "c1",
+                  nivel: 1,
+                  etiqueta: "Edición",
+                  decision: "pendiente",
+                  decisor_id: "",
+                  decisor_nombre: "",
+                  comentario: "",
+                  creado: "",
+                  decidido_en: "",
+                  cargo_requerido: "",
+                },
+              ],
+              estado: "pendiente",
+              nivel_actual: "n1",
+              aprobados: 0,
+              minimo_aprobaciones: 0,
+              comentarios_sin_resolver: 0,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Dale tu OK" }));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Tu OK quedó registrado; falta el de otra persona.",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Deshacer" }) }),
+      ),
+    );
+    // Ejecuta el Deshacer del toast: debe llamar a /deshacer y confirmar "Quitamos tu OK."
+    // (no el genérico "Quitamos tu reacción." de un dislike).
+    const llamada = (toast.success as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => c[1]?.action?.label === "Deshacer",
+    );
+    (llamada?.[1] as { action: { onClick: () => void } }).action.onClick();
+    await waitFor(() => expect(urls.some((u) => u.includes("/deshacer"))).toBe(true));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Quitamos tu OK."));
+  });
+
+  it("pieza APROBADA: sin botón de like (falso affordance) y con el último OK como metadato", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+          { status: 200 },
+        ),
+      ),
+    );
+    renderPost(pub({ estado: "aprobado", etapa_ia: "aprobada", revisor_nombre: "Leo" }));
+    // Nada de un Check enfocable que solo lanza un toast: el botón no existe.
+    expect(screen.queryByRole("button", { name: /me gusta/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /tu ok/i })).not.toBeInTheDocument();
+    // El dato del último OK (antes solo en el title del Check) queda legible.
+    expect(screen.getByText("OK: Leo")).toBeInTheDocument();
+    expect(screen.getByTitle("Último OK")).toBeInTheDocument();
+    // Comentar sigue disponible.
+    expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
+  });
+
+  it("fecha de salida: programada en ámbar con CalendarClock y nombre accesible; publicada neutra", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    const fecha = "2026-06-12T10:00:00Z";
+    const { unmount } = renderPost(
+      pub({ estado: "programado", etapa_ia: "programada", fecha_programada: fecha }),
+    );
+    const texto = formatearFechaHoraCorta(fecha);
+    // El sr-only dice QUÉ fecha es; el title la refuerza al hover; el tono es ámbar (pendiente).
+    expect(screen.getByText(`Programada para ${texto}`)).toBeInTheDocument();
+    expect(screen.getByTitle(`Programada para ${texto}`).className).toContain("text-amber-700");
+    unmount();
+    renderPost(pub({ estado: "publicado", etapa_ia: "publicada", fecha_programada: fecha }));
+    expect(screen.getByText(`Publicada el ${texto}`)).toBeInTheDocument();
+    expect(screen.getByTitle(`Publicada el ${texto}`).className).toContain("text-muted-foreground");
   });
 
   it("editar una pieza PUBLICADA avisa con el mensaje específico (ya salió a la red)", async () => {

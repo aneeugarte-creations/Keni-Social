@@ -110,11 +110,16 @@ const RE_URL = /(https?:\/\/[^\s]+)/g;
 /**
  * Texto del post tal y como lo vería la red: conserva saltos de línea y enlaza
  * URLs, pero NO interpreta Markdown (las redes no lo hacen). Vacío => guía.
+ *
+ * Enlaces: subrayado PERMANENTE (WCAG 1.4.1: el color no puede ser la única señal; en táctil
+ * no hay hover) y sky-700 (~4.6:1 sobre la tarjeta clara, AA). Con `enlacesTabulables: false`
+ * los <a> salen del orden de tabulación: lo usa el copy PLEGADO (`CopyConLeerMas`), donde el
+ * line-clamp los oculta y el focus ring caería en un punto invisible.
  */
 const TextoRed = React.forwardRef<
   HTMLParagraphElement,
-  { contenido: string; className?: string }
->(function TextoRed({ contenido, className }, ref) {
+  { contenido: string; className?: string; enlacesTabulables?: boolean }
+>(function TextoRed({ contenido, className, enlacesTabulables = true }, ref) {
   if (!contenido.trim()) {
     return (
       <p ref={ref} className={cn("italic text-muted-foreground", className)}>
@@ -132,7 +137,8 @@ const TextoRed = React.forwardRef<
             href={parte}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sky-600 hover:underline dark:text-sky-400"
+            tabIndex={enlacesTabulables ? undefined : -1}
+            className="text-sky-700 underline underline-offset-2 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300"
             onClick={(e) => e.stopPropagation()}
           >
             {parte}
@@ -190,10 +196,15 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
       <TextoRed
         ref={ref}
         contenido={contenido}
+        // Plegado con desborde: los enlaces ocultos por el clamp salen del tab-order (el
+        // usuario de teclado expande con el botón "más", que sí es tabulable, y entonces los
+        // enlaces entran al foco ya visibles).
+        enlacesTabulables={expandido || !hayMas}
         className={cn("text-sm leading-normal", !expandido && "line-clamp-2 min-h-[2.625rem]")}
       />
       {/* Fila del enlace SIEMPRE reservada (alto fijo) para que las tarjetas midan igual aunque
-          unas tengan "más" y otras no. */}
+          unas tengan "más" y otras no. El margen negativo amplía el target táctil a ~32px sin
+          alterar la fila h-5 reservada (WCAG 2.5.8). */}
       <div className="h-5">
         {hayMas && (
           <button
@@ -203,7 +214,7 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
               e.stopPropagation();
               alternar();
             }}
-            className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
+            className="-m-1.5 p-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
           >
             {expandido ? "menos" : "más"}
           </button>

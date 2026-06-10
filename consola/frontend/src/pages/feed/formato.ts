@@ -25,6 +25,19 @@ export const GRID_COLS: Record<number, string> = {
   5: "grid-cols-5",
 };
 
+/**
+ * Tope de ANCHURA del feed por nº de columnas EFECTIVAS: en monitores anchos una celda no
+ * debe pasar de ~480-540px (la tarjeta pierde densidad y el copy se desparrama). Lo aplican
+ * los TRES contenedores del feed (skeleton, grupos y rejilla plana) con `mx-auto w-full`.
+ */
+export const MAX_W_FEED: Record<number, string> = {
+  1: "max-w-2xl",
+  2: "max-w-4xl",
+  3: "max-w-6xl",
+  4: "max-w-screen-2xl",
+  5: "max-w-screen-2xl",
+};
+
 // Pares de tono CANÓNICOS del design system (mismos 700/300 que `ui/badge.tsx` y
 // `META_ESTADOS`): un solo verde para "OK/lista" y un solo rojo para "rechazo/error"
 // en toda la tarjeta del feed.

@@ -23,8 +23,9 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Send, ThumbsUp } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -60,6 +61,10 @@ const BANDEJAS: { id: Bandeja; etiqueta: string }[] = [
   { id: "en_revision", etiqueta: "Por aprobar" },
   { id: "aprobado", etiqueta: "Aprobadas" },
 ];
+
+// Mismo padding para el skeleton y el listado real: el propósito de `SkeletonPost` es que el
+// contenido aterrice SIN desplazarse (antes 4px de salto entre p-4 y p-3).
+const CLASES_LISTA = "space-y-4 p-4";
 
 /**
  * Diálogo de creación RÁPIDA (a pantalla completa en móvil): título + nota.
@@ -120,7 +125,14 @@ function DialogoCrear({
             Crea una idea rápida; el copy se afina luego en el editor.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        {/* <form>: el Enter/«ir» del teclado móvil envía el alta (el flujo que más se repite). */}
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (puedeCrear) crear.mutate();
+          }}
+        >
           <div className="space-y-1.5">
             <Label htmlFor="feed-crear-titulo">Título</Label>
             <Input
@@ -142,16 +154,16 @@ function DialogoCrear({
               placeholder="Contexto, ángulo, enlaces…"
             />
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={crear.isPending}>
-            Cancelar
-          </Button>
-          <Button variant="positive" onClick={() => crear.mutate()} disabled={!puedeCrear}>
-            {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Crear
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onCerrar} disabled={crear.isPending}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={!puedeCrear}>
+              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -162,7 +174,23 @@ export default function MobileFeed() {
   const { usuario } = useSesion();
   const queryClient = useQueryClient();
 
-  const [bandeja, setBandeja] = React.useState<Bandeja>("en_revision");
+  // La bandeja vive en la URL (`?bandeja=aprobado`; ausente/otro = por aprobar), igual que
+  // `?vista=` en el feed de escritorio: sobrevive al refresco y es compartible.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const bandeja: Bandeja = searchParams.get("bandeja") === "aprobado" ? "aprobado" : "en_revision";
+  const cambiarBandeja = React.useCallback(
+    (v: Bandeja) => {
+      setSearchParams(
+        (prev) => {
+          if (v === "en_revision") prev.delete("bandeja");
+          else prev.set("bandeja", v);
+          return prev;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   // Pre-filtra por las marcas del usuario: si tiene exactamente una, arranca en ella;
   // si tiene varias o ninguna asignada, arranca en "todas" (sus marcas). Memoizado
   // para no recalcular el array (y no invalidar dependencias) en cada render.
@@ -206,6 +234,10 @@ export default function MobileFeed() {
         signal,
       ),
     getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
+    // La frescura llega por el botón Actualizar y las actualizaciones in-place tras cada
+    // reacción: sin refetch en cadena de N páginas en cada vuelta a la pestaña.
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   // Aplana todas las páginas cargadas. Si el usuario tiene marcas asignadas y el filtro está en
@@ -246,10 +278,15 @@ export default function MobileFeed() {
   }, []);
 
   // El spinner del botón Actualizar SOLO en un refresco real, no en cada página del scroll
-  // (mismo comportamiento que el feed de escritorio).
+  // (mismo comportamiento que el feed de escritorio). "Actualizar" = volver arriba + refrescar
+  // la PRIMERA página (reset, no refetch en serie de todas las cargadas); el resto de
+  // superficies solo se marca stale.
   const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
-  const refrescar = () =>
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+  const refrescar = () => {
+    window.scrollTo(0, 0);
+    void queryClient.resetQueries({ queryKey: [...CLAVE_PUBLICACIONES, "feed"] });
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES, refetchType: "none" });
+  };
   const botonActualizar = (
     <Button
       variant="ghost"
@@ -268,7 +305,7 @@ export default function MobileFeed() {
   const tabs = (
     <Tabs
       value={bandeja}
-      onValueChange={(v) => setBandeja(v as Bandeja)}
+      onValueChange={(v) => cambiarBandeja(v as Bandeja)}
       className={conSelectorMarca ? undefined : "min-w-0 flex-1"}
     >
       <TabsList className="w-full" aria-label="Bandeja">
@@ -316,7 +353,7 @@ export default function MobileFeed() {
       <main className="mx-auto w-full max-w-xl flex-1 pb-28">
         <CadenasLoteContexto.Provider value={cadenasLote}>
           {feedQuery.isLoading ? (
-            <div className="space-y-4 p-4">
+            <div className={CLASES_LISTA}>
               {[0, 1, 2].map((i) => (
                 <SkeletonPost key={i} />
               ))}
@@ -334,8 +371,9 @@ export default function MobileFeed() {
             <>
               {piezas.length > 0 ? (
                 /* MISMA tarjeta que el feed de escritorio: PostFeed es autocontenido (cadena de
-                   aprobación, like/dislike con sus gates, editor y comentarios en línea). */
-                <div className="space-y-4 p-3">
+                   aprobación, like/dislike con sus gates, editor y comentarios en línea).
+                   Mismo padding que el skeleton: sin salto de 4px al aterrizar. */
+                <div className={CLASES_LISTA} role="feed" aria-busy={isFetchingNextPage}>
                   {piezas.map((p) => (
                     <div key={p.id} className="snap-start">
                       <PostFeed publicacion={p} />
@@ -349,11 +387,14 @@ export default function MobileFeed() {
               ) : (
                 <div className="p-6">
                   <EstadoVacio
+                    icono={bandeja === "en_revision" ? ThumbsUp : Send}
                     titulo={bandeja === "en_revision" ? "Nada por aprobar" : "Sin piezas aprobadas"}
                     texto={
                       bandeja === "en_revision"
                         ? "Cuando haya piezas en revisión para tus marcas, aparecerán aquí."
-                        : "Las piezas que apruebes se mostrarán en esta bandeja."
+                        : // La bandeja lista el estado `aprobado` del servidor: al programarse o
+                          // publicarse, la pieza deja esta bandeja (no «desaparece» sin más).
+                          "Las piezas aprobadas pendientes de programarse salen aquí; al programarse o publicarse dejan esta bandeja."
                     }
                   />
                 </div>

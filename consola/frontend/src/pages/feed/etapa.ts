@@ -38,6 +38,9 @@ export interface MetaEtapa {
   enCurso: boolean;
 }
 
+// GÉNERO deliberado: las etiquetas van en FEMENINO («Aprobada/Programada/Publicada») porque la
+// unidad del feed es «la pieza». NO «corregirlas» hacia el masculino de `META_ESTADOS` (que
+// califica a «el estado»): la divergencia es intencional, no un typo.
 export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   generando_copy: { etiqueta: "Generando copy", enCurso: true },
   // "Generando arte" = en realidad la pieza LLEVA imagen pero le falta la FOTO real (la IA solo

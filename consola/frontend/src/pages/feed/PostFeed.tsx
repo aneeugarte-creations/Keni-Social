@@ -21,7 +21,15 @@
  * dislikes para rechazar"); el gate lo decide el backend, `elegibilidadOK` solo habilita/explica.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Loader2, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import {
+  Bot,
+  CalendarClock,
+  GitBranch,
+  Loader2,
+  MessageSquare,
+  ThumbsDown,
+  ThumbsUp,
+} from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -32,6 +40,7 @@ import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
@@ -58,6 +67,12 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
+  // El hilo se abre al FONDO de la tarjeta (fuera del viewport en tarjetas altas): al abrirlo,
+  // acércalo a la vista. Llamada opcional: jsdom no implementa scrollIntoView.
+  const comentariosRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (comentariosAbierto) comentariosRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [comentariosAbierto]);
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
@@ -90,6 +105,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // Comentarios SIN RESOLVER: como en GitHub, bloquean publicar hasta marcarse resueltos. La cifra
   // viene de la cadena (cuenta los hilos abiertos del tema). Mientras carga es 0 (no bloquea de más).
   const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
+  // Cadena AÚN en vuelo (lote anti-N+1 o query individual sin aterrizar): el tooltip/toast del
+  // like lo dice tal cual, sin inventarse un "espera tu turno" que todavía no consta.
+  const cadenaCargando = enRevision && !cadena && !cadenaQuery.isError;
   // OK HUMANOS ya dados (decisor con id propio, no el reservado "auto" del QA/pre-aprobación). Si
   // los hay, editar el contenido los PERDERÁ (el backend resetea a borrador), así que avisamos.
   const aprobacionesHumanas = (cadena?.niveles ?? []).filter(
@@ -133,7 +151,8 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         cerrada
           ? "Pieza aprobada: lista para publicar."
           : "Tu OK quedó registrado; falta el de otra persona.",
-        { action: { label: "Deshacer", onClick: () => deshacer.mutate(undefined) } },
+        // "ok": el spinner gira en el pulgar de ARRIBA y el toast final dice "Quitamos tu OK."
+        { action: { label: "Deshacer", onClick: () => deshacer.mutate("ok") } },
       );
     },
     onError,
@@ -229,7 +248,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     : enRevision
       ? cadenaQuery.isError
         ? "No se pudo cargar el estado de aprobación; reintenta."
-        : motivo || "Espera tu turno para dar el OK."
+        : cadenaCargando
+          ? "Cargando el estado de aprobación…"
+          : motivo || "Espera tu turno para dar el OK."
       : etapa === "generando_copy"
         ? "Falta el copy: la IA aún lo está redactando."
         : etapa === "generando_arte"
@@ -352,13 +373,17 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         )}
         <span className="ml-auto inline-flex items-center gap-2">
           {/* Antigüedad de la pieza: cuándo entró a revisión o, si aún no (en preparación),
-              cuándo se creó. El `title` aclara QUÉ fecha es (el relativo solo no lo dice). */}
+              cuándo se creó. El `title` aclara QUÉ fecha es al hover; el `sr-only` lleva la
+              misma aclaración a lectores de pantalla (patrón de `DistintivoRed`). */}
           {publicacion.enviado_a_revision_en ? (
             <span
               className="tabular-nums"
               title={`Enviada a revisión: ${formatearFechaHoraCorta(publicacion.enviado_a_revision_en)}`}
             >
               {tiempoRelativo(publicacion.enviado_a_revision_en)}
+              <span className="sr-only">
+                {` (enviada a revisión el ${formatearFechaHoraCorta(publicacion.enviado_a_revision_en)})`}
+              </span>
             </span>
           ) : publicacion.fecha_creacion ? (
             <span
@@ -366,20 +391,26 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               title={`Creada: ${formatearFechaHoraCorta(publicacion.fecha_creacion)}`}
             >
               {tiempoRelativo(publicacion.fecha_creacion)}
+              <span className="sr-only">
+                {` (creada el ${formatearFechaHoraCorta(publicacion.fecha_creacion)})`}
+              </span>
             </span>
           ) : null}
           {/* Trazabilidad del PROCESO IA (su run del pipeline): consulta rara → icono discreto
-              en la cabecera, no una fila permanente del pie. Solo en piezas nacidas del pipeline. */}
+              en la cabecera. GitBranch es el icono canónico del destino (pestaña Pipelines);
+              Sparkles ya significa "usa IA" en esta misma tarjeta. La caja h-8/w-8 con márgenes
+              negativos da target táctil sin mover el layout. */}
           {publicacion.pipeline_id && (
-            <Link
-              to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
-              onClick={(e) => e.stopPropagation()}
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Ver proceso IA"
-              title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"
-            >
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
+            <Tooltip label="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)">
+              <Link
+                to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
+                onClick={(e) => e.stopPropagation()}
+                className="-my-2 -mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                aria-label="Ver proceso IA"
+              >
+                <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </Tooltip>
           )}
         </span>
       </header>
@@ -407,120 +438,163 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         onClick={(e) => e.stopPropagation()}
       >
         <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
-        {/* Cuándo sale/salió: la fecha de salida visible en programadas y publicadas. */}
+        {/* Cuándo sale/salió: la fecha de salida con el patrón de la Lista (CalendarClock +
+            ámbar mientras está programada; neutra una vez publicada). El `sr-only` dice QUÉ
+            fecha es; el visible va `aria-hidden` para no leerla dos veces. */}
         {(etapa === "programada" || etapa === "publicada") && publicacion.fecha_programada && (
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {formatearFechaHoraCorta(publicacion.fecha_programada)}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-xs tabular-nums",
+              etapa === "programada"
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-muted-foreground",
+            )}
+            title={
+              etapa === "programada"
+                ? `Programada para ${formatearFechaHoraCorta(publicacion.fecha_programada)}`
+                : `Publicada el ${formatearFechaHoraCorta(publicacion.fecha_programada)}`
+            }
+          >
+            <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+            <span aria-hidden="true">{formatearFechaHoraCorta(publicacion.fecha_programada)}</span>
+            <span className="sr-only">
+              {etapa === "programada"
+                ? `Programada para ${formatearFechaHoraCorta(publicacion.fecha_programada)}`
+                : `Publicada el ${formatearFechaHoraCorta(publicacion.fecha_programada)}`}
+            </span>
+          </span>
+        )}
+        {/* En estados cerrados el botón de like NO se pinta (sería un falso affordance): el
+            dato del último OK se conserva aquí, como metadato legible. */}
+        {yaAprobada && publicacion.revisor_nombre && (
+          <span className="text-xs text-muted-foreground" title="Último OK">
+            OK: {publicacion.revisor_nombre}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            // VERDE solo cuando TÚ ya diste tu OK; PRIMARIO cuando te toca decidir (escaneable
-            // sin leer tooltips); neutro en el resto.
-            className={cn(
-              "h-10 w-10 sm:h-8 sm:w-8",
-              miReaccion === "like"
-                ? cn(TEXTO_OK, "hover:text-emerald-700 dark:hover:text-emerald-300")
-                : puedeDar && miReaccion === "neutral" && sinResolver === 0
-                  ? "text-primary hover:text-primary"
-                  : undefined,
-            )}
-            onClick={onLike}
-            disabled={ocupado}
-            // Tooltip y nombre accesible derivados del ESTADO REAL del toggle (fuente única:
-            // `motivoBloqueo` cuando no puedes; nada de "pulsa para forzar" aquí).
-            title={
-              miReaccion === "like"
-                ? "Ya diste tu OK · vuelve a pulsar para quitarlo"
-                : miReaccion === "dislike"
-                  ? "Tu dislike está puesto; púlsalo para retirarlo y poder dar el OK"
-                  : puedeDar && sinResolver > 0
-                    ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar`
-                    : tituloLike
-            }
-            aria-label={
-              miReaccion === "like"
-                ? "Quitar tu OK"
-                : miReaccion === "dislike"
-                  ? "Retirar tu dislike"
-                  : puedeDar
-                    ? "Dale tu OK"
-                    : "Me gusta: no disponible"
-            }
-            aria-pressed={miReaccion === "like"}
-          >
-            {aprobar.isPending || (deshacer.isPending && deshacer.variables !== undefined) ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : yaAprobada ? (
-              <Check className="h-4 w-4" />
-            ) : (
-              <ThumbsUp className="h-4 w-4" />
-            )}
-          </Button>
+          {!yaAprobada && (
+            <Tooltip
+              label={
+                miReaccion === "like"
+                  ? "Ya diste tu OK · vuelve a pulsar para quitarlo"
+                  : miReaccion === "dislike"
+                    ? "Tu dislike está puesto; púlsalo para retirarlo y poder dar el OK"
+                    : puedeDar && sinResolver > 0
+                      ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar`
+                      : tituloLike
+              }
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                // VERDE solo cuando TÚ ya diste tu OK; ACENTO DE MARCA (keni) cuando te toca
+                // decidir —`text-primary` aquí era el MISMO gris que el reposo y la jerarquía
+                // no se veía—; gris de reposo en el resto.
+                className={cn(
+                  "h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
+                  miReaccion === "like"
+                    ? cn(TEXTO_OK, "hover:text-emerald-700 dark:hover:text-emerald-300")
+                    : puedeDar && miReaccion === "neutral" && sinResolver === 0
+                      ? "text-keni-600 hover:text-keni-700 dark:text-keni-400 dark:hover:text-keni-300"
+                      : undefined,
+                )}
+                onClick={onLike}
+                disabled={ocupado}
+                // Nombre accesible derivado del ESTADO REAL del toggle (fuente única:
+                // `motivoBloqueo` cuando no puedes; nada de "pulsa para forzar" aquí).
+                aria-label={
+                  miReaccion === "like"
+                    ? "Quitar tu OK"
+                    : miReaccion === "dislike"
+                      ? "Retirar tu dislike"
+                      : puedeDar
+                        ? "Dale tu OK"
+                        : "Me gusta: no disponible"
+                }
+                aria-pressed={miReaccion === "like"}
+              >
+                {aprobar.isPending || (deshacer.isPending && deshacer.variables !== undefined) ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ThumbsUp className="h-4 w-4" />
+                )}
+              </Button>
+            </Tooltip>
+          )}
           {/* Dislike: SIEMPRE visible en piezas en revisión (fila estable, no baila entre
               tarjetas); cuando no te toca, onDislike explica con un toast, igual que el like.
               Dos dislikes de dos personas rechazan la pieza. */}
           {enRevision && (
-            <Button
-              variant="ghost"
-              size="icon"
-              // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, negro/neutro.
-              className={cn(
-                "h-10 w-10 sm:h-8 sm:w-8",
-                miReaccion === "dislike" &&
-                  cn(TEXTO_ERROR, "hover:text-red-700 dark:hover:text-red-300"),
-              )}
-              onClick={onDislike}
-              disabled={ocupado}
-              title={
+            <Tooltip
+              label={
                 miReaccion === "like"
                   ? "Tu OK está puesto; quítalo con «Me gusta»"
                   : miReaccion === "dislike"
                     ? "Quitar tu dislike"
                     : "No me gusta"
               }
-              aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
-              aria-pressed={miReaccion === "dislike"}
             >
-              {rechazar.isPending || (deshacer.isPending && deshacer.variables === undefined) ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ThumbsDown className="h-4 w-4" />
-              )}
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, reposo.
+                className={cn(
+                  "h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
+                  miReaccion === "dislike" &&
+                    cn(TEXTO_ERROR, "hover:text-red-700 dark:hover:text-red-300"),
+                )}
+                onClick={onDislike}
+                disabled={ocupado}
+                aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
+                aria-pressed={miReaccion === "dislike"}
+              >
+                {rechazar.isPending || (deshacer.isPending && deshacer.variables === undefined) ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ThumbsDown className="h-4 w-4" />
+                )}
+              </Button>
+            </Tooltip>
           )}
           {/* El OVERRIDE de forzar (admin/coordinador) vive como botón discreto al pie del panel
               de estado (`CadenaAprobacion`), no aquí ni escondido en un toast. */}
           {/* Comentar: SIEMPRE el mismo icono (identidad estable del botón). Con hilos SIN
               RESOLVER se tiñe de ámbar y muestra la burbuja con el conteo: conversación
-              pendiente que bloquea publicar (como en un PR). */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "relative h-10 w-10 sm:h-8 sm:w-8",
-              sinResolver > 0 && "text-amber-700 dark:text-amber-300",
-            )}
-            onClick={() => setComentariosAbierto((v) => !v)}
-            aria-expanded={comentariosAbierto}
-            title={
+              pendiente que bloquea publicar (como en un PR). Abierto, queda marcado con
+              `bg-accent` (el hilo puede abrirse fuera del viewport en tarjetas altas). */}
+          <Tooltip
+            label={
               sinResolver > 0
-                ? `${plural(sinResolver, "comentario")} sin resolver`
+                ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
                 : comentariosAbierto
                   ? "Ocultar comentarios"
                   : "Comentar"
             }
-            aria-label={sinResolver > 0 ? `${plural(sinResolver, "comentario")} sin resolver` : "Comentar"}
           >
-            <MessageSquare className="h-4 w-4" />
-            {sinResolver > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none tabular-nums text-amber-950">
-                {sinResolver}
-              </span>
-            )}
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "relative h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
+                sinResolver > 0 && "text-amber-700 dark:text-amber-300",
+                comentariosAbierto && "bg-accent text-foreground",
+              )}
+              onClick={() => setComentariosAbierto((v) => !v)}
+              aria-expanded={comentariosAbierto}
+              aria-label={
+                sinResolver > 0
+                  ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
+                  : "Comentar"
+              }
+            >
+              <MessageSquare className="h-4 w-4" />
+              {sinResolver > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none tabular-nums text-amber-950">
+                  {sinResolver}
+                </span>
+              )}
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -538,6 +612,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           veredictoIA={publicacion.veredicto}
           sinResolver={sinResolver}
           onForzar={puedeForzar ? () => void onForzar() : undefined}
+          forzando={forzar.isPending}
         />
       )}
 
@@ -566,6 +641,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           hermanas (otras redes de la misma idea); la línea de contexto lo aclara. */}
       {comentariosAbierto && publicacion.contenido_id && (
         <div
+          ref={comentariosRef}
           className="border-t border-border px-4 py-3"
           onClick={(e) => e.stopPropagation()}
         >
