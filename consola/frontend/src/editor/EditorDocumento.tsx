@@ -8,8 +8,9 @@
 //   móvil), orden estilo Canva: Diseño (plantillas) SIEMPRE primero, luego Elementos, Galería,
 //   Marca (kit de identidad), Subidas (tus propias fotos) y Capas. Cada icono abre/cierra un
 //   FLYOUT (~350px) con su panel y «Ajustes» abre el inspector.
-//   Con puntero real (hover:hover), reposar ~200 ms sobre un icono abre su panel SIN FIJAR
-//   (overlay); el clic lo fija; salir del rail+panel sin fijar lo cierra a los ~300 ms.
+//   Con puntero real (hover:hover) y sin `prefers-reduced-motion: reduce`, reposar ~200 ms
+//   sobre un icono abre su panel SIN FIJAR (overlay); el clic lo fija; salir del rail+panel
+//   sin fijar lo cierra a los ~300 ms.
 //   «Diseño» pinta el panel que aporta la página (`panelDiseno`); si la página solo da
 //   `onPlantillas` (overlay de vídeo), el botón cae al modal clásico.
 // - ACCIONES: un único clúster (deshacer/rehacer, vista con muestra, menú «Más», Exportar) que con
@@ -102,6 +103,15 @@ const HOVER_CERRAR_MS = 300;
 /** ¿Hay puntero con hover real? (en táctil `hover: none` y el hover-para-abrir no aplica). */
 function conHoverReal(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia("(hover: hover)").matches;
+}
+/** ¿El usuario pide movimiento reducido? Con `prefers-reduced-motion: reduce`, que un panel
+ *  aparezca SOLO por reposar el puntero es movimiento no solicitado: el hover no abre nada
+ *  (los paneles se abren únicamente por clic). */
+function prefiereMenosMovimiento(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
@@ -212,8 +222,9 @@ export function EditorDocumento({
   // Reposar el puntero ~200 ms sobre un botón del rail con el panel cerrado ABRE su panel como
   // overlay SIN FIJAR; el clic lo fija (el toggle clásico queda intacto); salir del rail+panel sin
   // fijar lo cierra a los ~300 ms. Solo con puntero real (`hover: hover`): en táctil no hay hover.
-  // El flujo de teclado no pasa por aquí (solo eventos de ratón) y no se añade ninguna animación
-  // (nada que apagar con prefers-reduced-motion).
+  // Con `prefers-reduced-motion: reduce` el hover tampoco abre (solo clic): la aparición
+  // espontánea de un panel es movimiento que el usuario pidió evitar. El flujo de teclado no
+  // pasa por aquí (solo eventos de ratón).
   const timerAbrir = useRef<number | null>(null);
   const timerCerrar = useRef<number | null>(null);
   const cancelarAbrir = () => {
@@ -238,6 +249,7 @@ export function EditorDocumento({
     cancelarCierre();
     cancelarAbrir();
     if (!conHoverReal()) return; // táctil/sin puntero: el hover no existe
+    if (prefiereMenosMovimiento()) return; // movimiento reducido: los paneles solo se abren por clic
     if (t === "diseno" && panelDiseno === undefined) return; // el modal clásico NO se abre por hover
     if (tool === t) return; // ya abierto (fijado o no)
     if (tool !== null && fijado) return; // un panel fijado por clic no se cambia por hover
@@ -445,7 +457,7 @@ export function EditorDocumento({
                 >
                   <ImagePlay className="h-4 w-4 text-muted-foreground" />
                   Foto de muestra
-                  <span className="ml-auto text-[10px] text-muted-foreground">{muestraFoto ? "ON" : "OFF"}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">{muestraFoto ? "Sí" : "No"}</span>
                 </button>
                 <button
                   onClick={() => setMuestraCopy(!muestraCopy)}
@@ -453,7 +465,7 @@ export function EditorDocumento({
                 >
                   <Type className="h-4 w-4 text-muted-foreground" />
                   Copy de muestra
-                  <span className="ml-auto text-[10px] text-muted-foreground">{muestraCopy ? "ON" : "OFF"}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">{muestraCopy ? "Sí" : "No"}</span>
                 </button>
                 <div className="my-1 border-t border-border" />
               </div>

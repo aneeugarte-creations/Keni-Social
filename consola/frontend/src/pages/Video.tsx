@@ -21,7 +21,7 @@ import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { EditorSubtitulos } from "@/components/video/EditorSubtitulos";
 import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 // El editor de capas (Konva) se carga PEREZOSAMENTE: pesa y solo se necesita en la sección
@@ -401,6 +401,24 @@ export default function Video() {
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Video" icono={VideoIcon} />
 
+      {/* Estado de guardado en la CABECERA unificada (mismo patrón que Imagen): se portaliza vía
+          `AccionesPagina` (bajo `md` cae a la fila de acciones móvil). Honesto con el estado real:
+          lee los isPending de crear/guardar/actualizar. En el gestor no hay borrador en edición. */}
+      {seccion !== "gestor" && (
+        <AccionesPagina>
+          <span
+            aria-live="polite"
+            className={`whitespace-nowrap text-xs ${
+              !guardando && !composicionId
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-muted-foreground"
+            }`}
+          >
+            {guardando ? "Guardando…" : composicionId ? "Guardado" : "Sin guardar"}
+          </span>
+        </AccionesPagina>
+      )}
+
       {/* Sub-navegación de secciones */}
       <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-1.5" aria-label="Secciones del editor de video">
         {SECCIONES.map(({ clave, etiqueta, Icono }) => {
@@ -439,8 +457,9 @@ export default function Video() {
         </div>
       )}
 
-      {/* Barra del BORRADOR: título, estado (borrador/listo), indicador de guardado y acciones.
-          Fuera del gestor (en el gestor no se edita un borrador concreto). */}
+      {/* Barra del BORRADOR: título, estado (borrador/listo) y acciones. El indicador de
+          guardado vive en la cabecera unificada (AccionesPagina, arriba). Fuera del gestor
+          (en el gestor no se edita un borrador concreto). */}
       {seccion !== "gestor" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <input
@@ -465,10 +484,8 @@ export default function Video() {
             {estado === "listo" ? "Listo" : "Borrador"}
           </span>
 
-          {/* Indicador de guardado para que el usuario confíe en que persiste. */}
-          <span className="shrink-0 text-[11px] text-muted-foreground" aria-live="polite">
-            {guardando ? "Guardando…" : composicionId ? "Guardado" : "Sin guardar"}
-          </span>
+          {/* El indicador de guardado vive en la cabecera unificada (arriba), no aquí:
+              un solo sitio para ese dato, igual que en Imagen. */}
 
           {/* Acciones: guardar borrador (si aún no existe) o marcar listo/volver a borrador. */}
           {!composicionId ? (

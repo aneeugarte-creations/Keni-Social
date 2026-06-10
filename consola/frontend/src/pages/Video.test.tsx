@@ -8,10 +8,11 @@
  * No se ejercita el editor de capas (Konva) ni el render real: eso es preview/server-side.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ProveedorEncabezado } from "@/components/layout/encabezado";
 import * as apiMod from "@/lib/api";
 import { pistaPip, setClipPip, type ComposicionVideo } from "@/lib/video";
 
@@ -255,6 +256,33 @@ describe("Video", () => {
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
     // Sin clip base: la creación NO esperó al clip. Título por defecto derivado.
     expect(crear.mock.calls[0][0].titulo).toMatch(/^Borrador/);
+  });
+
+  it("el indicador de guardado se PORTALIZA a la cabecera unificada (AccionesPagina)", () => {
+    // Hueco de acciones de la barra superior, como lo montaría el AppShell.
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={client}>
+          <ProveedorEncabezado
+            value={{ slotInicio: null, slotAcciones: slot, registrarTitulo: () => () => {} }}
+          >
+            <MemoryRouter initialEntries={["/contenido/video"]}>
+              <Video />
+            </MemoryRouter>
+          </ProveedorEncabezado>
+        </QueryClientProvider>,
+      );
+      // En el gestor (sección por defecto) no se edita un borrador: sin indicador.
+      expect(within(slot).queryByText(/sin guardar/i)).not.toBeInTheDocument();
+      irABase();
+      // En una sección de edición el indicador aterriza en el hueco de la cabecera.
+      expect(within(slot).getByText(/sin guardar/i)).toBeInTheDocument();
+    } finally {
+      slot.remove();
+    }
   });
 
   it("el botón 'Guardar borrador' crea la composición y muestra 'Guardado'", async () => {

@@ -116,11 +116,16 @@ describe("EditorDocumento — rail estilo Canva", () => {
   });
 });
 
-/** Stub de matchMedia: el hover del rail solo aplica con puntero real (`hover: hover`). */
-function stubHover(matches: boolean) {
+/** Stub de matchMedia POR CONSULTA: el hover del rail solo aplica con puntero real
+ *  (`hover: hover`) y sin `prefers-reduced-motion: reduce`. */
+function stubHover(hover: boolean, reduceMovimiento = false) {
   vi.stubGlobal(
     "matchMedia",
-    vi.fn(() => ({ matches, addEventListener: () => {}, removeEventListener: () => {} })),
+    vi.fn((consulta: string) => ({
+      matches: consulta.includes("prefers-reduced-motion") ? reduceMovimiento : hover,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })),
   );
 }
 
@@ -190,6 +195,19 @@ describe("EditorDocumento — hover del rail (abre sin fijar; el clic fija)", ()
     fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Elementos"));
     act(() => void vi.advanceTimersByTime(1000));
     expect(screen.queryByText("panel-elementos")).not.toBeInTheDocument();
+  });
+
+  it("con prefers-reduced-motion, el hover NO abre paneles (solo el clic)", () => {
+    vi.useFakeTimers();
+    stubHover(true, true); // hay puntero real, pero el usuario pide movimiento reducido
+    montar();
+    const boton = within(railEscritorio()).getByTitle("Elementos");
+    fireEvent.mouseEnter(boton);
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(screen.queryByText("panel-elementos")).not.toBeInTheDocument();
+    // El clic sigue funcionando con normalidad (y fija el panel).
+    fireEvent.click(boton);
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument();
   });
 
   it("con solo onPlantillas, «Diseño» NO dispara el modal por hover (solo por clic)", () => {

@@ -22,6 +22,43 @@ const POSICION: Record<Lado, string> = {
   right: "left-full top-1/2 ml-1.5 -translate-y-1/2",
 };
 
+// ── Temporización ÚNICA de todos los tooltips (patrón Canva / Radix 500/150) ──────────────────
+// Reposar ~500 ms muestra el rótulo; al saltar entre disparadores hermanos (si el anterior se
+// cerró hace <150 ms) el siguiente aparece al instante, sin re-esperar. La marca de cierre es
+// COMPARTIDA entre `Tooltip` y `TooltipFlotante` para que el salto funcione también entre mezcla
+// de variantes. El foco con teclado muestra SIEMPRE al instante.
+const RETARDO_MS = 500;
+const VENTANA_SALTO_MS = 150;
+let ultimoCierre = 0;
+
+/** Visibilidad temporizada compartida: `mostrar(inmediato?)` arma el retardo, `ocultar` cierra. */
+function useTemporizadorTooltip() {
+  const [visible, setVisible] = React.useState(false);
+  const timerRef = React.useRef<number | null>(null);
+
+  // Limpia el temporizador pendiente al desmontar (evita setState sobre componente muerto).
+  React.useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  }, []);
+
+  const mostrar = React.useCallback((inmediato = false) => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    const espera = inmediato || Date.now() - ultimoCierre < VENTANA_SALTO_MS ? 0 : RETARDO_MS;
+    timerRef.current = window.setTimeout(() => setVisible(true), espera);
+  }, []);
+
+  const ocultar = React.useCallback(() => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setVisible((v) => {
+      if (v) ultimoCierre = Date.now();
+      return false;
+    });
+  }, []);
+
+  return { visible, mostrar, ocultar };
+}
+
 export interface TooltipProps {
   /** Texto a mostrar. Si está vacío, se renderiza el hijo sin envoltorio. */
   label: string;
@@ -34,8 +71,12 @@ export interface TooltipProps {
 /**
  * Envuelve un único elemento (normalmente un Button de icono) y le añade un
  * tooltip accesible. El hijo recibe `aria-label` si no tiene uno.
+ * Misma temporización que `TooltipFlotante`: ~500 ms de reposo, instantáneo
+ * entre hermanos y al enfocar con teclado.
  */
 export function Tooltip({ label, side = "top", children, className }: TooltipProps) {
+  const { visible, mostrar, ocultar } = useTemporizadorTooltip();
+
   if (!label) return children;
 
   const hijo = React.isValidElement<{ "aria-label"?: string }>(children)
@@ -45,13 +86,19 @@ export function Tooltip({ label, side = "top", children, className }: TooltipPro
     : children;
 
   return (
-    <span className={cn("group/tooltip relative inline-flex", className)}>
+    <span
+      className={cn("relative inline-flex", className)}
+      onMouseEnter={() => mostrar()}
+      onMouseLeave={ocultar}
+      onFocus={() => mostrar(true)}
+      onBlur={ocultar}
+    >
       {hijo}
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground opacity-0 shadow-md transition-opacity duration-150",
-          "group-hover/tooltip:opacity-100 group-focus-within/tooltip:opacity-100",
+          "pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md transition-opacity duration-150",
+          visible ? "opacity-100" : "opacity-0",
           POSICION[side],
         )}
       >
@@ -69,25 +116,15 @@ const TRANSFORM_FLOTANTE: Record<Lado, string> = {
   right: "translate(0, -50%)",
 };
 
-// Momento en que se ocultó el último tooltip flotante: al saltar entre botones hermanos
-// (<300 ms), el siguiente aparece al instante (micro-interacción estilo Canva).
-let ultimoCierreFlotante = 0;
-
 /**
  * Variante FLOTANTE del tooltip: se pinta en un portal sobre `<body>` con `position: fixed`,
  * así NO lo recortan los contenedores con overflow (barras con scroll horizontal como la barra
- * de acciones del lienzo). Mismo estilo visual que `Tooltip`. Aparece tras ~500 ms de hover
- * (instantáneo al saltar entre hermanos) y al enfocar con teclado.
+ * de acciones del lienzo). Mismo estilo visual y misma temporización que `Tooltip`: ~500 ms de
+ * hover (instantáneo al saltar entre hermanos) y al enfocar con teclado.
  */
 export function TooltipFlotante({ label, side = "top", children, className }: TooltipProps) {
-  const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
+  const { visible, mostrar, ocultar } = useTemporizadorTooltip();
   const anclaRef = React.useRef<HTMLSpanElement | null>(null);
-  const timerRef = React.useRef<number | null>(null);
-
-  // Limpia el temporizador pendiente al desmontar (evita setState sobre componente muerto).
-  React.useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-  }, []);
 
   if (!label) return children;
 
@@ -97,6 +134,7 @@ export function TooltipFlotante({ label, side = "top", children, className }: To
       })
     : children;
 
+  // La posición se calcula EN el render visible (el ancla ya está montada y el rect es el actual).
   const calcular = (): { x: number; y: number } | null => {
     const el = anclaRef.current;
     if (!el) return null;
@@ -106,20 +144,7 @@ export function TooltipFlotante({ label, side = "top", children, className }: To
     if (side === "right") return { x: r.right + 6, y: r.top + r.height / 2 };
     return { x: r.left + r.width / 2, y: r.top - 6 };
   };
-
-  const mostrar = (inmediato = false) => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    const espera = inmediato || Date.now() - ultimoCierreFlotante < 300 ? 0 : 500;
-    timerRef.current = window.setTimeout(() => setPos(calcular()), espera);
-  };
-  const ocultar = () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = null;
-    setPos((p) => {
-      if (p) ultimoCierreFlotante = Date.now();
-      return null;
-    });
-  };
+  const pos = visible ? calcular() : null;
 
   return (
     <span
