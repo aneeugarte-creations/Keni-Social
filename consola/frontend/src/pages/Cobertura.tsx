@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CircleOff,
   Clock,
   ExternalLink,
   Flame,
@@ -29,6 +30,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldQuestion,
+  Sparkles,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -80,6 +82,25 @@ function tiempoRelativo(iso: string): string {
   } catch {
     return iso.slice(0, 16).replace("T", " ");
   }
+}
+
+/**
+ * Tooltip del badge de score: la razón humana + el desglose por señal (todo lo persiste el
+ * daemon al puntuar). Relevancia EXPLICABLE: el equipo ve POR QUÉ una historia rankea.
+ */
+function etiquetaScore(h: Historia): string {
+  const partes: string[] = [];
+  if (h.score_razon) partes.push(h.score_razon);
+  const d = h.score_desglose;
+  if (d && Object.keys(d).length > 0) {
+    const pct = (v?: number) => Math.round((v ?? 0) * 100);
+    partes.push(
+      `corroboración ${pct(d.corroboracion)} · frescura ${pct(d.frescura)} · ` +
+        `viralidad ${pct(d.viralidad)} · marca ${pct(d.marca)}`,
+    );
+    if (d.palabras && d.palabras.length > 0) partes.push(`casa: ${d.palabras.join(", ")}`);
+  }
+  return partes.join("\n") || "Score de jerarquización (mayor = más prioritaria)";
 }
 
 // ── Claves de React Query ─────────────────────────────────────────────────────
@@ -364,12 +385,49 @@ function TarjetaHistoria({
             </Badge>
           )}
 
-          {/* Score de jerarquización (algoritmo de ponderación): mayor = más prioritaria */}
+          {/* Score de jerarquización (algoritmo de ponderación): mayor = más prioritaria.
+              EXPLICABLE: el tooltip enseña la razón humana + el desglose por señal que
+              persiste el daemon al puntuar (nada de caja negra). */}
           {historia.score > 0 && (
-            <Badge variant="secondary" className="gap-1 text-xs" data-testid="badge-score">
-              <Flame className="h-3 w-3 text-amber-500" />
-              {Math.round(historia.score * 100)}
-            </Badge>
+            <Tooltip label={etiquetaScore(historia)} side="top">
+              <Badge variant="secondary" className="gap-1 text-xs" data-testid="badge-score">
+                <Flame className="h-3 w-3 text-amber-500" />
+                {Math.round(historia.score * 100)}
+              </Badge>
+            </Tooltip>
+          )}
+
+          {/* LISTÓN de producción automática: la MISMA evaluación que usa el pipeline.
+              Solo aplica a lo que sigue en el pool (lo promovido/descartado ya se decidió). */}
+          {piezaEstado === "en_pool" && historia.promovible === true && (
+            <Tooltip
+              label={historia.promovible_motivo || "Supera el listón de producción automática"}
+              side="top"
+            >
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs border-evergreen-500 text-evergreen-700"
+                data-testid="badge-liston"
+              >
+                <Sparkles className="h-3 w-3" />
+                Auto-producible
+              </Badge>
+            </Tooltip>
+          )}
+          {piezaEstado === "en_pool" && historia.promovible === false && historia.promovible_motivo && (
+            <Tooltip
+              label={`No dispara producción automática: ${historia.promovible_motivo}`}
+              side="top"
+            >
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs text-muted-foreground"
+                data-testid="badge-liston"
+              >
+                <CircleOff className="h-3 w-3" />
+                Bajo el listón
+              </Badge>
+            </Tooltip>
           )}
 
           {/* Idiomas (excepto solo "es") */}

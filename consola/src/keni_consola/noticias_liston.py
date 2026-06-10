@@ -50,17 +50,25 @@ def palabras_relevancia(marca: str, perfil_activo: bool | None = None) -> frozen
 
 
 def evaluar(
-    cluster: dict[str, object], *, ahora: datetime | None = None
+    cluster: dict[str, object],
+    *,
+    ahora: datetime | None = None,
+    palabras_marca: frozenset[str] | None = None,
 ) -> tuple[bool, str]:
     """¿`cluster` supera el listón de producción automática AHORA? `(supera, motivo)`.
 
     Lee los umbrales vivos de config y el vocabulario efectivo de la marca del cluster, y
     delega la regla en `clustering.evaluar_liston` (pura). `ahora` inyectable para tests.
+    `palabras_marca` admite el vocabulario YA resuelto (un llamante que evalúa un LOTE — la
+    API del panel — lo memoiza por marca para no releer el cache del perfil por historia);
+    None = resolverlo aquí.
     """
     marca = str(cluster.get("marca") or "")
+    if palabras_marca is None:
+        palabras_marca = palabras_relevancia(marca)
     return clustering.evaluar_liston(
         cluster,
-        palabras_marca=palabras_relevancia(marca),
+        palabras_marca=palabras_marca,
         min_score=config.promover_min_score(),
         min_marca=config.promover_min_marca(),
         ahora=ahora,

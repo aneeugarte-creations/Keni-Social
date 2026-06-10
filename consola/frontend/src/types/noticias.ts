@@ -93,6 +93,25 @@ export interface Historia {
   senal: number;
   /** Score de ranking. */
   score: number;
+  /** Razón humana del score (qué señales lo explican; la persiste el daemon al puntuar). */
+  score_razon?: string;
+  /**
+   * Desglose por señal del score, cada una cruda en [0,1] + las palabras del vocabulario
+   * de la marca que casaron. {} si el daemon aún no puntuó esta historia.
+   */
+  score_desglose?: {
+    corroboracion?: number;
+    frescura?: number;
+    viralidad?: number;
+    marca?: number;
+    rendimiento?: number;
+    breaking?: number;
+    palabras?: string[];
+  };
+  /** true si supera el LISTÓN de producción automática (la misma evaluación que el pipeline). */
+  promovible?: boolean;
+  /** Motivo legible del listón (por qué supera, o por qué no). */
+  promovible_motivo?: string;
   /** 1 si la historia está en modo breaking (aceleración de fuentes). */
   breaking: number;
   /** ISO del artículo más antiguo del cluster. */
@@ -218,6 +237,8 @@ export interface SaludFeed {
   items_24h: number;
   /** Minutos desde el último ítem nuevo (null si nunca tuvo ítems). */
   frescura_min: number | null;
+  /** Artículos descartados por el filtro de entrada (agenda de marca) en el último sondeo. */
+  ultimo_filtrados?: number;
 }
 
 /**

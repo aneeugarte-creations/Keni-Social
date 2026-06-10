@@ -357,3 +357,52 @@ def test_borrar_todo_respeta_filtro_estado(cliente):
 def test_borrar_todo_marca_invalida_400(cliente):
     r = cliente.post("/api/noticias/historias/borrar-todo", json={"marca": "no-existe"})
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Relevancia EXPLICABLE + listón en el contrato de la API                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_historias_exponen_explicacion_y_liston(cliente):
+    """Cada historia trae score_razon/score_desglose persistidos y la evaluación del listón."""
+    from datetime import UTC, datetime
+
+    repos.upsert_noticia_cluster({
+        "id": "expl", "titulo": "Sismo sacude la CDMX esta mañana",
+        "resumen": "El gobierno de México activa el protocolo", "marca": "unotv",
+        "categoria": "mx", "geo": "MX", "clave": "t:expl", "n_items": 2, "n_fuentes": 3,
+        "idiomas": ["es"], "senal": 100, "score": 0.7, "breaking": 0,
+        "verificacion": "corroborada",
+        "score_razon": "3 fuentes · reciente · relevante para la marca (cdmx, sismo)",
+        "score_desglose": {"corroboracion": 0.48, "frescura": 1.0, "viralidad": 0.33,
+                            "marca": 0.67, "rendimiento": 0.0, "breaking": 0,
+                            "palabras": ["cdmx", "sismo"]},
+        "primer_visto": "2026-06-01T00:00:00+00:00",
+        "ultimo_visto": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "estado": "nuevo",
+    })
+
+    datos = cliente.get("/api/noticias/historias").json()
+    h = next(x for x in datos["historias"] if x["id"] == "expl")
+
+    # Explicación persistida del score (razón humana + desglose por señal).
+    assert "relevante para la marca" in h["score_razon"]
+    assert h["score_desglose"]["palabras"] == ["cdmx", "sismo"]
+    # Listón: la MISMA evaluación que la promoción CI (fresca+corroborada+con marca → supera).
+    assert h["promovible"] is True
+    assert h["promovible_motivo"]
+
+
+def test_historias_liston_no_promovible_explica_por_que(cliente):
+    """Una historia sin encaje de marca expone promovible=False con el motivo legible."""
+    from datetime import UTC, datetime
+
+    _sembrar_cluster(
+        "sin-encaje", titulo="Celebrity gossip from Hollywood",
+        ultimo_visto=datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
+    )
+    datos = cliente.get("/api/noticias/historias").json()
+    h = next(x for x in datos["historias"] if x["id"] == "sin-encaje")
+    assert h["promovible"] is False
+    assert "marca" in h["promovible_motivo"]

@@ -186,6 +186,9 @@ export function SaludFeeds() {
                 <TableHead>Categoría</TableHead>
                 <TableHead>Marca</TableHead>
                 <TableHead className="text-right">Items 24 h</TableHead>
+                <TableHead className="text-right" title="Artículos descartados por el filtro de entrada (no casan la agenda de la marca) en el último sondeo">
+                  Filtrados
+                </TableHead>
                 <TableHead className="text-right">Frescura</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Último error</TableHead>
@@ -201,6 +204,9 @@ export function SaludFeeds() {
                     <TableCell className="text-xs">{feed.categoria || "—"}</TableCell>
                     <TableCell className="text-xs">{feed.marca_nombre || feed.marca || "—"}</TableCell>
                     <TableCell className="text-right text-xs">{feed.items_24h}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">
+                      {feed.ultimo_filtrados ? feed.ultimo_filtrados : "—"}
+                    </TableCell>
                     <TableCell className="text-right text-xs">{frescuraTexto(feed.frescura_min)}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`text-xs ${est.className}`}>

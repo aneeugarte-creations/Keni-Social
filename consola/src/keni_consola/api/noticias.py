@@ -107,11 +107,33 @@ def _pieza_estado_de(cluster: dict[str, Any]) -> str:
     )
 
 
+def _evaluar_liston(
+    cluster: dict[str, Any], vocab_memo: dict[str, frozenset[str]]
+) -> tuple[bool, str]:
+    """Listón de producción automática de UNA historia, con memo de vocabulario por marca.
+
+    La MISMA evaluación que usa la promoción CI (`noticias_liston.evaluar`): el panel nunca
+    dice una cosa y el pipeline hace otra. `vocab_memo` evita releer el cache del perfil
+    editorial por cada historia del listado. Best-effort: ante un fallo se reporta NO
+    promovible con motivo genérico (el panel no casca por una historia rara).
+    """
+    from .. import noticias_liston
+
+    try:
+        marca = str(cluster.get("marca") or "")
+        if marca not in vocab_memo:
+            vocab_memo[marca] = noticias_liston.palabras_relevancia(marca)
+        return noticias_liston.evaluar(cluster, palabras_marca=vocab_memo[marca])
+    except Exception:  # noqa: BLE001 -- la explicación es informativa; nunca rompe el listado
+        return False, "no evaluable"
+
+
 def _historia_a_dict(
     cluster: dict[str, Any],
     enlaces: list[dict[str, Any]],
     *,
     pieza_estado: str = "en_pool",
+    liston: tuple[bool, str] | None = None,
 ) -> dict[str, Any]:
     """Serializa una historia (cluster) a la forma `Historia` (snake_case) del contrato.
 
@@ -167,6 +189,14 @@ def _historia_a_dict(
         "idiomas": cluster.get("idiomas") or [],
         "senal": int(cluster.get("senal") or 0),
         "score": float(cluster.get("score") or 0.0),
+        # Relevancia EXPLICABLE: la razón humana del score y su desglose por señal (los
+        # persiste el daemon al puntuar; ver `clustering.puntuar_detalle`).
+        "score_razon": cluster.get("score_razon") or "",
+        "score_desglose": cluster.get("score_desglose") or {},
+        # LISTÓN de producción automática (la MISMA evaluación que la promoción CI): si esta
+        # historia dispararía QA+copy solos, y el porqué (o el porqué no), legible.
+        "promovible": bool(liston[0]) if liston else False,
+        "promovible_motivo": (liston[1] if liston else ""),
         "breaking": int(cluster.get("breaking") or 0),
         "verificacion": cluster.get("verificacion") or "unica_fuente",
         "traducido": traducido,
@@ -390,6 +420,8 @@ def construir_salud(
                 "errores_seguidos": int(f.get("errores_seguidos") or 0),
                 "items_24h": items_24h,
                 "frescura_min": fmin,
+                # Filtro de ENTRADA por agenda de marca: descartados en el último sondeo.
+                "ultimo_filtrados": int(f.get("ultimo_filtrados") or 0),
             }
         )
 
@@ -484,6 +516,7 @@ async def listar_historias(request: Request) -> Response:
     resumen_pieza = repos.estado_pieza_por_contenido(
         [c.get("contenido_id") or "" for c in clusters]
     )
+    vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
             c,
@@ -491,6 +524,7 @@ async def listar_historias(request: Request) -> Response:
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
             ),
+            liston=_evaluar_liston(c, vocab_memo),
         )
         for c in clusters
     ]
@@ -504,7 +538,10 @@ async def detalle_historia(request: Request) -> Response:
     if cluster is None:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
-    historia = _historia_a_dict(cluster, items, pieza_estado=_pieza_estado_de(cluster))
+    historia = _historia_a_dict(
+        cluster, items, pieza_estado=_pieza_estado_de(cluster),
+        liston=_evaluar_liston(cluster, {}),
+    )
     return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})
 
 
