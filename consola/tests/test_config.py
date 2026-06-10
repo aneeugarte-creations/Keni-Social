@@ -525,9 +525,15 @@ def test_qa_activo_afirmativo(limpio, store_aislado, valor):
     assert config.qa_activo() is True
 
 
-def test_alguna_etapa_pipeline_activa_or_de_las_cuatro(limpio, store_aislado):
-    """El barrido del daemon corre si CUALQUIER etapa (Noticias/QA/Copy/Arte) está activa."""
-    assert config.alguna_etapa_pipeline_activa() is False  # todas off por defecto
+def test_alguna_etapa_pipeline_activa_or_de_las_etapas(limpio, store_aislado):
+    """El barrido del daemon corre si CUALQUIER etapa está activa.
+
+    OJO con el defecto: Avance (`KENI_PIPELINE_AVANCE`) es default ON (no gasta IA), así que
+    SIN ninguna env el barrido ya corre — por el avance, no por las etapas de IA. Para probar
+    el OR de las demás se apaga el avance explícitamente."""
+    assert config.alguna_etapa_pipeline_activa() is True  # avance default ON
+    store_aislado.setenv(config.ENV_PIPELINE_AVANCE, "0")
+    assert config.alguna_etapa_pipeline_activa() is False  # ahora sí: todas off
     for env in (
         config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
         config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
@@ -535,7 +541,7 @@ def test_alguna_etapa_pipeline_activa_or_de_las_cuatro(limpio, store_aislado):
         store_aislado.setenv(env, "1")
         assert config.alguna_etapa_pipeline_activa() is True
         store_aislado.delenv(env, raising=False)
-    assert config.alguna_etapa_pipeline_activa() is False  # de nuevo todas off
+    assert config.alguna_etapa_pipeline_activa() is False  # de nuevo todas off (avance=0)
 
 
 # --------------------------------------------------------------------------- #

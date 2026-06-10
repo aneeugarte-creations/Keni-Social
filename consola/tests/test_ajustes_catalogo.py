@@ -86,6 +86,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
         config.ENV_PROMOVER_MADURACION_MIN,
         config.ENV_CUPO_DIA, config.ENV_CUPO_FRANJA, config.ENV_FRANJA_HORAS,
+        # Etapa de avance: borrador completo -> cola de revisión (default ON; sin IA).
+        config.ENV_PIPELINE_AVANCE,
         # Filtro de ENTRADA por agenda de marca (la puerta del pool).
         config.ENV_INGESTA_FILTRO,
         # Caducidad del pool: TTL (lo viejo expira solo) + retención (techo del archivo).
