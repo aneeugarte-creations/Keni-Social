@@ -30,6 +30,10 @@ describe("WCAG helpers", () => {
     expect(umbralAA(nuevaCapaTexto({ tamano: 60, peso: 700 }))).toBe(3);
     expect(umbralAA(nuevaCapaTexto({ tamano: 16, peso: 400 }))).toBe(4.5);
   });
+  it("umbral AA: 3:1 para bold >= 18.66px (p.ej. 20px bold)", () => {
+    expect(umbralAA(nuevaCapaTexto({ tamano: 20, peso: 700 }))).toBe(3);
+    expect(umbralAA(nuevaCapaTexto({ tamano: 18, peso: 700 }))).toBe(4.5);
+  });
 });
 
 describe("analizarLegibilidad", () => {

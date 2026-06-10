@@ -80,7 +80,7 @@ export function PanelElementos() {
           {TEXTOS.map((t) => (
             <button
               key={t.etiqueta}
-              onClick={() => insertar(nuevaCapaTexto({ w: 760, ...t.parcial }))}
+              onClick={() => insertar(nuevaCapaTexto({ w: 760, ...structuredClone(t.parcial) }))}
               className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-neutral-900 px-3 py-2.5 text-left hover:border-primary"
             >
               <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-neutral-500">{t.etiqueta}</span>
@@ -113,7 +113,7 @@ export function PanelElementos() {
           {FORMAS.map((f) => (
             <button
               key={f.etiqueta}
-              onClick={() => insertar(nuevaCapaMarco({ w: 360, h: 240, ...f.parcial }))}
+              onClick={() => insertar(nuevaCapaMarco({ w: 360, h: 240, ...structuredClone(f.parcial) }))}
               title={f.etiqueta}
               className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-md border border-border text-[9px] text-muted-foreground hover:border-primary hover:bg-accent/50"
             >

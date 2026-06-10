@@ -52,7 +52,7 @@ export function contraste(l1: number, l2: number): number {
 // Umbral AA según el tamaño/peso del texto: 3:1 para texto grande (≥24px normal o ≥18.66px bold),
 // 4.5:1 para el resto. Trabajamos en px del documento (el tamaño de fuente de la capa).
 export function umbralAA(t: CapaTexto): number {
-  const grande = t.tamano >= 24 && (t.peso >= 700 ? t.tamano >= 18.66 : t.tamano >= 24);
+  const grande = t.tamano >= 24 || (t.peso >= 700 && t.tamano >= 18.66);
   return grande ? 3 : 4.5;
 }
 
@@ -177,12 +177,13 @@ export function correccionPara(doc: Documento, d: Diagnostico): Correccion {
     // en el render). Tomamos la fracción necesaria para tapar el texto + margen.
     const desdeY = Math.max(0, d.caja.y - d.caja.h * 0.25);
     const altoFrac = Math.min(0.9, Math.max(0.25, (h - desdeY) / h));
+    // Sobre fondo oscuro con texto presumiblemente oscuro, overlay claro para despegar.
     const overlay = nuevaCapaOverlay({
       x: 0,
       y: 0,
       w: doc.formato.w,
       h,
-      color: fondoOscuro ? "#000000" : "#000000",
+      color: fondoOscuro ? "#FFFFFF" : "#000000",
       alto_frac: altoFrac,
       alpha: 200, // ~0.78; suficiente para AA con texto blanco en la mayoría de fotos
       nombre: "Overlay legibilidad",
