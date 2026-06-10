@@ -98,6 +98,9 @@ _TABLAS = (
     # sorpresas de orden; sin FK declarada). Sin truncar, acumularian filas entre tests.
     "video_subtitulos",
     "video_composiciones",
+    # Latidos de daemons (observabilidad): sin truncar, un latido de un test contamina las
+    # aserciones de estado/contadores del siguiente.
+    "daemon_latidos",
     # Journal de migraciones VERSIONADAS de esquema (`_db_core.MIGRACIONES`). Truncarlo entre
     # tests es DELIBERADO: vacia el journal, de modo que la primera conexion de cada test
     # re-aplica las migraciones (idempotentes) y se preserva la auto-curacion "BD vieja" que

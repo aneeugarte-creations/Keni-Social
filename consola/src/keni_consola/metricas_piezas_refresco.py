@@ -42,13 +42,24 @@ def iniciar_refresco_piezas(intervalo_segundos: float | None = None) -> threadin
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
     def bucle() -> None:
+        from . import latidos  # import tardio: solo lo paga el hilo del servidor real
+
         while True:
+            t0 = time.monotonic()
             try:
                 n = metricas_pieza.refrescar_piezas_recientes()
                 if n:
                     _log.info("Refresco proactivo por pieza: %d pieza(s) actualizada(s).", n)
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
+                latidos.barrido(
+                    "metricas_piezas", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                )
+            except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 _log.exception("Fallo en el barrido de refresco de metricas por pieza.")
+                latidos.barrido(
+                    "metricas_piezas", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
+                )
             time.sleep(intervalo)
 
     hilo = threading.Thread(target=bucle, name="refresco-metricas-piezas-daemon", daemon=True)

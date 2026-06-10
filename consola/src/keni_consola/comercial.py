@@ -636,13 +636,24 @@ def iniciar_captura_programada(
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
     def bucle() -> None:
+        from . import latidos  # import tardio: solo lo paga el hilo del servidor real
+
         while True:
+            t0 = time.monotonic()
             try:
                 n = capturar_pendientes()
                 if n:
                     _log.info("Captura comercial: %d pieza(s) actualizada(s).", n)
-            except Exception:  # noqa: BLE001 -- un fallo de captura no debe matar el hilo
+                latidos.barrido(
+                    "comercial", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                )
+            except Exception as e:  # noqa: BLE001 -- un fallo de captura no debe matar el hilo
                 _log.exception("Fallo en la captura comercial programada.")
+                latidos.barrido(
+                    "comercial", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
+                )
             time.sleep(intervalo)
 
     hilo = threading.Thread(target=bucle, name="comercial-captura", daemon=True)

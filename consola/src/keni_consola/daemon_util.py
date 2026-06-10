@@ -54,6 +54,7 @@ def bucle_gateado(
     sweep_fn: Callable[[], Any],
     tick_seg: float = 60.0,
     log: logging.Logger,
+    nombre: str | None = None,
     _max_vueltas: int | None = None,
 ) -> None:
     """Bucle GATEADO y responsivo: corre `sweep_fn` solo mientras `activo_fn()` sea True.
@@ -64,9 +65,18 @@ def bucle_gateado(
     garantiza). Un fallo de `sweep_fn` se loguea y NO mata el hilo (la siguiente vuelta
     reintenta).
 
+    LATIDOS (observabilidad): cada vuelta registra un latido de ciclo y cada sweep uno de
+    barrido (ok/error + duracion) via `latidos` (best-effort: un fallo del latido no toca
+    el bucle). `nombre` identifica al daemon en la tabla; si no se pasa, se deriva del
+    modulo de `sweep_fn` (asi los 10 call sites existentes quedan instrumentados sin
+    cambios).
+
     `_max_vueltas` (solo para tests) acota el numero de iteraciones del bucle; en
     produccion se deja en None (bucle infinito).
     """
+    from . import latidos  # import tardio: mantiene este modulo importable sin la app entera
+
+    daemon = nombre or latidos.nombre_de_sweep(sweep_fn)
     proximo = 0.0  # 0.0 => si arranca ACTIVO, el primer barrido corre de inmediato.
     vueltas = 0
     while True:
@@ -74,10 +84,21 @@ def bucle_gateado(
         intervalo = intervalo_seg_fn()
         correr, proximo = toca_ejecutar(activo, time.monotonic(), proximo, intervalo)
         if correr:
+            t0 = time.monotonic()
             try:
                 sweep_fn()
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
+                latidos.barrido(
+                    daemon, ok=True, intervalo_seg=intervalo, tick_seg=tick_seg,
+                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                )
+            except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 log.exception("Fallo en el barrido del daemon gateado.")
+                latidos.barrido(
+                    daemon, ok=False, intervalo_seg=intervalo, tick_seg=tick_seg,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
+                )
+        else:
+            latidos.ciclo(daemon, activo=activo, intervalo_seg=intervalo, tick_seg=tick_seg)
         vueltas += 1
         if _max_vueltas is not None and vueltas >= _max_vueltas:
             return

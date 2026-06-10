@@ -29,9 +29,13 @@ real sigue gated por `KENI_PUBLICAR_REAL` (OFF). Es el mismo conjunto de daemons
 from __future__ import annotations
 
 import sys
-import threading
+import time
 
 from .app import crear_app
+
+# Cadencia del latido de liveness del proceso (fichero que sondea el healthcheck del
+# contenedor `daemons` en deploy). El healthcheck tolera varios multiplos de esto.
+_LATIDO_SEG = 30.0
 
 
 def main() -> int:
@@ -94,9 +98,17 @@ def main() -> int:
     # esto el reaper no corria en produccion y los huerfanos quedaban "ejecutando" para siempre.
     iniciar_reaper()
 
-    # Los daemons son hilos; mantenemos vivo el proceso principal indefinidamente.
-    threading.Event().wait()
-    return 0
+    # Los daemons son hilos; el proceso principal queda en un bucle de LATIDO: toca el
+    # fichero de liveness cada _LATIDO_SEG para que el healthcheck del contenedor (deploy)
+    # distinga "proceso vivo" de "proceso colgado/zombi" sin depender de la BD. Antes era
+    # un Event().wait() mudo: el contenedor solo se reiniciaba si el proceso MORIA, nunca
+    # si quedaba colgado.
+    from . import latidos
+
+    while True:
+        latidos.tocar_fichero()
+        time.sleep(_LATIDO_SEG)
+    return 0  # inalcanzable; conserva la firma
 
 
 if __name__ == "__main__":

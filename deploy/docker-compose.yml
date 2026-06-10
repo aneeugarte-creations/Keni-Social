@@ -324,11 +324,24 @@ services:
     command: ["python", "-m", "keni_consola.daemons"]
     # El daemons NO levanta uvicorn (corre solo los hilos de fondo), pero comparte imagen
     # con el back, cuyo Dockerfile define un HEALTHCHECK `curl :8765/healthz`. Heredado aqui
-    # daria SIEMPRE "unhealthy" (no hay servidor en 8765) -> estado de salud enganoso. Lo
-    # desactivamos: la liveness la cubre `restart: unless-stopped` (si el proceso muere, el
-    # contenedor sale y se reinicia).
+    # daria SIEMPRE "unhealthy" (no hay servidor en 8765). En su lugar sondeamos el FICHERO
+    # DE LATIDO que el bucle principal de `keni_consola.daemons` toca cada ~30s
+    # (`latidos.tocar_fichero`): si lleva >120s sin tocarse, el proceso esta colgado/zombi
+    # (no muerto: ese caso ya lo cubre `restart: unless-stopped`) y autoheal lo reinicia.
+    # Sin dependencia de la BD: un Postgres caido NO marca unhealthy a los daemons.
     healthcheck:
-      disable: true
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import os,sys,time;
+          f=os.environ.get('KENI_DAEMONS_LATIDO_FICHERO','/tmp/keni-daemons.latido');
+          sys.exit(0 if os.path.exists(f) and time.time()-os.path.getmtime(f)<120 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    labels:
+      - autoheal=true  # con healthcheck real, el sidecar ya puede vigilarlo
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
@@ -497,6 +510,11 @@ services:
     # el camino es `docker compose up -d --scale worker=2` (la cola reparte sin doble-
     # ejecutar: claim FOR UPDATE SKIP LOCKED), pero hay que re-presupuestar RAM antes
     # (2 workers × 20g no caben con holgura junto a db+CI en 61 GiB).
+    # APAGADO LIMPIO: al recibir SIGTERM el pool del worker deja de reclamar, cancela los
+    # `claude` en vuelo y RE-ENCOLA cada job capturado (worker.py `_Pool.detener`, timeout
+    # interno 10s). El default de Docker (10s a SIGKILL) cortaba ese drenaje JUSTO al
+    # limite; 30s le da margen real para devolver los jobs a `pendiente` sin perder nada.
+    stop_grace_period: 30s
     mem_limit: ${WORKER_MEM_LIMIT:-20g}
     # CPU: 6 `claude` concurrentes quieren ~4–6 nucleos (cada uno empuja CPU al razonar/usar
     # tools; la mayor parte del tiempo es ESPERA de API). 6 da holgura para los picos sin

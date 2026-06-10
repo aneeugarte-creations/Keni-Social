@@ -48,13 +48,15 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+from datetime import datetime
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from .. import config, media, permisos, rutas
+from .. import config, db, media, permisos, rutas
 from ..observabilidad import NOMBRE_LOGGER
+from ..tiempo import ahora_iso
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
@@ -668,8 +670,71 @@ async def s3_borrar_lote(request: Request) -> Response:
     return JSONResponse({"borrados": borrados, "fallidos": fallidos})
 
 
+# --------------------------------------------------------------------------- #
+# Daemons de fondo (latidos persistidos por `latidos.py`)                       #
+# --------------------------------------------------------------------------- #
+
+# Umbral de ATRASO de un daemon: su bucle late cada `tick_seg` (gateados: <=60s; bucles
+# fijos: su intervalo). Si `visto` es mas viejo que 2 ticks + margen, el hilo esta muerto
+# o el proceso daemons caido => "atrasado". El suelo evita falsos positivos con ticks
+# muy cortos (jitter de BD/arranque).
+_MARGEN_ATRASO_SEG = 90.0
+_UMBRAL_ATRASO_MIN_SEG = 120.0
+
+
+def _edad_segundos(iso: str, ahora: datetime) -> float | None:
+    """Edad en segundos de un timestamp canon (naive-UTC) frente a `ahora`; None si vacio."""
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    return max(0.0, (ahora - dt).total_seconds())
+
+
+async def daemons_latidos(request: Request) -> Response:
+    """Estado de los daemons de fondo a partir de sus latidos persistidos (solo admin).
+
+    Devuelve `{daemons: [...], error}` donde cada entrada agrega al registro crudo de
+    `daemon_latidos` la `edad_seg` del ultimo latido, el `umbral_atraso_seg` aplicado y
+    un `estado` listo para pintar: "ok" (late y su ultimo barrido fue bien), "error"
+    (late pero su ultimo barrido fallo), "inactivo" (late con el gate OFF) o "atrasado"
+    (no late: hilo muerto, proceso daemons caido o BD inaccesible para el). Defensivo:
+    un fallo de BD degrada a lista vacia con `error` legible, nunca 500.
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+    try:
+        filas = db.listar_latidos()
+    except Exception as e:  # noqa: BLE001 -- sonda defensiva: el panel nunca se cae
+        _logger.warning("No se pudieron leer los latidos de daemons: %s", e)
+        return JSONResponse(
+            {"daemons": [], "error": "No se pudieron leer los latidos de los daemons."}
+        )
+    ahora = datetime.fromisoformat(ahora_iso())
+    salida = []
+    for f in filas:
+        edad = _edad_segundos(f["visto"], ahora)
+        umbral = max(2.0 * f["tick_seg"], _UMBRAL_ATRASO_MIN_SEG) + _MARGEN_ATRASO_SEG
+        if edad is None or edad > umbral:
+            estado = "atrasado"
+        elif not f["activo"]:
+            estado = "inactivo"
+        elif f["ultimo_error"] and f["ultimo_error"] >= (f["ultimo_ok"] or ""):
+            # Canon ISO naive-UTC: comparar como texto respeta el orden temporal.
+            estado = "error"
+        else:
+            estado = "ok"
+        salida.append(
+            {**f, "edad_seg": edad, "umbral_atraso_seg": umbral, "estado": estado}
+        )
+    return JSONResponse({"daemons": salida, "error": None})
+
+
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
+    Route("/api/sistema/daemons", daemons_latidos, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),
     # IMPORTANTE: las rutas mas especificas (/s3/objetos, /s3/objeto, /s3/borrar) van ANTES
     # que /s3/probar y /s3 para que Starlette las case correctamente.

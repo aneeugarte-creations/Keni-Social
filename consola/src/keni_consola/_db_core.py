@@ -1438,6 +1438,29 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
+    # LATIDOS de los daemons de fondo (observabilidad del panel Sistema): UNA fila por daemon,
+    # upsert en cada ciclo/barrido (escritura best-effort desde `latidos.py`; un fallo aqui
+    # JAMAS rompe un barrido). `visto` = ultimo ciclo del bucle (el hilo vive aunque el gate
+    # este OFF); `ultimo_barrido`/`ultimo_ok`/`ultimo_error` = ejecucion real del sweep.
+    # `intervalo_seg`/`tick_seg` permiten al panel juzgar si un daemon esta ATRASADO sin
+    # conocer su configuracion (atrasado ~ edad(visto) >> tick). Timestamps ISO UTC (TEXT),
+    # como el resto del esquema.
+    """
+    CREATE TABLE IF NOT EXISTS daemon_latidos (
+        daemon         TEXT PRIMARY KEY,
+        visto          TEXT NOT NULL DEFAULT '',
+        activo         INTEGER NOT NULL DEFAULT 0,
+        intervalo_seg  REAL NOT NULL DEFAULT 0,
+        tick_seg       REAL NOT NULL DEFAULT 0,
+        ultimo_barrido TEXT NOT NULL DEFAULT '',
+        ultimo_ok      TEXT NOT NULL DEFAULT '',
+        ultimo_error   TEXT NOT NULL DEFAULT '',
+        error_txt      TEXT NOT NULL DEFAULT '',
+        duracion_ms    INTEGER NOT NULL DEFAULT 0,
+        barridos       INTEGER NOT NULL DEFAULT 0,
+        errores        INTEGER NOT NULL DEFAULT 0
+    )
+    """,
 )
 
 

@@ -510,7 +510,10 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
     def bucle() -> None:
+        from . import latidos  # import tardio: solo lo paga el hilo del servidor real
+
         while True:
+            t0 = time.monotonic()
             try:
                 n = preparar_vencidas()
                 if n:
@@ -518,8 +521,16 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                         "Programador: %d pieza(s) preparada(s) (KENI_PUBLICAR_REAL=%s).",
                         n, config.publicar_real(),
                     )
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
+                latidos.barrido(
+                    "programador", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                )
+            except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 _log.exception("Fallo en el barrido del programador.")
+                latidos.barrido(
+                    "programador", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
+                )
             time.sleep(intervalo)
 
     hilo = threading.Thread(target=bucle, name="programador-publicaciones", daemon=True)

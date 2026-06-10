@@ -240,6 +240,11 @@ from .db_jobs import (  # noqa: F401
     reencolar_job,
     terminar_job,
 )
+from .db_latidos import (  # noqa: F401
+    latido_barrido,
+    latido_ciclo,
+    listar_latidos,
+)
 from .db_metricas import (  # noqa: F401
     guardar_metricas_cache,
     leer_metricas_cache,

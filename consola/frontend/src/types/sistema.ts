@@ -375,6 +375,54 @@ export interface RespuestaProbarS3 {
   error: string | null;
 }
 
+// ── Daemons de fondo (GET /api/sistema/daemons) ──────────────────────────────
+// Latidos persistidos por cada daemon (tabla `daemon_latidos`): el bucle late en cada
+// vuelta (`visto`) y cada barrido deja resultado (`ultimo_ok`/`ultimo_error`). El back
+// ya juzga el `estado` (umbral de atraso incluido); el front solo pinta.
+
+/** Estado agregado de un daemon, calculado por el back. */
+export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado";
+
+/** Latido de un daemon de fondo (una fila de `daemon_latidos` + campos derivados). */
+export interface LatidoDaemon {
+  /** Nombre estable del daemon ("ingesta", "pipeline", "reaper"…). */
+  daemon: string;
+  /** Última vuelta del bucle (ISO) — el hilo vive aunque el gate esté OFF. */
+  visto: string;
+  /** `true` si el gate del daemon estaba ON en la última vuelta. */
+  activo: boolean;
+  /** Intervalo configurado entre barridos (segundos). */
+  intervalo_seg: number;
+  /** Cadencia real del bucle (segundos); base del umbral de atraso. */
+  tick_seg: number;
+  /** Último barrido ejecutado (ISO) o "". */
+  ultimo_barrido: string;
+  /** Último barrido OK (ISO) o "". */
+  ultimo_ok: string;
+  /** Último barrido con error (ISO) o "". */
+  ultimo_error: string;
+  /** Texto del último error (truncado) o "". */
+  error_txt: string;
+  /** Duración del último barrido (ms). */
+  duracion_ms: number;
+  /** Barridos totales desde el primer registro. */
+  barridos: number;
+  /** Barridos fallidos totales. */
+  errores: number;
+  /** Edad del último latido (segundos) o null si nunca latió. */
+  edad_seg: number | null;
+  /** Umbral aplicado para juzgar "atrasado" (segundos). */
+  umbral_atraso_seg: number;
+  /** Estado listo para pintar. */
+  estado: EstadoDaemon;
+}
+
+/** Respuesta de `GET /api/sistema/daemons`. Degradada: lista vacía + error legible. */
+export interface RespuestaDaemons {
+  daemons: LatidoDaemon[];
+  error: string | null;
+}
+
 // ── S3 Navegador de objetos (GET /api/sistema/s3/objetos) ────────────────────
 
 /** Una miga del breadcrumb del explorador S3 ({nombre, prefijo}). */

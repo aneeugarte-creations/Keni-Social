@@ -40,12 +40,23 @@ def iniciar_refresco_metricas(intervalo_segundos: float | None = None) -> thread
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
     def bucle() -> None:
+        from . import latidos  # import tardio: solo lo paga el hilo del servidor real
+
         while True:
+            t0 = time.monotonic()
             try:
                 n = metricas_cache.refrescar_todo()
                 _log.info("Refresco periodico de metricas: %d combo(s) actualizado(s).", n)
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
+                latidos.barrido(
+                    "metricas", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                )
+            except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 _log.exception("Fallo en el barrido de refresco de metricas.")
+                latidos.barrido(
+                    "metricas", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
+                )
             time.sleep(intervalo)
 
     hilo = threading.Thread(target=bucle, name="refresco-metricas-daemon", daemon=True)

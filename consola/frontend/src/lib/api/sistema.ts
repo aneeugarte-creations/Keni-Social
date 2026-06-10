@@ -4,6 +4,7 @@ import { peticion, query } from "./_core";
 import type {
   RespuestaBorrarLoteS3,
   RespuestaBorrarS3,
+  RespuestaDaemons,
   RespuestaEstado,
   RespuestaProbarS3,
   RespuestaRecursos,
@@ -18,6 +19,8 @@ export const apiSistema = {
   // --- Sistema (panel de admin; 403 si no) ---
   sistemaRecursos: (signal?: AbortSignal) =>
     peticion<RespuestaRecursos>("/sistema/recursos", { signal }),
+  sistemaDaemons: (signal?: AbortSignal) =>
+    peticion<RespuestaDaemons>("/sistema/daemons", { signal }),
   sistemaS3: (signal?: AbortSignal) => peticion<RespuestaS3>("/sistema/s3", { signal }),
   probarS3: () => peticion<RespuestaProbarS3>("/sistema/s3/probar", { metodo: "POST" }),
   s3Objetos: (prefijo?: string, signal?: AbortSignal) =>
