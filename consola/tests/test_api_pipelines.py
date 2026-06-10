@@ -370,24 +370,44 @@ def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
     assert por_etapa["EDITORIAL"]["salida"] == "SALIDA-ENCAJE"
 
 
-def test_etapa_arte_ok_con_imagen_y_toggle(cliente, monkeypatch):
-    """La etapa Arte aparece: 'saltada' si el toggle está off; 'ok' si on y hay imagen en una pieza."""
-    # Toggle Arte off (default): saltada.
-    tema = _tema_pipeline("Tema arte off")
-    repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", estado="borrador", copy="C.")
-    run = _run_por_titulo(cliente, "Tema arte off")
+def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
+    """La etapa Arte se deriva de la EVIDENCIA de arte GENERADO (generación/marcador de
+    auto-arte correlacionado), no de que la pieza tenga imagen: la FOTO de la nota de una
+    fuente propia (bajada en ingesta) no es arte IA. Antes, esa foto pintaba Arte 'ok' con
+    el toggle apagado (encendida estando apagada)."""
+    # Toggle Arte off (default) + pieza CON imagen (foto de fuente): saltada, NO ok.
+    tema = _tema_pipeline("Tema foto de fuente")
+    repos.crear_contenido_plataforma(
+        contenido_id=tema["id"], red="x", estado="borrador", copy="C.",
+        imagen="foto-fuente.png", falta_imagen=False,
+    )
+    run = _run_por_titulo(cliente, "Tema foto de fuente")
     arte = next(e for e in run["etapas"] if e["clave"] == "arte")
     assert arte["estado"] == "saltada"
-    # Toggle Arte on + una pieza con imagen -> ok.
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
-    tema2 = _tema_pipeline("Tema arte ok")
+    # Con EVIDENCIA de arte IA (la generación que deja el auto-arte) -> ok, aunque el toggle
+    # de HOY esté apagado (la evidencia no se re-pinta con interruptores).
+    tema2 = _tema_pipeline("Tema arte ia")
     repos.crear_contenido_plataforma(
         contenido_id=tema2["id"], red="x", estado="borrador", copy="C.",
-        imagen="foto.png", falta_imagen=False,
+        imagen="arte-ia.png", falta_imagen=False,
     )
-    run2 = _run_por_titulo(cliente, "Tema arte ok")
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "contenido_id": tema2["id"],
+        "etiqueta": "Arte — Tema arte ia", "estado": generaciones.ESTADO_COMPLETADO,
+    })
+    run2 = _run_por_titulo(cliente, "Tema arte ia")
     arte2 = next(e for e in run2["etapas"] if e["clave"] == "arte")
     assert arte2["estado"] == "ok"
+    # Toggle ON pero sin evidencia: pendiente (el arte aún no corrió), tampoco 'ok'.
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    tema3 = _tema_pipeline("Tema arte pendiente")
+    repos.crear_contenido_plataforma(
+        contenido_id=tema3["id"], red="x", estado="borrador", copy="C.",
+        imagen="foto-fuente.png", falta_imagen=False,
+    )
+    run3 = _run_por_titulo(cliente, "Tema arte pendiente")
+    arte3 = next(e for e in run3["etapas"] if e["clave"] == "arte")
+    assert arte3["estado"] == "pendiente"
 
 
 def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
@@ -622,3 +642,21 @@ def test_fusion_editorial_no_saltada_si_el_pool_corrio(cliente):
     sin_etapas = {e["clave"]: e["estado"] for e in sin["etapas"]}
     assert sin_etapas["fusion"] == "saltada"
     assert sin_etapas["editorial"] == "saltada"
+
+
+def test_lista_trae_sumatorio_de_metricas(cliente):
+    """La lista responde `totales`: la SUMA de métricas de todos los items que casan el filtro
+    (no solo la página), para el sumatorio de la página Producción."""
+    tema = _tema_pipeline("Run sumada")
+    _gen_suelta("Copy de la run sumada", contenido_id=tema["id"])
+    _gen_suelta("Suelta sumada")
+    body = cliente.get("/api/pipelines").json()
+    t = body["totales"]
+    assert t["items"] == 2
+    assert t["tokens"] == 300
+    assert t["coste_usd"] == pytest.approx(0.04)
+    assert t["duration_ms"] == 6000
+    # Con un filtro, el sumatorio se acota a lo filtrado.
+    solo_runs = cliente.get("/api/pipelines?clase=run").json()["totales"]
+    assert solo_runs["items"] == 1
+    assert solo_runs["tokens"] == 150

@@ -62,6 +62,7 @@ const SUELTA = {
 const LISTA = {
   pipelines: [RUN, SUELTA],
   paginacion: { total: 2, limite: 20, desplazamiento: 0 },
+  totales: { items: 3, tokens: 17345, coste_usd: 0.088, duration_ms: 16200 },
 };
 
 const AGREGADOS = {
@@ -112,6 +113,14 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     expect(screen.getByText("Tiempo de cómputo")).toBeInTheDocument();
     // El total de items (7) aparece como valor del KPI.
     expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
+  it("muestra el SUMATORIO del feed (tokens/coste/duración de lo filtrado) junto al conteo", async () => {
+    stubFetch();
+    renderConProviders(<Produccion />);
+    // totales.tokens = 17345 -> "17.3 k tok" (compacto es-MX).
+    expect(await screen.findByText(/17.3\s*k tok/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 items/i)).toBeInTheDocument();
   });
 
   it("pinta una RUN del pipeline como tarjeta con su tira de etapas y sus métricas", async () => {

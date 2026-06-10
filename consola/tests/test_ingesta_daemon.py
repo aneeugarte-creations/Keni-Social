@@ -734,3 +734,38 @@ def test_paso_caducidad_va_throttled(monkeypatch):
     ingesta_daemon.paso_caducidad(forzar=True)   # corre y sella el throttle
     ingesta_daemon.paso_caducidad()              # dentro del intervalo: no corre
     assert len(llamadas) == 1
+
+
+def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):
+    """El registro de actividad del pool sella las MÉTRICAS acumuladas por el ejecutor síncrono
+    (tokens/coste/duración de las llamadas Haiku de ese paso) y la toma RESETEA: el siguiente
+    registro sin llamadas sale sin métricas (no se duplica el coste). Antes estas generaciones
+    salían sin coste y las etapas Fusión/Editorial aparecían a cero en Producción."""
+    import pytest
+
+    from keni_consola import generaciones
+    from keni_consola.dominio import traduccion
+
+    traduccion.tomar_metricas_acumuladas()  # limpia restos del hilo
+    traduccion._acumular_metricas(
+        {"tokens_in": 100, "tokens_out": 40, "total_cost_usd": 0.0123, "duration_ms": 4200}
+    )
+    ingesta_daemon._registrar_actividad_ia(
+        "unotv", "Fusión de historias — UnoTV: 1 absorbida(s)", "SALIDA", prompt="PROMPT",
+    )
+    gen = next(
+        g for g in generaciones.listar(limite=None)
+        if (g.get("etiqueta") or "").startswith("Fusión")
+    )
+    m = gen.get("metricas") or {}
+    assert m.get("tokens_in") == 100
+    assert m.get("tokens_out") == 40
+    assert m.get("total_cost_usd") == pytest.approx(0.0123)
+    assert m.get("duration_ms") == 4200
+
+    ingesta_daemon._registrar_actividad_ia("unotv", "Encaje editorial — UnoTV", "S2")
+    gen2 = next(
+        g for g in generaciones.listar(limite=None)
+        if (g.get("etiqueta") or "").startswith("Encaje")
+    )
+    assert not gen2.get("metricas")

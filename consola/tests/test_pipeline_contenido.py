@@ -789,6 +789,32 @@ def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, mon
     assert pend["tipo_contenido"] == ""
 
 
+def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch):
+    """Item de fuente AJENA con foto en el feed (media-tag): NO se usa (sin derechos).
+
+    Antes había un fallback a "cualquier imagen ya capturada en los items": colaba fotos de
+    medios ajenos en las piezas (y encendía la etapa Arte sin arte). Solo fuentes PROPIAS
+    aportan imagen; sin ellas, el tema nace sin foto y el arte lo decide la etapa de Arte IA."""
+    import json
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    fuente = repos.crear_fuente_rss("Ajeno2", _URL_OK, marca="unotv", propia=False)
+    cluster = _sembrar_cluster("ca2", titulo="Historia ajena con foto", score=0.7)
+    items = [{
+        "titulo": "Historia ajena con foto", "url": "https://medio.test/nota2",
+        "url_canonica": "medio.test/nota2", "fuente_id": fuente["id"],
+        "fuente_nombre": "Medio", "publicado_en": "",
+        "imagen": "https://medio.test/foto-ajena.jpg",  # media-tag del feed ajeno
+    }]
+
+    tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
+
+    assert tema is not None
+    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    assert pend["imagen"] == ""
+    assert pend["tipo_contenido"] == ""
+
+
 def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):
     """`temas_en_vuelo` cuenta los temas sin terminar las fases de IA (QA pendiente o sin copy).
 

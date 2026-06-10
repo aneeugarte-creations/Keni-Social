@@ -179,21 +179,26 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
     —fusión de historias (dedup) y encaje editorial— que antes corrían mudos. Es un registro ya
     COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los REALES de la
     llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no se pasan,
-    queda solo el resumen. Un fallo al registrar NUNCA aborta el barrido (es observabilidad).
+    queda solo el resumen. Las MÉTRICAS (tokens/coste/duración) son las acumuladas por el
+    ejecutor síncrono desde la última toma (las llamadas Haiku de ESTE paso): antes estas
+    generaciones salían sin coste en Producción (etapas Fusión/Editorial a cero). Un fallo al
+    registrar NUNCA aborta el barrido (es observabilidad).
     """
     try:
-        generaciones.crear(
-            {
-                "tipo": "pipeline",
-                "marca": marca,
-                "etiqueta": etiqueta,
-                "prompt": (prompt or "")[:20000],
-                "salida": (salida or "")[:20000],
-                "estado": generaciones.ESTADO_COMPLETADO,
-                "fase": generaciones.FASE_COMPLETADO,
-                "fecha_fin": ahora_iso(),
-            }
-        )
+        registro: dict[str, Any] = {
+            "tipo": "pipeline",
+            "marca": marca,
+            "etiqueta": etiqueta,
+            "prompt": (prompt or "")[:20000],
+            "salida": (salida or "")[:20000],
+            "estado": generaciones.ESTADO_COMPLETADO,
+            "fase": generaciones.FASE_COMPLETADO,
+            "fecha_fin": ahora_iso(),
+        }
+        metricas = traduccion.tomar_metricas_acumuladas()
+        if metricas:
+            registro["metricas"] = metricas
+        generaciones.crear(registro)
     except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la ingesta
         _log.warning("ingesta_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
 
@@ -570,6 +575,9 @@ def paso_fusion_semantica(
             continue
         lote = recientes[:maximo]
         por_id = {str(c["id"]): c for c in lote}
+        # Descarta métricas residuales de pasos previos del hilo: lo acumulado a partir de
+        # aquí es el coste de la fusión de ESTA marca (lo sella el registro de actividad).
+        traduccion.tomar_metricas_acumuladas()
         # Capturamos el PROMPT y la SALIDA reales de Haiku (para la transparencia de la actividad).
         haiku: dict[str, str] = {"prompt": "", "salida": ""}
         try:
@@ -649,6 +657,9 @@ def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str,
         for c in candidatos
     ]
     traducciones = traduccion.traducir_items(items, ejecutor=ejecutor)
+    # La traducción no registra actividad propia: descarta sus métricas para que no se
+    # atribuyan al SIGUIENTE paso que sí registra (fusión/encaje del próximo barrido).
+    traduccion.tomar_metricas_acumuladas()
     por_id = {str(t.get("id") or ""): t for t in traducciones}
     originales = {c["id"]: c for c in candidatos}
 

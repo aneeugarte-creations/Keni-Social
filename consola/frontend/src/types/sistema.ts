@@ -336,6 +336,9 @@ export interface RespuestaPipelines {
   pipelines: Pipeline[];
   /** Envelope de paginación offset (`{total, limite, desplazamiento}`). */
   paginacion: Paginacion;
+  /** SUMATORIO de métricas de TODOS los items que casan el filtro (no solo la página):
+   *  tokens/coste/duración; `items` = generaciones sumadas. Opcional (backs previos). */
+  totales?: PipelineMetricas;
 }
 
 /** El STREAM (proceso de pensamiento de `claude -p`) de la generación de una etapa.

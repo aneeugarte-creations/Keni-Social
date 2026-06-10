@@ -363,11 +363,13 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
  *  (prompt + razonamiento + resultado); las no-IA muestran su dato propio. */
 function ContenidoEtapa({
   clave,
+  estado,
   run,
   generacion,
   plantilla,
 }: {
   clave: string;
+  estado: string;
   run: Pipeline;
   generacion?: PipelineGeneracion;
   plantilla?: string;
@@ -407,7 +409,10 @@ function ContenidoEtapa({
     );
   }
   if (clave === "arte") {
-    const imagenes = run.piezas.filter((p) => p.imagen_url);
+    // Solo si el arte IA CORRIÓ (estado ok): una pieza puede traer la FOTO de la nota de una
+    // fuente propia (bajada en la ingesta) sin que esta etapa la generara — esa foto vive en
+    // la pieza (feed/aprobación), no aquí. Enseñarla con la etapa apagada mentía ("Arte ok").
+    const imagenes = estado === "ok" ? run.piezas.filter((p) => p.imagen_url) : [];
     return (
       <div className="space-y-2">
         <BloqueIA gen={generacion} plantilla={plantilla} />
@@ -509,7 +514,7 @@ export function PanelEtapa({
         <div className="space-y-3 border-t p-3">
           {etapa.detalle && <p className="text-xs text-muted-foreground">{etapa.detalle}</p>}
           <EventosEtapa eventos={eventos} />
-          <ContenidoEtapa clave={etapa.clave} run={run} generacion={generacion} plantilla={plantilla} />
+          <ContenidoEtapa clave={etapa.clave} estado={etapa.estado} run={run} generacion={generacion} plantilla={plantilla} />
         </div>
       )}
     </div>

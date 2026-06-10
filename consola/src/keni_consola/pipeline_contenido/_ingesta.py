@@ -398,16 +398,16 @@ def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:
 
 
 def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
-    """Arte del tema desde los items del cluster, PRIORIZANDO fuentes PROPIAS (derechos).
+    """Arte del tema desde los items del cluster, SOLO de fuentes PROPIAS (derechos).
 
     Para un item de fuente PROPIA (`unotv.com`, `clarosports.com`…) reutilizamos su foto: la
     `imagen` del feed si la trae o, si no, RESOLVEMOS la `og:image` del artículo (la foto real
-    de la nota) —igual que `ingerir_marca`—. Solo de fuentes propias bajamos a resolver la
-    og:image (no tenemos derechos sobre la foto de un medio ajeno). Si ninguna propia da
-    imagen, caemos a cualquier imagen ya capturada en los items (comportamiento previo). "".
+    de la nota) —igual que `ingerir_marca`—. No tenemos derechos sobre la foto de un medio
+    AJENO: si ninguna fuente propia aporta imagen, el tema queda SIN foto ("") y el arte lo
+    pone la etapa de Arte IA (o el equipo). Antes había un fallback a cualquier imagen de los
+    items (media-tag de medios ajenos), que colaba fotos de terceros en las piezas.
     """
     cache: dict[str, bool] = {}
-    # 1) Fuente PROPIA: foto del feed o, en su defecto, og:image resuelta del artículo.
     for it in items:
         if not _es_fuente_propia(it.get("fuente_id") or "", cache):
             continue
@@ -422,8 +422,7 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
                 resuelta = ""
             if resuelta:
                 return resuelta
-    # 2) Fallback: cualquier imagen ya presente en los items (feed media-tag), sin resolver.
-    return next((it["imagen"].strip() for it in items if (it.get("imagen") or "").strip()), "")
+    return ""
 
 
 def crear_tema_de_cluster(

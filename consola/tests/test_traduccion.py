@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from keni_consola.dominio import traduccion
 
 # --------------------------------------------------------------------------- #
@@ -232,3 +234,42 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     assert "es1" not in ids  # el `NOT LIKE 'es%'` filtra el español
     assert "en2" not in ids  # ya traducido
 
+
+
+# --------------------------------------------------------------------------- #
+# Métricas del ejecutor síncrono (acumulador por hilo, para la actividad IA)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_metricas_de_envelope_extrae_y_tolera():
+    """Extrae tokens/coste/duración/turnos del envelope de `claude -p --output-format json`;
+    campos ausentes o ilegibles se omiten; sin nada útil devuelve None."""
+    envelope = {
+        "result": "ok",
+        "total_cost_usd": 0.0123,
+        "duration_ms": 4200,
+        "num_turns": 2,
+        "usage": {"input_tokens": 100, "output_tokens": 40},
+    }
+    m = traduccion._metricas_de_envelope(envelope)
+    assert m == {
+        "tokens_in": 100, "tokens_out": 40,
+        "total_cost_usd": 0.0123, "duration_ms": 4200, "num_turns": 2,
+    }
+    assert traduccion._metricas_de_envelope({"result": "ok"}) is None
+    assert traduccion._metricas_de_envelope({"usage": {"input_tokens": "raro"}}) is None
+    assert traduccion._metricas_de_envelope("no-dict") is None
+
+
+def test_acumulador_de_metricas_suma_y_resetea():
+    """Las llamadas SUMAN en el acumulador del hilo; `tomar_metricas_acumuladas` devuelve la
+    suma y RESETEA (la siguiente toma sin llamadas es None)."""
+    traduccion.tomar_metricas_acumuladas()  # limpia restos de otros tests del hilo
+    traduccion._acumular_metricas({"tokens_in": 10, "total_cost_usd": 0.01})
+    traduccion._acumular_metricas({"tokens_in": 5, "tokens_out": 7, "total_cost_usd": 0.02})
+    traduccion._acumular_metricas(None)  # no-op
+    tomadas = traduccion.tomar_metricas_acumuladas()
+    assert tomadas["tokens_in"] == 15
+    assert tomadas["tokens_out"] == 7
+    assert tomadas["total_cost_usd"] == pytest.approx(0.03)
+    assert traduccion.tomar_metricas_acumuladas() is None

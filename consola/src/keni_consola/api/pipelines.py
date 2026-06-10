@@ -259,6 +259,7 @@ def _etapas_de_run(
     *,
     pool_fusion: bool = False,
     pool_editorial: bool = False,
+    arte_ia: bool = False,
 ) -> list[dict]:
     """Deriva las 7 etapas de una run: Fusión + Editorial (pool) + Selección/Validación/Copy/Arte
     (toggles) + Aprobación (humana).
@@ -269,7 +270,9 @@ def _etapas_de_run(
     (Selección/Validación/Copy/Arte) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
     `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La Validación
-    (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el
+    (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Arte exige `arte_ia`
+    (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
+    propia en la pieza no enciende la etapa. Aprobación es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
     """
     marca = item.get("marca", "") or ""
@@ -317,9 +320,12 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "pendiente", ""
     cd = {"clave": "cd", "nombre": "Copy", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
 
-    # --- Arte: PRIMERO el arte persistido; el toggle solo pinta el futuro. -------------------
+    # --- Arte: SOLO evidencia de arte IA (marcador ARTE / generación de arte correlacionada).
+    # Una pieza puede traer IMAGEN sin que el arte IA corriera (la foto de la nota de una
+    # fuente PROPIA, bajada en la ingesta): eso NO es trabajo de esta etapa y antes la
+    # pintaba "ok" con el toggle apagado. La foto de fuente vive en la pieza (feed), no aquí.
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
-    if con_arte:
+    if arte_ia:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
     elif qa_veredicto == QA_CADUCADA:
         arte_estado, arte_detalle = _ESTADO_SALTADA, "Caducada"
@@ -425,6 +431,7 @@ def _run_de(
     metricas: dict | None = None,
     pool_fusion: bool = False,
     pool_editorial: bool = False,
+    arte_ia: bool = False,
 ) -> dict:
     """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
 
@@ -439,7 +446,8 @@ def _run_de(
     """
     base = [_pieza_de(p) for p in piezas_plat]
     etapas = _etapas_de_run(
-        item, base, cluster, pool_fusion=pool_fusion, pool_editorial=pool_editorial
+        item, base, cluster,
+        pool_fusion=pool_fusion, pool_editorial=pool_editorial, arte_ia=arte_ia,
     )
     marca = item.get("marca", "") or ""
     # `origen` real de la pieza padre (la fuente RSS que la ingirió): contexto de la etapa CI.
@@ -488,6 +496,29 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
         acc["tokens"] += m["tokens"] or 0
         acc["coste_usd"] = round(acc["coste_usd"] + (m["coste_usd"] or 0.0), 6)
         acc["duration_ms"] += m["duration_ms"] or 0
+    return out
+
+
+def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
+    """Ids de contenido con EVIDENCIA de arte GENERADO por IA (auto-arte).
+
+    El auto-arte deja dos trazas correlacionadas al tema: el MARCADOR de etapa
+    (`tipo='pipeline_etapa'`, etiqueta "ARTE · …") y la generación con el prompt real
+    (`tipo='pipeline'`, etiqueta "Arte — …"). Cualquiera de las dos vale. La etapa Arte se
+    deriva de ESTA evidencia, no de si la pieza tiene imagen (la foto de la nota de una
+    fuente propia no es arte IA).
+    """
+    out: set[str] = set()
+    for g in gens:
+        cid = g.get("contenido_id") or ""
+        if not cid:
+            continue
+        etiqueta = (g.get("etiqueta", "") or "")
+        tipo = g.get("tipo") or ""
+        if (tipo == TIPO_ACTIVIDAD and etiqueta.startswith("ARTE")) or (
+            tipo == "pipeline" and etiqueta.startswith("Arte")
+        ):
+            out.add(cid)
     return out
 
 
@@ -637,6 +668,7 @@ async def listar(request: Request) -> Response:
     met_por_run = _metricas_por_run(gens, ids_runs)
     pool_fusion = _marcas_con_pool(gens, _PREFIJO_POOL_FUSION)
     pool_editorial = _marcas_con_pool(gens, _PREFIJO_POOL_EDITORIAL)
+    arte_ia_runs = _runs_con_arte_ia(gens)
     # Una sola lectura de TODAS las plataformas, agrupadas por contenido (evita N consultas).
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma():
@@ -651,6 +683,7 @@ async def listar(request: Request) -> Response:
             metricas=met_por_run.get(it.get("id", "")),
             pool_fusion=(it.get("marca", "") or "") in pool_fusion,
             pool_editorial=(it.get("marca", "") or "") in pool_editorial,
+            arte_ia=(it.get("id", "") or "") in arte_ia_runs,
         )
         for it in runs_items
     ]
@@ -666,11 +699,22 @@ async def listar(request: Request) -> Response:
     if clase:
         todas = [r for r in todas if r["clase"] == clase]
     total = len(todas)
+    # SUMATORIO del universo filtrado (no solo la página): el coste agregado de lo listado.
+    totales = dict(_METRICAS_CERO)
+    for r in todas:
+        m = r.get("metricas") or {}
+        totales["items"] += int(m.get("items") or 0)
+        totales["tokens"] += int(m.get("tokens") or 0)
+        totales["coste_usd"] = round(totales["coste_usd"] + (m.get("coste_usd") or 0.0), 6)
+        totales["duration_ms"] += int(m.get("duration_ms") or 0)
     pagina = todas[desplazamiento : desplazamiento + limite]
     return JSONResponse(
         {
             "pipelines": pagina,
             "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+            # Suma de las métricas de TODOS los items que casan el filtro (tokens/coste/
+            # duración; `items` = generaciones sumadas). La UI lo pinta junto al conteo.
+            "totales": totales,
         }
     )
 
@@ -878,8 +922,8 @@ async def detalle(request: Request) -> Response:
     gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_EDITORIAL)
     if gen_encaje is not None:
         generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
-    # Métricas de la run + evidencia del pool: las MISMAS derivaciones que la lista, para que
-    # detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
+    # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
+    # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
     met = _metricas_por_run(gens, {pipeline_id}).get(pipeline_id)
     return JSONResponse(
         {
@@ -891,6 +935,7 @@ async def detalle(request: Request) -> Response:
                 metricas=met,
                 pool_fusion=gen_fusion is not None,
                 pool_editorial=gen_encaje is not None,
+                arte_ia=pipeline_id in _runs_con_arte_ia(gens),
             ),
             "actividad": eventos,
             # Stream del agente (`claude -p`) por código de etapa. Aditivo y back-compat: vacío si
