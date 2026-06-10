@@ -36,6 +36,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/noticias/fusion-historias": [
         "Ingesta de noticias · fusión de historias del mismo evento",
     ],
+    "prompt/noticias/fusion-verificacion": [
+        "Ingesta de noticias · verificación de cada grupo antes de fundir",
+    ],
     "prompt/noticias/perfil-editorial": ["Priorización · perfil de keywords por marca"],
     # Importación de documentos
     "prompt/importacion/calendario": ["Importar calendario de contenido (documento → parrilla)"],
