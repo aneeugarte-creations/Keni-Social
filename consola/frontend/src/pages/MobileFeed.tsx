@@ -6,10 +6,12 @@
  * la consola completa de administración (que opera una sola persona). Aquí solo se
  * APRUEBA, RECHAZA, COMENTA y CREA; nada de sidebar ni navegación lateral.
  *
- * Reutiliza lo existente:
- *  - `VistaPreviaRed` para pintar cada pieza como se vería en su red.
- *  - El editor rico `DialogoEditar` (a pantalla completa en móvil) para comentar/editar.
- *  - Las mutaciones de aprobación (`aprobar`/`rechazar`) y el alta (`crearContenido`).
+ * Reutiliza lo existente (MISMA tarjeta que el feed de escritorio):
+ *  - `PostFeed` por pieza: cadena de aprobación visible, like/dislike como toggle con sus
+ *    gates (`elegibilidadOK`, comentarios sin resolver), badge de etapa, editor y
+ *    comentarios en línea. Sin duplicar lógica de aprobación aquí.
+ *  - `useCadenasLote` (anti-N+1): las cadenas de la página en UNA llamada.
+ *  - El alta rápida (`crearContenido`) en la barra inferior.
  *  - `GET /api/publicaciones` filtrado por estado/marca (sin backend nuevo).
  *
  * Esta ruta vive FUERA del `AppShell` (layout propio, sin sidebar); es acceso directo
@@ -21,24 +23,14 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import {
-  Bot,
-  Check,
-  Loader2,
-  MessageSquare,
-  Plus,
-  RefreshCw,
-  XCircle,
-} from "lucide-react";
+import { Loader2, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { Autor } from "@/components/comunes/Autor";
-import { DistintivoRed } from "@/components/comunes/DistintivoRed";
+import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { MARCA_TODAS, marcaParam } from "@/components/comunes/selectores";
-import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,19 +43,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { PostFeed } from "@/pages/feed/PostFeed";
+import { CadenasLoteContexto, useCadenasLote } from "@/pages/feed/use-cadenas-lote";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
-import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
-import { tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { CuerpoCrearContenido, Publicacion } from "@/types";
+import type { CuerpoCrearContenido } from "@/types";
 
-/** Estados que ve el revisor en el feed: lo pendiente de su revisión y lo ya aprobado. */
+/** Estados que ve el revisor en el feed: lo pendiente de su aprobación y lo ya aprobado. */
 type Bandeja = "en_revision" | "aprobado";
 
 const BANDEJAS: { id: Bandeja; etiqueta: string }[] = [
-  { id: "en_revision", etiqueta: "Por revisar" },
+  // Mismo vocabulario que el feed de escritorio: "Por aprobar" (el OK), no "Por revisar".
+  { id: "en_revision", etiqueta: "Por aprobar" },
   { id: "aprobado", etiqueta: "Aprobadas" },
 ];
 
@@ -163,136 +157,6 @@ function DialogoCrear({
   );
 }
 
-/** Una tarjeta del feed: vista previa de la pieza + acciones de revisión. */
-function TarjetaFeed({
-  publicacion,
-  bandeja,
-  onComentar,
-}: {
-  publicacion: Publicacion;
-  bandeja: Bandeja;
-  onComentar: (p: Publicacion) => void;
-}) {
-  const queryClient = useQueryClient();
-
-  const tras = (mensaje: string) => () => {
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-    void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
-    toast.success(mensaje);
-  };
-  const onError = (e: unknown) => toast.error(mensajeError(e));
-
-  const aprobar = useMutation({
-    mutationFn: () => api.aprobarPublicacion(publicacion.id),
-    onSuccess: tras("Pieza aprobada."),
-    onError,
-  });
-  const rechazar = useMutation({
-    mutationFn: () => api.rechazarPublicacion(publicacion.id),
-    // Un solo rechazo ya NO devuelve a borrador: hacen falta dos (de dos personas). El backend
-    // refleja el desenlace; aquí solo confirmamos que tu rechazo quedó registrado.
-    onSuccess: tras("Rechazo registrado."),
-    onError,
-  });
-  const ocupado = aprobar.isPending || rechazar.isPending;
-
-  return (
-    <article className="snap-start border-b border-border bg-background pb-3">
-      {/* Cabecera EN UNA LÍNEA (orden del rediseño aprobado, igual que el feed de escritorio):
-          distintivo de FORMATO + RED (iconos pelados, sin nombre ni dos burbujas) → quién
-          posteó (IA/autor) · tiempo. El distintivo va en la cabecera, no sobre la imagen; la
-          marca la fija el selector global de arriba. */}
-      <header className="flex items-center gap-2 px-4 pb-2 pt-3 text-xs text-muted-foreground">
-        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
-        {publicacion.autor_nombre?.trim() ? (
-          <Autor
-            nombre={publicacion.autor_nombre}
-            conPrefijo={false}
-            className="text-xs font-medium text-foreground"
-          />
-        ) : (
-          <span
-            className="inline-flex items-center gap-1 text-xs font-medium text-foreground"
-            title="Pieza autogenerada por la IA"
-          >
-            <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-            IA
-          </span>
-        )}
-        {publicacion.enviado_a_revision_en && (
-          <span className="ml-auto tabular-nums">
-            {tiempoRelativo(publicacion.enviado_a_revision_en)}
-          </span>
-        )}
-      </header>
-
-      {/* Tarjeta uniforme (imagen 4:5 a sangre + copy), igual que el feed de escritorio:
-          scroll multiplataforma consistente. El distintivo de plataforma va en la cabecera. */}
-      <VistaPreviaRed
-        red={publicacion.red}
-        marca={publicacion.marca_nombre}
-        contenido={publicacion.contenido}
-        copy_in={publicacion.copy_in}
-        imagen_url={publicacion.imagen_url || publicacion.imagen}
-        onAbrir={() => onComentar(publicacion)}
-        variante="limpia"
-      />
-
-      {/* Acciones por tarjeta (alcanzables al hacer scroll). La barra inferior fija
-          aloja el alta global. Solo se aprueba/rechaza lo que está en revisión. */}
-      <div className="mt-3 flex items-center gap-2 px-4">
-        {bandeja === "en_revision" ? (
-          <>
-            <Button
-              variant="positive"
-              size="sm"
-              className="flex-1"
-              onClick={() => aprobar.mutate()}
-              disabled={ocupado}
-            >
-              {aprobar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              Aprobar
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => rechazar.mutate()}
-              disabled={ocupado}
-            >
-              {rechazar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <XCircle className="h-4 w-4" />
-              )}
-              Rechazar
-            </Button>
-          </>
-        ) : (
-          <span className="flex flex-1 items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
-            <Check className="h-4 w-4" />
-            {publicacion.revisor_nombre ? `Aprobada por ${publicacion.revisor_nombre}` : "Aprobada"}
-          </span>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onComentar(publicacion)}
-          aria-label="Comentar"
-        >
-          <MessageSquare className="h-4 w-4" />
-          Comentar
-        </Button>
-      </div>
-    </article>
-  );
-}
-
 /** Página raíz del feed móvil. */
 export default function MobileFeed() {
   const { usuario } = useSesion();
@@ -307,8 +171,6 @@ export default function MobileFeed() {
     marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS,
   );
 
-  // Pieza abierta en el editor rico (pestaña Comentarios) a pantalla completa.
-  const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [crearAbierto, setCrearAbierto] = React.useState(false);
 
   // Opciones (estados + catálogo de marcas) para el filtro y el editor.
@@ -347,6 +209,10 @@ export default function MobileFeed() {
     return todas;
   }, [feedQuery.data, marca, marcasUsuario]);
 
+  // ANTI-N+1: las cadenas de aprobación de la página en UN lote; los `PostFeed` las
+  // consumen vía contexto (igual que en el feed de escritorio).
+  const cadenasLote = useCadenasLote(piezas);
+
   // Sentinel del fondo del feed: al acercarse, pide la siguiente página (con guardas).
   const sentinelRef = React.useRef<HTMLDivElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
@@ -366,13 +232,15 @@ export default function MobileFeed() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // SCROLL MAGNÉTICO POR PIEZA (feed estilo red social): activa scroll-snap en el documento (el
-  // que hace scroll en esta pantalla) mientras está montada y lo revierte al salir. `scrollPadding`
-  // superior deja sitio a la cabecera sticky para que la pieza no quede tapada al encajar.
+  // que hace scroll en esta pantalla) mientras está montada y lo revierte al salir. `proximity`
+  // (no `mandatory`): las tarjetas superan la altura del viewport y `mandatory` secuestra el
+  // scroll del pie. `scrollPadding` superior deja sitio a la cabecera sticky para que la pieza
+  // no quede tapada al encajar.
   React.useEffect(() => {
     const el = document.documentElement;
     const prevTipo = el.style.scrollSnapType;
     const prevPad = el.style.scrollPaddingTop;
-    el.style.scrollSnapType = "y mandatory";
+    el.style.scrollSnapType = "y proximity";
     el.style.scrollPaddingTop = "8rem";
     return () => {
       el.style.scrollSnapType = prevTipo;
@@ -399,23 +267,16 @@ export default function MobileFeed() {
             <RefreshCw className={feedQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           </Button>
         </div>
-        <div className="flex gap-1 px-4 pb-2" role="tablist" aria-label="Bandeja">
-          {BANDEJAS.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              role="tab"
-              aria-selected={bandeja === b.id}
-              onClick={() => setBandeja(b.id)}
-              className={
-                bandeja === b.id
-                  ? "rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground"
-                  : "rounded-full border border-border px-3 py-1 text-sm text-muted-foreground"
-              }
-            >
-              {b.etiqueta}
-            </button>
-          ))}
+        <div className="px-4 pb-2">
+          <Tabs value={bandeja} onValueChange={(v) => setBandeja(v as Bandeja)}>
+            <TabsList className="w-full" aria-label="Bandeja">
+              {BANDEJAS.map((b) => (
+                <TabsTrigger key={b.id} value={b.id} className="flex-1">
+                  {b.etiqueta}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
         <div className="px-4 pb-2.5">
           <SelectorMarca
@@ -434,17 +295,22 @@ export default function MobileFeed() {
         {feedQuery.isLoading ? (
           <div className="space-y-4 p-4">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-72 w-full rounded-xl" />
+              <Skeleton key={i} className="h-80 w-full rounded-xl" />
             ))}
           </div>
         ) : feedQuery.isError ? (
-          <div className="p-6 text-center text-sm text-destructive">
-            No se pudo cargar el feed. {mensajeError(feedQuery.error)}
+          <div className="p-4">
+            <BloqueError
+              titulo="No se pudo cargar el feed"
+              mensaje={mensajeError(feedQuery.error)}
+              onReintentar={() => void feedQuery.refetch()}
+              cargando={feedQuery.isFetching}
+            />
           </div>
         ) : piezas.length === 0 ? (
           <div className="p-6">
             <EstadoVacio
-              titulo={bandeja === "en_revision" ? "Nada por revisar" : "Sin piezas aprobadas"}
+              titulo={bandeja === "en_revision" ? "Nada por aprobar" : "Sin piezas aprobadas"}
               texto={
                 bandeja === "en_revision"
                   ? "Cuando haya piezas en revisión para tus marcas, aparecerán aquí."
@@ -453,15 +319,16 @@ export default function MobileFeed() {
             />
           </div>
         ) : (
-          <>
-            {piezas.map((p) => (
-              <TarjetaFeed
-                key={p.id}
-                publicacion={p}
-                bandeja={bandeja}
-                onComentar={setEditando}
-              />
-            ))}
+          <CadenasLoteContexto.Provider value={cadenasLote}>
+            {/* MISMA tarjeta que el feed de escritorio: PostFeed es autocontenido (cadena de
+                aprobación, like/dislike con sus gates, editor y comentarios en línea). */}
+            <div className="space-y-4 p-3">
+              {piezas.map((p) => (
+                <div key={p.id} className="snap-start">
+                  <PostFeed publicacion={p} />
+                </div>
+              ))}
+            </div>
             {/* SCROLL INFINITO: sentinel invisible + spinner "Cargando más…" al fondo. */}
             <div ref={sentinelRef} aria-hidden className="h-px w-full" />
             {isFetchingNextPage && (
@@ -474,7 +341,7 @@ export default function MobileFeed() {
                 Cargando más…
               </div>
             )}
-          </>
+          </CadenasLoteContexto.Provider>
         )}
       </main>
 
@@ -487,12 +354,6 @@ export default function MobileFeed() {
           </Button>
         </div>
       </div>
-
-      {/* Editor rico (a pantalla completa en móvil) para comentar/editar. */}
-      <DialogoEditar
-        publicacion={editando}
-        onCerrar={() => setEditando(null)}
-      />
 
       <DialogoCrear
         abierto={crearAbierto}

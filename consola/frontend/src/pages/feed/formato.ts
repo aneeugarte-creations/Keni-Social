@@ -12,10 +12,21 @@
 /** Formatos canónicos de pieza. */
 export type Formato = "foto" | "video";
 
-/** Etiqueta humana + nº de redes destino por formato (espejo del backend). */
+/**
+ * Redes destino por formato — espejo EXACTO de `redes.redes_de_formato` del backend
+ * (`consola/src/keni_consola/redes.py`): foto → instagram/x/facebook; video → las 5.
+ * La matriz del feed lo usa para NO pintar huecos "No generado" en redes a las que la
+ * idea nunca irá (una foto jamás genera TikTok/YouTube).
+ */
+export const REDES_POR_FORMATO: Record<Formato, readonly string[]> = {
+  foto: ["instagram", "x", "facebook"],
+  video: ["x", "instagram", "facebook", "tiktok", "youtube"],
+};
+
+/** Etiqueta humana + nº de redes destino por formato (derivado de `REDES_POR_FORMATO`). */
 const FORMATOS: Record<Formato, { etiqueta: string; redes: number }> = {
-  foto: { etiqueta: "Foto", redes: 3 },
-  video: { etiqueta: "Video", redes: 5 },
+  foto: { etiqueta: "Foto", redes: REDES_POR_FORMATO.foto.length },
+  video: { etiqueta: "Video", redes: REDES_POR_FORMATO.video.length },
 };
 
 /** Formato canónico desde un valor crudo del backend; "" / desconocido -> "foto". */

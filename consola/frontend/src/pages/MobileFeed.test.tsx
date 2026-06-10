@@ -64,7 +64,7 @@ const PUBLICACION = {
   etapa_ia: "lista_para_revisar",
 };
 
-/** Stub de fetch: enruta /api/publicaciones y /api/publicaciones/opciones. */
+/** Stub de fetch: enruta opciones, cadenas (lote e individual), comentarios y el listado. */
 function stubFetch() {
   vi.stubGlobal(
     "fetch",
@@ -72,6 +72,19 @@ function stubFetch() {
       const ruta = String(url);
       if (ruta.includes("/api/publicaciones/opciones")) {
         return new Response(JSON.stringify(OPCIONES), { status: 200 });
+      }
+      if (ruta.includes("/api/publicaciones/cadenas")) {
+        // Lote vacío: cada PostFeed cae a su query individual (/aprobacion).
+        return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+      }
+      if (ruta.includes("/aprobacion")) {
+        return new Response(
+          JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+          { status: 200 },
+        );
+      }
+      if (ruta.includes("/comentarios")) {
+        return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
       }
       if (ruta.includes("/api/publicaciones")) {
         return new Response(
@@ -128,24 +141,29 @@ describe("MobileFeed · feed móvil de revisión", () => {
     stubFetch();
     renderFeed();
     expect(await screen.findByText("Feed de revisión")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Por revisar" })).toBeInTheDocument();
+    // Mismo vocabulario que el feed de escritorio: "Por aprobar" (el OK), no "Por revisar".
+    expect(screen.getByRole("tab", { name: "Por aprobar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear pieza/i })).toBeInTheDocument();
   });
 
-  it("renderiza una tarjeta con la pieza en revisión y sus acciones", async () => {
+  it("renderiza la pieza como PostFeed (mismas acciones que el feed de escritorio)", async () => {
     stubFetch();
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /aprobar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /comentar/i })).toBeInTheDocument();
+    // La tarjeta es el MISMO PostFeed del escritorio: like/dislike (la pieza está en revisión)
+    // y comentar; nada de los botones planos Aprobar/Rechazar sin gates.
+    expect(screen.getByRole("button", { name: "Me gusta" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "No me gusta" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^aprobar$/i })).not.toBeInTheDocument();
   });
 
   it("activa el scroll magnético por pieza mientras está montado y lo revierte al salir", async () => {
     stubFetch();
     const { unmount } = renderFeed();
     await screen.findByText("Feed de revisión");
-    expect(document.documentElement.style.scrollSnapType).toBe("y mandatory");
+    // `proximity`, no `mandatory`: las tarjetas superan el viewport y mandatory secuestra el pie.
+    expect(document.documentElement.style.scrollSnapType).toBe("y proximity");
     unmount();
     expect(document.documentElement.style.scrollSnapType).toBe("");
   });

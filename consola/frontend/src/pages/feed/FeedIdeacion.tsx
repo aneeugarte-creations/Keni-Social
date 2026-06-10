@@ -5,13 +5,16 @@
  * arte/formato), con un LABEL de su etapa en la tubería, y APRUEBA en línea —como quien
  * interactúa con un post— sin abrir el kanban.
  *
- * UN SOLO feed por fecha, con 3 PESTAÑAS que son VISTAS del mismo listado (no bandejas que
+ * UN SOLO feed por fecha, con 4 PESTAÑAS que son VISTAS del mismo listado (no bandejas que
  * fragmenten el flujo ni hagan fetches distintos): se pide TODO una vez (`creado DESC`) y la
  * pestaña solo FILTRA en cliente qué se enseña —
  *   - "Todo el feed": todas las piezas, mezcladas y por fecha (la vista por defecto).
+ *   - "En preparación": las que esperan trabajo del equipo o de la IA (copy en curso, falta
+ *     la foto/el clip) — la bandeja diaria de subir material.
  *   - "Por aprobar": las que esperan tu OK (`estado = en_revision`).
  *   - "Publicado y programado": lo que ya salió o tiene hueco (`estado ∈ {publicado, programado}`).
  * Cada pieza enseña en qué va con su label de etapa, y el OK aparece en línea cuando te toca.
+ * La vista activa viaja en la URL (`?vista=`): un enlace al feed filtrado es compartible.
  *
  * Vive DENTRO del AppShell (a diferencia del feed móvil `/feed`, que es de una columna y sin
  * sidebar para revisores en el móvil). Aquí es una pestaña del hub Parrilla, pensada para
@@ -25,14 +28,25 @@
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Minus, Plus, RefreshCw } from "lucide-react";
+import {
+  ImagePlus,
+  LayoutGrid,
+  Loader2,
+  Minus,
+  Plus,
+  RefreshCw,
+  Send,
+  SlidersHorizontal,
+  ThumbsUp,
+  type LucideIcon,
+} from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
@@ -42,6 +56,7 @@ import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import type { Publicacion } from "@/types";
 
+import { etapaDePublicacion } from "./etapa";
 import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PostFeed } from "./PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
@@ -145,17 +160,19 @@ function FeedZoom({ escala, children }: { escala: number; children: React.ReactN
  * Pestañas del feed: NO son bandejas (un fetch por estado), son VISTAS del mismo listado
  * único. `filtra` decide qué piezas se enseñan; `vacio` el mensaje cuando esa vista no tiene.
  */
-type Vista = "todo" | "por_aprobar" | "publicado";
+type Vista = "todo" | "preparacion" | "por_aprobar" | "publicado";
 
 const VISTAS: {
   id: Vista;
   etiqueta: string;
+  icono: LucideIcon;
   filtra: (p: Publicacion) => boolean;
   vacio: { titulo: string; texto: string };
 }[] = [
   {
     id: "todo",
     etiqueta: "Todo el feed",
+    icono: LayoutGrid,
     filtra: () => true,
     vacio: {
       titulo: "El feed está vacío",
@@ -164,8 +181,24 @@ const VISTAS: {
     },
   },
   {
+    // La bandeja del trabajo DIARIO del equipo: piezas a las que falta la foto/el clip (o cuyo
+    // copy aún se genera). `generando_arte` = subir material humano, no "espera a la IA".
+    id: "preparacion",
+    etiqueta: "En preparación",
+    icono: ImagePlus,
+    filtra: (p) => {
+      const e = etapaDePublicacion(p);
+      return e === "generando_copy" || e === "generando_arte";
+    },
+    vacio: {
+      titulo: "Nada en preparación",
+      texto: "Cuando una pieza necesite la foto o el video del equipo, aparecerá aquí.",
+    },
+  },
+  {
     id: "por_aprobar",
     etiqueta: "Por aprobar",
+    icono: ThumbsUp,
     filtra: (p) => p.estado === "en_revision",
     vacio: {
       titulo: "Nada por aprobar",
@@ -175,6 +208,7 @@ const VISTAS: {
   {
     id: "publicado",
     etiqueta: "Publicado y programado",
+    icono: Send,
     filtra: (p) => p.estado === "publicado" || p.estado === "programado",
     vacio: {
       titulo: "Nada publicado ni programado",
@@ -182,6 +216,112 @@ const VISTAS: {
     },
   },
 ];
+
+/** Vista válida desde la URL (`?vista=`); ausente o desconocida → "todo". */
+function vistaDesdeParam(v: string | null): Vista {
+  return VISTAS.some((x) => x.id === v) ? (v as Vista) : "todo";
+}
+
+/** Stepper de un ajuste de vista: etiqueta + par menos/más con el valor en medio. */
+function ControlStepper({
+  etiqueta,
+  valor,
+  onMenos,
+  onMas,
+  disabledMenos,
+  disabledMas,
+  ariaLabelMenos,
+  ariaLabelMas,
+}: {
+  etiqueta: string;
+  valor: string | number;
+  onMenos: () => void;
+  onMas: () => void;
+  disabledMenos?: boolean;
+  disabledMas?: boolean;
+  ariaLabelMenos: string;
+  ariaLabelMas: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs text-muted-foreground">{etiqueta}</span>
+      <div className="flex items-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={onMenos}
+          disabled={disabledMenos}
+          aria-label={ariaLabelMenos}
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </Button>
+        <span className="w-9 text-center text-xs font-medium tabular-nums">{valor}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={onMas}
+          disabled={disabledMas}
+          aria-label={ariaLabelMas}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Popover "Vista" de la barra de acciones: aloja los steppers de densidad (posts por fila) y
+ * zoom. Misma mecánica que `MenuAcciones` (cierre por clic fuera y Escape) pero SIN cerrar al
+ * clicar dentro: los steppers se pulsan varias veces seguidas.
+ */
+function PopoverVista({ children }: { children: React.ReactNode }) {
+  const [abierto, setAbierto] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!abierto) return;
+    const alClicFuera = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    };
+    const alEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAbierto(false);
+    };
+    document.addEventListener("mousedown", alClicFuera);
+    document.addEventListener("keydown", alEscape);
+    return () => {
+      document.removeEventListener("mousedown", alClicFuera);
+      document.removeEventListener("keydown", alEscape);
+    };
+  }, [abierto]);
+
+  return (
+    <div ref={ref} className="relative">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+        aria-label="Ajustes de vista"
+        aria-haspopup="dialog"
+        aria-expanded={abierto}
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+      </Button>
+      {abierto && (
+        <div
+          role="dialog"
+          aria-label="Ajustes de vista"
+          className="absolute right-0 z-50 mt-1 w-56 space-y-2 rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md"
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function FeedIdeacion() {
   const queryClient = useQueryClient();
@@ -193,7 +333,26 @@ export default function FeedIdeacion() {
   // siguen filtrando por estado en memoria.
   const { red, linea } = useFiltrosContenido();
 
-  const [vista, setVista] = React.useState<Vista>("todo");
+  // La vista activa vive en la URL (`?vista=`): sobrevive al refresco y es compartible.
+  // "todo" (el default) va sin parámetro para no ensuciar el enlace.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [vista, setVista] = React.useState<Vista>(() =>
+    vistaDesdeParam(searchParams.get("vista")),
+  );
+  const cambiarVista = React.useCallback(
+    (v: Vista) => {
+      setVista(v);
+      setSearchParams(
+        (prev) => {
+          if (v === "todo") prev.delete("vista");
+          else prev.set("vista", v);
+          return prev;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   // Nº de posts por fila en PC (1-4) y zoom (escala) de los posts. Preferencias locales, persistidas.
   const [columnas, setColumnas] = React.useState(() =>
@@ -209,19 +368,20 @@ export default function FeedIdeacion() {
     guardarPref("keni_feed_escala", escala);
   }, [escala]);
 
-  // SCROLL MAGNÉTICO POR POST (solo móvil, estilo YouTube Shorts): el contenedor que hace scroll es
-  // el <main> del AppShell. Le ponemos `scroll-snap-type: y mandatory` por estilo en línea (más
-  // fiable que clases dinámicas que el JIT de Tailwind podría no generar) SOLO por debajo de 640px,
-  // vía `matchMedia`, y lo revertimos al salir o al pasar a escritorio. Cada POST lleva `snap-start`
-  // (inerte si el contenedor no tiene snap-type, p. ej. en escritorio): así encaja entre piezas, no
-  // entre ideas, aunque varias piezas compartan idea (1 columna en móvil).
+  // SCROLL MAGNÉTICO POR POST (solo móvil a UNA columna, estilo YouTube Shorts): el contenedor que
+  // hace scroll es el <main> del AppShell. Le ponemos `scroll-snap-type: y proximity` por estilo en
+  // línea (más fiable que clases dinámicas que el JIT de Tailwind podría no generar) SOLO por
+  // debajo de 640px, vía `matchMedia`, y lo revertimos al salir o al pasar a escritorio.
+  // `proximity` (no `mandatory`): las tarjetas superan la altura del viewport y `mandatory`
+  // secuestra el scroll del pie. Con 2+ columnas no hay snap (saltaría errático por celda).
+  // Cada POST lleva `snap-start` (inerte si el contenedor no tiene snap-type).
   const rootRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     const scroller = rootRef.current?.closest("main") as HTMLElement | null;
     if (!scroller) return;
     const mq = window.matchMedia("(max-width: 639px)");
     const aplicar = () => {
-      scroller.style.scrollSnapType = mq.matches ? "y mandatory" : "";
+      scroller.style.scrollSnapType = mq.matches && columnas === 1 ? "y proximity" : "";
     };
     aplicar();
     mq.addEventListener("change", aplicar);
@@ -229,7 +389,7 @@ export default function FeedIdeacion() {
       mq.removeEventListener("change", aplicar);
       scroller.style.scrollSnapType = "";
     };
-  }, []);
+  }, [columnas]);
 
   const ajustarColumnas = (delta: number) =>
     setColumnas((c) => Math.min(COLUMNAS_MAX, Math.max(COLUMNAS_MIN, c + delta)));
@@ -342,7 +502,6 @@ export default function FeedIdeacion() {
   // las páginas cargadas y queden más por traer, vamos pidiendo la siguiente (sin limpiar el
   // parámetro) hasta encontrarla o agotar el feed; recién entonces resolvemos (salto + resalte
   // si existe, o solo limpiar si no apareció en todo el feed). No bloquea ni rompe el scroll.
-  const [searchParams, setSearchParams] = useSearchParams();
   const piezaParam = searchParams.get("pieza");
   const [piezaDestacada, setPiezaDestacada] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -361,7 +520,7 @@ export default function FeedIdeacion() {
       { replace: true },
     );
     if (!existe) return;
-    setVista("todo");
+    cambiarVista("todo");
     setPiezaDestacada(piezaParam);
     // Espera a que la idea esté pintada (cambio de vista) y haz scroll centrándola.
     const idAncla = anclaFeed(piezaParam);
@@ -378,6 +537,7 @@ export default function FeedIdeacion() {
     feedQuery.isLoading,
     grupos,
     setSearchParams,
+    cambiarVista,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -404,18 +564,50 @@ export default function FeedIdeacion() {
     <CadenasLoteContexto.Provider value={cadenasLote}>
     <div ref={rootRef}>
       <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={feedQuery.isFetching}>
-            Refrescar
-          </ItemMenu>
-        </MenuAcciones>
+        <div className="flex items-center gap-1">
+          {/* Ajustes de vista (densidad + zoom) en un popover: no compiten con las pestañas. */}
+          <PopoverVista>
+            <ControlStepper
+              etiqueta="Por fila"
+              valor={columnas}
+              onMenos={() => ajustarColumnas(-1)}
+              onMas={() => ajustarColumnas(1)}
+              disabledMenos={columnas <= COLUMNAS_MIN}
+              disabledMas={columnas >= COLUMNAS_MAX}
+              ariaLabelMenos="Menos columnas"
+              ariaLabelMas="Más columnas"
+            />
+            <ControlStepper
+              etiqueta="Zoom"
+              valor={`${Math.round(escala * 100)}%`}
+              onMenos={() => ajustarEscala(-0.1)}
+              onMas={() => ajustarEscala(0.1)}
+              disabledMenos={escala <= ESCALA_MIN}
+              disabledMas={escala >= ESCALA_MAX}
+              ariaLabelMenos="Reducir tamaño"
+              ariaLabelMas="Aumentar tamaño"
+            />
+          </PopoverVista>
+          {/* Refrescar como botón directo (gira mientras refresca, igual que el feed móvil). */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Refrescar"
+            onClick={refrescar}
+            disabled={feedQuery.isFetching}
+          >
+            <RefreshCw className={cn("h-4 w-4", feedQuery.isFetching && "animate-spin")} />
+          </Button>
+        </div>
       </AccionesPagina>
 
-      {/* Pestañas (formato tab, no bubble) + controles de densidad. Las pestañas son VISTAS del
-          MISMO feed (filtran por estado en cliente); Marca, Red y Línea las mandan los switches
-          GLOBALES de la topbar y filtran en servidor. En móvil las pestañas hacen wrap. */}
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
+      {/* Pestañas (formato tab, no bubble), solas en su fila. Son VISTAS del MISMO feed (filtran
+          por estado en cliente); Marca, Red y Línea las mandan los switches GLOBALES de la topbar
+          y filtran en servidor. En móvil las pestañas hacen wrap. El conteo cuenta lo CARGADO:
+          con más páginas por traer lleva "+" (no es un total). */}
+      <div className="mb-4">
+        <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
           <TabsList
             className="flex h-auto w-full flex-wrap justify-start gap-1 lg:w-auto"
             aria-label="Vista del feed"
@@ -423,80 +615,14 @@ export default function FeedIdeacion() {
             {VISTAS.map((v) => (
               <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
                 {v.etiqueta}
-                <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">
+                <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[11px] leading-none tabular-nums">
                   {conteos[v.id]}
+                  {hasNextPage ? "+" : ""}
                 </span>
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          {/* Red y Línea ya no tienen dropdown aquí: los mandan los selectores globales de
-              la topbar (SwitchFiltrosContenido). Quedan solo los controles de densidad/zoom. */}
-
-          {/* Posts por fila: +/- de 1 a 4 (parte la rejilla en CUALQUIER pantalla, móvil incluido). Persiste. */}
-          <div
-            className="flex items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1"
-            role="group"
-            aria-label="Posts por fila"
-          >
-            <span className="px-1 text-xs text-foreground">Por fila</span>
-            <button
-              type="button"
-              onClick={() => ajustarColumnas(-1)}
-              disabled={columnas <= COLUMNAS_MIN}
-              title="Menos columnas (posts más grandes)"
-              aria-label="Menos columnas"
-              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="w-5 text-center text-xs font-medium tabular-nums">{columnas}</span>
-            <button
-              type="button"
-              onClick={() => ajustarColumnas(1)}
-              disabled={columnas >= COLUMNAS_MAX}
-              title="Más columnas (posts más pequeños)"
-              aria-label="Más columnas"
-              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {/* Zoom: agranda/encoge los posts en CUALQUIER pantalla (la palanca de tamaño en móvil). Persiste. */}
-          <div
-            className="flex items-center gap-1 rounded-md border border-input bg-background px-1.5 py-1"
-            role="group"
-            aria-label="Tamaño de los posts"
-          >
-            <span className="px-1 text-xs text-foreground">Zoom</span>
-            <button
-              type="button"
-              onClick={() => ajustarEscala(-0.1)}
-              disabled={escala <= ESCALA_MIN}
-              title="Posts más pequeños"
-              aria-label="Reducir tamaño"
-              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="w-9 text-center text-xs tabular-nums text-foreground">
-              {Math.round(escala * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => ajustarEscala(0.1)}
-              disabled={escala >= ESCALA_MAX}
-              title="Posts más grandes"
-              aria-label="Aumentar tamaño"
-              className="flex h-6 w-6 items-center justify-center rounded text-foreground transition-colors hover:bg-accent/50 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla con
@@ -505,7 +631,14 @@ export default function FeedIdeacion() {
           fija cuántas por fila en cualquier pantalla; el zoom escala cada caja entera por encima. */}
       <FeedZoom escala={escala}>
         {feedQuery.isLoading ? (
-          <div className={cn("grid items-start gap-4", GRID_COLS[columnas])}>
+          // El skeleton ESPEJA el contenedor final (misma retícula/anchos): sin salto de layout.
+          <div
+            className={cn(
+              columnas === 1
+                ? "mx-auto w-full max-w-2xl space-y-4"
+                : cn("grid items-start gap-4", GRID_COLS[columnas]),
+            )}
+          >
             {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
           </div>
         ) : feedQuery.isError ? (
@@ -516,9 +649,27 @@ export default function FeedIdeacion() {
             cargando={feedQuery.isFetching}
           />
         ) : gruposVista.length === 0 ? (
-          <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
+          // VACÍO HONESTO: solo se afirma "no hay nada" cuando el feed está agotado. Si quedan
+          // páginas por traer, el sentinel de abajo va encadenando la carga hasta encontrar
+          // piezas de esta vista o llegar al final.
+          hasNextPage ? (
+            <div
+              className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Buscando piezas…
+            </div>
+          ) : (
+            <EstadoVacio
+              icono={vistaActual.icono}
+              titulo={vistaActual.vacio.titulo}
+              texto={vistaActual.vacio.texto}
+            />
+          )
         ) : agrupar ? (
-          <div className="space-y-5">
+          <div className="space-y-6" role="feed" aria-busy={isFetchingNextPage}>
             {gruposVista.map((g) => (
               <div
                 key={g.id}
@@ -529,7 +680,14 @@ export default function FeedIdeacion() {
                   g.id === piezaDestacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
                 )}
               >
-                <GrupoIdea grupo={g} redes={redesAMostrar} columnas={columnas} />
+                <GrupoIdea
+                  grupo={g}
+                  redes={redesAMostrar}
+                  columnas={columnas}
+                  // En las vistas filtradas el grupo enseña SOLO lo que cumple el filtro (sin
+                  // tarjetas ajenas ni huecos); la matriz completa es de "Todo el feed".
+                  filtra={vista === "todo" ? undefined : vistaActual.filtra}
+                />
               </div>
             ))}
           </div>
@@ -540,9 +698,14 @@ export default function FeedIdeacion() {
                 ? "mx-auto w-full max-w-2xl space-y-4"
                 : cn("grid items-start gap-4", GRID_COLS[columnas]),
             )}
+            role="feed"
+            aria-busy={isFetchingNextPage}
           >
             {gruposVista.map((g) => {
-              const p = g.piezas.find((x) => x.red === redesAMostrar[0]);
+              const p = g.piezas.find(
+                (x) =>
+                  x.red === redesAMostrar[0] && (vista === "todo" || vistaActual.filtra(x)),
+              );
               return (
                 <div
                   key={g.id}
@@ -566,26 +729,27 @@ export default function FeedIdeacion() {
         )}
 
         {/* SCROLL INFINITO: el sentinel (invisible) dispara la carga de la siguiente página al
-            acercarse al fondo. Solo cuando hay feed cargado y NO estamos en carga/error/vacío,
-            para no encadenar peticiones mientras se pinta la primera página. El spinner
-            "Cargando más…" da feedback sin saltos de layout (alto fijo). */}
-        {!feedQuery.isLoading && !feedQuery.isError && gruposVista.length > 0 && (
+            acercarse al fondo. Se monta SIEMPRE que queden páginas (también con la vista filtrada
+            vacía: así la paginación no muere afirmando un vacío falso). El spinner "Cargando más…"
+            da feedback sin saltos de layout (alto fijo). */}
+        {!feedQuery.isLoading && !feedQuery.isError && (
           <>
-            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-            {isFetchingNextPage ? (
-              <div
-                className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando más…
-              </div>
-            ) : !hasNextPage ? (
-              <p className="py-6 text-center text-xs text-muted-foreground">
-                Has llegado al final del feed.
-              </p>
-            ) : null}
+            {hasNextPage && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
+            {gruposVista.length > 0 &&
+              (isFetchingNextPage ? (
+                <div
+                  className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando más…
+                </div>
+              ) : !hasNextPage ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  Has llegado al final del feed.
+                </p>
+              ) : null)}
           </>
         )}
       </FeedZoom>

@@ -18,6 +18,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   Music2,
+  Pencil,
   Play,
   Repeat2,
   Send,
@@ -39,6 +40,11 @@ export interface VistaPreviaRedProps {
   copy_in?: string;
   /** Nombre del archivo o URL de la imagen; vacío = sin imagen. */
   imagen_url?: string;
+  /**
+   * Título de la pieza (el tema). En la variante limpia da nombre accesible al área
+   * interactiva ("Abrir para editar: …") y `alt` a la imagen.
+   */
+  titulo?: string;
   /**
    * Variante `"limpia"`: callback al activar la IMAGEN (clic o teclado). Cuando se pasa, SOLO la
    * imagen abre la acción (p. ej. el editor); el copy y su "leer más" quedan fuera. Sin valor, la
@@ -166,28 +172,16 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
   const alternar = () => setExpandido((v) => !v);
   return (
     <div
-      // TODA el área de texto alterna leer más/menos (estilo red social), no solo el enlace; solo
-      // cuando hay recorte. Para la propagación para no abrir el editor (que vive en la imagen); los
-      // enlaces del copy ya paran su propio clic, así que tocar una URL la abre en vez de plegar.
-      role={hayMas ? "button" : undefined}
-      tabIndex={hayMas ? 0 : undefined}
-      aria-expanded={hayMas ? expandido : undefined}
+      // TODA el área de texto alterna leer más/menos como CONVENIENCIA de puntero (estilo red
+      // social); el control accesible real es el BOTÓN "más/menos" de abajo (un role=button aquí
+      // daría como nombre TODO el copy y anidaría los <a> del texto dentro de un botón). Para la
+      // propagación para no abrir el editor (que vive en la imagen); los enlaces del copy ya paran
+      // su propio clic, así que tocar una URL la abre en vez de plegar.
       onClick={
         hayMas
           ? (e) => {
               e.stopPropagation();
               alternar();
-            }
-          : undefined
-      }
-      onKeyDown={
-        hayMas
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                alternar();
-              }
             }
           : undefined
       }
@@ -202,9 +196,17 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
           unas tengan "más" y otras no. */}
       <div className="h-5">
         {hayMas && (
-          <span className="text-sm font-medium text-muted-foreground">
+          <button
+            type="button"
+            aria-expanded={expandido}
+            onClick={(e) => {
+              e.stopPropagation();
+              alternar();
+            }}
+            className="text-sm font-medium text-muted-foreground"
+          >
             {expandido ? "menos" : "más"}
-          </span>
+          </button>
         )}
       </div>
     </div>
@@ -472,6 +474,7 @@ export function VistaPreviaRed({
   contenido,
   copy_in,
   imagen_url,
+  titulo,
   onAbrir,
   variante = "completa",
 }: VistaPreviaRedProps) {
@@ -482,6 +485,7 @@ export function VistaPreviaRed({
   // 4:5 a ancho completo, SIN nada superpuesto que tape la imagen. El distintivo de
   // plataforma + formato va en la CABECERA (junto al logo de IA/autor), no aquí.
   if (variante === "limpia") {
+    const etiquetaAbrir = titulo ? `Abrir para editar: ${titulo}` : "Abrir para editar";
     return (
       <div>
         {/* SOLO la imagen abre la acción (editor): es el área interactiva de la pieza. El copy
@@ -490,12 +494,12 @@ export function VistaPreviaRed({
           className={cn(
             "relative aspect-[4/5] w-full overflow-hidden bg-muted",
             onAbrir &&
-              "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              "group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           )}
           role={onAbrir ? "button" : undefined}
           tabIndex={onAbrir ? 0 : undefined}
-          title={onAbrir ? "Abrir para editar" : undefined}
-          aria-label={onAbrir ? "Abrir para editar" : undefined}
+          title={onAbrir ? etiquetaAbrir : undefined}
+          aria-label={onAbrir ? etiquetaAbrir : undefined}
           onClick={onAbrir}
           onKeyDown={
             onAbrir
@@ -509,16 +513,28 @@ export function VistaPreviaRed({
           }
         >
           {imagen ? (
-            <img src={imagen} alt="" className="h-full w-full object-cover" />
+            <img src={imagen} alt={titulo ?? ""} className="h-full w-full object-cover" />
           ) : (
             <PlaceholderImagen className="h-full w-full" />
           )}
           {/* El copy-in solo cuando NO hay imagen: si hay placa compuesta, el texto va horneado. */}
           <CapaCopyIn texto={imagen ? "" : copy_in} />
+          {/* Affordance de edición: el área interactiva se anuncia al hover/focus (en táctil la
+              guía la dan los toasts con acción "Abrir"). Decorativo: el nombre accesible ya lo
+              lleva el contenedor. */}
+          {onAbrir && (
+            <span
+              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              aria-hidden="true"
+            >
+              <Pencil className="h-3 w-3" />
+              Editar
+            </span>
+          )}
         </div>
         {/* Copy (caption) bajo la imagen, idéntico para toda red: recortado a 2 líneas con "leer
             más" estilo red social, y alto reservado para que todas las tarjetas midan igual. */}
-        <div className="px-4 py-3">
+        <div className="px-4 pb-1 pt-3">
           <CopyConLeerMas contenido={contenido} />
         </div>
       </div>

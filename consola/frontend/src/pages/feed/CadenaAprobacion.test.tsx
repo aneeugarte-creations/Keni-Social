@@ -53,9 +53,11 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.queryByText(/Faltan/i)).not.toBeInTheDocument();
   });
 
-  it("pinta el veredicto de IA cuando hay (🟢 lista)", () => {
+  it("pinta el veredicto de IA cuando hay, como badge SIN emoji", () => {
     renderCadena(cadenaOK(), "listo");
-    expect(screen.getByText(/IA: lista/i)).toBeInTheDocument();
+    expect(screen.getByText("IA: lista")).toBeInTheDocument();
+    // El veredicto va como Badge ok/aviso/error (icono + color), no triple-codificado con emoji.
+    expect(document.body.textContent).not.toContain("🟢");
   });
 
   it("NO renderiza botones de acción (la acción vive en la fila del post)", () => {

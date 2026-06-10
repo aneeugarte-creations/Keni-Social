@@ -32,7 +32,9 @@ import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
+import { cn } from "@/lib/utils";
 import {
   CLAVE_PUBLICACIONES,
   claveCadenaAprobacion,
@@ -99,7 +101,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // invalidaba `CLAVE_PUBLICACIONES` entero, que refetcheaba TODAS las páginas del scroll
   // infinito por cada like) e invalida únicamente SU cadena. El kanban (`contenido`) se marca
   // stale en bloque: es otra superficie y se refresca al montarse.
-  const tras = (mensaje: string) => (res?: RespuestaPublicacion) => {
+  const actualizarCaches = (res?: RespuestaPublicacion) => {
     if (res?.publicacion) {
       remplazarPublicacionEnCaches(queryClient, res.publicacion);
     } else {
@@ -107,27 +109,58 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     }
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
     void queryClient.invalidateQueries({ queryKey: claveCadenaAprobacion(publicacion.id) });
+  };
+  const tras = (mensaje: string) => (res?: RespuestaPublicacion) => {
+    actualizarCaches(res);
     toast.success(mensaje);
   };
   const onError = (e: unknown) => toast.error(mensajeError(e));
 
   // Fallback para piezas legadas que estén en revisión SIN cadena (aprobar/rechazar forwardea).
+  // El toast dice lo que DE VERDAD pasó: tu OK puede ser 1 de 2 (la pieza sigue en revisión) o
+  // cerrar la cadena (queda aprobada/lista para salir).
   const aprobar = useMutation({
     mutationFn: () => api.aprobarPublicacion(publicacion.id),
-    onSuccess: tras("Pieza aprobada."),
+    onSuccess: (res) => {
+      const cerrada =
+        !!res?.publicacion &&
+        ["aprobado", "programado", "publicado"].includes(res.publicacion.estado);
+      tras(
+        cerrada
+          ? "Pieza aprobada: lista para publicar."
+          : "Tu OK quedó registrado; falta el de otra persona.",
+      )(res);
+    },
     onError,
   });
   const rechazar = useMutation({
     mutationFn: () => api.rechazarPublicacion(publicacion.id),
     // Un dislike NO devuelve a borrador por sí solo: hacen falta dos (de dos personas). El back
-    // refleja el desenlace; aquí solo confirmamos que tu dislike quedó registrado.
-    onSuccess: tras("Dislike registrado."),
+    // refleja el desenlace; el toast lo cuenta tal cual.
+    onSuccess: (res) => {
+      tras(
+        res?.publicacion?.estado === "borrador"
+          ? "Pieza rechazada: vuelve a redacción."
+          : "Dislike registrado; con un segundo dislike la pieza se rechaza.",
+      )(res);
+    },
     onError,
   });
-  // Retira TU decisión (quitar tu like o tu dislike): tu nivel vuelve a pendiente.
+  // Retira TU decisión (quitar tu like o tu dislike): tu nivel vuelve a pendiente. Con origen
+  // "like" (pulsaste OK teniendo un dislike puesto) el toast explica el paso intermedio y ofrece
+  // completar el OK en un clic, en vez del genérico "quitamos tu reacción".
   const deshacer = useMutation({
-    mutationFn: () => api.deshacerAprobacion(publicacion.id),
-    onSuccess: tras("Quitamos tu reacción."),
+    mutationFn: (_origen?: "like") => api.deshacerAprobacion(publicacion.id),
+    onSuccess: (res, origen) => {
+      if (origen === "like") {
+        actualizarCaches(res);
+        toast("Dislike retirado; pulsa de nuevo para dar tu OK.", {
+          action: { label: "Dar OK", onClick: () => aprobar.mutate() },
+        });
+        return;
+      }
+      tras("Quitamos tu reacción.")(res);
+    },
     onError,
   });
   // OVERRIDE: forzar la aprobación saltándose la cadena (admin/coordinador). Lo decide el backend;
@@ -210,7 +243,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // le explica con un toast por qué no puede dar el OK (no bloquea en silencio).
   const onLike = () => {
     if (miReaccion === "dislike") {
-      deshacer.mutate(); // retira tu dislike antes de poder dar el OK
+      deshacer.mutate("like"); // retira tu dislike antes de poder dar el OK
       return;
     }
     if (miReaccion === "neutral") {
@@ -232,6 +265,14 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       });
       return;
     }
+    // Falta material del equipo (foto/clip o copy): el toast lleva la acción que resuelve el
+    // bloqueo (abrir el editor), clave en táctil donde no hay hover que enseñe dónde editar.
+    if (!enRevision && !yaAprobada && (etapa === "generando_arte" || etapa === "generando_copy")) {
+      toast(motivoBloqueo, {
+        action: { label: "Abrir", onClick: () => void abrirEditor() },
+      });
+      return;
+    }
     toast(motivoBloqueo);
   };
 
@@ -242,7 +283,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // (ese gate es para publicar, no para objetar).
   const onDislike = () => {
     if (miReaccion === "like" || miReaccion === "dislike") {
-      deshacer.mutate(); // "se quita el like" (o quita tu dislike si ya estaba marcado)
+      deshacer.mutate(undefined); // "se quita el like" (o quita tu dislike si ya estaba marcado)
       return;
     }
     if (puedeDar) {
@@ -276,7 +317,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   return (
     // El editor se abre SOLO al pulsar la imagen (área interactiva de la pieza). La cabecera, el
     // copy (con su "leer más"), las acciones y los comentarios NO abren el editor.
-    <div className="rounded-xl border border-border bg-background text-left shadow-sm">
+    <article
+      aria-label={publicacion.titulo}
+      className="rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm"
+    >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
           (iconos pelados, sin nombre ni dos burbujas) → quién posteó (IA/autor) · tiempo. El
           distintivo va en la cabecera, no sobre la imagen, para no taparla. */}
@@ -312,6 +356,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         contenido={cuerpo}
         copy_in={publicacion.copy_in}
         imagen_url={imagen || undefined}
+        titulo={publicacion.titulo}
         onAbrir={() => void abrirEditor()}
         variante="limpia"
       />
@@ -320,22 +365,30 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           zona NO abre el editor (para la propagación). Like y dislike son un TOGGLE de tu
           reacción; marcar OK / marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
       <div
-        className="flex items-center gap-2 px-4 py-3"
+        className="flex items-center gap-2 px-4 pb-2 pt-1"
         onClick={(e) => e.stopPropagation()}
       >
         <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
+        {/* Cuándo sale/salió: la fecha de salida visible en programadas y publicadas. */}
+        {(etapa === "programada" || etapa === "publicada") && publicacion.fecha_programada && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatearFechaHoraCorta(publicacion.fecha_programada)}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            // El icono va en VERDE solo cuando TÚ ya diste tu OK; si aún no lo has dado (p. ej.
-            // 0/2), queda negro/neutro.
-            className={
-              "h-8 w-8" +
-              (miReaccion === "like"
-                ? " text-emerald-600 hover:text-emerald-600 dark:text-emerald-400"
-                : "")
-            }
+            // VERDE solo cuando TÚ ya diste tu OK; PRIMARIO cuando te toca decidir (escaneable
+            // sin leer tooltips); neutro en el resto.
+            className={cn(
+              "h-10 w-10 sm:h-8 sm:w-8",
+              miReaccion === "like"
+                ? "text-emerald-600 hover:text-emerald-600 dark:text-emerald-400"
+                : puedeDar && miReaccion === "neutral" && sinResolver === 0
+                  ? "text-primary hover:text-primary"
+                  : undefined,
+            )}
             onClick={onLike}
             disabled={ocupado}
             title={
@@ -360,17 +413,18 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               <ThumbsUp className="h-4 w-4" />
             )}
           </Button>
-          {/* Dislike: visible cuando puedes marcarlo (te toca) o cuando tienes una reacción que
-              quitar (tu like o tu dislike). Dos dislikes de dos personas rechazan la pieza. */}
-          {enRevision && (puedeDar || miReaccion !== "neutral") && (
+          {/* Dislike: SIEMPRE visible en piezas en revisión (fila estable, no baila entre
+              tarjetas); cuando no te toca, onDislike explica con un toast, igual que el like.
+              Dos dislikes de dos personas rechazan la pieza. */}
+          {enRevision && (
             <Button
               variant="ghost"
               size="icon"
               // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, negro/neutro.
-              className={
-                "h-8 w-8" +
-                (miReaccion === "dislike" ? " text-red-600 hover:text-red-600 dark:text-red-400" : "")
-              }
+              className={cn(
+                "h-10 w-10 sm:h-8 sm:w-8",
+                miReaccion === "dislike" && "text-red-600 hover:text-red-600 dark:text-red-400",
+              )}
               onClick={onDislike}
               disabled={ocupado}
               title={
@@ -397,11 +451,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           <Button
             variant="ghost"
             size="icon"
-            className={
-              sinResolver > 0
-                ? "relative h-8 w-8 text-amber-600 dark:text-amber-400"
-                : "relative h-8 w-8"
-            }
+            className={cn(
+              "relative h-10 w-10 sm:h-8 sm:w-8",
+              sinResolver > 0 && "text-amber-700 dark:text-amber-300",
+            )}
             onClick={() => setComentariosAbierto((v) => !v)}
             aria-expanded={comentariosAbierto}
             title={
@@ -415,7 +468,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           >
             {sinResolver > 0 ? <Inbox className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
             {sinResolver > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none tabular-nums text-amber-950">
                 {sinResolver}
               </span>
             )}
@@ -426,21 +479,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {/* Editor rico (reusa el de Publicaciones): copy + imagen (placa con titular inline). Se MONTA
           solo al editar. Es un modal (portal): los clics dentro no abren otra vez la tarjeta. */}
       {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
-
-      {/* Enlace al PROCESO IA de esta pieza (su run del pipeline): dedup/fusión, jerarquización y
-          criba. Solo en piezas que NACIERON del pipeline (`pipeline_id`); las manuales/radar/rss no
-          tienen run que mostrar, así nadie busca un pipeline inexistente. */}
-      {publicacion.pipeline_id && (
-        <Link
-          to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
-          onClick={(e) => e.stopPropagation()}
-          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
-          title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"
-        >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          Ver proceso IA
-        </Link>
-      )}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
           (cuántos y de quién) + lo que falta. */}
@@ -456,7 +494,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             e.stopPropagation();
             setComentariosAbierto(true);
           }}
-          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-amber-600 hover:bg-amber-500/5 dark:text-amber-400"
+          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-amber-700 hover:bg-amber-500/5 dark:text-amber-300"
         >
           <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
           {plural(sinResolver, "comentario")} sin resolver antes de publicar.
@@ -472,6 +510,22 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           <Comentarios contenidoId={publicacion.contenido_id} />
         </div>
       )}
-    </div>
+
+      {/* Enlace al PROCESO IA de esta pieza (su run del pipeline): dedup/fusión, jerarquización y
+          criba. Solo en piezas que NACIERON del pipeline (`pipeline_id`); las manuales/radar/rss no
+          tienen run que mostrar. Va al FINAL del pie: es trazabilidad de consulta rara, por debajo
+          de estado, bloqueos y conversación. */}
+      {publicacion.pipeline_id && (
+        <Link
+          to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
+          title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          Ver proceso IA
+        </Link>
+      )}
+    </article>
   );
 }

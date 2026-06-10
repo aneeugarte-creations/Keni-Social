@@ -32,6 +32,11 @@ export function DistintivoRed({
     >
       {tieneFormato && <IconoFormato className="h-3 w-3" aria-hidden="true" />}
       <Icono className="h-3.5 w-3.5" aria-hidden="true" />
+      {/* Nombre accesible: el `title` no existe en táctil ni lo anuncian fiable los lectores. */}
+      <span className="sr-only">
+        {nombreRed(red)}
+        {tieneFormato ? ` · ${esVideo ? "Video" : "Foto"}` : ""}
+      </span>
     </span>
   );
 }

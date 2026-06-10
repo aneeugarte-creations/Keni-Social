@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { Publicacion, UsuarioSesion } from "@/types";
@@ -80,9 +80,58 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
   );
 }
 
+/** Stub de fetch para los flujos de aprobación: cadena de UN nivel humano pendiente (el
+ *  revisor u1 ≠ autor puede dar OK) y POST /aprobar que devuelve la pieza en `estadoFinal`. */
+function stubFetchAprobacion(estadoFinal: Publicacion["estado"]) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string | URL) => {
+      const ruta = String(url);
+      if (ruta.includes("/aprobar")) {
+        return new Response(
+          JSON.stringify({ publicacion: pub({ estado: estadoFinal }) }),
+          { status: 200 },
+        );
+      }
+      if (ruta.includes("/aprobacion")) {
+        return new Response(
+          JSON.stringify({
+            niveles: [
+              {
+                id: "n1",
+                plataforma_id: "p1",
+                contenido_id: "c1",
+                nivel: 1,
+                etiqueta: "Edición",
+                decision: "pendiente",
+                decisor_id: "",
+                decisor_nombre: "",
+                comentario: "",
+                creado: "",
+                decidido_en: "",
+                cargo_requerido: "",
+              },
+            ],
+            estado: "pendiente",
+            nivel_actual: "n1",
+            aprobados: 0,
+            minimo_aprobaciones: 0,
+            comentarios_sin_resolver: 0,
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }),
+  );
+}
+
 describe("PostFeed · firma IA y aviso de bloqueo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("pieza autogenerada (sin autor) firma como «IA», no «desconocido»", () => {
@@ -131,10 +180,14 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.getByRole("button", { name: /abrir para editar/i })).toBeInTheDocument();
   });
 
-  it("«Me gusta» cuando NO toca no aprueba: avisa con un toast (falta la imagen)", () => {
+  it("«Me gusta» cuando NO toca no aprueba: avisa con un toast (falta la imagen) con acción 'Abrir'", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
     fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Falta la imagen/i));
+    // El toast lleva la acción que resuelve el bloqueo (abrir el editor): clave en táctil.
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/Falta la imagen/i),
+      expect.objectContaining({ action: expect.anything() }),
+    );
   });
 
   it("pieza VIDEO con falta_video muestra badge 'Falta video' (no 'Falta imagen')", () => {
@@ -143,17 +196,57 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByText("Falta imagen")).not.toBeInTheDocument();
   });
 
-  it("«Me gusta» en pieza VIDEO con falta_video avisa 'Falta el video'", () => {
+  it("«Me gusta» en pieza VIDEO con falta_video avisa 'Falta el video' con acción 'Abrir'", () => {
     renderPost(pub({ formato: "video", falta_video: true, etapa_ia: "generando_arte" }));
     fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Falta el video/i));
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/Falta el video/i),
+      expect.objectContaining({ action: expect.anything() }),
+    );
   });
 
-  it("pieza lista pero aún en borrador: el badge dice 'Lista' y like avisa que entra sola", () => {
+  it("pieza lista pero aún en borrador: el badge dice 'Para revisar' y like avisa que entra sola", () => {
     renderPost(pub({ etapa_ia: "lista_para_revisar" }));
-    expect(screen.getByText("Lista")).toBeInTheDocument();
+    expect(screen.getByText("Para revisar")).toBeInTheDocument();
     expect(screen.queryByText(/Falta el copy/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/no está en revisión|entra sola/i));
+  });
+
+  it("el dislike se muestra en TODA pieza en revisión, aunque no te toque decidir (fila estable)", async () => {
+    // Cadena vacía (sin niveles): `puedeDar` es false, pero el botón existe igualmente; al
+    // pulsarlo, un toast explica (no desaparece y baila entre tarjetas).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+          { status: 200 },
+        ),
+      ),
+    );
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    expect(await screen.findByRole("button", { name: "No me gusta" })).toBeInTheDocument();
+  });
+
+  it("aprobar que CIERRA la cadena confirma 'lista para publicar'", async () => {
+    stubFetchAprobacion("aprobado");
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    // Espera la cadena (el panel pinta el conteo 0/1) para que el like sea elegible.
+    expect(await screen.findByText("0/1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Pieza aprobada: lista para publicar."),
+    );
+  });
+
+  it("aprobar con OK parcial (la pieza sigue en revisión) NO miente: 'Tu OK quedó registrado'", async () => {
+    stubFetchAprobacion("en_revision");
+    renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
+    expect(await screen.findByText("0/1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Me gusta" }));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Tu OK quedó registrado; falta el de otra persona."),
+    );
   });
 });
