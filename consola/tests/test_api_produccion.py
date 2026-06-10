@@ -53,7 +53,7 @@ def test_produccion_dia_contrato_y_embudo(entorno):
     assert emb["en_borrador"] == 1
     assert emb["programado"] == 1
     # Las 4 vistas del contrato presentes.
-    assert {"dia", "franja", "franja_horas"} <= set(data["objetivo"])
+    assert {"dia", "plan"} <= set(data["objetivo"])
     assert {"pendientes", "en_curso"} <= set(data["cola_generacion"])
     assert [p["id"] for p in data["programacion"]["programadas"]] == [prog["id"]]
     assert data["programacion"]["programadas"][0]["fecha_programada"] == "2030-01-01T10:00"

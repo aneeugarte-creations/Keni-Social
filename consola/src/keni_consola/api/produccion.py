@@ -11,7 +11,7 @@ ventana de producción (las mismas 24 h móviles del cupo de admisión):
   GET /api/produccion/dia?marca=unotv ->
     {
       "marca", "ventana": {desde, hasta},
-      "objetivo": {"dia": cupo_dia|None, "franja": cupo_franja|None, "franja_horas"},
+      "objetivo": {"dia": cupo_dia|None, "plan": plan_dia|None},
       "embudo": {"total", "generando", "en_borrador", "en_revision",
                   "aprobado", "programado", "publicado"},
       "por_vertical": [{"vertical", "total", "en_revision", "programado", "publicado"}],
@@ -154,11 +154,12 @@ async def dia(request: Request) -> Response:
         )
     piezas.sort(key=lambda p: p["creado"], reverse=True)
 
-    # Objetivo: el MISMO cupo que regula la admisión (0 = sin cupo configurado -> None).
+    # Objetivo: el MISMO cupo que regula la admisión (0/{} = sin cupo configurado -> None).
+    # El modelo por franjas se eliminó (feat(maquina)!): ahora es cupo diario simple +
+    # plan editorial por categoría (`plan_dia`).
     objetivo = {
         "dia": config.cupo_dia(marca) or None,
-        "franja": config.cupo_franja(marca) or None,
-        "franja_horas": config.franja_horas(),
+        "plan": config.plan_dia(marca) or None,
     }
 
     # Cola de generación (conteo global; el detalle vive en /api/actividad/cola).
