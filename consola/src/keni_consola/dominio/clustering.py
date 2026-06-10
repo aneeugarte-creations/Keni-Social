@@ -126,18 +126,43 @@ def clave_cluster(item: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def _tokens_ordenados(clave: str) -> str:
+    """Forma TOKEN-SORT de una clave fuzzy: mismos tokens, orden alfabético, deduplicados.
+
+    El mismo EVENTO se titula con las mismas palabras en distinto orden ("América vence a
+    Chivas en el clásico" / "Clásico: Chivas cae y América vence"): el `SequenceMatcher`
+    posicional castiga la reordenación aunque el contenido sea idéntico. Comparar además las
+    claves con tokens ordenados (estilo token-sort-ratio) recupera esos pares sin relajar el
+    umbral global.
+    """
+    return " ".join(sorted(set(clave.split())))
+
+
+def _ratio_claves(ka: str, kb: str) -> float:
+    """Ratio fuzzy [0,1] entre dos claves YA normalizadas: el MÁXIMO del directo y el token-sort.
+
+    El directo respeta el orden (titulares casi idénticos); el token-sort tolera la
+    reordenación (mismo evento, sintaxis distinta). Tomar el máximo solo puede UNIR más pares
+    del mismo evento, nunca menos (monótono respecto al comportamiento anterior).
+    """
+    directo = SequenceMatcher(None, ka, kb).ratio()
+    ordenado = SequenceMatcher(None, _tokens_ordenados(ka), _tokens_ordenados(kb)).ratio()
+    return max(directo, ordenado)
+
+
 def _ratio_titulos(a: str, b: str) -> float:
     """Ratio fuzzy [0,1] entre dos títulos usando la clave normalizada + sinónimos del Radar.
 
     Reutiliza `radar._clave_fuzzy` (minúsculas, sin acentos, sin signos, sinónimos del dominio
-    colapsados a su forma canónica) antes de comparar con `SequenceMatcher`. Claves cortas
-    devuelven 0.0 (no entran al fuzzy): evita falsos positivos entre títulos triviales.
+    colapsados a su forma canónica) antes de comparar con `_ratio_claves` (directo + token-sort).
+    Claves cortas devuelven 0.0 (no entran al fuzzy): evita falsos positivos entre títulos
+    triviales.
     """
     ka = similitud.clave_fuzzy(a)
     kb = similitud.clave_fuzzy(b)
     if len(ka) < _MIN_LONGITUD_FUZZY or len(kb) < _MIN_LONGITUD_FUZZY:
         return 0.0
-    return SequenceMatcher(None, ka, kb).ratio()
+    return _ratio_claves(ka, kb)
 
 
 def asignar(
@@ -250,7 +275,7 @@ class Asignador:
         mejor_id: str | None = None
         mejor_ratio = self.umbral
         for cid in sorted(candidatos, key=lambda c: self._orden.get(c, 0)):
-            ratio = SequenceMatcher(None, kf, self._fuzzy[cid]).ratio()
+            ratio = _ratio_claves(kf, self._fuzzy[cid])
             if ratio >= self.umbral and (mejor_id is None or ratio > mejor_ratio):
                 mejor_ratio = ratio
                 mejor_id = cid
@@ -635,7 +660,7 @@ def seleccionar_diversos(
             break
         kf = similitud.clave_fuzzy(str(c.get("titulo") or ""))
         parecido = len(kf) >= _MIN_LONGITUD_FUZZY and any(
-            k and SequenceMatcher(None, kf, k).ratio() >= umbral for k in claves
+            k and _ratio_claves(kf, k) >= umbral for k in claves
         )
         if parecido:
             saltados.append(c)

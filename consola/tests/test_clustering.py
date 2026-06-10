@@ -168,6 +168,50 @@ def test_recalcular_conserva_identidad_del_cluster():
 
 
 # --------------------------------------------------------------------------- #
+# Dedup por EVENTO: titulares reordenados (token-sort)                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_asignar_une_titulares_reordenados_mismo_evento():
+    """El mismo evento con la sintaxis cambiada (mismas palabras, otro orden) se une."""
+    cluster = {"id": "c1", "clave": "url:medio-a.com/n1",
+               "titulo": "América vence a Chivas en el clásico nacional"}
+    item = _item(url="https://medio-b.com/otra-nota",
+                 titulo="En el clásico nacional, América vence a Chivas")
+    assert clustering.asignar(item, [cluster]) == "c1"
+
+
+def test_asignador_une_titulares_reordenados_como_asignar():
+    """El índice incremental (`Asignador`) toma la MISMA decisión que `asignar` (paridad)."""
+    cluster = {"id": "c1", "clave": "url:medio-a.com/n1",
+               "titulo": "América vence a Chivas en el clásico nacional"}
+    item = _item(url="https://medio-b.com/otra-nota",
+                 titulo="En el clásico nacional, América vence a Chivas")
+    asignador = clustering.Asignador([cluster])
+    assert asignador.asignar(item) == "c1"
+
+
+def test_asignar_no_une_eventos_distintos_con_palabras_comunes():
+    """Compartir un par de tokens NO basta: eventos distintos siguen separados."""
+    cluster = {"id": "c1", "clave": "url:medio-a.com/n1",
+               "titulo": "América vence a Chivas en el clásico nacional"}
+    item = _item(url="https://medio-b.com/x",
+                 titulo="Cruz Azul golea a Pumas en el estadio olímpico")
+    assert clustering.asignar(item, [cluster]) is None
+
+
+def test_seleccionar_diversos_salta_macro_tema_reordenado():
+    """La diversidad de la promoción también detecta el macro-tema con el titular reordenado."""
+    clusters = [
+        {"id": "a", "titulo": "América vence a Chivas en el clásico nacional", "score": 0.9},
+        {"id": "b", "titulo": "En el clásico nacional América vence a Chivas", "score": 0.8},
+        {"id": "c", "titulo": "Sismo de magnitud sacude la capital del país", "score": 0.5},
+    ]
+    elegidos = clustering.seleccionar_diversos(clusters, maximo=2, umbral=0.80)
+    assert [c["id"] for c in elegidos] == ["a", "c"]
+
+
+# --------------------------------------------------------------------------- #
 # puntuar (fórmula + monotonía)                                                 #
 # --------------------------------------------------------------------------- #
 
