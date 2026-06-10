@@ -36,7 +36,7 @@ steps:
       # mounts del compose resuelvan en el host. Aqui vive tambien el .env (no en git).
       - /home/ubuntu/keni-social:/home/ubuntu/keni-social
     commands:
-      - apk add --no-cache docker-cli-compose rsync
+      - apk add --no-cache docker-cli-compose rsync flock
       # Sincroniza el checkout al dir estable (preserva .env/.git/venv/node_modules).
       # `--delete`: los ficheros BORRADOS en git deben desaparecer del dir estable; sin él se
       # quedaban huérfanos y rompían el build (p.ej. un .tsx eliminado seguía ahí y `tsc -b` lo
@@ -45,6 +45,19 @@ steps:
       # `deploy/woodpecker/.env`), repos/artefactos (.git, node_modules, .venv*, .ruff_cache,
       # __pycache__) y un worktree de trabajo en el host (`.claude`). Validado con --dry-run:
       # borra solo orphans/artefactos, ningún .env.
-      - rsync -a --delete --exclude .git --exclude 'deploy/.env*' --exclude 'deploy/woodpecker/.env' --exclude .claude --exclude .ruff_cache --exclude node_modules --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
-      # docker compose corre DESDE el dir estable -> bind mounts (garage.toml, traefik/dynamic) OK.
-      - cd /home/ubuntu/keni-social && sh deploy/deploy.sh /home/ubuntu/keni-social/deploy/.env
+      # SERIALIZACION de deploys (audit nocturno 2026-06-10): el agente corre hasta
+      # WOODPECKER_MAX_WORKFLOWS=3 pipelines A LA VEZ, y dos pushes seguidos a main hacian
+      # solaparse dos deploys: el rsync de B MUTA las fuentes del dir estable mientras A
+      # construye (hash/imagen inconsistentes) y el `up -d` de B recrea contenedores
+      # mientras A espera salud -> rollback/pipeline rojo ESPURIO con prod sano (visto 2x
+      # esta noche). `flock` sobre un lockfile del dir estable (mismo fichero de HOST para
+      # todos los steps concurrentes) serializa rsync+deploy como una unidad; espera hasta
+      # 30 min su turno (cola de la noche) y falla claro si no lo consigue. El lockfile
+      # va EXCLUIDO del rsync --delete: borrarlo en vuelo rompe la semantica de flock
+      # (los que esperan quedan en el inode viejo y dos deploys entrarian a la vez).
+      - >-
+        flock -x -w 1800 /home/ubuntu/keni-social/.deploy.lock sh -c "
+        rsync -a --delete --exclude .git --exclude 'deploy/.env*' --exclude 'deploy/woodpecker/.env'
+        --exclude .claude --exclude .deploy.lock --exclude .ruff_cache --exclude node_modules
+        --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
+        && cd /home/ubuntu/keni-social && sh deploy/deploy.sh /home/ubuntu/keni-social/deploy/.env"
