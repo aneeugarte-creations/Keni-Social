@@ -6,6 +6,7 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { ApiError, api } from "@/lib/api";
 
 import { SeccionNavegadorS3 } from "./sistema/NavegadorS3";
+import { SeccionBackups } from "./sistema/SeccionBackups";
 import { SeccionDaemons } from "./sistema/SeccionDaemons";
 import { SeccionRecursos } from "./sistema/SeccionRecursos";
 import { SeccionS3 } from "./sistema/SeccionS3";
@@ -42,6 +43,7 @@ export default function Sistema() {
         <div className="space-y-6">
           <SeccionRecursos />
           <SeccionDaemons />
+          <SeccionBackups />
           <SeccionS3 />
           <SeccionNavegadorS3 />
         </div>

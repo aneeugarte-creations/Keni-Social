@@ -229,9 +229,15 @@ services:
       KENI_REUTERS_API_KEY: ${KENI_REUTERS_API_KEY:-}
       KENI_AFP_CLIENT_ID: ${KENI_AFP_CLIENT_ID:-}
       KENI_AFP_CLIENT_SECRET: ${KENI_AFP_CLIENT_SECRET:-}
+      # Panel Sistema -> seccion Backups: directorio (SOLO LECTURA, ver volumes) donde el
+      # keni-backup del host deja dumps + estado.json. Vacio/ausente => seccion degradada.
+      KENI_BACKUPS_DIR: /backups
     volumes:
       # Estado de la app: consola.db (SQLite), secretos.toml (0600), media, tareas.
       - keni-data:/data
+      # Backups del HOST en solo-lectura: el panel Sistema muestra el ultimo estado.json
+      # y la antiguedad/tamano de los dumps sin poder tocarlos (observabilidad pura).
+      - /var/backups/keni-social:/backups:ro
     # Secretos como ficheros en /run/secrets (no como env -> no salen en docker inspect).
     secrets:
       - postgres_password

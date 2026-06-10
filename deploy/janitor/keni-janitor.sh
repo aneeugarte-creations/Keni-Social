@@ -67,7 +67,21 @@ if [ "$aggressive" = 1 ]; then
   docker builder prune -af >/dev/null 2>&1 || true
   log "  disco tras prune: $(df --output=pcent / 2>/dev/null | tail -1 | tr -dc '0-9')%"
 else
-  log "  bajo umbral: solo retencion de tags (sin prune)"
+  log "  bajo umbral: solo retencion de tags (sin prune global)"
+fi
+
+# 2b) CAP del build cache AUNQUE el disco vaya sobrado (audit 2026-06): el cache de buildx
+#     crece sin limite (41 GB medidos con el disco al 9%) y la regla de arriba solo lo
+#     vaciaba al cruzar THRESHOLD. `--keep-storage` poda por LRU dejando los
+#     BUILD_CACHE_KEEP mas recientes: los builds del CI siguen calientes y el cache deja
+#     de acumular capas muertas. No toca imagenes ni contenedores; las capas en uso por
+#     un build en vuelo Docker no las suelta.
+BUILD_CACHE_KEEP="${BUILD_CACHE_KEEP:-15GB}"
+if [ "$aggressive" != 1 ]; then
+  antes_cache="$(docker system df --format '{{.Type}} {{.Size}}' 2>/dev/null | awk '/Build Cache/ {print $3}')"
+  docker builder prune -f --keep-storage "$BUILD_CACHE_KEEP" >/dev/null 2>&1 || true
+  despues_cache="$(docker system df --format '{{.Type}} {{.Size}}' 2>/dev/null | awk '/Build Cache/ {print $3}')"
+  log "  build cache capado a ${BUILD_CACHE_KEEP} (antes: ${antes_cache:-?}, despues: ${despues_cache:-?})"
 fi
 
 # 3) Poda de registros de generacion viejos (belt-and-suspenders, #128). Solo registros

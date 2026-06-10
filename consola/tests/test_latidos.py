@@ -222,6 +222,78 @@ def test_endpoint_daemons_atrasado(entorno):
     assert por_nombre["zombi"]["estado"] == "atrasado"
 
 
+# --------------------------------------------------------------------------- #
+# Endpoint /api/sistema/backups                                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_endpoint_backups_sin_configurar(entorno, monkeypatch):
+    monkeypatch.delenv("KENI_BACKUPS_DIR", raising=False)
+    c = _cli_admin()
+    r = c.get("/api/sistema/backups")
+    assert r.status_code == 200
+    assert r.json()["configurado"] is False
+
+
+def test_endpoint_backups_contrato(entorno, monkeypatch, tmp_path):
+    raiz = tmp_path / "backups"
+    (raiz / "postgres").mkdir(parents=True)
+    (raiz / "postgres" / "keni-20260610-033500.dump").write_bytes(b"x" * 128)
+    (raiz / "estado.json").write_text(
+        '{"stamp":"20260610-033500","ok":true,"paso":"fin","error":"",'
+        '"duracion_seg":42,"dump_bytes":128,"verificado":true,'
+        '"volumenes":[{"volumen":"keni-data","bytes":1024}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KENI_BACKUPS_DIR", str(raiz))
+    c = _cli_admin()
+    cuerpo = c.get("/api/sistema/backups").json()
+    assert cuerpo["configurado"] is True
+    assert cuerpo["estado"]["ok"] is True
+    assert cuerpo["estado"]["verificado"] is True
+    assert cuerpo["dumps"] == 1
+    assert cuerpo["ultimo_dump"]["bytes"] == 128
+    assert cuerpo["atrasado"] is False  # mtime recien creado
+    assert cuerpo["error"] is None
+
+
+def test_endpoint_backups_sin_dumps_atrasado(entorno, monkeypatch, tmp_path):
+    raiz = tmp_path / "backups"
+    (raiz / "postgres").mkdir(parents=True)
+    monkeypatch.setenv("KENI_BACKUPS_DIR", str(raiz))
+    c = _cli_admin()
+    cuerpo = c.get("/api/sistema/backups").json()
+    assert cuerpo["configurado"] is True
+    assert cuerpo["dumps"] == 0
+    assert cuerpo["atrasado"] is True
+    assert cuerpo["estado"] is None  # sin estado.json: degradado, no error
+
+
+def test_endpoint_backups_estado_roto_degrada(entorno, monkeypatch, tmp_path):
+    raiz = tmp_path / "backups"
+    (raiz / "postgres").mkdir(parents=True)
+    (raiz / "estado.json").write_text("{no es json", encoding="utf-8")
+    monkeypatch.setenv("KENI_BACKUPS_DIR", str(raiz))
+    c = _cli_admin()
+    cuerpo = c.get("/api/sistema/backups").json()
+    assert cuerpo["configurado"] is True
+    assert cuerpo["estado"] is None
+    assert "estado.json" in (cuerpo["error"] or "")
+
+
+def test_endpoint_backups_editor_403(entorno, monkeypatch):
+    monkeypatch.delenv("KENI_BACKUPS_DIR", raising=False)
+    auth.crear_usuario("e2", CLAVE, "editor")
+    c = TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))
+    assert (
+        c.post(
+            "/api/auth/login", json={"usuario": "e2", "password": CLAVE}, headers=_ORIGIN
+        ).status_code
+        == 200
+    )
+    assert c.get("/api/sistema/backups").status_code == 403
+
+
 def test_endpoint_daemons_editor_403(entorno):
     auth.crear_usuario("e", CLAVE, "editor")
     c = TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))

@@ -423,6 +423,55 @@ export interface RespuestaDaemons {
   error: string | null;
 }
 
+// ── Backups locales (GET /api/sistema/backups) ───────────────────────────────
+// El keni-backup del host escribe estado.json en cada run; el back lo monta :ro.
+
+/** Un volumen incluido en el último backup (estado.json). */
+export interface VolumenBackup {
+  volumen: string;
+  bytes: number;
+}
+
+/** estado.json del último run de keni-backup (forma escrita por el script). */
+export interface EstadoBackup {
+  /** Stamp del run (YYYYmmdd-HHMMSS, UTC). */
+  stamp: string;
+  /** `true` si el run completó sin fallos. */
+  ok: boolean;
+  /** Último paso ejecutado (en fallo, el paso que rompió). */
+  paso: string;
+  /** Texto de error ("" si ok). */
+  error: string;
+  duracion_seg: number;
+  dump_bytes: number;
+  /** `true` si dump (pg_restore --list) y tars (gzip -t) verificaron. */
+  verificado: boolean;
+  volumenes: VolumenBackup[];
+}
+
+/** Dump de Postgres más reciente en disco. */
+export interface UltimoDump {
+  fichero: string;
+  bytes: number;
+  /** ISO naive-UTC del mtime. */
+  modificado: string;
+  edad_seg: number;
+}
+
+/** Respuesta de `GET /api/sistema/backups`. Degradada: `configurado:false`. */
+export interface RespuestaBackups {
+  /** `false` si el directorio de backups no está montado en este despliegue. */
+  configurado: boolean;
+  /** estado.json del último run o null (aún sin run / ilegible). */
+  estado: EstadoBackup | null;
+  /** Nº de dumps de Postgres retenidos. */
+  dumps: number;
+  ultimo_dump: UltimoDump | null;
+  /** `true` si no hay dump en las últimas 26 h (timer diario + margen). */
+  atrasado: boolean;
+  error: string | null;
+}
+
 // ── S3 Navegador de objetos (GET /api/sistema/s3/objetos) ────────────────────
 
 /** Una miga del breadcrumb del explorador S3 ({nombre, prefijo}). */

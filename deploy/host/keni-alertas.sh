@@ -3,9 +3,9 @@
 #
 # Corre cada 10 min via systemd timer (keni-alertas.timer) y comprueba:
 #   1) Salud de los contenedores del stack: back (su healthcheck ya es curl /healthz),
-#      front, worker, mcp, files y EN ESPECIAL db (Postgres esta EXCLUIDO del sidecar
-#      autoheal a proposito, asi que sin esto un db unhealthy pasaria desapercibido).
-#      daemons no tiene healthcheck (disable) -> se comprueba que este `running`.
+#      front, worker, mcp, files, daemons (healthcheck por fichero de latido desde
+#      2026-06) y EN ESPECIAL db (Postgres esta EXCLUIDO del sidecar autoheal a
+#      proposito, asi que sin esto un db unhealthy pasaria desapercibido).
 #   2) Disco raiz > KENI_ALERTA_DISCO_MAX % (def 85).
 #   3) Antiguedad del ultimo backup local (dump de Postgres en /var/backups/keni-social)
 #      > KENI_ALERTA_BACKUP_MAX_H horas (def 26: el timer de backup es diario).
@@ -59,13 +59,13 @@ fi
 salud() {  # estado de salud (o de ejecucion si no tiene healthcheck) de un contenedor
   docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || echo "ausente"
 }
-for svc in back front db worker files mcp; do
+for svc in back front db worker files mcp daemons; do
   estado="$(salud "keni-social-${svc}-1")"
   if [[ "$estado" != "healthy" ]]; then
     PROBLEMAS+=("contenedor keni-social-${svc}-1 NO healthy (estado: ${estado})")
   fi
 done
-for svc in traefik daemons; do  # sin healthcheck: basta running
+for svc in traefik; do  # sin healthcheck: basta running
   estado="$(salud "keni-social-${svc}-1")"
   if [[ "$estado" != "running" && "$estado" != "healthy" ]]; then
     PROBLEMAS+=("contenedor keni-social-${svc}-1 NO esta corriendo (estado: ${estado})")

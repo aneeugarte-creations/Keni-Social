@@ -2,6 +2,7 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion, query } from "./_core";
 import type {
+  RespuestaBackups,
   RespuestaBorrarLoteS3,
   RespuestaBorrarS3,
   RespuestaDaemons,
@@ -21,6 +22,8 @@ export const apiSistema = {
     peticion<RespuestaRecursos>("/sistema/recursos", { signal }),
   sistemaDaemons: (signal?: AbortSignal) =>
     peticion<RespuestaDaemons>("/sistema/daemons", { signal }),
+  sistemaBackups: (signal?: AbortSignal) =>
+    peticion<RespuestaBackups>("/sistema/backups", { signal }),
   sistemaS3: (signal?: AbortSignal) => peticion<RespuestaS3>("/sistema/s3", { signal }),
   probarS3: () => peticion<RespuestaProbarS3>("/sistema/s3/probar", { metodo: "POST" }),
   s3Objetos: (prefijo?: string, signal?: AbortSignal) =>

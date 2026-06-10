@@ -32,6 +32,21 @@ sudo systemctl start keni-backup.service   # primer backup AHORA; revisa el resu
 ls -lah /var/backups/keni-social/postgres /var/backups/keni-social/volumes
 ```
 
+Cada run VERIFICA lo que escribe (`pg_restore --list` del dump + `gzip -t` de cada tar) y
+deja `estado.json` en `$BACKUP_DIR` (lo muestra el panel Sistema de la Consola, que monta
+el directorio en solo-lectura; por eso el script normaliza permisos a 755/644). Un fallo
+de verificacion FALLA el run y dispara `OnFailure=` (keni-alertas).
+
+Prueba de RESTORE completo (hazla tras cambios de esquema grandes o trimestralmente):
+```sh
+ULTIMO=$(ls -t /var/backups/keni-social/postgres/keni-*.dump | head -1)
+docker run --rm -d --name pg-restore-test -e POSTGRES_PASSWORD=t postgres:16.13
+sleep 8
+docker exec -i pg-restore-test pg_restore -U postgres -d postgres --no-owner < "$ULTIMO"
+docker exec pg-restore-test psql -U postgres -tc "select count(*) from pg_tables where schemaname='public'"
+docker rm -f pg-restore-test
+```
+
 Restore (Postgres, formato custom): `docker exec -i keni-social-db-1 sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < keni-XXXX.dump`.
 Restore (volumen): `docker run --rm -v keni-social_keni-data:/v -v /var/backups/keni-social/volumes:/b alpine sh -c 'cd /v && tar xzf /b/keni-data-XXXX.tar.gz'` (con el stack parado).
 Offsite (recomendado al escalar): instala `rclone`, configura un remoto y pon
