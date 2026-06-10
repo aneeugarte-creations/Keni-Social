@@ -1,23 +1,22 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { pestanasDeRuta } from "@/components/layout/hub-tabs";
+import { SelectorSeccion } from "@/components/layout/SelectorSeccion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { cn } from "@/lib/utils";
 
 /**
- * Cabecera de sección UNIFICADA: ahora vive DENTRO de la barra superior (donde antes estaban
- * los breadcrumbs), a la izquierda de los switches de marca y las notificaciones. Es la misma
- * barra para todas las páginas, con tres zonas contiguas (todas a la izquierda):
- *   - PESTAÑAS: si la ruta cae en un hub con 2+ pestañas, se pintan aquí.
- *   - Hueco de TÍTULO: si es una página plana, su `<TituloPagina/>` se portaliza aquí con el
- *     formato de una pestaña activa. (Hub y título son excluyentes por diseño.)
+ * Cabecera de sección UNIFICADA, dentro de la barra superior (donde antes estaban los
+ * breadcrumbs), a la izquierda del control de marca/filtros y las notificaciones. Tres zonas
+ * contiguas:
+ *   - SECCIÓN: si la ruta cae en un hub con 2+ pestañas, se pinta como un DROPDOWN compacto
+ *     (`SelectorSeccion`) en vez de una tira de pestañas (mucho más cómodo en móvil).
+ *   - Hueco de TÍTULO: si es una página plana, su `<TituloPagina/>` se portaliza aquí.
+ *     (Hub y título son excluyentes por diseño.)
  *   - Hueco de ACCIONES: el menú "⋮" (vertical) o los controles que la página portalice, JUNTO
- *     a las pestañas/título.
+ *     a la sección/título.
  *
- * Los huecos los entrega el `AppShell` por contexto (refs `refInicio`/`refAcciones`). Como
- * vive en el header (altura fija de la barra), las pestañas ocupan todo el alto y su subrayado
- * de acento "muerde" el borde inferior del header.
+ * Los huecos los entrega el `AppShell` por contexto (refs `refInicio`/`refAcciones`).
  */
 export function EncabezadoSeccion({
   refInicio,
@@ -35,40 +34,13 @@ export function EncabezadoSeccion({
   const hayTabs = !!pestanas && pestanas.length >= 2;
 
   return (
-    <nav
-      aria-label="Cabecera de sección"
-      className="flex h-full min-w-0 items-stretch gap-1 self-stretch"
-    >
-      {hayTabs &&
-        pestanas.map((pestana) => {
-          const Icono = pestana.icono;
-          return (
-            <NavLink
-              key={pestana.ruta}
-              to={pestana.ruta}
-              end={pestana.end}
-              className={({ isActive }) =>
-                cn(
-                  // `-mb-px` solapa el borde inferior del header para que la pestaña activa
-                  // "muerda" la línea (subrayado de acento continuo con el borde de la barra).
-                  "-mb-px flex items-center gap-2 border-b-2 px-3 text-sm transition-colors",
-                  isActive
-                    ? "border-foreground font-medium text-foreground"
-                    : "border-transparent font-normal text-muted-foreground hover:border-border hover:text-foreground",
-                )
-              }
-            >
-              <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{pestana.etiqueta}</span>
-            </NavLink>
-          );
-        })}
+    <nav aria-label="Cabecera de sección" className="flex h-full min-w-0 items-center gap-1">
+      {hayTabs && <SelectorSeccion pestanas={pestanas} pathname={pathname} />}
 
-      {/* Hueco del título de página plana (portal). Excluyente con las pestañas. `items-stretch`
-          para que el título (con su subrayado) ocupe todo el alto y muerda el borde como un tab. */}
-      <div ref={refInicio} className="flex items-stretch" />
+      {/* Hueco del título de página plana (portal). Excluyente con el dropdown de sección. */}
+      <div ref={refInicio} className="flex items-center" />
 
-      {/* Hueco de acciones, JUNTO a las pestañas/título (portal). */}
+      {/* Hueco de acciones, JUNTO a la sección/título (portal). */}
       <div ref={refAcciones} className="flex items-center" />
     </nav>
   );

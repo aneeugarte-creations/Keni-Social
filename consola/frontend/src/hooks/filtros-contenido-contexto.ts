@@ -18,9 +18,10 @@ import type { LineaEditorialOpcion, RedPublicacion } from "@/types";
  * a "Todas" si la persistida deja de ser elegible con la marca activa actual. Por eso
  * el provider se monta DEBAJO del de marca.
  *
- * Visibilidad: el provider es global, pero los SELECTORES de la topbar solo se pintan
- * en las rutas de contenido/feed donde aplican (ver `RUTAS_FILTROS_CONTENIDO` y
- * `SwitchFiltrosContenido`); en métricas/ajustes/usuarios no aparecen.
+ * Visibilidad: el provider es global, pero los filtros de Red/Línea solo se ofrecen (dentro
+ * del control de contexto unificado de la topbar, `ControlContexto`) en las rutas de
+ * contenido/feed donde aplican (ver `RUTAS_FILTROS_CONTENIDO` y `rutaUsaFiltrosContenido`);
+ * en métricas/ajustes/usuarios no aparecen.
  */
 export interface ValorFiltrosContenido {
   /** Red activa (id), o `FILTRO_TODOS` para no filtrar por red. */

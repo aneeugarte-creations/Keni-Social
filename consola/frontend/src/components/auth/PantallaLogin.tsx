@@ -219,9 +219,6 @@ export function PantallaLogin() {
     <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1.5 text-center">
-          <div className="flex justify-center">
-            <span className="text-sm font-normal tracking-wider text-foreground">KENI</span>
-          </div>
           <CardTitle className="text-xl">Consola</CardTitle>
           <p className="text-sm text-muted-foreground">Inicia sesión para continuar.</p>
         </CardHeader>

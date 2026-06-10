@@ -45,14 +45,14 @@ function useEncabezado(): EncabezadoCtx | null {
 
 /**
  * Título de una página PLANA (sin pestañas). Se portaliza al hueco izquierdo de la barra
- * de cabecera con el MISMO formato que una pestaña activa: icono + texto `text-sm` y el
- * subrayado de acento. Así una página con título y una con pestañas arrancan idénticas.
+ * de cabecera con el MISMO formato que el trigger del dropdown de sección: icono + texto
+ * `text-sm font-medium`. Así una página con título y un hub con dropdown arrancan idénticos.
  */
 export function TituloPagina({ titulo, icono: Icono }: { titulo: string; icono?: LucideIcon }) {
   const ctx = useEncabezado();
   React.useEffect(() => ctx?.registrarTitulo(), [ctx]);
   const elemento = (
-    <span className="-mb-px flex items-center gap-2 border-b-2 border-foreground px-3 py-2 text-sm font-medium text-foreground">
+    <span className="flex items-center gap-2 px-2 py-2 text-sm font-medium text-foreground">
       {Icono && <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />}
       <span className="truncate">{titulo}</span>
     </span>

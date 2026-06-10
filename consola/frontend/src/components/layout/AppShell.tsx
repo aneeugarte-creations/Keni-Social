@@ -5,13 +5,11 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { CampanaNotificaciones } from "@/components/layout/CampanaNotificaciones";
+import { ControlContexto } from "@/components/layout/ControlContexto";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { EncabezadoSeccion } from "@/components/layout/EncabezadoSeccion";
 import { ProveedorEncabezado, type EncabezadoCtx } from "@/components/layout/encabezado";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { SwitchFiltrosContenido } from "@/components/layout/SwitchFiltrosContenido";
-import { SwitchMarca } from "@/components/layout/SwitchMarca";
-import { Wordmark } from "@/components/layout/Wordmark";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -135,25 +133,17 @@ export function AppShell() {
             {menuAbierto ? <X /> : <Menu />}
           </Button>
 
-          {/* Marca (solo movil; en escritorio vive en el sidebar). */}
-          <div className="md:hidden">
-            <Wordmark />
-          </div>
-
-          {/* Pestañas de la sección (o título de página plana) + acciones, donde antes estaban
-              los breadcrumbs. Vive a altura completa del header para que el subrayado de la
-              pestaña activa muerda el borde inferior de la barra. Recibe los huecos por props
-              (no consume el contexto): el Provider solo envuelve al `<Outlet/>`, que es quien
-              portaliza título/acciones a estos huecos. */}
+          {/* Sección (dropdown del hub o título de página plana) + acciones, donde antes
+              estaban los breadcrumbs. Recibe los huecos por props (no consume el contexto):
+              el Provider solo envuelve al `<Outlet/>`, que es quien portaliza título/acciones
+              a estos huecos. */}
           <EncabezadoSeccion refInicio={setSlotInicio} refAcciones={setSlotAcciones} />
 
-          {/* Filtros y workspace a la derecha de la topbar. Los switches GLOBALES mandan
-              en toda la consola: la MARCA filtra implícitamente lo que se ve (deriva del
-              perfil, ver SwitchMarca); RED y LÍNEA filtran la superficie de contenido/feed
-              y solo se pintan en sus rutas (SwitchFiltrosContenido decide su visibilidad). */}
+          {/* A la derecha de la topbar: el control de CONTEXTO unificado (marca + red + línea
+              en un solo dropdown; los filtros de red/línea solo se ofrecen en sus rutas) y las
+              notificaciones. */}
           <div className="ml-auto flex items-center gap-2">
-            <SwitchFiltrosContenido />
-            <SwitchMarca />
+            <ControlContexto />
             <CampanaNotificaciones />
           </div>
         </header>
