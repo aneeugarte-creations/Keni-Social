@@ -78,18 +78,22 @@ def test_avance_no_toca_incompletas(entorno, monkeypatch):
     assert repos.obtener_publicacion(sin_copy["id"])["estado"] == "borrador"
 
 
-def test_avance_no_reenvia_devueltas(entorno, monkeypatch):
-    """Una pieza DEVUELTA (ya estuvo en revisión) no se re-envía sola: ese clic es humano.
+def test_avance_reenvia_devueltas_tras_el_reposo(entorno, monkeypatch):
+    """Una pieza DEVUELTA (dos dislikes) vuelve SOLA a la cola pasado el reposo.
 
-    Sin esta guarda, el avance pelearía contra cada rechazo (devuelta → re-enviada en el
-    siguiente barrido, en bucle). El sello `enviado_a_revision_en` sobrevive a la devolución
-    y es la marca de "ya pasó por revisión"."""
+    Decisión de producto (10-jun): "borrador" no es un estado donde vivir — una pieza con
+    contenido completo pertenece a la cola de revisión. El reposo da margen a quien la
+    devolvió para editarla antes de que reaparezca; la cadena se recrea fresca (mismo
+    comportamiento que el re-envío humano)."""
     _encender(monkeypatch)
     pub = _crear_borrador(_cli_usuario())
     repos.actualizar_publicacion(pub["id"], {"enviado_a_revision_en": "2026-06-01T00:00:00"})
 
-    assert _avance.ejecutar_avance() == []
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "borrador"
+    enviadas = _avance.ejecutar_avance()
+    assert [p["id"] for p in enviadas] == [pub["id"]]
+    actual = repos.obtener_publicacion(pub["id"])
+    assert actual["estado"] == "en_revision"
+    assert actual["enviado_a_revision_en"] != "2026-06-01T00:00:00"  # sello re-estampado
 
 
 def test_avance_respeta_reposo(entorno, monkeypatch):

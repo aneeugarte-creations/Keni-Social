@@ -16,9 +16,11 @@ y excluible por marca (`KENI_PIPELINE_AVANCE::<marca>`).
 REGLAS DE SELECCIÓN (`piezas_para_avance`, pura):
   - Estado `borrador` y COMPLETA de verdad: la misma derivación que pinta el feed
     (`etapa_ia == "lista_para_revisar"`, del contenido real, no de flags almacenados).
-  - NUNCA enviada antes (`enviado_a_revision_en` vacío): una pieza DEVUELTA por un
-    revisor conserva su sello y NO se re-envía sola — re-enviarla es decisión humana
-    (si no, el avance pelearía contra cada rechazo).
+  - TAMBIÉN las devueltas: "borrador" no es un estado donde vivir — una pieza completa
+    pertenece a la cola de revisión (decisión de producto, 10-jun). Tras una devolución
+    (dos dislikes) la pieza descansa el REPOSO y vuelve sola a la cola con su cadena
+    fresca, igual que si la re-enviara una persona; quien la devuelve tiene ese margen
+    para editarla (o descartarla) antes de que reaparezca.
   - REPOSO: sin ediciones en los últimos minutos (`_REPOSO_MINUTOS`), para no arrancar
     de las manos una pieza que alguien está editando ahora mismo.
   - Marca no excluida de la etapa.
@@ -70,8 +72,6 @@ def piezas_para_avance(
     for pub in pubs:
         if pub.get("estado") != "borrador":
             continue
-        if str(pub.get("enviado_a_revision_en") or "").strip():
-            continue  # devuelta por un revisor: re-enviarla es decisión humana
         marca = str(pub.get("marca") or "").strip()
         if marca and config.marca_apagada(config.ENV_PIPELINE_AVANCE, marca):
             continue
