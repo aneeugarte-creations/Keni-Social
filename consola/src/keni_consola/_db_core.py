@@ -1147,6 +1147,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         errores_seguidos      INTEGER NOT NULL DEFAULT 0,
         pausado_hasta         TEXT NOT NULL DEFAULT '',
         desactivado_auto      INTEGER NOT NULL DEFAULT 0,
+        ultimo_filtrados      INTEGER NOT NULL DEFAULT 0,
         creado                TEXT NOT NULL DEFAULT ''
     )
     """,
@@ -2820,6 +2821,9 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # acumula `KENI_INGESTA_MAX_ERRORES` errores seguidos. Distingue "muerto por el motor" de
     # "apagado a mano" para poder reactivarlo desde /salud. En éxito se resetea.
     ("desactivado_auto", "INTEGER NOT NULL DEFAULT 0"),
+    # FILTRO DE ENTRADA por vocabulario de marca: cuántos items descartó el último sondeo por
+    # no casar la agenda de la marca (observabilidad del filtro de la puerta en /salud).
+    ("ultimo_filtrados", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()

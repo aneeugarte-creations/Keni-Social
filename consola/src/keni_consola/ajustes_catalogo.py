@@ -528,6 +528,17 @@ def _construir_catalogo() -> list[Ajuste]:
         ),
         # --- Ingesta (Ola A) ------------------------------------------------------ #
         Ajuste(
+            clave=config.ENV_INGESTA_FILTRO,
+            tipo="bool",
+            etiqueta="Ingesta: filtro de entrada por agenda de marca",
+            ayuda="Un feed asignado a una marca solo archiva artículos que casan al menos un "
+            "término del vocabulario de esa marca (el resto ni entra al pool). Exentos: feeds "
+            "propios, feeds compartidos sin marca y marcas sin vocabulario. Lo filtrado se "
+            "cuenta por sondeo en Salud de fuentes.",
+            grupo="noticias_motor",
+            defecto=True,
+        ),
+        Ajuste(
             clave=config.ENV_INGESTA_BATCH,
             tipo="int",
             etiqueta="Ingesta: feeds por barrido",

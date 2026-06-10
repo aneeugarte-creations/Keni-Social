@@ -155,6 +155,38 @@ def items_de_feed(
 
 
 # --------------------------------------------------------------------------- #
+# Filtro de relevancia en la ENTRADA (garbage in → garbage out)                 #
+# --------------------------------------------------------------------------- #
+
+
+def filtrar_por_vocabulario(
+    items: list[dict[str, Any]], palabras: frozenset[str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Separa los items que CASAN el vocabulario de su marca de los que no. PURA.
+
+    El filtro de la PUERTA: un feed asignado a una marca puede traer de todo (agregadores,
+    Google News, secciones mixtas); archivar lo que no casa NI UNA palabra de la agenda de la
+    marca solo satura el pool y el panel (y desde ahí compite por promoción). Devuelve
+    `(aptos, descartados)`; el llamante persiste los aptos y CUENTA los descartados (no se
+    archivan: el dato observable es el conteo por sondeo).
+
+    Conservador a propósito: basta UNA coincidencia (título o resumen) para entrar; con
+    vocabulario VACÍO no filtra nada (honesto: sin agenda definida no hay criterio). El
+    clustering aguas abajo sigue puntuando la relevancia GRADUADA; esto solo corta el cero.
+    """
+    if not palabras or not items:
+        return list(items), []
+    from . import clustering  # import local: clustering importa de este módulo (lazy)
+
+    aptos: list[dict[str, Any]] = []
+    descartados: list[dict[str, Any]] = []
+    for it in items:
+        s, _casadas = clustering.relevancia_marca_detalle(it, palabras)
+        (aptos if s > 0.0 else descartados).append(it)
+    return aptos, descartados
+
+
+# --------------------------------------------------------------------------- #
 # Pool único (Ola E): unificar TODAS las notas en `noticias_items`             #
 # --------------------------------------------------------------------------- #
 #

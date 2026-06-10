@@ -37,6 +37,7 @@ _COLS_FUENTE_RSS = (
     "errores_seguidos",
     "pausado_hasta",
     "desactivado_auto",
+    "ultimo_filtrados",
     "creado",
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
@@ -74,6 +75,8 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "pausado_hasta": fila["pausado_hasta"] or "",
         # Auto-desactivado por el motor (Ola D): True si el daemon lo apagó por errores seguidos.
         "desactivado_auto": bool(fila["desactivado_auto"]),
+        # Filtro de ENTRADA por vocabulario de marca: items descartados en el último sondeo.
+        "ultimo_filtrados": int(fila["ultimo_filtrados"] or 0),
     }
 
 
@@ -171,6 +174,7 @@ def crear_fuente_rss(
         "errores_seguidos": 0,
         "pausado_hasta": "",
         "desactivado_auto": 0,
+        "ultimo_filtrados": 0,
         "creado": ahora,
     }
     con = _conectar()
@@ -652,6 +656,7 @@ def registrar_sondeo_feed(
     pausado_hasta: str = "",
     activo: bool | None = None,
     desactivado_auto: bool | None = None,
+    filtrados: int = 0,
 ) -> None:
     """Anota el resultado de un sondeo de feed (salud + planificación). Best-effort.
 
@@ -667,6 +672,7 @@ def registrar_sondeo_feed(
     asignaciones = [
         "ultima_actualizacion = ?", "ultimo_conteo = ?", "ultimo_error = ?",
         "proximo_sondeo = ?", "errores_seguidos = ?", "pausado_hasta = ?",
+        "ultimo_filtrados = ?",
     ]
     params: list[Any] = [
         ahora_iso(),
@@ -675,6 +681,7 @@ def registrar_sondeo_feed(
         proximo_sondeo or "",
         int(errores_seguidos or 0),
         pausado_hasta or "",
+        int(filtrados or 0),
     ]
     if activo is not None:
         asignaciones.append("activo = ?")

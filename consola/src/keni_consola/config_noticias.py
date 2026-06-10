@@ -130,6 +130,25 @@ def ingesta_max_items() -> int:
     return _entero(ENV_INGESTA_MAX_ITEMS, INGESTA_MAX_ITEMS_DEF, minimo=1)
 
 
+# FILTRO DE ENTRADA por vocabulario de marca (la puerta del pool). Def ON: un feed asignado a
+# una marca solo archiva items que casan >= 1 término de la agenda de esa marca. Exentos los
+# feeds PROPIOS, los compartidos (sin marca) y las marcas sin vocabulario (sin criterio no se
+# filtra). Lo descartado se CUENTA por sondeo (`ultimo_filtrados`, visible en /salud).
+ENV_INGESTA_FILTRO = "KENI_INGESTA_FILTRO"
+
+
+def ingesta_filtro_activo() -> bool:
+    """True si el filtro de ENTRADA por vocabulario está activo (`KENI_INGESTA_FILTRO`, def ON).
+
+    Def ON (a diferencia de las etapas IA): no gasta recursos ni borra nada ya archivado, solo
+    deja de ARCHIVAR ruido nuevo. `0`/`no`/`off` lo apaga (se archiva todo, como antes).
+    """
+    crudo = _crudo(ENV_INGESTA_FILTRO).lower()
+    if not crudo:
+        return True
+    return crudo not in _FALSOS
+
+
 # Cadencia por categoría: env var + defecto de cada una (segundos), para el accesor genérico.
 _INGESTA_INTERVALOS: dict[str, tuple[str, int]] = {
     "breaking": (ENV_INGESTA_INTERVALO_BREAKING, INGESTA_INTERVALO_BREAKING_DEF),

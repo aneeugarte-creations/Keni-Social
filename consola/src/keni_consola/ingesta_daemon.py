@@ -737,13 +737,38 @@ def ejecutar_barrido() -> dict[str, Any]:
             )
 
         max_errores = config.ingesta_max_errores()
+        filtro_activo = config.ingesta_filtro_activo()
+        perfil_activo = config.perfil_editorial_activo()
+        vocab_cache: dict[str, frozenset[str]] = {}  # 1 lectura de vocabulario por marca/barrido
         items_nuevos = 0
+        items_filtrados = 0
         errores = 0
         auto_desactivados = 0
         for feed, items, salud in resultados:
             hubo_error = bool(salud.get("error"))
             if hubo_error:
                 errores += 1
+            # FILTRO DE ENTRADA (la puerta del pool): un feed asignado a una marca solo archiva
+            # items que casan la agenda de esa marca (>= 1 término del vocabulario, el MISMO que
+            # usa el ranking). Exentos: feeds PROPIOS (su contenido ES la marca), feeds sin
+            # marca (compartidos/agencias) y marcas sin vocabulario (sin criterio no se filtra).
+            # Lo descartado NO se archiva: se CUENTA por sondeo (observable en /salud).
+            filtrados = 0
+            marca_feed = str(feed.get("marca") or "")
+            if items and filtro_activo and marca_feed and not feed.get("propia"):
+                if marca_feed not in vocab_cache:
+                    vocab_cache[marca_feed] = _palabras_relevancia(marca_feed, perfil_activo)
+                try:
+                    items, descartados = ingesta.filtrar_por_vocabulario(
+                        items, vocab_cache[marca_feed]
+                    )
+                    filtrados = len(descartados)
+                    items_filtrados += filtrados
+                except Exception:  # noqa: BLE001 -- ante un fallo del filtro, se archiva todo (fail-open:
+                    # perder cobertura es peor que archivar ruido; el listón aguas abajo contiene el coste)
+                    _log.exception(
+                        "ingesta_daemon: fallo el filtro de entrada del feed %s.", feed.get("id")
+                    )
             insertadas = 0
             if items:
                 try:
@@ -786,6 +811,7 @@ def ejecutar_barrido() -> dict[str, Any]:
                     pausado_hasta=plan["pausado_hasta"],
                     activo=activo,
                     desactivado_auto=desactivado_auto,
+                    filtrados=filtrados,
                 )
             except Exception:  # noqa: BLE001 -- registrar salud es best-effort
                 _log.exception(
@@ -839,16 +865,17 @@ def ejecutar_barrido() -> dict[str, Any]:
             _log.exception("ingesta_daemon: fallo en el paso de traducción.")
 
         _log.info(
-            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s) (%d de agencias), "
-            "%d error(es), %d auto-desactivado(s); clustering: %d item(s), %d historia(s) "
-            "nueva(s); traducción: %d historia(s).",
-            len(feeds), items_nuevos, agencias_resumen["items"], errores, auto_desactivados,
-            cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
+            "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s) (%d de agencias, "
+            "%d filtrados en la entrada), %d error(es), %d auto-desactivado(s); clustering: "
+            "%d item(s), %d historia(s) nueva(s); traducción: %d historia(s).",
+            len(feeds), items_nuevos, agencias_resumen["items"], items_filtrados, errores,
+            auto_desactivados, cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
             trad_resumen["traducidos"],
         )
         return {
             "feeds": len(feeds),
             "items_nuevos": items_nuevos,
+            "items_filtrados": items_filtrados,
             "errores": errores,
             "auto_desactivados": auto_desactivados,
             "agencias": agencias_resumen,

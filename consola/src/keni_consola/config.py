@@ -402,6 +402,9 @@ from .config_jobs import (  # noqa: F401
 )
 from .config_noticias import (  # noqa: F401
     AFP_BASE_URL_DEF,
+    ENV_INGESTA_FILTRO,
+    ENV_PROMOVER_MIN_MARCA,
+    ENV_PROMOVER_MIN_SCORE,
     REUTERS_BASE_URL_DEF,
     afp_base_url,
     afp_client_id,
@@ -422,6 +425,7 @@ from .config_noticias import (  # noqa: F401
     fusion_semantica_max,
     ingesta_activa,
     ingesta_batch,
+    ingesta_filtro_activo,
     ingesta_intervalo_categoria,
     ingesta_max_errores,
     ingesta_max_items,
@@ -433,8 +437,6 @@ from .config_noticias import (  # noqa: F401
     perfil_editorial_activo,
     perfil_editorial_ttl_horas,
     pipeline_activo,
-    ENV_PROMOVER_MIN_MARCA,
-    ENV_PROMOVER_MIN_SCORE,
     pipeline_en_vuelo_max,
     pipeline_max,
     promover_diversidad_umbral,
