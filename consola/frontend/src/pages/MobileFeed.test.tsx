@@ -177,15 +177,21 @@ describe("MobileFeed · feed móvil de revisión", () => {
     expect(screen.queryByRole("button", { name: /^aprobar$/i })).not.toBeInTheDocument();
   });
 
-  it("activa el scroll magnético por pieza mientras está montado y lo revierte al salir", async () => {
+  it("el imán Reels vive en el SCROLLER propio de la pantalla, no en el documento", async () => {
+    // El CSS global bloquea el scroll de html/body (anti rubber-band iOS): un snap puesto
+    // en el documento es INERTE (así se perdió el imán del feed). Contrato: el div raíz
+    // del feed es el scroller (un viewport de alto, scroll interno) y lleva el snap
+    // obligatorio + scroll-padding para la cabecera sticky.
     stubFetch();
-    const { unmount } = renderFeed();
-    await screen.findByText("Feed de revisión");
-    // Estilo Reels/Shorts: snap OBLIGATORIO (una pieza por pantalla, el scroll aterriza
-    // encuadrado en la siguiente). Viable porque cada pieza vive en un slot de un viewport
-    // (las tarjetas largas scrollean por dentro del slot).
-    expect(document.documentElement.style.scrollSnapType).toBe("y mandatory");
-    unmount();
+    renderFeed();
+    const titulo = await screen.findByText("Feed de revisión");
+    const raiz = titulo.closest(".snap-y");
+    expect(raiz).not.toBeNull();
+    expect(raiz!.className).toContain("snap-mandatory");
+    expect(raiz!.className).toContain("h-dvh");
+    expect(raiz!.className).toContain("overflow-y-auto");
+    expect(raiz!.className).toContain("scroll-pt-24");
+    // El documento queda intacto (ya no hay estilos que poner/revertir ahí).
     expect(document.documentElement.style.scrollSnapType).toBe("");
   });
 

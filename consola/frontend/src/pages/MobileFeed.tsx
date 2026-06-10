@@ -258,24 +258,15 @@ export default function MobileFeed() {
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
   const sentinelRef = useSentinelInfinito({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
-  // SCROLL MAGNÉTICO POR PIEZA estilo Reels/Shorts: snap OBLIGATORIO en el documento (el
-  // que hace scroll en esta pantalla) mientras está montada, revertido al salir. Cada pieza
-  // ocupa un SLOT de un viewport (ver el wrapper de la lista): se ve UNA pieza encuadrada y
-  // el scroll aterriza exacto en la siguiente. `mandatory` es viable porque el slot ya no
-  // supera la altura del viewport (las tarjetas largas scrollean POR DENTRO de su slot; el
-  // gesto encadena al feed al llegar al borde). `proximity` perdía el imán a mitad de
-  // tarjeta. `scrollPaddingTop` deja sitio a la cabecera sticky (~2 filas compactas).
-  React.useEffect(() => {
-    const el = document.documentElement;
-    const prevTipo = el.style.scrollSnapType;
-    const prevPad = el.style.scrollPaddingTop;
-    el.style.scrollSnapType = "y mandatory";
-    el.style.scrollPaddingTop = "6rem";
-    return () => {
-      el.style.scrollSnapType = prevTipo;
-      el.style.scrollPaddingTop = prevPad;
-    };
-  }, []);
+  // SCROLL MAGNÉTICO POR PIEZA estilo Reels/Shorts. OJO: el snap ya NO va en el documento.
+  // El CSS global (index.css) bloquea el scroll de html/body (`overflow: hidden`, para
+  // matar el rubber-band/pull-to-refresh de iOS), así que el documento nunca se mueve y
+  // un scroll-snap puesto ahí es INERTE (así se perdió el imán del feed). Esta pantalla
+  // scrollea en su PROPIO contenedor (`scrollerRef`, el div raíz: overflow-y-auto +
+  // snap-y snap-mandatory + scroll-pt para la cabecera sticky). Cada pieza ocupa un SLOT
+  // de un viewport (ver el wrapper de la lista): se ve UNA pieza encuadrada y el scroll
+  // aterriza exacto en la siguiente; una tarjeta más larga scrollea POR DENTRO de su slot.
+  const scrollerRef = React.useRef<HTMLDivElement | null>(null);
 
   // El spinner del botón Actualizar SOLO en un refresco real, no en cada página del scroll
   // (mismo comportamiento que el feed de escritorio). "Actualizar" = volver arriba + refrescar
@@ -283,7 +274,7 @@ export default function MobileFeed() {
   // superficies solo se marca stale.
   const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
   const refrescar = () => {
-    window.scrollTo(0, 0);
+    scrollerRef.current?.scrollTo(0, 0);
     void queryClient.resetQueries({ queryKey: [...CLAVE_PUBLICACIONES, "feed"] });
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES, refetchType: "none" });
   };
@@ -319,7 +310,13 @@ export default function MobileFeed() {
   );
 
   return (
-    <div className="flex min-h-dvh w-full max-w-full flex-col overflow-x-hidden bg-background">
+    /* SCROLLER PROPIO de la pantalla (el documento está bloqueado por el CSS global):
+       alto fijo de un viewport, scroll vertical interno y el imán Reels aquí mismo
+       (snap-y mandatory + scroll-pt-24 = 6rem de cabecera sticky). */
+    <div
+      ref={scrollerRef}
+      className="flex h-dvh w-full max-w-full snap-y snap-mandatory flex-col overflow-y-auto overflow-x-hidden scroll-pt-24 bg-background"
+    >
       {/* Cabecera sticky COMPACTA (sin fila de título: se va un tercio del viewport en chrome). */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <h1 className="sr-only">Feed de revisión</h1>
