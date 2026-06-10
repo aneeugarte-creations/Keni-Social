@@ -48,6 +48,9 @@ modulos_backend = [
   "noticias",
   "fuentes",
   "insumos",
+  # Cajón Presidencia (Fuentes -> Internas): nota de WhatsApp -> pieza carrusel automática.
+  # Mismo dominio que insumos/evergreen (fuentes internas que producen piezas).
+  "presidencia",
   "algoritmos",
   "pipelines",
   # Patrones editoriales medidos + verificación de voz (ADR 0009): api/patrones.py.
