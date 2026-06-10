@@ -61,8 +61,13 @@ export function PanelOverlay({ doc, marca, capas, onCapas }: PanelOverlayProps) 
   }, [store]);
 
   return (
-    <div className="h-[60vh] min-h-[420px] overflow-hidden rounded-md border border-border">
-      <EditorDocumento store={store} marca={marca} />
+    // En lg+ llena el alto que le da la columna (Video.tsx le pasa flex-1); por debajo, alto
+    // fijo para que el editor no colapse cuando el contenedor apilado no tiene alto definido.
+    <div className="h-[60vh] min-h-[420px] overflow-hidden rounded-md border border-border lg:h-full">
+      {/* `accionesEnCabecera`: el clúster del editor (DESHACER/REHACER, muestra, «Más») se
+          portaliza a la barra de cabecera unificada del shell —mismo sitio que en el Estudio de
+          imagen—, así Deshacer/Rehacer quedan siempre visibles mientras se edita el overlay. */}
+      <EditorDocumento store={store} marca={marca} accionesEnCabecera />
     </div>
   );
 }

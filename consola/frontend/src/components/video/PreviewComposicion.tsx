@@ -52,7 +52,25 @@ export function PreviewComposicion({
   altoMax = 520,
 }: PreviewComposicionProps) {
   const { w, h } = doc.formato;
-  const escala = altoMax / h;
+
+  // Mide el ancho disponible del contenedor para CLAMPAR la escala: sin esto, un formato
+  // horizontal (16:9 a 520px de alto ≈ 924px de ancho) desbordaría la columna de preview.
+  const contRef = React.useRef<HTMLDivElement>(null);
+  const [anchoDisp, setAnchoDisp] = React.useState(0);
+  React.useEffect(() => {
+    const el = contRef.current;
+    if (!el) return;
+    const medir = () => setAnchoDisp(el.clientWidth);
+    medir();
+    // jsdom (tests) no trae ResizeObserver: se queda con la medición inicial sin romper.
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Escala: cabe en `altoMax` de alto Y en el ancho del contenedor (si ya se midió).
+  const escala = Math.min(altoMax / h, anchoDisp > 0 ? anchoDisp / w : Infinity);
   const anchoPx = w * escala;
   const altoPx = h * escala;
 
@@ -68,7 +86,7 @@ export function PreviewComposicion({
   const segActivo = segmentos && segmentos.length > 0 ? segmentoEn(segmentos, tiempo) : null;
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div ref={contRef} className="flex w-full flex-col items-center gap-2">
       <div
         className="relative overflow-hidden rounded-md border border-border bg-black shadow-sm"
         style={{ width: anchoPx, height: altoPx }}

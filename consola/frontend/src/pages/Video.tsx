@@ -366,7 +366,10 @@ export default function Video() {
   const tieneBase = !!baseKey;
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
+    // FULL-BLEED (mismo patrón que Imagen.tsx): anula el padding del `<main>` del shell para
+    // ocupar exactamente el alto bajo la cabecera (h-12 = 3rem). `overflow-hidden` aquí: la
+    // página NUNCA scrollea; el scroll vive DENTRO de cada panel (estilo Canva).
+    <div className="-mx-4 -my-4 flex h-[calc(100dvh-3rem)] flex-col overflow-hidden sm:-mx-6 sm:-my-6 lg:-mx-8">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Video" icono={VideoIcon} />
 
@@ -460,30 +463,36 @@ export default function Video() {
         </div>
       )}
 
-      {/* Cuerpo: controles (izq) + preview (der). El GESTOR ocupa todo el ancho (sin preview). */}
-      <div className="min-h-0 flex-1 overflow-auto">
+      {/* Cuerpo: controles (izq) + preview (der). El GESTOR ocupa todo el ancho (sin preview).
+          El padre NO scrollea (overflow-hidden); cada panel scrollea por dentro. */}
+      <div className="min-h-0 flex-1 overflow-hidden">
         {seccion === "gestor" ? (
-          <div className="mx-auto max-w-4xl space-y-3 p-4 sm:p-6">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-foreground">Mis composiciones</h2>
-              <button
-                type="button"
-                onClick={nuevaComposicion}
-                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent/60"
-              >
-                Nueva composición
-              </button>
+          <div className="h-full overflow-y-auto">
+            <div className="mx-auto max-w-4xl space-y-3 p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-foreground">Mis composiciones</h2>
+                <button
+                  type="button"
+                  onClick={nuevaComposicion}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent/60"
+                >
+                  Nueva composición
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Reabre una composición para seguir editándola o gestionar sus subtítulos. El estado
+                de subtítulos y el video adjunto a la pieza se muestran por fila.
+              </p>
+              <GestorComposiciones marca={marca} onAbrir={abrirComposicion} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Reabre una composición para seguir editándola o gestionar sus subtítulos. El estado de
-              subtítulos y el video adjunto a la pieza se muestran por fila.
-            </p>
-            <GestorComposiciones marca={marca} onAbrir={abrirComposicion} />
           </div>
         ) : (
-        <div className="mx-auto grid max-w-6xl gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        // En lg+ el grid llena el alto disponible y CADA columna scrollea por separado (Canva:
+        // paneles con scroll interno, página quieta). Por debajo de lg las columnas se apilan y
+        // scrollea este contenedor (un solo scroll interno, nunca el de la página).
+        <div className="mx-auto grid h-full w-full max-w-6xl gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:overflow-hidden">
           {/* Columna de controles según la sección */}
-          <section className="min-w-0 space-y-4">
+          <section className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
             {seccion === "base" && (
               <>
                 <div>
@@ -510,20 +519,24 @@ export default function Video() {
                   Logos, marcos de marca, imagen-in-video y textos. Se sobreimprimen sobre el video
                   (el render rasteriza estas capas y las compone con FFmpeg).
                 </p>
-                <React.Suspense
-                  fallback={
-                    <div className="flex h-[60vh] min-h-[420px] items-center justify-center rounded-md border border-border text-sm text-muted-foreground">
-                      Cargando editor de capas…
-                    </div>
-                  }
-                >
-                  <PanelOverlay
-                    doc={doc}
-                    marca={marca}
-                    capas={pistaOverlayCapas(doc)}
-                    onCapas={(capas) => mutar((d) => setCapasOverlay(d, capas))}
-                  />
-                </React.Suspense>
+                {/* En lg+ el editor LLENA el alto restante de la columna (flex-1); por debajo
+                    conserva un alto fijo (la columna apilada scrollea). */}
+                <div className="min-h-0 lg:flex-1">
+                  <React.Suspense
+                    fallback={
+                      <div className="flex h-[60vh] min-h-[420px] items-center justify-center rounded-md border border-border text-sm text-muted-foreground lg:h-full">
+                        Cargando editor de capas…
+                      </div>
+                    }
+                  >
+                    <PanelOverlay
+                      doc={doc}
+                      marca={marca}
+                      capas={pistaOverlayCapas(doc)}
+                      onCapas={(capas) => mutar((d) => setCapasOverlay(d, capas))}
+                    />
+                  </React.Suspense>
+                </div>
               </>
             )}
 
@@ -574,8 +587,9 @@ export default function Video() {
             )}
           </section>
 
-          {/* Columna de preview (persistente) */}
-          <aside className="space-y-2 lg:sticky lg:top-0">
+          {/* Columna de preview (persistente). Scrollea por dentro si no cabe; el preview se
+              clampa al ancho de la columna (no desborda en horizontal). */}
+          <aside className="min-w-0 space-y-2 lg:min-h-0 lg:overflow-y-auto">
             <h2 className="text-sm font-semibold text-foreground">Vista previa</h2>
             <PreviewComposicion
               doc={doc}
