@@ -435,6 +435,27 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=1,
         ),
         Ajuste(
+            clave=config.ENV_NOTICIAS_TTL_H,
+            tipo="int",
+            etiqueta="Noticias: caducidad del pool (horas)",
+            ayuda="Una historia nueva sin actividad en estas horas CADUCA sola (pasa a "
+            "descartada: sale del panel y de la producción automática; lo usado nunca caduca). "
+            "El feed es perecedero: lo viejo no debe competir con lo de hoy. 0 = sin caducidad.",
+            grupo="tuning",
+            defecto=config.NOTICIAS_TTL_H_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_NOTICIAS_RETENCION_H,
+            tipo="int",
+            etiqueta="Noticias: retención de lo caducado (horas)",
+            ayuda="Lo caducado sin usar se BORRA definitivamente tras estas horas (techo del "
+            "archivo: el pool no crece sin límite). 0 = no borrar nunca (solo caducar).",
+            grupo="tuning",
+            defecto=config.NOTICIAS_RETENCION_H_DEF,
+            minimo=0,
+        ),
+        Ajuste(
             clave=config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
             tipo="int",
             etiqueta="Perfil editorial: refresco (horas)",

@@ -302,6 +302,77 @@ def purgar_pool_irrelevante(
         con.close()
 
 
+def caducar_pool(
+    *, ttl_horas: int, retencion_horas: int = 0
+) -> dict[str, int]:
+    """CADUCIDAD del pool: lo viejo expira SOLO (TTL), y lo expirado se purga tras la retención.
+
+    Complementa al GC por relevancia (`purgar_pool_irrelevante`, que es selectivo y gateado):
+    esto es el RELOJ del feed — un feed de noticias es perecedero por diseño.
+
+      1. TTL (soft): historias `estado='nuevo'`, SIN `contenido_id`, sin actividad en
+         `ttl_horas` (su `ultimo_visto` —o `creado` si nunca vieron item— quedó atrás)
+         pasan a `estado='descartado'`: salen del panel, del ranking y de la promoción.
+         REVERSIBLE (es un estado) y conservador: lo usado/ligado al tablero NUNCA caduca.
+      2. RETENCIÓN (hard): historias `descartado` SIN `contenido_id` y sin actividad en
+         `retencion_horas` se BORRAN junto a sus items, y los items sueltos `nuevo` sin
+         contenido más viejos que la retención también (el archivo no crece sin techo).
+         `retencion_horas=0` desactiva el borrado (solo TTL).
+
+    `ttl_horas <= 0` = no-op total. Devuelve `{caducadas, purgadas, items_purgados}`.
+    """
+    if int(ttl_horas) <= 0:
+        return {"caducadas": 0, "purgadas": 0, "items_purgados": 0}
+    ahora = datetime.now(UTC)
+    corte_ttl = iso_utc(ahora - timedelta(hours=int(ttl_horas)))
+    con = _conectar()
+    try:
+        cur_ttl = con.execute(
+            "UPDATE noticias_clusters SET estado = 'descartado', actualizado = ? "
+            "WHERE estado = 'nuevo' AND (contenido_id IS NULL OR contenido_id = '') "
+            "AND ((ultimo_visto <> '' AND ultimo_visto < ?) "
+            "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))",
+            (ahora_iso(), corte_ttl, corte_ttl),
+        )
+        purgadas = 0
+        items_purgados = 0
+        if int(retencion_horas) > 0:
+            corte_ret = iso_utc(ahora - timedelta(hours=int(retencion_horas)))
+            # Items de las historias a purgar (la historia se borra con TODO su rastro).
+            cond_purga = (
+                "estado = 'descartado' AND (contenido_id IS NULL OR contenido_id = '') "
+                "AND ((ultimo_visto <> '' AND ultimo_visto < ?) "
+                "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))"
+            )
+            cur_items = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
+                "DELETE FROM noticias_items WHERE cluster_id IN "
+                f"(SELECT id FROM noticias_clusters WHERE {cond_purga})",
+                (corte_ret, corte_ret),
+            )
+            items_purgados += cur_items.rowcount or 0
+            cur_purga = con.execute(  # noqa: S608 -- idem
+                f"DELETE FROM noticias_clusters WHERE {cond_purga}", (corte_ret, corte_ret)
+            )
+            purgadas = cur_purga.rowcount or 0
+            # Items SUELTOS (sin cluster) `nuevo` sin contenido más viejos que la retención:
+            # nunca volverán a clusterizar (fuera de la ventana) ni a usarse; techo del archivo.
+            cur_sueltos = con.execute(
+                "DELETE FROM noticias_items WHERE cluster_id = '' AND estado = 'nuevo' "
+                "AND (contenido_id IS NULL OR contenido_id = '') "
+                "AND capturado_en <> '' AND capturado_en < ?",
+                (corte_ret,),
+            )
+            items_purgados += cur_sueltos.rowcount or 0
+        con.commit()
+        return {
+            "caducadas": cur_ttl.rowcount or 0,
+            "purgadas": purgadas,
+            "items_purgados": items_purgados,
+        }
+    finally:
+        con.close()
+
+
 def borrar_noticia_cluster(cluster_id: str) -> bool:
     """Borra la fila de un cluster (historia). True si existía. Best-effort, sin cascada.
 

@@ -25,7 +25,10 @@ def ejecutar_barrido() -> dict[str, Any]:
     """Un barrido de GC del pool: purga el ruido de baja relevancia con los umbrales vivos.
 
     Best-effort: `repos.purgar_pool_irrelevante` es una operación atómica (commit único) y
-    devuelve los conteos. Devuelve `{clusters, items, dry_run}`.
+    devuelve los conteos. Pasa ADEMÁS la caducidad por edad (`repos.caducar_pool`: TTL +
+    retención) para que el pool envejezca aunque el daemon de ingesta esté apagado (en
+    instalaciones con la ingesta viva, su propio paso de caducidad ya lo hace; repetirla es
+    idempotente). Devuelve `{clusters, items, dry_run, caducidad}`.
     """
     resumen = repos.purgar_pool_irrelevante(
         score_umbral=config.noticias_gc_score_umbral(),
@@ -36,7 +39,21 @@ def ejecutar_barrido() -> dict[str, Any]:
             "noticias_gc: purgadas %d historia(s) y %d item(s) de baja relevancia.",
             resumen.get("clusters", 0), resumen.get("items", 0),
         )
-    return resumen
+    try:
+        caducidad = repos.caducar_pool(
+            ttl_horas=config.noticias_ttl_horas(),
+            retencion_horas=config.noticias_retencion_horas(),
+        )
+    except Exception:  # noqa: BLE001 -- la caducidad es aditiva; no invalida la purga
+        _log.exception("noticias_gc: fallo la caducidad por edad del pool.")
+        caducidad = {"caducadas": 0, "purgadas": 0, "items_purgados": 0}
+    if caducidad.get("caducadas") or caducidad.get("purgadas"):
+        _log.info(
+            "noticias_gc: caducidad: %d historia(s) caducada(s), %d purgada(s), %d item(s).",
+            caducidad.get("caducadas", 0), caducidad.get("purgadas", 0),
+            caducidad.get("items_purgados", 0),
+        )
+    return {**resumen, "caducidad": caducidad}
 
 
 def _intervalo_segundos() -> float:

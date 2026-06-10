@@ -367,6 +367,28 @@ def noticias_gc_inactividad_horas() -> int:
     )
 
 
+# CADUCIDAD del pool (TTL + retención): a diferencia del GC por relevancia (selectivo y
+# gateado, def OFF), la caducidad es el RELOJ del feed y va encendida por defecto — una
+# noticia sin actividad en días no es feed, es archivo muerto. El TTL solo cambia ESTADO
+# (reversible); la retención sí borra (lo ya caducado, tras un margen largo).
+ENV_NOTICIAS_TTL_H = "KENI_NOTICIAS_TTL_H"
+NOTICIAS_TTL_H_DEF = 72  # = vida de la frescura del score: sin frescura, fuera del feed
+ENV_NOTICIAS_RETENCION_H = "KENI_NOTICIAS_RETENCION_H"
+NOTICIAS_RETENCION_H_DEF = 336  # 14 días: margen sobrado para auditar qué caducó
+
+
+def noticias_ttl_horas() -> int:
+    """Horas sin actividad para que una historia `nuevo` no usada CADUQUE sola
+    (`KENI_NOTICIAS_TTL_H`, def 72; 0 = sin caducidad). Soft: pasa a `descartado`."""
+    return _entero(ENV_NOTICIAS_TTL_H, NOTICIAS_TTL_H_DEF, minimo=0)
+
+
+def noticias_retencion_horas() -> int:
+    """Horas tras las que lo CADUCADO sin usar se borra de verdad (techo del archivo)
+    (`KENI_NOTICIAS_RETENCION_H`, def 336 = 14 días; 0 = no borrar nunca)."""
+    return _entero(ENV_NOTICIAS_RETENCION_H, NOTICIAS_RETENCION_H_DEF, minimo=0)
+
+
 # --------------------------------------------------------------------------- #
 # Perfil editorial por marca (Haiku desde libtexto) — Fase 2                    #
 # --------------------------------------------------------------------------- #

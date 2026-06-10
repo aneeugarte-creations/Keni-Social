@@ -678,3 +678,30 @@ def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(mon
         fuentes_baja=frozenset(), perfil_activo=False, ahora=datetime.now(UTC),
     )
     assert fusionado is False  # nada que fundir: la única absorbible ya fue promovida
+
+
+# --------------------------------------------------------------------------- #
+# paso_caducidad: el pool envejece SOLO (TTL) dentro del barrido de ingesta     #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_caducidad_llama_con_los_umbrales_vivos(monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(ingesta_daemon.repos, "caducar_pool",
+                        lambda **kw: llamadas.append(kw) or {"caducadas": 2, "purgadas": 1, "items_purgados": 3})
+    monkeypatch.setattr(ingesta_daemon.config, "noticias_ttl_horas", lambda: 48)
+    monkeypatch.setattr(ingesta_daemon.config, "noticias_retencion_horas", lambda: 240)
+
+    resumen = ingesta_daemon.paso_caducidad(forzar=True)
+
+    assert resumen == {"caducadas": 2, "purgadas": 1, "items_purgados": 3}
+    assert llamadas == [{"ttl_horas": 48, "retencion_horas": 240}]
+
+
+def test_paso_caducidad_va_throttled(monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(ingesta_daemon.repos, "caducar_pool",
+                        lambda **kw: llamadas.append(kw) or {"caducadas": 0, "purgadas": 0, "items_purgados": 0})
+    ingesta_daemon.paso_caducidad(forzar=True)   # corre y sella el throttle
+    ingesta_daemon.paso_caducidad()              # dentro del intervalo: no corre
+    assert len(llamadas) == 1

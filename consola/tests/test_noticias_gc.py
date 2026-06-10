@@ -91,3 +91,61 @@ def test_purga_items_huerfanos_viejos(entorno):
     claves = {it["clave"] for it in items}
     assert "k-viejo" not in claves
     assert "k-nuevo" in claves
+
+
+# --------------------------------------------------------------------------- #
+# CADUCIDAD del pool por edad (`db_noticias.caducar_pool`): TTL + retención    #
+# --------------------------------------------------------------------------- #
+
+
+def test_caducar_pool_expira_lo_viejo_y_conserva_lo_vivo(entorno):
+    """Una historia `nuevo` sin actividad en el TTL caduca (descartado); lo usado/reciente no."""
+    _cluster("vieja", ultimo_visto=_VIEJO, score=0.9, n_fuentes=3)  # ni el score alto la salva
+    _cluster("reciente", ultimo_visto=_ahora())
+    _cluster("usada", ultimo_visto=_VIEJO, estado="usado")
+    _cluster("ligada", ultimo_visto=_VIEJO, contenido_id="c123")
+
+    resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=0)
+
+    assert resumen["caducadas"] == 1
+    assert repos.obtener_noticia_cluster("vieja")["estado"] == "descartado"
+    assert repos.obtener_noticia_cluster("reciente")["estado"] == "nuevo"
+    assert repos.obtener_noticia_cluster("usada")["estado"] == "usado"
+    assert repos.obtener_noticia_cluster("ligada")["estado"] == "nuevo"  # ligada al tablero
+
+
+def test_caducar_pool_ttl_cero_es_noop(entorno):
+    _cluster("vieja", ultimo_visto=_VIEJO)
+    assert repos.caducar_pool(ttl_horas=0) == {
+        "caducadas": 0, "purgadas": 0, "items_purgados": 0,
+    }
+    assert repos.obtener_noticia_cluster("vieja")["estado"] == "nuevo"
+
+
+def test_caducar_pool_retencion_purga_lo_caducado_con_sus_items(entorno):
+    """Lo `descartado` sin usar y sin actividad en la retención se borra, con sus items."""
+    _cluster("caducada", ultimo_visto=_VIEJO, estado="descartado")
+    _cluster("caducada_fresca", ultimo_visto=_ahora(), estado="descartado")  # descartada a mano hoy
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "Item de la caducada", "clave": "k1",
+         "cluster_id": "caducada", "capturado_en": _VIEJO},
+        # Item SUELTO viejo (sin cluster): también es techo del archivo.
+        {"fuente_id": "f", "titulo": "Suelto viejo", "clave": "k2",
+         "cluster_id": "", "capturado_en": _VIEJO},
+    ])
+
+    resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=336)
+
+    assert resumen["purgadas"] == 1
+    assert resumen["items_purgados"] == 2  # el del cluster + el suelto viejo
+    assert repos.obtener_noticia_cluster("caducada") is None
+    assert repos.obtener_noticia_cluster("caducada_fresca") is not None  # dentro de la retención
+    items, _ = repos.listar_noticias_items(limite=500)
+    assert {it["clave"] for it in items} == set()
+
+
+def test_caducar_pool_retencion_cero_no_borra(entorno):
+    _cluster("caducada", ultimo_visto=_VIEJO, estado="descartado")
+    resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=0)
+    assert resumen["purgadas"] == 0
+    assert repos.obtener_noticia_cluster("caducada") is not None

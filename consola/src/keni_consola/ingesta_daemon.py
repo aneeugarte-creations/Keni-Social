@@ -671,6 +671,40 @@ def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str,
     return {"traducidos": traducidos, "candidatos": len(candidatos)}
 
 
+# Caducidad del pool (TTL): como mucho una pasada cada tantos segundos (la caducidad se mide
+# en horas; pasarla en cada tick de 30s sería ruido de BD sin efecto).
+_CADUCIDAD_INTERVALO_SEG = 900.0
+_ultima_caducidad = 0.0  # time.monotonic() de la última pasada completada
+
+
+def paso_caducidad(*, forzar: bool = False) -> dict[str, Any]:
+    """Caduca el pool por edad (TTL) y purga lo caducado tras la retención. Best-effort, THROTTLED.
+
+    El feed es perecedero POR DISEÑO: una historia `nuevo` sin actividad en `KENI_NOTICIAS_TTL_H`
+    (def 72h, la vida de la frescura del score) caduca sola a `descartado` (sale del panel, del
+    ranking y de la promoción; lo usado nunca caduca), y lo caducado sin usar se borra tras
+    `KENI_NOTICIAS_RETENCION_H` (def 14 días). Corre DENTRO del barrido de ingesta: donde se
+    construye el feed, se limpia el feed (no depende de que el GC por relevancia esté encendido).
+    La lógica vive en `db_noticias.caducar_pool`; aquí solo el throttle y el log.
+    """
+    global _ultima_caducidad
+    ahora_mono = time.monotonic()
+    if not forzar and _ultima_caducidad and (ahora_mono - _ultima_caducidad) < _CADUCIDAD_INTERVALO_SEG:
+        return {"caducadas": 0, "purgadas": 0, "items_purgados": 0}
+    resumen = repos.caducar_pool(
+        ttl_horas=config.noticias_ttl_horas(),
+        retencion_horas=config.noticias_retencion_horas(),
+    )
+    _ultima_caducidad = ahora_mono
+    if resumen["caducadas"] or resumen["purgadas"] or resumen["items_purgados"]:
+        _log.info(
+            "ingesta_daemon: caducidad del pool: %d historia(s) caducada(s), %d purgada(s), "
+            "%d item(s) purgado(s).",
+            resumen["caducadas"], resumen["purgadas"], resumen["items_purgados"],
+        )
+    return resumen
+
+
 # Agencias CONFIGURADAS a sondear en cada barrido. Lista fija para el piloto (no hay config
 # per-marca ni env de "qué agencias"); `agencias.traer_items` degrada honesto a `[]` sin
 # credencial, así que sondear una agencia no configurada es un no-op sin red ni coste.
@@ -863,6 +897,13 @@ def ejecutar_barrido() -> dict[str, Any]:
             trad_resumen = paso_traduccion()
         except Exception:  # noqa: BLE001 -- la traducción es aditiva; nunca tumba la ingesta
             _log.exception("ingesta_daemon: fallo en el paso de traducción.")
+
+        # Paso de CADUCIDAD (TTL): lo viejo expira solo y lo caducado se purga tras la retención.
+        # Throttled (1 pasada / 15 min) y best-effort: nunca tumba la ingesta.
+        try:
+            paso_caducidad()
+        except Exception:  # noqa: BLE001 -- la caducidad es aditiva; nunca tumba la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de caducidad.")
 
         _log.info(
             "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s) (%d de agencias, "
