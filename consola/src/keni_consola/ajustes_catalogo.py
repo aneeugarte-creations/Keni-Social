@@ -21,6 +21,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import ajustes, config, marcas
+from .dominio.clustering import (
+    LISTON_MIN_MARCA_DEF as _LISTON_MIN_MARCA_DEF,
+    LISTON_MIN_SCORE_DEF as _LISTON_MIN_SCORE_DEF,
+)
 
 # Conjuntos de verdad/falsedad para flags (mismos que `config`, fuente del parseo de bool).
 _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
@@ -440,6 +444,33 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=2,
         ),
         # --- Ranking de noticias · jerarquización del pool (grupo `noticias_ranking`) ----- #
+        # LISTÓN de producción automática: el panel lista TODO el pool jerarquizado, pero promover
+        # una historia a tema dispara QA+copy (claude -p: coste real de tokens). Estos dos umbrales
+        # son ese listón (la regla vive en `dominio.clustering.evaluar_liston`, explicable).
+        Ajuste(
+            clave=config.ENV_PROMOVER_MIN_SCORE,
+            tipo="float",
+            etiqueta="Listón auto-producción: score mínimo",
+            ayuda="Una historia solo dispara producción automática (QA + copy con IA, que consume "
+            "tokens) si su score recalculado alcanza esto. Las que no llegan se quedan en el pool, "
+            "visibles y usables a mano. 0 = sin listón de score. [0-1].",
+            grupo="noticias_ranking",
+            defecto=_LISTON_MIN_SCORE_DEF,
+            minimo=0,
+            maximo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_PROMOVER_MIN_MARCA,
+            tipo="float",
+            etiqueta="Listón auto-producción: encaje de marca mínimo",
+            ayuda="Encaje mínimo con el vocabulario de la marca (0.2 ≈ 1 término en el título). "
+            "Evita auto-producir historias que no van con la línea de la marca. Exentas: las "
+            "curadas por el equipo y las breaking corroboradas. 0 = sin listón de marca. [0-1].",
+            grupo="noticias_ranking",
+            defecto=_LISTON_MIN_MARCA_DEF,
+            minimo=0,
+            maximo=1,
+        ),
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
         # daemon, modula el ranking. Debajo, los pesos de la combinación lineal del score.
         Ajuste(

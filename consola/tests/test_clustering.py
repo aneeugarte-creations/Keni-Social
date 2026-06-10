@@ -249,6 +249,128 @@ def test_puntuar_senal_rendimiento_con_peso_sube_el_score():
 
 
 # --------------------------------------------------------------------------- #
+# puntuar_detalle: la explicación estructurada del score                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_puntuar_detalle_desglosa_las_senales_y_las_palabras():
+    pal = frozenset({"sismo", "cdmx"})
+    cl = _cluster(
+        n_fuentes=3, senal=1000, breaking=1,
+        titulo="Sismo de 6.1 sacude la CDMX", ultimo_visto=_T0.isoformat(),
+    )
+    score, razon, desglose = clustering.puntuar_detalle(cl, palabras_marca=pal, ahora=_T0)
+    assert clustering.puntuar(cl, palabras_marca=pal, ahora=_T0) == (score, razon)  # wrapper fiel
+    assert set(desglose) == {
+        "corroboracion", "frescura", "viralidad", "marca", "rendimiento", "breaking", "palabras",
+    }
+    for senal in ("corroboracion", "frescura", "viralidad", "marca", "rendimiento"):
+        assert 0.0 <= desglose[senal] <= 1.0
+    assert desglose["breaking"] == 1
+    assert desglose["palabras"] == ["cdmx", "sismo"]  # qué del vocabulario casó (explicable)
+    assert "cdmx" in razon  # la razón humana nombra las palabras que casaron
+
+
+def test_puntuar_detalle_casa_vocabulario_pese_a_la_puntuacion():
+    """La tokenización separa por no-alfanuméricos: 'México:' casa el término 'mexico'."""
+    pal = frozenset({"mexico"})
+    _s, _r, desglose = clustering.puntuar_detalle(
+        _cluster(titulo="México: arranca la jornada", ultimo_visto=_T0.isoformat()),
+        palabras_marca=pal, ahora=_T0,
+    )
+    assert desglose["palabras"] == ["mexico"]
+
+
+# --------------------------------------------------------------------------- #
+# evaluar_liston: el listón de producción automática                            #
+# --------------------------------------------------------------------------- #
+
+
+def _cluster_apto(**campos):
+    """Cluster que SUPERA el listón por defecto: fresco, corroborado y con encaje de marca."""
+    base = _cluster(
+        n_fuentes=3, senal=100, ultimo_visto=_T0.isoformat(),
+        titulo="Sismo sacude la CDMX esta mañana", verificacion="corroborada",
+    )
+    base.update(campos)
+    return base
+
+
+_PAL = frozenset({"sismo", "cdmx", "mexico"})
+
+
+def test_liston_supera_con_motivo_explicable():
+    ok, motivo = clustering.evaluar_liston(_cluster_apto(), palabras_marca=_PAL, ahora=_T0)
+    assert ok
+    assert "sismo" in motivo  # el motivo nombra las palabras que casaron
+
+
+def test_liston_rechaza_verificacion_dudosa():
+    ok, motivo = clustering.evaluar_liston(
+        _cluster_apto(verificacion="dudosa"), palabras_marca=_PAL, ahora=_T0
+    )
+    assert not ok
+    assert "dudosa" in motivo
+
+
+def test_liston_rechaza_score_bajo():
+    vieja_sin_senales = _cluster_apto(
+        n_fuentes=1, senal=0, ultimo_visto=(_T0 - timedelta(hours=70)).isoformat()
+    )
+    ok, motivo = clustering.evaluar_liston(vieja_sin_senales, palabras_marca=_PAL, ahora=_T0)
+    assert not ok
+    assert "score" in motivo
+
+
+def test_liston_recalcula_el_score_no_usa_el_persistido():
+    """Un score persistido alto NO cuela: el listón evalúa las señales DE AHORA (envejece)."""
+    vieja = _cluster_apto(
+        score=0.95, n_fuentes=1, senal=0,
+        ultimo_visto=(_T0 - timedelta(hours=70)).isoformat(),
+    )
+    ok, _motivo = clustering.evaluar_liston(vieja, palabras_marca=_PAL, ahora=_T0)
+    assert not ok
+
+
+def test_liston_rechaza_sin_encaje_de_marca():
+    ok, motivo = clustering.evaluar_liston(
+        _cluster_apto(titulo="Celebrity gossip news today"), palabras_marca=_PAL, ahora=_T0
+    )
+    assert not ok
+    assert "marca" in motivo
+
+
+def test_liston_exime_de_marca_a_lo_curado_por_el_equipo():
+    from keni_consola.dominio.ingesta import SENAL_CURADO
+
+    curada = _cluster_apto(titulo="Apunte del equipo sin vocabulario", senal=SENAL_CURADO)
+    ok, _motivo = clustering.evaluar_liston(curada, palabras_marca=_PAL, ahora=_T0)
+    assert ok  # el humano ya decidió: no se le exige vocabulario
+
+
+def test_liston_exime_de_marca_a_breaking_corroborada():
+    breaking = _cluster_apto(titulo="Evento inesperado sin vocabulario aun", breaking=1)
+    ok, _motivo = clustering.evaluar_liston(breaking, palabras_marca=_PAL, ahora=_T0)
+    assert ok  # evento mayor confirmado por varias fuentes a la vez
+
+
+def test_liston_breaking_sin_corroborar_no_queda_exenta():
+    breaking_unica = _cluster_apto(
+        titulo="Evento inesperado sin vocabulario", breaking=1, verificacion="unica_fuente"
+    )
+    ok, _motivo = clustering.evaluar_liston(breaking_unica, palabras_marca=_PAL, ahora=_T0)
+    assert not ok
+
+
+def test_liston_umbral_cero_desactiva_cada_regla():
+    sin_encaje = _cluster_apto(titulo="Celebrity gossip news today")
+    ok, _ = clustering.evaluar_liston(
+        sin_encaje, palabras_marca=_PAL, min_marca=0.0, ahora=_T0
+    )
+    assert ok  # min_marca=0 apaga el listón de marca (el de score se mantiene)
+
+
+# --------------------------------------------------------------------------- #
 # Auto-verificación por corroboración (Ola D)                                  #
 # --------------------------------------------------------------------------- #
 

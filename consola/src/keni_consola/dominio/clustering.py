@@ -535,36 +535,51 @@ def _relevancia_marca(cluster: dict[str, Any], palabras_marca: frozenset[str]) -
     El texto se normaliza sin acentos para casar 'fútbol' con la keyword 'futbol'. Monótona:
     más coincidencias ⇒ más relevancia (hasta saturar).
     """
+    return relevancia_marca_detalle(cluster, palabras_marca)[0]
+
+
+def relevancia_marca_detalle(
+    cluster: dict[str, Any], palabras_marca: frozenset[str]
+) -> tuple[float, tuple[str, ...]]:
+    """Relevancia de marca [0,1] MÁS las palabras del vocabulario que casaron (explicable).
+
+    Misma graduación que `_relevancia_marca` (título a peso pleno, resumen a 0.6, saturación
+    suave a 3 coincidencias). Las `palabras` devueltas son los términos del vocabulario
+    presentes en título o resumen (orden alfabético, sin duplicar): son la EXPLICACIÓN de la
+    señal de marca que la UI/el listón muestran al equipo. PURA y determinista.
+    """
     if not palabras_marca:
-        return 0.0
+        return 0.0, ()
     titulo = _sin_acentos(str(cluster.get("titulo") or ""))
     resumen = _sin_acentos(str(cluster.get("resumen") or ""))
-    n = (
-        _cuenta_coincidencias(titulo, palabras_marca)
-        + _PESO_MARCA_RESUMEN * _cuenta_coincidencias(resumen, palabras_marca)
-    )
+    en_titulo = _coincidencias(titulo, palabras_marca)
+    en_resumen = _coincidencias(resumen, palabras_marca)
+    n = len(en_titulo) + _PESO_MARCA_RESUMEN * len(en_resumen)
     if n <= 0:
-        return 0.0
-    return min(1.0, n / _MARCA_SATURA_COINCIDENCIAS)
+        return 0.0, ()
+    casadas = tuple(sorted(set(en_titulo) | set(en_resumen)))
+    return min(1.0, n / _MARCA_SATURA_COINCIDENCIAS), casadas
 
 
-def _cuenta_coincidencias(texto: str, vocabulario: frozenset[str]) -> int:
-    """Nº de entradas del vocabulario presentes en el texto normalizado.
+def _coincidencias(texto: str, vocabulario: frozenset[str]) -> list[str]:
+    """Entradas del vocabulario presentes en el texto normalizado (orden alfabético).
 
     Tokens sueltos casan por igualdad de token; FRASES por límite de palabra (regex), no por
-    subcadena: 'liga mx' ya no se cuela dentro de otra palabra. Determinista.
+    subcadena: 'liga mx' ya no se cuela dentro de otra palabra. La tokenización separa por
+    NO-alfanuméricos (antes era `split()` y la puntuación pegada — "méxico:" — impedía casar
+    el token "mexico" en titulares reales). Determinista.
     """
     if not texto or not vocabulario:
-        return 0
-    tokens = set(texto.split())
-    n = 0
-    for termino in vocabulario:
+        return []
+    tokens = set(re.findall(r"\w+", texto))
+    casadas: list[str] = []
+    for termino in sorted(vocabulario):
         if " " in termino:
             if re.search(rf"(?<!\w){re.escape(termino)}(?!\w)", texto):
-                n += 1
+                casadas.append(termino)
         elif termino in tokens:
-            n += 1
-    return n
+            casadas.append(termino)
+    return casadas
 
 
 # Umbral por defecto para ASIGNAR marca por vocabulario a una historia sin marca dominante.
@@ -659,6 +674,23 @@ def puntuar(
 ) -> tuple[float, str]:
     """Puntúa una historia para el ranking newsroom. Devuelve `(score, razon)`. PURA.
 
+    Atajo de `puntuar_detalle` para los llamantes que no necesitan el desglose por señal.
+    """
+    score, razon, _desglose = puntuar_detalle(
+        cluster, palabras_marca=palabras_marca, ahora=ahora, pesos=pesos
+    )
+    return score, razon
+
+
+def puntuar_detalle(
+    cluster: dict[str, Any],
+    *,
+    palabras_marca: frozenset[str] = frozenset(),
+    ahora: datetime | None = None,
+    pesos: PesosScore | None = None,
+) -> tuple[float, str, dict[str, Any]]:
+    """Puntúa una historia y EXPLICA el porqué. Devuelve `(score, razon, desglose)`. PURA.
+
     FÓRMULA — score en [0, 1], combinación lineal ponderada de cuatro señales independientes:
 
         score = 0.35 · corroboracion   (n_fuentes distintas, escala log; satura a 6 fuentes)
@@ -672,6 +704,12 @@ def puntuar(
     evita que historias viejas dominen. La viralidad y la marca inclinan el ranking. Es
     MONÓTONA en cada señal: a igualdad de lo demás, más fuentes / más fresca / más señal /
     más relevante ⇒ score mayor (los tests lo verifican). `razon` resume las señales activas.
+
+    `desglose` es la EXPLICACIÓN estructurada (se persiste junto al score, la lee la UI):
+    cada señal CRUDA en [0,1] (`corroboracion`/`frescura`/`viralidad`/`marca`/`rendimiento`),
+    `breaking` (0/1) y `palabras` (los términos del vocabulario de la marca que casaron).
+    Señales crudas, no ponderadas: el desglose explica QUÉ tiene la historia; los pesos
+    (editables en caliente) explican cuánto cuenta cada cosa.
     """
     p = pesos or _PESOS_DEF
     n_fuentes = int(cluster.get("n_fuentes") or 0)
@@ -679,7 +717,7 @@ def puntuar(
     s_corro = _log_norm(n_fuentes, _FUENTES_SATURA)
     s_fresca = _frescura(str(cluster.get("ultimo_visto") or ""), ahora=ahora)
     s_viral = _log_norm(senal, _SENAL_SATURA)
-    s_marca = _relevancia_marca(cluster, palabras_marca)
+    s_marca, palabras_casadas = relevancia_marca_detalle(cluster, palabras_marca)
     # Señal de RENDIMIENTO (Fase 2c): 0..1 que el daemon precalcula (1 si la historia cae en una
     # línea top por engagement). INERTE salvo que `pesos.rendimiento` > 0. Acota a [0,1] por defensa.
     s_rend = min(1.0, max(0.0, float(cluster.get("bonus_rendimiento") or 0.0)))
@@ -691,7 +729,8 @@ def puntuar(
         + p.marca * s_marca
         + p.rendimiento * s_rend
     )
-    if int(cluster.get("breaking") or 0):
+    es_breaking = bool(int(cluster.get("breaking") or 0))
+    if es_breaking:
         score = min(1.0, score + p.breaking)
     score = min(1.0, score)
 
@@ -703,8 +742,75 @@ def puntuar(
     if senal > 0:
         razones.append(f"señal {senal}")
     if s_marca > 0:
-        razones.append("relevante para la marca")
-    if int(cluster.get("breaking") or 0):
+        # Las palabras casadas EXPLICAN la relevancia (qué del vocabulario de la marca casó).
+        muestra = ", ".join(palabras_casadas[:4])
+        razones.append(f"relevante para la marca ({muestra})" if muestra else "relevante para la marca")
+    if es_breaking:
         razones.append("breaking")
     razon = " · ".join(razones) if razones else "historia única"
-    return round(score, 6), razon
+    desglose: dict[str, Any] = {
+        "corroboracion": round(s_corro, 3),
+        "frescura": round(s_fresca, 3),
+        "viralidad": round(s_viral, 3),
+        "marca": round(s_marca, 3),
+        "rendimiento": round(s_rend, 3),
+        "breaking": 1 if es_breaking else 0,
+        "palabras": list(palabras_casadas),
+    }
+    return round(score, 6), razon, desglose
+
+
+# --------------------------------------------------------------------------- #
+# Listón de promoción (auto-producción)                                         #
+# --------------------------------------------------------------------------- #
+
+# El score que LISTA el panel y el listón que DISPARA producción automática son dos niveles
+# distintos a propósito: el panel muestra el pool jerarquizado (todo lo que pasó la entrada),
+# pero encolar QA+copy (`claude -p`, coste real de tokens) exige un listón MÁS ALTO y
+# EXPLICABLE. Defaults conservadores; editables en caliente desde la consola.
+LISTON_MIN_SCORE_DEF = 0.35
+LISTON_MIN_MARCA_DEF = 0.2
+
+
+def evaluar_liston(
+    cluster: dict[str, Any],
+    *,
+    palabras_marca: frozenset[str] = frozenset(),
+    min_score: float = LISTON_MIN_SCORE_DEF,
+    min_marca: float = LISTON_MIN_MARCA_DEF,
+    ahora: datetime | None = None,
+) -> tuple[bool, str]:
+    """¿Esta historia supera el LISTÓN de producción automática? `(supera, motivo)`. PURA.
+
+    Reglas, en orden (el motivo explica la PRIMERA que falla):
+      1. VERIFICACIÓN: una historia `dudosa` (única fuente de baja confianza / clickbait)
+         jamás dispara producción automática, puntúe lo que puntúe.
+      2. SCORE: el score RECALCULADO AHORA (no el persistido, que envejece entre re-scores)
+         debe alcanzar `min_score`.
+      3. ENCAJE DE MARCA: la relevancia por vocabulario debe alcanzar `min_marca`. Exentas:
+         las historias CURADAS por el equipo (señal artificial de cajón: el humano ya decidió)
+         y las BREAKING CORROBORADAS (evento mayor confirmado por varias fuentes a la vez,
+         cuyo vocabulario puede ser nuevo).
+    Devuelve siempre un motivo legible (también al superar): es la explicación que se muestra.
+    """
+    if (cluster.get("verificacion") or "") == "dudosa":
+        return False, "verificación dudosa (única fuente no fiable o clickbait)"
+    score, _razon, desglose = puntuar_detalle(cluster, palabras_marca=palabras_marca, ahora=ahora)
+    if score < min_score:
+        return False, f"score {score:.2f} < {min_score:.2f} (listón de producción)"
+    s_marca = float(desglose["marca"])
+    if s_marca < min_marca:
+        from .ingesta import SENAL_CURADO
+
+        curada = int(cluster.get("senal") or 0) >= SENAL_CURADO
+        breaking_corroborada = bool(desglose["breaking"]) and (
+            (cluster.get("verificacion") or "") == "corroborada"
+        )
+        if not curada and not breaking_corroborada:
+            return False, (
+                f"encaje con la marca {s_marca:.2f} < {min_marca:.2f} "
+                "(no casa el vocabulario de la marca)"
+            )
+    palabras = ", ".join(desglose["palabras"][:4])
+    detalle = f" — casa: {palabras}" if palabras else ""
+    return True, f"score {score:.2f} ≥ {min_score:.2f}{detalle}"

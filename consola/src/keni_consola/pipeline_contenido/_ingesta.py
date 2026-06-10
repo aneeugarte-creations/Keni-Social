@@ -294,11 +294,19 @@ def _nota_de_cluster(titulo: str, resumen: str, enlaces: list[str]) -> str:
 
 
 def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
-    """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con DIVERSIDAD. Best-effort.
+    """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con LISTÓN y DIVERSIDAD. Best-effort.
 
     Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
     score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
     —no un tema por cada item RSS—, que es lo que frena el volumen y respeta la jerarquización.
+
+    LISTÓN de producción automática (`noticias_liston.evaluar`): promover acaba en QA+copy
+    (`claude -p`: coste real de tokens), así que antes de competir por plaza cada candidata debe
+    superar el listón — verificación no dudosa, score recalculado ≥ `KENI_PROMOVER_MIN_SCORE` y
+    encaje con el vocabulario de la marca ≥ `KENI_PROMOVER_MIN_MARCA` (exentas las curadas por
+    el equipo y las breaking corroboradas). Las que no lo superan se quedan `nuevo` en el pool
+    (visibles en el panel con su motivo; el humano puede usarlas a mano y la caducidad las
+    expira sola). Se loguea cuántas quedaron bajo el listón: la criba es auditable.
 
     DIVERSIDAD (MMR suave): se sobremuestrea el top y `clustering.seleccionar_diversos` salta
     las historias cuyo título es casi idéntico (ratio fuzzy ≥ `KENI_PROMOVER_DIVERSIDAD_UMBRAL`,
@@ -306,12 +314,12 @@ def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     plazas. Suave: si faltan plazas se rellenan con las saltadas (nunca devuelve menos). Con el
     umbral a 0 se desactiva (top-N puro, comportamiento anterior).
     """
-    from .. import config
+    from .. import config, noticias_liston
     from ..dominio import clustering
 
     umbral = config.promover_diversidad_umbral()
-    # Sobremuestra acotada: suficientes candidatas para diversificar sin recorrer el pool entero.
-    limite = maximo if umbral <= 0 else max(maximo * 4, maximo + 8)
+    # Sobremuestra acotada: suficientes candidatas para listón+diversidad sin recorrer el pool.
+    limite = max(maximo * 4, maximo + 8)
     try:
         clusters, _total = repos.listar_noticia_clusters(
             marca=marca, estado="nuevo", limite=limite
@@ -319,9 +327,30 @@ def clusters_para_promover(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no promueve nada
         _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
         return []
+    aptas: list[dict[str, Any]] = []
+    bajo_liston = 0
+    for c in clusters:
+        try:
+            supera, motivo = noticias_liston.evaluar(c)
+        except Exception:  # noqa: BLE001 -- ante un fallo del listón, NO se promueve (fail-closed:
+            # promover cuesta tokens; una historia retenida de más la recoge el humano o el
+            # siguiente barrido, una promovida de más ya quemó el claude -p).
+            _log.warning("pipeline: fallo al evaluar el listón de una historia (%s)", c.get("id"), exc_info=True)
+            continue
+        if supera:
+            aptas.append(c)
+        else:
+            bajo_liston += 1
+            _log.debug("pipeline: historia bajo el listón (%s): %s", c.get("id"), motivo)
+    if bajo_liston:
+        _log.info(
+            "pipeline: %d historia(s) de %s bajo el listón de producción automática "
+            "(quedan en el pool, visibles en el panel).",
+            bajo_liston, marca,
+        )
     if umbral <= 0:
-        return clusters[:maximo]
-    return clustering.seleccionar_diversos(clusters, maximo=maximo, umbral=umbral)
+        return aptas[:maximo]
+    return clustering.seleccionar_diversos(aptas, maximo=maximo, umbral=umbral)
 
 
 def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:

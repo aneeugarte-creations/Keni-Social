@@ -97,14 +97,27 @@ def _envejecer_intento(tema_id, campo):
     repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend)})
 
 
-def _sembrar_cluster(cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo"):
-    """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema."""
+def _sembrar_cluster(
+    cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
+    resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
+    verificacion="corroborada", n_fuentes=2,
+):
+    """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema.
+
+    Por defecto el cluster SUPERA el listón de producción automática (`noticias_liston`):
+    FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
+    Los tests del propio listón pasan valores que lo incumplen a propósito.
+    """
+    from datetime import UTC, datetime
+
     repos.upsert_noticia_cluster({
-        "id": cid, "titulo": titulo, "resumen": "Resumen de la historia", "marca": marca,
-        "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1, "n_fuentes": 2,
-        "idiomas": ["es"], "senal": 100, "score": score, "breaking": 0,
-        "primer_visto": "2026-06-01T00:00:00+00:00", "ultimo_visto": "2026-06-05T12:00:00+00:00",
-        "estado": estado,
+        "id": cid, "titulo": titulo, "resumen": resumen, "marca": marca,
+        "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1,
+        "n_fuentes": n_fuentes, "idiomas": ["es"], "senal": 100, "score": score,
+        "breaking": 0, "primer_visto": "2026-06-01T00:00:00+00:00",
+        "ultimo_visto": ultimo_visto
+        or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "estado": estado, "verificacion": verificacion,
     })
     return repos.obtener_noticia_cluster(cid)
 
@@ -986,6 +999,55 @@ def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
     _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8)
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
     assert {c["id"] for c in elegidos} == {"dup1", "dup2"}
+
+
+# --------------------------------------------------------------------------- #
+# LISTÓN de producción automática: promover cuesta tokens (QA+copy con IA);    #
+# el ruido se queda en el pool aunque haya plazas libres.                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_clusters_para_promover_respeta_el_liston(entorno):
+    """Solo las historias que superan el listón compiten por plaza; el ruido queda en el pool."""
+    from datetime import UTC, datetime, timedelta
+
+    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9)
+    # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
+    _sembrar_cluster(
+        "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
+        resumen="Rumores del espectáculo extranjero",
+    )
+    # Verificación dudosa: jamás dispara producción automática, puntúe lo que puntúe.
+    _sembrar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
+                     verificacion="dudosa")
+    # Vieja sin señales: su score persistido era alto, pero el listón recalcula AHORA.
+    _sembrar_cluster(
+        "vieja", titulo="México: nota de hace una semana", score=0.95, n_fuentes=1,
+        ultimo_visto=(datetime.now(UTC) - timedelta(days=7)).replace(tzinfo=None)
+        .isoformat(timespec="seconds"),
+    )
+
+    elegidos = pc.clusters_para_promover("unotv", maximo=4)
+
+    # Hay 4 plazas, pero solo la apta supera el listón (el resto NO rellena plazas libres).
+    assert [c["id"] for c in elegidos] == ["apta"]
+
+
+def test_promover_clusters_marca_no_promueve_bajo_liston(entorno, monkeypatch):
+    """El barrido CI deja en el pool (estado `nuevo`) lo que no supera el listón: ni tema ni copy."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9)
+    _sembrar_cluster(
+        "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
+        resumen="Rumores del espectáculo extranjero",
+    )
+
+    temas = pc.promover_clusters_marca("unotv", maximo=2)
+
+    assert [t["titulo"] for t in temas] == ["Sismo sacude la CDMX"]
+    assert repos.obtener_noticia_cluster("apta")["estado"] == "usado"
+    # La irrelevante sigue `nuevo`: visible en el panel, usable a mano, expirable por edad.
+    assert repos.obtener_noticia_cluster("irrelevante")["estado"] == "nuevo"
 
 
 def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):

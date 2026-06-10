@@ -264,6 +264,31 @@ def promover_diversidad_umbral() -> float:
     return _peso01(ENV_PROMOVER_DIVERSIDAD_UMBRAL, PROMOVER_DIVERSIDAD_UMBRAL_DEF)
 
 
+# LISTÓN de producción automática: el panel LISTA todo el pool jerarquizado, pero PROMOVER una
+# historia a tema (que acaba en QA+copy con `claude -p`: coste real de tokens) exige un listón
+# más alto y explicable. Defaults en `dominio.clustering` (capa pura); editables en caliente.
+ENV_PROMOVER_MIN_SCORE = "KENI_PROMOVER_MIN_SCORE"
+ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
+
+
+def promover_min_score() -> float:
+    """Score mínimo [0,1] para que una historia dispare producción automática
+    (`KENI_PROMOVER_MIN_SCORE`, def 0.35). `0` desactiva el listón de score. Valor inválido → def."""
+    from .dominio.clustering import LISTON_MIN_SCORE_DEF
+
+    return _peso01(ENV_PROMOVER_MIN_SCORE, LISTON_MIN_SCORE_DEF)
+
+
+def promover_min_marca() -> float:
+    """Encaje de marca mínimo [0,1] (relevancia por vocabulario) para la producción automática
+    (`KENI_PROMOVER_MIN_MARCA`, def 0.2 ≈ 1 término del vocabulario). `0` desactiva el listón de
+    marca. Exentas: historias curadas por el equipo y breaking corroboradas (ver
+    `clustering.evaluar_liston`). Valor inválido → def."""
+    from .dominio.clustering import LISTON_MIN_MARCA_DEF
+
+    return _peso01(ENV_PROMOVER_MIN_MARCA, LISTON_MIN_MARCA_DEF)
+
+
 # --------------------------------------------------------------------------- #
 # Señal de rendimiento en el ranking (líneas que mejor funcionan) — Fase 2c     #
 # --------------------------------------------------------------------------- #

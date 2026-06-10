@@ -541,7 +541,12 @@ def test_paso_rescore_baja_el_score_de_una_historia_vieja(monkeypatch):
 
     assert resumen["revisados"] == 1
     assert resumen["actualizados"] == 1
-    assert guardados and guardados[0]["c-vieja"] < 0.9  # la frescura decayó con el reloj
+    # El re-score guarda score + explicación REFRESCADA (la razón acompaña al score nuevo).
+    assert guardados
+    cambio = guardados[0]["c-vieja"]
+    assert cambio["score"] < 0.9  # la frescura decayó con el reloj
+    assert isinstance(cambio["score_razon"], str)
+    assert isinstance(cambio["score_desglose"], dict)
 
 
 def test_paso_rescore_ignora_historias_usadas(monkeypatch):

@@ -35,7 +35,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from . import agencias, config, daemon_util, db, generaciones, marcas, relevancia_marca, repos
+from . import agencias, config, daemon_util, db, generaciones, marcas, noticias_liston, repos
 from .dominio import (
     clustering,
     fusion_semantica,
@@ -117,21 +117,13 @@ def _sondear_feed(
 
 
 def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
-    """Keywords de relevancia de la marca: perfil editorial (Haiku) si está activo y existe; si no,
-    el vocabulario semilla de `relevancia_marca`. Centraliza la elección perfil-vs-semilla.
+    """Keywords de relevancia de la marca (perfil editorial Haiku si está activo; si no, semilla).
 
-    Respeta el toggle POR MARCA de `KENI_PIPELINE_EDITORIAL`: una marca con el Editorial apagado
-    vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado (antes el toggle solo
-    frenaba el refresco, pero el perfil viejo seguía mandando en el score).
+    Delegado en `noticias_liston.palabras_relevancia` (fuente única perfil-vs-semilla, la misma
+    que usan el listón de promoción y la API del panel; si divergieran, el panel explicaría un
+    score que el ranking no calculó).
     """
-    if (
-        perfil_activo and marca
-        and not config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca)
-    ):
-        perfil = perfil_editorial.palabras(marca)
-        if perfil:
-            return perfil
-    return relevancia_marca.palabras_de_marca(marca or None)
+    return noticias_liston.palabras_relevancia(marca, perfil_activo)
 
 
 def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:
@@ -353,10 +345,15 @@ def paso_clustering() -> dict[str, Any]:
                     recalc["bonus_rendimiento"] = _rendimiento_bonus(
                         recalc, top_lineas, vert_id_a_nombre, vert_etiquetas
                     )
-            score, _razon = clustering.puntuar(
+            score, razon, desglose = clustering.puntuar_detalle(
                 recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
             )
             recalc["score"] = score
+            # Explicación PERSISTIDA: la razón humana y el desglose por señal viajan con el
+            # score (el panel y el listón de promoción los muestran; sin esto el ranking es
+            # una caja negra y el equipo no puede auditar por qué algo sube o baja).
+            recalc["score_razon"] = razon
+            recalc["score_desglose"] = desglose
             indice[cid] = repos.upsert_noticia_cluster(recalc)
         except Exception:  # noqa: BLE001 -- recalcular un cluster no aborta el paso
             _log.exception("ingesta_daemon: fallo al recalcular el cluster %s.", cid)
@@ -412,7 +409,7 @@ def paso_rescore(
     ahora = datetime.now(UTC)
     palabras_cache: dict[str, frozenset[str]] = {}
     rend_cache: dict[str, tuple[set[str], dict[str, str], list[dict[str, Any]]]] = {}
-    cambios: dict[str, float] = {}
+    cambios: dict[str, dict[str, Any]] = {}
     revisados = 0
     for c in clusters:
         if (c.get("estado") or "nuevo") != "nuevo":
@@ -432,11 +429,15 @@ def paso_rescore(
                     cl["bonus_rendimiento"] = _rendimiento_bonus(
                         cl, top_lineas, vert_id_a_nombre, vert_etiquetas
                     )
-            score, _razon = clustering.puntuar(
+            score, razon, desglose = clustering.puntuar_detalle(
                 cl, palabras_marca=palabras_cache[marca_c], ahora=ahora, pesos=pesos
             )
             if abs(score - float(c.get("score") or 0.0)) >= 0.001:
-                cambios[str(c["id"])] = score
+                # El re-score refresca TAMBIÉN la explicación (si no, la razón persistida
+                # explicaría el score viejo: p. ej. seguiría diciendo "reciente" días después).
+                cambios[str(c["id"])] = {
+                    "score": score, "score_razon": razon, "score_desglose": desglose,
+                }
         except Exception:  # noqa: BLE001 -- una historia problemática no aborta la pasada
             _log.exception("ingesta_daemon: fallo al re-puntuar el cluster %s.", c.get("id"))
 
@@ -513,7 +514,9 @@ def _fusionar_grupo(
         fuentes_baja_confianza=fuentes_baja,
     )
     palabras = _palabras_relevancia(recalc.get("marca") or "", perfil_activo)
-    recalc["score"], _razon = clustering.puntuar(recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos)
+    recalc["score"], recalc["score_razon"], recalc["score_desglose"] = clustering.puntuar_detalle(
+        recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
+    )
     repos.upsert_noticia_cluster(recalc)
     return True
 

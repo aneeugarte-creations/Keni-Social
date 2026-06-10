@@ -840,6 +840,8 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "idiomas",
     "senal",
     "score",
+    "score_razon",
+    "score_desglose",
     "breaking",
     "primer_visto",
     "ultimo_visto",
@@ -857,6 +859,25 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
 _SELECT_NOTICIA_CLUSTER = f"SELECT {', '.join(_COLS_NOTICIA_CLUSTER)} FROM noticias_clusters"
 # Verificación por corroboración (Ola D): valores válidos de `noticias_clusters.verificacion`.
 VERIFICACIONES_CLUSTER: tuple[str, ...] = ("corroborada", "unica_fuente", "dudosa")
+
+
+def _desglose_a_json(valor: Any) -> str:
+    """Serializa `score_desglose` para la columna: dict -> JSON; str -> tal cual; resto -> ''."""
+    if isinstance(valor, dict):
+        try:
+            return json.dumps(valor, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return ""
+    return valor if isinstance(valor, str) else ""
+
+
+def _desglose_a_dict(crudo: Any) -> dict[str, Any]:
+    """Deserializa `score_desglose` (JSON) a dict; {} si está vacío o malformado. Best-effort."""
+    try:
+        datos = json.loads(crudo or "{}")
+    except (ValueError, TypeError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
 
 
 def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
@@ -880,6 +901,9 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "idiomas": idiomas,
         "senal": int(fila["senal"] or 0),
         "score": float(fila["score"] or 0.0),
+        # Relevancia EXPLICABLE: razón humana del score + desglose por señal (JSON -> dict).
+        "score_razon": fila["score_razon"] or "",
+        "score_desglose": _desglose_a_dict(fila["score_desglose"]),
         "breaking": int(fila["breaking"] or 0),
         "primer_visto": fila["primer_visto"] or "",
         "ultimo_visto": fila["ultimo_visto"] or "",
@@ -926,6 +950,11 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "idiomas": json.dumps(idiomas, ensure_ascii=False),
         "senal": int(cluster.get("senal") or 0),
         "score": float(cluster.get("score") or 0.0),
+        # Explicación del score (la escribe el daemon al puntuar; el dict público la trae como
+        # dict, aquí se serializa a JSON). SÍ entra al SET de conflicto: cada re-puntuación la
+        # refresca junto al score (si no, la razón explicaría un score viejo).
+        "score_razon": (cluster.get("score_razon") or "")[:500],
+        "score_desglose": _desglose_a_json(cluster.get("score_desglose")),
         "breaking": int(cluster.get("breaking") or 0),
         "primer_visto": cluster.get("primer_visto") or "",
         "ultimo_visto": cluster.get("ultimo_visto") or "",
@@ -1291,24 +1320,39 @@ def limpiar_items_cluster_colgante() -> int:
         con.close()
 
 
-def actualizar_scores_clusters(scores: dict[str, float]) -> int:
-    """Actualiza SOLO el `score` (+`actualizado`) de un lote de clusters en una conexión.
+def actualizar_scores_clusters(scores: dict[str, float | dict[str, Any]]) -> int:
+    """Actualiza el `score` (+ su explicación + `actualizado`) de un lote de clusters en una conexión.
 
     Para el RE-SCORE periódico de la ventana (la frescura decae con el tiempo aunque no entren
-    items nuevos): toca únicamente `score`, sin pisar agregados ni estado. Devuelve nº filas.
+    items nuevos): toca únicamente el score y su explicación, sin pisar agregados ni estado.
+    Cada valor puede ser un float (solo score; la explicación persistida se conserva) o un dict
+    `{score, score_razon?, score_desglose?}` para refrescar también la razón/el desglose (si no,
+    la razón explicaría un score viejo). Devuelve nº filas.
     """
-    pares = [(cid, float(s)) for cid, s in scores.items() if cid]
-    if not pares:
-        return 0
     ahora = ahora_iso()
     n = 0
     con = _conectar()
     try:
-        for cid, score in pares:
-            cur = con.execute(
-                "UPDATE noticias_clusters SET score = ?, actualizado = ? WHERE id = ?",
-                (score, ahora, cid),
-            )
+        for cid, valor in scores.items():
+            if not cid:
+                continue
+            if isinstance(valor, dict):
+                cur = con.execute(
+                    "UPDATE noticias_clusters SET score = ?, score_razon = ?, "
+                    "score_desglose = ?, actualizado = ? WHERE id = ?",
+                    (
+                        float(valor.get("score") or 0.0),
+                        (str(valor.get("score_razon") or ""))[:500],
+                        _desglose_a_json(valor.get("score_desglose")),
+                        ahora,
+                        cid,
+                    ),
+                )
+            else:
+                cur = con.execute(
+                    "UPDATE noticias_clusters SET score = ?, actualizado = ? WHERE id = ?",
+                    (float(valor), ahora, cid),
+                )
             n += cur.rowcount or 0
         con.commit()
     finally:

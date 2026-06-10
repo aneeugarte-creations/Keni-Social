@@ -1336,6 +1336,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         idiomas       TEXT NOT NULL DEFAULT '[]',
         senal         INTEGER NOT NULL DEFAULT 0,
         score         REAL NOT NULL DEFAULT 0,
+        score_razon   TEXT NOT NULL DEFAULT '',
+        score_desglose TEXT NOT NULL DEFAULT '',
         breaking      INTEGER NOT NULL DEFAULT 0,
         primer_visto  TEXT NOT NULL DEFAULT '',
         ultimo_visto  TEXT NOT NULL DEFAULT '',
@@ -2841,6 +2843,11 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("titulo_original", "TEXT NOT NULL DEFAULT ''"),
     ("idioma", "TEXT NOT NULL DEFAULT ''"),
     ("traducido", "INTEGER NOT NULL DEFAULT 0"),
+    # Relevancia EXPLICABLE: la razón humana del score y su desglose por señal (JSON con
+    # corroboracion/frescura/viralidad/marca/rendimiento/breaking + palabras casadas). Las
+    # escribe el daemon al puntuar; la UI/el listón de promoción las muestran al equipo.
+    ("score_razon", "TEXT NOT NULL DEFAULT ''"),
+    ("score_desglose", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:
