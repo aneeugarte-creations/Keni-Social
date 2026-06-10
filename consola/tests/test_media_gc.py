@@ -153,6 +153,171 @@ def test_protege_recursos_de_marca_y_plantillas(monkeypatch):
     assert {"logo-oficial.png", "mini.png", "fondo.jpg", "logo-spec.png", "muestra.jpg"} <= vivas
 
 
+def test_protege_fotos_de_collage(monkeypatch):
+    # Fotos de collage: JSON array `[{objeto, foco, zoom}, …]` en el campo `fotos`. Todas
+    # las fotos del collage deben ser referencias vivas (no huérfanas borrables).
+    monkeypatch.setattr(
+        media_gc.repos, "listar_publicaciones",
+        lambda *a, **k: [
+            {
+                "id": "pub1",
+                "imagen": "",
+                "foto": "",
+                "fotos": '[{"objeto":"hueco1.jpg","foco":[0.5,0.5],"zoom":1},'
+                '{"objeto":"hueco2.jpg","foco":[0.3,0.7],"zoom":1.2}]',
+            },
+            {"id": "pub2", "imagen": "", "foto": "", "fotos": ""},  # sin collage
+        ],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.delattr(media_gc.repos, "listar_documento_versiones", raising=False)
+
+    vivas = media_gc.referencias_vivas()
+    assert {"hueco1.jpg", "hueco2.jpg"} <= vivas
+
+    # Las fotos del collage son VIEJAS pero referenciadas por la publicación: NO se borran.
+    _objetos(monkeypatch, [("hueco1.jpg", _VIEJO), ("hueco2.jpg", _VIEJO)])
+    borrados = _captura_borrados(monkeypatch)
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == [] and res["conservados"] == 2
+
+
+def test_protege_collage_json_malformado(monkeypatch):
+    # Si el JSON de `fotos` está malformado, el GC lo ignora silenciosamente (robusto).
+    monkeypatch.setattr(
+        media_gc.repos, "listar_publicaciones",
+        lambda *a, **k: [{"id": "pub1", "imagen": "", "foto": "", "fotos": "invalid json"}],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.delattr(media_gc.repos, "listar_documento_versiones", raising=False)
+
+    # No debe fallar, simplemente no suma referencias del collage malformado.
+    vivas = media_gc.referencias_vivas()
+    assert vivas == set()
+
+
+def test_protege_documento_versiones_render_objeto(monkeypatch):
+    # Cada versión del documento tiene `render_objeto` (PNG renderizado). Estos PNGs son
+    # referencias vivas (no huérfanos borrables).
+    def _listar_docs(cid, pid):
+        return [
+            {
+                "id": "v1",
+                "version": 1,
+                "render_objeto": "render-v1.png",
+                "documento": "{}",
+            },
+            {
+                "id": "v2",
+                "version": 2,
+                "render_objeto": "render-v2.png",
+                "documento": "{}",
+            },
+        ]
+
+    monkeypatch.setattr(
+        media_gc.repos, "listar_publicaciones",
+        lambda *a, **k: [{"id": "pid1", "contenido_id": "cid1", "imagen": "", "foto": ""}],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_documento_versiones", _listar_docs)
+
+    vivas = media_gc.referencias_vivas()
+    assert {"render-v1.png", "render-v2.png"} <= vivas
+
+    # Los PNGs renderizados son VIEJOS pero referenciados por las versiones: NO se borran.
+    _objetos(monkeypatch, [("render-v1.png", _VIEJO), ("render-v2.png", _VIEJO)])
+    borrados = _captura_borrados(monkeypatch)
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == [] and res["conservados"] == 2
+
+
+def test_protege_documento_versiones_media_del_documento(monkeypatch):
+    # El JSON `documento` de cada versión contiene referencias a media (capas con objeto,
+    # fondos con imagen.media_id, logos, etc.). Estas referencias son vivas (no huérfanas).
+    doc_v1 = (
+        '{"fondo":{"tipo":"imagen","imagen":{"media_id":"fondo-v1.jpg"}},'
+        '"capas":[{"tipo":"imagen","objeto":"imagen-v1.png"}]}'
+    )
+    doc_v2 = (
+        '{"fondo":{"tipo":"imagen","imagen":{"media_id":"fondo-v2.jpg"}},'
+        '"capas":[{"tipo":"logo","tipo_logo":"imagen","media_id":"logo-v2.png"}]}'
+    )
+
+    def _listar_docs(cid, pid):
+        return [
+            {
+                "id": "v1",
+                "version": 1,
+                "render_objeto": "render-v1.png",
+                "documento": doc_v1,
+            },
+            {
+                "id": "v2",
+                "version": 2,
+                "render_objeto": "render-v2.png",
+                "documento": doc_v2,
+            },
+        ]
+
+    monkeypatch.setattr(
+        media_gc.repos, "listar_publicaciones",
+        lambda *a, **k: [{"id": "pid1", "contenido_id": "cid1", "imagen": "", "foto": ""}],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_documento_versiones", _listar_docs)
+
+    vivas = media_gc.referencias_vivas()
+    # render_objeto + media del documento de ambas versiones.
+    assert {
+        "render-v1.png", "render-v2.png",
+        "fondo-v1.jpg", "imagen-v1.png",
+        "fondo-v2.jpg", "logo-v2.png",
+    } <= vivas
+
+    # Todos VIEJOS pero referenciados por las versiones: NO se borran.
+    _objetos(monkeypatch, [
+        ("render-v1.png", _VIEJO),
+        ("fondo-v1.jpg", _VIEJO),
+        ("imagen-v1.png", _VIEJO),
+        ("render-v2.png", _VIEJO),
+        ("fondo-v2.jpg", _VIEJO),
+        ("logo-v2.png", _VIEJO),
+    ])
+    borrados = _captura_borrados(monkeypatch)
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == [] and res["conservados"] == 6
+
+
+def test_documento_versiones_malformado_es_ignorado(monkeypatch):
+    # Si el JSON `documento` está malformado, el GC lo ignora (robusto).
+    def _listar_docs(cid, pid):
+        return [
+            {
+                "id": "v1",
+                "version": 1,
+                "render_objeto": "render-v1.png",
+                "documento": "invalid json",  # malformado
+            },
+        ]
+
+    monkeypatch.setattr(
+        media_gc.repos, "listar_publicaciones",
+        lambda *a, **k: [{"id": "pid1", "contenido_id": "cid1", "imagen": "", "foto": ""}],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_documento_versiones", _listar_docs)
+
+    # No debe fallar, simplemente suma solo el render_objeto (el documento JSON es inútil).
+    vivas = media_gc.referencias_vivas()
+    assert "render-v1.png" in vivas
+
+
 # --------------------------------------------------------------------------- #
 # huerfanos / limpiar: la definicion conservadora                              #
 # --------------------------------------------------------------------------- #

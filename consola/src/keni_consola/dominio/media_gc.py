@@ -80,6 +80,35 @@ def _fotos_de(filas: list[dict[str, Any]]) -> set[str]:
     return nombres
 
 
+def _fotos_de_collage(filas: list[dict[str, Any]]) -> set[str]:
+    """Nombres de objeto en el campo `fotos` (collage JSON) de una lista de filas.
+
+    Una pieza puede tener un collage: varias fotos en huecos distintos. El campo `fotos` es
+    un JSON array `[{objeto, foco, zoom}, …]` (uno por hueco). Sin esta protección, el GC
+    borraría las fotos individuales del collage aunque la pieza las referencie.
+    """
+    import json
+
+    nombres: set[str] = set()
+    for fila in filas:
+        fotos_raw = (fila.get("fotos") or "").strip()
+        if not fotos_raw:
+            continue
+        try:
+            fotos = json.loads(fotos_raw)
+            if not isinstance(fotos, list):
+                continue
+            for foto in fotos:
+                if isinstance(foto, dict):
+                    objeto = (foto.get("objeto") or "").strip()
+                    if objeto:
+                        nombres.add(objeto)
+        except (ValueError, TypeError):
+            # JSON malformado: ignora silenciosamente.
+            pass
+    return nombres
+
+
 def _refs_documento(doc: Any, acc: set[str]) -> None:
     """Acumula en `acc` los media_id referenciados por un documento de capas (recursivo)."""
     if not isinstance(doc, dict):
@@ -166,6 +195,65 @@ def _objetos_catalogo_media() -> set[str]:
     }
 
 
+def _refs_documento_versiones() -> set[str]:
+    """Media referenciados por el historial de versiones del editor (`documento_versiones`).
+
+    Cada versión del documento de una pieza (en el editor inline) guarda:
+      - `render_objeto`: el PNG renderizado (la imagen de la versión),
+      - `documento`: JSON con las capas (estructura idéntica a plantillas), que contiene
+        referencias a media (objeto, media_id, fondos, etc.).
+
+    Sin esta protección, el GC borraría:
+      - Los PNG renderizados de versiones antiguas (quedando versiones huérfanas),
+      - Los media originales (imagenes, logos, fondos) que las capas del documento
+        referenciaban (el restore de la versión no podría renderizar).
+
+    Itera sobre TODAS las publicaciones (normales + comerciales) y acumula referencias
+    desde todas sus versiones. Defensivo y opcional: si el repo de versiones no existe
+    o falla, continúa sin tumbar el GC.
+    """
+    import json
+
+    refs: set[str] = set()
+    listar_versiones = getattr(repos, "listar_documento_versiones", None)
+    if listar_versiones is None:
+        return refs
+
+    try:
+        publicaciones = repos.listar_publicaciones()
+        comerciales = repos.listar_publicaciones_comerciales()
+        todas = publicaciones + comerciales
+
+        for pub in todas:
+            contenido_id = pub.get("contenido_id", "")
+            plataforma_id = pub.get("id", "")
+            if not contenido_id or not plataforma_id:
+                continue
+
+            try:
+                versiones = listar_versiones(contenido_id, plataforma_id)
+                for v in versiones:
+                    # Protege el PNG renderizado de la versión.
+                    render_obj = (v.get("render_objeto") or "").strip()
+                    if render_obj:
+                        refs.add(render_obj)
+
+                    # Protege media dentro del documento de la versión (estructura de capas).
+                    doc_raw = v.get("documento") or ""
+                    if doc_raw:
+                        try:
+                            _refs_documento(json.loads(doc_raw), refs)
+                        except (ValueError, TypeError):
+                            # JSON malformado: ignora silenciosamente.
+                            pass
+            except Exception:  # noqa: BLE001 -- fuente opcional: nunca tumba el GC
+                pass
+    except Exception:  # noqa: BLE001 -- fuente opcional: nunca tumba el GC
+        pass
+
+    return refs
+
+
 def referencias_vivas() -> set[str]:
     """Conjunto de nombres de objeto REFERENCIADOS (NO borrables).
 
@@ -173,11 +261,15 @@ def referencias_vivas() -> set[str]:
       - el `imagen` de TODAS las publicaciones normales (sin filtro de estado/marca),
       - el `imagen` de las publicaciones comerciales (HOY no tienen ese campo: el `.get`
         devuelve None y no aporta nada; se incluye por si se anade en el futuro),
+      - el `foto` cruda (render on-demand; CRÍTICO),
+      - las fotos de collage (`fotos` JSON array),
+      - el PNG renderizado + media del documento en TODAS las versiones del editor,
       - DEFENSIVO Y OPCIONAL: el `objeto` de la galería de artes SOLO si ese repo existe
         en runtime (ver `_objetos_catalogo_media`).
 
     Las publicaciones son la fuente de verdad de "media en uso"; la galería de artes anade
-    los objetos que el equipo decidio conservar para reutilizar.
+    los objetos que el equipo decidio conservar para reutilizar. El historial de versiones
+    protege los PNG renderizados y los media que cada versión referencia.
     """
     vivas: set[str] = set()
     publicaciones = repos.listar_publicaciones()
@@ -188,10 +280,16 @@ def referencias_vivas() -> set[str]:
     # el GC borraría el original del que el render compone.
     vivas |= _fotos_de(publicaciones)
     vivas |= _fotos_de(comerciales)
+    # Fotos de collage: varias fotos en huecos distintos, almacenadas como JSON array.
+    vivas |= _fotos_de_collage(publicaciones)
+    vivas |= _fotos_de_collage(comerciales)
     # Originales que alimentan el render: plantillas del estudio (miniatura + media_id) y
     # activos de marca (logos, tipografías). Defensivo y opcional.
     vivas |= _objetos_recursos_marca()
     vivas |= _objetos_catalogo_media()
+    # Historial de versiones del editor: PNG renderizados + media de cada versión del documento.
+    # Sin esto, restaurar una versión antigua quedaría sin sus originales (render en blanco).
+    vivas |= _refs_documento_versiones()
     return vivas
 
 
