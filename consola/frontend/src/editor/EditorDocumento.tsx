@@ -573,10 +573,10 @@ export function EditorDocumento({
           )}
 
           <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2 md:p-4">
-            {/* Aviso de hueco de foto: chip flotante discreto, abajo y centrado (no roba una
-                franja entera de cromo). */}
+            {/* Aviso de hueco de foto: chip flotante discreto, centrado, por encima de la
+                barra inferior de zoom/encuadre (no roba una franja entera de cromo). */}
             {faltaHueco && (
-              <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+              <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 -translate-x-1/2">
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700 shadow-sm dark:bg-amber-950 dark:text-amber-400">
                   <ImageOff className="h-3 w-3" />
                   Marca una imagen como «hueco de foto»
