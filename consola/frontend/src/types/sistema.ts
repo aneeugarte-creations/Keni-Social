@@ -124,6 +124,33 @@ export interface ColaDaemon {
   editable: boolean;
 }
 
+/** Gasto de IA acumulado del día UTC (ledger `gasto_ia`). */
+export interface GastoIADia {
+  tokens: number;
+  tokens_in: number;
+  tokens_out: number;
+  coste_usd: number;
+  generaciones: number;
+}
+
+/** Economía de tokens (`presupuesto_ia.estado()`): presupuesto diario, gasto y nivel. */
+export interface PresupuestoIA {
+  /** Nivel de corte vigente: "normal" | "solo_manual" | "agotado" | "pausado". */
+  nivel: string;
+  /** Kill switch humano (KENI_GENERACION_PAUSADA, editable en caliente). */
+  pausada: boolean;
+  /** Presupuesto de tokens/día (0 = sin límite). */
+  presupuesto_tokens_dia: number;
+  margen_manual_pct: number;
+  gastado: GastoIADia;
+  /** null si no hay presupuesto configurado. */
+  restante_tokens: number | null;
+  /** % del presupuesto consumido (null sin presupuesto). */
+  pct_usado: number | null;
+  /** Día UTC del acumulado (YYYY-MM-DD). */
+  dia: string;
+}
+
 /** Snapshot en vivo de la cola de generación + workers + daemons. */
 export interface ColaMonitor {
   /** Eco del filtro de marca aplicado a las listas en_curso/esperando ("" = todas). */
@@ -137,6 +164,8 @@ export interface ColaMonitor {
   en_curso: ColaJob[];
   esperando: ColaJob[];
   daemons: ColaDaemon[];
+  /** Economía de tokens (opcional para compatibilidad con backs anteriores). */
+  presupuesto?: PresupuestoIA;
 }
 
 /** Serie por día de la cola: encolados (entrada) y resultados (salida). */

@@ -5,8 +5,10 @@ import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { ApiError, api } from "@/lib/api";
 
+import { BannerAlertas } from "./sistema/BannerAlertas";
 import { SeccionNavegadorS3 } from "./sistema/NavegadorS3";
 import { SeccionBackups } from "./sistema/SeccionBackups";
+import { SeccionColaGasto } from "./sistema/SeccionColaGasto";
 import { SeccionDaemons } from "./sistema/SeccionDaemons";
 import { SeccionRecursos } from "./sistema/SeccionRecursos";
 import { SeccionRendimiento } from "./sistema/SeccionRendimiento";
@@ -42,7 +44,9 @@ export default function Sistema() {
         />
       ) : (
         <div className="space-y-6">
+          <BannerAlertas />
           <SeccionRecursos />
+          <SeccionColaGasto />
           <SeccionDaemons />
           <SeccionBackups />
           <SeccionRendimiento />
