@@ -1,0 +1,215 @@
+{
+ "version": 1,
+ "marca": "piso-15",
+ "ventana": {
+  "desde": "2025-08-17",
+  "hasta": "2026-06-08"
+ },
+ "piezas": 1545,
+ "generado": "2026-06-10T07:31:32+00:00",
+ "redes": {
+  "facebook": {
+   "muestras": 520,
+   "top": {
+    "n": 130,
+    "engagement_mediana_pct": 2.5,
+    "longitud": {
+     "p10": 305,
+     "p25": 402,
+     "p50": 588,
+     "p75": 683,
+     "p90": 818
+    },
+    "emojis": {
+     "p50": 1,
+     "p90": 4,
+     "p95": 4
+    },
+    "hashtags": {
+     "p50": 7,
+     "p90": 9,
+     "p95": 10
+    },
+    "pct_gancho_mayusculas": 4.6,
+    "pct_pregunta": 49.2,
+    "pct_multilinea": 100.0
+   },
+   "fondo": {
+    "n": 130,
+    "engagement_mediana_pct": 0.4,
+    "longitud": {
+     "p10": 335,
+     "p25": 468,
+     "p50": 587,
+     "p75": 739,
+     "p90": 939
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 3,
+     "p95": 4
+    },
+    "hashtags": {
+     "p50": 6,
+     "p90": 8,
+     "p95": 9
+    },
+    "pct_gancho_mayusculas": 6.9,
+    "pct_pregunta": 69.2,
+    "pct_multilinea": 100.0
+   },
+   "formatos_top": [
+    {
+     "formato": "reel",
+     "pct": 99.2
+    },
+    {
+     "formato": "foto",
+     "pct": 0.8
+    }
+   ],
+   "lint": {
+    "longitud_max": 1227,
+    "longitud_min": 152,
+    "emojis_max": 4,
+    "hashtags_max": 10,
+    "gancho_mayusculas": null,
+    "pregunta": null
+   }
+  },
+  "instagram": {
+   "muestras": 514,
+   "top": {
+    "n": 128,
+    "engagement_mediana_pct": 3.8,
+    "longitud": {
+     "p10": 269,
+     "p25": 321,
+     "p50": 430,
+     "p75": 616,
+     "p90": 763
+    },
+    "emojis": {
+     "p50": 1,
+     "p90": 4,
+     "p95": 6
+    },
+    "hashtags": {
+     "p50": 7,
+     "p90": 9,
+     "p95": 11
+    },
+    "pct_gancho_mayusculas": 10.2,
+    "pct_pregunta": 62.5,
+    "pct_multilinea": 100.0
+   },
+   "fondo": {
+    "n": 128,
+    "engagement_mediana_pct": 1.1,
+    "longitud": {
+     "p10": 304,
+     "p25": 404,
+     "p50": 519,
+     "p75": 644,
+     "p90": 739
+    },
+    "emojis": {
+     "p50": 1,
+     "p90": 4,
+     "p95": 5
+    },
+    "hashtags": {
+     "p50": 7,
+     "p90": 9,
+     "p95": 10
+    },
+    "pct_gancho_mayusculas": 7.0,
+    "pct_pregunta": 47.7,
+    "pct_multilinea": 99.2
+   },
+   "formatos_top": [
+    {
+     "formato": "reel",
+     "pct": 99.2
+    },
+    {
+     "formato": "foto",
+     "pct": 0.8
+    }
+   ],
+   "lint": {
+    "longitud_max": 1144,
+    "longitud_min": 134,
+    "emojis_max": 6,
+    "hashtags_max": 11,
+    "gancho_mayusculas": null,
+    "pregunta": null
+   }
+  },
+  "tiktok": {
+   "muestras": 511,
+   "top": {
+    "n": 127,
+    "engagement_mediana_pct": 5.8,
+    "longitud": {
+     "p10": 215,
+     "p25": 258,
+     "p50": 362,
+     "p75": 435,
+     "p90": 510
+    },
+    "emojis": {
+     "p50": 1,
+     "p90": 4,
+     "p95": 6
+    },
+    "hashtags": {
+     "p50": 6,
+     "p90": 9,
+     "p95": 10
+    },
+    "pct_gancho_mayusculas": 7.9,
+    "pct_pregunta": 47.2,
+    "pct_multilinea": 0.0
+   },
+   "fondo": {
+    "n": 127,
+    "engagement_mediana_pct": 1.6,
+    "longitud": {
+     "p10": 217,
+     "p25": 299,
+     "p50": 387,
+     "p75": 459,
+     "p90": 533
+    },
+    "emojis": {
+     "p50": 1,
+     "p90": 3,
+     "p95": 4
+    },
+    "hashtags": {
+     "p50": 7,
+     "p90": 9,
+     "p95": 10
+    },
+    "pct_gancho_mayusculas": 12.6,
+    "pct_pregunta": 58.3,
+    "pct_multilinea": 0.0
+   },
+   "formatos_top": [
+    {
+     "formato": "video",
+     "pct": 100.0
+    }
+   ],
+   "lint": {
+    "longitud_max": 765,
+    "longitud_min": 107,
+    "emojis_max": 6,
+    "hashtags_max": 10,
+    "gancho_mayusculas": null,
+    "pregunta": null
+   }
+  }
+ }
+}

@@ -105,8 +105,9 @@ def test_edad_dias_robusta():
 
 def test_cargar_perfil_ignora_version_desconocida(tmp_path, monkeypatch):
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path))
-    (tmp_path / "piso-15.json").write_text(
-        json.dumps({"version": 99, "marca": "piso-15", "redes": {}}), encoding="utf-8"
+    (tmp_path / "fundacion.json").write_text(
+        json.dumps({"version": 99, "marca": "fundacion", "redes": {}}), encoding="utf-8"
     )
-    # Versión mayor a la conocida y sin semilla del paquete: None (no se inventa).
-    assert patrones_marca.cargar_perfil("piso-15") is None
+    # Versión mayor a la conocida y sin semilla del paquete (fundación no tiene datos
+    # en Metricool): None (no se inventa).
+    assert patrones_marca.cargar_perfil("fundacion") is None
