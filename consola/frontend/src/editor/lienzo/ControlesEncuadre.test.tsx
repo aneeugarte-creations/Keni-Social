@@ -1,6 +1,8 @@
-// Menú de NIVELES DE ZOOM de ControlesEncuadre: tratamiento visual coherente en todas las filas
-// (atajo en <kbd> cuando lo hay + check del nivel actual con hueco SIEMPRE reservado) y el alias
-// ⌥⌘0 de «Ajustar a la pantalla» reflejado en tooltip y menú. Más el toggle de ZONAS SEGURAS.
+// ControlesEncuadre, ahora BARRA INFERIOR estilo Canva: menú de NIVELES DE ZOOM con tratamiento
+// visual coherente en todas las filas (atajo en <kbd> cuando lo hay + check del nivel actual con
+// hueco SIEMPRE reservado) y el alias ⌥⌘0 de «Ajustar a la pantalla» reflejado en tooltip y menú.
+// Más el toggle de ZONAS SEGURAS, el slider compacto de zoom y el menú "⋯" de pantallas estrechas
+// (que repite los MISMOS toggles de encuadre).
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -98,5 +100,31 @@ describe("ControlesEncuadre — zonas seguras", () => {
     fireEvent.click(screen.getByRole("button", { name: nombre }));
     expect(setZonas).toHaveBeenCalledTimes(1);
     expect(fijarEscala).not.toHaveBeenCalled();
+  });
+});
+
+describe("ControlesEncuadre — slider de zoom (barra inferior)", () => {
+  it("expone un slider 10–300 con el porcentaje actual y fija la escala al moverlo", () => {
+    const { fijarEscala } = montar(0.5); // 50 %
+    const slider = screen.getByRole("slider", { name: "Zoom" }) as HTMLInputElement;
+    expect(slider).toHaveAttribute("min", "10");
+    expect(slider).toHaveAttribute("max", "300");
+    expect(slider.value).toBe("50");
+    fireEvent.change(slider, { target: { value: "150" } });
+    expect(fijarEscala).toHaveBeenCalledWith(1.5);
+  });
+});
+
+describe("ControlesEncuadre — menú «⋯» (pantallas estrechas)", () => {
+  it("abre un menú con los MISMOS toggles de encuadre (mismos tooltips/aria)", () => {
+    montar(1);
+    fireEvent.click(screen.getByRole("button", { name: "Opciones de encuadre" }));
+    const menu = screen.getByRole("menu", { name: "Opciones de encuadre" });
+    expect(
+      within(menu).getByRole("button", { name: "Imán: ajustar a objetos, bordes y márgenes" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(menu).getByRole("button", { name: "Zonas seguras: la interfaz de la red puede tapar lo sombreado" }),
+    ).toBeInTheDocument();
   });
 });

@@ -967,12 +967,11 @@ export function Lienzo({
       : [];
 
   return (
-    <div className="flex h-full w-full items-stretch gap-2">
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
     {/* Franja superior fija: aloja la barra CONTEXTUAL de la capa + la píldora de acciones ARRIBA
         de la imagen (fuera del lienzo), en un sitio estable que NO sigue a la selección —igual que
-        el raíl de zoom va a la derecha—. La altura va reservada siempre para que el lienzo no se
-        recoloque al aparecer/desaparecer la selección. */}
+        la barra de zoom/encuadre va abajo—. La altura va reservada siempre para que el lienzo no
+        se recoloque al aparecer/desaparecer la selección. */}
     <div className="flex h-11 shrink-0 items-center justify-center px-1">
       {acciones.length > 0 && !arrastrando && !editando && !modoImagen && (
         <div className="flex min-w-0 max-w-full items-center gap-1.5">
@@ -1244,11 +1243,11 @@ export function Lienzo({
 
     </div>
     </div>
-    </div>
 
-    {/* Controles de ENCUADRE + zoom: raíl vertical AL LADO del lienzo (fuera de la foto, no tapa
-        el campo visual). Imán, rejilla (+ tamaño de celda), "dentro del marco" y "zonas seguras"
-        son toggles INDEPENDIENTES; sus preferencias se guardan en localStorage. */}
+    {/* Controles de ENCUADRE + zoom: BARRA INFERIOR estilo Canva, a lo ancho del área del lienzo
+        (debajo de la foto, no tapa el campo visual). Imán, rejilla (+ tamaño de celda), "dentro
+        del marco" y "zonas seguras" son toggles INDEPENDIENTES; sus preferencias se guardan en
+        localStorage. */}
     <ControlesEncuadre
       iman={iman}
       setIman={setIman}
