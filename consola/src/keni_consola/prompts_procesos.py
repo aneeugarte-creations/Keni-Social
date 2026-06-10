@@ -37,6 +37,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
         "Ingesta de noticias · fusión de historias del mismo evento",
     ],
     "prompt/noticias/fusion-verificacion": [
+        "Ingesta de noticias · verificación de cada grupo propuesto antes de fundir",
+    ],
+    "prompt/noticias/fusion-verificacion": [
         "Ingesta de noticias · verificación de cada grupo antes de fundir",
     ],
     "prompt/noticias/perfil-editorial": ["Priorización · perfil de keywords por marca"],
