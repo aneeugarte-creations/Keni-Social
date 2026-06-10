@@ -486,6 +486,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         contenido={cuerpo}
         copy_in={publicacion.copy_in}
         imagen_url={imagen || undefined}
+        carrusel={publicacion.carrusel}
         titulo={publicacion.titulo}
         onAbrir={() => void abrirEditor()}
         variante="limpia"

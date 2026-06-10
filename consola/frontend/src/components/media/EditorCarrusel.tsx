@@ -6,7 +6,16 @@
  * y reordenarlos. Se publican tal cual (sin placa), en este orden, en el post multi-media.
  * Reusado por el editor de pieza (DialogoEditar) y por el cajón Presidencia.
  */
-import { ArrowDown, ArrowUp, Film, ImagePlus, Loader2, Trash2, Video } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Film,
+  ImagePlus,
+  Loader2,
+  Star,
+  Trash2,
+  Video,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -19,11 +28,35 @@ export function EditorCarrusel({
   onCambio,
   disabled = false,
   idPrefijo = "carrusel",
+  base = 2,
+  etiqueta,
+  marcarPortada = false,
+  onPortada,
 }: {
   slides: SlideCarrusel[];
   onCambio: (slides: SlideCarrusel[]) => void;
   disabled?: boolean;
   idPrefijo?: string;
+  /**
+   * Número del PRIMER elemento de la lista en el carrusel publicado. En el editor de
+   * pieza los slides van DETRÁS de la portada (base 2, default); en el cajón Presidencia
+   * la lista ES el carrusel entero (base 1: la primera imagen será la portada).
+   */
+  base?: number;
+  /** Título de la sección (default: "Slides del carrusel" con su aclaración). */
+  etiqueta?: React.ReactNode;
+  /**
+   * Marca con una insignia "Portada" la PRIMERA imagen de la lista (cajón Presidencia:
+   * esa imagen se compondrá con la placa de marca). Default off.
+   */
+  marcarPortada?: boolean;
+  /**
+   * "Hacer portada": promueve el slide `i` (solo imágenes) a PORTADA de la pieza. El
+   * llamante (DialogoEditar) intercambia la foto del hueco 0 con este slide. Sin
+   * callback (p. ej. el cajón Presidencia, donde la portada es la primera imagen de la
+   * lista), el botón no se pinta.
+   */
+  onPortada?: (indice: number) => void;
 }) {
   const [subiendo, setSubiendo] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -63,14 +96,21 @@ export function EditorCarrusel({
 
   const quitar = (i: number) => onCambio(slides.filter((_, k) => k !== i));
 
+  // Primera IMAGEN de la lista: en el cajón (marcarPortada) será la portada compuesta.
+  const idxPortada = marcarPortada ? slides.findIndex((s) => s.tipo === "imagen") : -1;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">
-          Slides del carrusel
-          <span className="ml-1 text-xs font-normal text-muted-foreground">
-            (van EN CRUDO detrás de la portada, en este orden)
-          </span>
+          {etiqueta ?? (
+            <>
+              Slides del carrusel
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                (van EN CRUDO detrás de la portada, en este orden)
+              </span>
+            </>
+          )}
         </p>
         <Button
           type="button"
@@ -114,8 +154,8 @@ export function EditorCarrusel({
               data-testid="slide-carrusel"
             >
               <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
-                {/* La portada es el slide 1; estos van detrás. */}
-                {i + 2}
+                {/* Posición en el carrusel publicado (con base 2, la portada es el 1). */}
+                {i + base}
               </span>
               {s.tipo === "video" ? (
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted">
@@ -124,26 +164,47 @@ export function EditorCarrusel({
               ) : (
                 <img
                   src={urlMedia(s.objeto)}
-                  alt={`Slide ${i + 2}`}
+                  alt={`Slide ${i + base}`}
                   className="h-12 w-12 shrink-0 rounded object-cover"
                 />
               )}
               <span className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground">
                 {s.tipo === "video" && <Video className="h-3 w-3 shrink-0" aria-hidden="true" />}
                 <span className="truncate">{s.objeto}</span>
+                {i === idxPortada && (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground"
+                    title="Esta imagen será la portada (se compone con la placa de marca)"
+                  >
+                    <Star className="h-2.5 w-2.5" aria-hidden="true" />
+                    Portada
+                  </span>
+                )}
               </span>
               <div className="flex shrink-0 items-center gap-0.5">
+                {onPortada && s.tipo === "imagen" && (
+                  <Button
+                    type="button" size="sm" variant="ghost"
+                    className="h-7 gap-1 px-1.5 text-xs text-muted-foreground"
+                    onClick={() => onPortada(i)} disabled={disabled}
+                    aria-label={`Hacer portada el slide ${i + base}`}
+                    title="Usar esta imagen como portada (la portada actual pasa a ser un slide)"
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                    Portada
+                  </Button>
+                )}
                 <Button
                   type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
                   onClick={() => mover(i, -1)} disabled={disabled || i === 0}
-                  aria-label={`Subir slide ${i + 2}`}
+                  aria-label={`Subir slide ${i + base}`}
                 >
                   <ArrowUp className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
                   onClick={() => mover(i, 1)} disabled={disabled || i === slides.length - 1}
-                  aria-label={`Bajar slide ${i + 2}`}
+                  aria-label={`Bajar slide ${i + base}`}
                 >
                   <ArrowDown className="h-3.5 w-3.5" />
                 </Button>
@@ -151,7 +212,7 @@ export function EditorCarrusel({
                   type="button" size="sm" variant="ghost"
                   className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                   onClick={() => quitar(i)} disabled={disabled}
-                  aria-label={`Quitar slide ${i + 2}`}
+                  aria-label={`Quitar slide ${i + base}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

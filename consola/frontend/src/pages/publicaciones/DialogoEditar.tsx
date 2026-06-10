@@ -481,9 +481,32 @@ export function DialogoEditar({
             ) : null}
 
           {/* CARRUSEL: los slides extra EN CRUDO detrás de la portada (la portada se edita
-              arriba con la placa de siempre). Subir/quitar/reordenar; autoguardado normal. */}
+              arriba con la placa de siempre). Subir/quitar/reordenar y "Hacer portada"
+              (intercambia la foto de la placa con ese slide); autoguardado normal. */}
           {publicacion && formato === "carrusel" && (
-            <EditorCarrusel slides={slides} onCambio={setSlides} idPrefijo="editar" />
+            <EditorCarrusel
+              slides={slides}
+              onCambio={setSlides}
+              idPrefijo="editar"
+              onPortada={(i) => {
+                // SWAP portada <-> slide: la imagen del slide pasa al hueco 0 de la placa
+                // (sin reencuadre: se reencuadra en el editor de arriba) y la foto que era
+                // portada baja a ocupar ese mismo slot del carrusel (no se pierde nada).
+                const slide = slides[i];
+                if (!slide || slide.tipo !== "imagen") return;
+                const fotoActual = fotos[0]?.objeto ?? "";
+                const nuevasFotos = [...fotos];
+                nuevasFotos[0] = { objeto: slide.objeto, foco: null, zoom: 0 };
+                setFotos(nuevasFotos);
+                const nuevos = [...slides];
+                if (fotoActual) {
+                  nuevos[i] = { tipo: "imagen", objeto: fotoActual };
+                } else {
+                  nuevos.splice(i, 1);
+                }
+                setSlides(nuevos);
+              }}
+            />
           )}
 
           <div className="space-y-1.5">

@@ -13,6 +13,8 @@
  */
 import {
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
   Heart,
   ImageIcon,
   MessageCircle,
@@ -28,6 +30,7 @@ import {
 import * as React from "react";
 
 import { urlMedia } from "@/lib/api";
+import { parsearCarrusel, type SlideCarrusel } from "@/lib/carrusel";
 import { cn } from "@/lib/utils";
 
 import { iconoRed, nombreRed, tamanoRed } from "../../pages/publicaciones/meta";
@@ -40,6 +43,13 @@ export interface VistaPreviaRedProps {
   copy_in?: string;
   /** Nombre del archivo o URL de la imagen; vacío = sin imagen. */
   imagen_url?: string;
+  /**
+   * Slides EXTRA de una pieza `formato='carrusel'` (JSON `[{tipo,objeto}, …]`, campo
+   * `Publicacion.carrusel`). Con slides, la variante LIMPIA pinta un carrusel DESLIZABLE
+   * (scroll lateral con snap, como en las redes de verdad): portada + slides en orden.
+   * Vacío/ausente = imagen única de siempre.
+   */
+  carrusel?: string;
   /**
    * Título de la pieza (el tema). En la variante limpia da nombre accesible al área
    * interactiva ("Abrir para editar: …") y `alt` a la imagen.
@@ -220,6 +230,179 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
             {expandido ? "menos" : "más"}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Carrusel DESLIZABLE de la variante limpia (piezas `formato='carrusel'`): la PORTADA
+ * (imagen compuesta) + los slides en crudo, en un strip horizontal con scroll-snap —se
+ * desliza con el dedo/trackpad como en las redes de verdad— más flechas (escritorio),
+ * contador "n/N" y puntos de posición. Solo la PORTADA abre el editor (los slides en
+ * crudo no: un video necesita sus propios controles).
+ */
+function CarruselLimpio({
+  portada,
+  copyIn,
+  titulo,
+  onAbrir,
+  slides,
+}: {
+  portada: string;
+  copyIn?: string;
+  titulo?: string;
+  onAbrir?: () => void;
+  slides: SlideCarrusel[];
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [indice, setIndice] = React.useState(0);
+  const total = slides.length + 1;
+  const etiquetaAbrir = titulo ? `Abrir para editar: ${titulo}` : "Abrir para editar";
+
+  // Índice visible derivado del scroll real (también cuando se desliza con el dedo).
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el || el.clientWidth === 0) return;
+    setIndice(Math.min(total - 1, Math.max(0, Math.round(el.scrollLeft / el.clientWidth))));
+  };
+  const ir = (delta: -1 | 1) => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollBy({ left: delta * el.clientWidth, behavior: "smooth" });
+  };
+
+  return (
+    <div className="group/carrusel relative">
+      <div
+        ref={ref}
+        onScroll={onScroll}
+        className="flex aspect-[4/5] w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden bg-muted [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="group"
+        aria-roledescription="carrusel"
+        aria-label={`Carrusel de ${total} slides${titulo ? `: ${titulo}` : ""}`}
+      >
+        {/* Slide 1: la PORTADA (placa compuesta). Es el área que abre el editor. */}
+        <div
+          className={cn(
+            "relative h-full w-full shrink-0 snap-center",
+            onAbrir &&
+              "group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          )}
+          role={onAbrir ? "button" : undefined}
+          tabIndex={onAbrir ? 0 : undefined}
+          title={onAbrir ? etiquetaAbrir : undefined}
+          aria-label={onAbrir ? etiquetaAbrir : `Portada${titulo ? `: ${titulo}` : ""}`}
+          onClick={onAbrir}
+          onKeyDown={
+            onAbrir
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onAbrir();
+                  }
+                }
+              : undefined
+          }
+        >
+          {portada ? (
+            <img
+              src={portada}
+              alt={titulo ?? ""}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <PlaceholderImagen className="h-full w-full" />
+          )}
+          <CapaCopyIn texto={portada ? "" : copyIn} />
+          {onAbrir && (
+            <span
+              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+              aria-hidden="true"
+            >
+              <Pencil className="h-3 w-3" />
+              Editar
+            </span>
+          )}
+        </div>
+        {/* Slides EN CRUDO, en su orden de publicación. Los videos llevan sus controles. */}
+        {slides.map((s, i) => (
+          <div
+            key={`${s.objeto}-${i}`}
+            className="relative h-full w-full shrink-0 snap-center bg-black"
+            aria-label={`Slide ${i + 2} de ${total}`}
+          >
+            {s.tipo === "video" ? (
+              <video
+                src={urlMedia(s.objeto)}
+                controls
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <img
+                src={urlMedia(s.objeto)}
+                alt={`Slide ${i + 2}`}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Contador "n/N" (arriba a la derecha, como IG). */}
+      <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white">
+        {indice + 1}/{total}
+      </span>
+
+      {/* Flechas (escritorio): aparecen al hover/focus; en táctil se desliza con el dedo. */}
+      {indice > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            ir(-1);
+          }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-background/85 p-1.5 text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100 group-hover/carrusel:opacity-100"
+          aria-label="Slide anterior"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      )}
+      {indice < total - 1 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            ir(1);
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-background/85 p-1.5 text-foreground opacity-0 shadow-sm transition-opacity hover:bg-background focus-visible:opacity-100 group-hover/carrusel:opacity-100"
+          aria-label="Slide siguiente"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      )}
+
+      {/* Puntos de posición (abajo, centrados). Decorativos: el contador ya da la posición. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1"
+        aria-hidden="true"
+      >
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-1.5 w-1.5 rounded-full bg-white/60 shadow-sm transition-colors",
+              i === indice && "bg-white",
+            )}
+          />
+        ))}
       </div>
     </div>
   );
@@ -486,6 +669,7 @@ export function VistaPreviaRed({
   contenido,
   copy_in,
   imagen_url,
+  carrusel,
   titulo,
   onAbrir,
   variante = "completa",
@@ -498,6 +682,25 @@ export function VistaPreviaRed({
   // plataforma + formato va en la CABECERA (junto al logo de IA/autor), no aquí.
   if (variante === "limpia") {
     const etiquetaAbrir = titulo ? `Abrir para editar: ${titulo}` : "Abrir para editar";
+    // CARRUSEL deslizable (piezas con slides): portada + media en crudo, scroll lateral
+    // con snap (como en las redes de verdad). Sin slides, la imagen única de siempre.
+    const slides = parsearCarrusel(carrusel);
+    if (slides.length > 0) {
+      return (
+        <div>
+          <CarruselLimpio
+            portada={imagen}
+            copyIn={copy_in}
+            titulo={titulo}
+            onAbrir={onAbrir}
+            slides={slides}
+          />
+          <div className="px-4 pb-1 pt-3">
+            <CopyConLeerMas contenido={contenido} />
+          </div>
+        </div>
+      );
+    }
     return (
       <div>
         {/* SOLO la imagen abre la acción (editor): es el área interactiva de la pieza. El copy

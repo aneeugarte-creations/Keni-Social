@@ -126,8 +126,24 @@ export default function CajonPresidencia() {
           rows={5}
           aria-label="Texto de la nota de presidencia"
         />
-        {/* El media de la nota: el editor de slides reusa la subida imagen/video y el orden. */}
-        <EditorCarrusel slides={media} onCambio={setMedia} idPrefijo="presidencia" />
+        {/* El media de la nota: el editor de slides reusa la subida imagen/video y el orden.
+            Aquí la lista ES el carrusel entero (base 1) y la PRIMERA imagen queda marcada
+            como portada (sube de posición la que quieras de portada). */}
+        <EditorCarrusel
+          slides={media}
+          onCambio={setMedia}
+          idPrefijo="presidencia"
+          base={1}
+          marcarPortada
+          etiqueta={
+            <>
+              Media de la nota
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                (la primera imagen será la portada; el resto sale en crudo, en este orden)
+              </span>
+            </>
+          }
+        />
         {!hayImagen && media.length > 0 && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
             Falta al menos una imagen: la portada del carrusel se compone sobre una foto.

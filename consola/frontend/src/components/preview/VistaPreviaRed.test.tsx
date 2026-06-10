@@ -73,3 +73,58 @@ describe("VistaPreviaRed · copy con 'leer más' (feed limpio)", () => {
     expect(onAbrir).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * Carrusel DESLIZABLE de la variante limpia (piezas `formato='carrusel'`): con slides
+ * (`carrusel` JSON), la tarjeta pinta el strip portada+slides con contador "n/N", los
+ * slides en crudo (img/video) y SOLO la portada abre el editor.
+ */
+describe("VistaPreviaRed · carrusel deslizable (feed limpio)", () => {
+  const SLIDES =
+    '[{"tipo":"imagen","objeto":"s2.jpg"},{"tipo":"video","objeto":"videos/s3.mp4"}]';
+
+  it("pinta portada + slides con contador y solo la portada abre el editor", () => {
+    const onAbrir = vi.fn();
+    const { container } = render(
+      <VistaPreviaRed
+        red="instagram"
+        marca="UnoTV"
+        contenido="copy del carrusel"
+        imagen_url="/api/media/portada.png"
+        carrusel={SLIDES}
+        titulo="Nota de presidencia"
+        variante="limpia"
+        onAbrir={onAbrir}
+      />,
+    );
+    // Strip con rol de carrusel y 3 slides (portada + 2 en crudo).
+    const strip = screen.getByRole("group", { name: /Carrusel de 3 slides/ });
+    expect(strip).toBeInTheDocument();
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+    // El slide de imagen en crudo se sirve por /api/media; el de video lleva <video>.
+    expect(
+      container.querySelector('img[src="/api/media/s2.jpg"]'),
+    ).toBeInTheDocument();
+    expect(container.querySelector("video")).not.toBeNull();
+    // SOLO la portada es interactiva (abre el editor).
+    fireEvent.click(
+      screen.getByRole("button", { name: "Abrir para editar: Nota de presidencia" }),
+    );
+    expect(onAbrir).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin slides (carrusel vacío o ilegible) cae a la imagen única de siempre", () => {
+    render(
+      <VistaPreviaRed
+        red="instagram"
+        marca="UnoTV"
+        contenido="copy normal"
+        imagen_url="/api/media/foto.png"
+        carrusel=""
+        variante="limpia"
+      />,
+    );
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByText(/1\//)).toBeNull();
+  });
+});
