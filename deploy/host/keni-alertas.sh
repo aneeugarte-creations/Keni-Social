@@ -97,6 +97,21 @@ elif ! printf '%s' "$cert" | openssl x509 -noout -checkend "$((CERT_MIN_DIAS * 8
   PROBLEMAS+=("certificado TLS de ${HOST_TLS} caduca en < ${CERT_MIN_DIAS} dias (notAfter: ${caduca})")
 fi
 
+# --- 5) Sonda HTTP de punta a punta (Traefik -> back) ---
+# Un Traefik COLGADO (vivo pero sin servir) era un apagon total sin alerta: esta fuera
+# de autoheal (host-network, a proposito) y el chequeo 1 solo mira `running`. Pedimos
+# /healthz del host publico a traves del Traefik LOCAL (:443): cubre ingress + routing +
+# TLS + back en una sola sonda barata. 3 intentos para no alertar por un blip.
+intentos=0; sonda_ok=0
+while (( intentos < 3 )); do
+  codigo="$(curl -sk -o /dev/null -w '%{http_code}' -m 10 --resolve "${HOST_TLS}:443:127.0.0.1" "https://${HOST_TLS}/healthz" 2>/dev/null)"
+  if [[ "$codigo" == "200" ]]; then sonda_ok=1; break; fi
+  intentos=$((intentos + 1)); sleep 5
+done
+if [[ "$sonda_ok" != 1 ]]; then
+  PROBLEMAS+=("sonda HTTPS de punta a punta FALLO (https://${HOST_TLS}/healthz via Traefik local devolvio '${codigo:-sin respuesta}')")
+fi
+
 # --- Resultado. ---
 if ((${#PROBLEMAS[@]} > 0)); then
   for p in "${PROBLEMAS[@]}"; do
