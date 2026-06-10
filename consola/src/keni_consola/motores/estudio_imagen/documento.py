@@ -38,6 +38,7 @@ de error salen en español (la API los devuelve como 400).
 
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any
 
@@ -82,6 +83,46 @@ def _exige_doc(cond: bool, msg: str) -> None:
         raise DocumentoError(msg)
 
 
+def _entero(valor: Any, campo: str, minimo: int | None = None, maximo: int | None = None, defecto: int = 0) -> int:
+    """Convierte un valor a entero o lanza DocumentoError con mensaje en español.
+
+    Valida que esté en rango [minimo, maximo] si se especifican.
+    """
+    try:
+        if valor is None or valor == "":
+            return defecto
+        num = int(valor)
+        if not math.isfinite(num):
+            raise DocumentoError(f"'{campo}' debe ser un número válido.")
+        if minimo is not None and num < minimo:
+            raise DocumentoError(f"'{campo}' no puede ser menor a {minimo}.")
+        if maximo is not None and num > maximo:
+            raise DocumentoError(f"'{campo}' no puede ser mayor a {maximo}.")
+        return num
+    except (ValueError, TypeError, OverflowError):
+        raise DocumentoError(f"'{campo}' debe ser un número entero válido.")
+
+
+def _flotante(valor: Any, campo: str, minimo: float | None = None, maximo: float | None = None, defecto: float = 0.0) -> float:
+    """Convierte un valor a flotante o lanza DocumentoError con mensaje en español.
+
+    Valida que esté en rango [minimo, maximo] si se especifican.
+    """
+    try:
+        if valor is None or valor == "":
+            return defecto
+        num = float(valor)
+        if not math.isfinite(num):
+            raise DocumentoError(f"'{campo}' debe ser un número válido.")
+        if minimo is not None and num < minimo:
+            raise DocumentoError(f"'{campo}' no puede ser menor a {minimo}.")
+        if maximo is not None and num > maximo:
+            raise DocumentoError(f"'{campo}' no puede ser mayor a {maximo}.")
+        return num
+    except (ValueError, TypeError, OverflowError):
+        raise DocumentoError(f"'{campo}' debe ser un número válido.")
+
+
 def _id(c: dict[str, Any]) -> str:
     v = c.get("id")
     return v if isinstance(v, str) and v else uuid.uuid4().hex[:12]
@@ -99,12 +140,14 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
     caja = _caja(c, "La capa")
     op = c.get("opacidad", 1)
     nombre = c.get("nombre")
+    rotacion_val = c.get("rotacion", 0) or 0
+    opacidad_val = _flotante(op, "opacidad", minimo=0.0, maximo=1.0, defecto=1.0)
     base = {
         "id": _id(c),
         **caja,
-        "rotacion": float(c.get("rotacion", 0) or 0),
-        "opacidad": float(op) if _num(op) and 0 <= float(op) <= 1 else 1.0,
-        "z": int(c.get("z", 0)),
+        "rotacion": _flotante(rotacion_val, "rotacion", defecto=0.0),
+        "opacidad": opacidad_val,
+        "z": _entero(c.get("z", 0), "z", defecto=0),
         "visible": bool(c.get("visible", True)),
         "bloqueada": bool(c.get("bloqueada", False)),
     }
@@ -127,8 +170,8 @@ def _sombra(s: Any) -> dict[str, Any] | None:
     if not isinstance(s, dict):
         return None
     out: dict[str, Any] = {
-        "dx": int(s.get("dx", 2)),
-        "dy": int(s.get("dy", 2)),
+        "dx": _entero(s.get("dx", 2), "sombra.dx", defecto=2),
+        "dy": _entero(s.get("dy", 2), "sombra.dy", defecto=2),
         "color": s["color"] if _es_hex(s.get("color")) else "#000000",
     }
     desenfoque = s.get("desenfoque")
@@ -259,6 +302,8 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
     radio = c.get("radio", 0)
     radios = _radios(c.get("radios"))
     crop = _crop(c.get("crop"))
+    radio_val = _entero(radio, "radio", minimo=0, defecto=0)
+    zoom_val = _flotante(zoom, "zoom", minimo=1.0, maximo=6.0, defecto=1.0)
     img = {
         **_base(c),
         "tipo": "imagen",
@@ -269,9 +314,9 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         # `radio` redondea las esquinas del rect (px ≥ 0); se ignora con forma "elipse". Se persisten
         # siempre con su default para que el contrato sea estable; documentos viejos validan igual.
         "forma": c.get("forma") if c.get("forma") in _FORMAS_IMAGEN else "rect",
-        "radio": max(0, int(radio)) if _num(radio) else 0,
+        "radio": radio_val,
         # Reencuadre dentro del marco: factor de acercamiento (1 = ajuste base). Acotado a [1, 6].
-        "zoom": min(6.0, max(1.0, float(zoom))) if _num(zoom) else 1.0,
+        "zoom": zoom_val,
         # `es_foto`: ESTA capa es el HUECO DE FOTO de la plantilla — la única donde entra la foto de
         # la pieza al aplicarla. Toda plantilla del estudio tiene exactamente una (obligatoria y
         # bloqueada en el editor). `objeto` guarda una foto de muestra para la miniatura.
@@ -298,9 +343,9 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
         _exige_doc(_es_hex(chip.get("color")), "El color del chip debe ser hex #RRGGBB.")
         chip_limpio = {
             "color": chip["color"],
-            "pad_x": int(chip.get("pad_x", _CHIP_PAD_X)),
-            "pad_y": int(chip.get("pad_y", _CHIP_PAD_Y)),
-            "radio": int(chip.get("radio", 0)),
+            "pad_x": _entero(chip.get("pad_x", _CHIP_PAD_X), "chip.pad_x", defecto=_CHIP_PAD_X),
+            "pad_y": _entero(chip.get("pad_y", _CHIP_PAD_Y), "chip.pad_y", defecto=_CHIP_PAD_Y),
+            "radio": _entero(chip.get("radio", 0), "chip.radio", minimo=0, defecto=0),
         }
     sombra_limpia = _sombra(c.get("sombra"))
     # Contorno del texto (legibilidad sobre fotos): solo si trae grosor > 0.
@@ -313,22 +358,26 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
         }
     aj = c.get("auto_ajuste") or {}
     familia = c["familia"] if isinstance(c.get("familia"), str) and c.get("familia") else "sans"
+    tamano_val = _entero(c.get("tamano", 64), "tamano", minimo=4, maximo=2000, defecto=64)
+    peso_val = _entero(c.get("peso", 700), "peso", defecto=700)
+    max_lineas_val = _entero(aj.get("max_lineas", 4), "auto_ajuste.max_lineas", minimo=1, maximo=50, defecto=4)
+    tam_min_val = _entero(aj.get("tam_min", 40), "auto_ajuste.tam_min", minimo=4, maximo=2000, defecto=40)
     out: dict[str, Any] = {
         **_base(c),
         "tipo": "texto",
         "texto": str(c.get("texto", "")),
         "binding": c.get("binding"),
         "familia": familia,
-        "tamano": int(c.get("tamano", 64)),
-        "peso": int(c.get("peso", 700)),
+        "tamano": tamano_val,
+        "peso": peso_val,
         "color": c["color"],
         "alineacion": c.get("alineacion") if c.get("alineacion") in _ALINEACIONES else "izquierda",
         "mayusculas": bool(c.get("mayusculas", False)),
         "interlineado": float(c.get("interlineado", 1.14)),
         "interletra": float(c.get("interletra", 0)) if _num(c.get("interletra")) else 0.0,
         "auto_ajuste": {
-            "max_lineas": int(aj.get("max_lineas", 4)),
-            "tam_min": int(aj.get("tam_min", 40)),
+            "max_lineas": max_lineas_val,
+            "tam_min": tam_min_val,
         },
         "sombra": sombra_limpia,
         # Degradado del relleno (sustituye al color sólido cuando viene). Solo se persiste si es válido.
@@ -366,7 +415,7 @@ def _capa_logo(c: dict[str, Any]) -> dict[str, Any]:
             "color": wm["color"] if _es_hex(wm.get("color")) else "#FFFFFF",
             "fondo": wm["fondo"] if _es_hex(wm.get("fondo")) else "#E30613",
             "familia": wm["familia"] if isinstance(wm.get("familia"), str) and wm.get("familia") else "sans",
-            "peso": int(wm.get("peso", 700)),
+            "peso": _entero(wm.get("peso", 700), "wordmark.peso", defecto=700),
         },
     }
 
@@ -382,6 +431,7 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
             "grosor": float(borde["grosor"]),
         }
     radios = _radios(c.get("radios"))
+    radio_val = _entero(c.get("radio", 0), "radio", minimo=0, defecto=0)
     marco = {
         **_base(c),
         "tipo": "marco",
@@ -390,7 +440,7 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
         # Degradado del relleno (sustituye a `relleno` cuando viene). Solo se persiste si es válido.
         "relleno_degradado": _relleno_degradado(c.get("relleno_degradado")),
         "borde": borde_limpio,
-        "radio": int(c.get("radio", 0)),
+        "radio": radio_val,
         # Sombra de la forma del marco (opcional): solo se persiste si viene.
         "sombra": _sombra(c.get("sombra")),
     }
@@ -406,7 +456,7 @@ def _capa_overlay(c: dict[str, Any]) -> dict[str, Any]:
         "tipo": "overlay",
         "color": c["color"] if _es_hex(c.get("color")) else "#111315",
         "alto_frac": float(c.get("alto_frac", _spec._DEGRADADO_ALTO_FRAC)),
-        "alpha": int(c.get("alpha", _spec._DEGRADADO_ALPHA)),
+        "alpha": _entero(c.get("alpha", _spec._DEGRADADO_ALPHA), "alpha", minimo=0, maximo=255, defecto=_spec._DEGRADADO_ALPHA),
     }
 
 
@@ -440,20 +490,36 @@ def _validar_capa(c: Any) -> dict[str, Any]:
 def _validar_formato(f: Any) -> dict[str, int]:
     _exige_doc(isinstance(f, dict), "El documento necesita un objeto 'formato' con w,h.")
     _exige_doc(_num(f.get("w")) and _num(f.get("h")), "El formato necesita 'w' y 'h' numéricos.")
+    w = _entero(f["w"], "formato.w", minimo=16, maximo=8000)
+    h = _entero(f["h"], "formato.h", minimo=16, maximo=8000)
     return {
-        "w": int(f["w"]),
-        "h": int(f["h"]),
-        "safe_top": int(f.get("safe_top", 0)),
-        "safe_bottom": int(f.get("safe_bottom", 0)),
+        "w": w,
+        "h": h,
+        "safe_top": _entero(f.get("safe_top", 0), "formato.safe_top", minimo=0, defecto=0),
+        "safe_bottom": _entero(f.get("safe_bottom", 0), "formato.safe_bottom", minimo=0, defecto=0),
         # Márgenes laterales (encuadre): aditivos y retrocompatibles. Documentos sin ellos => 0.
-        "safe_left": int(f.get("safe_left", 0)),
-        "safe_right": int(f.get("safe_right", 0)),
+        "safe_left": _entero(f.get("safe_left", 0), "formato.safe_left", minimo=0, defecto=0),
+        "safe_right": _entero(f.get("safe_right", 0), "formato.safe_right", minimo=0, defecto=0),
     }
 
 
 # Máximo de huecos de foto por plantilla (collage). Más allá es un error de diseño; acotamos para
 # no desbordar el editor ni el almacén de fotos por pieza.
 MAX_HUECOS_FOTO = 12
+
+# Máximo de capas por documento (incluidas capas hijas de grupos). Límite defensivo contra DoS.
+MAX_CAPAS_DOCUMENTO = 200
+
+
+def _contar_capas_recursivo(capas: list[dict[str, Any]] | None) -> int:
+    """Cuenta el número TOTAL de capas incluyendo capas hijas de grupos."""
+    if not isinstance(capas, list):
+        return 0
+    total = len(capas)
+    for c in capas:
+        if isinstance(c, dict) and c.get("tipo") == "grupo":
+            total += _contar_capas_recursivo(c.get("capas"))
+    return total
 
 
 def _normalizar_hueco_foto(capas: list[dict[str, Any]]) -> None:
@@ -476,6 +542,11 @@ def validar(doc: Any) -> dict[str, Any]:
     _exige_doc(isinstance(capas, list), "El documento necesita una lista 'capas'.")
     fuentes = doc.get("fuentes") or {}
     capas_ok = [_validar_capa(c) for c in capas]
+    total_capas = _contar_capas_recursivo(capas_ok)
+    _exige_doc(
+        total_capas <= MAX_CAPAS_DOCUMENTO,
+        f"El documento tiene demasiadas capas ({total_capas}). Máximo permitido: {MAX_CAPAS_DOCUMENTO}.",
+    )
     _normalizar_hueco_foto(capas_ok)
     return {
         "version": VERSION,

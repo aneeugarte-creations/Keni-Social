@@ -313,3 +313,119 @@ def test_renderizar_documento_invalido_lanza_estudioerror(entorno, monkeypatch):
 def test_documento_desde_plantilla_marca_desconocida(entorno):
     with pytest.raises(e.EstudioError):
         e.documento_desde_plantilla("marca-fantasma", "feed")
+
+
+# --------------------------------------------------------------------------- #
+# BUG 1: Límites de validación (DoS)                                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_validar_formato_w_fuera_de_rango():
+    """w/h fuera de rango [16, 8000] -> DocumentoError (no 400 sutil)."""
+    # w muy pequeño
+    with pytest.raises(d.DocumentoError, match="no puede ser menor"):
+        d.validar(_doc(formato={"w": 15, "h": 1350}))
+    # w muy grande
+    with pytest.raises(d.DocumentoError, match="no puede ser mayor"):
+        d.validar(_doc(formato={"w": 8001, "h": 1350}))
+    # h muy pequeño
+    with pytest.raises(d.DocumentoError, match="no puede ser menor"):
+        d.validar(_doc(formato={"w": 1080, "h": 15}))
+
+
+def test_validar_capa_texto_tamano_fuera_de_rango():
+    """tamano fuera de [4, 2000] -> DocumentoError."""
+    # tamano muy pequeño
+    with pytest.raises(d.DocumentoError, match="tamano.*no puede ser menor"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                               "texto": "hola", "color": "#FFFFFF", "tamano": 3}]))
+    # tamano muy grande
+    with pytest.raises(d.DocumentoError, match="tamano.*no puede ser mayor"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                               "texto": "hola", "color": "#FFFFFF", "tamano": 2001}]))
+
+
+def test_validar_capa_texto_auto_ajuste_limites():
+    """max_lineas en [1, 50]; tam_min en [4, 2000]."""
+    # max_lineas fuera de rango
+    with pytest.raises(d.DocumentoError, match="max_lineas.*no puede ser menor"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 200,
+                               "texto": "a", "color": "#FFFFFF",
+                               "auto_ajuste": {"max_lineas": 0, "tam_min": 40}}]))
+    with pytest.raises(d.DocumentoError, match="max_lineas.*no puede ser mayor"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 200,
+                               "texto": "a", "color": "#FFFFFF",
+                               "auto_ajuste": {"max_lineas": 51, "tam_min": 40}}]))
+    # tam_min fuera de rango
+    with pytest.raises(d.DocumentoError, match="tam_min.*no puede ser menor"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 200,
+                               "texto": "a", "color": "#FFFFFF",
+                               "auto_ajuste": {"max_lineas": 4, "tam_min": 3}}]))
+
+
+def test_validar_documento_limite_capas():
+    """Más de MAX_CAPAS_DOCUMENTO (200) capas incluyendo hijas de grupos -> DocumentoError."""
+    capas_muchas = [{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10} for _ in range(201)]
+    with pytest.raises(d.DocumentoError, match="demasiadas capas"):
+        d.validar(_doc(capas=capas_muchas))
+
+
+def test_validar_documento_limite_capas_con_grupo():
+    """Las capas hijas de un grupo cuentan para el límite total (201 incluyendo 1 grupo + 200 hijas)."""
+    capas = [{"tipo": "grupo", "x": 0, "y": 0, "w": 10, "h": 10,
+              "capas": [{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10} for _ in range(200)]}]
+    with pytest.raises(d.DocumentoError, match="demasiadas capas"):
+        d.validar(_doc(capas=capas))
+
+
+# --------------------------------------------------------------------------- #
+# BUG 2: Casts sin guardar -> 500 en vez de 400                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_capa_base_z_invalido_400():
+    """z con valor no-numérico -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="z.*número entero"):
+        d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10, "z": "x"}]))
+
+
+def test_capa_base_rotacion_invalida_400():
+    """rotacion con valor no-numérico -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="rotacion"):
+        d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10, "rotacion": {}}]))
+
+
+def test_capa_texto_tamano_no_numerico_400():
+    """tamano con valor no-numérico (ej. dict) -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="tamano.*número entero"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                               "texto": "a", "color": "#FFFFFF", "tamano": {}}]))
+
+
+def test_capa_texto_peso_no_numerico_400():
+    """peso con valor no-numérico -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="peso.*número entero"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                               "texto": "a", "color": "#FFFFFF", "peso": "bold"}]))
+
+
+def test_capa_sombra_dx_no_numerico_400():
+    """sombra.dx con valor no-numérico -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="dx.*número entero"):
+        d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
+                               "sombra": {"dx": "nope", "dy": 2, "color": "#000000"}}]))
+
+
+def test_capa_chip_pad_no_numerico_400():
+    """chip.pad_x con valor no-numérico -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="pad_x.*número entero"):
+        d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                               "texto": "a", "color": "#FFFFFF",
+                               "chip": {"color": "#FF0000", "pad_x": "wide"}}]))
+
+
+def test_capa_overlay_alpha_no_numerico_400():
+    """overlay.alpha con valor no-numérico -> DocumentoError (no 500)."""
+    with pytest.raises(d.DocumentoError, match="alpha.*número entero"):
+        d.validar(_doc(capas=[{"tipo": "overlay", "x": 0, "y": 0, "w": 100, "h": 100,
+                               "color": "#000000", "alpha": "opaque"}]))

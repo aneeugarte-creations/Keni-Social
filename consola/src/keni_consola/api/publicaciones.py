@@ -21,6 +21,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -974,7 +975,8 @@ async def compuesta(request: Request) -> Response:
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
 
     try:
-        resultado = render_pieza.render_bytes(pub)
+        # Render es bloqueante (subprocess.run); ejecutar en threadpool para no bloquear el event loop.
+        resultado = await run_in_threadpool(render_pieza.render_bytes, pub)
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=422)
     if resultado is None:

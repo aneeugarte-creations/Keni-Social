@@ -99,3 +99,58 @@ def test_guardar_sin_documento_400(cliente, entorno, _render_mock):
 def test_guardar_pieza_inexistente_404(cliente, entorno, _render_mock):
     r = cliente.post("/api/imagen/pieza/c1/no-existe", json={"documento": _DOC})
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# BUG 3: pieza_guardar valida plataforma ANTES de renderizar                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_guardar_plataforma_no_pertenece_contenido_404(cliente, entorno, _render_mock):
+    """Guardar documento para plataforma que no pertenece al contenido -> 404."""
+    _cid1, pid1 = _pieza(entorno)
+    _cid2, pid2 = _pieza(entorno)
+
+    # Intentar guardar documento en plataforma que pertenece a cid2 bajo cid1 -> 404.
+    r = cliente.post(f"/api/imagen/pieza/{_cid1}/{pid2}", json={"documento": _DOC})
+    assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# BUG 2: Casts inválidos retornan 400, no 500                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_guardar_documento_con_z_invalido_400(cliente, entorno, _render_mock):
+    """Documento con z no-numérico -> 400 (no 500)."""
+    _cid, pid = _pieza(entorno)
+    doc = {
+        "formato": {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96},
+        "capas": [{"tipo": "imagen", "x": 0, "y": 0, "w": 100, "h": 100, "z": "x"}],
+    }
+    r = cliente.post(f"/api/imagen/pieza/{_cid}/{pid}", json={"documento": doc})
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_guardar_documento_con_tamano_invalido_400(cliente, entorno, _render_mock):
+    """Documento con tamano no-numérico -> 400 (no 500)."""
+    _cid, pid = _pieza(entorno)
+    doc = {
+        "formato": {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96},
+        "capas": [{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
+                   "texto": "a", "color": "#FFFFFF", "tamano": {}}],
+    }
+    r = cliente.post(f"/api/imagen/pieza/{_cid}/{pid}", json={"documento": doc})
+    assert r.status_code == 400
+
+
+def test_guardar_documento_con_formato_w_invalido_400(cliente, entorno, _render_mock):
+    """Documento con formato.w fuera de rango -> 400 (no 500)."""
+    _cid, pid = _pieza(entorno)
+    doc = {
+        "formato": {"w": 9999, "h": 1350, "safe_top": 60, "safe_bottom": 96},
+        "capas": [],
+    }
+    r = cliente.post(f"/api/imagen/pieza/{_cid}/{pid}", json={"documento": doc})
+    assert r.status_code == 400

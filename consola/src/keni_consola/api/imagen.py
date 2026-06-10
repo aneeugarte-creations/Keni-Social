@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -62,7 +63,8 @@ async def render(request: Request) -> Response:
     if not isinstance(doc, dict):
         return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
     try:
-        res = estudio_imagen.renderizar_documento(doc, bindings=bindings)
+        # Render es bloqueante (subprocess.run); ejecutar en threadpool para no bloquear el event loop.
+        res = await run_in_threadpool(estudio_imagen.renderizar_documento, doc, bindings=bindings)
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse(res)
@@ -127,7 +129,8 @@ async def pieza_documento(request: Request) -> Response:
 async def pieza_guardar(request: Request) -> Response:
     """POST /api/imagen/pieza/{contenido_id}/{plataforma_id} {documento}: guarda el documento en la pieza.
 
-    Valida y renderiza el documento (PNG fiel), APENDE una versión al historial y fija la `imagen`
+    Valida primero que la pieza existe (contenido + plataforma que le pertenece). Luego valida,
+    renderiza el documento (PNG fiel), crea una versión en el historial y fija la `imagen`
     de la publicación al PNG renderizado. -> `{id, url, version}` | 400 | 404.
     """
     cid = request.path_params["contenido_id"]
@@ -136,30 +139,48 @@ async def pieza_guardar(request: Request) -> Response:
     doc = datos.get("documento") if isinstance(datos, dict) else None
     if not isinstance(doc, dict):
         return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
+
+    # VALIDACIÓN PREVIA: que la plataforma existe y pertenece al contenido (404 si no).
+    # Se hace ANTES de renderizar para evitar huérfanos si el render falla después.
+    plataforma = repos.obtener_contenido_plataforma(pid)
+    if plataforma is None:
+        return JSONResponse({"error": "Esa publicación no existe."}, status_code=404)
+    if plataforma.get("contenido_id") != cid:
+        return JSONResponse(
+            {"error": "La plataforma no pertenece a ese contenido."}, status_code=404
+        )
+
     # Bindings: el cliente puede enviarlos (valores VIGENTES del editor, aún sin persistir); si no,
     # se usan los reales de la pieza (copy_in de la fila + pleca de la marca). Así el PNG guardado
     # muestra el titular/pleca REAL en las capas con `binding`, no el texto de muestra.
     bindings = datos.get("bindings") if isinstance(datos, dict) else None
     if not isinstance(bindings, dict):
         bindings = _bindings_de_pieza(cid, pid)
+
     try:
         doc_ok = estudio_imagen.validar_documento(doc)
-        render = estudio_imagen.renderizar_documento(doc_ok, bindings=bindings)
+        # Render es bloqueante (subprocess.run); ejecutar en threadpool para no bloquear el event loop.
+        render = await run_in_threadpool(estudio_imagen.renderizar_documento, doc_ok, bindings=bindings)
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    # Fija la imagen de la pieza (404 si la plataforma no existe).
-    actualizada = repos.actualizar_contenido_plataforma(pid, {"imagen": render["id"]})
-    if actualizada is None:
-        return JSONResponse({"error": "Esa publicación no existe."}, status_code=404)
+    # CREAR VERSIÓN PRIMERO: si la creación de versión falla, no habremos actualizado la imagen aún.
+    # Así evitamos dejar la publicación apuntando a un PNG cuya versión nunca fue registrada.
+    try:
+        version = repos.crear_documento_version(
+            contenido_id=cid,
+            plataforma_id=pid,
+            documento=json.dumps(doc_ok, ensure_ascii=False),
+            render_objeto=render["id"],
+            autor=autor_de_peticion(request),
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"No se pudo guardar la versión: {str(e)}"}, status_code=500
+        )
 
-    version = repos.crear_documento_version(
-        contenido_id=cid,
-        plataforma_id=pid,
-        documento=json.dumps(doc_ok, ensure_ascii=False),
-        render_objeto=render["id"],
-        autor=autor_de_peticion(request),
-    )
+    # Solo después de crear la versión, fijar la imagen de la pieza.
+    repos.actualizar_contenido_plataforma(pid, {"imagen": render["id"]})
     return JSONResponse({"id": render["id"], "url": render["url"], "version": version["version"]})
 
 
