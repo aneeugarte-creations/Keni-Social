@@ -56,6 +56,11 @@ _CACHE_GASTO: dict[str, Any] | None = None
 _CACHE_DIA = ""
 _CACHE_EXPIRA = 0.0
 
+# Ultimo nivel observado por ESTE proceso: cada TRANSICION deja un log WARNING (entrar en
+# corte) o INFO (volver a normal) — la señal operativa que consume la observabilidad (los
+# gates en si son silenciosos: rechazan/esperan sin ruido por peticion).
+_ULTIMO_NIVEL: str | None = None
+
 
 def _hoy_utc() -> str:
     """Dia UTC actual (YYYY-MM-DD), el bucket del presupuesto."""
@@ -63,10 +68,11 @@ def _hoy_utc() -> str:
 
 
 def invalidar_cache() -> None:
-    """Invalida la cache del gasto (la llama el registro de un cierre, y los tests)."""
-    global _CACHE_EXPIRA
+    """Invalida la cache del gasto y el nivel observado (cierres de generacion, y tests)."""
+    global _CACHE_EXPIRA, _ULTIMO_NIVEL
     with _CACHE_LOCK:
         _CACHE_EXPIRA = 0.0
+        _ULTIMO_NIVEL = None
 
 
 def _gasto_hoy() -> dict[str, Any]:
@@ -103,18 +109,38 @@ def nivel() -> str:
     """Nivel de corte VIGENTE (el kill switch manda; luego los escalones del presupuesto).
 
     Sin presupuesto configurado (0) no hay corte automatico: solo `normal`/`pausado`.
+    Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al relajar): es la
+    señal operativa del corte; los gates por peticion no loguean (serian ruido).
     """
     if config.generacion_pausada():
-        return NIVEL_PAUSADO
+        return _con_transicion(NIVEL_PAUSADO)
     presupuesto = config.presupuesto_tokens_dia()
     if presupuesto <= 0:
-        return NIVEL_NORMAL
+        return _con_transicion(NIVEL_NORMAL)
     gastado = int(_gasto_hoy().get("tokens", 0))
     if gastado >= presupuesto * (1 + config.presupuesto_margen_manual_pct() / 100.0):
-        return NIVEL_AGOTADO
+        return _con_transicion(NIVEL_AGOTADO)
     if gastado >= presupuesto:
-        return NIVEL_SOLO_MANUAL
-    return NIVEL_NORMAL
+        return _con_transicion(NIVEL_SOLO_MANUAL)
+    return _con_transicion(NIVEL_NORMAL)
+
+
+# Severidad creciente de los niveles (para distinguir endurecer de relajar al loguear).
+_SEVERIDAD = {NIVEL_NORMAL: 0, NIVEL_SOLO_MANUAL: 1, NIVEL_AGOTADO: 2, NIVEL_PAUSADO: 3}
+
+
+def _con_transicion(nuevo: str) -> str:
+    """Devuelve `nuevo` dejando un log SOLO si el nivel cambio desde la ultima lectura."""
+    global _ULTIMO_NIVEL
+    with _CACHE_LOCK:
+        anterior, _ULTIMO_NIVEL = _ULTIMO_NIVEL, nuevo
+    if anterior is None or anterior == nuevo:
+        return nuevo
+    if _SEVERIDAD.get(nuevo, 0) > _SEVERIDAD.get(anterior, 0):
+        _log.warning("presupuesto_ia: corte de generacion %s -> %s", anterior, nuevo)
+    else:
+        _log.info("presupuesto_ia: generacion reanudada %s -> %s", anterior, nuevo)
+    return nuevo
 
 
 def estado() -> dict[str, Any]:
