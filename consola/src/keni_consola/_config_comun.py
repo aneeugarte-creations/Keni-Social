@@ -77,6 +77,8 @@ ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 ENV_PRESUPUESTO_TOKENS_DIA = "KENI_PRESUPUESTO_TOKENS_DIA"
 ENV_PRESUPUESTO_MARGEN_MANUAL = "KENI_PRESUPUESTO_MARGEN_MANUAL"
 ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
+# Tope de INTENTOS de ejecucion de un job de la cola (anti crash-loop del re-reclamo).
+ENV_JOBS_MAX_INTENTOS = "KENI_JOBS_MAX_INTENTOS"
 
 # Generacion `claude -p`.
 ENV_CLAUDE_TIMEOUT = "KENI_CLAUDE_TIMEOUT"
@@ -454,6 +456,9 @@ PRESUPUESTO_TOKENS_DIA_DEF = 0
 # Margen EXTRA (%) sobre el presupuesto que se concede SOLO a los lanzamientos manuales del
 # equipo cuando el fondo ya esta cortado. Al superarlo, corte TOTAL (tambien lo manual).
 PRESUPUESTO_MARGEN_MANUAL_DEF = 20
+# Intentos maximos de ejecucion de un job (el normal + re-reclamos de huerfano). 3 da dos
+# reintentos automaticos tras muertes del worker sin permitir un crash-loop infinito.
+JOBS_MAX_INTENTOS_DEF = 3
 # Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
 # 4h da margen sin golpear las APIs externas en cada apertura.
 METRICAS_REFRESCO_HORAS_DEF = 4
@@ -805,6 +810,7 @@ __all__ = [
     'ENV_PRESUPUESTO_MARGEN_MANUAL',
     'ENV_PRESUPUESTO_TOKENS_DIA',
     'ENV_GENERACION_PAUSADA',
+    'ENV_JOBS_MAX_INTENTOS',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VALIDACION',
@@ -875,6 +881,7 @@ __all__ = [
     'INGESTA_WORKERS_DEF',
     'INVESTIGADOR_INTERVALO_HORAS_DEF',
     'LOG_LEVEL_DEF',
+    'JOBS_MAX_INTENTOS_DEF',
     'MAX_COLA_DEF',
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',

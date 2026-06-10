@@ -213,6 +213,7 @@ from ._config_comun import (  # noqa: F401
     ENV_PIPELINE_VALIDACION,
     ENV_PORT,
     ENV_PREFERENCIAS,
+    ENV_JOBS_MAX_INTENTOS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
     ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
@@ -285,6 +286,7 @@ from ._config_comun import (  # noqa: F401
     INGESTA_WORKERS_DEF,
     INVESTIGADOR_INTERVALO_HORAS_DEF,
     LOG_LEVEL_DEF,
+    JOBS_MAX_INTENTOS_DEF,
     MAX_COLA_DEF,
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
@@ -384,6 +386,7 @@ from .config_hosted import (  # noqa: F401
 )
 from .config_jobs import (  # noqa: F401
     generacion_pausada,
+    jobs_max_intentos,
     max_cola,
     max_jobs,
     presupuesto_margen_manual_pct,

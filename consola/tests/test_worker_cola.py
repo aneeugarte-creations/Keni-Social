@@ -248,6 +248,59 @@ def test_reclama_job_huerfano_de_worker_muerto(entorno):
     assert rereclamado is not None and rereclamado["id"] == primero["id"]
 
 
+def _envejecer_claim(job_id: str) -> None:
+    """Retrasa `claimed_at` mas alla del umbral de huerfano (simula un worker muerto)."""
+    viejo = (
+        datetime.now()
+        - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
+    ).isoformat(timespec="seconds")
+    con = db._conectar()
+    try:
+        con.execute("UPDATE jobs SET claimed_at = ? WHERE id = ?", (viejo, job_id))
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_huerfano_agota_intentos_y_se_descarta(entorno, monkeypatch):
+    """ANTI CRASH-LOOP: un job que mata repetidamente a su worker NO se re-reclama para siempre.
+
+    Con KENI_JOBS_MAX_INTENTOS=2: intento 1 (reclamo normal) + intento 2 (re-reclamo de
+    huerfano); al quedar huerfano OTRA vez, el siguiente reclamo lo DESCARTA: cierra el job
+    (libera el cupo) y deja el registro en error claro con motivo `interrumpido`.
+    """
+    monkeypatch.setenv("KENI_JOBS_MAX_INTENTOS", "2")
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+
+    primero = cola.reclamar("w1")  # intento 1
+    assert primero is not None
+    _envejecer_claim(primero["id"])
+    segundo = cola.reclamar("w2")  # intento 2 (re-reclamo de huerfano)
+    assert segundo is not None and segundo["id"] == primero["id"]
+    _envejecer_claim(primero["id"])
+
+    assert cola.reclamar("w3") is None  # NO hay tercer intento: descartado
+    g = generaciones.obtener(gen["id"])
+    assert g["estado"] == generaciones.ESTADO_ERROR
+    assert g["motivo"] == generaciones.MOTIVO_INTERRUMPIDO
+    assert repos.contar_jobs_activos() == 0  # el job quedo `terminado` (cupo liberado)
+
+
+def test_reencolar_resetea_intentos(entorno, monkeypatch):
+    """El reintento ADMIN (`reencolar_job`) resetea el contador: vuelve a tener sus intentos."""
+    monkeypatch.setenv("KENI_JOBS_MAX_INTENTOS", "1")
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    primero = cola.reclamar("w1")  # unico intento permitido
+    _envejecer_claim(primero["id"])
+    assert cola.reclamar("w2") is None  # descartado (agoto su unico intento)
+
+    assert repos.reencolar_job(gen["id"])  # decision humana: contador a cero
+    de_nuevo = cola.reclamar("w3")
+    assert de_nuevo is not None and de_nuevo["id"] == primero["id"]
+
+
 def test_spec_corrupto_se_reclama_con_spec_none(entorno):
     # JSON corrupto en la fila: el worker lo recibe con spec=None y lo marca en error.
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})

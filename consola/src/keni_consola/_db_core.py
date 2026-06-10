@@ -838,6 +838,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS prioridad INTEGER NOT NULL DEFAULT 0",
     "CREATE INDEX IF NOT EXISTS idx_jobs_estado_prioridad "
     "ON jobs (estado, prioridad DESC, creado ASC)",
+    # INTENTOS de ejecucion (anti crash-loop): se incrementa en cada reclamo (normal o
+    # re-reclamo de huerfano). Al superar `KENI_JOBS_MAX_INTENTOS`, el re-reclamo DESCARTA
+    # el job en vez de re-ejecutarlo para siempre. Migracion idempotente.
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS intentos INTEGER NOT NULL DEFAULT 0",
     # LEDGER de gasto de IA (economia de tokens, ver `presupuesto_ia.py`): una fila por
     # GENERACION CERRADA (terminal completado/error) con sus tokens/coste. La escribe el
     # hook de cierre del almacen de generaciones (UPSERT por gen_id: idempotente ante

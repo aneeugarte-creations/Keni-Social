@@ -4,12 +4,14 @@ from __future__ import annotations
 from ._config_comun import (
     _VERDADEROS,
     ENV_GENERACION_PAUSADA,
+    ENV_JOBS_MAX_INTENTOS,
     ENV_MAX_COLA,
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
+    JOBS_MAX_INTENTOS_DEF,
     MAX_COLA_DEF,
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
@@ -60,6 +62,17 @@ def presupuesto_margen_manual_pct() -> int:
     funcionando hasta `presupuesto * (1 + margen/100)`; superado eso, corte TOTAL.
     """
     return _entero(ENV_PRESUPUESTO_MARGEN_MANUAL, PRESUPUESTO_MARGEN_MANUAL_DEF, minimo=0)
+
+
+def jobs_max_intentos() -> int:
+    """Intentos maximos de ejecucion de un job de la cola (`KENI_JOBS_MAX_INTENTOS`, def 3).
+
+    Cuenta el intento normal MAS los re-reclamos de huerfano (worker muerto a mitad). Al
+    agotarse, el re-reclamo DESCARTA el job (registro en error con motivo `interrumpido`) en
+    vez de re-ejecutarlo para siempre: un job que mata al worker (OOM por un prompt enorme,
+    bug del runner) no debe convertirse en un crash-loop que ademas quema tokens en cada vuelta.
+    """
+    return _entero(ENV_JOBS_MAX_INTENTOS, JOBS_MAX_INTENTOS_DEF, minimo=1)
 
 
 def generacion_pausada() -> bool:

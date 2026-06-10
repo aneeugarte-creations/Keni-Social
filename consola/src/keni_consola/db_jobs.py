@@ -65,7 +65,8 @@ def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
             "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "spec = EXCLUDED.spec, estado = EXCLUDED.estado, creado = EXCLUDED.creado, "
-            "prioridad = EXCLUDED.prioridad, cancelado = 0, worker = '', claimed_at = '' "
+            "prioridad = EXCLUDED.prioridad, cancelado = 0, worker = '', claimed_at = '', "
+            "intentos = 0 "
             "WHERE jobs.estado = ? "
             "RETURNING id",
             (job_id, gen_id, spec, JOB_PENDIENTE, ahora, int(prioridad), JOB_TERMINADO),
@@ -126,8 +127,8 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, gen_id, estado, worker, creado, claimed_at, prioridad FROM jobs "
-            "WHERE estado <> ? ORDER BY creado ASC, id ASC LIMIT ?",
+            "SELECT id, gen_id, estado, worker, creado, claimed_at, prioridad, intentos "
+            "FROM jobs WHERE estado <> ? ORDER BY creado ASC, id ASC LIMIT ?",
             (JOB_TERMINADO, int(limite)),
         ).fetchall()
     finally:
@@ -141,6 +142,7 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
             "creado": f["creado"],
             "claimed_at": f["claimed_at"],
             "prioridad": int(f["prioridad"] or 0),
+            "intentos": int(f["intentos"] or 0),
         }
         for f in filas
     ]
@@ -190,6 +192,13 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     consultamos el registro de generaciones: si su `gen_id` YA esta en un estado TERMINAL
     (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
     (su trabajo ya se hizo). Solo afecta al re-reclamo de huerfanos; un `pendiente` nunca corrio.
+
+    TOPE DE INTENTOS (anti crash-loop): cada reclamo incrementa `jobs.intentos`. Un huerfano
+    que ya quemo `KENI_JOBS_MAX_INTENTOS` intentos NO se re-ejecuta: se cierra su job y su
+    registro queda en error (motivo `interrumpido`, mensaje claro). Sin esto, un job que MATA
+    al worker (OOM por un prompt enorme, bug del runner) se re-reclamaba para siempre, quemando
+    tokens de la suscripcion compartida en cada vuelta. `reencolar_job` (reintento admin) y la
+    resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo nuevo).
     """
     ahora = ahora_iso()
     limite_huerfano = iso_utc(
@@ -203,7 +212,7 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
         # seguimos buscando, sin reintentar para siempre.
         for _ in range(_MAX_SALTOS_RECLAMO):
             fila = con.execute(
-                "SELECT id, gen_id, spec, estado FROM jobs "
+                "SELECT id, gen_id, spec, estado, intentos FROM jobs "
                 "WHERE (estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?)) "
                 + filtro_prioridad +
                 # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
@@ -222,8 +231,21 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
                 )
                 con.commit()
                 continue
+            # TOPE DE INTENTOS (anti crash-loop): un huerfano que ya agoto sus intentos NO se
+            # re-ejecuta. Se cierra el job y el registro queda en error claro (best-effort).
+            if (
+                fila["estado"] == JOB_RECLAMADO
+                and int(fila["intentos"] or 0) >= config.jobs_max_intentos()
+            ):
+                con.execute(
+                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
+                )
+                con.commit()
+                _marcar_error_reintentos(fila["gen_id"], int(fila["intentos"] or 0))
+                continue
             con.execute(
-                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? WHERE id = ?",
+                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ?, "
+                "intentos = intentos + 1 WHERE id = ?",
                 (JOB_RECLAMADO, worker, ahora, fila["id"]),
             )
             con.commit()
@@ -238,6 +260,32 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
 # (cota dura para que el barrido nunca gire indefinidamente). Si hubiera mas, el siguiente
 # `reclamar` los sigue limpiando.
 _MAX_SALTOS_RECLAMO = 50
+
+
+def _marcar_error_reintentos(gen_id: str, intentos: int) -> None:
+    """Deja el registro de generacion en ERROR claro al descartar un job sin intentos.
+
+    Import perezoso de `generaciones` (igual que `_gen_ya_terminal`) y best-effort: si el
+    registro no se puede escribir, el job igualmente quedo `terminado` (el reaper de
+    generaciones acabara marcando el `ejecutando` colgado como interrumpido).
+    """
+    try:
+        from . import generaciones
+
+        g = generaciones.obtener(gen_id)
+        if g is None or g.get("estado") != generaciones.ESTADO_EJECUTANDO:
+            return  # ya tiene un terminal honesto (o no existe): no pisar nada
+        generaciones.actualizar(gen_id, {
+            "estado": generaciones.ESTADO_ERROR,
+            "motivo": generaciones.MOTIVO_INTERRUMPIDO,
+            "error": (
+                f"La generación se interrumpió {intentos} veces (el proceso que la ejecutaba "
+                "murió) y se descartó. Puedes relanzarla manualmente."
+            ),
+            "fecha_fin": ahora_iso(),
+        })
+    except Exception:  # noqa: BLE001 -- best-effort: el descarte del job ya esta hecho
+        pass
 
 
 def _gen_ya_terminal(gen_id: str) -> bool:
@@ -277,12 +325,13 @@ def reencolar_job(gen_id: str) -> bool:
     cerraria al verlo en estado terminal). Devuelve False si no hay fila para ese `gen_id`.
 
     "Limpio" aqui es '' (no NULL): ambas columnas son NOT NULL DEFAULT '' en el esquema,
-    el mismo convenio que usa el encolado."""
+    el mismo convenio que usa el encolado. `intentos` se RESETEA: el reintento es una
+    decision humana (o un apagado gracioso), no la continuacion de un crash-loop."""
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE jobs SET estado = ?, worker = '', claimed_at = '', cancelado = 0 "
-            "WHERE gen_id = ?",
+            "UPDATE jobs SET estado = ?, worker = '', claimed_at = '', cancelado = 0, "
+            "intentos = 0 WHERE gen_id = ?",
             (JOB_PENDIENTE, gen_id),
         )
         con.commit()
