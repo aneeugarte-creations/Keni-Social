@@ -315,6 +315,23 @@ def test_puntuar_detalle_desglosa_las_senales_y_las_palabras():
     assert "cdmx" in razon  # la razón humana nombra las palabras que casaron
 
 
+def test_relevancia_marca_casa_tambien_la_traduccion():
+    """Una historia extranjera TRADUCIDA evalúa la relevancia también sobre titulo_es/resumen_es."""
+    pal = frozenset({"sismo", "cdmx"})
+    extranjera = {
+        "titulo": "Earthquake shakes Mexico City this morning",
+        "resumen": "",
+        "titulo_es": "Un sismo sacude la CDMX esta mañana",
+        "resumen_es": "",
+    }
+    s, casadas = clustering.relevancia_marca_detalle(extranjera, pal)
+    assert s > 0.0
+    assert casadas == ("cdmx", "sismo")
+    # Sin traducción, el titular EN no casa el vocabulario ES (comportamiento previo).
+    sin_trad = {"titulo": "Earthquake shakes Mexico City this morning", "resumen": ""}
+    assert clustering.relevancia_marca_detalle(sin_trad, pal)[0] == 0.0
+
+
 def test_puntuar_detalle_casa_vocabulario_pese_a_la_puntuacion():
     """La tokenización separa por no-alfanuméricos: 'México:' casa el término 'mexico'."""
     pal = frozenset({"mexico"})

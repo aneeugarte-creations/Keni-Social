@@ -572,11 +572,20 @@ def relevancia_marca_detalle(
     suave a 3 coincidencias). Las `palabras` devueltas son los términos del vocabulario
     presentes en título o resumen (orden alfabético, sin duplicar): son la EXPLICACIÓN de la
     señal de marca que la UI/el listón muestran al equipo. PURA y determinista.
+
+    Historias EXTRANJERAS: el vocabulario es español, así que un titular en inglés solo casa
+    los términos neutrales (nintendo, nfl…). Si la historia trae TRADUCCIÓN (`titulo_es` /
+    `resumen_es`, Ola D), se evalúa ADEMÁS sobre ella: la relevancia no penaliza el idioma de
+    origen. Un término que casa en ambos idiomas cuenta una sola vez por campo.
     """
     if not palabras_marca:
         return 0.0, ()
-    titulo = _sin_acentos(str(cluster.get("titulo") or ""))
-    resumen = _sin_acentos(str(cluster.get("resumen") or ""))
+    titulo = _sin_acentos(
+        " ".join(str(cluster.get(k) or "") for k in ("titulo", "titulo_es")).strip()
+    )
+    resumen = _sin_acentos(
+        " ".join(str(cluster.get(k) or "") for k in ("resumen", "resumen_es")).strip()
+    )
     en_titulo = _coincidencias(titulo, palabras_marca)
     en_resumen = _coincidencias(resumen, palabras_marca)
     n = len(en_titulo) + _PESO_MARCA_RESUMEN * len(en_resumen)
