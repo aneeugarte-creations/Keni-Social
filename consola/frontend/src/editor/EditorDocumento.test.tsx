@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("./Lienzo", () => ({ Lienzo: () => <div data-testid="lienzo" /> }));
 vi.mock("./PanelElementos", () => ({ PanelElementos: () => <div>panel-elementos</div> }));
 vi.mock("./PanelGaleria", () => ({ PanelGaleria: () => <div>panel-galeria</div> }));
+vi.mock("./PanelMarca", () => ({ PanelMarca: () => <div>panel-marca</div> }));
 vi.mock("./Paneles", () => ({
   Inspector: () => <div>inspector</div>,
   PanelCapas: () => <div>panel-capas</div>,
@@ -43,14 +44,25 @@ describe("EditorDocumento — rail estilo Canva", () => {
     montar({ panelDiseno: <div>panel-de-plantillas</div> });
     const botones = within(railEscritorio()).getAllByRole("button");
     expect(botones[0]).toHaveTextContent("Diseño");
-    // Orden completo del rail: Diseño · Elementos · Galería · Capas · Ajustes.
+    // Orden completo del rail (estilo Canva): Diseño · Elementos · Galería · Marca · Capas ·
+    // Ajustes. «Marca» (Brand Kit) va tras Galería y antes de Capas.
     expect(botones.map((b) => b.textContent)).toEqual([
       "Diseño",
       "Elementos",
       "Galería",
+      "Marca",
       "Capas",
       "Ajustes",
     ]);
+  });
+
+  it("«Marca» abre el panel del kit de marca como flyout (y se cierra al re-pulsar)", () => {
+    montar();
+    const boton = within(railEscritorio()).getByTitle("Marca");
+    fireEvent.click(boton);
+    expect(screen.getByText("panel-marca")).toBeInTheDocument();
+    fireEvent.click(boton);
+    expect(screen.queryByText("panel-marca")).not.toBeInTheDocument();
   });
 
   it("«Diseño» abre el panel de la página como columna del rail (y se cierra al re-pulsar)", () => {

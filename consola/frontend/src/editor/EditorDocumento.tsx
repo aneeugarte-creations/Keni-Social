@@ -5,8 +5,9 @@
 //                    [barra contextual flotante (solo con selección)]
 //
 // - RAIL de herramientas: tira vertical de iconos (izquierda en escritorio, barra inferior en
-//   móvil), orden estilo Canva: Diseño (plantillas) SIEMPRE primero, luego Elementos, Galería y
-//   Capas. Cada icono abre/cierra un FLYOUT (~350px) con su panel y «Ajustes» abre el inspector.
+//   móvil), orden estilo Canva: Diseño (plantillas) SIEMPRE primero, luego Elementos, Galería,
+//   Marca (kit de identidad) y Capas. Cada icono abre/cierra un FLYOUT (~350px) con su panel y
+//   «Ajustes» abre el inspector.
 //   Con puntero real (hover:hover), reposar ~200 ms sobre un icono abre su panel SIN FIJAR
 //   (overlay); el clic lo fija; salir del rail+panel sin fijar lo cierra a los ~300 ms.
 //   «Diseño» pinta el panel que aporta la página (`panelDiseno`); si la página solo da
@@ -34,6 +35,7 @@ import {
   Image as ImageIcon,
   Maximize2,
   MoreHorizontal,
+  Palette,
   Redo2,
   Settings2,
   Shapes,
@@ -52,6 +54,7 @@ import { ExportarDialogo } from "./ExportarDialogo";
 import { BotonesMuestra } from "./BotonesMuestra";
 import { Lienzo } from "./Lienzo";
 import { PanelGaleria } from "./PanelGaleria";
+import { PanelMarca } from "./PanelMarca";
 import { PanelElementos } from "./PanelElementos";
 import { Inspector, PanelCapas } from "./Paneles";
 import { adaptarDocumento } from "./adaptar";
@@ -70,7 +73,7 @@ import { Telon, useCerrarConEscape } from "./Telon";
 import { useFuentesMarca } from "./useFuentesMarca";
 
 // El generador de IA NO va en el editor: era solo para las imágenes del feed (sobra aquí).
-type Herramienta = "diseno" | "elementos" | "texto" | "capas";
+type Herramienta = "diseno" | "elementos" | "texto" | "marca" | "capas";
 
 // Preferencias de "Vista con muestra" (toggles de PRESENTACIÓN del editor) en localStorage. Foto y
 // copy son INDEPENDIENTES. Por defecto ENCENDIDOS: al abrir una plantilla se ve de inmediato cómo
@@ -107,6 +110,9 @@ const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes
   // `clave: "texto"` es el id INTERNO histórico del panel (antes «Biblioteca»); la etiqueta visible
   // es «Galería» (galería de imágenes/activos de la marca), que es lo que de verdad es este panel.
   { clave: "texto", etiqueta: "Galería", Icono: ImageIcon },
+  // «Marca» (Brand Kit estilo Canva): kit de identidad de la marca del documento a un clic
+  // (logos + colores + tipografías). Tras Galería (orden Canva: …Texto, Marca…), antes de Capas.
+  { clave: "marca", etiqueta: "Marca", Icono: Palette },
   { clave: "capas", etiqueta: "Capas", Icono: Layers },
 ];
 
@@ -357,6 +363,7 @@ export function EditorDocumento({
       case "diseno": return panelDiseno ?? null;
       case "elementos": return <PanelElementos />;
       case "texto": return <PanelGaleria marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
+      case "marca": return <PanelMarca marca={marca} />;
       case "capas": return <PanelCapas />;
       default: return null;
     }
@@ -492,7 +499,7 @@ export function EditorDocumento({
     <ProveedorEditor store={store}>
       <div className="flex h-full min-h-0 w-full bg-background">
         {/* RAIL (escritorio: vertical izquierda), orden Canva: Diseño · Elementos · Galería ·
-            Capas. «Ajustes» (inspector) al fondo. */}
+            Marca · Capas. «Ajustes» (inspector) al fondo. */}
         <nav
           aria-label="Herramientas del editor"
           onMouseEnter={cancelarCierre}
@@ -603,7 +610,7 @@ export function EditorDocumento({
         )}
 
         {/* RAIL móvil (barra inferior fija, respetando el safe-area del notch inferior). */}
-        <nav aria-label="Herramientas del editor (móvil)" className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] ${herramientas.length >= 4 ? "grid-cols-5" : "grid-cols-4"} border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden`}>
+        <nav aria-label="Herramientas del editor (móvil)" className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] ${herramientas.length >= 5 ? "grid-cols-6" : "grid-cols-5"} border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden`}>
           {herramientas.map((h) => (
             <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} />
           ))}
