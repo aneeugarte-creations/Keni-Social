@@ -94,6 +94,7 @@ from ._barrido import (
     iniciar_pipeline,
 )
 from ._comun import (
+    _BACKOFF_ETAPA_SEG,
     _DEFAULT_QA_CRITERIOS,
     _DIAS_DEDUP,
     _FETCH_OG_IMAGE,
@@ -123,6 +124,7 @@ from ._comun import (
     _log,
     _tiene_copy,
     anotar_intento,
+    en_backoff,
     intentos_de,
     marcar_fallo_etapa,
     registrar_etapa,
@@ -219,8 +221,10 @@ __all__ = [
     "_tiene_copy",
     "temas_pipeline",
     "_MAX_INTENTOS_ETAPA",
+    "_BACKOFF_ETAPA_SEG",
     "intentos_de",
     "anotar_intento",
+    "en_backoff",
     "marcar_fallo_etapa",
     # CI
     "items_ingeribles",

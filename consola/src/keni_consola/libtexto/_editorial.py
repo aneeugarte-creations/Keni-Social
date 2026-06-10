@@ -90,19 +90,35 @@ def editoriales_de_pipeline(marca: str, pipeline: str) -> list[Documento]:
     return editoriales_de_marca(marca, pipeline=pipeline)
 
 
-def previsualizar_pipeline(pipeline: str, marca: str, contexto: str = "") -> dict[str, object]:
+def previsualizar_pipeline(
+    pipeline: str, marca: str, contexto: str = "", redes_ids: list[str] | None = None
+) -> dict[str, object]:
     """Devuelve el prompt ENSAMBLADO que recibiria `claude -p` para `pipeline`+`marca`.
 
     "Lo que inyectas es lo que ves": usa el MISMO compositor que la generacion real, sin
-    lanzar nada. Devuelve `{pipeline, prompt_base_id, prompt_efectivo, adjuntos, falta_base}`.
-    `adjuntos` es la lista (id/titulo/clase) de editoriales que se adjuntarian, en orden.
+    lanzar nada. Para el pipeline `copy` pasa por la MISMA composicion que `lanzar_copy`
+    (adjuntos de copy con reglas de imagen + instruccion de redes con limites): `redes_ids`
+    son las redes a previsualizar; sin ellas se previsualiza con TODAS (un lanzamiento
+    real siempre las trae). Devuelve `{pipeline, prompt_base_id, prompt_efectivo, adjuntos,
+    falta_base}`. `adjuntos` es la lista (id/titulo/clase) de adjuntos, en orden.
     """
     from ..dominio import generar  # perezoso: generar importa texto
 
     base_id = prompt_base_de(pipeline)
     cuerpo = cuerpo_efectivo(base_id) if base_id else None
-    adjuntos = editoriales_de_pipeline(marca, pipeline)
-    prompt = generar.componer(cuerpo or "", adjuntos, contexto) if cuerpo is not None else ""
+    if pipeline == "copy":
+        from .. import redes as catalogo_redes
+
+        ids = list(redes_ids) if redes_ids else catalogo_redes.ids()
+        adjuntos = generar.adjuntos_copy(marca)
+        prompt = (
+            generar.componer_copy(cuerpo, marca=marca, contexto=contexto, redes_ids=ids)
+            if cuerpo is not None
+            else ""
+        )
+    else:
+        adjuntos = editoriales_de_pipeline(marca, pipeline)
+        prompt = generar.componer(cuerpo or "", adjuntos, contexto) if cuerpo is not None else ""
     return {
         "pipeline": pipeline,
         "prompt_base_id": base_id,

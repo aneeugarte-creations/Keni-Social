@@ -26,15 +26,13 @@ propuestos igualmente marca sus noticias como procesadas (no se re-pregunta cada
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 import threading
 import time
 from typing import Any
 
 from . import libtexto, config, daemon_util, limites_plataforma, repos
-from .dominio import generar, jobspec
+from .dominio import generar, jobspec, json_llm
 
 _log = logging.getLogger("keni_consola.sugerencias_editoriales")
 
@@ -88,39 +86,18 @@ def seleccionar(noticias: list[dict[str, Any]], *, maximo: int) -> dict[str, lis
 
 
 # La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
-# «Prompts»), no hardcodeada. Los 4 datos dinámicos se insertan en sus marcadores. El SCAFFOLD
-# de abajo es la red por si la lectura fallara: es la MISMA plantilla (misma fuente de verdad
-# que la semilla del paquete), con los marcadores `{{...}}`.
+# «Prompts»), no hardcodeada. Los 4 datos dinámicos se insertan en sus marcadores. Si el store
+# fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_SUGERENCIAS_ID = "prompt/editorial/sugerencias-plataforma"
-_SCAFFOLD_SUGERENCIAS = (
-    "Eres el editor de estándares de plataforma de un equipo de redes sociales.\n"
-    "Plataforma: {{PLATAFORMA}}.\n\n"
-    "FICHA EDITORIAL ACTUAL de {{PLATAFORMA}} (cómo escribimos para esta red):\n"
-    "\"\"\"\n{{FICHA}}\n\"\"\"\n\n"
-    "LÍMITE de caracteres actual que tenemos registrado para {{PLATAFORMA}}: {{LIMITE}}.\n\n"
-    "NOTICIAS recientes y verificadas sobre el algoritmo o las tendencias de {{PLATAFORMA}}:\n"
-    "{{NOTICIAS}}\n\n"
-    "TAREA: propón SOLO cambios concretos y accionables que ESTAS noticias justifiquen, "
-    "a la ficha editorial (`tipo`: \"editorial\") y/o al límite de caracteres "
-    "(`tipo`: \"limite\"). Si una noticia no implica un cambio editorial real, NO "
-    "inventes uno. Sé específico: qué añadir/quitar/cambiar y por qué, citando la noticia.\n\n"
-    "Responde EXCLUSIVAMENTE con un bloque ```json``` que contenga una lista de objetos, "
-    "cada uno con las claves: \"tipo\" (\"editorial\" o \"limite\"), \"titulo\" (resumen "
-    "corto del cambio) y \"detalle\" (qué cambiar y por qué, en markdown). Si no hay "
-    "ningún cambio que proponer, responde con una lista vacía: ```json\n[]\n```."
-)
 
 
 def _plantilla_sugerencias() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete).
-
-    Cae al `_SCAFFOLD_SUGERENCIAS` si la lectura fallara o viniera vacía (no quedarnos sin prompt).
-    """
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
     try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_SUGERENCIAS_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar el digest sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or _SCAFFOLD_SUGERENCIAS
+    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_SUGERENCIAS_ID).strip()
 
 
 def componer_prompt(
@@ -155,36 +132,19 @@ def componer_prompt(
     )
 
 
-_RE_BLOQUE_JSON = re.compile(r"```(?:json)?\s*(\[.*?\])\s*```", re.DOTALL | re.IGNORECASE)
 _TIPOS_SUGERENCIA = ("editorial", "limite")
 
 
 def parsear_sugerencias(salida: str) -> list[dict[str, str]]:
-    """Extrae las sugerencias del texto de `claude` (bloque JSON). Tolerante.
+    """Extrae las sugerencias del texto de `claude` (extractor compartido `json_llm`).
 
-    Busca un bloque ```json [...] ```; si no, el primer `[...]` del texto. Cada elemento
-    valido aporta `{tipo, titulo, detalle}` (tipo cae a 'editorial' si no es valido). Si no
-    hay JSON parseable pero hay texto, NO inventa estructura: devuelve []. El llamante decide
-    el fallback. Nunca lanza.
+    Espera una LISTA JSON (cruda o en un bloque ```json```). Cada elemento valido aporta
+    `{tipo, titulo, detalle}` (tipo cae a 'editorial' si no es valido). Si no hay JSON
+    parseable pero hay texto, NO inventa estructura: devuelve []. El llamante decide el
+    fallback. Nunca lanza.
     """
-    if not salida or not salida.strip():
-        return []
-    crudo = None
-    m = _RE_BLOQUE_JSON.search(salida)
-    if m:
-        crudo = m.group(1)
-    else:
-        ini = salida.find("[")
-        fin = salida.rfind("]")
-        if 0 <= ini < fin:
-            crudo = salida[ini : fin + 1]
-    if not crudo:
-        return []
-    try:
-        datos = json.loads(crudo)
-    except (json.JSONDecodeError, ValueError):
-        return []
-    if not isinstance(datos, list):
+    datos = json_llm.extraer_lista(salida or "")
+    if datos is None:
         return []
     salida_sug: list[dict[str, str]] = []
     for item in datos:

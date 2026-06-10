@@ -19,6 +19,7 @@ from ._comun import (
     QA_SALTADA,
     _log,
     anotar_intento,
+    en_backoff,
     intentos_de,
     marcar_fallo_etapa,
 )
@@ -143,13 +144,20 @@ def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
                 f"La criba de la fuente falló {_MAX_INTENTOS_ETAPA} veces.",
             )
             continue
+        # Backoff creciente entre intentos (1/4/16 min): un fallo transitorio no quema los 3
+        # intentos en <1 min con el tick corto; se SALTA el tema (el barrido no duerme).
+        if en_backoff(tema, "qa_intentos"):
+            continue
         try:
             gen = lanzar_qa_fuente(tema, autor=autor)
         except generaciones.ColaLlenaError:
             _log.info("pipeline: cola llena en QA; el resto entra en el próximo tick.")
             break
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase QA
-            _log.exception("pipeline: fallo la criba de la fuente (QA) de un tema.")
+            _log.exception(
+                "pipeline: fallo la criba de la fuente (QA) del tema %s (marca %s).",
+                tema.get("id", ""), marca_t,
+            )
             continue
         if gen is not None:
             # El intento se anota TRAS el lanzamiento efectivo: una cola llena o un fallo
@@ -195,13 +203,19 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
                 f"La generación de copy falló {_MAX_INTENTOS_ETAPA} veces.",
             )
             continue
+        # Backoff creciente entre intentos (1/4/16 min): mismo rationale que en la fase QA.
+        if en_backoff(tema, "cd_intentos"):
+            continue
         try:
             gen = lanzar_copy_de_tema(tema, autor=autor)
         except generaciones.ColaLlenaError:
             _log.info("pipeline: cola llena en CD; el resto entra en el próximo tick.")
             return lanzados
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
-            _log.exception("pipeline: fallo la generación de copy (CD) de un tema.")
+            _log.exception(
+                "pipeline: fallo la generación de copy (CD) del tema %s (marca %s).",
+                tema.get("id", ""), tema.get("marca", ""),
+            )
             continue
         if gen:
             # Tras el lanzamiento efectivo (cola llena o fallo previo no queman intentos). Si el
@@ -219,11 +233,19 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             _log.info("pipeline: cola llena en CD (pool); el resto entra en el próximo barrido.")
             break
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
-            _log.exception("pipeline: fallo la generación de copy (CD) de un tema del pool.")
+            _log.exception(
+                "pipeline: fallo la generación de copy (CD) del tema %s del pool (marca %s).",
+                item.get("id", ""), item.get("marca", ""),
+            )
             continue
         if gen:
             lanzados.append(gen)
     return lanzados
+
+
+# Fracción de lanzamientos de arte fallidos en un ciclo a partir de la cual se emite UN ERROR
+# agregado (señal de proveedor de imagen caído, no de temas sueltos).
+_UMBRAL_FALLO_ARTE = 0.5
 
 
 def ejecutar_arte() -> list[dict[str, Any]]:
@@ -269,11 +291,17 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     # EN PARALELO (antes en serie): cada arte es una llamada HTTP sincrona al proveedor de
     # imagen (segundos por tema); con el cap por barrido (def 3), ilustrarlos a la vez deja
     # la etapa en ~el tiempo del mas lento. Cada tema es independiente y best-effort.
+    fallidos: list[str] = []  # ids de los temas cuyo arte reventó en ESTE ciclo (append es atómico)
+
     def _ilustrar(item: dict[str, Any]) -> dict[str, Any] | None:
         try:
             return autogen_arte.lanzar_para_topic(item)
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la etapa de arte
-            _log.exception("pipeline: fallo la generación de arte de un tema.")
+            fallidos.append(str(item.get("id", "") or ""))
+            _log.exception(
+                "pipeline: fallo la generación de arte del tema %s (marca %s).",
+                item.get("id", ""), item.get("marca", ""),
+            )
             return None
 
     adjuntados: list[dict[str, Any]] = []
@@ -284,6 +312,15 @@ def ejecutar_arte() -> list[dict[str, Any]]:
             max_workers=min(4, len(elegidos)), thread_name_prefix="pipeline-arte"
         ) as pool:
             adjuntados = [res for res in pool.map(_ilustrar, elegidos) if res]
+    # Fallo MASIVO (> _UMBRAL_FALLO_ARTE de los lanzamientos del ciclo): casi seguro el proveedor
+    # de imagen caído, no temas sueltos. Un ÚNICO ERROR agregado (alertable), además de los
+    # `exception` por tema de arriba.
+    if elegidos and len(fallidos) > _UMBRAL_FALLO_ARTE * len(elegidos):
+        _log.error(
+            "pipeline: arte: %d/%d lanzamiento(s) fallido(s) en este barrido "
+            "(¿proveedor de imagen caído?). Temas: %s",
+            len(fallidos), len(elegidos), ", ".join(fallidos),
+        )
     if adjuntados:
         _log.info("pipeline: %d tema(s) ilustrado(s) (etapa arte).", len(adjuntados))
     return adjuntados

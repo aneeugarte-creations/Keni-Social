@@ -13,10 +13,11 @@ en el worker desde el `spec`.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
-from .. import redes, repos
+from .. import limites_plataforma, redes, repos
 from . import publicaciones as contrato_publicaciones
 from . import stream
 
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
     # `generaciones` solo se usa en anotaciones (`-> generaciones.Procesar`). Mantener el
     # dominio NEUTRO: no importa de `generaciones` en runtime (invariante de `dominio/`).
     from .. import generaciones
+
+_log = logging.getLogger("keni_consola.copy")
 
 # --------------------------------------------------------------------------- #
 # Cosecha de IMAGENES de salida (skills/prompts de imagen)                     #
@@ -74,6 +77,94 @@ def cosechar_imagenes(salida: str) -> list[dict[str, str]]:
             continue
         imagenes.append({"nombre": nombre, "url": f"/api/media/{nombre}"})
     return imagenes
+
+
+# --------------------------------------------------------------------------- #
+# Validacion de piezas ANTES de persistir (no crear borradores rotos)          #
+# --------------------------------------------------------------------------- #
+
+# Tuit de un HILO dentro de `texto` (contrato del prompt de copy): linea que ABRE con la
+# numeracion "1/n ", "2/n "… Ver `instruccion_redes` y `copy-desde-nota.md` §Bloque final.
+_RE_TUIT_HILO = re.compile(r"^\d{1,2}/\d{1,2}(?:\s|$)")
+
+# Separador de SLIDES de un CARRUSEL dentro de `texto`: una linea con solo `---`.
+_RE_SEPARADOR_SLIDE = re.compile(r"^\s*---\s*$")
+
+
+def _tramos_publicables(texto: str) -> list[str]:
+    """Tramos del `texto` de una pieza a validar contra el limite tecnico de su red.
+
+    CONTRATO DE PIEZAS COMPUESTAS: un hilo viaja numerado dentro de `texto` (cada tuit abre
+    con "1/n ") y un carrusel con las slides separadas por una linea `---`; el limite de la
+    red aplica a CADA tramo (tuit/slide), no al texto entero. Pieza simple = un unico tramo.
+    """
+    lineas = texto.splitlines()
+    inicios = [i for i, ln in enumerate(lineas) if _RE_TUIT_HILO.match(ln.strip())]
+    if len(inicios) >= 2:  # un hilo de verdad tiene 2+ tuits numerados
+        tramos = [
+            "\n".join(lineas[ini:fin]).strip()
+            for ini, fin in zip(inicios, [*inicios[1:], len(lineas)], strict=True)
+        ]
+        return [t for t in tramos if t]
+    if any(_RE_SEPARADOR_SLIDE.match(ln) for ln in lineas):
+        partes: list[list[str]] = [[]]
+        for ln in lineas:
+            if _RE_SEPARADOR_SLIDE.match(ln):
+                partes.append([])
+            else:
+                partes[-1].append(ln)
+        tramos = ["\n".join(p).strip() for p in partes]
+        return [t for t in tramos if t]
+    return [texto]
+
+
+def _motivo_invalida(pieza: dict[str, object]) -> str | None:
+    """Motivo por el que una pieza NO debe convertirse en borrador, o None si es valida.
+
+    Valida red conocida (`redes.es_red`), texto no vacio y longitud dentro del limite
+    tecnico de la red (`limites_plataforma`, la misma fuente que ancla el prompt).
+    """
+    red = pieza.get("red")
+    if not isinstance(red, str) or not redes.es_red(red):
+        return f"red desconocida ({red!r})"
+    contenido = pieza.get("contenido")
+    if not isinstance(contenido, str) or not contenido.strip():
+        return f"{red}: texto vacío"
+    tramos = _tramos_publicables(contenido)
+    if not tramos:  # solo separadores/numeración sin texto: equivale a vacío
+        return f"{red}: texto vacío"
+    limite = limites_plataforma.limite_de(red)
+    if limite is not None:
+        mas_largo = max(len(t) for t in tramos)
+        if mas_largo > limite:
+            return f"{red}: {mas_largo} caracteres (límite {limite})"
+    return None
+
+
+def _avisar_piezas_descartadas(motivos: list[str], *, contenido_id: str, marca: str) -> None:
+    """Deja rastro de las piezas descartadas: WARN + nota en el tema (si lo hay).
+
+    Sigue el patron de avisos en `contenido.notas` (ver `pipeline_contenido._ingesta`).
+    Best-effort: nunca rompe el post-procesado (las piezas validas del lote ya se crearon).
+    """
+    detalle = "; ".join(motivos)
+    _log.warning(
+        "copy: %d pieza(s) descartada(s) tema=%s marca=%s: %s",
+        len(motivos), contenido_id or "-", marca, detalle,
+    )
+    if not contenido_id:
+        return
+    aviso = f"⚠ Copy descartado (pieza inválida): {detalle}."
+    try:
+        tema = repos.obtener_contenido(contenido_id)
+        if tema is None:
+            return
+        previas = str(tema.get("notas") or "").strip()
+        repos.actualizar_contenido(
+            contenido_id, {"notas": f"{previas}\n{aviso}" if previas else aviso}
+        )
+    except Exception:  # noqa: BLE001 -- el aviso es un extra; nunca rompe el post-procesado
+        _log.warning("copy: no se pudo anotar el tema %s", contenido_id, exc_info=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -144,6 +235,11 @@ def crear_publicaciones_desde_piezas(
     falla a mitad, se BORRAN las ya creadas y se RELANZA, para no dejar publicaciones rotas.
     Lo usa el "Guardar como publicación" del termómetro; el auto-copy lo deja en False
     (best-effort, no debe abortar toda la generación por una pieza).
+
+    VALIDACIÓN PRE-PERSISTENCIA: una pieza con red desconocida, texto vacío o que excede el
+    límite técnico de su red (`limites_plataforma`; en hilos/carruseles, por tramo) NO crea
+    borrador. Se descarta SOLO esa pieza (las válidas del lote se crean igual), se loguea
+    WARN y, si hay tema (`contenido_id`), se deja una nota en él.
     """
     creadas: list[dict[str, object]] = []
     # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez, la
@@ -155,17 +251,19 @@ def crear_publicaciones_desde_piezas(
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
         )
+    descartes: list[str] = []
     try:
         for pieza in piezas:
             red = pieza.get("red")
-            contenido = pieza.get("contenido")
+            if redes_filtro is not None and isinstance(red, str) and red not in redes_filtro:
+                continue  # filtro del llamante (eligió menos redes), no es una pieza inválida
+            motivo = _motivo_invalida(pieza)
+            if motivo is not None:
+                descartes.append(motivo)
+                continue
+            red = str(red)
+            contenido = str(pieza.get("contenido"))
             copy_in = pieza.get("copy_in")
-            if not isinstance(red, str) or not redes.es_red(red):
-                continue
-            if redes_filtro is not None and red not in redes_filtro:
-                continue
-            if not isinstance(contenido, str):
-                contenido = ""
             if not isinstance(copy_in, str):
                 copy_in = ""
             # Con imagen ORIGINAL de fuente usamos la descargada a media (asset propio
@@ -194,6 +292,8 @@ def crear_publicaciones_desde_piezas(
         if atomico:
             _revertir_borradores([str(p.get("id")) for p in creadas if p.get("id")])
         raise
+    if descartes:
+        _avisar_piezas_descartadas(descartes, contenido_id=contenido_id, marca=marca)
     return creadas
 
 

@@ -58,8 +58,10 @@ __all__ = [
     "_copy_pendiente_leido",
     "_tiene_copy",
     "_MAX_INTENTOS_ETAPA",
+    "_BACKOFF_ETAPA_SEG",
     "intentos_de",
     "anotar_intento",
+    "en_backoff",
     "marcar_fallo_etapa",
     "temas_pipeline",
 ]
@@ -128,10 +130,13 @@ QA_SALTADA = "saltada"
 VERDICTO_NO_VERIFICADO = dom_qa.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
 VERDICTO_PROBLEMA = dom_qa.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
-# Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). REDISEÑO:
-# la QA es PRE-COPY y criba la NOTA DE ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo
-# levanta `problema` ante algo de PESO (dato falso evidente, problema legal/ético claro); ante la
-# duda, `no_verificado`. SEÑALA (no publica ni reescribe).
+# Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
+# cuerpo que la semilla `prompt/qa-fuente` del paquete (último recurso si la semilla no se
+# pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y criba la NOTA DE
+# ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
+# PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.
+# SEÑALA (no publica ni reescribe). El campo JSON `veredicto` va en slug ASCII
+# ("apta"|"problema"); el semáforo 🟢/🔴 queda como línea humana.
 _DEFAULT_QA_CRITERIOS = """\
 Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO la NOTA DE ORIGEN
 (título + resumen + enlace) de la que se generará copy para redes. Haces una CRIBA PREVIA,
@@ -164,10 +169,13 @@ No uses el amarillo: o es apta (🟢) o tiene un problema de peso (🔴).
 ## Salida
 
 Tras el semáforo, cierra con un bloque ```json con la forma:
-{"veredicto": "🟢", "resumen": "una frase",
+{"veredicto": "apta", "resumen": "una frase",
  "hallazgos": [{"tipo": "dato|legal|voz", "gravedad": "error|aviso",
                 "fragmento": "...", "explicacion": "...", "sugerencia": "..."}]}
-Usa gravedad "error" SOLO para lo de peso (lo que hace 🔴). Sin emojis en el cuerpo.
+El campo "veredicto" va SIEMPRE en slug ASCII: "apta" (seguir) o "problema" (de peso, NO
+generar copy). El semáforo 🟢/🔴 es solo la línea humana de arriba, NO un valor del JSON.
+Usa gravedad "error" SOLO para lo de peso (lo que hace "problema"). Sin emojis en el cuerpo
+ni en el JSON.
 """
 
 
@@ -336,6 +344,11 @@ def _copy_pendiente_leido(tema: dict[str, Any]) -> dict[str, Any]:
 # y queda visible en Pipelines/tablero como fallo, para que un humano decida.
 _MAX_INTENTOS_ETAPA = 3
 
+# BACKOFF creciente entre reintentos (espera tras el intento 1/2/3): con el tick de ~15 s, un
+# fallo transitorio (proveedor caído, timeout) quemaba los 3 intentos en <1 min; esperar 1/4/16
+# min da tiempo a que pase, SIN dormir el barrido (el tema solo se SALTA en el tick).
+_BACKOFF_ETAPA_SEG = (60.0, 240.0, 960.0)
+
 
 def intentos_de(tema: dict[str, Any], campo: str) -> int:
     """Intentos ya consumidos de una etapa (`campo` = 'qa_intentos'/'cd_intentos'). 0 si no hay."""
@@ -348,11 +361,15 @@ def intentos_de(tema: dict[str, Any], campo: str) -> int:
 def anotar_intento(tema: dict[str, Any], campo: str) -> None:
     """Suma 1 al contador de intentos de la etapa en `copy_pendiente` (best-effort, persiste).
 
-    RE-LEE el tema de BD antes de escribir: con el lanzador SÍNCRONO de los tests, el `procesar`
-    del copy puede haber LIMPIADO `copy_pendiente` (éxito) durante el propio lanzamiento; anotar
-    sobre el dict viejo lo resucitaría. Si ya no hay pendiente, no hay nada que contar.
+    Anota además el INSTANTE del intento (`campo + "_ts"`, ISO UTC): es la base del backoff
+    creciente entre reintentos (`en_backoff`). RE-LEE el tema de BD antes de escribir: con el
+    lanzador SÍNCRONO de los tests, el `procesar` del copy puede haber LIMPIADO `copy_pendiente`
+    (éxito) durante el propio lanzamiento; anotar sobre el dict viejo lo resucitaría. Si ya no
+    hay pendiente, no hay nada que contar.
     """
     import json
+
+    from ..tiempo import ahora_iso
 
     tema_id = (tema.get("id") or "").strip()
     if not tema_id:
@@ -365,10 +382,34 @@ def anotar_intento(tema: dict[str, Any], campo: str) -> None:
         return  # éxito ya limpió el pendiente (o el tema desapareció): nada que anotar
     pend = _copy_pendiente_leido(fresco)
     pend[campo] = int(pend.get(campo) or 0) + 1
+    pend[f"{campo}_ts"] = ahora_iso()
     try:
         repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend, ensure_ascii=False)})
     except Exception:  # noqa: BLE001 -- sin contador, el tope no aplica; el reintento sigue
         _log.warning("pipeline: no se pudo anotar el intento %s del tema %s", campo, tema_id, exc_info=True)
+
+
+def en_backoff(tema: dict[str, Any], campo: str) -> bool:
+    """True si el tema debe ESPERAR antes de reintentar la etapa (backoff creciente).
+
+    Lee intentos + timestamp del último intento de `copy_pendiente` (`campo` y `campo + "_ts"`,
+    los anota `anotar_intento`) y aplica `_BACKOFF_ETAPA_SEG`. Sin intentos o sin timestamp
+    (temas previos al backoff) no hay espera. El barrido SALTA el tema (no duerme): un tick
+    posterior lo reevalúa. Comparación lexicográfica: ambos son ISO UTC canónicos.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from ..tiempo import iso_utc
+
+    intentos = intentos_de(tema, campo)
+    if intentos <= 0:
+        return False
+    ts = str(_copy_pendiente_leido(tema).get(f"{campo}_ts") or "").strip()
+    if not ts:
+        return False
+    espera = _BACKOFF_ETAPA_SEG[min(intentos, len(_BACKOFF_ETAPA_SEG)) - 1]
+    umbral = iso_utc(datetime.now(UTC) - timedelta(seconds=espera))
+    return ts > umbral  # último intento más reciente que el umbral: aún en espera
 
 
 def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:

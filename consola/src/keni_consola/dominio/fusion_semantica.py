@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import tempfile
 from collections.abc import Callable
 from typing import Any
+
+from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.fusion_semantica")
 
@@ -31,32 +32,21 @@ _MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
 
 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
-# JSON de historias se inserta en `{{HISTORIAS}}`. `_SCAFFOLD` es la red por si fallara la lectura.
+# JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la SEMILLA del
+# paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/noticias/fusion-historias"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
-_SCAFFOLD = (
-    "Eres un editor de un newsroom en México. Recibes una lista JSON de HISTORIAS "
-    "(cada una con id, titulo y resumen). Algunas cubren el MISMO acontecimiento desde "
-    "ángulos o fuentes distintas (p. ej. el mismo conflicto, el mismo partido, el mismo "
-    "anuncio). AGRÚPALAS: junta en un mismo grupo las historias que son del mismo evento. "
-    "Sé CONSERVADOR: si dudas, NO las agrupes (mejor dejarlas separadas que fusionar temas "
-    "distintos). Una historia puede ir en UN solo grupo. Ignora las que no casan con ninguna. "
-    "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
-    '{"grupos": [["id1","id2"], ["id3","id4","id5"]]} (solo grupos de 2 o más ids), '
-    "sin ningún texto adicional ni ```json.\n\n"
-    "Historias:\n{{HISTORIAS}}"
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
-    try:
-        from .. import libtexto
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la fusión sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or _SCAFFOLD
+    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
 
 
 def _construir_prompt(payload_json: str) -> str:
@@ -68,26 +58,9 @@ def _construir_prompt(payload_json: str) -> str:
 
 
 def _extraer_grupos(texto: str) -> list[list[str]]:
-    """Extrae los grupos de ids del texto de Haiku. Tolera ```json fences. [] si falla."""
-    if not texto or not texto.strip():
-        return []
-    s = texto.strip()
-    cerca = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
-    if cerca:
-        s = cerca.group(1).strip()
-    data: Any = None
-    try:
-        data = json.loads(s)
-    except (json.JSONDecodeError, ValueError):
-        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
-        if inicio < 0:
-            return []
-        try:
-            data = json.loads(s[inicio:])
-        except (json.JSONDecodeError, ValueError):
-            return []
-    bruto = data if isinstance(data, list) else (data.get("grupos") if isinstance(data, dict) else None)
-    if not isinstance(bruto, list):
+    """Extrae los grupos de ids del texto de Haiku (extractor compartido). [] si falla."""
+    bruto = json_llm.extraer_lista(texto, claves=("grupos",))
+    if bruto is None:
         return []
     grupos: list[list[str]] = []
     for g in bruto:
@@ -121,8 +94,14 @@ def proponer_fusiones(
     payload = [
         {
             "id": str(c["id"]),
-            "titulo": str(c.get("titulo", "")).strip()[:_MAX_CHARS_ITEM],
-            "resumen": str(c.get("resumen", "") or "").strip()[:_MAX_CHARS_ITEM],
+            "titulo": json_llm.truncar_avisando(
+                str(c.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
+                campo=f"titulo de {c['id']}", log=_log,
+            )[0],
+            "resumen": json_llm.truncar_avisando(
+                str(c.get("resumen", "") or "").strip(), _MAX_CHARS_ITEM,
+                campo=f"resumen de {c['id']}", log=_log,
+            )[0],
         }
         for c in validos
     ]

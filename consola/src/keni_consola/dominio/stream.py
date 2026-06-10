@@ -650,26 +650,27 @@ def _piezas_desde_por_red(
     redes_ids: list[str],
     copy_in_por_red: dict[str, str] | None = None,
 ) -> list[dict[str, object]]:
-    """Construye las piezas en el ORDEN FIJO de las redes pedidas, sin emojis.
+    """Construye las piezas en el ORDEN FIJO de las redes pedidas.
 
-    Cada `contenido` se limpia con `quitar_emojis` y `caracteres = len(contenido)`
-    YA limpio. Solo incluye redes presentes en `por_red`.
+    El `contenido` se emite TAL CUAL (la politica de emojis vive en el prompt + la
+    editorial de la marca, no en una limpieza posterior: Claro Sports los lleva y
+    UnoTV no) y `caracteres = len(contenido)`. Solo incluye redes en `por_red`.
 
-    `copy_in_por_red` (opcional) aporta el TEXTO EN IMAGEN (copy-in) por red; se emite
-    tal cual (sin `quitar_emojis`: es texto de placa y puede querer simbolos), `""` si la
-    red no lo trae. `caracteres` sigue midiendo SOLO el `contenido`.
+    `copy_in_por_red` (opcional) aporta el TEXTO EN IMAGEN (copy-in) por red; se limpia
+    con `quitar_emojis` (el contrato del prompt: la placa va SIEMPRE sin emojis), `""`
+    si la red no lo trae. `caracteres` sigue midiendo SOLO el `contenido`.
     """
     copy_in_por_red = copy_in_por_red or {}
     piezas: list[dict[str, object]] = []
     for r in redes_ids:
         if r not in por_red:
             continue
-        contenido = quitar_emojis(por_red[r])
+        contenido = por_red[r].strip()
         piezas.append({
             "red": r,
             "contenido": contenido,
             "caracteres": len(contenido),
-            "copy_in": copy_in_por_red.get(r, ""),
+            "copy_in": quitar_emojis(copy_in_por_red.get(r, "")),
         })
     return piezas
 
@@ -681,13 +682,13 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
       `piezas` a `[{red, contenido, caracteres}]` (solo redes en `redes_ids`, en
       orden fijo; `caracteres` = len(contenido)).
     - QUITA ese bloque json del texto para que `resultado` quede limpio.
-    - Deriva `verdicto` de la primera linea con ✅/⚠️/❌ ANTES de tocar nada (asi el
-      simbolo se conserva aunque luego se borren los emojis del copy).
+    - Deriva `verdicto` de la primera linea con ✅/⚠️/❌ ANTES de tocar nada.
     - FALLBACK: si no hay bloque JSON valido (o no trae `piezas` utilizables), intenta
       repartir el texto por ENCABEZADOS de plataforma. Si tampoco hay encabezados
       reconocibles, `piezas=[]` (comportamiento previo).
-    - `resultado` y el `contenido` de cada pieza salen SIN emojis (`quitar_emojis`);
-      el JSON sigue siendo la via preferente, el fallback solo actua si aquel falla.
+    - `resultado` y el `contenido` de cada pieza conservan los emojis que el modelo
+      escribio (la politica de emojis vive en el prompt + editorial de marca); solo el
+      `copy_in` (texto de placa) se limpia con `quitar_emojis`.
 
     Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}`.
     """
@@ -736,7 +737,7 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
         por_red = _repartir_por_encabezados(limpio, redes_ids)
 
     piezas = _piezas_desde_por_red(por_red, redes_ids, copy_in_por_red)
-    return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
+    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
 
 
 def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, object]:
@@ -748,7 +749,8 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
 
     Resiliente: si el modelo emite el array `piezas` (forma vieja), toma la PRIMERA pieza con
     `texto`. Si no hay JSON utilizable, el copy es el texto limpio entero (fallback). `resultado`
-    y el `contenido` salen sin emojis (`quitar_emojis`); el `copy_in` se emite tal cual.
+    y el `contenido` conservan los emojis que el modelo escribió (la política de emojis vive en
+    el prompt + editorial de marca); el `copy_in` (placa) se limpia SIEMPRE con `quitar_emojis`.
     Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}` (misma forma que `parsear_salida`).
     """
     salida = salida or ""
@@ -788,12 +790,13 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     if texto_base is None:
         texto_base = limpio
 
-    contenido = quitar_emojis(texto_base)
+    contenido = texto_base.strip()
+    copy_in_base = quitar_emojis(copy_in_base)
     piezas: list[dict[str, object]] = [
         {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
         for r in redes_ids
     ]
-    return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
+    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
 
 
 # --------------------------------------------------------------------------- #

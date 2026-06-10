@@ -241,37 +241,20 @@ _ESQUEMA_JSON = (
 
 # La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
 # «Prompts»). Los fragmentos calculados (fuente/reglas según el modo, roster, slots, esquema y la
-# cola con el documento embebido) se insertan en sus marcadores `{{...}}`. `_SCAFFOLD` es la red
-# (misma plantilla que la semilla del paquete) por si la lectura fallara.
+# cola con el documento embebido) se insertan en sus marcadores `{{...}}`. Si el store fallara,
+# la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/importacion/parrilla"
-# Fallback CORTO (la plantilla COMPLETA vive en la semilla del paquete / store): mantiene los 6
-# marcadores y el contrato JSON para no romper si la lectura de la Biblioteca fallara.
-_SCAFFOLD = (
-    "Convierte el documento de PLANIFICACIÓN de la rota/parrilla en operaciones estructuradas. "
-    "{{FUENTE}}\n\n"
-    "Extrae TODO (cualquier fecha y nº de franjas/día); cada operación con fecha ISO AAAA-MM-DD.\n\n"
-    "MIEMBROS (usa estos id en `miembro_id`; omite a los desconocidos en vez de inventar):\n"
-    "{{MIEMBROS}}\n\n"
-    "FRANJAS de referencia (usa el NOMBRE tal como aparece en el documento):\n{{SLOTS}}\n\n"
-    "Enums válidos: tipo_cobertura ∈ {transmision, imagenes, no_cubrir}; "
-    "prioridad ∈ {alta, media, baja}; estado ∈ {propuesto, aprobado}.\n\n"
-    "REGLAS:\n{{REGLA_FUENTE}}\n"
-    "- AGRUPA por EVENTO (no por red); no dupliques; respeta franjas; no inventes.\n\n"
-    "SALIDA: UN ÚNICO bloque ```json con esta forma EXACTA, sin texto antes ni después:\n"
-    "```json\n{{ESQUEMA_JSON}}\n```\n"
-    'Si no hay parrilla, devuelve ```json\n{"operaciones": []}\n```.{{COLA_FUENTE}}'
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
-    try:
-        from .. import libtexto
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la importación sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or _SCAFFOLD
+    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
 
 
 def componer_prompt(

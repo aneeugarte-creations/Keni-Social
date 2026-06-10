@@ -50,6 +50,7 @@ from ..estados import (
     PRIORIDADES_EVENTO,
     TIPOS_COBERTURA,
 )
+from . import json_llm
 
 # Origen reservado de las filas creadas/editadas por este flujo (provenance / dedup).
 ORIGEN = "import-doc"
@@ -227,43 +228,14 @@ def _hora_valida(valor: str) -> bool:
 
 
 def extraer_bloque_json(texto: str) -> list[Any] | None:
-    """Saca la lista de operaciones del texto de claude. Tolera ```json fences y dict envoltorio.
+    """Saca la lista de operaciones del texto de claude (extractor compartido `json_llm`).
 
-    Acepta tres formas: una lista JSON cruda, un objeto `{"operaciones": [...]}` (o `ops`/
-    `operations`), todo opcionalmente dentro de un bloque cercado ```json ... ```. Devuelve la
-    lista de operaciones (sin validar) o None si no hay JSON legible. PURO.
+    CONTRATO ESTRICTO: una lista JSON cruda o un objeto `{"operaciones": [...]}` (la ÚNICA
+    clave que el prompt pide; ya no se aceptan los alias `ops`/`operations`), opcionalmente
+    dentro de un bloque cercado ```json ... ``` (se prefiere el ÚLTIMO: el modelo a veces
+    razona antes y cierra con el JSON). None si no hay JSON legible. PURO.
     """
-    if not isinstance(texto, str) or not texto.strip():
-        return None
-    s = texto.strip()
-    # Preferimos el ULTIMO bloque cercado (el modelo a veces razona antes y cierra con el JSON).
-    cercados = re.findall(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
-    candidatos = [c.strip() for c in cercados if c.strip()] or [s]
-    for crudo in reversed(candidatos):
-        data = _cargar_json_tolerante(crudo)
-        if data is None:
-            continue
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            for clave in ("operaciones", "ops", "operations"):
-                if isinstance(data.get(clave), list):
-                    return data[clave]
-    return None
-
-
-def _cargar_json_tolerante(s: str) -> Any | None:
-    """`json.loads` tolerante: si el texto trae prefijo/sufijo, intenta desde el 1er `[`/`{`."""
-    try:
-        return json.loads(s)
-    except (json.JSONDecodeError, ValueError):
-        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
-        if inicio < 0:
-            return None
-        try:
-            return json.loads(s[inicio:])
-        except (json.JSONDecodeError, ValueError):
-            return None
+    return json_llm.extraer_lista(texto, claves=("operaciones",))
 
 
 # --------------------------------------------------------------------------- #

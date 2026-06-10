@@ -63,6 +63,15 @@ def test_extrae_none_si_no_hay_json():
     assert pi.extraer_bloque_json("") is None
 
 
+def test_contrato_estricto_solo_acepta_operaciones():
+    # El prompt pide EXACTAMENTE {"operaciones": [...]}; los alias viejos ya no cuelan.
+    assert pi.extraer_bloque_json('{"ops": [{"tipo": "crear_evento"}]}') is None
+    assert pi.extraer_bloque_json('{"operations": [{"tipo": "crear_evento"}]}') is None
+    assert pi.extraer_bloque_json(
+        '```json\n{"ops": [{"tipo": "crear_evento"}]}\n```'
+    ) is None
+
+
 # --------------------------------------------------------------------------- #
 # crear_evento                                                                #
 # --------------------------------------------------------------------------- #

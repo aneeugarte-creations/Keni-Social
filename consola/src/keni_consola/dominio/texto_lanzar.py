@@ -120,10 +120,11 @@ def lanzar(
     (que en una URL es el AVISO de extracción automática). Vacío => se deriva como antes.
 
     MODO PIEZAS (copy): si el prompt resuelto tiene `salida == "piezas"` y llegan `redes_ids`,
-    se compone con la instruccion de redes (sin emojis) y se lanza con el post-procesado de
-    COPY (parsea piezas por red + AUTO-CREA borradores en la Parrilla), igual que la antigua
-    generacion de copy. En cualquier otro caso se usa el camino IDENTIDAD (`PROC_PROMPT`): el
-    resultado es el texto markdown y no se crean artefactos.
+    se compone con la instruccion de redes (la politica de emojis la marcan el prompt y la
+    editorial adjunta, no un hardcode) y se lanza con el post-procesado de COPY (parsea piezas
+    por red + AUTO-CREA borradores en la Parrilla), igual que la antigua generacion de copy.
+    En cualquier otro caso se usa el camino IDENTIDAD (`PROC_PROMPT`): el resultado es el
+    texto markdown y no se crean artefactos.
     """
     if not generar.marca_valida(marca):
         raise libtexto.TextoError("Marca no válida.")
@@ -152,10 +153,7 @@ def lanzar(
 
     # MODO PIEZAS: el prompt declara salida=piezas y el lanzamiento trae redes -> copy.
     if salida == "piezas" and redes_ids:
-        prompt_final = generar.componer(
-            cuerpo_prompt, adjuntos, bloque_contexto,
-            sin_emojis=True, redes_ids=redes_ids,
-        )
+        prompt_final = generar.componer(cuerpo_prompt, adjuntos, bloque_contexto, redes_ids=redes_ids)
         # `titulo` es el nombre del PROMPT ("Copy desde nota"), no el título del historial.
         # `titulo_dado` titula los borradores: si el llamante sugiere un título del contenido
         # (titular de la URL) lo usamos; si no, "" para que se DERIVE de la nota (texto_base).

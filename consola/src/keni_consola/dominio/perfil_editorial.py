@@ -19,12 +19,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import re
 import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.perfil_editorial")
 
@@ -98,31 +99,20 @@ def _hash(texto: str) -> str:
 
 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
-# insertan la MARCA, el tope de keywords y la línea editorial en sus marcadores. `_SCAFFOLD` es
-# la red por si fallara la lectura.
+# insertan la MARCA, el tope de keywords y la línea editorial en sus marcadores. Si el store
+# fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/noticias/perfil-editorial"
-_SCAFFOLD = (
-    "Eres un analista editorial del equipo de redes de una empresa de medios en México. "
-    "Lee la LÍNEA EDITORIAL de la marca «{{MARCA}}» y extrae su PERFIL de cobertura: las "
-    "palabras y frases clave (temas, secciones, entidades, coberturas típicas) que definen "
-    "QUÉ publica esta marca, para poder puntuar qué noticias le encajan. "
-    "Devuelve entre 10 y {{MAX_KEYWORDS}} términos, en minúsculas, sin acentos, concretos "
-    "(p. ej. 'liga mx', 'seleccion mexicana', 'box'), no genéricos ('noticia', 'contenido'). "
-    "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
-    '{"keywords": ["...", "..."]} sin ningún texto adicional ni ```json.\n\n'
-    "Línea editorial de «{{MARCA}}»:\n{{EDITORIAL}}"
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
-    try:
-        from .. import libtexto
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar el perfil sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or _SCAFFOLD
+    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
 
 
 def _construir_prompt(marca: str, texto_editorial: str) -> str:
@@ -142,26 +132,9 @@ def _construir_prompt(marca: str, texto_editorial: str) -> str:
 
 
 def _extraer_keywords(texto: str) -> list[str]:
-    """Extrae la lista de keywords del texto de Haiku. Tolera ```json fences. [] si falla."""
-    if not texto or not texto.strip():
-        return []
-    s = texto.strip()
-    cerca = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
-    if cerca:
-        s = cerca.group(1).strip()
-    data: Any = None
-    try:
-        data = json.loads(s)
-    except (json.JSONDecodeError, ValueError):
-        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
-        if inicio < 0:
-            return []
-        try:
-            data = json.loads(s[inicio:])
-        except (json.JSONDecodeError, ValueError):
-            return []
-    bruto = data if isinstance(data, list) else (data.get("keywords") if isinstance(data, dict) else None)
-    if not isinstance(bruto, list):
+    """Extrae la lista de keywords del texto de Haiku (extractor compartido). [] si falla."""
+    bruto = json_llm.extraer_lista(texto, claves=("keywords",))
+    if bruto is None:
         return []
     from . import similitud  # sin acentos: el clustering compara contra texto de-acentuado
 

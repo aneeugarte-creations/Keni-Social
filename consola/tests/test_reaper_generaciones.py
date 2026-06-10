@@ -72,3 +72,34 @@ def test_devuelve_cuantas_reclamo(almacen):
 
 def test_almacen_vacio_no_rompe(almacen):
     assert generaciones.reclamar_zombis(3600, ahora=AHORA) == 0
+
+
+# --------------------------------------------------------------------------- #
+# TTL del saneo de QA 'en_curso' (derivado del timeout real; sin BD)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
+    """Sin override, el TTL es ~2x el wall-timeout REAL de la criba (no 30 min fijos)."""
+    from keni_consola import config
+    from keni_consola import reaper_generaciones as rg
+
+    monkeypatch.delenv(config.ENV_QA_EN_CURSO_TTL_MIN, raising=False)
+    monkeypatch.delenv("KENI_QA_FUENTE_TIMEOUT", raising=False)
+    assert rg._ttl_qa_en_curso_seg() == 2 * config.qa_fuente_timeout()  # def 2x180 = 360 s
+
+    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "60")
+    assert rg._ttl_qa_en_curso_seg() == 120
+
+    # Criba sin endurecer (timeout 0): rige el wall-timeout global de claude.
+    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "0")
+    assert rg._ttl_qa_en_curso_seg() == 2 * config.claude_timeout()
+
+
+def test_ttl_qa_en_curso_respeta_el_override_explicito(monkeypatch):
+    """`KENI_QA_EN_CURSO_TTL_MIN` explicito manda sobre la derivacion."""
+    from keni_consola import config
+    from keni_consola import reaper_generaciones as rg
+
+    monkeypatch.setenv(config.ENV_QA_EN_CURSO_TTL_MIN, "30")
+    assert rg._ttl_qa_en_curso_seg() == 30 * 60

@@ -30,10 +30,17 @@ def test_prompt_texto_incrusta_contenido():
     assert "INSUMO" in prompt  # delimitadores del bloque a procesar
 
 
-def test_fallback_insumo_mantiene_contrato_json():
-    # Red de seguridad: aunque falle la Biblioteca, el fallback sigue pidiendo JSON parseable.
-    fb = ip._fallback_insumo("eventos_claro", "/x")
-    assert '{"items"' in fb and '"evento"' in fb
+def test_fallback_de_cajon_sale_de_la_semilla(monkeypatch):
+    # Red de seguridad: si la lectura del store falla, el prompt sale de la SEMILLA del
+    # paquete (sin strings duplicados en el código) y conserva el contrato JSON parseable.
+    from keni_consola import libtexto
+
+    def boom(_pid):
+        raise RuntimeError("store roto")
+
+    monkeypatch.setattr(libtexto, "cuerpo_efectivo", boom)
+    fb = ip._prompt_de_cajon("eventos_claro", "/x")
+    assert '{"items"' in fb and "/x" in fb
 
 
 # --------------------------------------------------------------------------- #
@@ -179,6 +186,58 @@ def test_parsear_respuesta_haiku_json_invalido_devuelve_error():
     )
     assert items == []
     assert errores and "JSON" in errores[0]["motivo"]
+
+
+def test_parsear_respuesta_haiku_truncado_avisa_y_no_silencia(caplog):
+    """Un campo que supera su límite se recorta, con WARN y AVISO visible en `errores`."""
+    import logging
+
+    texto = json.dumps({"items": [
+        {"titulo": "T" * 600, "resumen": "R" * 2500, "linea": "L" * 600},
+    ]})
+    with caplog.at_level(logging.WARNING, logger="keni_consola.dominio.insumos_parse"):
+        items, errores = ip.parsear_respuesta_haiku(
+            texto, cajon="portal", fecha="2026-06-05", lote_id="l001"
+        )
+    assert len(items) == 1
+    assert len(items[0]["titulo"]) == 500
+    assert len(items[0]["resumen"]) == 2000
+    assert len(items[0]["linea"]) == 500
+    # Los límites no se mueven; el recorte deja constancia (aviso por campo, fila 1).
+    avisos = [e for e in errores if e.get("aviso")]
+    assert {a["fila"] for a in avisos} == {1}
+    motivos = " ".join(a["motivo"] for a in avisos)
+    assert "titulo" in motivos and "resumen" in motivos and "linea" in motivos
+    assert any("truncado" in r.message for r in caplog.records)
+
+
+def test_parsear_respuesta_haiku_sin_truncado_no_deja_avisos():
+    texto = json.dumps({"items": [{"titulo": "Corto", "resumen": "ok"}]})
+    items, errores = ip.parsear_respuesta_haiku(
+        texto, cajon="portal", fecha="2026-06-05", lote_id="l001"
+    )
+    assert len(items) == 1
+    assert errores == []
+
+
+def test_procesar_insumos_persiste_aviso_de_truncado_en_el_lote(monkeypatch):
+    """El worker deja el lote `listo` y la constancia del recorte viaja en su campo `error`."""
+    from keni_consola import repos
+
+    lotes: list[tuple[str, dict]] = []
+    monkeypatch.setattr(repos, "crear_insumo_items", lambda items: items)
+    monkeypatch.setattr(repos, "crear_noticias_items", lambda items: len(items))
+    monkeypatch.setattr(
+        repos, "actualizar_insumo_lote", lambda lote_id, campos: lotes.append((lote_id, campos))
+    )
+    salida = json.dumps({"items": [{"titulo": "T" * 600}]})
+    procesar = ip.construir_procesar_insumos(lote_id="l9", cajon="portal", fecha="2026-06-05")
+    res = procesar(salida, None)
+    assert res["estado"] == "listo"
+    assert lotes and lotes[-1][0] == "l9"
+    campos = lotes[-1][1]
+    assert campos["estado"] == "listo"
+    assert "titulo" in campos.get("error", "") and "Aviso" in campos.get("error", "")
 
 
 # --------------------------------------------------------------------------- #

@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +26,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .. import config, marcas
+from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.insumos_parse")
 
@@ -56,9 +56,9 @@ _LISTA_MARCAS = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(
 
 # Los prompts por cajón viven en la Biblioteca de Texto como prompts EDITABLES (carpeta
 # `insumos`, visibles en la pestaña «Prompts»), no hardcodeados. La RUTA del archivo a leer se
-# inserta donde el equipo ponga el marcador `_MARCA_RUTA`. `_fallback_insumo` es la red por si
-# la lectura fallara o el cuerpo viniera vacío: mantiene el contrato JSON mínimo para no romper
-# el parseo. El cajón usa "_" (p.ej. `eventos_claro`); el id de Biblioteca usa "-".
+# inserta donde el equipo ponga el marcador `_MARCA_RUTA`. Si la lectura del store fallara, la
+# red es la SEMILLA del paquete (`libtexto.cuerpo_semilla`), no un texto duplicado aquí. El
+# cajón usa "_" (p.ej. `eventos_claro`); el id de Biblioteca usa "-".
 _PROMPT_INSUMO_IDS: dict[str, str] = {
     "portal": "prompt/insumos/portal",
     "corresponsales": "prompt/insumos/corresponsales",
@@ -68,32 +68,21 @@ _PROMPT_INSUMO_IDS: dict[str, str] = {
 _MARCA_RUTA = "{{RUTA}}"
 
 
-def _fallback_insumo(cajon: str, ruta: str) -> str:
-    """Prompt mínimo PERO con contrato JSON válido (red de seguridad si falla la Biblioteca)."""
-    tipo = _TIPO_POR_CAJON.get(cajon, "nota")
-    return (
-        f"Eres un extractor de insumos para UnoTV/Claro Sports. Lee el archivo en {ruta}. "
-        'Devuelve EXCLUSIVAMENTE un objeto JSON {"items": [ ... ]} sin texto adicional. Cada '
-        'elemento: "titulo" (OBLIGATORIO), "resumen", "marca" ("claro-sports" deportes, '
-        '"nacion-gamer" videojuegos, "unotv" el resto), "linea", '
-        f'"tipo": "{tipo}", "idioma": "es". Si no hay nada, devuelve {{"items": []}}.'
-    )
-
-
 def _prompt_de_cajon(cajon: str, ruta: str) -> str:
     """Prompt EFECTIVO del cajón (Biblioteca: store del equipo > semilla del paquete).
 
     Inserta `ruta` donde esté `_MARCA_RUTA`; si el equipo quitó el marcador, adjunta la ruta al
-    final para no perderla. Import diferido de `libtexto` (evita ciclos) y fallback defensivo.
+    final para no perderla. Import diferido de `libtexto` (evita ciclos); si el store fallara,
+    cae a la SEMILLA del paquete (fuente única del prompt, sin duplicados en el código).
     """
-    try:
-        from .. import libtexto
+    from .. import libtexto
 
+    try:
         plantilla = (libtexto.cuerpo_efectivo(_PROMPT_INSUMO_IDS[cajon]) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar el parseo sin prompt por un fallo de lectura
         plantilla = ""
     if not plantilla:
-        return _fallback_insumo(cajon, ruta)
+        plantilla = libtexto.cuerpo_semilla(_PROMPT_INSUMO_IDS[cajon]).strip()
     if _MARCA_RUTA in plantilla:
         return plantilla.replace(_MARCA_RUTA, ruta)
     return f"{plantilla}\n\nArchivo a leer: {ruta}"
@@ -176,31 +165,8 @@ def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
 
 
 def _extraer_json_items(texto: str) -> list[Any] | None:
-    """Extrae la lista de ítems del texto de Claude. Tolera ```json fences y wrappers."""
-    if not texto or not texto.strip():
-        return None
-    s = texto.strip()
-    cerca = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
-    if cerca:
-        s = cerca.group(1).strip()
-    data: Any = None
-    try:
-        data = json.loads(s)
-    except (json.JSONDecodeError, ValueError):
-        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
-        if inicio < 0:
-            return None
-        try:
-            data = json.loads(s[inicio:])
-        except (json.JSONDecodeError, ValueError):
-            return None
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for clave in ("items", "filas", "rows", "resultados"):
-            if isinstance(data.get(clave), list):
-                return data[clave]
-    return None
+    """Extrae la lista de ítems del texto de Claude (extractor compartido `json_llm`)."""
+    return json_llm.extraer_lista(texto, claves=("items", "filas", "rows", "resultados"))
 
 
 # --------------------------------------------------------------------------- #
@@ -266,16 +232,32 @@ def _items_desde_registros(
         estado_material = str(reg.get("estado_material") or "").strip().lower()
         if estado_material not in estados_material_validos:
             estado_material = ""
+
+        def _campo(valor: str, limite: int, campo: str, fila: int = i) -> str:
+            """Truncado centralizado: WARN + AVISO visible (errores del lote) si recorta."""
+            recortado, fue = json_llm.truncar(valor, limite)
+            if fue:
+                _log.warning(
+                    "insumos [%s] fila %d: «%s» truncado (%d→%d caracteres).",
+                    cajon, fila, campo, len(valor), limite,
+                )
+                errores.append({
+                    "fila": fila,
+                    "motivo": f"Se recortó «{campo}» ({len(valor)}→{limite} caracteres).",
+                    "aviso": True,
+                })
+            return recortado
+
         items.append({
             "lote_id": lote_id,
             "fecha": fecha,
             "cajon": cajon,
             "marca": _normalizar_marca(reg.get("marca")) or marca_defecto,
-            "linea": str(reg.get("linea") or "").strip()[:500],
-            "titulo": titulo[:500],
-            "resumen": str(reg.get("resumen") or "").strip()[:2000],
-            "hora": str(reg.get("hora") or "").strip()[:20],
-            "lugar": str(reg.get("lugar") or "").strip()[:200],
+            "linea": _campo(str(reg.get("linea") or "").strip(), 500, "linea"),
+            "titulo": _campo(titulo, 500, "titulo"),
+            "resumen": _campo(str(reg.get("resumen") or "").strip(), 2000, "resumen"),
+            "hora": _campo(str(reg.get("hora") or "").strip(), 20, "hora"),
+            "lugar": _campo(str(reg.get("lugar") or "").strip(), 200, "lugar"),
             "estado_material": estado_material,
             "tipo": tipo,
             "idioma": str(reg.get("idioma") or "es").strip()[:10],
@@ -333,9 +315,13 @@ def construir_procesar_insumos(*, lote_id: str, cajon: str, fecha: str, marca_de
             repos.actualizar_insumo_lote(lote_id, {"estado": "error", "error": mensaje})
             return {"total_items": 0, "estado": "error"}
         insertados = repos.crear_insumo_items(items)
-        repos.actualizar_insumo_lote(
-            lote_id, {"total_items": len(insertados), "estado": "listo"}
-        )
+        # Constancia VISIBLE de los avisos (p.ej. campos truncados) aunque el lote quede
+        # `listo`: viajan en el campo `error` del lote (mecanismo existente de notas).
+        avisos = [e.get("motivo", "") for e in errores if e.get("aviso")]
+        campos: dict[str, Any] = {"total_items": len(insertados), "estado": "listo"}
+        if avisos:
+            campos["error"] = "Aviso: " + "; ".join(a for a in avisos[:3] if a)
+        repos.actualizar_insumo_lote(lote_id, campos)
         # Pool único (Ola E): además de su tabla propia, cada nota entra al pool
         # `noticias_items` para que el clustering la deduplique y el auto-feed la use.
         # Los EVENTOS NO entran (agenda de cobertura, no notas de copy). Idempotente por

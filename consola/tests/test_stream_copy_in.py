@@ -76,3 +76,34 @@ def test_unificada_sin_json_cae_al_texto_limpio():
     piezas = stream.parsear_salida_unificada("Copy suelto sin json", ["x", "tiktok"])["piezas"]
     assert all(p["contenido"] == "Copy suelto sin json" for p in piezas)
     assert all(p["copy_in"] == "" for p in piezas)
+
+
+def test_unificada_contenido_conserva_emojis_y_copy_in_no():
+    # Misma politica de emojis que `parsear_salida`: contenido tal cual, placa limpia.
+    salida = '```json\n{"texto": "¡GOLAZO! 🔥⚽", "copy_in": "GOLAZO 🔥"}\n```'
+    piezas = stream.parsear_salida_unificada(salida, ["x", "instagram"])["piezas"]
+    assert all(p["contenido"] == "¡GOLAZO! 🔥⚽" for p in piezas)
+    assert all(p["copy_in"] == "GOLAZO" for p in piezas)
+
+
+# --------------------------------------------------------------------------- #
+# Politica de emojis del parseo (vive en prompt + editorial, no en limpieza)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_contenido_conserva_emojis_y_copy_in_no():
+    # La politica de emojis vive en el prompt + editorial (Claro Sports los lleva):
+    # el parser NO los borra del contenido. El copy_in (placa) va SIEMPRE limpio.
+    salida = (
+        "Doc\n\n```json\n"
+        '{"piezas": [{"red": "instagram", "texto": "¡GOLAZO! 🔥⚽", "copy_in": "GOLAZO 🔥"}]}\n```'
+    )
+    pieza = stream.parsear_salida(salida, ["instagram"])["piezas"][0]
+    assert pieza["contenido"] == "¡GOLAZO! 🔥⚽"
+    assert pieza["caracteres"] == len("¡GOLAZO! 🔥⚽")
+    assert pieza["copy_in"] == "GOLAZO"
+
+
+def test_resultado_conserva_emojis():
+    salida = "Resumen con emoji 🔥\n\n```json\n{\"piezas\": []}\n```"
+    assert stream.parsear_salida(salida, ["x"])["resultado"] == "Resumen con emoji 🔥"

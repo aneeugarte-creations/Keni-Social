@@ -147,16 +147,48 @@ VERDICTO_PROBLEMA = "problema"
 # (permisivo: ante la duda, deja pasar). Cubre que el prompt use el lenguaje de semáforo.
 _FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
 
+# CONTRATO del prompt de fuente (`prompt/qa-fuente`): el campo JSON `veredicto` va en slug
+# ASCII ("apta" | "problema"). Los emojis 🟢/🔴 se aceptan como LEGADO (piezas en vuelo o un
+# prompt editado en producción aún viejo); el semáforo visual queda para la línea humana.
+_FUENTE_SLUG_APTA = "apta"
+_FUENTE_SLUG_PROBLEMA = "problema"
+
+
+def _slug_veredicto_fuente(salida: str) -> str:
+    """Veredicto del ÚLTIMO bloque ```json de la QA de FUENTE: "apta"/"problema" o "".
+
+    Acepta el slug ASCII del contrato y el emoji legado 🟢/🔴. Cualquier otro valor (o sin
+    bloque/clave) devuelve "" y el llamante cae al camino permisivo. PURO, nunca lanza.
+    """
+    coincidencias = list(stream._RE_BLOQUE_JSON.finditer(salida or ""))
+    if not coincidencias:
+        return ""
+    try:
+        datos = json.loads(coincidencias[-1].group(1))
+    except (json.JSONDecodeError, ValueError):
+        return ""
+    if not isinstance(datos, dict):
+        return ""
+    v = datos.get("veredicto")
+    if not isinstance(v, str):
+        return ""
+    if "🔴" in v:
+        return _FUENTE_SLUG_PROBLEMA
+    if "🟢" in v:
+        return _FUENTE_SLUG_APTA
+    v = v.strip().lower()
+    return v if v in (_FUENTE_SLUG_APTA, _FUENTE_SLUG_PROBLEMA) else ""
+
 
 def parsear_verdicto_fuente(salida: str) -> dict[str, object]:
     """Parsea la salida de la QA de la FUENTE en un veredicto ESTRUCTURADO permisivo.
 
     Reusa `parsear_informe` (mismo formato ```json con `veredicto`/`resumen`/`hallazgos`), pero
     COLAPSA el veredicto a dos valores de FUENTE:
-      - `problema` SOLO si el informe dice 🔴/no_publicar O trae algún hallazgo de gravedad
-        `error` (algo de peso en contra),
-      - `no_verificado` en cualquier otro caso (incluido sin veredicto / formato inesperado):
-        PERMISIVO por diseño (ante la duda, deja pasar y la pieza llevará ⚠️).
+      - `problema` si el JSON dice "problema" (slug del contrato) o 🔴 legado / el informe
+        deriva `no_publicar`, O trae algún hallazgo de gravedad `error` (algo de peso),
+      - `no_verificado` en cualquier otro caso (incluido sin veredicto / formato inesperado /
+        valor basura): PERMISIVO por diseño (ante la duda, deja pasar y la pieza llevará ⚠️).
 
     Devuelve `{verdicto, resumen, hallazgos: [...], informe_texto}` (mismas claves que
     `parsear_informe`, con `verdicto` ya colapsado a `no_verificado`/`problema`). PURO.
@@ -167,7 +199,14 @@ def parsear_verdicto_fuente(salida: str) -> dict[str, object]:
     hay_error = isinstance(hallazgos, list) and any(
         isinstance(h, dict) and h.get("gravedad") == "error" for h in hallazgos
     )
-    es_problema = crudo in _FUENTE_PROBLEMA_DESDE or hay_error
+    slug = _slug_veredicto_fuente(salida)
+    if slug == _FUENTE_SLUG_PROBLEMA:
+        es_problema = True
+    elif slug == _FUENTE_SLUG_APTA:
+        # El JSON manda sobre la línea de semáforo; un hallazgo `error` sigue pesando.
+        es_problema = hay_error
+    else:
+        es_problema = crudo in _FUENTE_PROBLEMA_DESDE or hay_error
     informe["verdicto"] = VERDICTO_PROBLEMA if es_problema else VERDICTO_NO_VERIFICADO
     return informe
 

@@ -211,9 +211,11 @@ def encadenar_copy_tras_qa(
     try:
         return lanzar_copy_de_tema(tema, autor=autor)
     except generaciones.ColaLlenaError:
-        _log.info(
-            "pipeline: cola llena al encadenar copy del tema %s; el barrido lo recogerá.",
-            contenido_id,
+        # SEGURO perderlo aquí: el tema conserva veredicto apto + `copy_pendiente` y sigue sin
+        # piezas, así que `temas_para_copy` lo selecciona en el siguiente tick del barrido.
+        _log.warning(
+            "pipeline: cola llena al encadenar copy del tema %s (marca %s); el barrido lo recogerá.",
+            contenido_id, tema.get("marca", ""),
         )
         return None
 
@@ -251,7 +253,11 @@ def encadenar_arte_tras_copy(contenido_id: str) -> dict[str, Any] | None:
             return None
         return autogen_arte.lanzar_para_topic(tema)
     except Exception:  # noqa: BLE001 -- el barrido de arte lo recogerá
+        # SEGURO perderlo aquí (incluida `ColaLlenaError`): la etiqueta `autogen-arte` (el dedup
+        # que consulta `topics_sin_arte`) solo se asigna AL ÉXITO dentro de `lanzar_para_topic`;
+        # un fallo deja el tema SIN etiqueta y el barrido de arte lo vuelve a elegir con certeza.
         _log.warning(
-            "pipeline: fallo el encadenado copy->arte (%s)", contenido_id, exc_info=True
+            "pipeline: fallo el encadenado copy->arte del tema %s; el barrido lo recogerá.",
+            contenido_id, exc_info=True,
         )
         return None

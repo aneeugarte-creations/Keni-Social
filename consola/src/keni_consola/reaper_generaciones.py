@@ -25,6 +25,7 @@ daemons). El barrido es best-effort: un fallo se loguea y NO mata el hilo.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from datetime import UTC, datetime, timedelta
 
@@ -32,6 +33,71 @@ from . import config, daemon_util, generaciones
 from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.reaper_generaciones")
+
+# TTL del saneo de QA 'en_curso' ≈ 2× el wall-timeout real de la criba: un zombi se detecta en
+# minutos (antes 30 min fijos = hasta media hora de cupo serial bloqueado por marca), y una
+# criba VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
+_FACTOR_TTL_QA_EN_CURSO = 2
+
+
+def _ttl_qa_en_curso_seg() -> int:
+    """TTL (s) del saneo de temas `qa_veredicto='en_curso'` huérfanos.
+
+    El override explícito (`KENI_QA_EN_CURSO_TTL_MIN`) manda; sin él, se DERIVA del timeout
+    real de la criba (`config.qa_fuente_timeout()`; si está a 0 —sin endurecer—, rige el
+    global `config.claude_timeout()`), x`_FACTOR_TTL_QA_EN_CURSO`. No duplica la constante.
+    """
+    if (os.environ.get(config.ENV_QA_EN_CURSO_TTL_MIN) or "").strip():
+        return config.qa_en_curso_ttl_seg()
+    return _FACTOR_TTL_QA_EN_CURSO * (config.qa_fuente_timeout() or config.claude_timeout())
+
+
+def _sanear_qa_en_curso() -> int:
+    """Saneo de temas del pipeline ZOMBI en `qa_veredicto='en_curso'`. Devuelve cuántos tocó.
+
+    La fase QA marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la
+    generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_qa`
+    y contando en `temas_en_vuelo` (bloquea el cupo serial de su marca). Por cada zombi más
+    viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
+      - etapa de Validación ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
+      - APAGADA (`KENI_PIPELINE_VALIDACION` off, global o `::marca`) -> se marca `saltada`
+        (CD lo recoge sin re-cribar; re-cribar con la etapa apagada lo dejaría zombi otra vez).
+    WARN por tema (tema_id + marca + destino). El worker además sanea en caliente al cerrar un
+    job de QA en error; esto es la red para las muertes no graciosas.
+    """
+    from . import repos
+    from .pipeline_contenido import ORIGEN_PIPELINE, QA_EN_CURSO, QA_SALTADA
+
+    umbral = iso_utc(datetime.now(UTC) - timedelta(seconds=_ttl_qa_en_curso_seg()))
+    tocados = 0
+    for tema in repos.listar_contenido():
+        if (tema.get("origen") or "") != ORIGEN_PIPELINE:
+            continue
+        if (tema.get("qa_veredicto") or "") != QA_EN_CURSO:
+            continue
+        # `actualizado` lo refresca cada escritura, incluida la que puso `en_curso`: un
+        # `en_curso` legítimo y reciente NUNCA se toca. Sin fecha no hay evidencia: se respeta.
+        actualizado = (tema.get("actualizado") or "").strip()
+        if not actualizado or actualizado >= umbral:
+            continue
+        tema_id = (tema.get("id") or "").strip()
+        marca = tema.get("marca") or ""
+        validacion_activa = config.etapa_activa(config.ENV_PIPELINE_VALIDACION, marca)
+        nuevo = "" if validacion_activa else QA_SALTADA
+        try:
+            repos.actualizar_contenido(tema_id, {"qa_veredicto": nuevo})
+        except Exception:  # noqa: BLE001 -- best-effort por tema; el resto del saneo sigue
+            _log.warning(
+                "Reaper de generaciones: no se pudo sanear la QA zombi del tema %s.",
+                tema_id, exc_info=True,
+            )
+            continue
+        tocados += 1
+        _log.warning(
+            "Reaper de generaciones: QA 'en_curso' zombi del tema %s (marca %s) -> %s.",
+            tema_id, marca, "re-criba" if validacion_activa else "saltada",
+        )
+    return tocados
 
 
 def ejecutar_barrido() -> int:
@@ -67,24 +133,14 @@ def ejecutar_barrido() -> int:
             _log.info("Reaper de generaciones: %d lote(s) de cajón zombi reconciliado(s).", m)
     except Exception:  # noqa: BLE001 -- saneamiento aditivo; un fallo no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo el saneo de lotes de cajón.", exc_info=True)
-    # Cuarto saneamiento: temas del pipeline ZOMBI en `qa_veredicto='en_curso'`. La fase QA
-    # marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la generación
-    # mueren sin finalizador (crash del worker, fallo al encolar), nada lo reseteaba: el tema
-    # quedaba excluido PARA SIEMPRE de `temas_sin_qa` y contando en `temas_en_vuelo` (bloquea
-    # el cupo serial de su marca). Se resetean a "" (re-criba) los `en_curso` más viejos que
-    # `KENI_QA_EN_CURSO_TTL_MIN` (def 30 min, muy superior al timeout de la criba: nunca toca
-    # una QA viva). El worker además sanea en caliente al cerrar un job de QA en error; esto
-    # es la red para las muertes no graciosas. Best-effort.
+    # Cuarto saneamiento: temas del pipeline ZOMBI en `qa_veredicto='en_curso'` (detalle en
+    # `_sanear_qa_en_curso`): TTL derivado del timeout real de la criba (~2×) y, con la etapa
+    # de Validación apagada, el zombi pasa a `saltada` (CD lo recoge) en vez de re-cribarse.
     try:
-        from . import repos
-
-        umbral_qa = iso_utc(
-            datetime.now(UTC) - timedelta(seconds=config.qa_en_curso_ttl_seg())
-        )
-        z = repos.sanear_qa_en_curso_huerfanos(umbral_qa)
+        z = _sanear_qa_en_curso()
         if z:
             _log.info(
-                "Reaper de generaciones: %d tema(s) con QA 'en_curso' zombi devuelto(s) a re-criba.", z
+                "Reaper de generaciones: %d tema(s) con QA 'en_curso' zombi saneado(s).", z
             )
     except Exception:  # noqa: BLE001 -- saneamiento aditivo; un fallo no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo el saneo de QA en_curso.", exc_info=True)

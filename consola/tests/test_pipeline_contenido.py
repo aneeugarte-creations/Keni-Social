@@ -90,6 +90,13 @@ def _ci_desde_feed(marca="unotv", *, maximo=2):
     return [t for tr in trabajos if (t := pc.crear_tema_de(tr, claves_vistas=claves))]
 
 
+def _envejecer_intento(tema_id, campo):
+    """Retrasa el timestamp del último intento de la etapa (saca el tema del backoff)."""
+    pend = json.loads(repos.obtener_contenido(tema_id)["copy_pendiente"])
+    pend[f"{campo}_ts"] = "2020-01-01T00:00:00"
+    repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend)})
+
+
 def _sembrar_cluster(cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo"):
     """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema."""
     repos.upsert_noticia_cluster({
@@ -144,6 +151,20 @@ def test_extraer_og_image():
 def test_extraer_og_image_ausente():
     assert pc._extraer_og_image("<head></head>") == ""
     assert pc._extraer_og_image("") == ""
+
+
+def test_en_backoff_puro_segun_intentos_y_timestamp():
+    """`en_backoff` (PURO sobre el dict): espera tras un intento RECIENTE; sin ts/intentos no."""
+    from keni_consola.tiempo import ahora_iso
+
+    reciente = json.dumps({"qa_intentos": 1, "qa_intentos_ts": ahora_iso()})
+    assert pc.en_backoff({"id": "t", "copy_pendiente": reciente}, "qa_intentos") is True
+    viejo = json.dumps({"qa_intentos": 1, "qa_intentos_ts": "2020-01-01T00:00:00"})
+    assert pc.en_backoff({"id": "t", "copy_pendiente": viejo}, "qa_intentos") is False
+    # Temas previos al backoff (intentos sin timestamp) y temas sin intentos: sin espera.
+    legacy = json.dumps({"qa_intentos": 2})
+    assert pc.en_backoff({"id": "t", "copy_pendiente": legacy}, "qa_intentos") is False
+    assert pc.en_backoff({"id": "t", "copy_pendiente": ""}, "qa_intentos") is False
 
 
 def test_qa_lexico_listo_sin_observaciones():
@@ -416,12 +437,14 @@ def test_encadenado_cola_llena_no_rompe_la_qa(entorno, monkeypatch):
     assert [t["id"] for t in pc.temas_para_copy()] == [tema["id"]]
 
 
-def test_copy_fallido_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch):
-    """DEDUP AL ÉXITO: un copy que falló (sin piezas, `copy_pendiente` intacto) se RELANZA.
+def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
+    """DEDUP AL ÉXITO + BACKOFF: un copy fallido se RELANZA, pero solo PASADA la espera creciente.
 
     Antes `copy_pendiente` se limpiaba al ENCOLAR y un copy fallido jamás se reintentaba (el
     tema quedaba huérfano para siempre). El doble lanzamiento mientras el job está EN VUELO
-    lo evita la clave de idempotencia de `dominio.generar.lanzar` (no este filtro).
+    lo evita la clave de idempotencia de `dominio.generar.lanzar` (no este filtro). Con el tick
+    corto, el reintento INMEDIATO quemaba los 3 intentos en <1 min: ahora el barrido SALTA el
+    tema mientras dura el backoff del intento (`_BACKOFF_ETAPA_SEG`).
     """
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
@@ -432,12 +455,18 @@ def test_copy_fallido_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch)
     # El lanzamiento NO limpió `copy_pendiente` (lo limpia el post-procesado al ÉXITO).
     assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "").strip()
 
-    # El copy "falló" (no nació pieza): el siguiente barrido lo reintenta.
+    # El copy "falló" (no nació pieza), pero el tick INMEDIATO no relanza: backoff en curso.
+    pc.ejecutar_cd(autor=None)
+    assert len(llamadas) == 1
+
+    # Pasada la espera (timestamp envejecido), el barrido sí lo reintenta.
+    _envejecer_intento(tema["id"], "cd_intentos")
     pc.ejecutar_cd(autor=None)
     assert len(llamadas) == 2
 
     # Éxito (pieza creada): deja de relanzarse.
     repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Listo")
+    _envejecer_intento(tema["id"], "cd_intentos")
     pc.ejecutar_cd(autor=None)
     assert len(llamadas) == 2
 
@@ -505,8 +534,8 @@ def test_qa_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
     assert pc.temas_en_vuelo("unotv") == 0
 
 
-def test_qa_lanzamiento_anota_intento(entorno, monkeypatch):
-    """Cada criba REAL anota su intento en `copy_pendiente` (la base del tope de reintentos)."""
+def test_qa_lanzamiento_anota_intento_y_timestamp(entorno, monkeypatch):
+    """Cada criba REAL anota su intento + instante en `copy_pendiente` (tope y backoff)."""
     import json
 
     monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
@@ -517,6 +546,26 @@ def test_qa_lanzamiento_anota_intento(entorno, monkeypatch):
 
     pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
     assert pend["qa_intentos"] == 1
+    assert (pend.get("qa_intentos_ts") or "").strip()  # base del backoff entre reintentos
+
+
+def test_qa_backoff_salta_y_reintenta_tras_la_espera(entorno, monkeypatch):
+    """BACKOFF en QA: un tema recién fallado se SALTA (sin quemar intento); pasada la espera entra."""
+    from keni_consola.tiempo import ahora_iso
+
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    cliente = _cliente()  # noqa: F841 -- lanzador noop
+    pend = json.dumps({
+        "nota": "n", "redes_ids": ["x"], "qa_intentos": 1, "qa_intentos_ts": ahora_iso(),
+    })
+    tema = _tema_pipeline(titulo="QA en backoff", copy_pendiente=pend)
+
+    assert pc.ejecutar_qa(autor=None) == []  # en espera: ni lanza ni quema intento
+    assert json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])["qa_intentos"] == 1
+
+    _envejecer_intento(tema["id"], "qa_intentos")
+    cribados = pc.ejecutar_qa(autor=None)
+    assert [c["id"] for c in cribados] == [tema["id"]]
 
 
 def test_cd_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
@@ -564,6 +613,7 @@ def test_cd_reintento_anota_intentos_acumulados(entorno, monkeypatch):
     tema = _tema_pipeline(titulo="Suma intentos", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     pc.ejecutar_cd(autor=None)  # 1er intento (el copy mockeado "falla": no nace pieza)
+    _envejecer_intento(tema["id"], "cd_intentos")  # fuera del backoff: el barrido reintenta
     pc.ejecutar_cd(autor=None)  # 2º intento
 
     assert len(llamadas) == 2
@@ -1010,6 +1060,8 @@ def test_sanear_qa_en_curso_huerfanos_resetea_solo_viejos(entorno):
 
     Cierra el ZOMBI: si la criba muere sin finalizador, el tema quedaba `en_curso` para
     siempre (excluido de `temas_sin_qa` y contando en el cupo en vuelo de su marca).
+    NOTA: el reaper usa ahora su saneo PER-TEMA (`reaper_generaciones._sanear_qa_en_curso`,
+    con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
     from keni_consola import db
 
@@ -1031,6 +1083,121 @@ def test_sanear_qa_en_curso_huerfanos_resetea_solo_viejos(entorno):
     assert n == 1
     assert (repos.obtener_contenido(zombi["id"])["qa_veredicto"] or "") == ""  # a re-criba
     assert repos.obtener_contenido(vivo["id"])["qa_veredicto"] == pc.QA_EN_CURSO  # intacto
+
+
+def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
+    """Retrasa el `actualizado` de un tema (lo vuelve zombi para los saneadores)."""
+    from keni_consola import db
+
+    con = db._conectar()
+    try:
+        con.execute("UPDATE contenido SET actualizado = ? WHERE id = ?", (fecha, tema_id))
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_reaper_qa_zombi_re_criba_con_validacion_activa(entorno, monkeypatch):
+    """El saneo del reaper devuelve a re-criba ('') SOLO los `en_curso` zombis (per-tema)."""
+    from keni_consola import reaper_generaciones
+
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    zombi = _tema_pipeline(titulo="Zombi", qa_veredicto=pc.QA_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", qa_veredicto=pc.QA_EN_CURSO)
+    _envejecer_actualizado(zombi["id"])
+
+    n = reaper_generaciones._sanear_qa_en_curso()
+
+    assert n == 1
+    assert (repos.obtener_contenido(zombi["id"])["qa_veredicto"] or "") == ""  # a re-criba
+    assert repos.obtener_contenido(vivo["id"])["qa_veredicto"] == pc.QA_EN_CURSO  # intacto
+
+
+def test_reaper_qa_zombi_saltada_con_validacion_apagada(entorno, monkeypatch):
+    """Con la etapa de Validación APAGADA, el zombi pasa a 'saltada' (CD lo recoge), no a re-criba."""
+    from keni_consola import reaper_generaciones
+
+    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)  # etapa off (def)
+    zombi = _tema_pipeline(titulo="Zombi sin QA", qa_veredicto=pc.QA_EN_CURSO)
+    _envejecer_actualizado(zombi["id"])
+
+    n = reaper_generaciones._sanear_qa_en_curso()
+
+    assert n == 1
+    assert repos.obtener_contenido(zombi["id"])["qa_veredicto"] == pc.QA_SALTADA
+
+
+def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch, caplog):
+    """>50% de lanzamientos de arte fallidos en un ciclo -> UN único ERROR agregado (proveedor)."""
+    import logging
+
+    from keni_consola import autogen_arte
+
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
+    items = [
+        {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
+        {"id": "t2", "titulo": "Tema 2", "marca": "unotv"},
+    ]
+    monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: items)
+    monkeypatch.setattr(autogen_arte, "_plataformas_por_item", lambda items: {})
+    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_arte, "_etiquetas_por_item", lambda: {})
+    monkeypatch.setattr(autogen_arte, "topics_sin_arte", lambda *a, **k: list(items))
+    monkeypatch.setattr(
+        autogen_arte, "lanzar_para_topic",
+        lambda it: (_ for _ in ()).throw(RuntimeError("proveedor caído")),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="keni_consola.pipeline_contenido"):
+        res = pc.ejecutar_arte()
+
+    assert res == []
+    agregados = [
+        r for r in caplog.records
+        if r.levelno == logging.ERROR and "fallido(s) en este barrido" in r.getMessage()
+    ]
+    assert len(agregados) == 1
+    assert "2/2" in agregados[0].getMessage()
+    # Correlación: el resumen lista los temas afectados.
+    assert "t1" in agregados[0].getMessage() and "t2" in agregados[0].getMessage()
+
+
+def test_ejecutar_arte_fallo_aislado_sin_error_agregado(entorno, monkeypatch, caplog):
+    """Un fallo de arte AISLADO (<=50% del ciclo) no dispara la señal de proveedor caído."""
+    import logging
+
+    from keni_consola import autogen_arte
+
+    monkeypatch.setenv(config.ENV_MAQUINA, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
+    items = [
+        {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
+        {"id": "t2", "titulo": "Tema 2", "marca": "unotv"},
+    ]
+    monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: items)
+    monkeypatch.setattr(autogen_arte, "_plataformas_por_item", lambda items: {})
+    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_arte, "_etiquetas_por_item", lambda: {})
+    monkeypatch.setattr(autogen_arte, "topics_sin_arte", lambda *a, **k: list(items))
+
+    def _solo_t1_falla(it):
+        if it["id"] == "t1":
+            raise RuntimeError("fallo puntual")
+        return {"contenido_id": it["id"]}
+
+    monkeypatch.setattr(autogen_arte, "lanzar_para_topic", _solo_t1_falla)
+
+    with caplog.at_level(logging.ERROR, logger="keni_consola.pipeline_contenido"):
+        res = pc.ejecutar_arte()
+
+    assert len(res) == 1  # t2 sí se ilustró
+    assert not [
+        r for r in caplog.records
+        if r.levelno == logging.ERROR and "fallido(s) en este barrido" in r.getMessage()
+    ]
 
 
 def test_ids_contenido_con_copy_filtra_por_marca(entorno):

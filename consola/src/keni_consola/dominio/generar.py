@@ -14,17 +14,20 @@ que `claude` corre con un cwd NEUTRO (`jobspec.CWD_GENERACION`).
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from pathlib import Path
 from typing import Any
 
-from .. import generaciones, libtexto, marcas, redes
+from .. import generaciones, libtexto, limites_plataforma, marcas, redes
 from . import jobspec
 
 _log = logging.getLogger("keni_consola.generar")
 
-# Instrucción ADITIVA de estilo en todo prompt de generación (defensa en profundidad; además
-# `quitar_emojis` los borra de forma determinista en el post-procesado de documento).
+# Instrucción ADITIVA de estilo, OPT-IN por flujo (la usan flujos cuya salida nunca debe
+# llevar emojis, p. ej. evergreen/termómetro). El COPY ya NO la inyecta: su política de
+# emojis vive en el prompt (`copy-desde-nota` §4) + la editorial adjunta de la marca, la
+# única fuente; el hardcode la contradecía.
 INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
 
 # Delimitador XML que envuelve el contenido NO confiable (nota/transcripción/ítem RSS del
@@ -114,20 +117,42 @@ def cwd_generacion() -> Path:
     return jobspec.cwd_generacion()
 
 
+def _limites_redes(redes_ids: list[str]) -> str:
+    """Frase con el límite TÉCNICO de cada red pedida, desde la fuente única del código.
+
+    Los topes salen de `limites_plataforma` (keni-shared), no van hardcodeados en el prompt:
+    así el prompt nunca diverge del código que luego VALIDA las piezas (`dominio.copy`).
+    """
+    partes = []
+    for r in redes_ids:
+        limite = limites_plataforma.limite_de(r)
+        nombre = redes.nombre_por_id(r)
+        partes.append(
+            f"{nombre} máx {limite} caracteres" if limite is not None else f"{nombre} sin tope técnico"
+        )
+    return ", ".join(partes)
+
+
 def instruccion_redes(redes_ids: list[str]) -> str:
-    """Instrucción ADITIVA: limita las redes y pide un bloque json con las piezas por red."""
+    """Instrucción ADITIVA: limita las redes, ancla sus límites técnicos (desde el código)
+    y pide el bloque json con las piezas por red (contrato, incluidas piezas compuestas)."""
     etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
     ids_json = ", ".join(f'"{r}"' for r in redes_ids)
     return (
         f"Genera el copy SOLO para estas redes: {etiquetas}. "
+        f"Límites técnicos de caracteres (no los excedas): {_limites_redes(redes_ids)}. "
         "Mantén tu formato y tu auto-verificación habituales. "
         "Además, al FINAL de toda tu respuesta, añade un único bloque de código "
         'cercado ```json con esta forma exacta: {"piezas": [{"red": "<id>", '
         '"texto": "<copy de esa red>", "copy_in": "<texto que va DENTRO de la imagen>"}, '
-        f"...]}}, usando como <id> únicamente estos valores: {ids_json}. Incluye una pieza "
-        "por cada red pedida. El `copy_in` es el texto que va SOBRE la imagen (titular/claim "
-        "corto), distinto del `texto` que la acompaña; respeta la línea editorial de "
-        'texto-en-imagen de la marca adjunta y deja "" si la pieza no lleva imagen.'
+        f"...]}}, usando como <id> únicamente estos valores: {ids_json}. Incluye exactamente "
+        "UNA pieza por cada red pedida (nunca dos de la misma red). Si la pieza de una red es "
+        'un HILO o un CARRUSEL, va numerada DENTRO de su "texto": en un hilo, un tuit por '
+        'párrafo con prefijo "1/n ", "2/n "… y cada tuit dentro del límite de la red; en un '
+        'carrusel, las slides separadas por una línea con solo "---". El `copy_in` es el texto '
+        "que va SOBRE la imagen (titular/claim corto), distinto del `texto` que la acompaña; "
+        "respeta la línea editorial de texto-en-imagen de la marca adjunta, sale siempre sin "
+        'emojis y deja "" si la pieza no lleva imagen.'
     )
 
 
@@ -138,11 +163,22 @@ def instruccion_copy_unico(redes_ids: list[str]) -> str:
     Facebook, TikTok, YouTube): NO una variante por plataforma. Así X nunca queda sin copy_in
     (heredaba el "" cuando el modelo la trataba como red sin imagen). El copy sale SIN hashtags:
     el equipo los añade aparte por grupos donde corresponde (Instagram/TikTok). Pide un único
-    bloque ```json con un OBJETO PLANO (sin array `piezas` por red)."""
+    bloque ```json con un OBJETO PLANO (sin array `piezas` por red). El límite de longitud va
+    anclado al MÁS ESTRICTO de las redes pedidas (desde `limites_plataforma`, fuente única)."""
     etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
+    limites = [
+        limites_plataforma.limite_de(r) for r in redes_ids
+        if limites_plataforma.limite_de(r) is not None
+    ]
+    tope = (
+        f"Para que valga en todas, el copy no excede el límite técnico más estricto de esas "
+        f"redes: {min(limites)} caracteres. "
+        if limites else ""
+    )
     return (
         f"Este copy se publicará TAL CUAL en estas redes: {etiquetas}. Escribe UN SOLO copy "
         "que sirva igual para todas (NO una variante por red) y UN SOLO texto-en-imagen. "
+        f"{tope}"
         "NO añadas hashtags: el equipo los pone aparte por grupos donde corresponde. "
         "Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu "
         "respuesta, añade un único bloque de código cercado ```json con esta forma exacta: "
@@ -153,6 +189,22 @@ def instruccion_copy_unico(redes_ids: list[str]) -> str:
     )
 
 
+# Línea de markdown SIN texto efectivo: heading (`# …`, con espacio tras los `#`, así un
+# hashtag "#gol" cuenta como contenido) o separador horizontal (`---`/`***`/`___`).
+_RE_LINEA_SIN_TEXTO = re.compile(r"^(?:#{1,6}(?:\s.*)?|[-*_]{3,})$")
+
+
+def cuerpo_sin_texto(cuerpo: str) -> bool:
+    """True si el cuerpo no aporta texto efectivo (vacío o solo headings/separadores).
+
+    Un editorial "esqueleto" (solo títulos de sección sin prosa debajo) no aporta contexto
+    al modelo: `componer` lo filtra de los adjuntos para no gastar tokens.
+    """
+    for linea in (cuerpo or "").splitlines():
+        s = linea.strip()
+        if s and _RE_LINEA_SIN_TEXTO.match(s) is None:
+            return False
+    return True
 def componer(
     cuerpo_prompt: str,
     adjuntos: list[libtexto.Documento],
@@ -164,32 +216,39 @@ def componer(
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
-    `sin_emojis`/`redes_ids` son ADITIVOS y OPT-IN (específicos de copy): por defecto NO se
-    añaden, para que un prompt cualquiera de la Texto no quede forzado a "sin emojis"
-    ni al bloque de piezas por red. Las features de copy los activan.
+    `sin_emojis`/`redes_ids` son ADITIVOS y OPT-IN: por defecto NO se añaden, para que un
+    prompt cualquiera de la Texto no quede forzado a "sin emojis" ni al bloque de piezas
+    por red. `redes_ids` lo activan las features de copy; `sin_emojis` lo activan flujos
+    cuya salida nunca lleva emojis (evergreen/termómetro), NO el copy (su política de
+    emojis vive en el propio prompt + editorial).
 
     `copy_unico` (solo copy-desde-nota): cuando es True, en vez de pedir una pieza por red
     (`instruccion_redes`) pide UN SOLO copy + copy_in reutilizado en todas (`instruccion_copy_unico`).
     Lo activa `lanzar_copy`; la galería/termómetro y la Texto manual siguen pidiendo por red.
     """
-    # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos (cuerpo del
-    # prompt + instrucciones fijas + editorial de la marca) va ANTES; lo VARIABLE (la nota/
-    # transcripción del CONTEXTO) va AL FINAL. Así dos copies de la misma marca comparten el
-    # prefijo y el proveedor puede cachearlo (antes las instrucciones iban DESPUÉS del
-    # contexto y rompían el prefijo común). El contenido del prompt es el mismo; solo cambia
-    # el orden de los bloques.
+    # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos de la misma
+    # marca (cuerpo del prompt + instrucciones fijas + editorial de la marca) va ANTES; lo
+    # VARIABLE por lanzamiento (la instrucción de redes, que cambia con las redes pedidas, y
+    # la nota/transcripción del CONTEXTO) va AL FINAL. Así dos copies de la misma marca
+    # comparten el prefijo y el proveedor puede cachearlo (antes `instruccion_redes` iba
+    # ANTES del bloque editorial y rompía el prefijo común). El contenido del prompt es el
+    # mismo; solo cambia el orden de los bloques.
     partes: list[str] = [cuerpo_prompt.strip()]
     if sin_emojis:
         partes.append(INSTRUCCION_SIN_EMOJIS)
+    if adjuntos:
+        # Filtra documentos sin texto efectivo (solo headings): no aportan y gastan tokens.
+        bloques = [
+            f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos if not cuerpo_sin_texto(d.cuerpo)
+        ]
+        if bloques:
+            partes.append(
+                "---\nLÍNEA EDITORIAL (material de referencia, no lo copies literal):\n\n"
+                + "\n\n".join(bloques)
+            )
     if redes_ids:
         partes.append(
             instruccion_copy_unico(redes_ids) if copy_unico else instruccion_redes(redes_ids)
-        )
-    if adjuntos:
-        bloques = [f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos]
-        partes.append(
-            "---\nLÍNEA EDITORIAL (material de referencia, no lo copies literal):\n\n"
-            + "\n\n".join(bloques)
         )
     if bloque_contexto and bloque_contexto.strip():
         # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
@@ -306,6 +365,39 @@ def lanzar(
 PROMPT_COPY = "prompt/copy-desde-nota"
 
 
+def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
+    """Adjuntos editoriales del pipeline de COPY: línea editorial de la marca + reglas de imagen.
+
+    Las reglas de imagen (`editorial/reglas/imagen`) no entran por el auto-adjunto clásico
+    (su carpeta no es global ni de marca), pero el modelo de copy redacta el `copy_in` (texto
+    sobre la placa), así que se adjuntan aquí. Best-effort: store o, si no, semilla; si el
+    documento falta o está vacío, no se adjunta y el lanzamiento NO se rompe.
+    """
+    adjuntos = list(libtexto.editoriales_de_marca(marca, pipeline="copy"))
+    # Perezoso para no ciclar: `estudio_imagen` importa este módulo al cargarse.
+    from .estudio_imagen import REGLAS_IMAGEN
+
+    if any(d.id == REGLAS_IMAGEN for d in adjuntos):
+        return adjuntos
+    try:
+        doc = libtexto.obtener(REGLAS_IMAGEN) or libtexto.obtener_semilla(REGLAS_IMAGEN)
+    except Exception:  # noqa: BLE001 -- las reglas de imagen son un extra; nunca rompen el copy
+        doc = None
+    if doc is not None and not cuerpo_sin_texto(doc.cuerpo):
+        adjuntos.append(doc)
+    return adjuntos
+
+
+def componer_copy(cuerpo: str, *, marca: str, contexto: str, redes_ids: list[str]) -> str:
+    """Composición ÚNICA del prompt de copy (la usan `lanzar_copy` y la previsualización).
+
+    "Lo que lanzas es lo que previsualizas": la Biblioteca (`libtexto.previsualizar_pipeline`)
+    pasa por AQUÍ, así el prompt mostrado es el mismo que recibe `claude -p`. El pipeline de
+    copy pide copy UNIFICADO (un texto+copy_in para todas las redes), también en la preview.
+    """
+    return componer(cuerpo, adjuntos_copy(marca), contexto, redes_ids=redes_ids, copy_unico=True)
+
+
 def lanzar_copy(
     *,
     marca: str,
@@ -358,10 +450,9 @@ def lanzar_copy(
     cuerpo = libtexto.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
         raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")
-    prompt = componer(
-        cuerpo, libtexto.editoriales_de_marca(marca, pipeline="copy"), contexto,
-        sin_emojis=True, redes_ids=redes_ids, copy_unico=True,
-    )
+    # Sin `sin_emojis`: la política de emojis del copy vive en el prompt + editorial adjunta
+    # (única fuente); el hardcode "No uses emojis" contradecía al prompt de copy.
+    prompt = componer_copy(cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids)
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Saneamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None

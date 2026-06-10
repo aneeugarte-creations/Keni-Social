@@ -41,6 +41,7 @@ from datetime import date, datetime
 from typing import Any
 
 from . import marcas, redes, repos
+from .dominio import json_llm
 
 _log = logging.getLogger("keni_consola.importador_calendario")
 
@@ -385,47 +386,41 @@ def _filas_desde_registros(
         if isinstance(redes_val, list):
             redes_val = ",".join(str(x) for x in redes_val)
         notas = str(reg.get("notas") or "").strip()
+        # Truncado centralizado con constancia: WARN + aviso en `errores` si recorta.
+        titulo_corto, trunc_titulo = json_llm.truncar(titulo, _MAX_TITULO)
+        notas_cortas, trunc_notas = json_llm.truncar(notas, _MAX_TEXTO)
+        for campo, fue, antes, limite in (
+            ("titulo", trunc_titulo, len(titulo), _MAX_TITULO),
+            ("notas", trunc_notas, len(notas), _MAX_TEXTO),
+        ):
+            if fue:
+                _log.warning(
+                    "import calendario fila %d: «%s» truncado (%d→%d caracteres).",
+                    i, campo, antes, limite,
+                )
+                errores.append({
+                    "fila": i,
+                    "motivo": f"Se recortó «{campo}» ({antes}→{limite} caracteres).",
+                    "aviso": True,
+                })
         filas.append(
             FilaCalendario(
-                titulo=titulo[:_MAX_TITULO],
+                titulo=titulo_corto,
                 fecha=_parse_fecha(reg.get("fecha")),
                 marca_id=idx_marcas.get(_normaliza(reg.get("marca")), ""),
                 redes=_parse_redes(redes_val, idx_redes),
                 prioridad=_parse_prioridad(reg.get("prioridad"), compromiso=compromiso),
                 compromiso=compromiso,
                 evergreen=evergreen,
-                notas=notas[:_MAX_TEXTO],
+                notas=notas_cortas,
             )
         )
     return filas, errores
 
 
 def _extraer_json(texto: str) -> list[Any] | None:
-    """Saca la lista de filas del texto de Claude. Tolera ```json fences y `{"filas":[…]}`."""
-    if not texto or not texto.strip():
-        return None
-    s = texto.strip()
-    cerca = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
-    if cerca:
-        s = cerca.group(1).strip()
-    data: Any = None
-    try:
-        data = json.loads(s)
-    except (json.JSONDecodeError, ValueError):
-        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
-        if inicio < 0:
-            return None
-        try:
-            data = json.loads(s[inicio:])
-        except (json.JSONDecodeError, ValueError):
-            return None
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for clave in ("filas", "rows", "calendario", "items"):
-            if isinstance(data.get(clave), list):
-                return data[clave]
-    return None
+    """Saca la lista de filas del texto de Claude (extractor compartido `json_llm`)."""
+    return json_llm.extraer_lista(texto, claves=("filas", "rows", "calendario", "items"))
 
 
 def parsear_respuesta_claude(texto: str) -> tuple[list[FilaCalendario], list[dict[str, Any]]]:
@@ -438,34 +433,19 @@ def parsear_respuesta_claude(texto: str) -> tuple[list[FilaCalendario], list[dic
 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
 # insertan la RUTA del archivo y las listas (catálogo) de MARCAS y REDES en sus marcadores.
-# `_SCAFFOLD` es la red por si fallara la lectura.
+# Si el store fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/importacion/calendario"
-_SCAFFOLD = (
-    "Eres un extractor de calendarios de contenido para redes sociales. Lee el archivo "
-    "en la ruta {{RUTA}} (puede ser Excel, CSV, PDF, Word, una imagen/captura o texto) y "
-    'devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"filas": [ ... ]}, sin ningún '
-    "texto adicional ni explicación. Cada elemento de `filas` es un objeto con estas claves:\n"
-    '- "titulo": el tema o post (OBLIGATORIO).\n'
-    '- "fecha": fecha de publicación en ISO YYYY-MM-DD, o "" si no la hay.\n'
-    '- "marca": una de estas marcas por su nombre exacto, o "": {{MARCAS}}.\n'
-    '- "redes": lista de redes (subconjunto de): {{REDES}}.\n'
-    '- "prioridad": "alta", "media" o "baja".\n'
-    '- "compromiso": true si la fila está marcada como obligatoria/comprometida.\n'
-    '- "evergreen": true si está marcada como evergreen/verde.\n'
-    '- "notas": cualquier detalle adicional, o "".\n'
-    "Si el archivo no contiene un calendario, devuelve {\"filas\": []}."
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
-    try:
-        from . import libtexto
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    from . import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la extracción sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or _SCAFFOLD
+    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
 
 
 def _prompt_extraccion(ruta: str) -> str:

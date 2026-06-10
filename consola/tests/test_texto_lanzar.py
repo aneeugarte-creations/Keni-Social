@@ -53,10 +53,11 @@ def test_componer_incluye_solo_secciones_presentes():
 
 
 def test_componer_orden_estable_primero_contexto_al_final():
-    """PROMPT CACHING: lo estable (cuerpo + instrucciones fijas + editorial) va ANTES; lo
-    variable (la nota del CONTEXTO) va AL FINAL. Así dos copies de la misma marca comparten
-    el prefijo del prompt y el proveedor puede cachearlo (antes las instrucciones colgaban
-    DESPUÉS del contexto y rompían el prefijo común)."""
+    """PROMPT CACHING: lo estable POR MARCA (cuerpo + instrucciones fijas + editorial) va
+    ANTES; lo variable POR LANZAMIENTO (la instrucción de redes, que cambia con las redes
+    pedidas, y la nota del CONTEXTO) va AL FINAL. Así dos copies de la misma marca comparten
+    el prefijo del prompt y el proveedor puede cachearlo (antes `instruccion_redes` iba antes
+    del bloque editorial y rompía el prefijo común)."""
     from keni_consola.dominio import generar
 
     ed = libtexto.crear(
@@ -67,12 +68,57 @@ def test_componer_orden_estable_primero_contexto_al_final():
     )
     i_cuerpo = final.index("Haz X")
     i_emojis = final.index(generar.INSTRUCCION_SIN_EMOJIS)
-    i_redes = final.index("Genera el copy SOLO para estas redes")
     i_editorial = final.index("tono cercano")
+    i_redes = final.index("Genera el copy SOLO para estas redes")
     i_contexto = final.index("la nota variable")
-    assert i_cuerpo < i_emojis < i_redes < i_editorial < i_contexto
+    assert i_cuerpo < i_emojis < i_editorial < i_redes < i_contexto
     # El contexto del usuario es el ÚLTIMO bloque del prompt.
-    assert i_contexto > max(i_cuerpo, i_emojis, i_redes, i_editorial)
+    assert i_contexto > max(i_cuerpo, i_emojis, i_editorial, i_redes)
+
+
+def test_instruccion_redes_ancla_limites_desde_el_codigo():
+    """Los límites por red del prompt salen de `keni_shared.limites_plataforma` (fuente
+    única), no van hardcodeados: el prompt no puede divergir del código que valida."""
+    from keni_shared import limites_plataforma
+
+    from keni_consola.dominio import generar
+
+    instr = generar.instruccion_redes(["x", "facebook"])
+    assert f"máx {limites_plataforma.limite_de('x')} caracteres" in instr
+    assert "sin tope técnico" in instr  # facebook no tiene tope
+    # El contrato de piezas compuestas (hilo/carrusel DENTRO de "texto") es explícito.
+    assert "UNA pieza por cada red pedida" in instr
+    assert "HILO" in instr and "CARRUSEL" in instr and "---" in instr
+
+
+def test_cuerpo_sin_texto_detecta_solo_headings():
+    from keni_consola.dominio import generar
+
+    assert generar.cuerpo_sin_texto("")
+    assert generar.cuerpo_sin_texto("# Título\n\n## Sección\n\n---\n")
+    assert not generar.cuerpo_sin_texto("# Título\n\nprosa real")
+    # Un hashtag NO es un heading: es contenido editorial.
+    assert not generar.cuerpo_sin_texto("#UnoTV #México")
+
+
+def test_componer_filtra_adjuntos_sin_texto():
+    """Un editorial "esqueleto" (solo headings) no se inyecta: no aporta y gasta tokens."""
+    from keni_consola.dominio import generar
+
+    vacio = libtexto.crear(
+        "Esqueleto", tipo="editorial", clase="voz", marcas=[_MARCA],
+        cuerpo="# Tono\n\n## Qué evitar\n",
+    )
+    lleno = libtexto.crear(
+        "Voz real", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano"
+    )
+    final = generar.componer("Haz X", [vacio, lleno], "")
+    assert "tono cercano" in final
+    assert "Esqueleto" not in final
+
+    # Si TODOS los adjuntos están vacíos, no se emite siquiera el bloque editorial.
+    solo_vacio = generar.componer("Haz X", [vacio], "")
+    assert "LÍNEA EDITORIAL" not in solo_vacio
 
 
 # --------------------------------------------------------------------------- #
@@ -152,8 +198,13 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     assert spec["kind"] == jobspec.PROC_COPY
     assert spec["redes_ids"] == redes_ids
     assert spec["prompt_id"] == doc.id.rsplit("/", 1)[-1]
-    # El prompt compuesto pide el bloque json de piezas por red.
+    # El prompt compuesto pide el bloque json de piezas por red, con sus límites técnicos.
     assert "piezas" in encolado["prompt"]
+    assert "máx 280 caracteres" in encolado["prompt"]
+    # La política de emojis vive en el prompt/editorial, NO en un hardcode del lanzamiento.
+    from keni_consola.dominio import generar
+
+    assert generar.INSTRUCCION_SIN_EMOJIS not in encolado["prompt"]
     # POLÍTICA REVISADA: el camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por
     # red; el usuario no ve la salida cruda), así que NO veta la web por-callsite. El `endurecer`
     # del spec queda en None; la única veta es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
@@ -196,6 +247,42 @@ def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     # El camino IDENTIDAD NO endurece la web (igual que hoy): puede enrutar prompts de
     # INVESTIGACIÓN (brief-tendencias / termometro-mundial) que la usan legítimamente.
     assert encolado["spec"]["endurecer"] is None
+
+
+def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado):
+    """El copy redacta el `copy_in` (texto sobre la placa): adjunta las reglas de imagen
+    (best-effort, de la semilla si el store no las tiene) y NO inyecta el hardcode de
+    emojis (la política vive en el prompt + editorial adjunta)."""
+    from keni_consola.dominio import generar
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
+    )
+    final = encolado["prompt"]
+    assert "Reglas de imagen" in final  # título del adjunto `editorial/reglas/imagen`
+    assert generar.INSTRUCCION_SIN_EMOJIS not in final
+    # Modo UNIFICADO: el tope viene del límite más estricto de las redes pedidas (X = 280).
+    assert "más estricto" in final and "280 caracteres" in final
+    assert "UN SOLO copy" in final
+
+
+def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):
+    """Previsualización FIEL: la Biblioteca muestra el MISMO prompt que recibe `claude -p`
+    (misma composición: adjuntos de copy + instrucción de redes), salvo el nonce del
+    envoltorio anti-inyección del contexto."""
+    import re
+
+    from keni_consola.dominio import generar
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
+    )
+    prev = libtexto.previsualizar_pipeline("copy", _MARCA, "Nota: gol en el 90'", redes_ids=["x"])
+
+    sin_nonce = lambda s: re.sub(r"contenido_usuario_[0-9a-f]+", "contenido_usuario_NONCE", s)  # noqa: E731
+    assert sin_nonce(prev["prompt_efectivo"]) == sin_nonce(encolado["prompt"])
+    # Los adjuntos listados incluyen las reglas de imagen.
+    assert any(a["id"] == "editorial/reglas/imagen" for a in prev["adjuntos"])
 
 
 def test_spec_prompt_round_trip_reconstruye_identidad():

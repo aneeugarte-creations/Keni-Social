@@ -21,7 +21,7 @@ from ._crud import obtener
 from ._io import _parsear
 from ._rutas import raiz
 
-__all__ = ["dir_semilla", "obtener_semilla", "cuerpo_efectivo", "importar_semilla"]
+__all__ = ["dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla"]
 
 
 def dir_semilla() -> Path:
@@ -86,6 +86,20 @@ def cuerpo_efectivo(prompt_id: str) -> str | None:
         return doc.cuerpo
     semilla = obtener_semilla(prompt_id)
     return semilla.cuerpo if semilla is not None else None
+
+
+def cuerpo_semilla(prompt_id: str) -> str:
+    """Cuerpo del documento en la SEMILLA del paquete ("" si no existe). NUNCA lanza.
+
+    Red de los módulos que componen prompts: si la lectura del store fallara
+    (`cuerpo_efectivo` lanza), el fallback es el seed que viaja en el paquete, no un
+    string duplicado en el código.
+    """
+    try:
+        doc = obtener_semilla(prompt_id)
+    except Exception:  # noqa: BLE001 -- el fallback nunca debe propagar un fallo de lectura
+        return ""
+    return doc.cuerpo if doc is not None else ""
 
 
 def importar_semilla(origen: Path | None = None) -> int:

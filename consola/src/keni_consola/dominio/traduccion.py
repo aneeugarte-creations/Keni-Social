@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -34,6 +33,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .. import config
+from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.traduccion")
 
@@ -101,32 +101,21 @@ def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
 
 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
-# JSON a traducir se inserta en `{{ITEMS}}`. `_SCAFFOLD` es la red por si fallara la lectura.
+# JSON a traducir se inserta en `{{ITEMS}}`. Si el store fallara, la red es la SEMILLA del
+# paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/noticias/traduccion"
 _MARCA_ITEMS = "{{ITEMS}}"
-_SCAFFOLD = (
-    "Eres un traductor y localizador para el equipo de redes sociales de UnoTV en México. "
-    "Recibes una lista JSON de titulares y resúmenes en idioma extranjero. "
-    "Tradúcelos al español mexicano (MX): usa vocabulario natural de México, "
-    "tropicaliza nombres/referencias si corresponde, sé conciso y periodístico. "
-    "Devuelve EXCLUSIVAMENTE un objeto JSON con la forma "
-    '{"traducciones": [{"id": "...", "titulo_es": "...", "resumen_es": "..."}, ...]} '
-    "sin ningún texto adicional ni ```json. "
-    "Si un resumen está vacío, devuelve resumen_es vacío también. "
-    "No inventes ni añadas información que no esté en el original.\n\n"
-    "Lista de ítems:\n{{ITEMS}}"
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla); `_SCAFFOLD` si falla."""
-    try:
-        from .. import libtexto
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la traducción sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or _SCAFFOLD
+    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
 
 
 def _construir_prompt(items_json: str) -> str:
@@ -143,31 +132,10 @@ def _construir_prompt(items_json: str) -> str:
 
 
 def _extraer_traducciones(texto: str) -> list[dict[str, str]] | None:
-    """Extrae la lista de traducciones del texto de Claude. Tolera ```json fences."""
-    if not texto or not texto.strip():
-        return None
-    s = texto.strip()
-    cerca = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
-    if cerca:
-        s = cerca.group(1).strip()
-    data: Any = None
-    try:
-        data = json.loads(s)
-    except (json.JSONDecodeError, ValueError):
-        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
-        if inicio < 0:
-            return None
-        try:
-            data = json.loads(s[inicio:])
-        except (json.JSONDecodeError, ValueError):
-            return None
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for clave in ("traducciones", "items", "translations", "resultados"):
-            if isinstance(data.get(clave), list):
-                return data[clave]
-    return None
+    """Extrae la lista de traducciones del texto de Claude (extractor compartido)."""
+    return json_llm.extraer_lista(
+        texto, claves=("traducciones", "items", "translations", "resultados")
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -196,16 +164,22 @@ def traducir_items(
 
     correr = ejecutor or _ejecutar_claude_json
 
-    # Construye el payload de entrada, recortando campos largos.
+    # Construye el payload de entrada, recortando campos largos (truncado centralizado).
     payload: list[dict[str, str]] = []
     for item in items:
-        titulo = str(item.get("titulo", "")).strip()[:_MAX_CHARS_ITEM]
-        resumen = str(item.get("resumen", "") or "").strip()
+        item_id = str(item.get("id", ""))
+        titulo, _ = json_llm.truncar_avisando(
+            str(item.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
+            campo=f"titulo de {item_id}", log=_log,
+        )
         # Recorta resumen para que titulo+resumen juntos no superen el cap.
         espacio_resumen = max(0, _MAX_CHARS_ITEM - len(titulo))
-        resumen = resumen[:espacio_resumen]
+        resumen, _ = json_llm.truncar_avisando(
+            str(item.get("resumen", "") or "").strip(), espacio_resumen,
+            campo=f"resumen de {item_id}", log=_log,
+        )
         payload.append({
-            "id": str(item.get("id", "")),
+            "id": item_id,
             "titulo": titulo,
             "resumen": resumen,
         })
@@ -241,6 +215,7 @@ def traducir_items(
         if isinstance(t, dict) and "id" in t:
             por_id[str(t["id"])] = t
 
+    sin_traducir: list[str] = []
     for item in items:
         item_id = str(item.get("id", ""))
         trad = por_id.get(item_id)
@@ -251,11 +226,19 @@ def traducir_items(
                 "resumen_es": str(trad.get("resumen_es", "") or "").strip(),
             })
         else:
-            # ítem no encontrado en la respuesta -> devuelve el original
+            # Ítem ausente (o sin `titulo_es`) en la respuesta -> conserva el original. El
+            # fallback es razonable, pero NO silencioso: el prompt pide TODOS los ítems.
+            sin_traducir.append(item_id)
             resultado.append({
                 "id": item_id,
                 "titulo_es": str(item.get("titulo", "")),
                 "resumen_es": str(item.get("resumen", "") or ""),
             })
+    if sin_traducir:
+        _log.warning(
+            "traducir_items: %d de %d ítem(s) sin traducción en la respuesta "
+            "(se conserva el original): %s",
+            len(sin_traducir), len(items), ", ".join(sin_traducir[:10]),
+        )
 
     return resultado

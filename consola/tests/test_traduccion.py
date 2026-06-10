@@ -125,20 +125,35 @@ def test_json_invalido_devuelve_originales():
     assert resultado[0]["titulo_es"] == "Hello"
 
 
-def test_respuesta_parcial_rellena_con_originales():
+def test_respuesta_parcial_rellena_con_originales(caplog):
+    import logging
+
     items = [
         {"id": "a", "titulo": "A title", "resumen": "A summary"},
         {"id": "b", "titulo": "B title", "resumen": "B summary"},
     ]
-    resultado = traduccion.traducir_items(items, ejecutor=_ejecutor_respuesta_parcial)
+    with caplog.at_level(logging.WARNING, logger="keni_consola.dominio.traduccion"):
+        resultado = traduccion.traducir_items(items, ejecutor=_ejecutor_respuesta_parcial)
     assert len(resultado) == 2
     a_res = next(r for r in resultado if r["id"] == "a")
     b_res = next(r for r in resultado if r["id"] == "b")
     # El primer ítem fue traducido.
     assert a_res["titulo_es"] == "[ES] primero"
-    # El segundo ítem no llegó en la respuesta -> devuelve original.
+    # El segundo ítem no llegó en la respuesta -> devuelve original (fallback razonable)…
     assert b_res["titulo_es"] == "B title"
     assert b_res["resumen_es"] == "B summary"
+    # …pero NO silencioso: queda un WARN con el id y la cuenta de ítems sin traducir.
+    avisos = [r.message for r in caplog.records if "sin traducción" in r.message]
+    assert avisos and "1 de 2" in avisos[0] and "b" in avisos[0]
+
+
+def test_respuesta_completa_no_deja_warn_de_faltantes(caplog):
+    import logging
+
+    items = [{"id": "t1", "titulo": "Breaking news", "resumen": "Summary"}]
+    with caplog.at_level(logging.WARNING, logger="keni_consola.dominio.traduccion"):
+        traduccion.traducir_items(items, ejecutor=_ejecutor_ok)
+    assert not [r for r in caplog.records if "sin traducción" in r.message]
 
 
 # --------------------------------------------------------------------------- #

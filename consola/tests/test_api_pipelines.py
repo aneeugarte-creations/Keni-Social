@@ -8,6 +8,8 @@ exclusión de lo que NO es del pipeline. Usa la fixture `cliente` (entorno aisla
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from keni_consola import config, generaciones, repos
@@ -351,6 +353,71 @@ def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
 
 def test_detalle_404(cliente):
     assert cliente.get("/api/pipelines/no-existe-xyz").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/pipelines/problemas: temas bloqueados (veredicto `problema`)         #
+# --------------------------------------------------------------------------- #
+
+
+def test_problemas_lista_temas_bloqueados(cliente):
+    """Lista los temas `problema` con etapa, intentos, último error y timestamps; excluye el resto."""
+    pend = json.dumps({"nota": "n", "qa_intentos": 1, "cd_intentos": 3})
+    hallazgos = json.dumps({
+        "resumen": "Fallo repetido de la etapa",
+        "hallazgos": [{
+            "tipo": "sistema", "gravedad": "error", "fragmento": "Copy",
+            "explicacion": "La generación de copy falló 3 veces.",
+            "sugerencia": "Revisa la generación o relanza a mano.",
+        }],
+    })
+    _tema_pipeline(
+        "Tema bloqueado", qa_veredicto="problema", qa_hallazgos=hallazgos, copy_pendiente=pend,
+    )
+    _tema_pipeline("Tema sano", qa_veredicto="no_verificado")
+
+    r = cliente.get("/api/pipelines/problemas")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    p = body["problemas"][0]
+    assert p["titulo"] == "Tema bloqueado"
+    assert p["marca"] == "unotv" and p["marca_nombre"]
+    assert p["etapa"] == "Copy"  # el hallazgo de sistema trae la etapa que agotó reintentos
+    assert p["intentos"] == {"qa": 1, "cd": 3}
+    assert "falló 3 veces" in p["error"]
+    assert p["hallazgos"] and p["hallazgos"][0]["tipo"] == "sistema"
+    assert p["creado"] and p["actualizado"]
+
+
+def test_problemas_criba_roja_es_validacion(cliente):
+    """Un 🔴 de la propia criba (hallazgo no-sistema) se atribuye a la etapa Validación."""
+    hallazgos = json.dumps({
+        "resumen": "Dato falso evidente",
+        "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],
+    })
+    _tema_pipeline("Criba roja", qa_veredicto="problema", qa_hallazgos=hallazgos)
+    p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
+    assert p["etapa"] == "Validación"
+    assert p["error"] == "es falso"
+    assert p["intentos"] == {"qa": 0, "cd": 0}  # sin copy_pendiente no hay contadores
+
+
+def test_problemas_filtra_por_marca_y_valida(cliente):
+    _tema_pipeline("P claro", marca="claro-sports", qa_veredicto="problema")
+    _tema_pipeline("P uno", marca="unotv", qa_veredicto="problema")
+    titulos = {
+        x["titulo"]
+        for x in cliente.get("/api/pipelines/problemas?marca=claro-sports").json()["problemas"]
+    }
+    assert titulos == {"P claro"}
+    assert cliente.get("/api/pipelines/problemas?marca=no-existe").status_code == 400
+
+
+def test_problemas_vacio_sin_bloqueados(cliente):
+    _tema_pipeline("Todo bien", qa_veredicto="no_verificado")
+    body = cliente.get("/api/pipelines/problemas").json()
+    assert body == {"problemas": [], "total": 0}
 
 
 def test_detalle_expone_stream_de_la_etapa(cliente):

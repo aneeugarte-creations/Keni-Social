@@ -107,6 +107,7 @@ from ._rutas import (
 )
 from ._semilla import (
     cuerpo_efectivo,
+    cuerpo_semilla,
     dir_semilla,
     importar_semilla,
     obtener_semilla,
@@ -191,5 +192,6 @@ __all__ = [
     "dir_semilla",
     "obtener_semilla",
     "cuerpo_efectivo",
+    "cuerpo_semilla",
     "importar_semilla",
 ]

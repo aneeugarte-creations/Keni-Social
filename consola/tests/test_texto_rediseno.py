@@ -152,6 +152,21 @@ def test_previsualizar_pipeline_ensambla_base_y_adjuntos():
     assert any(a["id"] == "editorial/reglas" for a in prev["adjuntos"])
 
 
+def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
+    """El preview del pipeline `copy` pasa por la MISMA composición que `lanzar_copy`:
+    instrucción de copy UNIFICADO con el límite más estricto + reglas de imagen adjuntas.
+    Sin `redes_ids` se previsualiza con TODAS las redes (un lanzamiento real siempre las trae)."""
+    libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="BASE", rol="copy", pipelines=["copy"])
+    prev = libtexto.previsualizar_pipeline("copy", "unotv", "CTX")
+    assert "Este copy se publicará TAL CUAL en estas redes" in prev["prompt_efectivo"]
+    assert "280 caracteres" in prev["prompt_efectivo"]  # el más estricto (X) desde el código
+    assert any(a["id"] == "editorial/reglas/imagen" for a in prev["adjuntos"])
+
+    # Con redes explícitas, solo esas entran en la instrucción.
+    prev_x = libtexto.previsualizar_pipeline("copy", "unotv", "CTX", redes_ids=["x"])
+    assert "Este copy se publicará TAL CUAL en estas redes: X." in prev_x["prompt_efectivo"]
+
+
 def test_previsualizar_pipeline_sin_prompt_base():
     # Sin store ni semilla del prompt de qa -> falta_base True (no revienta).
     prev = libtexto.previsualizar_pipeline("qa", "unotv")
