@@ -234,10 +234,15 @@ SIN_VERIFICAR="$(leer_env KENI_DEPLOY_SIN_VERIFICAR)"
 if [ "$SIN_VERIFICAR" = "1" ]; then
   echo "==> [6/6] verificacion de salud SALTADA (KENI_DEPLOY_SIN_VERIFICAR=1)"
 else
-  echo "==> [6/6] verificacion de salud (back, front) con rollback automatico"
+  echo "==> [6/6] verificacion de salud (back, front, daemons, worker) con rollback automatico"
   # back: healthcheck del Dockerfile = curl /healthz (start_period 20s, interval 30s).
-  if espera_sano back 180 && espera_sano front 120; then
-    echo "==> salud OK (back y front healthy)"
+  # daemons: healthcheck por fichero de latido (compose; el proceso lo toca cada 30s).
+  # worker: healthcheck por escaneo de /proc (compose). Ambos son imagenes NUESTRAS con
+  # foto :previa, asi que un fallo suyo tambien debe disparar el rollback (antes solo se
+  # verificaban back/front y un daemons/worker roto pasaba en verde).
+  if espera_sano back 180 && espera_sano front 120 \
+      && espera_sano daemons 150 && espera_sano worker 120; then
+    echo "==> salud OK (back, front, daemons y worker healthy)"
     # db y files: si NO estan sanos el problema es de CONFIG/estado (sus imagenes son
     # upstream y no entran en el rollback :previa), asi que NO se intenta rollback —
     # pero el pipeline DEBE quedar rojo para que un operador mire (p.ej. un cambio de
