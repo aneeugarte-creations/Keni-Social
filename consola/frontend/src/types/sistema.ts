@@ -472,6 +472,32 @@ export interface RespuestaBackups {
   error: string | null;
 }
 
+// ── Rendimiento de la API (GET /api/sistema/rendimiento) ─────────────────────
+// Agregador en memoria del back: ventana deslizante (últimas 256 peticiones por
+// ruta normalizada) de la latencia al primer byte. Se reinicia con cada deploy.
+
+/** Latencias agregadas de una ruta de la API. */
+export interface RutaRendimiento {
+  /** "GET /api/contenido/{id}" (método + ruta con ids colapsados). */
+  ruta: string;
+  /** Peticiones totales desde el arranque del proceso. */
+  n: number;
+  /** Respuestas 5xx totales. */
+  err_5xx: number;
+  p50_ms: number;
+  p95_ms: number;
+  max_ms: number;
+  ultimo_ms: number;
+}
+
+/** Respuesta de `GET /api/sistema/rendimiento`. */
+export interface RespuestaRendimiento {
+  /** ISO del arranque del agregador (deploy del back). */
+  desde: string;
+  /** Rutas ordenadas por nº de peticiones (desc). */
+  rutas: RutaRendimiento[];
+}
+
 // ── S3 Navegador de objetos (GET /api/sistema/s3/objetos) ────────────────────
 
 /** Una miga del breadcrumb del explorador S3 ({nombre, prefijo}). */

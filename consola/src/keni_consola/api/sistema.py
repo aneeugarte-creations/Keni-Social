@@ -808,10 +808,29 @@ async def backups(request: Request) -> Response:
     return JSONResponse(base)
 
 
+# --------------------------------------------------------------------------- #
+# Rendimiento de la API (agregador en memoria de `rendimiento.py`)              #
+# --------------------------------------------------------------------------- #
+
+
+async def rendimiento_api(request: Request) -> Response:
+    """Latencias agregadas por ruta (solo admin): n, 5xx, p50/p95/max del TTFB.
+
+    Snapshot del agregador EN MEMORIA del proceso back (ventana deslizante de las
+    ultimas 256 peticiones por ruta normalizada; se reinicia con cada deploy).
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+    from .. import rendimiento
+
+    return JSONResponse(rendimiento.resumen())
+
+
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
     Route("/api/sistema/daemons", daemons_latidos, methods=["GET"]),
     Route("/api/sistema/backups", backups, methods=["GET"]),
+    Route("/api/sistema/rendimiento", rendimiento_api, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),
     # IMPORTANTE: las rutas mas especificas (/s3/objetos, /s3/objeto, /s3/borrar) van ANTES
     # que /s3/probar y /s3 para que Starlette las case correctamente.

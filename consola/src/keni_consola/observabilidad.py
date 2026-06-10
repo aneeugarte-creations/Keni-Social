@@ -175,11 +175,13 @@ class RegistroPeticiones:
         ruta = scope.get("path", "?")
         inicio = time.perf_counter()
         estado: int = 0
+        ttfb_ms: float = 0.0  # latencia al PRIMER BYTE (http.response.start)
 
         async def send_envuelto(message: Message) -> None:
-            nonlocal estado
+            nonlocal estado, ttfb_ms
             if message["type"] == "http.response.start":
                 estado = message["status"]
+                ttfb_ms = (time.perf_counter() - inicio) * 1000.0
                 # Devolvemos el id de correlacion al cliente (cabecera): un usuario que
                 # reporta un fallo da este id y casa 1:1 con la traza del servidor.
                 cabeceras = message.setdefault("headers", [])
@@ -193,6 +195,13 @@ class RegistroPeticiones:
             _log_peticiones.info(
                 "[%s] %s %s -> %s (%.1f ms)", rid, metodo, ruta, estado or "?", dur_ms
             )
+            # Agregador de latencias por ruta del panel Sistema (best-effort, jamas
+            # lanza). Usa el TTFB, no la duracion total: una SSE abierta horas no debe
+            # contaminar los percentiles. Si no hubo response.start (cliente corto la
+            # conexion antes de la respuesta), cae a la duracion total.
+            from . import rendimiento
+
+            rendimiento.registrar(metodo, ruta, estado, ttfb_ms or dur_ms)
             restaurar_request_id(token)
 
 

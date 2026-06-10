@@ -9,6 +9,7 @@ import type {
   RespuestaEstado,
   RespuestaProbarS3,
   RespuestaRecursos,
+  RespuestaRendimiento,
   RespuestaS3,
   RespuestaS3Objetos,
 } from "@/types";
@@ -24,6 +25,8 @@ export const apiSistema = {
     peticion<RespuestaDaemons>("/sistema/daemons", { signal }),
   sistemaBackups: (signal?: AbortSignal) =>
     peticion<RespuestaBackups>("/sistema/backups", { signal }),
+  sistemaRendimiento: (signal?: AbortSignal) =>
+    peticion<RespuestaRendimiento>("/sistema/rendimiento", { signal }),
   sistemaS3: (signal?: AbortSignal) => peticion<RespuestaS3>("/sistema/s3", { signal }),
   probarS3: () => peticion<RespuestaProbarS3>("/sistema/s3/probar", { metodo: "POST" }),
   s3Objetos: (prefijo?: string, signal?: AbortSignal) =>
