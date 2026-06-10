@@ -35,6 +35,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `metricas_refresco.py` — refresco de la cache de métricas (espejo de `programador.py`).
 - `metricas_piezas_refresco.py` — refresco PROACTIVO de la cache de métricas POR PIEZA.
 - `algoritmos_refresco.py` — ingiere los feeds de inteligencia de plataforma cada N horas.
+- `patrones_refresco.py` — re-deriva de Metricool los perfiles de patrones por marca cada N días (gateado, ADR 0009).
 
 ## Métricas y analítica (lado lectura)
 - `metricas_cache.py` — cache de métricas: lectura instantánea + refresco en fondo.
@@ -44,6 +45,8 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `algoritmos.py` — inteligencia de PLATAFORMA (cambios de algoritmo + tendencias por red).
 - `priorizacion.py` — score de prioridad dinámico para la "lista viva" del día (H3).
 - `relevancia_marca.py` — relevancia por marca para la investigación (Plan del día).
+- `patrones_marca.py` — perfil de PATRONES por marca (top vs fondo medido) + verificador de voz del copy (ADR 0009).
+- `patrones_derivar.py` — CLI de derivación: Metricool/JSONL → perfil JSON + doc editorial `patrones`.
 
 ## Media y assets
 - `media.py` — almacenamiento de media (imágenes) + generación por IA.
