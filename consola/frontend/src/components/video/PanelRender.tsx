@@ -6,7 +6,7 @@
  * tardar; corre en el worker y sobrevive a recargas (el sondeo lo reanuda).
  */
 import { useMutation } from "@tanstack/react-query";
-import { Film, Loader2, Play } from "lucide-react";
+import { Download, Film, Loader2, Play } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -52,12 +52,38 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
   const renderizando = render.isPending || ejecutando;
   const fallo = generacion?.estado === "error";
 
+  // Descarga DIRECTA del mp4 (fetch blob + <a download>): "abrir en pestaña nueva" obliga a
+  // descargar desde el player del navegador; esto baja el archivo en un clic.
+  const [descargando, setDescargando] = React.useState(false);
+  async function descargarMp4() {
+    if (!url || descargando) return;
+    setDescargando(true);
+    try {
+      const r = await fetch(urlMedia(url), { credentials: "same-origin" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = objUrl;
+      enlace.download = nombreMp4(url);
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      URL.revokeObjectURL(objUrl);
+    } catch {
+      toast.error("No se pudo descargar el MP4. Ábrelo en una pestaña nueva y descárgalo desde ahí.");
+    } finally {
+      setDescargando(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <Button
         type="button"
         onClick={() => render.mutate()}
         disabled={!composicionId || renderizando || disabled}
+        title={!composicionId ? "Sube un clip base en la sección Base" : undefined}
       >
         {renderizando ? (
           <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -66,6 +92,14 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
         )}
         {renderizando ? "Renderizando…" : "Renderizar video"}
       </Button>
+
+      {/* Razón VISIBLE del disabled: sin composición guardada no hay nada que renderizar. */}
+      {!composicionId && (
+        <p className="text-xs text-muted-foreground">
+          Para renderizar, sube un clip base en la sección Base: la composición se crea y se
+          guarda al subirlo.
+        </p>
+      )}
 
       {renderizando && (
         <p className="text-xs text-muted-foreground">
@@ -86,17 +120,40 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
             className="w-full rounded-md border border-border"
             aria-label="Video renderizado"
           />
-          <a
-            href={urlMedia(url)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            <Play className="h-3 w-3" />
-            Abrir el mp4 en una pestaña nueva
-          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void descargarMp4()}
+              disabled={descargando}
+            >
+              {descargando ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-1 h-4 w-4" />
+              )}
+              {descargando ? "Descargando…" : "Descargar MP4"}
+            </Button>
+            <a
+              href={urlMedia(url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Play className="h-3 w-3" />
+              Abrir el mp4 en una pestaña nueva
+            </a>
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+/** Nombre de archivo para la descarga, derivado de la clave/URL del media (fallback `render.mp4`). */
+function nombreMp4(u: string): string {
+  const ultimo = u.split("?")[0].split("/").filter(Boolean).pop() ?? "";
+  const limpio = decodeURIComponent(ultimo);
+  return limpio.toLowerCase().endsWith(".mp4") ? limpio : "render.mp4";
 }

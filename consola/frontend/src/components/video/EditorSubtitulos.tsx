@@ -57,6 +57,10 @@ export function EditorSubtitulos({
   // Segmentos en edición (borrador local hasta guardar).
   const [segmentos, setSegmentos] = React.useState<SegmentoSub[]>([]);
   const [sucio, setSucio] = React.useState(false);
+  // Las correcciones SIN GUARDAR se respaldan en sessionStorage: si el usuario navega a otra
+  // sección/página y vuelve, se restauran (con aviso) en vez de perderse.
+  const claveBorrador = composicionId ? `keni:video:subs:${composicionId}` : null;
+  const [restaurado, setRestaurado] = React.useState(false);
 
   // Carga la fila de subtítulos de la composición (puede ser null si aún no se transcribió).
   const subQ = useQuery({
@@ -74,14 +78,35 @@ export function EditorSubtitulos({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtituloId]);
 
-  // Cuando llega la fila (y no hay edición sin guardar), hidrata el borrador local.
+  // Cuando llega la fila (y no hay edición sin guardar), hidrata el borrador local. Si hay un
+  // respaldo en sessionStorage (correcciones que no llegaron a guardarse), gana el respaldo y
+  // se marca sucio para que el dato del servidor no lo pise y "Guardar" quede habilitado.
   React.useEffect(() => {
     if (!sub || sucio) return;
+    const respaldo = leerRespaldo(claveBorrador);
+    if (respaldo) {
+      setSegmentos(respaldo);
+      setSucio(true);
+      setRestaurado(true);
+      onSegmentos?.(respaldo);
+      return;
+    }
     const segs = normalizarSegmentos(sub.segmentos);
     setSegmentos(segs);
     onSegmentos?.(segs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sub]);
+
+  // Respalda cada edición sin guardar (pequeño: texto + tiempos; sobrevive a la navegación
+  // dentro de la pestaña, que es donde se perdían las correcciones).
+  React.useEffect(() => {
+    if (!sucio || !claveBorrador) return;
+    try {
+      sessionStorage.setItem(claveBorrador, JSON.stringify(segmentos));
+    } catch {
+      /* sessionStorage lleno o no disponible (modo privado): seguimos sin respaldo */
+    }
+  }, [segmentos, sucio, claveBorrador]);
 
   // Al completar la transcripción, el worker ya escribió los segmentos: refrescamos la fila.
   React.useEffect(() => {
@@ -110,6 +135,15 @@ export function EditorSubtitulos({
       api.video.guardarSubtitulo(subtituloId!, { segmentos, estado }),
     onSuccess: (_r, estado) => {
       setSucio(false);
+      setRestaurado(false);
+      // Guardado en el servidor: el respaldo local ya no aplica.
+      if (claveBorrador) {
+        try {
+          sessionStorage.removeItem(claveBorrador);
+        } catch {
+          /* sin sessionStorage no había respaldo que limpiar */
+        }
+      }
       void qc.invalidateQueries({ queryKey: ["video-subtitulos-de", composicionId] });
       onSegmentos?.(segmentos);
       toast.success(estado === "listo" ? "Subtítulos marcados como listos." : "Subtítulos guardados.");
@@ -168,6 +202,15 @@ export function EditorSubtitulos({
 
       {tieneSegmentos ? (
         <>
+          {restaurado && (
+            <p
+              role="status"
+              className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              Tienes cambios sin guardar restaurados de tu sesión anterior. Pulsa «Guardar
+              correcciones» para conservarlos.
+            </p>
+          )}
           <p className="text-[11px] text-amber-700 dark:text-amber-400">
             Corrige la ortografía y erratas (es-MX). Nada se quema en el video hasta que marques los
             subtítulos como listos.
@@ -220,4 +263,20 @@ export function EditorSubtitulos({
       )}
     </div>
   );
+}
+
+/**
+ * Lee el respaldo de correcciones sin guardar de sessionStorage (`keni:video:subs:<id>`).
+ * Devuelve null si no hay clave, no hay respaldo, está corrupto o quedó vacío.
+ */
+function leerRespaldo(clave: string | null): SegmentoSub[] | null {
+  if (!clave) return null;
+  try {
+    const crudo = sessionStorage.getItem(clave);
+    if (!crudo) return null;
+    const segs = normalizarSegmentos(JSON.parse(crudo));
+    return segs.length > 0 ? segs : null;
+  } catch {
+    return null;
+  }
 }

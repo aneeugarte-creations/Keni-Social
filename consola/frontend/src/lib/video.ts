@@ -462,3 +462,15 @@ export function formatearTiempo(seg: number): string {
 export function segmentoEn(segmentos: SegmentoSub[], t: number): SegmentoSub | null {
   return segmentos.find((s) => t >= s.inicio && t <= s.fin) ?? null;
 }
+
+/**
+ * Formatea milisegundos a `mm:ss` (reloj del player y duraciones de clip/composición).
+ * Valores no finitos o negativos se tratan como 0.
+ */
+export function formatearDuracionMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}

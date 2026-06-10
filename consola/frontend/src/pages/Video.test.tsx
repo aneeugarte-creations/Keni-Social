@@ -17,9 +17,16 @@ import type { ComposicionVideo } from "@/lib/video";
 
 import Video from "./Video";
 
-// Marca activa: la página solo lee `marcaActiva`/`marcaPrimaria`.
+// Marca activa: la página solo lee `marcaActiva`/`marcaPrimaria`. Mutable por test (el caso
+// "sin marca" la vacía) y se restaura en cada beforeEach.
+const marcaMock = vi.hoisted(() => ({
+  actual: { marcaActiva: "unotv", marcaPrimaria: "unotv" } as {
+    marcaActiva: string | null;
+    marcaPrimaria: string | null;
+  },
+}));
 vi.mock("@/hooks/marca-activa-contexto", () => ({
-  useMarcaActiva: () => ({ marcaActiva: "unotv", marcaPrimaria: "unotv" }),
+  useMarcaActiva: () => marcaMock.actual,
 }));
 
 // Stub de red genérico (la query de formatos cae al fallback local con retry:false).
@@ -77,6 +84,7 @@ function renderVideo(rutaInicial = "/contenido/video") {
 
 describe("Video", () => {
   beforeEach(() => {
+    marcaMock.actual = { marcaActiva: "unotv", marcaPrimaria: "unotv" };
     // El gestor (sección por defecto) lista composiciones + piezas: stubs vacíos por defecto.
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({ composiciones: [] });
     vi.spyOn(apiMod.api, "publicaciones").mockResolvedValue({
@@ -121,16 +129,40 @@ describe("Video", () => {
     expect(screen.getByText(/subir video/i)).toBeInTheDocument();
   });
 
-  it("deshabilita las secciones que requieren clip base (Render, Subtítulos)", () => {
+  it("deshabilita las secciones que requieren clip base (Render, Subtítulos) CON la razón", () => {
     renderVideo();
-    // Las pestañas son botones; sin clip base, Render/Subtítulos están deshabilitadas.
+    // Las pestañas son botones; sin clip base, Render/Subtítulos están deshabilitadas y el
+    // `title` explica el porqué (un disabled mudo desorienta).
     const render = screen.getByRole("button", { name: /^render$/i });
     const subs = screen.getByRole("button", { name: /subtítulos/i });
     expect(render).toBeDisabled();
+    expect(render).toHaveAttribute("title", "Requiere un clip base");
     expect(subs).toBeDisabled();
-    // Las secciones Base y "Mis composiciones" sí están activas.
-    expect(screen.getByRole("button", { name: /^base$/i })).not.toBeDisabled();
+    expect(subs).toHaveAttribute("title", "Requiere un clip base");
+    // Las secciones Base y "Mis composiciones" sí están activas (y sin tooltip de bloqueo).
+    const base = screen.getByRole("button", { name: /^base$/i });
+    expect(base).not.toBeDisabled();
+    expect(base).not.toHaveAttribute("title");
     expect(screen.getByRole("button", { name: /mis composiciones/i })).not.toBeDisabled();
+  });
+
+  it("sin marca activa: aviso claro y edición desactivada (no un toast al primer cambio)", () => {
+    marcaMock.actual = { marcaActiva: null, marcaPrimaria: null };
+    renderVideo();
+    irABase();
+    expect(screen.getByRole("alert")).toHaveTextContent(/selecciona una marca arriba/i);
+    // La edición queda desactivada hasta elegir marca: formato, título y guardar borrador.
+    expect(screen.getByRole("radio", { name: /9:16/i })).toBeDisabled();
+    expect(screen.getByLabelText(/título del borrador/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /guardar borrador/i })).toBeDisabled();
+  });
+
+  it("con marca activa no hay aviso de marca y la edición está habilitada", () => {
+    renderVideo();
+    irABase();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /9:16/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /guardar borrador/i })).not.toBeDisabled();
   });
 
   it("avisa que el preview es aproximado (render fiel = servidor)", async () => {

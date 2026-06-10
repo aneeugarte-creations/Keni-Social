@@ -364,6 +364,9 @@ export default function Video() {
   }
 
   const tieneBase = !!baseKey;
+  // Sin marca activa no se puede crear/guardar la composición: en vez de fallar con un toast al
+  // primer cambio, se muestra un aviso claro y se desactiva la edición hasta elegir marca.
+  const sinMarca = !marca;
 
   return (
     // FULL-BLEED (mismo patrón que Imagen.tsx): anula el padding del `<main>` del shell para
@@ -386,6 +389,8 @@ export default function Video() {
               key={clave}
               type="button"
               disabled={off}
+              // Explica POR QUÉ está deshabilitada (el disabled sin razón desorienta).
+              title={off ? "Requiere un clip base" : undefined}
               onClick={() => setSeccion(clave)}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
                 activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"
@@ -398,6 +403,17 @@ export default function Video() {
         })}
       </nav>
 
+      {/* Sin marca activa no hay dónde guardar: aviso claro + edición desactivada (mejor que un
+          toast seco al primer cambio). El selector de marca vive en la cabecera del shell. */}
+      {seccion !== "gestor" && sinMarca && (
+        <div
+          role="alert"
+          className="shrink-0 border-b border-amber-300/60 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-300"
+        >
+          Selecciona una marca arriba para empezar a editar: la composición se guarda por marca.
+        </div>
+      )}
+
       {/* Barra del BORRADOR: título, estado (borrador/listo), indicador de guardado y acciones.
           Fuera del gestor (en el gestor no se edita un borrador concreto). */}
       {seccion !== "gestor" && (
@@ -408,7 +424,8 @@ export default function Video() {
             onChange={(e) => onCambiarTitulo(e.target.value)}
             placeholder={tituloBorradorPorDefecto(aspecto)}
             aria-label="Título del borrador"
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            disabled={sinMarca}
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           />
 
           {/* Badge de estado. */}
@@ -433,7 +450,8 @@ export default function Video() {
             <button
               type="button"
               onClick={guardarBorrador}
-              disabled={crear.isPending}
+              disabled={crear.isPending || sinMarca}
+              title={sinMarca ? "Selecciona una marca arriba" : undefined}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
             >
               <Save className="h-3.5 w-3.5" />
@@ -497,7 +515,7 @@ export default function Video() {
               <>
                 <div>
                   <h2 className="mb-2 text-sm font-semibold text-foreground">Formato</h2>
-                  <SelectorFormato aspecto={aspecto} onCambio={onCambioFormato} />
+                  <SelectorFormato aspecto={aspecto} onCambio={onCambioFormato} disabled={sinMarca} />
                 </div>
                 <div>
                   <h2 className="mb-2 text-sm font-semibold text-foreground">Pista base</h2>
@@ -507,6 +525,7 @@ export default function Video() {
                     videoUrl={baseUrl}
                     onCambioVideo={onCambioBase}
                     onReencuadre={(c) => mutar((d) => setReencuadreBase(d, c))}
+                    disabled={sinMarca}
                   />
                 </div>
               </>
@@ -591,11 +610,14 @@ export default function Video() {
               clampa al ancho de la columna (no desborda en horizontal). */}
           <aside className="min-w-0 space-y-2 lg:min-h-0 lg:overflow-y-auto">
             <h2 className="text-sm font-semibold text-foreground">Vista previa</h2>
+            {/* `atajoEspacio` se apaga en Overlay: el Lienzo (Konva) ya usa la barra espaciadora
+                para el pan del lienzo y los dos atajos chocarían. */}
             <PreviewComposicion
               doc={doc}
               baseUrl={baseUrl}
               pipUrl={pipUrl}
               segmentos={segmentos}
+              atajoEspacio={seccion !== "overlay"}
             />
           </aside>
         </div>

@@ -5,13 +5,14 @@
  *  - `cambiarAspecto` reescala las cajas de los clips de video.
  *  - `setCajaPip` hace clamp dentro del lienzo.
  *  - `normalizarSegmentos` acepta start/end/text y inicio/fin/texto, y garantiza id estable.
- *  - `formatearTiempo` / `segmentoEn`.
+ *  - `formatearTiempo` / `segmentoEn` / `formatearDuracionMs`.
  */
 import { describe, expect, it } from "vitest";
 
 import {
   cambiarAspecto,
   composicionVacia,
+  formatearDuracionMs,
   formatearTiempo,
   normalizarSegmentos,
   pistaBase,
@@ -181,5 +182,20 @@ describe("formatearTiempo / segmentoEn", () => {
     expect(segmentoEn(segs, 1)?.texto).toBe("a");
     expect(segmentoEn(segs, 3)?.texto).toBe("b");
     expect(segmentoEn(segs, 10)).toBeNull();
+  });
+});
+
+describe("formatearDuracionMs", () => {
+  it("formatea milisegundos a mm:ss (truncando los decimales de segundo)", () => {
+    expect(formatearDuracionMs(0)).toBe("00:00");
+    expect(formatearDuracionMs(30000)).toBe("00:30");
+    expect(formatearDuracionMs(65400)).toBe("01:05");
+    expect(formatearDuracionMs(3600000)).toBe("60:00");
+  });
+
+  it("trata valores negativos o no finitos como 0", () => {
+    expect(formatearDuracionMs(-5000)).toBe("00:00");
+    expect(formatearDuracionMs(Number.NaN)).toBe("00:00");
+    expect(formatearDuracionMs(Number.POSITIVE_INFINITY)).toBe("00:00");
   });
 });

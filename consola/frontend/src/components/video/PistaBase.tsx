@@ -5,11 +5,11 @@
  * solo el "toque RRSS": ajuste cover/contain y punto focal para que el clip caiga bien en el
  * lienzo vertical/cuadrado/horizontal.
  */
-import { Crosshair } from "lucide-react";
+import { Clock, Crosshair } from "lucide-react";
 
 import { EditorVideo } from "@/components/media/EditorVideo";
 import { Label } from "@/components/ui/label";
-import { pistaBase, type AjusteVideo, type ComposicionVideo } from "@/lib/video";
+import { formatearDuracionMs, pistaBase, type AjusteVideo, type ComposicionVideo } from "@/lib/video";
 
 export interface PistaBaseProps {
   doc: ComposicionVideo;
@@ -32,10 +32,24 @@ export function PistaBase({
   disabled,
 }: PistaBaseProps) {
   const clip = pistaBase(doc)?.clips[0];
+  // Duración del clip base y de la composición (mm:ss). 0 = aún desconocida (el render la
+  // recalcula); se muestra "—" en vez de un confuso 00:00.
+  const durClipMs = clip ? clip.fin_ms - clip.inicio_ms : 0;
 
   return (
     <div className="space-y-4">
       <EditorVideo video={videoKey} videoUrl={videoUrl} onCambio={onCambioVideo} disabled={disabled} />
+
+      {clip && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          <span>
+            Clip base: <span className="tabular-nums">{durClipMs > 0 ? formatearDuracionMs(durClipMs) : "—"}</span>
+            {" · "}
+            Composición: <span className="tabular-nums">{doc.duracion_ms > 0 ? formatearDuracionMs(doc.duracion_ms) : "—"}</span>
+          </span>
+        </p>
+      )}
 
       {clip && (
         <div className="space-y-3 rounded-md border border-border p-3">
