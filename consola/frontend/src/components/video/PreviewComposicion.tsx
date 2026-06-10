@@ -37,6 +37,12 @@ import {
   type SegmentoSub,
 } from "@/lib/video";
 
+/** Mando externo del player: lo expone `playerRef` para que otros (timeline) busquen sin duplicar el player. */
+export interface PreviewPlayerHandle {
+  /** Busca a `t` segundos (clamp interno a [0, duración]). */
+  buscarA: (t: number) => void;
+}
+
 export interface PreviewComposicionProps {
   doc: ComposicionVideo;
   /** URL servible del clip base (de la subida). Si falta, se muestra un placeholder. */
@@ -52,6 +58,12 @@ export interface PreviewComposicionProps {
    * en pantalla ya usa la barra espaciadora (p. ej. el pan del Lienzo en la sección Overlay).
    */
   atajoEspacio?: boolean;
+  /** Notifica el tiempo actual del player (segundos): alimenta el playhead del timeline. */
+  onTiempo?: (seg: number) => void;
+  /** Notifica la duración real (segundos) al cargar metadatos (0 al cambiar de clip). */
+  onDuracion?: (seg: number) => void;
+  /** Expone `buscarA` para seeks externos (p. ej. arrastrar el playhead del timeline). */
+  playerRef?: React.Ref<PreviewPlayerHandle>;
 }
 
 export function PreviewComposicion({
@@ -61,6 +73,9 @@ export function PreviewComposicion({
   segmentos,
   altoMax = 520,
   atajoEspacio = true,
+  onTiempo,
+  onDuracion,
+  playerRef,
 }: PreviewComposicionProps) {
   const { w, h } = doc.formato;
 
@@ -166,6 +181,16 @@ export function PreviewComposicion({
     },
     [durTotal],
   );
+
+  // Integración con el timeline: expone `buscarA` (seeks externos) y notifica reloj/duración.
+  // Son props opcionales: sin ellas el player se comporta exactamente igual que antes.
+  React.useImperativeHandle(playerRef, () => ({ buscarA }), [buscarA]);
+  React.useEffect(() => {
+    onTiempo?.(tiempo);
+  }, [tiempo, onTiempo]);
+  React.useEffect(() => {
+    onDuracion?.(duracion);
+  }, [duracion, onDuracion]);
 
   /** Convierte la posición X de un puntero sobre la barra en un seek. */
   const buscarDesdePuntero = React.useCallback(

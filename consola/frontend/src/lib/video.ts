@@ -238,6 +238,54 @@ export function setClipBase(
   };
 }
 
+/** Duración mínima (ms) que debe conservar el clip base tras un trim. */
+export const MIN_RECORTE_MS = 1000;
+
+/**
+ * Fija el recorte temporal del clip BASE (`recorte_in_ms`/`recorte_out_ms`), que el render
+ * server-side aplica con `-ss`/`-to` antes del input de FFmpeg
+ * (`motores/estudio_video/filtros.py::construir_comando`). Clampa a `[0, maxMs]` (la duración
+ * real del clip, si se conoce) y garantiza un mínimo de `MIN_RECORTE_MS` (clips más cortos:
+ * todo el clip). Recalcula `fin_ms` del clip y `duracion_ms` del documento (= duración
+ * recortada; el worker la usa para el % de progreso del render). Sin clip base o sin cambio
+ * real devuelve el MISMO objeto (los autoguardados comparan por referencia).
+ */
+export function setRecorteBase(
+  doc: ComposicionVideo,
+  inMs: number,
+  outMs: number,
+  maxMs?: number,
+): ComposicionVideo {
+  const clip = pistaBase(doc)?.clips[0];
+  if (!clip) return doc;
+  const tope =
+    maxMs && maxMs > 0
+      ? maxMs
+      : Math.max(clip.recorte_out_ms || 0, clip.fin_ms || 0, doc.duracion_ms || 0);
+  if (tope <= 0) return doc;
+  const minDur = Math.min(MIN_RECORTE_MS, tope);
+  const salida = Math.round(Math.min(Math.max(outMs, minDur), tope));
+  const entrada = Math.round(Math.min(Math.max(0, inMs), salida - minDur));
+  if (entrada === clip.recorte_in_ms && salida === clip.recorte_out_ms) return doc;
+  const dur = salida - entrada;
+  return {
+    ...doc,
+    duracion_ms: dur,
+    pistas: doc.pistas.map((p) =>
+      p.tipo === "video" && p.id === "base"
+        ? {
+            ...p,
+            clips: p.clips.map((c, i) =>
+              i === 0
+                ? { ...c, recorte_in_ms: entrada, recorte_out_ms: salida, fin_ms: c.inicio_ms + dur }
+                : c,
+            ),
+          }
+        : p,
+    ),
+  };
+}
+
 /** Actualiza el reencuadre (ajuste/foco) del clip base. */
 export function setReencuadreBase(
   doc: ComposicionVideo,

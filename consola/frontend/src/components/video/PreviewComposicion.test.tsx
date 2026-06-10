@@ -11,12 +11,13 @@
  * jsdom no implementa HTMLMediaElement.play/pause: se mockean en el prototipo despachando los
  * eventos `play`/`pause` reales (los mismos que dispararía el navegador).
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { composicionVacia, setClipBase, type ComposicionVideo, type SegmentoSub } from "@/lib/video";
 
-import { PreviewComposicion } from "./PreviewComposicion";
+import { PreviewComposicion, type PreviewPlayerHandle } from "./PreviewComposicion";
 
 function docConBase(duracionMs = 30000): ComposicionVideo {
   return setClipBase(composicionVacia("9:16", "unotv"), "videos/abc.mp4", duracionMs);
@@ -148,5 +149,33 @@ describe("PreviewComposicion (player)", () => {
     render(<PreviewComposicion doc={docConBase()} baseUrl="videos/abc.mp4" atajoEspacio={false} />);
     fireEvent.keyDown(document.body, { code: "Space" });
     expect(playMock).not.toHaveBeenCalled();
+  });
+
+  it("notifica el reloj (onTiempo) y la duración (onDuracion), y expone buscarA vía playerRef", () => {
+    const onTiempo = vi.fn();
+    const onDuracion = vi.fn();
+    const ref = React.createRef<PreviewPlayerHandle>();
+    const { container } = render(
+      <PreviewComposicion
+        doc={docConBase(30000)}
+        baseUrl="videos/abc.mp4"
+        playerRef={ref}
+        onTiempo={onTiempo}
+        onDuracion={onDuracion}
+      />,
+    );
+    const video = container.querySelector("video")!;
+    // El reloj del player fluye hacia fuera (alimenta el playhead del timeline).
+    video.currentTime = 7;
+    fireEvent(video, new Event("timeupdate"));
+    expect(onTiempo).toHaveBeenLastCalledWith(7);
+    // La duración real fluye al cargar metadatos.
+    Object.defineProperty(video, "duration", { value: 45, configurable: true });
+    fireEvent(video, new Event("loadedmetadata"));
+    expect(onDuracion).toHaveBeenLastCalledWith(45);
+    // Y el mando externo busca en el MISMO player (sin duplicarlo).
+    act(() => ref.current!.buscarA(12));
+    expect(video.currentTime).toBeCloseTo(12, 5);
+    expect(onTiempo).toHaveBeenLastCalledWith(12);
   });
 });

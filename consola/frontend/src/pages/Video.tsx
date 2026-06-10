@@ -29,10 +29,11 @@ import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 const PanelOverlay = React.lazy(() =>
   import("@/components/video/PanelOverlay").then((m) => ({ default: m.PanelOverlay })),
 );
+import { LineaTiempo } from "@/components/video/LineaTiempo";
 import { PanelPip } from "@/components/video/PanelPip";
 import { PanelRender } from "@/components/video/PanelRender";
 import { PistaBase } from "@/components/video/PistaBase";
-import { PreviewComposicion } from "@/components/video/PreviewComposicion";
+import { PreviewComposicion, type PreviewPlayerHandle } from "@/components/video/PreviewComposicion";
 import { SelectorFormato } from "@/components/video/SelectorFormato";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError, urlMedia } from "@/lib/api";
@@ -47,6 +48,7 @@ import {
   setCapasOverlay,
   setClipBase,
   setClipPip,
+  setRecorteBase,
   setReencuadreBase,
   tituloBorradorPorDefecto,
   type AspectoVideo,
@@ -612,18 +614,77 @@ export default function Video() {
             <h2 className="text-sm font-semibold text-foreground">Vista previa</h2>
             {/* `atajoEspacio` se apaga en Overlay: el Lienzo (Konva) ya usa la barra espaciadora
                 para el pan del lienzo y los dos atajos chocarían. */}
-            <PreviewComposicion
+            <PreviewConTimeline
               doc={doc}
               baseUrl={baseUrl}
               pipUrl={pipUrl}
               segmentos={segmentos}
               atajoEspacio={seccion !== "overlay"}
+              trimDeshabilitado={sinMarca}
+              onRecorte={(inMs, outMs, durMs) =>
+                mutar((d) => setRecorteBase(d, inMs, outMs, durMs > 0 ? durMs : undefined))
+              }
             />
           </aside>
         </div>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Vista previa + LÍNEA DE TIEMPO con el reloj del player COMPARTIDO. Vive como componente
+ * propio para que el tick de reproducción (60 fps vía `onTiempo`) re-renderice SOLO esta
+ * columna y no toda la página (el editor de capas Konva de Overlay es caro). El playhead es
+ * bidireccional: el player alimenta `tiempoSeg` y el timeline busca vía `playerRef.buscarA`.
+ */
+function PreviewConTimeline({
+  doc,
+  baseUrl,
+  pipUrl,
+  segmentos,
+  atajoEspacio,
+  trimDeshabilitado,
+  onRecorte,
+}: {
+  doc: ComposicionVideo;
+  baseUrl: string;
+  pipUrl: string;
+  segmentos: SegmentoSub[];
+  atajoEspacio: boolean;
+  trimDeshabilitado: boolean;
+  /** Commit del trim del clip base; `durMs` = duración real del clip (0 si aún no se conoce). */
+  onRecorte: (inMs: number, outMs: number, durMs: number) => void;
+}) {
+  const playerRef = React.useRef<PreviewPlayerHandle>(null);
+  const [tiempoSeg, setTiempoSeg] = React.useState(0);
+  const [durSeg, setDurSeg] = React.useState(0);
+  const durMs = Math.round(durSeg * 1000);
+  return (
+    <>
+      <PreviewComposicion
+        doc={doc}
+        baseUrl={baseUrl}
+        pipUrl={pipUrl}
+        segmentos={segmentos}
+        atajoEspacio={atajoEspacio}
+        playerRef={playerRef}
+        onTiempo={setTiempoSeg}
+        onDuracion={setDurSeg}
+      />
+      {baseUrl ? (
+        <LineaTiempo
+          doc={doc}
+          duracionClipMs={durMs}
+          tiempoSeg={tiempoSeg}
+          onSeek={(s) => playerRef.current?.buscarA(s)}
+          onRecorte={(inMs, outMs) => onRecorte(inMs, outMs, durMs)}
+          segmentos={segmentos}
+          disabled={trimDeshabilitado}
+        />
+      ) : null}
+    </>
   );
 }
 

@@ -4,6 +4,7 @@
  *  - `setClipBase` fija el clip a pantalla completa y la duración.
  *  - `cambiarAspecto` reescala las cajas de los clips de video.
  *  - `setCajaPip` hace clamp dentro del lienzo.
+ *  - `setRecorteBase` clampa el trim del clip base (mínimo 1 s) y recalcula la duración.
  *  - `normalizarSegmentos` acepta start/end/text y inicio/fin/texto, y garantiza id estable.
  *  - `formatearTiempo` / `segmentoEn` / `formatearDuracionMs`.
  */
@@ -14,6 +15,7 @@ import {
   composicionVacia,
   formatearDuracionMs,
   formatearTiempo,
+  MIN_RECORTE_MS,
   normalizarSegmentos,
   pistaBase,
   pistaPip,
@@ -23,6 +25,7 @@ import {
   setCajaPip,
   setClipBase,
   setClipPip,
+  setRecorteBase,
   setReencuadreBase,
   setSubtitulos,
   tituloBorradorPorDefecto,
@@ -197,5 +200,37 @@ describe("formatearDuracionMs", () => {
     expect(formatearDuracionMs(-5000)).toBe("00:00");
     expect(formatearDuracionMs(Number.NaN)).toBe("00:00");
     expect(formatearDuracionMs(Number.POSITIVE_INFINITY)).toBe("00:00");
+  });
+});
+
+describe("setRecorteBase", () => {
+  const doc30 = () => setClipBase(composicionVacia("9:16"), "videos/abc.mp4", 30000);
+
+  it("fija recorte_in/out_ms y recalcula fin_ms del clip y duracion_ms del documento", () => {
+    const doc = setRecorteBase(doc30(), 2000, 5000);
+    const clip = pistaBase(doc)?.clips[0];
+    expect(clip).toMatchObject({ recorte_in_ms: 2000, recorte_out_ms: 5000, fin_ms: 3000 });
+    expect(doc.duracion_ms).toBe(3000);
+  });
+
+  it("clampa a [0, maxMs] (la duración real del clip)", () => {
+    const doc = setRecorteBase(doc30(), -500, 99000, 30000);
+    const clip = pistaBase(doc)?.clips[0];
+    expect(clip).toMatchObject({ recorte_in_ms: 0, recorte_out_ms: 30000 });
+  });
+
+  it("garantiza el mínimo de 1 s entre in y out", () => {
+    expect(MIN_RECORTE_MS).toBe(1000);
+    const doc = setRecorteBase(doc30(), 29950, 30000, 30000);
+    const clip = pistaBase(doc)?.clips[0];
+    expect(clip).toMatchObject({ recorte_in_ms: 29000, recorte_out_ms: 30000 });
+    expect(doc.duracion_ms).toBe(1000);
+  });
+
+  it("sin clip base o sin cambio real devuelve el MISMO objeto (autoguardado por referencia)", () => {
+    const vacia = composicionVacia("9:16");
+    expect(setRecorteBase(vacia, 0, 5000)).toBe(vacia);
+    const doc = doc30();
+    expect(setRecorteBase(doc, 0, 30000, 30000)).toBe(doc);
   });
 });

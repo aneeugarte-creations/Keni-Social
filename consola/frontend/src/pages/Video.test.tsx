@@ -186,6 +186,20 @@ describe("Video", () => {
     );
   });
 
+  it("con clip base muestra la LÍNEA DE TIEMPO (regla + playhead + asas de trim)", async () => {
+    vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
+      composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
+    });
+    renderVideo("/contenido/video?composicion=comp-7");
+    // El timeline vive bajo el preview: playhead accesible y asas de trim del clip base.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Línea de tiempo de la composición")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("slider", { name: /cursor de reproducción/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recortar inicio del clip/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recortar fin del clip/i })).toBeInTheDocument();
+  });
+
   it("por `?contenido=<id>` REABRE la composición de la pieza si ya existe", async () => {
     const listar = vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
       composiciones: [
