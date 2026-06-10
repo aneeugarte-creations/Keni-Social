@@ -370,6 +370,25 @@ def job_cancelado(job_id: str) -> bool:
     return bool(fila["cancelado"]) if fila is not None else False
 
 
+def gen_ids_jobs_pendientes() -> set[str]:
+    """`gen_id` de TODOS los jobs `pendiente` (esperando turno en la cola).
+
+    Lo usa el reaper de generaciones: un registro `ejecutando` cuyo job sigue PENDIENTE no
+    es un zombi (nada llego a correr ni a morir): esta legitimamente en cola, posiblemente
+    retenido por el corte de presupuesto o el kill switch (`presupuesto_ia`), y puede
+    esperar mas que el TTL. Segarlo lo mataria en silencio: la guardia anti-duplicado del
+    reclamo veria el registro terminal y cerraria el job sin ejecutarlo.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT gen_id FROM jobs WHERE estado = ?", (JOB_PENDIENTE,)
+        ).fetchall()
+    finally:
+        con.close()
+    return {f["gen_id"] for f in filas}
+
+
 # --------------------------------------------------------------------------- #
 # Ledger de gasto de IA (economia de tokens; ver `presupuesto_ia.py`)          #
 # --------------------------------------------------------------------------- #

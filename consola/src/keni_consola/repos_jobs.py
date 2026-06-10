@@ -59,6 +59,10 @@ def job_cancelado(job_id: str) -> bool:
     return db.job_cancelado(job_id)
 
 
+def gen_ids_jobs_pendientes() -> set[str]:
+    return db.gen_ids_jobs_pendientes()
+
+
 # Ledger de gasto de IA (economia de tokens; ver `presupuesto_ia.py`).
 
 

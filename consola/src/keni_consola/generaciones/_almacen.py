@@ -539,12 +539,27 @@ def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> in
 
     `ahora` se inyecta en tests; por defecto es la hora actual. Best-effort por item: un
     fallo al parsear/actualizar uno NO aborta el barrido.
+
+    EXENTAS las generaciones cuyo job sigue PENDIENTE en la cola: no son zombis (nada llego
+    a correr ni a morir), estan esperando turno — posiblemente retenidas MAS que el TTL por
+    el corte de presupuesto o el kill switch (`presupuesto_ia`), o por una cola cargada.
+    Segarlas las mataria en silencio: al reanudarse, la guardia anti-duplicado del reclamo
+    veria el registro terminal y cerraria el job SIN ejecutarlo (trabajo perdido). Best-
+    effort: si la cola no se puede leer, se asume vacia (comportamiento anti-zombi previo).
     """
     referencia = ahora if ahora is not None else datetime.now()
+    try:
+        from .. import repos
+
+        en_cola = repos.gen_ids_jobs_pendientes()
+    except Exception:  # noqa: BLE001 -- sin lectura de la cola, mejor reaper que zombis
+        en_cola = set()
     reclamadas = 0
     for gen in _todas_ordenadas():
         if gen.get("estado") != ESTADO_EJECUTANDO:
             continue
+        if gen.get("id") in en_cola:
+            continue  # job aun pendiente: espera legitima (corte/pausa/cola), no zombi
         try:
             inicio = datetime.fromisoformat(gen.get("fecha_inicio", ""))
         except ValueError:
