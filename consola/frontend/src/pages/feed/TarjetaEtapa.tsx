@@ -23,14 +23,12 @@ const ESTADO_DE_ETAPA = {
   programada: "programado",
   publicada: "publicado",
   lista_para_revisar: "en_revision",
-  en_borrador: "borrador",
 } as const;
 
 /** Color del punto por etapa, a juego con la clase del badge. */
 const PUNTO_DE_ETAPA: Record<EtapaIa, string> = {
   generando_copy: "animate-pulse motion-reduce:animate-none bg-sky-500",
   generando_arte: "animate-pulse motion-reduce:animate-none bg-sky-500",
-  en_borrador: "bg-zinc-400",
   lista_para_revisar: "bg-violet-500",
   aprobada: "bg-blue-500",
   programada: "bg-amber-500",

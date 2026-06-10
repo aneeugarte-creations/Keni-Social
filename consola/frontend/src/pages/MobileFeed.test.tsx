@@ -144,16 +144,16 @@ describe("MobileFeed · feed móvil de revisión", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera compacta, las MISMAS 4 vistas del escritorio y el botón de crear", async () => {
+  it("muestra la cabecera compacta, las MISMAS 3 vistas del escritorio y el botón de crear", async () => {
     stubFetch();
     renderFeed();
     // El título queda solo para lectores de pantalla (sr-only): la cabecera no gasta una fila.
     expect(await screen.findByText("Feed de revisión")).toBeInTheDocument();
     // La partición compartida (vistas.tsx): el móvil ya no es una superficie capada con 2
     // bandejas; mismo vocabulario que el escritorio. Por defecto manda "Por aprobar".
-    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
     expect(screen.getByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /En preparación/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Por aprobar/ })).toHaveAttribute(
       "aria-selected",
@@ -342,16 +342,16 @@ describe("MobileFeed · feed móvil de revisión", () => {
       urls.push(String(url));
       return base(url);
     });
-    renderFeed({ marcas: ["unotv", "claro-sports"] }, "/?vista=preparacion&marca=claro-sports");
+    renderFeed({ marcas: ["unotv", "claro-sports"] }, "/?vista=por_aprobar&marca=claro-sports");
     await screen.findByText("Feed de revisión");
-    expect(screen.getByRole("tab", { name: /En preparación/ })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     // La consulta dedicada va al servidor con el estado de la vista Y la marca de la URL.
     await waitFor(() =>
       expect(
-        urls.some((u) => u.includes("estado=borrador") && u.includes("marca=claro-sports")),
+        urls.some((u) => u.includes("estado=en_revision") && u.includes("marca=claro-sports")),
       ).toBe(true),
     );
   });

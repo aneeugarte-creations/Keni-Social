@@ -19,13 +19,13 @@
  */
 import type { Publicacion } from "@/types";
 
-/** Las etapas observables de la tubería IA, en orden. `en_borrador` es la etapa HONESTA de una
- *  pieza completa (copy + arte) que aún no entró en revisión (o fue devuelta a redacción): no
- *  está "para revisar" porque nadie puede darle el OK todavía. */
+/** Las etapas observables de la tubería IA, en orden. Una pieza COMPLETA (copy + arte) está
+ *  "lista para revisar" en cuanto tiene todo su contenido: el pipeline la mueve sola a la cola
+ *  de revisión (etapa de avance incondicional), así que «borrador» no es un estado donde
+ *  descanse — no hay etapa intermedia que mostrar. */
 export type EtapaIa =
   | "generando_copy"
   | "generando_arte"
-  | "en_borrador"
   | "lista_para_revisar"
   | "aprobada"
   | "programada"
@@ -48,8 +48,6 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   // Ola F: para piezas video este estado significa "Falta video"; la etiqueta dinámica
   // la calcula `etiquetaEtapa` a partir del formato; aquí "Falta imagen" es el fallback foto.
   generando_arte: { etiqueta: "Falta imagen", enCurso: true },
-  // Pieza completa pero fuera de revisión (entra sola al guardarse, o fue devuelta): borrador.
-  en_borrador: { etiqueta: "En borrador", enCurso: false },
   // "Para revisar" (no "Lista"): no colisiona con la pestaña "Lista" del hub y dice la acción.
   lista_para_revisar: { etiqueta: "Para revisar", enCurso: false },
   aprobada: { etiqueta: "Aprobada", enCurso: false },
@@ -88,17 +86,16 @@ export function etiquetaEtapa(etapa: EtapaIa, formato?: string): string {
  * IMAGEN vs PLANTILLA: la placa (`imagen`) es solo la PLANTILLA (parte del copy-in), no cuenta
  * como imagen real. "Lleva imagen" = hay copy-in o exención; necesita FOTO (`foto`/`imagen_fuente`).
  *
+ * Una pieza COMPLETA fuera de revisión (borrador recién completado o devuelto a redacción) es
+ * "Para revisar": el pipeline la mueve sola a la cola de revisión (avance incondicional), así
+ * que «borrador» no es un estado donde descanse y no se distingue como etapa aparte.
+ *
  * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
  * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
  * legadas/parciales que no la traigan).
  */
 export function etapaDePublicacion(p: Publicacion): EtapaIa {
-  const etapa = etapaBruta(p);
-  // NORMALIZACIÓN honesta (solo aquí, NO en el contrato generado): "Para revisar" solo si la
-  // pieza DE VERDAD está en revisión. Una pieza completa fuera de revisión (borrador recién
-  // completado o devuelto a redacción) es "En borrador": nadie puede darle el OK todavía.
-  if (etapa === "lista_para_revisar" && p.estado !== "en_revision") return "en_borrador";
-  return etapa;
+  return etapaBruta(p);
 }
 
 /** Etapa sin normalizar: la explícita del backend si llega, o la derivación local. */

@@ -85,20 +85,22 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("generando_arte");
   });
 
-  it("pieza SIN marca con imagen subida (bespoke), aún en borrador → en_borrador (no 'para revisar')", () => {
+  it("pieza SIN marca con imagen subida (bespoke), completa → lista_para_revisar", () => {
+    // Completa de verdad (copy + imagen propia): el pipeline la mueve sola a la cola de
+    // revisión, así que el feed la pinta directa como "Para revisar" (sin etapa intermedia).
     expect(
       etapaDePublicacion(
         pub({ estado: "borrador", marca: "", contenido: "copy", copy_in: "", foto: "", imagen: "subida.png", etapa_ia: undefined }),
       ),
-    ).toBe("en_borrador");
+    ).toBe("lista_para_revisar");
   });
 
-  it("completa (copy + foto real) pero fuera de revisión → en_borrador (etapa honesta)", () => {
+  it("completa (copy + foto real) aún en borrador → lista_para_revisar (avance incondicional)", () => {
     expect(
       etapaDePublicacion(
         pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
       ),
-    ).toBe("en_borrador");
+    ).toBe("lista_para_revisar");
   });
 
   it("en revisión → lista_para_revisar (gate humano)", () => {
@@ -107,12 +109,12 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     );
   });
 
-  it("normaliza el `etapa_ia` explícito: 'lista_para_revisar' con estado borrador → en_borrador", () => {
-    // El backend puede decir "lista para revisar" en una pieza completa que sigue en borrador
-    // (o devuelta a redacción): el feed no miente con un "Para revisar" que nadie puede aprobar.
+  it("respeta el `etapa_ia` explícito 'lista_para_revisar' tanto en borrador como en revisión", () => {
+    // «borrador» no es un estado donde descanse una pieza completa: el pipeline la avanza sola,
+    // así que "Para revisar" es honesto desde que tiene todo el contenido (sin etapa intermedia).
     expect(
       etapaDePublicacion(pub({ estado: "borrador", etapa_ia: "lista_para_revisar" })),
-    ).toBe("en_borrador");
+    ).toBe("lista_para_revisar");
     expect(
       etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" })),
     ).toBe("lista_para_revisar");
@@ -139,7 +141,6 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     for (const etapa of [
       "generando_copy",
       "generando_arte",
-      "en_borrador",
       "lista_para_revisar",
       "aprobada",
       "programada",

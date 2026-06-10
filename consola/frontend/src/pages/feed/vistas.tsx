@@ -6,7 +6,7 @@
  * que ambas superficies enseñen el MISMO trabajo con el MISMO vocabulario.
  */
 import { useQuery } from "@tanstack/react-query";
-import { LayoutGrid, PencilRuler, Send, ThumbsUp, type LucideIcon } from "lucide-react";
+import { LayoutGrid, Send, ThumbsUp, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { FILTRO_TODOS } from "@/hooks/filtros-contenido-contexto";
@@ -26,13 +26,17 @@ export const PAGINAS_POR_LOTE = 5;
 export const TOPE_PAGINAS_PIEZA = 3 * PAGINAS_POR_LOTE;
 
 /**
- * Pestañas del feed: una PARTICIÓN del ciclo por ESTADO (borrador → en revisión →
- * aprobado/programado/publicado); "Todo el feed" es la unión. "En preparación" y "Por aprobar"
- * mapean 1:1 a un estado y van con consulta DEDICADA (el servidor filtra); `filtra` mantiene la
- * misma regla en cliente (idempotente en las dedicadas; el filtro real de "Aprobadas y
- * publicadas"). `etiquetaCorta` es el texto visible en <sm (un sr-only conserva el completo).
+ * Pestañas del feed: una PARTICIÓN del ciclo por ESTADO. "Todo el feed" es la unión; "Por
+ * aprobar" mapea 1:1 a `en_revision` y va con consulta DEDICADA (el servidor filtra);
+ * "Aprobadas y publicadas" filtra en cliente los tres estados finales. `filtra` mantiene la
+ * misma regla en cliente. `etiquetaCorta` es el texto visible en <sm (un sr-only conserva el
+ * completo).
+ *
+ * NO hay pestaña «En preparación»: «borrador» dejó de ser un estado donde descanse una pieza
+ * —el pipeline mueve sola toda pieza completa a la cola de revisión (avance incondicional)—, así
+ * que los borradores son transitorios y caen en "Todo el feed" mientras existen.
  */
-export type Vista = "todo" | "preparacion" | "por_aprobar" | "publicado";
+export type Vista = "todo" | "por_aprobar" | "publicado";
 
 export interface VistaFeed {
   id: Vista;
@@ -57,22 +61,6 @@ export const VISTAS: VistaFeed[] = [
       titulo: "El feed está vacío",
       texto:
         "El equipo postea material y la IA lo convierte en piezas; aparecerán aquí, las más recientes primero, y aprobarás en línea cuando alguna esté lista.",
-    },
-  },
-  {
-    // TODO lo anterior a revisión: copy en curso, falta la foto/el clip, borradores completos
-    // que entran solos y piezas devueltas a redacción. Es la bandeja del trabajo del equipo.
-    // "Preparar" (verbo, simétrico con "Aprobar") y PencilRuler: la vista cubre copy en curso
-    // y devueltas a redacción, no solo "falta la imagen" (lo que sugería ImagePlus).
-    id: "preparacion",
-    etiqueta: "En preparación",
-    etiquetaCorta: "Preparar",
-    icono: PencilRuler,
-    filtra: (p) => p.estado === "borrador",
-    vacio: {
-      titulo: "Nada en preparación",
-      texto:
-        "Cuando una pieza esté en manos del equipo o de la IA (copy en curso, falta la foto o el video, o devuelta a redacción), aparecerá aquí.",
     },
   },
   {
@@ -109,14 +97,12 @@ export function vistaDesdeParam(v: string | null, porDefecto: Vista = "todo"): V
 }
 
 /**
- * CONSULTA DEDICADA por estado: "En preparación" y "Por aprobar" mapean 1:1 a un estado del
- * backend y el SERVIDOR filtra. "Todo" y "Aprobadas y publicadas" comparten el listado base
- * (`estado` ausente → misma query cacheada); la vista de 3 estados filtra en cliente (el
- * parámetro `estado` del backend admite UNO).
+ * CONSULTA DEDICADA por estado: "Por aprobar" mapea 1:1 a `en_revision` y el SERVIDOR filtra.
+ * "Todo" y "Aprobadas y publicadas" comparten el listado base (`estado` ausente → misma query
+ * cacheada); la vista de 3 estados filtra en cliente (el parámetro `estado` del backend admite UNO).
  */
-export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "borrador" | "en_revision" | undefined> = {
+export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "en_revision" | undefined> = {
   todo: undefined,
-  preparacion: "borrador",
   por_aprobar: "en_revision",
   publicado: undefined,
 };
@@ -124,8 +110,10 @@ export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "borrador" | "en_revision" 
 /**
  * CONTEOS para los badges de las pestañas: el total EXACTO del servidor con cualquier filtro
  * (`limite=1` activa el modo offset: 1 fila + `paginacion.total`). Tres consultas ligeras:
- * todos / borrador / en_revision; "Aprobadas y publicadas" es la RESTA exacta (las 4 vistas
- * son una partición). Se cuentan PIEZAS (la unidad canónica del hub), no ideas: deliberado.
+ * todos / borrador / en_revision; "Aprobadas y publicadas" es la RESTA exacta (todos − borrador
+ * − en_revision). El conteo de borradores ya NO tiene pestaña propia (son transitorios), pero
+ * se sigue restando para que "Aprobadas y publicadas" no los cuente. Se cuentan PIEZAS (la
+ * unidad canónica del hub), no ideas: deliberado.
  *
  * `filtros` lleva los parámetros YA resueltos para la query (ausente = sin filtro); la clave
  * usa los mismos centinelas que las claves históricas de `FeedIdeacion` (caché compartida).
@@ -169,7 +157,6 @@ export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: 
   // El badge solo se pinta con su número RESUELTO (nada de parpadeos de 0 mientras carga).
   const conteoVista: Record<Vista, number | undefined> = {
     todo: totalTodos,
-    preparacion: totalBorrador,
     por_aprobar: totalRevision,
     publicado:
       totalTodos != null && totalBorrador != null && totalRevision != null

@@ -216,13 +216,15 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     );
   });
 
-  it("pieza completa pero fuera de revisión: badge honesto 'En borrador' y like avisa que entra sola", () => {
+  it("pieza completa aún fuera de revisión: badge 'Para revisar' (sin etapa intermedia) y like avisa que entra sola", () => {
     renderPost(pub({ etapa_ia: "lista_para_revisar" }));
-    // El backend dice "lista para revisar" pero el estado NO es en_revision: el feed normaliza
-    // a 'En borrador' (nadie puede darle el OK todavía; un violeta "Para revisar" mentiría).
-    expect(screen.getByText("En borrador")).toBeInTheDocument();
-    expect(screen.queryByText("Para revisar")).not.toBeInTheDocument();
+    // Una pieza completa se pinta directa como "Para revisar": el pipeline la avanza sola a la
+    // cola de revisión, así que «borrador» no es un estado donde descanse y no hay badge aparte.
+    expect(screen.getByText("Para revisar")).toBeInTheDocument();
+    expect(screen.queryByText("En borrador")).not.toBeInTheDocument();
     expect(screen.queryByText(/Falta el copy/i)).not.toBeInTheDocument();
+    // Mientras el avance no la ha movido todavía (estado aún borrador), el like avisa que entra
+    // sola: el gate humano (los OK) se abre en cuanto está en la cola.
     fireEvent.click(screen.getByRole("button", { name: "Me gusta: no disponible" }));
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/no está en revisión|entra sola/i));
   });

@@ -201,17 +201,19 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
   });
 
-  it("muestra 4 pestañas-vista del mismo feed (todo / preparación / por aprobar / publicadas)", async () => {
+  it("muestra 3 pestañas-vista del mismo feed (todo / por aprobar / publicadas), sin 'En preparación'", async () => {
     stubFetch();
     renderFeed();
-    // 4 vistas-partición por estado. Es un hub: la barra son las PESTAÑAS, sin título de
+    // 3 vistas-partición por estado. Es un hub: la barra son las PESTAÑAS, sin título de
     // página propio. El nombre accesible se compone del DOM (etiqueta completa + conteo en
     // piezas), no de un aria-label que pise el número: por eso se matchea por regex.
     expect(await screen.findByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /En preparación/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Por aprobar/ })).toBeInTheDocument();
     // Vocabulario en femenino (la unidad es LA pieza): "Aprobadas y publicadas".
     expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toBeInTheDocument();
+    // «En preparación» ya no existe: «borrador» dejó de ser un estado donde descanse una pieza
+    // (el pipeline la avanza sola a revisión), así que no hay pestaña de borradores.
+    expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /En proceso/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Aprobado y publicado(?!s)/ })).not.toBeInTheDocument();
   });
@@ -265,7 +267,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(await screen.findByText("Sin piezas aprobadas ni publicadas")).toBeInTheDocument();
   });
 
-  it("las vistas PARTICIONAN el ciclo: el borrador cae en 'En preparación' (dedicada) y el aprobado en 'Aprobadas y publicadas'", async () => {
+  it("un borrador COMPLETO cae en 'Todo el feed' con badge 'Para revisar' (sin etapa intermedia) y queda fuera de 'Aprobadas y publicadas'", async () => {
     const BORRADOR = {
       ...PUBLICACION,
       id: "p2",
@@ -284,15 +286,13 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     };
     stubFetch([PUBLICACION, BORRADOR, APROBADA]);
     renderFeed();
+    // En "Todo el feed" se ve el borrador completo, pintado directo como "Para revisar": el
+    // pipeline lo avanza solo a revisión, así que no hay badge "En borrador" intermedio.
     expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
-    // 'En preparación' = consulta dedicada estado=borrador: solo el borrador (con su badge
-    // honesto 'En borrador').
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /En preparación/ }), { button: 0 });
-    expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText("Aprobada sin hueco")).not.toBeInTheDocument());
-    expect(screen.getByText("En borrador")).toBeInTheDocument();
+    expect(screen.getAllByText("Para revisar").length).toBeGreaterThan(0);
+    expect(screen.queryByText("En borrador")).not.toBeInTheDocument();
     // 'Aprobadas y publicadas' (filtro en cliente sobre el listado base) incluye lo aprobado
-    // SIN hueco todavía.
+    // SIN hueco todavía, pero NO el borrador (no es un estado final).
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Aprobadas y publicadas/ }), { button: 0 });
     expect(await screen.findByText("Aprobada sin hueco")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument());
@@ -346,13 +346,14 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Todo=9 · En preparación=2 · Por aprobar=4 · Aprobadas y publicadas=9−2−4=3 (partición).
+    // Todo=9 · Por aprobar=4 · Aprobadas y publicadas=9−2−4=3 (los 2 borradores se restan aunque
+    // ya no tengan pestaña propia, para que "Aprobadas y publicadas" no los cuente).
     expect(await within(screen.getByRole("tab", { name: /Todo el feed/ })).findByText("9")).toBeInTheDocument();
-    expect(within(screen.getByRole("tab", { name: /En preparación/ })).getByText("2")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(within(screen.getByRole("tab", { name: /Por aprobar/ })).getByText("4")).toBeInTheDocument();
     expect(within(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).getByText("3")).toBeInTheDocument();
     // El title habla de PIEZAS (unidad canónica), pluralizado de verdad (nada de "1 ideas").
-    expect(within(screen.getByRole("tab", { name: /En preparación/ })).getByTitle("2 piezas")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: /Por aprobar/ })).getByTitle("4 piezas")).toBeInTheDocument();
     // El NOMBRE ACCESIBLE incluye el conteo con su unidad ("Por aprobar 4 piezas"): el
     // aria-label que lo pisaba ya no existe.
     expect(screen.getByRole("tab", { name: /Por aprobar.*4 piezas/ })).toBeInTheDocument();

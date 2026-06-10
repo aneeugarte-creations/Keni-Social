@@ -242,7 +242,7 @@ export default function FeedIdeacion() {
   });
 
   // Conteos exactos de los badges de las pestañas (compartidos con el móvil; ver vistas.tsx).
-  const { totalBorrador, totalRevision, conteoVista } = useConteosFeed({
+  const { totalRevision, conteoVista } = useConteosFeed({
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
@@ -423,20 +423,9 @@ export default function FeedIdeacion() {
   );
 
   // SALIDA de los vacíos de las vistas dedicadas/filtradas: un vacío sin acción es un punto
-  // muerto. "Por aprobar" manda a donde está el trabajo (preparación si lo hay); el resto, al
-  // feed completo.
+  // muerto. "Por aprobar" y "Aprobadas y publicadas" mandan al feed completo.
   const accionVacio =
-    vista === "por_aprobar" ? (
-      (totalBorrador ?? 0) > 0 ? (
-        <Button variant="outline" size="sm" onClick={() => cambiarVista("preparacion")}>
-          Ver en preparación
-        </Button>
-      ) : (
-        <Button variant="outline" size="sm" onClick={() => cambiarVista("todo")}>
-          Ver todo el feed
-        </Button>
-      )
-    ) : vista === "preparacion" || vista === "publicado" ? (
+    vista === "por_aprobar" || vista === "publicado" ? (
       <Button variant="outline" size="sm" onClick={() => cambiarVista("todo")}>
         Ver todo el feed
       </Button>
