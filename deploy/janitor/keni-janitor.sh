@@ -25,7 +25,9 @@ LOG="${LOG:-/var/log/keni-janitor.log}"
 # daemon estuviera caido. SOLO actua si GEN_DIR apunta a un dir existente (def: el subdir de
 # generaciones del volumen `keni-data`). Borra por MTIME mas viejo que GEN_DIAS dias (def 30,
 # igual que el default del daemon). OFF si GEN_DIR no existe.
-GEN_DIR="${GEN_DIR:-/var/lib/docker/volumes/keni-data/_data/keni-social/generaciones}"
+# OJO: el volumen Compose se llama `keni-social_keni-data` (prefijo del proyecto), no
+# `keni-data`; con el default anterior el dir no existia y esta red de seguridad era INERTE.
+GEN_DIR="${GEN_DIR:-/var/lib/docker/volumes/keni-social_keni-data/_data/keni-social/generaciones}"
 GEN_DIAS="${GEN_DIAS:-30}"
 
 log() { printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG" >&2; }
