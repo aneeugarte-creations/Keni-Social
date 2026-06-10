@@ -281,6 +281,7 @@ def lanzar(
     autor: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
     clave_idem: str | None = None,
+    urgente: bool = False,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
 
@@ -330,8 +331,12 @@ def lanzar(
         endurecer=endurecer,
         # PRIORIDAD de despacho: el lote de FONDO (pipeline/autogen/QA de la fuente) cede el
         # paso a los lanzamientos manuales del equipo (API/MCP) en la cola del worker.
+        # `urgente` (solo fondo): el tema viene de una curación humana urgente (p. ej. una
+        # breaking empujada desde el panel) y adelanta al lote de fondo SIN pisar lo manual.
         prioridad=(
-            jobspec.PRIORIDAD_PIPELINE if tipo in _TIPOS_FONDO else jobspec.PRIORIDAD_MANUAL
+            (jobspec.PRIORIDAD_BREAKING if urgente else jobspec.PRIORIDAD_PIPELINE)
+            if tipo in _TIPOS_FONDO
+            else jobspec.PRIORIDAD_MANUAL
         ),
     )
     try:
@@ -429,6 +434,7 @@ def lanzar_copy(
     limpiar_pendiente: bool = False,
     etiqueta_exito: str = "",
     endurecer: dict[str, Any] | None = None,
+    urgente: bool = False,
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
@@ -491,7 +497,7 @@ def lanzar_copy(
         contenido_id or "", titulo_dado or "", ",".join(redes_ids), contexto,
     )
     return lanzar(
-        tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
+        tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt, urgente=urgente,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
         endurecer=endurecer, clave_idem=clave_estable,

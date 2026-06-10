@@ -273,9 +273,16 @@ TIPO_CONTENIDO_DEFECTO = "ia"
 #     da de alta con este origen lo añade el Flujo A; aquí solo se fija el valor y la regla.
 ORIGEN_EQUIPO = "equipo"
 
+# Tema creado al USAR una historia del panel de noticias (`api/noticias.usar_historia`):
+# curación HUMANA explícita (el equipo empujó esa historia, a menudo una breaking).
+ORIGEN_HISTORIA = "historia"
+
 # Orígenes de FUENTE que la auto-generación de copy trata como "tema redactable" (un
 # borrador se encola solo). Incluye las fuentes externas históricas + el alta creativa del
-# equipo (`equipo`). El alta tecleada legada (`origen=""`) NO está aquí: queda fuera de la
+# equipo (`equipo`) + las historias curadas desde el panel (`historia`: sin esto, si su
+# lanzamiento síncrono fallaba —cola llena, generación pausada, presupuesto— el tema moría
+# sin copy y SIN REINTENTO, invisible para ambos motores; medido en el piloto con una
+# breaking). El alta tecleada legada (`origen=""`) NO está aquí: queda fuera de la
 # auto-generación a propósito.
 ORIGENES_AUTOGEN: tuple[str, ...] = (
     "import-calendario",
@@ -283,6 +290,7 @@ ORIGENES_AUTOGEN: tuple[str, ...] = (
     "radar",
     "rss",
     ORIGEN_EQUIPO,
+    ORIGEN_HISTORIA,
 )
 
 # Eje (clase) de una etiqueta editorial del tablero (ola "organizacion"). Una etiqueta

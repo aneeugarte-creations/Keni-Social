@@ -30,7 +30,7 @@ from typing import Any
 
 from . import marcas, redes, repos
 from .dominio import generar as dom_generar
-from .estados import ORIGENES_AUTOGEN
+from .estados import ORIGENES_AUTOGEN, ORIGEN_HISTORIA
 
 _log = logging.getLogger("keni_consola.autogen_copy")
 
@@ -118,6 +118,10 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     redes_ids = _redes_de(item)
     gen = dom_generar.lanzar_copy(
         tipo="autogen",
+        # URGENTE si el tema nació de USAR una historia del panel (curación humana explícita,
+        # típicamente una breaking): su copy adelanta al lote de fondo en la cola del worker
+        # (PRIORIDAD_BREAKING), sin pisar los lanzamientos manuales.
+        urgente=(item.get("origen") or "") == ORIGEN_HISTORIA,
         marca=marca,
         contexto=nota,
         redes_ids=redes_ids,

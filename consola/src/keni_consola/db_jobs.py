@@ -340,6 +340,25 @@ def reencolar_job(gen_id: str) -> bool:
         con.close()
 
 
+def priorizar_job(gen_id: str, prioridad: int) -> bool:
+    """Sube la prioridad de despacho del job PENDIENTE de `gen_id`. True si lo tocó.
+
+    Solo actúa sobre jobs aún `pendiente` (uno reclamado ya corre; uno terminado ya salió):
+    el worker ordena por (prioridad DESC, creado), así que el job adelanta a todo lo de
+    prioridad menor en el siguiente claim. Decisión humana desde el Monitor ("este primero").
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE jobs SET prioridad = ? WHERE gen_id = ? AND estado = ?",
+            (int(prioridad), gen_id, JOB_PENDIENTE),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def cancelar_job(gen_id: str) -> bool:
     """Marca el job de un `gen_id` como cancelado (cross-proceso). True si habia un job.
 

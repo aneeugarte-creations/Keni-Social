@@ -189,6 +189,12 @@ export interface RespuestaReencolarCola {
   gen_id: string;
 }
 
+/** Respuesta de priorizar un job esperando (admin). */
+export interface RespuestaPriorizarCola {
+  priorizado: boolean;
+  gen_id: string;
+}
+
 // --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
 
 /** Una etapa de una run del pipeline (CI/CD/QA/Aprobación). */

@@ -6,6 +6,7 @@ import type {
   ColaMonitor,
   ColaSerie,
   RespuestaActividad,
+  RespuestaPriorizarCola,
   RespuestaPurgarCola,
   RespuestaReencolarCola,
 } from "@/types";
@@ -51,6 +52,12 @@ export const apiActividad = {
     peticion<RespuestaPurgarCola>("/actividad/cola/purgar", { metodo: "POST" }),
   colaReencolar: (genId: string) =>
     peticion<RespuestaReencolarCola>("/actividad/cola/reencolar", {
+      metodo: "POST",
+      json: { gen_id: genId },
+    }),
+  // Adelanta un job ESPERANDO al lote de fondo (lo sube a prioridad manual).
+  colaPriorizar: (genId: string) =>
+    peticion<RespuestaPriorizarCola>("/actividad/cola/priorizar", {
       metodo: "POST",
       json: { gen_id: genId },
     }),

@@ -51,6 +51,11 @@ def terminar_job(job_id: str) -> None:
     return db.terminar_job(job_id)
 
 
+def priorizar_job(gen_id: str, prioridad: int) -> bool:
+    """Sube la prioridad del job pendiente de una generación. Delegado en `db.py`."""
+    return db.priorizar_job(gen_id, prioridad)
+
+
 def cancelar_job(gen_id: str) -> bool:
     return db.cancelar_job(gen_id)
 

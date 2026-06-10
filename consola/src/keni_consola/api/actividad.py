@@ -380,6 +380,31 @@ async def cola_purgar(request: Request) -> Response:
     return JSONResponse({"purgados": purgados})
 
 
+async def cola_priorizar(request: Request) -> Response:
+    """POST /api/actividad/cola/priorizar {gen_id}: adelanta un job ESPERANDO. Admin.
+
+    Sube su prioridad de despacho a la de un lanzamiento manual (`PRIORIDAD_MANUAL`): el
+    worker lo clavará antes que todo el lote de fondo pendiente. Solo aplica a jobs aún
+    `pendiente` (los reclamados ya corren); 404 si no hay job pendiente para ese `gen_id`.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    try:
+        cuerpo = await request.json()
+    except Exception:  # noqa: BLE001 -- body no-JSON
+        cuerpo = {}
+    gen_id = (cuerpo.get("gen_id") or "").strip() if isinstance(cuerpo, dict) else ""
+    if not gen_id:
+        return JSONResponse({"error": "Falta el identificador de la generación."}, status_code=400)
+    from ..dominio import jobspec
+
+    if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_MANUAL):
+        return JSONResponse(
+            {"error": "No hay un job esperando para esa generación."}, status_code=404
+        )
+    return JSONResponse({"priorizado": True, "gen_id": gen_id})
+
+
 async def cola_reencolar(request: Request) -> Response:
     """POST /api/actividad/cola/reencolar {gen_id}: reintenta un job atascado/fallido. Admin.
 
@@ -418,6 +443,7 @@ RUTAS = [
     # Mas especificas ANTES que la generica para que Starlette case bien.
     Route("/api/actividad/cola/series", cola_series, methods=["GET"]),
     Route("/api/actividad/cola/purgar", cola_purgar, methods=["POST"]),
+    Route("/api/actividad/cola/priorizar", cola_priorizar, methods=["POST"]),
     Route("/api/actividad/cola/reencolar", cola_reencolar, methods=["POST"]),
     Route("/api/actividad/cola", cola, methods=["GET"]),
 ]

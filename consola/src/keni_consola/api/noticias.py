@@ -24,7 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_copy, config, marcas, redes, repos
+from .. import autogen_copy, config, estados, marcas, redes, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
@@ -593,7 +593,7 @@ async def usar_historia(request: Request) -> Response:
         prioridad="media",
         fecha_objetivo=hoy_utc().isoformat(),
         autor=autor_de_peticion(request),
-        origen="historia",
+        origen=estados.ORIGEN_HISTORIA,
         tipo_contenido="fuente",
         fecha_fuente=fecha_fuente,
         url_fuente=url_fuente or "",

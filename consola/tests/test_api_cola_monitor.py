@@ -188,6 +188,60 @@ def test_purgar_requiere_admin(entorno):
     assert repos.contar_jobs_activos() == 1
 
 
+def test_lanzar_urgente_encola_con_prioridad_breaking(entorno):
+    """`dominio.generar.lanzar(urgente=True)` en tipo de FONDO encola a PRIORIDAD_BREAKING.
+
+    Es el carril de las historias CURADAS desde el panel (breaking empujada por un humano):
+    su copy adelanta al lote de fondo sin pisar los lanzamientos manuales (10 > 5 > 0).
+    """
+    from keni_consola.dominio import generar as dom_generar
+
+    spec_proc = jobspec.construir_hashtags()
+    comunes = dict(
+        titulo="t", marca=_MARCA, prompt="p",
+        procesar=jobspec.reconstruir_procesar({"procesar": spec_proc}),
+        procesar_spec=spec_proc,
+    )
+    urgente = dom_generar.lanzar(tipo="autogen", urgente=True, clave_idem="k1", **comunes)
+    fondo = dom_generar.lanzar(tipo="autogen", clave_idem="k2", **comunes)
+    manual = dom_generar.lanzar(tipo="copy", clave_idem="k3", **comunes)
+    prios = {j["gen_id"]: j["prioridad"] for j in repos.jobs_activos()}
+    assert prios[urgente["id"]] == jobspec.PRIORIDAD_BREAKING
+    assert prios[fondo["id"]] == jobspec.PRIORIDAD_PIPELINE
+    assert prios[manual["id"]] == jobspec.PRIORIDAD_MANUAL
+
+
+def test_priorizar_adelanta_job_pendiente_admin(entorno):
+    """Priorizar sube el job ESPERANDO a prioridad manual: el worker lo clava antes que el fondo."""
+    primero = _encolar("Fondo viejo")
+    segundo = _encolar("Breaking esperando")
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/priorizar", json={"gen_id": segundo}, headers=_ORIGIN
+    )
+    assert r.status_code == 200 and r.json()["priorizado"] is True
+    # El priorizado adelanta: el siguiente claim se lleva al segundo, no al primero (FIFO roto).
+    job = cola.reclamar("w")
+    assert job is not None and job["gen_id"] == segundo
+    assert cola.reclamar("w2")["gen_id"] == primero
+
+
+def test_priorizar_job_reclamado_404(entorno):
+    """Un job ya RECLAMADO (corriendo) no se prioriza: 404 explicable."""
+    gen_id = _encolar()
+    cola.reclamar("w")
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/priorizar", json={"gen_id": gen_id}, headers=_ORIGIN
+    )
+    assert r.status_code == 404
+
+
+def test_priorizar_requiere_admin(entorno):
+    gen_id = _encolar()
+    assert _cli_como("editor").post(
+        "/api/actividad/cola/priorizar", json={"gen_id": gen_id}, headers=_ORIGIN
+    ).status_code == 403
+
+
 def test_reencolar_reintenta_job_terminado_admin(entorno):
     gen_id = _encolar()
     # Simula un job ya procesado: clavado + terminado (sale de la cola activa).

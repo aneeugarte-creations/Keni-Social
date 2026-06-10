@@ -1053,10 +1053,16 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
     repos.crear_contenido(
         clase="contenido", titulo="Tecleado a mano", marca="unotv", origen="",
     )
+    # Una historia USADA desde el panel (curación humana) también entra: si su lanzamiento
+    # síncrono falló (cola llena / generación pausada), este es su ÚNICO reintento.
+    historia = repos.crear_contenido(
+        clase="contenido", titulo="Breaking curada", marca="unotv", origen="historia",
+    )
     ids = {t["id"] for t in pc.temas_autogen_sin_copy()}
     assert bueno["id"] in ids
+    assert historia["id"] in ids
     # El tecleado (origen "") NO entra.
-    assert len(ids) == 1
+    assert len(ids) == 2
 
 
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):

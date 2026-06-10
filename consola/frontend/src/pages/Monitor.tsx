@@ -1,17 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Activity,
-  AlertTriangle,
-  Coins,
-  Boxes,
-  Clock,
-  Cpu,
-  Layers,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  XCircle,
-} from "lucide-react";
+import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Coins, Cpu, Layers, RefreshCw, RotateCcw, Trash2, XCircle } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -96,12 +84,17 @@ function TablaJobs({
   esAdmin,
   onCancelar,
   cancelandoId,
+  onPriorizar,
+  priorizandoId,
 }: {
   jobs: ColaJob[];
   mostrarWorker: boolean;
   esAdmin: boolean;
   onCancelar: (genId: string) => void;
   cancelandoId: string | null;
+  /** Solo la tabla «Esperando»: adelanta el job al lote de fondo (prioridad manual). */
+  onPriorizar?: (genId: string) => void;
+  priorizandoId?: string | null;
 }) {
   return (
     <Table>
@@ -146,16 +139,30 @@ function TablaJobs({
             </TableCell>
             {esAdmin && (
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  disabled={cancelandoId === j.gen_id}
-                  onClick={() => onCancelar(j.gen_id)}
-                >
-                  <XCircle className="mr-1 h-3.5 w-3.5" />
-                  Cancelar
-                </Button>
+                <span className="inline-flex items-center gap-1">
+                  {onPriorizar && j.prioridad <= 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={priorizandoId === j.gen_id}
+                      title="Adelanta este job a todo el lote de fondo que espera."
+                      onClick={() => onPriorizar(j.gen_id)}
+                    >
+                      <ArrowUp className="mr-1 h-3.5 w-3.5" />
+                      Priorizar
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={cancelandoId === j.gen_id}
+                    onClick={() => onCancelar(j.gen_id)}
+                  >
+                    <XCircle className="mr-1 h-3.5 w-3.5" />
+                    Cancelar
+                  </Button>
+                </span>
               </TableCell>
             )}
           </TableRow>
@@ -330,6 +337,7 @@ export default function Monitor() {
   // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
   const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
+  const [priorizandoId, setPriorizandoId] = React.useState<string | null>(null);
 
   const cola = useQuery({
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
@@ -366,6 +374,17 @@ export default function Monitor() {
     },
     onError: (e) => toast.error(mensajeError(e)),
     onSettled: () => setCancelandoId(null),
+  });
+
+  const priorizar = useMutation({
+    mutationFn: (genId: string) => api.colaPriorizar(genId),
+    onMutate: (genId: string) => setPriorizandoId(genId),
+    onSuccess: () => {
+      toast.success("Job priorizado: adelanta al lote de fondo.");
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+    onSettled: () => setPriorizandoId(null),
   });
 
   // Toggle REAL de un daemon: la MISMA mutación compartida que Configuración y el panel de la
@@ -565,6 +584,8 @@ export default function Monitor() {
               </CardHeader>
               <CardContent className="p-0">
                 <TablaJobs
+                  onPriorizar={(id) => priorizar.mutate(id)}
+                  priorizandoId={priorizandoId}
                   jobs={cola.data.esperando}
                   mostrarWorker={false}
                   esAdmin={esAdmin}

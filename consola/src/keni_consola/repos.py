@@ -193,6 +193,7 @@ from .repos_jobs import (  # noqa: F401
     job_cancelado,
     jobs_activos,
     reclamar_job,
+    priorizar_job,
     reencolar_job,
     registrar_gasto_ia,
     terminar_job,

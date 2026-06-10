@@ -161,6 +161,7 @@ def registrar_sondeo_feed(
     pausado_hasta: str = "",
     activo: bool | None = None,
     desactivado_auto: bool | None = None,
+    filtrados: int = 0,
 ) -> None:
     return db.registrar_sondeo_feed(
         feed_id,
@@ -171,6 +172,7 @@ def registrar_sondeo_feed(
         pausado_hasta=pausado_hasta,
         activo=activo,
         desactivado_auto=desactivado_auto,
+        filtrados=filtrados,
     )
 
 
