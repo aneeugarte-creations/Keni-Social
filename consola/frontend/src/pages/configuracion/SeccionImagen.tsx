@@ -31,10 +31,16 @@ import { cn } from "@/lib/utils";
 import { CLAVE_IMAGEN, PROVEEDORES, mensajeError } from "./lib";
 import { TarjetaColapsable } from "./TarjetaColapsable";
 
+/** Envoltorio con AUTOGUARDADO por rol (#153): los secretos de conexión son de admin.
+ * Montada en su página contextual, se oculta sola a un editor (sesión null = modo local
+ * pleno). El guard vive en un wrapper para no llamar hooks condicionalmente. */
 export function SeccionImagen() {
-  // Autoguardado por rol (#153): montada en el Estudio, se oculta sola a un editor.
   const { usuario } = useSesion();
   if (usuario !== null && usuario.rol !== "admin") return null;
+  return <SeccionImagenAdmin />;
+}
+
+function SeccionImagenAdmin() {
   const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_IMAGEN,

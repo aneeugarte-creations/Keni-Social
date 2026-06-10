@@ -324,11 +324,16 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
   );
 }
 
+/** Envoltorio con AUTOGUARDADO por rol (#153): los secretos de conexión son de admin.
+ * Montada en su página contextual, se oculta sola a un editor (sesión null = modo local
+ * pleno). El guard vive en un wrapper para no llamar hooks condicionalmente. */
 export function SeccionMetricool() {
-  // Autoguardado por rol: los secretos de conexión son de admin (#153); montada en la
-  // página de Métricas, se oculta sola a un editor (sesión null = modo local pleno).
   const { usuario } = useSesion();
   if (usuario !== null && usuario.rol !== "admin") return null;
+  return <SeccionMetricoolAdmin />;
+}
+
+function SeccionMetricoolAdmin() {
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_METRICOOL,
     queryFn: ({ signal }) => api.conexionesMetricool(signal),
