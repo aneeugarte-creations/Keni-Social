@@ -7,6 +7,9 @@
  *    ventana y desaparece fuera de ella.
  *  - Scrubbing: pointer down sobre la barra busca (seek) a la fracción correspondiente.
  *  - Espacio = play/pausa global, salvo foco en un campo editable o `atajoEspacio` apagado.
+ *  - RECORTE: la reproducción lo respeta como el render (play desde fuera salta a `recorte_in`,
+ *    al alcanzar `recorte_out` pausa clavada en el corte); el scrubbing recorre el clip entero
+ *    y el reloj muestra el tiempo del VÍDEO FINAL con las zonas descartadas atenuadas.
  *
  * jsdom no implementa HTMLMediaElement.play/pause: se mockean en el prototipo despachando los
  * eventos `play`/`pause` reales (los mismos que dispararía el navegador).
@@ -15,12 +18,31 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { composicionVacia, setClipBase, type ComposicionVideo, type SegmentoSub } from "@/lib/video";
+import {
+  composicionVacia,
+  setClipBase,
+  setRecorteBase,
+  type ComposicionVideo,
+  type SegmentoSub,
+} from "@/lib/video";
 
 import { PreviewComposicion, type PreviewPlayerHandle } from "./PreviewComposicion";
 
 function docConBase(duracionMs = 30000): ComposicionVideo {
   return setClipBase(composicionVacia("9:16", "unotv"), "videos/abc.mp4", duracionMs);
+}
+
+/** Clip de 30 s recortado a 6–21 s: el vídeo final durará 15 s. */
+function docRecortado(): ComposicionVideo {
+  return setRecorteBase(docConBase(30000), 6000, 21000, 30000);
+}
+
+/** Carga los metadatos del <video> (jsdom no los emite): duración real del clip crudo. */
+function cargarMetadatos(container: HTMLElement, durSeg = 30): HTMLVideoElement {
+  const video = container.querySelector("video")!;
+  Object.defineProperty(video, "duration", { value: durSeg, configurable: true });
+  fireEvent(video, new Event("loadedmetadata"));
+  return video;
 }
 
 const SEGMENTOS: SegmentoSub[] = [{ id: "s1", inicio: 1, fin: 2, texto: "Hola México" }];
@@ -70,10 +92,13 @@ describe("PreviewComposicion (player)", () => {
     const barra = screen.getByRole("slider", { name: /posición de reproducción/i });
     expect(barra).toHaveAttribute("aria-valuetext", "00:00 de 00:30");
     // Metadatos reales: 45 s (jsdom expone `duration` solo-lectura; se redefine en la instancia).
-    const video = container.querySelector("video")!;
-    Object.defineProperty(video, "duration", { value: 45, configurable: true });
-    fireEvent(video, new Event("loadedmetadata"));
-    expect(barra).toHaveAttribute("aria-valuetext", "00:00 de 00:45");
+    // El documento dice `recorte_out` = 30 s, así que los 15 s extra cuentan como RECORTE: el
+    // render aplicará -to 30 s y el slider lo expone como vídeo final (igual que la reproducción).
+    cargarMetadatos(container, 45);
+    expect(barra).toHaveAttribute(
+      "aria-valuetext",
+      "00:00 de 00:45 (vídeo final: 00:00 de 00:30)",
+    );
   });
 
   it("pinta el subtítulo activo SINCRONIZADO con el tiempo del video (timeupdate)", () => {
@@ -177,5 +202,85 @@ describe("PreviewComposicion (player)", () => {
     act(() => ref.current!.buscarA(12));
     expect(video.currentTime).toBeCloseTo(12, 5);
     expect(onTiempo).toHaveBeenLastCalledWith(12);
+  });
+
+  it("play desde fuera del recorte salta a recorte_in; desde dentro no recoloca", async () => {
+    const { container } = render(<PreviewComposicion doc={docRecortado()} baseUrl="videos/abc.mp4" />);
+    const video = cargarMetadatos(container);
+    // t=0 está ANTES del corte (6–21 s): play arranca en recorte_in.
+    fireEvent.click(screen.getByRole("button", { name: "Reproducir" }));
+    expect(video.currentTime).toBeCloseTo(6, 5);
+    expect(playMock).toHaveBeenCalledTimes(1);
+    // Pausa, busca DENTRO del corte y reanuda: play NO recoloca (sigue donde estaba).
+    fireEvent.click(await screen.findByRole("button", { name: "Pausar" }));
+    video.currentTime = 10;
+    fireEvent(video, new Event("timeupdate"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reproducir" }));
+    expect(video.currentTime).toBeCloseTo(10, 5);
+  });
+
+  it("al alcanzar recorte_out la reproducción se pausa clavada en el corte, lista para replay", async () => {
+    const { container } = render(<PreviewComposicion doc={docRecortado()} baseUrl="videos/abc.mp4" />);
+    const video = cargarMetadatos(container);
+    fireEvent.click(screen.getByRole("button", { name: "Reproducir" }));
+    expect(pauseMock).not.toHaveBeenCalled();
+    // La reproducción cruza recorte_out (21 s): el player pausa y clava el frame en el corte.
+    video.currentTime = 21.3;
+    fireEvent(video, new Event("timeupdate"));
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(video.currentTime).toBeCloseTo(21, 5);
+    // Replay: el siguiente play vuelve a recorte_in.
+    fireEvent.click(await screen.findByRole("button", { name: "Reproducir" }));
+    expect(video.currentTime).toBeCloseTo(6, 5);
+  });
+
+  it("en pausa, el scrubbing puede inspeccionar la zona descartada sin que el player la corrija", () => {
+    const { container } = render(<PreviewComposicion doc={docRecortado()} baseUrl="videos/abc.mp4" />);
+    const video = cargarMetadatos(container);
+    const barra = screen.getByRole("slider", { name: /posición de reproducción/i });
+    vi.spyOn(barra, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 4,
+      right: 100,
+      bottom: 4,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    // 90 % de 30 s = 27 s, DESPUÉS de recorte_out: el seek se respeta (inspección libre).
+    fireEvent.mouseDown(barra, { clientX: 90 });
+    fireEvent.mouseUp(window);
+    expect(video.currentTime).toBeCloseTo(27, 5);
+    expect(pauseMock).not.toHaveBeenCalled();
+  });
+
+  it("el reloj muestra el tiempo del VÍDEO FINAL y la barra atenúa las zonas descartadas", () => {
+    const { container } = render(<PreviewComposicion doc={docRecortado()} baseUrl="videos/abc.mp4" />);
+    const video = cargarMetadatos(container);
+    // Zonas descartadas atenuadas: cabeza 6/30 = 20 %, cola (30−21)/30 = 30 %.
+    expect(screen.getByTestId("barra-descarte-in").style.width).toBe("20%");
+    expect(screen.getByTestId("barra-descarte-out").style.width).toBe("30%");
+    // Antes del corte, el reloj del vídeo final marca 0 de 15 s.
+    video.currentTime = 2;
+    fireEvent(video, new Event("timeupdate"));
+    expect(screen.getByText("00:00 / 00:15")).toBeInTheDocument();
+    // Dentro del corte: 10 s del clip = 4 s del vídeo final; el slider expone ambos ejes.
+    video.currentTime = 10;
+    fireEvent(video, new Event("timeupdate"));
+    expect(screen.getByText("00:04 / 00:15")).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: /posición de reproducción/i })).toHaveAttribute(
+      "aria-valuetext",
+      "00:10 de 00:30 (vídeo final: 00:04 de 00:15)",
+    );
+  });
+
+  it("sin recorte efectivo no hay zonas atenuadas y el reloj es el del clip", () => {
+    const { container } = render(<PreviewComposicion doc={docConBase(30000)} baseUrl="videos/abc.mp4" />);
+    cargarMetadatos(container);
+    expect(screen.queryByTestId("barra-descarte-in")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("barra-descarte-out")).not.toBeInTheDocument();
+    expect(screen.getByText("00:00 / 00:30")).toBeInTheDocument();
   });
 });

@@ -276,7 +276,10 @@ function leerRespaldo(clave: string | null): SegmentoSub[] | null {
     if (!crudo) return null;
     const segs = normalizarSegmentos(JSON.parse(crudo));
     return segs.length > 0 ? segs : null;
-  } catch {
+  } catch (e) {
+    // Respaldo corrupto o sessionStorage inaccesible: se descarta (gana el dato del servidor),
+    // pero se deja rastro — un respaldo que no restaura son correcciones humanas perdidas.
+    console.warn(`Respaldo de subtítulos ilegible en sessionStorage (${clave}); se descarta.`, e);
     return null;
   }
 }

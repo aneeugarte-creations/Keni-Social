@@ -16,9 +16,10 @@
  *     que el render fuera a ignorar. El trim SÍ lo respeta: `construir_comando` lo aplica con
  *     `-ss`/`-to` antes del input de FFmpeg.
  *
- * El eje temporal es el del CLIP BASE CRUDO (lo mismo que reproduce el <video> del preview):
- * el recorte se dibuja como tarjeta dentro de ese eje y lo de fuera queda atenuado. El player
- * sigue reproduciendo el clip completo; el recorte se aplica en el render.
+ * El eje temporal es el del CLIP BASE CRUDO (lo mismo que recorre el scrubbing del preview):
+ * el recorte se dibuja como tarjeta dentro de ese eje y lo de fuera queda atenuado. La
+ * REPRODUCCIÓN respeta el recorte igual que el render (PreviewComposicion arranca en
+ * `recorte_in` y pausa en `recorte_out`); el scrubbing sí recorre el clip completo.
  */
 import * as React from "react";
 
@@ -330,7 +331,8 @@ export function LineaTiempo({
         </div>
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground/70">
-        El recorte (in/out) se aplica en el render; el player reproduce el clip completo.
+        La reproducción y el render respetan el recorte (in/out); el scrubbing recorre el clip
+        completo.
       </p>
     </div>
   );

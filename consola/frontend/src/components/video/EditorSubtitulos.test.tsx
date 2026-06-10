@@ -4,6 +4,7 @@
  *  - Al volver con un respaldo pendiente, se RESTAURA (gana al dato del servidor) con aviso
  *    "cambios sin guardar restaurados" y «Guardar correcciones» habilitado.
  *  - Guardar en el servidor limpia el respaldo y el aviso.
+ *  - Un respaldo CORRUPTO se descarta con `console.warn` (rastro) y gana el dato del servidor.
  *
  * `useGeneracion` se mockea (aquí no se ejercita la transcripción en vivo).
  */
@@ -100,5 +101,16 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
     await waitFor(() =>
       expect(screen.queryByText(/cambios sin guardar restaurados/i)).not.toBeInTheDocument(),
     );
+  });
+
+  it("un respaldo corrupto se descarta con console.warn y gana el dato del servidor", async () => {
+    sessionStorage.setItem(CLAVE, "{respaldo-corrupto");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    renderEditor();
+    // Cae al dato del servidor, sin aviso de restauración (no había nada restaurable).
+    expect(await screen.findByDisplayValue("ola desde mejico")).toBeInTheDocument();
+    expect(screen.queryByText(/cambios sin guardar restaurados/i)).not.toBeInTheDocument();
+    // Y deja rastro con CONTEXTO (la clave del respaldo) + el error original.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(CLAVE), expect.anything());
   });
 });

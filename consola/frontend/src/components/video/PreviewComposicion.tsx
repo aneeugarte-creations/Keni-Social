@@ -20,6 +20,12 @@
  * (best-effort: la sincronía fiel es del render). Espacio = play/pausa salvo que el foco esté
  * en un control editable; se apaga vía `atajoEspacio` cuando otro editor usa la barra
  * (p. ej. el pan con espacio del Lienzo en la sección Overlay).
+ *
+ * RECORTE (trim): la reproducción RESPETA `recorte_in_ms`/`recorte_out_ms` del clip base igual
+ * que lo hará el render (-ss/-to en FFmpeg): play desde fuera del rango arranca en `recorte_in`
+ * y al alcanzar `recorte_out` se pausa clavada en el corte (play de nuevo = replay desde
+ * `recorte_in`). El SCRUBBING sí recorre el clip completo (estilo Canva: lo descartado se ve
+ * atenuado en la barra) y el reloj muestra el tiempo DEL VÍDEO FINAL, no el del clip crudo.
  */
 import { Pause, Play } from "lucide-react";
 import * as React from "react";
@@ -109,12 +115,51 @@ export function PreviewComposicion({
   // Duración total a mostrar: la real del <video> si ya cargó metadatos; si no, la del documento.
   const durTotal = duracion > 0 ? duracion : (doc.duracion_ms || 0) / 1000;
 
+  // ── RECORTE del clip base (en segundos, leído del documento: NO se duplica estado) ──────────
+  // El render solo incluirá [recorte_in, recorte_out]; la reproducción lo respeta (ver cabecera).
+  const clipBase = pistaBase(doc)?.clips[0];
+  const recInSeg = Math.max(0, (clipBase?.recorte_in_ms ?? 0) / 1000);
+  const recOutCrudo = (clipBase?.recorte_out_ms ?? 0) / 1000;
+  const recOutSeg = recOutCrudo > 0 ? recOutCrudo : durTotal;
+  // Hay recorte efectivo si algún borde deja fuera ≥ 50 ms (evita falsos positivos por redondeo
+  // entre la duración de los metadatos y el `recorte_out` guardado en ms).
+  const hayRecorte = durTotal > 0 && (recInSeg > 0.05 || recOutSeg < durTotal - 0.05);
+
   // Cambiar de clip resetea el player (nuevo video = reloj a cero, en pausa).
   React.useEffect(() => {
     setReproduciendo(false);
     setTiempo(0);
     setDuracion(0);
   }, [baseUrl]);
+
+  /**
+   * Avanza el reloj con TOPE en `recorte_out`: mientras REPRODUCE, al alcanzar el corte pausa
+   * base y PiP y clava el frame ahí (igual que terminará el vídeo final; play de nuevo = replay
+   * desde `recorte_in` vía `alternar`). En pausa NO interviene: el scrubbing puede inspeccionar
+   * libremente la parte descartada del clip.
+   */
+  const avanzarReloj = React.useCallback(
+    (v: HTMLVideoElement) => {
+      const t = v.currentTime || 0;
+      if (reproduciendo && hayRecorte && t >= recOutSeg) {
+        v.pause();
+        try {
+          videoPipRef.current?.pause();
+        } catch {
+          /* preview best-effort */
+        }
+        try {
+          v.currentTime = recOutSeg;
+        } catch {
+          /* metadatos aún no listos */
+        }
+        setTiempo(recOutSeg);
+        return;
+      }
+      setTiempo(t);
+    },
+    [reproduciendo, hayRecorte, recOutSeg],
+  );
 
   // Mientras reproduce, un rAF lee `currentTime` del <video> para un reloj fluido (los eventos
   // `timeupdate` solo llegan ~4 veces/s). `timeupdate` queda como red de seguridad (y para
@@ -126,36 +171,12 @@ export function PreviewComposicion({
     let raf = 0;
     const tick = () => {
       const v = videoBaseRef.current;
-      if (v) setTiempo(v.currentTime || 0);
+      if (v) avanzarReloj(v);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [reproduciendo]);
-
-  /** Play/pausa del base, arrastrando al PiP (best-effort; la sincronía fiel es del render). */
-  const alternar = React.useCallback(() => {
-    const v = videoBaseRef.current;
-    if (!v) return;
-    const pip = videoPipRef.current;
-    if (reproduciendo) {
-      v.pause();
-      try {
-        pip?.pause();
-      } catch {
-        /* preview best-effort */
-      }
-    } else {
-      // `play()` puede devolver undefined (jsdom) o una promesa que rechaza (autoplay): ambas
-      // se absorben — si no arranca, el estado simplemente no pasa a "reproduciendo".
-      void Promise.resolve(v.play()).catch(() => {});
-      try {
-        void Promise.resolve(pip?.play()).catch(() => {});
-      } catch {
-        /* preview best-effort */
-      }
-    }
-  }, [reproduciendo]);
+  }, [reproduciendo, avanzarReloj]);
 
   /** Busca a `t` segundos (clamp a [0, durTotal]) en base + PiP y refresca el reloj. */
   const buscarA = React.useCallback(
@@ -181,6 +202,36 @@ export function PreviewComposicion({
     },
     [durTotal],
   );
+
+  /** Play/pausa del base, arrastrando al PiP (best-effort; la sincronía fiel es del render). */
+  const alternar = React.useCallback(() => {
+    const v = videoBaseRef.current;
+    if (!v) return;
+    const pip = videoPipRef.current;
+    if (reproduciendo) {
+      v.pause();
+      try {
+        pip?.pause();
+      } catch {
+        /* preview best-effort */
+      }
+    } else {
+      // Respeta el recorte como lo hará el render: play desde FUERA del rango (antes de
+      // `recorte_in` o en/tras `recorte_out`) arranca en `recorte_in` (replay incluido).
+      if (hayRecorte) {
+        const t = v.currentTime || 0;
+        if (t < recInSeg || t >= recOutSeg - 0.05) buscarA(recInSeg);
+      }
+      // `play()` puede devolver undefined (jsdom) o una promesa que rechaza (autoplay): ambas
+      // se absorben — si no arranca, el estado simplemente no pasa a "reproduciendo".
+      void Promise.resolve(v.play()).catch(() => {});
+      try {
+        void Promise.resolve(pip?.play()).catch(() => {});
+      } catch {
+        /* preview best-effort */
+      }
+    }
+  }, [reproduciendo, hayRecorte, recInSeg, recOutSeg, buscarA]);
 
   // Integración con el timeline: expone `buscarA` (seeks externos) y notifica reloj/duración.
   // Son props opcionales: sin ellas el player se comporta exactamente igual que antes.
@@ -254,17 +305,21 @@ export function PreviewComposicion({
   const anchoPx = w * escala;
   const altoPx = h * escala;
 
-  const base = pistaBase(doc);
   const pip = pistaPip(doc);
   const overlay = pistaOverlay(doc);
   const subs = pistaSubtitulos(doc);
   const preset = presetParaAspecto(doc.formato.preset);
 
-  const clipBase = base?.clips[0];
   const clipPip = pip?.clips[0];
 
   const segActivo = segmentos && segmentos.length > 0 ? segmentoEn(segmentos, tiempo) : null;
   const progresoPct = durTotal > 0 ? Math.min(100, (tiempo / durTotal) * 100) : 0;
+  // Reloj del VÍDEO FINAL: con recorte, el contador corre desde `recorte_in` y el total es la
+  // duración recortada (lo que de verdad quedará tras el render). Sin recorte, el clip entero.
+  const durFinalSeg = hayRecorte ? Math.max(0, recOutSeg - recInSeg) : durTotal;
+  const tiempoFinalSeg = hayRecorte
+    ? Math.min(Math.max(0, tiempo - recInSeg), durFinalSeg)
+    : tiempo;
   // Controles visibles en pausa; durante la reproducción solo al hover/foco (estilo Canva).
   const visControles = reproduciendo
     ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
@@ -288,7 +343,7 @@ export function PreviewComposicion({
             onPlay={() => setReproduciendo(true)}
             onPause={() => setReproduciendo(false)}
             onEnded={() => setReproduciendo(false)}
-            onTimeUpdate={(e) => setTiempo(e.currentTarget.currentTime || 0)}
+            onTimeUpdate={(e) => avanzarReloj(e.currentTarget)}
             onLoadedMetadata={(e) => {
               const d = e.currentTarget.duration;
               if (Number.isFinite(d) && d > 0) setDuracion(d);
@@ -430,7 +485,11 @@ export function PreviewComposicion({
                 aria-valuemin={0}
                 aria-valuemax={Math.round(durTotal)}
                 aria-valuenow={Math.round(Math.min(tiempo, durTotal))}
-                aria-valuetext={`${formatearDuracionMs(tiempo * 1000)} de ${formatearDuracionMs(durTotal * 1000)}`}
+                aria-valuetext={`${formatearDuracionMs(tiempo * 1000)} de ${formatearDuracionMs(durTotal * 1000)}${
+                  hayRecorte
+                    ? ` (vídeo final: ${formatearDuracionMs(tiempoFinalSeg * 1000)} de ${formatearDuracionMs(durFinalSeg * 1000)})`
+                    : ""
+                }`}
                 onMouseDown={iniciarScrub}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowRight") {
@@ -448,15 +507,38 @@ export function PreviewComposicion({
                   className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white"
                   style={{ width: `${progresoPct}%` }}
                 />
+                {/* Zonas DESCARTADAS por el recorte, atenuadas (estilo Canva): se puede scrubbear
+                    sobre ellas para inspeccionar, pero NO estarán en el vídeo final. */}
+                {hayRecorte && recInSeg > 0 && (
+                  <div
+                    data-testid="barra-descarte-in"
+                    className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-l-full bg-black/60"
+                    style={{ width: `${Math.min(100, (recInSeg / durTotal) * 100)}%` }}
+                  />
+                )}
+                {hayRecorte && recOutSeg < durTotal && (
+                  <div
+                    data-testid="barra-descarte-out"
+                    className="absolute right-0 top-1/2 h-1 -translate-y-1/2 rounded-r-full bg-black/60"
+                    style={{ width: `${Math.min(100, ((durTotal - recOutSeg) / durTotal) * 100)}%` }}
+                  />
+                )}
                 <div
                   className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow"
                   style={{ left: `${progresoPct}%` }}
                 />
               </div>
 
-              {/* Reloj actual / total */}
-              <span className="shrink-0 text-[10px] tabular-nums text-white/90">
-                {formatearDuracionMs(tiempo * 1000)} / {formatearDuracionMs(durTotal * 1000)}
+              {/* Reloj actual / total del VÍDEO FINAL (con recorte, lo que quedará tras el render). */}
+              <span
+                className="shrink-0 text-[10px] tabular-nums text-white/90"
+                title={
+                  hayRecorte
+                    ? `Tiempo del vídeo final (corte ${formatearDuracionMs(recInSeg * 1000)}–${formatearDuracionMs(recOutSeg * 1000)} del clip)`
+                    : undefined
+                }
+              >
+                {formatearDuracionMs(tiempoFinalSeg * 1000)} / {formatearDuracionMs(durFinalSeg * 1000)}
               </span>
             </div>
           </>
