@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import type { PipelineActividad, PipelineGeneracion, RespuestaPipelineDetalle } from "@/types";
 
-import { ChipEstado, ETAPA_A_EVENTO, PanelEtapa, TiraEtapas } from "./Pipelines";
+import { ChipEstado, ETAPA_A_EVENTO, MetricasPipeline, PanelEtapa, TiraEtapas } from "./Pipelines";
 import { tiempoRelativo } from "@/lib/fecha";
 import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 
@@ -47,11 +47,11 @@ export default function PipelineDetalle() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
         <Link
-          to="/datos/actividad/pipelines"
+          to="/datos/produccion"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Pipelines
+          Producción
         </Link>
         <Button variant="ghost" size="sm" className="gap-1" onClick={() => q.refetch()} disabled={q.isFetching}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -79,6 +79,8 @@ export default function PipelineDetalle() {
               <span className="rounded border px-2 py-0.5 text-xs">{run.marca_nombre || run.marca}</span>
               <ChipEstado estado={run.estado_global} />
               <span className="text-xs text-muted-foreground">{tiempoRelativo(run.creado)}</span>
+              {/* Coste real de la run: tokens/coste/duración sumados de sus generaciones. */}
+              <MetricasPipeline metricas={run.metricas} className="ml-auto" />
             </div>
             <h1 className="text-lg font-semibold leading-snug">{run.titulo}</h1>
           </div>

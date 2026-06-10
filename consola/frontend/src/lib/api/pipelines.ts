@@ -7,10 +7,11 @@ import type {
 } from "@/types";
 
 export const apiPipelines = {
-  // --- Pipelines (vista CI/CD del pipeline de contenido) ---
+  // --- Feed unificado de Producción (runs del pipeline + actividad suelta) ---
   pipelines: (
     params: {
-      marca?: string; etapa?: string; estado?: string; limite?: number; desplazamiento?: number;
+      marca?: string; etapa?: string; estado?: string; tipo?: string; clase?: string;
+      limite?: number; desplazamiento?: number;
     } = {},
     signal?: AbortSignal,
   ) =>
@@ -19,6 +20,8 @@ export const apiPipelines = {
         marca: params.marca,
         etapa: params.etapa || undefined,
         estado: params.estado || undefined,
+        tipo: params.tipo || undefined,
+        clase: params.clase || undefined,
         limite: params.limite != null ? String(params.limite) : undefined,
         desplazamiento: params.desplazamiento != null ? String(params.desplazamiento) : undefined,
       })}`,

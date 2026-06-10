@@ -510,3 +510,115 @@ def test_detalle_sin_gen_id_no_trae_generacion(cliente):
     registrar_etapa(ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"])
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
     assert body["generaciones_por_etapa"] == {}
+
+
+# --------------------------------------------------------------------------- #
+# Feed UNIFICADO (página Producción): runs + actividad suelta en una lista     #
+# --------------------------------------------------------------------------- #
+
+
+def _gen_suelta(etiqueta: str = "Copy manual", marca: str = "unotv", **extra) -> dict:
+    base = {
+        "tipo": "copy", "marca": marca, "etiqueta": etiqueta,
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 100, "tokens_out": 50, "total_cost_usd": 0.02,
+                     "duration_ms": 3000, "num_turns": 2},
+    }
+    base.update(extra)
+    return generaciones.crear(base)
+
+
+def test_feed_unificado_mezcla_runs_y_actividad_suelta(cliente):
+    """La lista trae las runs (`clase='run'`) Y la actividad suelta (`clase='actividad'`)
+    como item de UNA etapa (su tipo de trabajo) con métricas; los marcadores de etapa NO salen."""
+    _tema_pipeline("Run del feed")
+    _gen_suelta("Copy a mano")
+    generaciones.crear({  # marcador de etapa: sin coste, fuera del feed
+        "tipo": "pipeline_etapa", "marca": "unotv", "etiqueta": "CD · Generación de copy",
+        "estado": generaciones.ESTADO_COMPLETADO,
+    })
+    items = cliente.get("/api/pipelines").json()["pipelines"]
+    por_titulo = {x["titulo"]: x for x in items}
+    assert por_titulo["Run del feed"]["clase"] == "run"
+    suelta = por_titulo["Copy a mano"]
+    assert suelta["clase"] == "actividad"
+    assert suelta["estado_global"] == "ok"
+    assert len(suelta["etapas"]) == 1
+    assert suelta["etapas"][0]["clave"] == "trabajo"
+    assert suelta["etapas"][0]["es_ia"] is True
+    assert suelta["tipo"] == "copy"
+    assert suelta["metricas"]["tokens"] == 150
+    assert suelta["metricas"]["coste_usd"] == pytest.approx(0.02)
+    assert suelta["metricas"]["duration_ms"] == 3000
+    assert all(x["titulo"] != "CD · Generación de copy" for x in items)
+
+
+def test_run_suma_metricas_de_sus_generaciones(cliente):
+    """Una generación correlacionada a la run (contenido_id) NO sale suelta: su coste se
+    SUMA en `metricas` de la run (antes salía duplicada en la pestaña Feed)."""
+    tema = _tema_pipeline("Run con coste")
+    _gen_suelta("Copy de la run", contenido_id=tema["id"])
+    _gen_suelta("Arte de la run", tipo="imagen", contenido_id=tema["id"],
+                metricas={"tokens_in": 10, "tokens_out": 10, "total_cost_usd": 0.005,
+                          "duration_ms": 1000})
+    items = cliente.get("/api/pipelines").json()["pipelines"]
+    titulos = {x["titulo"] for x in items}
+    assert "Copy de la run" not in titulos
+    assert "Arte de la run" not in titulos
+    run = next(x for x in items if x["titulo"] == "Run con coste")
+    assert run["metricas"]["items"] == 2
+    assert run["metricas"]["tokens"] == 150 + 20
+    assert run["metricas"]["coste_usd"] == pytest.approx(0.025)
+    assert run["metricas"]["duration_ms"] == 4000
+    # El detalle trae las MISMAS métricas (no se contradicen tarjeta y página).
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()["pipeline"]
+    assert det["metricas"] == run["metricas"]
+
+
+def test_filtros_clase_y_tipo(cliente):
+    """`?clase=` separa runs de actividad suelta; `?tipo=` filtra los sueltos por su trabajo."""
+    _tema_pipeline("Run filtrable")
+    _gen_suelta("Suelta copy")
+    _gen_suelta("Suelta imagen", tipo="imagen")
+    solo_runs = cliente.get("/api/pipelines?clase=run").json()["pipelines"]
+    assert all(x["clase"] == "run" for x in solo_runs)
+    solo_actividad = cliente.get("/api/pipelines?clase=actividad").json()["pipelines"]
+    assert all(x["clase"] == "actividad" for x in solo_actividad)
+    imagenes = cliente.get("/api/pipelines?tipo=imagen").json()["pipelines"]
+    assert {x["titulo"] for x in imagenes} == {"Suelta imagen"}
+    # Valor inválido de clase: se ignora (200 con el conjunto sin filtrar).
+    assert cliente.get("/api/pipelines?clase=zzz").status_code == 200
+
+
+def test_fusion_editorial_no_saltada_si_el_pool_corrio(cliente):
+    """Run SIN historia pero con la IA del pool corrida (generaciones Fusión/Encaje de la
+    marca): Fusión y Editorial se pintan 'ok' con detalle honesto, NO 'saltada' — antes la
+    página enseñaba 'Saltada' junto a un bloque IA completado con output (contradicción)."""
+    tema = _tema_pipeline("Run sin grupo")
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "prompt": "P", "salida": "S",
+        "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
+    })
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
+        "prompt": "P", "salida": "S",
+        "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
+    })
+    run = _run_por_titulo(cliente, "Run sin grupo")
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["fusion"]["estado"] == "ok"
+    assert "Sin grupo" in etapas["fusion"]["detalle"]
+    assert etapas["editorial"]["estado"] == "ok"
+    # El detalle deriva IGUAL (misma evidencia) y además enlaza la generación del pool.
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    det_etapas = {e["clave"]: e for e in det["pipeline"]["etapas"]}
+    assert det_etapas["fusion"]["estado"] == "ok"
+    assert det_etapas["editorial"]["estado"] == "ok"
+    assert det["generaciones_por_etapa"]["FUSION"]["salida"] == "S"
+    # Sin pool ni historia (otra marca): sigue 'saltada' (sin evidencia no se inventa nada).
+    _tema_pipeline("Run sin evidencia", marca="claro-sports")
+    sin = _run_por_titulo(cliente, "Run sin evidencia")
+    sin_etapas = {e["clave"]: e["estado"] for e in sin["etapas"]}
+    assert sin_etapas["fusion"] == "saltada"
+    assert sin_etapas["editorial"] == "saltada"

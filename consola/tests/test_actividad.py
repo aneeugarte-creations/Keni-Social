@@ -206,6 +206,8 @@ def test_agregados_total_por_tipo_y_por_dia():
     assert agg["total"]["items"] == 3
     assert agg["total"]["tokens"] == 140 + 15 + 180
     assert agg["total"]["coste_usd"] == pytest.approx(0.01 + 0.002 + 0.0123)
+    # Tiempo de computo IA sumado (g2 no trae duration_ms: suma 0).
+    assert agg["total"]["duration_ms"] == 1200 + 4200
 
     tipos = {f["tipo"]: f for f in agg["por_tipo"]}
     assert set(tipos) == {"copy", "rss", "run"}
@@ -223,7 +225,7 @@ def test_agregados_total_por_tipo_y_por_dia():
 
 def test_agregados_vacio():
     agg = actividad.agregados([], [])
-    assert agg["total"] == {"items": 0, "coste_usd": 0, "tokens": 0}
+    assert agg["total"] == {"items": 0, "coste_usd": 0, "tokens": 0, "duration_ms": 0}
     assert agg["por_tipo"] == []
     assert agg["por_dia"] == []
 

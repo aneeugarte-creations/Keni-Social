@@ -76,8 +76,7 @@ rutas_frontend = [
   "/datos/investigacion/fuentes",
   "/datos/investigacion/cajones",
   "/datos/investigacion/termometro",
-  "/datos/actividad",
-  "/datos/actividad/pipelines",
+  "/datos/produccion",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -129,15 +128,15 @@ grupo_orden = 30
 orden = 10
 
 [[nav]]
-ruta = "/datos/actividad"
-etiqueta = "Actividad IA"
+ruta = "/datos/produccion"
+etiqueta = "Producción"
 icono = "Activity"
-descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) con su coste y consumo, y los Pipelines (vista CI/CD del pipeline de contenido, etapa a etapa). Pestañas Actividad / Pipelines."
+descripcion = "Todo lo que la máquina produce, en una línea temporal: las runs del pipeline (etapa a etapa) y la actividad suelta de IA (copy, imágenes, investigación…), con conteos, coste, tokens y tiempo. Pestañas Producción / Monitor."
 grupo = "datos"
 grupo_orden = 30
 orden = 30
-# Pipelines dejó de ser una entrada suelta del sidebar: ahora es la pestaña
-# `/datos/actividad/pipelines` del hub Actividad IA (ver `hub-tabs.ts`).
+# Antes se llamaba «Actividad IA» y tenía pestañas Feed/Pipelines: HOY están fusionadas
+# en este feed único (/datos/produccion); las rutas viejas redirigen en `router.tsx`.
 
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
 # de la página Texto y dejó de ser una entrada de nav.)

@@ -1,29 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, ChevronRight, GitBranch, OctagonAlert, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Clock, Coins, OctagonAlert, Sparkles } from "lucide-react";
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
 
-import { BloqueError } from "@/components/comunes/BloqueError";
 import { aspectoEstado, ChipEstado } from "@/components/comunes/ChipEstado";
-import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Markdown } from "@/components/ui/Markdown";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
-import { INTERVALO_SERIE_MS } from "@/lib/refresco";
+import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
+import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { cn } from "@/lib/utils";
 import type {
   Pipeline,
@@ -32,8 +16,8 @@ import type {
   PipelineEtapa,
   PipelineGeneracion,
   PipelineHallazgo,
+  PipelineMetricas,
   PipelineQaFuente,
-  RespuestaPipelines,
 } from "@/types";
 
 // Verificación por corroboración (Ola D) -> etiqueta corta para los chips de procedencia IA.
@@ -53,7 +37,7 @@ export const ETAPA_A_EVENTO: Record<string, string> = {
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
-const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
+export const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "fusion", nombre: "Fusión" },
   { clave: "editorial", nombre: "Editorial" },
   { clave: "ci", nombre: "Selección" },
@@ -64,15 +48,13 @@ const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
 ];
 // Valores del filtro `?estado=` (el `estado_global` de la run). Nombres = los del chip
 // único (`aspectoEstado`): el filtro y el badge dicen lo mismo.
-const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
+export const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "pendiente", nombre: "Pendiente" },
   { clave: "en_curso", nombre: "En curso" },
   { clave: "revisar", nombre: "Revisar" },
   { clave: "fallo", nombre: "Error" },
   { clave: "ok", nombre: "Completado" },
 ];
-// Tamaño de página del botón «Cargar más» (se pide `limite = páginas * PAGINA`, offset 0).
-const PAGINA = 20;
 
 /** Chip de la criba de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
  *  Nada si aún no hay veredicto (criba pendiente/en curso: lo cubre la tira de etapas). */
@@ -209,27 +191,75 @@ export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
   );
 }
 
-/** Tarjeta de una run: TODA la tarjeta es clicable (abre el detalle). */
-function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: (id: string) => void }) {
+/** Chips de las MÉTRICAS de un item del feed (tokens · coste · duración). Nada si no hay
+ *  ninguna métrica todavía (run sin generaciones / trabajo aún en cola). */
+export function MetricasPipeline({ metricas, className }: { metricas?: PipelineMetricas; className?: string }) {
+  if (!metricas) return null;
+  const { tokens, coste_usd, duration_ms } = metricas;
+  if (tokens == null && coste_usd == null && duration_ms == null) return null;
+  if (!metricas.items && !tokens && !coste_usd && !duration_ms) return null;
+  return (
+    <span className={cn("flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground", className)}>
+      {tokens != null && (
+        <Badge variant="outline" className="gap-1 text-[10px] tabular-nums" title={`${numeroCompleto(tokens)} tokens`}>
+          {numeroCompacto(tokens)} tok
+        </Badge>
+      )}
+      {coste_usd != null && (
+        <Badge variant="outline" className="gap-1 text-[10px] tabular-nums" title="Coste de las generaciones">
+          <Coins className="h-2.5 w-2.5" aria-hidden="true" />
+          {costeUsd(coste_usd)}
+        </Badge>
+      )}
+      {duration_ms != null && duration_ms > 0 && (
+        <Badge variant="outline" className="gap-1 text-[10px] tabular-nums" title="Tiempo de cómputo IA">
+          <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+          {duracion(duration_ms)}
+        </Badge>
+      )}
+    </span>
+  );
+}
+
+/** Etapas a PINTAR de un item del feed: las de la run tal cual; en un item SUELTO, su única
+ *  etapa lleva como nombre la etiqueta legible de su tipo de trabajo (copy, imagen, run…). */
+export function etapasDeItem(run: Pipeline): PipelineEtapa[] {
+  if (run.clase !== "actividad") return run.etapas;
+  return run.etapas.map((e) => ({ ...e, nombre: etiquetaTipoGeneracion(run.tipo || e.nombre) }));
+}
+
+/** Tarjeta de un item del feed de Producción (run del pipeline o trabajo suelto): TODA la
+ *  tarjeta es clicable (abre su detalle) salvo que no haya detalle que abrir (`onAbrir` null). */
+function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipeline) => void) | null }) {
+  const esActividad = run.clase === "actividad";
   return (
     <Card
-      role="button"
-      tabIndex={0}
-      onClick={() => onAbrir(run.id)}
+      role={onAbrir ? "button" : undefined}
+      tabIndex={onAbrir ? 0 : undefined}
+      onClick={onAbrir ? () => onAbrir(run) : undefined}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (onAbrir && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          onAbrir(run.id);
+          onAbrir(run);
         }
       }}
-      className="cursor-pointer transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        onAbrir && "cursor-pointer hover:bg-muted/40",
+      )}
     >
       <CardContent className="flex items-center gap-3 p-4">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="shrink-0">{run.marca_nombre || run.marca}</Badge>
+            {esActividad && (
+              <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title="Trabajo de IA fuera del pipeline">
+                <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />
+                {etiquetaTipoGeneracion(run.tipo || "")}
+              </Badge>
+            )}
             <ChipEstado estado={run.estado_global} />
-            <BadgeQaFuente qa={run.qa_fuente} />
+            <BadgeQaFuente qa={run.qa_fuente ?? undefined} />
             {run.cluster && (
               <Badge
                 variant="outline"
@@ -241,15 +271,18 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: (id: string) =
               </Badge>
             )}
             <span className="truncate text-xs text-muted-foreground">{tiempoRelativo(run.creado)}</span>
+            <MetricasPipeline metricas={run.metricas} className="ml-auto" />
           </div>
           <p className="truncate text-sm font-medium" title={run.titulo}>{run.titulo}</p>
-          <TiraEtapas etapas={run.etapas} />
+          <TiraEtapas etapas={etapasDeItem(run)} />
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        {onAbrir && <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />}
       </CardContent>
     </Card>
   );
 }
+
+export { FilaPipeline };
 
 function EventosEtapa({ eventos }: { eventos: PipelineActividad[] }) {
   if (eventos.length === 0) return null;
@@ -274,14 +307,27 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
   const salida = (gen?.salida ?? "").trim();
   const prompt = (gen?.prompt || plantilla || "").trim();
   const esPlantilla = !gen?.prompt && !!plantilla;
+  const m = gen?.metricas;
   return (
     <div className="space-y-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Sparkles className="h-3 w-3 text-violet-600" aria-hidden="true" />
         <span className="text-xs font-semibold text-foreground">IA</span>
         {gen
           ? <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
           : <span className="text-[11px] text-muted-foreground">aún no ejecutado</span>}
+        {/* Métricas REALES de la llamada (tokens/coste/duración), si la generación las dejó. */}
+        {m && (
+          <MetricasPipeline
+            className="ml-auto"
+            metricas={{
+              items: 1,
+              tokens: (m.tokens_in ?? 0) + (m.tokens_out ?? 0) || null,
+              coste_usd: m.total_cost_usd ?? null,
+              duration_ms: m.duration_ms ?? null,
+            }}
+          />
+        )}
       </div>
       {/* ENTRADA (prompt) ↔ SALIDA (razonamiento + resultado), lado a lado en pantallas anchas
           (la página dedicada) y apilados en estrecho (el feed móvil). */}
@@ -391,6 +437,11 @@ function ContenidoEtapa({
       </div>
     );
   }
+  if (clave === "trabajo") {
+    // Trabajo SUELTO (item `clase="actividad"` del feed): todo el trabajo es UNA etapa IA;
+    // su contenido es el bloque entrada/salida de la generación, sin piezas ni criba.
+    return <BloqueIA gen={generacion} plantilla={plantilla} />;
+  }
   // aprobacion — gate HUMANO (no IA).
   return (
     <div className="space-y-1.5">
@@ -465,126 +516,8 @@ export function PanelEtapa({
   );
 }
 
-/** Vista «Pipelines» del hub Actividad IA (runs del pipeline por contenido, etapa a
- * etapa). Era una página propia; CONSOLIDADA como vista de Actividad (?vista=pipelines):
- * una sola superficie de histórico con dos lentes (Feed / Pipelines). El detalle de una
- * run sigue siendo página aparte (/datos/actividad/pipelines/:id). */
-export function VistaPipelines() {
-  // Cada run abre su PÁGINA dedicada (estilo GitLab/Azure), no un pop-up.
-  const navigate = useNavigate();
-  const abrir = React.useCallback(
-    (id: string) => navigate(`/datos/actividad/pipelines/${encodeURIComponent(id)}`),
-    [navigate],
-  );
-  // La vista respeta el switch global de marca de la barra superior (no tiene selector
-  // propio). `marcaActiva` es el id canónico (o null = "Todas", solo admin) que el back
-  // valida; null → sin filtro de marca.
-  const { marcaActiva } = useMarcaActiva();
-  // Filtros (etapa donde está parada / estado global) y paginación incremental.
-  const [etapa, setEtapa] = React.useState("");
-  const [estado, setEstado] = React.useState("");
-  const [paginas, setPaginas] = React.useState(1);
-  // Al cambiar un filtro (o la marca activa), volvemos a la 1ª página.
-  React.useEffect(() => { setPaginas(1); }, [etapa, estado, marcaActiva]);
-
-  const q = useQuery({
-    queryKey: ["pipelines", "lista", marcaActiva ?? "todas", etapa, estado, paginas],
-    queryFn: ({ signal }) =>
-      api.pipelines(
-        { marca: marcaActiva ?? undefined, etapa, estado, limite: paginas * PAGINA },
-        signal,
-      ),
-    refetchInterval: INTERVALO_SERIE_MS,
-    placeholderData: (prev) => prev,  // no parpadea al «Cargar más» ni al cambiar de filtro
-  });
-  const datos = q.data as RespuestaPipelines | undefined;
-  const runs = datos?.pipelines ?? [];
-  const total = datos?.paginacion?.total ?? runs.length;
-  const hayFiltro = !!(etapa || estado);
-
-  return (
-    <div className="space-y-5">
-      <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu icono={RefreshCw} onClick={() => q.refetch()} disabled={q.isFetching}>
-            Actualizar
-          </ItemMenu>
-        </MenuAcciones>
-      </AccionesPagina>
-
-      {/* Filtros: por la etapa donde está parada la run y por su estado global. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Select value={etapa || "todas"} onValueChange={(v) => setEtapa(v === "todas" ? "" : v)}>
-          <SelectTrigger className="h-9 w-full sm:w-[200px]"><SelectValue placeholder="Etapa" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas las etapas</SelectItem>
-            {ETAPAS_FILTRO.map((e) => (
-              <SelectItem key={e.clave} value={e.clave}>{e.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={estado || "todos"} onValueChange={(v) => setEstado(v === "todos" ? "" : v)}>
-          <SelectTrigger className="h-9 w-full sm:w-[170px]"><SelectValue placeholder="Estado" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Cualquier estado</SelectItem>
-            {ESTADOS_FILTRO.map((e) => (
-              <SelectItem key={e.clave} value={e.clave}>{e.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {hayFiltro && (
-          <Button variant="ghost" size="sm" onClick={() => { setEtapa(""); setEstado(""); }}>
-            Limpiar
-          </Button>
-        )}
-        {!q.isPending && (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {total} {total === 1 ? "run" : "runs"}{hayFiltro ? " (filtrado)" : ""}
-          </span>
-        )}
-      </div>
-
-      {q.isPending ? (
-        <div className="space-y-3">
-          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
-        </div>
-      ) : q.isError ? (
-        <BloqueError
-          titulo="No se pudieron cargar los pipelines"
-          mensaje={q.error instanceof ApiError ? q.error.message : "Inténtalo de nuevo."}
-          onReintentar={() => q.refetch()}
-          cargando={q.isFetching}
-        />
-      ) : runs.length === 0 ? (
-        <EstadoVacio
-          icono={GitBranch}
-          titulo={hayFiltro ? "Sin runs con ese filtro" : "Aún no hay pipelines"}
-          texto={
-            hayFiltro
-              ? "Ninguna run coincide con la etapa/estado elegidos. Prueba a quitar el filtro."
-              : "Cuando el pipeline automático ingiera temas (RSS/tendencias), cada pieza aparecerá aquí con sus etapas. Actívalo en Ajustes (toggles por etapa)."
-          }
-        />
-      ) : (
-        <>
-          <div className="space-y-3">
-            {runs.map((run) => (
-              <FilaPipeline key={run.id} run={run} onAbrir={abrir} />
-            ))}
-          </div>
-          {runs.length < total && (
-            <div className="flex justify-center pt-1">
-              <Button
-                variant="outline"
-                onClick={() => setPaginas((p) => p + 1)}
-                disabled={q.isFetching}
-              >
-                {q.isFetching ? "Cargando…" : `Cargar más (${runs.length} de ${total})`}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
+// La antigua vista «Pipelines» (y la pestaña «Feed» del hub Actividad IA) viven hoy
+// FUSIONADAS en la página Producción (`pages/Produccion.tsx`): una sola línea temporal de
+// runs del pipeline + actividad suelta. Este módulo conserva la maquinaria de render
+// compartida (tarjeta del feed, tira de etapas, panel por etapa, bloque IA, métricas) que
+// usan Producción y los detalles (`PipelineDetalle`, `GeneracionDetalle`).

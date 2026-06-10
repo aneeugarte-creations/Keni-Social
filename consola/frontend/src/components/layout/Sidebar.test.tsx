@@ -26,12 +26,12 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/contenido/imagen", "/datos/investigacion", "/datos/actividad"],
+      rutas_frontend: ["/contenido/imagen", "/datos/investigacion", "/datos/produccion"],
       nav: [
         { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
         { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
         { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
-        { ruta: "/datos/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
+        { ruta: "/datos/produccion", etiqueta: "Producción", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
       ],
     },
     {
@@ -84,7 +84,7 @@ const CATALOGO = {
       items: [
         { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Fuentes y radar" },
         { ruta: "/datos/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
-        { ruta: "/datos/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "Qué hizo la IA" },
+        { ruta: "/datos/produccion", etiqueta: "Producción", icono: "Activity", descripcion: "Qué produjo la máquina" },
       ],
     },
   ],
@@ -234,7 +234,7 @@ describe("Sidebar · bloques de flujo", () => {
     expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/contenido/texto");
     // Bloque "Datos": los hubs son una entrada, no sus pestañas.
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
-    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/datos/actividad");
+    expect(screen.getByRole("link", { name: /producción/i })).toHaveAttribute("href", "/datos/produccion");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
     expect(screen.queryByRole("link", { name: /^fuentes$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^termómetro$/i })).not.toBeInTheDocument();
@@ -330,10 +330,10 @@ describe("apps-scope · helpers", () => {
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",
-      // /datos/actividad (hub) → el histórico (índice; vistas Feed/Pipelines) + Monitor
-      // (en vivo + salud). Pipelines y la página Sistema se consolidaron dentro.
-      "/datos/actividad",
-      "/datos/actividad/monitor",
+      // /datos/produccion (hub) → el feed unificado (índice) + Monitor (en vivo +
+      // salud). Las antiguas pestañas Feed/Pipelines y la página Sistema viven dentro.
+      "/datos/produccion",
+      "/datos/produccion/monitor",
     ]);
   });
 
@@ -349,12 +349,12 @@ describe("apps-scope · helpers", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
     // Tras retirar Revisión, Producción ya no aporta entradas al bloque "operacion".
-    // Ordenado por (grupo_orden, orden): contenido(/imagen,/texto) · datos(/investigacion,/actividad).
+    // Ordenado por (grupo_orden, orden): contenido(/imagen,/texto) · datos(/investigacion,/produccion).
     expect(rutas).toEqual([
       "/contenido/imagen",
       "/contenido/texto",
       "/datos/investigacion",
-      "/datos/actividad",
+      "/datos/produccion",
     ]);
   });
 });

@@ -232,7 +232,7 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
 
 
 /**
- * Monitor de la cola de generación (pestaña del hub Actividad IA): qué ocurre AHORA en la
+ * Monitor de la cola de generación (pestaña del hub Producción): qué ocurre AHORA en la
  * cola (workers, claude -p en vuelo, esperando), throughput por día y estado de los daemons,
  * con control de admin (purgar la cola, cancelar un job). Sondeo en vivo cada pocos segundos.
  */

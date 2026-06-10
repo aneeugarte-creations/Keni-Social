@@ -464,7 +464,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           {publicacion.pipeline_id && (
             <Tooltip label="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)">
               <Link
-                to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
+                to={`/datos/produccion/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
                 onClick={(e) => e.stopPropagation()}
                 className="-my-2 -mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 aria-label="Ver proceso IA"

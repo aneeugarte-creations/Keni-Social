@@ -44,7 +44,7 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
     onSuccess: (gen) => {
       setUrl("");
       iniciar(gen);
-      toast.info("Render encolado. Sigue su avance en Actividad IA.");
+      toast.info("Render encolado. Sigue su avance en Producción.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });

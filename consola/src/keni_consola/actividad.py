@@ -230,7 +230,8 @@ def agregados(
     """Agrega coste/tokens/items sobre generaciones + runs (sin paginar ni filtrar).
 
     Devuelve:
-      - `total`: `{items, coste_usd, tokens}` sobre TODA la actividad.
+      - `total`: `{items, coste_usd, tokens, duration_ms}` sobre TODA la actividad
+        (`duration_ms` = tiempo de computo IA sumado; los items sin metrica suman 0).
       - `por_tipo`: una fila por `tipo` (incluye "run" como un tipo mas),
         `{tipo, items, coste_usd, tokens}`, de mayor a menor coste (luego por tipo).
       - `por_dia`: una fila por dia (`YYYY-MM-DD` de la `fecha`), `{dia, items,
@@ -241,6 +242,7 @@ def agregados(
     total_items = len(items)
     total_coste = 0.0
     total_tokens = 0
+    total_duracion = 0
 
     por_tipo: dict[str, dict[str, Any]] = {}
     por_dia: dict[str, dict[str, Any]] = {}
@@ -251,6 +253,7 @@ def agregados(
         tokens = m["tokens"] or 0
         total_coste += coste
         total_tokens += tokens
+        total_duracion += m["duration_ms"] or 0
 
         t = por_tipo.setdefault(
             it["tipo"], {"tipo": it["tipo"], "items": 0, "coste_usd": 0.0, "tokens": 0}
@@ -282,6 +285,7 @@ def agregados(
             "items": total_items,
             "coste_usd": _redondear(total_coste),
             "tokens": total_tokens,
+            "duration_ms": total_duracion,
         },
         "por_tipo": filas_tipo,
         "por_dia": filas_dia,

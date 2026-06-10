@@ -29,9 +29,9 @@ _SIDEBAR_BLOQUES = [
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
-    # Analíticas (medición que cierra el loop) y Actividad IA (qué hizo la IA). Pipelines
-    # (CI/CD) ya no es entrada de sidebar: vive como pestaña del hub Actividad IA.
-    ["Investigación", "Analíticas", "Actividad IA"],
+    # Analíticas (medición que cierra el loop) y Producción (el feed unificado de lo que
+    # produce la máquina: runs del pipeline + actividad suelta, antes «Actividad IA»).
+    ["Investigación", "Analíticas", "Producción"],
 ]
 
 # Encabezados humanos de cada bloque, en el mismo orden.
@@ -98,7 +98,7 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programacion"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"
-    assert iconos["/datos/actividad"] == "Activity"
+    assert iconos["/datos/produccion"] == "Activity"
 
 
 def test_desactivar_flag_oculta_la_app_del_catalogo():

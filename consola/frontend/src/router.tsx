@@ -47,8 +47,9 @@ const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
 const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
-const Actividad = lazy(() => import("@/pages/Actividad"));
+const Produccion = lazy(() => import("@/pages/Produccion"));
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
+const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
@@ -68,7 +69,7 @@ const Usuarios = lazy(() => import("@/pages/Usuarios"));
  * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
  * (herramientas de creación) y `/datos/*` (entradas y señales). La home es el
  * feed del equipo (`/operacion/feed`). Los hubs que quedan (Feed, Investigación,
- * Analíticas, Texto, Actividad IA) son una ruta-layout sin componente:
+ * Analíticas, Texto, Producción) son una ruta-layout sin componente:
  * react-router renderiza `<Outlet/>` y la subnav entre sub-rutas vive in-page
  * (SubnavHub, via HUB_TABS). Programación y Turnos (antes pestañas del hub
  * Calendario) son ya páginas planas; Revisión se retiró por obsoleta.
@@ -249,23 +250,28 @@ export const router = createBrowserRouter([
               { path: "comercial", element: <Comercial /> },
             ],
           },
-          // Hub Actividad IA: el feed de actividad (índice) + Pipelines (vista CI/CD del
-          // pipeline de contenido, etapa a etapa). Pipelines es una pestaña del hub, no una
-          // entrada suelta del sidebar.
+          // Hub Producción (antes «Actividad IA» con pestañas Feed/Pipelines, hoy FUSIONADAS):
+          // el feed unificado (runs del pipeline + actividad suelta) es el índice; cada run
+          // y cada trabajo suelto tienen su página de detalle entrada/salida.
           {
-            path: "actividad",
+            path: "produccion",
             children: [
-              { index: true, element: <Actividad /> },
-              // Pipelines es ahora una VISTA de Actividad (?vista=pipelines): la antigua
-              // pestaña redirige. El detalle de una run sigue siendo página propia.
-              { path: "pipelines", element: <Navigate to="/datos/actividad?vista=pipelines" replace /> },
+              { index: true, element: <Produccion /> },
               { path: "pipelines/:id", element: <PipelineDetalle /> },
+              // Detalle de un trabajo SUELTO (generación fuera del pipeline): mismo in/out.
+              { path: "actividad/:id", element: <GeneracionDetalle /> },
               // Monitor: cola en vivo (todo el equipo) + pestaña Salud (infra, admin).
               { path: "monitor", element: <Monitor /> },
             ],
           },
-          // Compat: la antigua ruta plana /datos/pipelines ahora es pestaña de Actividad IA.
-          { path: "pipelines", element: <Navigate to="/datos/actividad/pipelines" replace /> },
+          // Compat: el hub se llamaba «Actividad IA» (/datos/actividad, con Pipelines como
+          // pestaña/vista). Redirige preservando el resto del path (p. ej. pipelines/:id,
+          // monitor) y la query (?tab=...).
+          { path: "actividad/pipelines", element: <Navigate to="/datos/produccion" replace /> },
+          { path: "actividad/*", element: <RedirigirPrefijo a="/datos/produccion" /> },
+          { path: "actividad", element: <Navigate to="/datos/produccion" replace /> },
+          // Compat: la antigua ruta plana /datos/pipelines.
+          { path: "pipelines", element: <Navigate to="/datos/produccion" replace /> },
         ],
       },
 
@@ -275,7 +281,7 @@ export const router = createBrowserRouter([
       // afecta (máquina/sistema/esfuerzo → Monitor·Ajustes; noticias → Cobertura;
       // publicación → Programación; Metricool → Métricas; imagen → Estudio; apariencia →
       // Mi cuenta). La ruta vieja redirige al Monitor·Ajustes.
-      { path: "configuracion", element: <Navigate to="/datos/actividad/monitor?tab=ajustes" replace /> },
+      { path: "configuracion", element: <Navigate to="/datos/produccion/monitor?tab=ajustes" replace /> },
       { path: "sugerencias", element: <Sugerencias /> },
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
       // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.
@@ -285,7 +291,7 @@ export const router = createBrowserRouter([
       { path: "usuarios", element: <Usuarios /> },
       // La página Sistema se CONSOLIDÓ como pestaña «Salud» del Monitor (una sola
       // superficie de monitorización); la ruta vieja redirige para enlaces/bookmarks.
-      { path: "sistema", element: <Navigate to="/datos/actividad/monitor?tab=salud" replace /> },
+      { path: "sistema", element: <Navigate to="/datos/produccion/monitor?tab=salud" replace /> },
 
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando
@@ -306,7 +312,7 @@ export const router = createBrowserRouter([
       { path: "parrilla/pendientes", element: <Navigate to="/operacion/feed/lista" replace /> },
       { path: "parrilla/piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
       { path: "parrilla/*", element: <Navigate to="/operacion/feed" replace /> },
-      { path: "actividad", element: <Navigate to="/datos/actividad" replace /> },
+      { path: "actividad", element: <Navigate to="/datos/produccion" replace /> },
       // "Activos"/"Plantillas" quedaron obsoletas; sus rutas redirigen a la Texto.
       { path: "activos", element: <Navigate to="/contenido/texto/documentos" replace /> },
       { path: "activos/plantillas", element: <Navigate to="/contenido/texto/documentos" replace /> },
@@ -323,18 +329,18 @@ export const router = createBrowserRouter([
       { path: "rota", element: <Navigate to="/operacion/turnos" replace /> },
       // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
       { path: "publicaciones", element: <Navigate to="/operacion/feed/lista" replace /> },
-      // El hub Agentes se retiró: su Actividad IA vive ahora en /datos/actividad.
-      { path: "monitor", element: <Navigate to="/datos/actividad" replace /> },
-      { path: "agentes", element: <Navigate to="/datos/actividad" replace /> },
-      { path: "agentes/actividad", element: <Navigate to="/datos/actividad" replace /> },
+      // El hub Agentes se retiró: su actividad vive ahora en Producción (/datos/produccion).
+      { path: "monitor", element: <Navigate to="/datos/produccion/monitor" replace /> },
+      { path: "agentes", element: <Navigate to="/datos/produccion" replace /> },
+      { path: "agentes/actividad", element: <Navigate to="/datos/produccion" replace /> },
       // El copy se generaba en /generacion (motor antiguo, retirado): ahora vive en
       // la Texto; el catálogo de prompts también vive en la Texto.
       { path: "generar-copy", element: <Navigate to="/contenido/texto" replace /> },
       { path: "generacion", element: <Navigate to="/contenido/texto" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
-      { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },
-      { path: "carpetas", element: <Navigate to="/datos/actividad" replace /> },
+      { path: "proyectos", element: <Navigate to="/datos/produccion" replace /> },
+      { path: "carpetas", element: <Navigate to="/datos/produccion" replace /> },
 
       // Cualquier otra ruta (URL desconocida, no cubierta por las redirecciones
       // legacy de arriba): página 404 dedicada en vez de rebotar en silencio al

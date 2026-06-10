@@ -1,4 +1,4 @@
-"""API PIPELINES: vista estilo GitLab CI/CD de las RUNS del pipeline de contenido.
+"""API PIPELINES: el feed UNIFICADO de Producción (runs del pipeline + actividad suelta).
 
 Cada `contenido` con `origen='pipeline'` (los que produce el daemon
 `pipeline_contenido`) es una RUN: el recorrido de UNA pieza por las etapas
@@ -7,8 +7,19 @@ etapa derivado del ESTADO REAL de la pieza y sus publicaciones por plataforma (n
 de los logs: robusto y auto-curativo). El detalle por run añade el LOG de actividad de
 las etapas (las generaciones-marcador `tipo='pipeline'` correlacionadas por `contenido_id`).
 
+La LISTA ya no es solo de runs: es el feed de la página Producción, que MEZCLA en una
+sola línea temporal las runs del pipeline (`clase: "run"`) y la ACTIVIDAD SUELTA
+(`clase: "actividad"`): generaciones que no nacieron de una run (copy manual, imágenes,
+investigación, importaciones…) y los runs de agente. Cada item suelto se presenta con la
+MISMA forma que una run, con UNA etapa (su tipo de trabajo), para que la UI lo pinte con
+la misma tarjeta y el mismo detalle entrada/salida. Antes esto vivía partido en dos
+pestañas (Feed / Pipelines) con contenido medio duplicado y medio faltante en ambas.
+Todos los items (runs incluidas) llevan `metricas` (items, tokens, coste, duración)
+sumadas de sus generaciones correlacionadas.
+
 Endpoints (solo lectura):
-  - `GET /api/pipelines?marca=&limite=50` -> `{"pipelines": [run, ...]}`
+  - `GET /api/pipelines?marca=&etapa=&estado=&tipo=&clase=&limite=50`
+      -> `{"pipelines": [item, ...], "paginacion": {...}}`
   - `GET /api/pipelines/problemas?marca=&limite=50` -> `{"problemas": [tema, ...], "total": n}`
   - `GET /api/pipelines/{pipeline_id}` -> `{"pipeline": run, "actividad": [evento, ...]}`
 
@@ -23,8 +34,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import config, generaciones, marcas, redes, repos
+from .. import actividad, agentes, config, generaciones, marcas, redes, repos
 from .._http_json import _entero_query, envoltura_paginacion
+from .actividad import _es_marcador_pipeline
 from ..pipeline_contenido import (
     ORIGEN_PIPELINE,
     QA_CADUCADA,
@@ -101,6 +113,22 @@ _PROMPT_POR_ETAPA = {
 }
 # Valores válidos del filtro `?estado=` (el `estado_global` de la run).
 _ESTADOS_GLOBAL = frozenset({"ok", "en_curso", "pendiente", "revisar", "fallo"})
+# Valores válidos del filtro `?clase=` (qué mitad del feed unificado se quiere ver).
+_CLASES = frozenset({"run", "actividad"})
+# Estado de una generación/run de agente -> `estado_global` del item suelto (mismo chip
+# que las runs). Lo que no casa (p. ej. un estado raro/legado) cae a "pendiente".
+_ESTADO_ACTIVIDAD = {
+    "completado": "ok",
+    "error": "fallo",
+    "ejecutando": "en_curso",
+}
+# Prefijos de etiqueta de la IA del POOL (lote por marca): "Fusión de historias" alimenta
+# la etapa Fusión y "Encaje editorial" la etapa Editorial. Fuente única para el detalle
+# (enlazar la generación) y la lista (evidencia de que el pool corrió: fix "Saltada").
+_PREFIJO_POOL_FUSION = "Fusión"
+_PREFIJO_POOL_EDITORIAL = "Encaje"
+# Métricas a cero de un item sin generaciones correlacionadas (forma estable para la UI).
+_METRICAS_CERO = {"items": 0, "tokens": 0, "coste_usd": 0.0, "duration_ms": 0}
 # Tope de runs a MATERIALIZAR antes de filtrar/paginar en memoria. El tablero del equipo es
 # pequeño en el piloto; esto acota el coste si el histórico de runs creciera mucho (se sirven los
 # más recientes). `log()` no aplica aquí: la paginación reporta el `total` ya acotado a esto.
@@ -183,10 +211,18 @@ def _cluster_publico(cluster: dict | None) -> dict | None:
     }
 
 
-def _fusion_de(cluster: dict | None, marca: str) -> dict:
+def _fusion_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -> dict:
     """Etapa "Fusión": dedup IA del pool. SOLO evidencia persistida: con historia (cluster)
-    enlazada corrió (ok); sin ella, no corrió (saltada). El toggle de hoy no re-pinta runs."""
+    enlazada corrió (ok). Sin historia, `corrio_pool` desempata: si la IA del pool corrió
+    para la marca (hay generación "Fusión de historias"), la etapa CORRIÓ y esta historia
+    simplemente no se agrupó con otras — antes se pintaba "Saltada" con un bloque IA
+    completado al lado (contradicción visible). Solo sin evidencia alguna queda saltada."""
     if not cluster:
+        if corrio_pool:
+            return {
+                "clave": "fusion", "nombre": "Fusión", "estado": "ok",
+                "detalle": "Sin grupo: no se fusionó con otras historias", "ts": "",
+            }
         return {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     n_fuentes = int(cluster.get("n_fuentes", 0) or 0)
     n_items = int(cluster.get("n_items", 0) or 0)
@@ -197,10 +233,16 @@ def _fusion_de(cluster: dict | None, marca: str) -> dict:
     }
 
 
-def _editorial_de(cluster: dict | None, marca: str) -> dict:
+def _editorial_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -> dict:
     """Etapa "Editorial": encaje editorial IA + score. SOLO evidencia persistida (el score del
-    cluster); el toggle de hoy no re-pinta runs."""
+    cluster). Sin historia, `corrio_pool` (hay generación "Encaje editorial" de la marca)
+    pinta la etapa como corrida sin score propio, igual que en Fusión (fix "Saltada")."""
     if not cluster:
+        if corrio_pool:
+            return {
+                "clave": "editorial", "nombre": "Editorial", "estado": "ok",
+                "detalle": "Sin score: el tema no venía de una historia del pool", "ts": "",
+            }
         return {"clave": "editorial", "nombre": "Editorial", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     score = round(float(cluster.get("score", 0.0) or 0.0), 2)
     detalle = f"Score {score}" + (" · 🔥" if cluster.get("breaking") else "")
@@ -210,20 +252,29 @@ def _editorial_de(cluster: dict | None, marca: str) -> dict:
     }
 
 
-def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) -> list[dict]:
+def _etapas_de_run(
+    item: dict,
+    piezas: list[dict],
+    cluster: dict | None = None,
+    *,
+    pool_fusion: bool = False,
+    pool_editorial: bool = False,
+) -> list[dict]:
     """Deriva las 7 etapas de una run: Fusión + Editorial (pool) + Selección/Validación/Copy/Arte
     (toggles) + Aprobación (humana).
 
     Fusión y Editorial se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
-    previos al tema. Las togglables (Selección/Validación/Copy/Arte) están activas o "saltada"
+    previos al tema; sin historia, `pool_fusion`/`pool_editorial` (hay generación de pool de la
+    marca) las pintan como corridas sin grupo/score, no "saltada". Las togglables
+    (Selección/Validación/Copy/Arte) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
     `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La Validación
     (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Aprobación es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
     """
     marca = item.get("marca", "") or ""
-    fusion = _fusion_de(cluster, marca)
-    editorial = _editorial_de(cluster, marca)
+    fusion = _fusion_de(cluster, marca, corrio_pool=pool_fusion)
+    editorial = _editorial_de(cluster, marca, corrio_pool=pool_editorial)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
@@ -366,7 +417,14 @@ def _qa_fuente_de(item: dict) -> dict:
 
 
 def _run_de(
-    item: dict, piezas_plat: list[dict], *, completo: bool = False, cluster: dict | None = None
+    item: dict,
+    piezas_plat: list[dict],
+    *,
+    completo: bool = False,
+    cluster: dict | None = None,
+    metricas: dict | None = None,
+    pool_fusion: bool = False,
+    pool_editorial: bool = False,
 ) -> dict:
     """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
 
@@ -375,12 +433,18 @@ def _run_de(
     LISTA basta la reducida. Las ETAPAS se derivan SIEMPRE de la forma reducida (mismos campos).
     `cluster`: la HISTORIA de la que nació el tema (None si no nació de una); alimenta la etapa
     Jerarquización y el bloque `cluster` (procedencia IA: corroboración, fusión, score).
+    `metricas`: suma de las generaciones correlacionadas a la run (items/tokens/coste/duración);
+    None cae a ceros (forma estable). `pool_fusion`/`pool_editorial`: evidencia de que la IA del
+    pool corrió para la marca (pinta Fusión/Editorial sin historia como corridas, no saltadas).
     """
     base = [_pieza_de(p) for p in piezas_plat]
-    etapas = _etapas_de_run(item, base, cluster)
+    etapas = _etapas_de_run(
+        item, base, cluster, pool_fusion=pool_fusion, pool_editorial=pool_editorial
+    )
     marca = item.get("marca", "") or ""
     # `origen` real de la pieza padre (la fuente RSS que la ingirió): contexto de la etapa CI.
     return {
+        "clase": "run",
         "id": item.get("id", ""),
         "titulo": item.get("titulo", "") or "",
         "marca": marca,
@@ -397,8 +461,115 @@ def _run_de(
         "qa_fuente": _qa_fuente_de(item),
         # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-ranking.
         "cluster": _cluster_publico(cluster),
+        # Coste real de la run: la suma de sus generaciones (`contenido_id` correlacionado).
+        "metricas": metricas or dict(_METRICAS_CERO),
         "piezas": [_pieza_detalle(p) for p in piezas_plat] if completo else base,
     }
+
+
+def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
+    """Suma las métricas de las generaciones REALES (no marcadores) por run (`contenido_id`).
+
+    Devuelve `contenido_id -> {items, tokens, coste_usd, duration_ms}` solo para los ids de
+    `ids_runs`. La normalización de métricas es la del dominio `actividad` (la misma del feed):
+    tokens_in+tokens_out -> tokens, total_cost_usd -> coste_usd. Los marcadores de etapa
+    (sin coste) no suman.
+    """
+    out: dict[str, dict] = {}
+    for g in gens:
+        if _es_marcador_pipeline(g):
+            continue
+        cid = g.get("contenido_id") or ""
+        if cid not in ids_runs:
+            continue
+        m = actividad.normalizar_generacion(g)["metricas"]
+        acc = out.setdefault(cid, dict(_METRICAS_CERO))
+        acc["items"] += 1
+        acc["tokens"] += m["tokens"] or 0
+        acc["coste_usd"] = round(acc["coste_usd"] + (m["coste_usd"] or 0.0), 6)
+        acc["duration_ms"] += m["duration_ms"] or 0
+    return out
+
+
+def _marcas_con_pool(gens: list[dict], prefijo: str) -> set[str]:
+    """Marcas con alguna generación de POOL (tipo `pipeline`, etiqueta con `prefijo`).
+
+    Es la evidencia de que la IA del pool (Fusión / Encaje editorial, por lote de marca)
+    CORRIÓ: la usa la derivación de etapas para no pintar "Saltada" una fase con output.
+    """
+    return {
+        (g.get("marca", "") or "")
+        for g in gens
+        if (g.get("tipo") or "") == "pipeline"
+        and (g.get("etiqueta", "") or "").startswith(prefijo)
+    }
+
+
+def _item_de_actividad(it: dict) -> dict:
+    """Presenta un item SUELTO de actividad (generación manual / run de agente) como una
+    "run" de UNA etapa, con la MISMA forma que las runs del pipeline.
+
+    Así la UI lo pinta con la misma tarjeta (tira de etapas + métricas) y el mismo patrón de
+    detalle entrada/salida. `it` es el item YA normalizado por el dominio `actividad`. La
+    etapa única lleva `clave="trabajo"` y `nombre` = el tipo crudo (la UI lo etiqueta con su
+    catálogo de tipos); `tipo`/`fuente` viajan para filtros y navegación.
+    """
+    estado = _ESTADO_ACTIVIDAD.get(it["estado"], "pendiente")
+    marca = it["marca"]
+    etapa = {
+        "clave": "trabajo",
+        "nombre": it["tipo"] or "trabajo",
+        "estado": estado,
+        "detalle": "",
+        "ts": it["fecha"],
+        "es_ia": True,
+    }
+    return {
+        "clase": "actividad",
+        "id": it["id"],
+        "titulo": it["etiqueta"] or it["tipo"] or "Sin etiqueta",
+        "marca": marca,
+        "marca_nombre": _marca_nombre(marca) or marca,
+        "origen": it["fuente"],  # "generacion" | "run" (run de agente)
+        "tipo": it["tipo"],
+        "descripcion": "",
+        "creado": it["fecha"],
+        "actualizado": it["fecha"],
+        "estado_global": estado,
+        "etapa_actual": "",
+        "etapas": [etapa],
+        "qa_fuente": None,
+        "cluster": None,
+        "metricas": {"items": 1, **{k: v for k, v in it["metricas"].items() if k != "num_turns"}},
+        "piezas": [],
+        # Ruta del SPA al resultado (si su tipo tiene página); la UI la ofrece en el detalle.
+        "resultado_url": it["resultado_url"],
+    }
+
+
+def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -> list[dict]:
+    """Items SUELTOS del feed: generaciones que no pertenecen a una run listada + runs de agente.
+
+    Excluye los marcadores de etapa (sin coste), el trabajo del POOL y de etapas del pipeline
+    (`tipo='pipeline'`: ya está representado DENTRO de las runs) y toda generación cuyo
+    `contenido_id` apunte a una run de `ids_runs` (su coste ya viaja en la run; listarla otra
+    vez sería la duplicación que teníamos con dos pestañas). Una generación correlacionada a un
+    contenido que NO es run del pipeline (p. ej. autogen sobre el tablero) SÍ sale suelta.
+    """
+    sueltas = [
+        actividad.normalizar_generacion(g)
+        for g in gens
+        if not _es_marcador_pipeline(g)
+        and (g.get("tipo") or "") != "pipeline"
+        and (g.get("contenido_id") or "") not in ids_runs
+    ]
+    runs_agente = agentes.listar_runs_globales()
+    if marca:
+        runs_agente = [
+            r for r in runs_agente if (r.get("agente") or r.get("marca") or "") == marca
+        ]
+    sueltas.extend(actividad.normalizar_run(r) for r in runs_agente)
+    return [_item_de_actividad(it) for it in sueltas]
 
 
 def _runs_del_pipeline(marca: str | None) -> list[dict]:
@@ -424,24 +595,34 @@ def _runs_del_pipeline(marca: str | None) -> list[dict]:
 
 
 async def listar(request: Request) -> Response:
-    """GET /api/pipelines?marca=&etapa=&estado=&limite=50&desplazamiento=0.
+    """GET /api/pipelines?marca=&etapa=&estado=&tipo=&clase=&limite=50&desplazamiento=0.
 
-    Runs del pipeline (recientes primero) con FILTROS (por etapa donde está parada / por estado
-    global) y PAGINACIÓN offset (envelope `paginacion:{total, limite, desplazamiento}`). Mantiene
-    la clave `pipelines` retrocompatible. Los filtros se aplican sobre el objeto run DERIVADO
-    (etapa_actual/estado_global), por eso se materializa el universo y se filtra/pagina en memoria.
+    Feed UNIFICADO de Producción, recientes primero: runs del pipeline (`clase="run"`) +
+    actividad suelta (`clase="actividad"`), con FILTROS y PAGINACIÓN offset (envelope
+    `paginacion:{total, limite, desplazamiento}`). Mantiene la clave `pipelines`
+    retrocompatible. Filtros (se IGNORAN si el valor no es válido: el cliente ve el
+    conjunto sin filtrar, no un 400):
+      - `etapa`: la etapa del pipeline donde la run está parada (solo casa runs).
+      - `estado`: el `estado_global` del item (runs y sueltos).
+      - `tipo`: el tipo de trabajo de un item suelto (copy/rss/imagen/run/…; solo casa sueltos).
+      - `clase`: "run" (solo pipeline) o "actividad" (solo sueltos).
+    Los filtros se aplican sobre el objeto DERIVADO (etapa_actual/estado_global), por eso se
+    materializa el universo y se filtra/pagina en memoria.
     """
     qp = request.query_params
     marca = (qp.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    # Filtros (se IGNORAN si el valor no es válido: el cliente ve el conjunto sin filtrar, no un 400).
     etapa = (qp.get("etapa") or "").strip()
     if etapa and etapa not in _ETAPA_CLAVES:
         etapa = ""
     estado = (qp.get("estado") or "").strip()
     if estado and estado not in _ESTADOS_GLOBAL:
         estado = ""
+    tipo = (qp.get("tipo") or "").strip()
+    clase = (qp.get("clase") or "").strip()
+    if clase and clase not in _CLASES:
+        clase = ""
     limite = _entero_query(qp.get("limite"), minimo=1)
     if limite is None:
         limite = _LIMITE_DEF
@@ -449,6 +630,13 @@ async def listar(request: Request) -> Response:
     desplazamiento = _entero_query(qp.get("desplazamiento"), minimo=0) or 0
 
     runs_items = _runs_del_pipeline(marca or None)
+    ids_runs = {it.get("id", "") or "" for it in runs_items}
+    # UNA sola lectura del almacén de generaciones: alimenta las métricas por run, la
+    # evidencia del pool (fix "Saltada") y los items sueltos del feed.
+    gens = generaciones.listar(limite=None, marca=marca or None)
+    met_por_run = _metricas_por_run(gens, ids_runs)
+    pool_fusion = _marcas_con_pool(gens, _PREFIJO_POOL_FUSION)
+    pool_editorial = _marcas_con_pool(gens, _PREFIJO_POOL_EDITORIAL)
     # Una sola lectura de TODAS las plataformas, agrupadas por contenido (evita N consultas).
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma():
@@ -456,13 +644,27 @@ async def listar(request: Request) -> Response:
     # Una sola lectura de las HISTORIAS (clusters) de estos temas (procedencia IA; evita N consultas).
     clusters = repos.clusters_por_contenidos([it.get("id", "") or "" for it in runs_items])
     todas = [
-        _run_de(it, por_contenido.get(it.get("id", ""), []), cluster=clusters.get(it.get("id", "")))
+        _run_de(
+            it,
+            por_contenido.get(it.get("id", ""), []),
+            cluster=clusters.get(it.get("id", "")),
+            metricas=met_por_run.get(it.get("id", "")),
+            pool_fusion=(it.get("marca", "") or "") in pool_fusion,
+            pool_editorial=(it.get("marca", "") or "") in pool_editorial,
+        )
         for it in runs_items
     ]
+    todas.extend(_actividad_suelta(gens, ids_runs, marca or None))
+    # Mezcla cronológica (recientes primero) de runs + sueltos; empata por id (estable).
+    todas.sort(key=lambda r: (r.get("creado", "") or "", r.get("id", "") or ""), reverse=True)
     if etapa:
-        todas = [r for r in todas if r["etapa_actual"] == etapa]
+        todas = [r for r in todas if r["clase"] == "run" and r["etapa_actual"] == etapa]
     if estado:
         todas = [r for r in todas if r["estado_global"] == estado]
+    if tipo:
+        todas = [r for r in todas if r["clase"] == "actividad" and r.get("tipo") == tipo]
+    if clase:
+        todas = [r for r in todas if r["clase"] == clase]
     total = len(todas)
     pagina = todas[desplazamiento : desplazamiento + limite]
     return JSONResponse(
@@ -666,20 +868,31 @@ async def detalle(request: Request) -> Response:
     cluster = repos.cluster_por_contenido(pipeline_id)
     # UNA sola lectura del almacén de generaciones (antes 3×, ~3 s cada una); se reparte.
     gens = generaciones.listar(limite=None)
-    actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
+    eventos, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
     # Fusión/Editorial: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
     # reciente para enseñar el prompt+salida REALES del Haiku en cada etapa (por su etiqueta).
     marca_tema = item.get("marca", "") or ""
-    gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo="Fusión")
+    gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_FUSION)
     if gen_fusion is not None:
         generaciones_por_etapa.setdefault("FUSION", gen_fusion)
-    gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo="Encaje")
+    gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_EDITORIAL)
     if gen_encaje is not None:
         generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
+    # Métricas de la run + evidencia del pool: las MISMAS derivaciones que la lista, para que
+    # detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
+    met = _metricas_por_run(gens, {pipeline_id}).get(pipeline_id)
     return JSONResponse(
         {
-            "pipeline": _run_de(item, piezas, completo=True, cluster=cluster),
-            "actividad": actividad,
+            "pipeline": _run_de(
+                item,
+                piezas,
+                completo=True,
+                cluster=cluster,
+                metricas=met,
+                pool_fusion=gen_fusion is not None,
+                pool_editorial=gen_encaje is not None,
+            ),
+            "actividad": eventos,
             # Stream del agente (`claude -p`) por código de etapa. Aditivo y back-compat: vacío si
             # ninguna etapa tiene una generación correlacionada.
             "generaciones_por_etapa": generaciones_por_etapa,

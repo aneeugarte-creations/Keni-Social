@@ -21,7 +21,7 @@ export interface CuerpoGuardarEsfuerzo {
   esfuerzo: string;
 }
 
-// --- Actividad IA unificada (#actividad) ---
+// --- Actividad IA unificada (#actividad; hoy la consume la página Producción) ---
 //
 // Sección AD-HOC (a mano): la página /actividad consume el contrato unificado que
 // expone el backend, que fusiona en un solo feed las generaciones de IA en segundo
@@ -39,7 +39,7 @@ export interface MetricasActividad {
   num_turns: number | null;
 }
 
-/** Un ítem del feed unificado de Actividad IA. */
+/** Un ítem del feed unificado de actividad IA. */
 export interface ActividadItem {
   id: string;
   fuente: FuenteActividad;
@@ -57,11 +57,11 @@ export interface ActividadItem {
    */
   resultado_url: string | null;
   /** Tema del pipeline que originó la generación ("" si fue manual/run): cruce directo a
-   *  `/datos/actividad/pipelines/{contenido_id}` (el id del pipeline ES el contenido). */
+   *  `/datos/produccion/pipelines/{contenido_id}` (el id del pipeline ES el contenido). */
   contenido_id: string;
 }
 
-/** Respuesta paginada del feed de Actividad IA (`GET /api/actividad`). */
+/** Respuesta paginada del feed de actividad (`GET /api/actividad`). */
 export interface RespuestaActividad {
   items: ActividadItem[];
   total: number;
@@ -72,6 +72,8 @@ export interface ActividadTotal {
   items: number;
   coste_usd: number;
   tokens: number;
+  /** Tiempo de cómputo IA sumado (ms). Opcional para compatibilidad con backs previos. */
+  duration_ms?: number;
 }
 
 /** Desglose de actividad por tipo de trabajo. */
@@ -89,7 +91,7 @@ export interface ActividadPorDia {
   coste_usd: number;
 }
 
-/** Agregados de Actividad IA (`GET /api/actividad/agregados`): totales + desgloses. */
+/** Agregados de actividad IA (`GET /api/actividad/agregados`): totales + desgloses (los KPIs de Producción). */
 export interface ActividadAgregados {
   total: ActividadTotal;
   por_tipo: ActividadPorTipo[];
@@ -282,13 +284,28 @@ export interface PipelineCluster {
   senal: number;
 }
 
-/** Una RUN del pipeline: el recorrido de una pieza por sus etapas. */
+/** Métricas sumadas de las generaciones de un item del feed de Producción. */
+export interface PipelineMetricas {
+  /** Nº de generaciones correlacionadas (1 en los items sueltos). */
+  items: number;
+  tokens: number | null;
+  coste_usd: number | null;
+  duration_ms: number | null;
+}
+
+/** Un item del feed UNIFICADO de Producción: una RUN del pipeline (el recorrido de una
+ *  pieza por sus etapas) o un trabajo SUELTO de IA (`clase: "actividad"`: generación
+ *  manual/lote o run de agente), presentado con la misma forma y UNA etapa. */
 export interface Pipeline {
+  /** "run" (run del pipeline) | "actividad" (trabajo suelto). Ausente en backs previos = run. */
+  clase?: "run" | "actividad";
   id: string;
   titulo: string;
   marca: string;
   marca_nombre: string;
   origen?: string;
+  /** Solo items sueltos: el tipo de trabajo (copy/rss/imagen/investigacion/run/…). */
+  tipo?: string;
   descripcion?: string;
   creado: string;
   actualizado: string;
@@ -296,11 +313,15 @@ export interface Pipeline {
   /** Clave de la etapa donde la run está «parada» (1ª no-ok/saltada); "" si todo está hecho. */
   etapa_actual: string;
   etapas: PipelineEtapa[];
-  /** Criba de la fuente (⚠️/❗ + hallazgos). Siempre presente desde el back. */
-  qa_fuente?: PipelineQaFuente;
+  /** Criba de la fuente (⚠️/❗ + hallazgos). `null` en items sueltos. */
+  qa_fuente?: PipelineQaFuente | null;
   /** Procedencia IA (historia/cluster) del tema. `null` si no nació de una historia. */
   cluster?: PipelineCluster | null;
+  /** Tokens/coste/duración sumados de sus generaciones. Opcional (backs previos). */
+  metricas?: PipelineMetricas;
   piezas: PipelinePieza[];
+  /** Solo items sueltos: ruta del SPA al resultado de la generación (si su tipo tiene página). */
+  resultado_url?: string | null;
 }
 
 /** Un evento del log de actividad de una run (etapa registrada). */

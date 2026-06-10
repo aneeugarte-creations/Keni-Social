@@ -86,14 +86,15 @@ export const TABS_TEXTO: ItemTabHub[] = [
   { ruta: "/contenido/texto/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
-// Actividad IA es un hub de DOS pestañas: Actividad (el histórico, con sus vistas
-// Feed/Pipelines en ?vista=) y Monitor (en vivo + salud de la infra). Pipelines y la
-// página Sistema se CONSOLIDARON dentro de ellas.
-export const TABS_ACTIVIDAD: ItemTabHub[] = [
-  // `end: true`: comparte prefijo con las sub-rutas, así que el tab raíz (el histórico)
+// Producción (antes «Actividad IA») es un hub de DOS pestañas: Producción (el feed
+// unificado: runs del pipeline + actividad suelta, con conteos y métricas) y Monitor
+// (en vivo + salud de la infra). Las antiguas pestañas Feed/Pipelines se FUSIONARON
+// en el índice; la página Sistema vive dentro del Monitor.
+export const TABS_PRODUCCION: ItemTabHub[] = [
+  // `end: true`: comparte prefijo con las sub-rutas, así que el tab raíz (el feed)
   // solo se marca activo en la coincidencia exacta del índice.
-  { ruta: "/datos/actividad", etiqueta: "Actividad", icono: Activity, end: true },
-  { ruta: "/datos/actividad/monitor", etiqueta: "Monitor", icono: Gauge },
+  { ruta: "/datos/produccion", etiqueta: "Producción", icono: Activity, end: true },
+  { ruta: "/datos/produccion/monitor", etiqueta: "Monitor", icono: Gauge },
 ];
 
 /**
@@ -108,7 +109,7 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   // Bajo /operacion, Programación y Turnos son páginas planas (sin pestañas), no hubs;
   // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido.
   "/contenido/texto": TABS_TEXTO,
-  "/datos/actividad": TABS_ACTIVIDAD,
+  "/datos/produccion": TABS_PRODUCCION,
 };
 
 /**

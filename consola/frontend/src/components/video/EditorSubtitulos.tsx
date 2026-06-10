@@ -125,7 +125,7 @@ export function EditorSubtitulos({
     onSuccess: (gen) => {
       iniciar(gen);
       void qc.invalidateQueries({ queryKey: ["video-subtitulos-de", composicionId] });
-      toast.info("Transcripción en curso. Aparecerá en Actividad IA.");
+      toast.info("Transcripción en curso. Aparecerá en Producción.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
