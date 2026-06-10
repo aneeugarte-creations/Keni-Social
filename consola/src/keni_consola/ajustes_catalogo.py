@@ -50,6 +50,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("noticias_rendimiento", "Priorizar lo que mejor funciona en redes"),
     ("noticias_breaking", "Qué cuenta como última hora"),
     ("noticias_produccion", "Cuándo se produce en automático"),
+    ("noticias_produccion_marca", "Cupos de producción por marca"),
     ("noticias_tecnico", "Ajustes técnicos · capacidad y ritmo del motor"),
     ("tuning", "Ajustes finos · sistema, limpieza y alertas"),
 )
@@ -63,6 +64,7 @@ GRUPOS_NOTICIAS: tuple[str, ...] = (
     "noticias_rendimiento",
     "noticias_breaking",
     "noticias_produccion",
+    "noticias_produccion_marca",
     "noticias_tecnico",
 )
 
@@ -147,6 +149,40 @@ def _ajustes_por_marca() -> list[Ajuste]:
                     defecto=_global_de_etapa(env_flag),
                 )
             )
+    return salida
+
+
+def _cupos_por_marca() -> list[Ajuste]:
+    """Overrides POR MARCA de los cupos de producción (`KENI_CUPO_DIA::marca` /
+    `KENI_CUPO_FRANJA::marca`). El cupo global es el defecto; el override ancla cada marca a
+    SU cadencia real de publicación (Metricool): no postea lo mismo un medio de última hora
+    que una marca de nicho. Se generan en caliente desde el catálogo de marcas."""
+    salida: list[Ajuste] = []
+    for mid, nombre in marcas.opciones():
+        salida.append(
+            Ajuste(
+                clave=config.clave_por_marca(config.ENV_CUPO_DIA, mid),
+                tipo="int",
+                etiqueta=f"{nombre} · cupo diario",
+                ayuda=f"Temas auto-producidos al día para «{nombre}» (24 h móviles). "
+                "Sin tocarlo, usa el cupo diario global. 0 = sin cupo.",
+                grupo="noticias_produccion_marca",
+                defecto=config.cupo_dia(),
+                minimo=0,
+            )
+        )
+        salida.append(
+            Ajuste(
+                clave=config.clave_por_marca(config.ENV_CUPO_FRANJA, mid),
+                tipo="int",
+                etiqueta=f"{nombre} · cupo por franja",
+                ayuda=f"Temas auto-producidos por franja horaria para «{nombre}». "
+                "Sin tocarlo, usa el cupo por franja global. 0 = sin cupo.",
+                grupo="noticias_produccion_marca",
+                defecto=config.cupo_franja(),
+                minimo=0,
+            )
+        )
     return salida
 
 
@@ -520,6 +556,54 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
             maximo=1,
         ),
+        # MADURACIÓN + CUPOS de volumen: dedican tiempo a ELEGIR (la corroboración se acumula
+        # antes de competir por plaza) y anclan el volumen auto-producido a la cadencia real de
+        # publicación de cada marca (pocas plazas por franja → selección, no goteo continuo).
+        Ajuste(
+            clave=config.ENV_PROMOVER_MADURACION_MIN,
+            tipo="int",
+            etiqueta="Minutos de maduración antes de producir",
+            ayuda="Una historia espera estos minutos en el pool antes de poder producirse en "
+            "automático: da tiempo a que otras fuentes la confirmen y a comparar historias "
+            "maduras entre sí. La última hora confirmada por varios medios y lo curado por el "
+            "equipo no esperan. 0 = sin espera.",
+            grupo="noticias_produccion",
+            defecto=config.PROMOVER_MADURACION_MIN_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_CUPO_DIA,
+            tipo="int",
+            etiqueta="Cupo diario de producción automática",
+            ayuda="Máximo de temas auto-producidos por marca en las últimas 24 horas, para "
+            "publicar un volumen similar al real de la marca (cada tema abre ~3 piezas). "
+            "Se puede afinar por marca en «Cupos de producción por marca». 0 = sin cupo.",
+            grupo="noticias_produccion",
+            defecto=config.CUPO_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_CUPO_FRANJA,
+            tipo="int",
+            etiqueta="Cupo por franja horaria",
+            ayuda="Máximo de temas auto-producidos por marca en la franja horaria en curso. "
+            "Reparte el cupo diario a lo largo del día: cada franja nueva trae plazas libres "
+            "para las noticias frescas y muy relevantes de ese momento. 0 = sin cupo.",
+            grupo="noticias_produccion",
+            defecto=config.CUPO_FRANJA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_FRANJA_HORAS,
+            tipo="int",
+            etiqueta="Duración de la franja (horas)",
+            ayuda="Tamaño de los bloques horarios del cupo por franja (bloques fijos del día "
+            "UTC; p. ej. 3 = 00-03, 03-06…).",
+            grupo="noticias_produccion",
+            defecto=config.FRANJA_HORAS_DEF,
+            minimo=1,
+            maximo=24,
+        ),
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
         # daemon, modula el ranking. Sus tres parámetros van debajo, en el mismo grupo.
         Ajuste(
@@ -738,6 +822,7 @@ def catalogo() -> list[Ajuste]:
         _maestros_etapa()
         + _construir_catalogo()
         + _ajustes_por_marca()
+        + _cupos_por_marca()
         + _publicacion_por_marca()
     )
 

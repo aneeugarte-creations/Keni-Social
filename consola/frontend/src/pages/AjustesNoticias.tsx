@@ -16,6 +16,7 @@ const GRUPOS_NOTICIAS = new Set([
   "noticias_rendimiento",
   "noticias_breaking",
   "noticias_produccion",
+  "noticias_produccion_marca",
   "noticias_tecnico",
 ]);
 

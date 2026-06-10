@@ -812,6 +812,7 @@ def evaluar_liston(
     palabras_marca: frozenset[str] = frozenset(),
     min_score: float = LISTON_MIN_SCORE_DEF,
     min_marca: float = LISTON_MIN_MARCA_DEF,
+    min_maduracion_min: int = 0,
     ahora: datetime | None = None,
 ) -> tuple[bool, str]:
     """¿Esta historia supera el LISTÓN de producción automática? `(supera, motivo)`. PURA.
@@ -819,27 +820,46 @@ def evaluar_liston(
     Reglas, en orden (el motivo explica la PRIMERA que falla):
       1. VERIFICACIÓN: una historia `dudosa` (única fuente de baja confianza / clickbait)
          jamás dispara producción automática, puntúe lo que puntúe.
-      2. SCORE: el score RECALCULADO AHORA (no el persistido, que envejece entre re-scores)
+      2. MADURACIÓN: la historia debe llevar al menos `min_maduracion_min` minutos en el
+         pool (desde `primer_visto`) antes de competir por plaza. Promover al primer
+         avistamiento elige con UNA fuente y señal a medio acumular; esperar deja que la
+         corroboración/viralidad separen lo grande del ruido y la selección compare
+         historias maduras entre sí. Exentas: CURADAS por el equipo y BREAKING
+         corroboradas (la urgencia real no espera). `0` desactiva la regla; sin
+         `primer_visto` parseable no se retiene (no se castiga un dato ausente).
+      3. SCORE: el score RECALCULADO AHORA (no el persistido, que envejece entre re-scores)
          debe alcanzar `min_score`.
-      3. ENCAJE DE MARCA: la relevancia por vocabulario debe alcanzar `min_marca`. Exentas:
+      4. ENCAJE DE MARCA: la relevancia por vocabulario debe alcanzar `min_marca`. Exentas:
          las historias CURADAS por el equipo (señal artificial de cajón: el humano ya decidió)
          y las BREAKING CORROBORADAS (evento mayor confirmado por varias fuentes a la vez,
          cuyo vocabulario puede ser nuevo).
     Devuelve siempre un motivo legible (también al superar): es la explicación que se muestra.
     """
+    from .ingesta import SENAL_CURADO
+
     if (cluster.get("verificacion") or "") == "dudosa":
         return False, "verificación dudosa (única fuente no fiable o clickbait)"
+    curada = int(cluster.get("senal") or 0) >= SENAL_CURADO
+    breaking_corroborada = bool(int(cluster.get("breaking") or 0)) and (
+        (cluster.get("verificacion") or "") == "corroborada"
+    )
+    if min_maduracion_min > 0 and not curada and not breaking_corroborada:
+        visto = _parse_iso(str(cluster.get("primer_visto") or ""))
+        if visto is not None:
+            momento = ahora or datetime.now(UTC)
+            if momento.tzinfo is None:
+                momento = momento.replace(tzinfo=UTC)
+            edad_min = (momento - visto).total_seconds() / 60.0
+            if edad_min < min_maduracion_min:
+                return False, (
+                    f"madurando ({edad_min:.0f} de {min_maduracion_min} min en el pool): "
+                    "se promueve cuando la corroboración haya tenido tiempo de acumularse"
+                )
     score, _razon, desglose = puntuar_detalle(cluster, palabras_marca=palabras_marca, ahora=ahora)
     if score < min_score:
         return False, f"score {score:.2f} < {min_score:.2f} (listón de producción)"
     s_marca = float(desglose["marca"])
     if s_marca < min_marca:
-        from .ingesta import SENAL_CURADO
-
-        curada = int(cluster.get("senal") or 0) >= SENAL_CURADO
-        breaking_corroborada = bool(desglose["breaking"]) and (
-            (cluster.get("verificacion") or "") == "corroborada"
-        )
         if not curada and not breaking_corroborada:
             return False, (
                 f"encaje con la marca {s_marca:.2f} < {min_marca:.2f} "

@@ -81,8 +81,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_GENERACION_PAUSADA,
         config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_MARGEN_MANUAL,
         config.ENV_PROMPT_MAX_CHARS,
-        # Listón de auto-producción del ranking de noticias (umbrales de promoción a tema).
+        # Listón de auto-producción del ranking de noticias (umbrales de promoción a tema)
+        # + maduración y cupos de volumen (día móvil / franja horaria).
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
+        config.ENV_PROMOVER_MADURACION_MIN,
+        config.ENV_CUPO_DIA, config.ENV_CUPO_FRANJA, config.ENV_FRANJA_HORAS,
         # Filtro de ENTRADA por agenda de marca (la puerta del pool).
         config.ENV_INGESTA_FILTRO,
         # Caducidad del pool: TTL (lo viejo expira solo) + retención (techo del archivo).
@@ -148,7 +151,8 @@ def test_grupos_estables(store):
         "maquina_global", "maestros_etapa", "automatizacion_marca", "pipeline_topes",
         "publicacion", "publicacion_marca", "automatismos_generales",
         "noticias_entrada", "noticias_orden", "noticias_rendimiento",
-        "noticias_breaking", "noticias_produccion", "noticias_tecnico",
+        "noticias_breaking", "noticias_produccion", "noticias_produccion_marca",
+        "noticias_tecnico",
         "tuning",
     }
     # GRUPOS_NOTICIAS (las secciones de la subpágina de Noticias) referencia grupos reales.
@@ -188,6 +192,10 @@ def test_noticias_reparto_en_secciones(store):
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,
             config.ENV_PROMOVER_MIN_MARCA,
+            config.ENV_PROMOVER_MADURACION_MIN,
+            config.ENV_CUPO_DIA,
+            config.ENV_CUPO_FRANJA,
+            config.ENV_FRANJA_HORAS,
         },
         "noticias_tecnico": {
             config.ENV_INGESTA_BATCH,

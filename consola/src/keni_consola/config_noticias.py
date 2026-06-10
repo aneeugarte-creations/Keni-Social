@@ -311,6 +311,70 @@ def promover_min_marca() -> float:
 
 
 # --------------------------------------------------------------------------- #
+# Cupos de producción automática (volumen ≈ cadencia real de cada marca)       #
+# --------------------------------------------------------------------------- #
+
+# La admisión CI sin cupo produce al ritmo de la ingesta (cientos de noticias/día → cientos de
+# temas/día), muy por encima de lo que una marca publica de verdad. Estos cupos anclan el
+# volumen auto-producido a la CADENCIA REAL de publicación (medida en Metricool) y convierten
+# la admisión en una SELECCIÓN: pocas plazas por franja, para las mejores historias del
+# momento — y cada franja nueva trae plazas frescas para lo que acaba de pasar.
+ENV_PROMOVER_MADURACION_MIN = "KENI_PROMOVER_MADURACION_MIN"
+PROMOVER_MADURACION_MIN_DEF = 45
+ENV_CUPO_DIA = "KENI_CUPO_DIA"
+CUPO_DIA_DEF = 16
+ENV_CUPO_FRANJA = "KENI_CUPO_FRANJA"
+CUPO_FRANJA_DEF = 3
+ENV_FRANJA_HORAS = "KENI_FRANJA_HORAS"
+FRANJA_HORAS_DEF = 3
+
+
+def promover_maduracion_min() -> int:
+    """Minutos mínimos de una historia en el pool antes de poder promoverse
+    (`KENI_PROMOVER_MADURACION_MIN`, def 45, min 0; `0` desactiva). Exentas las curadas y las
+    breaking corroboradas (regla en `clustering.evaluar_liston`): la urgencia real no espera.
+    Dedicar este tiempo a "elegir" deja que la corroboración se acumule y que la selección
+    compare historias maduras, no primeras llegadas."""
+    return _entero(ENV_PROMOVER_MADURACION_MIN, PROMOVER_MADURACION_MIN_DEF, minimo=0)
+
+
+def _entero_marca(env_flag: str, marca: str, defecto: int, *, minimo: int) -> int:
+    """Entero con override POR MARCA: lee `ENV::marca` y cae a `ENV` (mismo sufijo `::` que
+    los toggles de etapa). El override hereda el valor global si falta o no parsea."""
+    base = _entero(env_flag, defecto, minimo=minimo)
+    if not marca:
+        return base
+    return _entero(f"{env_flag}::{marca}", base, minimo=minimo)
+
+
+def cupo_dia(marca: str = "") -> int:
+    """Máx. temas AUTO-PRODUCIDOS por marca en 24 h móviles (`KENI_CUPO_DIA`, def 16, min 0).
+
+    `0` = sin cupo diario. Override por marca: `KENI_CUPO_DIA::<marca>`. Ventana MÓVIL de
+    24 h (no día calendario): sin efecto frontera a medianoche (UTC ≠ CDMX) y sin ráfaga al
+    cambiar de día. Calibrado con la cadencia real de publicación de la marca (Metricool):
+    cada tema abre ~3 piezas (IG/X/FB), así que cupo_dia≈24 ≈ 70-75 posts/día."""
+    return _entero_marca(ENV_CUPO_DIA, marca, CUPO_DIA_DEF, minimo=0)
+
+
+def cupo_franja(marca: str = "") -> int:
+    """Máx. temas AUTO-PRODUCIDOS por marca en la FRANJA HORARIA actual
+    (`KENI_CUPO_FRANJA`, def 3, min 0; `0` = sin cupo por franja). Override por marca:
+    `KENI_CUPO_FRANJA::<marca>`. Reparte el cupo diario a lo largo del día: una franja
+    llena NO hipoteca las siguientes, que quedan libres para las noticias frescas y muy
+    relevantes de su momento."""
+    return _entero_marca(ENV_CUPO_FRANJA, marca, CUPO_FRANJA_DEF, minimo=0)
+
+
+def franja_horas() -> int:
+    """Duración (horas) de las franjas del cupo (`KENI_FRANJA_HORAS`, def 3, min 1, máx 24).
+
+    Las franjas son bloques FIJOS alineados al día UTC (p. ej. con 3 h: 00-03, 03-06, …):
+    deterministas y baratas de contar. Global (no por marca): es la rejilla, no el cupo."""
+    return min(24, _entero(ENV_FRANJA_HORAS, FRANJA_HORAS_DEF, minimo=1))
+
+
+# --------------------------------------------------------------------------- #
 # Señal de rendimiento en el ranking (líneas que mejor funcionan) — Fase 2c     #
 # --------------------------------------------------------------------------- #
 

@@ -401,6 +401,49 @@ def test_liston_rechaza_sin_encaje_de_marca():
     assert "marca" in motivo
 
 
+def test_liston_madura_antes_de_promover():
+    """Con maduración, una historia recién vista NO se promueve aún (motivo explicable)."""
+    recien = _cluster_apto(primer_visto=(_T0 - timedelta(minutes=10)).isoformat())
+    ok, motivo = clustering.evaluar_liston(
+        recien, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
+    )
+    assert not ok
+    assert "madurando" in motivo
+
+
+def test_liston_madurada_se_promueve():
+    madura = _cluster_apto(primer_visto=(_T0 - timedelta(minutes=50)).isoformat())
+    ok, _motivo = clustering.evaluar_liston(
+        madura, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
+    )
+    assert ok
+
+
+def test_liston_maduracion_exime_breaking_corroborada_y_curadas():
+    from keni_consola.dominio.ingesta import SENAL_CURADO
+
+    breaking = _cluster_apto(breaking=1, primer_visto=(_T0 - timedelta(minutes=1)).isoformat())
+    ok, _m = clustering.evaluar_liston(
+        breaking, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
+    )
+    assert ok  # la urgencia real no espera
+    curada = _cluster_apto(
+        senal=SENAL_CURADO, primer_visto=(_T0 - timedelta(minutes=1)).isoformat()
+    )
+    ok, _m = clustering.evaluar_liston(
+        curada, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
+    )
+    assert ok  # el humano ya decidió
+
+
+def test_liston_maduracion_sin_primer_visto_no_retiene():
+    """Un dato ausente no castiga: sin `primer_visto` parseable la regla no aplica."""
+    ok, _m = clustering.evaluar_liston(
+        _cluster_apto(), palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
+    )
+    assert ok
+
+
 def test_liston_exime_de_marca_a_lo_curado_por_el_equipo():
     from keni_consola.dominio.ingesta import SENAL_CURADO
 

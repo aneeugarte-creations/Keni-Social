@@ -41,6 +41,7 @@ __all__ = [
     "crear_tema_de",
     "crear_tema_de_cluster",
     "clusters_para_promover",
+    "cupo_produccion_restante",
     "promover_clusters_marca",
     "temas_en_vuelo",
     "caducar_temas_viejos",
@@ -508,6 +509,58 @@ def temas_en_vuelo(marca: str) -> int:
     item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
     """
     return len(_temas_en_vuelo_de(marca))
+
+
+def cupo_produccion_restante(
+    marca: str, *, ahora: datetime | None = None
+) -> int | None:
+    """Plazas de ADMISIÓN que le quedan a `marca` por sus cupos de volumen; None = sin cupos.
+
+    Dos cupos, gana el más restrictivo (ambos cuentan temas `origen=pipeline` por `creado`):
+      - DIARIO (`KENI_CUPO_DIA`, ventana MÓVIL de 24 h): ancla el volumen auto-producido a la
+        cadencia real de publicación de la marca.
+      - POR FRANJA (`KENI_CUPO_FRANJA` en bloques fijos de `KENI_FRANJA_HORAS` alineados al
+        día UTC): reparte ese volumen a lo largo del día, de modo que SIEMPRE queden plazas
+        para las noticias frescas y muy relevantes de cada franja (una mañana cargada no se
+        come las plazas de la tarde).
+
+    `None` cuando ambos cupos están desactivados (0): la admisión queda como antes (solo el
+    gate serial en vuelo). FAIL-CLOSED ante un contador ilegible: promover gasta tokens, así
+    que sin lectura fiable se devuelve 0 (no se admite; el siguiente tick reintenta).
+    """
+    from ..tiempo import iso_utc
+
+    momento = ahora or datetime.now(timezone.utc)
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    restantes: list[int] = []
+    cupo_d = config.cupo_dia(marca)
+    if cupo_d > 0:
+        try:
+            usados = repos.contar_contenido_origen_desde(
+                marca, ORIGEN_PIPELINE, iso_utc(momento - timedelta(hours=24))
+            )
+        except Exception:  # noqa: BLE001 -- fail-closed: sin contador fiable no se admite
+            _log.warning("pipeline: no se pudo contar el cupo diario (%s)", marca, exc_info=True)
+            return 0
+        restantes.append(cupo_d - usados)
+    cupo_f = config.cupo_franja(marca)
+    if cupo_f > 0:
+        horas = config.franja_horas()
+        inicio_franja = momento.replace(
+            hour=momento.hour - (momento.hour % horas), minute=0, second=0, microsecond=0
+        )
+        try:
+            usados_f = repos.contar_contenido_origen_desde(
+                marca, ORIGEN_PIPELINE, iso_utc(inicio_franja)
+            )
+        except Exception:  # noqa: BLE001 -- fail-closed (mismo rationale que el cupo diario)
+            _log.warning("pipeline: no se pudo contar el cupo de franja (%s)", marca, exc_info=True)
+            return 0
+        restantes.append(cupo_f - usados_f)
+    if not restantes:
+        return None
+    return max(0, min(restantes))
 
 
 def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:

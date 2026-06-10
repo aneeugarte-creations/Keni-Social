@@ -921,6 +921,93 @@ def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     assert res["temas"][0]["titulo"] == "Hist 1"  # la de mayor score
 
 
+# --------------------------------------------------------------------------- #
+# Cupos de VOLUMEN (día móvil + franja horaria): anclan la producción a la     #
+# cadencia real de la marca y dejan plazas libres para lo fresco de cada franja. #
+# --------------------------------------------------------------------------- #
+
+
+def test_cupo_franja_corta_la_admision(entorno, monkeypatch):
+    """Con el cupo de franja lleno (temas ya creados en el bloque actual), CI no admite más."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_CUPO_DIA", "0")        # aísla: solo la franja limita
+    monkeypatch.setenv("KENI_CUPO_FRANJA", "2")
+    monkeypatch.setenv("KENI_FRANJA_HORAS", "24")   # bloque único: lo creado hoy cuenta seguro
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    # 2 temas auto-producidos en la franja (con copy generado: NO cuentan como en-vuelo,
+    # así el gate serial no interfiere y se prueba el cupo de volumen aislado).
+    for n in (1, 2):
+        t = _tema_pipeline(
+            titulo=f"Producido {n}", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+        )
+        repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
+    _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
+
+    res = pc._ejecutar_barrido()
+
+    assert res["temas"] == []  # cupo de franja lleno: la plaza es de la franja siguiente
+    assert repos.obtener_noticia_cluster("hot")["estado"] == "nuevo"  # sigue en el pool
+
+
+def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
+    """Con el cupo DIARIO (24 h móviles) agotado, CI no admite aunque la franja tenga hueco."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_CUPO_DIA", "1")
+    monkeypatch.setenv("KENI_CUPO_FRANJA", "0")     # aísla: solo el día limita
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    t = _tema_pipeline(
+        titulo="Producido hoy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+    )
+    repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
+    _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
+
+    res = pc._ejecutar_barrido()
+
+    assert res["temas"] == []
+    assert repos.obtener_noticia_cluster("hot")["estado"] == "nuevo"
+
+
+def test_cupo_admite_solo_las_plazas_restantes(entorno, monkeypatch):
+    """Con plazas parciales, CI promueve solo las restantes (las mejores por score)."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
+    monkeypatch.setenv("KENI_CUPO_DIA", "0")
+    monkeypatch.setenv("KENI_CUPO_FRANJA", "2")
+    monkeypatch.setenv("KENI_FRANJA_HORAS", "24")
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    t = _tema_pipeline(
+        titulo="Producido antes", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+    )
+    repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
+    _sembrar_cluster("c1", titulo="Hist 1", score=0.9)
+    _sembrar_cluster("c2", titulo="Hist 2", score=0.8)
+
+    res = pc._ejecutar_barrido()
+
+    assert [t["titulo"] for t in res["temas"]] == ["Hist 1"]  # 1 plaza restante, la top
+
+
+def test_cupo_por_marca_override(entorno, monkeypatch):
+    """`KENI_CUPO_FRANJA::marca` (store) gana al global para esa marca."""
+    overrides = {"KENI_CUPO_FRANJA::unotv": "0"}  # unotv sin cupo de franja
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
+    monkeypatch.setenv("KENI_CUPO_FRANJA", "2")
+    assert config.cupo_franja("unotv") == 0
+    assert config.cupo_franja("claro-sports") == 2
+
+
+def test_cupo_produccion_restante_none_sin_cupos(entorno, monkeypatch):
+    """Ambos cupos a 0 -> None (la admisión queda solo con el gate serial)."""
+    monkeypatch.setenv("KENI_CUPO_DIA", "0")
+    monkeypatch.setenv("KENI_CUPO_FRANJA", "0")
+    from keni_consola.pipeline_contenido import _ingesta
+
+    assert _ingesta.cupo_produccion_restante("unotv") is None
+
+
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
     """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba).
 

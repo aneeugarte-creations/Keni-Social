@@ -101,6 +101,15 @@ def _ejecutar_barrido() -> dict[str, Any]:
         cupo = config.pipeline_en_vuelo_max() - _ingesta.temas_en_vuelo(marca)
         if cupo <= 0:
             continue
+        # CUPOS DE VOLUMEN (día móvil + franja horaria): anclan la producción a la cadencia
+        # real de publicación de la marca y convierten la admisión en SELECCIÓN (pocas plazas
+        # por franja, para las mejores historias del ranking en ese momento). None = sin cupos.
+        cupo_volumen = _ingesta.cupo_produccion_restante(marca)
+        if cupo_volumen is not None:
+            if cupo_volumen <= 0:
+                _log.debug("pipeline: cupo de volumen agotado para %s; franja/día llenos.", marca)
+                continue
+            cupo = min(cupo, cupo_volumen)
         try:
             temas_nuevos.extend(promover_clusters_marca(marca, maximo=min(maximo, cupo)))
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido

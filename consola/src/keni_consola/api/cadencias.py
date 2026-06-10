@@ -95,7 +95,8 @@ async def guardar(request: Request) -> Response:
     }
     if not dom_cadencia.cadencia_valida(candidata):
         return JSONResponse(
-            {"error": "Revisa la ventana: horas HH:MM válidas y fin posterior al inicio."},
+            {"error": "Revisa la ventana: horas HH:MM válidas y fin distinto del inicio "
+             "(fin anterior al inicio = ventana nocturna que cruza la medianoche)."},
             status_code=400,
         )
 

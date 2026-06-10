@@ -424,6 +424,20 @@ function GruposAjustes({
           );
         }
 
+        // Cupos de producción por marca: overrides del cupo global. Colapsado: solo se tocan
+        // al calibrar una marca a su cadencia real de publicación.
+        if (grupo.id === "noticias_produccion_marca") {
+          return (
+            <TarjetaColapsable
+              key={grupo.id}
+              titulo={grupo.titulo}
+              descripcion="Ajusta el volumen auto-producido de cada marca a su ritmo real de publicación. Sin tocar, cada marca usa el cupo global."
+            >
+              <div>{filas}</div>
+            </TarjetaColapsable>
+          );
+        }
+
         // Técnico del motor de noticias: capacidad y ritmo. Colapsado para que la subpágina de
         // Noticias muestre solo lo editorial; los defectos van bien salvo problema de carga/coste.
         if (grupo.id === "noticias_tecnico") {

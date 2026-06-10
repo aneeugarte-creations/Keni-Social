@@ -71,5 +71,6 @@ def evaluar(
         palabras_marca=palabras_marca,
         min_score=config.promover_min_score(),
         min_marca=config.promover_min_marca(),
+        min_maduracion_min=config.promover_maduracion_min(),
         ahora=ahora,
     )

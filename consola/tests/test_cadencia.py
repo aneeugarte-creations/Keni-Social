@@ -27,7 +27,9 @@ def _cad(**extra):
 def test_cadencia_valida():
     assert c.cadencia_valida(_cad())
     assert not c.cadencia_valida(_cad(margen_min=0))
-    assert not c.cadencia_valida(_cad(hora_inicio="22:00", hora_fin="08:00"))  # fin<=inicio
+    # fin<inicio = ventana NOCTURNA (cruza la medianoche): VÁLIDA (operación CDMX sobre UTC).
+    assert c.cadencia_valida(_cad(hora_inicio="22:00", hora_fin="08:00"))
+    assert not c.cadencia_valida(_cad(hora_inicio="08:00", hora_fin="08:00"))  # fin==inicio
     assert not c.cadencia_valida(_cad(dias=[]))
     assert not c.cadencia_valida(_cad(hora_inicio="24:00"))  # hora inválida
 
@@ -72,6 +74,37 @@ def test_solo_futuro():
 def test_invalida_devuelve_none():
     ahora = datetime(2026, 6, 9, 6, 0)
     assert c.proximo_hueco_cadencia(_cad(margen_min=0), ahora, set()) is None
+
+
+# --- ventana nocturna (cruza la medianoche) -----------------------------------
+
+
+def test_nocturna_hueco_tras_medianoche_pertenece_a_la_ventana_de_ayer():
+    # Ventana 16:00-05:00 (nocturna), margen 120. A las 02:30 del miércoles los huecos
+    # 16..02 de la ventana del MARTES ya pasaron; el siguiente de esa misma ventana es
+    # el de las 04:00 (madrugada del miércoles).
+    cad = _cad(margen_min=120, hora_inicio="16:00", hora_fin="05:00")
+    ahora = datetime(2026, 6, 10, 2, 30)  # miércoles de madrugada
+    assert c.proximo_hueco_cadencia(cad, ahora, set()) == "2026-06-10T04:00"
+
+
+def test_nocturna_rueda_a_la_ventana_de_hoy_al_agotarse_la_de_ayer():
+    # Tras el último hueco de la ventana de ayer (05:00), el siguiente es el arranque
+    # de la ventana de HOY (16:00).
+    cad = _cad(margen_min=120, hora_inicio="16:00", hora_fin="05:00")
+    ahora = datetime(2026, 6, 10, 5, 30)
+    assert c.proximo_hueco_cadencia(cad, ahora, set()) == "2026-06-10T16:00"
+
+
+def test_nocturna_dia_activo_es_el_del_arranque_de_la_ventana():
+    # Cadencia solo del martes (1): sus huecos de madrugada del miércoles SÍ existen
+    # (pertenecen a la ventana del martes); la ventana del miércoles no.
+    cad = _cad(margen_min=120, hora_inicio="16:00", hora_fin="05:00", dias=[1])
+    ahora = datetime(2026, 6, 10, 2, 30)  # miércoles de madrugada
+    assert c.proximo_hueco_cadencia(cad, ahora, set()) == "2026-06-10T04:00"
+    # Pasada la cola de la ventana del martes, el siguiente arranque es el MARTES próximo.
+    despues = datetime(2026, 6, 10, 5, 30)
+    assert c.proximo_hueco_cadencia(cad, despues, set()) == "2026-06-16T16:00"
 
 
 # --- aplicabilidad por especificidad -----------------------------------------
