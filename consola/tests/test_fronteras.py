@@ -63,6 +63,13 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # `dominio.copy.crear_publicaciones_desde_piezas` o directo). Es el handoff A→C de
         # siempre, ahora desde el módulo de historial (al retirar el sistema de skills).
         ("historial", "publicaciones"),
+        # Seam (produccion lee la agenda de C): el panel "Producción del día"
+        # (`api/produccion.py`) muestra la cola de programación con el PRÓXIMO HUECO por
+        # red, y ese cálculo (franjas + cadencias + ocupados) vive en
+        # `api.publicaciones.calcular_hueco_para` — la MISMA función del encolado manual y
+        # de la auto-programación, a propósito: si el panel calculara sus huecos aparte,
+        # mentiría en cuanto divergieran. SOLO LECTURA (no muta nada de C).
+        ("produccion", "publicaciones"),
         # Seam #7 (operación C usa la infra de jobs de A): `api/parrilla_import.py` (C)
         # importa documento a la rota con un `claude -p` READ-ONLY en SEGUNDO PLANO, y
         # para ello usa la infraestructura de jobs `generaciones` (A) — encolar y leer el

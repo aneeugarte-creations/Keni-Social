@@ -28,6 +28,7 @@ permisos = ["editor", "admin"]
 # para mapear cada router a su app.
 modulos_backend = [
   "actividad",
+  "produccion",
   "texto",
   "bloques",
   "imagen",
