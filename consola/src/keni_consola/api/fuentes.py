@@ -219,6 +219,14 @@ async def activar_presets_handler(request: Request) -> Response:
             incluir="",
             excluir="",
             redes_def="",
+            # La CATEGORÍA del preset manda la CADENCIA de sondeo del motor (deportes ~180s,
+            # gaming ~1800s…) y alimenta la cobertura/huecos de /salud. Antes solo se devolvía
+            # cosmética en la respuesta y la fuente nacía sin categoría: cadencia por defecto
+            # para todo y categoría «—» en Salud.
+            categoria=preset.get("categoria", "") or "",
+            # Cadencia PROPIA del preset (fuentes que rate-limitan, p. ej. GDELT): el motor
+            # la respeta por encima del default de la categoría. 0 = sin override.
+            intervalo_min=int(preset.get("intervalo_min") or 0),
         )
         # Añade a las ya activas para que iteraciones posteriores en este mismo request
         # sean idempotentes (misma URL pedida dos veces -> solo se crea una).
@@ -228,7 +236,6 @@ async def activar_presets_handler(request: Request) -> Response:
             **fuente,
             "idioma": preset.get("idioma", ""),
             "region": preset.get("region", ""),
-            "categoria": preset.get("categoria", ""),
         }
         creadas.append(fuente_resp)
 

@@ -7,7 +7,9 @@ Módulo PURO de datos (sin red, sin BD). Ofrece tres funciones de consulta:
 
 Cada preset tiene los campos del contrato (04-fuentes-externas.md):
   id, nombre, url, categoria, marca_sugerida, linea_sugerida, idioma, region,
-  descripcion.
+  descripcion. Opcional: `intervalo_min` (segundos entre sondeos para fuentes que
+  rate-limitan — p. ej. GDELT devuelve 429 ante ráfagas; el activador lo propaga a la
+  fuente creada y el motor lo respeta por encima de la cadencia de su categoría).
 
 Categorías: mx, regional, internacional, deportes, ciencia-tech, gaming, negocios,
 tendencias.
@@ -496,6 +498,7 @@ _PRESETS: list[dict[str, Any]] = [
         "linea_sugerida": "Internacional",
         "idioma": "en",
         "region": "GLOBAL",
+        "intervalo_min": 1800,  # GDELT rate-limita (429): sondeo espaciado a 30 min
         "descripcion": "GDELT: cobertura mundial multi-idioma sobre México.",
     },
     # ============================================================ NEGOCIOS == #
@@ -1071,6 +1074,7 @@ _PRESETS: list[dict[str, Any]] = [
         "linea_sugerida": "Ciencia y Tecnología",
         "idioma": "en",
         "region": "GLOBAL",
+        "intervalo_min": 1800,  # GDELT rate-limita (429): sondeo espaciado a 30 min
         "descripcion": "GDELT: cobertura mundial multi-idioma de ciencia y tecnología.",
     },
     # ============================================================== GAMING == #
@@ -1247,7 +1251,7 @@ _PRESETS: list[dict[str, Any]] = [
     {
         "id": "theverge-gaming",
         "nombre": "The Verge — Gaming",
-        "url": "https://www.theverge.com/games/rss/index.xml",
+        "url": "https://www.theverge.com/rss/games/index.xml",
         "categoria": "ciencia-tech",
         "marca_sugerida": "nacion-gamer",
         "linea_sugerida": "Gaming & Tech",
@@ -1286,6 +1290,7 @@ _PRESETS: list[dict[str, Any]] = [
         "linea_sugerida": "Gaming",
         "idioma": "en",
         "region": "GLOBAL",
+        "intervalo_min": 1800,  # GDELT rate-limita (429): sondeo espaciado a 30 min
         "descripcion": "GDELT: cobertura mundial multi-idioma de videojuegos.",
     },
     # --- Reddit gaming (subreddits verificados) ----------------------------- #
@@ -1499,6 +1504,7 @@ _PRESETS: list[dict[str, Any]] = [
         "linea_sugerida": "Tendencias México",
         "idioma": "en",
         "region": "MX",
+        "intervalo_min": 1800,  # GDELT rate-limita (429): sondeo espaciado a 30 min
         "descripcion": "GDELT: cobertura mundial multi-idioma sobre México.",
     },
     # --- YouTube canales oficiales (channel_id verificado) ------------------ #

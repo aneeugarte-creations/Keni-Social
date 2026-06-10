@@ -318,6 +318,27 @@ def test_post_activar_presets_crea_fuentes(cliente, monkeypatch):
     nombres = {f["nombre"] for f in datos["fuentes"]}
     assert "La Jornada — Edición" in nombres
     assert "IGN — Latinoamérica" in nombres
+    # La CATEGORÍA del preset se PERSISTE en la fuente (manda la cadencia del motor y la
+    # cobertura de /salud; antes solo viajaba cosmética en la respuesta).
+    from keni_consola import repos as _repos
+
+    por_nombre = {f["nombre"]: f for f in _repos.listar_fuentes_rss()}
+    assert por_nombre["La Jornada — Edición"]["categoria"] == "mx"
+    assert por_nombre["IGN — Latinoamérica"]["categoria"] == "gaming"
+
+
+def test_post_activar_propaga_intervalo_del_preset(cliente, monkeypatch):
+    """Un preset con `intervalo_min` (fuentes que rate-limitan, p. ej. GDELT) lo persiste."""
+    from keni_consola import repos as _repos
+    from keni_consola.dominio import http_feed
+
+    monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
+
+    r = cliente.post("/api/fuentes/presets/activar", json={"ids": ["gdelt-mundo"]})
+    assert r.status_code == 200 and r.json()["creadas"] == 1
+    fuente = next(f for f in _repos.listar_fuentes_rss() if f["nombre"].startswith("GDELT"))
+    assert fuente["intervalo_min"] == 1800  # sondeo espaciado: GDELT castiga ráfagas con 429
+    assert fuente["categoria"] == "internacional"
 
 
 def test_post_activar_idempotente(cliente, monkeypatch):
