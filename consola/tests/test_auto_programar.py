@@ -139,15 +139,16 @@ def test_barrer_aprobadas_programa_las_existentes(cliente, ahora_fijo):
 # --------------------------------------------------------------------------- #
 
 
-def _green_aprobado(titulo="Green del banco", creado="2026-05-01T00:00:00"):
-    """Siembra un contenido green APROBADO en el banco (creado hace tiempo: fuera de la
-    ventana de 24 h del plan, para que no cuente como el generado de hoy)."""
+def _green_aprobado(titulo="Green del banco", creado="2026-05-01T00:00:00", estado="publicado"):
+    """Siembra un contenido green del BANCO (creado hace tiempo: fuera de la ventana de
+    24 h del plan). Por defecto su pieza ya está PUBLICADA (un green aprobado sale una
+    primera vez por su propia franja; al banco de reemisión llega ya publicado)."""
     cont = repos.crear_contenido(
         clase="contenido", titulo=titulo, marca="unotv",
         flujo="evergreen", origen="evergreen", creado=creado,
     )
     repos.crear_contenido_plataforma(
-        contenido_id=cont["id"], red="x", copy="Copy green", estado="aprobado",
+        contenido_id=cont["id"], red="x", copy="Copy green", estado=estado,
         falta_revision=False,
     )
     return cont
