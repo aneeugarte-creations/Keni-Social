@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileUp, Image, Loader2, Maximize2, Minimize2, Plus, Repeat, Save, SaveAll, Video, X } from "lucide-react";
+import { Check, Copy, FileUp, Image, Loader2, Plus, Repeat, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -90,23 +90,6 @@ export default function Imagen() {
   const [editTab, setEditTab] = useState<{ id: string; valor: string } | null>(null);
   // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
-
-  // PANTALLA COMPLETA: foco en el editor (pestañas + lienzo), ocultando el resto del shell. El
-  // objetivo es la región editor (`editorRef`), así sus propias pestañas —y el botón para salir—
-  // siguen visibles en pantalla completa.
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const [pantallaCompleta, setPantallaCompleta] = useState(false);
-  useEffect(() => {
-    const onCambio = () => setPantallaCompleta(document.fullscreenElement === editorRef.current);
-    document.addEventListener("fullscreenchange", onCambio);
-    return () => document.removeEventListener("fullscreenchange", onCambio);
-  }, []);
-  const alternarPantallaCompleta = () => {
-    const el = editorRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen?.();
-    else void el.requestFullscreen?.().catch(() => toast.error("Tu navegador no permitió la pantalla completa."));
-  };
 
   // Marca que filtra la GALERÍA y la TEXTO del estado vacío: la del selector global. «Todas»
   // (marcaActiva null) => "" => se muestra TODO (plantillas/logos de todas las marcas).
@@ -493,13 +476,9 @@ export default function Imagen() {
     <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Imagen" icono={Image} />
-      {/* Región EDITOR (pestañas + lienzo): objetivo de PANTALLA COMPLETA, para que sus pestañas
-          —y el botón para salir— sigan visibles. `bg-background` evita un fondo transparente en
-          pantalla completa. */}
-      <div ref={editorRef} className="flex min-h-0 flex-1 flex-col bg-background">
       {/* Pestañas (scroll horizontal) + acciones de guardado a la DERECHA, al final de la misma
-          barra: guardar / guardar como / pantalla completa. El «+» (lienzo nuevo) solo aparece
-          cuando ya hay alguna pestaña. */}
+          barra: guardar / guardar como. El «+» (lienzo nuevo) solo aparece cuando ya hay alguna
+          pestaña. */}
       {pestanas.length > 0 && (
         <div className="flex items-center border-b border-border bg-muted/30">
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2">
@@ -584,27 +563,11 @@ export default function Imagen() {
                   </span>
                   Guardar
                 </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={guardando}
-                  // En pantalla completa el diálogo (portal a body) quedaría oculto: salimos antes de abrirlo.
-                  onClick={() => { if (document.fullscreenElement) void document.exitFullscreen?.(); setDialogo({ nombre: "", tipo: "foto" }); }}
-                  title="Guardar como… (plantilla nueva)"
-                >
+                <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "", tipo: "foto" })} title="Guardar como… (plantilla nueva)">
                   <SaveAll className="h-4 w-4" />
                 </Button>
               </>
             )}
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={alternarPantallaCompleta}
-              aria-pressed={pantallaCompleta}
-              title={pantallaCompleta ? "Salir de pantalla completa (Esc)" : "Pantalla completa — centrarse en la imagen"}
-            >
-              {pantallaCompleta ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
           </div>
         </div>
       )}
@@ -639,7 +602,6 @@ export default function Imagen() {
             onBlanco={() => abrirPestana()}
           />
         )}
-      </div>
       </div>
 
       {/* Galería modal: aplicar una plantilla a la pestaña ACTIVA (desde el rail). */}
