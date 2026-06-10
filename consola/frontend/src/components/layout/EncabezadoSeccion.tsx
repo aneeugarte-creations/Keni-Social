@@ -75,11 +75,13 @@ export function EncabezadoSeccion({
         </>
       )}
 
-      {/* Hueco del título de página plana (portal). Excluyente con la sección. */}
-      <div ref={refInicio} className="flex items-center" />
+      {/* Hueco del título de página plana (portal). Excluyente con la sección. `min-w-0`
+          deja ENCOGER el hueco en móvil para que el `truncate` del título actúe (sin esto
+          el control de marca de la derecha lo pisaba). */}
+      <div ref={refInicio} className="flex min-w-0 items-center" />
 
       {/* Hueco de acciones, JUNTO a la sección/título (portal). */}
-      <div ref={refAcciones} className="flex items-center" />
+      <div ref={refAcciones} className="flex min-w-0 items-center" />
     </nav>
   );
 }
