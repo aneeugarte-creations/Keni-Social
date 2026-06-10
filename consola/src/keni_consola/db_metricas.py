@@ -394,10 +394,12 @@ def purgar_metricas_cache(
             f"DELETE FROM metricas_cache WHERE tipo IN ({marcas_tipos}) AND clave NOT LIKE ?",
             (*tipos, prefijo_vigente + "%"),
         )
+        # El patron LIKE viaja como parametro: un '%' literal en el SQL rompe el
+        # binding de psycopg (solo admite %s/%b/%t como placeholders).
         c2 = con.execute(
             f"DELETE FROM metricas_cache WHERE tipo IN ({marcas_tipos}) "
-            "AND rango LIKE 'rango:%' AND generado_en < ?",
-            (*tipos, corte_rangos_adhoc),
+            "AND rango LIKE ? AND generado_en < ?",
+            (*tipos, "rango:%", corte_rangos_adhoc),
         )
         con.commit()
         return max(c1.rowcount or 0, 0) + max(c2.rowcount or 0, 0)
