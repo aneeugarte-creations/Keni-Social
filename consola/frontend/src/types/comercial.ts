@@ -163,7 +163,8 @@ export interface PiezaCampania {
   titulo: string;
   publicado: string;
   visualizaciones: number;
-  /** Visualizaciones INORGÁNICAS (Meta Ads) atribuidas a esta pieza; 0 si no se impulsó. */
+  /** Visualizaciones INORGÁNICAS (Meta Ads). En una fila inorgánica son las impresiones del
+   * boost; en una pieza orgánica es 0 (lo pagado vive en su propia fila). */
   visualizaciones_pagadas: number;
   interacciones: number;
   engagement_pct: number;
@@ -171,6 +172,8 @@ export interface PiezaCampania {
   formato: string;
   /** True si entró por cross-post (gemela sin hashtag de una pieza etiquetada). */
   por_cross_post: boolean;
+  /** True si es una publicación INORGÁNICA (un boost de Meta Ads), no un post orgánico. */
+  es_inorganico: boolean;
 }
 
 export interface KpisCampania {
@@ -218,20 +221,6 @@ export interface InorganicoCampania {
   moneda: string;
 }
 
-/** Una campaña de Ads con nombre propio (no atribuible a una pieza): bloque "Meta Ads". */
-export interface CampaniaAdsItem {
-  nombre: string;
-  red: string;
-  impresiones: number;
-  gasto: number;
-  clics: number;
-  moneda: string;
-  inicio: string;
-  fin: string;
-  es_post_impulsado: boolean;
-  atribuida_a: string | null;
-}
-
 export interface AnaliticaCampania {
   campania: CampaniaComercial;
   rango: string;
@@ -244,10 +233,9 @@ export interface AnaliticaCampania {
   desglose_red: DesgloseRedCampania[];
   /** Nº de piezas añadidas por inferencia de cross-post (sin el hashtag propio). */
   cross_posts: number;
-  /** Totales inorgánicos (Meta Ads) atribuidos a la campaña. */
+  /** Totales inorgánicos (Meta Ads): los boosts que entran como filas inorgánicas. */
   inorganico: InorganicoCampania;
-  /** Campañas de Ads con nombre propio (las que no son un post impulsado de una pieza). */
-  ads: CampaniaAdsItem[];
+  /** Piezas del periodo: orgánicas + inorgánicas (boosts), estas con `es_inorganico`. */
   piezas: PiezaCampania[];
   generado_en: string;
 }

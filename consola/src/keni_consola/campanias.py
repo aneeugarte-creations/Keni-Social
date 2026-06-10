@@ -244,65 +244,56 @@ def _expandir_cross_post(
     return resultado, ids_cross
 
 
-def _norm_txt(t: str) -> str:
-    """Normaliza para comparaciones laxas: sin acentos, minúsculas, espacios colapsados.
-    (No quita hashtags ni recorta, a diferencia de `_clave_contenido`.)"""
-    t = unicodedata.normalize("NFKD", t or "")
-    t = "".join(c for c in t if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", t).strip().lower()
+def _boosts_de_campania(
+    ads: list[dict[str, Any]], piezas: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Boosts (posts impulsados de Meta Ads) que PERTENECEN a la campaña.
 
+    Un boost pertenece si su caption (el TITULAR, primera línea del nombre `Publicación:
+    "<caption>"`) es prefijo del cuerpo de una pieza orgánica de la campaña (mismo contenido
+    cross-posteado). Cada uno se anota con la marca (`cuenta`) de la pieza con la que casó.
 
-def _ad_relacionada(nombre_ad: str, tags: set[str], nombre_camp: str) -> bool:
-    """¿Una campaña de Ads con NOMBRE PROPIO pertenece a esta campaña editorial? Heurística
-    laxa pero acotada: el nombre del ad comparte un término (>=5 chars) con algún hashtag o
-    con el nombre de la campaña. Captura 'ALCANCE CAMPAÑA CHIHUAHUA' para #AhChihuahua sin
-    arrastrar promociones ajenas (p.ej. 'COLAB CORONA')."""
-    n = _norm_txt(nombre_ad)
-    objetivos = {o for o in ({_norm_txt(t) for t in tags} | {_norm_txt(nombre_camp)}) if len(o) >= 5}
-    palabras = [w for w in n.split() if len(w) >= 5]
-    return any(o in n or any(w in o for w in palabras) for o in objetivos)
-
-
-def _atribuir_ads(
-    ads: list[dict[str, Any]],
-    piezas: list[dict[str, Any]],
-    tags: set[str],
-    nombre_camp: str,
-) -> tuple[dict[tuple[str, str], int], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Reparte las campañas de Ads (inorgánico) de las marcas entre las piezas de la campaña.
-
-    - Un POST IMPULSADO (`Publicación: "<caption>"`) se atribuye a su pieza orgánica por la
-      huella del caption (`_clave_contenido`): su gasto/impresiones caen como columna en esa
-      pieza. Si varias piezas comparten contenido (cross-post IG+TikTok), se atribuye a UNA
-      (la de más visualizaciones) para no duplicar.
-    - Una campaña con NOMBRE PROPIO relacionada con la campaña editorial va al bloque "Ads".
-
-    Devuelve `(pagadas_por_pieza, ads_atribuidos, ads_bloque)`.
-    """
-    # Cuerpo normalizado (sin recortar) de cada pieza, una vez. El caption de un post
-    # impulsado es el TITULAR (primera línea); el de la pieza es titular + cuerpo. Por eso se
-    # empareja por PREFIJO (la pieza empieza por el titular del ad), no por igualdad.
+    NO se hace matching difuso por el NOMBRE de la campaña: arrastraba ads ajenos (todas las
+    'ALCANCE CAMPAÑA …' casaban por la palabra genérica 'campaña' con una campaña llamada
+    'Campaña Chihuahua'). Las campañas de pago con nombre propio viven en la sección "Ads" del
+    dashboard, que es a nivel marca."""
     cuerpos = [(p, _cuerpo_norm(p.get("texto", "") or p.get("titulo", ""))) for p in piezas]
-
-    pagadas: dict[tuple[str, str], int] = {}
-    atribuidos: list[dict[str, Any]] = []
-    bloque: list[dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for a in ads:
-        if a.get("es_post_impulsado"):
-            cap = _cuerpo_norm(a.get("caption", ""))
-            pieza = None
-            if len(cap) >= _MIN_CLAVE_CONTENIDO:
-                candidatas = [p for p, cuerpo in cuerpos if cuerpo.startswith(cap)]
-                if candidatas:
-                    pieza = max(candidatas, key=lambda p: int(p.get("visualizaciones") or 0))
-            if pieza is not None:
-                ident = (str(pieza.get("id", "")), str(pieza.get("red", "")))
-                pagadas[ident] = pagadas.get(ident, 0) + int(a.get("impresiones") or 0)
-                atribuidos.append({**a, "atribuida_a": pieza.get("id", "")})
-                continue
-        if _ad_relacionada(a.get("nombre", ""), tags, nombre_camp):
-            bloque.append({**a, "atribuida_a": None})
-    return pagadas, atribuidos, bloque
+        if not a.get("es_post_impulsado"):
+            continue
+        cap = _cuerpo_norm(a.get("caption", ""))
+        if len(cap) < _MIN_CLAVE_CONTENIDO:
+            continue
+        candidatas = [p for p, cuerpo in cuerpos if cuerpo.startswith(cap)]
+        if not candidatas:
+            continue
+        pieza = max(candidatas, key=lambda p: int(p.get("visualizaciones") or 0))
+        out.append({**a, "cuenta": a.get("cuenta") or pieza.get("cuenta")})
+    return out
+
+
+def _fila_inorganica(ad: dict[str, Any]) -> dict[str, Any]:
+    """Fila sintética de la tabla para un boost: una publicación INORGÁNICA (Meta Ads).
+
+    No tiene métricas orgánicas (el boost no está en el feed orgánico): sus impresiones
+    pagadas van en la columna "Ads" y `es_inorganico` la distingue. Mismo shape que
+    `_pieza_tabla` para que conviva en la misma tabla."""
+    return {
+        "id": f"ad:{ad.get('nombre', '')}",
+        "red": ad.get("red", ""),
+        "marca": marcas.etiqueta_por_id_metricas(str(ad.get("cuenta") or "")),
+        "titulo": ad.get("caption", "") or ad.get("nombre", ""),
+        "publicado": str(ad.get("inicio") or ad.get("fin") or "")[:10],
+        "visualizaciones": 0,
+        "visualizaciones_pagadas": int(ad.get("impresiones") or 0),
+        "interacciones": 0,
+        "engagement_pct": 0.0,
+        "url": "",
+        "formato": "ads",
+        "por_cross_post": False,
+        "es_inorganico": True,
+    }
 
 
 def _agregar(piezas: list[dict[str, Any]]) -> dict[str, Any]:
@@ -407,15 +398,13 @@ def _tendencia(piezas: list[dict[str, Any]], rango: str) -> list[dict[str, Any]]
     return puntos
 
 
-def _pieza_tabla(
-    p: dict[str, Any], por_cross_post: bool = False, visualizaciones_pagadas: int = 0
-) -> dict[str, Any]:
-    """Adapta una pieza del listado a la fila de la tabla de campaña.
+def _pieza_tabla(p: dict[str, Any], por_cross_post: bool = False) -> dict[str, Any]:
+    """Adapta una pieza ORGÁNICA del listado a la fila de la tabla de campaña.
 
     `por_cross_post` marca las piezas incluidas por inferencia (gemelas de una etiquetada,
-    sin el hashtag propio). `visualizaciones_pagadas` son las impresiones inorgánicas (Meta
-    Ads) atribuidas a esta pieza por un post impulsado de su mismo contenido; 0 si no se
-    impulsó. La UI las muestra en una columna aparte, claramente separadas de lo orgánico.
+    sin el hashtag propio). Lo inorgánico (Meta Ads) NO se pliega aquí: cada boost es su
+    propia fila (`_fila_inorganica`), con `es_inorganico=True` y sus impresiones en la
+    columna "Ads"; una pieza orgánica nunca lleva pagadas (0).
     """
     return {
         "id": p.get("id", ""),
@@ -424,12 +413,13 @@ def _pieza_tabla(
         "titulo": p.get("titulo", ""),
         "publicado": str(p.get("publicado") or "")[:10],
         "visualizaciones": int(p.get("visualizaciones") or 0),
-        "visualizaciones_pagadas": int(visualizaciones_pagadas or 0),
+        "visualizaciones_pagadas": 0,
         "interacciones": int(p.get("interacciones") or 0),
         "engagement_pct": round(float(p.get("engagement_pct") or 0.0), 2),
         "url": p.get("url") or "",
         "formato": p.get("formato") or "",
         "por_cross_post": por_cross_post,
+        "es_inorganico": False,
     }
 
 
@@ -472,29 +462,36 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
     actual = _agregar(piezas)
     anterior = _agregar(piezas_prev)
 
-    # Inorgánico (Meta/TikTok Ads) del periodo de las marcas, atribuido a la campaña: los
-    # posts impulsados caen como columna en su pieza; las campañas con nombre propio van al
-    # bloque "ads". Degrada a vacío si no hay Ads conectado (la campaña nunca revienta).
+    # Inorgánico (Meta Ads): los BOOSTS (posts impulsados) que pertenecen a la campaña —los
+    # que casan por caption con una pieza orgánica— entran como FILAS propias (publicaciones
+    # inorgánicas), no como columna de otra fila: el contenido impulsado en una red donde no
+    # hubo post orgánico (p.ej. una pauta de FB de un reel de IG) es una publicación más. Las
+    # campañas de pago con nombre propio NO entran aquí (viven en la sección Ads del
+    # dashboard, a nivel marca). Degrada a vacío si no hay Ads conectado.
     ads_crudos = await asyncio.gather(*(_ads_cacheado(rango, idm) for idm in ids_metricas))
     ads = [a for lista in ads_crudos for a in lista]
-    pagadas, ads_atribuidos, ads_bloque = _atribuir_ads(ads, piezas, tags, cam["nombre"])
-    ads_total = ads_atribuidos + ads_bloque
+    boosts = _boosts_de_campania(ads, piezas)
+    filas_inorg = [_fila_inorganica(b) for b in boosts]
+    # Los inorgánicos cuentan como publicaciones (el equipo los cuenta), pero NO suman a las
+    # visualizaciones orgánicas (no las tenemos): su alcance vive en `inorganico` y la columna.
+    actual["piezas"] += len(filas_inorg)
     inorganico = {
-        "visualizaciones": sum(int(a.get("impresiones") or 0) for a in ads_total),
-        "gasto": round(sum(float(a.get("gasto") or 0.0) for a in ads_total), 2),
-        "clics": sum(int(a.get("clics") or 0) for a in ads_total),
-        "campanias": len(ads_total),
-        "moneda": next((a.get("moneda") for a in ads_total if a.get("moneda")), ""),
+        "visualizaciones": sum(int(b.get("impresiones") or 0) for b in boosts),
+        "gasto": round(sum(float(b.get("gasto") or 0.0) for b in boosts), 2),
+        "clics": sum(int(b.get("clics") or 0) for b in boosts),
+        "campanias": len(boosts),
+        "moneda": next((b.get("moneda") for b in boosts if b.get("moneda")), ""),
     }
 
-    # Tabla ordenada por visualizaciones desc (las piezas que más rindieron arriba). Cada
-    # fila marca si entró por cross-post y lleva sus visualizaciones pagadas (inorgánico).
-    def _fila(p: dict[str, Any]) -> dict[str, Any]:
-        ident = (str(p.get("id", "")), str(p.get("red", "")))
-        return _pieza_tabla(p, ident in ids_cross, pagadas.get(ident, 0))
-
+    # Tabla: piezas orgánicas + filas inorgánicas (boosts), ordenadas por alcance total
+    # (orgánico + pagado) desc, para que un boost grande no se hunda al fondo.
+    filas_org = [
+        _pieza_tabla(p, (str(p.get("id", "")), str(p.get("red", ""))) in ids_cross) for p in piezas
+    ]
     tabla = sorted(
-        (_fila(p) for p in piezas), key=lambda f: f["visualizaciones"], reverse=True
+        filas_org + filas_inorg,
+        key=lambda f: f["visualizaciones"] + f["visualizaciones_pagadas"],
+        reverse=True,
     )
     return {
         "campania": cam,
@@ -508,7 +505,6 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "desglose_red": _desglose_por_red(piezas),
         "cross_posts": len(ids_cross),
         "inorganico": inorganico,
-        "ads": ads_bloque,
         "piezas": tabla,
         "generado_en": ahora_iso(),
     }

@@ -123,7 +123,7 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
     );
   }
 
-  const { kpis, comparativa, tendencia, desglose_red, inorganico, ads, piezas } = consulta.data;
+  const { kpis, comparativa, tendencia, desglose_red, inorganico, piezas } = consulta.data;
 
   return (
     <div className="space-y-6">
@@ -159,8 +159,6 @@ export function PanelCampania({ campaniaId, rango }: { campaniaId: string; rango
       <DesgloseRedTabla filas={desglose_red} />
 
       <TablaPiezas piezas={piezas} />
-
-      <TablaAds ads={ads} />
     </div>
   );
 }
@@ -193,57 +191,6 @@ function BloqueInorganico({ inorganico }: { inorganico: AnaliticaCampania["inorg
           <p className="text-xs text-muted-foreground">Campañas</p>
           <p className="text-xl font-semibold tabular-nums">{inorganico.campanias}</p>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Tabla "Meta Ads del periodo": campañas de pago con nombre propio (no atribuibles a una
- * pieza). Las que SÍ son post impulsado de una pieza salen como columna en la tabla de piezas. */
-function TablaAds({ ads }: { ads: AnaliticaCampania["ads"] }) {
-  if (!ads || ads.length === 0) return null;
-  const filas = [...ads].sort((a, b) => b.impresiones - a.impresiones);
-  return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="px-6 py-4">
-          <h3 className="text-sm font-medium">Meta Ads del periodo</h3>
-          <p className="text-xs text-muted-foreground">
-            Campañas de pago relacionadas con la campaña (inversión no atribuible a una pieza).
-          </p>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Campaña</TableHead>
-              <TableHead>Red</TableHead>
-              <TableHead className="text-right">Impresiones</TableHead>
-              <TableHead className="text-right">Gasto</TableHead>
-              <TableHead className="pr-6 text-right">Clics</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filas.map((a, i) => (
-              <TableRow key={`${a.nombre}-${i}`}>
-                <TableCell className="pl-6">
-                  <span className="block max-w-[28rem] truncate font-medium" title={a.nombre}>
-                    {a.nombre}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">{nombreRed(a.red)}</Badge>
-                </TableCell>
-                <TableCell className="text-right tabular-nums" title={numeroCompleto(a.impresiones)}>
-                  {numeroCompacto(a.impresiones)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {a.gasto.toLocaleString("es-MX", { maximumFractionDigits: 0 })} {a.moneda}
-                </TableCell>
-                <TableCell className="pr-6 text-right tabular-nums">{numeroCompacto(a.clics)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
       </CardContent>
     </Card>
   );
@@ -506,6 +453,14 @@ function TablaPiezas({ piezas }: { piezas: PiezaCampania[] }) {
                           title="Incluida por cross-post: mismo contenido en otra red, sin el hashtag propio"
                         >
                           cross-post
+                        </Badge>
+                      )}
+                      {p.es_inorganico && (
+                        <Badge
+                          className="shrink-0 border-transparent bg-amber-100 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                          title="Publicación inorgánica: un boost de Meta Ads de este contenido"
+                        >
+                          Ads
                         </Badge>
                       )}
                     </span>

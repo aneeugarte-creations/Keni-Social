@@ -258,10 +258,12 @@ def test_analitica_multimarca_agrega_todas_las_marcas(cliente, monkeypatch):
     assert len({p["id"] for p in datos["piezas"]}) == 2
 
 
-def test_inorganico_atribuye_boost_a_pieza_y_separa_campanias(cliente, monkeypatch):
-    """Lo inorgánico (Meta Ads): un POST IMPULSADO cae como `visualizaciones_pagadas` en su
-    pieza (enlazado por caption); una campaña con NOMBRE PROPIO relacionada va al bloque
-    `ads`; una ajena se descarta. Los totales `inorganico` suman ambos, no la ajena."""
+def test_inorganico_boost_es_fila_propia_y_campanias_con_nombre_se_excluyen(cliente, monkeypatch):
+    """Lo inorgánico (Meta Ads): un POST IMPULSADO que casa por caption con una pieza de la
+    campaña entra como FILA PROPIA (publicación inorgánica), con sus impresiones en la columna
+    "Ads" y `es_inorganico=True`. Las campañas de pago con NOMBRE PROPIO (aunque contengan la
+    palabra 'campaña') NO entran: viven en la sección Ads del dashboard. El conteo de
+    publicaciones incluye el inorgánico; las visualizaciones orgánicas no se inflan."""
     cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
     cuerpo = "Gran reportaje en la sierra tarahumara este fin de semana"
 
@@ -274,27 +276,34 @@ def test_inorganico_atribuye_boost_a_pieza_y_separa_campanias(cliente, monkeypat
 
     def _ads_falso(rango, marca=None):
         return [
+            # Boost del mismo contenido en FB (titular = primera línea del caption) -> fila.
             {"nombre": f'Publicación: "{cuerpo}"', "red": "facebook", "impresiones": 5000,
-             "gasto": 300.0, "clics": 100, "moneda": "MXN", "es_post_impulsado": True, "caption": cuerpo},
-            {"nombre": "ALCANCE CAMPAÑA CHIHUAHUA", "red": "facebook", "impresiones": 20000,
-             "gasto": 117.0, "clics": 50, "moneda": "MXN", "es_post_impulsado": False, "caption": ""},
-            {"nombre": "COLAB CORONA", "red": "facebook", "impresiones": 99999, "gasto": 500.0,
-             "clics": 0, "moneda": "MXN", "es_post_impulsado": False, "caption": ""},
+             "gasto": 300.0, "clics": 100, "moneda": "MXN", "inicio": "2026-06-01",
+             "es_post_impulsado": True, "caption": cuerpo, "cuenta": "claro_sports"},
+            # Campaña con nombre propio que contiene 'campaña' -> NO debe arrastrarse.
+            {"nombre": "ALCANCE CAMPAÑA ASUS TUF A14", "red": "facebook", "impresiones": 99999,
+             "gasto": 500.0, "clics": 0, "moneda": "MXN", "es_post_impulsado": False, "caption": ""},
         ]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
     monkeypatch.setattr(campanias.servicio, "construir_ads", _ads_falso)
     datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
 
-    fila = {p["id"]: p for p in datos["piezas"]}["ig1"]
-    assert fila["visualizaciones_pagadas"] == 5000  # boost atribuido a la pieza
-    # Bloque ads: solo la campaña con nombre propio RELACIONADA (no la ajena, no el boost).
-    nombres = {a["nombre"] for a in datos["ads"]}
-    assert nombres == {"ALCANCE CAMPAÑA CHIHUAHUA"}
-    # Totales inorgánicos = boost (5000) + relacionada (20000); la ajena (COLAB CORONA) fuera.
-    assert datos["inorganico"]["visualizaciones"] == 25000
-    assert datos["inorganico"]["gasto"] == 417.0
-    assert datos["inorganico"]["campanias"] == 2
+    filas = {p["id"]: p for p in datos["piezas"]}
+    # La pieza orgánica NO lleva pagadas; el boost es una fila aparte (id 'ad:...').
+    assert filas["ig1"]["visualizaciones_pagadas"] == 0 and filas["ig1"]["es_inorganico"] is False
+    inorg = [p for p in datos["piezas"] if p["es_inorganico"]]
+    assert len(inorg) == 1
+    assert inorg[0]["visualizaciones_pagadas"] == 5000 and inorg[0]["visualizaciones"] == 0
+    assert inorg[0]["red"] == "facebook" and inorg[0]["marca"] == "Claro Sports"
+    # ASUS (nombre propio) NO aparece como pieza.
+    assert all("ASUS" not in p["titulo"] for p in datos["piezas"])
+    # Totales inorgánicos = solo el boost; el conteo de publicaciones lo incluye (1 org + 1 inorg).
+    assert datos["inorganico"]["visualizaciones"] == 5000
+    assert datos["inorganico"]["campanias"] == 1
+    assert datos["kpis"]["piezas"] == 2
+    # Las visualizaciones ORGÁNICAS no se inflan con el inorgánico.
+    assert datos["kpis"]["visualizaciones"] == 1000
 
 
 def test_analitica_campania_inexistente_es_404(cliente):
