@@ -110,7 +110,8 @@ export function PanelGaleria({
             y: Math.round((stN.documento.formato.h - h) / 2),
           }),
         );
-        const capas = stN.documento.capas;
+        // Estado FRESCO tras agregar (el set del store reemplaza `documento`; `stN` quedó obsoleto).
+        const capas = store.getState().documento.capas;
         stN.seleccionar(capas[capas.length - 1]?.id ?? null);
       })();
       return;
@@ -144,7 +145,9 @@ export function PanelGaleria({
     } else {
       return;
     }
-    st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);
+    // Estado FRESCO tras agregar (el set del store reemplaza `documento`; `st` quedó obsoleto).
+    const capas = store.getState().documento.capas;
+    st.seleccionar(capas[capas.length - 1]?.id ?? null);
   };
 
   // Agrupa por tipo para mostrar secciones.

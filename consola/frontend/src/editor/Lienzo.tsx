@@ -504,7 +504,8 @@ export function Lienzo({
           z,
         }),
       );
-      const nuevas = st.documento.capas;
+      // Estado FRESCO tras agregar (el set del store reemplaza `documento`; `st` quedó obsoleto).
+      const nuevas = store.getState().documento.capas;
       st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
       toast.success("Imagen añadida al lienzo.", { id: tid });
     } catch (e) {
@@ -531,7 +532,8 @@ export function Lienzo({
         z: zTope(st.documento),
       }),
     );
-    const nuevas = st.documento.capas;
+    // Estado FRESCO tras agregar (el set del store reemplaza `documento`; `st` quedó obsoleto).
+    const nuevas = store.getState().documento.capas;
     st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
   };
 
@@ -688,7 +690,8 @@ export function Lienzo({
         const z = zTope(st.documento);
         const cw = 320, ch = 120;
         st.agregar(nuevaCapaLogo(asset.objeto, { x: Math.round(dx - cw / 2), y: Math.round(dy - ch / 2), w: cw, h: ch, z }));
-        const nuevas = st.documento.capas;
+        // Estado FRESCO tras agregar (el set del store reemplaza `documento`; `st` quedó obsoleto).
+        const nuevas = store.getState().documento.capas;
         st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
       } else {
         // Imagen suelta: la capa adopta el aspect-ratio real de la foto (antes: cuadrado fijo).
