@@ -841,3 +841,18 @@ def test_campanias_ads_parsea_filtra_y_degrada_por_provider():
     named = next(a for a in ads if not a.es_post_impulsado)
     assert named.nombre == "ALCANCE CAMPAÑA CHIHUAHUA" and named.impresiones == 244093
     assert named.caption == ""
+
+
+@respx.mock
+def test_campanias_ads_respeta_proveedores_por_marca():
+    """`ads_proveedores` por marca acota los providers consultados (p.ej. sin licencia de
+    TikTok Ads, ["facebookads"]): no se pide el provider sin licencia, ni 403 por barrido."""
+    marcas = {"claro_sports": {**MARCAS["claro_sports"], "ads_proveedores": ["facebookads"]}}
+    ruta = respx.get(f"{BASE}/v2/advertising/campaigns").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    with httpx.Client() as cli:
+        FuenteMetricool(marcas=marcas, cliente=cli).campanias_ads("claro_sports", RANGO)
+
+    providers = [c.request.url.params.get("providers[]") for c in ruta.calls]
+    assert providers == ["facebookads"]  # tiktokads NI se consulta

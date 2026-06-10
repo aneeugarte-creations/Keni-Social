@@ -100,7 +100,7 @@ class MetricoolConfig:
     Metricool distinta, con su PROPIO `user_token` (cabecera `X-Mc-Auth`),
     `user_id` y `blog_id` (ambos query params). Cada marca vive en
     `[metricool.marcas.<id>]` con esos tres campos (y opcional `nombre`,
-    `plataformas`).
+    `plataformas`, `ads_proveedores`).
 
     `user_token`/`user_id` de nivel `[metricool]` (o las env
     `METRICOOL_USER_TOKEN`/`METRICOOL_USER_ID`) son solo un DEFAULT de
@@ -115,7 +115,8 @@ class MetricoolConfig:
     user_token: str = ""
     user_id: str = ""
     # id_marca_keni -> {"blog_id": str, "user_token": str?, "user_id": str?,
-    #                   "nombre": str?, "plataformas": [str|Plataforma]?}
+    #                   "nombre": str?, "plataformas": [str|Plataforma]?,
+    #                   "ads_proveedores": [str]?}
     marcas: dict[str, dict] = field(default_factory=dict)
 
     def token_de(self, marca: dict) -> str:
@@ -212,7 +213,8 @@ def _parsear_metricool(datos: dict) -> MetricoolConfig:
     """Lee la sección `[metricool]` del config: credenciales POR MARCA.
 
     Modelo PRIMARIO (per-marca): cada `[metricool.marcas.<id>]` trae su propio
-    `user_token`, `user_id` y `blog_id` (y opcional `nombre`, `plataformas`).
+    `user_token`, `user_id` y `blog_id` (y opcional `nombre`, `plataformas`,
+    `ads_proveedores`).
 
     Compatibilidad: `user_token`/`user_id` de nivel `[metricool]` —o las env
     `METRICOOL_USER_TOKEN`/`METRICOOL_USER_ID` (con prioridad sobre el TOML)— se
@@ -247,6 +249,11 @@ def _parsear_metricool(datos: dict) -> MetricoolConfig:
             plats = m.get("plataformas")
             if isinstance(plats, list):
                 entrada["plataformas"] = [str(p) for p in plats]
+            # Providers de Ads CON licencia en Metricool (p.ej. solo facebookads): acota
+            # las consultas de campañas; sin la clave se consultan todos los conocidos.
+            provs = m.get("ads_proveedores")
+            if isinstance(provs, list):
+                entrada["ads_proveedores"] = [str(p) for p in provs]
             # Conserva la marca aunque le falten credenciales: así el estado per-marca
             # (consola GET) sabe que existe pero está "sin conectar". La omisión real
             # la hace `marcas_configuradas()` al construir la fuente.

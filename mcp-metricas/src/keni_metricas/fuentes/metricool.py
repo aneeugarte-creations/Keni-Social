@@ -273,6 +273,8 @@ def _entero(v) -> int:
 # feed orgánico (`/v2/analytics/posts`), que NO trae lo pagado. Las métricas van en un
 # objeto `metrics` con claves en MAYÚSCULAS (IMPRESSIONS/SPENT/CLICKS), acotadas por
 # from/to. Confirmado contra la API real del piloto (act_… de Claro Sports/UnoTV).
+# Providers por DEFECTO; una marca puede acotarlos con `ads_proveedores` en su config
+# (p.ej. sin licencia de TikTok Ads: ["facebookads"] evita un 403 esperado cada barrido).
 _PROVIDERS_ADS: tuple[str, ...] = ("facebookads", "tiktokads")
 # Provider de Ads -> red destino normalizada (la de keni). 'facebookads' cubre FB e IG;
 # se queda en 'facebook' (la cuenta de Ads es de la página). 'tiktokads' -> 'tiktok'.
@@ -754,15 +756,17 @@ class FuenteMetricool:
         Lee `/v2/advertising/campaigns` por provider. Solo devuelve las campañas con ENTREGA
         en la ventana (impresiones > 0): la API lista TODO el histórico de campañas (activas
         o no), pero su `metrics` viene acotado a from/to, así que 0 impresiones = sin entrega
-        en el periodo. Degrada por provider: un 403/500 (red de Ads no conectada, p.ej.
-        TikTok Ads en el piloto) se OMITE, no rompe el resto."""
+        en el periodo. Los providers consultados se acotan por marca (`ads_proveedores`; sin
+        la clave, todos los conocidos). Degrada por provider: un 403/500 (red de Ads no
+        conectada) se OMITE, no rompe el resto."""
         desde, hasta, _ = resolver_rango(rango)
         params_rango = {
             "from": desde.isoformat() + "T00:00:00",
             "to": hasta.isoformat() + "T23:59:59",
         }
         out: list[CampaniaAds] = []
-        for prov in _PROVIDERS_ADS:
+        provs = self._marca(cuenta_id).get("ads_proveedores") or _PROVIDERS_ADS
+        for prov in provs:
             try:
                 datos = get_json(
                     self._cli,
