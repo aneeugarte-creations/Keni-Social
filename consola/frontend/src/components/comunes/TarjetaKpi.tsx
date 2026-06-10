@@ -9,6 +9,8 @@
  * - `variante="borde"` (por defecto): borde sutil, sin fondo; usada en Comercial.
  * - `variante="card"` : envuelta en Card de shadcn; usada en el dashboard de Métricas.
  */
+import * as React from "react";
+
 import { Card, CardContent } from "@/components/ui/card";
 
 interface TarjetaKpiProps {
@@ -27,6 +29,12 @@ interface TarjetaKpiProps {
    * - `"card"`: envuelta en Card de shadcn con padding interior.
    */
   variante?: "borde" | "card";
+  /**
+   * Insignia opcional alineada a la derecha de la etiqueta (p. ej. un BadgeDelta
+   * con la variación vs el periodo anterior). Si no se pasa, la fila de la
+   * etiqueta se ve igual que siempre.
+   */
+  insignia?: React.ReactNode;
 }
 
 export function TarjetaKpi({
@@ -34,12 +42,16 @@ export function TarjetaKpi({
   valor,
   titulo,
   variante = "borde",
+  insignia,
 }: TarjetaKpiProps) {
   if (variante === "card") {
     return (
       <Card>
         <CardContent className="space-y-1.5 p-5">
-          <p className="text-sm text-muted-foreground">{etiqueta}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">{etiqueta}</p>
+            {insignia}
+          </div>
           <p
             className="truncate text-2xl font-semibold tracking-tight tabular-nums"
             title={titulo ?? valor}
@@ -53,7 +65,10 @@ export function TarjetaKpi({
 
   return (
     <div className="rounded-lg border border-border p-4">
-      <p className="text-sm text-muted-foreground">{etiqueta}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">{etiqueta}</p>
+        {insignia}
+      </div>
       <p className="truncate text-xl font-semibold tabular-nums" title={titulo ?? valor}>
         {valor}
       </p>

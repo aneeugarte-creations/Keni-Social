@@ -2,8 +2,8 @@
  * Tests para @/lib/formato — utilidades de formato es-MX compartidas.
  *
  * Cubre todos los helpers: numeroCompacto, numeroCompleto, porcentaje,
- * variacion, rendimientoRel, costeUsd y duracion; incluyendo valores límite
- * y no finitos.
+ * variacion, puntosPct, rendimientoRel, costeUsd y duracion; incluyendo
+ * valores límite y no finitos.
  */
 import { describe, expect, it } from "vitest";
 
@@ -16,6 +16,7 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  puntosPct,
   rendimientoRel,
   tiempoVis,
   variacion,
@@ -122,6 +123,32 @@ describe("variacion", () => {
 
   it("incluye un decimal y el símbolo %", () => {
     expect(variacion(5)).toContain("%");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// puntosPct (diferencia en puntos porcentuales, p. ej. engagement A vs B)
+// ---------------------------------------------------------------------------
+describe("puntosPct", () => {
+  it("devuelve — para valores no finitos", () => {
+    expect(puntosPct(NaN)).toBe("—");
+    expect(puntosPct(Infinity)).toBe("—");
+  });
+
+  it("añade + para positivos y − (menos tipográfico U+2212) para negativos", () => {
+    expect(puntosPct(0.42)).toBe("+0.4 pts");
+    expect(puntosPct(-1.16)).toBe("−1.2 pts");
+  });
+
+  it("decide el signo TRAS redondear: −0.04 → '0.0 pts' sin signo (nunca '−0.0 pts')", () => {
+    expect(puntosPct(-0.04)).toBe("0.0 pts");
+    expect(puntosPct(0.04)).toBe("0.0 pts");
+    expect(puntosPct(0)).toBe("0.0 pts");
+  });
+
+  it("usa el sufijo ' pts', nunca '%' (los puntos no son variación relativa)", () => {
+    expect(puntosPct(2.5)).toContain(" pts");
+    expect(puntosPct(2.5)).not.toContain("%");
   });
 });
 

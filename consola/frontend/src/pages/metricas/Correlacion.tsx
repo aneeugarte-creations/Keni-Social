@@ -269,7 +269,14 @@ function GraficaCorrelacion({
   }, [items]);
 
   return (
-    <div>
+    /* role=img: alternativa textual del scatter (nº de puntos y redes presentes). */
+    <div
+      role="img"
+      aria-label={`Seguidores frente a piezas publicadas: ${plural(
+        puntos.length,
+        "punto",
+      )} por día y red (${redesPresentes.map(nombreRed).join(", ")})`}
+    >
       {/* Leyenda de redes con su color (trazo de contraste para el tema claro). */}
       <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
         {redesPresentes.map((red) => (

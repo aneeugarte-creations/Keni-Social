@@ -67,6 +67,25 @@ export function variacion(valor: number): string {
 }
 
 /**
+ * Diferencia en PUNTOS porcentuales con signo explícito (+/−) y un decimal.
+ * Para métricas que YA son porcentajes (engagement): la comparación honesta entre
+ * dos periodos es la resta en puntos, nunca la variación relativa del porcentaje
+ * (2.0 % → 2.4 % es "+0.4 pts", no "+20 %"). Misma regla de signo que `variacion`:
+ * se decide TRAS redondear a 1 decimal (−0.04 → "0.0 pts", nunca "−0.0 pts").
+ * Ej.: 0.42 → "+0.4 pts", −1.16 → "−1.2 pts", −0.04 → "0.0 pts".
+ */
+export function puntosPct(valor: number): string {
+  if (!Number.isFinite(valor)) return "—";
+  const r = Math.round(valor * 10) / 10;
+  const abs = Math.abs(r).toLocaleString("es-MX", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const signo = r > 0 ? "+" : r < 0 ? "−" : "";
+  return `${signo}${abs} pts`;
+}
+
+/**
  * Rendimiento relativo con sufijo "×" y SIEMPRE 1 decimal (0.04 → "0.0×", nunca
  * "0×"; 1 → "1.0×"). `null` (sin base de comparación) o no finito → "—".
  */

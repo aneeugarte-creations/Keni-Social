@@ -54,6 +54,8 @@ import { useOrdenTabla } from "./useOrdenTabla";
 // Componentes que la GRÁFICA apila: solo interacciones (orden y color estables).
 // Las reproducciones (video_views) son consumo, no interacción, y su volumen
 // aplastaría al resto de segmentos; viven solo en la tabla.
+// OJO: el color codifica el COMPONENTE de interacción (no la red, que aquí es parte del
+// eje); la paleta por red (coloresRed.ts) no aplica a esta gráfica.
 const COMPONENTES_GRAFICA: Array<{ clave: keyof CeldaDesglose; etiqueta: string; color: string }> =
   [
     { clave: "likes", etiqueta: "Me gusta", color: "rose" },
@@ -142,7 +144,19 @@ export function DesgloseInteracciones({
         </p>
       ) : (
         <div className="space-y-4">
-          <GraficaApilada celdas={celdas} marcas={marcas} redFiltro={redFiltro} />
+          {/* Alternativa textual del chart: los totales del periodo por componente. */}
+          <div
+            role="img"
+            aria-label={`Desglose de interacciones por marca y red: Me gusta ${numeroCompacto(
+              data.totales.likes ?? 0,
+            )}, Comentarios ${numeroCompacto(
+              data.totales.comentarios ?? 0,
+            )}, Compartidos ${numeroCompacto(
+              data.totales.compartidos ?? 0,
+            )}, Guardados ${numeroCompacto(data.totales.guardados ?? 0)}`}
+          >
+            <GraficaApilada celdas={celdas} marcas={marcas} redFiltro={redFiltro} />
+          </div>
           <TablaDesglose
             celdas={celdas}
             totales={data.totales}

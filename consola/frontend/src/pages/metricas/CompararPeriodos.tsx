@@ -15,7 +15,6 @@
  * `rango:AAAA-MM-DD_AAAA-MM-DD` o preset).
  */
 import { useQuery } from "@tanstack/react-query";
-import { BadgeDelta, type DeltaType } from "@tremor/react";
 import { AlertCircle, AlertTriangle, ArrowLeftRight, RefreshCw } from "lucide-react";
 import * as React from "react";
 
@@ -23,16 +22,16 @@ import {
   marcaMetricasDesdeCanonica,
   marcaParam,
 } from "@/components/comunes/selectores";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
-import { nombreMarca, numeroCompleto, variacion } from "@/lib/formato";
+import { nombreMarca, numeroCompleto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
 
 import { MARCA_TODAS, SelectorTiempo } from "./Controles";
+import { InsigniaComparativa } from "./InsigniaComparativa";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { METRICAS } from "./metricas-meta";
 import { diasDePeriodo, periodoAnterior, seSolapan } from "./rango";
@@ -82,37 +81,6 @@ function formatoValor(metrica: string, valor: number | null): string {
   const meta = METRICAS.find((m) => m.metrica === metrica);
   // Métricas extra (granulares + seguidores) son conteos: separador de miles es-MX.
   return meta ? meta.completo(valor) : numeroCompleto(valor);
-}
-
-/** Traduce la variación porcentual al `deltaType` de Tremor BadgeDelta. Una variación
- * ausente o no finita (métrica no comparable) se trata como "sin cambio", no revienta. */
-function deltaType(variacionPct: number | null | undefined): DeltaType {
-  if (variacionPct == null || !Number.isFinite(variacionPct)) return "unchanged";
-  if (variacionPct > 5) return "increase";
-  if (variacionPct > 0) return "moderateIncrease";
-  if (variacionPct < -5) return "decrease";
-  if (variacionPct < 0) return "moderateDecrease";
-  return "unchanged";
-}
-
-/**
- * Insignia de variación de una comparativa. Caso especial: crecimiento desde CERO
- * (a=0, b>0). El backend devuelve `variacion_pct = 0.0` para base 0 (división imposible),
- * y un BadgeDelta "0.0 %" OCULTARÍA el arranque: se muestra "Nuevo" en su lugar.
- */
-function InsigniaVariacion({ comp }: { comp: ComparativaMetrica }) {
-  if (comp.a === 0 && comp.b > 0) {
-    return (
-      <Badge variant="ok" className="shrink-0">
-        Nuevo
-      </Badge>
-    );
-  }
-  return (
-    <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs" className="shrink-0">
-      {variacion(comp.variacion_pct)}
-    </BadgeDelta>
-  );
 }
 
 /**
@@ -300,7 +268,9 @@ export function CompararPeriodos({
   );
 }
 
-/** Tarjeta destacada de una métrica con valor A, valor B y BadgeDelta. */
+/** Tarjeta destacada de una métrica con valor A, valor B y su insignia comparativa
+ * (variación relativa para conteos, diferencia en pts para engagement, "Nuevo" para
+ * arranques desde cero; ver InsigniaComparativa). */
 function TarjetaComparativa({ comp }: { comp: ComparativaMetrica }) {
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4">
@@ -308,7 +278,7 @@ function TarjetaComparativa({ comp }: { comp: ComparativaMetrica }) {
         <p className="min-w-0 truncate text-sm font-medium text-muted-foreground">
           {etiquetaMetrica(comp.metrica)}
         </p>
-        <InsigniaVariacion comp={comp} />
+        <InsigniaComparativa comp={comp} />
       </div>
       <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
         {formatoValor(comp.metrica, comp.b)}
@@ -328,7 +298,7 @@ function FilaComparativa({ comp }: { comp: ComparativaMetrica }) {
         <p className="truncate text-xs text-muted-foreground">{etiquetaMetrica(comp.metrica)}</p>
         <p className="text-sm font-medium tabular-nums">{formatoValor(comp.metrica, comp.b)}</p>
       </div>
-      <InsigniaVariacion comp={comp} />
+      <InsigniaComparativa comp={comp} />
     </div>
   );
 }

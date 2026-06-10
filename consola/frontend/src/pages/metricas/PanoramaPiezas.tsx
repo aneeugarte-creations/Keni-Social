@@ -39,7 +39,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { hoyCDMX } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import { nombreRed, numeroCompacto, numeroCompleto, porcentaje, redCanonica } from "@/lib/formato";
+import {
+  nombreRed,
+  numeroCompacto,
+  numeroCompleto,
+  plural,
+  porcentaje,
+  redCanonica,
+} from "@/lib/formato";
 import type { PiezaListado } from "@/types";
 
 import { colorDe } from "./coloresRed";
@@ -78,6 +85,20 @@ interface PuntoDato {
   publicado: string;
   visualizaciones: number;
   engagement_pct: number;
+}
+
+/**
+ * Altura (eje Y) de una pieza: log10 de sus vistas, con suelo en 1 para que las piezas
+ * con 0 vistas se apoyen en la línea «1» del eje (log10(0) = -Infinity rompería el chart).
+ */
+export function yLog(vistas: number): number {
+  return Math.log10(Math.max(1, vistas));
+}
+
+/** Ticks del eje Y (log): potencias de 10 (1, 10, 100, 1K, …) hasta cubrir `maxViews`. */
+export function ticksLog(maxViews: number): number[] {
+  const maxExp = Math.max(1, Math.ceil(Math.log10(Math.max(10, maxViews))));
+  return Array.from({ length: maxExp + 1 }, (_, i) => i);
 }
 
 /** Timestamp (ms) de una fecha ISO `AAAA-MM-DD`, o null si no es válida. */
@@ -295,7 +316,7 @@ export function PanoramaPiezas({
         const red = redCanonica(p.plataforma) || "otra";
         return {
           x,
-          y: Math.log10(Math.max(1, p.visualizaciones)),
+          y: yLog(p.visualizaciones),
           r: radio(p.engagement_pct),
           jx: (hash01(p.id + "x") - 0.5) * 2 * JITTER_X,
           jy: (hash01(p.id + "y") - 0.5) * 2 * JITTER_Y,
@@ -311,8 +332,7 @@ export function PanoramaPiezas({
 
       // Ticks del eje Y (log): potencias de 10 (1, 10, 100, 1K, …) hasta el máximo.
       const maxViews = totalPuntos ? Math.max(...base.map((b) => b.p.visualizaciones)) : 1;
-      const maxExp = Math.max(1, Math.ceil(Math.log10(Math.max(10, maxViews))));
-      const ticks = Array.from({ length: maxExp + 1 }, (_, i) => i);
+      const ticks = ticksLog(maxViews);
 
       // Rango temporal REAL + dominio con un pequeño margen a los lados.
       const xs = base.map((b) => b.x);
@@ -387,6 +407,10 @@ export function PanoramaPiezas({
 
   const conGlow = total <= MAX_PUNTOS_GLOW;
 
+  // Piezas con 0 vistas: en escala log se apoyan en la línea «1» del eje; se avisa en la
+  // leyenda para que nadie las lea como "1 vista".
+  const sinVistas = puntos.filter((p) => p.visualizaciones === 0).length;
+
   // Selector de periodo (segmentado) — siempre visible, también en carga/vacío.
   const selectorPeriodo = (
     <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Periodo">
@@ -420,7 +444,14 @@ export function PanoramaPiezas({
           Aún no hay piezas publicadas en este periodo.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card p-6">
+        /* role=img: alternativa textual del chart (total, redes y clave de lectura). */
+        <div
+          className="overflow-hidden rounded-xl border border-border bg-card p-6"
+          role="img"
+          aria-label={`Panorama de ${plural(total, "pieza")} del periodo; redes: ${redesPresentes
+            .map(nombreRed)
+            .join(", ")}; cada punto es una pieza, altura = vistas (escala logarítmica), tamaño = engagement`}
+        >
           {/* Leyenda: redes presentes (color + forma) y la clave de lectura de la escala. */}
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
             {redesPresentes.map((red) => (
@@ -444,6 +475,12 @@ export function PanoramaPiezas({
                 Eje vertical: vistas en escala logarítmica · tamaño del punto = engagement
               </span>
             </span>
+            {sinVistas > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {plural(sinVistas, "pieza")} con 0 vistas se {sinVistas === 1 ? "apoya" : "apoyan"}{" "}
+                en la línea «1» del eje (escala logarítmica)
+              </span>
+            )}
           </div>
 
           <ResponsiveContainer width="100%" height={384}>

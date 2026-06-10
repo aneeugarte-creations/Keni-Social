@@ -1,0 +1,187 @@
+/**
+ * Tests del dashboard de Métricas (página integradora).
+ *
+ * Cubre:
+ *   1. El aviso de datos de muestra aparece SOLO cuando `fuente === "muestra"`.
+ *   2. Deep-link del periodo: `?periodo=` válido (preset del backend o token
+ *      `mes:`/`rango:`) inicializa el rango de la consulta del reporte.
+ *   3. `?periodo=` inválido cae al primer rango disponible.
+ *
+ * Los hijos pesados (gráficas, tablas con queries propias) se mockean a stubs
+ * vacíos: aquí se prueba la ORQUESTACIÓN de la página, no cada sección.
+ */
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  MarcaActivaContexto,
+  type ValorMarcaActiva,
+} from "@/hooks/marca-activa-contexto";
+import * as apiMod from "@/lib/api";
+import type { OpcionesMetricas, ReporteMetricas } from "@/types";
+
+import Metricas from "./Metricas";
+
+// ── Stubs de los hijos pesados (queries/gráficas propias) ────────────────────
+
+vi.mock("./metricas/TendenciaDiaria", () => ({ TendenciaDiaria: () => null }));
+vi.mock("./metricas/AnalisisNarrativo", () => ({ AnalisisNarrativo: () => null }));
+vi.mock("./metricas/DistribucionEngagement", () => ({ DistribucionEngagement: () => null }));
+vi.mock("./metricas/PanoramaPiezas", () => ({ PanoramaPiezas: () => null }));
+vi.mock("./metricas/PiezasConsolidada", () => ({ PiezasConsolidada: () => null }));
+vi.mock("./metricas/CompararPeriodos", () => ({ CompararPeriodos: () => null }));
+vi.mock("./metricas/EvolucionRedes", () => ({ EvolucionRedes: () => null }));
+vi.mock("./metricas/Correlacion", () => ({ Correlacion: () => null }));
+vi.mock("./metricas/Crosstab", () => ({ Crosstab: () => null }));
+vi.mock("./metricas/DesgloseInteracciones", () => ({ DesgloseInteracciones: () => null }));
+vi.mock("./metricas/CrecimientoSeguidores", () => ({ CrecimientoSeguidores: () => null }));
+vi.mock("./metricas/GraficaPorSerie", () => ({ GraficaPorSerie: () => null }));
+vi.mock("./metricas/MetricaPorLinea", () => ({ MetricaPorLinea: () => null }));
+vi.mock("./metricas/SeccionAds", () => ({ SeccionAds: () => null }));
+vi.mock("./metricas/GraficaMarcas", () => ({ GraficaMarcas: () => null }));
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+const OPCIONES: OpcionesMetricas = {
+  marcas: [{ id: "uno_tv", nombre: "UnoTV" }],
+  rangos: [
+    { id: "semana", etiqueta: "Últimos 7 días" },
+    { id: "mes", etiqueta: "Últimos 30 días" },
+  ],
+};
+
+function reporte(fuente: string): ReporteMetricas {
+  return {
+    rango: "semana",
+    // Distintivo a propósito: no coincide con las etiquetas del selector de rangos.
+    etiqueta_rango: "Corte de prueba (1–7 jun)",
+    marca: "Todas",
+    fuente,
+    total: {
+      visualizaciones: 1000,
+      alcance: 800,
+      interacciones: 50,
+      engagement_pct: 5,
+      publicaciones: 10,
+    },
+    cuentas: [],
+    por_red: [],
+    cobertura_redes: [],
+    generado_en: "2026-06-10T12:00:00Z",
+  };
+}
+
+// ── Arnés ─────────────────────────────────────────────────────────────────────
+
+function valorMarcaActiva(marcaActiva: string | null): ValorMarcaActiva {
+  return {
+    marcaActiva,
+    marcaPrimaria: marcaActiva,
+    enMarcaPrimaria: true,
+    esMultiMarca: false,
+    puedeTodas: true,
+    marcasParaSwitch: [],
+    nombreActiva: marcaActiva,
+    cambiarMarca: vi.fn(),
+    volverAPrimaria: vi.fn(),
+  };
+}
+
+function renderMetricas(ruta = "/metricas", marcaActiva: string | null = null) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MarcaActivaContexto.Provider value={valorMarcaActiva(marcaActiva)}>
+        <MemoryRouter initialEntries={[ruta]}>
+          <Metricas />
+        </MemoryRouter>
+      </MarcaActivaContexto.Provider>
+    </QueryClientProvider>,
+  );
+}
+
+// ── Stubs de API ──────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockReporte: any;
+
+beforeEach(() => {
+  vi.spyOn(apiMod.api, "metricasOpciones").mockResolvedValue(OPCIONES);
+  mockReporte = vi
+    .spyOn(apiMod.api, "metricasReporte")
+    .mockResolvedValue(reporte("metricool"));
+  vi.spyOn(apiMod.api, "metricasIngesta").mockResolvedValue({
+    alertas: [],
+    etiqueta_rango: "Corte de prueba (1–7 jun)",
+    generado_en: "2026-06-10T12:00:00Z",
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe("Metricas · aviso de datos de muestra", () => {
+  it("muestra el aviso cuando la fuente del reporte es 'muestra'", async () => {
+    mockReporte.mockResolvedValue(reporte("muestra"));
+    renderMetricas();
+
+    expect(await screen.findByText("Datos de muestra (sintéticos)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Las cifras son de demostración, no datos reales del cliente."),
+    ).toBeInTheDocument();
+  });
+
+  it("NO muestra el aviso cuando la fuente es real (metricool)", async () => {
+    renderMetricas();
+
+    // El cuerpo del dashboard ya pintó (la etiqueta del corte es visible)…
+    expect(await screen.findByText("Corte de prueba (1–7 jun)")).toBeInTheDocument();
+    // …y el aviso de muestra no aparece.
+    expect(screen.queryByText("Datos de muestra (sintéticos)")).not.toBeInTheDocument();
+  });
+});
+
+describe("Metricas · periodo en la URL (?periodo=)", () => {
+  it("inicializa el rango desde ?periodo= cuando es un preset del backend", async () => {
+    renderMetricas("/metricas?periodo=mes");
+
+    await waitFor(() => {
+      expect(mockReporte).toHaveBeenCalledWith(
+        expect.objectContaining({ rango: "mes" }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("acepta tokens mes:/rango: válidos aunque no estén en los presets", async () => {
+    renderMetricas("/metricas?periodo=mes:2026-05");
+
+    await waitFor(() => {
+      expect(mockReporte).toHaveBeenCalledWith(
+        expect.objectContaining({ rango: "mes:2026-05" }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("cae al primer rango disponible cuando ?periodo= no es válido", async () => {
+    renderMetricas("/metricas?periodo=basura");
+
+    await waitFor(() => {
+      expect(mockReporte).toHaveBeenCalledWith(
+        expect.objectContaining({ rango: "semana" }),
+        expect.anything(),
+      );
+    });
+    expect(mockReporte).not.toHaveBeenCalledWith(
+      expect.objectContaining({ rango: "basura" }),
+      expect.anything(),
+    );
+  });
+});

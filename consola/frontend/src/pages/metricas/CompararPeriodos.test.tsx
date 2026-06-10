@@ -174,6 +174,45 @@ describe("CompararPeriodos", () => {
     expect(screen.queryByText("0.0 %")).not.toBeInTheDocument();
   });
 
+  it("muestra el engagement en PUNTOS porcentuales ('+0.4 pts'), nunca variación relativa", async () => {
+    // 2.0 % → 2.4 % de engagement es una mejora de 0.4 PUNTOS. La variación relativa
+    // del porcentaje ("+20.0 %") es engañosa para un ratio y no se muestra jamás.
+    const respEngagement: CompararMetricas = {
+      ...RESP,
+      total: {
+        metricas: [
+          { metrica: "engagement_pct", a: 2.0, b: 2.4, diferencia: 0.4, variacion_pct: 20 },
+        ],
+      },
+      por_marca: [],
+    };
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(respEngagement);
+    renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
+
+    expect(await screen.findByText("+0.4 pts")).toBeInTheDocument();
+    expect(screen.queryByText(/\+20/)).not.toBeInTheDocument();
+  });
+
+  it("no pinta insignia de engagement cuando la diferencia es null (no calculable)", async () => {
+    // El backend emite diferencia=null cuando el engagement no es calculable en alguno
+    // de los periodos: sin dato no se inventa badge (ni "0.0 pts" ni "—").
+    const respSinDiferencia = {
+      ...RESP,
+      total: {
+        metricas: [
+          { metrica: "engagement_pct", a: null, b: 2.4, diferencia: null, variacion_pct: null },
+        ],
+      },
+      por_marca: [],
+    } as unknown as CompararMetricas;
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(respSinDiferencia);
+    renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
+
+    // La tarjeta se pinta (valor B), pero sin badge de pts ni de %.
+    expect(await screen.findByText("Engagement")).toBeInTheDocument();
+    expect(screen.queryByText(/pts/)).not.toBeInTheDocument();
+  });
+
   it("muestra el desglose por marca con el nombre legible (no el id crudo)", async () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);

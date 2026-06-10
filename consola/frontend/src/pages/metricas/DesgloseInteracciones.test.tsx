@@ -4,6 +4,7 @@ import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
+import { numeroCompacto } from "@/lib/formato";
 import type { DesgloseInteracciones as DesgloseResp } from "@/types";
 
 import { DesgloseInteracciones } from "./DesgloseInteracciones";
@@ -75,6 +76,22 @@ describe("DesgloseInteracciones", () => {
     expect(screen.getAllByText("5,000").length).toBeGreaterThan(0);
     expect(screen.queryByText(/5\s*mil/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("300").length).toBeGreaterThan(0);
+  });
+
+  it("ofrece una alternativa textual del chart (role=img con los totales por componente)", async () => {
+    vi.spyOn(api, "metricasDesglose").mockResolvedValue(RESP);
+    renderConProviders(
+      <DesgloseInteracciones marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    const img = await screen.findByRole("img", {
+      name: /Desglose de interacciones por marca y red/,
+    });
+    expect(img).toHaveAttribute(
+      "aria-label",
+      `Desglose de interacciones por marca y red: Me gusta ${numeroCompacto(5000)}, ` +
+        "Comentarios 300, Compartidos 120, Guardados 80",
+    );
   });
 
   it("ordena las celdas al clicar una cabecera de componente", async () => {

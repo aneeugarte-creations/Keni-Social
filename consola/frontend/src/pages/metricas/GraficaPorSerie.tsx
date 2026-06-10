@@ -149,17 +149,25 @@ function SerieChart({ serie }: { serie: SeriePorEtiqueta }) {
   }));
   return (
     <div className="space-y-2 pt-2">
-      <BarChart
-        data={datos}
-        index="grupo"
-        categories={["Engagement %"]}
-        colors={["emerald"]}
-        valueFormatter={(v) => porcentaje(v)}
-        customTooltip={TooltipGrupo}
-        showLegend={false}
-        showAnimation
-        className="h-56"
-      />
+      {/* Alternativa textual del chart: cada grupo con su engagement formateado. */}
+      <div
+        role="img"
+        aria-label={`Engagement por ${serie.etiqueta}: ${serie.grupos
+          .map((g) => `${g.valor} ${porcentaje(g.engagement_pct)}`)
+          .join(", ")}`}
+      >
+        <BarChart
+          data={datos}
+          index="grupo"
+          categories={["Engagement %"]}
+          colors={["emerald"]}
+          valueFormatter={(v) => porcentaje(v)}
+          customTooltip={TooltipGrupo}
+          showLegend={false}
+          showAnimation
+          className="h-56"
+        />
+      </div>
       <p className="text-xs text-muted-foreground">
         {serie.grupos.map((g, i) => (
           <span key={g.valor}>

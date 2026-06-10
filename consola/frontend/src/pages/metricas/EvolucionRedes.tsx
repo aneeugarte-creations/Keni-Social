@@ -41,7 +41,15 @@ interface FilaTramo {
 }
 
 /** Tamaño del tramo de agregación, adaptativo al span real de los datos. */
-type Granularidad = "dia" | "semana" | "mes";
+export type Granularidad = "dia" | "semana" | "mes";
+
+/**
+ * Granularidad adaptativa según el span REAL de los datos: con el rango por defecto
+ * (~30 días) la agregación mensual daba 1-2 barras; en día/semana sí hay tendencia.
+ */
+export function granularidadParaSpan(spanDias: number): Granularidad {
+  return spanDias <= 45 ? "dia" : spanDias <= 180 ? "semana" : "mes";
+}
 
 /** "May 2021" capitalizado a partir de año/mes (0-index). */
 function etiquetaMes(anio: number, mes0: number): string {
@@ -82,7 +90,7 @@ function siguienteTramo(f: Date, gran: Granularidad): Date {
 }
 
 /** Etiqueta del tramo: día → "1 jun"; semana → "Sem del 1 jun"; mes → "Jun 2026". */
-function etiquetaTramo(f: Date, gran: Granularidad): string {
+export function etiquetaTramo(f: Date, gran: Granularidad): string {
   if (gran === "mes") return etiquetaMes(f.getFullYear(), f.getMonth());
   if (gran === "semana") return `Sem del ${etiquetaDia(f)}`;
   return etiquetaDia(f);
@@ -148,7 +156,7 @@ export function EvolucionRedes({
 
   const piezas = React.useMemo<PiezaListado[]>(() => data?.piezas ?? [], [data]);
 
-  const { filas, redesPresentes } = React.useMemo(() => {
+  const { filas, redesPresentes, gran } = React.useMemo(() => {
     // Piezas válidas: con fecha parseable y vistas finitas.
     const validas: Array<{ f: Date; red: string; vistas: number }> = [];
     const redes = new Set<string>();
@@ -160,16 +168,18 @@ export function EvolucionRedes({
       validas.push({ f, red, vistas: p.visualizaciones });
     }
     if (!validas.length) {
-      return { filas: [] as FilaTramo[], redesPresentes: [] as string[] };
+      return {
+        filas: [] as FilaTramo[],
+        redesPresentes: [] as string[],
+        gran: "dia" as Granularidad,
+      };
     }
 
-    // Granularidad adaptativa según el span REAL de los datos: con el rango por defecto
-    // (~30 días) la agregación mensual daba 1-2 barras; en día/semana sí hay tendencia.
     const tiempos = validas.map((v) => v.f.getTime());
     const minT = Math.min(...tiempos);
     const maxT = Math.max(...tiempos);
     const spanDias = Math.round((maxT - minT) / 86_400_000);
-    const gran: Granularidad = spanDias <= 45 ? "dia" : spanDias <= 180 ? "semana" : "mes";
+    const gran = granularidadParaSpan(spanDias);
 
     // Agrega vistas por (tramo, red). Clave = timestamp del inicio del tramo.
     const porTramo = new Map<number, Record<string, number>>();
@@ -199,7 +209,7 @@ export function EvolucionRedes({
       out.push(fila);
     }
 
-    return { filas: out, redesPresentes: presentes };
+    return { filas: out, redesPresentes: presentes, gran };
   }, [piezas]);
 
   // Muestra ~8 etiquetas de tramo como máximo en el eje X (interval = categorías a saltar).
@@ -216,7 +226,14 @@ export function EvolucionRedes({
           Aún no hay piezas publicadas en este periodo.
         </p>
       ) : (
-        <div className="rounded-xl border border-border bg-card p-6">
+        /* role=img: alternativa textual del chart (resume tramos, granularidad y redes). */
+        <div
+          className="rounded-xl border border-border bg-card p-6"
+          role="img"
+          aria-label={`Vistas por red en ${filas.length} tramos por ${
+            gran === "dia" ? "día" : gran
+          }: redes ${redesPresentes.map(nombreRed).join(", ")}`}
+        >
           {/* Rótulo de la métrica (título + aclaración honesta) + leyenda, dentro del gráfico. */}
           <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
             <div className="space-y-1">

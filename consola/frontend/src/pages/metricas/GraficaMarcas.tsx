@@ -21,9 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
-import { numeroCompacto, numeroCompleto } from "./formato";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 type Metrica = "visualizaciones" | "interacciones";
@@ -33,6 +33,7 @@ const ETIQUETA: Record<Metrica, string> = {
   interacciones: "Interacciones",
 };
 /** Colores por métrica (nombres Tremor), los mismos de METRICAS en metricas-meta. */
+// OJO: aquí el color codifica la MÉTRICA (no la red); la paleta por red (coloresRed.ts) no aplica.
 const COLOR: Record<Metrica, "orange" | "violet"> = {
   visualizaciones: "orange",
   interacciones: "violet",
@@ -81,6 +82,13 @@ export function GraficaMarcas({
     [etiqueta]: c[metrica],
   }));
 
+  // Alternativa textual del chart: hasta 5 marcas con su valor + "y N más" si hay más.
+  const top5 = cuentas
+    .slice(0, 5)
+    .map((c) => `${c.marca} ${numeroCompacto(c[metrica])}`)
+    .join(", ");
+  const resumen = cuentas.length > 5 ? `${top5} y ${cuentas.length - 5} más` : top5;
+
   const ordenadas = [...cuentas].sort((a, b) => b.visualizaciones - a.visualizaciones);
   const pcts = porcentajesMayorResto(ordenadas.map((c) => c.visualizaciones));
   const datosReparto = ordenadas.map((c, i) => ({
@@ -111,7 +119,8 @@ export function GraficaMarcas({
       <Card className="lg:col-span-3">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-base">Vistas e interacciones por marca</CardTitle>
+            {/* Título dinámico: la gráfica enseña UNA métrica a la vez (la del Select). */}
+            <CardTitle className="text-base">{etiqueta} por marca</CardTitle>
             <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
               <SelectTrigger className="w-[170px]" aria-label="Métrica de la comparativa">
                 <SelectValue />
@@ -124,18 +133,21 @@ export function GraficaMarcas({
           </div>
         </CardHeader>
         <CardContent>
-          <BarChart
-            className="h-72"
-            data={datosBarras}
-            index="marca"
-            categories={[etiqueta]}
-            colors={[COLOR[metrica]]}
-            valueFormatter={numeroCompacto}
-            yAxisWidth={56}
-            showAnimation
-            noDataText="Sin datos para este periodo."
-            customTooltip={(props) => <TooltipBarras {...props} punto={PUNTO[metrica]} />}
-          />
+          {/* Alternativa textual del chart para lectores de pantalla (resumen con datos). */}
+          <div role="img" aria-label={`${etiqueta} por marca: ${resumen}`}>
+            <BarChart
+              className="h-72"
+              data={datosBarras}
+              index="marca"
+              categories={[etiqueta]}
+              colors={[COLOR[metrica]]}
+              valueFormatter={numeroCompacto}
+              yAxisWidth={56}
+              showAnimation
+              noDataText="Sin datos para este periodo."
+              customTooltip={(props) => <TooltipBarras {...props} punto={PUNTO[metrica]} />}
+            />
+          </div>
         </CardContent>
       </Card>
 

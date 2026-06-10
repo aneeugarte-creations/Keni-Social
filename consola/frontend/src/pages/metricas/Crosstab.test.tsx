@@ -114,6 +114,30 @@ describe("Crosstab (rendimiento por formato)", () => {
     expect(cabPiezas.closest("th")).toHaveAttribute("aria-sort", "ascending");
   });
 
+  it("REGRESIÓN: fija los literales que explican el rendimiento relativo (semántica del backend)", async () => {
+    // La semántica vive en mcp-metricas (servicio.crosstab_desde_fuente +
+    // estadisticas.anotar_rendimiento_relativo): rendimiento_relativo_medio = MEDIA por
+    // pieza de (vistas de la pieza ÷ MEDIANA de vistas de su grupo marca×red), con la
+    // MEDIA del grupo si la mediana es 0 (y null si ambas son 0). Si esta redacción
+    // diverge, se corrige el texto de la UI hacia el backend, nunca al revés.
+    vi.spyOn(api, "metricasCrosstab").mockResolvedValue(RESP);
+    renderConProviders(
+      <Crosstab marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+    await screen.findAllByText("UnoTV");
+
+    // La descripción de la sección nombra el agregado y su baseline exactos.
+    expect(screen.getByText(/promedio por pieza/)).toBeInTheDocument();
+    expect(screen.getByText(/mediana de vistas de su grupo marca×red/)).toBeInTheDocument();
+
+    // El title de la celda de rendimiento lleva la fórmula completa, fallback incluido.
+    expect(
+      screen.getAllByTitle(
+        "Promedio por pieza de: vistas ÷ mediana de vistas de su grupo marca×red (media del grupo si la mediana es 0)",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("muestra un vacío honesto cuando la fuente no expone celdas", async () => {
     vi.spyOn(api, "metricasCrosstab").mockResolvedValue({ ...RESP, celdas: [] });
     renderConProviders(

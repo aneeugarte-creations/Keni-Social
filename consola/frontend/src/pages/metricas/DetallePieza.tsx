@@ -15,7 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { AreaChart } from "@tremor/react";
 import { ExternalLink, Gauge } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -226,14 +225,5 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
       <dt className="text-muted-foreground">{etiqueta}</dt>
       <dd className="font-medium tabular-nums">{valor}</dd>
     </div>
-  );
-}
-
-/** Badge auxiliar reutilizado por la lista cuando una pieza no tiene url. */
-export function BadgeSinUrl() {
-  return (
-    <Badge variant="outline" className="text-muted-foreground">
-      sin enlace
-    </Badge>
   );
 }

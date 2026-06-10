@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { AvisoMuestra } from "@/components/comunes/AvisoMuestra";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import {
   marcaCanonicaDesdeMetricas,
@@ -16,6 +17,8 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
 
+import { AlertaIngesta } from "./metricas/AlertaIngesta";
+import { AnalisisNarrativo } from "./metricas/AnalisisNarrativo";
 import { BotonActualizar } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorTiempo } from "./metricas/Controles";
@@ -25,14 +28,15 @@ import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
 import { Descargas } from "./metricas/Descargas";
 import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
+import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
 import { EvolucionRedes } from "./metricas/EvolucionRedes";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
-import { AlertaIngesta } from "./metricas/AlertaIngesta";
 import { PanoramaPiezas } from "./metricas/PanoramaPiezas";
 import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
+import { diasDePeriodo } from "./metricas/rango";
 import { SeccionAds } from "./metricas/SeccionAds";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
@@ -92,6 +96,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   const { marcas, rangos } = opciones;
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   // La marca del dashboard la MANDA el switch global de la barra superior (workspace);
   // Analíticas no tiene selector propio: respeta el global. `marcaActiva` es el id
   // canónico (o null = "Todas", agregado solo para admin).
@@ -117,7 +122,31 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     const idMetricas = marcaMetricasDesdeCanonica(marcaActiva);
     return marcas.some((m) => m.id === idMetricas) ? idMetricas : MARCA_TODAS;
   }, [marcaActiva, marcas]);
-  const [rango, setRango] = React.useState(rangos[0]?.id ?? "");
+  // El periodo viaja en la URL (`?periodo=`) para que los enlaces profundos y el
+  // historial conserven el corte temporal. Al montar se acepta solo un token válido:
+  // un preset del backend o un token `mes:`/`rango:` que resuelva a días.
+  const [rango, setRango] = React.useState(() => {
+    const token = searchParams.get("periodo");
+    if (token && (rangos.some((r) => r.id === token) || diasDePeriodo(token) != null)) {
+      return token;
+    }
+    return rangos[0]?.id ?? "";
+  });
+  // Único punto de cambio del rango: actualiza el estado Y refleja el token en la URL
+  // (replace: cambiar de periodo no debe apilar entradas en el historial).
+  const cambiarRango = React.useCallback(
+    (token: string) => {
+      setRango(token);
+      setSearchParams(
+        (prev) => {
+          prev.set("periodo", token);
+          return prev;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const marca_ = marcaParam(marca);
 
@@ -161,7 +190,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         marca={marca_}
         generadoEn={reporteQuery.data?.generado_en}
       />
-      <SelectorTiempo rangos={rangos} valor={rango} onCambio={setRango} />
+      <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
     </div>
   );
 
@@ -182,6 +211,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         />
       ) : (
         <div className="space-y-8">
+          {/* Mientras la fuente sea sintética, el aviso encabeza el dashboard: que
+              nadie confunda las cifras de demostración con datos reales del cliente. */}
+          {reporteQuery.data.fuente === "muestra" && <AvisoMuestra />}
           {/* La marca la manda el switch global de la topbar: no se repite aquí. Solo se
               conserva el rango temporal del corte, como texto sutil junto a las descargas. */}
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -191,7 +223,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
           <AlertaIngesta marcaActual={marca} rangoActual={rango} />
 
-          <Kpis total={reporteQuery.data.total} />
+          <Kpis total={reporteQuery.data.total} marcaActual={marca} rangoActual={rango} />
+          {/* Lectura narrativa del periodo (qué pasó y por qué), entre los números
+              crudos y la tendencia diaria. Sigue marca/rango global. */}
+          <AnalisisNarrativo marcaActual={marca} rangoActual={rango} />
           <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
 
           {/* Por marca: la comparativa visual y la tabla detallada son dos lecturas
@@ -258,6 +293,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             {/* El Panorama usa query y periodo PROPIOS (selector 7d/30d/90d/1año); solo
                 EvolucionRedes comparte caché con PiezasConsolidada. */}
             <PanoramaPiezas marcaActual={marca} />
+            {/* Cómo se reparte el engagement entre las piezas del periodo (distribución,
+                no solo medias): contexto antes de bajar a la tabla consolidada. */}
+            <DistribucionEngagement marcaActual={marca} rangoActual={rango} />
             <PiezasConsolidada marcaActual={marca} rangoActual={rango} marcas={marcas} />
           </section>
 

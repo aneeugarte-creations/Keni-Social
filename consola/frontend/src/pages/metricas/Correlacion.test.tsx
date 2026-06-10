@@ -96,6 +96,22 @@ describe("Correlacion (seguidores vs publicación)", () => {
     expect(screen.queryByText("Seg./post")).not.toBeInTheDocument();
   });
 
+  it("ofrece una alternativa textual del scatter (role=img con nº de puntos y redes)", async () => {
+    vi.spyOn(api, "metricasCorrelacion").mockResolvedValue(RESP);
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    // 2 items (instagram + x) → 2 puntos; las redes con su nombre legible.
+    const img = await screen.findByRole("img", {
+      name: /Seguidores frente a piezas publicadas/,
+    });
+    expect(img).toHaveAttribute(
+      "aria-label",
+      "Seguidores frente a piezas publicadas: 2 puntos por día y red (Instagram, X)",
+    );
+  });
+
   it("traduce el nombre técnico del ratio en la nota del backend a «Seg. por pieza»", async () => {
     const notaTecnica =
       "Correlación, no causalidad. 'seguidores_por_post' es un reparto indicativo.";
