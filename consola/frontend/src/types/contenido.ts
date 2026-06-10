@@ -262,7 +262,7 @@ export interface Contenido {
   notas: string;
   /** De dónde sale la imagen (IA / galería / fuente original). */
   tipo_contenido: TipoContenido;
-  /** Ola F: formato de la pieza — "foto" (3 redes) o "video" (5 redes). */
+  /** Formato de la pieza — "foto" (3 redes), "video" (5) o "carrusel" (2: IG/FB). */
   formato: string;
   /** Derivado: deadline pasado y aún sin cerrar. */
   vencido: boolean;

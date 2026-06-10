@@ -692,6 +692,7 @@ export interface Publicacion {
   plantilla_diseno_id?: string;
   foto_encuadre?: string;
   fotos?: string;
+  carrusel?: string;
 }
 /**
  * Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).

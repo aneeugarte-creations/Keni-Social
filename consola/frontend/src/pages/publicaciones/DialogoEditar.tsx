@@ -6,12 +6,14 @@ import { toast } from "sonner";
 
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
+import { EditorCarrusel } from "@/components/media/EditorCarrusel";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { EditorVideo } from "@/components/media/EditorVideo";
 import type { Documento } from "@/editor/documento";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
+import { parsearCarrusel, serializarCarrusel, type SlideCarrusel } from "@/lib/carrusel";
 import { capasFotoDoc, type FotoCollage } from "@/lib/placa/docPieza";
 import {
   parsearEncuadre,
@@ -67,10 +70,12 @@ export function DialogoEditar({
   // de la idea (el backend propaga copy/copy-in/foto al guardar). Vive en la idea (padre):
   // togglearlo desde cualquier red afecta a todas. OFF = cada red se edita por separado.
   const [espejo, setEspejo] = React.useState(true);
-  // Ola F: formato de la pieza ("foto"|"video") + estado del video.
+  // Formato de la pieza ("foto"|"video"|"carrusel") + estado del video.
   const [formato, setFormato] = React.useState("foto");
   const [videoKey, setVideoKey] = React.useState("");
   const [videoUrl, setVideoUrl] = React.useState("");
+  // CARRUSEL: slides EXTRA en crudo detrás de la portada (la portada es la placa de arriba).
+  const [slides, setSlides] = React.useState<SlideCarrusel[]>([]);
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
@@ -120,8 +125,8 @@ export function DialogoEditar({
     setGaleriaPlantillas(false);
   };
 
-  // Ola F: flip de formato (foto↔video). PATCH /api/contenido/{contenido_id} con {formato}.
-  // El backend ajusta las redes (3↔5) y puede devolver un `aviso` si había redes con contenido.
+  // Flip de formato (foto/video/carrusel). PATCH /api/contenido/{contenido_id} con {formato}.
+  // El backend ajusta las redes (3/5/2) y puede devolver un `aviso` si había redes con contenido.
   const flipFormato = useMutation({
     mutationFn: (nuevoFormato: string) => {
       if (!publicacion) throw new Error("Sin publicación");
@@ -130,6 +135,9 @@ export function DialogoEditar({
     onSuccess: (data) => {
       const nuevoFmt = data.contenido.formato || "foto";
       setFormato(nuevoFmt);
+      // Al salir de carrusel el backend limpia sus slides: el estado local los suelta también
+      // (si no, el autoguardado los re-escribiría).
+      if (nuevoFmt !== "carrusel") setSlides([]);
       if (data.aviso) toast(data.aviso);
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
@@ -137,21 +145,29 @@ export function DialogoEditar({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Cambia el formato (foto↔video) PIDIENDO CONFIRMACIÓN: el cambio es SIEMPRE destructivo —el
-  // backend borra el asset del formato anterior (la foto al pasar a vídeo, el vídeo al pasar a
-  // foto), quita la plantilla (foto→miniatura y viceversa) y devuelve la pieza a borrador (pierde
-  // el «listo para revisar»)—. Confirmamos siempre porque el asset a perder puede estar en otras
-  // redes de la pieza (no solo en la que se edita aquí), así que no se puede detectar de forma
-  // fiable desde una sola fila.
-  const cambiarFormato = (aVideo: boolean) => {
-    if (!publicacion) return;
-    const que = aVideo ? "la foto" : "el video";
+  // Cambia el formato PIDIENDO CONFIRMACIÓN: el cambio puede ser destructivo —el backend borra
+  // el asset del formato anterior (la parte visual al pasar a vídeo, el vídeo al pasar a un
+  // formato de imagen, los slides al salir de carrusel), quita la plantilla y devuelve la pieza
+  // a borrador (pierde el «listo para revisar»)—. Confirmamos siempre porque el asset a perder
+  // puede estar en otras redes de la pieza (no solo en la que se edita aquí), así que no se
+  // puede detectar de forma fiable desde una sola fila.
+  const cambiarFormato = (nuevo: string) => {
+    if (!publicacion || nuevo === formato) return;
+    const etiqueta = nuevo === "video" ? "video" : nuevo === "carrusel" ? "carrusel" : "foto";
+    const pierde =
+      nuevo === "video"
+        ? "la foto (y los slides, si los hay)"
+        : formato === "video"
+          ? "el video"
+          : formato === "carrusel"
+            ? "los slides del carrusel"
+            : "nada de la foto (se conserva)";
     const ok = window.confirm(
-      `Al cambiar a ${aVideo ? "video" : "foto"} se borrará ${que} y la plantilla actual, y la ` +
+      `Al cambiar a ${etiqueta} se borrará ${pierde} y la plantilla actual, y la ` +
         `pieza volverá a borrador (perderá el «listo para revisar»). ¿Continuar?`,
     );
     if (!ok) return;
-    flipFormato.mutate(aVideo ? "video" : "foto");
+    flipFormato.mutate(nuevo);
   };
 
   // Toggle del espejo: PUT inmediato (no espera al autoguardado debounced; es un ajuste de la
@@ -198,10 +214,11 @@ export function DialogoEditar({
     setPlacaOculta(publicacion.placa_oculta ?? false);
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
     setEspejo(publicacion.espejo ?? true);
-    // Ola F: formato y video.
+    // Formato, video y slides del carrusel.
     setFormato(publicacion.formato || "foto");
     setVideoKey(publicacion.video ?? "");
     setVideoUrl("");
+    setSlides(parsearCarrusel(publicacion.carrusel));
     // Carga del collage: si la pieza trae `fotos` (JSON), úsalo; si no, deriva el hueco único del
     // par legado `foto`/`foto_encuadre`.
     const fotosGuardadas = parsearFotos(publicacion.fotos);
@@ -250,6 +267,11 @@ export function DialogoEditar({
       // Collage completo (todas las fotos por hueco) como JSON.
       fotos: serializarFotos(fotos),
     };
+    // CARRUSEL: solo se envían los slides cuando la pieza ES carrusel (en otros formatos el
+    // backend ya los limpió en el flip; reenviar el estado local viejo los resucitaría).
+    if (formato === "carrusel") {
+      cuerpo.carrusel = serializarCarrusel(slides);
+    }
     // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → QA →
     // me gusta → auto-programar). PATCH parcial: lo no enviado queda intacto.
     const { publicacion: actualizada } = await api.actualizarPublicacion(publicacion.id, cuerpo);
@@ -273,7 +295,7 @@ export function DialogoEditar({
         /* carrera / ya en revisión: lo ignoramos (el feed reflejará el estado real) */
       }
     }
-  }, [publicacion, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel]);
+  }, [publicacion, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel, formato, slides]);
 
   // Solo se autoguarda cuando hay contenido (el copy del post). Sin título: ya no lo exige.
   const datosValidos = !!publicacion && contenido.trim().length > 0;
@@ -322,6 +344,7 @@ export function DialogoEditar({
   const firmaAutoguardado = JSON.stringify({
     contenido, copyIn, placaOculta, plantillaId,
     fotos: serializarFotos(fotos),
+    carrusel: formato === "carrusel" ? serializarCarrusel(slides) : "",
   });
   React.useEffect(() => {
     if (cargandoRef.current || !publicacion) return;
@@ -346,17 +369,35 @@ export function DialogoEditar({
 
         {/* Orden de edición: primero la IMAGEN/VIDEO, luego el CONTENIDO (copy) y al final los HASHTAGS. */}
         <div className="space-y-4">
-          {/* Ola F: toggle Foto/Video. Solo disponible cuando la pieza tiene contenido_id (no vacío). */}
+          {/* Formato de la pieza (foto/video/carrusel): selector segmentado. */}
           {publicacion && (
             <div className="flex flex-wrap items-center gap-3">
-              <Label htmlFor="editar-formato-toggle">Foto</Label>
-              <Switch
-                id="editar-formato-toggle"
-                checked={formato === "video"}
-                onCheckedChange={(v) => cambiarFormato(v)}
-                disabled={flipFormato.isPending}
-              />
-              <Label htmlFor="editar-formato-toggle">Video</Label>
+              <div
+                className="inline-flex items-center gap-1 rounded-md border p-0.5"
+                role="group"
+                aria-label="Formato de la pieza"
+              >
+                {(
+                  [
+                    ["foto", "Foto"],
+                    ["video", "Video"],
+                    ["carrusel", "Carrusel"],
+                  ] as const
+                ).map(([valor, etiqueta]) => (
+                  <Button
+                    key={valor}
+                    type="button"
+                    size="sm"
+                    variant={formato === valor ? "default" : "ghost"}
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() => cambiarFormato(valor)}
+                    disabled={flipFormato.isPending}
+                    aria-pressed={formato === valor}
+                  >
+                    {etiqueta}
+                  </Button>
+                ))}
+              </div>
               {/* ESPEJO entre redes: con él puesto, lo editado aquí se aplica también a las
                   demás redes de la idea (las ya publicadas no se tocan). Apágalo para que
                   cada red lleve su propio copy/foto. */}
@@ -438,6 +479,12 @@ export function DialogoEditar({
                 copy={contenido}
               />
             ) : null}
+
+          {/* CARRUSEL: los slides extra EN CRUDO detrás de la portada (la portada se edita
+              arriba con la placa de siempre). Subir/quitar/reordenar; autoguardado normal. */}
+          {publicacion && formato === "carrusel" && (
+            <EditorCarrusel slides={slides} onCambio={setSlides} idPrefijo="editar" />
+          )}
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

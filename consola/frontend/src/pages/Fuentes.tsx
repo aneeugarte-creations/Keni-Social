@@ -15,6 +15,10 @@ import { SaludFeeds } from "./fuentes/SaludFeeds";
 // Buzones del equipo (listas tipo portal/WhatsApp/corresponsales y Excel): la fuente
 // INTERNA. Compone la página de Cajones del día.
 import CajonesDia from "./CajonesDia";
+// Cajón PRESIDENCIA: la nota de WhatsApp de presidencia (texto + media) que genera sola
+// una pieza CARRUSEL en el feed. Es un buzón aparte de los Cajones del día (no se parsea
+// con IA: la nota va tal cual y el media adjunto ES el carrusel).
+import CajonPresidencia from "./fuentes/CajonPresidencia";
 
 /** Una clase de fuente (pestaña): Externas o Internas. */
 type PestanaTipo = {
@@ -82,6 +86,7 @@ export default function Fuentes() {
             corresponsales y Excel), filtrados por la marca activa. Las aportaciones a mano
             ("Idea" e "Interno AMX") se mudaron a Contenidos, fusionadas con el generador de ideas. */}
         <TabsContent value="internas" className="space-y-8">
+          <CajonPresidencia />
           <CajonesDia />
         </TabsContent>
       </Tabs>

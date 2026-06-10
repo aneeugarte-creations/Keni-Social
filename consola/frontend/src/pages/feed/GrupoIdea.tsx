@@ -152,11 +152,14 @@ export function GrupoIdea({
     }
     return m;
   }, [grupo.piezas, filtra]);
-  // FORMATO de la idea: si alguna pieza es video, la idea va a las 5 redes; si no, a las 3 de
-  // foto. Acota los huecos "No generado" a las redes que el backend SÍ generará.
+  // FORMATO de la idea: si alguna pieza es video, la idea va a las 5 redes; si es carrusel,
+  // a las 2 de carrusel; si no, a las 3 de foto. Acota los huecos "No generado" a las redes
+  // que el backend SÍ generará.
   const formatoGrupo = grupo.piezas.some((p) => normalizarFormato(p.formato) === "video")
     ? "video"
-    : "foto";
+    : grupo.piezas.some((p) => normalizarFormato(p.formato) === "carrusel")
+      ? "carrusel"
+      : "foto";
   // Solo las redes CON pieza pintan tarjeta; las pendientes del formato van a la franja
   // compacta "Falta generar" (sin huecos gigantes).
   const redesVisibles = redes.filter((r) => porRed.has(r));

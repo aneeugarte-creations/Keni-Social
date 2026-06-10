@@ -1,5 +1,6 @@
 import type { MarcaDisponible, Publicacion } from "../types.gen";
 import type { Veredicto, PiezaGenerada } from "./comun";
+import type { Generacion } from "./generaciones";
 
 // --- Carril Rápido de Breaking (Claro Sports) ---
 
@@ -406,4 +407,46 @@ export interface RespuestaGenerarDesdeItem {
   verdicto: Veredicto;
   piezas: PiezaGenerada[];
   publicaciones: Publicacion[];
+}
+
+// --- Cajón PRESIDENCIA (Fuentes → Internas): nota de WhatsApp -> pieza carrusel ---
+
+/** Un elemento de media de la nota (ya subido a /api/media): imagen o video, en orden. */
+export interface MediaNotaPresidencia {
+  tipo: "imagen" | "video";
+  objeto: string;
+}
+
+/** Una nota volcada al cajón (el tema `origen='presidencia'`) + estado de su pieza. */
+export interface NotaPresidencia {
+  id: string;
+  titulo: string;
+  texto: string;
+  marca: string;
+  marca_nombre: string;
+  autor_nombre: string;
+  creado: string;
+  /** 'generando' (copy en curso) | 'lista' (con copy en el feed) | 'sin_pieza'. */
+  estado_pieza: "generando" | "lista" | "sin_pieza";
+}
+
+/** Cuerpo de `POST /api/presidencia/notas`. */
+export interface CuerpoCrearNotaPresidencia {
+  marca: string;
+  texto: string;
+  titulo?: string;
+  media: MediaNotaPresidencia[];
+}
+
+/** Respuesta de `GET /api/presidencia/notas`. */
+export interface RespuestaNotasPresidencia {
+  notas: NotaPresidencia[];
+  marcas: { id: string; nombre: string }[];
+}
+
+/** Respuesta de `POST /api/presidencia/notas`. */
+export interface RespuestaCrearNotaPresidencia {
+  nota: NotaPresidencia;
+  contenido_id: string;
+  generacion: Generacion;
 }

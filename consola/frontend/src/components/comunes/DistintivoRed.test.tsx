@@ -28,4 +28,13 @@ describe("DistintivoRed", () => {
     expect(distintivo).toHaveAttribute("title", "TikTok");
     expect(distintivo!.querySelectorAll("svg")).toHaveLength(1);
   });
+
+  it("carrusel pinta su propio icono (capas) y la etiqueta en el tooltip", () => {
+    const { container } = render(<DistintivoRed red="instagram" formato="carrusel" />);
+    const distintivo = container.querySelector("span");
+    expect(distintivo).toHaveAttribute("title", "Instagram · Carrusel");
+    const iconos = distintivo!.querySelectorAll("svg");
+    expect(iconos).toHaveLength(2);
+    expect(iconos[0].classList.contains("lucide-layers")).toBe(true);
+  });
 });

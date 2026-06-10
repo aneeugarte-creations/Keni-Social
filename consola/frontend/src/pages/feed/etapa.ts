@@ -59,11 +59,16 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
 
 /**
  * Etiqueta dinámica de la etapa, teniendo en cuenta el formato de la pieza (Ola F).
- * Para piezas video, "generando_arte" significa "Falta video" en vez de "Falta imagen".
+ * Para piezas video, "generando_arte" significa "Falta video" en vez de "Falta imagen";
+ * para carruseles, lo que falta es la PORTADA (los slides extra ya vienen en crudo).
  */
 export function etiquetaEtapa(etapa: EtapaIa, formato?: string): string {
-  if (etapa === "generando_arte" && (formato ?? "").trim().toLowerCase() === "video") {
+  const fmt = (formato ?? "").trim().toLowerCase();
+  if (etapa === "generando_arte" && fmt === "video") {
     return "Falta video";
+  }
+  if (etapa === "generando_arte" && fmt === "carrusel") {
+    return "Falta portada";
   }
   return META_ETAPA[etapa].etiqueta;
 }

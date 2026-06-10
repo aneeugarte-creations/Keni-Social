@@ -1,16 +1,17 @@
 /**
- * FORMATO de una pieza (foto|video) — espejo del backend (`redes.redes_de_formato`).
+ * FORMATO de una pieza (foto|video|carrusel) — espejo del backend (`redes.redes_de_formato`).
  *
- * Regla del dueño: una pieza FOTO va a 3 redes (instagram, x, facebook); una VIDEO a las 5.
- * El flujo automático crea piezas FOTO. El humano ve un BADGE explícito ("Foto"/"Video") para
- * saber al instante de qué tipo de post se trata (y, por tanto, a cuántas redes va).
+ * Regla del dueño: una pieza FOTO va a 3 redes (instagram, x, facebook); una VIDEO a las 5;
+ * un CARRUSEL a 2 (instagram, facebook: carruseles nativos — portada compuesta + slides en
+ * crudo). El flujo automático crea piezas FOTO. El humano ve un BADGE explícito
+ * ("Foto"/"Video"/"Carrusel") para saber al instante de qué tipo de post se trata.
  *
  * Esta tabla NO es la fuente de verdad (lo es el backend): solo da la ETIQUETA y el nº de redes
  * para el badge. Desconocido/"" -> foto (el default seguro del backend).
  */
 
 /** Formatos canónicos de pieza. */
-export type Formato = "foto" | "video";
+export type Formato = "foto" | "video" | "carrusel";
 
 /**
  * Clases estáticas (Tailwind las detecta) por nº de columnas de las rejillas del feed. Sin
@@ -57,26 +58,28 @@ export const TEXTO_ERROR = "text-red-700 dark:text-red-300";
 export const REDES_POR_FORMATO: Record<Formato, readonly string[]> = {
   foto: ["instagram", "x", "facebook"],
   video: ["x", "instagram", "facebook", "tiktok", "youtube"],
+  carrusel: ["instagram", "facebook"],
 };
 
 /** Etiqueta humana + nº de redes destino por formato (derivado de `REDES_POR_FORMATO`). */
 const FORMATOS: Record<Formato, { etiqueta: string; redes: number }> = {
   foto: { etiqueta: "Foto", redes: REDES_POR_FORMATO.foto.length },
   video: { etiqueta: "Video", redes: REDES_POR_FORMATO.video.length },
+  carrusel: { etiqueta: "Carrusel", redes: REDES_POR_FORMATO.carrusel.length },
 };
 
 /** Formato canónico desde un valor crudo del backend; "" / desconocido -> "foto". */
 export function normalizarFormato(formato: string | null | undefined): Formato {
   const f = (formato ?? "").trim().toLowerCase();
-  return f === "video" ? "video" : "foto";
+  return f === "video" || f === "carrusel" ? f : "foto";
 }
 
-/** Etiqueta humana del formato para la UI ("Foto"/"Video"). Desconocido -> "Foto". */
+/** Etiqueta humana del formato para la UI ("Foto"/"Video"/"Carrusel"). Desconocido -> "Foto". */
 export function etiquetaFormato(formato: string | null | undefined): string {
   return FORMATOS[normalizarFormato(formato)].etiqueta;
 }
 
-/** Nº de redes destino del formato (foto=3, video=5). Para el tooltip del badge. */
+/** Nº de redes destino del formato (foto=3, video=5, carrusel=2). Para el tooltip del badge. */
 export function redesDeFormato(formato: string | null | undefined): number {
   return FORMATOS[normalizarFormato(formato)].redes;
 }

@@ -105,6 +105,9 @@ export interface CuerpoActualizarPublicacion {
   foto_encuadre?: string;
   /** COLLAGE: JSON array `[{objeto,foco,zoom}, …]`, una foto por hueco. "" = sin collage. */
   fotos?: string;
+  /** CARRUSEL: slides EXTRA en crudo, JSON `[{tipo:"imagen"|"video",objeto}, …]` en orden de
+   *  publicación (la portada es la imagen compuesta de siempre). "" = sin slides. */
+  carrusel?: string;
   /** ESPEJO entre redes (vive en la idea): editar el contenido de una pieza lo propaga a sus
    *  redes hermanas. ON por defecto; OFF = cada red se edita por separado. */
   espejo?: boolean;
