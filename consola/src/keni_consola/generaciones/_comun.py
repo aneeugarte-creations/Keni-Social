@@ -26,6 +26,7 @@ from ..dominio.runner import (  # noqa: F401  (re-export; ver nota arriba)
     ColaLlenaError,
     GeneracionPausadaError,
     PresupuestoAgotadoError,
+    PromptExcesivoError,
 )
 from ..tiempo import ahora_iso
 
@@ -33,6 +34,7 @@ __all__ = [
     "ColaLlenaError",
     "GeneracionPausadaError",
     "PresupuestoAgotadoError",
+    "PromptExcesivoError",
     "ESTADO_EJECUTANDO",
     "ESTADO_COMPLETADO",
     "ESTADO_ERROR",

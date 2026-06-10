@@ -134,6 +134,7 @@ from ._comun import (
     ColaLlenaError,
     GeneracionPausadaError,
     PresupuestoAgotadoError,
+    PromptExcesivoError,
     Procesar,
     _log,
     _timeout,
@@ -169,6 +170,7 @@ __all__ = [
     "ColaLlenaError",
     "GeneracionPausadaError",
     "PresupuestoAgotadoError",
+    "PromptExcesivoError",
     "Procesar",
     # Almacén / CRUD / idempotencia / poda / reaper.
     "raiz",

@@ -256,13 +256,14 @@ def encolar_job_claude(
     from .. import cola
 
     cola.encolar(gen_id, spec)  # gate de cola COMPARTIDO: puede lanzar ColaLlenaError (-> 429)
-    # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p`. Se expone
-    # SOLO en el detalle (`GET /api/generaciones/{id}`), nunca en el listado (lo quita
-    # `_todas_ordenadas`). Best-effort: el job ya está encolado; un fallo al persistir el
-    # prompt no debe tumbarlo.
+    # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p` y su TAMAÑO
+    # (`prompt_chars`, economía de contexto: lo vuelca el ledger `gasto_ia` al cerrar, para
+    # ver la deriva del contexto por día). El prompt se expone SOLO en el detalle
+    # (`GET /api/generaciones/{id}`), nunca en el listado (lo quita `_todas_ordenadas`).
+    # Best-effort: el job ya está encolado; un fallo al persistir esto no debe tumbarlo.
     if prompt:
         try:
-            actualizar(gen_id, {"prompt": prompt})
+            actualizar(gen_id, {"prompt": prompt, "prompt_chars": len(prompt)})
         except Exception:  # noqa: BLE001 -- best-effort
             pass
 

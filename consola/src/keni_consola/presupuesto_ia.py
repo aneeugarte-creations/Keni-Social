@@ -166,6 +166,10 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
     from . import repos
 
     try:
+        prompt_chars = int(registro.get("prompt_chars") or 0)
+    except (TypeError, ValueError):
+        prompt_chars = 0
+    try:
         repos.registrar_gasto_ia(
             gen_id,
             dia=dia,
@@ -174,6 +178,7 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             coste_usd=coste,
+            prompt_chars=prompt_chars,
         )
     except Exception:  # noqa: BLE001 -- el ledger nunca debe romper el cierre de un job
         _log.warning("presupuesto_ia: fallo al registrar el gasto de %s", gen_id, exc_info=True)

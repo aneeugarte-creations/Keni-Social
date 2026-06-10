@@ -147,6 +147,14 @@ def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:
 # --------------------------------------------------------------------------- #
 
 
+def _entero_o_cero(valor: Any) -> int:
+    """Entero tolerante (0 si falta/ilegible): para campos numericos opcionales del registro."""
+    try:
+        return int(valor or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
     """Reconstruye el dict PUBLICO de una generacion (forma estable para la API/UI)."""
     metricas = datos.get("metricas")
@@ -186,6 +194,9 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # expone SOLO en el detalle (`obtener`); `_todas_ordenadas` lo quita del listado
         # para no engordar Actividad. Ausente en registros legados => "".
         "prompt": _str("prompt"),
+        # Tamano del prompt (chars; economia de contexto). Lo sella el encolado y lo vuelca
+        # el ledger `gasto_ia` al cerrar (deriva del contexto por dia). Legados => 0.
+        "prompt_chars": _entero_o_cero(datos.get("prompt_chars")),
         "error": _str("error"),
         # Atribucion por usuario (#130 Fase 1). Ausente en registros legados/anonimos => "".
         "autor_id": _str("autor_id"),

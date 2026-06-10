@@ -389,11 +389,13 @@ def registrar_gasto_ia(
     tokens_in: int = 0,
     tokens_out: int = 0,
     coste_usd: float = 0.0,
+    prompt_chars: int = 0,
 ) -> None:
     """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
 
     `dia` es el dia UTC (YYYY-MM-DD) en que se CERRO la generacion (cuando se gasto). Un
     re-cierre sobreescribe tokens/coste con los ultimos valores (nunca suma dos veces).
+    `prompt_chars` (economia de contexto): tamano del prompt que entro a `claude -p`.
     """
     if not gen_id:
         return
@@ -402,12 +404,14 @@ def registrar_gasto_ia(
     try:
         con.execute(
             "INSERT INTO gasto_ia (gen_id, dia, tipo, marca, tokens_in, tokens_out, "
-            "coste_usd, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "coste_usd, prompt_chars, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "dia = EXCLUDED.dia, tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, "
             "tokens_in = EXCLUDED.tokens_in, tokens_out = EXCLUDED.tokens_out, "
-            "coste_usd = EXCLUDED.coste_usd, actualizado = EXCLUDED.actualizado",
-            (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd), ahora),
+            "coste_usd = EXCLUDED.coste_usd, prompt_chars = EXCLUDED.prompt_chars, "
+            "actualizado = EXCLUDED.actualizado",
+            (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd),
+             int(prompt_chars), ahora),
         )
         con.commit()
     finally:
@@ -452,6 +456,7 @@ def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
         filas = con.execute(
             "SELECT dia, COALESCE(SUM(tokens_in), 0) AS tin, "
             "COALESCE(SUM(tokens_out), 0) AS tout, COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COALESCE(SUM(prompt_chars), 0) AS pchars, "
             "COUNT(*) AS n FROM gasto_ia WHERE dia >= ? GROUP BY dia ORDER BY dia ASC",
             (corte,),
         ).fetchall()
@@ -464,6 +469,9 @@ def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
             "tokens_in": int(f["tin"]),
             "tokens_out": int(f["tout"]),
             "coste_usd": float(f["coste"]),
+            # Economia de contexto: chars de prompt sumados del dia (la media por generacion
+            # se deriva con `generaciones`); delata la deriva de prompts cada vez mas gordos.
+            "prompt_chars": int(f["pchars"]),
             "generaciones": int(f["n"]),
         }
         for f in filas

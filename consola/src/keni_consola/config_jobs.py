@@ -9,6 +9,8 @@ from ._config_comun import (
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
+    ENV_PROMPT_AVISO_CHARS,
+    ENV_PROMPT_MAX_CHARS,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
     JOBS_MAX_INTENTOS_DEF,
@@ -16,6 +18,8 @@ from ._config_comun import (
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
+    PROMPT_AVISO_CHARS_DEF,
+    PROMPT_MAX_CHARS_DEF,
     WORKER_SONDEO_SEGUNDOS_DEF,
     _crudo,
     _entero,
@@ -73,6 +77,25 @@ def jobs_max_intentos() -> int:
     bug del runner) no debe convertirse en un crash-loop que ademas quema tokens en cada vuelta.
     """
     return _entero(ENV_JOBS_MAX_INTENTOS, JOBS_MAX_INTENTOS_DEF, minimo=1)
+
+
+def prompt_max_chars() -> int:
+    """Tope DURO del prompt de una generacion (`KENI_PROMPT_MAX_CHARS`, def 200000; 0 = sin tope).
+
+    Economia de contexto: un prompt patologico (feeds concatenados sin criba, un documento
+    gigante) quemaria decenas de miles de tokens de la suscripcion compartida en UNA generacion.
+    Superarlo rechaza el encolado con un mensaje claro (`PromptExcesivoError` -> 429).
+    """
+    return _entero(ENV_PROMPT_MAX_CHARS, PROMPT_MAX_CHARS_DEF, minimo=0)
+
+
+def prompt_aviso_chars() -> int:
+    """Umbral de AVISO del tamano del prompt (`KENI_PROMPT_AVISO_CHARS`, def 80000; 0 = sin aviso).
+
+    No corta nada: deja un warning correlacionado al gen-id para detectar la deriva del
+    contexto (prompts cada vez mas gordos) ANTES de chocar con el tope duro.
+    """
+    return _entero(ENV_PROMPT_AVISO_CHARS, PROMPT_AVISO_CHARS_DEF, minimo=0)
 
 
 def generacion_pausada() -> bool:

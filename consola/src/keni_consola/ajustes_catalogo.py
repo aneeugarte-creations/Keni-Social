@@ -345,6 +345,17 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
             maximo=100,
         ),
+        Ajuste(
+            clave=config.ENV_PROMPT_MAX_CHARS,
+            tipo="int",
+            etiqueta="Contexto máximo por generación (caracteres; 0 = sin tope)",
+            ayuda="Tope duro del prompt que entra a una generación (~4 caracteres = 1 token). "
+            "Un contexto patológico (feeds sin criba, documentos enormes) se rechaza antes "
+            "de gastar tokens de la suscripción compartida.",
+            grupo="pipeline_topes",
+            defecto=config.PROMPT_MAX_CHARS_DEF,
+            minimo=0,
+        ),
         # --- Tuning (int/float/select) --------------------------------------------- #
         Ajuste(
             clave=config.ENV_ALERTAS_INTERVALO_HORAS,

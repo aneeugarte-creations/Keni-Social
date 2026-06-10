@@ -861,6 +861,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_gasto_ia_dia ON gasto_ia (dia)",
+    # Economia de CONTEXTO: tamano del prompt (chars) de cada generacion cerrada, para ver
+    # la deriva del contexto por dia (prompts cada vez mas gordos). Migracion idempotente.
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS prompt_chars BIGINT NOT NULL DEFAULT 0",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
     # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
     # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un

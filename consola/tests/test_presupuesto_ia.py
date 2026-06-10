@@ -24,7 +24,10 @@ from keni_consola.dominio import jobspec
 from keni_consola.tiempo import ahora_iso
 
 _MARCA = "unotv"
-_HOY = None  # se deriva en caliente (dia UTC del test)
+
+# Referencia GENUINA al encolado real: `crear_app` REASIGNA `generaciones.encolar_job_claude`
+# por una fake (y persiste entre tests); la capturamos al importar (patron de test_worker_cola).
+_ENCOLAR_REAL = generaciones.encolar_job_claude
 
 
 def _hoy() -> str:
@@ -219,6 +222,39 @@ def test_reclamar_prioridad_minima_corta_el_fondo_encolado(entorno):
     assert cola.reclamar("w1", prioridad_minima=jobspec.PRIORIDAD_MANUAL) is None
     # Sin corte, el fondo sigue ahi y sale con normalidad.
     assert cola.reclamar("w1") is not None
+
+
+# --------------------------------------------------------------------------- #
+# Economia de CONTEXTO (tamano del prompt)                                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_prompt_excesivo_se_rechaza(entorno, monkeypatch):
+    """Un prompt por encima del tope DURO se rechaza al encolar (antes de gastar tokens)."""
+    monkeypatch.setenv("KENI_PROMPT_MAX_CHARS", "100")
+    gen_id = _gen()
+    spec = jobspec.construir(prompt="x" * 101, procesar=jobspec.construir_hashtags())
+    with pytest.raises(generaciones.PromptExcesivoError):
+        cola.encolar(gen_id, spec)
+    # Es subclase de ColaLlenaError: 429 claro sin handlers nuevos.
+    assert issubclass(generaciones.PromptExcesivoError, generaciones.ColaLlenaError)
+    # En el limite exacto (o con el tope a 0 = sin tope) SI encola.
+    assert cola.encolar(gen_id, jobspec.construir(prompt="x" * 100, procesar=jobspec.construir_hashtags()))
+
+
+def test_prompt_chars_se_sella_y_llega_al_ledger(entorno):
+    """El encolado sella `prompt_chars` en el registro y el cierre lo vuelca al ledger."""
+    gen_id = _gen()
+    prompt = "hola " * 100  # 500 chars
+    spec = jobspec.construir(prompt=prompt, procesar=jobspec.construir_hashtags())
+    _ENCOLAR_REAL(
+        gen_id, prompt=prompt, cwd=__import__("pathlib").Path("."),
+        procesar=jobspec.reconstruir_procesar(spec), spec=spec,
+    )
+    assert generaciones.obtener(gen_id)["prompt_chars"] == len(prompt)
+    _cerrar(gen_id, tokens_in=100, tokens_out=50)
+    serie = repos.gasto_ia_por_dia(2)
+    assert [d for d in serie if d["dia"] == _hoy()][0]["prompt_chars"] == len(prompt)
 
 
 def test_worker_pausado_no_reclama(entorno, monkeypatch):

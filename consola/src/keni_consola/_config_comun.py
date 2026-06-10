@@ -79,6 +79,9 @@ ENV_PRESUPUESTO_MARGEN_MANUAL = "KENI_PRESUPUESTO_MARGEN_MANUAL"
 ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
 # Tope de INTENTOS de ejecucion de un job de la cola (anti crash-loop del re-reclamo).
 ENV_JOBS_MAX_INTENTOS = "KENI_JOBS_MAX_INTENTOS"
+# Economia de CONTEXTO: tope duro y umbral de aviso del tamano del prompt por generacion.
+ENV_PROMPT_MAX_CHARS = "KENI_PROMPT_MAX_CHARS"
+ENV_PROMPT_AVISO_CHARS = "KENI_PROMPT_AVISO_CHARS"
 
 # Generacion `claude -p`.
 ENV_CLAUDE_TIMEOUT = "KENI_CLAUDE_TIMEOUT"
@@ -459,6 +462,11 @@ PRESUPUESTO_MARGEN_MANUAL_DEF = 20
 # Intentos maximos de ejecucion de un job (el normal + re-reclamos de huerfano). 3 da dos
 # reintentos automaticos tras muertes del worker sin permitir un crash-loop infinito.
 JOBS_MAX_INTENTOS_DEF = 3
+# Tope DURO del prompt por generacion (chars; ~4 chars = 1 token). 200k chars ~ 50k tokens:
+# muy por encima de cualquier prompt legitimo de copy; corta los patologicos (avalancha de
+# feeds concatenados). 0 = sin tope. El AVISO (warning + visible) salta mucho antes.
+PROMPT_MAX_CHARS_DEF = 200_000
+PROMPT_AVISO_CHARS_DEF = 80_000
 # Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
 # 4h da margen sin golpear las APIs externas en cada apertura.
 METRICAS_REFRESCO_HORAS_DEF = 4
@@ -811,6 +819,8 @@ __all__ = [
     'ENV_PRESUPUESTO_TOKENS_DIA',
     'ENV_GENERACION_PAUSADA',
     'ENV_JOBS_MAX_INTENTOS',
+    'ENV_PROMPT_MAX_CHARS',
+    'ENV_PROMPT_AVISO_CHARS',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VALIDACION',
@@ -882,6 +892,8 @@ __all__ = [
     'INVESTIGADOR_INTERVALO_HORAS_DEF',
     'LOG_LEVEL_DEF',
     'JOBS_MAX_INTENTOS_DEF',
+    'PROMPT_MAX_CHARS_DEF',
+    'PROMPT_AVISO_CHARS_DEF',
     'MAX_COLA_DEF',
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',

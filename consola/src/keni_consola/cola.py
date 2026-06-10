@@ -13,10 +13,13 @@ registro igual que antes; la cola solo coordina quién ejecuta qué.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from . import config, presupuesto_ia, repos
 from .dominio import jobspec, runner
+
+_log = logging.getLogger("keni_consola.cola")
 
 
 def tope_cola() -> int:
@@ -70,6 +73,25 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
         raise runner.PresupuestoAgotadoError(
             "El presupuesto diario de IA está agotado para el trabajo automático; "
             "los lanzamientos manuales siguen disponibles."
+        )
+
+    # ECONOMIA DE CONTEXTO: el tamano del prompt se gobierna AQUI (embudo unico de admision).
+    # Tope DURO (`KENI_PROMPT_MAX_CHARS`): un prompt patologico (feeds concatenados sin criba,
+    # un documento gigante) se rechaza ANTES de gastar tokens, con el remedio en el mensaje.
+    # Umbral de AVISO (`KENI_PROMPT_AVISO_CHARS`): no corta, deja rastro correlacionado para
+    # ver la deriva del contexto antes de chocar con el tope.
+    prompt_chars = len(spec.get("prompt") or "")
+    tope_prompt = config.prompt_max_chars()
+    if tope_prompt and prompt_chars > tope_prompt:
+        raise runner.PromptExcesivoError(
+            f"El contexto de esta generación es demasiado grande ({prompt_chars:,} caracteres; "
+            f"máximo {tope_prompt:,}). Recorta el material de entrada e inténtalo de nuevo."
+        )
+    aviso = config.prompt_aviso_chars()
+    if aviso and prompt_chars > aviso:
+        _log.warning(
+            "cola: prompt grande en la generacion %s (%d chars > aviso %d); revisa el contexto",
+            gen_id, prompt_chars, aviso,
         )
 
     if es_fondo and repos.contar_jobs_activos() >= tope_cola():

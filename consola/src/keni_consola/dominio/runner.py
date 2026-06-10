@@ -106,6 +106,17 @@ class PresupuestoAgotadoError(ColaLlenaError):
     """
 
 
+class PromptExcesivoError(ColaLlenaError):
+    """El prompt supera el tope duro (`KENI_PROMPT_MAX_CHARS`): rechazar ANTES de gastar.
+
+    Economia de contexto: un prompt patologico quemaria decenas de miles de tokens en una
+    sola generacion. Subclase de `ColaLlenaError` por pragmatismo: el manejador central ya
+    devuelve un 429 con el mensaje claro y el pipeline lo trata como rechazo de admision
+    sin cablear un handler nuevo (el remedio NO es reintentar, es recortar el contexto;
+    el mensaje lo dice).
+    """
+
+
 # Cada cuanto (s) se persiste el avance: con parciales llegan muchos eventos por
 # segundo; throttlear evita martillear el disco sin perder la sensacion de "en vivo".
 THROTTLE_S = 0.4
