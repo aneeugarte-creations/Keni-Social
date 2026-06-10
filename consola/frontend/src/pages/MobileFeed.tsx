@@ -384,7 +384,7 @@ export default function MobileFeed() {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
 
   return (
-    <div className="flex min-h-dvh flex-col bg-muted/20">
+    <div className="flex min-h-dvh w-full max-w-full flex-col overflow-x-hidden bg-muted/20">
       {/* Cabecera sticky: bandejas + filtro por marca. */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex items-center gap-2 px-4 py-2.5">

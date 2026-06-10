@@ -148,9 +148,13 @@ export function AppShell() {
           </div>
         </header>
 
-        <main className={cn("flex-1 overflow-y-auto")}>
+        {/* `overflow-x-hidden`: el scroll real es VERTICAL. Sin esto, `overflow-y-auto`
+            promueve el eje X a `auto` (regla CSS: si un eje no es `visible`, el otro `visible`
+            pasa a `auto`), y un hijo más ancho que el viewport (una tarjeta del feed, una URL
+            larga) deja arrastrar TODA la superficie de lado en móvil. Clampar X lo impide. */}
+        <main className={cn("min-w-0 flex-1 overflow-y-auto overflow-x-hidden")}>
           {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
-          <div className="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          <div className="w-full min-w-0 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
             {/* Las páginas portalizan su título/acciones a los huecos de la barra superior vía
                 el proveedor de contexto, que envuelve al `<Outlet/>`. La cabecera de sección
                 (pestañas/título) ya se pinta en el header, no aquí. */}
