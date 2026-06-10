@@ -148,18 +148,20 @@ export function CropOverlay({
   };
 
   // Tiradores de ESQUINA sobre la imagen completa (escala proporcional, ancla en la opuesta).
-  const esquinas: { esq: Esquina; x: number; y: number; cursor: string }[] = v
+  const esquinas: { esq: Esquina; x: number; y: number; cursor: string; etiqueta: string }[] = v
     ? [
-        { esq: "nw", x: fL, y: fT, cursor: "nwse-resize" },
-        { esq: "ne", x: fL + fW, y: fT, cursor: "nesw-resize" },
-        { esq: "se", x: fL + fW, y: fT + fH, cursor: "nwse-resize" },
-        { esq: "sw", x: fL, y: fT + fH, cursor: "nesw-resize" },
+        { esq: "nw", x: fL, y: fT, cursor: "nwse-resize", etiqueta: "Escalar la imagen desde la esquina superior izquierda" },
+        { esq: "ne", x: fL + fW, y: fT, cursor: "nesw-resize", etiqueta: "Escalar la imagen desde la esquina superior derecha" },
+        { esq: "se", x: fL + fW, y: fT + fH, cursor: "nwse-resize", etiqueta: "Escalar la imagen desde la esquina inferior derecha" },
+        { esq: "sw", x: fL, y: fT + fH, cursor: "nesw-resize", etiqueta: "Escalar la imagen desde la esquina inferior izquierda" },
       ]
     : [];
 
   return (
     <div
       ref={contRef}
+      role="group"
+      aria-label="Recorte de imagen"
       onPointerMove={onMove}
       onPointerUp={onUp}
       onWheel={onWheel}
@@ -192,8 +194,11 @@ export function CropOverlay({
             className="pointer-events-none absolute border border-primary/50"
             style={{ left: fL, top: fT, width: fW, height: fH }}
           />
-          {/* Superficie de arrastre: TODA la imagen (también la parte fuera del marco). */}
+          {/* Superficie de arrastre: TODA la imagen (también la parte fuera del marco). El gesto es
+              de puntero (sin teclado): role + label para que el lector de pantalla la identifique. */}
           <div
+            role="button"
+            aria-label="Mover la imagen dentro del marco"
             onPointerDown={onDownMover}
             className="absolute cursor-move"
             style={{ left: fL, top: fT, width: fW, height: fH }}
@@ -202,6 +207,8 @@ export function CropOverlay({
           {esquinas.map((a) => (
             <div
               key={a.esq}
+              role="button"
+              aria-label={a.etiqueta}
               onPointerDown={onDownEsquina(a.esq)}
               className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-background shadow"
               style={{ left: a.x, top: a.y, cursor: a.cursor }}
