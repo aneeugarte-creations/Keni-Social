@@ -70,7 +70,13 @@ def test_normalizar_generacion():
             "tokens": 140, "coste_usd": 0.01, "duration_ms": 1200, "num_turns": 2,
         },
         "resultado_url": "/operacion/feed/lista",
+        "contenido_id": "",
     }
+
+
+def test_normalizar_generacion_lleva_contenido_id():
+    """Una generacion nacida del pipeline expone el tema que la origino (cruce a Pipelines)."""
+    assert actividad.normalizar_generacion(_gen(contenido_id="c1"))["contenido_id"] == "c1"
 
 
 def test_normalizar_generacion_resultado_url_por_tipo():
@@ -126,6 +132,7 @@ def test_normalizar_run():
             "tokens": 180, "coste_usd": 0.0123, "duration_ms": 4200, "num_turns": 3,
         },
         "resultado_url": None,
+        "contenido_id": "",
     }
 
 

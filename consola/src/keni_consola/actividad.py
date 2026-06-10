@@ -27,6 +27,8 @@ FORMA del ITEM (congelada; el frontend depende de ella):
       "metricas": {"tokens": int|None, "coste_usd": float|None,
                    "duration_ms": int|None, "num_turns": int|None},
       "resultado_url": str|None,  # ruta del SPA al resultado (solo generaciones COMPLETADAS)
+      "contenido_id": str,    # tema del pipeline que la origino ("" si no nacio de uno):
+                              # el front enlaza /datos/actividad/pipelines/{contenido_id}
     }
 """
 
@@ -136,6 +138,9 @@ def normalizar_generacion(g: dict[str, Any]) -> dict[str, Any]:
         "fecha": str(g.get("fecha_inicio", "") or ""),
         "metricas": _metricas_generacion(g.get("metricas")),
         "resultado_url": _resultado_url(g),
+        # Cruce con la vista Pipelines: una generacion nacida del pipeline lleva el tema
+        # que la origino (el id del pipeline ES el contenido_id). "" en las manuales.
+        "contenido_id": str(g.get("contenido_id", "") or ""),
     }
 
 
@@ -172,6 +177,7 @@ def normalizar_run(r: dict[str, Any]) -> dict[str, Any]:
         "fecha": str(r.get("fecha_inicio", "") or ""),
         "metricas": _metricas_run(r.get("metricas")),
         "resultado_url": None,
+        "contenido_id": "",  # los runs de agente no nacen de un pipeline
     }
 
 

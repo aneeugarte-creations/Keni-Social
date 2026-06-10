@@ -56,6 +56,9 @@ export interface ActividadItem {
    * su propio estado vacío/404.
    */
   resultado_url: string | null;
+  /** Tema del pipeline que originó la generación ("" si fue manual/run): cruce directo a
+   *  `/datos/actividad/pipelines/{contenido_id}` (el id del pipeline ES el contenido). */
+  contenido_id: string;
 }
 
 /** Respuesta paginada del feed de Actividad IA (`GET /api/actividad`). */

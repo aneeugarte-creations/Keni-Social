@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, RefreshCw } from "lucide-react";
+import { GitBranch, Activity, RefreshCw } from "lucide-react";
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
@@ -328,8 +328,23 @@ function TablaActividad({
                     className={cn("cursor-pointer hover:bg-muted/40")}
                   >
                     <TableCell className="max-w-[22rem] pl-6 font-medium">
-                      <span className="block truncate" title={it.etiqueta}>
-                        {it.etiqueta || <span className="text-muted-foreground">Sin etiqueta</span>}
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate" title={it.etiqueta}>
+                          {it.etiqueta || <span className="text-muted-foreground">Sin etiqueta</span>}
+                        </span>
+                        {/* Cruce a la vista Pipelines: solo en generaciones nacidas del
+                            pipeline (contenido_id). stopPropagation: la fila abre el visor. */}
+                        {it.contenido_id && (
+                          <Link
+                            to={`/datos/actividad/pipelines/${it.contenido_id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                            title="Ver el pipeline que la originó"
+                            aria-label="Ver pipeline"
+                          >
+                            <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
+                          </Link>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell>
