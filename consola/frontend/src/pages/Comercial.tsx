@@ -32,6 +32,7 @@ import type { CampaniaComercial } from "@/types";
 import { CLAVE_COMERCIAL } from "./comercial/claves";
 import { DialogoCampania } from "./comercial/DialogoCampania";
 import { PanelCampania } from "./comercial/PanelCampania";
+import { SelectorTiempo } from "./metricas/Controles";
 
 /**
  * Token `rango:AAAA-MM-DD_AAAA-MM-DD` de los últimos `n` días (incluye hoy), en fecha
@@ -173,18 +174,7 @@ export default function Comercial() {
                 </MenuAcciones>
               )}
             </div>
-            <Select value={rango} onValueChange={setRango}>
-              <SelectTrigger className="w-full sm:w-[200px]" aria-label="Periodo">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RANGOS.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.etiqueta}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectorTiempo rangos={RANGOS} valor={rango} onCambio={setRango} />
           </div>
 
           {campaniaActual && (
