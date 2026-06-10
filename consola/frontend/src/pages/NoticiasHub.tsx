@@ -10,25 +10,36 @@
  *
  * El Termómetro (galería internacional) se arma desde el botón de receta.
  */
-import { Images } from "lucide-react";
+import { Images, SlidersHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { useSesion } from "@/hooks/sesion-contexto";
 
 import Cobertura from "./Cobertura";
 
 export default function NoticiasHub() {
   const navigate = useNavigate();
+  const { usuario } = useSesion();
+  const esAdmin = usuario === null || usuario.rol === "admin";
   return (
     <div className="space-y-4">
-      {/* Receta de Noticias: armar la galería internacional (el antiguo Termómetro, que dejó
-          de ser pestaña al colapsar el hub a 3 piezas). Acción de hub → menú "⋯" de la barra. */}
+      {/* Acciones de hub → menú "⋮" de la barra: la receta de Noticias (galería internacional,
+          el antiguo Termómetro) y, para admins, la subpágina de ajustes del motor de noticias. */}
       <AccionesPagina>
         <MenuAcciones>
           <ItemMenu icono={Images} onClick={() => navigate("/datos/investigacion/termometro")}>
             Armar galería internacional
           </ItemMenu>
+          {esAdmin && (
+            <ItemMenu
+              icono={SlidersHorizontal}
+              onClick={() => navigate("/datos/investigacion/ajustes")}
+            >
+              Ajustes del motor
+            </ItemMenu>
+          )}
         </MenuAcciones>
       </AccionesPagina>
       <Cobertura />

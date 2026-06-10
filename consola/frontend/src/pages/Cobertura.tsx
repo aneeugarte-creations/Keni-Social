@@ -54,7 +54,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 import { tiempoRelativo } from "@/lib/fecha";
 import type { Historia } from "@/types";
 
@@ -789,9 +788,6 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
 
 
 
-// Grupos del catálogo que gobiernan ESTE pool (motor de ingesta + ranking).
-const GRUPOS_NOTICIAS = new Set(["noticias_motor", "noticias_ranking"]);
-
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function Cobertura() {
@@ -812,18 +808,9 @@ export default function Cobertura() {
 
       {/* Noticias = el pool DEDUPLICADO en historias (una historia = la misma noticia
           contada por N fuentes). El crudo por artículo ya no se muestra; la salud de
-          feeds se gestiona en Fuentes. */}
+          feeds se gestiona en Fuentes. Los ajustes del motor que llena y ordena este pool
+          viven en su subpágina (menú ⋮ → «Ajustes del motor»). */}
       <VistaHistorias marcaActiva={marcaActiva} />
-
-      {/* Ajustes CONTEXTUALES (admin): el motor que llena este pool y su ranking se
-          ajustan AQUÍ, donde se ven sus efectos (reparto: cada ajuste en su página). */}
-      <div className="mt-6 space-y-4">
-        <PanelAjustes
-          ids={GRUPOS_NOTICIAS}
-          titulo="Ajustes del motor de noticias"
-          descripcion="Ingesta, agrupación, traducción y los pesos del ranking que ordenan este pool. Aplican en caliente."
-        />
-      </div>
     </>
   );
 }

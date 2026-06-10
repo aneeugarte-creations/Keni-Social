@@ -424,6 +424,20 @@ function GruposAjustes({
           );
         }
 
+        // Técnico del motor de noticias: capacidad y ritmo. Colapsado para que la subpágina de
+        // Noticias muestre solo lo editorial; los defectos van bien salvo problema de carga/coste.
+        if (grupo.id === "noticias_tecnico") {
+          return (
+            <TarjetaColapsable
+              key={grupo.id}
+              titulo={grupo.titulo}
+              descripcion="Cuánto trabajo hace el motor en cada ronda. Los valores por defecto van bien; tócalos solo si el motor se queda corto o gasta de más."
+            >
+              <div>{filas}</div>
+            </TarjetaColapsable>
+          );
+        }
+
         // Resto (interruptor general, topes, ajustes finos): título + lista plana.
         return (
           <div key={grupo.id} className="space-y-1">
@@ -508,6 +522,36 @@ export function PanelAjustes({
         />
       )}
     </TarjetaColapsable>
+  );
+}
+
+/** Secciones de ajustes A PÁGINA COMPLETA (sin tarjeta colapsable), para subpáginas dedicadas
+ * (p. ej. «Ajustes del motor de noticias» del hub Investigación). Cada grupo del catálogo se
+ * pinta como una sección con su título; mismo catálogo, query y mutación que `PanelAjustes`.
+ * Solo admin: para el resto avisa en vez de desaparecer (la subpágina no debe quedar en blanco). */
+export function SeccionesAjustes({ ids }: { ids: ReadonlySet<string> }) {
+  const { usuario } = useSesion();
+  const esAdmin = usuario === null || usuario.rol === "admin";
+  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
+  if (!esAdmin)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Estos ajustes solo los puede ver y editar un administrador.
+      </p>
+    );
+  if (isPending || isError)
+    return (
+      <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
+    );
+  const grupos = (data?.grupos ?? []).filter((g) => ids.has(g.id));
+  return (
+    <div className="space-y-6">
+      <GruposAjustes
+        grupos={grupos}
+        onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+        guardando={guardar.isPending}
+      />
+    </div>
   );
 }
 

@@ -32,10 +32,11 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
 # el de aparición en la UI. Repartidos por OBJETIVO: la MÁQUINA DE CONTENIDO (interruptor general +
-# maestros de etapa + excepciones por marca + cadencia/topes) vive en el Monitor; Publicación, los
-# automatismos de fondo (daemons on/off), el MOTOR DE NOTICIAS (ingesta/agrupación/traducción), el
-# RANKING DE NOTICIAS (master + pesos del score) y los Ajustes finos operacionales (jobs, limpieza,
-# alertas) viven en Configuración.
+# maestros de etapa + excepciones por marca + cadencia/topes) vive en el Monitor; Publicación y los
+# automatismos de fondo (daemons on/off) en sus páginas; el MOTOR DE NOTICIAS en la subpágina de
+# Ajustes de Noticias, repartido en SECCIONES en lenguaje editorial (qué entra → orden del pool →
+# rendimiento → última hora → producción automática → técnico); los finos operacionales (jobs,
+# limpieza, alertas) en el Monitor.
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido (interruptor general)"),
     ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
@@ -44,9 +45,25 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("publicacion", "Publicación"),
     ("publicacion_marca", "Publicación · excepciones por marca"),
     ("automatismos_generales", "Automatismos generales"),
-    ("noticias_motor", "Motor de noticias · ingesta, agrupación y traducción"),
-    ("noticias_ranking", "Ranking de noticias · jerarquización del pool"),
+    ("noticias_entrada", "Qué entra al pool"),
+    ("noticias_orden", "Cómo se ordena el pool"),
+    ("noticias_rendimiento", "Priorizar lo que mejor funciona en redes"),
+    ("noticias_breaking", "Qué cuenta como última hora"),
+    ("noticias_produccion", "Cuándo se produce en automático"),
+    ("noticias_tecnico", "Ajustes técnicos · capacidad y ritmo del motor"),
     ("tuning", "Ajustes finos · sistema, limpieza y alertas"),
+)
+
+# Grupos del MOTOR DE NOTICIAS: las secciones de la subpágina «Ajustes del motor de noticias»
+# (hub Investigación → menú ⋮ de Noticias). El front pinta estos grupos ALLÍ y solo allí; el
+# orden de la tupla es el de las secciones en pantalla.
+GRUPOS_NOTICIAS: tuple[str, ...] = (
+    "noticias_entrada",
+    "noticias_orden",
+    "noticias_rendimiento",
+    "noticias_breaking",
+    "noticias_produccion",
+    "noticias_tecnico",
 )
 
 # Grupos de la MÁQUINA DE CONTENIDO: el interruptor general, los maestros de etapa, sus excepciones
@@ -458,35 +475,35 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
             tipo="int",
-            etiqueta="Perfil editorial: refresco (horas)",
-            ayuda="Cada cuántas horas se re-extrae con IA el perfil editorial de cada marca "
-            "(también se refresca antes si cambia la línea editorial).",
-            grupo="noticias_motor",
+            etiqueta="Refresco del perfil editorial (horas)",
+            ayuda="Cada cuántas horas la IA vuelve a leer la línea editorial de cada marca para "
+            "afinar el encaje de las noticias. Si editas la línea, se refresca solo antes.",
+            grupo="noticias_tecnico",
             defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_FUSION_SEMANTICA_MAX,
             tipo="int",
-            etiqueta="Fusión semántica: historias por marca/barrido",
-            ayuda="Máximo de historias por marca que se mandan a la IA a agrupar en cada barrido "
-            "(acota coste y tamaño de contexto).",
-            grupo="noticias_motor",
+            etiqueta="Unión de duplicados: historias por ronda",
+            ayuda="Tope de historias por marca que se mandan a la IA en cada ronda para unir las "
+            "que cuentan el mismo suceso. Más alto = más limpieza por ronda, más coste de IA.",
+            grupo="noticias_tecnico",
             defecto=config.FUSION_SEMANTICA_MAX_DEF,
             minimo=2,
         ),
-        # --- Ranking de noticias · jerarquización del pool (grupo `noticias_ranking`) ----- #
+        # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # LISTÓN de producción automática: el panel lista TODO el pool jerarquizado, pero promover
         # una historia a tema dispara QA+copy (claude -p: coste real de tokens). Estos dos umbrales
         # son ese listón (la regla vive en `dominio.clustering.evaluar_liston`, explicable).
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_SCORE,
             tipo="float",
-            etiqueta="Listón auto-producción: score mínimo",
-            ayuda="Una historia solo dispara producción automática (QA + copy con IA, que consume "
-            "tokens) si su score recalculado alcanza esto. Las que no llegan se quedan en el pool, "
-            "visibles y usables a mano. 0 = sin listón de score. [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Relevancia mínima para producir en automático",
+            ayuda="Una historia solo dispara la producción automática (copy con IA, que gasta "
+            "tokens) si su relevancia llega a este valor. Las que no llegan se quedan en el pool, "
+            "visibles y usables a mano. 0 = sin listón. De 0 a 1.",
+            grupo="noticias_produccion",
             defecto=_LISTON_MIN_SCORE_DEF,
             minimo=0,
             maximo=1,
@@ -494,35 +511,34 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_MARCA,
             tipo="float",
-            etiqueta="Listón auto-producción: encaje de marca mínimo",
-            ayuda="Encaje mínimo con el vocabulario de la marca (0.2 ≈ 1 término en el título). "
-            "Evita auto-producir historias que no van con la línea de la marca. Exentas: las "
-            "curadas por el equipo y las breaking corroboradas. 0 = sin listón de marca. [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Encaje mínimo con la marca",
+            ayuda="Segundo listón: cuánto debe encajar la historia con los temas de la marca "
+            "(0.2 ≈ un término de la marca en el título). No aplica a lo que cura el equipo ni a "
+            "la última hora confirmada por varios medios. 0 = sin listón. De 0 a 1.",
+            grupo="noticias_produccion",
             defecto=_LISTON_MIN_MARCA_DEF,
             minimo=0,
             maximo=1,
         ),
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
-        # daemon, modula el ranking. Debajo, los pesos de la combinación lineal del score.
+        # daemon, modula el ranking. Sus tres parámetros van debajo, en el mismo grupo.
         Ajuste(
             clave=config.ENV_RENDIMIENTO_RANKING,
             tipo="bool",
-            etiqueta="Priorizar por rendimiento (Metricool)",
-            ayuda="El ranking da un empujón a las historias de las líneas editoriales que MEJOR "
-            "funcionan en redes. Anti-sesgo: una línea solo cuenta con una muestra mínima de piezas "
-            "medidas y se limita a un top-N (no monotematiza). Activa los tres ajustes de abajo.",
-            grupo="noticias_ranking",
+            etiqueta="Dar prioridad a lo que mejor funciona",
+            ayuda="Sube en el pool las historias de las líneas editoriales con mejor engagement "
+            "real en redes (medido en Metricool). Los tres ajustes de abajo solo cuentan con esto "
+            "encendido.",
+            grupo="noticias_rendimiento",
             defecto=False,
         ),
         Ajuste(
             clave=config.ENV_SCORE_PESO_RENDIMIENTO,
             tipo="float",
-            etiqueta="Ranking: peso rendimiento (líneas top)",
-            ayuda="Cuánto pesa que la historia caiga en una línea editorial de alto rendimiento. Solo "
-            "cuenta con «Priorizar por rendimiento» activo; si lo dejas vacío con esa opción activa, "
-            "se aplica un auto-peso de 0.10 (renormalizando los demás pesos). [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Fuerza del empujón",
+            ayuda="Cuánto sube una historia por caer en una de las mejores líneas. Si lo dejas "
+            "vacío con la opción encendida, se usa 0.10 automáticamente. De 0 a 1.",
+            grupo="noticias_rendimiento",
             defecto=config.SCORE_PESO_RENDIMIENTO_DEF,
             minimo=0,
             maximo=1,
@@ -530,111 +546,110 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_RENDIMIENTO_TOP_N,
             tipo="int",
-            etiqueta="Rendimiento: nº de líneas top",
-            ayuda="Cuántas líneas (las de mejor engagement) reciben el empujón de rendimiento. Solo "
-            "con «Priorizar por rendimiento» activo.",
-            grupo="noticias_ranking",
+            etiqueta="Cuántas líneas premiar",
+            ayuda="Solo las mejores N líneas editoriales reciben el empujón, para que el pool no "
+            "se vuelva monotemático.",
+            grupo="noticias_rendimiento",
             defecto=config.RENDIMIENTO_TOP_N_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_RENDIMIENTO_MIN_PIEZAS,
             tipo="int",
-            etiqueta="Rendimiento: muestra mínima por línea",
-            ayuda="Una línea solo cuenta como top si tiene al menos estas piezas medidas (anti-sesgo: "
-            "evita encaramar una línea que «funcionó una vez»). Solo con «Priorizar por rendimiento» activo.",
-            grupo="noticias_ranking",
+            etiqueta="Piezas medidas mínimas por línea",
+            ayuda="Una línea solo cuenta como de las mejores si tiene al menos estas piezas con "
+            "métricas. Evita premiar una línea que funcionó una sola vez.",
+            grupo="noticias_rendimiento",
             defecto=config.RENDIMIENTO_MIN_PIEZAS_DEF,
             minimo=1,
         ),
-        # --- Ingesta (Ola A) ------------------------------------------------------ #
+        # --- Qué entra al pool (grupo `noticias_entrada`) -------------------------- #
         Ajuste(
             clave=config.ENV_INGESTA_FILTRO,
             tipo="bool",
-            etiqueta="Ingesta: filtro de entrada por agenda de marca",
-            ayuda="Un feed asignado a una marca solo archiva artículos que casan al menos un "
-            "término del vocabulario de esa marca (el resto ni entra al pool). Exentos: feeds "
-            "propios, feeds compartidos sin marca y marcas sin vocabulario. Lo filtrado se "
-            "cuenta por sondeo en Salud de fuentes.",
-            grupo="noticias_motor",
+            etiqueta="Solo noticias de los temas de la marca",
+            ayuda="Una fuente asignada a una marca solo guarda noticias que mencionan algún tema "
+            "de esa marca; el resto ni entra al pool. Las fuentes propias del equipo y las marcas "
+            "sin temario entran siempre. Lo filtrado se cuenta en la salud de Fuentes.",
+            grupo="noticias_entrada",
             defecto=True,
         ),
         Ajuste(
             clave=config.ENV_INGESTA_BATCH,
             tipo="int",
-            etiqueta="Ingesta: feeds por barrido",
-            ayuda="Máximo de feeds RSS a sondear por barrido del motor de ingesta.",
-            grupo="noticias_motor",
+            etiqueta="Fuentes consultadas por ronda",
+            ayuda="Máximo de fuentes RSS que el motor revisa en cada ronda.",
+            grupo="noticias_tecnico",
             defecto=config.INGESTA_BATCH_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_INGESTA_WORKERS,
             tipo="int",
-            etiqueta="Ingesta: descargas en paralelo",
-            ayuda="Conexiones simultáneas para descargar feeds en un mismo barrido.",
-            grupo="noticias_motor",
+            etiqueta="Descargas a la vez",
+            ayuda="Cuántas fuentes se descargan en paralelo dentro de una misma ronda.",
+            grupo="noticias_tecnico",
             defecto=config.INGESTA_WORKERS_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_INGESTA_MAX_ITEMS,
             tipo="int",
-            etiqueta="Ingesta: artículos por feed",
-            ayuda="Máximo de artículos a archivar por feed y sondeo.",
-            grupo="noticias_motor",
+            etiqueta="Noticias guardadas por fuente y ronda",
+            ayuda="Tope de artículos que se guardan de cada fuente en cada ronda.",
+            grupo="noticias_tecnico",
             defecto=config.INGESTA_MAX_ITEMS_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_INGESTA_MAX_ERRORES,
             tipo="int",
-            etiqueta="Ingesta: errores seguidos para auto-desactivar feed",
-            ayuda="Tras este número de errores consecutivos el daemon apaga el feed "
-            "automáticamente (Ola D). Se reintenta a mano desde la UI.",
-            grupo="noticias_motor",
+            etiqueta="Apagar una fuente tras estos fallos seguidos",
+            ayuda="Si una fuente falla este número de veces seguidas, se apaga sola para no "
+            "insistir en vano. Se reactiva a mano desde Fuentes; un éxito pone el contador a cero.",
+            grupo="noticias_entrada",
             defecto=config.INGESTA_MAX_ERRORES_DEF,
             minimo=1,
         ),
-        # --- Clustering (Ola B) -------------------------------------------------- #
+        # --- Agrupación de historias y última hora -------------------------------- #
         Ajuste(
             clave=config.ENV_CLUSTER_VENTANA_H,
             tipo="int",
-            etiqueta="Clustering: ventana de agrupación (horas)",
-            ayuda="Solo se cargan los clusters con actividad en esta ventana para "
-            "decidir si un item nuevo pertenece a uno existente. Acota el trabajo.",
-            grupo="noticias_motor",
+            etiqueta="Memoria de agrupación (horas)",
+            ayuda="Una noticia recién llegada solo se compara con historias con actividad en "
+            "estas últimas horas para decidir si es la misma. Acota el trabajo de cada ronda.",
+            grupo="noticias_tecnico",
             defecto=config.CLUSTER_VENTANA_H_DEF,
             minimo=1,
         ),
         Ajuste(
             clave=config.ENV_CLUSTER_BREAKING_FUENTES,
             tipo="int",
-            etiqueta="Clustering: fuentes mínimas para marcar breaking",
-            ayuda="Número de fuentes distintas requeridas para que una historia se "
-            "marque automáticamente como breaking en la ventana de breaking.",
-            grupo="noticias_motor",
+            etiqueta="Medios distintos necesarios",
+            ayuda="Una historia se marca como última hora cuando al menos estos medios distintos "
+            "la cuentan casi a la vez.",
+            grupo="noticias_breaking",
             defecto=config.CLUSTER_BREAKING_FUENTES_DEF,
             minimo=2,
         ),
         Ajuste(
             clave=config.ENV_CLUSTER_BREAKING_VENTANA_H,
             tipo="int",
-            etiqueta="Clustering: ventana breaking (horas)",
-            ayuda="Ventana de tiempo (horas) en la que deben coincidir las fuentes "
-            "para que un cluster se marque como breaking.",
-            grupo="noticias_motor",
+            etiqueta="Plazo para coincidir (horas)",
+            ayuda="Los medios deben coincidir dentro de este plazo para que la historia cuente "
+            "como última hora.",
+            grupo="noticias_breaking",
             defecto=config.CLUSTER_BREAKING_VENTANA_H_DEF,
             minimo=1,
         ),
-        # --- Jerarquización: pesos del algoritmo de ponderación del score (suman ~1) -------- #
+        # --- Orden del pool: pesos de las señales del score (suman ~1) ------------- #
         Ajuste(
             clave=config.ENV_SCORE_PESO_CORROBORACION,
             tipo="float",
-            etiqueta="Ranking: peso corroboración (nº fuentes)",
-            ayuda="Cuánto pesa que varias fuentes se hagan eco de una historia (señal de "
-            "tendencia). Más alto = prioriza lo que cubren muchas fuentes. [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="La cuentan varios medios",
+            ayuda="Cuánto sube una historia cuando varios medios distintos se hacen eco de ella "
+            "(buena señal de que importa). De 0 a 1.",
+            grupo="noticias_orden",
             defecto=config.SCORE_PESO_CORROBORACION_DEF,
             minimo=0,
             maximo=1,
@@ -642,10 +657,10 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_SCORE_PESO_MARCA,
             tipo="float",
-            etiqueta="Ranking: peso relevancia de marca",
-            ayuda="Cuánto pesa el encaje de la historia con la línea editorial de la marca "
-            "(p. ej. UnoTV nacional MX, Claro Sports deporte MX). [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Encaja con la marca",
+            ayuda="Cuánto sube una historia que casa con la línea editorial de la marca "
+            "(p. ej. nacional MX para UnoTV, deporte para Claro Sports). De 0 a 1.",
+            grupo="noticias_orden",
             defecto=config.SCORE_PESO_MARCA_DEF,
             minimo=0,
             maximo=1,
@@ -653,9 +668,10 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_SCORE_PESO_FRESCURA,
             tipo="float",
-            etiqueta="Ranking: peso frescura (recencia)",
-            ayuda="Cuánto pesa que la historia sea reciente. Más alto = favorece lo nuevo. [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Es reciente",
+            ayuda="Cuánto sube una historia por ser nueva. Más alto = el pool favorece lo último "
+            "que llega. De 0 a 1.",
+            grupo="noticias_orden",
             defecto=config.SCORE_PESO_FRESCURA_DEF,
             minimo=0,
             maximo=1,
@@ -663,9 +679,10 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_SCORE_PESO_VIRALIDAD,
             tipo="float",
-            etiqueta="Ranking: peso viralidad",
-            ayuda="Cuánto pesa la señal de viralidad agregada de la historia. [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Se está moviendo en redes",
+            ayuda="Cuánto sube una historia que llega con señal de viralidad (se comparte mucho). "
+            "De 0 a 1.",
+            grupo="noticias_orden",
             defecto=config.SCORE_PESO_VIRALIDAD_DEF,
             minimo=0,
             maximo=1,
@@ -673,42 +690,41 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_SCORE_BONUS_BREAKING,
             tipo="float",
-            etiqueta="Ranking: bonus breaking",
-            ayuda="Empujón extra (aditivo) al score de las historias marcadas como breaking. [0-1].",
-            grupo="noticias_ranking",
+            etiqueta="Empujón en el pool",
+            ayuda="Cuánto sube de golpe una historia al marcarse como última hora. De 0 a 1.",
+            grupo="noticias_breaking",
             defecto=config.SCORE_BONUS_BREAKING_DEF,
             minimo=0,
             maximo=1,
         ),
-        # --- Traducción (Ola D) -------------------------------------------------- #
+        # --- Traducción de noticias extranjeras ----------------------------------- #
         Ajuste(
             clave=config.ENV_TRAD_MIN_SCORE,
             tipo="float",
-            etiqueta="Traducción: score mínimo de cluster",
-            ayuda="Score mínimo de un cluster extranjero para entrar a traducción. "
-            "0 = traducir todo cluster reciente; sube el valor para limitar a los más relevantes.",
-            grupo="noticias_motor",
+            etiqueta="Traducir solo lo relevante",
+            ayuda="Las noticias en otros idiomas se traducen solas al español. Con 0 se traducen "
+            "todas las recientes; sube el valor para traducir solo las más relevantes.",
+            grupo="noticias_entrada",
             defecto=config.TRAD_MIN_SCORE_DEF,
             minimo=0,
         ),
         Ajuste(
             clave=config.ENV_TRAD_LOTE,
             tipo="int",
-            etiqueta="Traducción: clusters por barrido",
-            ayuda="Máximo de clusters extranjeros a traducir por barrido. "
-            "El backlog pendiente se procesa en barridos sucesivos.",
-            grupo="noticias_motor",
+            etiqueta="Traducciones por ronda",
+            ayuda="Máximo de historias extranjeras que se traducen en cada ronda; lo pendiente "
+            "se hace en las rondas siguientes.",
+            grupo="noticias_tecnico",
             defecto=config.TRAD_LOTE_DEF,
             minimo=1,
         ),
-        # --- SLA de frescura (Ola D) --------------------------------------------- #
         Ajuste(
             clave=config.ENV_FEED_SLA_MIN,
             tipo="int",
-            etiqueta="Ingesta: SLA de frescura por feed (minutos)",
-            ayuda="Un feed activo sin items nuevos en más de este margen aparece como "
-            "'stale' en el panel de salud (/salud).",
-            grupo="noticias_motor",
+            etiqueta="Avisar de fuente parada (minutos)",
+            ayuda="Una fuente activa que pasa más de estos minutos sin traer nada nuevo se marca "
+            "como parada en la salud de Fuentes.",
+            grupo="noticias_entrada",
             defecto=config.FEED_SLA_MIN_DEF,
             minimo=1,
         ),

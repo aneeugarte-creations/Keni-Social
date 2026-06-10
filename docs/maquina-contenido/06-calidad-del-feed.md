@@ -104,9 +104,9 @@ cubriendo los titulares de sintaxis distinta.
 
 | Knob | Def | Grupo | Qué controla |
 |------|-----|-------|--------------|
-| `KENI_INGESTA_FILTRO` | ON | noticias_motor | filtro de entrada por agenda de marca |
-| `KENI_PROMOVER_MIN_SCORE` | 0.35 | noticias_ranking | score mínimo del listón |
-| `KENI_PROMOVER_MIN_MARCA` | 0.2 | noticias_ranking | encaje de marca mínimo del listón |
+| `KENI_INGESTA_FILTRO` | ON | noticias_entrada | filtro de entrada por agenda de marca |
+| `KENI_PROMOVER_MIN_SCORE` | 0.35 | noticias_produccion | score mínimo del listón |
+| `KENI_PROMOVER_MIN_MARCA` | 0.2 | noticias_produccion | encaje de marca mínimo del listón |
 | `KENI_NOTICIAS_TTL_H` | 72 | tuning | caducidad del pool (0 = off) |
 | `KENI_NOTICIAS_RETENCION_H` | 336 | tuning | borrado de lo caducado (0 = nunca) |
 

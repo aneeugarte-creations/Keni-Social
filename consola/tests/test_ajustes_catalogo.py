@@ -142,63 +142,75 @@ def test_maquina_global_kill_switch(store):
 
 
 def test_grupos_estables(store):
-    """Los ids de grupo se mantienen (el frontend rutea Básica/Avanzado por estos ids)."""
+    """Los ids de grupo se mantienen (el frontend reparte páginas/secciones por estos ids)."""
     ids = {g[0] for g in ajustes_catalogo.GRUPOS}
     assert ids == {
         "maquina_global", "maestros_etapa", "automatizacion_marca", "pipeline_topes",
         "publicacion", "publicacion_marca", "automatismos_generales",
-        "noticias_motor", "noticias_ranking", "tuning",
+        "noticias_entrada", "noticias_orden", "noticias_rendimiento",
+        "noticias_breaking", "noticias_produccion", "noticias_tecnico",
+        "tuning",
     }
+    # GRUPOS_NOTICIAS (las secciones de la subpágina de Noticias) referencia grupos reales.
+    assert set(ajustes_catalogo.GRUPOS_NOTICIAS) <= ids
 
 
-def test_motor_noticias_en_su_grupo(store):
-    """El motor de noticias (ingesta/clustering/traducción + perfil/fusión) vive en `noticias_motor`,
-    no en `tuning`; todos int/float con minimo definido."""
-    claves = [
-        config.ENV_INGESTA_BATCH,
-        config.ENV_INGESTA_WORKERS,
-        config.ENV_INGESTA_MAX_ITEMS,
-        config.ENV_INGESTA_MAX_ERRORES,
-        config.ENV_CLUSTER_VENTANA_H,
-        config.ENV_CLUSTER_BREAKING_FUENTES,
-        config.ENV_CLUSTER_BREAKING_VENTANA_H,
-        config.ENV_TRAD_MIN_SCORE,
-        config.ENV_TRAD_LOTE,
-        config.ENV_FEED_SLA_MIN,
-        config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
-        config.ENV_FUSION_SEMANTICA_MAX,
-    ]
-    for clave in claves:
-        a = ajustes_catalogo.por_clave(clave)
-        assert a is not None, f"falta la clave {clave}"
-        assert a.tipo in ("int", "float"), f"{clave} debe ser int/float"
-        assert a.grupo == "noticias_motor", f"{clave} debe estar en grupo noticias_motor"
-        assert a.minimo is not None, f"{clave} debe tener minimo"
-
-
-def test_ranking_noticias_en_su_grupo(store):
-    """El master de rendimiento + los pesos del score + los parámetros de rendimiento forman el
-    grupo `noticias_ranking`. El master NO debe seguir en `automatismos_generales`."""
-    esperadas = {
-        config.ENV_RENDIMIENTO_RANKING,
-        config.ENV_SCORE_PESO_RENDIMIENTO,
-        config.ENV_RENDIMIENTO_TOP_N,
-        config.ENV_RENDIMIENTO_MIN_PIEZAS,
-        config.ENV_SCORE_PESO_CORROBORACION,
-        config.ENV_SCORE_PESO_MARCA,
-        config.ENV_SCORE_PESO_FRESCURA,
-        config.ENV_SCORE_PESO_VIRALIDAD,
-        config.ENV_SCORE_BONUS_BREAKING,
+def test_noticias_reparto_en_secciones(store):
+    """Los ajustes del motor de noticias se reparten EXACTAMENTE en las secciones de la
+    subpágina de Noticias: entrada → orden → rendimiento → última hora → producción → técnico.
+    Lo editorial queda visible y lo de capacidad/ritmo en `noticias_tecnico` (colapsado)."""
+    reparto = {
+        "noticias_entrada": {
+            config.ENV_INGESTA_FILTRO,
+            config.ENV_INGESTA_MAX_ERRORES,
+            config.ENV_TRAD_MIN_SCORE,
+            config.ENV_FEED_SLA_MIN,
+        },
+        "noticias_orden": {
+            config.ENV_SCORE_PESO_CORROBORACION,
+            config.ENV_SCORE_PESO_MARCA,
+            config.ENV_SCORE_PESO_FRESCURA,
+            config.ENV_SCORE_PESO_VIRALIDAD,
+        },
+        "noticias_rendimiento": {
+            config.ENV_RENDIMIENTO_RANKING,
+            config.ENV_SCORE_PESO_RENDIMIENTO,
+            config.ENV_RENDIMIENTO_TOP_N,
+            config.ENV_RENDIMIENTO_MIN_PIEZAS,
+        },
+        "noticias_breaking": {
+            config.ENV_CLUSTER_BREAKING_FUENTES,
+            config.ENV_CLUSTER_BREAKING_VENTANA_H,
+            config.ENV_SCORE_BONUS_BREAKING,
+        },
         # Listón de auto-producción (dominio.clustering.evaluar_liston): umbrales que deciden
         # qué historias del pool disparan QA+copy automáticos (coste real de tokens).
-        config.ENV_PROMOVER_MIN_SCORE,
-        config.ENV_PROMOVER_MIN_MARCA,
+        "noticias_produccion": {
+            config.ENV_PROMOVER_MIN_SCORE,
+            config.ENV_PROMOVER_MIN_MARCA,
+        },
+        "noticias_tecnico": {
+            config.ENV_INGESTA_BATCH,
+            config.ENV_INGESTA_WORKERS,
+            config.ENV_INGESTA_MAX_ITEMS,
+            config.ENV_CLUSTER_VENTANA_H,
+            config.ENV_TRAD_LOTE,
+            config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
+            config.ENV_FUSION_SEMANTICA_MAX,
+        },
     }
-    en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "noticias_ranking"}
-    assert en_grupo == esperadas
-    # El master es un bool; ya no es un daemon de `automatismos_generales`.
+    for gid, esperadas in reparto.items():
+        en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == gid}
+        assert en_grupo == esperadas, f"reparto inesperado en {gid}"
+        # Todo numérico de estas secciones declara mínimo (la UI pinta inputs acotados).
+        for clave in esperadas:
+            a = ajustes_catalogo.por_clave(clave)
+            assert a is not None, f"falta la clave {clave}"
+            if a.tipo in ("int", "float"):
+                assert a.minimo is not None, f"{clave} debe tener minimo"
+    # El master de rendimiento es un bool; ya no es un daemon de `automatismos_generales`.
     master = ajustes_catalogo.por_clave(config.ENV_RENDIMIENTO_RANKING)
-    assert master is not None and master.tipo == "bool" and master.grupo == "noticias_ranking"
+    assert master is not None and master.tipo == "bool" and master.grupo == "noticias_rendimiento"
 
 
 def test_tuning_solo_operacional(store):
@@ -281,11 +293,11 @@ def test_grupos_maquina_son_los_del_monitor(store):
 
 
 def test_motor_noticias_trad_min_score_float(store):
-    """KENI_TRAD_MIN_SCORE es float en el grupo del motor de noticias con minimo 0."""
+    """KENI_TRAD_MIN_SCORE es float en la sección de entrada al pool con minimo 0."""
     a = ajustes_catalogo.por_clave(config.ENV_TRAD_MIN_SCORE)
     assert a is not None
     assert a.tipo == "float"
-    assert a.grupo == "noticias_motor"
+    assert a.grupo == "noticias_entrada"
     assert a.minimo == 0
 
 
