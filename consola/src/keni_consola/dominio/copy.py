@@ -17,7 +17,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from .. import limites_plataforma, redes, repos
+from .. import limites_plataforma, patrones_marca, redes, repos
 from . import publicaciones as contrato_publicaciones
 from . import stream
 
@@ -165,6 +165,55 @@ def _avisar_piezas_descartadas(motivos: list[str], *, contenido_id: str, marca: 
         )
     except Exception:  # noqa: BLE001 -- el aviso es un extra; nunca rompe el post-procesado
         _log.warning("copy: no se pudo anotar el tema %s", contenido_id, exc_info=True)
+
+
+# --------------------------------------------------------------------------- #
+# Verificacion de VOZ (lint de patrones reales de la marca)                    #
+# --------------------------------------------------------------------------- #
+
+
+def verificar_voz(
+    marca: str, piezas: list[dict[str, object]], verdicto: str, *, copy_unico: bool = True
+) -> tuple[str, list[str]]:
+    """Contrasta las piezas generadas contra el PERFIL DE PATRONES real de la marca.
+
+    Devuelve `(verdicto_efectivo, avisos)`. El lint es determinista y ADVISORY: nunca
+    descarta piezas ni bloquea; si hay avisos y el modelo dijo `listo`, el veredicto se
+    DEGRADA a `revisar` (el humano decide con los avisos delante). Cualquier otro
+    veredicto (`revisar`, `no_publicar`, vacio/heredado) ya pide ojos humanos y se
+    respeta. Best-effort: un fallo del lint nunca rompe el post-procesado.
+    """
+    try:
+        avisos = patrones_marca.avisos_de_piezas(marca, piezas, copy_unico=copy_unico)
+    except Exception:  # noqa: BLE001 -- el lint es un extra; jamas rompe la generacion
+        _log.warning("verificacion de voz fallo para %s", marca, exc_info=True)
+        return verdicto, []
+    if avisos and verdicto == "listo":
+        return "revisar", avisos
+    return verdicto, avisos
+
+
+def _avisar_voz(avisos: list[str], *, contenido_id: str, marca: str) -> None:
+    """Deja rastro de los avisos de voz: WARN + nota en el tema (si lo hay).
+
+    Mismo patron best-effort que `_avisar_piezas_descartadas`: el aviso acompana a la
+    revision humana, nunca rompe el post-procesado.
+    """
+    detalle = "; ".join(avisos)
+    _log.warning("copy: voz fuera de patron tema=%s marca=%s: %s", contenido_id or "-", marca, detalle)
+    if not contenido_id:
+        return
+    nota = f"⚠ Verificación de voz (patrones medidos de la marca): {detalle}."
+    try:
+        tema = repos.obtener_contenido(contenido_id)
+        if tema is None:
+            return
+        previas = str(tema.get("notas") or "").strip()
+        repos.actualizar_contenido(
+            contenido_id, {"notas": f"{previas}\n{nota}" if previas else nota}
+        )
+    except Exception:  # noqa: BLE001 -- la nota es un extra; nunca rompe el post-procesado
+        _log.warning("copy: no se pudo anotar la voz en el tema %s", contenido_id, exc_info=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -373,6 +422,11 @@ def construir_procesar_copy(
         )
         # El veredicto de la salida manda; si viene vacío, cae al inicial (p. ej. no_verificado).
         verdicto = (str(parsed["verdicto"]) or "").strip() or (veredicto_inicial or "")
+        # Verificacion de VOZ contra los patrones medidos de la marca: con avisos, un
+        # `listo` del modelo baja a `revisar` y la nota viaja al tema (el humano decide).
+        verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
+        if avisos_voz:
+            _avisar_voz(avisos_voz, contenido_id=contenido_id, marca=marca)
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=verdicto, origen=historial_id, autor=autor,
@@ -391,6 +445,7 @@ def construir_procesar_copy(
             "verdicto": verdicto,
             "piezas": parsed["piezas"],
             "publicaciones": publicaciones,
+            "avisos_voz": avisos_voz,
         }
         if con_imagenes:
             resultado["imagenes"] = cosechar_imagenes(salida)
@@ -426,6 +481,9 @@ def construir_procesar_galeria(
             prompt_id, marca, resultado, piezas=parsed["piezas"], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
+        # SIN verificacion de voz aqui: la galeria (termometro) es un formato propio con
+        # captions cortas por diseno; las bandas del perfil se midieron sobre el feed y
+        # darian falsos avisos. El lint vive en el pipeline de COPY (construir_procesar_copy).
         return {
             "documento": resultado,
             "resultado": resultado,

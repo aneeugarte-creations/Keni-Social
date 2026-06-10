@@ -503,12 +503,26 @@ _RE_BLOQUE_JSON = re.compile(r"```[ \t]*[jJ][sS][oO][nN][ \t]*\r?\n(.*?)```", re
 # Mapa del simbolo de veredicto (primera linea) a su valor interno estable.
 _VEREDICTO_POR_SIMBOLO = {"✅": "listo", "⚠️": "revisar", "❌": "no_publicar"}
 
+# Veredicto en PALABRAS (el formato que pide `prompt/copy-desde-nota`: la salida abre
+# con "LISTO PARA APROBAR" / "REVISAR ANTES DE PUBLICAR" / "NO PUBLICAR", sin simbolo).
+# Frases COMPLETAS del contrato, no palabras sueltas: un copy cuyo primer renglon diga
+# "...esta LISTO para la final" no debe colar un veredicto.
+_VEREDICTO_POR_TEXTO: tuple[tuple[str, str], ...] = (
+    ("NO PUBLICAR", "no_publicar"),
+    ("REVISAR ANTES DE PUBLICAR", "revisar"),
+    ("LISTO PARA APROBAR", "listo"),
+)
+
 
 def derivar_verdicto(texto: str) -> str:
-    """Deriva el veredicto desde la PRIMERA linea con contenido (✅/⚠️/❌).
+    """Deriva el veredicto desde la PRIMERA linea con contenido (simbolo o palabras).
 
-    Devuelve "listo"|"revisar"|"no_publicar" segun el simbolo que aparezca en esa
-    linea, o "" si no hay ninguno. Mira solo la primera linea no vacia.
+    Devuelve "listo"|"revisar"|"no_publicar" segun el simbolo ✅/⚠️/❌ o, si no hay
+    simbolo, segun las palabras del contrato del prompt de copy ("LISTO PARA APROBAR",
+    "REVISAR ANTES DE PUBLICAR", "NO PUBLICAR"); "" si no hay nada reconocible. Una
+    linea con DOS o mas veredictos en palabras (la leyenda del prompt enumera los
+    tres) es ambigua y NO deriva: solo cuenta la linea de veredicto real, que trae
+    uno solo. Mira solo la primera linea no vacia.
     """
     for linea in texto.splitlines():
         if not linea.strip():
@@ -516,6 +530,10 @@ def derivar_verdicto(texto: str) -> str:
         for simbolo, valor in _VEREDICTO_POR_SIMBOLO.items():
             if simbolo in linea:
                 return valor
+        mayus = linea.upper()
+        encontrados = {valor for token, valor in _VEREDICTO_POR_TEXTO if token in mayus}
+        if len(encontrados) == 1:
+            return encontrados.pop()
         return ""
     return ""
 
