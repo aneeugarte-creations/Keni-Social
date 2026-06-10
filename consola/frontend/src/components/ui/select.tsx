@@ -59,10 +59,37 @@ SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayNam
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
+>(({ className, children, position = "popper", ...props }, ref) => {
+  // CIERRE POR TOQUE FUERA EN iOS/WebKit (bug real reproducido en iPhone): con el select
+  // abierto, Radix pone `pointer-events: none` en el body y, en TÁCTIL, espera el `click`
+  // posterior al touch para cerrar al tocar fuera. WebKit NO sintetiza ese click cuando el
+  // target tiene pointer-events:none (Chrome sí), así que el select se quedaba ABIERTO
+  // con su capa tragándose TODOS los toques: la app entera parecía bloqueada (Métricas,
+  // o cualquier página con un select). Escape SÍ cierra (verificado), así que mientras el
+  // contenido esté montado convertimos cualquier `touchend` FUERA de él en un Escape.
+  const refContenido = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    const cerrarSiFuera = (e: TouchEvent) => {
+      const cont = refContenido.current;
+      if (!cont) return;
+      if (e.target instanceof Node && cont.contains(e.target)) return;
+      cont.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    };
+    document.addEventListener("touchend", cerrarSiFuera, { capture: true });
+    return () => document.removeEventListener("touchend", cerrarSiFuera, { capture: true });
+  }, []);
+  const refCompuesta = React.useCallback(
+    (nodo: React.ElementRef<typeof SelectPrimitive.Content> | null) => {
+      refContenido.current = nodo;
+      if (typeof ref === "function") ref(nodo);
+      else if (ref) ref.current = nodo;
+    },
+    [ref],
+  );
+  return (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
-      ref={ref}
+      ref={refCompuesta}
       className={cn(
         "relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         position === "popper" &&
@@ -85,7 +112,8 @@ const SelectContent = React.forwardRef<
       <SelectScrollDownButton />
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
-));
+  );
+});
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 
 const SelectLabel = React.forwardRef<

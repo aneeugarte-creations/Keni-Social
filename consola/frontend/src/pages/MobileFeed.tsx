@@ -258,18 +258,18 @@ export default function MobileFeed() {
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
   const sentinelRef = useSentinelInfinito({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
-  // SCROLL MAGNÉTICO POR PIEZA (feed estilo red social): activa scroll-snap en el documento (el
-  // que hace scroll en esta pantalla) mientras está montada y lo revierte al salir. `proximity`
-  // (no `mandatory`): las tarjetas superan la altura del viewport y `mandatory` secuestra el
-  // scroll del pie. `scrollPadding` superior deja sitio a la cabecera sticky para que la pieza
-  // no quede tapada al encajar.
-  // `scrollPaddingTop` deja sitio a la cabecera sticky (ahora compacta, ~2 filas) para que la
-  // pieza no quede tapada al encajar.
+  // SCROLL MAGNÉTICO POR PIEZA estilo Reels/Shorts: snap OBLIGATORIO en el documento (el
+  // que hace scroll en esta pantalla) mientras está montada, revertido al salir. Cada pieza
+  // ocupa un SLOT de un viewport (ver el wrapper de la lista): se ve UNA pieza encuadrada y
+  // el scroll aterriza exacto en la siguiente. `mandatory` es viable porque el slot ya no
+  // supera la altura del viewport (las tarjetas largas scrollean POR DENTRO de su slot; el
+  // gesto encadena al feed al llegar al borde). `proximity` perdía el imán a mitad de
+  // tarjeta. `scrollPaddingTop` deja sitio a la cabecera sticky (~2 filas compactas).
   React.useEffect(() => {
     const el = document.documentElement;
     const prevTipo = el.style.scrollSnapType;
     const prevPad = el.style.scrollPaddingTop;
-    el.style.scrollSnapType = "y proximity";
+    el.style.scrollSnapType = "y mandatory";
     el.style.scrollPaddingTop = "6rem";
     return () => {
       el.style.scrollSnapType = prevTipo;
@@ -375,7 +375,15 @@ export default function MobileFeed() {
                    Mismo padding que el skeleton: sin salto de 4px al aterrizar. */
                 <div className={CLASES_LISTA} role="feed" aria-busy={isFetchingNextPage}>
                   {piezas.map((p) => (
-                    <div key={p.id} className="snap-start">
+                    /* SLOT estilo Reels: un viewport por pieza (alto = pantalla menos
+                       cabecera sticky y padding), snap obligatorio sin saltarse piezas
+                       (`snap-always`). Una tarjeta más larga que el slot scrollea POR
+                       DENTRO; al llegar a su borde, el gesto encadena al feed y el imán
+                       encuadra la siguiente pieza. */
+                    <div
+                      key={p.id}
+                      className="h-[calc(100dvh-7rem)] snap-start snap-always overflow-y-auto"
+                    >
                       <PostFeed publicacion={p} />
                     </div>
                   ))}

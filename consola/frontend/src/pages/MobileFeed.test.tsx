@@ -181,10 +181,23 @@ describe("MobileFeed · feed móvil de revisión", () => {
     stubFetch();
     const { unmount } = renderFeed();
     await screen.findByText("Feed de revisión");
-    // `proximity`, no `mandatory`: las tarjetas superan el viewport y mandatory secuestra el pie.
-    expect(document.documentElement.style.scrollSnapType).toBe("y proximity");
+    // Estilo Reels/Shorts: snap OBLIGATORIO (una pieza por pantalla, el scroll aterriza
+    // encuadrado en la siguiente). Viable porque cada pieza vive en un slot de un viewport
+    // (las tarjetas largas scrollean por dentro del slot).
+    expect(document.documentElement.style.scrollSnapType).toBe("y mandatory");
     unmount();
     expect(document.documentElement.style.scrollSnapType).toBe("");
+  });
+
+  it("cada pieza vive en un slot de un viewport con snap obligatorio (estilo Reels)", async () => {
+    stubFetch();
+    renderFeed();
+    const post = await screen.findByText("¡Increíble remontada!");
+    const slot = post.closest(".snap-start");
+    expect(slot).not.toBeNull();
+    expect(slot!.className).toContain("snap-always");
+    expect(slot!.className).toContain("h-[calc(100dvh-7rem)]");
+    expect(slot!.className).toContain("overflow-y-auto");
   });
 
   it("feed agotado con piezas: pinta el fin del feed", async () => {
