@@ -5,6 +5,7 @@
 
 import {
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   Bold,
@@ -14,11 +15,13 @@ import {
   Settings2,
 } from "lucide-react";
 
+import { useState } from "react";
+
 import type { Capa, CapaTexto } from "./documento";
 import { CATALOGO_FUENTES } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
-const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignRight } as const;
+const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignJustify } as const;
 const ALIN_CICLO = ["izquierda", "centro", "derecha", "justificado"] as const;
 
 function Sep() {
@@ -31,16 +34,20 @@ function BotonIcono({
   activo,
   titulo,
   children,
+  ariaLabel,
 }: {
   onClick: () => void;
   activo?: boolean;
   titulo: string;
   children: React.ReactNode;
+  ariaLabel?: string;
 }) {
   return (
     <button
       onClick={onClick}
       title={titulo}
+      aria-label={ariaLabel}
+      aria-pressed={activo}
       className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-sm transition-colors ${
         activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
@@ -59,14 +66,34 @@ function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12
   paso?: number;
   ancho?: string;
 }) {
+  const [edicion, setEdicion] = useState<string>(String(Math.round(valor)));
+
+  // Sincroniza el estado local cuando `valor` cambia desde fuera.
+  const val = Math.round(valor);
+  if (edicion !== String(val) && edicion === String(Math.round(Number(edicion) || 0))) {
+    setEdicion(String(val));
+  }
+
   const fija = (v: number) => onChange(Math.max(min, Math.min(max, v)));
+  const commitear = () => {
+    const v = Number(edicion);
+    if (!isNaN(v)) fija(v);
+    setEdicion(String(Math.round(valor)));
+  };
+
   return (
     <div className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-input">
       <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor - paso)} title="Menos">−</button>
       <input
         type="number"
-        value={Math.round(valor)}
-        onChange={(e) => fija(Number(e.target.value))}
+        value={edicion}
+        onChange={(e) => setEdicion(e.target.value)}
+        onBlur={commitear}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commitear();
+          if (e.key === "Escape") setEdicion(String(Math.round(valor)));
+        }}
+        aria-label="Tamaño de letra"
         className={`${ancho} bg-background px-1 text-center text-sm outline-none`}
       />
       <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor + paso)} title="Más">+</button>
@@ -75,10 +102,20 @@ function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12
 }
 
 function Swatch({ color, onChange, titulo }: { color: string; onChange: (c: string) => void; titulo: string }) {
+  // Extrae #rrggbb del color (puede ser #rrggbb o #rrggbbaa).
+  const hexRgb = color.slice(0, 7);
+  // Preserva el alfa si estaba presente (últimos 2 chars).
+  const alfa = color.length === 9 ? color.slice(7, 9) : "";
+
+  const handleColorChange = (nuevoHex: string) => {
+    // Si había alfa, preservarlo; si no, solo RGB.
+    onChange(alfa ? nuevoHex + alfa : nuevoHex);
+  };
+
   return (
     <label title={titulo} className="relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input">
       <span className="h-4 w-4 rounded-sm border border-border" style={{ background: color }} />
-      <input type="color" value={color} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
+      <input type="color" value={hexRgb} onChange={(e) => handleColorChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
     </label>
   );
 }
@@ -140,6 +177,7 @@ export function BarraContextual({
           <Stepper valor={(capa as CapaTexto).tamano} min={8} max={400} onChange={(v) => set({ tamano: v } as Partial<Capa>)} />
           <BotonIcono
             titulo="Negrita"
+            ariaLabel="Negrita"
             activo={(capa as CapaTexto).peso >= 600}
             onClick={() => set({ peso: (capa as CapaTexto).peso >= 600 ? 400 : 700 } as Partial<Capa>)}
           >
@@ -152,6 +190,7 @@ export function BarraContextual({
             return (
               <BotonIcono
                 titulo={`Alineación: ${al}`}
+                ariaLabel={`Alineación: ${al} (clic para cambiar)`}
                 onClick={() => set({ alineacion: ALIN_CICLO[(ALIN_CICLO.indexOf(al) + 1) % ALIN_CICLO.length] } as Partial<Capa>)}
               >
                 <Icono className="h-4 w-4" />

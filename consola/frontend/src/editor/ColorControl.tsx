@@ -121,6 +121,8 @@ export function ColorControl({ valor, onChange }: { valor: string; onChange: (c:
   const [abierto, setAbierto] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const botonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const capas = useEditor((s) => s.documento.capas);
   const fondo = useEditor((s) => s.documento.fondo);
   const delDoc = coloresDelDocumento(capas, fondo);
@@ -130,17 +132,29 @@ export function ColorControl({ valor, onChange }: { valor: string; onChange: (c:
   useEffect(() => {
     if (!abierto) return;
     const cerrar = () => setAbierto(false);
-    // Escape también cierra el popover (A11y: antes solo el click fuera lo cerraba).
+    // Cierra al scrollear (capture: true) o cambiar tamaño de ventana.
+    const cerrarEnScroll = () => cerrar();
+    const cerrarEnResize = () => cerrar();
     const conTecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAbierto(false);
+      if (e.key === "Escape") {
+        cerrar();
+        botonRef.current?.focus();
+      }
     };
+    // Enfoca el primer control al abrir.
+    setTimeout(() => inputRef.current?.focus(), 0);
     window.addEventListener("click", cerrar);
+    window.addEventListener("scroll", cerrarEnScroll, { capture: true });
+    window.addEventListener("resize", cerrarEnResize);
     window.addEventListener("keydown", conTecla);
     return () => {
       window.removeEventListener("click", cerrar);
+      window.removeEventListener("scroll", cerrarEnScroll, { capture: true });
+      window.removeEventListener("resize", cerrarEnResize);
       window.removeEventListener("keydown", conTecla);
     };
   }, [abierto]);
+
 
   const abrir = () => {
     const r = botonRef.current?.getBoundingClientRect();
@@ -170,11 +184,14 @@ export function ColorControl({ valor, onChange }: { valor: string; onChange: (c:
       {abierto && pos &&
         createPortal(
           <div
+            ref={popoverRef}
+            role="dialog"
             onClick={(e) => e.stopPropagation()}
             style={{ position: "fixed", top: pos.top, left: pos.left, width: 192 }}
             className="z-[100] rounded-md border border-border bg-popover p-2 shadow-lg"
           >
             <input
+              ref={inputRef}
               type="color"
               value={rgb}
               onChange={(e) => setRgb(e.target.value)}
