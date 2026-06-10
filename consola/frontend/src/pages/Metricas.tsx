@@ -28,6 +28,7 @@ import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
+import { AlertaIngesta } from "./metricas/AlertaIngesta";
 import { PanoramaPiezas } from "./metricas/PanoramaPiezas";
 import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
 import { SeccionAds } from "./metricas/SeccionAds";
@@ -164,6 +165,8 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <p className="text-sm text-muted-foreground">{reporteQuery.data.etiqueta_rango}</p>
             <Descargas rango={rango} marca={marca_} />
           </div>
+
+          <AlertaIngesta marcaActual={marca} rangoActual={rango} />
 
           <Kpis total={reporteQuery.data.total} />
           <TendenciaDiaria marcaActual={marca} rangoActual={rango} />

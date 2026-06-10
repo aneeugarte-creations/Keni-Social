@@ -383,3 +383,42 @@ def test_ads_vacio_sin_inversion(cliente, monkeypatch):
     data = r.json()
     assert data["ads"] == [] and data["total"]["campanias"] == 0
     assert data["total"]["visualizaciones"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# /api/metricas/ingesta (canales con la sincronización estancada)             #
+# --------------------------------------------------------------------------- #
+
+
+def _listado_estancado(rango="mes", marca=None):
+    base = {"titulo": "x", "url": "", "engagement_pct": 1.0, "interacciones": 1,
+            "visualizaciones": 100, "cuenta": "claro_sports"}
+    return [
+        {**base, "id": "1", "red": "facebook", "formato": "foto", "publicado": "2026-06-08"},
+        # FB reel estancado: 24 días por detrás del resto del feed de la marca.
+        {**base, "id": "2", "red": "facebook", "formato": "reel", "publicado": "2026-05-15"},
+        {**base, "id": "3", "red": "instagram", "formato": "reel", "publicado": "2026-06-07"},
+    ]
+
+
+def test_ingesta_detecta_canal_estancado(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_listado_piezas=_listado_estancado)
+    r = cliente.get("/api/metricas/ingesta?rango=mes&marca=claro_sports")
+    assert r.status_code == 200, r.text
+    alertas = r.json()["alertas"]
+    # Solo FB/reel está estancado (24d de rezago >= umbral); foto e IG-reel van al día.
+    assert len(alertas) == 1
+    a = alertas[0]
+    assert a["red"] == "facebook" and a["formato"] == "reel"
+    assert a["marca"] == "Claro Sports"
+    assert a["ultima_pieza"] == "2026-05-15" and a["rezago_dias"] >= 7
+
+
+def test_ingesta_sin_estancados_lista_vacia(cliente, monkeypatch):
+    def _al_dia(rango="mes", marca=None):
+        return [{"id": "1", "red": "facebook", "formato": "foto", "publicado": "2026-06-08",
+                 "cuenta": "claro_sports", "titulo": "x", "url": "", "engagement_pct": 1.0,
+                 "interacciones": 1, "visualizaciones": 100}]
+    _mock_servicio(monkeypatch, construir_listado_piezas=_al_dia)
+    r = cliente.get("/api/metricas/ingesta?rango=mes&marca=claro_sports")
+    assert r.status_code == 200 and r.json()["alertas"] == []

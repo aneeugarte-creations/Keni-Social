@@ -64,7 +64,7 @@ from .reporte import (
     opciones,
     reporte,
 )
-from .series import ads, correlacion, crosstab, desglose, seguidores, tendencia
+from .series import ads, correlacion, crosstab, desglose, ingesta, seguidores, tendencia
 
 # `_comparar_totales`, `_suma_clics` y `_cobertura_por_marca` se re-exportan porque la
 # suite (`test_api_metricas.py`) los importa de `keni_consola.api.metricas`; no son
@@ -89,6 +89,7 @@ __all__ = [
     "crosstab",
     "correlacion",
     "ads",
+    "ingesta",
     "estado",
     "refrescar",
     "export_csv",
@@ -118,6 +119,7 @@ RUTAS = [
     Route("/api/metricas/crosstab", crosstab, methods=["GET"]),
     Route("/api/metricas/correlacion", correlacion, methods=["GET"]),
     Route("/api/metricas/ads", ads, methods=["GET"]),
+    Route("/api/metricas/ingesta", ingesta, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),
     Route("/api/metricas/refrescar", refrescar, methods=["POST"]),
     Route("/api/metricas/export.csv", export_csv, methods=["GET"]),

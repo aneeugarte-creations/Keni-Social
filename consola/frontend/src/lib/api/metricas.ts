@@ -11,6 +11,7 @@ import type {
   DesgloseInteracciones,
   EstadoMetricas,
   HistoricoPieza,
+  IngestaMetricas,
   MetricasLineas,
   OpcionesMetricas,
   PiezasListado,
@@ -75,6 +76,9 @@ export const apiMetricas = {
   // Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el inorgánico a nivel marca.
   metricasAds: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<AdsMetricas>(`/metricas/ads${query(params)}`, { signal }),
+  // Canales (marca×red×formato) con la ingesta estancada (se quedaron atrás del feed).
+  metricasIngesta: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<IngestaMetricas>(`/metricas/ingesta${query(params)}`, { signal }),
   // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
   metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),

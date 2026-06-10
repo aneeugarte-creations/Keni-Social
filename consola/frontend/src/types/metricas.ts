@@ -70,3 +70,20 @@ export interface AdsMetricas {
   etiqueta_rango: string;
   generado_en: string;
 }
+
+/** Un canal (marca×red×formato) con la ingesta ESTANCADA (se quedó atrás del feed). */
+export interface AlertaIngestaItem {
+  marca: string;
+  red: string;
+  formato: string;
+  ultima_pieza: string;
+  dias_sin_piezas: number;
+  rezago_dias: number;
+}
+
+/** Respuesta de `GET /api/metricas/ingesta`: canales con la sincronización estancada. */
+export interface IngestaMetricas {
+  alertas: AlertaIngestaItem[];
+  etiqueta_rango: string;
+  generado_en: string;
+}
