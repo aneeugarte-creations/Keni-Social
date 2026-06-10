@@ -157,6 +157,14 @@ export interface CapaTexto extends CapaBase {
   familia: string;
   tamano: number;
   peso: number;
+  // CURSIVA (itálica real). Solo surte efecto en familias con itálica registrada
+  // (`FAMILIAS_CON_CURSIVA` en dibujar.mjs): para el resto el editor deshabilita el botón y ambos
+  // renders ignoran el flag (nadie sintetiza oblicuas). Opcional; default false (solo se persiste si true).
+  cursiva?: boolean;
+  // SUBRAYADO: línea bajo cada línea de texto (grosor ∝ tamaño, color del relleno), pintada igual
+  // por el editor (Konva `textDecoration`) y el export (`dibujarSubrayadoLinea` en dibujar.mjs).
+  // El texto en arco (`curva`) no se subraya en ningún lado. Opcional; default false (solo se persiste si true).
+  subrayado?: boolean;
   color: string;
   alineacion: Alineacion;
   mayusculas: boolean;

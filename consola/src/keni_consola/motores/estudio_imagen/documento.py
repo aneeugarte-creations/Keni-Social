@@ -22,8 +22,12 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
                    alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
                    sombra:{dx,dy,color,desenfoque?,opacidad?}|null,
                    relleno_degradado:{desde,hasta,angulo?}|null, chip:{color,pad_x,pad_y,radio}|null,
-                   curva:{radio}|null, ancla:arriba|abajo, valign:arriba|centro|abajo }
+                   curva:{radio}|null, ancla:arriba|abajo, valign:arriba|centro|abajo,
+                   cursiva?, subrayado? }
                    # curva: texto en ARCO (radio px; +=arriba/sonrisa, -=abajo/ceño). Sólo si radio!=0.
+                   # cursiva/subrayado: booleanos opcionales, solo se persisten si True (def False).
+                   # La cursiva solo surte efecto en familias con itálica real (FAMILIAS_CON_CURSIVA
+                   # en dibujar.mjs); el render la ignora para el resto (sin oblicuas sintéticas).
                    # valign: alineación VERTICAL del texto dentro de la CAJA (cuando h>0). La caja
                    # es de alto fijo: el texto se auto-encoge para caber. `ancla` queda por
                    # compatibilidad (camino legado h<=0, sin caja).
@@ -417,6 +421,14 @@ def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
             else ("abajo" if c.get("ancla") == "abajo" else "arriba")
         ),
     }
+    # Cursiva y subrayado (opcionales, retrocompatibles): booleanos con default False; solo se
+    # persisten si vienen a True (igual que flip_h/flip_v). La cursiva solo surte efecto en
+    # familias con itálica real (FAMILIAS_CON_CURSIVA en dibujar.mjs); el render ignora el flag
+    # para el resto (nunca se sintetizan oblicuas).
+    if bool(c.get("cursiva")):
+        out["cursiva"] = True
+    if bool(c.get("subrayado")):
+        out["subrayado"] = True
     # Texto curvo (texto en arco): solo se persiste si trae un radio != 0, para no ensuciar los
     # documentos antiguos ni alterar el render legado (sin `curva` => texto recto idéntico).
     curva = _curva(c.get("curva"))

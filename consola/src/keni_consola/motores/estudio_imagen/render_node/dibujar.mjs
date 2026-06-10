@@ -20,6 +20,19 @@ export const MAPA_MEZCLA = {
   oscurecer: "darken",
 };
 
+// Familias del catálogo CON cara ITÁLICA real registrada en AMBOS lados (TTF *Italic* en el
+// servidor/`fuentes.mjs` y webfont itálica en el editor). Única fuente de verdad cliente/servidor:
+// el editor deshabilita el botón de cursiva fuera de esta lista y ambos renders IGNORAN el flag
+// para el resto (Skia no sintetiza oblicuas, y una oblicua sintética del navegador rompería la
+// regla previa==export). Anton/Archivo Black/Oswald y las tipografías propias de marca (un solo
+// TTF, sin cara itálica) quedan fuera.
+export const FAMILIAS_CON_CURSIVA = ["Barlow", "Barlow Condensed", "Montserrat", "Lora", "Exo 2", "Lato"];
+
+// ¿La familia REAL (ya resuelta por `familiaReal`) tiene itálica registrada?
+export function tieneCursiva(familia) {
+  return FAMILIAS_CON_CURSIVA.includes(familia);
+}
+
 function hexRGBA(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -398,7 +411,10 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   const texto = (t.mayusculas ? String(valor).toUpperCase() : String(valor)).trim();
   if (!texto) return; // binding vacío (p. ej. pleca "" ) => se omite la capa
   const familia = familiaReal(t.familia);
-  const fontFor = (tam) => `${t.peso || 700} ${Math.round(tam)}px "${familia}"`;
+  // CURSIVA: el prefijo `italic` solo si la familia REAL tiene itálica registrada (espejo del
+  // botón del editor). Para el resto el flag se ignora: nunca se sintetizan oblicuas.
+  const cursiva = t.cursiva && tieneCursiva(familia) ? "italic " : "";
+  const fontFor = (tam) => `${cursiva}${t.peso || 700} ${Math.round(tam)}px "${familia}"`;
   const aj = t.auto_ajuste || { max_lineas: 4, tam_min: 40 };
   // Interletra (letter-spacing): la fija ANTES de medir para que el wrap/chip cuadre. La soportan
   // tanto el canvas del navegador como @napi-rs/canvas (Skia). Se restablece al final.
@@ -419,7 +435,7 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   // ancho Y alto (pasamos `maxAlto = boxH`). Si `h<=0` (plantillas legadas), seguimos como antes:
   // el texto solo se limita por ancho y nº de líneas, y el bloque se ancla por `ancla`.
   const boxH = t.h > 0 ? t.h : null;
-  const { lineas, altoLinea } = ajustar(
+  const { tam, lineas, altoLinea } = ajustar(
     ctx, texto, t.w, boxH || 0, fontFor, t.tamano, aj.tam_min, aj.max_lineas, t.interlineado || 1.14,
   );
   // Contorno del texto (legibilidad sobre fotos): se traza DEBAJO del relleno.
@@ -470,6 +486,12 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
     if (t.chip && ln.trim()) {
       dibujarChipLinea(ctx, t, ctx.measureText(ln).width, y, altoLinea, tx);
     }
+    // SUBRAYADO: una línea bajo CADA línea de texto, ANTES de los glifos (como el `textDecoration`
+    // de Konva, cuya geometría espeja `dibujarSubrayadoLinea`). El texto curvo no se subraya en
+    // ninguno de los dos lados (el camino curvo retorna antes de llegar aquí).
+    if (t.subrayado && ln.trim()) {
+      dibujarSubrayadoLinea(ctx, t, ln, y, altoLinea, tam, tx, relleno, sombra, sombraReal, justif && !ultima);
+    }
     if (justif && !ultima) {
       dibujarLineaJustificada(ctx, ln, t.x, y, t.w, relleno, sombra, contorno);
     } else {
@@ -519,6 +541,39 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
     y += altoLinea;
   }
   if (interletra) ctx.letterSpacing = "0px";
+}
+
+// Subraya UNA línea de texto. ESPEJO de la geometría del `textDecoration: "underline"` de Konva
+// Text (lo que pinta el editor): grosor `tam/15`, color del relleno (sólido o degradado), a
+// `altoLinea/2 + round(tam/2)` bajo el tope de la línea, con el ancho MEDIDO de la línea según la
+// alineación — salvo en justificado, donde las líneas no-últimas se subrayan a todo el ancho de la
+// caja (`anchoCompleto`). La sombra sigue el mismo doble camino que el texto: LEGADA = copia
+// desplazada en el color de la sombra; REAL = la proyecta el propio trazo (blur/opacidad nativos).
+function dibujarSubrayadoLinea(ctx, t, ln, lineTop, altoLinea, tam, tx, relleno, sombra, sombraReal, anchoCompleto) {
+  const ancho = anchoCompleto ? t.w : ctx.measureText(ln).width;
+  const x = t.alineacion === "centro" ? tx - ancho / 2
+    : t.alineacion === "derecha" ? tx - ancho
+    : t.x;
+  const uy = lineTop + altoLinea / 2 + Math.round(tam / 2);
+  const traza = (dx, dy, color) => {
+    ctx.beginPath();
+    ctx.moveTo(x + dx, uy + dy);
+    ctx.lineTo(x + Math.round(ancho) + dx, uy + dy);
+    ctx.lineWidth = tam / 15;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  };
+  if (sombraReal) {
+    ctx.shadowColor = hexRGBA(sombra.color || "#000000", sombra.opacidad ?? 1);
+    ctx.shadowBlur = sombra.desenfoque ?? 0;
+    ctx.shadowOffsetX = sombra.dx ?? 0;
+    ctx.shadowOffsetY = sombra.dy ?? 0;
+    traza(0, 0, relleno);
+    resetSombraCanvas(ctx);
+    return;
+  }
+  if (sombra) traza(sombra.dx ?? 2, sombra.dy ?? 2, sombra.color || "#000000");
+  traza(0, 0, relleno);
 }
 
 // Dibuja el chip (fondo/pleca) de UNA línea de texto, ajustado a su ancho. `lineTop` es la

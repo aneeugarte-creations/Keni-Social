@@ -12,26 +12,42 @@ interface ArchivoFuente {
   archivo: string;
   /** Peso CSS (o rango para variables). */
   peso: string;
+  /** Estilo CSS: "italic" para las caras itálicas (ausente = normal). */
+  estilo?: "italic";
 }
 
 // Familia real -> archivos por peso (espejo de `ARCHIVOS` en fuentes.mjs). Las variables se
-// registran con rango de peso (el navegador interpola por el eje).
+// registran con rango de peso (el navegador interpola por el eje). Las caras *Italic* se
+// registran con `style: italic` bajo la MISMA familia: así `ctx.font = "italic …"` usa la
+// itálica REAL, igual que Skia en el servidor (que no sintetiza oblicuas).
 const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Barlow", archivo: "Barlow-Regular.ttf", peso: "400" },
   { familia: "Barlow", archivo: "Barlow-SemiBold.ttf", peso: "600" },
   { familia: "Barlow", archivo: "Barlow-Bold.ttf", peso: "700" },
+  { familia: "Barlow", archivo: "Barlow-Italic.ttf", peso: "400", estilo: "italic" },
+  { familia: "Barlow", archivo: "Barlow-SemiBoldItalic.ttf", peso: "600", estilo: "italic" },
+  { familia: "Barlow", archivo: "Barlow-BoldItalic.ttf", peso: "700", estilo: "italic" },
   { familia: "Barlow Condensed", archivo: "BarlowCondensed-SemiBold.ttf", peso: "600" },
   { familia: "Barlow Condensed", archivo: "BarlowCondensed-Bold.ttf", peso: "700" },
   { familia: "Barlow Condensed", archivo: "BarlowCondensed-ExtraBold.ttf", peso: "800" },
+  { familia: "Barlow Condensed", archivo: "BarlowCondensed-SemiBoldItalic.ttf", peso: "600", estilo: "italic" },
+  { familia: "Barlow Condensed", archivo: "BarlowCondensed-BoldItalic.ttf", peso: "700", estilo: "italic" },
+  { familia: "Barlow Condensed", archivo: "BarlowCondensed-ExtraBoldItalic.ttf", peso: "800", estilo: "italic" },
   { familia: "Anton", archivo: "Anton-Regular.ttf", peso: "400" },
   { familia: "Archivo Black", archivo: "ArchivoBlack-Regular.ttf", peso: "400" },
   { familia: "Oswald", archivo: "Oswald-Variable.ttf", peso: "200 700" },
   { familia: "Montserrat", archivo: "Montserrat-Variable.ttf", peso: "100 900" },
+  { familia: "Montserrat", archivo: "Montserrat-Italic-Variable.ttf", peso: "100 900", estilo: "italic" },
   { familia: "Lora", archivo: "Lora-Variable.ttf", peso: "400 700" },
+  { familia: "Lora", archivo: "Lora-Italic-Variable.ttf", peso: "400 700", estilo: "italic" },
   { familia: "Exo 2", archivo: "Exo2-Variable.ttf", peso: "100 900" },
+  { familia: "Exo 2", archivo: "Exo2-Italic-Variable.ttf", peso: "100 900", estilo: "italic" },
   { familia: "Lato", archivo: "Lato-Regular.ttf", peso: "400" },
   { familia: "Lato", archivo: "Lato-Bold.ttf", peso: "700" },
   { familia: "Lato", archivo: "Lato-Black.ttf", peso: "900" },
+  { familia: "Lato", archivo: "Lato-Italic.ttf", peso: "400", estilo: "italic" },
+  { familia: "Lato", archivo: "Lato-BoldItalic.ttf", peso: "700", estilo: "italic" },
+  { familia: "Lato", archivo: "Lato-BlackItalic.ttf", peso: "900", estilo: "italic" },
 ];
 
 // Una sola promesa por familia: no recargamos en cada render.
@@ -45,7 +61,7 @@ function cargarFamilia(familia: string): Promise<void> {
     const archivos = ARCHIVOS.filter((a) => a.familia === familia);
     await Promise.all(
       archivos.map(async (a) => {
-        const cara = new FontFace(familia, `url(/fonts/${a.archivo})`, { weight: a.peso });
+        const cara = new FontFace(familia, `url(/fonts/${a.archivo})`, { weight: a.peso, style: a.estilo ?? "normal" });
         await cara.load();
         document.fonts.add(cara);
       }),

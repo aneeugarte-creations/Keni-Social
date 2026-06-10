@@ -36,3 +36,10 @@ export function dibujarDocumento(ctx: CanvasRenderingContext2D, args: DibujarDoc
 // Mapa etiqueta de modo de fusión -> `globalCompositeOperation`. Compartido con el editor (Konva)
 // para que la previa y el export usen el mismo modo. "normal" => "source-over".
 export const MAPA_MEZCLA: Record<import("../../editor/documento").TipoMezcla, string>;
+
+// Familias del catálogo con cara ITÁLICA real registrada en ambos lados (editor y servidor). El
+// editor deshabilita la cursiva fuera de esta lista; ambos renders ignoran el flag para el resto
+// (nunca se sintetizan oblicuas).
+export const FAMILIAS_CON_CURSIVA: string[];
+// ¿La familia REAL (ya resuelta, p. ej. "sans" -> "Barlow") tiene itálica registrada?
+export function tieneCursiva(familia: string): boolean;

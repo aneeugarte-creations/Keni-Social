@@ -88,3 +88,49 @@ describe("BarraContextual — tamaño de letra (regresión)", () => {
     expect(capaTexto(store).tamano).toBe(72);
   });
 });
+
+describe("BarraContextual — cursiva (I) y subrayado (U)", () => {
+  it("I conmuta `cursiva` en una familia CON itálica (Barlow)", () => {
+    const store = montarConTexto(); // familia por defecto: Barlow
+    const btn = screen.getByRole("button", { name: "Cursiva" });
+    expect(btn).not.toBeDisabled();
+    expect(btn).toHaveAttribute("title", "Cursiva");
+    fireEvent.click(btn);
+    expect(capaTexto(store).cursiva).toBe(true);
+    fireEvent.click(btn);
+    expect(capaTexto(store).cursiva).toBe(false);
+  });
+
+  it("I queda DESHABILITADO (con tooltip) si la familia no tiene itálica (Anton)", () => {
+    const store = montarConTexto({ familia: "Anton" });
+    const btn = screen.getByRole("button", { name: "Cursiva" });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("title", "Esta fuente no tiene cursiva");
+    fireEvent.click(btn);
+    expect(capaTexto(store).cursiva).toBeUndefined(); // el clic no hace nada
+  });
+
+  it("las familias lógicas legadas ('sans'/'condensada') resuelven a Barlow: I habilitado", () => {
+    montarConTexto({ familia: "condensada" });
+    expect(screen.getByRole("button", { name: "Cursiva" })).not.toBeDisabled();
+  });
+
+  it("U conmuta `subrayado`", () => {
+    const store = montarConTexto();
+    const btn = screen.getByRole("button", { name: "Subrayado" });
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(capaTexto(store).subrayado).toBe(true);
+    fireEvent.click(btn);
+    expect(capaTexto(store).subrayado).toBe(false);
+  });
+
+  it("U queda DESHABILITADO para el texto en arco (curva), con tooltip", () => {
+    const store = montarConTexto({ curva: { radio: 600 } });
+    const btn = screen.getByRole("button", { name: "Subrayado" });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("title", "El texto en arco no admite subrayado");
+    fireEvent.click(btn);
+    expect(capaTexto(store).subrayado).toBeUndefined();
+  });
+});

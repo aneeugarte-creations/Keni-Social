@@ -13,11 +13,15 @@ import {
   ChevronsLeftRight,
   ChevronsUpDown,
   Crop,
+  Italic,
   Replace,
   Settings2,
+  Underline,
 } from "lucide-react";
 
 import { useState } from "react";
+
+import { tieneCursiva } from "../lib/placa/dibujar.mjs";
 
 import type { Capa, CapaTexto } from "./documento";
 import { CATALOGO_FUENTES } from "./documento";
@@ -36,19 +40,21 @@ function Sep() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
 }
 
-// Botón con icono, compacto.
+// Botón con icono, compacto. `deshabilitado` lo apaga (patrón Canva: el tooltip explica por qué).
 function BotonIcono({
   onClick,
   activo,
   titulo,
   children,
   ariaLabel,
+  deshabilitado,
 }: {
   onClick: () => void;
   activo?: boolean;
   titulo: string;
   children: React.ReactNode;
   ariaLabel?: string;
+  deshabilitado?: boolean;
 }) {
   return (
     <button
@@ -56,8 +62,11 @@ function BotonIcono({
       title={titulo}
       aria-label={ariaLabel}
       aria-pressed={activo}
+      disabled={deshabilitado}
       className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-sm transition-colors ${
-        activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+        deshabilitado
+          ? "cursor-not-allowed text-muted-foreground/40"
+          : activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
       {children}
@@ -194,6 +203,42 @@ export function BarraContextual({
           >
             <Bold className="h-4 w-4" />
           </BotonIcono>
+          {(() => {
+            const c = capa as CapaTexto;
+            // CURSIVA solo para familias con itálica REAL (la misma regla que `dibujar.mjs` y el
+            // servidor): fuera de la lista el botón se apaga (patrón Canva) y nada se sintetiza.
+            // "sans"/"condensada" son las familias lógicas legadas (espejo de `familiaReal`).
+            const familia = c.familia === "sans" ? "Barlow" : c.familia === "condensada" ? "Barlow Condensed" : c.familia;
+            const hayCursiva = tieneCursiva(familia);
+            return (
+              <BotonIcono
+                titulo={hayCursiva ? "Cursiva" : "Esta fuente no tiene cursiva"}
+                ariaLabel="Cursiva"
+                activo={hayCursiva && !!c.cursiva}
+                deshabilitado={!hayCursiva}
+                onClick={() => set({ cursiva: !c.cursiva } as Partial<Capa>)}
+              >
+                <Italic className="h-4 w-4" />
+              </BotonIcono>
+            );
+          })()}
+          {(() => {
+            const c = capa as CapaTexto;
+            // El texto en ARCO (curva) no se subraya en ningún lado (ni Konva TextPath ni el
+            // export): el botón se apaga para no prometer nada que la pieza final no tenga.
+            const enArco = !!c.curva?.radio;
+            return (
+              <BotonIcono
+                titulo={enArco ? "El texto en arco no admite subrayado" : "Subrayado"}
+                ariaLabel="Subrayado"
+                activo={!enArco && !!c.subrayado}
+                deshabilitado={enArco}
+                onClick={() => set({ subrayado: !c.subrayado } as Partial<Capa>)}
+              >
+                <Underline className="h-4 w-4" />
+              </BotonIcono>
+            );
+          })()}
           <Swatch color={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} titulo="Color del texto" />
           {(() => {
             const al = (capa as CapaTexto).alineacion;

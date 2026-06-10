@@ -47,6 +47,10 @@ function ctxFalso() {
   const translates: { x: number; y: number }[] = [];
   // Llamadas a scale (para verificar el VOLTEO/flip espejo de imagen/logo).
   const scales: { x: number; y: number }[] = [];
+  // Historial de strings `ctx.font` (para verificar el prefijo "italic" de la cursiva).
+  const fonts: string[] = [];
+  // Llamadas a stroke() con el estado del trazo (para verificar el SUBRAYADO: grosor y color).
+  const strokes: { lineWidth: number; estilo: string }[] = [];
   let tamActual = 64;
   const ctx = {
     fills,
@@ -58,6 +62,8 @@ function ctxFalso() {
     gcos,
     translates,
     scales,
+    fonts,
+    strokes,
     canvas: { width: 1080, height: 1080 },
     shadowColor: "transparent",
     shadowBlur: 0,
@@ -65,6 +71,7 @@ function ctxFalso() {
     shadowOffsetY: 0,
     globalCompositeOperation: "source-over",
     set font(v: string) {
+      fonts.push(v);
       const m = /(\d+)px/.exec(v);
       tamActual = m ? Number(m[1]) : tamActual;
     },
@@ -102,7 +109,7 @@ function ctxFalso() {
     rect: (...args: number[]) => paths.push({ tipo: "rect", args }),
     clip: () => {},
     fill: () => { gcos.push(String(ctx.globalCompositeOperation)); },
-    stroke: () => {},
+    stroke: () => { strokes.push({ lineWidth: ctx.lineWidth, estilo: String(ctx.strokeStyle) }); },
     fillRect: (...args: number[]) => fillRects.push({ estilo: String(ctx.fillStyle), args }),
     strokeRect: () => {},
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -810,5 +817,126 @@ describe("pivote de rotación (espejo de Konva)", () => {
     const ctx = ctxFalso();
     dibujarDocumento(ctx as never, { documento: docConMarco({ rotacion: 0 }), imgs: {}, bindings: {} } as never);
     expect(ctx.translates).toHaveLength(0);
+  });
+});
+
+import { FAMILIAS_CON_CURSIVA, tieneCursiva } from "./dibujar.mjs";
+
+describe("cursiva (itálica real, nunca sintética)", () => {
+  it("el catálogo de familias con itálica es el esperado y `tieneCursiva` lo refleja", () => {
+    expect(FAMILIAS_CON_CURSIVA).toEqual(["Barlow", "Barlow Condensed", "Montserrat", "Lora", "Exo 2", "Lato"]);
+    expect(tieneCursiva("Barlow")).toBe(true);
+    expect(tieneCursiva("Lora")).toBe(true);
+    // Sin cara itálica registrada: ni Anton/Oswald/Archivo Black ni una tipografía de marca.
+    expect(tieneCursiva("Anton")).toBe(false);
+    expect(tieneCursiva("Oswald")).toBe(false);
+    expect(tieneCursiva("Archivo Black")).toBe(false);
+    expect(tieneCursiva("Mi Fuente De Marca")).toBe(false);
+  });
+
+  it("capa con `cursiva` en familia CON itálica (Barlow) pone 'italic' en el font del canvas", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({ cursiva: true }), imgs: {}, bindings: {} } as never);
+    expect(ctx.fonts.some((f) => f.startsWith("italic "))).toBe(true);
+  });
+
+  it("RETROCOMPAT: sin `cursiva` ningún font lleva 'italic'", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({}), imgs: {}, bindings: {} } as never);
+    expect(ctx.fonts.every((f) => !f.includes("italic"))).toBe(true);
+  });
+
+  it("`cursiva` en familia SIN itálica (Anton) se IGNORA: no se sintetizan oblicuas", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      // `familiaReal` identidad para que "Anton" llegue tal cual al dibujante.
+      { documento: docConTexto({ cursiva: true, familia: "Anton" }), imgs: {}, bindings: {}, familiaReal: (l: string) => l } as never,
+    );
+    expect(ctx.fonts.length).toBeGreaterThan(0);
+    expect(ctx.fonts.every((f) => !f.includes("italic"))).toBe(true);
+  });
+
+  it("la cursiva también viaja al texto CURVO (el fontFor es compartido)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ cursiva: true, curva: { radio: 600 } }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.fonts.some((f) => f.startsWith("italic "))).toBe(true);
+  });
+});
+
+describe("subrayado (espejo de la geometría de Konva)", () => {
+  // Capa por defecto de `docConTexto`: "HOLA" en (100,200) w=800 h=0, tamaño 100, interlineado 1
+  // => top de línea 200, altoLinea 100; subrayado a y = 200 + 100/2 + 100/2 = 300; ancho medido
+  // 4×100×0.5 = 200 (stub). Grosor = tam/15; color = relleno.
+  it("traza una línea bajo el texto: grosor tam/15, color del relleno, ancho de la línea", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({ subrayado: true }), imgs: {}, bindings: {} } as never);
+    expect(ctx.strokes).toHaveLength(1);
+    expect(ctx.strokes[0].lineWidth).toBeCloseTo(100 / 15, 5);
+    expect(ctx.strokes[0].estilo).toBe("#FFFFFF");
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,300")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "300,300")).toBe(true);
+  });
+
+  it("RETROCOMPAT: sin `subrayado` no se traza nada (cero strokes)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConTexto({}), imgs: {}, bindings: {} } as never);
+    expect(ctx.strokes).toHaveLength(0);
+  });
+
+  it("respeta la alineación: centrado, la línea queda centrada en la caja", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ subrayado: true, alineacion: "centro" }), imgs: {}, bindings: {} } as never,
+    );
+    // tx = 100 + 800/2 = 500; ancho 200 => de 400 a 600.
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "400,300")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "600,300")).toBe(true);
+  });
+
+  it("con sombra LEGADA pinta primero la copia desplazada en el color de la sombra", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ subrayado: true, sombra: { dx: 4, dy: 6, color: "#000000" } }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.strokes).toHaveLength(2);
+    expect(ctx.strokes[0].estilo).toBe("#000000");
+    expect(ctx.strokes[1].estilo).toBe("#FFFFFF");
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "104,306")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,300")).toBe(true);
+  });
+
+  it("JUSTIFICADO: las líneas no-últimas se subrayan a todo el ancho de la caja; la última, a su medida", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      {
+        // Wrap del stub: "AAAA BBBB CCCC" (700px) + "DDDD" (200px) en caja de 800.
+        documento: docConTexto({ subrayado: true, alineacion: "justificado", texto: "AAAA BBBB CCCC DDDD" }),
+        imgs: {},
+        bindings: {},
+      } as never,
+    );
+    expect(ctx.strokes).toHaveLength(2);
+    // Línea 1 (no última): ancho completo de la caja, de x=100 a x=900, en y=300.
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,300")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "900,300")).toBe(true);
+    // Línea 2 (última): solo su ancho medido (200), de x=100 a x=300, en y=400.
+    expect(ctx.paths.some((p) => p.tipo === "moveTo" && p.args.join(",") === "100,400")).toBe(true);
+    expect(ctx.paths.some((p) => p.tipo === "lineTo" && p.args.join(",") === "300,400")).toBe(true);
+  });
+
+  it("el texto en ARCO no se subraya (paridad con el editor, que tampoco lo pinta)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(
+      ctx as never,
+      { documento: docConTexto({ subrayado: true, curva: { radio: 600 } }), imgs: {}, bindings: {} } as never,
+    );
+    expect(ctx.strokes).toHaveLength(0);
   });
 });

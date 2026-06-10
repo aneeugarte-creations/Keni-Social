@@ -6,7 +6,7 @@ import Konva from "konva";
 import { useEffect, useReducer, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text, TextPath } from "react-konva";
 
-import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
+import { MAPA_MEZCLA, tieneCursiva } from "../../lib/placa/dibujar.mjs";
 import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado } from "../documento";
 import { copyMuestra, fotoMuestra } from "../muestra";
 import { useImagen } from "../useImagen";
@@ -219,6 +219,17 @@ function familiaReal(familia: string | undefined): string {
   if (familia === "sans") return "Barlow";
   if (familia === "condensada") return "Barlow Condensed";
   return familia || "Barlow";
+}
+
+// `fontStyle` Konva de una capa de texto ("italic bold" / "italic" / "bold" / "normal"): la
+// negrita por peso (>=600, como siempre) y la CURSIVA solo si la familia REAL tiene itálica
+// registrada (`tieneCursiva`, la misma regla que aplica el export en `dibujar.mjs`): así la previa
+// nunca enseña una oblicua sintética del navegador que el servidor no pueda reproducir.
+function estiloFuente(c: CapaTexto): string {
+  const negrita = c.peso >= 600;
+  const cursiva = !!c.cursiva && tieneCursiva(familiaReal(c.familia));
+  if (cursiva) return negrita ? "italic bold" : "italic";
+  return negrita ? "bold" : "normal";
 }
 
 type Filtros = CapaImagen["filtros"];
@@ -580,7 +591,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
             text={textoMuestra(c, muestraCopy)}
             fontFamily={familiaReal(c.familia)}
             fontSize={c.tamano}
-            fontStyle={c.peso >= 600 ? "bold" : "normal"}
+            fontStyle={estiloFuente(c)}
             fill={c.color}
             letterSpacing={c.interletra || 0}
             stroke={c.contorno?.color}
@@ -613,7 +624,11 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           verticalAlign={enCaja ? (c.valign === "centro" ? "middle" : c.valign === "abajo" ? "bottom" : "top") : undefined}
           fontFamily={familiaReal(c.familia)}
           fontSize={c.tamano}
-          fontStyle={c.peso >= 600 ? "bold" : "normal"}
+          fontStyle={estiloFuente(c)}
+          // SUBRAYADO end-to-end: Konva pinta la línea bajo cada línea de texto; el export replica
+          // su geometría exacta (`dibujarSubrayadoLinea` en dibujar.mjs). El texto en arco
+          // (TextPath, arriba) NO lo recibe: el export tampoco lo subraya (paridad previa==final).
+          textDecoration={c.subrayado ? "underline" : ""}
           fill={gradTexto ? undefined : c.color}
           {...(gradTexto ?? {})}
           align={ALIN[c.alineacion] ?? "left"}

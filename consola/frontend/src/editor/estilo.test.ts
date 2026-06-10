@@ -14,6 +14,16 @@ describe("estiloDe", () => {
     expect("w" in e.campos).toBe(false);
   });
 
+  it("texto: cursiva y subrayado son parte del estilo (si están presentes en la capa)", () => {
+    const t = nuevaCapaTexto({ cursiva: true, subrayado: true });
+    const e = estiloDe(t);
+    expect(e.campos).toMatchObject({ cursiva: true, subrayado: true });
+    // Una capa sin esos flags (opcionales) no los inyecta como `undefined`.
+    const sin = estiloDe(nuevaCapaTexto());
+    expect("cursiva" in sin.campos).toBe(false);
+    expect("subrayado" in sin.campos).toBe(false);
+  });
+
   it("imagen: NO copia objeto/crop/foco/zoom/es_foto", () => {
     const im = nuevaCapaImagen("media-123", {
       foco: [0.2, 0.8],

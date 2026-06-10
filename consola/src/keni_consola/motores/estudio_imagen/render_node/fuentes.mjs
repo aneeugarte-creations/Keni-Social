@@ -15,22 +15,37 @@ const DIR_FUENTES = join(_aqui, "..", "fuentes");
 
 // Familia real -> archivo(s). Las variables (Oswald/Montserrat/Lora) se registran una vez; Skia
 // elige el peso por el eje variable al pedir `<peso>px`. Barlow trae estáticas por peso.
+// CURSIVA: las caras *Italic* se registran bajo la MISMA familia; Skia elige la itálica cuando el
+// font string lleva `italic` (Skia NUNCA sintetiza oblicuas, por eso hacen falta los TTF reales).
+// Anton / Archivo Black / Oswald no tienen itálica (ver FAMILIAS_CON_CURSIVA en dibujar.mjs).
 const ARCHIVOS = [
   ["Barlow", "Barlow-Regular.ttf"],
   ["Barlow", "Barlow-SemiBold.ttf"],
   ["Barlow", "Barlow-Bold.ttf"],
+  ["Barlow", "Barlow-Italic.ttf"],
+  ["Barlow", "Barlow-SemiBoldItalic.ttf"],
+  ["Barlow", "Barlow-BoldItalic.ttf"],
   ["Barlow Condensed", "BarlowCondensed-SemiBold.ttf"],
   ["Barlow Condensed", "BarlowCondensed-Bold.ttf"],
   ["Barlow Condensed", "BarlowCondensed-ExtraBold.ttf"],
+  ["Barlow Condensed", "BarlowCondensed-SemiBoldItalic.ttf"],
+  ["Barlow Condensed", "BarlowCondensed-BoldItalic.ttf"],
+  ["Barlow Condensed", "BarlowCondensed-ExtraBoldItalic.ttf"],
   ["Anton", "Anton-Regular.ttf"],
   ["Archivo Black", "ArchivoBlack-Regular.ttf"],
   ["Oswald", "Oswald-Variable.ttf"],
   ["Montserrat", "Montserrat-Variable.ttf"],
+  ["Montserrat", "Montserrat-Italic-Variable.ttf"],
   ["Lora", "Lora-Variable.ttf"],
+  ["Lora", "Lora-Italic-Variable.ttf"],
   ["Exo 2", "Exo2-Variable.ttf"],
+  ["Exo 2", "Exo2-Italic-Variable.ttf"],
   ["Lato", "Lato-Regular.ttf"],
   ["Lato", "Lato-Bold.ttf"],
   ["Lato", "Lato-Black.ttf"],
+  ["Lato", "Lato-Italic.ttf"],
+  ["Lato", "Lato-BoldItalic.ttf"],
+  ["Lato", "Lato-BlackItalic.ttf"],
 ];
 
 // Catálogo de familias ofrecidas (el editor mantiene su propia copia para el selector).
