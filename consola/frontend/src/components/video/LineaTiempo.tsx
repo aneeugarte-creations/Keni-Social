@@ -7,7 +7,7 @@
  *     el playhead (el padre pasa `tiempoSeg` desde `PreviewComposicion.onTiempo`).
  *   - El clip BASE como tarjeta con ancho ∝ duración recortada y ASAS de trim en los bordes:
  *     arrastrarlas fija `recorte_in_ms`/`recorte_out_ms` con etiqueta mm:ss viva; al soltar se
- *     emite `onRecorte` y el preview salta al borde recortado. Mínimo 1 s (MIN_RECORTE_MS).
+ *     emite `onTrim` y el preview salta al borde recortado. Mínimo 1 s (MIN_RECORTE_MS).
  *   - PiP y subtítulos como barras finas SOLO LECTURA (informativas, no editables aquí).
  *
  * QUÉ NO HACE (a propósito)
@@ -40,8 +40,11 @@ export interface LineaTiempoProps {
   tiempoSeg: number;
   /** Busca en el player (segundos): arrastrar el playhead / click en la banda. */
   onSeek: (seg: number) => void;
-  /** Commit del trim al SOLTAR un asa: `recorte_in_ms`/`recorte_out_ms` del clip base. */
-  onRecorte?: (inMs: number, outMs: number) => void;
+  /**
+   * Commit del trim al SOLTAR un asa: `recorte_in_ms`/`recorte_out_ms` del clip base.
+   * Se llama `onTrim` (no `onRecorte`) para no confundirlo con el recorte (crop) de imagen.
+   */
+  onTrim?: (inMs: number, outMs: number) => void;
   /** Segmentos de subtítulos (barra fina informativa, en tiempo del clip base). */
   segmentos?: SegmentoSub[];
   /** Desactiva el trim (p. ej. sin marca activa). El seek sigue activo (no muta nada). */
@@ -60,12 +63,12 @@ export function LineaTiempo({
   duracionClipMs = 0,
   tiempoSeg,
   onSeek,
-  onRecorte,
+  onTrim,
   segmentos,
   disabled = false,
 }: LineaTiempoProps) {
   const bandaRef = React.useRef<HTMLDivElement>(null);
-  // Asa en arrastre (estado VISUAL durante el gesto): el commit va en el mouseup vía onRecorte.
+  // Asa en arrastre (estado VISUAL durante el gesto): el commit va en el mouseup vía onTrim.
   const [arrastre, setArrastre] = React.useState<{ asa: "in" | "out"; ms: number } | null>(null);
 
   const clip = pistaBase(doc)?.clips[0];
@@ -110,12 +113,12 @@ export function LineaTiempo({
 
   /**
    * Arrastre de un asa de trim. Captura los bordes vigentes al empezar, clampa al mínimo de
-   * 1 s y SOLO emite `onRecorte` al soltar si hubo cambio real (click seco = no-op). Tras el
+   * 1 s y SOLO emite `onTrim` al soltar si hubo cambio real (click seco = no-op). Tras el
    * commit, el preview salta al borde recortado (feedback inmediato de dónde quedó el corte).
    */
   const iniciarTrim = React.useCallback(
     (asa: "in" | "out") => (e: React.MouseEvent) => {
-      if (disabled || !onRecorte || !clip) return;
+      if (disabled || !onTrim || !clip) return;
       e.preventDefault();
       e.stopPropagation(); // que no dispare el scrub de la banda
       const vIn = clip.recorte_in_ms ?? 0;
@@ -137,14 +140,14 @@ export function LineaTiempo({
         setArrastre(null);
         const fin = Math.round(ultimo);
         if (fin === (asa === "in" ? vIn : vOut)) return; // click sin arrastre: nada que guardar
-        if (asa === "in") onRecorte(fin, vOut);
-        else onRecorte(vIn, fin);
+        if (asa === "in") onTrim(fin, vOut);
+        else onTrim(vIn, fin);
         onSeek(fin / 1000); // el preview salta al borde recortado al soltar
       };
       window.addEventListener("mousemove", mover);
       window.addEventListener("mouseup", soltar);
     },
-    [disabled, onRecorte, clip, totalMs, msDesdePuntero, onSeek],
+    [disabled, onTrim, clip, totalMs, msDesdePuntero, onSeek],
   );
 
   /** Teclado del playhead: flechas ±1 s, Shift ±5 s, Home/End a los extremos. */
@@ -242,7 +245,7 @@ export function LineaTiempo({
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center truncate px-3 text-[10px] font-medium tabular-nums text-foreground/80">
               Clip base · {formatearDuracionMs(outMs - inMs)}
             </span>
-            {onRecorte && (
+            {onTrim && (
               <>
                 <button
                   type="button"

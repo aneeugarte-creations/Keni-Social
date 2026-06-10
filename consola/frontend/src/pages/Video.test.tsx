@@ -8,7 +8,7 @@
  * No se ejercita el editor de capas (Konva) ni el render real: eso es preview/server-side.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -267,6 +267,60 @@ describe("Video", () => {
     fireEvent.click(screen.getByRole("button", { name: /guardar borrador/i }));
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/^Guardado$/)).toBeInTheDocument();
+  });
+
+  it("el commit del trim AUTOGUARDA (PUT) y el indicador pasa por 'Guardando…' → 'Guardado'", async () => {
+    vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
+      composicion: { id: "comp-7", documento: docConBase(), titulo: "T", estado: "borrador" },
+    });
+    // PUT controlable: así se puede asertar el "Guardando…" mientras la escritura está en vuelo.
+    let resolverPut: () => void = () => {};
+    const put = vi
+      .spyOn(apiMod.api.video, "guardarComposicion")
+      .mockImplementation(
+        () => new Promise<never>((res) => { resolverPut = () => res({} as never); }),
+      );
+    renderVideo("/contenido/video?composicion=comp-7");
+    const asa = await screen.findByRole("button", { name: /recortar fin del clip/i });
+    // jsdom no tiene layout: banda de 100px (1px = 1% del eje de 30 s).
+    const banda = screen.getByLabelText("Línea de tiempo de la composición");
+    vi.spyOn(banda, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, width: 100, height: 96, right: 100, bottom: 96, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.mouseDown(asa, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 50 });
+    fireEvent.mouseUp(window); // commit del trim → autoguardado
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0][0]).toBe("comp-7");
+    const guardado = put.mock.calls[0][1] as ComposicionVideo;
+    const clip = (guardado.pistas[0] as { clips: { recorte_out_ms?: number }[] }).clips[0];
+    expect(clip.recorte_out_ms).toBe(15000);
+    // Feedback del autoguardado: "Guardando…" en vuelo y "Guardado" al asentar.
+    expect(screen.getByText("Guardando…")).toBeInTheDocument();
+    await act(async () => resolverPut());
+    expect(await screen.findByText(/^Guardado$/)).toBeInTheDocument();
+  });
+
+  it("lo editado MIENTRAS se creaba el borrador se guarda al terminar la creación (flush)", async () => {
+    // Creación controlable: el segundo cambio llega con el POST aún en vuelo.
+    let resolverCrear: () => void = () => {};
+    const crear = vi.spyOn(apiMod.api.video, "crearComposicion").mockImplementation(
+      () => new Promise<{ id: string }>((res) => { resolverCrear = () => res({ id: "comp-nueva" }); }),
+    );
+    const put = vi.spyOn(apiMod.api.video, "guardarComposicion").mockResolvedValue({} as never);
+    renderVideo();
+    irABase();
+    fireEvent.click(screen.getByRole("radio", { name: "1:1" })); // primer cambio → crea (en vuelo)
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    await act(async () => {}); // deja propagar el isPending de la creación
+    fireEvent.click(screen.getByRole("radio", { name: "16:9" })); // edición DURANTE la creación
+    expect(crear).toHaveBeenCalledTimes(1); // no re-crea: la creación sigue en vuelo
+    expect(put).not.toHaveBeenCalled(); // sin id todavía no hay dónde guardar
+    await act(async () => resolverCrear());
+    // Al llegar el id se FLUSHEA el doc vigente: el 16:9 no se pierde (antes quedaba solo local).
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0][0]).toBe("comp-nueva");
+    expect((put.mock.calls[0][1] as ComposicionVideo).formato.preset).toBe("16:9");
   });
 
   it("'Marcar listo' hace PUT del estado='listo' sin reenviar documento", async () => {

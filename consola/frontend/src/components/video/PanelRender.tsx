@@ -53,11 +53,14 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
   const fallo = generacion?.estado === "error";
 
   // Descarga DIRECTA del mp4 (fetch blob + <a download>): "abrir en pestaña nueva" obliga a
-  // descargar desde el player del navegador; esto baja el archivo en un clic.
+  // descargar desde el player del navegador; esto baja el archivo en un clic. Si falla, el error
+  // queda VISIBLE en línea (un toast desaparece a los segundos) junto al enlace de fallback.
   const [descargando, setDescargando] = React.useState(false);
+  const [errorDescarga, setErrorDescarga] = React.useState("");
   async function descargarMp4() {
     if (!url || descargando) return;
     setDescargando(true);
+    setErrorDescarga("");
     try {
       const r = await fetch(urlMedia(url), { credentials: "same-origin" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -71,7 +74,9 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
       enlace.remove();
       URL.revokeObjectURL(objUrl);
     } catch {
-      toast.error("No se pudo descargar el MP4. Ábrelo en una pestaña nueva y descárgalo desde ahí.");
+      setErrorDescarga(
+        "No se pudo descargar el MP4. Reinténtalo o ábrelo en una pestaña nueva y descárgalo desde ahí.",
+      );
     } finally {
       setDescargando(false);
     }
@@ -127,6 +132,8 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
               variant="outline"
               onClick={() => void descargarMp4()}
               disabled={descargando}
+              aria-busy={descargando}
+              title="Descarga el MP4 renderizado a tu equipo"
             >
               {descargando ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -145,6 +152,12 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
               Abrir el mp4 en una pestaña nueva
             </a>
           </div>
+          {/* Error de descarga EN LÍNEA y persistente (con el fallback al lado, no solo un toast). */}
+          {errorDescarga && (
+            <p role="alert" className="text-xs text-destructive">
+              {errorDescarga}
+            </p>
+          )}
         </div>
       )}
     </div>

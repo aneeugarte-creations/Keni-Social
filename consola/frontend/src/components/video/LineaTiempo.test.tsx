@@ -4,7 +4,7 @@
  *  - Regla con marcas de tiempo y tarjeta del clip con ancho ∝ duración recortada.
  *  - Playhead accesible (role=slider): flechas ±1 s, Shift ±5 s.
  *  - Mousedown/arrastre sobre la banda = seek a la fracción del puntero (scrub).
- *  - Asas de trim: arrastrar fija recorte_in/out_ms (commit al SOLTAR vía onRecorte, con
+ *  - Asas de trim: arrastrar fija recorte_in/out_ms (commit al SOLTAR vía onTrim, con
  *    etiqueta mm:ss viva durante el gesto y salto del preview al borde), mínimo 1 s.
  *  - `disabled` apaga el trim (las asas no recortan); el seek sigue activo.
  *  - PiP y subtítulos aparecen como barras finas solo-lectura.
@@ -109,39 +109,39 @@ describe("LineaTiempo", () => {
 
   it("arrastrar el asa derecha recorta con etiqueta viva y el commit va al soltar", () => {
     const onSeek = vi.fn();
-    const onRecorte = vi.fn();
+    const onTrim = vi.fn();
     render(
       <LineaTiempo
         doc={doc30()}
         duracionClipMs={30000}
         tiempoSeg={0}
         onSeek={onSeek}
-        onRecorte={onRecorte}
+        onTrim={onTrim}
       />,
     );
     mockearBanda();
     const asa = screen.getByRole("button", { name: /recortar fin del clip/i });
     fireEvent.mouseDown(asa, { clientX: 100 });
-    expect(onRecorte).not.toHaveBeenCalled(); // nada hasta soltar
+    expect(onTrim).not.toHaveBeenCalled(); // nada hasta soltar
     fireEvent.mouseMove(window, { clientX: 50 });
     // Etiqueta mm:ss VIVA del borde en arrastre (además de la marca 00:15 de la regla) y
     // tarjeta encogida en vivo.
     expect(screen.getAllByText("00:15").length).toBe(2);
     expect(screen.getByTestId("clip-base").style.width).toBe("50%");
     fireEvent.mouseUp(window);
-    expect(onRecorte).toHaveBeenCalledWith(0, 15000);
+    expect(onTrim).toHaveBeenCalledWith(0, 15000);
     expect(onSeek).toHaveBeenLastCalledWith(15); // el preview salta al borde recortado
   });
 
   it("respeta el mínimo de 1 s al recortar (asa izquierda clampada a out-1s)", () => {
-    const onRecorte = vi.fn();
+    const onTrim = vi.fn();
     render(
       <LineaTiempo
         doc={doc30()}
         duracionClipMs={30000}
         tiempoSeg={0}
         onSeek={() => {}}
-        onRecorte={onRecorte}
+        onTrim={onTrim}
       />,
     );
     mockearBanda();
@@ -149,18 +149,18 @@ describe("LineaTiempo", () => {
     fireEvent.mouseDown(asa, { clientX: 0 });
     fireEvent.mouseMove(window, { clientX: 100 }); // intenta pasar del final
     fireEvent.mouseUp(window);
-    expect(onRecorte).toHaveBeenCalledWith(29000, 30000);
+    expect(onTrim).toHaveBeenCalledWith(29000, 30000);
   });
 
   it("un click seco en el asa (sin arrastre) no recorta nada", () => {
-    const onRecorte = vi.fn();
+    const onTrim = vi.fn();
     render(
       <LineaTiempo
         doc={doc30()}
         duracionClipMs={30000}
         tiempoSeg={0}
         onSeek={() => {}}
-        onRecorte={onRecorte}
+        onTrim={onTrim}
       />,
     );
     mockearBanda();
@@ -168,18 +168,18 @@ describe("LineaTiempo", () => {
       clientX: 100,
     });
     fireEvent.mouseUp(window);
-    expect(onRecorte).not.toHaveBeenCalled();
+    expect(onTrim).not.toHaveBeenCalled();
   });
 
   it("con `disabled` las asas están deshabilitadas y no recortan", () => {
-    const onRecorte = vi.fn();
+    const onTrim = vi.fn();
     render(
       <LineaTiempo
         doc={doc30()}
         duracionClipMs={30000}
         tiempoSeg={0}
         onSeek={() => {}}
-        onRecorte={onRecorte}
+        onTrim={onTrim}
         disabled
       />,
     );
@@ -189,7 +189,7 @@ describe("LineaTiempo", () => {
     fireEvent.mouseDown(asa, { clientX: 100 });
     fireEvent.mouseMove(window, { clientX: 50 });
     fireEvent.mouseUp(window);
-    expect(onRecorte).not.toHaveBeenCalled();
+    expect(onTrim).not.toHaveBeenCalled();
   });
 
   it("PiP y subtítulos aparecen como barras finas solo-lectura ancladas a sus tiempos", () => {

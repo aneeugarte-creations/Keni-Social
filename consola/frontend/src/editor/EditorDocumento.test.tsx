@@ -5,11 +5,13 @@
  *  - Solo con `onPlantillas` (overlay de vídeo), «Diseño» cae al modal clásico (callback).
  *  - Sin ninguno de los dos, «Diseño» no aparece.
  *  - El flyout/inspector de escritorio mide ~350px (md:w-[350px], patrón Canva).
+ *  - HOVER del rail: reposar ~200 ms abre el panel SIN FIJAR; el clic lo fija; salir del
+ *    rail+panel sin fijar lo cierra a los ~300 ms. Solo con puntero real (hover:hover).
  *
  * El lienzo real (Konva) y los paneles pesados se mockean: aquí se ejercita SOLO el shell.
  */
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./Lienzo", () => ({ Lienzo: () => <div data-testid="lienzo" /> }));
 vi.mock("./PanelElementos", () => ({ PanelElementos: () => <div>panel-elementos</div> }));
@@ -88,5 +90,93 @@ describe("EditorDocumento — rail estilo Canva", () => {
     fireEvent.click(within(railEscritorio()).getByTitle("Ajustes"));
     const aside = document.querySelector("aside");
     expect(aside?.className).toContain("md:w-[350px]");
+  });
+});
+
+/** Stub de matchMedia: el hover del rail solo aplica con puntero real (`hover: hover`). */
+function stubHover(matches: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => ({ matches, addEventListener: () => {}, removeEventListener: () => {} })),
+  );
+}
+
+describe("EditorDocumento — hover del rail (abre sin fijar; el clic fija)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("reposar ~200 ms sobre un botón abre su panel y salir del rail sin fijar lo cierra a los ~300 ms", () => {
+    vi.useFakeTimers();
+    stubHover(true);
+    montar();
+    fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Elementos"));
+    // Aún no: hay un reposo de ~200 ms antes de abrir (un roce no abre nada).
+    expect(screen.queryByText("panel-elementos")).not.toBeInTheDocument();
+    act(() => void vi.advanceTimersByTime(200));
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument();
+    // Sale del rail sin haber fijado: gracia de ~300 ms y cierre.
+    fireEvent.mouseLeave(railEscritorio());
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument(); // todavía (gracia)
+    act(() => void vi.advanceTimersByTime(300));
+    expect(screen.queryByText("panel-elementos")).not.toBeInTheDocument();
+  });
+
+  it("entrar al panel cancela el cierre; el clic FIJA (mouse-leave ya no cierra; re-pulsar sí)", () => {
+    vi.useFakeTimers();
+    stubHover(true);
+    montar();
+    const boton = within(railEscritorio()).getByTitle("Elementos");
+    fireEvent.mouseEnter(boton);
+    act(() => void vi.advanceTimersByTime(200));
+    // rail → panel: el mouseleave del rail arma el cierre y entrar al panel lo cancela.
+    fireEvent.mouseLeave(railEscritorio());
+    fireEvent.mouseEnter(document.querySelector("aside")!);
+    act(() => void vi.advanceTimersByTime(500));
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument();
+    // El clic en el botón del rail FIJA el panel hover-abierto (no lo cierra)…
+    fireEvent.click(boton);
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument();
+    // …y salir ya no lo cierra.
+    fireEvent.mouseLeave(railEscritorio());
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument();
+    // Toggle clásico intacto: re-pulsar cierra el panel fijado.
+    fireEvent.click(boton);
+    expect(screen.queryByText("panel-elementos")).not.toBeInTheDocument();
+  });
+
+  it("interactuar DENTRO del panel hover-abierto lo fija (no se esfuma mientras se usa)", () => {
+    vi.useFakeTimers();
+    stubHover(true);
+    montar();
+    fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Capas"));
+    act(() => void vi.advanceTimersByTime(200));
+    const aside = document.querySelector("aside")!;
+    fireEvent.mouseDown(aside); // p. ej. clicar una capa del panel
+    fireEvent.mouseLeave(aside);
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(screen.getByText("panel-capas")).toBeInTheDocument();
+  });
+
+  it("sin puntero con hover real (táctil), el hover NO abre nada", () => {
+    vi.useFakeTimers();
+    stubHover(false);
+    montar();
+    fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Elementos"));
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(screen.queryByText("panel-elementos")).not.toBeInTheDocument();
+  });
+
+  it("con solo onPlantillas, «Diseño» NO dispara el modal por hover (solo por clic)", () => {
+    vi.useFakeTimers();
+    stubHover(true);
+    const onPlantillas = vi.fn();
+    montar({ onPlantillas });
+    fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Diseño"));
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(onPlantillas).not.toHaveBeenCalled();
+    expect(document.querySelector("aside")).toBeNull();
   });
 });

@@ -7,6 +7,8 @@
 // - RAIL de herramientas: tira vertical de iconos (izquierda en escritorio, barra inferior en
 //   móvil), orden estilo Canva: Diseño (plantillas) SIEMPRE primero, luego Elementos, Galería y
 //   Capas. Cada icono abre/cierra un FLYOUT (~350px) con su panel y «Ajustes» abre el inspector.
+//   Con puntero real (hover:hover), reposar ~200 ms sobre un icono abre su panel SIN FIJAR
+//   (overlay); el clic lo fija; salir del rail+panel sin fijar lo cierra a los ~300 ms.
 //   «Diseño» pinta el panel que aporta la página (`panelDiseno`); si la página solo da
 //   `onPlantillas` (overlay de vídeo), el botón cae al modal clásico.
 // - ACCIONES: un único clúster (deshacer/rehacer, vista con muestra, menú «Más», Exportar) que con
@@ -89,6 +91,14 @@ function leerToggle(clave: string): boolean {
   }
 }
 
+// Hover del rail (patrón Canva): reposo que abre el panel sin fijar y gracia antes de cerrarlo.
+const HOVER_ABRIR_MS = 200;
+const HOVER_CERRAR_MS = 300;
+/** ¿Hay puntero con hover real? (en táctil `hover: none` y el hover-para-abrir no aplica). */
+function conHoverReal(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(hover: hover)").matches;
+}
+
 const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
   // Orden Canva: «Diseño» (plantillas) SIEMPRE primero. Solo aparece si la página aporta
   // `panelDiseno` u `onPlantillas` (se filtra en el componente).
@@ -145,6 +155,8 @@ export function EditorDocumento({
   const [menuMas, setMenuMas] = useState(false);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
+  // ¿El panel abierto está FIJADO (clic) o es un overlay de hover sin fijar? El clic siempre fija.
+  const [fijado, setFijado] = useState(true);
   const [ajustes, setAjustes] = useState(false);
   // Capa de imagen a REENCUADRAR (B5), a RECORTAR (crop visual) y a REEMPLAZAR (clic en activo).
   const [reencuadreId, setReencuadreId] = useState<string | null>(null);
@@ -181,16 +193,74 @@ export function EditorDocumento({
   const faltaHueco =
     !!avisaHueco && !store.getState().documento.capas.some((c) => c.tipo === "imagen" && c.es_foto);
 
-  const abrirTool = (t: Herramienta) => setTool((prev) => (prev === t ? null : t));
-
   // Herramientas visibles del rail: «Diseño» solo si la página aporta su panel o el modal clásico.
   const herramientas = HERRAMIENTAS.filter(
     (h) => h.clave !== "diseno" || panelDiseno !== undefined || onPlantillas !== undefined,
   );
+
+  // ── HOVER DEL RAIL (patrón Canva, guía 1.3) ──────────────────────────────────────────────────
+  // Reposar el puntero ~200 ms sobre un botón del rail con el panel cerrado ABRE su panel como
+  // overlay SIN FIJAR; el clic lo fija (el toggle clásico queda intacto); salir del rail+panel sin
+  // fijar lo cierra a los ~300 ms. Solo con puntero real (`hover: hover`): en táctil no hay hover.
+  // El flujo de teclado no pasa por aquí (solo eventos de ratón) y no se añade ninguna animación
+  // (nada que apagar con prefers-reduced-motion).
+  const timerAbrir = useRef<number | null>(null);
+  const timerCerrar = useRef<number | null>(null);
+  const cancelarAbrir = () => {
+    if (timerAbrir.current !== null) {
+      window.clearTimeout(timerAbrir.current);
+      timerAbrir.current = null;
+    }
+  };
+  const cancelarCierre = () => {
+    if (timerCerrar.current !== null) {
+      window.clearTimeout(timerCerrar.current);
+      timerCerrar.current = null;
+    }
+  };
+  useEffect(() => () => {
+    cancelarAbrir();
+    cancelarCierre();
+  }, []);
+
+  /** mouseenter en un botón del rail: arma la apertura sin fijar (si procede). */
+  const hoverBoton = (t: Herramienta) => {
+    cancelarCierre();
+    cancelarAbrir();
+    if (!conHoverReal()) return; // táctil/sin puntero: el hover no existe
+    if (t === "diseno" && panelDiseno === undefined) return; // el modal clásico NO se abre por hover
+    if (tool === t) return; // ya abierto (fijado o no)
+    if (tool !== null && fijado) return; // un panel fijado por clic no se cambia por hover
+    timerAbrir.current = window.setTimeout(() => {
+      timerAbrir.current = null;
+      setTool(t);
+      setFijado(false);
+    }, HOVER_ABRIR_MS);
+  };
+
+  /** mouseleave del rail o del flyout: con panel sin fijar, arma el cierre diferido. */
+  const hoverSalir = () => {
+    cancelarAbrir();
+    if (tool === null || fijado) return;
+    cancelarCierre();
+    timerCerrar.current = window.setTimeout(() => {
+      timerCerrar.current = null;
+      setTool(null);
+    }, HOVER_CERRAR_MS);
+  };
+
   // «Diseño» abre su PANEL si la página lo aporta; si solo hay `onPlantillas`, cae al modal.
+  // El clic sobre el panel hover-abierto lo FIJA en vez de cerrarlo (toggle solo si está fijado).
   const pulsarTool = (t: Herramienta) => {
+    cancelarAbrir();
+    cancelarCierre();
     if (t === "diseno" && panelDiseno === undefined) return onPlantillas?.();
-    abrirTool(t);
+    if (tool === t && fijado) {
+      setTool(null);
+      return;
+    }
+    setTool(t);
+    setFijado(true);
   };
 
   // ESCAPE cierra el overlay ABIERTO más "alto" (menú > flyout > inspector), esté donde
@@ -233,6 +303,7 @@ export function EditorDocumento({
     if (sel) {
       setReemplazarId(sel);
       setTool("texto");
+      setFijado(true); // apertura programática: cuenta como fijada (no la cierra el mouse-leave)
     }
   };
 
@@ -422,9 +493,14 @@ export function EditorDocumento({
       <div className="flex h-full min-h-0 w-full bg-background">
         {/* RAIL (escritorio: vertical izquierda), orden Canva: Diseño · Elementos · Galería ·
             Capas. «Ajustes» (inspector) al fondo. */}
-        <nav aria-label="Herramientas del editor" className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex">
+        <nav
+          aria-label="Herramientas del editor"
+          onMouseEnter={cancelarCierre}
+          onMouseLeave={hoverSalir}
+          className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex"
+        >
           {herramientas.map((h) => (
-            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} />
+            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} onHover={() => hoverBoton(h.clave)} />
           ))}
           <div className="mt-auto w-full">
             <RailBtn etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
@@ -439,8 +515,14 @@ export function EditorDocumento({
               etiqueta="Cerrar panel de herramienta"
               className="fixed inset-0 z-20 bg-black/30 md:hidden"
             />
-            {/* ~350px (patrón Canva) en escritorio; hoja inferior en móvil (colapso intacto). */}
-            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-[350px] md:border-r">
+            {/* ~350px (patrón Canva) en escritorio; hoja inferior en móvil (colapso intacto).
+                Hover: entrar cancela el cierre diferido; salir sin fijar lo arma; cualquier
+                interacción dentro FIJA el panel (que no se esfume mientras se usa). */}
+            <aside
+              onMouseEnter={cancelarCierre}
+              onMouseLeave={hoverSalir}
+              onMouseDownCapture={() => setFijado(true)}
+              className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-[350px] md:border-r">
               <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
                 <span className="text-sm font-semibold">{tituloTool}</span>
@@ -532,10 +614,11 @@ export function EditorDocumento({
   );
 }
 
-function RailBtn({ etiqueta, Icono, activo, costo, onClick }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; costo?: boolean; onClick: () => void }) {
+function RailBtn({ etiqueta, Icono, activo, costo, onClick, onHover }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; costo?: boolean; onClick: () => void; onHover?: () => void }) {
   return (
     <button
       onClick={onClick}
+      onMouseEnter={onHover}
       title={costo ? `${etiqueta} · usa IA con coste` : etiqueta}
       className={`flex w-full flex-col items-center gap-0.5 rounded-md py-2 text-[10px] transition-colors ${
         activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"

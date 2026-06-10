@@ -4,11 +4,13 @@
  *  - Con composición: "Renderizar video" encola el render (POST + seguimiento de generación).
  *  - Con el mp4 listo: "Descargar MP4" baja el archivo directo (fetch blob + <a download>),
  *    además del enlace de abrir en pestaña nueva.
+ *  - Mientras baja el blob el botón muestra "Descargando…" (deshabilitado) y, si la descarga
+ *    falla, el error queda VISIBLE en línea (role=alert), no solo un toast efímero.
  *
  * `useGeneracion` se mockea (el sondeo/SSE real se prueba en su propio test).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
@@ -117,5 +119,33 @@ describe("PanelRender", () => {
     expect(descarga!.download).toBe("render-final.mp4");
     expect(descarga!.href).toContain("blob:keni-mp4");
     await waitFor(() => expect(revocarUrl).toHaveBeenCalledWith("blob:keni-mp4"));
+  });
+
+  it("muestra 'Descargando…' mientras baja el blob y, si falla, deja el error VISIBLE en línea", async () => {
+    generacionMock.actual = {
+      generacion: {
+        id: "g-1",
+        estado: "completado",
+        resultado: { url: "/api/media/render-final.mp4" },
+      } as unknown as Generacion,
+      ejecutando: false,
+      iniciar: vi.fn(),
+    };
+    // Fetch controlable: así se observa el estado intermedio y luego el fallo.
+    let rechazar: (e: Error) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise((_res, rej) => { rechazar = rej; })),
+    );
+    renderPanel("comp-7");
+    fireEvent.click(screen.getByRole("button", { name: /descargar mp4/i }));
+    // Estado de carga: spinner/texto "Descargando…" y botón deshabilitado (sin doble clic).
+    const ocupado = await screen.findByRole("button", { name: /descargando…/i });
+    expect(ocupado).toBeDisabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await act(async () => rechazar(new Error("red caída")));
+    // Error PERSISTENTE en línea (no solo un toast), con el reintento disponible.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo descargar el mp4/i);
+    expect(screen.getByRole("button", { name: /descargar mp4/i })).not.toBeDisabled();
   });
 });

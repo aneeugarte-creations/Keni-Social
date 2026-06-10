@@ -98,6 +98,20 @@ export default function Video() {
   const [titulo, setTitulo] = React.useState("");
   const [estado, setEstado] = React.useState<EstadoComposicion>("borrador");
 
+  // Doc VIGENTE (para el flush post-creación de `crear`: su onSuccess corre fuera del render).
+  const docRef = React.useRef(doc);
+  React.useEffect(() => {
+    docRef.current = doc;
+  });
+
+  // `id` explícito para el flush post-creación (el estado `composicionId` aún no está aplicado
+  // cuando corre el onSuccess de `crear`); el resto de llamadas usan el id del estado.
+  const guardar = useMutation({
+    mutationFn: ({ id, doc: d }: { id?: string; doc: ComposicionVideo }) =>
+      api.video.guardarComposicion(id ?? composicionId!, d),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   // Crea la composición en el backend en cuanto hay una edición significativa (NO espera al clip
   // base): así el borrador no se pierde si el usuario se va antes de subir el clip. `marca` es
   // obligatoria en la API: sin marca activa no se puede crear. Si la composición nació desde una
@@ -118,6 +132,12 @@ export default function Video() {
       setComposicionId(r.id);
       // Refleja en UI el título que realmente se guardó (el derivado por defecto si estaba vacío).
       if (!titulo.trim()) setTitulo(tituloBorradorPorDefecto(d.formato?.preset ?? aspecto));
+      // Lo editado MIENTRAS se creaba (p. ej. un trim rápido tras subir el clip) quedó solo en
+      // local: sin id aún no se podía autoguardar. Flushea el doc vigente para no perderlo (y el
+      // indicador "Guardando…" sigue siendo honesto: usa la misma mutación de guardado).
+      if (docRef.current !== d) {
+        void guardar.mutateAsync({ id: r.id, doc: docRef.current }).catch(() => {});
+      }
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -211,11 +231,6 @@ export default function Video() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composicionParam, contenidoParam, marca]);
 
-  const guardar = useMutation({
-    mutationFn: (d: ComposicionVideo) => api.video.guardarComposicion(composicionId!, d),
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   // Actualiza SOLO metadatos del borrador (titulo/estado) sin reenviar el documento (PUT parcial).
   const actualizarMeta = useMutation({
     mutationFn: (cambios: { titulo?: string; estado?: EstadoComposicion }) =>
@@ -234,7 +249,7 @@ export default function Video() {
         const siguiente = fn(prev);
         if (siguiente === prev) return prev; // sin cambio real: no reguardar (evita bucles).
         if (composicionId) {
-          void guardar.mutateAsync(siguiente).catch(() => {});
+          void guardar.mutateAsync({ doc: siguiente }).catch(() => {});
         } else if (!crear.isPending) {
           // Primer cambio significativo sin composición todavía: crearla (necesita marca).
           const conMarca = { ...siguiente, marca: siguiente.marca || marca };
@@ -335,7 +350,7 @@ export default function Video() {
         }
         crear.mutate(siguiente);
       } else {
-        void guardar.mutateAsync(siguiente).catch(() => {});
+        void guardar.mutateAsync({ doc: siguiente }).catch(() => {});
       }
       return siguiente;
     });
@@ -601,7 +616,7 @@ export default function Video() {
                 <PanelRender
                   composicionId={composicionId}
                   onAntesDeRenderizar={async () => {
-                    if (composicionId) await guardar.mutateAsync(doc);
+                    if (composicionId) await guardar.mutateAsync({ doc });
                   }}
                 />
               </>
@@ -621,7 +636,7 @@ export default function Video() {
               segmentos={segmentos}
               atajoEspacio={seccion !== "overlay"}
               trimDeshabilitado={sinMarca}
-              onRecorte={(inMs, outMs, durMs) =>
+              onTrim={(inMs, outMs, durMs) =>
                 mutar((d) => setRecorteBase(d, inMs, outMs, durMs > 0 ? durMs : undefined))
               }
             />
@@ -646,7 +661,7 @@ function PreviewConTimeline({
   segmentos,
   atajoEspacio,
   trimDeshabilitado,
-  onRecorte,
+  onTrim,
 }: {
   doc: ComposicionVideo;
   baseUrl: string;
@@ -655,7 +670,7 @@ function PreviewConTimeline({
   atajoEspacio: boolean;
   trimDeshabilitado: boolean;
   /** Commit del trim del clip base; `durMs` = duración real del clip (0 si aún no se conoce). */
-  onRecorte: (inMs: number, outMs: number, durMs: number) => void;
+  onTrim: (inMs: number, outMs: number, durMs: number) => void;
 }) {
   const playerRef = React.useRef<PreviewPlayerHandle>(null);
   const [tiempoSeg, setTiempoSeg] = React.useState(0);
@@ -679,7 +694,7 @@ function PreviewConTimeline({
           duracionClipMs={durMs}
           tiempoSeg={tiempoSeg}
           onSeek={(s) => playerRef.current?.buscarA(s)}
-          onRecorte={(inMs, outMs) => onRecorte(inMs, outMs, durMs)}
+          onTrim={(inMs, outMs) => onTrim(inMs, outMs, durMs)}
           segmentos={segmentos}
           disabled={trimDeshabilitado}
         />
