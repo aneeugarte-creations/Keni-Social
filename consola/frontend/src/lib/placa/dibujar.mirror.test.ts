@@ -45,6 +45,8 @@ function ctxFalso() {
   const gcos: string[] = [];
   // Llamadas a translate (para verificar el PIVOTE de rotación de cada capa).
   const translates: { x: number; y: number }[] = [];
+  // Llamadas a scale (para verificar el VOLTEO/flip espejo de imagen/logo).
+  const scales: { x: number; y: number }[] = [];
   let tamActual = 64;
   const ctx = {
     fills,
@@ -55,6 +57,7 @@ function ctxFalso() {
     ops,
     gcos,
     translates,
+    scales,
     canvas: { width: 1080, height: 1080 },
     shadowColor: "transparent",
     shadowBlur: 0,
@@ -89,7 +92,7 @@ function ctxFalso() {
     restore: () => {},
     translate: (x: number, y: number) => translates.push({ x, y }),
     rotate: () => {},
-    scale: () => {},
+    scale: (x: number, y: number) => scales.push({ x, y }),
     beginPath: () => {},
     closePath: () => {},
     moveTo: (...args: number[]) => paths.push({ tipo: "moveTo", args }),
@@ -497,6 +500,66 @@ describe("forma de la imagen: recorte rect (default) vs elipse", () => {
     const verts = ctx.paths.filter((p) => p.tipo === "moveTo" || p.tipo === "lineTo");
     expect(verts.length).toBe(10);
     expect(ctx.paths.some((p) => p.tipo === "rect" && p.args.join(",") === "100,100,400,400")).toBe(false);
+  });
+});
+
+describe("volteo (flip) horizontal/vertical de imagen", () => {
+  const img = { width: 800, height: 600 } as never;
+
+  it("RETROCOMPAT: sin flip NO aplica ningún scale espejo", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConImagen({}), imgs: { "foto.png": img }, bindings: {} } as never);
+    expect(ctx.scales.length).toBe(0);
+  });
+
+  it("flip_h aplica scale(-1,1) alrededor del CENTRO de la caja (translate centro, scale, vuelta)", () => {
+    const ctx = ctxFalso();
+    // Caja (100,100,400,400) => centro (300,300).
+    dibujarDocumento(ctx as never, { documento: docConImagen({ flip_h: true }), imgs: { "foto.png": img }, bindings: {} } as never);
+    expect(ctx.scales).toContainEqual({ x: -1, y: 1 });
+    expect(ctx.translates).toContainEqual({ x: 300, y: 300 });
+    expect(ctx.translates).toContainEqual({ x: -300, y: -300 });
+  });
+
+  it("flip_v aplica scale(1,-1)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConImagen({ flip_v: true }), imgs: { "foto.png": img }, bindings: {} } as never);
+    expect(ctx.scales).toContainEqual({ x: 1, y: -1 });
+  });
+
+  it("flip_h + flip_v aplica scale(-1,-1)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, { documento: docConImagen({ flip_h: true, flip_v: true }), imgs: { "foto.png": img }, bindings: {} } as never);
+    expect(ctx.scales).toContainEqual({ x: -1, y: -1 });
+  });
+});
+
+describe("overlay posicionable: la banda se pinta DENTRO de la caja de la capa", () => {
+  function docConOverlay(extra: Record<string, unknown>): never {
+    return {
+      version: 1,
+      formato: { w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 },
+      fondo: { tipo: "color", color: "#000000" },
+      capas: [
+        { id: "ov", tipo: "overlay", x: 0, y: 0, w: 1080, h: 1080, z: 1, rotacion: 0, opacidad: 1, visible: true, color: "#111315", alto_frac: 0.5, alpha: 255, ...extra },
+      ],
+    } as never;
+  }
+
+  it("RETROCOMPAT: overlay a (0,0,W,H) pinta la banda histórica (0, H-band, W, band)", () => {
+    const ctx = ctxFalso();
+    // band = floor(1080 * 0.5) = 540 => fillRect(0, 540, 1080, 540).
+    dibujarDocumento(ctx as never, { documento: docConOverlay({}), imgs: {}, bindings: {} } as never);
+    const fr = ctx.fillRects[ctx.fillRects.length - 1];
+    expect(fr.args).toEqual([0, 540, 1080, 540]);
+  });
+
+  it("overlay MOVIDO usa su (x,y,w,h): la banda cae dentro de la caja (x, y+h-band, w, band)", () => {
+    const ctx = ctxFalso();
+    // Caja (200,300,600,400), band = floor(400*0.5)=200 => fillRect(200, 300+400-200, 600, 200).
+    dibujarDocumento(ctx as never, { documento: docConOverlay({ x: 200, y: 300, w: 600, h: 400 }), imgs: {}, bindings: {} } as never);
+    const fr = ctx.fillRects[ctx.fillRects.length - 1];
+    expect(fr.args).toEqual([200, 500, 600, 200]);
   });
 });
 

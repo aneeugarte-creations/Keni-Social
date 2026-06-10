@@ -15,7 +15,9 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
     Capa base = { id, tipo, x, y, w, h, rotacion, opacidad, z, visible, bloqueada }
       imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], forma (catálogo de formas), radio,
                    filtros:{brillo,contraste,saturacion,desenfoque},
-                   sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
+                   sombra:{dx,dy,color,desenfoque?,opacidad?}|null, flip_h?, flip_v? }
+                   # flip_h/flip_v: volteo (espejo) horizontal/vertical alrededor del centro de la
+                   # caja. Booleanos opcionales; solo se persisten si True (def False).
       texto   -> { texto, binding:copy_in|etiqueta_default|null, familia, tamano, peso, color,
                    alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
                    sombra:{dx,dy,color,desenfoque?,opacidad?}|null,
@@ -25,7 +27,8 @@ de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z
                    # valign: alineación VERTICAL del texto dentro de la CAJA (cuando h>0). La caja
                    # es de alto fijo: el texto se auto-encoge para caber. `ancla` queda por
                    # compatibilidad (camino legado h<=0, sin caja).
-      logo    -> { tipo_logo:imagen|wordmark, media_id, wordmark:{texto,color,fondo,familia,peso} }
+      logo    -> { tipo_logo:imagen|wordmark, media_id, wordmark:{texto,color,fondo,familia,peso},
+                   flip_h?, flip_v? }  # volteo horizontal/vertical (opcional, solo si True)
       marco   -> { forma (catálogo de formas | linea), relleno|null, relleno_degradado:{desde,hasta,angulo?}|null,
                    borde:{color,grosor}|null, radio, sombra:{dx,dy,color,desenfoque?,opacidad?}|null }
       overlay -> { color, alto_frac, alpha }            # degradado de legibilidad (banda inferior)
@@ -292,6 +295,18 @@ def _radios(r: Any) -> list[float] | None:
     return vals
 
 
+def _aplica_flip(c: dict[str, Any], out: dict[str, Any]) -> None:
+    """Persiste `flip_h`/`flip_v` (volteo espejo horizontal/vertical) IN PLACE, SOLO si son True.
+
+    Booleanos opcionales con default False: igual que `mezcla`, un documento sin volteo (o con volteo
+    False) no ensucia el JSON ni cambia el render legado. Aplica a capas imagen y logo.
+    """
+    if bool(c.get("flip_h")):
+        out["flip_h"] = True
+    if bool(c.get("flip_v")):
+        out["flip_v"] = True
+
+
 def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
     foco = c.get("foco") or [0.5, 0.5]
     _exige_doc(
@@ -331,6 +346,8 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         img["radios"] = radios
     if crop is not None:
         img["crop"] = crop
+    # Volteo (flip) horizontal/vertical: opcional, solo se persiste si True.
+    _aplica_flip(c, img)
     return img
 
 
@@ -405,7 +422,7 @@ def _capa_logo(c: dict[str, Any]) -> dict[str, Any]:
     tipo_logo = c.get("tipo_logo")
     _exige_doc(tipo_logo in _spec._TIPOS_LOGO, "El tipo de logo debe ser imagen o wordmark.")
     wm = c.get("wordmark") or {}
-    return {
+    logo = {
         **_base(c),
         "tipo": "logo",
         "tipo_logo": tipo_logo,
@@ -418,6 +435,9 @@ def _capa_logo(c: dict[str, Any]) -> dict[str, Any]:
             "peso": _entero(wm.get("peso", 700), "wordmark.peso", defecto=700),
         },
     }
+    # Volteo (flip) horizontal/vertical: opcional, solo se persiste si True.
+    _aplica_flip(c, logo)
+    return logo
 
 
 def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:

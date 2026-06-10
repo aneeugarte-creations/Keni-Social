@@ -168,6 +168,32 @@ def test_validar_sombra_imagen_opcional():
     assert s["dy"] == 8 and s["desenfoque"] == 16.0 and s["opacidad"] == 0.4
 
 
+def test_validar_capa_imagen_flip_solo_si_true():
+    # Ausente / False => NO se persiste (no ensucia documentos viejos ni cambia el render legado).
+    sin = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10}]))
+    assert "flip_h" not in sin["capas"][0] and "flip_v" not in sin["capas"][0]
+    no = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
+                                "flip_h": False, "flip_v": False}]))
+    assert "flip_h" not in no["capas"][0] and "flip_v" not in no["capas"][0]
+    # True => se persiste (cada eje por separado).
+    con = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
+                                 "flip_h": True, "flip_v": False}]))
+    c = con["capas"][0]
+    assert c["flip_h"] is True and "flip_v" not in c
+    ambos = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
+                                   "flip_h": True, "flip_v": True}]))
+    assert ambos["capas"][0]["flip_h"] is True and ambos["capas"][0]["flip_v"] is True
+
+
+def test_validar_capa_logo_flip_solo_si_true():
+    sin = d.validar(_doc(capas=[{"tipo": "logo", "tipo_logo": "wordmark",
+                                 "x": 0, "y": 0, "w": 10, "h": 10}]))
+    assert "flip_h" not in sin["capas"][0] and "flip_v" not in sin["capas"][0]
+    con = d.validar(_doc(capas=[{"tipo": "logo", "tipo_logo": "imagen", "media_id": "l.png",
+                                 "x": 0, "y": 0, "w": 10, "h": 10, "flip_v": True}]))
+    assert con["capas"][0]["flip_v"] is True and "flip_h" not in con["capas"][0]
+
+
 def test_validar_marco_sombra_y_relleno_degradado():
     sin = d.validar(_doc(capas=[{"tipo": "marco", "x": 0, "y": 0, "w": 100, "h": 100,
                                  "forma": "rect", "relleno": "#FF0000"}]))

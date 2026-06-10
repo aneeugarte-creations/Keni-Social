@@ -1,5 +1,7 @@
 // Inspector · capa LOGO: imagen (media_id) o wordmark (texto + tipografía y colores).
 
+import { FlipHorizontal2, FlipVertical2 } from "lucide-react";
+
 import { ColorControl } from "../ColorControl";
 
 import type { Capa, CapaLogo } from "../documento";
@@ -19,6 +21,29 @@ export function CuerpoLogo({ capa, set, familias }: PropsCuerpoCapa<CapaLogo>) {
           <option value="imagen">Imagen</option>
           <option value="wordmark">Wordmark</option>
         </select>
+      </Campo>
+      {/* VOLTEO (flip): espejo horizontal/vertical alrededor del centro de la caja. */}
+      <Campo etiqueta="Voltear">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Voltear horizontal"
+            aria-pressed={!!capa.flip_h}
+            onClick={() => set({ flip_h: !capa.flip_h } as Partial<Capa>)}
+            className={`rounded border border-input p-1 hover:bg-accent ${capa.flip_h ? "bg-accent" : "bg-background"}`}
+          >
+            <FlipHorizontal2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Voltear vertical"
+            aria-pressed={!!capa.flip_v}
+            onClick={() => set({ flip_v: !capa.flip_v } as Partial<Capa>)}
+            className={`rounded border border-input p-1 hover:bg-accent ${capa.flip_v ? "bg-accent" : "bg-background"}`}
+          >
+            <FlipVertical2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </Campo>
       {capa.tipo_logo === "imagen" && (
         <Campo etiqueta="Media ID">

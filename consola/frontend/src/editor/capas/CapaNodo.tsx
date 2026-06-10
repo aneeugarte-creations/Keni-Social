@@ -237,6 +237,8 @@ function NodoImagenAjustada({
   radio,
   radios,
   crop,
+  flipH,
+  flipV,
   props,
 }: {
   img: HTMLImageElement;
@@ -250,6 +252,8 @@ function NodoImagenAjustada({
   radio?: number;
   radios?: [number, number, number, number];
   crop?: CapaImagen["crop"];
+  flipH?: boolean;
+  flipV?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   props: any;
 }) {
@@ -325,19 +329,32 @@ function NodoImagenAjustada({
   // "lighten" con `sombra`, sobre la foto en gris. El export del servidor (dibujar.mjs) es la
   // verdad; aquí basta una previa razonable. Recortado por el clip del Group (mismo path).
   const duo = filtros?.duotono ?? null;
+  // VOLTEO (flip): espejo alrededor del CENTRO de la caja. Va en un Group INTERIOR (no en el nodo
+  // interactivo de `props`) para no contaminar el `scaleX/Y` que el Transformer usa al redimensionar
+  // (con un scale -1 fijo en el nodo, `onTransformEnd` calcularía un w/h negativo). El recorte por
+  // forma (clip) vive en este Group interior para voltearse junto al contenido (espejo del motor:
+  // `aplicarFlip` envuelve clip+foto). offset = w/h cuando se invierte el eje, así el espejo gira
+  // sobre el centro y la caja [0,w]×[0,h] sigue cubierta. Espejo de `aplicarFlip` en `dibujar.mjs`.
+  const sx = flipH ? -1 : 1;
+  const sy = flipV ? -1 : 1;
+  const flip = sx !== 1 || sy !== 1
+    ? { scaleX: sx, scaleY: sy, offsetX: sx === -1 ? w : 0, offsetY: sy === -1 ? h : 0 }
+    : {};
   return (
-    <Group {...props} {...recorte}>
-      {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
-          así que sin este Rect el Group no recibiría clic/arrastre (no se podían mover las fotos).
-          opacity 0 = invisible en escena pero presente en el hit graph de Konva. */}
-      <Rect x={0} y={0} width={w} height={h} fill="#000000" opacity={0} />
-      <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} {...cropPx} />
-      {duo && (
-        <>
-          <Rect x={0} y={0} width={w} height={h} fill={duo.luz} globalCompositeOperation="multiply" listening={false} />
-          <Rect x={0} y={0} width={w} height={h} fill={duo.sombra} globalCompositeOperation="lighten" listening={false} />
-        </>
-      )}
+    <Group {...props}>
+      <Group {...recorte} {...flip}>
+        {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
+            así que sin este Rect el Group no recibiría clic/arrastre (no se podían mover las fotos).
+            opacity 0 = invisible en escena pero presente en el hit graph de Konva. */}
+        <Rect x={0} y={0} width={w} height={h} fill="#000000" opacity={0} />
+        <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} {...cropPx} />
+        {duo && (
+          <>
+            <Rect x={0} y={0} width={w} height={h} fill={duo.luz} globalCompositeOperation="multiply" listening={false} />
+            <Rect x={0} y={0} width={w} height={h} fill={duo.sombra} globalCompositeOperation="lighten" listening={false} />
+          </>
+        )}
+      </Group>
     </Group>
   );
 }
@@ -444,7 +461,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       if (!imgEfectiva) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      const nodoImg = <NodoImagenAjustada img={imgEfectiva} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} radios={c.radios} crop={c.crop} props={props} />;
+      const nodoImg = <NodoImagenAjustada img={imgEfectiva} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} zoom={c.zoom} filtros={c.filtros} forma={c.forma} radio={c.radio} radios={c.radios} crop={c.crop} flipH={c.flip_h} flipV={c.flip_v} props={props} />;
       // Realce de selección que SIGUE LA FORMA: el Transformer de Konva usa su bbox rect (sus
       // tiradores definen la caja), pero cuando la imagen NO es un rect simple el contorno azul
       // punteado debe cuadrar con su silueta. Solo visual (listening=false). Trazamos el mismo path
@@ -511,22 +528,31 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       const c = capa as CapaLogo;
       if (c.tipo_logo === "imagen" && img) {
         // Logo: SIEMPRE encajar (contain) — nunca deformar.
-        return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste="contain" foco={[0.5, 0.5]} filtros={null} props={props} />;
+        return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste="contain" foco={[0.5, 0.5]} filtros={null} flipH={c.flip_h} flipV={c.flip_v} props={props} />;
       }
+      // VOLTEO del wordmark: igual que la imagen, en un Group INTERIOR (no toca el scale del
+      // Transformer). El motor (`aplicarFlip`) voltea `dibujarLogo` completo (también el wordmark).
+      const sx = c.flip_h ? -1 : 1;
+      const sy = c.flip_v ? -1 : 1;
+      const flipWm = sx !== 1 || sy !== 1
+        ? { scaleX: sx, scaleY: sy, offsetX: sx === -1 ? c.w : 0, offsetY: sy === -1 ? c.h : 0 }
+        : {};
       return (
         <Group {...props}>
-          <Rect width={c.w} height={c.h} fill={c.wordmark.fondo} cornerRadius={6} />
-          <Text
-            text={c.wordmark.texto || "LOGO"}
-            width={c.w}
-            height={c.h}
-            align="center"
-            verticalAlign="middle"
-            fontFamily={familiaReal(c.wordmark.familia)}
-            fontSize={Math.round(c.h * 0.42)}
-            fontStyle={c.wordmark.peso >= 600 ? "bold" : "normal"}
-            fill={c.wordmark.color}
-          />
+          <Group {...flipWm}>
+            <Rect width={c.w} height={c.h} fill={c.wordmark.fondo} cornerRadius={6} />
+            <Text
+              text={c.wordmark.texto || "LOGO"}
+              width={c.w}
+              height={c.h}
+              align="center"
+              verticalAlign="middle"
+              fontFamily={familiaReal(c.wordmark.familia)}
+              fontSize={Math.round(c.h * 0.42)}
+              fontStyle={c.wordmark.peso >= 600 ? "bold" : "normal"}
+              fill={c.wordmark.color}
+            />
+          </Group>
         </Group>
       );
     }

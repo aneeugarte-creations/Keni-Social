@@ -125,6 +125,8 @@ export interface CapaImagen extends CapaBase {
   crop?: Crop; // recorte no destructivo de la fuente (def: sin crop = toda la imagen)
   filtros: Filtros | null;
   sombra?: Sombra | null; // sombra del rectángulo de la imagen (opcional)
+  flip_h?: boolean; // volteo horizontal (espejo izq<->der) alrededor del centro. Def false; solo se persiste si true.
+  flip_v?: boolean; // volteo vertical (espejo arriba<->abajo) alrededor del centro. Def false; solo se persiste si true.
 }
 
 export interface Sombra {
@@ -181,6 +183,8 @@ export interface CapaLogo extends CapaBase {
   tipo_logo: "imagen" | "wordmark";
   media_id: string;
   wordmark: { texto: string; color: string; fondo: string; familia: string; peso: number };
+  flip_h?: boolean; // volteo horizontal (espejo izq<->der) alrededor del centro. Def false; solo se persiste si true.
+  flip_v?: boolean; // volteo vertical (espejo arriba<->abajo) alrededor del centro. Def false; solo se persiste si true.
 }
 
 export interface CapaMarco extends CapaBase {

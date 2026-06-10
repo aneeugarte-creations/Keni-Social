@@ -293,10 +293,15 @@ function dibujarFondo(ctx, fondo, w, h, fondoImg) {
   }
 }
 
-function dibujarOverlayInferior(ctx, ov, w, h) {
+// Banda de degradado de legibilidad pegada al borde INFERIOR de la caja (x,y,w,h). La caja es el
+// LIENZO completo en el render legado (`dibujarSpec`, x=y=0) o la caja de la propia capa overlay en
+// el documento (`dibujarCapa`), que la posiciona DENTRO de su caja (espejo de `CapaNodo`: la banda
+// va a `y + h - band`, no a coords de lienzo). Retrocompat: un overlay a (0,0,W,H) => banda idéntica
+// a la histórica (0, H-band, W, band).
+function dibujarOverlayInferior(ctx, ov, x, y, w, h) {
   if (!ov) return;
   const band = Math.max(1, Math.floor(h * (ov.alto_frac ?? 0.58)));
-  const g = ctx.createLinearGradient(0, h - band, 0, h);
+  const g = ctx.createLinearGradient(0, y + h - band, 0, y + h);
   // rampa t**1.5 sobre alpha máx (paridad con degradado_inferior de Pillow).
   const aMax = (ov.alpha ?? 238) / 255;
   for (let i = 0; i <= 10; i++) {
@@ -304,7 +309,7 @@ function dibujarOverlayInferior(ctx, ov, w, h) {
     g.addColorStop(t, hexRGBA(ov.color || "#111315", aMax * Math.pow(t, 1.5)));
   }
   ctx.fillStyle = g;
-  ctx.fillRect(0, h - band, w, band);
+  ctx.fillRect(x, y + h - band, w, band);
 }
 
 // Dibuja UNA línea de texto a lo largo de un ARCO (texto curvo). El texto se trata como una sola
@@ -645,8 +650,8 @@ export function dibujarSpec(ctx, { formato, fuentes, bindings, placeholder, imgs
     const v = t.binding === "copy_in" ? B.copy_in : t.binding === "etiqueta_default" ? B.etiqueta_default : t.texto;
     return String(v || "").trim();
   });
-  if (hayTitular && !placeholder) dibujarOverlayInferior(ctx, formato.overlay_inferior, w, h);
-  else if (placeholder) dibujarOverlayInferior(ctx, formato.overlay_inferior, w, h);
+  if (hayTitular && !placeholder) dibujarOverlayInferior(ctx, formato.overlay_inferior, 0, 0, w, h);
+  else if (placeholder) dibujarOverlayInferior(ctx, formato.overlay_inferior, 0, 0, w, h);
 
   // 3) Capas de texto + logo, por z-order.
   const capas = [];
@@ -754,6 +759,21 @@ function dibujarMarco(ctx, m) {
   if (conSombra) resetSombraCanvas(ctx);
 }
 
+// VOLTEO (flip) de una capa imagen/logo: espejo alrededor del CENTRO de su caja. `flip_h` invierte
+// izquierda<->derecha (scale(-1,1)), `flip_v` arriba<->abajo (scale(1,-1)). Compone con la rotación
+// ya activa (se aplica dentro del mismo save/restore) y con el recorte por forma (la silueta se
+// voltea junto al contenido). La SOMBRA de la imagen NO se voltea (se pinta antes): la dirección de
+// luz es fija. Espejo del editor (Konva/CapaNodo), que aplica el mismo espejo con offset al centro.
+function aplicarFlip(ctx, capa) {
+  const sx = capa.flip_h ? -1 : 1;
+  const sy = capa.flip_v ? -1 : 1;
+  if (sx === 1 && sy === 1) return;
+  const cx = capa.x + capa.w / 2, cy = capa.y + capa.h / 2;
+  ctx.translate(cx, cy);
+  ctx.scale(sx, sy);
+  ctx.translate(-cx, -cy);
+}
+
 // Dibuja UNA capa (con su opacidad/rotación). `env` = {I: imágenes por objeto/media_id, B: bindings,
 // F: familiaReal, final: boolean}.
 //
@@ -801,6 +821,8 @@ function dibujarCapa(ctx, capa, env) {
         ctx.fill();
         resetSombraCanvas(ctx);
       }
+      // VOLTEO: espejo del contenido (clip+foto) alrededor del centro, tras pintar la sombra.
+      aplicarFlip(ctx, capa);
       dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco, capa.zoom, capa.forma, capa.radio, capa.radios, capa.crop, capa.filtros ? capa.filtros.duotono : null);
       if (filtro) ctx.filter = "none";
       break;
@@ -814,13 +836,18 @@ function dibujarCapa(ctx, capa, env) {
     case "logo":
       // `dibujarLogo` espera `logo.tipo` ∈ {imagen,wordmark}; en el documento ese campo es
       // `tipo_logo` (porque `tipo` ya es "logo"). Adaptamos sin tocar el dibujante compartido.
+      // VOLTEO: espejo del logo (imagen o wordmark) alrededor del centro de su caja.
+      aplicarFlip(ctx, capa);
       dibujarLogo(ctx, { ...capa, tipo: capa.tipo_logo }, env.I[capa.media_id], null, env.F);
       break;
     case "marco":
       dibujarMarco(ctx, capa);
       break;
     case "overlay":
-      dibujarOverlayInferior(ctx, capa, capa.w, capa.h);
+      // La banda se posiciona DENTRO de la caja de la capa (x, y+h-band): `dibujarCapa` ya aplicó el
+      // translate/rotate del pivote como en las demás capas, así un overlay movido/rotado cae en el
+      // mismo sitio que el editor (Konva). Retrocompat: overlay a (0,0,W,H) => banda histórica.
+      dibujarOverlayInferior(ctx, capa, capa.x, capa.y, capa.w, capa.h);
       break;
     case "grupo":
       for (const sub of capa.capas || []) dibujarCapa(ctx, sub, env);
