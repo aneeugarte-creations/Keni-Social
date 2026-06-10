@@ -158,8 +158,11 @@ export interface CuerpoImagenesComponer {
 
 // --- Galería de artes (objetos de media catalogados para reutilizar) ---
 
-/** Origen de un arte: trabajado en el Estudio, subido por el usuario o generado con IA. */
-export type TipoArte = "estudio" | "subida" | "ia";
+/**
+ * Origen de un arte: trabajado en el Estudio, subido por el usuario, generado con IA o la
+ * foto ORIGINAL de la nota (RSS de marca propia, auto-catalogada en su carpeta "Originales").
+ */
+export type TipoArte = "estudio" | "subida" | "ia" | "original";
 
 /**
  * Un ARTE: una imagen del almacén que el equipo CONSERVA para reutilizar en publicaciones.

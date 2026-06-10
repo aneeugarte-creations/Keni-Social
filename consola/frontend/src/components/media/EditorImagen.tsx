@@ -87,12 +87,6 @@ export interface EditorImagenProps {
   copy?: string;
   /** Texto que va DENTRO de la imagen (copy-in); titular al componer la placa. */
   copyIn?: string;
-  /**
-   * Imagen ORIGINAL del artículo (URL), p.ej. de un RSS de marca propia. Si la pieza la
-   * trae, se ofrece "Usar imagen original" para volver a ella tras haberla reemplazado.
-   * La pieza ya la muestra por defecto (imagen_url cae a esta URL cuando no hay archivo).
-   */
-  imagenFuente?: string;
 }
 
 export function EditorImagen({
@@ -106,7 +100,6 @@ export function EditorImagen({
   red,
   copy,
   copyIn,
-  imagenFuente,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = React.useState("");
@@ -262,29 +255,12 @@ export function EditorImagen({
     onCambio("", "");
   }
 
-  // "Usar imagen original": DESCARGA la imagen del artículo al almacén (S3) y la fija como
-  // imagen de la pieza, así queda hosteada y PUBLICABLE (no una URL externa que caduca).
-  const usarOriginal = useMutation({
-    mutationFn: () => {
-      if (!imagenFuente) throw new Error("Esta pieza no tiene imagen original.");
-      return api.mediaDesdeUrl(imagenFuente);
-    },
-    onSuccess: (data) => {
-      setFondo(null);
-      setAvisoGenerar("");
-      onCambio(data.id, data.url);
-      toast.success("Imagen original guardada");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const trabajando =
     subir.isPending ||
     generar.isPending ||
     generandoIA ||
     componer.isPending ||
-    componiendo ||
-    usarOriginal.isPending;
+    componiendo;
   const ocupado = trabajando || !!disabled;
 
   const fuente = (
@@ -300,9 +276,6 @@ export function EditorImagen({
       onTexto={() => setGaleriaAbierta(true)}
       onGenerar={() => generar.mutate()}
       avisoGenerar={avisoGenerar}
-      mostrarOriginal={!!imagenFuente}
-      descargandoOriginal={usarOriginal.isPending}
-      onOriginal={() => usarOriginal.mutate()}
     />
   );
 
@@ -492,9 +465,6 @@ function FuenteFondo({
   onTexto,
   onGenerar,
   avisoGenerar,
-  mostrarOriginal,
-  descargandoOriginal,
-  onOriginal,
 }: {
   idPrefijo: string;
   compacto?: boolean;
@@ -507,10 +477,6 @@ function FuenteFondo({
   onTexto: () => void;
   onGenerar: () => void;
   avisoGenerar: string;
-  /** La pieza trae imagen original (RSS de marca propia): se ofrece descargarla y usarla. */
-  mostrarOriginal?: boolean;
-  descargandoOriginal?: boolean;
-  onOriginal?: () => void;
 }) {
   return (
     <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
@@ -521,16 +487,6 @@ function FuenteFondo({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        {mostrarOriginal && (
-          <Button type="button" variant="outline" size="sm" onClick={onOriginal} disabled={ocupado}>
-            {descargandoOriginal ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ImagePlus className="h-4 w-4" />
-            )}
-            Usar imagen original
-          </Button>
-        )}
         <Button type="button" variant="outline" size="sm" onClick={onTexto} disabled={ocupado}>
           <Library className="h-4 w-4" />
           Texto

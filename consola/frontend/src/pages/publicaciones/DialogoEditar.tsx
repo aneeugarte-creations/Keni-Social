@@ -394,7 +394,6 @@ export function DialogoEditar({
                 red={publicacion.red}
                 copy={contenido}
                 copyIn={copyIn}
-                imagenFuente={publicacion.imagen_fuente}
               />
             ) : null}
 

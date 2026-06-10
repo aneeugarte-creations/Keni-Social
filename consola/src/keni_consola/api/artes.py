@@ -34,9 +34,10 @@ from ..seguridad import autor_de_peticion
 
 _log = logging.getLogger("keni_consola.artes")
 
-# Origen del arte (de donde salio): trabajado en el Estudio, subido por el usuario o
-# generado con IA. Es informativo (la UI lo muestra/filtra); no cambia el almacenamiento.
-_TIPOS = ("estudio", "subida", "ia")
+# Origen del arte (de donde salio): trabajado en el Estudio, subido por el usuario, generado
+# con IA o la foto ORIGINAL de la nota (RSS de marca propia, auto-catalogada). Es informativo
+# (la UI lo muestra/filtra como carpetas); no cambia el almacenamiento.
+_TIPOS = ("estudio", "subida", "ia", "original")
 _TIPO_DEFECTO = "estudio"
 
 _MAX_TITULO = 120

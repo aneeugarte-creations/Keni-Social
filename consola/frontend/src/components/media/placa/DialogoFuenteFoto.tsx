@@ -1,9 +1,9 @@
 /**
- * Diálogo de ORIGEN de la foto del hueco activo: usar imagen original · Galería · Subir ·
- * generar con IA. Se abre al TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO
- * ACTIVO (lo gobierna el componente padre vía callbacks).
+ * Diálogo de ORIGEN de la foto del hueco activo: Galería · Subir · generar con IA. Se abre al
+ * TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO ACTIVO (lo gobierna el
+ * componente padre vía callbacks).
  */
-import { ImagePlus, Library, Loader2, Upload } from "lucide-react";
+import { Library, Loader2, Upload } from "lucide-react";
 
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { Button } from "@/components/ui/button";
@@ -25,14 +25,10 @@ export interface DialogoFuenteFotoProps {
   slotActivo: number;
   /** Nº total de huecos del diseño. */
   nHuecos: number;
-  /** URL de la imagen original (RSS de marca propia), si la pieza la trae. */
-  imagenFuente?: string;
   /** ¿Hay alguna acción de origen en curso? (deshabilita los controles). */
   ocupado: boolean;
   /** ¿Está subiendo un archivo? */
   subiendo: boolean;
-  /** ¿Está cargando la imagen original? */
-  usandoOriginal: boolean;
   /** ¿Está generando con IA? */
   generandoIA: boolean;
   /** Prompt de IA (controlado por el padre). */
@@ -40,8 +36,6 @@ export interface DialogoFuenteFotoProps {
   onPromptCambio: (valor: string) => void;
   /** Aviso (p. ej. error 400 de generación). */
   avisoGenerar: string;
-  /** "Usar imagen original". */
-  onUsarOriginal: () => void;
   /** Abre la galería de artes. */
   onAbrirGaleria: () => void;
   /** Abre el selector de archivo ("Subir"). */
@@ -56,15 +50,12 @@ export function DialogoFuenteFoto({
   esCollage,
   slotActivo,
   nHuecos,
-  imagenFuente,
   ocupado,
   subiendo,
-  usandoOriginal,
   generandoIA,
   prompt,
   onPromptCambio,
   avisoGenerar,
-  onUsarOriginal,
   onAbrirGaleria,
   onSubir,
   onGenerar,
@@ -80,22 +71,6 @@ export function DialogoFuenteFoto({
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            {imagenFuente && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onUsarOriginal}
-                disabled={ocupado}
-              >
-                {usandoOriginal ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ImagePlus className="h-4 w-4" />
-                )}
-                Usar imagen original
-              </Button>
-            )}
             <Button
               type="button"
               variant="outline"

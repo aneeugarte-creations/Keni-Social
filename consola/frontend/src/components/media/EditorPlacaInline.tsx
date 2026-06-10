@@ -241,17 +241,6 @@ export function EditorPlacaInline({
     onSuccess: (d) => cambiarFotoActiva(d.id),
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const usarOriginal = useMutation({
-    mutationFn: () => {
-      if (!imagenFuente) throw new Error("Sin imagen original.");
-      return api.mediaDesdeUrl(imagenFuente);
-    },
-    onSuccess: (d) => {
-      cambiarFotoActiva(d.id);
-      toast.success("Imagen original cargada");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
   const { generacion: genIA, ejecutando: generandoIA, iniciar: iniciarIA } = useGeneracion();
   const generar = useMutation({
     mutationFn: () => api.generarMedia({ prompt: prompt.trim() }),
@@ -454,7 +443,7 @@ export function EditorPlacaInline({
     setFuenteAbierta(true);
   }
 
-  const ocupado = subir.isPending || generar.isPending || generandoIA || usarOriginal.isPending;
+  const ocupado = subir.isPending || generar.isPending || generandoIA;
   // ¿El hueco activo tiene foto cargada? (controla la barra de reencuadre).
   const hayFotoActiva = !!imagenDeHueco(slotActivo);
   // Contador de huecos sin foto (sobre el nº de huecos del diseño).
@@ -523,15 +512,12 @@ export function EditorPlacaInline({
         esCollage={esCollage}
         slotActivo={slotActivo}
         nHuecos={nHuecos}
-        imagenFuente={imagenFuente}
         ocupado={ocupado}
         subiendo={subir.isPending}
-        usandoOriginal={usarOriginal.isPending}
         generandoIA={generandoIA}
         prompt={prompt}
         onPromptCambio={setPrompt}
         avisoGenerar={avisoGenerar}
-        onUsarOriginal={() => usarOriginal.mutate()}
         onAbrirGaleria={() => {
           setFuenteAbierta(false);
           setGaleriaAbierta(true);

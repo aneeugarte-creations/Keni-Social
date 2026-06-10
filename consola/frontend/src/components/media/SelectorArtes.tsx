@@ -23,7 +23,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api, mensajeError, urlMedia } from "@/lib/api";
-import type { Arte } from "@/types";
+import { cn } from "@/lib/utils";
+import type { Arte, TipoArte } from "@/types";
+
+/** Carpetas de la biblioteca (filtro por `tipo`). "" = todas. */
+const CARPETAS: ReadonlyArray<{ id: TipoArte | ""; etiqueta: string }> = [
+  { id: "", etiqueta: "Todas" },
+  { id: "original", etiqueta: "Originales" },
+  { id: "subida", etiqueta: "Subidas" },
+  { id: "ia", etiqueta: "IA" },
+  { id: "estudio", etiqueta: "Estudio" },
+];
 
 export interface SelectorArtesProps {
   open: boolean;
@@ -37,12 +47,17 @@ export interface SelectorArtesProps {
 export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: SelectorArtesProps) {
   const queryClient = useQueryClient();
   const [q, setQ] = React.useState("");
+  // Carpeta activa (filtro por `tipo`). "" = todas.
+  const [tipo, setTipo] = React.useState<TipoArte | "">("");
 
-  const clave = ["artes", marca ?? "", q.trim()] as const;
+  const clave = ["artes", marca ?? "", tipo, q.trim()] as const;
   const { data, isLoading, isError, error } = useQuery({
     queryKey: clave,
     queryFn: ({ signal }) =>
-      api.listarArtes({ marca: marca || undefined, q: q.trim() || undefined }, signal),
+      api.listarArtes(
+        { marca: marca || undefined, tipo: tipo || undefined, q: q.trim() || undefined },
+        signal,
+      ),
     enabled: open,
   });
 
@@ -67,6 +82,21 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
             encima automáticamente.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CARPETAS.map((c) => (
+            <Button
+              key={c.id || "todas"}
+              type="button"
+              variant={tipo === c.id ? "default" : "outline"}
+              size="sm"
+              className={cn("h-7 px-2.5 text-xs", tipo === c.id && "pointer-events-none")}
+              onClick={() => setTipo(c.id)}
+            >
+              {c.etiqueta}
+            </Button>
+          ))}
+        </div>
 
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -80,6 +80,39 @@ def cosechar_imagenes(salida: str) -> list[dict[str, str]]:
 # Creacion de publicaciones (borrador) por pieza                              #
 # --------------------------------------------------------------------------- #
 
+# `tipo` de catalogo de la foto ORIGINAL del articulo (RSS de marca propia). La Biblioteca
+# (Galeria de Artes) la agrupa en su carpeta "Originales".
+TIPO_ARTE_ORIGINAL = "original"
+
+
+def _descargar_original_a_biblioteca(
+    imagen_fuente: str, *, marca: str, titulo: str, autor: dict[str, str] | None
+) -> str:
+    """Descarga la foto ORIGINAL del articulo, la CATALOGA en la Biblioteca y devuelve su key.
+
+    La foto de una fuente PROPIA se baja a S3, se promueve a la carpeta protegida `artes` y se
+    registra en el catalogo (`tipo="original"`, por marca): asi APARECE en la Galeria de Artes
+    bajo su carpeta "Originales", el GC no la borra y la pieza nace con ESA key auto-inyectada
+    al feed. Tolerante: "" si la descarga falla (la pieza cae a `imagen_fuente`); si solo falla
+    el catalogo, se devuelve igualmente la key promovida (la imagen sirve en la pieza).
+    """
+    from .. import almacen_media
+    from . import extraccion_url
+
+    try:
+        objeto = extraccion_url.descargar_imagen_a_media(imagen_fuente)
+    except Exception:  # noqa: BLE001 -- la descarga es un extra; nunca rompe la generacion
+        return ""
+    try:
+        objeto = almacen_media.promover_objeto(objeto, "artes")
+        repos.crear_media_catalogo(
+            objeto=objeto, tipo=TIPO_ARTE_ORIGINAL, marca=marca or "",
+            titulo=titulo or "", autor=autor,
+        )
+    except Exception:  # noqa: BLE001 -- sin fila de catalogo la imagen sigue sirviendo en la pieza
+        pass
+    return objeto
+
 
 def crear_publicaciones_desde_piezas(
     piezas: list[dict[str, object]],
@@ -113,18 +146,15 @@ def crear_publicaciones_desde_piezas(
     (best-effort, no debe abortar toda la generación por una pieza).
     """
     creadas: list[dict[str, object]] = []
-    # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez a media
-    # (S3) para que la pieza nazca con un asset propio PUBLICABLE (no una URL externa que
-    # puede caducar). Tolerante: si la descarga falla, `imagen_descargada` queda "" y la
-    # pieza cae a `imagen_url`=`imagen_fuente` (visible, aunque no publicable).
+    # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez, la
+    # CATALOGAMOS en la Biblioteca (Galería de Artes, carpeta "Originales", por marca) y la
+    # pieza nace con ESA imagen auto-inyectada al feed. Tolerante: si algo falla,
+    # `imagen_descargada` queda "" y la pieza cae a `imagen_url`=`imagen_fuente`.
     imagen_descargada = ""
     if imagen_fuente:
-        from . import extraccion_url
-
-        try:
-            imagen_descargada = extraccion_url.descargar_imagen_a_media(imagen_fuente)
-        except Exception:  # noqa: BLE001 -- la descarga es un extra; nunca rompe la generación
-            imagen_descargada = ""
+        imagen_descargada = _descargar_original_a_biblioteca(
+            imagen_fuente, marca=marca, titulo=titulo, autor=autor,
+        )
     try:
         for pieza in piezas:
             red = pieza.get("red")
