@@ -42,6 +42,7 @@ vi.mock("./metricas/GraficaPorSerie", () => ({ GraficaPorSerie: () => null }));
 vi.mock("./metricas/MetricaPorLinea", () => ({ MetricaPorLinea: () => null }));
 vi.mock("./metricas/SeccionAds", () => ({ SeccionAds: () => null }));
 vi.mock("./metricas/GraficaMarcas", () => ({ GraficaMarcas: () => null }));
+vi.mock("@/pages/configuracion/SeccionMetricool", () => ({ SeccionMetricool: () => null }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
