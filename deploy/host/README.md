@@ -132,18 +132,28 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
   consola/su. Se deja a proposito como break-glass de consola (Latitude OOB). Bloquearlo
   (`passwd -l ubuntu`) endurece un pelo a cambio de perder ese fallback; decision del operador.
 
-## Nota operativa: SSH y rafagas de conexiones (incidente 2026-06-10)
+## Acceso SSH: vias, fail2ban y rafagas de conexiones
 
-OpenSSH moderno trae penalizaciones POR IP DE ORIGEN (`PerSourcePenalties`): una rafaga
-de conexiones rapidas (scripts/agentes haciendo muchos ssh/scp sueltos) puede dejar tu IP
-con `Connection refused` un buen rato, AUNQUE sshd este vivo (verificable desde fuera:
-`https://check-host.net/check-tcp?host=<ip>:22`). El servicio web no se ve afectado.
+Dos vias de entrada al servidor; la tailnet es la principal y la publica el fallback:
 
-Remedio y prevencion: multiplexa con ControlMaster en vez de abrir N conexiones:
+- **Tailnet (principal):** el servidor es el nodo `learn-01` (`100.72.242.71`) en la tailnet
+  de Tailscale (`tailscaled` instalado como servicio; enrolado con `--accept-dns=false` para
+  no tocar el resolv.conf del host). El rango `100.64.0.0/10` esta en el `ignoreip` de
+  fail2ban: por aqui NO hay bans por rafagas. El alias `ssh latitude` de la maquina del
+  operador apunta aqui.
+- **Publica (fallback):** `ubuntu@162.43.191.103`, solo-clave. La protege **fail2ban**
+  (jail `sshd` en `/etc/fail2ban/jail.d/keni-sshd.local`: maxretry 5 en 10 min -> ban 1 h).
+  El `ignoreip` lleva, ademas de la tailnet, los prefijos del operador; las IPs dinamicas
+  de ISP caducan, asi que ante un `Connection refused` con sshd vivo (verificable desde
+  fuera: `https://check-host.net/check-tcp?host=<ip>:22`) lo primero es mirar
+  `sudo fail2ban-client status sshd`. El servicio web no se ve afectado por estos bans.
+
+Reglas para scripts/agentes sobre la via publica: multiplexar con ControlMaster en vez de
+abrir N conexiones sueltas, y ante un rechazo NO insistir en bucle corto:
 
 ```sh
 ssh -o ControlMaster=auto -o ControlPath=~/.ssh/cm/%r@%h -o ControlPersist=600 ...
 ```
 
-Si te bloquea: espera (la penalizacion caduca sola) y NO insistas en bucle corto —
-cada intento rechazado puede alargarla.
+(El sshd de este host es OpenSSH 9.6: las `PerSourcePenalties` de OpenSSH >= 9.8 NO aplican
+aqui; los bloqueos por rafaga son de fail2ban.)
