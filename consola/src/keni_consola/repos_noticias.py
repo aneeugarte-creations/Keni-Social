@@ -94,6 +94,10 @@ def purgar_pool_irrelevante(
     )
 
 
+def caducar_pool(*, ttl_horas: int, retencion_horas: int = 0) -> dict[str, int]:
+    return db.caducar_pool(ttl_horas=ttl_horas, retencion_horas=retencion_horas)
+
+
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     return db.marcar_item(fuente_id, clave, usado)
 
