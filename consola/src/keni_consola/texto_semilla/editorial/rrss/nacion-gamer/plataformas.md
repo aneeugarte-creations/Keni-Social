@@ -4,33 +4,32 @@ tipo: editorial
 clase: 
 marcas: [nacion-gamer]
 creado: 2026-05-31T00:00:00+00:00
-actualizado: 2026-06-09T00:00:00+00:00
+actualizado: 2026-06-10T00:00:00+00:00
 ---
 
 # Plataformas · Nación Gamer
 
-Notas de formato por red propias de Nación Gamer. El tráiler, la filtración y el lanzamiento son el gancho. Formatos cortos y de comunidad funcionan mejor que el comunicado. Cifras medidas sobre 662 piezas (12-may a 9-jun-2026); los límites técnicos por red los pone el sistema, esto es recomendación editorial.
+Notas de formato por red propias de Nación Gamer. El tráiler, la filtración y el lanzamiento son el gancho. Formatos cortos y de comunidad funcionan mejor que el comunicado. Las bandas numéricas viven en el documento "Patrones", medido sobre 12 meses y regenerable; los límites técnicos por red los pone el sistema.
 
 ## X / Twitter
 
-- (Sin datos de Metricool aún para esta cuenta.) Convención: el golpe en una línea con la entidad como hashtag; perfecto para el formato "TITULAR | dato".
+- (Sin datos de Metricool aún para esta cuenta.) Convención: el golpe en una línea con la entidad como hashtag.
 
 ## Instagram
 
-- Longitud top: 110-390 caracteres (mediana ~200); las peores superan los 500 — cortar sin piedad.
+- Caption breve (el top vive entre ~100 y ~490 caracteres, mediana ~210); las peores superan los 750 — cortar sin piedad. El peso visual lo lleva la imagen/captura.
 - 2-4 hashtags de entidad integrados en el texto (#Nintendo, #StarWars, #XboxShowcase).
-- Caption breve; el peso visual lo lleva la imagen/captura. Pregunta a la comunidad ocasional (29% de las top la usan).
 
 ## Facebook
 
-- Aquí lo MUY breve y directo gana: top mediana 150 caracteres, sin saltos de párrafo; las peores promedian 573 con parrafones.
-- Menos mayúsculas de gancho que en IG: la línea directa estilo "Te extrañamos mucho, #gearsofwar" supera al "TITULAR |" en esta red (19% mayúsculas en top vs 73% en bottom).
+- Aquí lo MUY breve y directo gana: top con mediana ~155 caracteres, sin saltos de párrafo; las peores promedian más de 700 con parrafones.
+- La línea directa estilo "Te extrañamos mucho, #gearsofwar" supera al "TITULAR |": el gancho en mayúsculas es la firma medida del cuartil peor en esta red (86% fondo vs 22% top).
 - 2-3 hashtags máximo.
 
 ## TikTok
 
-- Descripción de 120-210 caracteres en una línea; el dato/ángulo + 2-3 hashtags (#IA #Nintendo #anime).
-- La pregunta directa a la comunidad funciona: "¿Ya lo jugaste? #Balatro" (39% de las top).
+- Descripción de ~110-230 caracteres en una línea; el dato/ángulo + 2-4 hashtags (#IA #Nintendo #anime).
+- La pregunta directa a la comunidad es opcional: medida, no distingue al top del fondo — el ángulo concreto importa más.
 
 ## YouTube
 

@@ -1,0 +1,223 @@
+{
+ "version": 1,
+ "marca": "nacion-gamer",
+ "ventana": {
+  "desde": "2025-06-01",
+  "hasta": "2026-06-09"
+ },
+ "piezas": 7934,
+ "generado": "2026-06-10T06:09:09+00:00",
+ "redes": {
+  "facebook": {
+   "muestras": 3598,
+   "top": {
+    "n": 899,
+    "engagement_mediana_pct": 3.1,
+    "longitud": {
+     "p10": 56,
+     "p25": 104,
+     "p50": 155,
+     "p75": 306,
+     "p90": 651
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 0,
+     "p95": 1
+    },
+    "hashtags": {
+     "p50": 3,
+     "p90": 7,
+     "p95": 8
+    },
+    "pct_gancho_mayusculas": 21.8,
+    "pct_pregunta": 24.5,
+    "pct_multilinea": 58.5
+   },
+   "fondo": {
+    "n": 899,
+    "engagement_mediana_pct": 0.5,
+    "longitud": {
+     "p10": 205,
+     "p25": 467,
+     "p50": 722,
+     "p75": 1034,
+     "p90": 1394
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 0,
+     "p95": 0
+    },
+    "hashtags": {
+     "p50": 3,
+     "p90": 6,
+     "p95": 8
+    },
+    "pct_gancho_mayusculas": 86.0,
+    "pct_pregunta": 27.1,
+    "pct_multilinea": 92.0
+   },
+   "formatos_top": [
+    {
+     "formato": "reel",
+     "pct": 74.1
+    },
+    {
+     "formato": "foto",
+     "pct": 17.8
+    },
+    {
+     "formato": "video",
+     "pct": 6.5
+    }
+   ],
+   "lint": {
+    "longitud_max": 781,
+    "longitud_min": null,
+    "emojis_max": 1,
+    "hashtags_max": 8,
+    "gancho_mayusculas": "evitar",
+    "pregunta": null
+   }
+  },
+  "instagram": {
+   "muestras": 3521,
+   "top": {
+    "n": 880,
+    "engagement_mediana_pct": 6.7,
+    "longitud": {
+     "p10": 49,
+     "p25": 103,
+     "p50": 208,
+     "p75": 492,
+     "p90": 834
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 0,
+     "p95": 1
+    },
+    "hashtags": {
+     "p50": 3,
+     "p90": 7,
+     "p95": 8
+    },
+    "pct_gancho_mayusculas": 39.5,
+    "pct_pregunta": 22.0,
+    "pct_multilinea": 66.1
+   },
+   "fondo": {
+    "n": 880,
+    "engagement_mediana_pct": 1.4,
+    "longitud": {
+     "p10": 113,
+     "p25": 447,
+     "p50": 762,
+     "p75": 1091,
+     "p90": 1403
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 0,
+     "p95": 0
+    },
+    "hashtags": {
+     "p50": 3,
+     "p90": 7,
+     "p95": 8
+    },
+    "pct_gancho_mayusculas": 80.1,
+    "pct_pregunta": 28.0,
+    "pct_multilinea": 86.9
+   },
+   "formatos_top": [
+    {
+     "formato": "reel",
+     "pct": 55.2
+    },
+    {
+     "formato": "foto",
+     "pct": 29.4
+    },
+    {
+     "formato": "carrusel",
+     "pct": 15.3
+    }
+   ],
+   "lint": {
+    "longitud_max": 1000,
+    "longitud_min": null,
+    "emojis_max": 1,
+    "hashtags_max": 8,
+    "gancho_mayusculas": null,
+    "pregunta": null
+   }
+  },
+  "tiktok": {
+   "muestras": 815,
+   "top": {
+    "n": 203,
+    "engagement_mediana_pct": 11.4,
+    "longitud": {
+     "p10": 77,
+     "p25": 109,
+     "p50": 149,
+     "p75": 230,
+     "p90": 354
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 0,
+     "p95": 2
+    },
+    "hashtags": {
+     "p50": 4,
+     "p90": 8,
+     "p95": 10
+    },
+    "pct_gancho_mayusculas": 1.0,
+    "pct_pregunta": 35.0,
+    "pct_multilinea": 0.0
+   },
+   "fondo": {
+    "n": 203,
+    "engagement_mediana_pct": 4.3,
+    "longitud": {
+     "p10": 87,
+     "p25": 118,
+     "p50": 176,
+     "p75": 279,
+     "p90": 382
+    },
+    "emojis": {
+     "p50": 0,
+     "p90": 0,
+     "p95": 0
+    },
+    "hashtags": {
+     "p50": 3,
+     "p90": 6,
+     "p95": 7
+    },
+    "pct_gancho_mayusculas": 4.4,
+    "pct_pregunta": 38.4,
+    "pct_multilinea": 0.0
+   },
+   "formatos_top": [
+    {
+     "formato": "video",
+     "pct": 100.0
+    }
+   ],
+   "lint": {
+    "longitud_max": 531,
+    "longitud_min": null,
+    "emojis_max": 2,
+    "hashtags_max": 10,
+    "gancho_mayusculas": null,
+    "pregunta": null
+   }
+  }
+ }
+}

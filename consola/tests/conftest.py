@@ -94,6 +94,17 @@ def _aislar_plantillas_marca(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _aislar_patrones(monkeypatch, tmp_path):
+    """Aisla el dir de perfiles de patrones (`patrones_marca.dir_perfiles_data`).
+
+    Sin esto, un test que aplica un perfil (re-derivación, verificador de voz)
+    escribiría en la config REAL (`~/.config/keni-social/patrones`) y el verificador
+    leería perfiles del runtime del desarrollador en vez de la semilla del paquete.
+    """
+    monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path / "patrones"))
+
+
+@pytest.fixture(autouse=True)
 def _aislar_logging_keni():
     """Aisla el estado del logger del paquete entre tests (contaminacion cruzada de logging).
 
@@ -430,6 +441,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_algoritmos": "app_produccion",
     "test_sugerencias_editoriales": "app_produccion",
     "test_metricas_runs": "app_produccion",
+    "test_patrones_marca": "app_produccion",
     "test_plantillas_marca": "app_produccion",
     "test_api_plantillas_marca": "app_produccion",
     "test_investigacion": "app_produccion",
