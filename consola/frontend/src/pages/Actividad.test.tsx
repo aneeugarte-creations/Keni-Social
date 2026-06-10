@@ -105,7 +105,7 @@ describe("Actividad (feed unificado de IA)", () => {
           id: "g2",
           fuente: "generacion",
           tipo: "copy",
-          etiqueta: "En curso",
+          etiqueta: "Copy en curso",
           marca: "UnoTV",
           estado: "ejecutando",
           fecha: "2026-05-28T11:00:00",
@@ -117,7 +117,7 @@ describe("Actividad (feed unificado de IA)", () => {
     };
     stubFetch(enCurso);
     renderConProviders(<Actividad />);
-    const fila = (await screen.findByText("En curso")).closest("tr");
+    const fila = (await screen.findByText("Copy en curso")).closest("tr");
     expect(fila).toHaveAttribute("role", "button");
     expect(screen.queryByRole("button", { name: /Ver en vivo/ })).toBeNull();
   });

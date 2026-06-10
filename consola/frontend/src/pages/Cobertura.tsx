@@ -54,6 +54,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { tiempoRelativo } from "@/lib/fecha";
 import type { Historia } from "@/types";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -65,24 +66,6 @@ const REFETCH_INTERVAL_MS = 45_000;
 const PAGE_SIZE = 30;
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
-
-/** Tiempo relativo legible en español («hace 3 min», «hace 2 h», etc.). */
-function tiempoRelativo(iso: string): string {
-  if (!iso) return "";
-  try {
-    const delta = Date.now() - new Date(iso).getTime();
-    const seg = Math.floor(delta / 1000);
-    if (seg < 60) return "hace unos segundos";
-    const min = Math.floor(seg / 60);
-    if (min < 60) return `hace ${min} min`;
-    const h = Math.floor(min / 60);
-    if (h < 24) return `hace ${h} h`;
-    const d = Math.floor(h / 24);
-    return `hace ${d} día${d !== 1 ? "s" : ""}`;
-  } catch {
-    return iso.slice(0, 16).replace("T", " ");
-  }
-}
 
 /**
  * Tooltip del badge de score: la razón humana + el desglose por señal (todo lo persiste el

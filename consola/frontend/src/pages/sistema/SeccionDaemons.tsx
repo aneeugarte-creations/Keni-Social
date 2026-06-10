@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity } from "lucide-react";
+import { Activity, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +136,15 @@ export function SeccionDaemons() {
         <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
           <Activity className="h-4 w-4" aria-hidden="true" />
           Daemons de fondo
+          {/* Aquí se OBSERVA la salud (latidos persistidos); el encendido/apagado vive en
+              el Monitor, junto a la cola que gobiernan. Un solo sitio para cada cosa. */}
+          <Link
+            to="/datos/actividad/monitor"
+            className="ml-auto inline-flex items-center gap-1 text-xs font-normal underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Encender/apagar en el Monitor
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          </Link>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0">

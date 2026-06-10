@@ -29,7 +29,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 
-import { CLAVE_AJUSTES, GRUPOS_BASICOS, GRUPOS_MAQUINA, mensajeError } from "./lib";
+import { CLAVE_AJUSTES, GRUPOS_MAQUINA, mensajeError } from "./lib";
 import { TarjetaColapsable } from "./TarjetaColapsable";
 
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
@@ -467,38 +467,32 @@ function EstadoAjustes({
   );
 }
 
-/** Sección admin de Configuración: toggles + ajustes finos GLOBALES (aplican en caliente). Los
- * grupos de la MÁQUINA DE CONTENIDO (`GRUPOS_MAQUINA`) NO se pintan aquí: viven en el Monitor.
- *
- * `nivel` decide qué grupos pinta: «basica» los de `GRUPOS_BASICOS`; «avanzada» el resto (excluida
- * siempre la máquina). Si tras filtrar no queda ningún grupo, la tarjeta no se renderiza. */
-export function SeccionFuncionalidad({ nivel }: { nivel: "basica" | "avanzada" }) {
+/** Sección admin de Configuración: TODOS los ajustes globales del catálogo que NO son de la
+ * máquina de contenido (`GRUPOS_MAQUINA`, que viven en el Monitor junto a la cola que
+ * gobiernan). Una sola sección: antes se repartía en pestañas «básica/avanzada» con la
+ * básica VACÍA (GRUPOS_BASICOS = ∅), una estructura fantasma que confundía. */
+export function SeccionFuncionalidad() {
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
 
-  const avanzada = nivel === "avanzada";
-  // Configuración EXCLUYE los grupos de la máquina (van al Monitor). El resto se reparte
-  // básica/avanzada como antes.
-  const grupos = (data?.grupos ?? []).filter(
-    (g) => !GRUPOS_MAQUINA.has(g.id) && (avanzada ? !GRUPOS_BASICOS.has(g.id) : GRUPOS_BASICOS.has(g.id)),
-  );
+  // Configuración EXCLUYE los grupos de la máquina (se operan en el Monitor).
+  const grupos = (data?.grupos ?? []).filter((g) => !GRUPOS_MAQUINA.has(g.id));
 
-  // Sin grupos para esta pestaña (p. ej. la API aún no trae el grupo): no pintamos la tarjeta.
-  // Va DESPUÉS de los hooks para no llamarlos condicionalmente.
+  // Sin grupos (p. ej. la API aún no trae ninguno): no pintamos la tarjeta. Va DESPUÉS de
+  // los hooks para no llamarlos condicionalmente.
   if (!isPending && !isError && grupos.length === 0) return null;
 
   return (
     <TarjetaColapsable
-      titulo={avanzada ? "Ajustes finos" : "Funcionalidad"}
+      titulo="Ajustes del sistema"
       abiertaInicial
       contentClassName="space-y-6 pt-0"
       descripcion={
-        avanzada ? (
-          <>
-            Granularidad de la automatización (intervalos, máximos por barrido, umbrales, jobs…).
-            Funcionan bien en sus <strong>valores por defecto</strong>; tócalos solo para afinar.
-            Los cambios aplican <strong>en caliente</strong> (hasta ~1 minuto).
-          </>
-        ) : undefined
+        <>
+          Automatismos, publicación y granularidad fina (intervalos, máximos, umbrales, jobs…).
+          Funcionan bien en sus <strong>valores por defecto</strong>; los cambios aplican{" "}
+          <strong>en caliente</strong> (hasta ~1 minuto). La <strong>máquina de contenido</strong>{" "}
+          (etapas, topes y economía de tokens) se opera desde el Monitor.
+        </>
       }
     >
       {isPending || isError ? (

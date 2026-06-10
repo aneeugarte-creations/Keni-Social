@@ -1,40 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
-import { Coins, ListOrdered } from "lucide-react";
+import { Coins, ExternalLink, ListOrdered } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { costeUsd, numeroCompacto } from "@/lib/formato";
 
 import { INTERVALO_RECURSOS_MS } from "./lib";
 
-const ETIQUETA_NIVEL: Record<string, string> = {
-  normal: "Normal",
-  solo_manual: "Solo manual",
-  agotado: "Agotado",
-  pausado: "Pausado",
-};
-
-function tonoNivel(nivel: string): string {
-  if (nivel === "normal")
-    return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
-  if (nivel === "solo_manual")
-    return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
-  return "bg-red-500/15 text-red-600 dark:text-red-400"; // agotado / pausado
-}
-
-function formatoTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)} k`;
-  return String(n);
-}
+// Ruta del Monitor de la cola: es donde se OPERA (cancelar/purgar, kill switch, máquina).
+// Este panel solo OBSERVA: misma fuente (`/api/actividad/cola`), mismas etiquetas, y un
+// enlace en vez de duplicar controles.
+const RUTA_MONITOR = "/datos/actividad/monitor";
 
 /**
  * Sección compacta de cola de generación + economía de tokens del panel Sistema.
- * Solo LECTURA sobre el contrato de `/api/actividad/cola` (las acciones —purgar,
- * reencolar, toggles— viven en el Monitor de Actividad IA, su sitio natural).
+ * Solo LECTURA sobre el contrato de `/api/actividad/cola`: las acciones (purgar,
+ * cancelar, pausar, toggles) viven en el Monitor, su sitio natural — aquí se enlaza.
+ * Chip de nivel y formato de tokens/coste COMPARTIDOS con el Monitor
+ * (`ChipNivelPresupuesto`, `@/lib/formato`): el mismo dato se lee igual en ambos.
  */
 export function SeccionColaGasto() {
   const query = useQuery({
@@ -75,6 +63,13 @@ export function SeccionColaGasto() {
                 Llena
               </Badge>
             )}
+            <Link
+              to={RUTA_MONITOR}
+              className="ml-auto inline-flex items-center gap-1 text-xs font-normal text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Abrir Monitor
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            </Link>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0 text-sm text-muted-foreground">
@@ -96,15 +91,8 @@ export function SeccionColaGasto() {
         <CardHeader className="p-4 pb-2">
           <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
             <Coins className="h-4 w-4" aria-hidden="true" />
-            Gasto de IA (hoy)
-            {presupuesto && (
-              <Badge
-                variant="outline"
-                className={cn("border-transparent", tonoNivel(presupuesto.nivel))}
-              >
-                {ETIQUETA_NIVEL[presupuesto.nivel] ?? presupuesto.nivel}
-              </Badge>
-            )}
+            Economía de tokens (hoy)
+            {presupuesto && <ChipNivelPresupuesto nivel={presupuesto.nivel} />}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0 text-sm text-muted-foreground">
@@ -114,22 +102,22 @@ export function SeccionColaGasto() {
             <>
               <p>
                 <span className="text-2xl font-semibold tabular-nums text-foreground">
-                  {formatoTokens(presupuesto.gastado.tokens)}
+                  {numeroCompacto(presupuesto.gastado.tokens)}
                 </span>{" "}
-                tokens · ${presupuesto.gastado.coste_usd.toFixed(2)} ·{" "}
+                tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
                 {presupuesto.gastado.generaciones} generación(es)
               </p>
               <p className="mt-1 text-xs">
                 {presupuesto.presupuesto_tokens_dia > 0 ? (
                   <>
                     {presupuesto.pct_usado}% del presupuesto diario (
-                    {formatoTokens(presupuesto.presupuesto_tokens_dia)}) · restante{" "}
-                    {formatoTokens(presupuesto.restante_tokens ?? 0)}
+                    {numeroCompacto(presupuesto.presupuesto_tokens_dia)}) · restante{" "}
+                    {numeroCompacto(presupuesto.restante_tokens ?? 0)}
                   </>
                 ) : (
                   "Sin presupuesto diario configurado (sin límite)."
                 )}
-                {presupuesto.pausada && " · Generación PAUSADA (kill switch)."}
+                {presupuesto.pausada && " · Generación PAUSADA (se reanuda desde el Monitor)."}
               </p>
             </>
           )}

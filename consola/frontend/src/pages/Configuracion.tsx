@@ -64,34 +64,31 @@ export default function Configuracion() {
         </MenuAcciones>
       </AccionesPagina>
 
-      {/* Orden por frecuencia/criticidad, no por tema. Arriba del todo y SIEMPRE visible: el
-          tema (preferencia personal, instantánea). Debajo, dos pestañas que doman una página
-          muy llena. */}
+      {/* Arriba del todo y SIEMPRE visible: el tema (preferencia personal, instantánea).
+          Debajo, pestañas por CONTENIDO (antes «Básica/Avanzada», con la Básica vacía de
+          ajustes): AJUSTES = todo el catálogo global + esfuerzo de generación;
+          CONEXIONES = secretos de proveedores (Imagen IA + Metricool), setup-once y solo
+          admin. La máquina de contenido NO está aquí: se opera desde el Monitor. */}
       <div className="space-y-4">
         <SeccionApariencia />
 
-        <Tabs defaultValue="basica" className="space-y-4">
+        <Tabs defaultValue="ajustes" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="basica">Básica</TabsTrigger>
-            <TabsTrigger value="avanzada">Avanzada</TabsTrigger>
+            <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
+            {puedeVerConexiones && <TabsTrigger value="conexiones">Conexiones</TabsTrigger>}
           </TabsList>
 
-          {/* Básica: controles clave de arriba (lo que más se toca) a abajo (setup-once).
-              Funcionalidad (toggles del día) arranca abierta; las Conexiones (Imagen IA +
-              Metricool) van AL FINAL y colapsadas: se configuran una vez y casi nunca se
-              vuelven a abrir. Metricool, lo último. Todas: solo admin (#153). */}
-          <TabsContent value="basica" className="space-y-4">
-            {puedeVerConexiones && <SeccionFuncionalidad nivel="basica" />}
-            {puedeVerConexiones && <SeccionImagen />}
-            {puedeVerConexiones && <SeccionMetricool />}
-          </TabsContent>
-
-          {/* Avanzada: la granularidad que funciona en sus valores por defecto (ajustes finos
-              + esfuerzo de generación); rara vez se toca. */}
-          <TabsContent value="avanzada" className="space-y-4">
-            {puedeVerConexiones && <SeccionFuncionalidad nivel="avanzada" />}
+          <TabsContent value="ajustes" className="space-y-4">
+            {puedeVerConexiones && <SeccionFuncionalidad />}
             <SeccionEsfuerzo />
           </TabsContent>
+
+          {puedeVerConexiones && (
+            <TabsContent value="conexiones" className="space-y-4">
+              <SeccionImagen />
+              <SeccionMetricool />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </>

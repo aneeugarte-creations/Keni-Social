@@ -4,13 +4,13 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { ChipEstado } from "@/components/comunes/ChipEstado";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
-import type { BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -62,25 +62,6 @@ const TAM_PAGINA = 50;
 // Fecha/hora en hora CDMX (los instantes del backend son UTC): se formatean con
 // `@/lib/fecha`. `formatearFecha` aquí es la variante corta (sin año) con hora.
 const formatearFecha = (iso: string): string => formatearFechaHoraCorta(iso) || "—";
-
-/** Etiqueta + variante de badge para un estado de actividad (generación). */
-function presentacionEstado(estado: string): {
-  texto: string;
-  variante: BadgeProps["variant"];
-} {
-  switch (estado) {
-    case "completado":
-      return { texto: "Completado", variante: "ok" };
-    case "error":
-      return { texto: "Error", variante: "error" };
-    case "ejecutando":
-      return { texto: "Visualizando…", variante: "aviso" };
-    case "lanzado":
-      return { texto: "Lanzado", variante: "secondary" };
-    default:
-      return { texto: estado || "—", variante: "secondary" };
-  }
-}
 
 /** Coste con guion para nulos (el formateador trata `null` como no-finito). */
 function costeCelda(v: number | null): string {
@@ -323,8 +304,7 @@ function TablaActividad({
               </TableRow>
             ) : (
               items.map((it) => {
-                const est = presentacionEstado(it.estado);
-                const m = it.metricas;
+                                const m = it.metricas;
                 // Acción PRINCIPAL del item (sin columna aparte): la fila entera la dispara.
                 // EN VIVO o SIN página de resultado (p.ej. importar parrilla) -> abrir el visor
                 // (stream + prompt + error), también en estados terminales. CON resultado ->
@@ -361,7 +341,7 @@ function TablaActividad({
                       {it.marca || <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={est.variante}>{est.texto}</Badge>
+                      <ChipEstado estado={it.estado} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {formatearFecha(it.fecha)}

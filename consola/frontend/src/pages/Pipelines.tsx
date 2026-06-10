@@ -4,11 +4,11 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { aspectoEstado, ChipEstado } from "@/components/comunes/ChipEstado";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
-import type { BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Markdown } from "@/components/ui/Markdown";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
+import { tiempoRelativo } from "@/lib/fecha";
+import { INTERVALO_SERIE_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import type {
   Pipeline,
@@ -41,16 +43,9 @@ const VERIFICACION_TEXTO: Record<string, string> = {
   dudosa: "dudosa",
 };
 
-// Estado de etapa/run -> aspecto del badge + etiqueta corta. Mapeo único para toda la
-// página (la tira de etapas y el chip de estado global comparten convención GitLab-like).
-const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; texto: string }> = {
-  ok: { variant: "secondary", clase: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30", texto: "OK" },
-  en_curso: { variant: "secondary", clase: "bg-sky-500/15 text-sky-600 border-sky-500/30", texto: "En curso" },
-  revisar: { variant: "secondary", clase: "bg-amber-500/15 text-amber-600 border-amber-500/30", texto: "Revisar" },
-  pendiente: { variant: "outline", clase: "text-muted-foreground", texto: "Pendiente" },
-  saltada: { variant: "outline", clase: "text-muted-foreground/60 border-dashed line-through", texto: "Saltada" },
-  fallo: { variant: "destructive", clase: "", texto: "Fallo" },
-};
+// El aspecto de los estados (badge + etiqueta) vive CONSOLIDADO en el chip único de la
+// consola (`components/comunes/ChipEstado`): misma etiqueta y color que Actividad/Monitor.
+export { ChipEstado };
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
 export const ETAPA_A_EVENTO: Record<string, string> = {
@@ -67,29 +62,17 @@ const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "arte", nombre: "Arte" },
   { clave: "aprobacion", nombre: "Aprobación" },
 ];
-// Valores del filtro `?estado=` (el `estado_global` de la run).
+// Valores del filtro `?estado=` (el `estado_global` de la run). Nombres = los del chip
+// único (`aspectoEstado`): el filtro y el badge dicen lo mismo.
 const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "pendiente", nombre: "Pendiente" },
   { clave: "en_curso", nombre: "En curso" },
   { clave: "revisar", nombre: "Revisar" },
-  { clave: "fallo", nombre: "Fallo" },
+  { clave: "fallo", nombre: "Error" },
   { clave: "ok", nombre: "Completado" },
 ];
 // Tamaño de página del botón «Cargar más» (se pide `limite = páginas * PAGINA`, offset 0).
 const PAGINA = 20;
-
-function aspecto(estado: string) {
-  return ASPECTO[estado] ?? ASPECTO.pendiente;
-}
-
-export function ChipEstado({ estado, className }: { estado: string; className?: string }) {
-  const a = aspecto(estado);
-  return (
-    <Badge variant={a.variant} className={cn("border", a.clase, className)}>
-      {a.texto}
-    </Badge>
-  );
-}
 
 /** Chip de la criba de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
  *  Nada si aún no hay veredicto (criba pendiente/en curso: lo cubre la tira de etapas). */
@@ -212,7 +195,7 @@ export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
           <div
             className={cn(
               "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-              aspecto(e.estado).clase || "text-muted-foreground",
+              aspectoEstado(e.estado).clase || "text-muted-foreground",
             )}
             title={e.detalle}
           >
@@ -224,20 +207,6 @@ export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
       ))}
     </div>
   );
-}
-
-export function tiempoRelativo(iso: string): string {
-  if (!iso) return "";
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return iso;
-  const seg = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (seg < 60) return "hace un momento";
-  const min = Math.floor(seg / 60);
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return `hace ${d} d`;
 }
 
 /** Tarjeta de una run: TODA la tarjeta es clicable (abre el detalle). */
@@ -521,7 +490,7 @@ export default function Pipelines() {
         { marca: marcaActiva ?? undefined, etapa, estado, limite: paginas * PAGINA },
         signal,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: INTERVALO_SERIE_MS,
     placeholderData: (prev) => prev,  // no parpadea al «Cargar más» ni al cambiar de filtro
   });
   const datos = q.data as RespuestaPipelines | undefined;

@@ -14,7 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import type { PipelineActividad, PipelineGeneracion, RespuestaPipelineDetalle } from "@/types";
 
-import { ChipEstado, ETAPA_A_EVENTO, PanelEtapa, TiraEtapas, tiempoRelativo } from "./Pipelines";
+import { ChipEstado, ETAPA_A_EVENTO, PanelEtapa, TiraEtapas } from "./Pipelines";
+import { tiempoRelativo } from "@/lib/fecha";
+import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 
 export default function PipelineDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +24,7 @@ export default function PipelineDetalle() {
     queryKey: ["pipelines", "detalle", id],
     queryFn: ({ signal }) => api.pipelineDetalle(id as string, signal),
     enabled: !!id,
-    refetchInterval: 15_000,
+    refetchInterval: INTERVALO_DETALLE_MS,
     placeholderData: (prev) => prev,
   });
   const datos = q.data as RespuestaPipelineDetalle | undefined;

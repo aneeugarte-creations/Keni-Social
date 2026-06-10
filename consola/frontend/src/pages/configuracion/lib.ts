@@ -25,12 +25,6 @@ export const GRUPOS_MAQUINA = new Set([
   "pipeline_topes",
 ]);
 
-/** Grupos de ajustes que viven en la pestaña «Básica» de Configuración. Tras mover la máquina de
- *  contenido al Monitor, Configuración solo conserva lo global/genérico; en Básica no queda ningún
- *  grupo de `SeccionFuncionalidad` (publicación, automatismos y ajustes finos van a «Avanzada»).
- *  Coincide con la `id` de grupo del backend; un grupo ausente en la respuesta no pinta nada. */
-export const GRUPOS_BASICOS = new Set<string>([]);
-
 /**
  * Limpia emojis de estado (❌ ✅ ⚠️ …) que pueda traer el backend y normaliza
  * espacios y puntuación, para mostrar un texto sobrio en la consola.

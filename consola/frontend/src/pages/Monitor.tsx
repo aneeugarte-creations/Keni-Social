@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
+  Coins,
   Boxes,
   Clock,
   Cpu,
@@ -16,6 +17,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,22 +35,12 @@ import {
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { haceSegundos } from "@/lib/fecha";
+import { costeUsd, numeroCompacto } from "@/lib/formato";
+import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { PanelMaquinaContenido, useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import type { ColaJob, ColaMonitor, ColaSerie } from "@/types";
-
-// Cadencia del snapshot en vivo: lo bastante rápido para sentirse "en tiempo real" sin
-// martillear el back (la cola cambia en segundos). La serie por día se refresca más despacio.
-const INTERVALO_COLA_MS = 3000;
-const INTERVALO_SERIE_MS = 30_000;
-
-/** "hace 5 s" / "hace 3 min" / "hace 2 h" a partir de segundos (o "—" si no hay dato). */
-function haceTexto(segundos: number | null | undefined): string {
-  if (segundos == null) return "—";
-  if (segundos < 60) return `hace ${segundos} s`;
-  if (segundos < 3600) return `hace ${Math.floor(segundos / 60)} min`;
-  return `hace ${Math.floor(segundos / 3600)} h`;
-}
+import type { ColaJob, ColaMonitor, ColaSerie, PresupuestoIA } from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
 function Kpi({
@@ -142,7 +134,7 @@ function TablaJobs({
               </TableCell>
             )}
             <TableCell className="tabular-nums text-muted-foreground">
-              {haceTexto(mostrarWorker ? j.corriendo_hace_s : j.encolado_hace_s)}
+              {haceSegundos(mostrarWorker ? j.corriendo_hace_s : j.encolado_hace_s)}
             </TableCell>
             {esAdmin && (
               <TableCell className="text-right">
@@ -284,6 +276,89 @@ function PanelDaemons({
  * cola (workers, claude -p en vuelo, esperando), throughput por día y estado de los daemons,
  * con control de admin (purgar la cola, cancelar un job). Sondeo en vivo cada pocos segundos.
  */
+/** ECONOMÍA DE TOKENS de la generación, en el sitio donde se OPERA la cola.
+ *
+ * El estado (nivel/gasto/restante) viene en el mismo snapshot de la cola; el control
+ * rápido es el kill switch (KENI_GENERACION_PAUSADA, ajuste editable en caliente). Los
+ * knobs finos (presupuesto diario, margen manual, tope de contexto) viven en el panel
+ * «Máquina de contenido» de abajo (grupo `pipeline_topes`); el panel Sistema OBSERVA
+ * este mismo estado en modo lectura y enlaza aquí. */
+function PanelPresupuesto({
+  presupuesto,
+  esAdmin,
+  pausando,
+  onPausar,
+}: {
+  presupuesto: PresupuestoIA;
+  esAdmin: boolean;
+  pausando: boolean;
+  onPausar: (valor: boolean) => void;
+}) {
+  const conPresupuesto = presupuesto.presupuesto_tokens_dia > 0;
+  const pct = presupuesto.pct_usado;
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+          <Coins className="h-4 w-4 text-muted-foreground" />
+          Economía de tokens
+          <ChipNivelPresupuesto nivel={presupuesto.nivel} />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 pt-2">
+        <div className="space-y-1 text-sm">
+          <p>
+            Hoy:{" "}
+            <span className="font-medium tabular-nums">
+              {numeroCompacto(presupuesto.gastado.tokens)}
+            </span>{" "}
+            tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
+            {presupuesto.gastado.generaciones} generación(es)
+          </p>
+          {conPresupuesto ? (
+            <p className="text-xs text-muted-foreground">
+              Presupuesto diario {numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens
+              {presupuesto.restante_tokens != null && (
+                <> · restan {numeroCompacto(presupuesto.restante_tokens)}</>
+              )}
+              {pct != null && <> · {pct.toFixed(0)}% usado</>}
+              {" · al agotarse se corta el trabajo automático (lo manual sigue hasta el margen)"}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Sin presupuesto diario configurado (se fija en «Máquina de contenido»).
+            </p>
+          )}
+          {conPresupuesto && pct != null && (
+            <div className="h-1.5 w-56 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  "h-full rounded-full",
+                  pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500",
+                )}
+                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+              />
+            </div>
+          )}
+        </div>
+        {esAdmin && (
+          <label className="flex items-center gap-2 text-sm">
+            <span className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}>
+              {presupuesto.pausada ? "Generación pausada" : "Pausar generación"}
+            </span>
+            <Switch
+              checked={presupuesto.pausada}
+              disabled={pausando}
+              onCheckedChange={(v) => onPausar(v)}
+              aria-label="Pausar la generación con IA (kill switch)"
+            />
+          </label>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Monitor() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
@@ -296,7 +371,7 @@ export default function Monitor() {
   const cola = useQuery({
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
     queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
-    refetchInterval: INTERVALO_COLA_MS,
+    refetchInterval: INTERVALO_VIVO_MS,
   });
   const serie = useQuery({
     queryKey: ["actividad", "cola", "series"],
@@ -428,6 +503,21 @@ export default function Monitor() {
               tono={cola.data.slots_libres > 0 ? "ok" : undefined}
             />
           </div>
+
+          {/* Economía de tokens: estado vivo + kill switch (los knobs, en Máquina de contenido) */}
+          {cola.data.presupuesto && (
+            <PanelPresupuesto
+              presupuesto={cola.data.presupuesto}
+              esAdmin={esAdmin}
+              pausando={
+                toggleDaemon.isPending &&
+                guardandoClave === "KENI_GENERACION_PAUSADA"
+              }
+              onPausar={(valor) =>
+                toggleDaemon.mutate({ clave: "KENI_GENERACION_PAUSADA", valor })
+              }
+            />
+          )}
 
           {/* En curso */}
           <Card>

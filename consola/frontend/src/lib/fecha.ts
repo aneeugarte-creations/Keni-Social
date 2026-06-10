@@ -141,13 +141,31 @@ export function formatearDia(dia: string | null | undefined): string {
 }
 
 /**
- * Tiempo relativo legible en es-MX (p. ej. "hace 5 min", "en 2 h"). Es
+ * Tiempo relativo legible en es-MX (p. ej. "hace 5 minutos", "en 2 horas"). Es
  * independiente de zona (compara instantes); tolera vacíos/ inválidos → "".
+ *
+ * ES LA ÚNICA implementación de tiempo relativo de la consola: Pipelines, Cobertura y
+ * Monitor tenían copias locales divergentes ("hace 2 h" / "hace unos segundos") y el
+ * mismo instante se leía distinto según la página. Para edades ya medidas en segundos
+ * (los `*_hace_s` del monitor de cola) usa `haceSegundos`.
  */
 export function tiempoRelativo(iso: string | null | undefined): string {
   const d = aInstante(iso);
   if (!d) return "";
-  const seg = Math.round((d.getTime() - Date.now()) / 1000);
+  return _relativo(Math.round((d.getTime() - Date.now()) / 1000));
+}
+
+/**
+ * Tiempo relativo a partir de una EDAD en segundos ya calculada por el backend
+ * (p. ej. `encolado_hace_s`): "hace 5 segundos", "hace 3 minutos". `null` → "—".
+ */
+export function haceSegundos(segundos: number | null | undefined): string {
+  if (segundos == null || !Number.isFinite(segundos)) return "—";
+  return _relativo(-Math.round(segundos));
+}
+
+/** Cuerpo compartido: delta en segundos (negativo = pasado) → texto es-MX vía Intl. */
+function _relativo(seg: number): string {
   const abs = Math.abs(seg);
   const rtf = new Intl.RelativeTimeFormat("es-MX", { numeric: "auto" });
   const divisiones: [number, Intl.RelativeTimeFormatUnit][] = [
