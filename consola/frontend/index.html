@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover`: el layout llega al borde fisico en iPhone con notch/isla; los
+         `env(safe-area-inset-*)` del feed movil dependen de esto para no quedar a 0. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <!--
       Tema aplicado antes de pintar para evitar parpadeo. Respeta lo guardado en

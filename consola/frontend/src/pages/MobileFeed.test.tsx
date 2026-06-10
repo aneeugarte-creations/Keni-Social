@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -100,8 +100,8 @@ function stubFetch() {
   );
 }
 
-function renderFeed(usuario: Partial<UsuarioSesion> = {}) {
-  const valor: ValorSesion = {
+function sesion(usuario: Partial<UsuarioSesion> = {}): ValorSesion {
+  return {
     usuario: {
       id: "u1",
       usuario: "revisor",
@@ -117,16 +117,23 @@ function renderFeed(usuario: Partial<UsuarioSesion> = {}) {
     cerrarSesion: vi.fn(),
     refrescar: vi.fn(),
   };
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+}
+
+function arbol(valor: ValorSesion, client: QueryClient) {
+  return (
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={valor}>
         <MemoryRouter>
           <MobileFeed />
         </MemoryRouter>
       </SesionContexto.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+}
+
+function renderFeed(usuario: Partial<UsuarioSesion> = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(arbol(sesion(usuario), client));
 }
 
 describe("MobileFeed · feed móvil de revisión", () => {
@@ -137,13 +144,24 @@ describe("MobileFeed · feed móvil de revisión", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera, las bandejas y el botón de crear", async () => {
+  it("muestra la cabecera compacta, las bandejas y el botón de crear", async () => {
     stubFetch();
     renderFeed();
+    // El título queda solo para lectores de pantalla (sr-only): la cabecera no gasta una fila.
     expect(await screen.findByText("Feed de revisión")).toBeInTheDocument();
     // Mismo vocabulario que el feed de escritorio: "Por aprobar" (el OK), no "Por revisar".
     expect(screen.getByRole("tab", { name: "Por aprobar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actualizar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear pieza/i })).toBeInTheDocument();
+    // Con UNA sola marca asignada el selector de marca no es una decisión: no se pinta.
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("con varias marcas asignadas SÍ muestra el selector de marca", async () => {
+    stubFetch();
+    renderFeed({ marcas: ["unotv", "claro-sports"] });
+    await screen.findByText("Feed de revisión");
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
   });
 
   it("renderiza la pieza como PostFeed (mismas acciones que el feed de escritorio)", async () => {
@@ -151,8 +169,9 @@ describe("MobileFeed · feed móvil de revisión", () => {
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // La tarjeta es el MISMO PostFeed del escritorio: like/dislike (la pieza está en revisión)
-    // y comentar; nada de los botones planos Aprobar/Rechazar sin gates.
-    expect(screen.getByRole("button", { name: "Me gusta" })).toBeInTheDocument();
+    // y comentar; nada de los botones planos Aprobar/Rechazar sin gates. El nombre accesible
+    // del like deriva del estado real (aquí la cadena no da turno: "no disponible").
+    expect(screen.getByRole("button", { name: "Me gusta: no disponible" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "No me gusta" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^aprobar$/i })).not.toBeInTheDocument();
@@ -166,5 +185,80 @@ describe("MobileFeed · feed móvil de revisión", () => {
     expect(document.documentElement.style.scrollSnapType).toBe("y proximity");
     unmount();
     expect(document.documentElement.style.scrollSnapType).toBe("");
+  });
+
+  it("feed agotado con piezas: pinta el fin del feed", async () => {
+    stubFetch(); // 1 pieza, sin cursor_siguiente -> no hay más páginas
+    renderFeed();
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    expect(screen.getByText("Has llegado al final del feed.")).toBeInTheDocument();
+  });
+
+  it("vacío HONESTO: con la página llena de otras marcas y más por traer, busca en vez de afirmar 'Nada por aprobar'", async () => {
+    // Usuario multi-marca (filtro en 'todas'): la página 1 trae solo piezas de una marca AJENA
+    // (el filtro en cliente las descarta) y hay cursor: el feed debe seguir buscando.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          return new Response(
+            JSON.stringify({
+              publicaciones: [{ ...PUBLICACION, marca: "otra-marca" }],
+              paginacion: { total: 9, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderFeed({ marcas: ["unotv", "claro-sports"] });
+    expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
+    expect(screen.queryByText("Nada por aprobar")).not.toBeInTheDocument();
+  });
+
+  it("preselecciona la única marca del usuario aunque la sesión llegue DESPUÉS del mount", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          urls.push(ruta);
+          return new Response(
+            JSON.stringify({ publicaciones: [], paginacion: { total: 0, limite: 50, desplazamiento: 0 } }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    // Mount en carga fría: la sesión aún no trae marcas -> el filtro arranca en "todas".
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { rerender } = render(arbol(sesion({ marcas: [] }), client));
+    await screen.findByText("Feed de revisión");
+    // La sesión aterriza con UNA marca: el filtro se preselecciona solo (sin tocar el selector),
+    // y el listado pasa a pedirse acotado a esa marca (las altas rápidas ya no nacen huérfanas).
+    rerender(arbol(sesion({ marcas: ["unotv"] }), client));
+    await waitFor(() => expect(urls.some((u) => u.includes("marca=unotv"))).toBe(true));
   });
 });

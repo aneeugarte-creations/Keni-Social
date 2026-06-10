@@ -161,6 +161,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
             onChange={alEscribir}
             onKeyDown={alTeclear}
             onBlur={() => setMenu(null)}
+            aria-label="Escribe un comentario"
             placeholder="Escribe un comentario para el equipo… usa @ para mencionar"
             rows={2}
             className="text-sm"

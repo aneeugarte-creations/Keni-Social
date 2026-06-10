@@ -30,7 +30,8 @@ export function DistintivoRed({
       className={cn("inline-flex items-center gap-1 text-muted-foreground", className)}
       title={`${nombreRed(red)}${tieneFormato ? ` · ${esVideo ? "Video" : "Foto"}` : ""}`}
     >
-      {tieneFormato && <IconoFormato className="h-3 w-3" aria-hidden="true" />}
+      {/* Mismo tamaño que el logo de red; la jerarquía formato<red la da la opacidad, no el tamaño. */}
+      {tieneFormato && <IconoFormato className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />}
       <Icono className="h-3.5 w-3.5" aria-hidden="true" />
       {/* Nombre accesible: el `title` no existe en táctil ni lo anuncian fiable los lectores. */}
       <span className="sr-only">

@@ -13,6 +13,25 @@
 export type Formato = "foto" | "video";
 
 /**
+ * Clases estáticas (Tailwind las detecta) por nº de columnas de las rejillas del feed. Sin
+ * prefijo responsive: aplican en TODOS los anchos. Único export compartido por la rejilla
+ * plana de `FeedIdeacion` y la matriz interna de `GrupoIdea` (antes eran clones).
+ */
+export const GRID_COLS: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-4",
+  5: "grid-cols-5",
+};
+
+// Pares de tono CANÓNICOS del design system (mismos 700/300 que `ui/badge.tsx` y
+// `META_ESTADOS`): un solo verde para "OK/lista" y un solo rojo para "rechazo/error"
+// en toda la tarjeta del feed.
+export const TEXTO_OK = "text-emerald-700 dark:text-emerald-300";
+export const TEXTO_ERROR = "text-red-700 dark:text-red-300";
+
+/**
  * Redes destino por formato — espejo EXACTO de `redes.redes_de_formato` del backend
  * (`consola/src/keni_consola/redes.py`): foto → instagram/x/facebook; video → las 5.
  * La matriz del feed lo usa para NO pintar huecos "No generado" en redes a las que la

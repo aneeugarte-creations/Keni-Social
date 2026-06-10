@@ -7,10 +7,12 @@
  *     red (`VistaPreviaRed`, variante limpia: sin chrome social falso ni cabecera duplicada).
  *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): "Me gusta" (el OK humano),
  *     "No me gusta" (dislike), "Editar" (copy, copy-in, foto+plantilla, vía `DialogoEditar`) y
- *     "Comentar". Like y dislike son un TOGGLE de tu reacción: un dislike tras tu like lo quita
- *     (vuelve a neutro) y el siguiente lo marca; el like quita tu dislike. El "me gusta" (marcar
- *     OK) y el "marcar dislike" solo se habilitan cuando te toca decidir (`elegibilidadOK`);
- *     QUITAR tu propia reacción siempre puedes. Dos dislikes (dos personas) rechazan la pieza.
+ *     "Comentar". Cada botón es un TOGGLE estándar de SU PROPIA reacción: un segundo like quita
+ *     tu OK; un segundo dislike quita tu dislike; un like con dislike puesto lo retira primero.
+ *     El "marcar OK" y el "marcar dislike" solo se habilitan cuando te toca decidir
+ *     (`elegibilidadOK`); QUITAR tu propia reacción siempre puedes. Dos dislikes (dos personas)
+ *     rechazan la pieza. El override de FORZAR vive como botón discreto al pie del panel de
+ *     estado (no escondido en un toast).
  *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): veredicto de IA + OK del
  *     equipo (cuántos y de quién) + lo que falta. La acción vive en la fila, no aquí.
  *
@@ -19,7 +21,7 @@
  * dislikes para rechazar"); el gate lo decide el backend, `elegibilidadOK` solo habilita/explica.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Inbox, Loader2, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Bot, Check, Loader2, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -47,6 +49,7 @@ import type { Publicacion, RespuestaPublicacion } from "@/types";
 import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
+import { TEXTO_ERROR, TEXTO_OK } from "./formato";
 import { BadgeEtapa } from "./TarjetaEtapa";
 import { CadenasLoteContexto } from "./use-cadenas-lote";
 
@@ -92,8 +95,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const aprobacionesHumanas = (cadena?.niveles ?? []).filter(
     (n) => n.decision === "aprobado" && n.decisor_id !== "" && n.decisor_id !== "auto",
   ).length;
-  const tieneAprobaciones =
-    etapa === "aprobada" || etapa === "programada" || aprobacionesHumanas > 0;
+  const tieneAprobaciones = yaAprobada || aprobacionesHumanas > 0;
   // Hay cadena configurada => pintamos el panel "dale el OK"; si no, camino simple (legado).
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
 
@@ -118,39 +120,46 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
 
   // Fallback para piezas legadas que estén en revisión SIN cadena (aprobar/rechazar forwardea).
   // El toast dice lo que DE VERDAD pasó: tu OK puede ser 1 de 2 (la pieza sigue en revisión) o
-  // cerrar la cadena (queda aprobada/lista para salir).
+  // cerrar la cadena (queda aprobada/lista para salir). Como tu reacción siempre se puede
+  // retirar, el toast ofrece "Deshacer" (patrón Gmail) salvo en estados finales distintos.
   const aprobar = useMutation({
     mutationFn: () => api.aprobarPublicacion(publicacion.id),
     onSuccess: (res) => {
       const cerrada =
         !!res?.publicacion &&
         ["aprobado", "programado", "publicado"].includes(res.publicacion.estado);
-      tras(
+      actualizarCaches(res);
+      toast.success(
         cerrada
           ? "Pieza aprobada: lista para publicar."
           : "Tu OK quedó registrado; falta el de otra persona.",
-      )(res);
+        { action: { label: "Deshacer", onClick: () => deshacer.mutate(undefined) } },
+      );
     },
     onError,
   });
   const rechazar = useMutation({
     mutationFn: () => api.rechazarPublicacion(publicacion.id),
     // Un dislike NO devuelve a borrador por sí solo: hacen falta dos (de dos personas). El back
-    // refleja el desenlace; el toast lo cuenta tal cual.
+    // refleja el desenlace; el toast lo cuenta tal cual. "Deshacer" solo mientras la pieza siga
+    // en revisión (devuelta a redacción es otro estado: no se deshace desde un toast).
     onSuccess: (res) => {
-      tras(
-        res?.publicacion?.estado === "borrador"
-          ? "Pieza rechazada: vuelve a redacción."
-          : "Dislike registrado; con un segundo dislike la pieza se rechaza.",
-      )(res);
+      actualizarCaches(res);
+      if (res?.publicacion?.estado === "borrador") {
+        toast.success("Pieza rechazada: vuelve a redacción.");
+        return;
+      }
+      toast.success("Dislike registrado; con un segundo dislike la pieza se rechaza.", {
+        action: { label: "Deshacer", onClick: () => deshacer.mutate(undefined) },
+      });
     },
     onError,
   });
-  // Retira TU decisión (quitar tu like o tu dislike): tu nivel vuelve a pendiente. Con origen
-  // "like" (pulsaste OK teniendo un dislike puesto) el toast explica el paso intermedio y ofrece
-  // completar el OK en un clic, en vez del genérico "quitamos tu reacción".
+  // Retira TU decisión (quitar tu like o tu dislike): tu nivel vuelve a pendiente. El `origen`
+  // afina el toast: "ok" = togglear tu like; "like" = pulsaste OK teniendo un dislike puesto
+  // (explica el paso intermedio y ofrece completar el OK en un clic); sin origen, el genérico.
   const deshacer = useMutation({
-    mutationFn: (_origen?: "like") => api.deshacerAprobacion(publicacion.id),
+    mutationFn: (_origen?: "like" | "ok") => api.deshacerAprobacion(publicacion.id),
     onSuccess: (res, origen) => {
       if (origen === "like") {
         actualizarCaches(res);
@@ -159,7 +168,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         });
         return;
       }
-      tras("Quitamos tu reacción.")(res);
+      tras(origen === "ok" ? "Quitamos tu OK." : "Quitamos tu reacción.")(res);
     },
     onError,
   });
@@ -207,27 +216,20 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // habilitamos/explicamos antes de pedirlo. `aprobar`/`rechazar` (legado) forwardean al
   // nivel ACTUAL de la cadena, así que un OK cierra el nivel humano que toca.
   const { puedeDar, motivo } = elegibilidadOK(cadena, usuario, publicacion.autor_id);
-  // Texto del botón "Me gusta" según el estado de la pieza (tooltip cuando está deshabilitado).
-  const tituloLike = puedeDar
-    ? "Dale tu OK (me gusta) a esta pieza"
-    : yaAprobada
-      ? publicacion.revisor_nombre
-        ? `Aprobada · último OK: ${publicacion.revisor_nombre}`
-        : "Aprobada"
-      : enRevision
-        ? motivo || "Esperando turno para tu OK"
-        : "La IA aún prepara esta pieza; podrás darle tu OK cuando esté lista.";
 
-  // Por qué el "me gusta" está bloqueado (qué falta). Ya NO es un texto fijo en la tarjeta: se
-  // muestra como TOAST al intentar darle like cuando no toca. Explica el gate (en revisión: tu
-  // pieza / ya diste OK / espera turno) o, antes, qué le falta a la pieza.
+  // Por qué el "me gusta" está bloqueado (qué falta): FUENTE ÚNICA del tooltip del botón y del
+  // toast al pulsarlo cuando no toca. Explica el gate (en revisión: tu pieza / ya diste OK /
+  // espera turno) o, antes, qué le falta a la pieza. Si la cadena no pudo cargarse, lo dice
+  // (sin inventarse un "espera tu turno" que no consta).
   const esVideo = (publicacion.formato ?? "").trim().toLowerCase() === "video";
   const motivoBloqueo = yaAprobada
     ? publicacion.revisor_nombre
       ? `Ya aprobada · último OK: ${publicacion.revisor_nombre}`
       : "Esta pieza ya está aprobada."
     : enRevision
-      ? motivo || "Espera tu turno para dar el OK."
+      ? cadenaQuery.isError
+        ? "No se pudo cargar el estado de aprobación; reintenta."
+        : motivo || "Espera tu turno para dar el OK."
       : etapa === "generando_copy"
         ? "Falta el copy: la IA aún lo está redactando."
         : etapa === "generando_arte"
@@ -235,55 +237,59 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             ? "Falta el video: ábrela y sube el clip."
             : "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
           : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
+  // Tooltip del "me gusta" cuando SÍ puedes; bloqueado, manda `motivoBloqueo` (fuente única).
+  const tituloLike = puedeDar ? "Dale tu OK (me gusta) a esta pieza" : motivoBloqueo;
 
-  // "Me gusta": el like NUNCA quita tu like (eso es trabajo del dislike). Si tienes un dislike,
-  // un like lo retira primero (un clic más dará el OK). En neutro y si te toca, da el OK (con el
-  // gate de comentarios sin resolver). Si YA diste tu OK o no te toca, cae al manejo de "no
-  // toca": un segundo like ofrece FORZAR la aprobación (saltar la cadena) a quien pueda; al resto
-  // le explica con un toast por qué no puede dar el OK (no bloquea en silencio).
+  // "Me gusta" como TOGGLE estándar de tu OK: con tu like puesto, lo quita; con tu dislike
+  // puesto, lo retira primero (un clic más dará el OK); en neutro, comprueba PRIMERO si te toca
+  // (`puedeDar`, con su motivo si no) y SOLO entonces el gate de comentarios sin resolver —el
+  // orden importa: al autor de la pieza se le explica la elegibilidad, no se le manda a resolver
+  // comentarios de un OK que no puede dar—.
   const onLike = () => {
+    if (miReaccion === "like") {
+      deshacer.mutate("ok"); // toggle off: quita tu OK
+      return;
+    }
     if (miReaccion === "dislike") {
       deshacer.mutate("like"); // retira tu dislike antes de poder dar el OK
       return;
     }
-    if (miReaccion === "neutral") {
-      if (sinResolver > 0) {
-        toast(`Resuelve ${plural(sinResolver, "comentario")} antes de aprobar y publicar.`);
-        setComentariosAbierto(true);
+    if (!puedeDar) {
+      // Falta material del equipo (foto/clip o copy): el toast lleva la acción que resuelve el
+      // bloqueo (abrir el editor), clave en táctil donde no hay hover que enseñe dónde editar.
+      if (
+        !enRevision &&
+        !yaAprobada &&
+        (etapa === "generando_arte" || etapa === "generando_copy")
+      ) {
+        toast(motivoBloqueo, {
+          action: { label: "Abrir", onClick: () => void abrirEditor() },
+        });
         return;
       }
-      if (puedeDar) {
-        aprobar.mutate();
-        return;
-      }
-    }
-    // Ya diste tu OK (segundo like) o no te toca: si puedes FORZAR (admin/coordinador), el toast
-    // ofrece saltarte la cadena; si no, explica por qué no puedes dar el OK.
-    if (puedeForzar && enRevision && !yaAprobada) {
-      toast(motivoBloqueo, {
-        action: { label: "Forzar", onClick: () => void onForzar() },
-      });
+      toast(motivoBloqueo);
       return;
     }
-    // Falta material del equipo (foto/clip o copy): el toast lleva la acción que resuelve el
-    // bloqueo (abrir el editor), clave en táctil donde no hay hover que enseñe dónde editar.
-    if (!enRevision && !yaAprobada && (etapa === "generando_arte" || etapa === "generando_copy")) {
-      toast(motivoBloqueo, {
-        action: { label: "Abrir", onClick: () => void abrirEditor() },
-      });
+    if (sinResolver > 0) {
+      toast(`Resuelve ${plural(sinResolver, "comentario")} antes de aprobar y publicar.`);
+      setComentariosAbierto(true);
       return;
     }
-    toast(motivoBloqueo);
+    aprobar.mutate();
   };
 
-  // "No me gusta" (toggle): con tu like puesto, lo quita (vuelve a neutro); si ya tenías dislike,
-  // lo quita (toggle off); desde neutro, si te toca, marca tu dislike (rechaza el nivel actual).
-  // Dos dislikes de dos personas distintas rechazan la pieza (lo decide el backend). Si no te
-  // toca decidir, un toast explica por qué. Marcar dislike NO depende de comentarios sin resolver
-  // (ese gate es para publicar, no para objetar).
+  // "No me gusta" (toggle de TU dislike): si ya está puesto, lo quita; desde neutro, si te toca,
+  // marca tu dislike (rechaza el nivel actual). Con tu LIKE puesto ya NO lo deshace (cada botón
+  // togglea solo su propia reacción): un toast te manda al "Me gusta". Dos dislikes de dos
+  // personas rechazan la pieza (lo decide el backend). Marcar dislike NO depende de comentarios
+  // sin resolver (ese gate es para publicar, no para objetar).
   const onDislike = () => {
-    if (miReaccion === "like" || miReaccion === "dislike") {
-      deshacer.mutate(undefined); // "se quita el like" (o quita tu dislike si ya estaba marcado)
+    if (miReaccion === "dislike") {
+      deshacer.mutate(undefined); // toggle off: quita tu dislike
+      return;
+    }
+    if (miReaccion === "like") {
+      toast("Tu OK está puesto; vuelve a pulsar «Me gusta» para quitarlo.");
       return;
     }
     if (puedeDar) {
@@ -294,13 +300,16 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   };
 
   // Abre el editor. Si la pieza ya tiene aprobaciones, AVISA primero: editarla las pierde (vuelve a
-  // borrador y habrá que aprobarla de nuevo). Igual que reescribir un PR ya aprobado.
+  // borrador y habrá que aprobarla de nuevo). Igual que reescribir un PR ya aprobado. En piezas
+  // YA PUBLICADAS el aviso es otro: lo que salió a la red no cambia desde aquí.
   const abrirEditor = async () => {
     if (tieneAprobaciones) {
       const ok = await confirmar({
         titulo: "Se perderán las aprobaciones",
         mensaje:
-          "Esta pieza ya tiene el visto bueno del equipo. Si la editas, volverá a borrador y tendrá que aprobarse otra vez desde cero. ¿Quieres continuar?",
+          etapa === "publicada"
+            ? "Esta pieza ya salió a la red. Editarla aquí solo cambia la copia interna y la devuelve a borrador. ¿Continuar?"
+            : "Esta pieza ya tiene el visto bueno del equipo. Si la editas, volverá a borrador y tendrá que aprobarse otra vez desde cero. ¿Quieres continuar?",
         textoConfirmar: "Editar de todas formas",
         textoCancelar: "Dejar como está",
       });
@@ -341,9 +350,38 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             className="text-xs font-medium text-foreground"
           />
         )}
-        {publicacion.enviado_a_revision_en && (
-          <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
-        )}
+        <span className="ml-auto inline-flex items-center gap-2">
+          {/* Antigüedad de la pieza: cuándo entró a revisión o, si aún no (en preparación),
+              cuándo se creó. El `title` aclara QUÉ fecha es (el relativo solo no lo dice). */}
+          {publicacion.enviado_a_revision_en ? (
+            <span
+              className="tabular-nums"
+              title={`Enviada a revisión: ${formatearFechaHoraCorta(publicacion.enviado_a_revision_en)}`}
+            >
+              {tiempoRelativo(publicacion.enviado_a_revision_en)}
+            </span>
+          ) : publicacion.fecha_creacion ? (
+            <span
+              className="tabular-nums"
+              title={`Creada: ${formatearFechaHoraCorta(publicacion.fecha_creacion)}`}
+            >
+              {tiempoRelativo(publicacion.fecha_creacion)}
+            </span>
+          ) : null}
+          {/* Trazabilidad del PROCESO IA (su run del pipeline): consulta rara → icono discreto
+              en la cabecera, no una fila permanente del pie. Solo en piezas nacidas del pipeline. */}
+          {publicacion.pipeline_id && (
+            <Link
+              to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Ver proceso IA"
+              title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          )}
+        </span>
       </header>
 
       {/* El post tal como se verá en la red: variante LIMPIA = tarjeta uniforme (imagen 4:5 a
@@ -384,28 +422,36 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             className={cn(
               "h-10 w-10 sm:h-8 sm:w-8",
               miReaccion === "like"
-                ? "text-emerald-600 hover:text-emerald-600 dark:text-emerald-400"
+                ? cn(TEXTO_OK, "hover:text-emerald-700 dark:hover:text-emerald-300")
                 : puedeDar && miReaccion === "neutral" && sinResolver === 0
                   ? "text-primary hover:text-primary"
                   : undefined,
             )}
             onClick={onLike}
             disabled={ocupado}
+            // Tooltip y nombre accesible derivados del ESTADO REAL del toggle (fuente única:
+            // `motivoBloqueo` cuando no puedes; nada de "pulsa para forzar" aquí).
             title={
               miReaccion === "like"
-                ? puedeForzar
-                  ? "Ya diste tu OK · pulsa para forzar la aprobación (saltar la cadena)"
-                  : "Ya diste tu OK; falta el de otra persona"
+                ? "Ya diste tu OK · vuelve a pulsar para quitarlo"
                 : miReaccion === "dislike"
-                  ? "Quita tu dislike para poder dar el OK"
-                  : sinResolver > 0
+                  ? "Tu dislike está puesto; púlsalo para retirarlo y poder dar el OK"
+                  : puedeDar && sinResolver > 0
                     ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar`
                     : tituloLike
             }
-            aria-label="Me gusta"
+            aria-label={
+              miReaccion === "like"
+                ? "Quitar tu OK"
+                : miReaccion === "dislike"
+                  ? "Retirar tu dislike"
+                  : puedeDar
+                    ? "Dale tu OK"
+                    : "Me gusta: no disponible"
+            }
             aria-pressed={miReaccion === "like"}
           >
-            {aprobar.isPending || (deshacer.isPending && miReaccion === "dislike") ? (
+            {aprobar.isPending || (deshacer.isPending && deshacer.variables !== undefined) ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : yaAprobada ? (
               <Check className="h-4 w-4" />
@@ -423,31 +469,33 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, negro/neutro.
               className={cn(
                 "h-10 w-10 sm:h-8 sm:w-8",
-                miReaccion === "dislike" && "text-red-600 hover:text-red-600 dark:text-red-400",
+                miReaccion === "dislike" &&
+                  cn(TEXTO_ERROR, "hover:text-red-700 dark:hover:text-red-300"),
               )}
               onClick={onDislike}
               disabled={ocupado}
               title={
                 miReaccion === "like"
-                  ? "Quitar tu OK"
+                  ? "Tu OK está puesto; quítalo con «Me gusta»"
                   : miReaccion === "dislike"
                     ? "Quitar tu dislike"
                     : "No me gusta"
               }
-              aria-label={miReaccion === "like" ? "Quitar tu OK" : "No me gusta"}
+              aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
               aria-pressed={miReaccion === "dislike"}
             >
-              {rechazar.isPending || (deshacer.isPending && miReaccion !== "neutral") ? (
+              {rechazar.isPending || (deshacer.isPending && deshacer.variables === undefined) ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <ThumbsDown className="h-4 w-4" />
               )}
             </Button>
           )}
-          {/* El OVERRIDE de forzar (admin/coordinador) ya NO es un icono en la tarjeta: se ofrece
-              como acción discreta "Forzar" en el toast al intentar dar el OK sin que toque. */}
-          {/* Comentar. Con hilos SIN RESOLVER muestra una bandeja (Inbox) con el conteo y en ámbar:
-              avisa de que hay conversación pendiente que bloquea publicar (como en un PR). */}
+          {/* El OVERRIDE de forzar (admin/coordinador) vive como botón discreto al pie del panel
+              de estado (`CadenaAprobacion`), no aquí ni escondido en un toast. */}
+          {/* Comentar: SIEMPRE el mismo icono (identidad estable del botón). Con hilos SIN
+              RESOLVER se tiñe de ámbar y muestra la burbuja con el conteo: conversación
+              pendiente que bloquea publicar (como en un PR). */}
           <Button
             variant="ghost"
             size="icon"
@@ -466,7 +514,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             }
             aria-label={sinResolver > 0 ? `${plural(sinResolver, "comentario")} sin resolver` : "Comentar"}
           >
-            {sinResolver > 0 ? <Inbox className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+            <MessageSquare className="h-4 w-4" />
             {sinResolver > 0 && (
               <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none tabular-nums text-amber-950">
                 {sinResolver}
@@ -481,50 +529,51 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
-          (cuántos y de quién) + lo que falta. */}
+          (cuántos y de quién) + lo que falta (comentarios sin resolver) + el override de forzar
+          (admin/coordinador, con su confirmación). Para piezas aprobadas sin panel, la burbuja
+          del botón Comentar sigue siendo la señal de hilos abiertos. */}
       {enRevision && tieneCadena && cadena && (
-        <CadenaAprobacion cadena={cadena} veredictoIA={publicacion.veredicto} />
+        <CadenaAprobacion
+          cadena={cadena}
+          veredictoIA={publicacion.veredicto}
+          sinResolver={sinResolver}
+          onForzar={puedeForzar ? () => void onForzar() : undefined}
+        />
       )}
 
-      {/* Aviso de comentarios sin resolver: bloquean aprobar/programar hasta marcarse resueltos. */}
-      {sinResolver > 0 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setComentariosAbierto(true);
-          }}
-          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-amber-700 hover:bg-amber-500/5 dark:text-amber-300"
-        >
-          <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
-          {plural(sinResolver, "comentario")} sin resolver antes de publicar.
-        </button>
+      {/* La cadena NO cargó (red/500): se dice y se ofrece reintentar, en vez de dejar el panel
+          mudo y el like contando una historia falsa. */}
+      {enRevision && cadenaQuery.isError && (
+        <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          <span>No se pudo cargar el estado de aprobación.</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              void cadenaQuery.refetch();
+            }}
+          >
+            {cadenaQuery.isFetching && <Loader2 className="h-3 w-3 animate-spin" />}
+            Reintentar
+          </Button>
+        </div>
       )}
 
-      {/* Hilo de comentarios del equipo. No abre el editor (para la propagación: tiene inputs). */}
+      {/* Hilo de comentarios del equipo. No abre el editor (para la propagación: tiene inputs).
+          Los comentarios cuelgan del CONTENIDO padre: el mismo hilo aparece en las tarjetas
+          hermanas (otras redes de la misma idea); la línea de contexto lo aclara. */}
       {comentariosAbierto && publicacion.contenido_id && (
         <div
           className="border-t border-border px-4 py-3"
           onClick={(e) => e.stopPropagation()}
         >
+          <p className="mb-2 text-xs text-muted-foreground">
+            Conversación de la idea (común a todas sus redes)
+          </p>
           <Comentarios contenidoId={publicacion.contenido_id} />
         </div>
-      )}
-
-      {/* Enlace al PROCESO IA de esta pieza (su run del pipeline): dedup/fusión, jerarquización y
-          criba. Solo en piezas que NACIERON del pipeline (`pipeline_id`); las manuales/radar/rss no
-          tienen run que mostrar. Va al FINAL del pie: es trazabilidad de consulta rara, por debajo
-          de estado, bloqueos y conversación. */}
-      {publicacion.pipeline_id && (
-        <Link
-          to={`/datos/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
-          onClick={(e) => e.stopPropagation()}
-          className="flex w-full items-center gap-1.5 border-t border-border px-4 py-2 text-left text-xs text-muted-foreground hover:bg-muted/40"
-          title="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)"
-        >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          Ver proceso IA
-        </Link>
       )}
     </article>
   );

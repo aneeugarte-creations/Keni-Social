@@ -84,26 +84,37 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("generando_arte");
   });
 
-  it("pieza SIN marca con imagen subida (bespoke) → lista_para_revisar", () => {
+  it("pieza SIN marca con imagen subida (bespoke), aún en borrador → en_borrador (no 'para revisar')", () => {
     expect(
       etapaDePublicacion(
         pub({ estado: "borrador", marca: "", contenido: "copy", copy_in: "", foto: "", imagen: "subida.png", etapa_ia: undefined }),
       ),
-    ).toBe("lista_para_revisar");
+    ).toBe("en_borrador");
   });
 
-  it("lleva imagen y ya tiene foto real → lista_para_revisar", () => {
+  it("completa (copy + foto real) pero fuera de revisión → en_borrador (etapa honesta)", () => {
     expect(
       etapaDePublicacion(
         pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
       ),
-    ).toBe("lista_para_revisar");
+    ).toBe("en_borrador");
   });
 
   it("en revisión → lista_para_revisar (gate humano)", () => {
     expect(etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: undefined }))).toBe(
       "lista_para_revisar",
     );
+  });
+
+  it("normaliza el `etapa_ia` explícito: 'lista_para_revisar' con estado borrador → en_borrador", () => {
+    // El backend puede decir "lista para revisar" en una pieza completa que sigue en borrador
+    // (o devuelta a redacción): el feed no miente con un "Para revisar" que nadie puede aprobar.
+    expect(
+      etapaDePublicacion(pub({ estado: "borrador", etapa_ia: "lista_para_revisar" })),
+    ).toBe("en_borrador");
+    expect(
+      etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" })),
+    ).toBe("lista_para_revisar");
   });
 
   it("aprobado / programado / publicado mapean a sus etapas", () => {
@@ -127,6 +138,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     for (const etapa of [
       "generando_copy",
       "generando_arte",
+      "en_borrador",
       "lista_para_revisar",
       "aprobada",
       "programada",

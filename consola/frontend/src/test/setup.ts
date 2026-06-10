@@ -26,6 +26,22 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   } as unknown as typeof ResizeObserver;
 }
 
+// Ni IntersectionObserver, que usa el sentinel del scroll infinito del feed (`useSentinelInfinito`).
+// Stub no-op: los tests que necesitan DISPARAR la intersección stubban el suyo propio (vi.stubGlobal).
+if (typeof globalThis.IntersectionObserver === "undefined") {
+  globalThis.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+    root = null;
+    rootMargin = "";
+    thresholds = [];
+  } as unknown as typeof IntersectionObserver;
+}
+
 // Desmonta el arbol de React tras cada test para evitar fugas entre casos.
 afterEach(() => {
   cleanup();

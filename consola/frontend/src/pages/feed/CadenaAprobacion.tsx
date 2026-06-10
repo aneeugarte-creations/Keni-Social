@@ -13,10 +13,13 @@
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { plural } from "@/lib/formato";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
+
+import { TEXTO_ERROR, TEXTO_OK } from "./formato";
 
 /** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada. */
 const ETIQUETA_QA = "qa editorial";
@@ -44,10 +47,17 @@ function pintaIA(
 export function CadenaAprobacion({
   cadena,
   veredictoIA,
+  sinResolver = 0,
+  onForzar,
 }: {
   cadena: TCadena;
   /** Veredicto de QA suelto (cuando la IA no es un nivel de la cadena). Pinta el badge. */
   veredictoIA?: string;
+  /** Comentarios sin resolver: > 0 añade la línea de bloqueo dentro del panel ("lo que falta"). */
+  sinResolver?: number;
+  /** Override admin/coordinador: si llega y la cadena sigue abierta, pinta al pie el botón
+   *  discreto "Forzar aprobación" (la confirmación la pone el llamador). */
+  onForzar?: () => void;
 }) {
   const niveles = [...cadena.niveles].sort((a, b) => a.nivel - b.nivel);
   const humanos = niveles.filter((n) => !esNivelIA(n));
@@ -95,7 +105,7 @@ export function CadenaAprobacion({
       {disDados.length > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <span
-            className="inline-flex items-center gap-1 font-medium tabular-nums text-red-600 dark:text-red-400"
+            className={`inline-flex items-center gap-1 font-medium tabular-nums ${TEXTO_ERROR}`}
             title={`Dislikes: ${disDados.length} de ${umbralDislike}`}
             aria-label={`Dislikes: ${disDados.length} de ${umbralDislike}`}
           >
@@ -110,15 +120,35 @@ export function CadenaAprobacion({
 
       {/* Desenlace de la cadena. */}
       {lista ? (
-        <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+        <p className={`mt-2 flex items-center gap-1.5 text-sm font-medium ${TEXTO_OK}`}>
           <Check className="h-4 w-4" />
           Lista para publicar
         </p>
       ) : rechazada ? (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+        <p className={`mt-2 text-sm ${TEXTO_ERROR}`}>
           Rechazada; la pieza vuelve a la redacción.
         </p>
       ) : null}
+
+      {/* Lo que falta: comentarios sin resolver (bloquean publicar, como en un PR). */}
+      {sinResolver > 0 && (
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-300">
+          <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+          Falta resolver {plural(sinResolver, "comentario")} antes de publicar
+        </p>
+      )}
+
+      {/* Override (admin/coordinador): discreto, al pie, fuera del camino del doble clic del
+          like. Solo mientras la cadena siga abierta. */}
+      {onForzar && !lista && !rechazada && (
+        <button
+          type="button"
+          onClick={onForzar}
+          className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Forzar aprobación (saltar la cadena)
+        </button>
+      )}
     </section>
   );
 }

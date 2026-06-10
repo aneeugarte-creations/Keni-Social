@@ -162,17 +162,44 @@ describe("FeedIdeacion · feed de ideación interno", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
-  it("muestra 4 pestañas-vista del mismo feed (todo / preparación / por aprobar / publicado)", async () => {
+  it("tope responsivo: en móvil (<640px) la preferencia de 5 columnas se acota a 2 efectivas", async () => {
+    window.localStorage.setItem("keni_feed_columnas", "5");
+    // jsdom no trae matchMedia: lo simulamos diciendo que el viewport es <640px.
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    stubFetch();
+    renderFeed();
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // La rejilla plana usa las columnas EFECTIVAS (máx. 2 en móvil), no la preferencia (5).
+    const rejilla = screen.getByRole("feed");
+    expect(rejilla.className).toContain("grid-cols-2");
+    expect(rejilla.className).not.toContain("grid-cols-5");
+  });
+
+  it("muestra 4 pestañas-vista del mismo feed (todo / preparación / por aprobar / aprobado)", async () => {
     stubFetch();
     renderFeed();
     // 4 vistas del mismo listado (no las bandejas viejas por estado). Es un hub: la barra
-    // son las PESTAÑAS, sin título de página propio.
-    expect(await screen.findByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /En preparación/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Publicado y programado/ })).toBeInTheDocument();
+    // son las PESTAÑAS, sin título de página propio. El nombre accesible es la etiqueta
+    // COMPLETA (aria-label), aunque en <sm el texto visible se acorte.
+    expect(await screen.findByRole("tab", { name: "Todo el feed" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "En preparación" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Por aprobar" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Aprobado y publicado" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "En proceso" })).not.toBeInTheDocument();
   });
 
@@ -187,18 +214,82 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
   });
 
-  it("la pestaña filtra el feed en cliente: 'Publicado y programado' oculta lo que está por aprobar", async () => {
+  it("la pestaña filtra el feed en cliente: 'Aprobado y publicado' oculta lo que está por aprobar", async () => {
     stubFetch();
     renderFeed();
     // La única pieza (en_revision) se ve en 'Todo'.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Al cambiar a 'Publicado y programado' desaparece (no está publicada ni programada). Las
+    // Al cambiar a 'Aprobado y publicado' desaparece (no está aprobada ni publicada). Las
     // pestañas son Radix Tabs: se activan con mouseDown (no con un click sintético en jsdom).
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Publicado y programado/ }), { button: 0 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Aprobado y publicado" }), { button: 0 });
     await waitFor(() =>
       expect(screen.queryByText("¡Increíble remontada!")).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("Nada publicado ni programado")).toBeInTheDocument();
+    expect(screen.getByText("Nada aprobado ni publicado")).toBeInTheDocument();
+  });
+
+  it("las 3 vistas filtradas PARTICIONAN el ciclo: el borrador completo cae en 'En preparación' y el aprobado en 'Aprobado y publicado'", async () => {
+    // Tres piezas de tres ideas: borrador COMPLETO (antes invisible en toda vista filtrada),
+    // en revisión y aprobada SIN hueco (antes tampoco salía en ninguna).
+    const BORRADOR = {
+      ...PUBLICACION,
+      id: "p2",
+      contenido_id: "c2",
+      contenido: "Borrador completo",
+      estado: "borrador",
+      etapa_ia: "lista_para_revisar",
+    };
+    const APROBADA = {
+      ...PUBLICACION,
+      id: "p3",
+      contenido_id: "c3",
+      contenido: "Aprobada sin hueco",
+      estado: "aprobado",
+      etapa_ia: "aprobada",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          return new Response(
+            JSON.stringify({
+              publicaciones: [PUBLICACION, BORRADOR, APROBADA],
+              paginacion: { total: 3, limite: 50, desplazamiento: 0 },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderFeed();
+    expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
+    // 'En preparación' = todo lo anterior a revisión (incluye el borrador completo, con su
+    // badge honesto 'En borrador').
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "En preparación" }), { button: 0 });
+    await waitFor(() => expect(screen.queryByText("Aprobada sin hueco")).not.toBeInTheDocument());
+    expect(screen.getByText("Borrador completo")).toBeInTheDocument();
+    expect(screen.getByText("En borrador")).toBeInTheDocument();
+    // 'Aprobado y publicado' incluye lo aprobado SIN hueco todavía.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Aprobado y publicado" }), { button: 0 });
+    await waitFor(() => expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument());
+    expect(screen.getByText("Aprobada sin hueco")).toBeInTheDocument();
   });
 
   it("vista filtrada: 'Por aprobar' enseña SOLO las piezas que cumplen (sin tarjetas ajenas ni huecos)", async () => {
@@ -351,9 +442,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Etapa IA en vivo: en revisión → para revisar.
     expect(screen.getByText("Para revisar")).toBeInTheDocument();
-    // El OK en línea ("me gusta") está habilitado para el revisor elegible, con "No me gusta"
-    // (dislike) al lado. Nombre EXACTO: /me gusta/i casaría también con "No me gusta".
-    const like = await screen.findByRole("button", { name: "Me gusta" });
+    // El OK en línea está habilitado para el revisor elegible (nombre accesible derivado del
+    // estado real del toggle: "Dale tu OK"), con "No me gusta" (dislike) al lado.
+    const like = await screen.findByRole("button", { name: "Dale tu OK" });
     expect(like).toBeEnabled();
     expect(screen.getByRole("button", { name: "No me gusta" })).toBeInTheDocument();
     // Panel de estado de la cadena (solo lectura): el recuento de OK (solo el conteo).
@@ -443,9 +534,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(urls.some((u) => u.includes("cursor="))).toBe(true);
   });
 
-  it("matriz por idea: los huecos 'No generado' se acotan a las redes del FORMATO (foto = 3 redes)", async () => {
-    // Catálogo de 3 redes y una idea FOTO con pieza solo en X: hueco en Instagram (sí es red de
-    // foto) pero NO en TikTok (una foto jamás irá ahí; un hueco sería trabajo pendiente falso).
+  it("matriz por idea: la franja 'Falta generar' se acota a las redes del FORMATO (foto = 3 redes)", async () => {
+    // Catálogo de 3 redes y una idea FOTO con pieza solo en X: falta Instagram (sí es red de
+    // foto) pero NO TikTok (una foto jamás irá ahí; listarla sería trabajo pendiente falso).
+    // Las redes pendientes ya no pintan placeholders gigantes: van en UNA franja compacta.
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
@@ -497,8 +589,11 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     renderFeed();
     // El post de la red generada (X).
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Solo 1 hueco (Instagram): TikTok no es red de foto y no pinta hueco.
-    expect(screen.getAllByText("No generado")).toHaveLength(1);
+    // Franja compacta con SOLO Instagram (TikTok no es red de foto); sin placeholders gigantes.
+    expect(screen.getByText("Falta generar:")).toBeInTheDocument();
+    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.queryByText("TikTok")).toBeNull();
+    expect(screen.queryByText("No generado")).toBeNull();
     // Cabecera de la idea: sin contador "1/3 redes" ni fila de logos (la matriz ya lo cuenta);
     // título + fecha de la nota original (CDMX) + fuente.
     expect(screen.queryByText("1/3 redes")).toBeNull();
@@ -512,7 +607,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(screen.getByText("Récord")).toBeInTheDocument();
   });
 
-  it("matriz por idea: una idea VIDEO va a las 5 redes (post en X + 4 huecos)", async () => {
+  it("matriz por idea: una idea VIDEO va a las 5 redes (post en X + franja con las otras 4)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
@@ -558,7 +653,112 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // 5 celdas: el post (X) + 4 huecos (Instagram, Facebook, TikTok, YouTube).
-    expect(screen.getAllByText("No generado")).toHaveLength(4);
+    // El post (X) + UNA franja compacta con las 4 redes pendientes (sin placeholders gigantes).
+    expect(screen.getByText("Falta generar:")).toBeInTheDocument();
+    for (const red of ["Instagram", "Facebook", "TikTok", "YouTube"]) {
+      expect(screen.getByText(red)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("No generado")).toBeNull();
+  });
+
+  it("tope de búsqueda: con 5 páginas cargadas y la vista vacía aparece «Seguir buscando» y NO se pide la 6ª sola", async () => {
+    // IntersectionObserver controlable que RESPETA disconnect(): un disparador de un observer
+    // desconectado (sentinel apagado por el tope) no hace nada, como en el navegador.
+    const observers: IOFalso[] = [];
+    class IOFalso {
+      activa = true;
+      private cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+        observers.push(this);
+      }
+      fire() {
+        if (this.activa) {
+          this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+        }
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {
+        this.activa = false;
+      }
+      takeRecords() {
+        return [];
+      }
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    }
+    vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
+
+    // Todas las páginas traen UNA pieza publicada y SIEMPRE hay cursor: la vista 'Por aprobar'
+    // nunca encuentra nada y el feed nunca se agota (el peor caso del rastreo encadenado).
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/publicaciones/opciones")) {
+          return new Response(JSON.stringify(OPCIONES), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/publicaciones")) {
+          urls.push(ruta);
+          const n = urls.length;
+          return new Response(
+            JSON.stringify({
+              publicaciones: [
+                {
+                  ...PUBLICACION,
+                  id: `p${n}`,
+                  contenido_id: `c${n}`,
+                  contenido: `Publicada ${n}`,
+                  estado: "publicado",
+                  etapa_ia: "publicada",
+                },
+              ],
+              paginacion: { total: 99, limite: 1, desplazamiento: 0, cursor_siguiente: `cur-${n}` },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    renderFeed({}, "/?vista=por_aprobar");
+    // Página 1 cargada y vista vacía: se busca (no se afirma el vacío).
+    expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
+    // El sentinel encadena hasta el tope del lote (5 páginas).
+    for (let pagina = 2; pagina <= 5; pagina++) {
+      const ultimo = observers[observers.length - 1];
+      ultimo.fire();
+      await waitFor(() => expect(urls.length).toBe(pagina));
+    }
+    // Tope alcanzado: se ofrece reanudar y el rastreo se detiene.
+    expect(await screen.findByRole("button", { name: "Seguir buscando" })).toBeInTheDocument();
+    expect(screen.getByText("No hay piezas de esta vista entre lo ya cargado.")).toBeInTheDocument();
+    // Disparar lo que quede registrado no pide la 6ª página (los observers están apagados).
+    observers.forEach((o) => o.fire());
+    await waitFor(() => expect(urls.length).toBe(5));
+    // "Seguir buscando" concede otro lote: el sentinel revive y pide la 6ª.
+    fireEvent.click(screen.getByRole("button", { name: "Seguir buscando" }));
+    await waitFor(() => {
+      const ultimo = observers[observers.length - 1];
+      expect(ultimo.activa).toBe(true);
+    });
+    observers[observers.length - 1].fire();
+    await waitFor(() => expect(urls.length).toBe(6));
   });
 });

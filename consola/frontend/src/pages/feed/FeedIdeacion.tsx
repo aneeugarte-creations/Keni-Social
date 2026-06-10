@@ -31,7 +31,6 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import {
   ImagePlus,
   LayoutGrid,
-  Loader2,
   Minus,
   Plus,
   RefreshCw,
@@ -46,8 +45,8 @@ import { useSearchParams } from "react-router-dom";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -56,15 +55,17 @@ import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import type { Publicacion } from "@/types";
 
-import { etapaDePublicacion } from "./etapa";
+import { GRID_COLS } from "./formato";
 import { GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
+import { PieFeed, SkeletonPost, useSentinelInfinito } from "./infinito";
 import { PostFeed } from "./PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
 
 // --- Tamaño (zoom) y nº de columnas del feed (preferencia local, por dispositivo) --- //
 // Dos controles independientes que persisten por dispositivo:
-//  - Columnas (1-4): nº de posts por fila. Aplica en TODOS los anchos, móvil incluido; más
-//    columnas = posts más pequeños y densos (en móvil quedan apretados, es lo que se quiere).
+//  - Columnas (COLUMNAS_MIN-COLUMNAS_MAX): nº de posts por fila, en cualquier pantalla. En
+//    móvil (<640px) se acota a 2 EFECTIVAS (la preferencia guardada no cambia): con más, la
+//    fila de acciones desborda la celda y la tarjeta deja de ser operable.
 //  - Zoom (60%-140%): escala cada caja ENTERA del feed (imagen + texto a la vez, vía `FeedZoom`),
 //    en cualquier pantalla y por encima de las columnas (ampliar sin tocar el nº de posts por fila).
 const COLUMNAS_MIN = 1;
@@ -73,15 +74,12 @@ const COLUMNAS_MIN = 1;
 const COLUMNAS_MAX = 5;
 const ESCALA_MIN = 0.6;
 const ESCALA_MAX = 1.4;
-// Clases estáticas (Tailwind las detecta) por nº de columnas. Sin prefijo: aplican en TODOS los
-// anchos (móvil incluido), no solo en PC. El usuario manda cuántos posts por fila en cada pantalla.
-const GRID_COLS: Record<number, string> = {
-  1: "grid-cols-1",
-  2: "grid-cols-2",
-  3: "grid-cols-3",
-  4: "grid-cols-4",
-  5: "grid-cols-5",
-};
+// Tope de columnas EFECTIVAS bajo 640px (la preferencia persiste entera para escritorio).
+const COLUMNAS_MAX_MOVIL = 2;
+// Tope de la búsqueda encadenada de las vistas filtradas vacías: cada "lote" permite traer
+// hasta N páginas más antes de parar y ofrecer "Seguir buscando" (sin esto, una vista vacía
+// podía descargar el feed ENTERO con un spinner sin progreso).
+const PAGINAS_POR_LOTE = 5;
 
 /**
  * Id del ancla DOM de una idea en el feed (deep-link desde las notificaciones). El cajón
@@ -158,13 +156,18 @@ function FeedZoom({ escala, children }: { escala: number; children: React.ReactN
 
 /**
  * Pestañas del feed: NO son bandejas (un fetch por estado), son VISTAS del mismo listado
- * único. `filtra` decide qué piezas se enseñan; `vacio` el mensaje cuando esa vista no tiene.
+ * único. Las tres vistas filtradas son una PARTICIÓN del ciclo por ESTADO (toda pieza cae en
+ * exactamente una: borrador → en revisión → aprobado/programado/publicado); "Todo el feed" es
+ * la unión. `filtra` decide qué piezas se enseñan; `vacio` el mensaje cuando esa vista no
+ * tiene; `corta` es el texto siempre visible en <sm (el resto de la etiqueta se oculta).
  */
 type Vista = "todo" | "preparacion" | "por_aprobar" | "publicado";
 
 const VISTAS: {
   id: Vista;
   etiqueta: string;
+  /** Prefijo de `etiqueta` visible en TODO ancho; el resto se oculta en <sm. Sin él, entera. */
+  corta?: string;
   icono: LucideIcon;
   filtra: (p: Publicacion) => boolean;
   vacio: { titulo: string; texto: string };
@@ -172,6 +175,7 @@ const VISTAS: {
   {
     id: "todo",
     etiqueta: "Todo el feed",
+    corta: "Todo",
     icono: LayoutGrid,
     filtra: () => true,
     vacio: {
@@ -181,18 +185,16 @@ const VISTAS: {
     },
   },
   {
-    // La bandeja del trabajo DIARIO del equipo: piezas a las que falta la foto/el clip (o cuyo
-    // copy aún se genera). `generando_arte` = subir material humano, no "espera a la IA".
+    // TODO lo anterior a revisión: copy en curso, falta la foto/el clip, borradores completos
+    // que entran solos y piezas devueltas a redacción. Es la bandeja del trabajo del equipo.
     id: "preparacion",
     etiqueta: "En preparación",
     icono: ImagePlus,
-    filtra: (p) => {
-      const e = etapaDePublicacion(p);
-      return e === "generando_copy" || e === "generando_arte";
-    },
+    filtra: (p) => p.estado === "borrador",
     vacio: {
       titulo: "Nada en preparación",
-      texto: "Cuando una pieza necesite la foto o el video del equipo, aparecerá aquí.",
+      texto:
+        "Cuando una pieza esté en manos del equipo o de la IA (copy en curso, falta la foto o el video, o devuelta a redacción), aparecerá aquí.",
     },
   },
   {
@@ -202,17 +204,19 @@ const VISTAS: {
     filtra: (p) => p.estado === "en_revision",
     vacio: {
       titulo: "Nada por aprobar",
-      texto: "Cuando la IA deje una pieza lista, aparecerá aquí para tu visto bueno (los 2 OK).",
+      // El detalle de cuántos OK lleva cada pieza lo enseña `CadenaAprobacion` pieza a pieza.
+      texto: "Cuando la IA deje una pieza lista, aparecerá aquí para los OK del equipo.",
     },
   },
   {
     id: "publicado",
-    etiqueta: "Publicado y programado",
+    etiqueta: "Aprobado y publicado",
+    corta: "Aprobado",
     icono: Send,
-    filtra: (p) => p.estado === "publicado" || p.estado === "programado",
+    filtra: (p) => ["aprobado", "programado", "publicado"].includes(p.estado),
     vacio: {
-      titulo: "Nada publicado ni programado",
-      texto: "Las piezas que apruebes y tengan hueco en la parrilla saldrán aquí.",
+      titulo: "Nada aprobado ni publicado",
+      texto: "Las piezas aprobadas, las programadas con hueco y las ya publicadas salen aquí.",
     },
   },
 ];
@@ -333,15 +337,24 @@ export default function FeedIdeacion() {
   // siguen filtrando por estado en memoria.
   const { red, linea } = useFiltrosContenido();
 
+  const rootRef = React.useRef<HTMLDivElement>(null);
+
   // La vista activa vive en la URL (`?vista=`): sobrevive al refresco y es compartible.
   // "todo" (el default) va sin parámetro para no ensuciar el enlace.
   const [searchParams, setSearchParams] = useSearchParams();
   const [vista, setVista] = React.useState<Vista>(() =>
     vistaDesdeParam(searchParams.get("vista")),
   );
+  // Lotes de búsqueda concedidos a la vista filtrada vacía (tope = lotes × PAGINAS_POR_LOTE
+  // páginas); "Seguir buscando" concede otro. Se reinicia al cambiar de vista.
+  const [lotesBusqueda, setLotesBusqueda] = React.useState(1);
   const cambiarVista = React.useCallback(
     (v: Vista) => {
       setVista(v);
+      setLotesBusqueda(1);
+      // Cambio de contexto: el listado nuevo se lee desde arriba, no desde donde quedó el scroll.
+      const scroller = rootRef.current?.closest("main");
+      if (scroller) scroller.scrollTop = 0;
       setSearchParams(
         (prev) => {
           if (v === "todo") prev.delete("vista");
@@ -354,7 +367,7 @@ export default function FeedIdeacion() {
     [setSearchParams],
   );
 
-  // Nº de posts por fila en PC (1-4) y zoom (escala) de los posts. Preferencias locales, persistidas.
+  // Nº de posts por fila y zoom (escala) de los posts. Preferencias locales, persistidas.
   const [columnas, setColumnas] = React.useState(() =>
     leerPref("keni_feed_columnas", 2, COLUMNAS_MIN, COLUMNAS_MAX),
   );
@@ -368,6 +381,23 @@ export default function FeedIdeacion() {
     guardarPref("keni_feed_escala", escala);
   }, [escala]);
 
+  // ¿Viewport móvil (<640px)? Acota las columnas EFECTIVAS (tope responsivo) sin tocar la
+  // preferencia guardada. Guard de `matchMedia` para jsdom (tests) y entornos sin la API.
+  const [esMovil, setEsMovil] = React.useState(
+    () =>
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 639px)").matches,
+  );
+  React.useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(max-width: 639px)");
+    const aplicar = () => setEsMovil(mq.matches);
+    aplicar();
+    mq.addEventListener("change", aplicar);
+    return () => mq.removeEventListener("change", aplicar);
+  }, []);
+  const colsEfectivas = esMovil ? Math.min(columnas, COLUMNAS_MAX_MOVIL) : columnas;
+
   // SCROLL MAGNÉTICO POR POST (solo móvil a UNA columna, estilo YouTube Shorts): el contenedor que
   // hace scroll es el <main> del AppShell. Le ponemos `scroll-snap-type: y proximity` por estilo en
   // línea (más fiable que clases dinámicas que el JIT de Tailwind podría no generar) SOLO por
@@ -375,13 +405,12 @@ export default function FeedIdeacion() {
   // `proximity` (no `mandatory`): las tarjetas superan la altura del viewport y `mandatory`
   // secuestra el scroll del pie. Con 2+ columnas no hay snap (saltaría errático por celda).
   // Cada POST lleva `snap-start` (inerte si el contenedor no tiene snap-type).
-  const rootRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     const scroller = rootRef.current?.closest("main") as HTMLElement | null;
     if (!scroller) return;
     const mq = window.matchMedia("(max-width: 639px)");
     const aplicar = () => {
-      scroller.style.scrollSnapType = mq.matches && columnas === 1 ? "y proximity" : "";
+      scroller.style.scrollSnapType = mq.matches && colsEfectivas === 1 ? "y proximity" : "";
     };
     aplicar();
     mq.addEventListener("change", aplicar);
@@ -389,7 +418,7 @@ export default function FeedIdeacion() {
       mq.removeEventListener("change", aplicar);
       scroller.style.scrollSnapType = "";
     };
-  }, [columnas]);
+  }, [colsEfectivas]);
 
   const ajustarColumnas = (delta: number) =>
     setColumnas((c) => Math.min(COLUMNAS_MAX, Math.max(COLUMNAS_MIN, c + delta)));
@@ -445,26 +474,7 @@ export default function FeedIdeacion() {
   // siembra en las claves individuales que consumen los `PostFeed` (vía contexto).
   const cadenasLote = useCadenasLote(piezas);
 
-  // Sentinel de scroll infinito: cuando el ancla del fondo entra en viewport, pide la siguiente
-  // página (con guardas de `hasNextPage`/`isFetchingNextPage` para no encadenar peticiones).
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
-  React.useEffect(() => {
-    const nodo = sentinelRef.current;
-    if (!nodo || !hasNextPage) return;
-    const obs = new IntersectionObserver(
-      (entradas) => {
-        if (entradas[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
-          void fetchNextPage();
-        }
-      },
-      // `rootMargin` adelanta la carga ~600px antes del fondo: el feed se siente continuo, sin
-      // que el usuario llegue a ver el final antes de que aparezca lo siguiente.
-      { rootMargin: "600px 0px" },
-    );
-    obs.observe(nodo);
-    return () => obs.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Redes del catálogo: el feed enseña CADA idea en TODAS las redes; las que aún no tienen pieza
   // salen como hueco "No generado" (queremos todo el contenido en todas las redes). Si se filtra
@@ -525,7 +535,13 @@ export default function FeedIdeacion() {
     // Espera a que la idea esté pintada (cambio de vista) y haz scroll centrándola.
     const idAncla = anclaFeed(piezaParam);
     const tScroll = window.setTimeout(() => {
-      document.getElementById(idAncla)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // WCAG 2.3.3: sin animación de scroll si el SO pide movimiento reducido.
+      const sinAnimar =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document
+        .getElementById(idAncla)
+        ?.scrollIntoView({ behavior: sinAnimar ? "auto" : "smooth", block: "center" });
     }, 60);
     const tResalte = window.setTimeout(() => setPiezaDestacada(null), 2500);
     return () => {
@@ -558,6 +574,25 @@ export default function FeedIdeacion() {
     [grupos, vistaActual],
   );
 
+  // TOPE de la búsqueda encadenada: con la vista filtrada vacía, el sentinel solo encadena hasta
+  // `lotesBusqueda × PAGINAS_POR_LOTE` páginas; después se para y ofrece "Seguir buscando".
+  // Con resultados delante no hay tope: el usuario scrollea contenido real.
+  const vistaVacia = gruposVista.length === 0 && !feedQuery.isLoading && !feedQuery.isError;
+  const paginasCargadas = feedQuery.data?.pages.length ?? 0;
+  const topeAlcanzado =
+    vistaVacia && hasNextPage && paginasCargadas >= lotesBusqueda * PAGINAS_POR_LOTE;
+
+  // Sentinel de scroll infinito compartido (ver `infinito.tsx`); el tope lo apaga sin desmontarlo.
+  const sentinelRef = useSentinelInfinito({
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    habilitado: !topeAlcanzado,
+  });
+
+  // El spinner del botón Actualizar SOLO cuando de verdad se refresca el listado, no en cada
+  // `fetchNextPage` del scroll (si no, el botón parpadea mientras bajas por el feed).
+  const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
   const refrescar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
 
   return (
@@ -577,6 +612,12 @@ export default function FeedIdeacion() {
               ariaLabelMenos="Menos columnas"
               ariaLabelMas="Más columnas"
             />
+            {/* El tope móvil no es un control roto: se avisa de que la preferencia se acota. */}
+            {esMovil && columnas > COLUMNAS_MAX_MOVIL && (
+              <p className="text-right text-xs text-muted-foreground">
+                (máx. {COLUMNAS_MAX_MOVIL} en móvil)
+              </p>
+            )}
             <ControlStepper
               etiqueta="Zoom"
               valor={`${Math.round(escala * 100)}%`}
@@ -588,58 +629,75 @@ export default function FeedIdeacion() {
               ariaLabelMas="Aumentar tamaño"
             />
           </PopoverVista>
-          {/* Refrescar como botón directo (gira mientras refresca, igual que el feed móvil). */}
+          {/* Actualizar (el verbo de la casa) como botón directo: gira y se deshabilita SOLO
+              durante un refresco real, no en cada página del scroll infinito. */}
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            aria-label="Refrescar"
+            aria-label="Actualizar"
+            title="Actualizar"
             onClick={refrescar}
-            disabled={feedQuery.isFetching}
+            disabled={refrescando}
           >
-            <RefreshCw className={cn("h-4 w-4", feedQuery.isFetching && "animate-spin")} />
+            <RefreshCw className={cn("h-4 w-4", refrescando && "animate-spin")} />
           </Button>
         </div>
       </AccionesPagina>
 
-      {/* Pestañas (formato tab, no bubble), solas en su fila. Son VISTAS del MISMO feed (filtran
-          por estado en cliente); Marca, Red y Línea las mandan los switches GLOBALES de la topbar
-          y filtran en servidor. En móvil las pestañas hacen wrap. El conteo cuenta lo CARGADO:
-          con más páginas por traer lleva "+" (no es un total). */}
+      {/* Pestañas (control segmentado en UNA fila, como en el resto de la app), solas en su
+          fila. Son VISTAS del MISMO feed (filtran por estado en cliente); Marca, Red y Línea las
+          mandan los switches GLOBALES de la topbar y filtran en servidor. En <sm las etiquetas
+          se acortan (el `aria-label` conserva el nombre completo). El conteo solo se pinta con
+          el feed AGOTADO: es exacto o no es (nada de "0+" sobre páginas a medio cargar). */}
       <div className="mb-4">
         <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
           <TabsList
-            className="flex h-auto w-full flex-wrap justify-start gap-1 lg:w-auto"
+            className="w-fit max-w-full justify-start gap-1 overflow-x-auto"
             aria-label="Vista del feed"
           >
             {VISTAS.map((v) => (
-              <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
-                {v.etiqueta}
-                <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[11px] leading-none tabular-nums">
-                  {conteos[v.id]}
-                  {hasNextPage ? "+" : ""}
-                </span>
+              <TabsTrigger key={v.id} value={v.id} className="gap-1.5" aria-label={v.etiqueta}>
+                {v.corta ? (
+                  <>
+                    {v.corta}
+                    <span className="hidden sm:inline">{v.etiqueta.slice(v.corta.length)}</span>
+                  </>
+                ) : (
+                  v.etiqueta
+                )}
+                {!hasNextPage && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 px-1.5 py-0 tabular-nums"
+                    title={`${conteos[v.id]} ideas`}
+                  >
+                    {conteos[v.id]}
+                  </Badge>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
       </div>
 
-      {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla con
-          todas las redes y huecos "No generado" en las que falten) — así no se mezclan ideas en una
-          fila. Filtrado a UNA red: rejilla PLANA (1 col = centrado; 2-4 = a lo ancho). `columnas`
-          fija cuántas por fila en cualquier pantalla; el zoom escala cada caja entera por encima. */}
+      {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla
+          con sus redes generadas y la franja "Falta generar" con las pendientes) — así no se
+          mezclan ideas en una fila. Filtrado a UNA red: rejilla PLANA (1 col = centrado; más =
+          a lo ancho). `colsEfectivas` fija cuántas por fila (la preferencia, acotada en móvil);
+          el zoom escala cada caja entera por encima. */}
       <FeedZoom escala={escala}>
         {feedQuery.isLoading ? (
-          // El skeleton ESPEJA el contenedor final (misma retícula/anchos): sin salto de layout.
+          // El skeleton ESPEJA el contenedor final (misma retícula/anchos) y la ANATOMÍA de la
+          // tarjeta (cabecera + imagen 4:5 + copy + acciones): sin salto de layout al aterrizar.
           <div
             className={cn(
-              columnas === 1
+              colsEfectivas === 1
                 ? "mx-auto w-full max-w-2xl space-y-4"
-                : cn("grid items-start gap-4", GRID_COLS[columnas]),
+                : cn("grid items-start gap-4", GRID_COLS[colsEfectivas]),
             )}
           >
-            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-80 w-full rounded-xl" />)}
+            {[0, 1, 2].map((i) => <SkeletonPost key={i} />)}
           </div>
         ) : feedQuery.isError ? (
           <BloqueError
@@ -650,17 +708,19 @@ export default function FeedIdeacion() {
           />
         ) : gruposVista.length === 0 ? (
           // VACÍO HONESTO: solo se afirma "no hay nada" cuando el feed está agotado. Si quedan
-          // páginas por traer, el sentinel de abajo va encadenando la carga hasta encontrar
-          // piezas de esta vista o llegar al final.
-          hasNextPage ? (
-            <div
-              className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
-              role="status"
-              aria-live="polite"
-            >
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Buscando piezas…
+          // páginas, el sentinel encadena la carga HASTA EL TOPE del lote; ahí se para y
+          // "Seguir buscando" concede otro lote (sin descargar el feed entero a ciegas).
+          topeAlcanzado ? (
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                No hay piezas de esta vista entre lo ya cargado.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setLotesBusqueda((n) => n + 1)}>
+                Seguir buscando
+              </Button>
             </div>
+          ) : hasNextPage ? (
+            <PieFeed estado="buscando" />
           ) : (
             <EstadoVacio
               icono={vistaActual.icono}
@@ -669,7 +729,8 @@ export default function FeedIdeacion() {
             />
           )
         ) : agrupar ? (
-          <div className="space-y-6" role="feed" aria-busy={isFetchingNextPage}>
+          // Sin role="feed" aquí: sus hijos directos no son <article> (cada grupo agrupa varios).
+          <div className="space-y-6" aria-busy={isFetchingNextPage}>
             {gruposVista.map((g) => (
               <div
                 key={g.id}
@@ -683,9 +744,9 @@ export default function FeedIdeacion() {
                 <GrupoIdea
                   grupo={g}
                   redes={redesAMostrar}
-                  columnas={columnas}
+                  columnas={colsEfectivas}
                   // En las vistas filtradas el grupo enseña SOLO lo que cumple el filtro (sin
-                  // tarjetas ajenas ni huecos); la matriz completa es de "Todo el feed".
+                  // tarjetas ajenas); la matriz completa es de "Todo el feed".
                   filtra={vista === "todo" ? undefined : vistaActual.filtra}
                 />
               </div>
@@ -694,9 +755,9 @@ export default function FeedIdeacion() {
         ) : (
           <div
             className={cn(
-              columnas === 1
+              colsEfectivas === 1
                 ? "mx-auto w-full max-w-2xl space-y-4"
-                : cn("grid items-start gap-4", GRID_COLS[columnas]),
+                : cn("grid items-start gap-4", GRID_COLS[colsEfectivas]),
             )}
             role="feed"
             aria-busy={isFetchingNextPage}
@@ -730,25 +791,16 @@ export default function FeedIdeacion() {
 
         {/* SCROLL INFINITO: el sentinel (invisible) dispara la carga de la siguiente página al
             acercarse al fondo. Se monta SIEMPRE que queden páginas (también con la vista filtrada
-            vacía: así la paginación no muere afirmando un vacío falso). El spinner "Cargando más…"
-            da feedback sin saltos de layout (alto fijo). */}
+            vacía: así la paginación no muere afirmando un vacío falso); el tope del lote lo
+            apaga sin desmontarlo. El pie (`PieFeed`) da feedback sin saltos de layout. */}
         {!feedQuery.isLoading && !feedQuery.isError && (
           <>
             {hasNextPage && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
             {gruposVista.length > 0 &&
               (isFetchingNextPage ? (
-                <div
-                  className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Cargando más…
-                </div>
+                <PieFeed estado="cargando" />
               ) : !hasNextPage ? (
-                <p className="py-6 text-center text-xs text-muted-foreground">
-                  Has llegado al final del feed.
-                </p>
+                <PieFeed estado="fin" />
               ) : null)}
           </>
         )}

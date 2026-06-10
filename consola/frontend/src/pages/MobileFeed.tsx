@@ -42,11 +42,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { PieFeed, SkeletonPost, useSentinelInfinito } from "@/pages/feed/infinito";
 import { PostFeed } from "@/pages/feed/PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "@/pages/feed/use-cadenas-lote";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
@@ -170,6 +170,15 @@ export default function MobileFeed() {
   const [marca, setMarca] = React.useState<string>(
     marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS,
   );
+  // En carga fría la sesión llega DESPUÉS del mount y el `useState` ya quedó en "todas":
+  // cuando aterricen las marcas, si el usuario tiene UNA y aún no tocó el selector, se
+  // preselecciona (si no, el alta rápida crearía piezas sin marca, huérfanas).
+  const [marcaTocada, setMarcaTocada] = React.useState(false);
+  React.useEffect(() => {
+    if (!marcaTocada && marcasUsuario.length === 1 && marca !== marcasUsuario[0]) {
+      setMarca(marcasUsuario[0]);
+    }
+  }, [marcaTocada, marcasUsuario, marca]);
 
   const [crearAbierto, setCrearAbierto] = React.useState(false);
 
@@ -213,140 +222,159 @@ export default function MobileFeed() {
   // consumen vía contexto (igual que en el feed de escritorio).
   const cadenasLote = useCadenasLote(piezas);
 
-  // Sentinel del fondo del feed: al acercarse, pide la siguiente página (con guardas).
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  // Sentinel del fondo del feed (compartido con escritorio, ver `pages/feed/infinito.tsx`).
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
-  React.useEffect(() => {
-    const nodo = sentinelRef.current;
-    if (!nodo || !hasNextPage) return;
-    const obs = new IntersectionObserver(
-      (entradas) => {
-        if (entradas[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
-          void fetchNextPage();
-        }
-      },
-      { rootMargin: "600px 0px" },
-    );
-    obs.observe(nodo);
-    return () => obs.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  const sentinelRef = useSentinelInfinito({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
   // SCROLL MAGNÉTICO POR PIEZA (feed estilo red social): activa scroll-snap en el documento (el
   // que hace scroll en esta pantalla) mientras está montada y lo revierte al salir. `proximity`
   // (no `mandatory`): las tarjetas superan la altura del viewport y `mandatory` secuestra el
   // scroll del pie. `scrollPadding` superior deja sitio a la cabecera sticky para que la pieza
   // no quede tapada al encajar.
+  // `scrollPaddingTop` deja sitio a la cabecera sticky (ahora compacta, ~2 filas) para que la
+  // pieza no quede tapada al encajar.
   React.useEffect(() => {
     const el = document.documentElement;
     const prevTipo = el.style.scrollSnapType;
     const prevPad = el.style.scrollPaddingTop;
     el.style.scrollSnapType = "y proximity";
-    el.style.scrollPaddingTop = "8rem";
+    el.style.scrollPaddingTop = "6rem";
     return () => {
       el.style.scrollSnapType = prevTipo;
       el.style.scrollPaddingTop = prevPad;
     };
   }, []);
 
+  // El spinner del botón Actualizar SOLO en un refresco real, no en cada página del scroll
+  // (mismo comportamiento que el feed de escritorio).
+  const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
   const refrescar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+  const botonActualizar = (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={refrescar}
+      disabled={refrescando}
+      aria-label="Actualizar"
+      title="Actualizar"
+    >
+      <RefreshCw className={refrescando ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+    </Button>
+  );
+  // Con UNA sola marca asignada el selector no es una decisión (dos opciones idénticas): se
+  // oculta y las pestañas comparten fila con Actualizar. Con varias (o admin), dos filas.
+  const conSelectorMarca = marcasUsuario.length !== 1;
+  const tabs = (
+    <Tabs
+      value={bandeja}
+      onValueChange={(v) => setBandeja(v as Bandeja)}
+      className={conSelectorMarca ? undefined : "min-w-0 flex-1"}
+    >
+      <TabsList className="w-full" aria-label="Bandeja">
+        {BANDEJAS.map((b) => (
+          <TabsTrigger key={b.id} value={b.id} className="flex-1">
+            {b.etiqueta}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
 
   return (
-    <div className="flex min-h-dvh w-full max-w-full flex-col overflow-x-hidden bg-muted/20">
-      {/* Cabecera sticky: bandejas + filtro por marca. */}
+    <div className="flex min-h-dvh w-full max-w-full flex-col overflow-x-hidden bg-background">
+      {/* Cabecera sticky COMPACTA (sin fila de título: se va un tercio del viewport en chrome). */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        <div className="flex items-center gap-2 px-4 py-2.5">
-          <h1 className="text-base font-semibold">Feed de revisión</h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto"
-            onClick={refrescar}
-            aria-label="Refrescar"
-          >
-            <RefreshCw className={feedQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-          </Button>
-        </div>
-        <div className="px-4 pb-2">
-          <Tabs value={bandeja} onValueChange={(v) => setBandeja(v as Bandeja)}>
-            <TabsList className="w-full" aria-label="Bandeja">
-              {BANDEJAS.map((b) => (
-                <TabsTrigger key={b.id} value={b.id} className="flex-1">
-                  {b.etiqueta}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className="px-4 pb-2.5">
-          <SelectorMarca
-            marcas={marcas}
-            valor={marca}
-            onCambio={setMarca}
-            incluirTodas
-            etiquetaTodas={marcasUsuario.length > 0 ? "Todas mis marcas" : "Todas las marcas"}
-            className="w-full"
-          />
-        </div>
+        <h1 className="sr-only">Feed de revisión</h1>
+        {conSelectorMarca ? (
+          <>
+            <div className="flex items-center gap-2 px-4 pb-2 pt-2.5">
+              <SelectorMarca
+                marcas={marcas}
+                valor={marca}
+                onCambio={(v) => {
+                  setMarcaTocada(true);
+                  setMarca(v);
+                }}
+                incluirTodas
+                etiquetaTodas={marcasUsuario.length > 0 ? "Todas mis marcas" : "Todas las marcas"}
+                className="min-w-0 flex-1"
+              />
+              {botonActualizar}
+            </div>
+            <div className="px-4 pb-2">{tabs}</div>
+          </>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-2">
+            {tabs}
+            {botonActualizar}
+          </div>
+        )}
       </header>
 
       {/* Columna del feed. Padding inferior para no quedar tapado por la barra fija. */}
-      <main className="mx-auto w-full max-w-xl flex-1 pb-24">
-        {feedQuery.isLoading ? (
-          <div className="space-y-4 p-4">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-80 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : feedQuery.isError ? (
-          <div className="p-4">
-            <BloqueError
-              titulo="No se pudo cargar el feed"
-              mensaje={mensajeError(feedQuery.error)}
-              onReintentar={() => void feedQuery.refetch()}
-              cargando={feedQuery.isFetching}
-            />
-          </div>
-        ) : piezas.length === 0 ? (
-          <div className="p-6">
-            <EstadoVacio
-              titulo={bandeja === "en_revision" ? "Nada por aprobar" : "Sin piezas aprobadas"}
-              texto={
-                bandeja === "en_revision"
-                  ? "Cuando haya piezas en revisión para tus marcas, aparecerán aquí."
-                  : "Las piezas que apruebes se mostrarán en esta bandeja."
-              }
-            />
-          </div>
-        ) : (
-          <CadenasLoteContexto.Provider value={cadenasLote}>
-            {/* MISMA tarjeta que el feed de escritorio: PostFeed es autocontenido (cadena de
-                aprobación, like/dislike con sus gates, editor y comentarios en línea). */}
-            <div className="space-y-4 p-3">
-              {piezas.map((p) => (
-                <div key={p.id} className="snap-start">
-                  <PostFeed publicacion={p} />
-                </div>
+      <main className="mx-auto w-full max-w-xl flex-1 pb-28">
+        <CadenasLoteContexto.Provider value={cadenasLote}>
+          {feedQuery.isLoading ? (
+            <div className="space-y-4 p-4">
+              {[0, 1, 2].map((i) => (
+                <SkeletonPost key={i} />
               ))}
             </div>
-            {/* SCROLL INFINITO: sentinel invisible + spinner "Cargando más…" al fondo. */}
-            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-            {isFetchingNextPage && (
-              <div
-                className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
-                role="status"
-                aria-live="polite"
-              >
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando más…
-              </div>
-            )}
-          </CadenasLoteContexto.Provider>
-        )}
+          ) : feedQuery.isError ? (
+            <div className="p-4">
+              <BloqueError
+                titulo="No se pudo cargar el feed"
+                mensaje={mensajeError(feedQuery.error)}
+                onReintentar={() => void feedQuery.refetch()}
+                cargando={feedQuery.isFetching}
+              />
+            </div>
+          ) : (
+            <>
+              {piezas.length > 0 ? (
+                /* MISMA tarjeta que el feed de escritorio: PostFeed es autocontenido (cadena de
+                   aprobación, like/dislike con sus gates, editor y comentarios en línea). */
+                <div className="space-y-4 p-3">
+                  {piezas.map((p) => (
+                    <div key={p.id} className="snap-start">
+                      <PostFeed publicacion={p} />
+                    </div>
+                  ))}
+                </div>
+              ) : hasNextPage ? (
+                // VACÍO HONESTO: la página cargada puede ser toda de otras marcas (filtro en
+                // cliente); mientras queden páginas se busca, no se afirma "nada por aprobar".
+                <PieFeed estado="buscando" />
+              ) : (
+                <div className="p-6">
+                  <EstadoVacio
+                    titulo={bandeja === "en_revision" ? "Nada por aprobar" : "Sin piezas aprobadas"}
+                    texto={
+                      bandeja === "en_revision"
+                        ? "Cuando haya piezas en revisión para tus marcas, aparecerán aquí."
+                        : "Las piezas que apruebes se mostrarán en esta bandeja."
+                    }
+                  />
+                </div>
+              )}
+              {/* SCROLL INFINITO: el sentinel se monta SIEMPRE que queden páginas (también con
+                  el listado filtrado vacío) + pie de estado compartido. */}
+              {hasNextPage && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
+              {piezas.length > 0 &&
+                (isFetchingNextPage ? (
+                  <PieFeed estado="cargando" />
+                ) : !hasNextPage ? (
+                  <PieFeed estado="fin" />
+                ) : null)}
+            </>
+          )}
+        </CadenasLoteContexto.Provider>
       </main>
 
-      {/* Barra de acciones inferior fija (thumb-reachable): alta de pieza. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur">
+      {/* Barra de acciones inferior fija (thumb-reachable): alta de pieza. El padding inferior
+          respeta el safe-area de iOS (home indicator). */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex w-full max-w-xl">
           <Button className="w-full" onClick={() => setCrearAbierto(true)}>
             <Plus className="h-4 w-4" />

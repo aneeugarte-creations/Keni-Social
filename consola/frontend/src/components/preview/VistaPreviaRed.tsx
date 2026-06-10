@@ -203,7 +203,7 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
               e.stopPropagation();
               alternar();
             }}
-            className="text-sm font-medium text-muted-foreground"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
           >
             {expandido ? "menos" : "más"}
           </button>
