@@ -36,7 +36,7 @@ import { Button } from "@/components/ui/button";
 import { BarraContextual } from "./BarraContextual";
 import { BotonesMuestra } from "./BotonesMuestra";
 import { Lienzo } from "./Lienzo";
-import { PanelTexto } from "./PanelTexto";
+import { PanelGaleria } from "./PanelGaleria";
 import { PanelElementos } from "./PanelElementos";
 import { Inspector, PanelCapas } from "./Paneles";
 import { adaptarDocumento } from "./adaptar";
@@ -230,7 +230,7 @@ export function EditorDocumento({
   const panel = (() => {
     switch (tool) {
       case "elementos": return <PanelElementos />;
-      case "texto": return <PanelTexto marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
+      case "texto": return <PanelGaleria marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
       case "capas": return <PanelCapas />;
       default: return null;
     }

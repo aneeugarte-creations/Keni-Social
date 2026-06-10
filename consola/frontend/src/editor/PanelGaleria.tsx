@@ -26,7 +26,7 @@ function tipoDeArchivo(nombre: string): string {
   return "arte";
 }
 
-export function PanelTexto({
+export function PanelGaleria({
   marca,
   reemplazarId = null,
   onReemplazado,
@@ -217,7 +217,11 @@ export function PanelTexto({
                     )}
                   </button>
                   <button
-                    onClick={() => borrar.mutate(a.id)}
+                    onClick={() => {
+                      if (window.confirm(`¿Borrar activo «${a.nombre}»?`)) {
+                        borrar.mutate(a.id);
+                      }
+                    }}
                     title="Borrar activo"
                     className="absolute right-0.5 top-0.5 rounded bg-background/80 p-0.5 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
                   >

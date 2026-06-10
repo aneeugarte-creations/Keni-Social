@@ -3,7 +3,7 @@
 // Pestaña de tipo: "Fotos" (default) / "Miniaturas" (portadas de video).
 
 import { Copy, Image, Repeat, Trash2, Video, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 
@@ -53,11 +53,20 @@ export function GaleriaPlantillas({
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(tipoFijo ?? "foto");
+  const [imagenRota, setImagenRota] = useState<Set<string>>(new Set());
+
+  // Ref para rastrear si el commit ya se ejecutó (evita doble PATCH en blur después de Enter).
+  const commitHecho = useRef(false);
 
   const tipoEfectivo = tipoFijo ?? filtroTipo;
   const plantillasFiltradas = plantillas.filter((p) => (p.tipo ?? "foto") === tipoEfectivo);
 
   const commit = (p: PlantillaDiseno) => {
+    // Si el commit ya se hizo, noop. Así evitamos doble PATCH: Enter ejecuta commit,
+    // luego onBlur sería un noop.
+    if (commitHecho.current) return;
+    commitHecho.current = true;
+
     const n = editVal.trim();
     if (n && n !== p.nombre) onRenombrar?.(p, n);
     setEditId(null);
@@ -65,6 +74,32 @@ export function GaleriaPlantillas({
 
   // Escape cierra la galería esté donde esté el foco (overlay casero, sin Radix).
   useCerrarConEscape(true, onCerrar);
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") {
+      const dialog = e.currentTarget;
+      const focusables = dialog.querySelectorAll(
+        "button, input, [tabindex]:not([tabindex='-1'])"
+      ) as NodeListOf<HTMLElement>;
+      if (focusables.length === 0) return;
+
+      const focused = document.activeElement as HTMLElement;
+      const focusedIndex = Array.from(focusables).indexOf(focused);
+
+      if (e.shiftKey) {
+        // Shift+Tab: ir atrás
+        const prev = focusedIndex <= 0 ? focusables.length - 1 : focusedIndex - 1;
+        e.preventDefault();
+        focusables[prev]?.focus();
+      } else {
+        // Tab: ir adelante
+        const next = focusedIndex < 0 || focusedIndex >= focusables.length - 1 ? 0 : focusedIndex + 1;
+        e.preventDefault();
+        focusables[next]?.focus();
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop accesible: clicable, focusable y cierra también con Escape (A11y). */}
@@ -77,6 +112,7 @@ export function GaleriaPlantillas({
         role="dialog"
         aria-modal="true"
         aria-label="Plantillas"
+        onKeyDown={handleDialogKeyDown}
         className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -132,12 +168,19 @@ export function GaleriaPlantillas({
                     <div className="aspect-[4/5] w-full">
                       {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
                           plantillas creadas por API/agente—, el render on-demand del documento. */}
-                      <img
-                        src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
-                        alt={p.nombre}
-                        loading="lazy"
-                        className="h-full w-full object-contain"
-                      />
+                      {imagenRota.has(p.id) ? (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                          Sin vista previa
+                        </div>
+                      ) : (
+                        <img
+                          src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
+                          alt={p.nombre}
+                          loading="lazy"
+                          onError={() => setImagenRota((prev) => new Set([...prev, p.id]))}
+                          className="h-full w-full object-contain"
+                        />
+                      )}
                     </div>
                   </button>
                   {/* Badge de tipo sobre la tarjeta */}
@@ -152,14 +195,25 @@ export function GaleriaPlantillas({
                       onChange={(e) => setEditVal(e.target.value)}
                       onBlur={() => commit(p)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") commit(p);
-                        else if (e.key === "Escape") setEditId(null);
+                        if (e.key === "Enter") {
+                          e.stopPropagation();
+                          commit(p);
+                        } else if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setEditId(null);
+                          commitHecho.current = false;
+                        }
                       }}
                       className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
                     />
                   ) : onRenombrar ? (
                     <button
-                      onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditId(p.id);
+                        setEditVal(p.nombre || "");
+                        commitHecho.current = false;
+                      }}
                       title="Clic para renombrar"
                       className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
                     >

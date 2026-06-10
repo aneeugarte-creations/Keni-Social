@@ -11,6 +11,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImageOff, Loader2, Search, Trash2 } from "lucide-react";
 import * as React from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -47,15 +48,24 @@ export interface SelectorArtesProps {
 export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: SelectorArtesProps) {
   const queryClient = useQueryClient();
   const [q, setQ] = React.useState("");
+  const [qDebounced, setQDebounced] = React.useState("");
   // Carpeta activa (filtro por `tipo`). "" = todas.
   const [tipo, setTipo] = React.useState<TipoArte | "">("");
 
-  const clave = ["artes", marca ?? "", tipo, q.trim()] as const;
+  // Debounce de 250ms para la búsqueda: evita lanzar queries en cada pulsación.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQDebounced(q.trim());
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  const clave = ["artes", marca ?? "", tipo, qDebounced] as const;
   const { data, isLoading, isError, error } = useQuery({
     queryKey: clave,
     queryFn: ({ signal }) =>
       api.listarArtes(
-        { marca: marca || undefined, tipo: tipo || undefined, q: q.trim() || undefined },
+        { marca: marca || undefined, tipo: tipo || undefined, q: qDebounced || undefined },
         signal,
       ),
     enabled: open,
@@ -158,7 +168,11 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                     variant="destructive"
                     size="icon"
                     className="absolute right-1.5 top-1.5 h-7 w-7 opacity-0 transition group-hover:opacity-100"
-                    onClick={() => borrar.mutate(arte.id)}
+                    onClick={() => {
+                      if (window.confirm(`¿Quitar «${arte.titulo || "sin nombre"}» de la galería?`)) {
+                        borrar.mutate(arte.id);
+                      }
+                    }}
                     disabled={borrar.isPending}
                     aria-label="Quitar arte de la galería"
                     title="Quitar de la galería"
