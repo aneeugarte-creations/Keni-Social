@@ -219,7 +219,9 @@ def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):
 
 
 def test_priorizar_adelanta_job_pendiente_admin(entorno):
-    """Priorizar sube el job ESPERANDO a prioridad manual: el worker lo clava antes que el fondo."""
+    """Priorizar sube el job ESPERANDO a URGENTE: adelanta a TODO lo pendiente, también a
+    otros manuales (antes manual→manual empataba y decidía el id aleatorio: flake + botón
+    del Monitor sin efecto entre manuales)."""
     primero = _encolar("Fondo viejo")
     segundo = _encolar("Breaking esperando")
     r = _cli_como("admin").post(

@@ -398,7 +398,7 @@ async def cola_priorizar(request: Request) -> Response:
         return JSONResponse({"error": "Falta el identificador de la generación."}, status_code=400)
     from ..dominio import jobspec
 
-    if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_MANUAL):
+    if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_URGENTE):
         return JSONResponse(
             {"error": "No hay un job esperando para esa generación."}, status_code=404
         )

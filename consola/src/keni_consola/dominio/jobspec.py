@@ -50,6 +50,11 @@ VERSION = 1
 PRIORIDAD_PIPELINE = 0
 PRIORIDAD_BREAKING = 5
 PRIORIDAD_MANUAL = 10
+# "Este primero" del Monitor (decisión humana EXPLÍCITA sobre un job concreto): por encima
+# de TODO lo pendiente, también de otros manuales. Sin este nivel, priorizar un job manual
+# era un no-op (manual→manual empata y decide el id aleatorio del desempate: a veces
+# adelantaba, a veces no — el botón del Monitor mentía la mitad de las veces).
+PRIORIDAD_URGENTE = 20
 
 # cwd NEUTRO para prompts AUTOCONTENIDOS (Texto y TODAS las generaciones de texto): un
 # dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).
