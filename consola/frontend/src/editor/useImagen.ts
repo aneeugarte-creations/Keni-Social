@@ -4,6 +4,18 @@
 
 import { useEffect, useState } from "react";
 
+// Dimensiones NATURALES (px) de una imagen accesible por URL, sin insertarla en el documento.
+// Tolerante: devuelve `null` si el navegador no puede decodificarla. Se usa al insertar una imagen
+// suelta para que la capa adopte el aspect-ratio real de la foto (caja == foto, estilo Canva).
+export function leerDimensionesUrl(url: string): Promise<{ w: number; h: number } | null> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 export function useImagen(objeto: string | undefined | null): HTMLImageElement | null {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
 

@@ -11,6 +11,8 @@ import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, Cap
 import { copyMuestra, fotoMuestra } from "../muestra";
 import { useImagen } from "../useImagen";
 
+import { geometriaImagenEnCaja } from "./geometriaImagen";
+
 // Traza, en COORDS LOCALES (0..w, 0..h), la silueta de `forma` — espejo EXACTO de `pathForma`
 // (dibujar.mjs) con origen en (0,0). Lo usan el clip de la imagen y el dibujo del marco en Konva,
 // para que la previa coincida con el export del servidor. "rect" sin radio == rectángulo simple.
@@ -258,26 +260,13 @@ function NodoImagenAjustada({
   props: any;
 }) {
   const ref = useRef<Konva.Image | null>(null);
-  // Imagen EFECTIVA = sub-rect fuente recortado (crop, fracciones 0..1 -> px). El cover/contain y el
-  // `crop` de Konva (px de la imagen) se calculan sobre ese sub-rect. Espejo de `rectFuente`.
-  const iwTotal = img.width || 1;
-  const ihTotal = img.height || 1;
-  const cx = crop ? Math.max(0, Math.min(1, crop.cx)) : 0;
-  const cy = crop ? Math.max(0, Math.min(1, crop.cy)) : 0;
-  const cw = crop ? Math.max(0, Math.min(1 - cx, crop.cw)) : 1;
-  const ch = crop ? Math.max(0, Math.min(1 - cy, crop.ch)) : 1;
-  const usaCrop = crop != null && cw > 0 && ch > 0 && (cx > 0 || cy > 0 || cw < 1 || ch < 1);
-  const iw = usaCrop ? cw * iwTotal : iwTotal;
-  const ih = usaCrop ? ch * ihTotal : ihTotal;
-  const base = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
-  const escala = base * (zoom > 0 ? zoom : 1);
-  const dw = iw * escala;
-  const dh = ih * escala;
-  const ix = (w - dw) * (foco[0] ?? 0.5);
-  const iy = (h - dh) * (foco[1] ?? 0.5);
-  const cropPx = usaCrop
-    ? { crop: { x: cx * iwTotal, y: cy * ihTotal, width: cw * iwTotal, height: ch * ihTotal } }
-    : {};
+  // Geometría del ajuste (cover/contain + foco + zoom + crop): destino, rect VISIBLE dentro de la
+  // caja y sub-rect FUENTE equivalente (helper puro, espejo de `dibujarImagenEnCaja`). El
+  // KonvaImage pinta SOLO el rect visible (con crop de fuente exacto, mismos píxeles que antes):
+  // el bbox de un Group en Konva IGNORA el clip, así que pintar el destino entero hacía que el
+  // Transformer (marco de selección) saliera más ancho/alto que la foto cuando cover/zoom
+  // desbordaban la caja. Así el marco abraza EXACTAMENTE la foto renderizada, como Canva.
+  const g = geometriaImagenEnCaja(img.width, img.height, w, h, ajuste, foco, zoom, crop);
 
   useEffect(() => {
     const node = ref.current;
@@ -310,7 +299,9 @@ function NodoImagenAjustada({
       /* imagen aún sin dimensiones: se reintenta en el próximo render */
     }
     node.getLayer()?.batchDraw();
-  }, [filtros, dw, dh, img]);
+    // El cache de filtros congela el CONTENIDO del nodo: re-cachear cuando cambian el tamaño
+    // visible o el sub-rect de fuente (foco/zoom/crop pueden mover la fuente sin mover el destino).
+  }, [filtros, img, g.vw, g.vh, g.sx, g.sy, g.sw, g.sh]);
 
   // Recorte de la caja según la forma (espejo del clip de `dibujarImagenEnCaja`): catálogo completo
   // de formas (elipse, polígonos, estrella, flecha…) o rect simple/redondeado. Para "rect" sin
@@ -340,14 +331,33 @@ function NodoImagenAjustada({
   const flip = sx !== 1 || sy !== 1
     ? { scaleX: sx, scaleY: sy, offsetX: sx === -1 ? w : 0, offsetY: sy === -1 ? h : 0 }
     : {};
+  // ¿La caja delimitadora debe ABRAZAR el contenido visible (Canva)? Solo cuando la capa es un
+  // rectángulo simple sin duotono: con forma/esquinas la silueta ocupa la caja entera (el realce
+  // de selección la sigue) y el tinte duotono pinta toda la caja, igual que el export. Con `cover`
+  // el rect visible YA es la caja; esto solo cambia el caso `contain` letterboxed, donde el marco
+  // y el área clicable se ciñen a la foto (el letterbox vacío deja de capturar clics, como Canva).
+  const abrazaContenido = !formaNoRect(forma, r, radios);
+  const hit = abrazaContenido && !duo
+    ? { x: g.vx, y: g.vy, width: g.vw, height: g.vh }
+    : { x: 0, y: 0, width: w, height: h };
   return (
     <Group {...props}>
       <Group {...recorte} {...flip}>
-        {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
-            así que sin este Rect el Group no recibiría clic/arrastre (no se podían mover las fotos).
-            opacity 0 = invisible en escena pero presente en el hit graph de Konva. */}
-        <Rect x={0} y={0} width={w} height={h} fill="#000000" opacity={0} />
-        <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} {...cropPx} />
+        {/* Zona sensible al puntero del tamaño del CONTENIDO visible (o de la caja, si la silueta
+            la ocupa entera): la imagen interior va con listening=false, así que sin este Rect el
+            Group no recibiría clic/arrastre (no se podían mover las fotos). opacity 0 = invisible
+            en escena pero presente en el hit graph de Konva. */}
+        <Rect {...hit} fill="#000000" opacity={0} />
+        <KonvaImage
+          ref={ref}
+          image={img}
+          x={g.vx}
+          y={g.vy}
+          width={g.vw}
+          height={g.vh}
+          listening={false}
+          crop={{ x: g.sx, y: g.sy, width: g.sw, height: g.sh }}
+        />
         {duo && (
           <>
             <Rect x={0} y={0} width={w} height={h} fill={duo.luz} globalCompositeOperation="multiply" listening={false} />

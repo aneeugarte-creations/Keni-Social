@@ -35,12 +35,13 @@ import {
 import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
 import { toast } from "sonner";
 
-import { api } from "@/lib/api";
+import { api, urlMedia } from "@/lib/api";
 
 import { CapaNodo } from "./capas/CapaNodo";
 import type { Capa, CapaImagen, CapaTexto } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
+import { leerDimensionesUrl } from "./useImagen";
 
 import { BannerRecorte, BannerReencuadre } from "./lienzo/BannersModo";
 import { type AccionLienzo, BarraAcciones } from "./lienzo/BarraAcciones";
@@ -62,20 +63,13 @@ import { useAtajosTeclado } from "./lienzo/useAtajosTeclado";
 
 // Lee las dimensiones naturales (px) de un fichero de imagen sin subirlo, para respetar su
 // aspect-ratio al insertarlo. Tolerante: devuelve `null` si el navegador no puede decodificarlo.
-function leerDimensiones(archivo: File): Promise<{ w: number; h: number } | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(archivo);
-    const img = new window.Image();
-    img.onload = () => {
-      resolve({ w: img.naturalWidth, h: img.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => {
-      resolve(null);
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
-  });
+async function leerDimensiones(archivo: File): Promise<{ w: number; h: number } | null> {
+  const url = URL.createObjectURL(archivo);
+  try {
+    return await leerDimensionesUrl(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export function Lienzo({
@@ -341,6 +335,29 @@ export function Lienzo({
     }
   };
 
+  // Inserta un activo de la galería (ya subido) como capa imagen centrada en `centro` (coords del
+  // documento), adoptando el ASPECT-RATIO natural de la foto (estilo Canva): caja == foto, sin
+  // letterbox ni recorte sorpresa, y el marco de selección la abraza exacto. Las dimensiones se
+  // leen del propio media (normalmente ya cacheado por la miniatura de la galería); si el
+  // navegador no puede decodificarlo, cae al cuadrado de antes.
+  const insertarActivoImagen = async (objeto: string, centro: { x: number; y: number }) => {
+    const dims = await leerDimensionesUrl(urlMedia(objeto));
+    const st = store.getState();
+    const cw = Math.round(documento.formato.w * 0.4);
+    const ch = dims && dims.w > 0 ? Math.round((cw * dims.h) / dims.w) : cw;
+    st.agregar(
+      nuevaCapaImagen(objeto, {
+        x: Math.round(centro.x - cw / 2),
+        y: Math.round(centro.y - ch / 2),
+        w: cw,
+        h: ch,
+        z: zTope(st.documento),
+      }),
+    );
+    const nuevas = st.documento.capas;
+    st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
+  };
+
   // Pan con barra ESPACIADORA: mientras está pulsada, cursor grab/grabbing y `listening` del Stage
   // off (los arrastres mueven el lienzo, no las capas). Ignora el espacio si el foco está en un campo
   // editable (evita romper la escritura). `blur` de ventana lo resetea (no quedarse "pegado").
@@ -501,17 +518,17 @@ export function Lienzo({
         return;
       }
       if (!asset.objeto) return;
-      const st = store.getState();
-      const z = Math.max(0, ...st.documento.capas.map((c) => c.z)) + 1;
       if (asset.tipo === "logo") {
+        const st = store.getState();
+        const z = zTope(st.documento);
         const cw = 320, ch = 120;
         st.agregar(nuevaCapaLogo(asset.objeto, { x: Math.round(dx - cw / 2), y: Math.round(dy - ch / 2), w: cw, h: ch, z }));
+        const nuevas = st.documento.capas;
+        st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
       } else {
-        const cw = Math.round(documento.formato.w * 0.4);
-        st.agregar(nuevaCapaImagen(asset.objeto, { x: Math.round(dx - cw / 2), y: Math.round(dy - cw / 2), w: cw, h: cw, z }));
+        // Imagen suelta: la capa adopta el aspect-ratio real de la foto (antes: cuadrado fijo).
+        void insertarActivoImagen(asset.objeto, { x: dx, y: dy });
       }
-      const nuevas = st.documento.capas;
-      st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
       return;
     }
 

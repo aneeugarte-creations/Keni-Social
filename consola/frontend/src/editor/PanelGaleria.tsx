@@ -13,6 +13,7 @@ import { api, urlMedia, type ActivoMarca } from "@/lib/api";
 import type { Capa } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
 import { useStoreEditor } from "./usarEditor";
+import { leerDimensionesUrl } from "./useImagen";
 
 // Tipos que se insertan como capa de imagen (el logo va como capa logo).
 const TIPOS_IMAGEN = new Set(["arte", "infografia", "icono", "fondo"]);
@@ -91,18 +92,28 @@ export function PanelGaleria({
     if (a.tipo === "logo") {
       st.agregar(nuevaCapaLogo(a.objeto, { z, x: 56, y: 56, w: 320, h: 120 }));
     } else if (TIPOS_IMAGEN.has(a.tipo)) {
-      // Centrado, a media anchura del lienzo.
-      const w = Math.round(doc.formato.w * 0.5);
-      const h = w;
-      st.agregar(
-        nuevaCapaImagen(a.objeto, {
-          z,
-          w,
-          h,
-          x: Math.round((doc.formato.w - w) / 2),
-          y: Math.round((doc.formato.h - h) / 2),
-        }),
-      );
+      // Centrado, a media anchura del lienzo, adoptando el ASPECT-RATIO natural de la foto (estilo
+      // Canva): caja == foto, sin letterbox ni recorte sorpresa, y el marco de selección la abraza
+      // exacto. Las dimensiones se leen del media (ya cacheado por la miniatura); si no decodifica,
+      // cae al cuadrado de antes.
+      void (async () => {
+        const dims = await leerDimensionesUrl(urlMedia(a.objeto));
+        const stN = store.getState();
+        const w = Math.round(stN.documento.formato.w * 0.5);
+        const h = dims && dims.w > 0 ? Math.round((w * dims.h) / dims.w) : w;
+        stN.agregar(
+          nuevaCapaImagen(a.objeto, {
+            z: zTope(stN.documento),
+            w,
+            h,
+            x: Math.round((stN.documento.formato.w - w) / 2),
+            y: Math.round((stN.documento.formato.h - h) / 2),
+          }),
+        );
+        const capas = stN.documento.capas;
+        stN.seleccionar(capas[capas.length - 1]?.id ?? null);
+      })();
+      return;
     } else if (a.tipo === "tipografia") {
       // Aplica la familia a la capa de TEXTO seleccionada; si no hay, informa cómo usarla.
       const sel = st.seleccion;
