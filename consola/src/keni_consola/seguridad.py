@@ -261,6 +261,27 @@ _RUTAS_API_PUBLICAS = frozenset(
     {"/api/auth/login", "/api/auth/mfa/login/opciones", "/api/auth/mfa/verify"}
 )
 
+# GET de un objeto de media (`/api/media/<nombre>`) SIN credencial: los schedulers externos
+# (Metricool) ingieren la imagen/video del post por esta URL y no tienen sesion. Es una
+# CAPABILITY URL: el nombre es content-addressed/uuid (indescifrable sin conocerlo) y el
+# contenido es media DESTINADA A PUBLICARSE en redes. Solo lectura de objeto: el resto del
+# arbol /api/media (subidas, generacion, listados) sigue exigiendo credencial, igual que
+# cualquier GET de coleccion. El handler ya es anti-traversal (nombre plano).
+_PREFIJO_MEDIA_PUBLICA = "/api/media/"
+# Sub-rutas de /api/media/ que NO son objetos (acciones POST con su propio path): nunca
+# publicas, aunque alguien las pida con GET.
+_MEDIA_NO_PUBLICA = frozenset({"/api/media/video", "/api/media/desde-url", "/api/media/generar"})
+
+
+def _es_media_publica(metodo: str, ruta: str) -> bool:
+    """True si la peticion es el GET publico de un objeto de media (ver nota de arriba)."""
+    return (
+        metodo == "GET"
+        and ruta.startswith(_PREFIJO_MEDIA_PUBLICA)
+        and len(ruta) > len(_PREFIJO_MEDIA_PUBLICA)
+        and ruta not in _MEDIA_NO_PUBLICA
+    )
+
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
 # servidor, no solo en el frontend). El token de mantenimiento NO tiene usuario asociado,
@@ -320,7 +341,7 @@ class SeguridadConsola:
         estado["usuario"] = None
         estado["auth_por_token"] = False
 
-        publica = ruta in _RUTAS_API_PUBLICAS
+        publica = ruta in _RUTAS_API_PUBLICAS or _es_media_publica(metodo, ruta)
         if not publica:
             # 1) Credencial: sesion valida (cookie) O token interino (si esta configurado).
             usuario = self._usuario_de_sesion(scope)

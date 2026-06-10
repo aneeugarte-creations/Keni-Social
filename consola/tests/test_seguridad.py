@@ -89,6 +89,23 @@ def test_api_con_token_incorrecto_da_401(entorno):
     assert r.status_code == 401
 
 
+def test_get_de_objeto_de_media_es_publico(entorno):
+    """`GET /api/media/<objeto>` pasa SIN credencial (capability URL para Metricool).
+
+    Los schedulers externos ingieren la imagen del post por esta URL y no tienen sesion:
+    sin la exencion, los posts salian SIN media (y las redes que exigen media ni se
+    construian). El nombre es content-addressed (indescifrable); un objeto inexistente da
+    404, NUNCA 401. Las subidas/acciones de /api/media siguen exigiendo credencial."""
+    c = _cli_sin_auth()
+    # Objeto inexistente: el middleware lo deja pasar (404 del handler, no 401 de auth).
+    assert c.get("/api/media/render/no-existe.png").status_code == 404
+    assert c.get("/api/media/no-existe.jpg").status_code == 404
+    # La RAIZ de media y las acciones NO son publicas: ni colecciones ni subidas sin auth.
+    assert c.post("/api/media").status_code in (401, 403)
+    assert c.post("/api/media/generar").status_code in (401, 403)
+    assert c.get("/api/media/generar").status_code in (401, 405)
+
+
 # --------------------------------------------------------------------------- #
 # 2) Proteccion CSRF en mutaciones (Origin/Referer)                            #
 # --------------------------------------------------------------------------- #
