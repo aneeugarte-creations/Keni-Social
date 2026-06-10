@@ -330,6 +330,9 @@ ENV_RENDIMIENTO_MIN_PIEZAS = "KENI_RENDIMIENTO_MIN_PIEZAS"
 # (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
 # `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
 ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
+# Modelo de la FUSIÓN semántica de historias (decide qué se corrobora con qué; el juicio
+# fino "mismo evento vs mismo tema" se le escapaba a haiku). Def "sonnet"; "" = sin --model.
+ENV_FUSION_MODELO = "KENI_FUSION_MODELO"
 
 # Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4). La traducción es
 # SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de ingesta, gateada por
@@ -793,6 +796,7 @@ __all__ = [
     'ENV_INGESTA_MAX_ERRORES',
     'ENV_INGESTA_MAX_ITEMS',
     'ENV_INGESTA_WORKERS',
+    'ENV_FUSION_MODELO',
     'ENV_INSUMOS_MODELO',
     'ENV_INVESTIGADOR',
     'ENV_INVESTIGADOR_INTERVALO_HORAS',

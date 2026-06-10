@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._config_comun import (
+    ENV_FUSION_MODELO,
     ENV_INSUMOS_MODELO,
     os,
 )
@@ -25,3 +26,19 @@ def insumos_modelo() -> str:
     if raw is None:
         return "haiku"  # no fijada: default haiku
     return raw.strip()  # fijada: respeta el valor (puede ser "" para desactivar --model)
+
+
+def fusion_modelo() -> str:
+    """Modelo de claude para la FUSIÓN semántica de historias (`KENI_FUSION_MODELO`, def "sonnet").
+
+    La fusión decide qué historias se CORROBORAN entre sí: un grupo equivocado infla
+    `n_fuentes`/score y puede auto-producir una pieza con fuentes que no hablan de lo mismo.
+    Ese juicio fino ("mismo acontecimiento" vs "mismo tema") se le escapaba a haiku — agrupó
+    el show de Shakira con una alerta de la embajada por compartir «Mundial»—, así que la
+    fusión usa sonnet por defecto (pocas llamadas por barrido: el coste es menor). Mismas
+    semánticas que `insumos_modelo`: "" explícito = sin `--model`.
+    """
+    raw = os.environ.get(ENV_FUSION_MODELO)
+    if raw is None:
+        return "sonnet"
+    return raw.strip()

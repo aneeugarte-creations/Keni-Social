@@ -53,17 +53,20 @@ Ejecutor = Callable[[str, str], str]
 # --------------------------------------------------------------------------- #
 
 
-def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
+def _ejecutar_claude_json(prompt: str, dir_permitido: str, modelo: str | None = None) -> str:
     """Corre `claude -p <prompt> --output-format json [--model X] --add-dir <dir>`.
 
     Síncrono, acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido
-    `CLAUDE_CODE_OAUTH_TOKEN`). No tocar en tests: se inyecta un ejecutor falso.
+    `CLAUDE_CODE_OAUTH_TOKEN`). `modelo=None` cae al de insumos (`KENI_INSUMOS_MODELO`);
+    un llamante puede fijar el suyo (la fusión usa el de `KENI_FUSION_MODELO`). No tocar
+    en tests: se inyecta un ejecutor falso.
     """
     from . import stream  # import perezoso: evita ciclo importador<->dominio
 
     if shutil.which("claude") is None:
         raise RuntimeError("El asistente (claude) no está disponible en el servidor.")
-    modelo = config.insumos_modelo()
+    if modelo is None:
+        modelo = config.insumos_modelo()
     argv: list[str] = [
         "claude",
         "-p",

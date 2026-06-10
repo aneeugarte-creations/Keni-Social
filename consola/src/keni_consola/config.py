@@ -173,6 +173,7 @@ from ._config_comun import (  # noqa: F401
     ENV_INGESTA_MAX_ERRORES,
     ENV_INGESTA_MAX_ITEMS,
     ENV_INGESTA_WORKERS,
+    ENV_FUSION_MODELO,
     ENV_INSUMOS_MODELO,
     ENV_INVESTIGADOR,
     ENV_INVESTIGADOR_INTERVALO_HORAS,
@@ -365,6 +366,7 @@ from .config_auth import (  # noqa: F401
     token,
 )
 from .config_contenido import (  # noqa: F401
+    fusion_modelo,
     insumos_modelo,
 )
 from .config_generacion import (  # noqa: F401

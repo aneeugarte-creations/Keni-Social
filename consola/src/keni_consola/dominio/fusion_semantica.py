@@ -1,4 +1,4 @@
-"""Fusión SEMÁNTICA de historias del MISMO evento con Haiku (Fase 2b).
+"""Fusión SEMÁNTICA de historias del MISMO evento con claude (Fase 2b).
 
 El clustering léxico (clustering.asignar) une variantes claras del MISMO titular (url canónica o
 título fuzzy ≥ umbral), pero NO une coberturas del mismo evento con titulares distintos
@@ -10,6 +10,15 @@ Este módulo es NEUTRO y PURO de I/O: solo construye el prompt, llama al ejecuto
 tests) y parsea los grupos. La FUSIÓN efectiva (reasignar items + borrar absorbidos + recalcular)
 la hace el daemon (`ingesta_daemon`), que es quien tiene los repos. BEST-EFFORT: ante cualquier
 fallo devuelve [] (no se funde nada).
+
+DOS PASADAS (la fusión equivocada es cara: infla la corroboración y puede auto-producir una
+pieza con fuentes que no hablan de lo mismo — pasó con «Shakira en la inauguración» fundida
+con «alerta de seguridad de la embajada» por compartir «Mundial»):
+  1. PROPUESTA sobre el lote completo (prompt `fusion-historias`).
+  2. VERIFICACIÓN por grupo propuesto (prompt `fusion-verificacion`): re-pregunta con SOLO
+     esas historias y el grupo puede salir confirmado, PARTIDO en subgrupos o descartado.
+     Mismo contrato JSON; cualquier fallo descarta el grupo (conservador).
+El modelo es el de `config.fusion_modelo()` (def sonnet: pocas llamadas, juicio fino).
 """
 
 from __future__ import annotations
@@ -35,23 +44,24 @@ _MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
 # JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la SEMILLA del
 # paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/noticias/fusion-historias"
+_PROMPT_VERIFICACION_ID = "prompt/noticias/fusion-verificacion"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
 
 
-def _plantilla() -> str:
+def _plantilla(prompt_id: str = _PROMPT_ID) -> str:
     """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
     from .. import libtexto
 
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+        cuerpo = (libtexto.cuerpo_efectivo(prompt_id) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la fusión sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
+    return cuerpo or libtexto.cuerpo_semilla(prompt_id).strip()
 
 
-def _construir_prompt(payload_json: str) -> str:
-    """Prompt para que Haiku agrupe historias del MISMO evento (plantilla editable + lista JSON)."""
-    plantilla = _plantilla()
+def _construir_prompt(payload_json: str, prompt_id: str = _PROMPT_ID) -> str:
+    """Prompt de agrupación/verificación (plantilla editable + lista JSON de historias)."""
+    plantilla = _plantilla(prompt_id)
     if _MARCA_HISTORIAS in plantilla:
         return plantilla.replace(_MARCA_HISTORIAS, payload_json)
     return f"{plantilla}\n\nHistorias:\n{payload_json}"
@@ -127,11 +137,61 @@ def proponer_fusiones(
         if len(limpio) >= 2:
             vistos.update(limpio)
             salida_grupos.append(limpio)
-    return salida_grupos
+
+    # SEGUNDA PASADA: cada grupo propuesto se VERIFICA con un prompt enfocado (solo esas
+    # historias). El verificador puede confirmar, PARTIR en subgrupos o descartar; un grupo
+    # que no supera la verificación NO se funde (conservador: la fusión equivocada infla la
+    # corroboración). Mismo contrato JSON, así el parseo y los ejecutores de test no cambian.
+    payload_por_id = {q["id"]: q for q in payload}
+    confirmados: list[list[str]] = []
+    for grupo in salida_grupos:
+        confirmados.extend(_verificar_grupo(grupo, payload_por_id, correr, al_ejecutar))
+    return confirmados
+
+
+def _verificar_grupo(
+    grupo: list[str],
+    payload_por_id: dict[str, dict[str, Any]],
+    correr: Ejecutor,
+    al_ejecutar: Callable[[str, str], None] | None,
+) -> list[list[str]]:
+    """Verifica UN grupo propuesto; devuelve los subgrupos confirmados (subset, ≥2, disjuntos)."""
+    payload = [payload_por_id[i] for i in grupo if i in payload_por_id]
+    if len(payload) < 2:
+        return []
+    prompt = _construir_prompt(
+        json.dumps(payload, ensure_ascii=False), prompt_id=_PROMPT_VERIFICACION_ID
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="keni-fusion-verifica-") as carpeta:
+            salida = correr(prompt, carpeta)
+    except Exception as e:  # noqa: BLE001 -- conservador: sin verificación no se funde
+        _log.warning("fusion_semantica: falló la verificación del grupo (%s); se descarta.", e)
+        return []
+    if al_ejecutar is not None:
+        try:
+            al_ejecutar(prompt, salida)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("fusion_semantica: fallo en al_ejecutar (verificación).", exc_info=True)
+    miembros = set(grupo)
+    vistos: set[str] = set()
+    confirmados: list[list[str]] = []
+    for g in _extraer_grupos(salida):
+        limpio = [i for i in dict.fromkeys(g) if i in miembros and i not in vistos]
+        if len(limpio) >= 2:
+            vistos.update(limpio)
+            confirmados.append(limpio)
+    return confirmados
 
 
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
-    """Ejecutor real: reutiliza el runner síncrono de `traduccion` (claude -p --output-format json)."""
+    """Ejecutor real: el runner síncrono de `traduccion` con el modelo de la fusión.
+
+    El nombre es histórico (la fusión nació con haiku); el modelo real lo decide
+    `config.fusion_modelo()` (def sonnet: el juicio "mismo evento vs mismo tema" se le
+    escapaba a haiku y agrupaba por tema).
+    """
+    from .. import config
     from .traduccion import _ejecutar_claude_json
 
-    return _ejecutar_claude_json(prompt, dir_permitido)
+    return _ejecutar_claude_json(prompt, dir_permitido, modelo=config.fusion_modelo())

@@ -47,6 +47,61 @@ def test_proponer_fusiones_fallo_haiku_no_funde():
     assert fusion_semantica.proponer_fusiones(clusters, ejecutor=revienta) == []
 
 
+def test_verificacion_descarta_grupo_no_confirmado():
+    """SEGUNDA PASADA: un grupo propuesto que el verificador rechaza NO se funde.
+
+    Regresión del cluster "Shakira + alerta de la embajada" (10-jun): la primera pasada
+    agrupó por TEMA (todo «Mundial»), infló la corroboración y el pool enseñó una historia
+    «Corroborada · 2 fuentes» con fuentes que no hablaban de lo mismo. El verificador
+    re-pregunta con SOLO esas historias y, si no son el mismo hecho, fuera."""
+    llamadas = {"n": 0}
+
+    def ej(_p, _c):
+        llamadas["n"] += 1
+        if llamadas["n"] == 1:  # propuesta: agrupa por tema (mal)
+            return json.dumps({"grupos": [["shakira", "embajada"]]})
+        return json.dumps({"grupos": []})  # verificación: no son el mismo evento
+
+    clusters = [
+        {"id": "shakira", "titulo": "A qué hora cantará Shakira en la inauguración"},
+        {"id": "embajada", "titulo": "Embajada de EU alerta sobre la seguridad"},
+    ]
+    assert fusion_semantica.proponer_fusiones(clusters, ejecutor=ej) == []
+    assert llamadas["n"] == 2  # propuesta + verificación
+
+
+def test_verificacion_puede_partir_un_grupo():
+    """El verificador puede devolver un SUBGRUPO: se funde solo lo confirmado."""
+    llamadas = {"n": 0}
+
+    def ej(_p, _c):
+        llamadas["n"] += 1
+        if llamadas["n"] == 1:
+            return json.dumps({"grupos": [["a", "b", "c"]]})
+        return json.dumps({"grupos": [["a", "b"]]})  # c no era el mismo evento
+
+    clusters = [
+        {"id": "a", "titulo": "Sismo de 6.1 sacude CDMX"},
+        {"id": "b", "titulo": "Tiembla en la Ciudad de México: 6.1"},
+        {"id": "c", "titulo": "Protección Civil presenta su plan anual"},
+    ]
+    assert fusion_semantica.proponer_fusiones(clusters, ejecutor=ej) == [["a", "b"]]
+
+
+def test_verificacion_fallida_descarta_el_grupo():
+    """Si la LLAMADA de verificación revienta, el grupo se descarta (conservador)."""
+    llamadas = {"n": 0}
+
+    def ej(_p, _c):
+        llamadas["n"] += 1
+        if llamadas["n"] == 1:
+            return json.dumps({"grupos": [["a", "b"]]})
+        raise RuntimeError("claude caído")
+
+    clusters = [{"id": "a", "titulo": "X largo para fuzzy"}, {"id": "b", "titulo": "Y largo tambien"}]
+    assert fusion_semantica.proponer_fusiones(clusters, ejecutor=ej) == []
+
+
 def test_extraer_grupos_tolera_fences():
     out = fusion_semantica._extraer_grupos('```json\n{"grupos": [["1","2"], ["3"]]}\n```')
     assert out == [["1", "2"]]  # grupos de <2 se descartan
