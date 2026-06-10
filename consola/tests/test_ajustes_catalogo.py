@@ -83,6 +83,10 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PROMPT_MAX_CHARS,
         # Listón de auto-producción del ranking de noticias (umbrales de promoción a tema).
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
+        # Filtro de ENTRADA por agenda de marca (la puerta del pool).
+        config.ENV_INGESTA_FILTRO,
+        # Caducidad del pool: TTL (lo viejo expira solo) + retención (techo del archivo).
+        config.ENV_NOTICIAS_TTL_H, config.ENV_NOTICIAS_RETENCION_H,
     }
     # Los toggles por marca (clave `ENV::marca`) se generan en caliente; el resto del catálogo
     # son exactamente las claves globales esperadas.
@@ -208,6 +212,9 @@ def test_tuning_solo_operacional(store):
         config.ENV_NOTICIAS_GC_INTERVALO_HORAS,
         config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
         config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
+        # Caducidad del pool de noticias (TTL + retención): limpieza, vive con el resto de GC.
+        config.ENV_NOTICIAS_TTL_H,
+        config.ENV_NOTICIAS_RETENCION_H,
     ]
     en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "tuning"}
     assert en_grupo == set(claves)
