@@ -147,12 +147,20 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         !!res?.publicacion &&
         ["aprobado", "programado", "publicado"].includes(res.publicacion.estado);
       actualizarCaches(res);
+      // "ok": el spinner gira en el pulgar de ARRIBA y el toast final dice "Quitamos tu OK."
+      // Si quien dio el OK puede FORZAR (admin/coordinación), el override vive AQUÍ, en el
+      // toast del primer OK —no como botón permanente en la tarjeta—: acaba de dar su OK y
+      // puede cerrar la cadena sin esperar el segundo; "Deshacer" queda como botón cancel.
       toast.success(
         cerrada
           ? "Pieza aprobada: lista para publicar."
           : "Tu OK quedó registrado; falta el de otra persona.",
-        // "ok": el spinner gira en el pulgar de ARRIBA y el toast final dice "Quitamos tu OK."
-        { action: { label: "Deshacer", onClick: () => deshacer.mutate("ok") } },
+        cerrada || !puedeForzar
+          ? { action: { label: "Deshacer", onClick: () => deshacer.mutate("ok") } }
+          : {
+              action: { label: "Forzar aprobación", onClick: () => void onForzar() },
+              cancel: { label: "Deshacer", onClick: () => deshacer.mutate("ok") },
+            },
       );
     },
     onError,
@@ -487,16 +495,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               <Button
                 variant="ghost"
                 size="icon"
-                // VERDE solo cuando TÚ ya diste tu OK; ACENTO DE MARCA (keni) cuando te toca
-                // decidir —`text-primary` aquí era el MISMO gris que el reposo y la jerarquía
-                // no se veía—; gris de reposo en el resto.
+                // VERDE solo cuando TÚ ya diste tu OK; gris de reposo en el resto. (El acento
+                // keni para "te toca decidir" se leía como ROJO en un botón sin pulsar y
+                // confundía: el color queda reservado al estado pulsado.)
                 className={cn(
                   "h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
-                  miReaccion === "like"
-                    ? cn(TEXTO_OK, "hover:text-emerald-700 dark:hover:text-emerald-300")
-                    : puedeDar && miReaccion === "neutral" && sinResolver === 0
-                      ? "text-keni-600 hover:text-keni-700 dark:text-keni-400 dark:hover:text-keni-300"
-                      : undefined,
+                  miReaccion === "like" &&
+                    cn(TEXTO_OK, "hover:text-emerald-700 dark:hover:text-emerald-300"),
                 )}
                 onClick={onLike}
                 disabled={ocupado}
@@ -603,16 +608,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
-          (cuántos y de quién) + lo que falta (comentarios sin resolver) + el override de forzar
-          (admin/coordinador, con su confirmación). Para piezas aprobadas sin panel, la burbuja
-          del botón Comentar sigue siendo la señal de hilos abiertos. */}
+          (cuántos y de quién) + lo que falta (comentarios sin resolver). El override de
+          forzar ya NO es un botón de la tarjeta: se ofrece en el toast del primer OK
+          (admin/coordinación), con su misma confirmación. Para piezas aprobadas sin panel,
+          la burbuja del botón Comentar sigue siendo la señal de hilos abiertos. */}
       {enRevision && tieneCadena && cadena && (
         <CadenaAprobacion
           cadena={cadena}
           veredictoIA={publicacion.veredicto}
           sinResolver={sinResolver}
-          onForzar={puedeForzar ? () => void onForzar() : undefined}
-          forzando={forzar.isPending}
         />
       )}
 

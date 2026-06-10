@@ -321,13 +321,12 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     );
   });
 
-  it("«Forzar» vive como botón discreto del panel (admin), no en el toast del like", async () => {
+  it("«Forzar» NO es un botón de la tarjeta: se ofrece en el toast del primer OK (admin)", async () => {
     stubFetchAprobacion("aprobado");
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }), { rol: "admin" });
     expect(await screen.findByText("0/1")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Forzar aprobación (saltar la cadena)" }),
-    ).toBeInTheDocument();
+    // La tarjeta queda limpia: ni el panel ni la fila de acciones ofrecen el override.
+    expect(screen.queryByRole("button", { name: /forzar/i })).not.toBeInTheDocument();
   });
 
   it("orden de gates: el autor con comentarios sin resolver recibe el motivo de elegibilidad", async () => {
@@ -400,12 +399,14 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/Espera tu turno/));
   });
 
-  it("cuando te toca decidir, el like lleva el acento de marca (no el gris de reposo)", async () => {
+  it("el like SIN pulsar va en gris de reposo (nada de acento rojo de marca)", async () => {
     stubFetchAprobacion("aprobado");
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
     const like = await screen.findByRole("button", { name: "Dale tu OK" });
-    // `text-primary` era el MISMO gris que el reposo: la señal "te toca" no se veía.
-    expect(like.className).toContain("text-keni-600");
+    // El acento keni (#d12d07) se leía como un like ROJO sin pulsar; el color queda
+    // reservado al estado pulsado (verde = tu OK puesto).
+    expect(like.className).not.toContain("text-keni");
+    expect(like.className).toContain("text-muted-foreground");
   });
 
   it("el «Deshacer» del toast de aprobar retira el OK (origen 'ok'), no un dislike genérico", async () => {

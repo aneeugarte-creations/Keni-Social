@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
@@ -60,39 +60,10 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(document.body.textContent).not.toContain("🟢");
   });
 
-  it("NO renderiza botones de acción (la acción vive en la fila del post)", () => {
+  it("NO renderiza botones de acción (la acción vive en la fila del post; el override de forzar, en el toast del primer OK)", () => {
     renderCadena(cadenaOK());
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  });
-
-  it("con `onForzar` y la cadena ABIERTA pinta el botón discreto de forzar", () => {
-    const onForzar = vi.fn();
-    render(<CadenaAprobacion cadena={cadenaOK()} onForzar={onForzar} />);
-    const boton = screen.getByRole("button", { name: "Forzar aprobación (saltar la cadena)" });
-    fireEvent.click(boton);
-    expect(onForzar).toHaveBeenCalledTimes(1);
-  });
-
-  it("mientras se fuerza (`forzando`), el botón queda deshabilitado y con spinner", () => {
-    const onForzar = vi.fn();
-    render(<CadenaAprobacion cadena={cadenaOK()} onForzar={onForzar} forzando />);
-    const boton = screen.getByRole("button", { name: /forzar aprobación/i });
-    // Sin segundo clic que reabra la confirmación mientras la mutación está en vuelo.
-    expect(boton).toBeDisabled();
-    expect(boton.querySelector(".animate-spin")).not.toBeNull();
-  });
-
-  it("con la cadena CERRADA no ofrece forzar aunque llegue `onForzar`", () => {
-    const c = cadenaOK({
-      niveles: [
-        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
-        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación", decision: "aprobado", decisor_id: "leo", decisor_nombre: "Leo" }),
-      ],
-      estado: "aprobado",
-      nivel_actual: "",
-    });
-    render(<CadenaAprobacion cadena={c} onForzar={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: /forzar/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/forzar/i)).not.toBeInTheDocument();
   });
 
   it("con comentarios sin resolver añade la línea de bloqueo dentro del panel", () => {
