@@ -476,16 +476,16 @@ export default function Monitor() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi
               icono={Cpu}
-              titulo="Procesando"
+              titulo="En curso"
               valor={`${cola.data.procesando}/${cola.data.capacidad.max_jobs}`}
               subtitulo="claude -p en vuelo / slots"
               tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
             />
             <Kpi
               icono={Clock}
-              titulo="En cola"
+              titulo="Esperando"
               valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
-              subtitulo="esperando un slot"
+              subtitulo="en cola, esperando un slot"
               tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
             />
             <Kpi
