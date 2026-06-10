@@ -29,6 +29,8 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 
+import { useSesion } from "@/hooks/sesion-contexto";
+
 import { CLAVE_AJUSTES, GRUPOS_MAQUINA, mensajeError } from "./lib";
 import { TarjetaColapsable } from "./TarjetaColapsable";
 
@@ -467,33 +469,34 @@ function EstadoAjustes({
   );
 }
 
-/** Sección admin de Configuración: TODOS los ajustes globales del catálogo que NO son de la
- * máquina de contenido (`GRUPOS_MAQUINA`, que viven en el Monitor junto a la cola que
- * gobiernan). Una sola sección: antes se repartía en pestañas «básica/avanzada» con la
- * básica VACÍA (GRUPOS_BASICOS = ∅), una estructura fantasma que confundía. */
-export function SeccionFuncionalidad() {
+/** Panel GENÉRICO de ajustes del catálogo para montar EN LA PÁGINA A LA QUE AFECTAN
+ * (reparto contextual: el motor de noticias en Noticias, la publicación en Programación,
+ * el sistema en el Monitor…). Filtra los grupos del catálogo por id y se AUTO-GUARDA por
+ * rol: si la sesión no es admin no monta nada (el endpoint /api/ajustes exige admin).
+ * Mismo motor y misma mutación en caliente en todas las páginas. */
+export function PanelAjustes({
+  ids,
+  titulo,
+  descripcion,
+  abiertaInicial = false,
+}: {
+  ids: ReadonlySet<string>;
+  titulo: string;
+  descripcion?: React.ReactNode;
+  abiertaInicial?: boolean;
+}) {
+  const { usuario } = useSesion();
+  const esAdmin = usuario === null || usuario.rol === "admin";
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
-
-  // Configuración EXCLUYE los grupos de la máquina (se operan en el Monitor).
-  const grupos = (data?.grupos ?? []).filter((g) => !GRUPOS_MAQUINA.has(g.id));
-
-  // Sin grupos (p. ej. la API aún no trae ninguno): no pintamos la tarjeta. Va DESPUÉS de
-  // los hooks para no llamarlos condicionalmente.
+  if (!esAdmin) return null;
+  const grupos = (data?.grupos ?? []).filter((g) => ids.has(g.id));
   if (!isPending && !isError && grupos.length === 0) return null;
-
   return (
     <TarjetaColapsable
-      titulo="Ajustes del sistema"
-      abiertaInicial
+      titulo={titulo}
+      abiertaInicial={abiertaInicial}
       contentClassName="space-y-6 pt-0"
-      descripcion={
-        <>
-          Automatismos, publicación y granularidad fina (intervalos, máximos, umbrales, jobs…).
-          Funcionan bien en sus <strong>valores por defecto</strong>; los cambios aplican{" "}
-          <strong>en caliente</strong> (hasta ~1 minuto). La <strong>máquina de contenido</strong>{" "}
-          (etapas, topes y economía de tokens) se opera desde el Monitor.
-        </>
-      }
+      descripcion={descripcion}
     >
       {isPending || isError ? (
         <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />

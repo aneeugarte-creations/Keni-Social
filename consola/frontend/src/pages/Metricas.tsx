@@ -9,6 +9,7 @@ import {
   marcaParam,
 } from "@/components/comunes/selectores";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -74,7 +75,16 @@ export default function Metricas() {
     );
   }
 
-  return <DashboardMetricas opciones={opcionesQuery.data} />;
+  return (
+    <>
+      <DashboardMetricas opciones={opcionesQuery.data} />
+      {/* Ajuste CONTEXTUAL (admin): la conexión Metricool por marca alimenta ESTE
+          dashboard, así que se configura aquí (reparto: cada ajuste en su página). */}
+      <div className="mt-6">
+        <SeccionMetricool />
+      </div>
+    </>
+  );
 }
 
 /** Cuerpo del dashboard una vez que tenemos las opciones disponibles. */

@@ -371,6 +371,9 @@ describe("Avatar · visibilidad de Usuarios por rol", () => {
     fireEvent.click(screen.getByRole("button", { name: /x.*editor/i }));
     expect(screen.queryByRole("menuitem", { name: /usuarios/i })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /mi cuenta/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /configuración/i })).toBeInTheDocument();
+    // «Configuración» ya no existe en el avatar: los ajustes se DISTRIBUYERON a la
+    // página a la que afectan (Monitor·Ajustes, Noticias, Programación, Métricas,
+    // Estudio); la cuenta se queda con «Mi cuenta» (incluida la apariencia).
+    expect(screen.queryByRole("menuitem", { name: /configuración/i })).not.toBeInTheDocument();
   });
 });

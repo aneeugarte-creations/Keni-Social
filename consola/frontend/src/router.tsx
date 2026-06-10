@@ -55,7 +55,6 @@ const Monitor = lazy(() => import("@/pages/Monitor"));
 const MobileFeed = lazy(() => import("@/pages/MobileFeed"));
 
 // Ajustes (ahora solo accesibles via dropdown del avatar).
-const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
@@ -269,7 +268,11 @@ export const router = createBrowserRouter([
 
       // Ajustes (sin entrada en el sidebar; se llega desde el dropdown del avatar).
       { path: "mi-cuenta", element: <MiCuenta /> },
-      { path: "configuracion", element: <Configuracion /> },
+      // La página Configuración se DISTRIBUYÓ: cada ajuste vive en la página a la que
+      // afecta (máquina/sistema/esfuerzo → Monitor·Ajustes; noticias → Cobertura;
+      // publicación → Programación; Metricool → Métricas; imagen → Estudio; apariencia →
+      // Mi cuenta). La ruta vieja redirige al Monitor·Ajustes.
+      { path: "configuracion", element: <Navigate to="/datos/actividad/monitor?tab=ajustes" replace /> },
       { path: "sugerencias", element: <Sugerencias /> },
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
       // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.

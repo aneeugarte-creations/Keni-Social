@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
 import type { MarcaMetricool, PerfilMetricool } from "@/types";
 
@@ -324,6 +325,10 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
 }
 
 export function SeccionMetricool() {
+  // Autoguardado por rol: los secretos de conexión son de admin (#153); montada en la
+  // página de Métricas, se oculta sola a un editor (sesión null = modo local pleno).
+  const { usuario } = useSesion();
+  if (usuario !== null && usuario.rol !== "admin") return null;
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_METRICOOL,
     queryFn: ({ signal }) => api.conexionesMetricool(signal),

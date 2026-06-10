@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Lightbulb, LogOut, Settings2, UserCog, Users, Webhook } from "lucide-react";
+import { ChevronsUpDown, Lightbulb, LogOut, UserCog, Users, Webhook } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -31,7 +31,6 @@ interface OpcionMenu {
  */
 const OPCIONES: OpcionMenu[] = [
   { ruta: "/mi-cuenta", etiqueta: "Mi cuenta", icono: UserCog },
-  { ruta: "/configuracion", etiqueta: "Configuración", icono: Settings2 },
   { ruta: "/sugerencias", etiqueta: "Feedback", icono: Lightbulb },
   { ruta: "/webhooks", etiqueta: "Webhooks", icono: Webhook, soloAdmin: true },
   { ruta: "/usuarios", etiqueta: "Usuarios", icono: Users, soloAdmin: true },

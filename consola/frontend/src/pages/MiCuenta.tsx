@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { TituloPagina } from "@/components/layout/encabezado";
+import { SeccionApariencia } from "@/pages/configuracion/SeccionApariencia";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -430,6 +431,11 @@ export default function MiCuenta() {
   return (
     <>
       <TituloPagina titulo="Mi cuenta" icono={User} />
+      {/* Preferencia PERSONAL (tema claro/oscuro): vive con la cuenta, no en una página
+          de configuración global (reparto contextual). */}
+      <div className="mb-4">
+        <SeccionApariencia />
+      </div>
       <ContenidoMiCuenta />
     </>
   );

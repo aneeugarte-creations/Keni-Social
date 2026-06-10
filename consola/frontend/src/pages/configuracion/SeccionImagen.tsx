@@ -25,12 +25,16 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
 
 import { CLAVE_IMAGEN, PROVEEDORES, mensajeError } from "./lib";
 import { TarjetaColapsable } from "./TarjetaColapsable";
 
 export function SeccionImagen() {
+  // Autoguardado por rol (#153): montada en el Estudio, se oculta sola a un editor.
+  const { usuario } = useSesion();
+  if (usuario !== null && usuario.rol !== "admin") return null;
   const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_IMAGEN,

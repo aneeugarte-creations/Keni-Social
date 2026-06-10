@@ -1,3 +1,7 @@
+import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
+
+// Grupos del catálogo que gobiernan la publicación (global + por marca).
+const GRUPOS_PUBLICACION = new Set(["publicacion", "publicacion_marca"]);
 import { CalendarDays, Gauge, Upload } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
@@ -82,6 +86,16 @@ export default function CalendarioContenido() {
           void catalogosQuery.refetch();
         }}
       />
+
+      {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
+          ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
+      <div className="mt-6">
+        <PanelAjustes
+          ids={GRUPOS_PUBLICACION}
+          titulo="Ajustes de publicación"
+          descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
+        />
+      </div>
     </>
   );
 }

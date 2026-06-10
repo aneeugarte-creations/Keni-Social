@@ -40,7 +40,12 @@ import { haceSegundos } from "@/lib/fecha";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
-import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
+import {
+  PanelAjustes,
+  PanelMaquinaContenido,
+  useGuardarAjuste,
+} from "@/pages/configuracion/SeccionFuncionalidad";
+import { SeccionEsfuerzo } from "@/pages/configuracion/SeccionEsfuerzo";
 import { PanelSalud } from "@/pages/sistema/PanelSalud";
 import type { ColaJob, ColaSerie, PresupuestoIA } from "@/types";
 
@@ -305,6 +310,10 @@ function PanelPresupuesto({
   );
 }
 
+// Grupos del catálogo que son TUNING DE SISTEMA (jobs, limpieza, alertas): se ajustan
+// aquí porque es el Monitor quien vigila sus efectos (cola, daemons, salud).
+const GRUPOS_SISTEMA = new Set(["automatismos_generales", "tuning"]);
+
 export default function Monitor() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
@@ -312,7 +321,9 @@ export default function Monitor() {
   // solo admin: era la página Sistema del avatar, consolidada aquí). El tab viaja en la
   // URL (?tab=salud) para que /sistema pueda redirigir y los enlaces profundos funcionen.
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = esAdmin && searchParams.get("tab") === "salud" ? "salud" : "vivo";
+  const crudoTab = searchParams.get("tab");
+  const tab =
+    crudoTab === "ajustes" ? "ajustes" : esAdmin && crudoTab === "salud" ? "salud" : "vivo";
   const qc = useQueryClient();
   // El Monitor respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
   // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
@@ -396,23 +407,37 @@ export default function Monitor() {
         )}
       </AccionesPagina>
 
-      {esAdmin && (
-        <Tabs
-          value={tab}
-          onValueChange={(v) =>
-            setSearchParams(v === "vivo" ? {} : { tab: v }, { replace: true })
-          }
-          className="mb-4"
-        >
-          <TabsList>
-            <TabsTrigger value="vivo">En vivo</TabsTrigger>
-            <TabsTrigger value="salud">Salud</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
+      <Tabs
+        value={tab}
+        onValueChange={(v) =>
+          setSearchParams(v === "vivo" ? {} : { tab: v }, { replace: true })
+        }
+        className="mb-4"
+      >
+        <TabsList>
+          <TabsTrigger value="vivo">En vivo</TabsTrigger>
+          {esAdmin && <TabsTrigger value="salud">Salud</TabsTrigger>}
+          <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {tab === "salud" ? (
         <PanelSalud />
+      ) : tab === "ajustes" ? (
+        /* AJUSTES DE LO QUE ESTE MONITOR VIGILA (reparto contextual: cada ajuste vive en
+           la página a la que afecta): la máquina de contenido (etapas/por marca/topes y
+           economía de tokens), el tuning del sistema (jobs, limpieza, alertas) y el
+           esfuerzo de la generación. Lo demás vive en su página (noticias, publicación,
+           conexiones). */
+        <div className="space-y-4">
+          <PanelMaquinaContenido />
+          <PanelAjustes
+            ids={GRUPOS_SISTEMA}
+            titulo="Sistema"
+            descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
+          />
+          <SeccionEsfuerzo />
+        </div>
       ) : cola.isError ? (
         <BloqueError
           titulo="No se pudo leer la cola"
