@@ -150,6 +150,9 @@ export function useAtajosTeclado({
       // Con Alt pulsado e.key cambia en macOS ("ˇ" y similares), por eso se mira e.code.
       if (!meta && e.altKey && e.shiftKey && e.code === "KeyT") {
         e.preventDefault();
+        // Mismo requisito que el botón de la barra: 3+ capas seleccionadas. `ordenarMulti` ya es
+        // no-op interno con menos, pero el guard explícito deja el contrato a la vista en el atajo.
+        if (st.seleccionMulti.length < 3) return;
         return st.ordenarMulti();
       }
       // CREACIÓN estilo Canva (T/R/C/L, sin modificadores y fuera de los modos de imagen): inserta

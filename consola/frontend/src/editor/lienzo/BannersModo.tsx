@@ -5,7 +5,7 @@ import { Check, Crop as CropIcon, Move, X } from "lucide-react";
 
 export function BannerReencuadre({ onListo }: { onListo?: () => void }) {
   return (
-    <div className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
+    <div className="absolute left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
       <Move className="h-3.5 w-3.5 text-muted-foreground" />
       <span>Arrastra la foto · rueda para zoom</span>
       <button
@@ -23,7 +23,7 @@ export function BannerReencuadre({ onListo }: { onListo?: () => void }) {
 // para reencuadrar; esquinas o rueda para escalarla dentro del marco).
 export function BannerRecorte({ onListo, onCancelar }: { onListo?: () => void; onCancelar?: () => void }) {
   return (
-    <div className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
+    <div className="absolute left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs shadow-md">
       <CropIcon className="h-3.5 w-3.5 text-muted-foreground" />
       <span>Arrastra la foto · esquinas o rueda para escalar</span>
       <button

@@ -219,13 +219,16 @@ describe("useAtajosTeclado — «Ordenar» (tidy up, ⌥⇧T)", () => {
     hook.unmount();
   });
 
-  it("con 2 capas seleccionadas es un no-op", () => {
+  it("con 2 capas seleccionadas es un no-op: el atajo NI SIQUIERA llama a ordenarMulti (guard, como el botón)", () => {
     const { store, hook } = montar();
     const st = store.getState();
     st.agregar(nuevaCapaTexto({ id: "a", x: 0, y: 100, w: 100, h: 50, z: 2 }));
     st.agregar(nuevaCapaTexto({ id: "b", x: 130, y: 100, w: 100, h: 50, z: 3 }));
     st.seleccionarMuchas(["a", "b"]);
+    const espia = vi.fn();
+    store.setState({ ordenarMulti: espia });
     teclaCon({ key: "ˇ", code: "KeyT", altKey: true, shiftKey: true });
+    expect(espia).not.toHaveBeenCalled();
     const capas = store.getState().documento.capas;
     expect(capas.find((c) => c.id === "b")!.x).toBe(130);
     expect(store.getState().puedeDeshacer()).toBe(true); // solo los `agregar`; el tidy no registró nada

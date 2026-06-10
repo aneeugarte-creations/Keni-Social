@@ -894,7 +894,10 @@ export function Lienzo({
   // "contain" abraza la foto exacta, igual que el marco de selección); con rotación, la caja del
   // modelo rotada (overlay/texto sin caja ajustan su alto visual).
   const hoverBox = (() => {
-    if (!hoverId || arrastrando || marquee || modoImagen || espacio) return null;
+    // Mira también los IDs de modo (no solo `modoImagen`): si `recorteId`/`reencuadreId` apuntan a
+    // una capa ya inexistente (o no imagen), `modoImagen` resuelve a null pero el editor sigue "en
+    // modo" y el contorno de hover no debe aparecer.
+    if (!hoverId || arrastrando || marquee || modoImagen || reencuadreId || recorteActivoId || espacio) return null;
     if (seleccionMulti.includes(hoverId)) return null;
     const c = documento.capas.find((x) => x.id === hoverId);
     if (!c || c.visible === false) return null;
