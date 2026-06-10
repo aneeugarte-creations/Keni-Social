@@ -1,6 +1,5 @@
 import type { MarcaDisponible, Publicacion } from "../types.gen";
 import type { Veredicto } from "./comun";
-import type { MetricaPieza } from "./contenido";
 
 /** Resultado de programar una pieza en Metricool (preview dry-run o publicación real). */
 export interface ResultadoProgramarMetricool {
@@ -113,13 +112,6 @@ export interface CuerpoActualizarPublicacion {
   espejo?: boolean;
 }
 
-/** Respuesta al reciclar una publicación evergreen. */
-export interface RespuestaReciclarPublicacion {
-  publicacion: Publicacion;
-  /** `true` si quedó encolada (con fecha); `false` si quedó como borrador. */
-  encolado: boolean;
-}
-
 /** Cuerpo opcional para duplicar una publicación (red/marca/título destino). */
 export interface CuerpoDuplicarPublicacion {
   red?: string;
@@ -127,57 +119,6 @@ export interface CuerpoDuplicarPublicacion {
   titulo?: string;
 }
 
-// --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
-
-/** Motivo por el que el archivo sugiere retomar una pieza (heurística explicable).
- *
- * `rendimiento`: la pieza YA rindió bien (engagement real medido en Metricool) → repostear.
- * Es la señal más fuerte (datos reales, no solo contexto). El resto son contextuales.
- */
-export type MotivoReciclaje = "rendimiento" | "efemeride" | "evergreen" | "recurrente";
-
-/** Una pieza de archivo que la heurística propone reciclar, con su motivo. */
-export interface SugerenciaReciclaje {
-  id: string;
-  titulo: string;
-  marca: string;
-  marca_nombre: string;
-  red: string;
-  red_nombre: string;
-  fecha_creacion: string;
-  fecha_actualizacion: string;
-  /** Tipo de señal que la hizo candidata. */
-  motivo: MotivoReciclaje;
-  /** Frase en es-MX que explica POR QUÉ retomarla ahora. */
-  motivo_detalle: string;
-  /** Puntuación interna para ordenar (mayor = más prioritaria). */
-  puntuacion: number;
-  /** Rendimiento real (Metricool) cuando el motivo es `rendimiento`; `null` si no aplica. */
-  rendimiento: MetricaPieza | null;
-}
-
-/** Parámetros (días/umbral) de la heurística, para que la UI los pueda mostrar. */
-export interface ParametrosReciclaje {
-  ventana_efemeride_dias: number;
-  edad_minima_evergreen_dias: number;
-  edad_minima_antiguedad_dias: number;
-  /** Engagement (%) mínimo para considerar que una pieza "rindió bien". */
-  umbral_engagement_rendimiento: number;
-}
-
-/** Respuesta de `GET /api/reciclaje/sugerencias`. */
-export interface RespuestaSugerenciasReciclaje {
-  sugerencias: SugerenciaReciclaje[];
-  parametros: ParametrosReciclaje;
-}
-
-/** Filtros opcionales para pedir sugerencias de reciclaje. */
-export interface FiltrosReciclaje {
-  marca?: string;
-  red?: string;
-  /** Permite pasarse a `query()` (Record<string, string | undefined>). */
-  [clave: string]: string | undefined;
-}
 
 // --- Hashtags ---
 

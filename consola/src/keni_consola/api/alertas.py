@@ -3,7 +3,6 @@
 El daemon `alertas_rendimiento.py` emite a la bitacora de eventos internos
 (`db.eventos_internos`) dos tipos de aviso PROACTIVO sobre las piezas publicadas:
 
-  - `pieza.reciclaje_sugerida`  una pieza de archivo merece retomarse (evergreen).
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
 
 Hasta ahora solo se veian via `/api/webhooks` (SOLO ADMIN). Este endpoint los expone al
@@ -33,7 +32,7 @@ from .. import repos
 # `dominio.eventos.TIPOS_EVENTO`). Se nombran aqui de forma explicita para no acoplar el
 # filtro al orden/contenido completo de `TIPOS_EVENTO`.
 TIPOS_ALERTA: frozenset[str] = frozenset(
-    {"pieza.reciclaje_sugerida", "pieza.bajo_rendimiento"}
+    {"pieza.bajo_rendimiento"}
 )
 
 _LIMITE_DEF = 50
@@ -52,7 +51,7 @@ def _limite(crudo: str | None) -> int:
 
 
 async def listar(request: Request) -> Response:
-    """GET /api/alertas[?limite=N]: alertas de rendimiento (reciclaje / bajo rendimiento).
+    """GET /api/alertas[?limite=N]: alertas de rendimiento (bajo rendimiento).
 
     Lee la bitacora de eventos internos y FILTRA a los tipos de alerta. Para no perder
     alertas cuando la bitacora trae muchos eventos de otros tipos, leemos un poco mas que

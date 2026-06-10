@@ -9,7 +9,7 @@ Que resuelve: hoy el rendimiento por pieza es LAZY (se recalcula al abrir el tab
 cache esta vieja). Esto adelanta ese trabajo: cada N horas (def 4h;
 `KENI_METRICAS_PIEZAS_REFRESCO_HORAS`) recalcula la cache de las piezas publicadas
 RECIENTES con `id_post_metricool` desde Metricool, para que el tablero y la heuristica de
-reciclaje vean datos FRESCOS sin pagar el lazy-fill en la apertura.
+tablero vean datos FRESCOS sin pagar el lazy-fill en la apertura.
 
 Vive en el servidor real (`__main__`), NO en `crear_app`: los tests no lo arrancan (igual
 que el programador y la captura comercial). Un fallo de barrido se loguea y NO mata el

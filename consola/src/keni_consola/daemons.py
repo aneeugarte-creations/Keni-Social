@@ -11,7 +11,7 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
   - programador de publicaciones (DRY-RUN salvo `KENI_PUBLICAR_REAL=1`),
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
-  - alertas de rendimiento / reciclaje (solo leen + emiten eventos internos),
+  - alertas de rendimiento (solo leen + emiten eventos internos),
   - MÁQUINA DE CONTENIDO (Flujo C): el pipeline (`KENI_PIPELINE_COPY`/`KENI_PIPELINE_SELECCION`/
     `KENI_PIPELINE_ARTE`, bajo el maestro `KENI_MAQUINA`) ingiere del news-pool y lleva los
     temas a borrador (copy + arte) en la cola de revision; el resultado para en el gate

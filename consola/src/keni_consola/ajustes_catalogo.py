@@ -168,7 +168,7 @@ def _plan_por_marca() -> list[Ajuste]:
             etiqueta=f"{nombre} · plan diario",
             ayuda="Cupos por categoría, formato «categoria:n» separados por comas (categorías "
             "= las de sus fuentes RSS, más «breaking» para última hora corroborada y "
-            "«evergreen» reservado al reciclaje manual). Vacío = sin plan.",
+            "«evergreen» que llena solo su automatismo diario). Vacío = sin plan.",
             grupo="noticias_produccion_marca",
             defecto="",
         )

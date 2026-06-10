@@ -2,7 +2,7 @@
 
 OFFLINE, persistencia en tmp. Siembra eventos internos directamente en la bitacora
 (`db.registrar_evento_interno`) y verifica que el endpoint devuelve SOLO los dos tipos de
-alerta de rendimiento (reciclaje sugerida / bajo rendimiento), filtrando el resto de
+alerta de rendimiento (bajo rendimiento), filtrando el resto de
 eventos internos. Cubre tambien la forma de la respuesta y el `?limite=`.
 """
 
@@ -24,23 +24,18 @@ def test_respuesta_tiene_forma_esperada(cliente):
 
 
 def test_devuelve_alertas_de_rendimiento_filtradas(cliente):
-    # Dos alertas de rendimiento + un evento de OTRO tipo que NO debe salir.
+    # Una alerta de rendimiento + un evento de OTRO tipo que NO debe salir.
     _sembrar(
         "pieza.bajo_rendimiento",
         contenido_id="c1",
         plataforma_id="p1",
         payload={"resumen": "Engagement bajo"},
     )
-    _sembrar(
-        "pieza.reciclaje_sugerida",
-        contenido_id="c2",
-        payload={"resumen": "Retomar evergreen"},
-    )
     _sembrar("pieza.publicada", contenido_id="c3")  # otro tipo: NO es alerta
 
     alertas = cliente.get("/api/alertas").json()["alertas"]
     tipos = {a["tipo"] for a in alertas}
-    assert tipos == {"pieza.bajo_rendimiento", "pieza.reciclaje_sugerida"}
+    assert tipos == {"pieza.bajo_rendimiento"}
     # No se cuela ningun evento ajeno (la publicacion).
     assert all(a["tipo"] != "pieza.publicada" for a in alertas)
     # Cada alerta trae los campos del contrato.

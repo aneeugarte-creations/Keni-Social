@@ -383,7 +383,7 @@ def plan_dia(marca: str = "") -> dict[str, int]:
     con LAS MEJORES historias de esa categoría (las breaking corroboradas consumen el cupo
     'breaking' sea cual sea su categoría de feed) y la ingesta salta los feeds de categorías
     fuera del plan. Categorías sin pool (p. ej. 'evergreen') reservan el hueco para el flujo
-    manual/reciclaje: la auto-producción no las llena. {} = sin plan (cae al cupo diario
+    manual ('evergreen' lo llena su automatismo diario). {} = sin plan (cae al cupo diario
     global, `cupo_dia`). El override por marca SUSTITUYE al global (no se mezclan)."""
     if marca:
         propio = _crudo(f"{ENV_PLAN_DIA}::{marca}")

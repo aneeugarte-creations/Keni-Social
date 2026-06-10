@@ -104,7 +104,7 @@ ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
 ENV_METRICAS_PIEZAS_REFRESCO_HORAS = "KENI_METRICAS_PIEZAS_REFRESCO_HORAS"
 # Retencion (dias) del HISTORICO de metricas por pieza (`metricas_pieza_snapshots`, ADR 0007).
 ENV_METRICAS_HISTORICO_RETENCION_DIAS = "KENI_METRICAS_HISTORICO_RETENCION_DIAS"
-# Barrido de ALERTAS de rendimiento / reciclaje proactivo (emite eventos internos).
+# Barrido de ALERTAS de rendimiento (emite eventos internos).
 ENV_ALERTAS_INTERVALO_HORAS = "KENI_ALERTAS_RENDIMIENTO_HORAS"
 ENV_ALERTAS_ACTIVAS = "KENI_ALERTAS_RENDIMIENTO"
 # Umbral (% engagement) por debajo del cual una pieza publicada se considera "bajo
@@ -489,7 +489,7 @@ METRICAS_PIEZAS_REFRESCO_HORAS_DEF = 4
 # Retencion del historico por pieza (`metricas_pieza_snapshots`): a 4h de cadencia, 90 dias
 # son ~540 puntos por pieza; la poda mantiene la tabla acotada (ADR 0007).
 METRICAS_HISTORICO_RETENCION_DIAS_DEF = 90
-# Cadencia del barrido de alertas de rendimiento / reciclaje proactivo (horas).
+# Cadencia del barrido de alertas de rendimiento (horas).
 ALERTAS_INTERVALO_HORAS_DEF = 6
 # Umbral de engagement (%) por debajo del cual una pieza dispara alerta de bajo rendimiento.
 ALERTAS_UMBRAL_ENGAGEMENT_DEF = 1.0

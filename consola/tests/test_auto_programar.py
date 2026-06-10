@@ -132,3 +132,95 @@ def test_barrer_aprobadas_programa_las_existentes(cliente, ahora_fijo):
     assert auto_programar.barrer_aprobadas() == 2
     assert repos.obtener_publicacion(p1)["estado"] == "programado"
     assert repos.obtener_publicacion(p2)["estado"] == "programado"
+
+
+# --------------------------------------------------------------------------- #
+# Evergreen diario: reemision automatica del banco green (1 al dia, hueco 8h) #
+# --------------------------------------------------------------------------- #
+
+
+def _green_aprobado(titulo="Green del banco", creado="2026-05-01T00:00:00"):
+    """Siembra un contenido green APROBADO en el banco (creado hace tiempo: fuera de la
+    ventana de 24 h del plan, para que no cuente como el generado de hoy)."""
+    cont = repos.crear_contenido(
+        clase="contenido", titulo=titulo, marca="unotv",
+        flujo="evergreen", origen="evergreen", creado=creado,
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=cont["id"], red="x", copy="Copy green", estado="aprobado",
+        falta_revision=False,
+    )
+    return cont
+
+
+def test_evergreen_diario_reemite_uno_del_banco(cliente, ahora_fijo, monkeypatch):
+    from keni_consola import evergreen_diario
+
+    monkeypatch.setenv("KENI_MAQUINA", "1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1")
+    original = _green_aprobado()
+
+    assert evergreen_diario.barrer() == 1
+
+    reemisiones = [
+        c for c in repos.listar_contenido(clase="contenido", marca="unotv")
+        if c.get("origen") == evergreen_diario.ORIGEN_EVERGREEN_DIARIO
+    ]
+    assert len(reemisiones) == 1
+    copia = reemisiones[0]
+    assert copia["titulo"] == original["titulo"]
+    assert copia["categoria"] == "evergreen"
+    piezas = repos.listar_contenido_plataforma(copia["id"])
+    assert len(piezas) == 1 and piezas[0]["estado"] == "aprobado"
+    assert piezas[0]["copy"] == "Copy green"
+    # IDEMPOTENTE en la ventana: la reemision cuenta como generado -> no se anade otra hoy.
+    assert evergreen_diario.barrer() == 0
+
+
+def test_evergreen_diario_no_reemite_si_hoy_ya_hay_green(cliente, ahora_fijo, monkeypatch):
+    from keni_consola import evergreen_diario
+
+    monkeypatch.setenv("KENI_MAQUINA", "1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1")
+    _green_aprobado()
+    # El equipo YA creo un green hoy (cuenta en la ventana): el automatismo no anade otro.
+    repos.crear_contenido(
+        clase="contenido", titulo="Green de hoy", marca="unotv", flujo="evergreen",
+    )
+    assert evergreen_diario.barrer() == 0
+
+
+def test_evergreen_diario_sin_banco_o_sin_plan_no_hace_nada(cliente, ahora_fijo, monkeypatch):
+    from keni_consola import evergreen_diario
+
+    monkeypatch.setenv("KENI_MAQUINA", "1")
+    # Sin plan con linea evergreen: nada.
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4")
+    _green_aprobado()
+    assert evergreen_diario.barrer() == 0
+    # Con plan pero sin banco aprobado: nada (no se inventa contenido).
+    monkeypatch.setenv("KENI_PLAN_DIA::piso-15", "evergreen:1")
+    assert evergreen_diario.barrer() == 0
+
+
+def test_evergreen_diario_reemision_se_programa_al_hueco_de_su_categoria(
+    cliente, ahora_fijo, monkeypatch
+):
+    """Cadena completa: reemision (aprobado) -> barrer_aprobadas -> franja evergreen."""
+    from keni_consola import evergreen_diario
+
+    monkeypatch.setenv("KENI_MAQUINA", "1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1")
+    # Franja evergreen (mie 14:00 UTC = 8:00 MX del miercoles del reloj fijo).
+    cliente.post(
+        "/api/franjas",
+        json={"dia_semana": 2, "hora": "14:00", "marca": "unotv", "categoria": "evergreen"},
+    )
+    _green_aprobado()
+
+    assert evergreen_diario.barrer() == 1
+    assert auto_programar.barrer_aprobadas() == 1
+
+    programadas = repos.listar_publicaciones(estado="programado")
+    assert len(programadas) == 1
+    assert programadas[0]["fecha_programada"] == "2026-05-20T14:00"

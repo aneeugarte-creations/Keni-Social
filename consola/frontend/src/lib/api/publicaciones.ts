@@ -5,7 +5,6 @@ import type {
   CuerpoActualizarPublicacion,
   CuerpoDuplicarPublicacion,
   FiltrosPublicaciones,
-  FiltrosReciclaje,
   OpcionesPublicaciones,
   RespuestaAlertas,
   RespuestaBorrarLotePublicaciones,
@@ -16,8 +15,6 @@ import type {
   RespuestaMensaje,
   RespuestaPublicacion,
   RespuestaPublicaciones,
-  RespuestaReciclarPublicacion,
-  RespuestaSugerenciasReciclaje,
 } from "@/types";
 
 export const apiPublicaciones = {
@@ -57,10 +54,6 @@ export const apiPublicaciones = {
     }),
   encolarPublicacion: (id: string) =>
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/encolar`, {
-      metodo: "POST",
-    }),
-  reciclarPublicacion: (id: string) =>
-    peticion<RespuestaReciclarPublicacion>(`/publicaciones/${encodeURIComponent(id)}/reciclar`, {
       metodo: "POST",
     }),
   /**
@@ -136,15 +129,12 @@ export const apiPublicaciones = {
     >("/contenido/importar", { metodo: "POST", form, timeoutMs: 120_000 });
   },
 
-  // --- Alertas de rendimiento (bitácora editorial: reciclaje / bajo rendimiento) ---
+  // --- Alertas de rendimiento (bitácora editorial: bajo rendimiento) ---
   alertas: (params: { limite?: number } = {}, signal?: AbortSignal) =>
     peticion<RespuestaAlertas>(
       `/alertas${query({ limite: params.limite?.toString() })}`,
       { signal },
     ),
 
-  // --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
-  sugerenciasReciclaje: (filtros: FiltrosReciclaje = {}, signal?: AbortSignal) =>
-    peticion<RespuestaSugerenciasReciclaje>(`/reciclaje/sugerencias${query(filtros)}`, { signal }),
 
 };

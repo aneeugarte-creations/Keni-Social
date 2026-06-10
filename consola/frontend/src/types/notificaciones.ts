@@ -6,7 +6,6 @@ export type TipoEventoInterno =
   | "pieza.publicada"
   | "contenido.vencido"
   // Fase 3 auto-operativa: alertas proactivas del barrido `alertas_rendimiento`.
-  | "pieza.reciclaje_sugerida"
   | "pieza.bajo_rendimiento";
 
 /** Forma del payload del POST saliente: `generico` (evento crudo) | `slack` (`{text}`). */
@@ -129,7 +128,7 @@ export interface RespuestaMencionesCandidatos {
 }
 
 /** Tipo de alerta de rendimiento (subconjunto de eventos internos de la bitácora). */
-export type TipoAlerta = "pieza.bajo_rendimiento" | "pieza.reciclaje_sugerida";
+export type TipoAlerta = "pieza.bajo_rendimiento";
 
 /**
  * Una alerta de rendimiento leída de la bitácora (`GET /api/alertas`): aviso proactivo

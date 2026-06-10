@@ -1,11 +1,8 @@
 import { useNavigate } from "react-router-dom";
 
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
-import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
 
 /** Workspace "todas las marcas" (sin aislar): coincide con el centinela global de marca. */
-const WORKSPACE_TODAS = "__todas__";
 
 /**
  * Pestaña "Lista" del hub Feed: la SUPERFICIE de contenido en lista.
@@ -19,25 +16,14 @@ const WORKSPACE_TODAS = "__todas__";
  */
 export default function ListaContenido() {
   const navigate = useNavigate();
-  // El workspace ES la marca activa global (switch de la topbar). No hay estado ni
-  // persistencia local de marca aquí.
-  const { marcaActiva } = useMarcaActiva();
-  const workspace = marcaActiva ?? WORKSPACE_TODAS;
 
-  // Encolar/reciclar sin cadencia ni franjas devuelve 400: llevamos al usuario a configurar
+  // Encolar sin cadencia ni franjas devuelve 400: llevamos al usuario a configurar
   // la cadencia (ahora en el calendario de Programación), que es el camino vigente.
   const irAConfigurarCadencia = () =>
     navigate("/operacion/programacion?cadencia=1");
 
   return (
     <>
-      {/* Sugerencias proactivas de reciclaje (#110): se ocultan solas si no hay candidatas.
-          Respetan el workspace activo. */}
-      <PanelReciclaje
-        filtros={{ marca: workspace === WORKSPACE_TODAS ? undefined : workspace }}
-        onConfigurarCadencia={irAConfigurarCadencia}
-      />
-
       <GestionPublicaciones modo="lista" onConfigurarCadencia={irAConfigurarCadencia} />
     </>
   );

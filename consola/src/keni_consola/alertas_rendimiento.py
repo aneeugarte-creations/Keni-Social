@@ -1,27 +1,10 @@
-"""Barrido de ALERTAS de rendimiento / reciclaje proactivo (Fase 3 auto-operativa).
+"""Barrido de ALERTAS de rendimiento (Fase 3 auto-operativa).
 
-Hermano de `eventos_scanner.py` (mismo patron de hilo demonio + idempotencia por clave),
-pero en vez de vencimientos del tablero emite alertas PROACTIVAS sobre el rendimiento de
-las piezas publicadas:
-
-  1. RECICLAJE — reusa la heuristica YA existente (`dominio.reciclaje.sugerencias_de_reciclaje`,
-     la MISMA que alimenta el `PanelReciclaje` del tablero): por cada candidata emite
-     `pieza.reciclaje_sugerida`. Asi el equipo se entera (webhook/Slack) sin tener que
-     abrir la consola, y el banner del tablero ("N candidatas") ya muestra la lista.
-  2. BAJO RENDIMIENTO — por cada pieza publicada del tablero con `id_post_metricool` cuyo
-     engagement REAL (Metricool, via `metricas_pieza.rendimiento`, cacheado) cae por debajo
-     del umbral configurable (`KENI_ALERTAS_UMBRAL_ENGAGEMENT`, def 1.0%), emite
-     `pieza.bajo_rendimiento`.
-
-IDEMPOTENCIA: cada alerta lleva una `clave_idempotencia` con un BUCKET DIARIO
-(`<tipo>:<id>:<YYYY-MM-DD>`), de modo que la MISMA pieza no re-emite la alerta en cada
-barrido del dia (la bitacora de eventos desduplica por esa clave). Al dia siguiente, si
-sigue siendo candidata / sigue rindiendo bajo, se vuelve a avisar UNA vez.
-
-SAFE BY DEFAULT: `eventos.emitir` no toca la red si no hay webhooks activos (solo bitacora
-el evento interno). El arranque del hilo (`iniciar_alertas_rendimiento`) vive en el
-servidor real (`__main__`), NO en `crear_app`: los tests crean la app sin arrancarlo. Un
-fallo de barrido se loguea y NO mata el hilo.
+Emite `pieza.bajo_rendimiento` cuando una pieza publicada cae bajo el umbral de engagement
+(`KENI_ALERTAS_UMBRAL_ENGAGEMENT`): el equipo se entera (webhook/Slack) sin vigilar metricas.
+Idempotente por bucket diario (re-ejecutar el mismo dia no duplica avisos). El antiguo carril
+de "candidatas a reciclaje" se retiro: lo sustituye el EVERGREEN DIARIO automatico
+(`evergreen_diario`), que reemite solo una pieza green aprobada al dia.
 """
 
 from __future__ import annotations
@@ -31,39 +14,10 @@ import threading
 from datetime import date
 
 from . import config, daemon_util, marcas, metricas_pieza, redes, repos
-from .dominio import eventos, reciclaje
+from .dominio import eventos
 from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.alertas_rendimiento")
-
-
-def _emitir_reciclaje(hoy_iso: str) -> int:
-    """Emite `pieza.reciclaje_sugerida` por cada candidata de la heuristica. Devuelve NUEVAS."""
-    try:
-        candidatas = reciclaje.sugerencias_de_reciclaje()
-    except Exception:  # noqa: BLE001 -- un fallo de la heuristica no debe matar el barrido
-        _log.exception("alertas: fallo al calcular candidatas de reciclaje.")
-        return 0
-    emitidos = 0
-    for c in candidatas:
-        clave = f"pieza.reciclaje_sugerida:{c['id']}:{hoy_iso}"
-        nuevo = eventos.emitir(
-            "pieza.reciclaje_sugerida",
-            {
-                "pieza_id": c["id"],
-                "titulo": c.get("titulo", ""),
-                "marca": c.get("marca", ""),
-                "marca_nombre": c.get("marca_nombre", ""),
-                "red": c.get("red", ""),
-                "red_nombre": c.get("red_nombre", ""),
-                "motivo": c.get("motivo", ""),
-                "motivo_detalle": c.get("motivo_detalle", ""),
-            },
-            clave_idempotencia=clave,
-        )
-        if nuevo:
-            emitidos += 1
-    return emitidos
 
 
 def _emitir_bajo_rendimiento(hoy_iso: str, umbral: float) -> int:
@@ -126,21 +80,23 @@ def _emitir_bajo_rendimiento(hoy_iso: str, umbral: float) -> int:
     return emitidos
 
 
-def emitir_alertas(hoy: date | None = None) -> tuple[int, int]:
-    """Corre UN barrido de alertas. Devuelve `(reciclaje_nuevas, bajo_rendimiento_nuevas)`.
+def emitir_alertas(hoy: date | None = None) -> int:
+    """Corre UN barrido de alertas. Devuelve cuantas `pieza.bajo_rendimiento` NUEVAS emitio.
 
-    Es lo que ejecuta cada vuelta del hilo y tambien se puede llamar a mano (test/CLI).
-    La idempotencia por bucket diario hace que re-ejecutar el mismo dia no duplique avisos.
+    (El carril de reciclaje se retiro con la feature: el evergreen diario automatico
+    sustituye a las sugerencias de "retomar" piezas.) Es lo que ejecuta cada vuelta del
+    hilo y tambien se puede llamar a mano (test/CLI). La idempotencia por bucket diario
+    hace que re-ejecutar el mismo dia no duplique avisos.
     """
     hoy_iso = (hoy or hoy_utc()).isoformat()
     umbral = config.alertas_umbral_engagement()
-    return _emitir_reciclaje(hoy_iso), _emitir_bajo_rendimiento(hoy_iso, umbral)
+    return _emitir_bajo_rendimiento(hoy_iso, umbral)
 
 
 def iniciar_alertas_rendimiento(
     intervalo_segundos: float | None = None,
 ) -> threading.Thread:
-    """Arranca un hilo demonio que emite las alertas de rendimiento/reciclaje (GATEADO EN VIVO).
+    """Arranca un hilo demonio que emite las alertas de rendimiento (GATEADO EN VIVO).
 
     El hilo arranca SIEMPRE y comprueba `KENI_ALERTAS_RENDIMIENTO` en cada ciclo: apagar/
     encender en runtime aplica sin reiniciar (apagar en <= ~1 min; encender tras estar
@@ -155,12 +111,9 @@ def iniciar_alertas_rendimiento(
     )
 
     def barrido() -> None:
-        recic, bajo = emitir_alertas()
-        if recic or bajo:
-            _log.info(
-                "Alertas: %d candidata(s) de reciclaje, %d pieza(s) de bajo rendimiento.",
-                recic, bajo,
-            )
+        bajo = emitir_alertas()
+        if bajo:
+            _log.info("Alertas: %d pieza(s) de bajo rendimiento.", bajo)
 
     def bucle() -> None:
         daemon_util.bucle_gateado(

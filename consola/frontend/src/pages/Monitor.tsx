@@ -408,7 +408,7 @@ function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: string }) {
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           Generados · publicados / objetivo, en ventana móvil de 24 h (el mismo conteo que la
-          admisión del plan). «Evergreen» se llena desde Reciclaje; «Breaking» también cuenta lo
+          admisión del plan). «Evergreen» se llena solo (cada día, uno aleatorio del banco green aprobado, a las 8:00); «Breaking» también cuenta lo
           empujado desde el panel.
         </p>
       </CardContent>

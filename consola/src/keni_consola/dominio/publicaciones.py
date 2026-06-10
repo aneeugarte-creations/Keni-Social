@@ -4,10 +4,10 @@ Este módulo es el punto ÚNICO y explícito por el que otras apps tocan las pie
 (`publicaciones`). Expone tres clases de contrato, todos nombrados y propiedad de C:
 
   - SERIALIZACIÓN: `publicacion_a_dict` (forma pública de una pieza para API/UI).
-  - LECTURA (solo lectura, ADR 0005 §Seams #2/#3): `listar_para_reciclaje` (universo que
-    consume `reciclaje` de A) y `cola_de_aprobacion` / `proximas_programadas` (lo que
-    agrega el `panel` del shell). Devuelven la forma pública de C; el consumidor NO arma
-    su propia consulta contra el almacén ni conoce los estados internos de C.
+  - LECTURA (solo lectura, ADR 0005 §Seams #2/#3): `cola_de_aprobacion` /
+    `proximas_programadas` (lo que agrega el `panel` del shell). Devuelven la forma
+    pública de C; el consumidor NO arma su propia consulta contra el almacén ni conoce
+    los estados internos de C.
   - HANDOFF A→C (ADR 0005 §Seams #1): `crear_borrador` (una generación de A deposita un
     borrador en C). Es la ÚNICA puerta de creación que A usa; A no llama a `repos`
     directamente ni decide el estado inicial de la pieza.
@@ -224,19 +224,6 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
 # conoce los estados internos ni arma la query.                                 #
 # --------------------------------------------------------------------------- #
 
-
-def listar_para_reciclaje(
-    marca: str | None = None, red: str | None = None
-) -> list[dict[str, Any]]:
-    """Universo de piezas que A·`reciclaje` necesita para proponer candidatas (LECTURA).
-
-    Devuelve TODAS las piezas del (marca, red) filtrado, en cualquier estado y SIN
-    serializar a la forma pública: la heurística de reciclaje trabaja sobre los campos
-    crudos (titulo/contenido/estado/fechas/evergreen) y necesita ver borradores y
-    programadas para no reproponer lo ya reciclado, y las publicadas para el cruce de
-    temas. Es el contrato de lectura de C: A ya no llama a `repos.listar_publicaciones`.
-    """
-    return repos.listar_publicaciones(marca=marca, red=red)
 
 
 def cola_de_aprobacion() -> list[dict[str, Any]]:

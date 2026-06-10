@@ -163,14 +163,6 @@ def test_calculo_error_incluye_claves_granulares_en_none(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_evento_reciclaje_en_catalogo_y_resumen():
-    assert "pieza.reciclaje_sugerida" in eventos.TIPOS_EVENTO
-    payload = eventos.construir_payload(
-        "pieza.reciclaje_sugerida",
-        {"titulo": "Gol histórico", "marca_nombre": "Claro Sports", "motivo_detalle": "Rindió muy bien"},
-    )
-    assert "Gol histórico" in payload["resumen"]
-    assert "Claro Sports" in payload["resumen"]
 
 
 def test_evento_bajo_rendimiento_en_catalogo_y_resumen():

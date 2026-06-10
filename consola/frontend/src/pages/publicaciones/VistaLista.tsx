@@ -8,7 +8,6 @@ import {
   Copy,
   ImageIcon,
   Pencil,
-  RefreshCw,
   Send,
   Sprout,
   Trash2,
@@ -95,29 +94,6 @@ function TarjetaPublicacion({
     },
   });
 
-  const reciclar = useMutation({
-    mutationFn: () => api.reciclarPublicacion(publicacion.id),
-    onSuccess: (res) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      const fecha = res?.publicacion?.fecha_programada;
-      toast.success(
-        res?.encolado
-          ? `Reciclada y encolada${fecha ? ` para ${formatearFechaHora(fecha)}` : ""}`
-          : "Reciclada como nuevo borrador",
-      );
-    },
-    onError: (e) => {
-      // 400 = sin cadencia/franjas para encolar: avisamos y ofrecemos configurar la cadencia.
-      if (e instanceof ApiError && e.status === 400) {
-        toast.error(e.message, {
-          action: { label: "Configurar cadencia", onClick: onConfigurarCadencia },
-        });
-        return;
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
   const programarMetricool = useMutation({
     mutationFn: () => api.programarEnMetricool(publicacion.id),
     onSuccess: (res) => {
@@ -184,16 +160,6 @@ function TarjetaPublicacion({
             icono: Send,
             onClick: () => programarMetricool.mutate(),
             deshabilitado: programarMetricool.isPending,
-          },
-        ]
-      : []),
-    ...(publicacion.estado === "publicado" || publicacion.evergreen
-      ? [
-          {
-            etiqueta: "Reciclar (volver a publicar)",
-            icono: RefreshCw,
-            onClick: () => reciclar.mutate(),
-            deshabilitado: reciclar.isPending,
           },
         ]
       : []),

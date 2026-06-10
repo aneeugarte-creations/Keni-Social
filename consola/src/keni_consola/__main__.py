@@ -145,15 +145,15 @@ def main() -> int:
     # Refresco PROACTIVO de la cache POR PIEZA (Fase 3 auto-operativa): un hilo demonio que
     # recalcula el rendimiento de las piezas publicadas recientes (con `id_post_metricool`)
     # desde Metricool cada N horas (def 4h, KENI_METRICAS_PIEZAS_REFRESCO_HORAS), para que el
-    # tablero y el reciclaje vean datos frescos sin lazy-fill en la apertura. Vive aqui
+    # tablero vea datos frescos sin lazy-fill en la apertura. Vive aqui
     # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
     from .metricas_piezas_refresco import iniciar_refresco_piezas
 
     iniciar_refresco_piezas()
 
-    # Alertas de rendimiento / reciclaje proactivo (Fase 3 auto-operativa): un hilo demonio
+    # Alertas de rendimiento (Fase 3 auto-operativa): un hilo demonio
     # que cada N horas (def 6h, KENI_ALERTAS_RENDIMIENTO_HORAS) emite eventos internos
-    # `pieza.reciclaje_sugerida` (candidatas del archivo) y `pieza.bajo_rendimiento` (piezas
+    # `pieza.bajo_rendimiento` (piezas
     # publicadas bajo el umbral de engagement), repartidos a los webhooks salientes si los
     # hay. SAFE BY DEFAULT: sin webhooks no toca la red. KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     # Vive aqui (servidor real), NO en `crear_app`.

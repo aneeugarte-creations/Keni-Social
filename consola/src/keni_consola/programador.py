@@ -575,6 +575,16 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                 # la pieza moría en `aprobado`. Best-effort e idempotente (solo toca piezas
                 # `aprobado` que pasan los mismos gates que el encolado manual); gateado por
                 # `KENI_AUTO_PROGRAMAR` dentro de `barrer_aprobadas`.
+                # EVERGREEN DIARIO: si a una marca con línea evergreen le falta el green de
+                # hoy, reemite uno aleatorio del banco aprobado (piezas en `aprobado` que el
+                # barrido de abajo programa al hueco de las 8:00). ANTES de barrer aprobadas,
+                # para que la reemisión se programe en este mismo tick.
+                try:
+                    from . import evergreen_diario
+
+                    evergreen_diario.barrer()
+                except Exception:  # noqa: BLE001 -- el evergreen nunca rompe el barrido principal
+                    _log.exception("Fallo el barrido del evergreen diario.")
                 try:
                     from . import auto_programar
 

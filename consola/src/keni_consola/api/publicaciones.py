@@ -967,46 +967,6 @@ async def clonar(request: Request) -> Response:
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
 
-async def reciclar(request: Request) -> Response:
-    """Recicla (evergreen) una publicacion: la DUPLICA y la encola si hay franjas.
-
-    `POST /api/publicaciones/{id}/reciclar` -> `{publicacion, encolado}` | 404.
-    La copia nace como `borrador` con `evergreen=1`, copiando contenido/imagen/
-    veredicto/red/marca de la original. Si hay franjas aplicables a su (marca, red),
-    se ENCOLA al proximo hueco (reusa `calcular_hueco_para`): pasa a `programado` con
-    `fecha_programada` puesta y `encolado=true`. Si no hay franjas, se queda en
-    `borrador` con `encolado=false`.
-    """
-    publicacion_id = request.path_params["publicacion_id"]
-    original = repos.obtener_publicacion(publicacion_id)
-    if original is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    copia = repos.crear_publicacion(
-        original["marca"],
-        original["red"],
-        titulo=original["titulo"],
-        contenido=original["contenido"],
-        copy_in=original.get("copy_in", ""),
-        estado="borrador",
-        veredicto=original["veredicto"],
-        fecha_programada="",
-        origen=original["origen"],
-        imagen=original["imagen"],
-        evergreen=True,
-        autor=autor_de_peticion(request),
-    )
-
-    # Encola con el mismo backstop de unicidad + reintento que `encolar` (evita doble-reserva
-    # del slot si otra pieza lo toma a la vez).
-    actualizada, hubo_hueco = _encolar_en_hueco_libre(copia)
-    if hubo_hueco and actualizada is not None:
-        return JSONResponse(
-            {"publicacion": _publicacion_a_dict(actualizada), "encolado": True}
-        )
-    return JSONResponse({"publicacion": _publicacion_a_dict(copia), "encolado": False})
-
-
 async def programar_metricool(request: Request) -> Response:
     """Programa/previsualiza la pieza en Metricool a demanda (botón de la UI).
 
@@ -1201,7 +1161,6 @@ RUTAS = [
     Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/clonar", clonar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/reciclar", reciclar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),

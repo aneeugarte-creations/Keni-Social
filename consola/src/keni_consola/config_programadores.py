@@ -106,7 +106,7 @@ def metricas_piezas_refresco_horas() -> int:
 
     `KENI_METRICAS_PIEZAS_REFRESCO_HORAS`, def 4, min 1. Fase 3 auto-operativa: refresca
     proactivamente el rendimiento de las piezas publicadas recientes (con `id_post_metricool`)
-    para que el tablero y el reciclaje vean datos frescos sin lazy-fill en la apertura.
+    para que el tablero vea datos frescos sin lazy-fill en la apertura.
     """
     return _entero(
         ENV_METRICAS_PIEZAS_REFRESCO_HORAS, METRICAS_PIEZAS_REFRESCO_HORAS_DEF, minimo=1
@@ -125,7 +125,7 @@ def metricas_historico_retencion_dias() -> int:
 
 
 def alertas_rendimiento_horas() -> int:
-    """Cada cuantas horas corre el barrido de alertas de rendimiento/reciclaje.
+    """Cada cuantas horas corre el barrido de alertas de rendimiento.
 
     `KENI_ALERTAS_RENDIMIENTO_HORAS`, def 6, min 1.
     """

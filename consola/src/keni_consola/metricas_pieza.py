@@ -243,7 +243,7 @@ def listado_piezas_publicadas(
 # `rendimiento` (arriba) es LAZY: recalcula al abrir el tablero si la cache esta vieja.
 # El daemon `metricas_piezas_refresco` usa lo de abajo para adelantarse: recalcula la
 # cache de las piezas publicadas RECIENTES (con `id_post_metricool`) en segundo plano,
-# para que el tablero y la heuristica de reciclaje vean datos FRESCOS sin pagar el
+# para que el tablero vea datos FRESCOS sin pagar el
 # lazy-fill en la apertura. Es solo lectura; no muta el tablero.
 
 
