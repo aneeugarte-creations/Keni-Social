@@ -6,26 +6,25 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { cn } from "@/lib/utils";
 
 /**
- * Barra de cabecera UNIFICADA de la sección, encima del `<Outlet/>`. Reemplaza al antiguo
- * `SubnavHub`: ahora SIEMPRE es la misma barra para todas las páginas (misma altura, ancho
- * y posición), con tres zonas:
- *   - PESTAÑAS (izquierda): si la ruta cae en un hub con 2+ pestañas, se pintan aquí.
- *   - Hueco de TÍTULO (izquierda): si es una página plana, su `<TituloPagina/>` se portaliza
- *     aquí con el formato de una pestaña activa. (Hub y título son excluyentes por diseño.)
- *   - Hueco de ACCIONES (derecha): el menú "⋯" o los controles que la página portalice.
+ * Cabecera de sección UNIFICADA: ahora vive DENTRO de la barra superior (donde antes estaban
+ * los breadcrumbs), a la izquierda de los switches de marca y las notificaciones. Es la misma
+ * barra para todas las páginas, con tres zonas contiguas (todas a la izquierda):
+ *   - PESTAÑAS: si la ruta cae en un hub con 2+ pestañas, se pintan aquí.
+ *   - Hueco de TÍTULO: si es una página plana, su `<TituloPagina/>` se portaliza aquí con el
+ *     formato de una pestaña activa. (Hub y título son excluyentes por diseño.)
+ *   - Hueco de ACCIONES: el menú "⋮" (vertical) o los controles que la página portalice, JUNTO
+ *     a las pestañas/título.
  *
- * Los huecos los entrega el `AppShell` por contexto (refs `refInicio`/`refAcciones`). La barra
- * solo se pinta —y toma su borde inferior— cuando hay pestañas o un título montado; en una
- * página aún sin título ni pestañas queda colapsada (sin hueco visual).
+ * Los huecos los entrega el `AppShell` por contexto (refs `refInicio`/`refAcciones`). Como
+ * vive en el header (altura fija de la barra), las pestañas ocupan todo el alto y su subrayado
+ * de acento "muerde" el borde inferior del header.
  */
 export function EncabezadoSeccion({
   refInicio,
   refAcciones,
-  tituloPresente,
 }: {
   refInicio: (el: HTMLElement | null) => void;
   refAcciones: (el: HTMLElement | null) => void;
-  tituloPresente: boolean;
 }) {
   const { pathname } = useLocation();
   const { marcaActiva } = useMarcaActiva();
@@ -34,15 +33,11 @@ export function EncabezadoSeccion({
   );
   // Hub solo si quedan 2+ pestañas tras el gating por marca (si no, no hay nada que conmutar).
   const hayTabs = !!pestanas && pestanas.length >= 2;
-  const visible = hayTabs || tituloPresente;
 
   return (
     <nav
       aria-label="Cabecera de sección"
-      className={cn(
-        "mb-8 flex min-h-9 flex-wrap items-center gap-1 border-border pb-2.5",
-        visible ? "border-b" : "hidden",
-      )}
+      className="flex h-full min-w-0 items-stretch gap-1 self-stretch"
     >
       {hayTabs &&
         pestanas.map((pestana) => {
@@ -54,9 +49,9 @@ export function EncabezadoSeccion({
               end={pestana.end}
               className={({ isActive }) =>
                 cn(
-                  // `-mb-px` solapa el borde inferior de la barra para que la pestaña activa
-                  // "muerda" la línea (subrayado de acento continuo).
-                  "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors",
+                  // `-mb-px` solapa el borde inferior del header para que la pestaña activa
+                  // "muerda" la línea (subrayado de acento continuo con el borde de la barra).
+                  "-mb-px flex items-center gap-2 border-b-2 px-3 text-sm transition-colors",
                   isActive
                     ? "border-foreground font-medium text-foreground"
                     : "border-transparent font-normal text-muted-foreground hover:border-border hover:text-foreground",
@@ -69,11 +64,12 @@ export function EncabezadoSeccion({
           );
         })}
 
-      {/* Hueco del título de página plana (portal). Excluyente con las pestañas. */}
-      <div ref={refInicio} className="flex items-center" />
+      {/* Hueco del título de página plana (portal). Excluyente con las pestañas. `items-stretch`
+          para que el título (con su subrayado) ocupe todo el alto y muerda el borde como un tab. */}
+      <div ref={refInicio} className="flex items-stretch" />
 
-      {/* Hueco de acciones, a la derecha (portal). */}
-      <div ref={refAcciones} className="ml-auto flex items-center gap-2" />
+      {/* Hueco de acciones, JUNTO a las pestañas/título (portal). */}
+      <div ref={refAcciones} className="flex items-center" />
     </nav>
   );
 }

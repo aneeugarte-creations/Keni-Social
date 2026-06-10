@@ -60,17 +60,15 @@ export function AppShell() {
   }, [colapsado]);
   const alternarColapsado = React.useCallback(() => setColapsado((v) => !v), []);
 
-  // Huecos de la barra de cabecera unificada (`EncabezadoSeccion`): inicio (título de página
-  // plana) y acciones (menú "⋯"). Las páginas portalizan ahí su título/acciones vía contexto,
-  // así caen siempre en la misma barra y quedan alineados. `tituloCount` cuenta los títulos
-  // montados para que la barra tome su borde solo cuando hay título (o pestañas).
+  // Huecos de la barra de cabecera unificada (`EncabezadoSeccion`, ahora dentro del topbar):
+  // inicio (título de página plana) y acciones (menú "⋮"). Las páginas portalizan ahí su
+  // título/acciones vía contexto, así caen siempre en la misma barra y quedan alineados.
+  // El header siempre está presente (con su propio borde), así que ya no hace falta contar
+  // títulos para decidir la visibilidad de la barra; `registrarTitulo` queda como no-op estable
+  // para no romper el contrato de `<TituloPagina/>`.
   const [slotInicio, setSlotInicio] = React.useState<HTMLElement | null>(null);
   const [slotAcciones, setSlotAcciones] = React.useState<HTMLElement | null>(null);
-  const [tituloCount, setTituloCount] = React.useState(0);
-  const registrarTitulo = React.useCallback(() => {
-    setTituloCount((n) => n + 1);
-    return () => setTituloCount((n) => n - 1);
-  }, []);
+  const registrarTitulo = React.useCallback(() => () => {}, []);
   const ctxEncabezado = React.useMemo<EncabezadoCtx>(
     () => ({ slotInicio, slotAcciones, registrarTitulo }),
     [slotInicio, slotAcciones, registrarTitulo],
@@ -142,6 +140,13 @@ export function AppShell() {
             <Wordmark />
           </div>
 
+          {/* Pestañas de la sección (o título de página plana) + acciones, donde antes estaban
+              los breadcrumbs. Vive a altura completa del header para que el subrayado de la
+              pestaña activa muerda el borde inferior de la barra. Recibe los huecos por props
+              (no consume el contexto): el Provider solo envuelve al `<Outlet/>`, que es quien
+              portaliza título/acciones a estos huecos. */}
+          <EncabezadoSeccion refInicio={setSlotInicio} refAcciones={setSlotAcciones} />
+
           {/* Filtros y workspace a la derecha de la topbar. Los switches GLOBALES mandan
               en toda la consola: la MARCA filtra implícitamente lo que se ve (deriva del
               perfil, ver SwitchMarca); RED y LÍNEA filtran la superficie de contenido/feed
@@ -156,17 +161,10 @@ export function AppShell() {
         <main className={cn("flex-1 overflow-y-auto")}>
           {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
           <div className="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-            {/* Cabecera de sección UNIFICADA (misma altura/ancho/posición en todas las
-                páginas): pestañas del hub, o el título de la página plana, más las acciones
-                a la derecha. Las páginas portalizan título/acciones a sus huecos vía el
-                proveedor de contexto (envuelve también al `<Outlet/>`). Vive FUERA del
-                boundary: un fallo de página no debe tumbar la barra de navegación. */}
+            {/* Las páginas portalizan su título/acciones a los huecos de la barra superior vía
+                el proveedor de contexto, que envuelve al `<Outlet/>`. La cabecera de sección
+                (pestañas/título) ya se pinta en el header, no aquí. */}
             <ProveedorEncabezado value={ctxEncabezado}>
-              <EncabezadoSeccion
-                refInicio={setSlotInicio}
-                refAcciones={setSlotAcciones}
-                tituloPresente={tituloCount > 0}
-              />
               <FronteraError key={location.pathname}>
                 <React.Suspense fallback={<CargandoPagina />}>
                   <Outlet />

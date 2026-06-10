@@ -1,15 +1,15 @@
-import { MoreHorizontal, type LucideIcon } from "lucide-react";
+import { MoreVertical, type LucideIcon } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Menú de acciones "⋯" minimalista (sin dependencia de dropdown): un botón fantasma con tres
- * puntos que despliega un panel con los comandos de la página. Vive a la derecha de la barra
- * de cabecera (vía `<AccionesPagina/>`). Cierra al hacer clic fuera, con Escape o al elegir un
- * comando. Para comandos puntuales; los controles que deban verse siempre (un selector de
- * rango, p. ej.) se portalizan sueltos, no aquí dentro.
+ * Menú de acciones "⋮" minimalista (sin dependencia de dropdown): un botón fantasma con tres
+ * puntos VERTICALES que despliega un panel con los comandos de la página. Vive junto a las
+ * pestañas, en la barra superior (vía `<AccionesPagina/>`). Cierra al hacer clic fuera, con
+ * Escape o al elegir un comando. Para comandos puntuales; los controles que deban verse siempre
+ * (un selector de rango, p. ej.) se portalizan sueltos, no aquí dentro.
  */
 export function MenuAcciones({
   children,
@@ -48,12 +48,12 @@ export function MenuAcciones({
         aria-expanded={abierto}
         onClick={() => setAbierto((v) => !v)}
       >
-        <MoreHorizontal className="h-4 w-4" />
+        <MoreVertical className="h-4 w-4" />
       </Button>
       {abierto && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+          className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
           onClick={() => setAbierto(false)}
         >
           {children}
