@@ -255,6 +255,7 @@ from .db_metricas import (  # noqa: F401
     listar_snapshots_comerciales,
     listar_snapshots_piezas,
     podar_snapshots_piezas,
+    purgar_metricas_cache,
     registrar_snapshot_pieza,
     serie_pieza,
     ultimo_snapshot_comercial,
