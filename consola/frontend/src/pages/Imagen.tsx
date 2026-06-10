@@ -9,11 +9,11 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileUp, Image, Loader2, Plus, Repeat, Save, SaveAll, Video, X } from "lucide-react";
+import { Check, Copy, FileUp, Image, Loader2, Maximize2, Minimize2, Plus, Repeat, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,23 @@ export default function Imagen() {
   const [editTab, setEditTab] = useState<{ id: string; valor: string } | null>(null);
   // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
+
+  // PANTALLA COMPLETA: foco en el editor (pestañas + lienzo), ocultando el resto del shell. El
+  // objetivo es la región editor (`editorRef`), así sus propias pestañas —y el botón para salir—
+  // siguen visibles en pantalla completa.
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  useEffect(() => {
+    const onCambio = () => setPantallaCompleta(document.fullscreenElement === editorRef.current);
+    document.addEventListener("fullscreenchange", onCambio);
+    return () => document.removeEventListener("fullscreenchange", onCambio);
+  }, []);
+  const alternarPantallaCompleta = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void el.requestFullscreen?.().catch(() => toast.error("Tu navegador no permitió la pantalla completa."));
+  };
 
   // Marca que filtra la GALERÍA y la TEXTO del estado vacío: la del selector global. «Todas»
   // (marcaActiva null) => "" => se muestra TODO (plantillas/logos de todas las marcas).
@@ -476,20 +493,67 @@ export default function Imagen() {
     <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Imagen" icono={Image} />
-      {/* Acciones de guardado/export PORTALIZADAS al hueco derecho de la barra de cabecera del shell
-          (la misma del título): así NO hay una barra «Guardar» apilada aparte —que dejaba un hueco
-          antes de la imagen— sino una sola barra superior, minimalista. */}
-      {(!!pestanaActiva || !!exportUrl) && (
-        <AccionesPagina>
-          <div className="flex items-center gap-1.5">
-            {/* En «Todas», la marca de la PIEZA abierta (admin): distingue piezas de marcas distintas. */}
-            {marcaActiva === null && !!marcaPanel && (
-              <span className="hidden rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground sm:inline">
-                {marcas.find((m) => m.id === marcaPanel)?.nombre ?? marcaPanel}
-              </span>
-            )}
+      {/* Región EDITOR (pestañas + lienzo): objetivo de PANTALLA COMPLETA, para que sus pestañas
+          —y el botón para salir— sigan visibles. `bg-background` evita un fondo transparente en
+          pantalla completa. */}
+      <div ref={editorRef} className="flex min-h-0 flex-1 flex-col bg-background">
+      {/* Pestañas (scroll horizontal) + acciones de guardado a la DERECHA, al final de la misma
+          barra: guardar / guardar como / pantalla completa. El «+» (lienzo nuevo) solo aparece
+          cuando ya hay alguna pestaña. */}
+      {pestanas.length > 0 && (
+        <div className="flex items-center border-b border-border bg-muted/30">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2">
+            {pestanas.map((t) => {
+              const marca = marcas.find((m) => m.id === t.marca)?.nombre ?? t.marca;
+              return (
+                <div
+                  key={t.id}
+                  className={`flex shrink-0 items-center gap-1 border-b-2 px-3 py-1.5 text-sm ${
+                    t.id === activa ? "border-primary font-medium" : "border-transparent text-muted-foreground"
+                  }`}
+                >
+                  {editTab?.id === t.id ? (
+                    <input
+                      autoFocus
+                      value={editTab.valor}
+                      onChange={(e) => setEditTab({ id: t.id, valor: e.target.value })}
+                      onBlur={confirmarRenombrarTab}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirmarRenombrarTab();
+                        else if (e.key === "Escape") setEditTab(null);
+                      }}
+                      className="max-w-[200px] rounded border border-input bg-background px-1 py-0.5 text-sm"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setActiva(t.id)}
+                      onDoubleClick={() => setEditTab({ id: t.id, valor: t.nombre || "" })}
+                      title="Doble-clic para renombrar"
+                      className="max-w-[200px] truncate"
+                    >
+                      {t.nombre || marca}
+                      {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
+                    </button>
+                  )}
+                  <button onClick={() => cerrarPestana(t.id)} className="opacity-60 hover:opacity-100" title="Cerrar">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              onClick={() => abrirPestana()}
+              disabled={!marcaInicial}
+              title="Nuevo lienzo en blanco"
+              className="ml-1 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+          {/* Acciones, al final del todo a la derecha: guardar · guardar como · pantalla completa. */}
+          <div className="flex shrink-0 items-center gap-1 border-l border-border px-1.5">
             {exportUrl && (
-              <a href={exportUrl} target="_blank" rel="noreferrer" className="hidden text-sm text-primary underline sm:inline">
+              <a href={exportUrl} target="_blank" rel="noreferrer" className="mr-1 hidden text-sm text-primary underline sm:inline">
                 Ver PNG
               </a>
             )}
@@ -520,64 +584,28 @@ export default function Imagen() {
                   </span>
                   Guardar
                 </Button>
-                <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "", tipo: "foto" })} title="Guardar como… (plantilla nueva)">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={guardando}
+                  // En pantalla completa el diálogo (portal a body) quedaría oculto: salimos antes de abrirlo.
+                  onClick={() => { if (document.fullscreenElement) void document.exitFullscreen?.(); setDialogo({ nombre: "", tipo: "foto" }); }}
+                  title="Guardar como… (plantilla nueva)"
+                >
                   <SaveAll className="h-4 w-4" />
                 </Button>
               </>
             )}
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={alternarPantallaCompleta}
+              aria-pressed={pantallaCompleta}
+              title={pantallaCompleta ? "Salir de pantalla completa (Esc)" : "Pantalla completa — centrarse en la imagen"}
+            >
+              {pantallaCompleta ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
           </div>
-        </AccionesPagina>
-      )}
-
-      {/* Pestañas abiertas. El «+» (lienzo nuevo) solo aparece cuando ya hay alguna pestaña. */}
-      {pestanas.length > 0 && (
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-muted/30 px-2">
-          {pestanas.map((t) => {
-            const marca = marcas.find((m) => m.id === t.marca)?.nombre ?? t.marca;
-            return (
-              <div
-                key={t.id}
-                className={`flex items-center gap-1 border-b-2 px-3 py-1.5 text-sm ${
-                  t.id === activa ? "border-primary font-medium" : "border-transparent text-muted-foreground"
-                }`}
-              >
-                {editTab?.id === t.id ? (
-                  <input
-                    autoFocus
-                    value={editTab.valor}
-                    onChange={(e) => setEditTab({ id: t.id, valor: e.target.value })}
-                    onBlur={confirmarRenombrarTab}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") confirmarRenombrarTab();
-                      else if (e.key === "Escape") setEditTab(null);
-                    }}
-                    className="max-w-[200px] rounded border border-input bg-background px-1 py-0.5 text-sm"
-                  />
-                ) : (
-                  <button
-                    onClick={() => setActiva(t.id)}
-                    onDoubleClick={() => setEditTab({ id: t.id, valor: t.nombre || "" })}
-                    title="Doble-clic para renombrar"
-                    className="max-w-[200px] truncate"
-                  >
-                    {t.nombre || marca}
-                    {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
-                  </button>
-                )}
-                <button onClick={() => cerrarPestana(t.id)} className="opacity-60 hover:opacity-100" title="Cerrar">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            );
-          })}
-          <button
-            onClick={() => abrirPestana()}
-            disabled={!marcaInicial}
-            title="Nuevo lienzo en blanco"
-            className="ml-1 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
         </div>
       )}
 
@@ -611,6 +639,7 @@ export default function Imagen() {
             onBlanco={() => abrirPestana()}
           />
         )}
+      </div>
       </div>
 
       {/* Galería modal: aplicar una plantilla a la pestaña ACTIVA (desde el rail). */}

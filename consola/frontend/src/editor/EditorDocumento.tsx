@@ -22,7 +22,6 @@ import {
   Image as ImageIcon,
   Loader2,
   Maximize2,
-  Minimize2,
   MoreHorizontal,
   Redo2,
   Shapes,
@@ -105,14 +104,10 @@ export function EditorDocumento({
   onAbrirAdaptado?: (doc: Documento, nombre: string) => void;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
-  // Raíz del editor: objetivo de "pantalla completa" (foco total en la imagen, sin el resto del shell).
-  const raizRef = useRef<HTMLDivElement | null>(null);
   // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
   const stageInfo = useRef<{ stage: Konva.Stage | null; escala: number }>({ stage: null, escala: 1 });
   // Menú «Más…» (acciones secundarias plegadas: adaptar + legibilidad) abierto.
   const [menuMas, setMenuMas] = useState(false);
-  // Pantalla completa (Fullscreen API) del editor.
-  const [pantallaCompleta, setPantallaCompleta] = useState(false);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
   const [ajustes, setAjustes] = useState(false);
@@ -144,24 +139,6 @@ export function EditorDocumento({
   useEffect(() => store.subscribe(() => force((n) => n + 1)), [store]);
   // Redibuja el lienzo cuando el equipo edita la foto/copy de muestra (estado fuera del store).
   useEffect(() => suscribirMuestra(() => force((n) => n + 1)), []);
-
-  // Pantalla completa: refleja el estado real (entrar/salir con tecla Esc o el botón del navegador).
-  useEffect(() => {
-    const onCambio = () => setPantallaCompleta(document.fullscreenElement === raizRef.current);
-    document.addEventListener("fullscreenchange", onCambio);
-    return () => document.removeEventListener("fullscreenchange", onCambio);
-  }, []);
-  const alternarPantallaCompleta = () => {
-    const el = raizRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen?.();
-    } else {
-      void el.requestFullscreen?.().catch(() => {
-        toast.error("Tu navegador no permitió la pantalla completa.");
-      });
-    }
-  };
 
   const seleccion = store.getState().seleccion;
   // Hueco de foto ausente: el componente se re-renderiza con cada cambio del store (suscripción
@@ -262,7 +239,7 @@ export function EditorDocumento({
 
   return (
     <ProveedorEditor store={store}>
-      <div ref={raizRef} className="flex h-full min-h-0 w-full bg-background">
+      <div className="flex h-full min-h-0 w-full bg-background">
         {/* RAIL (escritorio: vertical izquierda). */}
         <nav className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex">
           {onPlantillas && (
@@ -391,15 +368,6 @@ export function EditorDocumento({
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
               >
                 <Redo2 className="h-4 w-4" />
-              </button>
-              {/* PANTALLA COMPLETA — foco total en la imagen (oculta el resto del shell). */}
-              <button
-                title={pantallaCompleta ? "Salir de pantalla completa (Esc)" : "Pantalla completa — centrarse en la imagen"}
-                aria-pressed={pantallaCompleta}
-                onClick={alternarPantallaCompleta}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
-              >
-                {pantallaCompleta ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
               {onExportar && (
                 <Button size="sm" className="ml-1" onClick={onExportar} disabled={exportando}>
