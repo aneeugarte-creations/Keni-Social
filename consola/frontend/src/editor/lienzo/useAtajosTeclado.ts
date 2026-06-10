@@ -56,9 +56,14 @@ export function useAtajosTeclado({
         else st.deshacer();
         return;
       }
-      // Zoom: ⌘0 ajusta a pantalla, ⌘+ acerca, ⌘− aleja, ⇧0 = 100 % (1 px del documento : 1 px de
-      // pantalla). ⇧0 usa e.code para ser independiente de la distribución del teclado.
-      if (meta && e.key === "0") { e.preventDefault(); return zoom.current?.ajustar(); }
+      // Zoom: ⌘0 ajusta a pantalla (también ⌥⌘0, el alias estándar de Canva; con Alt pulsado
+      // e.key puede no ser "0", por eso ahí se mira e.code), ⌘+ acerca, ⌘− aleja, ⇧0 = 100 %
+      // (1 px del documento : 1 px de pantalla). ⇧0 usa e.code para ser independiente de la
+      // distribución del teclado.
+      if (meta && (e.key === "0" || (e.altKey && e.code === "Digit0"))) {
+        e.preventDefault();
+        return zoom.current?.ajustar();
+      }
       if (meta && (e.key === "+" || e.key === "=")) {
         e.preventDefault();
         return zoom.current?.acercar();

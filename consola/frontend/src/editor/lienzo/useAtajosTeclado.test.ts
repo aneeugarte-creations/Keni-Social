@@ -30,12 +30,40 @@ function montar(opts: { recorteId?: string | null; reencuadreId?: string | null;
       onConfirmarRecorte,
     }),
   );
-  return { store, hook, onSalirReencuadre, onCancelarRecorte, onConfirmarRecorte };
+  return { store, hook, zoom, onSalirReencuadre, onCancelarRecorte, onConfirmarRecorte };
 }
 
 // Como en un navegador real, el keydown se origina en el elemento enfocado (body) y BURBUJEA
 // hasta window, donde escucha el hook.
 const tecla = (key: string) => document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+const teclaCon = (init: KeyboardEventInit) =>
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
+
+describe("useAtajosTeclado — zoom (ajustar a pantalla)", () => {
+  it("⌘0 ajusta a pantalla", () => {
+    const { zoom, hook } = montar();
+    teclaCon({ key: "0", code: "Digit0", metaKey: true });
+    expect(zoom.current.ajustar).toHaveBeenCalledTimes(1);
+    hook.unmount();
+  });
+
+  it("⌥⌘0 (alias estándar de Canva) también ajusta, aunque Alt cambie e.key", () => {
+    const { zoom, hook } = montar();
+    // En macOS, ⌥0 puede reportar otra tecla en e.key; el hook se apoya en e.code.
+    teclaCon({ key: "º", code: "Digit0", metaKey: true, altKey: true });
+    expect(zoom.current.ajustar).toHaveBeenCalledTimes(1);
+    expect(zoom.current.real).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it("⇧0 sigue siendo 100 % (no ajusta)", () => {
+    const { zoom, hook } = montar();
+    teclaCon({ key: ")", code: "Digit0", shiftKey: true });
+    expect(zoom.current.real).toHaveBeenCalledTimes(1);
+    expect(zoom.current.ajustar).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+});
 
 describe("useAtajosTeclado — modo recorte (Canva)", () => {
   it("Enter con el recorte activo CONFIRMA (Hecho)", () => {

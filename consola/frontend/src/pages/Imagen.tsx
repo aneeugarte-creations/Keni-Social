@@ -20,7 +20,7 @@
 // de autoguardado local (claveAuto) o del servidor.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, FileUp, Image, Plus, Repeat, Save, SaveAll, Video, X } from "lucide-react";
+import { FileUp, Image, Plus, Save, SaveAll, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -28,16 +28,6 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
-import {
-  BadgeCategoria,
-  BuscadorPlantillas,
-  ChipsCategoria,
-  MasonryPlantillas,
-  ratioPlantilla,
-  useColumnasGaleria,
-  useFiltroPlantillas,
-  useLotes,
-} from "@/components/plantillas/FiltroPlantillas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -47,7 +37,7 @@ import { documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
-import { agruparPorCategoria, CATEGORIAS_PLANTILLA } from "@/lib/categoriasPlantilla";
+import { CATEGORIAS_PLANTILLA } from "@/lib/categoriasPlantilla";
 import { prepararDocumento } from "@/lib/placa/docPieza";
 
 type TipoPlantilla = "foto" | "miniatura";
@@ -859,19 +849,25 @@ export default function Imagen() {
             avisaHueco={!!pestanaActiva.plantillaId}
           />
         ) : (
-          <div className="h-full overflow-y-auto">
-            <GaleriaInline
-              plantillas={plantillas}
-              agruparPorMarca={marcaActiva === null}
-              cargando={plantillasQ.isLoading}
-              onAbrir={abrirPlantilla}
-              onBorrar={(p) => void pedirBorrarPlantilla(p)}
-              onDuplicar={(p) => duplicarPlantilla.mutate(p)}
-              onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
-              onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
-              onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
-              onBlanco={() => abrirPestana()}
-            />
+          // GALERÍA del estado vacío (sin pestañas): el MISMO `ContenidoPlantillas` del rail y de
+          // la modal, a página completa (una sola fuente de verdad): más columnas (no compacto),
+          // gestión completa, agrupación por marca en «Todas» y «Lienzo en blanco» al final.
+          <div className="mx-auto h-full max-w-4xl">
+            {plantillasQ.isLoading ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
+            ) : (
+              <ContenidoPlantillas
+                plantillas={plantillas}
+                agruparPorMarca={marcaActiva === null}
+                onCargar={abrirPlantilla}
+                onBorrar={(p) => void pedirBorrarPlantilla(p)}
+                onDuplicar={(p) => duplicarPlantilla.mutate(p)}
+                onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
+                onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
+                onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
+                onLienzoBlanco={() => abrirPestana()}
+              />
+            )}
           </div>
         )}
       </div>
@@ -932,251 +928,6 @@ export default function Imagen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// Agrupa plantillas por marca (orden alfabético por nombre de marca). Para la vista «Todas»,
-// donde conviven varias marcas: amontonarlas en una sola rejilla no aporta nada, así que se
-// dividen en secciones por marca.
-function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDiseno[][] {
-  const porMarca = new Map<string, PlantillaDiseno[]>();
-  for (const p of plantillas) {
-    const arr = porMarca.get(p.marca);
-    if (arr) arr.push(p);
-    else porMarca.set(p.marca, [p]);
-  }
-  return [...porMarca.values()].sort((a, b) =>
-    (a[0].marca_nombre || a[0].marca).localeCompare(b[0].marca_nombre || b[0].marca),
-  );
-}
-
-// Galería del estado vacío: rejilla de plantillas + tarjeta de «lienzo en blanco», con búsqueda y
-// chips de categoría (estilo Canva). Con una marca concreta las secciones son por CATEGORÍA; en
-// «Todas» (`agruparPorMarca`) la agrupación es marca → categoría. La marca y «Plantillas» no se
-// rotulan en el toolbar: aquí lo dicen las cabeceras de sección.
-function GaleriaInline({
-  plantillas,
-  agruparPorMarca,
-  cargando,
-  onAbrir,
-  onBorrar,
-  onDuplicar,
-  onRenombrar,
-  onRotar,
-  onCategorizar,
-  onBlanco,
-}: {
-  plantillas: PlantillaDiseno[];
-  agruparPorMarca: boolean;
-  cargando: boolean;
-  onAbrir: (p: PlantillaDiseno) => void;
-  onBorrar: (p: PlantillaDiseno) => void;
-  onDuplicar: (p: PlantillaDiseno) => void;
-  onRenombrar: (p: PlantillaDiseno, nombre: string) => void;
-  onRotar: (p: PlantillaDiseno, rotar: boolean) => void;
-  onCategorizar: (p: PlantillaDiseno, categoria: string) => void;
-  onBlanco: () => void;
-}) {
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editVal, setEditVal] = useState("");
-  // Búsqueda (nombre/categoría) + chip de categoría activa, client-side.
-  const { q, setQ, categoria, setCategoria, presentes, filtradas } = useFiltroPlantillas(plantillas);
-  // Masonry responsive (2/3/4 columnas según viewport) + carga perezosa por lotes: el corte
-  // sigue el ORDEN DE PINTADO (marca → categoría), así cada lote solo AÑADE al final y el scroll
-  // no salta. Los datos ya están en memoria; esto solo limita el DOM.
-  const columnas = useColumnasGaleria();
-  const { visibles, hayMas, refSentinela } = useLotes(filtradas.length, `${categoria}|${q}`);
-  const listasOrden = agruparPorMarca
-    ? agruparPlantillasPorMarca(filtradas).flatMap((g) => agruparPorCategoria(g))
-    : agruparPorCategoria(filtradas);
-  const enLote = new Set(
-    listasOrden.flatMap((g) => g.plantillas).slice(0, visibles).map((p) => p.id),
-  );
-  const commit = (p: PlantillaDiseno) => {
-    const n = editVal.trim();
-    if (n && n !== p.nombre) onRenombrar(p, n);
-    setEditId(null);
-  };
-  const REJILLA = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4";
-  const tarjetaBlanco = (
-    <button
-      onClick={onBlanco}
-      className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground"
-    >
-      <Plus className="h-6 w-6" />
-      Lienzo en blanco
-    </button>
-  );
-  const tarjeta = (p: PlantillaDiseno) => (
-            <div key={p.id} className="group relative">
-              <button
-                onClick={() => onAbrir(p)}
-                title={`Abrir «${p.nombre}»`}
-                className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[transform,box-shadow] duration-150 hover:shadow-lg hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-safe:hover:scale-[1.02]"
-              >
-                {/* Caja con la relación de aspecto REAL del documento: reserva el alto exacto
-                    antes de que cargue la miniatura (sin layout shift) y da la altura variable
-                    del masonry. */}
-                <div className="w-full" style={{ aspectRatio: String(ratioPlantilla(p)) }}>
-                  {p.miniatura ? (
-                    <img src={urlMedia(p.miniatura)} alt={p.nombre} loading="lazy" draggable={false} className="pointer-events-none h-full w-full object-contain" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">Sin vista previa</div>
-                  )}
-                </div>
-              </button>
-              {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). El
-                  TIPO (foto/miniatura) va en la misma fila del título, a la izquierda, como un
-                  chip — ya no flota sobre la imagen. */}
-              {editId === p.id ? (
-                <input
-                  autoFocus
-                  value={editVal}
-                  onChange={(e) => setEditVal(e.target.value)}
-                  onBlur={() => commit(p)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commit(p);
-                    else if (e.key === "Escape") setEditId(null);
-                  }}
-                  className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
-                />
-              ) : (
-                <div className="flex items-center gap-1.5 px-1.5 py-1">
-                  {(p.tipo ?? "foto") === "miniatura" ? (
-                    <span
-                      title="Miniatura (portada de vídeo)"
-                      className="inline-flex shrink-0 items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                    >
-                      <Video className="h-2.5 w-2.5" />Miniatura
-                    </span>
-                  ) : (
-                    <span
-                      title="Foto (post de imagen)"
-                      className="inline-flex shrink-0 items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
-                    >
-                      <Image className="h-2.5 w-2.5" />Foto
-                    </span>
-                  )}
-                  {/* Categoría: badge-selector (clic = cambiar de categoría, sin diálogo). */}
-                  <BadgeCategoria categoria={p.categoria} onCambiar={(slug) => onCategorizar(p, slug)} />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditVal(p.nombre || ""); }}
-                    title="Clic para renombrar"
-                    className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {p.nombre || "(sin nombre)"}
-                  </button>
-                </div>
-              )}
-              {/* Rotación: incluir la plantilla en el grupo que rota automáticamente por la marca
-                  (cada post nuevo se lleva la siguiente; necesita ≥2 marcadas). */}
-              <button
-                onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
-                title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
-                className={`flex w-full items-center justify-center gap-1 px-1.5 pb-1 text-[11px] font-medium transition-colors ${
-                  p.rotar ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Repeat className="h-3 w-3" />
-                {p.rotar ? "En rotación" : "Rotación"}
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
-                title="Duplicar plantilla"
-                className="absolute right-8 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onBorrar(p); }}
-                title="Borrar plantilla"
-                className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-  );
-  // Secciones por CATEGORÍA dentro de una lista (de una marca o de todo): cabecera de categoría
-  // solo cuando hay más de un grupo (un único grupo sería ruido). La ESTRUCTURA (número de
-  // grupos) se decide sobre la lista COMPLETA y el corte por lotes se aplica al final: así las
-  // cabeceras no aparecen de golpe POR ENCIMA del scroll al soltar un lote.
-  const seccionesCategoria = (lista: PlantillaDiseno[]) => {
-    const grupos = agruparPorCategoria(lista);
-    const gruposLote = grupos
-      .map((g) => ({ ...g, plantillas: g.plantillas.filter((p) => enLote.has(p.id)) }))
-      .filter((g) => g.plantillas.length > 0);
-    if (grupos.length <= 1)
-      return (
-        <MasonryPlantillas
-          plantillas={gruposLote[0]?.plantillas ?? []}
-          columnas={columnas}
-          render={tarjeta}
-        />
-      );
-    return (
-      <div className="space-y-5">
-        {gruposLote.map((g) => (
-          <section key={g.slug}>
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {g.etiqueta}
-            </h4>
-            <MasonryPlantillas plantillas={g.plantillas} columnas={columnas} render={tarjeta} />
-          </section>
-        ))}
-      </div>
-    );
-  };
-  return (
-    <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      {/* Búsqueda + chips de categoría (estilo Canva), STICKY: quedan fijos al hacer scroll por la
-          galería (márgenes negativos para cubrir el padding del contenedor al pegarse arriba). */}
-      {!cargando && plantillas.length > 0 && (
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 space-y-2 border-b border-border bg-background px-4 py-3 sm:-mx-6 sm:-mt-6 sm:px-6">
-          <BuscadorPlantillas valor={q} onCambiar={setQ} />
-          <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} />
-        </div>
-      )}
-      {cargando ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
-      ) : plantillas.length > 0 && filtradas.length === 0 ? (
-        <div className="space-y-8">
-          {/* VACÍO de búsqueda: mensaje + salida de un clic (limpia búsqueda y chip). */}
-          <div className="space-y-3 py-4 text-center">
-            <p className="text-sm text-muted-foreground">Sin resultados para esa búsqueda.</p>
-            <Button variant="outline" size="sm" onClick={() => { setQ(""); setCategoria(""); }}>
-              Borrar búsqueda
-            </Button>
-          </div>
-          <div className={REJILLA}>{tarjetaBlanco}</div>
-        </div>
-      ) : agruparPorMarca ? (
-        <div className="space-y-8">
-          {agruparPlantillasPorMarca(filtradas)
-            // Las marcas cuyo lote aún no ha llegado entran después, siempre POR DEBAJO.
-            .filter((grupo) => grupo.some((p) => enLote.has(p.id)))
-            .map((grupo) => (
-              <section key={grupo[0].marca}>
-                <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
-                  {grupo[0].marca_nombre || grupo[0].marca}
-                </h3>
-                {seccionesCategoria(grupo)}
-              </section>
-            ))}
-          {/* Sentinel de scroll infinito: al acercarse, suelta el siguiente lote. */}
-          {hayMas && <div ref={refSentinela} data-sentinela aria-hidden className="h-px" />}
-          {/* «Lienzo en blanco» va al FINAL de la galería (no el primero). */}
-          <div className={REJILLA}>{tarjetaBlanco}</div>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {seccionesCategoria(filtradas)}
-          {/* Sentinel de scroll infinito: al acercarse, suelta el siguiente lote. */}
-          {hayMas && <div ref={refSentinela} data-sentinela aria-hidden className="h-px" />}
-          {/* «Lienzo en blanco» va al FINAL de la lista (no el primero). */}
-          <div className={REJILLA}>{tarjetaBlanco}</div>
-        </div>
-      )}
     </div>
   );
 }

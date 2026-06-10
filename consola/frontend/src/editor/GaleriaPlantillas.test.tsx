@@ -351,3 +351,61 @@ describe("ContenidoPlantillas — masonry y carga perezosa", () => {
     expect(tarjeta.className).toContain("focus-visible:ring-2");
   });
 });
+
+// ── Galería a página completa (estado vacío de pages/Imagen): marca + lienzo en blanco ─────────
+
+const CLARO: PlantillaDiseno = {
+  ...FOTO,
+  id: "m2-1",
+  marca: "m2",
+  marca_nombre: "Claro Sports",
+  nombre: "Placa Claro",
+};
+
+describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»", () => {
+  it("agruparPorMarca divide en secciones por marca, en orden alfabético", () => {
+    render(
+      <ContenidoPlantillas agruparPorMarca plantillas={[FOTO, CLARO]} onCargar={vi.fn()} />,
+    );
+    const cabeceras = screen.getAllByRole("heading").map((h) => h.textContent);
+    expect(cabeceras).toEqual(["Claro Sports", "UnoTV"]);
+    expect(screen.getByTitle(`Cargar «${FOTO.nombre}»`)).toBeInTheDocument();
+    expect(screen.getByTitle(`Cargar «${CLARO.nombre}»`)).toBeInTheDocument();
+  });
+
+  it("dentro de una sección de marca, las categorías llevan cabecera propia solo si hay varias", () => {
+    render(
+      <ContenidoPlantillas
+        agruparPorMarca
+        plantillas={[ULTIMA, MARCADOR, CLARO]}
+        onCargar={vi.fn()}
+      />,
+    );
+    // m1 (UnoTV) tiene dos categorías -> cabeceras; m2 (Claro) una sola -> sin cabecera extra.
+    expect(screen.getByRole("heading", { name: "Última hora" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Marcador" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "General" })).not.toBeInTheDocument();
+  });
+
+  it("onLienzoBlanco añade la tarjeta «Lienzo en blanco» al final y dispara el handler", () => {
+    const onLienzoBlanco = vi.fn();
+    render(
+      <ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onLienzoBlanco={onLienzoBlanco} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /lienzo en blanco/i }));
+    expect(onLienzoBlanco).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin onLienzoBlanco no aparece la tarjeta (modo selector/panel)", () => {
+    render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /lienzo en blanco/i })).not.toBeInTheDocument();
+  });
+
+  it("galería vacía: copy unificado + la tarjeta «Lienzo en blanco» como CTA", () => {
+    const onLienzoBlanco = vi.fn();
+    render(<ContenidoPlantillas plantillas={[]} onCargar={vi.fn()} onLienzoBlanco={onLienzoBlanco} />);
+    expect(screen.getByText(/aún no hay plantillas para esta marca/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /lienzo en blanco/i }));
+    expect(onLienzoBlanco).toHaveBeenCalledTimes(1);
+  });
+});

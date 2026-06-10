@@ -3,13 +3,15 @@
 // Pestaña de tipo: "Fotos" (default) / "Miniaturas" (portadas de video).
 // Organización estilo Canva: búsqueda + chips de categoría + rejilla agrupada por categoría.
 //
-// Dos envoltorios sobre el MISMO contenido (`ContenidoPlantillas`):
+// Envoltorios sobre el MISMO contenido (`ContenidoPlantillas`), una sola fuente de verdad:
 //  - `GaleriaPlantillas`: diálogo modal (overlay) — flujos que interrumpen (DialogoEditar, vídeo).
 //  - `ContenidoPlantillas` directo: panel «Diseño» del rail del editor (columna ~350px), estilo
 //    Canva: búsqueda y chips quedan FIJOS arriba (fuera del área con scroll).
+//  - `ContenidoPlantillas` a página completa: estado vacío del editor (pages/Imagen) con
+//    `agruparPorMarca` (vista «Todas») y tarjeta «Lienzo en blanco» al final (`onLienzoBlanco`).
 
-import { Copy, Image, Repeat, Trash2, Video, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { Copy, Image, Plus, Repeat, Trash2, Video, X } from "lucide-react";
+import { Fragment, useRef, useState } from "react";
 
 import {
   BadgeCategoria,
@@ -27,6 +29,21 @@ import { agruparPorCategoria } from "@/lib/categoriasPlantilla";
 import { Telon, useCerrarConEscape } from "./Telon";
 
 type FiltroTipo = "foto" | "miniatura";
+
+// Agrupa plantillas por marca (orden alfabético por nombre de marca). Para la vista «Todas»,
+// donde conviven varias marcas: amontonarlas en una sola rejilla no aporta nada, así que se
+// dividen en secciones por marca.
+function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDiseno[][] {
+  const porMarca = new Map<string, PlantillaDiseno[]>();
+  for (const p of plantillas) {
+    const arr = porMarca.get(p.marca);
+    if (arr) arr.push(p);
+    else porMarca.set(p.marca, [p]);
+  }
+  return [...porMarca.values()].sort((a, b) =>
+    (a[0].marca_nombre || a[0].marca).localeCompare(b[0].marca_nombre || b[0].marca),
+  );
+}
 
 /** Badge de tipo: pequeña etiqueta visual sobre la tarjeta de plantilla. */
 function BadgeTipo({ tipo }: { tipo: "foto" | "miniatura" }) {
@@ -60,6 +77,10 @@ interface PropsContenido {
   tipoFijo?: "foto" | "miniatura";
   /** Modo PANEL estrecho (columna del rail ~350px): rejilla fija de 2 columnas y padding menor. */
   compacto?: boolean;
+  /** Divide la rejilla en secciones por MARCA (vista «Todas»: marca → categoría). */
+  agruparPorMarca?: boolean;
+  /** Si se pasa, añade la tarjeta «Lienzo en blanco» al FINAL de la galería (CTA para empezar). */
+  onLienzoBlanco?: () => void;
 }
 
 /**
@@ -76,6 +97,8 @@ export function ContenidoPlantillas({
   onCategorizar,
   tipoFijo,
   compacto,
+  agruparPorMarca,
+  onLienzoBlanco,
 }: PropsContenido) {
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
@@ -90,23 +113,33 @@ export function ContenidoPlantillas({
   // Búsqueda + chip de categoría (client-side) SOBRE las del tipo activo.
   const { q, setQ, categoria, setCategoria, presentes, filtradas } =
     useFiltroPlantillas(plantillasTipo);
-  const grupos = agruparPorCategoria(filtradas);
 
   // Carga perezosa por lotes (los datos YA están en memoria; esto solo limita el DOM). El corte
-  // sigue el ORDEN DE PINTADO (grupo a grupo), así cada lote nuevo solo AÑADE al final y el
-  // scroll no salta. Cambiar búsqueda/chip/tipo reinicia el contador.
+  // sigue el ORDEN DE PINTADO (sección a sección, grupo a grupo), así cada lote nuevo solo AÑADE
+  // al final y el scroll no salta. Cambiar búsqueda/chip/tipo reinicia el contador.
   const { visibles, hayMas, refSentinela } = useLotes(
     filtradas.length,
     `${tipoEfectivo}|${categoria}|${q}`,
   );
-  const gruposVisibles: typeof grupos = [];
+  // SECCIONES de la rejilla: con `agruparPorMarca` (vista «Todas») se divide por marca (orden
+  // alfabético) y dentro por categoría; sin él, una única sección (solo categorías). La cabecera
+  // de categoría de cada sección se decide sobre sus grupos COMPLETOS (no sobre el lote), para
+  // que no aparezcan cabeceras de golpe al soltar un lote.
+  const listas = agruparPorMarca ? agruparPlantillasPorMarca(filtradas) : [filtradas];
   let resto = visibles;
-  for (const g of grupos) {
-    if (resto <= 0) break;
-    const corte = g.plantillas.slice(0, resto);
-    resto -= corte.length;
-    gruposVisibles.push({ ...g, plantillas: corte });
-  }
+  const secciones = listas
+    .map((lista) => {
+      const grupos = agruparPorCategoria(lista);
+      const corte: typeof grupos = [];
+      for (const g of grupos) {
+        if (resto <= 0) break;
+        const visiblesGrupo = g.plantillas.slice(0, resto);
+        resto -= visiblesGrupo.length;
+        corte.push({ ...g, plantillas: visiblesGrupo });
+      }
+      return { marca: lista[0], conCabeceras: grupos.length > 1, grupos: corte };
+    })
+    .filter((s) => s.grupos.length > 0);
 
   // En panel estrecho (~350px) el masonry es SIEMPRE de 2 columnas (estilo Canva); en el diálogo
   // ancho acompaña al viewport (2/3/4).
@@ -270,10 +303,11 @@ export function ContenidoPlantillas({
 
       <div className={`min-h-0 flex-1 overflow-auto py-4 ${padX}`}>
         {plantillasTipo.length === 0 ? (
+          // VACÍO de galería (tono único en todas las galerías): qué falta + qué hacer. La CTA es
+          // la tarjeta «Lienzo en blanco» de abajo cuando existe (`onLienzoBlanco`).
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {tipoEfectivo === "miniatura"
-              ? "Aún no hay miniaturas para esta marca. Diseña una plantilla de tipo «Miniatura» y pulsa «Guardar plantilla»."
-              : "Aún no hay plantillas para esta marca. Diseña una y pulsa «Guardar plantilla»."}
+            Aún no hay {tipoEfectivo === "miniatura" ? "miniaturas" : "plantillas"} para esta
+            marca. Diseña una en el lienzo y pulsa «Guardar plantilla».
           </p>
         ) : filtradas.length === 0 ? (
           // VACÍO de búsqueda: además del mensaje, una salida de un clic (limpia búsqueda + chip).
@@ -287,28 +321,63 @@ export function ContenidoPlantillas({
             </button>
           </div>
         ) : (
-          // Agrupación por CATEGORÍA (cabecera solo si hay más de un grupo; se decide sobre los
-          // grupos COMPLETOS para que no aparezcan cabeceras de golpe al soltar un lote).
+          // Secciones (marca → categoría o solo categoría) con cabeceras según el modo.
           <>
-            <div className="space-y-5">
-              {gruposVisibles.map((grupo) => (
-                <section key={grupo.slug}>
-                  {grupos.length > 1 && (
-                    <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {grupo.etiqueta}
+            <div className={agruparPorMarca ? "space-y-8" : undefined}>
+              {secciones.map((s, i) => {
+                const cuerpo = (
+                  <div className="space-y-5">
+                    {s.grupos.map((grupo) => {
+                      // Dentro de una sección de marca, la categoría baja un nivel (h4).
+                      const Cabecera = agruparPorMarca ? "h4" : "h3";
+                      return (
+                        <section key={grupo.slug}>
+                          {s.conCabeceras && (
+                            <Cabecera className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              {grupo.etiqueta}
+                            </Cabecera>
+                          )}
+                          <MasonryPlantillas
+                            plantillas={grupo.plantillas}
+                            columnas={columnas}
+                            render={tarjeta}
+                          />
+                        </section>
+                      );
+                    })}
+                  </div>
+                );
+                return agruparPorMarca && s.marca ? (
+                  <section key={s.marca.marca}>
+                    <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
+                      {s.marca.marca_nombre || s.marca.marca}
                     </h3>
-                  )}
-                  <MasonryPlantillas
-                    plantillas={grupo.plantillas}
-                    columnas={columnas}
-                    render={tarjeta}
-                  />
-                </section>
-              ))}
+                    {cuerpo}
+                  </section>
+                ) : (
+                  <Fragment key={i}>{cuerpo}</Fragment>
+                );
+              })}
             </div>
             {/* Sentinel de scroll infinito: al acercarse, suelta el siguiente lote. */}
             {hayMas && <div ref={refSentinela} data-sentinela aria-hidden className="h-px" />}
           </>
+        )}
+        {/* «Lienzo en blanco» va al FINAL de la galería (no el primero), en todos los estados. */}
+        {onLienzoBlanco && (
+          <div
+            className={`mt-6 grid gap-3 ${
+              columnas >= 4 ? "grid-cols-4" : columnas === 3 ? "grid-cols-3" : "grid-cols-2"
+            }`}
+          >
+            <button
+              onClick={onLienzoBlanco}
+              className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+            >
+              <Plus className="h-6 w-6" />
+              Lienzo en blanco
+            </button>
+          </div>
         )}
       </div>
     </div>

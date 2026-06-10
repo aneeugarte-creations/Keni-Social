@@ -7,7 +7,7 @@
 // 1 px del documento : 1 px de pantalla). Todos los iconos llevan tooltip con su atajo.
 
 import { Check, Frame, Grid3x3, Magnet, Maximize, Minus, Plus } from "lucide-react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 
 import { TooltipFlotante } from "@/components/ui/tooltip";
@@ -51,8 +51,10 @@ export function ControlesEncuadre({
   useCerrarConEscape(menuZoom, () => setMenuZoom(false));
   const pctActual = Math.round(escala * 100);
 
-  // Fila del menú de zoom (texto a la izquierda, atajo/check a la derecha).
-  const fila = (etiqueta: string, onClick: () => void, derecha?: ReactNode, activo = false) => (
+  // Fila del menú de zoom, con el MISMO tratamiento visual en todas: texto a la izquierda y, a la
+  // derecha, atajo (kbd, si lo hay) + check del nivel actual (reserva su hueco siempre, para que
+  // las filas no bailen).
+  const fila = (etiqueta: string, onClick: () => void, opts: { atajo?: string; activo?: boolean } = {}) => (
     <button
       key={etiqueta}
       onClick={() => {
@@ -60,11 +62,14 @@ export function ControlesEncuadre({
         setMenuZoom(false);
       }}
       className={`flex w-full items-center justify-between gap-3 rounded px-2 py-1 text-left text-xs tabular-nums hover:bg-accent ${
-        activo ? "text-foreground" : "text-muted-foreground"
+        opts.activo ? "text-foreground" : "text-muted-foreground"
       }`}
     >
       <span>{etiqueta}</span>
-      {derecha}
+      <span className="flex items-center gap-1">
+        {opts.atajo && <kbd className="text-[10px] text-muted-foreground">{opts.atajo}</kbd>}
+        <Check aria-hidden className={`h-3 w-3 ${opts.activo ? "" : "invisible"}`} />
+      </span>
     </button>
   );
 
@@ -131,7 +136,7 @@ export function ControlesEncuadre({
           <Plus className="h-3.5 w-3.5" />
         </button>
       </TooltipFlotante>
-      <TooltipFlotante label="Ajustar a la pantalla (⌘0)" side="left">
+      <TooltipFlotante label="Ajustar a la pantalla (⌘0 · ⌥⌘0)" side="left">
         <button onClick={ajustarPantalla} className="rounded p-1 hover:bg-accent">
           <Maximize className="h-3.5 w-3.5" />
         </button>
@@ -146,17 +151,12 @@ export function ControlesEncuadre({
             aria-label="Nivel de zoom"
             className="absolute bottom-0 right-full z-50 mr-1.5 w-44 rounded-md border border-border bg-popover p-1 shadow-md"
           >
-            {fila("Ajustar a la pantalla", ajustarPantalla, <kbd className="text-[10px] text-muted-foreground">⌘0</kbd>)}
-            {fila("100 % (tamaño real)", zoomReal, <kbd className="text-[10px] text-muted-foreground">⇧0</kbd>)}
+            {fila("Ajustar a la pantalla", ajustarPantalla, { atajo: "⌘0 · ⌥⌘0" })}
+            {fila("100 % (tamaño real)", zoomReal, { atajo: "⇧0", activo: pctActual === 100 })}
             <div className="my-1 h-px bg-border" />
             {PASOS_ZOOM.map((p) => {
               const pct = Math.round(p * 100);
-              return fila(
-                `${pct} %`,
-                () => fijarEscala(p),
-                pct === pctActual ? <Check className="h-3 w-3" /> : undefined,
-                pct === pctActual,
-              );
+              return fila(`${pct} %`, () => fijarEscala(p), { activo: pct === pctActual });
             })}
           </div>
         </>
