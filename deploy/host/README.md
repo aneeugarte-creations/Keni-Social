@@ -131,3 +131,19 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
 - **Cuenta `ubuntu` con password usable:** SSH es solo-clave, asi que el password solo sirve en
   consola/su. Se deja a proposito como break-glass de consola (Latitude OOB). Bloquearlo
   (`passwd -l ubuntu`) endurece un pelo a cambio de perder ese fallback; decision del operador.
+
+## Nota operativa: SSH y rafagas de conexiones (incidente 2026-06-10)
+
+OpenSSH moderno trae penalizaciones POR IP DE ORIGEN (`PerSourcePenalties`): una rafaga
+de conexiones rapidas (scripts/agentes haciendo muchos ssh/scp sueltos) puede dejar tu IP
+con `Connection refused` un buen rato, AUNQUE sshd este vivo (verificable desde fuera:
+`https://check-host.net/check-tcp?host=<ip>:22`). El servicio web no se ve afectado.
+
+Remedio y prevencion: multiplexa con ControlMaster en vez de abrir N conexiones:
+
+```sh
+ssh -o ControlMaster=auto -o ControlPath=~/.ssh/cm/%r@%h -o ControlPersist=600 ...
+```
+
+Si te bloquea: espera (la penalizacion caduca sola) y NO insistas en bucle corto —
+cada intento rechazado puede alargarla.
