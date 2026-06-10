@@ -56,6 +56,16 @@ describe("CrecimientoSeguidores", () => {
     expect(screen.queryByText("instagram")).not.toBeInTheDocument();
   });
 
+  it("ofrece una alternativa textual del chart (role=img con el neto del periodo)", async () => {
+    vi.spyOn(api, "metricasSeguidores").mockResolvedValue(RESP);
+    renderConProviders(<CrecimientoSeguidores marcaActual="__todas__" rangoActual="semana" />);
+
+    // El gráfico lleva un wrapper role="img" cuyo aria-label resume el neto con signo.
+    expect(
+      await screen.findByRole("img", { name: /seguidores del periodo: neto \+/i }),
+    ).toBeInTheDocument();
+  });
+
   it("dice con honestidad cuando la fuente no expone seguidores", async () => {
     vi.spyOn(api, "metricasSeguidores").mockResolvedValue({
       ...RESP,
@@ -64,6 +74,8 @@ describe("CrecimientoSeguidores", () => {
     });
     renderConProviders(<CrecimientoSeguidores marcaActual="__todas__" rangoActual="semana" />);
 
-    expect(await screen.findByText(/no expone seguidores/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/aún no hay datos de seguidores para este periodo/i),
+    ).toBeInTheDocument();
   });
 });

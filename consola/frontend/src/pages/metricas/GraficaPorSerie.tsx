@@ -4,14 +4,15 @@
  * Metricool no clasifica los posts; este bloque cruza las piezas del periodo con el
  * `contenido` de la BD (enlace por `id_post_metricool`; fallback fuzzy por título) para
  * agrupar el rendimiento por tipo de contenido y por las clases de etiqueta editorial
- * (campaña / vertical / tipo). Un tab por EJE; cada eje pinta engagement medio por grupo.
+ * (campaña / vertical / tipo). Un tab por EJE; cada eje pinta el engagement promedio por
+ * pieza de cada grupo (media simple de porcentajes, como lo agrega el backend).
  *
  * Honestidad: muestra cuántas piezas se enlazaron por id vs. por título (heurístico) vs.
  * sin enlace (caen en "Sin clasificar"), para que nadie lea la gráfica como autoritativa
  * cuando el enlace con la BD es parcial.
  */
 import { useQuery } from "@tanstack/react-query";
-import { BarChart } from "@tremor/react";
+import { BarChart, type CustomTooltipProps } from "@tremor/react";
 import { Layers } from "lucide-react";
 import * as React from "react";
 
@@ -19,7 +20,7 @@ import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import { numeroCompacto, porcentaje } from "@/lib/formato";
+import { numeroCompacto, numeroCompleto, plural, porcentaje } from "@/lib/formato";
 import type { SeriePorEtiqueta } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
@@ -45,18 +46,17 @@ export function GraficaPorSerie({
     staleTime: 2 * 60_000,
   });
 
-  // El primer eje con al menos un grupo clasificado (≠ todo "Sin clasificar") es el
-  // tab inicial; si no hay ninguno, caemos al primer eje a secas.
+  // Tab inicial = el primer eje de la respuesta. Si el tab elegido por el usuario ya no
+  // existe en los datos (cambio de marca/rango), caemos al inicial SIN efecto: se deriva
+  // en render, evitando un estado huérfano que dejaría los tabs sin contenido.
   const ejeInicial = React.useMemo(() => data?.series[0]?.eje ?? "", [data]);
   const [tab, setTab] = React.useState("");
-  React.useEffect(() => {
-    if (ejeInicial && !tab) setTab(ejeInicial);
-  }, [ejeInicial, tab]);
+  const tabValido = data?.series.some((s) => s.eje === tab) ? tab : ejeInicial;
 
   return (
     <SeccionColapsable
-      titulo="Rendimiento por serie / tipo"
-      descripcion="Engagement medio del periodo agrupado por la clasificación editorial de cada pieza (cruce con el tablero por id de Metricool; título como respaldo)."
+      titulo="Rendimiento por serie y tipo"
+      descripcion="Engagement promedio por pieza del periodo, agrupado por la clasificación editorial de cada pieza (cruce con el tablero por id de Metricool; título como respaldo)."
       icono={Layers}
     >
       {isPending ? (
@@ -71,7 +71,7 @@ export function GraficaPorSerie({
           </p>
         ) : (
           <>
-            <Tabs value={tab || ejeInicial} onValueChange={setTab}>
+            <Tabs value={tabValido} onValueChange={setTab}>
               <TabsList className="flex-wrap">
                 {data.series.map((s) => (
                   <TabsTrigger key={s.eje} value={s.eje}>
@@ -97,6 +97,40 @@ export function GraficaPorSerie({
   );
 }
 
+/** Tooltip del grupo: engagement promedio por pieza, nº de piezas y vistas del grupo. */
+function TooltipGrupo({ active, payload, label }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const dato = payload[0]?.payload as
+    | { "Engagement %": number; n: number; vistas: number }
+    | undefined;
+  if (!dato) return null;
+  return (
+    <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+      <p className="mb-1 font-medium">{String(label ?? "")}</p>
+      <ul className="space-y-0.5">
+        <li className="flex items-center gap-3 text-muted-foreground">
+          Engagement
+          <span className="ml-auto tabular-nums text-foreground">
+            {porcentaje(dato["Engagement %"])}
+          </span>
+        </li>
+        <li className="flex items-center gap-3 text-muted-foreground">
+          Piezas
+          <span className="ml-auto tabular-nums text-foreground">
+            {plural(dato.n, "pieza")}
+          </span>
+        </li>
+        <li className="flex items-center gap-3 text-muted-foreground">
+          Vistas
+          <span className="ml-auto tabular-nums text-foreground">
+            {numeroCompleto(dato.vistas)}
+          </span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 function SerieChart({ serie }: { serie: SeriePorEtiqueta }) {
   if (serie.grupos.length === 0) {
     return (
@@ -105,9 +139,13 @@ function SerieChart({ serie }: { serie: SeriePorEtiqueta }) {
       </p>
     );
   }
+  // La etiqueta del eje incluye el n del grupo para no leer barras de 1 pieza como
+  // autoritativas; el tooltip repite n + vistas con el número completo.
   const datos = serie.grupos.map((g) => ({
-    grupo: g.valor,
+    grupo: `${g.valor} (${g.n})`,
     "Engagement %": g.engagement_pct,
+    n: g.n,
+    vistas: g.visualizaciones,
   }));
   return (
     <div className="space-y-2 pt-2">
@@ -115,8 +153,9 @@ function SerieChart({ serie }: { serie: SeriePorEtiqueta }) {
         data={datos}
         index="grupo"
         categories={["Engagement %"]}
-        colors={["indigo"]}
+        colors={["emerald"]}
         valueFormatter={(v) => porcentaje(v)}
+        customTooltip={TooltipGrupo}
         showLegend={false}
         showAnimation
         className="h-56"
@@ -147,8 +186,8 @@ function Cobertura({
 }) {
   return (
     <p className="text-xs text-muted-foreground">
-      {total} piezas · {enlazadas} enlazadas por id
-      {enlazadasTitulo > 0 && ` · ${enlazadasTitulo} por título (aprox.)`}
+      {total} piezas · {enlazadas} vinculadas al tablero
+      {enlazadasTitulo > 0 && ` · ${enlazadasTitulo} por título (aproximado)`}
       {sinEnlace > 0 && ` · ${sinEnlace} sin clasificar`}
     </p>
   );

@@ -80,14 +80,34 @@ describe("Correlacion (seguidores vs publicación)", () => {
     expect(enlace).not.toBeNull();
     expect(enlace).toHaveAttribute("href", "https://example.com/p1");
     // marca (unotv → "UnoTV") y red (instagram → "Instagram") legibles, no el id crudo.
+    // La red puede aparecer más de una vez (leyenda del scatter + celda de la tabla).
     expect(screen.getByText("UnoTV")).toBeInTheDocument();
-    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
     expect(screen.queryByText("instagram")).not.toBeInTheDocument();
     // El día sin posts no inventa ratio; claro_sports → "Claro Sports".
     expect(screen.getByText("Claro Sports")).toBeInTheDocument();
     // Seguidores ganados = CONTEO con signo ("+320"), NUNCA un porcentaje ("+320.0 %").
     expect(screen.getByText("+320")).toBeInTheDocument();
     expect(screen.queryByText("+320.0 %")).not.toBeInTheDocument();
+    // Cabeceras en lenguaje del producto: «Piezas» y «Seg. por pieza» (no "post").
+    expect(screen.getByText("Piezas")).toBeInTheDocument();
+    expect(screen.getByText("Seg. por pieza")).toBeInTheDocument();
+    expect(screen.queryByText("Posts")).not.toBeInTheDocument();
+    expect(screen.queryByText("Seg./post")).not.toBeInTheDocument();
+  });
+
+  it("traduce el nombre técnico del ratio en la nota del backend a «Seg. por pieza»", async () => {
+    const notaTecnica =
+      "Correlación, no causalidad. 'seguidores_por_post' es un reparto indicativo.";
+    vi.spyOn(api, "metricasCorrelacion").mockResolvedValue({ ...RESP, nota: notaTecnica });
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    expect(
+      await screen.findByText(/«Seg\. por pieza» es un reparto indicativo/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/'seguidores_por_post'/)).not.toBeInTheDocument();
   });
 
   it("pagina por día (un día por página) y navega entre días", async () => {
@@ -106,7 +126,8 @@ describe("Correlacion (seguidores vs publicación)", () => {
     // Primera página = día más reciente (2026-05-28 → UnoTV); el otro día no se ve.
     expect(await screen.findByText("UnoTV")).toBeInTheDocument();
     expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
-    expect(screen.getByText(/día 1 de 2/)).toBeInTheDocument();
+    // Conteo del día con plural correcto ("1 combinación de marca y red", no "marca·red").
+    expect(screen.getByText(/1 combinación de marca y red · día 1 de 2/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Día más antiguo" }));
     expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
@@ -119,6 +140,8 @@ describe("Correlacion (seguidores vs publicación)", () => {
       <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
     );
 
-    expect(await screen.findByText(/no expone seguidores/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/aún no hay datos de seguidores para este periodo/i),
+    ).toBeInTheDocument();
   });
 });

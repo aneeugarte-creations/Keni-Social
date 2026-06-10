@@ -2,9 +2,10 @@
  * Crosstab de rendimiento marca×red×formato (estrategia digital).
  *
  * Una tabla-mapa de calor: cada fila es una combinación marca×red×formato del periodo
- * con su número de piezas, engagement medio y `rendimiento_relativo_medio` (vistas de la
- * celda ÷ mediana de VISTAS de su grupo). El rendimiento relativo se colorea para leer de
- * un vistazo qué formatos alcanzan por encima (>1, verde) o por debajo (<1, rojo) de su grupo.
+ * con su número de piezas, engagement promedio y `rendimiento_relativo_medio` (promedio
+ * por pieza de: vistas de la pieza ÷ mediana de vistas de su grupo marca×red; media del
+ * grupo si la mediana es 0). El rendimiento relativo se colorea para leer de un vistazo
+ * qué formatos alcanzan por encima (≥1.05×, verde) o por debajo (≤0.95×, rojo) de su grupo.
  *
  * Mismo stack y estados honestos (carga / vacío / error) que el resto de Métricas: si la
  * fuente no expone celdas, lo dice en vez de inventar.
@@ -28,10 +29,11 @@ import {
   nombreFormato,
   nombreMarca,
   nombreRed,
-  numeroCompacto,
+  numeroCompleto,
   porcentaje,
   redCanonica,
   REDES_CANONICAS,
+  rendimientoRel,
 } from "@/lib/formato";
 import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
@@ -51,11 +53,6 @@ function claseRendimiento(v: number | null): string {
   if (v >= 1.05) return "text-emerald-700 dark:text-emerald-300";
   if (v <= 0.95) return "text-red-700 dark:text-red-300";
   return "text-foreground";
-}
-
-function textoRendimiento(v: number | null): string {
-  // 1 decimal, consistente con el badge de `rendimiento_relativo` en PiezasAnalitica.
-  return v == null ? "—" : `${v.toLocaleString("es-MX", { maximumFractionDigits: 1 })}×`;
 }
 
 export function Crosstab({
@@ -83,10 +80,12 @@ export function Crosstab({
       icono={Grid3x3}
       descripcion={
         <>
-          Cruce marca × red × formato. El rendimiento relativo compara las VISTAS de
-          cada combinación con la mediana de vistas de su grupo:{" "}
-          <span className="text-emerald-700 dark:text-emerald-300">verde</span> alcanza
-          por encima, <span className="text-red-700 dark:text-red-300">rojo</span> por debajo.
+          Cruce marca × red × formato. Rendimiento = promedio por pieza de (vistas de la
+          pieza ÷ mediana de vistas de su grupo marca×red); si la mediana del grupo es 0
+          se usa la media.{" "}
+          <span className="text-emerald-700 dark:text-emerald-300">Verde</span> rinde por
+          encima (≥1.05×), <span className="text-red-700 dark:text-red-300">rojo</span> por
+          debajo (≤0.95×); entre medias se considera neutro.
         </>
       }
     >
@@ -98,7 +97,8 @@ export function Crosstab({
         </p>
       ) : data.celdas.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          La fuente activa no expone el cruce por formato para este periodo.
+          Aún no hay cruce por formato para este periodo (la fuente de métricas no lo
+          entrega).
         </p>
       ) : (
         <TablaCrosstab celdas={data.celdas} marcas={marcas} />
@@ -108,6 +108,14 @@ export function Crosstab({
 }
 
 type ClaveCrosstab = "n_piezas" | "visualizaciones" | "engagement_pct" | "rendimiento";
+
+/** Accesores de orden por columna (constante de módulo: referencia estable entre renders). */
+const ACCESORES: Record<ClaveCrosstab, (c: CeldaCrosstab) => number | null> = {
+  n_piezas: (c) => c.n_piezas,
+  visualizaciones: (c) => c.visualizaciones,
+  engagement_pct: (c) => c.engagement_pct,
+  rendimiento: (c) => c.rendimiento_relativo_medio,
+};
 
 function TablaCrosstab({
   celdas,
@@ -119,12 +127,7 @@ function TablaCrosstab({
   // Orden por defecto: rendimiento relativo descendente (lo que más rinde, arriba).
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CeldaCrosstab, ClaveCrosstab>(
     celdas,
-    {
-      n_piezas: (c) => c.n_piezas,
-      visualizaciones: (c) => c.visualizaciones,
-      engagement_pct: (c) => c.engagement_pct,
-      rendimiento: (c) => c.rendimiento_relativo_medio,
-    },
+    ACCESORES,
     { clave: "rendimiento", direccion: "desc" },
   );
 
@@ -178,7 +181,7 @@ function TablaCrosstab({
               onClick={() => alClicar("engagement_pct")}
               alinear="right"
             >
-              Eng.
+              Engagement
             </CabeceraOrdenable>
             <CabeceraOrdenable
               activa={estado.clave === "rendimiento"}
@@ -198,7 +201,7 @@ function TablaCrosstab({
               <TableCell className="text-muted-foreground">{nombreFormato(c.formato)}</TableCell>
               <TableCell className="text-right tabular-nums">{c.n_piezas}</TableCell>
               <TableCell className="text-right tabular-nums">
-                {numeroCompacto(c.visualizaciones)}
+                {numeroCompleto(c.visualizaciones)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {porcentaje(c.engagement_pct)}
@@ -208,9 +211,9 @@ function TablaCrosstab({
                   "text-right font-medium tabular-nums",
                   claseRendimiento(c.rendimiento_relativo_medio),
                 )}
-                title="Vistas de la celda ÷ mediana de vistas de su grupo"
+                title="Promedio por pieza de: vistas ÷ mediana de vistas de su grupo marca×red (media del grupo si la mediana es 0)"
               >
-                {textoRendimiento(c.rendimiento_relativo_medio)}
+                {rendimientoRel(c.rendimiento_relativo_medio)}
               </TableCell>
             </TableRow>
           ))}

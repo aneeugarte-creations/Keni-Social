@@ -35,6 +35,13 @@ function dinero(v: number, moneda: string): string {
 
 type ClaveOrden = "impresiones" | "gasto" | "clics";
 
+// Accesores de orden a nivel módulo: identidad estable entre renders.
+const ACCESORES: Record<ClaveOrden, (a: CampaniaAdsMetrica) => number> = {
+  impresiones: (a) => a.impresiones,
+  gasto: (a) => a.gasto,
+  clics: (a) => a.clics,
+};
+
 export function SeccionAds({
   marcaActual = MARCA_TODAS,
   rangoActual,
@@ -46,16 +53,14 @@ export function SeccionAds({
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "ads", rangoActual ?? "", marca_ ?? "todas"],
     queryFn: ({ signal }) => api.metricasAds({ rango: rangoActual, marca: marca_ }, signal),
+    enabled: Boolean(rangoActual),
+    staleTime: 2 * 60_000,
   });
 
   const ads = data?.ads ?? [];
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CampaniaAdsMetrica, ClaveOrden>(
     ads,
-    {
-      impresiones: (a) => a.impresiones,
-      gasto: (a) => a.gasto,
-      clics: (a) => a.clics,
-    },
+    ACCESORES,
     { clave: "impresiones", direccion: "desc" },
   );
 
@@ -77,9 +82,9 @@ export function SeccionAds({
 
   return (
     <SeccionColapsable
-      titulo="Ads"
+      titulo="Publicidad"
       icono={Megaphone}
-      descripcion="Inversión pagada del periodo (inorgánico), separada de lo orgánico."
+      descripcion="Campañas de pago del periodo, separadas del contenido orgánico."
       contentClassName="p-0"
     >
       {isPending ? (
@@ -92,7 +97,9 @@ export function SeccionAds({
         <>
           {total && (
             <div className="flex flex-wrap gap-x-8 gap-y-2 border-b px-6 py-4">
-              <Kpi etiqueta="Vistas pagadas" valor={numeroCompacto(total.visualizaciones)} titulo={numeroCompleto(total.visualizaciones)} />
+              {/* `total.visualizaciones` es la SUMA de la columna Impresiones (no son
+                  vistas orgánicas): el término correcto en Ads es "Impresiones". */}
+              <Kpi etiqueta="Impresiones" valor={numeroCompacto(total.visualizaciones)} titulo={numeroCompleto(total.visualizaciones)} />
               <Kpi etiqueta="Gasto" valor={dinero(total.gasto, total.moneda)} />
               <Kpi etiqueta="Campañas" valor={String(total.campanias)} />
               <Kpi etiqueta="Clics" valor={numeroCompacto(total.clics)} />
@@ -110,7 +117,9 @@ export function SeccionAds({
             </TableHeader>
             <TableBody>
               {filasOrdenadas.map((a, i) => (
-                <TableRow key={`${a.nombre}-${i}`}>
+                // Clave estable ante reordenaciones: nombre+red+inicio identifica la
+                // campaña; el índice solo entra si `inicio` llega vacío.
+                <TableRow key={`${a.nombre}-${a.red}-${a.inicio || i}`}>
                   <TableCell className="pl-6">
                     <span className="block max-w-[28rem] truncate font-medium" title={a.nombre}>
                       {a.nombre}

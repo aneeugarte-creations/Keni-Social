@@ -3,7 +3,7 @@
  *
  * Centraliza el formateo de números, porcentajes, variaciones, costes y
  * duraciones para que todas las páginas hablen el mismo idioma visual:
- * separadores de miles mexicanos y abreviaturas legibles (mil / M) en KPIs,
+ * separadores de miles mexicanos y abreviaturas legibles (k / M) en KPIs,
  * ejes de gráficas, tablas y tooltips.
  *
  * Antes estas funciones vivían en `pages/metricas/formato.ts`; ahora ese
@@ -22,8 +22,8 @@ const nfCompacto = new Intl.NumberFormat("es-MX", {
 
 /**
  * Número compacto y legible. Para valores < 1000 muestra el entero tal cual;
- * a partir de ahí abrevia con "mil" / "M" en español de México.
- * Ej.: 221621046 → "221.6 M", 1830 → "1.8 mil", 842 → "842".
+ * a partir de ahí abrevia con "k" / "M" en español de México.
+ * Ej.: 221621046 → "221.6 M", 1830 → "1.8 k", 842 → "842".
  */
 export function numeroCompacto(valor: number): string {
   if (!Number.isFinite(valor)) return "—";
@@ -50,17 +50,32 @@ export function porcentaje(valor: number): string {
 }
 
 /**
- * Variación porcentual con signo explícito (+/−) y un decimal.
- * Ej.: 12.345 → "+12.3 %", -4 → "−4.0 %", 0 → "0.0 %".
+ * Variación porcentual con signo explícito (+/−) y un decimal. El signo se decide
+ * TRAS redondear a 1 decimal: una variación de −0.04 redondea a 0.0 y se muestra
+ * "0.0 %" sin signo (nunca "−0.0 %" ni "+0.0 %").
+ * Ej.: 12.345 → "+12.3 %", -4 → "−4.0 %", -0.04 → "0.0 %", 0 → "0.0 %".
  */
 export function variacion(valor: number): string {
   if (!Number.isFinite(valor)) return "—";
-  const abs = Math.abs(valor).toLocaleString("es-MX", {
+  const r = Math.round(valor * 10) / 10;
+  const abs = Math.abs(r).toLocaleString("es-MX", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
-  const signo = valor > 0 ? "+" : valor < 0 ? "−" : "";
+  const signo = r > 0 ? "+" : r < 0 ? "−" : "";
   return `${signo}${abs} %`;
+}
+
+/**
+ * Rendimiento relativo con sufijo "×" y SIEMPRE 1 decimal (0.04 → "0.0×", nunca
+ * "0×"; 1 → "1.0×"). `null` (sin base de comparación) o no finito → "—".
+ */
+export function rendimientoRel(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v.toLocaleString("es-MX", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}×`;
 }
 
 /**

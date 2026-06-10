@@ -42,8 +42,8 @@ interface SelectorRangoProps {
 export function SelectorRango({ rangos, valor, onCambio, id, ariaLabel }: SelectorRangoProps) {
   return (
     <Select value={valor} onValueChange={onCambio}>
-      <SelectTrigger id={id} className="h-8 w-full text-xs sm:w-[200px]" aria-label={ariaLabel ?? "Rango"}>
-        <SelectValue placeholder="Rango" />
+      <SelectTrigger id={id} className="h-8 w-full text-xs sm:w-[200px]" aria-label={ariaLabel ?? "Periodo"}>
+        <SelectValue placeholder="Periodo" />
       </SelectTrigger>
       <SelectContent>
         {rangos.map((r) => (
@@ -69,7 +69,7 @@ function aniosRecientes(): number[] {
 }
 
 /**
- * Selector de tiempo del dashboard: presets (atajos) · mes concreto · personalizado.
+ * Selector de tiempo del dashboard: periodos comunes (presets) · mes · fechas exactas.
  *
  * Emite un "token de rango" (`mes:AAAA-MM` / `rango:AAAA-MM-DD_AAAA-MM-DD` / preset)
  * que viaja al backend sin tocar la capa de datos. Mantiene `SelectorRango` (presets)
@@ -86,7 +86,7 @@ export function SelectorTiempo({
 }) {
   const [modo, setModo] = React.useState<ModoTiempo>(() => modoDesdeToken(valor));
 
-  // Preset por defecto al volver a "Atajos" (el valor actual si es preset, si no el 1º).
+  // Preset por defecto al volver a "Periodos comunes" (el valor actual si es preset, si no el 1º).
   const presetActual = modoDesdeToken(valor) === "atajos" ? valor : (rangos[0]?.id ?? "mes");
 
   const mesActual = partesMes(valor);
@@ -97,6 +97,16 @@ export function SelectorTiempo({
   const rangoActual = partesRango(valor);
   const [desde, setDesde] = React.useState(rangoActual?.desde ?? "");
   const [hasta, setHasta] = React.useState(rangoActual?.hasta ?? "");
+
+  // `valor` puede cambiar DESDE FUERA (p. ej. el comparador re-deriva el periodo A/B
+  // cuando cambia el periodo visible arriba). Sin esto, modo/desde/hasta solo nacían
+  // del valor inicial y el selector mostraba un periodo que NO era el consultado.
+  React.useEffect(() => {
+    setModo(modoDesdeToken(valor));
+    const r = partesRango(valor);
+    setDesde(r?.desde ?? "");
+    setHasta(r?.hasta ?? "");
+  }, [valor]);
 
   function cambiarModo(nuevo: ModoTiempo) {
     setModo(nuevo);
@@ -115,13 +125,13 @@ export function SelectorTiempo({
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <Select value={modo} onValueChange={(v) => cambiarModo(v as ModoTiempo)}>
-        <SelectTrigger className="h-8 w-full text-xs sm:w-[200px]" aria-label="Modo de tiempo">
+        <SelectTrigger className="h-8 w-full text-xs sm:w-[200px]" aria-label="Tipo de periodo">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="atajos">Atajos</SelectItem>
-          <SelectItem value="mes">Mes concreto</SelectItem>
-          <SelectItem value="personalizado">Personalizado</SelectItem>
+          <SelectItem value="atajos">Periodos comunes</SelectItem>
+          <SelectItem value="mes">Mes</SelectItem>
+          <SelectItem value="personalizado">Fechas exactas</SelectItem>
         </SelectContent>
       </Select>
 
@@ -134,7 +144,7 @@ export function SelectorTiempo({
         // vuelven a sus anchos naturales. Antes los 140px+100px fijos desbordaban la barra.
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <Select value={String(mes)} onValueChange={(m) => onCambio(tokenMes(anio, Number(m)))}>
-            <SelectTrigger className="w-full sm:w-[140px]" aria-label="Mes">
+            <SelectTrigger className="h-8 w-full text-xs sm:w-[140px]" aria-label="Mes">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -146,7 +156,7 @@ export function SelectorTiempo({
             </SelectContent>
           </Select>
           <Select value={String(anio)} onValueChange={(a) => onCambio(tokenMes(Number(a), mes))}>
-            <SelectTrigger className="w-full sm:w-[100px]" aria-label="Año">
+            <SelectTrigger className="h-8 w-full text-xs sm:w-[100px]" aria-label="Año">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -170,7 +180,7 @@ export function SelectorTiempo({
             max={hasta || undefined}
             onChange={(e) => aplicarPersonalizado(e.target.value, hasta)}
             aria-label="Desde"
-            className="w-full sm:w-[150px]"
+            className="h-8 w-full text-xs sm:w-[150px]"
           />
           <span className="hidden text-muted-foreground sm:inline">–</span>
           <Input
@@ -179,7 +189,7 @@ export function SelectorTiempo({
             min={desde || undefined}
             onChange={(e) => aplicarPersonalizado(desde, e.target.value)}
             aria-label="Hasta"
-            className="w-full sm:w-[150px]"
+            className="h-8 w-full text-xs sm:w-[150px]"
           />
         </div>
       )}

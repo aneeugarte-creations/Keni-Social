@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import type { CompararMetricas, OpcionesMetricas, UsuarioSesion } from "@/types";
 
 import { CompararPeriodos } from "./CompararPeriodos";
+import { diasDePeriodo, seSolapan } from "./rango";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -101,31 +102,36 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("CompararPeriodos", () => {
-  it("usa el selector de tiempo (atajos · mes · personalizado) para AMBOS periodos", () => {
+  it("usa el selector de tiempo (periodos comunes · mes · fechas exactas) para AMBOS periodos", () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
 
-    // Etiquetas claras Periodo A (origen) / Periodo B (comparado).
-    expect(screen.getByText("Periodo A")).toBeInTheDocument();
-    expect(screen.getByText("Periodo B")).toBeInTheDocument();
+    // Etiquetas claras: A = "Comparar con (antes)", B = "Periodo actual".
+    expect(screen.getByText("Comparar con (antes)")).toBeInTheDocument();
+    expect(screen.getByText("Periodo actual")).toBeInTheDocument();
 
-    // SelectorTiempo expone un combobox "Modo de tiempo" por cada periodo (A y B),
+    // SelectorTiempo expone un combobox "Tipo de periodo" por cada periodo (A y B),
     // que el antiguo SelectorRango (solo presets) NO tenía. Dos periodos => dos
-    // selectores de modo: es lo que habilita comparar periodos arbitrarios
+    // selectores de tipo: es lo que habilita comparar periodos arbitrarios
     // (mes:AAAA-MM / rango:AAAA-MM-DD_AAAA-MM-DD), no solo preset vs preset.
-    const modos = screen.getAllByLabelText("Modo de tiempo");
+    const modos = screen.getAllByLabelText("Tipo de periodo");
     expect(modos).toHaveLength(2);
   });
 
-  it("hereda el rango visible como Periodo B (comparado) y consulta la comparativa", async () => {
+  it("hereda el periodo visible como B (actual) y deriva A como su anterior adyacente", async () => {
     const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
 
-    // Periodo B parte del rango que se ve arriba ("mes"); A parte de otro distinto.
+    // B parte del periodo que se ve arriba ("mes"); A es el periodo inmediatamente
+    // ANTERIOR adyacente: un token `rango:` de la MISMA longitud (comparable), nunca
+    // el propio "mes" ni un preset solapado.
     await screen.findByText("Desglose por marca");
-    const { rango_a, rango_b } = espia.mock.calls[0][0];
+    const { rango_a = "", rango_b = "" } = espia.mock.calls[0][0];
     expect(rango_b).toBe("mes");
     expect(rango_a).not.toBe("mes");
+    expect(rango_a).toMatch(/^rango:\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}$/);
+    expect(diasDePeriodo(rango_a)).toBe(diasDePeriodo("mes"));
+    expect(seSolapan(rango_a, rango_b)).toBe(false);
   });
 
   it("no revienta con valores null (métrica no comparable) -> muestra '—'", async () => {
@@ -147,6 +153,25 @@ describe("CompararPeriodos", () => {
     // Render asíncrono (la query resuelve): si reventara, esto lanzaría. El valor null
     // de 'alcance' se pinta "—" en vez de tirar la página.
     expect((await screen.findAllByText("—")).length).toBeGreaterThan(0);
+  });
+
+  it("marca como 'Nuevo' el crecimiento desde cero (a=0, b>0) en vez de '0.0 %'", async () => {
+    // El backend devuelve variacion_pct = 0.0 cuando la base es 0 (división imposible):
+    // un BadgeDelta "0.0 %" ocultaría el arranque. Se muestra un badge "Nuevo".
+    const respDesdeCero: CompararMetricas = {
+      ...RESP,
+      total: {
+        metricas: [
+          { metrica: "visualizaciones", a: 0, b: 500, diferencia: 500, variacion_pct: 0 },
+        ],
+      },
+      por_marca: [],
+    };
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(respDesdeCero);
+    renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
+
+    expect(await screen.findByText("Nuevo")).toBeInTheDocument();
+    expect(screen.queryByText("0.0 %")).not.toBeInTheDocument();
   });
 
   it("muestra el desglose por marca con el nombre legible (no el id crudo)", async () => {

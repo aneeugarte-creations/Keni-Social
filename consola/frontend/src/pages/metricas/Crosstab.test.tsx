@@ -81,9 +81,12 @@ describe("Crosstab (rendimiento por formato)", () => {
     expect(screen.queryByText("feed_image")).not.toBeInTheDocument();
     // formato null se muestra como "Sin formato".
     expect(screen.getByText("Sin formato")).toBeInTheDocument();
-    // rendimiento relativo formateado con sufijo "×".
+    // rendimiento relativo formateado con sufijo "×" (rendimientoRel, 1 decimal).
     expect(screen.getByText("1.4×")).toBeInTheDocument();
     expect(screen.getByText("0.6×")).toBeInTheDocument();
+    // la celda de Vistas muestra el número COMPLETO (no compacto).
+    expect(screen.getByText("120,000")).toBeInTheDocument();
+    expect(screen.getByText("30,000")).toBeInTheDocument();
   });
 
   it("ordena por rendimiento desc por defecto y permite reordenar por otra columna", async () => {
@@ -118,7 +121,7 @@ describe("Crosstab (rendimiento por formato)", () => {
     );
 
     expect(
-      await screen.findByText(/no expone el cruce por formato/i),
+      await screen.findByText(/Aún no hay cruce por formato para este periodo/i),
     ).toBeInTheDocument();
   });
 });

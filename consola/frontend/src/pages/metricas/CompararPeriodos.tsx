@@ -1,12 +1,14 @@
 /**
  * Sub-sección "Comparar periodos".
  *
- * Selecciona Periodo A (origen), Periodo B (comparado) y marca, consulta
- * `api.metricasComparar` y muestra por métrica el valor A, el valor B y la variación
- * con flecha y color (Tremor BadgeDelta: verde sube / rojo baja). Incluye el desglose
- * `por_marca`.
+ * Selecciona el periodo A ("Comparar con (antes)"), el periodo B ("Periodo actual") y
+ * marca, consulta `api.metricasComparar` y muestra por métrica el valor A, el valor B
+ * y la variación con flecha y color (Tremor BadgeDelta: verde sube / rojo baja).
+ * Incluye el desglose `por_marca`. Por defecto A es el periodo inmediatamente ANTERIOR
+ * adyacente a B (misma longitud); si los periodos elegidos no son comparables (distinta
+ * duración o solape) se avisa, sin bloquear.
  *
- * Ambos periodos usan `SelectorTiempo` (atajos · mes concreto · rango personalizado),
+ * Ambos periodos usan `SelectorTiempo` (periodos comunes · mes · fechas exactas),
  * así que se pueden comparar periodos ARBITRARIOS —p. ej. "mayo 2026" vs "abril 2026"
  * o dos rangos de fechas a medida—, no solo presets contra presets. El backend
  * (`/api/metricas/comparar`) acepta cualquier token (`mes:AAAA-MM`,
@@ -14,13 +16,14 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { BadgeDelta, type DeltaType } from "@tremor/react";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowLeftRight, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import {
   marcaMetricasDesdeCanonica,
   marcaParam,
 } from "@/components/comunes/selectores";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -32,6 +35,7 @@ import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "
 import { MARCA_TODAS, SelectorTiempo } from "./Controles";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { METRICAS } from "./metricas-meta";
+import { diasDePeriodo, periodoAnterior, seSolapan } from "./rango";
 
 /**
  * Metadatos de las métricas EXTRA de la comparativa (granulares + seguidores) que no están
@@ -80,8 +84,10 @@ function formatoValor(metrica: string, valor: number | null): string {
   return meta ? meta.completo(valor) : numeroCompleto(valor);
 }
 
-/** Traduce la variación porcentual al `deltaType` de Tremor BadgeDelta. */
-function deltaType(variacionPct: number): DeltaType {
+/** Traduce la variación porcentual al `deltaType` de Tremor BadgeDelta. Una variación
+ * ausente o no finita (métrica no comparable) se trata como "sin cambio", no revienta. */
+function deltaType(variacionPct: number | null | undefined): DeltaType {
+  if (variacionPct == null || !Number.isFinite(variacionPct)) return "unchanged";
   if (variacionPct > 5) return "increase";
   if (variacionPct > 0) return "moderateIncrease";
   if (variacionPct < -5) return "decrease";
@@ -89,22 +95,86 @@ function deltaType(variacionPct: number): DeltaType {
   return "unchanged";
 }
 
+/**
+ * Insignia de variación de una comparativa. Caso especial: crecimiento desde CERO
+ * (a=0, b>0). El backend devuelve `variacion_pct = 0.0` para base 0 (división imposible),
+ * y un BadgeDelta "0.0 %" OCULTARÍA el arranque: se muestra "Nuevo" en su lugar.
+ */
+function InsigniaVariacion({ comp }: { comp: ComparativaMetrica }) {
+  if (comp.a === 0 && comp.b > 0) {
+    return (
+      <Badge variant="ok" className="shrink-0">
+        Nuevo
+      </Badge>
+    );
+  }
+  return (
+    <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs" className="shrink-0">
+      {variacion(comp.variacion_pct)}
+    </BadgeDelta>
+  );
+}
+
+/**
+ * Avisos de COMPARABILIDAD entre los dos periodos: distinta duración (la variación de
+ * conteos no es comparable) y solape (la comparación no es fiable). Solo avisa: no
+ * bloquea, comparar periodos arbitrarios sigue permitido.
+ */
+function AvisosComparabilidad({ rangoA, rangoB }: { rangoA: string; rangoB: string }) {
+  const diasA = diasDePeriodo(rangoA);
+  const diasB = diasDePeriodo(rangoB);
+  const distintaDuracion = diasA != null && diasB != null && diasA !== diasB;
+  const solapados = seSolapan(rangoA, rangoB);
+  if (!distintaDuracion && !solapados) return null;
+  return (
+    <div className="space-y-2">
+      {distintaDuracion && (
+        <p
+          className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+          role="status"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            Los periodos tienen distinta duración ({diasA} vs {diasB} días): la variación
+            de los conteos no es comparable.
+          </span>
+        </p>
+      )}
+      {solapados && (
+        <p
+          className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+          role="status"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Los periodos se solapan: la comparación no es fiable.</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function CompararPeriodos({
   opciones,
   rangoActual,
 }: {
   opciones: OpcionesMetricas;
-  /** Rango seleccionado arriba: se usa como rango B (comparado) por defecto. */
+  /** Periodo seleccionado arriba: se usa como periodo B (actual) por defecto. */
   rangoActual?: string;
 }) {
   const rangos = opciones.rangos;
-  // B (comparado) hereda el rango que se está viendo arriba; A (origen) parte de
-  // otro rango distinto para que la comparativa tenga sentido por defecto.
+  // B (actual) hereda el periodo que se está viendo arriba; A (antes) parte del
+  // periodo inmediatamente ANTERIOR de la misma longitud, para que la comparativa
+  // sea comparable por defecto (misma duración, sin solape).
   const rangoBInicial = rangoActual ?? rangos[0]?.id ?? "";
   const rangoAInicial =
-    rangos.find((r) => r.id !== rangoBInicial)?.id ?? rangos[0]?.id ?? "";
+    periodoAnterior(rangoBInicial) ??
+    rangos.find((r) => r.id !== rangoBInicial)?.id ??
+    rangos[0]?.id ??
+    "";
   const [rangoA, setRangoA] = React.useState(rangoAInicial);
   const [rangoB, setRangoB] = React.useState(rangoBInicial);
+  // ¿El usuario eligió A a mano? Mientras no lo haga, A sigue derivándose de B.
+  const usuarioTocoA = React.useRef(false);
 
   // La MARCA la manda SIEMPRE el switch global de la barra superior (`useMarcaActiva`):
   // la comparativa no tiene selector propio. `marcaActiva` es el id canónico (o null =
@@ -117,10 +187,21 @@ export function CompararPeriodos({
     return opciones.marcas.some((m) => m.id === idMetricas) ? idMetricas : MARCA_TODAS;
   }, [marcaActiva, opciones.marcas]);
 
-  // Si arriba cambia el rango visible, lo reflejamos como rango B (comparado).
+  // Si arriba cambia el periodo visible, lo reflejamos como periodo B (actual) y,
+  // mientras el usuario no haya tocado A a mano, re-derivamos A como su anterior
+  // adyacente (misma longitud) para mantener la comparativa comparable.
   React.useEffect(() => {
-    if (rangoActual) setRangoB(rangoActual);
-  }, [rangoActual]);
+    if (!rangoActual) return;
+    setRangoB(rangoActual);
+    if (!usuarioTocoA.current) {
+      setRangoA(
+        periodoAnterior(rangoActual) ??
+          rangos.find((r) => r.id !== rangoActual)?.id ??
+          rangos[0]?.id ??
+          "",
+      );
+    }
+  }, [rangoActual, rangos]);
 
   const habilitado = Boolean(rangoA && rangoB);
   const marca_ = marcaParam(marca);
@@ -137,17 +218,25 @@ export function CompararPeriodos({
   return (
     <SeccionColapsable
       titulo="Comparar periodos"
+      icono={ArrowLeftRight}
       acciones={
         <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
-            <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
-              Periodo A
+            <span className="w-28 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
+              Comparar con (antes)
             </span>
-            <SelectorTiempo rangos={rangos} valor={rangoA} onCambio={setRangoA} />
+            <SelectorTiempo
+              rangos={rangos}
+              valor={rangoA}
+              onCambio={(token) => {
+                usuarioTocoA.current = true;
+                setRangoA(token);
+              }}
+            />
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
-              Periodo B
+            <span className="w-28 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
+              Periodo actual
             </span>
             <SelectorTiempo rangos={rangos} valor={rangoB} onCambio={setRangoB} />
           </div>
@@ -157,7 +246,7 @@ export function CompararPeriodos({
     >
       {!habilitado ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Elige dos rangos para comparar.
+            Elige dos periodos para comparar.
           </p>
         ) : isPending ? (
           <EsqueletoComparar />
@@ -175,6 +264,8 @@ export function CompararPeriodos({
               <span aria-hidden="true">→</span>
               <span className="font-medium text-foreground">{data.etiqueta_b}</span>
             </div>
+
+            <AvisosComparabilidad rangoA={rangoA} rangoB={rangoB} />
 
             {/* Totales: una tarjeta por métrica con A, B y variación. */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -217,9 +308,7 @@ function TarjetaComparativa({ comp }: { comp: ComparativaMetrica }) {
         <p className="min-w-0 truncate text-sm font-medium text-muted-foreground">
           {etiquetaMetrica(comp.metrica)}
         </p>
-        <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs" className="shrink-0">
-          {variacion(comp.variacion_pct)}
-        </BadgeDelta>
+        <InsigniaVariacion comp={comp} />
       </div>
       <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
         {formatoValor(comp.metrica, comp.b)}
@@ -239,9 +328,7 @@ function FilaComparativa({ comp }: { comp: ComparativaMetrica }) {
         <p className="truncate text-xs text-muted-foreground">{etiquetaMetrica(comp.metrica)}</p>
         <p className="text-sm font-medium tabular-nums">{formatoValor(comp.metrica, comp.b)}</p>
       </div>
-      <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs" className="shrink-0">
-        {variacion(comp.variacion_pct)}
-      </BadgeDelta>
+      <InsigniaVariacion comp={comp} />
     </div>
   );
 }

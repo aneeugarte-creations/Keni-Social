@@ -2,7 +2,8 @@
  * Tests para @/lib/formato — utilidades de formato es-MX compartidas.
  *
  * Cubre todos los helpers: numeroCompacto, numeroCompleto, porcentaje,
- * variacion, costeUsd y duracion; incluyendo valores límite y no finitos.
+ * variacion, rendimientoRel, costeUsd y duracion; incluyendo valores límite
+ * y no finitos.
  */
 import { describe, expect, it } from "vitest";
 
@@ -15,6 +16,7 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  rendimientoRel,
   tiempoVis,
   variacion,
 } from "./formato";
@@ -113,8 +115,33 @@ describe("variacion", () => {
     expect(r).not.toContain("−");
   });
 
+  it("decide el signo TRAS redondear: −0.04 → '0.0 %' sin signo (nunca '−0.0 %')", () => {
+    expect(variacion(-0.04)).toBe("0.0 %");
+    expect(variacion(0.04)).toBe("0.0 %");
+  });
+
   it("incluye un decimal y el símbolo %", () => {
     expect(variacion(5)).toContain("%");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rendimientoRel
+// ---------------------------------------------------------------------------
+describe("rendimientoRel", () => {
+  it("null (sin base de comparación) → —", () => {
+    expect(rendimientoRel(null)).toBe("—");
+  });
+
+  it("siempre muestra 1 decimal con sufijo ×", () => {
+    expect(rendimientoRel(0.04)).toBe("0.0×"); // nunca "0×"
+    expect(rendimientoRel(1)).toBe("1.0×");
+    expect(rendimientoRel(1.4)).toBe("1.4×");
+  });
+
+  it("no finito → —", () => {
+    expect(rendimientoRel(NaN)).toBe("—");
+    expect(rendimientoRel(Infinity)).toBe("—");
   });
 });
 

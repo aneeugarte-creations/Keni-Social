@@ -2,8 +2,10 @@
  * Correlación seguidores ganados ↔ piezas publicadas (estrategia digital).
  *
  * Cruza, por marca×red×día, cuántos seguidores se ganaron contra cuántas piezas se
- * publicaron, con `seguidores_por_post` como ratio crudo y un enlace a la pieza estrella
- * de ese día. RENDERIZA la `nota` del backend (correlación ≠ causalidad) de forma visible
+ * publicaron: un SCATTER (recharts) muestra todos los puntos del periodo filtrado
+ * (x = piezas del día, y = seguidores ganados, color = red) y la tabla queda como
+ * drill-down del día, con `seguidores_por_post` como ratio crudo y un enlace a la pieza
+ * estrella. RENDERIZA la `nota` del backend (correlación ≠ causalidad) de forma visible
  * para no inducir lecturas causales. La tabla es ORDENABLE por columna numérica y
  * FILTRABLE por red (cliente).
  *
@@ -13,6 +15,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ExternalLink, GitCompareArrows, Info } from "lucide-react";
 import * as React from "react";
+import {
+  CartesianGrid,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
@@ -33,10 +44,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { nombreMarca, nombreRed, numeroCompleto, porcentaje, REDES_CANONICAS } from "@/lib/formato";
+import {
+  nombreMarca,
+  nombreRed,
+  numeroCompacto,
+  numeroCompleto,
+  plural,
+  porcentaje,
+  redCanonica,
+  REDES_CANONICAS,
+} from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
@@ -54,16 +75,19 @@ function seguidoresNeto(n: number): string {
   return `${n > 0 ? "+" : "−"}${numeroCompleto(Math.abs(n))}`;
 }
 
-/** "lun 1 jun 2026" a partir de una fecha ISO (AAAA-MM-DD), en es-MX (cabecera del pager). */
+/** "Lun 1 jun 2026" a partir de una fecha ISO (AAAA-MM-DD), en es-MX (cabecera del pager). */
 function etiquetaDia(iso: string): string {
   const [a, m, d] = iso.split("-").map((n) => parseInt(n, 10));
   if (!a || !m || !d) return iso;
-  return new Date(a, m - 1, d).toLocaleDateString("es-MX", {
+  const texto = new Date(a, m - 1, d).toLocaleDateString("es-MX", {
     weekday: "short",
     day: "numeric",
     month: "short",
     year: "numeric",
   });
+  // Solo la PRIMERA letra en mayúscula (sin `capitalize` CSS, que pondría en
+  // mayúscula cada palabra: "Lun 1 Jun 2026" ✗).
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 export function Correlacion({
@@ -90,6 +114,12 @@ export function Correlacion({
   // TODAS las redes canónicas en el selector (no solo las que traen datos).
   const redesDisponibles = REDES_CANONICAS;
 
+  // Items del periodo tras el filtro de red (cliente): alimentan el scatter.
+  const visibles = React.useMemo(
+    () => (redFiltro === RED_TODAS ? items : items.filter((it) => it.red === redFiltro)),
+    [items, redFiltro],
+  );
+
   // El filtro de red solo tiene sentido cuando hay datos cargados.
   const filtroRed =
     !isPending && !isError && items.length > 0 ? (
@@ -110,7 +140,7 @@ export function Correlacion({
 
   return (
     <SeccionColapsable
-      titulo="Seguidores vs publicación"
+      titulo="Seguidores frente a piezas publicadas"
       icono={GitCompareArrows}
       descripcion="Por día y red: seguidores ganados frente a piezas publicadas, con la pieza que mejor rindió ese día."
       acciones={filtroRed}
@@ -124,15 +154,20 @@ export function Correlacion({
         </p>
       ) : items.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          La fuente activa no expone seguidores aún para este periodo.
+          Aún no hay datos de seguidores para este periodo (la fuente de métricas no los
+          entrega).
         </p>
       ) : (
         <>
-          {/* La nota del backend (correlación, no causalidad) SIEMPRE visible. */}
+          {/* La nota del backend (correlación, no causalidad) SIEMPRE visible, con el
+              nombre técnico del ratio traducido a la etiqueta de la tabla. */}
           <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{data.nota}</span>
+            <span>{data.nota.replace("'seguidores_por_post'", "«Seg. por pieza»")}</span>
           </p>
+          {/* Scatter con TODOS los puntos del periodo filtrado; la tabla de abajo es el
+              drill-down del día. */}
+          {visibles.length > 0 && <GraficaCorrelacion items={visibles} marcas={marcas} />}
           <TablaCorrelacion items={items} marcas={marcas} redFiltro={redFiltro} />
         </>
       )}
@@ -140,7 +175,174 @@ export function Correlacion({
   );
 }
 
+/** Punto del scatter ya preparado para recharts (uno por marca×red×día). */
+interface PuntoDispersion {
+  x: number; // n_posts — piezas publicadas ese día
+  y: number; // seguidores_ganados
+  fecha: string;
+  marca: string;
+  red: string; // canónica
+  fill: string; // color de la red (coloresRed.ts)
+}
+
+/** Forma de cada punto: círculo con el color de su red y trazo de contraste. */
+function PuntoCorrelacion(props: { cx?: number; cy?: number; payload?: PuntoDispersion }) {
+  const { cx, cy, payload } = props;
+  if (cx == null || cy == null || !payload) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={5}
+      fill={payload.fill}
+      fillOpacity={0.85}
+      stroke="hsl(var(--foreground))"
+      strokeOpacity={0.25}
+      strokeWidth={1}
+    />
+  );
+}
+
+/** Tooltip (tematizado) con fecha, marca, red, seguidores y piezas del punto. */
+function TooltipCorrelacion(props: {
+  active?: boolean;
+  payload?: Array<{ payload: PuntoDispersion }>;
+  marcas: MarcaDisponible[];
+}) {
+  const p = props.active ? props.payload?.[0]?.payload : undefined;
+  if (!p) return null;
+  return (
+    <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+      <p className="mb-1 font-medium">{etiquetaDia(p.fecha)}</p>
+      <ul className="space-y-0.5 text-muted-foreground">
+        <li className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-2 w-2 rounded-full ring-1 ring-foreground/25"
+            style={{ backgroundColor: p.fill }}
+          />
+          {nombreMarca(p.marca, props.marcas)} · {nombreRed(p.red)}
+        </li>
+        <li>
+          Seguidores: <span className="tabular-nums text-foreground">{seguidoresNeto(p.y)}</span>
+        </li>
+        <li>
+          Piezas: <span className="tabular-nums text-foreground">{numeroCompleto(p.x)}</span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Scatter seguidores ganados ↔ piezas publicadas: un punto por marca×red×día con el
+ * color canónico de su red. Es la vista que sustenta la afirmación de "correlación";
+ * la tabla de abajo queda como drill-down del día.
+ */
+function GraficaCorrelacion({
+  items,
+  marcas,
+}: {
+  items: ItemCorrelacion[];
+  marcas: MarcaDisponible[];
+}) {
+  const { puntos, redesPresentes } = React.useMemo(() => {
+    const flat: PuntoDispersion[] = items.map((it) => {
+      const red = redCanonica(it.red);
+      return {
+        x: it.n_posts,
+        y: it.seguidores_ganados,
+        fecha: it.fecha,
+        marca: it.marca,
+        red,
+        fill: colorDe(red),
+      };
+    });
+    // Leyenda: redes presentes en orden canónico (+ las fuera de catálogo al final).
+    const extras = Array.from(new Set(flat.map((p) => p.red))).filter(
+      (r) => !(REDES_CANONICAS as readonly string[]).includes(r),
+    );
+    const presentes = [
+      ...REDES_CANONICAS.filter((r) => flat.some((p) => p.red === r)),
+      ...extras,
+    ];
+    return { puntos: flat, redesPresentes: presentes };
+  }, [items]);
+
+  return (
+    <div>
+      {/* Leyenda de redes con su color (trazo de contraste para el tema claro). */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {redesPresentes.map((red) => (
+          <span
+            key={red}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <span
+              className="h-2.5 w-2.5 rounded-full ring-1 ring-foreground/25"
+              style={{ backgroundColor: colorDe(red) }}
+            />
+            {nombreRed(red)}
+          </span>
+        ))}
+      </div>
+      <div className="h-56">
+        <ResponsiveContainer width="100%" height={224}>
+          <ScatterChart margin={{ top: 8, right: 16, bottom: 14, left: 8 }}>
+            <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.5} strokeDasharray="3 3" />
+            <XAxis
+              type="number"
+              dataKey="x"
+              allowDecimals={false}
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+              tickLine={false}
+              axisLine={{ stroke: "hsl(var(--border))" }}
+              label={{
+                value: "Piezas publicadas en el día",
+                position: "insideBottom",
+                offset: -10,
+                fill: "hsl(var(--muted-foreground))",
+                fontSize: 11,
+              }}
+            />
+            <YAxis
+              type="number"
+              dataKey="y"
+              tickFormatter={numeroCompacto}
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              width={48}
+              label={{
+                value: "Seguidores ganados",
+                angle: -90,
+                position: "insideLeft",
+                fill: "hsl(var(--muted-foreground))",
+                fontSize: 11,
+              }}
+            />
+            <Tooltip
+              cursor={{ stroke: "hsl(var(--muted-foreground))", strokeOpacity: 0.3 }}
+              content={<TooltipCorrelacion marcas={marcas} />}
+            />
+            <Scatter data={puntos} shape={<PuntoCorrelacion />} />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 type ClaveCorrelacion = "seguidores_ganados" | "n_posts" | "seguidores_por_post";
+
+// Accesores de orden de la tabla (constante de módulo: identidad estable entre renders).
+const ACCESORES_CORRELACION: Record<
+  ClaveCorrelacion,
+  (it: ItemCorrelacion) => number | null
+> = {
+  seguidores_ganados: (it) => it.seguidores_ganados,
+  n_posts: (it) => it.n_posts,
+  seguidores_por_post: (it) => it.seguidores_por_post,
+};
 
 function TablaCorrelacion({
   items,
@@ -165,11 +367,11 @@ function TablaCorrelacion({
   }, [visibles]);
 
   const [diaIdx, setDiaIdx] = React.useState(0);
-  React.useEffect(() => {
-    setDiaIdx((i) => (i >= dias.length ? 0 : i));
-  }, [dias.length]);
+  // Clamp EN RENDER (sin useEffect de reset): si el filtro encoge la lista nunca se
+  // pinta un frame imposible tipo "día 10 de 5".
+  const idx = Math.min(diaIdx, Math.max(dias.length - 1, 0));
 
-  const diaActual = dias[Math.min(diaIdx, Math.max(dias.length - 1, 0))] ?? "";
+  const diaActual = dias[idx] ?? "";
   const itemsDelDia = React.useMemo(
     () => visibles.filter((it) => it.fecha === diaActual),
     [visibles, diaActual],
@@ -177,17 +379,13 @@ function TablaCorrelacion({
 
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<ItemCorrelacion, ClaveCorrelacion>(
     itemsDelDia,
-    {
-      seguidores_ganados: (it) => it.seguidores_ganados,
-      n_posts: (it) => it.n_posts,
-      seguidores_por_post: (it) => it.seguidores_por_post,
-    },
+    ACCESORES_CORRELACION,
     { clave: "seguidores_ganados", direccion: "desc" },
   );
 
   // Todas las redes canónicas presentes en CADA día: si una red no publicó ni ganó
   // seguidores ese día (o no está contratada, como X), aparece igualmente como fila "—".
-  const redesConDatos = new Set(itemsDelDia.map((it) => it.red.toLowerCase()));
+  const redesConDatos = new Set(itemsDelDia.map((it) => redCanonica(it.red)));
   const redesFaltantes = (
     redFiltro === RED_TODAS ? REDES_CANONICAS : REDES_CANONICAS.filter((r) => r === redFiltro)
   ).filter((r) => !redesConDatos.has(r));
@@ -205,10 +403,10 @@ function TablaCorrelacion({
       {/* Pager por día */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold capitalize text-foreground">{etiquetaDia(diaActual)}</p>
+          <p className="text-sm font-semibold text-foreground">{etiquetaDia(diaActual)}</p>
           <p className="text-xs text-muted-foreground">
-            {itemsDelDia.length} {itemsDelDia.length === 1 ? "marca·red" : "marca·red"} · día{" "}
-            {diaIdx + 1} de {dias.length}
+            {plural(itemsDelDia.length, "combinación", "combinaciones")} de marca y red · día{" "}
+            {idx + 1} de {dias.length}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -216,8 +414,8 @@ function TablaCorrelacion({
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            onClick={() => setDiaIdx((i) => Math.max(0, i - 1))}
-            disabled={diaIdx <= 0}
+            onClick={() => setDiaIdx(Math.max(0, idx - 1))}
+            disabled={idx <= 0}
             aria-label="Día más reciente"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -226,8 +424,8 @@ function TablaCorrelacion({
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            onClick={() => setDiaIdx((i) => Math.min(dias.length - 1, i + 1))}
-            disabled={diaIdx >= dias.length - 1}
+            onClick={() => setDiaIdx(Math.min(dias.length - 1, idx + 1))}
+            disabled={idx >= dias.length - 1}
             aria-label="Día más antiguo"
           >
             <ChevronRight className="h-4 w-4" />
@@ -255,7 +453,7 @@ function TablaCorrelacion({
                 onClick={() => alClicar("n_posts")}
                 alinear="right"
               >
-                Posts
+                Piezas
               </CabeceraOrdenable>
               <CabeceraOrdenable
                 activa={estado.clave === "seguidores_por_post"}
@@ -263,7 +461,7 @@ function TablaCorrelacion({
                 onClick={() => alClicar("seguidores_por_post")}
                 alinear="right"
               >
-                Seg./post
+                Seg. por pieza
               </CabeceraOrdenable>
               <TableHead>Pieza estrella</TableHead>
             </TableRow>
@@ -312,7 +510,7 @@ function PiezaEstrella({ post }: { post: PostEstrella | null }) {
         {post.titulo}
       </span>
       <span className="text-xs text-muted-foreground tabular-nums">
-        {porcentaje(post.engagement_pct)} eng.
+        {porcentaje(post.engagement_pct)} de engagement
       </span>
     </>
   );

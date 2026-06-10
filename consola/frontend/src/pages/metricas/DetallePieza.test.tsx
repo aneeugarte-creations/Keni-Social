@@ -92,12 +92,12 @@ describe("DetallePieza", () => {
       <DetallePieza pieza={PIEZA} abierto onOpenChange={() => {}} />,
     );
 
-    // Título + desglose granular (likes presentes; clics nulos -> "—").
+    // Título + desglose granular (me gusta presentes; clics nulos -> "—").
     expect(screen.getByText("Reel viral")).toBeInTheDocument();
     expect(screen.getByText("Me gusta")).toBeInTheDocument();
     // KPIs de velocidad aparecen tras cargar el histórico.
-    expect(await screen.findByText("En 24 h")).toBeInTheDocument();
-    expect(screen.getByText("Snapshots")).toBeInTheDocument();
+    expect(await screen.findByText("% en las primeras 24 h")).toBeInTheDocument();
+    expect(screen.getByText("Mediciones")).toBeInTheDocument();
     expect(
       screen.queryByText(/sin histórico todavía/i),
     ).not.toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("DetallePieza", () => {
     expect(
       await screen.findByText(/sin histórico todavía \(esta pieza aún no se está siguiendo\)/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText("En 24 h")).not.toBeInTheDocument();
+    expect(screen.queryByText("% en las primeras 24 h")).not.toBeInTheDocument();
   });
 
   it("no consulta el histórico mientras el modal está cerrado", () => {

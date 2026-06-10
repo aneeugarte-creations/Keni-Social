@@ -87,7 +87,7 @@ export default {
             inverted: "#ffffff",
           },
         },
-        // Paleta Tremor (modo oscuro).
+        // Paleta Tremor (modo oscuro) — grises neutros, sin tinte azul.
         "dark-tremor": {
           brand: {
             // ACENTO charts (variante: MONOCROMO) — modo oscuro.
@@ -96,21 +96,21 @@ export default {
             subtle: "#737373",
             DEFAULT: "#d4d4d4",
             emphasis: "#fafafa",
-            inverted: "#0b0f17",
+            inverted: "#121212",
           },
           background: {
-            muted: "#0b0f17",
-            subtle: "#1f2937",
-            DEFAULT: "#111827",
-            emphasis: "#d1d5db",
+            muted: "#0a0a0a",
+            subtle: "#1a1a1a",
+            DEFAULT: "#121212",
+            emphasis: "#d4d4d4",
           },
           border: { DEFAULT: "#262626" },
           ring: { DEFAULT: "#262626" },
           content: {
-            subtle: "#6b7280",
-            DEFAULT: "#9ca3af",
-            emphasis: "#e5e7eb",
-            strong: "#f9fafb",
+            subtle: "#737373",
+            DEFAULT: "#8f8f8f",
+            emphasis: "#e5e5e5",
+            strong: "#fafafa",
             inverted: "#000000",
           },
         },
@@ -190,6 +190,18 @@ export default {
     "dark:stroke-[#93c5fd]",
     "text-[#93c5fd]",
     "dark:text-[#93c5fd]",
+    // Paleta de redes (coloresRed.ts): COLOR_RED + COLOR_FALLBACK, mismas 8 variantes
+    // por color para que Tremor pueda pintarlas con valores hex arbitrarios.
+    ...["#00b3ff", "#a855f7", "#00e64d", "#ff1f3d", "#ff8a00", "#b026ff"].flatMap((hex) => [
+      `fill-[${hex}]`,
+      `dark:fill-[${hex}]`,
+      `bg-[${hex}]`,
+      `dark:bg-[${hex}]`,
+      `stroke-[${hex}]`,
+      `dark:stroke-[${hex}]`,
+      `text-[${hex}]`,
+      `dark:text-[${hex}]`,
+    ]),
     {
       pattern:
         /^(bg-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/,

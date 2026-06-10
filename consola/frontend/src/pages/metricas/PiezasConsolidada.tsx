@@ -64,7 +64,9 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  redCanonica,
   REDES_CANONICAS,
+  rendimientoRel,
 } from "@/lib/formato";
 import type { MarcaDisponible, PiezaListado } from "@/types";
 
@@ -185,22 +187,27 @@ export function PiezasConsolidada({
   const filtradas = React.useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return piezas.filter((p) => {
-      if (redFiltro !== TODAS && p.plataforma !== redFiltro) return false;
+      // La plataforma se normaliza a su forma canónica (twitter→x) antes de comparar.
+      if (redFiltro !== TODAS && redCanonica(p.plataforma) !== redFiltro) return false;
       if (lineaFiltro !== TODAS && (p.linea || SIN_LINEA) !== lineaFiltro) return false;
       if (q && !(p.titulo || "").toLowerCase().includes(q)) return false;
       return true;
     });
   }, [piezas, redFiltro, lineaFiltro, busqueda]);
 
-  // Estadísticas del conjunto FILTRADO (reflejan los filtros activos).
+  // Estadísticas del conjunto FILTRADO (reflejan los filtros activos). El engagement
+  // agregado es POOLED (interacciones ÷ vistas del conjunto), no la media de porcentajes:
+  // pondera cada pieza por sus vistas reales.
   const stats = React.useMemo(() => {
     const vistas = filtradas.map((p) => p.visualizaciones);
     const eng = filtradas.map((p) => p.engagement_pct);
+    const sumVistas = vistas.reduce((a, b) => a + b, 0);
+    const sumInteracciones = filtradas.reduce((a, p) => a + p.interacciones, 0);
     return {
       total: filtradas.length,
       vistasMedia: media(vistas),
       vistasMediana: mediana(vistas),
-      engMedia: media(eng),
+      engPooled: sumVistas > 0 ? (sumInteracciones / sumVistas) * 100 : null,
       engMediana: mediana(eng),
     };
   }, [filtradas]);
@@ -240,7 +247,7 @@ export function PiezasConsolidada({
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del periodo (de la marca activa): 5 de ejemplo, «Ver las N piezas» para todas. Filtra por línea o red; ordena por columna (Vistas desc = top del periodo, Día = orden cronológico); toca una pieza para su detalle."
+        descripcion="Todas las piezas del periodo de la marca activa. Se muestran 5; con «Mostrar más» despliegas el listado completo. Filtra por línea o red, ordena con las columnas (Vistas de mayor a menor = el top del periodo) y toca una pieza para ver su detalle."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">
@@ -292,17 +299,18 @@ export function PiezasConsolidada({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <TarjetaKpi etiqueta="Piezas" valor={numeroCompleto(stats.total)} />
             <TarjetaKpi
-              etiqueta="Vistas media · mediana"
+              etiqueta="Vistas: promedio · mediana"
               valor={`${stats.vistasMedia == null ? "—" : numeroCompacto(stats.vistasMedia)} · ${
                 stats.vistasMediana == null ? "—" : numeroCompacto(stats.vistasMediana)
               }`}
             />
             <TarjetaKpi
-              etiqueta="Engagement medio"
-              valor={stats.engMedia == null ? "—" : porcentaje(stats.engMedia)}
+              etiqueta="Engagement (agregado)"
+              valor={stats.engPooled == null ? "—" : porcentaje(stats.engPooled)}
+              titulo="Interacciones ÷ vistas del conjunto filtrado"
             />
             <TarjetaKpi
-              etiqueta="Engagement mediana"
+              etiqueta="Engagement (mediana por pieza)"
               valor={stats.engMediana == null ? "—" : porcentaje(stats.engMediana)}
             />
           </div>
@@ -354,7 +362,7 @@ export function PiezasConsolidada({
                     alinear="right"
                     className="text-right"
                   >
-                    Eng.
+                    Engagement
                   </CabeceraOrdenable>
                   {COLS_INTERACCION.map(({ clave, etiqueta, icono: Icono }) => (
                     <CabeceraOrdenable
@@ -469,24 +477,20 @@ function FilaPieza({
     pieza.formato ? nombreFormato(pieza.formato) : "",
   ].filter(Boolean);
 
+  // Accesibilidad: el control real (focusable, accionable con teclado) es el BOTÓN del
+  // título; el onClick de la fila se conserva solo como atajo de ratón. El enlace externo
+  // ya no queda anidado dentro de un control con role="button".
   return (
-    <TableRow
-      onClick={onAbrir}
-      tabIndex={0}
-      role="button"
-      aria-label={`Ver detalle de "${titulo}"`}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onAbrir();
-        }
-      }}
-      className="cursor-pointer"
-    >
+    <TableRow onClick={onAbrir} className="cursor-pointer">
       <TableCell className="max-w-[20rem]">
-        <span className="block truncate font-medium" title={titulo}>
+        <button
+          type="button"
+          onClick={onAbrir}
+          className="block max-w-full truncate text-left font-medium underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+          title={titulo}
+        >
           {titulo}
-        </span>
+        </button>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{partes.join(" · ")}</span>
           {pieza.url ? (
@@ -496,7 +500,7 @@ function FilaPieza({
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center underline-offset-4 hover:underline"
-              aria-label="Abrir el post en la red"
+              aria-label="Abrir la pieza en la red"
             >
               <ExternalLink className="h-3 w-3" aria-hidden="true" />
             </a>
@@ -504,10 +508,9 @@ function FilaPieza({
           {pieza.rendimiento_relativo != null && (
             <Badge
               variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
-              title="Vistas de la pieza ÷ mediana de vistas de su red"
+              title="Vistas de la pieza ÷ mediana de vistas de su marca×red (media del grupo si la mediana es 0)"
             >
-              {pieza.rendimiento_relativo.toLocaleString("es-MX", { maximumFractionDigits: 1 })}×
-              mediana
+              {rendimientoRel(pieza.rendimiento_relativo)}
             </Badge>
           )}
         </span>
@@ -516,7 +519,7 @@ function FilaPieza({
         {etiquetaDiaCorto(pieza.publicado)}
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {numeroCompacto(pieza.visualizaciones)}
+        {numeroCompleto(pieza.visualizaciones)}
       </TableCell>
       <TableCell className="text-right tabular-nums">
         {porcentaje(pieza.engagement_pct)}
@@ -527,6 +530,7 @@ function FilaPieza({
           <TableCell
             key={clave}
             className="hidden text-right tabular-nums sm:table-cell"
+            title={valor == null ? undefined : numeroCompleto(valor)}
           >
             {valor == null ? "—" : numeroCompacto(valor)}
           </TableCell>

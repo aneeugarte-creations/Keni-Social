@@ -32,6 +32,7 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  rendimientoRel,
   tiempoVis,
 } from "@/lib/formato";
 import type { PiezaMetrica } from "@/types";
@@ -110,16 +111,12 @@ function Contenido({ pieza }: { pieza: PiezaMetrica }) {
           <Dato etiqueta="Reproducciones" valor={granular(pieza.video_views)} />
           <Dato etiqueta="Clics enlace" valor={granular(pieza.clics_enlace)} />
           <Dato
-            etiqueta="Tiempo medio"
+            etiqueta="Tiempo promedio"
             valor={pieza.tiempo_medio_vis_s == null ? "—" : tiempoVis(pieza.tiempo_medio_vis_s)}
           />
           <Dato
             etiqueta="Rend. relativo"
-            valor={
-              pieza.rendimiento_relativo == null
-                ? "—"
-                : `${pieza.rendimiento_relativo.toFixed(1)}×`
-            }
+            valor={rendimientoRel(pieza.rendimiento_relativo)}
           />
         </dl>
       </div>
@@ -177,7 +174,7 @@ function CurvaHistorica({
         data={datos}
         index="momento"
         categories={["Vistas", "Interacciones"]}
-        colors={["indigo", "cyan"]}
+        colors={["orange", "violet"]}
         valueFormatter={numeroCompacto}
         showLegend
         showAnimation
@@ -188,7 +185,7 @@ function CurvaHistorica({
       {data.velocidad ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Kpi
-            etiqueta="En 24 h"
+            etiqueta="% en las primeras 24 h"
             valor={
               data.velocidad.pct_en_primeras_24h == null
                 ? "—"
@@ -196,18 +193,18 @@ function CurvaHistorica({
             }
           />
           <Kpi
-            etiqueta="Δ por día"
+            etiqueta="Crecimiento diario promedio"
             valor={
               data.velocidad.delta_medio_por_dia == null
                 ? "—"
                 : numeroCompacto(data.velocidad.delta_medio_por_dia)
             }
           />
-          <Kpi etiqueta="Snapshots" valor={numeroCompleto(data.velocidad.n_snapshots)} />
+          <Kpi etiqueta="Mediciones" valor={numeroCompleto(data.velocidad.n_snapshots)} />
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Velocidad no disponible: hacen falta al menos 2 snapshots.
+          Velocidad no disponible: se necesitan al menos 2 mediciones.
         </p>
       )}
     </div>

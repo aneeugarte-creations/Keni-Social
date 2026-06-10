@@ -8,7 +8,13 @@
  * El token viaja como string por toda la cadena (es también la clave de cache), así
  * que aquí solo construimos/parseamos ese string. La etiqueta legible la calcula el
  * backend (`etiqueta_rango`) y llega en cada respuesta.
+ *
+ * Los helpers de resolución (`diasDePeriodo`, `resolverPeriodo`, `periodoAnterior`,
+ * `seSolapan`) replican la semántica del backend (`RANGOS_DIAS` + `resolver_rango`):
+ * los presets rodantes son ventanas de N días que TERMINAN HOY, con el corte de día
+ * en zona CDMX (`hoyCDMX`), NUNCA en la zona del navegador.
  */
+import { hoyCDMX } from "@/lib/fecha";
 
 export type ModoTiempo = "atajos" | "mes" | "personalizado";
 
@@ -39,4 +45,101 @@ export function partesMes(token: string): { anio: number; mes: number } | null {
 export function partesRango(token: string): { desde: string; hasta: string } | null {
   const m = /^rango:(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/.exec(token);
   return m ? { desde: m[1], hasta: m[2] } : null;
+}
+
+// --- Resolución de periodos (espejo del backend) ----------------------------
+
+/**
+ * Días de cada preset (mismo mapa que `RANGOS_DIAS` del backend + semana_cerrada).
+ * Los rodantes (semana/7d/mes/30d) son ventanas que terminan HOY; `semana_cerrada`
+ * es la última semana natural cerrada (lunes→domingo), también de 7 días.
+ */
+const PRESETS_DIAS: Record<string, number> = {
+  semana: 7,
+  "7d": 7,
+  mes: 30,
+  "30d": 30,
+  semana_cerrada: 7,
+};
+
+/** Suma `n` días (puede ser negativo) a un día ISO `AAAA-MM-DD`. Anclado a mediodía
+ * UTC para que la aritmética de días nunca desplace el día calendario. */
+function sumarDias(dia: string, n: number): string {
+  const d = new Date(`${dia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Duración en días (inclusiva) del periodo que representa un token.
+ * Presets → su mapa; `mes:AAAA-MM` → días de ese mes; `rango:` → (hasta−desde)+1.
+ * Token desconocido → null.
+ */
+export function diasDePeriodo(token: string): number | null {
+  const preset = PRESETS_DIAS[token];
+  if (preset != null) return preset;
+  const mes = partesMes(token);
+  // Date.UTC(anio, mes, 0): día 0 del mes SIGUIENTE (índice 0-based) = último día del mes.
+  if (mes) return new Date(Date.UTC(mes.anio, mes.mes, 0)).getUTCDate();
+  const rango = partesRango(token);
+  if (rango) {
+    const ms =
+      Date.parse(`${rango.hasta}T12:00:00Z`) - Date.parse(`${rango.desde}T12:00:00Z`);
+    if (Number.isNaN(ms)) return null;
+    return Math.round(ms / 86_400_000) + 1;
+  }
+  return null;
+}
+
+/**
+ * Resuelve un token a sus fechas `{desde, hasta}` (ISO, ambas inclusive).
+ * Presets rodantes: ventana de N días que termina HOY (corte de día CDMX);
+ * `semana_cerrada`: lunes→domingo de la semana natural anterior; `mes:`/`rango:`:
+ * sus propias fechas. Token desconocido → null.
+ */
+export function resolverPeriodo(token: string): { desde: string; hasta: string } | null {
+  const rango = partesRango(token);
+  if (rango) return rango;
+  const mes = partesMes(token);
+  if (mes) {
+    const ultimoDia = new Date(Date.UTC(mes.anio, mes.mes, 0)).getUTCDate();
+    const mm = String(mes.mes).padStart(2, "0");
+    return { desde: `${mes.anio}-${mm}-01`, hasta: `${mes.anio}-${mm}-${String(ultimoDia).padStart(2, "0")}` };
+  }
+  const dias = PRESETS_DIAS[token];
+  if (dias == null) return null;
+  const hoy = hoyCDMX();
+  if (token === "semana_cerrada") {
+    // Lunes→domingo de la semana natural ANTERIOR a la que contiene hoy.
+    const diaSemana = new Date(`${hoy}T12:00:00Z`).getUTCDay(); // 0=domingo .. 6=sábado
+    const lunesDeEstaSemana = sumarDias(hoy, -((diaSemana + 6) % 7));
+    const domingoCerrado = sumarDias(lunesDeEstaSemana, -1);
+    return { desde: sumarDias(domingoCerrado, -6), hasta: domingoCerrado };
+  }
+  return { desde: sumarDias(hoy, -(dias - 1)), hasta: hoy };
+}
+
+/**
+ * El periodo inmediatamente ANTERIOR adyacente de la MISMA longitud que `token`.
+ * `mes:AAAA-MM` → el token del mes anterior; resto → `rango:` con la ventana de N
+ * días que termina justo antes de empezar la actual. Token desconocido → null.
+ */
+export function periodoAnterior(token: string): string | null {
+  const mes = partesMes(token);
+  if (mes) {
+    return mes.mes === 1 ? tokenMes(mes.anio - 1, 12) : tokenMes(mes.anio, mes.mes - 1);
+  }
+  const periodo = resolverPeriodo(token);
+  const dias = diasDePeriodo(token);
+  if (!periodo || dias == null) return null;
+  return tokenRango(sumarDias(periodo.desde, -dias), sumarDias(periodo.desde, -1));
+}
+
+/** ¿Se solapan los periodos que representan dos tokens? (false si alguno no resuelve). */
+export function seSolapan(a: string, b: string): boolean {
+  const pa = resolverPeriodo(a);
+  const pb = resolverPeriodo(b);
+  if (!pa || !pb) return false;
+  // Comparación lexicográfica de ISO AAAA-MM-DD = comparación cronológica.
+  return pa.desde <= pb.hasta && pb.desde <= pa.hasta;
 }

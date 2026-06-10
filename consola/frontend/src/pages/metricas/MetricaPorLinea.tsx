@@ -2,9 +2,10 @@
  * Métrica por LÍNEA de contenido (vertical) y por ORIGEN.
  *
  * Consume `/api/metricas/lineas` y muestra dos tablas: rendimiento del periodo por línea
- * y por origen, con piezas / visualizaciones / interacciones / engagement. Sigue el
- * selector de marca + rango global del dashboard (la marca viaja en forma `id_metricas`,
- * que es justo lo que devuelve `marcaParam` para el catálogo de Métricas).
+ * y por origen, con piezas / vistas / interacciones / engagement (promedio por pieza:
+ * media simple de porcentajes, como lo agrega el backend). Sigue el selector de marca +
+ * rango global del dashboard (la marca viaja en forma `id_metricas`, que es justo lo que
+ * devuelve `marcaParam` para el catálogo de Métricas).
  *
  * Estados honestos (carga / vacío / error) como el resto de Métricas: si la fuente no
  * expone líneas/orígenes para el periodo, lo dice en vez de inventar.
@@ -23,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { numeroCompacto, porcentaje } from "@/lib/formato";
+import { numeroCompleto, porcentaje } from "@/lib/formato";
 import type { FilaMetricaLinea } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -34,6 +35,14 @@ import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 type ClaveOrden = "piezas" | "visualizaciones" | "interacciones" | "engagement_pct";
+
+/** Accesores de orden por columna (constante de módulo: referencia estable entre renders). */
+const ACCESORES: Record<ClaveOrden, (f: FilaMetricaLinea) => number | null> = {
+  piezas: (f) => f.piezas,
+  visualizaciones: (f) => f.visualizaciones,
+  interacciones: (f) => f.interacciones,
+  engagement_pct: (f) => f.engagement_pct,
+};
 
 export function MetricaPorLinea({
   marcaActual = MARCA_TODAS,
@@ -55,7 +64,7 @@ export function MetricaPorLinea({
   return (
     <SeccionColapsable
       titulo="Rendimiento por línea y origen"
-      descripcion="Qué líneas de contenido y qué orígenes (interno / petición externa) rinden mejor en el periodo: piezas publicadas, visualizaciones, interacciones y engagement."
+      descripcion="Qué líneas de contenido y qué orígenes (interno / petición externa) rinden mejor en el periodo: piezas publicadas, vistas, interacciones y engagement promedio por pieza."
       icono={GitBranch}
       contentClassName="space-y-8"
     >
@@ -67,7 +76,8 @@ export function MetricaPorLinea({
           </p>
         ) : data.lineas.length === 0 && data.origenes.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            La fuente activa no expone rendimiento por línea u origen para este periodo.
+            Aún no hay rendimiento por línea u origen para este periodo (la fuente de
+            métricas no lo entrega).
           </p>
         ) : (
           <>
@@ -102,12 +112,7 @@ function TablaLineas({
 }) {
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<FilaMetricaLinea, ClaveOrden>(
     filas,
-    {
-      piezas: (f) => f.piezas,
-      visualizaciones: (f) => f.visualizaciones,
-      interacciones: (f) => f.interacciones,
-      engagement_pct: (f) => f.engagement_pct,
-    },
+    ACCESORES,
     { clave: "visualizaciones", direccion: "desc" },
   );
 
@@ -157,7 +162,7 @@ function TablaLineas({
                   onClick={() => alClicar("engagement_pct")}
                   alinear="right"
                 >
-                  Engagement
+                  Engagement (promedio por pieza)
                 </CabeceraOrdenable>
               </TableRow>
             </TableHeader>
@@ -167,10 +172,10 @@ function TablaLineas({
                   <TableCell className="font-medium">{f.nombre}</TableCell>
                   <TableCell className="text-right tabular-nums">{f.piezas}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {numeroCompacto(f.visualizaciones)}
+                    {numeroCompleto(f.visualizaciones)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {numeroCompacto(f.interacciones)}
+                    {numeroCompleto(f.interacciones)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {porcentaje(f.engagement_pct)}
@@ -181,10 +186,10 @@ function TablaLineas({
                 <TableCell>Total</TableCell>
                 <TableCell className="text-right tabular-nums">{total.piezas}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {numeroCompacto(total.visualizaciones)}
+                  {numeroCompleto(total.visualizaciones)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {numeroCompacto(total.interacciones)}
+                  {numeroCompleto(total.interacciones)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {porcentaje(total.engagement_pct)}

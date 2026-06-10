@@ -73,26 +73,34 @@ const MISMO_DIA: PiezaListado[] = [
   pieza({ id: "p2", titulo: "Noticia local", visualizaciones: 9000, linea: null }),
 ];
 
+/** Filas de DATOS de la tabla (las que tienen celdas `td`), en orden de pintado.
+ *  La fila ya no tiene role="button": el control accesible es el BOTÓN del título. */
+function filasDatos() {
+  return screen
+    .getAllByRole("row")
+    .filter((f) => within(f).queryAllByRole("cell").length > 0);
+}
+
 describe("PiezasConsolidada", () => {
-  it("muestra 'Plataforma · Línea' y la tira de estadísticas (media/mediana)", async () => {
+  it("muestra 'Plataforma · Línea' y la tira de estadísticas (promedio/mediana)", async () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
 
     expect(await screen.findByText("Gol de último minuto")).toBeInTheDocument();
     expect(screen.getByText(/Facebook · Virales/)).toBeInTheDocument();
     expect(screen.getByText(/Facebook · Sin línea/)).toBeInTheDocument();
-    // Stats del conjunto filtrado: 2 piezas; vistas media (5K) y mediana (5K) presentes.
+    // Stats del conjunto filtrado: 2 piezas; vistas promedio (5K) y mediana (5K) presentes.
     expect(screen.getByText("Piezas")).toBeInTheDocument();
-    expect(screen.getByText("Vistas media · mediana")).toBeInTheDocument();
-    expect(screen.getByText("Engagement mediana")).toBeInTheDocument();
+    expect(screen.getByText("Vistas: promedio · mediana")).toBeInTheDocument();
+    expect(screen.getByText("Engagement (agregado)")).toBeInTheDocument();
+    expect(screen.getByText("Engagement (mediana por pieza)")).toBeInTheDocument();
   });
 
   it("ordena por vistas (desc por defecto): la más vista va primero", async () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
     await screen.findByText("Gol de último minuto");
-    const filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
-    expect(within(filas[0]).getByText("Noticia local")).toBeInTheDocument(); // 9000 vistas
+    expect(within(filasDatos()[0]).getByText("Noticia local")).toBeInTheDocument(); // 9000 vistas
   });
 
   it("muestra columnas de comentarios/compartidos/guardados/clics y ordena por ellas", async () => {
@@ -112,8 +120,7 @@ describe("PiezasConsolidada", () => {
     // Orden por comentarios (clic en columna nueva = desc): la de más comentarios primero.
     // Nombre EXACTO "Comentarios" (la cabecera); los botones de fila contienen el título.
     fireEvent.click(screen.getByRole("button", { name: "Comentarios" }));
-    const filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
-    expect(within(filas[0]).getByText("Muchos comentarios")).toBeInTheDocument();
+    expect(within(filasDatos()[0]).getByText("Muchos comentarios")).toBeInTheDocument();
   });
 
   it("filtra por título con el buscador", async () => {
@@ -128,7 +135,7 @@ describe("PiezasConsolidada", () => {
     expect(screen.getByText("Noticia local")).toBeInTheDocument();
   });
 
-  it("el día es una columna ordenable más (no el eje); pagina de 50 en 50", async () => {
+  it("el día es una columna ordenable más (no el eje); pagina de 20 en 20", async () => {
     const dosDias = [
       pieza({ id: "pA", titulo: "Pieza reciente", publicado: "2026-05-21", visualizaciones: 1000 }),
       pieza({ id: "pB", titulo: "Pieza antigua", publicado: "2026-05-20", visualizaciones: 2000 }),
@@ -136,19 +143,17 @@ describe("PiezasConsolidada", () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(dosDias));
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
 
-    // Ambas piezas en la MISMA página (50 por página), ya no separadas por día.
+    // Ambas piezas en la MISMA página (20 por página), ya no separadas por día.
     expect(await screen.findByText("Pieza reciente")).toBeInTheDocument();
     expect(screen.getByText("Pieza antigua")).toBeInTheDocument();
 
     // Orden por defecto = Vistas desc → la más vista (la antigua, 2000) va primero,
     // aunque sea de un día anterior: la página 1 es el top del rango, no de un día.
-    let filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
-    expect(within(filas[0]).getByText("Pieza antigua")).toBeInTheDocument();
+    expect(within(filasDatos()[0]).getByText("Pieza antigua")).toBeInTheDocument();
 
     // El día es una columna ordenable: al ordenar por "Día" (clic = desc) manda la fecha.
     fireEvent.click(screen.getByRole("button", { name: "Día" }));
-    filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
-    expect(within(filas[0]).getByText("Pieza reciente")).toBeInTheDocument();
+    expect(within(filasDatos()[0]).getByText("Pieza reciente")).toBeInTheDocument();
   });
 
   it("en vista agregada muestra todas las marcas recibidas (sin filtro propio de marca)", async () => {
@@ -168,13 +173,15 @@ describe("PiezasConsolidada", () => {
     expect(screen.queryByLabelText("Filtrar por marca")).not.toBeInTheDocument();
   });
 
-  it("abre el detalle al clicar una fila", async () => {
+  it("abre el detalle al activar el botón del título (control accesible)", async () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
     const espia = vi.spyOn(api, "metricasPiezaHistorico").mockResolvedValue(HISTORICO_VACIO);
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
     await screen.findByText("Noticia local");
 
-    fireEvent.click(screen.getByRole("button", { name: /Ver detalle de "Noticia local"/ }));
+    // La fila ya NO es un control (sin role="button"); el botón es el título de la pieza.
+    expect(screen.queryByRole("button", { name: /Ver detalle de/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Noticia local" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     await waitFor(() => expect(espia).toHaveBeenCalledWith({ id: "p2" }, expect.anything()));
   });
