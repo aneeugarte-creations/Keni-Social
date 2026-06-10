@@ -1,30 +1,21 @@
 /**
- * Zona de imagen de una pieza: el usuario solo decide DE DÓNDE SALE EL FONDO y, si la pieza
- * tiene marca con plantilla, la placa de marca + el copy-in se componen ENCIMA casi solos.
+ * Editor de imagen para piezas sin marca: el usuario elige o sube una foto/fondo sin procesamiento
+ * de placa. Se adjunta tal cual a la pieza.
  *
- * Tres orígenes de fondo:
- *   - **Texto (S3)**: elegir un arte ya guardado (`SelectorArtes`).
+ * Tres orígenes de imagen:
+ *   - **Galería de artes**: elegir un arte ya guardado (`SelectorArtes`).
  *   - **Subir**: un archivo del equipo (`POST /api/media`).
  *   - **Generar con IA**: a partir de un prompt (`POST /api/media/generar`).
  *
- * Tras obtener el fondo por cualquiera de las tres vías, si hay `marca` se AUTO-COMPONE la
- * placa (`POST /api/imagenes/componer`, sondeada con `useGeneracion`) usando el copy-in como
- * titular, y se muestra la preview; el usuario puede reajustar titular/etiqueta y re-componer,
- * o **guardar el fondo en la galería** para reutilizarlo. Sin `marca` (uso suelto, p. ej.
- * en el tablero) el fondo se adjunta tal cual, sin componer.
- *
- * El componente es controlado: el padre guarda el `nombre` de la imagen final (vacío = sin
- * imagen) y lo incluye al guardar la pieza. El FONDO limpio se recuerda solo en esta sesión
- * (para re-componer y para guardarlo en la galería sin la placa estampada).
+ * El componente es controlado: el padre guarda el `nombre` de la imagen final (vacío = sin imagen)
+ * y lo incluye al guardar la pieza.
  */
 import { useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  ImageOff,
   ImagePlus,
   Library,
   Loader2,
-  RefreshCw,
   Save,
   Upload,
   Wand2,
@@ -42,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { nombreRed, tamanoRed } from "@/pages/publicaciones/meta";
-import type { Arte, FormatoImagen, TipoArte } from "@/types";
+import type { Arte, TipoArte } from "@/types";
 
 /** Convierte una relación tipo "16:9" o "1.91:1" en un número (ancho/alto). */
 function ratioDe(txt: string): number | null {
@@ -50,17 +41,7 @@ function ratioDe(txt: string): number | null {
   return w && h ? w / h : null;
 }
 
-/**
- * Formato de placa para una red (espejo de `estudio_imagen.formato_por_red` del backend):
- * el compositor solo entiende `vertical|feed|cuadrado`; se elige el encaje más cercano.
- */
-function formatoDeRed(red: string | undefined): FormatoImagen {
-  if (red === "tiktok") return "vertical";
-  if (red === "instagram") return "cuadrado";
-  return "feed";
-}
-
-/** Fondo limpio elegido en esta sesión (antes de estampar la placa). */
+/** Fondo elegido en esta sesión. */
 interface Fondo {
   id: string;
   url: string;
@@ -82,11 +63,8 @@ export interface EditorImagenProps {
    * "Abrir en Estudio" que lleva al Estudio de imagen preconfigurado (router state).
    */
   publicacionId?: string;
-  marca?: string;
   red?: string;
   copy?: string;
-  /** Texto que va DENTRO de la imagen (copy-in); titular al componer la placa. */
-  copyIn?: string;
 }
 
 export function EditorImagen({
@@ -96,30 +74,17 @@ export function EditorImagen({
   disabled,
   idPrefijo = "img",
   publicacionId,
-  marca,
   red,
   copy,
-  copyIn,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = React.useState("");
   // Aviso amable cuando la generación no está configurada (400).
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
-  // Galería de artes (texto S3).
+  // Galería de artes.
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
-  // Fondo limpio de ESTA sesión (lo que se compone y lo que se puede guardar sin placa).
+  // Fondo elegido en esta sesión.
   const [fondo, setFondo] = React.useState<Fondo | null>(null);
-  // Ajustes de la placa (solo si hay marca). El titular parte del copy-in de la pieza.
-  const [titular, setTitular] = React.useState(copyIn ?? "");
-  const [etiqueta, setEtiqueta] = React.useState("");
-
-  // Si cambia el copy-in de la pieza y el usuario aún no tocó el titular, lo seguimos.
-  const titularTocado = React.useRef(false);
-  React.useEffect(() => {
-    if (!titularTocado.current) setTitular(copyIn ?? "");
-  }, [copyIn]);
-
-  const componible = !!marca; // solo las piezas con marca auto-componen la placa.
   const src = urlMedia(imagenUrl || imagen);
 
   // Aspect-ratio real de la imagen (medido al cargar) frente al recomendado de la red.
@@ -129,65 +94,19 @@ export function EditorImagen({
   }, [src]);
   const tamRed = red ? tamanoRed(red) : null;
   const ratioRec = tamRed ? ratioDe(tamRed.ratio) : null;
-  // El warning de recorte es SOLO para fotos crudas (subir/texto) en piezas SIN placa de
-  // marca: cuando hay marca, la placa ya se compone en el formato propio de la red, así que la
-  // plantilla auto-compuesta no debe avisar de "recorte" (su ratio es el correcto por diseño).
+  // Warning si la relación de aspecto de la imagen cargada no coincide con el estándar de la red.
   const aspectoFueraDeEstandar =
-    !componible &&
     ratioReal != null &&
     ratioRec != null &&
     Math.abs(ratioReal - ratioRec) / ratioRec > 0.1;
 
-  // --- Composición de la placa (job de imagen en background, sondeado) --- //
-  const { generacion: genComp, ejecutando: componiendo, iniciar: iniciarComp } = useGeneracion();
-  const componer = useMutation({
-    mutationFn: (base: Fondo) =>
-      api.imagenesComponer({
-        imagen: base.id,
-        marca: marca!,
-        formato: formatoDeRed(red),
-        titular: titular.trim() || undefined,
-        etiqueta: etiqueta.trim() || undefined,
-      }),
-    onSuccess: (data) => iniciarComp(data.generacion),
-    onError: (e) => {
-      // Si la marca no tiene placa (o falla la composición), usamos el fondo tal cual.
-      toast.message("Se usó el fondo sin placa de marca.", { description: mensajeError(e) });
-      if (fondo) onCambio(fondo.id, fondo.url);
-    },
-  });
-
-  // Al completar la composición, fijamos la imagen compuesta como la de la pieza.
-  const compTerminal = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    if (!genComp || genComp.id === compTerminal.current) return;
-    if (genComp.estado === "completado") {
-      compTerminal.current = genComp.id;
-      const r = genComp.resultado;
-      if (r?.id && r?.url) {
-        onCambio(r.id, r.url);
-        toast.success("Marca aplicada");
-      }
-    } else if (genComp.estado === "error") {
-      compTerminal.current = genComp.id;
-      toast.message("Se usó el fondo sin placa de marca.", { description: genComp.error || "" });
-      if (fondo) onCambio(fondo.id, fondo.url);
-    }
-  }, [genComp, onCambio, fondo]);
-
-  /** Aplica un fondo recién elegido: lo recuerda y, si hay marca, compone la placa encima. */
+  /** Aplica un fondo recién elegido: lo recuerda y lo adjunta. */
   const aplicarFondo = React.useCallback(
     (base: Fondo) => {
       setFondo(base);
-      if (componible) {
-        componer.mutate(base);
-      } else {
-        onCambio(base.id, base.url); // uso suelto: se adjunta tal cual.
-      }
+      onCambio(base.id, base.url);
     },
-    // `componer` es estable (useMutation); lo omitimos para no recrear el callback en cada render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [componible, onCambio],
+    [onCambio],
   );
 
   // --- Subir un archivo como fondo --- //
@@ -233,7 +152,7 @@ export function EditorImagen({
   const guardar = useMutation({
     mutationFn: () => {
       if (!fondo) throw new Error("Elige primero un fondo.");
-      return api.guardarArte({ objeto: fondo.id, marca: marca || undefined, tipo: fondo.tipo });
+      return api.guardarArte({ objeto: fondo.id, tipo: fondo.tipo });
     },
     onSuccess: () => toast.success("Fondo guardado en la galería"),
     onError: (e) => toast.error(mensajeError(e)),
@@ -258,9 +177,7 @@ export function EditorImagen({
   const trabajando =
     subir.isPending ||
     generar.isPending ||
-    generandoIA ||
-    componer.isPending ||
-    componiendo;
+    generandoIA;
   const ocupado = trabajando || !!disabled;
 
   const fuente = (
@@ -288,17 +205,31 @@ export function EditorImagen({
         </Label>
         {publicacionId && (
           <Button
-            asChild
+            asChild={!disabled}
             type="button"
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-xs text-muted-foreground"
             disabled={!!disabled}
+            onClick={
+              disabled
+                ? undefined
+                : () => {
+                    // Link navigation handled by asChild when not disabled
+                  }
+            }
           >
-            <Link to="/contenido/estudio" state={{ publicacionId, marca, red, copy, imagen: imagen || undefined }}>
-              <Wand2 className="mr-1 h-3.5 w-3.5" />
-              Abrir en Estudio
-            </Link>
+            {disabled ? (
+              <span>
+                <Wand2 className="mr-1 h-3.5 w-3.5" />
+                Abrir en Estudio
+              </span>
+            ) : (
+              <Link to="/contenido/estudio" state={{ publicacionId, red, copy, imagen: imagen || undefined }}>
+                <Wand2 className="mr-1 h-3.5 w-3.5" />
+                Abrir en Estudio
+              </Link>
+            )}
           </Button>
         )}
       </div>
@@ -323,11 +254,6 @@ export function EditorImagen({
               }
               className="max-h-56 w-auto rounded-md border border-border object-contain"
             />
-            {componiendo && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/60">
-                <Loader2 className="h-5 w-5 animate-spin" />
-              </div>
-            )}
             <Button
               type="button"
               variant="destructive"
@@ -352,73 +278,8 @@ export function EditorImagen({
             </p>
           )}
 
-          {/* Ajustes de la placa: solo cuando hay un fondo de esta sesión y la marca compone. */}
-          {componible && fondo && (
-            <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-2.5">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`${idPrefijo}-titular`} className="text-xs">
-                    Titular en la placa
-                  </Label>
-                  <Input
-                    id={`${idPrefijo}-titular`}
-                    value={titular}
-                    onChange={(e) => {
-                      titularTocado.current = true;
-                      setTitular(e.target.value);
-                    }}
-                    placeholder="Texto del titular…"
-                    disabled={ocupado}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`${idPrefijo}-etiqueta`} className="text-xs">
-                    Etiqueta <span className="text-muted-foreground">(vacío = la de marca)</span>
-                  </Label>
-                  <Input
-                    id={`${idPrefijo}-etiqueta`}
-                    value={etiqueta}
-                    onChange={(e) => setEtiqueta(e.target.value)}
-                    placeholder="ÚLTIMA HORA…"
-                    disabled={ocupado}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fondo && componer.mutate(fondo)}
-                  disabled={ocupado}
-                >
-                  {componiendo ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                  Re-componer
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => guardar.mutate()}
-                  disabled={ocupado || guardar.isPending}
-                >
-                  {guardar.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Save className="h-3.5 w-3.5" />
-                  )}
-                  Guardar fondo en texto
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Sin marca: aún se puede guardar el fondo (sin placa) para reutilizarlo. */}
-          {!componible && fondo && (
+          {/* Guardar el fondo para reutilizarlo en la galería. */}
+          {fondo && (
             <Button
               type="button"
               variant="outline"
@@ -431,7 +292,7 @@ export function EditorImagen({
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              Guardar en texto
+              Guardar en la galería
             </Button>
           )}
 
@@ -446,7 +307,6 @@ export function EditorImagen({
         open={galeriaAbierta}
         onCerrar={() => setGaleriaAbierta(false)}
         onSeleccionar={elegirArte}
-        marca={marca}
       />
     </div>
   );
@@ -489,7 +349,7 @@ function FuenteFondo({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" onClick={onTexto} disabled={ocupado}>
           <Library className="h-4 w-4" />
-          Texto
+          Galería
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onSubir} disabled={ocupado}>
           {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -528,12 +388,6 @@ function FuenteFondo({
       {avisoGenerar && (
         <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
           {avisoGenerar}
-        </p>
-      )}
-      {!compacto && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ImageOff className="h-3.5 w-3.5" />
-          La placa de marca y el copy-in se aplican encima automáticamente.
         </p>
       )}
     </div>

@@ -393,7 +393,6 @@ export function DialogoEditar({
                 publicacionId={publicacion.id}
                 red={publicacion.red}
                 copy={contenido}
-                copyIn={copyIn}
               />
             ) : null}
 
