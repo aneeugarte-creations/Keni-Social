@@ -11,10 +11,12 @@ import { useQuery } from "@tanstack/react-query";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { DialogoImportarCalendario } from "@/pages/publicaciones/DialogoImportarCalendario";
 import { GestionCadencia } from "@/pages/publicaciones/GestionCadencia";
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
+import { PanelLineasPlan } from "@/pages/publicaciones/PanelLineasPlan";
 
 /**
  * Página "Programación" (`/operacion/programacion`): la rejilla mensual de publicaciones
@@ -26,6 +28,7 @@ import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones
  * el aviso "sin cadencia" de la lista de contenido).
  */
 export default function CalendarioContenido() {
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [importarAbierto, setImportarAbierto] = React.useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [cadenciaAbierto, setCadenciaAbierto] = React.useState(
@@ -63,6 +66,14 @@ export default function CalendarioContenido() {
           </ItemMenu>
         </MenuAcciones>
       </AccionesPagina>
+
+      {/* El pulso del plan diario por línea (generados · publicados / objetivo): vive aquí,
+          junto a la parrilla que alimenta. Solo con marca activa y plan configurado. */}
+      {marcaActiva && (
+        <div className="mb-4">
+          <PanelLineasPlan marca={marcaActiva} nombre={nombreActiva ?? marcaActiva} />
+        </div>
+      )}
 
       <GestionPublicaciones modo="calendario" />
 

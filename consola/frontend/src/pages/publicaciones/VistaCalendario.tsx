@@ -261,24 +261,9 @@ export function VistaCalendario({
     reprogramar.mutate({ id: idArrastrada, iso: destino });
   }
 
-  if (programadas.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <CalendarOff className="h-6 w-6" />
-          </div>
-          <div className="space-y-1">
-            <p className="font-medium">No hay publicaciones programadas</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Pon una pieza en estado “Programado” con su fecha y hora (o deja que el motor la
-              reparta) para verla aquí.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  // OJO: SIN early-return cuando no hay programadas — el panel de programación lleva más
+  // que las piezas (rejilla del mes, navegación, y arriba el plan por línea y la cadencia):
+  // debe verse siempre. El vacío se señala con un aviso inline sobre la rejilla.
 
   // --- Cabecera: toggle de vista + navegación contextual ------------------------------------
   const fmtMes = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" });
@@ -315,6 +300,13 @@ export function VistaCalendario({
   return (
     <Card>
       <CardContent className="space-y-3 py-4">
+        {programadas.length === 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            <CalendarOff className="h-4 w-4 shrink-0" />
+            No hay publicaciones programadas todavía: aprueba una pieza (o deja que el motor
+            la reparta) y aparecerá en su hueco.
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="inline-flex overflow-hidden rounded-md border border-border">
