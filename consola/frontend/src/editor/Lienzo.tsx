@@ -38,7 +38,7 @@ import { toast } from "sonner";
 import { api, urlMedia } from "@/lib/api";
 
 import { CapaNodo } from "./capas/CapaNodo";
-import type { Capa, CapaImagen, CapaOverlay, CapaTexto } from "./documento";
+import type { Capa, CapaImagen, CapaOverlay, CapaTexto, Crop } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 import { leerDimensionesUrl } from "./useImagen";
@@ -111,10 +111,77 @@ export function Lienzo({
   const { w, h } = documento.formato;
   // Capa en modo reencuadre (solo imágenes): arrastrar mueve el FOCO, la rueda hace ZOOM.
   const capaReencuadre = reencuadreId ? documento.capas.find((c) => c.id === reencuadreId && c.tipo === "imagen") ?? null : null;
-  // Capa en modo RECORTE visual (solo imágenes): tiradores que editan `crop`. Excluyente con reencuadre.
-  const capaRecorte = recorteId ? documento.capas.find((c) => c.id === recorteId && c.tipo === "imagen") ?? null : null;
+  // MODO RECORTE estilo Canva (solo imágenes): además del modo controlado por el padre (prop
+  // `recorteId`, p. ej. desde el inspector), el Lienzo entra POR SÍ MISMO con DOBLE CLIC sobre una
+  // capa de imagen (estado interno). Excluyente con reencuadre (el reencuadre manda si coinciden).
+  const [recorteInternoId, setRecorteInternoId] = useState<string | null>(null);
+  const recorteActivoId = recorteId ?? recorteInternoId;
+  const capaRecorte =
+    !capaReencuadre && recorteActivoId
+      ? documento.capas.find((c) => c.id === recorteActivoId && c.tipo === "imagen") ?? null
+      : null;
   // Cualquier modo de edición de imagen oculta los tiradores normales del Transformer.
   const modoImagen = capaReencuadre ?? capaRecorte;
+
+  // SESIÓN de recorte: instantánea al ENTRAR en el modo, para que "Cancelar"/Esc restaure el crop
+  // de entrada y para que "Hecho"/Enter colapse todos los gestos del modo en UN paso de deshacer
+  // (como Canva). `pasadoLen` ancla el historial al estado de entrada.
+  const sesionRecorte = useRef<{ id: string; crop?: Crop; pasadoLen: number } | null>(null);
+  useEffect(() => {
+    if (!capaRecorte) {
+      sesionRecorte.current = null;
+      return;
+    }
+    if (sesionRecorte.current?.id === capaRecorte.id) return;
+    const st = store.getState();
+    const c = st.documento.capas.find((x) => x.id === capaRecorte.id) as CapaImagen | undefined;
+    sesionRecorte.current = {
+      id: capaRecorte.id,
+      crop: c?.crop ? { ...c.crop } : undefined,
+      pasadoLen: st.pasado.length,
+    };
+  }, [capaRecorte, store]);
+  // Si la capa en recorte interno desaparece (deshacer/borrado), el modo se cierra solo.
+  useEffect(() => {
+    if (recorteInternoId && !documento.capas.some((c) => c.id === recorteInternoId && c.tipo === "imagen")) {
+      setRecorteInternoId(null);
+    }
+  }, [recorteInternoId, documento]);
+
+  const salirRecorte = () => {
+    if (recorteInternoId) setRecorteInternoId(null);
+    if (recorteId) onSalirRecorte?.();
+  };
+  // "Hecho"/Enter: confirma el recorte. Colapsa los gestos del modo en UN paso de deshacer
+  // (deshacer tras confirmar devuelve el crop de ENTRADA, no los estados intermedios).
+  const confirmarRecorte = () => {
+    const ses = sesionRecorte.current;
+    if (ses) {
+      store.setState((s) =>
+        s.pasado.length > ses.pasadoLen + 1 ? { pasado: s.pasado.slice(0, ses.pasadoLen + 1) } : {},
+      );
+    }
+    salirRecorte();
+  };
+  // "Cancelar"/Esc: restaura el crop de entrada y DESCARTA los pasos de historial del modo.
+  const cancelarRecorte = () => {
+    const ses = sesionRecorte.current;
+    if (ses) {
+      store.setState((s) => ({
+        documento: {
+          ...s.documento,
+          capas: s.documento.capas.map((c) => {
+            if (c.id !== ses.id || c.tipo !== "imagen") return c;
+            if (ses.crop) return { ...c, crop: { ...ses.crop } } as Capa;
+            const { crop: _omit, ...resto } = c as CapaImagen;
+            return resto as Capa;
+          }),
+        },
+        pasado: s.pasado.slice(0, ses.pasadoLen),
+      }));
+    }
+    salirRecorte();
+  };
 
   // Mide el espacio disponible para AJUSTAR el lienzo (responsive: llena el ancho en móvil y el
   // centro en escritorio). Cae a las props si aún no se ha medido.
@@ -267,7 +334,16 @@ export function Lienzo({
   zoomApi.current = { acercar, alejar, ajustar: ajustarPantalla, real: zoomReal };
 
   // Atajos de teclado (ignora si se está escribiendo en un input/textarea). Hook extraído.
-  useAtajosTeclado({ store, zoom: zoomApi, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte });
+  // El modo recorte (prop O interno) cancela con Esc y confirma con Enter.
+  useAtajosTeclado({
+    store,
+    zoom: zoomApi,
+    reencuadreId,
+    onSalirReencuadre,
+    recorteId: capaRecorte ? recorteActivoId : null,
+    onCancelarRecorte: cancelarRecorte,
+    onConfirmarRecorte: confirmarRecorte,
+  });
 
   // Zoom con ctrl/cmd + rueda, CENTRADO EN EL CURSOR: calcula el punto del documento bajo el puntero
   // y deja anotada un ancla; tras re-renderizar con la nueva escala, el efecto de abajo ajusta el
@@ -327,6 +403,28 @@ export function Lienzo({
   const cerrarEdicion = (guardar: boolean) => {
     if (editando && guardar) store.getState().actualizar(editando.id, { texto: textoEdit } as Partial<Capa>);
     setEditando(null);
+  };
+
+  // DOBLE CLIC sobre una capa (estilo Canva): en TEXTO abre la edición en línea; en IMAGEN entra en
+  // MODO RECORTE. Sube hasta el hijo directo de la Layer (las capas de primer nivel llevan ahí su
+  // id; el target del doble clic puede ser un nodo interior, p. ej. el Rect de hit de la imagen).
+  const onDobleClic = (e: Konva.KonvaEventObject<MouseEvent | Event>) => {
+    const stage = stageRef.current;
+    if (!stage || espacioRef.current || modoImagen) return;
+    let n: Konva.Node | null = e.target === stage ? null : e.target;
+    while (n && !(n.getParent() instanceof Konva.Layer)) n = n.getParent();
+    const id = n?.id() || null;
+    if (!id) return;
+    const capa = documento.capas.find((c) => c.id === id);
+    if (!capa) return;
+    if (capa.tipo === "texto") return abrirEdicionTexto(id);
+    if (capa.tipo === "imagen") {
+      const c = capa as CapaImagen;
+      // Solo si hay imagen EFECTIVA que recortar: foto real, o la muestra activa sobre el hueco.
+      if (!c.objeto && !(muestraFoto && c.es_foto)) return;
+      store.getState().seleccionar(id);
+      setRecorteInternoId(id);
+    }
   };
 
   // El textarea de edición inline se posiciona en píxeles de pantalla al ABRIR; si cambia la escala
@@ -749,8 +847,8 @@ export function Lienzo({
           onMouseOver={onMouseOverStage}
           onMouseLeave={() => setHoverId(null)}
           onWheel={onWheel}
-          onDblClick={(e) => { const id = e.target.id?.(); if (id) abrirEdicionTexto(id); }}
-          onDblTap={(e) => { const id = e.target.id?.(); if (id) abrirEdicionTexto(id); }}
+          onDblClick={onDobleClic}
+          onDblTap={onDobleClic}
           onDragStart={onDragStart}
           onDragMove={onDragMove}
           onDragEnd={onDragEnd}
@@ -875,8 +973,8 @@ export function Lienzo({
       {/* Banner de reencuadre. */}
       {capaReencuadre && <BannerReencuadre onListo={onSalirReencuadre} />}
 
-      {/* Banner de recorte (crop visual). */}
-      {capaRecorte && <BannerRecorte onListo={onSalirRecorte} />}
+      {/* Banner de recorte (estilo Canva): Hecho confirma (Enter), Cancelar restaura (Esc). */}
+      {capaRecorte && <BannerRecorte onListo={confirmarRecorte} onCancelar={cancelarRecorte} />}
 
       {/* Edición de texto en línea. */}
       {editando && (

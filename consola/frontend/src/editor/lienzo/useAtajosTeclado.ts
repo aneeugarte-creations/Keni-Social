@@ -27,14 +27,17 @@ export function useAtajosTeclado({
   reencuadreId,
   onSalirReencuadre,
   recorteId,
-  onSalirRecorte,
+  onCancelarRecorte,
+  onConfirmarRecorte,
 }: {
   store: StoreEditor;
   zoom: RefObject<ZoomApi>;
   reencuadreId: string | null;
   onSalirReencuadre?: () => void;
   recorteId: string | null;
-  onSalirRecorte?: () => void;
+  // Modo recorte estilo Canva: Esc CANCELA (restaura el crop de entrada) y Enter CONFIRMA (Hecho).
+  onCancelarRecorte?: () => void;
+  onConfirmarRecorte?: () => void;
 }) {
   const ultimoNudgeRef = useRef<number>(0);
 
@@ -68,10 +71,16 @@ export function useAtajosTeclado({
         e.preventDefault();
         return zoom.current?.real();
       }
+      // Enter CONFIRMA el modo recorte (= botón "Hecho" del banner), estilo Canva.
+      if (recorteId && e.key === "Enter") {
+        e.preventDefault();
+        return onConfirmarRecorte?.();
+      }
       if (e.key === "Escape") {
-        // CASCADA estilo Canva: cerrar modo de imagen (recorte/reencuadre) → deseleccionar →
-        // (si no hay nada que hacer aquí) dejar pasar para que el editor cierre paneles/overlays.
-        if (recorteId) return onSalirRecorte?.();
+        // CASCADA estilo Canva: cancelar el recorte (restaura el crop de entrada) → cerrar el
+        // reencuadre → deseleccionar → (si no hay nada que hacer aquí) dejar pasar para que el
+        // editor cierre paneles/overlays.
+        if (recorteId) return onCancelarRecorte?.();
         if (reencuadreId) return onSalirReencuadre?.();
         if (st.seleccion || st.seleccionMulti.length > 0) return st.seleccionar(null);
         return;
@@ -163,5 +172,5 @@ export function useAtajosTeclado({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, zoom, reencuadreId, onSalirReencuadre, recorteId, onSalirRecorte]);
+  }, [store, zoom, reencuadreId, onSalirReencuadre, recorteId, onCancelarRecorte, onConfirmarRecorte]);
 }
