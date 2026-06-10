@@ -66,25 +66,30 @@ def test_produccion_dia_contrato_y_embudo(entorno):
 
 
 def test_produccion_dia_lineas_del_plan(entorno, monkeypatch):
-    """`por_categoria` (monitor de líneas): producido vs objetivo por categoría del plan."""
+    """`por_categoria` (monitor de líneas): GENERADOS y PUBLICADOS vs objetivo por categoría.
+
+    El conteo lee `contenido.categoria` (persistida al promover/usar/reciclar): estable
+    aunque el GC del pool borre el cluster de origen.
+    """
     monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
     cli = _cli()
-    pieza = _crear(cli, titulo="Nacional promovida")
-    plat = repos.obtener_contenido_plataforma(pieza["id"])
-    repos.upsert_noticia_cluster({
-        "id": "cl-prod", "titulo": "Nacional promovida", "resumen": "", "marca": "unotv",
-        "categoria": "mx", "geo": "MX", "clave": "t:cl-prod", "n_items": 1, "n_fuentes": 2,
-        "idiomas": ["es"], "senal": 0, "score": 0.7, "breaking": 0,
-        "primer_visto": "2026-06-01T00:00:00", "ultimo_visto": "2026-06-01T00:00:00",
-        "estado": "usado", "verificacion": "corroborada",
-    })
-    repos.actualizar_noticia_cluster("cl-prod", contenido_id=plat["contenido_id"])
+    # Dos generados de mx; uno llega a PUBLICADO.
+    repos.crear_contenido(clase="contenido", titulo="Nacional 1", marca="unotv", categoria="mx")
+    publicado = repos.crear_contenido(
+        clase="contenido", titulo="Nacional 2", marca="unotv", categoria="mx"
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=publicado["id"], red="x", copy="C", estado="publicado"
+    )
+    # Una manual sin categoría: fuera del plan (no cuenta en ninguna línea).
+    _crear(cli, titulo="Manual sin línea")
 
     data = _cli().get("/api/produccion/dia?marca=unotv").json()
 
     lineas = {l["categoria"]: l for l in data["por_categoria"]}
-    assert lineas["mx"]["producido"] == 1 and lineas["mx"]["objetivo"] == 4
-    assert lineas["breaking"]["producido"] == 0 and lineas["breaking"]["objetivo"] == 2
+    assert lineas["mx"]["generados"] == 2 and lineas["mx"]["publicados"] == 1
+    assert lineas["mx"]["objetivo"] == 4
+    assert lineas["breaking"]["generados"] == 0 and lineas["breaking"]["objetivo"] == 2
 
 
 def test_produccion_dia_filtra_por_marca(entorno):

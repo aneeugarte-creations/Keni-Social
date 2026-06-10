@@ -30,6 +30,7 @@ __all__ = [
     "listar_contenido_vencido",
     "titulos_recientes_marca",
     "contar_contenido_origen_desde",
+    "resumen_plan_por_categoria",
     "existe_publicado_similar",
     "publicados_marca_cache",
     "existe_publicado_similar_en_cache",
@@ -62,6 +63,10 @@ _COLS_CONTENIDO = (
     "autor_nombre",
     "origen",
     "notas",
+    # CATEGORÍA del plan editorial con la que nació ('' = sin línea / alta manual). Copiada
+    # de la historia al promover ('breaking' si lo era) o 'evergreen' al reciclar; estable
+    # frente al GC del pool. La consumen el conteo del plan y los horarios por categoría.
+    "categoria",
     "tipo_contenido",
     # FORMATO de la pieza (foto|video): decide a qué redes va (`redes.redes_de_formato`).
     "formato",
@@ -112,6 +117,10 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     "responsable_nombre",
     "origen",
     "notas",
+    # CATEGORÍA del plan editorial con la que nació ('' = sin línea / alta manual). Copiada
+    # de la historia al promover ('breaking' si lo era) o 'evergreen' al reciclar; estable
+    # frente al GC del pool. La consumen el conteo del plan y los horarios por categoría.
+    "categoria",
     "tipo_contenido",
     # FORMATO de la pieza (foto|video): editable para poder pasar de foto a video más adelante.
     "formato",
@@ -172,6 +181,7 @@ def crear_contenido(
     responsable: dict[str, str] | None = None,
     origen: str = "",
     notas: str = "",
+    categoria: str = "",
     tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
     formato: str = redes.FORMATO_FOTO,
     id_post_metricool: str = "",
@@ -200,7 +210,7 @@ def crear_contenido(
         evento_id=evento_id, programa=programa, prioridad=prioridad, estado=estado,
         fecha_objetivo=fecha_objetivo, hora_objetivo=hora_objetivo,
         fecha_entrega=fecha_entrega, autor=autor, responsable=responsable, origen=origen,
-        notas=notas, tipo_contenido=tipo_contenido, formato=formato,
+        notas=notas, categoria=categoria, tipo_contenido=tipo_contenido, formato=formato,
         id_post_metricool=id_post_metricool, senal_viralidad=senal_viralidad,
         qa_veredicto=qa_veredicto, qa_hallazgos=qa_hallazgos,
         copy_pendiente=copy_pendiente, fecha_fuente=fecha_fuente, url_fuente=url_fuente,
@@ -248,6 +258,7 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         "autor_nombre": autor.get("usuario", "") or "",
         "origen": campos.get("origen") or "",
         "notas": campos.get("notas") or "",
+        "categoria": (campos.get("categoria") or "").strip().lower(),
         "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
         # FORMATO de la pieza (foto|video): decide las redes destino (`redes.redes_de_formato`).
         # Se normaliza (vacío/desconocido -> 'foto') para no persistir valores fuera de catálogo.
@@ -458,6 +469,35 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     finally:
         con.close()
     return [(f["titulo"] or "") for f in filas]
+
+
+def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str, int]]:
+    """GENERADOS y PUBLICADOS por LÍNEA del plan desde `desde_iso`: {cat: {generados, publicados}}.
+
+    Cuenta el `contenido` de la marca con `categoria` propia (nacido de una historia del plan
+    o del reciclaje evergreen; '' = alta manual, fuera del plan) creado en la ventana.
+    PUBLICADOS = de esos, cuántos tienen ya alguna pieza por red en estado 'publicado'.
+    Es el contador del plan diario: lo leen la admisión (cupos restantes) y el monitor
+    («generados · publicados / objetivo»). `clase='contenido'` excluye tareas.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT c.categoria AS cat, COUNT(*) AS generados, "
+            "SUM(CASE WHEN EXISTS (SELECT 1 FROM contenido_plataforma p "
+            "WHERE p.contenido_id = c.id AND p.estado = 'publicado') THEN 1 ELSE 0 END) "
+            "AS publicados "
+            "FROM contenido c "
+            "WHERE c.marca = ? AND c.clase = 'contenido' AND c.categoria <> '' "
+            "AND c.creado >= ? GROUP BY c.categoria",
+            (marca, desde_iso),
+        ).fetchall()
+    finally:
+        con.close()
+    return {
+        str(f["cat"]): {"generados": int(f["generados"]), "publicados": int(f["publicados"] or 0)}
+        for f in filas
+    }
 
 
 def contar_contenido_origen_desde(marca: str, origen: str, desde_iso: str) -> int:

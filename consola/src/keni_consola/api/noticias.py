@@ -283,9 +283,14 @@ async def usar(request: Request) -> Response:
         # Deja el enlace de origen en la nota para trazar la fuente.
         descripcion = (descripcion + f"\n\nFuente: {item['url']}").strip()
 
+    from ..pipeline_contenido import _ingesta as _pc_ingesta
+
     contenido = repos.crear_contenido(
         clase="contenido",
         flujo="importante",
+        # LÍNEA del plan con la que nació ('breaking' si lo era): la curación humana también
+        # consume su cupo del plan y hereda los horarios de su categoría.
+        categoria=_pc_ingesta.categoria_efectiva(cluster),
         titulo=titulo[:_MAX_TITULO],
         descripcion=descripcion[:_MAX_TEXTO],
         marca=marca,
@@ -584,9 +589,14 @@ async def usar_historia(request: Request) -> Response:
     url_fuente = items[0].get("url_canonica") if items else ""
     fecha_fuente = cluster.get("primer_visto") or ""
 
+    from ..pipeline_contenido import _ingesta as _pc_ingesta
+
     contenido = repos.crear_contenido(
         clase="contenido",
         flujo="importante",
+        # LÍNEA del plan con la que nació ('breaking' si lo era): la curación humana también
+        # consume su cupo del plan y hereda los horarios de su categoría.
+        categoria=_pc_ingesta.categoria_efectiva(cluster),
         titulo=titulo[:_MAX_TITULO],
         descripcion=descripcion[:_MAX_TEXTO],
         marca=marca,

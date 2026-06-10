@@ -354,36 +354,52 @@ function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: string }) {
       <CardContent className="p-4 pt-2">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {lineas.map((l) => {
-            const completo = l.objetivo != null && l.producido >= l.objetivo;
-            const exceso = l.objetivo != null && l.producido > l.objetivo;
+            const completo = l.objetivo != null && l.generados >= l.objetivo;
+            const exceso = l.objetivo != null && l.generados > l.objetivo;
             return (
               <div key={l.categoria} className="rounded-lg border border-border/60 p-3">
                 <div className="text-xs text-muted-foreground">
                   {ETIQUETA_LINEA[l.categoria] ??
                     l.categoria.charAt(0).toUpperCase() + l.categoria.slice(1)}
                 </div>
+                {/* Los TRES números de la línea: generados · publicados / objetivo. */}
                 <div
                   className={cn(
                     "mt-1 text-lg font-semibold tabular-nums",
                     exceso ? "text-amber-600" : completo ? "text-emerald-600" : undefined,
                   )}
                 >
-                  {l.producido}
+                  {l.generados}
                   <span className="text-sm font-normal text-muted-foreground">
                     {l.objetivo != null ? ` / ${l.objetivo}` : " (fuera de plan)"}
                   </span>
                 </div>
+                <div className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                  {l.publicados} publicado{l.publicados === 1 ? "" : "s"}
+                </div>
                 {l.objetivo != null && (
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        "h-full rounded-full",
-                        exceso ? "bg-amber-500" : completo ? "bg-emerald-500" : "bg-sky-500",
-                      )}
-                      style={{
-                        width: `${Math.min(100, (l.producido / Math.max(1, l.objetivo)) * 100)}%`,
-                      }}
-                    />
+                    {/* Barra doble: generados (claro) y, encima, publicados (sólido). */}
+                    <div className="relative h-full">
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 left-0 rounded-full",
+                          exceso ? "bg-amber-500/40" : completo ? "bg-emerald-500/40" : "bg-sky-500/40",
+                        )}
+                        style={{
+                          width: `${Math.min(100, (l.generados / Math.max(1, l.objetivo)) * 100)}%`,
+                        }}
+                      />
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 left-0 rounded-full",
+                          exceso ? "bg-amber-500" : completo ? "bg-emerald-500" : "bg-sky-500",
+                        )}
+                        style={{
+                          width: `${Math.min(100, (l.publicados / Math.max(1, l.objetivo)) * 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -391,8 +407,9 @@ function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: string }) {
           })}
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Ventana móvil de 24 h, el mismo conteo que usa la admisión del plan. «Evergreen» se
-          llena desde Reciclaje (manual); «Breaking» también cuenta lo empujado desde el panel.
+          Generados · publicados / objetivo, en ventana móvil de 24 h (el mismo conteo que la
+          admisión del plan). «Evergreen» se llena desde Reciclaje; «Breaking» también cuenta lo
+          empujado desde el panel.
         </p>
       </CardContent>
     </Card>

@@ -195,10 +195,11 @@ export interface RespuestaPriorizarCola {
   gen_id: string;
 }
 
-/** Una línea del plan editorial diario: producido vs objetivo en la ventana. */
+/** Una línea del plan editorial diario: generados/publicados vs objetivo en la ventana. */
 export interface ProduccionLinea {
   categoria: string;
-  producido: number;
+  generados: number;
+  publicados: number;
   objetivo: number | null;
 }
 

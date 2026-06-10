@@ -156,11 +156,6 @@ def categoria_promovida_de_contenido(contenido_id: str) -> str:
     return db.categoria_promovida_de_contenido(contenido_id)
 
 
-def contar_promovidos_por_categoria(marca: str, desde_iso: str) -> dict[str, int]:
-    """Historias promovidas por categoría desde un instante (plan diario). Delegado en `db.py`."""
-    return db.contar_promovidos_por_categoria(marca, desde_iso)
-
-
 def registrar_sondeo_feed(
     feed_id: str,
     *,

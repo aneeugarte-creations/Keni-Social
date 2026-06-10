@@ -112,30 +112,6 @@ def listar_fuentes_rss(
     return [_fila_a_fuente_rss(f) for f in filas]
 
 
-def contar_promovidos_por_categoria(marca: str, desde_iso: str) -> dict[str, int]:
-    """Historias PROMOVIDAS a contenido por `marca` desde `desde_iso`, agrupadas por categoría.
-
-    Cuenta los clusters ya enlazados a un contenido (`contenido_id`) cuyo contenido se CREÓ en
-    la ventana — cubre tanto la promoción automática (CI) como el «usar historia» del panel.
-    Una historia BREAKING cuenta como 'breaking' sea cual sea la categoría de su feed: los
-    slots de breaking del plan absorben la última hora, también la empujada a mano. Para el
-    plan editorial diario (`cupos_categoria_restantes`).
-    """
-    con = _conectar()
-    try:
-        filas = con.execute(
-            "SELECT CASE WHEN n.breaking = 1 THEN 'breaking' "
-            "ELSE LOWER(COALESCE(n.categoria, '')) END AS cat, COUNT(*) AS n "
-            "FROM noticias_clusters n JOIN contenido c ON c.id = n.contenido_id "
-            "WHERE n.marca = ? AND n.contenido_id <> '' AND c.creado >= ? "
-            "GROUP BY 1",
-            (marca, desde_iso),
-        ).fetchall()
-    finally:
-        con.close()
-    return {str(f["cat"]): int(f["n"]) for f in filas}
-
-
 def categoria_promovida_de_contenido(contenido_id: str) -> str:
     """Categoría del PLAN con la que nació un contenido promovido de una historia.
 

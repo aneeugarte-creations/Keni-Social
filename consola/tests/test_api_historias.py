@@ -229,6 +229,9 @@ def test_usar_crea_borrador_con_origen_historia_y_marca_usado(cliente):
     assert cont["origen"] == "historia"
     assert cont["flujo"] == "importante"
     assert cont["titulo"] == "Historia para usar"
+    # La LÍNEA del plan queda persistida en el contenido (la categoría de la historia):
+    # cuenta en el cupo diario y hereda los horarios de su categoría.
+    assert cont["categoria"] == "mx"
     # El cluster quedó usado + enlazado.
     refrescado = repos.obtener_noticia_cluster("c1")
     assert refrescado["estado"] == "usado"

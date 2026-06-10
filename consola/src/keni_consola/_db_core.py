@@ -633,6 +633,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     # `menciones` se anadio despues del CREATE original: ALTER idempotente para BD existentes.
     "ALTER TABLE contenido_comentarios ADD COLUMN IF NOT EXISTS menciones TEXT NOT NULL DEFAULT ''",
+    # CATEGORÍA del plan editorial con la que nació el contenido ('' = sin línea: alta manual).
+    # Copiada de la HISTORIA al promover/usar ('breaking' si lo era) o 'evergreen' al reciclar:
+    # la relación fuente→tipo de contenido queda EN la pieza (el GC del pool borra clusters
+    # viejos y el join dejaba de contar/programar bien). La leen el conteo del plan diario y
+    # los horarios por categoría.
+    "ALTER TABLE contenido ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT ''",
     "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON contenido_comentarios (contenido_id)",
     "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON contenido_comentarios (plataforma_id)",
     # Historial de versiones del COPY de una fila por plataforma. Cada vez que el copy de una

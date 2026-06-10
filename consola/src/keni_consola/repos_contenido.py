@@ -32,6 +32,7 @@ def crear_contenido(
     responsable: dict[str, str] | None = None,
     origen: str = "",
     notas: str = "",
+    categoria: str = "",
     tipo_contenido: str = "ia",
     formato: str = "foto",
     id_post_metricool: str = "",
@@ -64,6 +65,7 @@ def crear_contenido(
         responsable=responsable,
         origen=origen,
         notas=notas,
+        categoria=categoria,
         tipo_contenido=tipo_contenido,
         formato=formato,
         id_post_metricool=id_post_metricool,
@@ -133,6 +135,11 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
     """Resetea a "" los `qa_veredicto='en_curso'` zombi (reaper). Delegado en `db.py`."""
     return db.sanear_qa_en_curso_huerfanos(umbral_iso)
+
+
+def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str, int]]:
+    """Generados/publicados por línea del plan (ventana). Delegado en `db.py`."""
+    return db.resumen_plan_por_categoria(marca, desde_iso)
 
 
 def contar_contenido_origen_desde(marca: str, origen: str, desde_iso: str) -> int:

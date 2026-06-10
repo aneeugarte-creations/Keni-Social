@@ -706,6 +706,11 @@ def categoria_de_pieza(pub: dict[str, Any]) -> str:
         if not cid:
             return ""
         item = repos.obtener_contenido(cid) or {}
+        # La categoría vive EN el contenido desde que se persiste al crear (promoción,
+        # usar historia, reciclaje). Los fallbacks cubren filas anteriores a la columna.
+        propia = str(item.get("categoria") or "").strip().lower()
+        if propia:
+            return propia
         if (item.get("flujo") or "") == "evergreen":
             return "evergreen"
         return repos.categoria_promovida_de_contenido(cid)

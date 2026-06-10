@@ -471,6 +471,9 @@ def crear_tema_de_cluster(
             descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
+            # LÍNEA del plan con la que nació ('breaking' si lo era): queda EN la pieza
+            # (estable frente al GC del pool); la leen el conteo del plan y los horarios.
+            categoria=categoria_efectiva(cluster),
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
@@ -589,7 +592,7 @@ def cupos_categoria_restantes(
     if momento.tzinfo is not None:
         momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
     try:
-        usados = repos.contar_promovidos_por_categoria(
+        resumen = repos.resumen_plan_por_categoria(
             marca, iso_utc(momento - timedelta(hours=24))
         )
     except Exception:  # noqa: BLE001 -- fail-closed (promover gasta tokens)
@@ -598,7 +601,7 @@ def cupos_categoria_restantes(
     return {
         cat: hueco
         for cat, cupo in plan.items()
-        if (hueco := cupo - usados.get(cat, 0)) > 0
+        if (hueco := cupo - resumen.get(cat, {}).get("generados", 0)) > 0
     }
 
 

@@ -982,28 +982,36 @@ def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
     assert [t["titulo"] for t in res["temas"]] == ["Ultima hora corroborada"]
 
 
-def test_plan_descuenta_lo_ya_promovido_hoy(entorno, monkeypatch):
-    """El cupo de una categoría descuenta lo promovido en 24 h (cluster→contenido)."""
+def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
+    """El cupo de una categoría descuenta lo GENERADO en 24 h (contenido.categoria persistida)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
-    # Promoción previa: cluster ya usado y enlazado a un contenido creado HOY.
-    previo = repos.crear_contenido(clase="contenido", titulo="Ya promovida", marca="unotv")
-    repos.upsert_noticia_cluster({
-        "id": "ayer", "titulo": "Ya promovida", "resumen": "", "marca": "unotv",
-        "categoria": "mx", "geo": "MX", "clave": "t:ayer", "n_items": 1, "n_fuentes": 2,
-        "idiomas": ["es"], "senal": 0, "score": 0.7, "breaking": 0,
-        "primer_visto": "2026-06-01T00:00:00+00:00",
-        "ultimo_visto": "2026-06-01T00:00:00+00:00",
-        "estado": "usado", "verificacion": "corroborada",
-    })
-    repos.actualizar_noticia_cluster("ayer", contenido_id=previo["id"])
+    # Generado previo de la línea mx (la categoría vive EN el contenido, no en el cluster).
+    repos.crear_contenido(
+        clase="contenido", titulo="Ya generada", marca="unotv", categoria="mx"
+    )
     _sembrar_cluster("hoy", titulo="Nacional nueva", score=0.9, categoria="mx")
 
     res = pc._ejecutar_barrido()
 
-    assert res["temas"] == []  # cupo mx (1) ya consumido por la promoción previa
+    assert res["temas"] == []  # cupo mx (1) ya consumido por el generado previo
     assert repos.obtener_noticia_cluster("hoy")["estado"] == "nuevo"
+
+
+def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
+    """Al promover, la LÍNEA queda en `contenido.categoria` ('breaking' si lo era)."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx")
+    _sembrar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1)
+
+    temas = pc.promover_clusters_marca(
+        "unotv", maximo=2, cupos_categoria={"mx": 1, "breaking": 1}
+    )
+
+    por_titulo = {t["titulo"]: t for t in temas}
+    assert por_titulo["Nacional persistida"]["categoria"] == "mx"
+    assert por_titulo["Urgente persistida"]["categoria"] == "breaking"
 
 
 def test_plan_por_marca_gana_al_global(entorno, monkeypatch):

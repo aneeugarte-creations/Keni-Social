@@ -226,6 +226,9 @@ def _insertar_publicacion(
     padre = _fila_contenido_nueva(
         clase="contenido",
         flujo="evergreen" if evergreen else "",
+        # Reciclaje = línea 'evergreen' del plan (cuenta como generado de esa línea y usa
+        # sus horarios). Una publicación normal no trae línea ('' = genéricas).
+        categoria="evergreen" if evergreen else "",
         titulo=campos.get("titulo") or "",
         marca=marca,
         tipo_contenido=campos.get("tipo_contenido") or TIPO_CONTENIDO_DEFECTO,
