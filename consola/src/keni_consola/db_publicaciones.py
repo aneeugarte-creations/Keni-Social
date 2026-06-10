@@ -293,6 +293,10 @@ def _publicacion_de_filas(
             "fecha_fuente": padre["fecha_fuente"],
             "url_fuente": padre["url_fuente"], "fuente_nombre": padre["fuente_nombre"],
             "tipo_contenido": padre["tipo_contenido"], "formato": padre["formato"],
+            # `espejo` vive en el padre con DEFAULT 1 en BD; la fila recién construida en
+            # memoria no lo trae -> None, que `_fila_a_publicacion` resuelve a True (el
+            # mismo default). Sin esta clave, el camino del LOTE caía con KeyError.
+            "espejo": padre.get("espejo"),
         }
     )
 
