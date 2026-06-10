@@ -36,6 +36,7 @@ from starlette.routing import Route
 
 from .. import actividad, agentes, config, generaciones, marcas, redes, repos
 from .._http_json import _entero_query, envoltura_paginacion
+from ..estados import ORIGENES_AUTOGEN
 from .actividad import _es_marcador_pipeline
 from ..pipeline_contenido import (
     ORIGEN_PIPELINE,
@@ -47,6 +48,16 @@ from ..pipeline_contenido import (
     intentos_de,
     qa_lexico,
 )
+
+# Orígenes de tema que el feed acepta como RUN: los del propio pipeline (ingesta del pool) y
+# los del TABLERO que su etapa de copy redacta (`ORIGENES_AUTOGEN`: rss/radar/equipo/historia/
+# import-calendario). Un tema de tablero solo se lista si la máquina lo TRABAJÓ (tiene
+# generaciones del pipeline correlacionadas): el alta manual sin trabajo IA no es una run.
+_ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
+# Tipos de generación que cuentan como TRABAJO del pipeline sobre un tema ("autogen" es el
+# nombre LEGADO del copy de tablero, anterior a sellarlo como `pipeline`; se acepta para que
+# las runs históricas no pierdan su evidencia).
+_TIPOS_TRABAJO_PIPELINE = frozenset({"pipeline", TIPO_ACTIVIDAD, "autogen"})
 
 # Estado de etapa cuando su toggle está DESACTIVADO para la marca (1 toggle = 1 etapa): la etapa
 # no se ejecuta y se pinta "Saltada" (no bloquea el estado global ni cuenta como fallo).
@@ -274,10 +285,22 @@ def _etapas_de_run(
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
     propia en la pieza no enciende la etapa. Aprobación es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
+
+    Un tema del TABLERO (origen != 'pipeline': rss/equipo/historia/importación, redactado
+    por la etapa de copy) no pasa por el pool ni por la criba: Fusión/Editorial/Validación
+    se pintan saltadas con el motivo "no aplica", honestas en vez de "pendiente" eterno.
     """
     marca = item.get("marca", "") or ""
-    fusion = _fusion_de(cluster, marca, corrio_pool=pool_fusion)
-    editorial = _editorial_de(cluster, marca, corrio_pool=pool_editorial)
+    es_tablero = (item.get("origen") or "") != ORIGEN_PIPELINE
+    if es_tablero:
+        # El tema entró por el tablero, no por el pool de noticias: la fusión/encaje del pool
+        # no aplican (la evidencia de pool de la MARCA es de otros temas; no se hereda).
+        no_aplica = "No aplica: tema del tablero (sin pool de noticias)"
+        fusion = {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": no_aplica, "ts": ""}
+        editorial = {"clave": "editorial", "nombre": "Editorial", "estado": _ESTADO_SALTADA, "detalle": no_aplica, "ts": ""}
+    else:
+        fusion = _fusion_de(cluster, marca, corrio_pool=pool_fusion)
+        editorial = _editorial_de(cluster, marca, corrio_pool=pool_editorial)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
@@ -285,11 +308,15 @@ def _etapas_de_run(
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
     # --- Selección: el tema EXISTE, luego la selección CORRIÓ (evidencia, no toggle). --------
-    ci = {"clave": "ci", "nombre": "Selección", "estado": "ok", "detalle": "", "ts": creado}
+    ci_detalle = f"Del tablero · {item.get('origen') or ''}" if es_tablero else ""
+    ci = {"clave": "ci", "nombre": "Selección", "estado": "ok", "detalle": ci_detalle, "ts": creado}
 
     # --- Validación: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
     # toggle solo decide el estado de una run que AÚN no tiene veredicto (futuro).
-    if qa_veredicto == QA_SALTADA:
+    if es_tablero and not qa_veredicto:
+        # La criba valida la FUENTE de una noticia ingerida; un tema del tablero no la tiene.
+        qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin criba (tema del tablero)"
+    elif qa_veredicto == QA_SALTADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
     elif qa_veredicto == QA_CADUCADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
@@ -582,16 +609,17 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
     """Items SUELTOS del feed: generaciones que no pertenecen a una run listada + runs de agente.
 
     Excluye los marcadores de etapa (sin coste), el trabajo del POOL y de etapas del pipeline
-    (`tipo='pipeline'`: ya está representado DENTRO de las runs) y toda generación cuyo
-    `contenido_id` apunte a una run de `ids_runs` (su coste ya viaja en la run; listarla otra
-    vez sería la duplicación que teníamos con dos pestañas). Una generación correlacionada a un
-    contenido que NO es run del pipeline (p. ej. autogen sobre el tablero) SÍ sale suelta.
+    (`tipo='pipeline'`, y su nombre LEGADO `autogen`: ya está representado DENTRO de las runs)
+    y toda generación cuyo `contenido_id` apunte a una run de `ids_runs` (su coste ya viaja en
+    la run; listarla otra vez sería la duplicación que teníamos con dos pestañas). Una
+    generación correlacionada a un contenido que NO es run (p. ej. un copy manual sobre el
+    tablero) SÍ sale suelta.
     """
     sueltas = [
         actividad.normalizar_generacion(g)
         for g in gens
         if not _es_marcador_pipeline(g)
-        and (g.get("tipo") or "") != "pipeline"
+        and (g.get("tipo") or "") not in _TIPOS_TRABAJO_PIPELINE
         and (g.get("contenido_id") or "") not in ids_runs
     ]
     runs_agente = agentes.listar_runs_globales()
@@ -603,8 +631,28 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
     return [_item_de_actividad(it) for it in sueltas]
 
 
-def _runs_del_pipeline(marca: str | None) -> list[dict]:
-    """Contenidos `origen='pipeline'`, más recientes primero, acotados a `_UNIVERSO_MAX`.
+def _temas_trabajados(gens: list[dict]) -> set[str]:
+    """Ids de contenido con TRABAJO del pipeline correlacionado (copy/arte/criba/marcadores).
+
+    Es la evidencia que convierte un tema del TABLERO en run del feed: la etapa de copy del
+    pipeline también redacta los temas de `ORIGENES_AUTOGEN` (rss/equipo/historia/…); ese
+    trabajo debe verse DENTRO de la run de su tema, no como entradas sueltas.
+    """
+    return {
+        g.get("contenido_id") or ""
+        for g in gens
+        if (g.get("contenido_id") or "") and (g.get("tipo") or "") in _TIPOS_TRABAJO_PIPELINE
+    }
+
+
+def _runs_del_pipeline(marca: str | None, trabajados: set[str]) -> list[dict]:
+    """Temas que son RUNS del feed, más recientes primero, acotados a `_UNIVERSO_MAX`.
+
+    Son runs: (a) todo contenido `origen='pipeline'` (ingerido por el propio pipeline) y
+    (b) los temas del TABLERO (`ORIGENES_AUTOGEN`) que la máquina TRABAJÓ (`trabajados`:
+    tienen generaciones del pipeline correlacionadas) — su copy/arte pertenece al pipeline
+    y se muestra como run, no como entradas sueltas. Un alta manual sin trabajo IA no es
+    una run (no aparece aquí; vive solo en el tablero).
 
     `listar_contenido` no filtra por `origen`, así que filtramos en memoria. El listado de
     contenido ya viene acotado al tablero del equipo; reordenamos por recencia (`creado` desc) y
@@ -620,6 +668,7 @@ def _runs_del_pipeline(marca: str | None) -> list[dict]:
         it
         for it in items
         if (it.get("origen") or "") == ORIGEN_PIPELINE
+        or ((it.get("origen") or "") in _ORIGENES_RUN and (it.get("id") or "") in trabajados)
     ]
     pipeline.sort(key=lambda it: (it.get("creado", "") or "", it.get("id", "")), reverse=True)
     return pipeline[:_UNIVERSO_MAX]
@@ -660,11 +709,12 @@ async def listar(request: Request) -> Response:
     limite = min(limite, _LIMITE_MAX)
     desplazamiento = _entero_query(qp.get("desplazamiento"), minimo=0) or 0
 
-    runs_items = _runs_del_pipeline(marca or None)
-    ids_runs = {it.get("id", "") or "" for it in runs_items}
-    # UNA sola lectura del almacén de generaciones: alimenta las métricas por run, la
-    # evidencia del pool (fix "Saltada") y los items sueltos del feed.
+    # UNA sola lectura del almacén de generaciones: alimenta el universo de runs (temas del
+    # tablero TRABAJADOS por el pipeline), las métricas por run, la evidencia del pool (fix
+    # "Saltada") y los items sueltos del feed.
     gens = generaciones.listar(limite=None, marca=marca or None)
+    runs_items = _runs_del_pipeline(marca or None, _temas_trabajados(gens))
+    ids_runs = {it.get("id", "") or "" for it in runs_items}
     met_por_run = _metricas_por_run(gens, ids_runs)
     pool_fusion = _marcas_con_pool(gens, _PREFIJO_POOL_FUSION)
     pool_editorial = _marcas_con_pool(gens, _PREFIJO_POOL_EDITORIAL)
@@ -903,11 +953,16 @@ def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list
 
 
 async def detalle(request: Request) -> Response:
-    """GET /api/pipelines/{pipeline_id}: una run + su log de actividad por etapas."""
+    """GET /api/pipelines/{pipeline_id}: una run + su log de actividad por etapas.
+
+    Acepta tanto los temas del pipeline (`origen='pipeline'`) como los del TABLERO que su
+    etapa de copy redacta (`ORIGENES_AUTOGEN`): ambos son runs del feed de Producción.
+    """
     pipeline_id = request.path_params["pipeline_id"]
     item = repos.obtener_contenido(pipeline_id)
-    if item is None or (item.get("origen") or "") != ORIGEN_PIPELINE:
+    if item is None or (item.get("origen") or "") not in _ORIGENES_RUN:
         return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
+    es_pipeline = (item.get("origen") or "") == ORIGEN_PIPELINE
     piezas = repos.listar_contenido_plataforma(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
     # UNA sola lectura del almacén de generaciones (antes 3×, ~3 s cada una); se reparte.
@@ -915,11 +970,12 @@ async def detalle(request: Request) -> Response:
     eventos, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
     # Fusión/Editorial: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
     # reciente para enseñar el prompt+salida REALES del Haiku en cada etapa (por su etiqueta).
+    # SOLO en temas del pipeline: a un tema del tablero el pool no le aplica (etapas "No aplica").
     marca_tema = item.get("marca", "") or ""
-    gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_FUSION)
+    gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_FUSION) if es_pipeline else None
     if gen_fusion is not None:
         generaciones_por_etapa.setdefault("FUSION", gen_fusion)
-    gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_EDITORIAL)
+    gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_EDITORIAL) if es_pipeline else None
     if gen_encaje is not None:
         generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la

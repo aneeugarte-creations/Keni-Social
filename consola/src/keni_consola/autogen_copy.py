@@ -108,6 +108,12 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     manual del asistente y que `api/rss.generar`): compone el prompt copy-desde-nota
     autocontenido (semilla + editorial de la marca + la nota del tema), encola en background
     y el borrador entra a la cola de revision. `contenido_id` NIDA el borrador bajo el tema.
+
+    Es trabajo del PIPELINE (su etapa de copy redactando un tema del tablero), asi que se
+    sella IGUAL que el copy de un tema ingerido: `tipo="pipeline"` + marcador de etapa CD
+    correlacionado al tema. Antes salia como `tipo="autogen"` / "Auto-copy" (un nombre
+    legado, suelto en Produccion, fuera de su run): el feed unificado lo muestra ahora como
+    la run del tema con su etapa Copy.
     """
     marca = item.get("marca") or ""
     if not marca or not marcas.es_marca(marca):
@@ -116,8 +122,11 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     if not nota:
         return None
     redes_ids = _redes_de(item)
+    titulo = (item.get("titulo") or "").strip()
     gen = dom_generar.lanzar_copy(
-        tipo="autogen",
+        # `pipeline`: misma marca de trabajo que el copy de los temas ingeridos (la etapa CD
+        # del pipeline es el UNICO motor de copy; "autogen" era el nombre del daemon legado).
+        tipo="pipeline",
         # URGENTE si el tema nació de USAR una historia del panel (curación humana explícita,
         # típicamente una breaking): su copy adelanta al lote de fondo en la cola del worker
         # (PRIORIDAD_BREAKING), sin pisar los lanzamientos manuales.
@@ -125,8 +134,8 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         marca=marca,
         contexto=nota,
         redes_ids=redes_ids,
-        titulo="Auto-copy",
-        titulo_dado=(item.get("titulo") or "").strip()[:300],
+        titulo=titulo or "Copy",
+        titulo_dado=titulo[:300],
         texto_base=nota,
         origen_historial=ORIGEN_HISTORIAL,
         autor=None,
@@ -140,5 +149,28 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         # de `dominio.generar.lanzar` devuelve el run en curso.
         etiqueta_exito=ETIQUETA_AUTOGEN,
     )
+    _registrar_etapa_cd(item, gen)
     return gen
+
+
+def _registrar_etapa_cd(item: dict[str, Any], gen: dict[str, Any] | None) -> None:
+    """Marcador de etapa CD correlacionado al tema (espejo de `_copy.lanzar_copy_tema`).
+
+    Ata la generacion REAL al tema para que el detalle del pipeline muestre su stream y la
+    run sume sus metricas. Best-effort: un fallo de traza no rompe el lanzamiento. Import
+    diferido de `pipeline_contenido` (mismo patron que `autogen_arte`) para no acoplar la
+    carga del modulo (evita ciclo con `_barrido`).
+    """
+    try:
+        from .pipeline_contenido import ETAPA_CD, registrar_etapa
+
+        registrar_etapa(
+            ETAPA_CD,
+            item.get("marca") or "",
+            f"Generación de copy (tablero) — '{(item.get('titulo') or '')[:120]}'",
+            contenido_id=item.get("id") or "",
+            gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
+        )
+    except Exception:  # noqa: BLE001 -- la traza es observabilidad; nunca rompe el copy
+        _log.warning("Auto-copy: no se pudo registrar el marcador de etapa CD.", exc_info=True)
 

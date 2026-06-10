@@ -660,3 +660,73 @@ def test_lista_trae_sumatorio_de_metricas(cliente):
     solo_runs = cliente.get("/api/pipelines?clase=run").json()["totales"]
     assert solo_runs["items"] == 1
     assert solo_runs["tokens"] == 150
+
+
+# --------------------------------------------------------------------------- #
+# Temas del TABLERO trabajados por el pipeline: son RUNS del feed              #
+# --------------------------------------------------------------------------- #
+
+
+def test_tema_de_tablero_trabajado_sale_como_run(cliente):
+    """Un tema del tablero (origen de `ORIGENES_AUTOGEN`) que la etapa de copy REDACTÓ es una
+    RUN del feed (no una entrada suelta "Auto-copy"): su trabajo se ve dentro de la run, con
+    etapas honestas (Fusión/Editorial/Criba "no aplica": no pasó por el pool)."""
+    tema = repos.crear_contenido(
+        clase="contenido", titulo="Breaking usada a mano", marca="unotv", origen="historia",
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=tema["id"], red="x", estado="borrador", copy="Copy.",
+    )
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "contenido_id": tema["id"],
+        "etiqueta": "Breaking usada a mano · UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 100, "tokens_out": 50, "total_cost_usd": 0.02,
+                     "duration_ms": 3000},
+    })
+    # Pool de la marca corrido: NO se hereda (el tema no vino del pool).
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO,
+    })
+    items = cliente.get("/api/pipelines").json()["pipelines"]
+    run = next(x for x in items if x["titulo"] == "Breaking usada a mano")
+    assert run["clase"] == "run"
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["fusion"]["estado"] == "saltada"
+    assert "No aplica" in etapas["fusion"]["detalle"]
+    assert etapas["editorial"]["estado"] == "saltada"
+    assert etapas["qa"]["estado"] == "saltada"
+    assert "Sin criba" in etapas["qa"]["detalle"] or "No aplica" in etapas["qa"]["detalle"]
+    assert etapas["ci"]["estado"] == "ok"
+    assert "historia" in etapas["ci"]["detalle"]
+    assert etapas["cd"]["estado"] == "ok"  # el copy persistido
+    assert run["metricas"]["tokens"] == 150
+    # El trabajo NO sale duplicado como entrada suelta.
+    assert all(
+        x["clase"] == "run" or x["titulo"] != "Breaking usada a mano · UnoTV" for x in items
+    )
+    # Y su detalle es accesible (misma página que cualquier run).
+    det = cliente.get(f"/api/pipelines/{tema['id']}")
+    assert det.status_code == 200
+    det_etapas = {e["clave"]: e for e in det.json()["pipeline"]["etapas"]}
+    assert det_etapas["fusion"]["estado"] == "saltada"  # coherente con la lista
+
+
+def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
+    """Una generación LEGADA `tipo='autogen'` correlacionada a un tema del tablero también
+    convierte el tema en run y se pliega en sus métricas (no queda suelta como "Auto-copy")."""
+    tema = repos.crear_contenido(
+        clase="contenido", titulo="Tema con autogen legado", marca="unotv", origen="equipo",
+    )
+    generaciones.crear({
+        "tipo": "autogen", "marca": "unotv", "contenido_id": tema["id"],
+        "etiqueta": "Auto-copy · UnoTV", "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 10, "tokens_out": 5, "total_cost_usd": 0.001,
+                     "duration_ms": 500},
+    })
+    items = cliente.get("/api/pipelines").json()["pipelines"]
+    run = next(x for x in items if x["titulo"] == "Tema con autogen legado")
+    assert run["clase"] == "run"
+    assert run["metricas"]["tokens"] == 15
+    assert all(x["titulo"] != "Auto-copy · UnoTV" for x in items)

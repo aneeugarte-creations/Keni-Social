@@ -1510,3 +1510,40 @@ def test_listar_contenido_origenes_filtra_en_sql(entorno):
     # Sin exclusión, el 'hecha' también sale; con lista vacía, nada (y sin query).
     assert hecho["id"] in {t["id"] for t in repos.listar_contenido_origenes(["rss"])}
     assert repos.listar_contenido_origenes([]) == []
+
+
+def test_lanzar_para_topic_sella_pipeline_y_marcador_cd(entorno, monkeypatch):
+    """El copy de un tema del TABLERO es trabajo del PIPELINE: se lanza `tipo='pipeline'`
+    (no el legado "autogen") y deja el marcador de etapa CD correlacionado al tema, para que
+    Producción lo muestre dentro de la run (stream en el detalle + métricas sumadas)."""
+    from keni_consola import autogen_copy
+
+    capturas: dict[str, object] = {}
+
+    def _fake_lanzar_copy(**kwargs):
+        capturas.update(kwargs)
+        return {"id": "gen-tablero-1"}
+
+    monkeypatch.setattr(autogen_copy.dom_generar, "lanzar_copy", _fake_lanzar_copy)
+    marcadores: list[tuple] = []
+    monkeypatch.setattr(
+        pc, "registrar_etapa",
+        lambda etapa, marca, detalle, contenido_id="", gen_id="": marcadores.append(
+            (etapa, marca, detalle, contenido_id, gen_id)
+        ),
+    )
+
+    item = {"id": "tema-tablero", "marca": "unotv", "origen": "equipo",
+            "titulo": "Nota del equipo", "descripcion": "La nota."}
+    gen = autogen_copy.lanzar_para_topic(item)
+
+    assert gen == {"id": "gen-tablero-1"}
+    assert capturas["tipo"] == "pipeline"
+    assert capturas["contenido_id"] == "tema-tablero"
+    assert capturas["titulo"] == "Nota del equipo"  # etiqueta legible, no "Auto-copy"
+    assert len(marcadores) == 1
+    etapa, marca, detalle, contenido_id, gen_id = marcadores[0]
+    assert etapa == pc.ETAPA_CD
+    assert marca == "unotv"
+    assert contenido_id == "tema-tablero"
+    assert gen_id == "gen-tablero-1"
