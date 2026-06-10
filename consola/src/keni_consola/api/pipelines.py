@@ -286,7 +286,10 @@ def _etapas_de_run(item: dict, piezas: list[dict], cluster: dict | None = None) 
     elif aprobadas:
         ap_estado, ap_detalle = "en_curso", f"{aprobadas}/{total}"
     elif en_curso:
-        ap_estado, ap_detalle = "en_curso", ""
+        # Esperando al HUMANO (piezas en revisión, ninguna aprobada aún): es "pendiente", no
+        # "en curso" — la máquina no está haciendo nada. Antes esto pintaba runs de hace una
+        # semana como "En curso" en la lista solo porque nadie llegó a aprobarlas.
+        ap_estado, ap_detalle = "pendiente", "En revisión"
     elif qa_veredicto == QA_CADUCADA and not total:
         # Run CADUCADA sin piezas: cerrada sin producto (no quede "pendiente" para siempre).
         ap_estado, ap_detalle = _ESTADO_SALTADA, "Caducada"
@@ -635,12 +638,21 @@ def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list
         )
         gen_real = _generacion_publica(gen.get("gen_id", "") or "")
         if gen_real is not None and etapa:
-            # Nos quedamos con la generación de marcador MÁS RECIENTE por etapa.
+            # Por etapa nos quedamos con la generación COMPLETADA más reciente (su salida ES
+            # el resultado real); solo si ninguna terminó aún, la más reciente en curso (el
+            # stream vivo). Antes ganaba "la más reciente" a secas: con un relanzamiento, el
+            # duplicado recién arrancado TAPABA la salida del que ya completó (la etapa decía
+            # "Completado" y su cuadro "En curso…", sin resultado que mirar).
+            terminada = gen_real.get("estado") == "completado"
             previa = gens_por_etapa.get(etapa)
-            if previa is None or fecha >= previa[0]:
-                gens_por_etapa[etapa] = (fecha, gen_real)
+            if (
+                previa is None
+                or (terminada and not previa[1])
+                or (terminada == previa[1] and fecha >= previa[0])
+            ):
+                gens_por_etapa[etapa] = (fecha, terminada, gen_real)
     eventos.sort(key=lambda e: e["fecha"], reverse=True)
-    generaciones_por_etapa = {etapa: par[1] for etapa, par in gens_por_etapa.items()}
+    generaciones_por_etapa = {etapa: tupla[2] for etapa, tupla in gens_por_etapa.items()}
     return eventos, generaciones_por_etapa
 
 

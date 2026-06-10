@@ -9,14 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import config, libtexto, marcas, redes, repos
+from .. import config, generaciones, libtexto, marcas, redes, repos
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec
 from ..dominio import qa_editorial as dom_qa
 from . import _ref
 from ._comun import (
     _DEFAULT_QA_CRITERIOS,
-    _ETIQUETA_QA,
     _TITULO_QA,
     ETAPA_QA,
     PROMPT_QA_ID,
@@ -184,12 +183,19 @@ def lanzar_qa_fuente(
         _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
     gen = gen_dom.lanzar(
         tipo=TIPO_PIPELINE,
-        # Etiqueta HUMANA en Actividad: igual que la etapa de la vista Pipelines ("Validación"),
-        # no el nombre interno del prompt ("QA fuente"): la actividad y las etapas deben hablar
-        # el mismo idioma para el equipo.
-        titulo=_ETIQUETA_QA,
+        # Etiqueta HUMANA en Actividad: el nombre de la etapa ("Validación", como en la vista
+        # Pipelines) + el TEMA cribado. Sin el tema, N cribas simultáneas eran N filas idénticas
+        # en el feed ("Validación de la fuente · UnoTV" ×16) imposibles de distinguir.
+        titulo=f"Validación · {titulo}",
         marca=marca,
         prompt=prompt,
+        # CLAVE ESTABLE por tema: el prompt lleva un nonce por llamada (anti-inyección) y la
+        # clave por defecto (hash del prompt) nunca coincidiría. Con esta, un re-lanzamiento de
+        # la criba del MISMO tema mientras hay una en vuelo devuelve ese run (cinturón además
+        # del marcador `en_curso`, que un saneo/reset puede limpiar a destiempo).
+        clave_idem=generaciones.clave_idempotencia(
+            (autor or {}).get("id", ""), TIPO_PIPELINE, marca, "qa-fuente", tema_id
+        ),
         procesar=dom_qa.construir_procesar_qa_fuente(
             marca, titulo, autor, contenido_id=tema_id,
         ),

@@ -143,7 +143,7 @@ render_secret GARAGE_ADMIN_TOKEN       garage_admin_token       0:0          400
 
 # Build SELECTIVO: cada servicio se (re)construye SOLO si su imagen-por-hash no existe ya (=
 # su contenido cambió). Si ya existe, se salta -> su tag NO cambia -> el `up -d` final no lo
-# recrea (ni interrumpe el worker). `daemons` comparte la imagen de `back` (no se build aparte).
+# recrea (ni interrumpe el worker). `daemons` comparte la imagen del `worker` (no se build aparte):
 # `cambio` (imagen AÚN no construida) marca los flags ANTES de construir, para gatear los pasos
 # de esquema/estado. La detección va SEPARADA del build a propósito: así un fallo de `$DC build`
 # aborta el deploy por `set -e` (sin `|| true` que lo enmascare) y deja prod intacto.

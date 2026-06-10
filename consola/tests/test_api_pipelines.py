@@ -103,6 +103,22 @@ def test_run_qa_problema_omite_copy(cliente):
     assert qa["hallazgos"] and qa["hallazgos"][0]["tipo"] == "dato"
 
 
+def test_aprobacion_esperando_humano_es_pendiente(cliente):
+    """Piezas EN REVISIÓN sin ninguna aprobada = la run espera al HUMANO: 'pendiente' (con el
+    detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada. Antes, runs de
+    hace una semana aparecían 'En curso' en la lista solo porque nadie las había aprobado."""
+    tema = _tema_pipeline("Run en revisión", qa_veredicto="no_verificado")
+    repos.crear_contenido_plataforma(
+        contenido_id=tema["id"], red="x", estado="en_revision",
+        copy="Copy.", veredicto="no_verificado",
+    )
+    run = _run_por_titulo(cliente, "Run en revisión")
+    ap = next(e for e in run["etapas"] if e["clave"] == "aprobacion")
+    assert ap["estado"] == "pendiente"
+    assert ap["detalle"] == "En revisión"
+    assert run["estado_global"] == "pendiente"
+
+
 def test_run_aprobado(cliente):
     """Pieza aprobada con QA `no_verificado` -> aprobación ok y estado_global ok."""
     tema = _tema_pipeline("Tema aprobado", qa_veredicto="no_verificado")

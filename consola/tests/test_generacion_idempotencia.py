@@ -132,3 +132,41 @@ def test_lanzar_limpia_temporal_del_lanzamiento_redundante(entorno, cuenta_encol
     assert len(cuenta_encolados) == 1
     assert not temp.exists()
     assert g2["id"] == cuenta_encolados[0]
+
+
+# --------------------------------------------------------------------------- #
+# lanzar_copy: clave ESTABLE pese al nonce del prompt (dup x3 del piloto)      #
+# --------------------------------------------------------------------------- #
+
+
+def test_lanzar_copy_converge_pese_al_nonce_del_prompt(entorno, cuenta_encolados):
+    """Dos lanzamientos del MISMO trabajo de copy convergen aunque el prompt final cambie.
+
+    El prompt del copy lleva un NONCE anti-inyección distinto por llamada (el delimitador del
+    contexto), así que la clave por defecto (hash del prompt) NUNCA coincidía: el backoff del
+    pipeline relanzaba el copy del MISMO tema en vuelo (3 generaciones y 3 juegos de borradores
+    por tema, medido). La clave estable por insumos (tema/nota/redes) restaura la promesa.
+    """
+    autor = {"id": "u1", "usuario": "ana"}
+    args = dict(
+        marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
+        titulo="Tema X", titulo_dado="Tema X", contenido_id="tema-1", autor=autor,
+    )
+    g1 = generar.lanzar_copy(**args)
+    g2 = generar.lanzar_copy(**args)
+    assert g1["id"] == g2["id"]  # convergen al run en vuelo
+    assert len(cuenta_encolados) == 1  # UN solo claude -p
+
+    # Un trabajo DISTINTO (otro tema/nota) sí arranca el suyo.
+    g3 = generar.lanzar_copy(
+        marca=_MARCA, contexto="Otra nota distinta.", redes_ids=["x"],
+        titulo="Tema Y", titulo_dado="Tema Y", contenido_id="tema-2", autor=autor,
+    )
+    assert g3["id"] != g1["id"]
+    assert len(cuenta_encolados) == 2
+
+    # Al COMPLETAR el run, un re-lanzamiento legítimo (regenerar) vuelve a correr.
+    generaciones.actualizar(g1["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    g4 = generar.lanzar_copy(**args)
+    assert g4["id"] != g1["id"]
+    assert len(cuenta_encolados) == 3

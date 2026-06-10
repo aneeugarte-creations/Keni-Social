@@ -318,14 +318,20 @@ services:
     # MÁQUINA DE CONTENIDO (Flujo C): el pipeline (KENI_PIPELINE_COPY) ingiere del news-pool y, en sus
     # etapas de copy y arte (KENI_PIPELINE_ARTE), lleva los temas a BORRADOR en la cola de revision.
     # NO publica ni aprueba contenido por su cuenta (la auto-produccion para en el gate humano); NO
-    # publica puertos ni va por Traefik. Misma imagen que el `back`; comparte Postgres + /data
-    # (donde viven las credenciales Metricool y la clave del proveedor de imagen del auto-arte).
+    # publica puertos ni va por Traefik. Comparte Postgres + /data (donde viven las credenciales
+    # Metricool y la clave del proveedor de imagen del auto-arte).
+    #
+    # IMAGEN DEL WORKER (no la del back): los pasos IA INLINE del pool de noticias —fusión
+    # semántica de historias, encaje editorial, traducción— corren `claude -p` SÍNCRONO dentro
+    # de ESTE proceso (dominio.fusion_semantica/traduccion), no por la cola. Con la imagen del
+    # back (sin Node/claude) fallaban TODOS los barridos con "El asistente (claude) no está
+    # disponible en el servidor" y la etapa de Fusión nunca corría en hosted. La imagen del
+    # worker trae claude + el entrypoint que carga el token desde /run/secrets.
     build:
       context: ..
-      dockerfile: deploy/back/Dockerfile
-    # Comparte imagen con `back` (mismo Dockerfile) -> misma tag por contenido BACK_VERSION:
-    # un cambio en `consola/` recrea back Y daemons a la vez (ambos corren ese código).
-    image: keni-social/back:${BACK_VERSION:-latest}
+      dockerfile: deploy/worker/Dockerfile
+    # Misma tag por contenido WORKER_VERSION: un cambio en `consola/` recrea worker Y daemons.
+    image: keni-social/worker:${WORKER_VERSION:-latest}
     restart: unless-stopped
     command: ["python", "-m", "keni_consola.daemons"]
     # El daemons NO levanta uvicorn (corre solo los hilos de fondo), pero comparte imagen
@@ -352,6 +358,10 @@ services:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
       IS_SANDBOX: "1"
+      # Credenciales de claude para los pasos IA INLINE del pool (fusión/encaje/traducción):
+      # mismos ficheros de secreto que el worker; el entrypoint de la imagen los exporta.
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      CLAUDE_CODE_OAUTH_TOKEN_FILE: /run/secrets/claude_code_oauth_token
       # Store EDITABLE de ajustes compartido con back/worker (mismo volumen keni-data): los
       # daemons leen aqui los flags/tuning cambiados en caliente (store > env > defecto).
       KENI_CONSOLA_AJUSTES: /data/ajustes.toml
@@ -395,6 +405,8 @@ services:
       - postgres_password
       - s3_access_key
       - s3_secret_key
+      - anthropic_api_key
+      - claude_code_oauth_token
     networks:
       # `data` para alcanzar db/files; `internal` conserva egress (Metricool, noticias).
       - internal

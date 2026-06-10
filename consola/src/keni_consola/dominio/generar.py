@@ -477,11 +477,24 @@ def lanzar_copy(
         limpiar_pendiente=bool(limpiar_pendiente),
         etiqueta_exito=etiqueta_exito or "",
     )
+    # CLAVE DE IDEMPOTENCIA ESTABLE: la clave por defecto de `lanzar` usa hash(prompt), pero el
+    # prompt del copy lleva un NONCE anti-inyección DISTINTO por llamada (el delimitador del
+    # contexto, ver `envolver_contenido_usuario`), así que esa clave NUNCA coincidía y la
+    # promesa "un re-lanzamiento del mismo trabajo devuelve el run en vuelo" estaba ROTA para
+    # el copy: el backoff del pipeline (1/4/16 min) relanzaba el copy del MISMO tema mientras
+    # el primero seguía corriendo (3 generaciones y 3 juegos de borradores por tema, medido en
+    # el piloto). La clave se calcula aquí sobre los INSUMOS estables del trabajo lógico (sin
+    # nonce): mismo tema/nota/redes => mismo run mientras esté en vuelo; al terminar, un
+    # re-lanzamiento legítimo (regenerar) vuelve a correr.
+    clave_estable = generaciones.clave_idempotencia(
+        _autor_campos(autor)["autor_id"], tipo, marca, prompt_efectivo,
+        contenido_id or "", titulo_dado or "", ",".join(redes_ids), contexto,
+    )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
-        endurecer=endurecer,
+        endurecer=endurecer, clave_idem=clave_estable,
         # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/veredicto; el usuario no ve la salida
         # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
         # veta la web por-callsite; queda la veta global `Bash Write Edit`.
