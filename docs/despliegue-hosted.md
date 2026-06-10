@@ -1,5 +1,10 @@
 # Despliegue hosted (MCP sobre HTTP)
 
+> **Alcance:** este documento cubre solo el MCP de **métricas** sobre HTTP. El despliegue
+> hosted COMPLETO del producto (Traefik + back + worker + daemons + Postgres + Garage en
+> `social.kenitech.io`, con su MCP operativo en `/mcp`) vive en `deploy/` y se describe en
+> [`operacion-observabilidad.md`](operacion-observabilidad.md) y [`arquitectura.md`](arquitectura.md).
+
 Esta es la **mitad *hosted* de la arquitectura híbrida** de `keni-metricas`:
 
 - **Local por persona (stdio).** El MCP corre en la máquina de cada quien con sus propias credenciales, que nunca salen del equipo. Ver `docs/despliegue-local.md` y `docs/credenciales.md`. Es el modo por defecto.

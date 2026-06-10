@@ -6,7 +6,7 @@ Principio: **la llave es revocable y vive contigo, no en la IA.** El MCP usa el 
 
 ## Por defecto no necesitas nada
 
-Con `fuente = "muestra"` (valor por defecto) el MCP funciona con datos representativos. Configura credenciales solo cuando quieras **datos reales** (`fuente = "real"`).
+Sin credenciales configuradas el MCP funciona con `fuente = "muestra"` (datos representativos y deterministas). Configura credenciales solo cuando quieras **datos reales**: la fuente por defecto es `metricool` (la única de pago; con credenciales por marca en el config) y `real` queda como ruta alternativa de APIs directas por red.
 
 ## Por plataforma
 
