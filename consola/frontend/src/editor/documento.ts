@@ -364,3 +364,9 @@ export function documentoVacio(
 export function zTope(doc: Documento): number {
   return doc.capas.reduce((m, c) => Math.max(m, c.z ?? 0), 0) + 1;
 }
+
+// Alto VISUAL de una capa para centrar/repartir: los textos sin caja (h<=0) ocupan una línea
+// (tamano × interlineado); el resto usa su h del modelo.
+export function altoVisual(c: Capa): number {
+  return c.tipo === "texto" && c.h <= 0 ? Math.round(c.tamano * c.interlineado) : c.h;
+}

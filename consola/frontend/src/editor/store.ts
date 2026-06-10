@@ -7,7 +7,7 @@
 import { createStore } from "zustand/vanilla";
 
 import type { Capa, CapaImagen, CapaMarco, Documento, Forma } from "./documento";
-import { nuevoId } from "./documento";
+import { altoVisual, nuevoId } from "./documento";
 
 const LIMITE_HISTORIAL = 50;
 
@@ -35,6 +35,10 @@ export interface EstadoEditor {
   aplicarPosiciones: (pos: { id: string; x: number; y: number }[], registrar?: boolean) => void;
   alinearMulti: (modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => void;
   distribuir: (eje: "h" | "v") => void;
+  // «Ordenar» (tidy up estilo Canva, ⌥⇧T): con 3+ capas seleccionadas las reparte con ESPACIADO
+  // UNIFORME a lo largo del eje dominante de su disposición actual (el de mayor dispersión de
+  // centros), alineando los centros en el eje perpendicular. Un paso de deshacer. Con <3, no-op.
+  ordenarMulti: () => void;
   agregar: (capa: Capa) => void;
   // Inserta VARIAS capas (un bloque) en un solo paso de historial, encima de todo, con ids frescos.
   insertarBloque: (capas: Capa[]) => void;
@@ -367,6 +371,49 @@ export function crearStoreEditor(inicial: Documento) {
             doc.capas.map((c) =>
               nuevaPos.has(c.id) ? ({ ...c, [eje === "h" ? "x" : "y"]: nuevaPos.get(c.id) } as Capa) : c,
             ),
+          );
+        });
+      },
+
+      ordenarMulti: () => {
+        const sel = get().seleccionMulti;
+        if (sel.length < 3) return;
+        aplicar((doc) => {
+          const elegidas = doc.capas.filter((c) => sel.includes(c.id));
+          if (elegidas.length < 3) return doc;
+          const cx = (c: Capa) => c.x + c.w / 2;
+          const cy = (c: Capa) => c.y + altoVisual(c) / 2;
+          // Eje DOMINANTE de la disposición actual: el de mayor dispersión de centros (empate => h).
+          const xs = elegidas.map(cx);
+          const ys = elegidas.map(cy);
+          const eje: "h" | "v" =
+            Math.max(...xs) - Math.min(...xs) >= Math.max(...ys) - Math.min(...ys) ? "h" : "v";
+          const orden = [...elegidas].sort((a, b) => (eje === "h" ? cx(a) - cx(b) : cy(a) - cy(b)));
+          // Reparto con HUECO uniforme dentro de la extensión actual (del borde inicial del primero
+          // al borde final del último); puede ser negativo si se solapan — sigue siendo determinista.
+          const tam = (c: Capa) => (eje === "h" ? c.w : altoVisual(c));
+          const ini = Math.min(...orden.map((c) => (eje === "h" ? c.x : c.y)));
+          const fin = Math.max(...orden.map((c) => (eje === "h" ? c.x + c.w : c.y + altoVisual(c))));
+          const hueco = (fin - ini - orden.reduce((s, c) => s + tam(c), 0)) / (orden.length - 1);
+          // Eje perpendicular: alinea los CENTROS al centro medio del conjunto.
+          const perp = orden.reduce((s, c) => s + (eje === "h" ? cy(c) : cx(c)), 0) / orden.length;
+          let cursor = ini;
+          const pos = new Map<string, { x: number; y: number }>();
+          for (const c of orden) {
+            pos.set(
+              c.id,
+              eje === "h"
+                ? { x: Math.round(cursor), y: Math.round(perp - altoVisual(c) / 2) }
+                : { x: Math.round(perp - c.w / 2), y: Math.round(cursor) },
+            );
+            cursor += tam(c) + hueco;
+          }
+          return conCapas(
+            doc,
+            doc.capas.map((c) => {
+              const p = pos.get(c.id);
+              return p ? ({ ...c, x: p.x, y: p.y } as Capa) : c;
+            }),
           );
         });
       },

@@ -188,4 +188,77 @@ describe("Store del editor (Zustand)", () => {
       expect(grupo.y + grupo.h).toBeGreaterThanOrEqual(150);
     });
   });
+
+  describe("ordenarMulti («Ordenar», tidy up estilo Canva)", () => {
+    const montarCajas = (cajas: { id: string; x: number; y: number; w: number; h: number }[]) => {
+      const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "test"));
+      const estado = store.getState();
+      cajas.forEach((c, i) => estado.agregar(nuevaCapaMarco({ ...c, z: i + 1, relleno: "#FF0000" })));
+      estado.seleccionarMuchas(cajas.map((c) => c.id));
+      return store;
+    };
+    const caja = (store: ReturnType<typeof crearStoreEditor>, id: string) =>
+      store.getState().documento.capas.find((c) => c.id === id)!;
+
+    it("disposición horizontal: hueco uniforme dentro de la extensión y centros alineados en Y", () => {
+      const store = montarCajas([
+        { id: "a", x: 0, y: 90, w: 100, h: 60 },
+        { id: "b", x: 110, y: 140, w: 50, h: 20 },
+        { id: "c", x: 450, y: 100, w: 150, h: 40 },
+      ]);
+      store.getState().ordenarMulti();
+      // Extensión 0..600, tamaños 100+50+150 = 300 => hueco (600−300)/2 = 150: a:0, b:250, c:450.
+      expect(caja(store, "a").x).toBe(0);
+      expect(caja(store, "b").x).toBe(250);
+      expect(caja(store, "c").x).toBe(450);
+      // Centros Y alineados a la media de centros ((120+150+120)/3 = 130).
+      expect(caja(store, "a").y).toBe(130 - 30);
+      expect(caja(store, "b").y).toBe(130 - 10);
+      expect(caja(store, "c").y).toBe(130 - 20);
+    });
+
+    it("disposición vertical (mayor dispersión en Y): reparte en Y y alinea centros en X", () => {
+      const store = montarCajas([
+        { id: "a", x: 100, y: 0, w: 80, h: 100 },
+        { id: "b", x: 120, y: 120, w: 40, h: 100 },
+        { id: "c", x: 100, y: 500, w: 80, h: 100 },
+      ]);
+      store.getState().ordenarMulti();
+      // Extensión 0..600, altos 300 => hueco (600−300)/2 = 150: a:0, b:250, c:500.
+      expect(caja(store, "a").y).toBe(0);
+      expect(caja(store, "b").y).toBe(250);
+      expect(caja(store, "c").y).toBe(500);
+      // Centros X a la media de centros (140 los tres => no cambian).
+      expect(caja(store, "a").x).toBe(100);
+      expect(caja(store, "b").x).toBe(120);
+      expect(caja(store, "c").x).toBe(100);
+    });
+
+    it("es UN solo paso de deshacer (vuelve a las posiciones de partida)", () => {
+      const store = montarCajas([
+        { id: "a", x: 0, y: 100, w: 100, h: 50 },
+        { id: "b", x: 130, y: 100, w: 100, h: 50 },
+        { id: "c", x: 500, y: 100, w: 100, h: 50 },
+      ]);
+      const pasadoAntes = store.getState().pasado.length;
+      store.getState().ordenarMulti();
+      expect(store.getState().pasado.length).toBe(pasadoAntes + 1);
+      store.getState().deshacer();
+      expect(caja(store, "b").x).toBe(130);
+      expect(caja(store, "c").x).toBe(500);
+    });
+
+    it("con menos de 3 capas seleccionadas es un no-op (ni mueve ni registra historial)", () => {
+      const store = montarCajas([
+        { id: "a", x: 0, y: 100, w: 100, h: 50 },
+        { id: "b", x: 130, y: 100, w: 100, h: 50 },
+        { id: "c", x: 500, y: 100, w: 100, h: 50 },
+      ]);
+      store.getState().seleccionarMuchas(["a", "b"]);
+      const pasadoAntes = store.getState().pasado.length;
+      store.getState().ordenarMulti();
+      expect(store.getState().pasado.length).toBe(pasadoAntes);
+      expect(caja(store, "b").x).toBe(130);
+    });
+  });
 });

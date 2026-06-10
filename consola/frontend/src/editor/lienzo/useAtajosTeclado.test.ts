@@ -1,12 +1,14 @@
 // Contrato de los atajos del MODO RECORTE estilo Canva: Enter CONFIRMA (Hecho) y Escape CANCELA
 // (restaura), respetando la CASCADA de Escape existente (recorte → reencuadre → deseleccionar).
+// Y de los atajos de CREACIÓN (T/R/C/L) + «Ordenar» (tidy up, ⌥⇧T).
 
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { CapaMarco, CapaTexto } from "../documento";
 import { documentoVacio, nuevaCapaTexto } from "../documento";
 import { crearStoreEditor } from "../store";
-import { type ZoomApi, useAtajosTeclado } from "./useAtajosTeclado";
+import { type LienzoApi, type ZoomApi, useAtajosTeclado } from "./useAtajosTeclado";
 
 function montar(opts: { recorteId?: string | null; reencuadreId?: string | null; conSeleccion?: boolean } = {}) {
   const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "test"));
@@ -16,6 +18,11 @@ function montar(opts: { recorteId?: string | null; reencuadreId?: string | null;
   const zoom = {
     current: { acercar: vi.fn(), alejar: vi.fn(), ajustar: vi.fn(), real: vi.fn() } as ZoomApi,
   };
+  // Viewport simulado: centrado en (300, 200) del documento, para comprobar que los elementos
+  // nuevos nacen en el centro del VIEWPORT y no en el del lienzo ni en 0,0.
+  const lienzo = {
+    current: { centroViewport: vi.fn(() => ({ x: 300, y: 200 })), editarTexto: vi.fn() } as LienzoApi,
+  };
   const onSalirReencuadre = vi.fn();
   const onCancelarRecorte = vi.fn();
   const onConfirmarRecorte = vi.fn();
@@ -23,6 +30,7 @@ function montar(opts: { recorteId?: string | null; reencuadreId?: string | null;
     useAtajosTeclado({
       store,
       zoom,
+      lienzo,
       reencuadreId: opts.reencuadreId ?? null,
       onSalirReencuadre,
       recorteId: opts.recorteId ?? null,
@@ -30,7 +38,7 @@ function montar(opts: { recorteId?: string | null; reencuadreId?: string | null;
       onConfirmarRecorte,
     }),
   );
-  return { store, hook, zoom, onSalirReencuadre, onCancelarRecorte, onConfirmarRecorte };
+  return { store, hook, zoom, lienzo, onSalirReencuadre, onCancelarRecorte, onConfirmarRecorte };
 }
 
 // Como en un navegador real, el keydown se origina en el elemento enfocado (body) y BURBUJEA
@@ -100,5 +108,127 @@ describe("useAtajosTeclado — modo recorte (Canva)", () => {
     tecla("Escape");
     expect(sinModos.store.getState().seleccion).toBeNull();
     sinModos.hook.unmount();
+  });
+});
+
+describe("useAtajosTeclado — creación T/R/C/L (estilo Canva)", () => {
+  // La edición en línea del texto se abre tras el commit de React (requestAnimationFrame):
+  // en el test se ejecuta el callback al instante para poder afirmar de forma síncrona.
+  const rafSincrono = () =>
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+
+  it("T crea la caja de texto del panel (Cuerpo), centrada en el viewport, seleccionada y en edición", () => {
+    rafSincrono();
+    const { store, lienzo, hook } = montar();
+    const antes = store.getState().documento.capas.length;
+    tecla("t");
+    const st = store.getState();
+    expect(st.documento.capas).toHaveLength(antes + 1);
+    const capa = st.documento.capas[st.documento.capas.length - 1] as CapaTexto;
+    // EXACTAMENTE el preset «Cuerpo» del panel Elementos.
+    expect(capa.tipo).toBe("texto");
+    expect(capa.texto).toBe("Texto de cuerpo");
+    expect(capa.tamano).toBe(40);
+    expect(capa.peso).toBe(400);
+    expect(capa.w).toBe(760);
+    // Centrada en el viewport (300, 200): x = 300 − 760/2; y = 200 − (40·1.14)/2 ≈ 177.
+    expect(capa.x).toBe(300 - 380);
+    expect(capa.y).toBe(200 - Math.round((40 * 1.14) / 2));
+    // Queda seleccionada y entra directa en edición en línea.
+    expect(st.seleccion).toBe(capa.id);
+    expect(lienzo.current.editarTexto).toHaveBeenCalledWith(capa.id);
+    hook.unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it("R, C y L crean rectángulo, elipse y línea con los MISMOS defaults que el panel", () => {
+    const { store, hook } = montar();
+    tecla("r");
+    tecla("c");
+    tecla("l");
+    const capas = store.getState().documento.capas;
+    const [rect, elipse, linea] = capas.slice(-3) as CapaMarco[];
+    expect(rect).toMatchObject({ tipo: "marco", forma: "rect", relleno: "#E30613", borde: null, w: 360, h: 240 });
+    expect(rect.x).toBe(300 - 180);
+    expect(rect.y).toBe(200 - 120);
+    expect(elipse).toMatchObject({ tipo: "marco", forma: "elipse", relleno: "#E30613", borde: null, w: 320, h: 320 });
+    expect(linea).toMatchObject({ tipo: "marco", forma: "linea", relleno: null, borde: { color: "#FFFFFF", grosor: 8 }, w: 480, h: 0 });
+    // Cada una queda encima de la anterior (z creciente) y seleccionada la última.
+    expect(elipse.z).toBeGreaterThan(rect.z);
+    expect(linea.z).toBeGreaterThan(elipse.z);
+    expect(store.getState().seleccion).toBe(linea.id);
+    hook.unmount();
+  });
+
+  it("cada creación es UN paso de deshacer", () => {
+    const { store, hook } = montar();
+    const antes = store.getState().documento.capas.length;
+    tecla("r");
+    expect(store.getState().documento.capas).toHaveLength(antes + 1);
+    store.getState().deshacer();
+    expect(store.getState().documento.capas).toHaveLength(antes);
+    hook.unmount();
+  });
+
+  it("no crea nada con el modo recorte o reencuadre activos", () => {
+    const conRecorte = montar({ recorteId: "img-1" });
+    const antes = conRecorte.store.getState().documento.capas.length;
+    tecla("r");
+    expect(conRecorte.store.getState().documento.capas).toHaveLength(antes);
+    conRecorte.hook.unmount();
+
+    const conReencuadre = montar({ reencuadreId: "img-1" });
+    tecla("t");
+    expect(conReencuadre.store.getState().documento.capas).toHaveLength(antes);
+    conReencuadre.hook.unmount();
+  });
+
+  it("no crea nada con modificadores (⌘R no es 'rectángulo') ni escribiendo en un campo", () => {
+    const { store, hook } = montar();
+    const antes = store.getState().documento.capas.length;
+    teclaCon({ key: "r", metaKey: true });
+    teclaCon({ key: "t", altKey: true });
+    teclaCon({ key: "c", shiftKey: true });
+    // Foco en un input: el atajo no debe robar la escritura.
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+    input.remove();
+    expect(store.getState().documento.capas).toHaveLength(antes);
+    hook.unmount();
+  });
+});
+
+describe("useAtajosTeclado — «Ordenar» (tidy up, ⌥⇧T)", () => {
+  it("con 3+ capas seleccionadas reparte con espaciado uniforme (vía store.ordenarMulti)", () => {
+    const { store, hook } = montar();
+    const st = store.getState();
+    st.agregar(nuevaCapaTexto({ id: "a", x: 0, y: 100, w: 100, h: 50, z: 2 }));
+    st.agregar(nuevaCapaTexto({ id: "b", x: 130, y: 100, w: 100, h: 50, z: 3 }));
+    st.agregar(nuevaCapaTexto({ id: "c", x: 500, y: 100, w: 100, h: 50, z: 4 }));
+    st.seleccionarMuchas(["a", "b", "c"]);
+    // En macOS ⌥⇧T cambia e.key; el atajo se apoya en e.code.
+    teclaCon({ key: "ˇ", code: "KeyT", altKey: true, shiftKey: true });
+    const capas = store.getState().documento.capas;
+    const x = (id: string) => capas.find((c) => c.id === id)!.x;
+    // Extensión 0..600, 3 cajas de 100 => hueco uniforme de 150: 0, 250, 500.
+    expect([x("a"), x("b"), x("c")]).toEqual([0, 250, 500]);
+    hook.unmount();
+  });
+
+  it("con 2 capas seleccionadas es un no-op", () => {
+    const { store, hook } = montar();
+    const st = store.getState();
+    st.agregar(nuevaCapaTexto({ id: "a", x: 0, y: 100, w: 100, h: 50, z: 2 }));
+    st.agregar(nuevaCapaTexto({ id: "b", x: 130, y: 100, w: 100, h: 50, z: 3 }));
+    st.seleccionarMuchas(["a", "b"]);
+    teclaCon({ key: "ˇ", code: "KeyT", altKey: true, shiftKey: true });
+    const capas = store.getState().documento.capas;
+    expect(capas.find((c) => c.id === "b")!.x).toBe(130);
+    expect(store.getState().puedeDeshacer()).toBe(true); // solo los `agregar`; el tidy no registró nada
+    hook.unmount();
   });
 });

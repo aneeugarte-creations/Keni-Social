@@ -4,26 +4,29 @@
 
 import { Image as ImageIcon, PanelBottom } from "lucide-react";
 
-import type { Capa } from "./documento";
+import type { Capa, CapaMarco, CapaTexto } from "./documento";
 import { nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, zTope } from "./documento";
+import { crearElipse, crearLinea, crearRectangulo, crearTextoCuerpo } from "./elementos";
 import { useStoreEditor } from "./usarEditor";
 
 // Presets de texto. Titular y Pleca quedan ENLAZADOS al copy de la pieza (binding): al aplicar la
-// plantilla a una publicación se rellenan solos. Subtítulo y Cuerpo son texto fijo.
-const TEXTOS: { etiqueta: string; vista: string; clase: string; parcial: Parameters<typeof nuevaCapaTexto>[0] }[] = [
-  { etiqueta: "Titular", vista: "Titular", clase: "text-xl font-extrabold tracking-tight", parcial: { texto: "TITULAR", tamano: 96, peso: 800, mayusculas: true, ancla: "abajo", binding: "copy_in" } },
-  { etiqueta: "Subtítulo", vista: "Subtítulo", clase: "text-base font-bold", parcial: { texto: "Subtítulo", tamano: 56, peso: 700 } },
-  { etiqueta: "Cuerpo", vista: "Texto de cuerpo", clase: "text-xs", parcial: { texto: "Texto de cuerpo", tamano: 40, peso: 400 } },
-  { etiqueta: "Pleca", vista: "EN VIVO", clase: "text-[10px] font-bold", parcial: { texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, binding: "etiqueta_default", chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } } },
+// plantilla a una publicación se rellenan solos. Subtítulo y Cuerpo son texto fijo. «Cuerpo» es el
+// MISMO elemento que crea el atajo T del lienzo (fábrica compartida en `elementos.ts`).
+const TEXTOS: { etiqueta: string; vista: string; clase: string; chip?: boolean; atajo?: string; crear: () => CapaTexto }[] = [
+  { etiqueta: "Titular", vista: "Titular", clase: "text-xl font-extrabold tracking-tight", crear: () => nuevaCapaTexto({ w: 760, texto: "TITULAR", tamano: 96, peso: 800, mayusculas: true, ancla: "abajo", binding: "copy_in" }) },
+  { etiqueta: "Subtítulo", vista: "Subtítulo", clase: "text-base font-bold", crear: () => nuevaCapaTexto({ w: 760, texto: "Subtítulo", tamano: 56, peso: 700 }) },
+  { etiqueta: "Cuerpo", vista: "Texto de cuerpo", clase: "text-xs", atajo: "T", crear: crearTextoCuerpo },
+  { etiqueta: "Pleca", vista: "EN VIVO", clase: "text-[10px] font-bold", chip: true, crear: () => nuevaCapaTexto({ w: 760, texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, binding: "etiqueta_default", chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } }) },
 ];
 
-// Formas, con una vista previa real (no solo un icono).
-const FORMAS: { etiqueta: string; vista: React.ReactNode; parcial: Parameters<typeof nuevaCapaMarco>[0] }[] = [
-  { etiqueta: "Rectángulo", vista: <span className="h-6 w-9 rounded-sm bg-foreground/80" />, parcial: { forma: "rect", relleno: "#E30613", borde: null } },
-  { etiqueta: "Redondeado", vista: <span className="h-6 w-9 rounded-lg bg-foreground/80" />, parcial: { forma: "rect", relleno: "#E30613", borde: null, radio: 32 } },
-  { etiqueta: "Elipse", vista: <span className="h-7 w-7 rounded-full bg-foreground/80" />, parcial: { forma: "elipse", relleno: "#E30613", borde: null, w: 320, h: 320 } },
-  { etiqueta: "Marco", vista: <span className="h-6 w-9 rounded-sm border-2 border-foreground/80" />, parcial: { forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } } },
-  { etiqueta: "Línea", vista: <span className="h-0.5 w-9 bg-foreground/80" />, parcial: { forma: "linea", borde: { color: "#FFFFFF", grosor: 8 }, h: 0, w: 480 } },
+// Formas, con una vista previa real (no solo un icono). Rectángulo, Elipse y Línea son los MISMOS
+// elementos que crean los atajos R/C/L del lienzo (fábricas compartidas en `elementos.ts`).
+const FORMAS: { etiqueta: string; vista: React.ReactNode; atajo?: string; crear: () => CapaMarco }[] = [
+  { etiqueta: "Rectángulo", vista: <span className="h-6 w-9 rounded-sm bg-foreground/80" />, atajo: "R", crear: crearRectangulo },
+  { etiqueta: "Redondeado", vista: <span className="h-6 w-9 rounded-lg bg-foreground/80" />, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "rect", relleno: "#E30613", borde: null, radio: 32 }) },
+  { etiqueta: "Elipse", vista: <span className="h-7 w-7 rounded-full bg-foreground/80" />, atajo: "C", crear: crearElipse },
+  { etiqueta: "Marco", vista: <span className="h-6 w-9 rounded-sm border-2 border-foreground/80" />, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } }) },
+  { etiqueta: "Línea", vista: <span className="h-0.5 w-9 bg-foreground/80" />, atajo: "L", crear: crearLinea },
 ];
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
@@ -80,12 +83,13 @@ export function PanelElementos() {
           {TEXTOS.map((t) => (
             <button
               key={t.etiqueta}
-              onClick={() => insertar(nuevaCapaTexto({ w: 760, ...structuredClone(t.parcial) }))}
+              onClick={() => insertar(t.crear())}
+              title={t.atajo ? `${t.etiqueta} (${t.atajo})` : t.etiqueta}
               className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-neutral-900 px-3 py-2.5 text-left hover:border-primary"
             >
               <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-neutral-500">{t.etiqueta}</span>
               <span className={`truncate text-white ${t.clase}`}>
-                {t.parcial?.chip ? <span className="rounded-sm bg-[#E30613] px-1.5 py-0.5">{t.vista}</span> : t.vista}
+                {t.chip ? <span className="rounded-sm bg-[#E30613] px-1.5 py-0.5">{t.vista}</span> : t.vista}
               </span>
             </button>
           ))}
@@ -113,8 +117,8 @@ export function PanelElementos() {
           {FORMAS.map((f) => (
             <button
               key={f.etiqueta}
-              onClick={() => insertar(nuevaCapaMarco({ w: 360, h: 240, ...structuredClone(f.parcial) }))}
-              title={f.etiqueta}
+              onClick={() => insertar(f.crear())}
+              title={f.atajo ? `${f.etiqueta} (${f.atajo})` : f.etiqueta}
               className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-md border border-border text-[9px] text-muted-foreground hover:border-primary hover:bg-accent/50"
             >
               {f.vista}

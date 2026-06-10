@@ -20,6 +20,7 @@ import {
   AlignStartVertical,
   BringToFront,
   Copy,
+  LayoutGrid,
   SendToBack,
   Trash2,
 } from "lucide-react";
@@ -60,7 +61,7 @@ import {
 } from "./lienzo/lib";
 import { ReframeOverlay } from "./lienzo/ReframeOverlay";
 import { useArrastreCapas } from "./lienzo/useArrastreCapas";
-import { type ZoomApi, useAtajosTeclado } from "./lienzo/useAtajosTeclado";
+import { type LienzoApi, type ZoomApi, useAtajosTeclado } from "./lienzo/useAtajosTeclado";
 
 // Lee las dimensiones naturales (px) de un fichero de imagen sin subirlo, para respetar su
 // aspect-ratio al insertarlo. Tolerante: devuelve `null` si el navegador no puede decodificarlo.
@@ -336,12 +337,16 @@ export function Lienzo({
   // pero siempre ejecuta los handlers frescos (con `baseFit`/`escala` actuales).
   const zoomApi = useRef<ZoomApi>({ acercar, alejar, ajustar: ajustarPantalla, real: zoomReal });
   zoomApi.current = { acercar, alejar, ajustar: ajustarPantalla, real: zoomReal };
+  // Servicios del lienzo para los atajos de CREACIÓN (T/R/C/L), en un ref como `zoomApi`. Se
+  // rellena más abajo, cuando ya existen `abrirEdicionTexto` y el contenedor de scroll.
+  const lienzoApi = useRef<LienzoApi>({ centroViewport: () => ({ x: w / 2, y: h / 2 }), editarTexto: () => {} });
 
   // Atajos de teclado (ignora si se está escribiendo en un input/textarea). Hook extraído.
   // El modo recorte (prop O interno) cancela con Esc y confirma con Enter.
   useAtajosTeclado({
     store,
     zoom: zoomApi,
+    lienzo: lienzoApi,
     reencuadreId,
     onSalirReencuadre,
     recorteId: capaRecorte ? recorteActivoId : null,
@@ -408,6 +413,16 @@ export function Lienzo({
     if (editando && guardar) store.getState().actualizar(editando.id, { texto: textoEdit } as Partial<Capa>);
     setEditando(null);
   };
+
+  // Centro del VIEWPORT visible en coords del documento (los elementos nuevos —atajos T/R/C/L,
+  // pegado de imágenes— nacen ahí, no en 0,0). Sin medida aún => centro del lienzo.
+  const centroViewport = () => {
+    const cont = scrollRef.current;
+    return cont && cont.clientWidth > 0
+      ? { x: (cont.scrollLeft + cont.clientWidth / 2) / escala, y: (cont.scrollTop + cont.clientHeight / 2) / escala }
+      : { x: w / 2, y: h / 2 };
+  };
+  lienzoApi.current = { centroViewport, editarTexto: abrirEdicionTexto };
 
   // DOBLE CLIC sobre una capa (estilo Canva): en TEXTO abre la edición en línea; en IMAGEN entra en
   // MODO RECORTE. Sube hasta el hijo directo de la Layer (las capas de primer nivel llevan ahí su
@@ -538,12 +553,7 @@ export function Lienzo({
       const archivo = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/"));
       if (!archivo) return;
       e.preventDefault();
-      const cont = scrollRef.current;
-      const centro =
-        cont && cont.clientWidth > 0
-          ? { x: (cont.scrollLeft + cont.clientWidth / 2) / escala, y: (cont.scrollTop + cont.clientHeight / 2) / escala }
-          : { x: w / 2, y: h / 2 };
-      void subirEInsertarImagen(archivo, centro);
+      void subirEInsertarImagen(archivo, lienzoApi.current.centroViewport());
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -782,6 +792,8 @@ export function Lienzo({
             ? [
                 { icono: AlignHorizontalDistributeCenter, titulo: "Distribuir horizontal", onClick: () => store.getState().distribuir("h") },
                 { icono: AlignVerticalDistributeCenter, titulo: "Distribuir vertical", onClick: () => store.getState().distribuir("v") },
+                // «Ordenar» (tidy up): espaciado uniforme en el eje dominante + centros alineados.
+                { icono: LayoutGrid, titulo: "Ordenar", atajo: "⌥⇧T", onClick: () => store.getState().ordenarMulti() },
               ]
             : []),
           ...(!multi && seleccion

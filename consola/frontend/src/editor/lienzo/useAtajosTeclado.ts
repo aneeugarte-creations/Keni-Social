@@ -6,7 +6,8 @@ import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
 
 import type { Capa } from "../documento";
-import { nuevoId } from "../documento";
+import { altoVisual, nuevoId, zTope } from "../documento";
+import { crearElemento, type ElementoRapido } from "../elementos";
 import { aplicarEstilo } from "../estilo";
 import { copiarEstiloPortapapeles, estiloPortapapeles } from "../estilos-guardados";
 import type { StoreEditor } from "../store";
@@ -21,9 +22,27 @@ export type ZoomApi = {
   real: () => void;
 };
 
+// Servicios del Lienzo para los atajos de CREACIÓN (T/R/C/L). En un ref por la misma razón que
+// `ZoomApi`: el efecto no se re-registra, pero siempre ejecuta los handlers frescos.
+export type LienzoApi = {
+  // Centro del VIEWPORT visible, en coords del documento: los elementos nuevos nacen ahí.
+  centroViewport: () => { x: number; y: number };
+  // Abre la edición de texto EN LÍNEA sobre la capa (los textos nuevos entran directos a escribir).
+  editarTexto: (id: string) => void;
+};
+
+// Tecla → elemento de creación rápida (estilo Canva): T texto, R rectángulo, C círculo, L línea.
+const ELEMENTO_POR_TECLA: Record<string, ElementoRapido> = {
+  t: "texto",
+  r: "rect",
+  c: "elipse",
+  l: "linea",
+};
+
 export function useAtajosTeclado({
   store,
   zoom,
+  lienzo,
   reencuadreId,
   onSalirReencuadre,
   recorteId,
@@ -32,6 +51,7 @@ export function useAtajosTeclado({
 }: {
   store: StoreEditor;
   zoom: RefObject<ZoomApi>;
+  lienzo?: RefObject<LienzoApi>;
   reencuadreId: string | null;
   onSalirReencuadre?: () => void;
   recorteId: string | null;
@@ -126,6 +146,36 @@ export function useAtajosTeclado({
         }
         return;
       }
+      // «Ordenar» (tidy up, ⌥⇧T): 3+ capas seleccionadas → espaciado uniforme en su eje dominante.
+      // Con Alt pulsado e.key cambia en macOS ("ˇ" y similares), por eso se mira e.code.
+      if (!meta && e.altKey && e.shiftKey && e.code === "KeyT") {
+        e.preventDefault();
+        return st.ordenarMulti();
+      }
+      // CREACIÓN estilo Canva (T/R/C/L, sin modificadores y fuera de los modos de imagen): inserta
+      // el MISMO elemento que el botón del panel «Elementos» (fábricas compartidas en
+      // `elementos.ts`), centrado en el viewport actual, y lo deja seleccionado. El texto entra
+      // directo en edición en línea (tras el commit de React, cuando su nodo ya existe en el Stage).
+      if (!meta && !e.altKey && !e.shiftKey && !recorteId && !reencuadreId) {
+        const tipo = ELEMENTO_POR_TECLA[e.key.toLowerCase()];
+        if (tipo) {
+          e.preventDefault();
+          const capa = crearElemento(tipo);
+          const centro = lienzo?.current?.centroViewport() ?? {
+            x: st.documento.formato.w / 2,
+            y: st.documento.formato.h / 2,
+          };
+          st.agregar({
+            ...capa,
+            x: Math.round(centro.x - capa.w / 2),
+            y: Math.round(centro.y - altoVisual(capa) / 2),
+            z: zTope(st.documento),
+          } as Capa);
+          st.seleccionar(capa.id);
+          if (capa.tipo === "texto") requestAnimationFrame(() => lienzo?.current?.editarTexto(capa.id));
+          return;
+        }
+      }
       if (!sel) return;
       const capa = st.documento.capas.find((c) => c.id === sel);
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); return st.quitarMulti(); }
@@ -177,5 +227,5 @@ export function useAtajosTeclado({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, zoom, reencuadreId, onSalirReencuadre, recorteId, onCancelarRecorte, onConfirmarRecorte]);
+  }, [store, zoom, lienzo, reencuadreId, onSalirReencuadre, recorteId, onCancelarRecorte, onConfirmarRecorte]);
 }
