@@ -1,14 +1,21 @@
-// Shell del editor (patrón Canva/Polotno, mobile-first):
+// Shell del editor (patrón Canva: lienzo protagonista, cromo a los lados):
 //
-//   [rail] [flyout?] [ barra contextual + acciones ]   [inspector?]
-//                    [          LIENZO            ]
+//   cabecera del shell ←(portal)— [estado/guardar · deshacer/rehacer · muestra · Más · Exportar]
+//   [rail] [flyout?] [        LIENZO centrado         ] [inspector?]
+//                    [barra contextual flotante (solo con selección)]
 //
 // - RAIL de herramientas: tira vertical de iconos (izquierda en escritorio, barra inferior en
-//   móvil). Cada icono abre/cierra un FLYOUT con su panel (Elementos, Texto, IA, Capas).
-// - BARRA CONTEXTUAL: controles rápidos de la capa seleccionada; a su derecha, deshacer/rehacer y
-//   exportar (siempre visibles).
-// - INSPECTOR: panel de ajustes profundos, se abre desde «Ajustes» (columna derecha en escritorio,
-//   hoja inferior en móvil).
+//   móvil). Cada icono abre/cierra un FLYOUT con su panel (Plantillas, Elementos, Galería, Capas)
+//   y «Ajustes» abre el inspector.
+// - ACCIONES: un único clúster (deshacer/rehacer, vista con muestra, menú «Más», Exportar) que con
+//   `accionesEnCabecera` se PORTALIZA a la barra de cabecera unificada del shell (vía
+//   `AccionesPagina`); sin ella (p. ej. overlay de vídeo) se pinta como fila fina propia. La página
+//   puede aportar `accionesInicio` (estado de guardado + guardar), `accionesFin` (acción primaria
+//   contextual) y `menuExtra` (entradas para el menú «Más»).
+// - BARRA CONTEXTUAL: controles de la capa seleccionada; FLOTA sobre el lienzo (franja reservada
+//   del Lienzo, junto a alinear/orden/duplicar/borrar) y SOLO aparece con selección.
+// - INSPECTOR: panel de ajustes profundos, desde «Ajustes» del rail o de la barra contextual
+//   (columna derecha en escritorio, hoja inferior en móvil).
 // - Flyout e inspector son UN solo elemento responsive: columna acoplada en `md+`, hoja inferior
 //   en móvil (clases `max-md:`), con backdrop solo en móvil.
 
@@ -17,18 +24,24 @@ import {
   DollarSign,
   Eye,
   ImageOff,
+  ImagePlay,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
   Maximize2,
   MoreHorizontal,
   Redo2,
+  Settings2,
   Shapes,
+  Type,
   Undo2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { confirmar } from "@/components/comunes/confirmar";
 
 import { BarraContextual } from "./BarraContextual";
 import { ExportarDialogo } from "./ExportarDialogo";
@@ -89,22 +102,37 @@ export function EditorDocumento({
   onPlantillas,
   avisaHueco,
   onAbrirAdaptado,
+  accionesEnCabecera,
+  accionesInicio,
+  accionesFin,
+  menuExtra,
 }: {
   store: StoreEditor;
   marca: string;
   // Config de EXPORTACIÓN: presente => muestra el botón «Exportar» (diálogo de descarga con
   // formato/calidad/escala). Ausente (p. ej. overlay de vídeo) => sin botón de export.
-  exportar?: { bindings?: Record<string, string>; nombre?: string };
+  // `primario: false` lo degrada a botón secundario (cuando la acción primaria es otra, p. ej.
+  // «Guardar en pieza»).
+  exportar?: { bindings?: Record<string, string>; nombre?: string; primario?: boolean };
   onPlantillas?: () => void;
   // Si la pestaña está atada a plantilla, avisa cuando NO hay capa marcada como hueco de foto.
   avisaHueco?: boolean;
   // «Adaptar a…»: abre el documento reencuadrado en una pestaña nueva (lo cablea Imagen).
   onAbrirAdaptado?: (doc: Documento, nombre: string) => void;
+  // PORTALIZA el clúster de acciones a la barra de cabecera del shell (`AccionesPagina`). Sin
+  // esta prop el clúster se pinta como fila propia (overlay de vídeo, tests sueltos).
+  accionesEnCabecera?: boolean;
+  // Acciones de la PÁGINA al inicio del clúster (estado de guardado + guardar).
+  accionesInicio?: ReactNode;
+  // Acción primaria contextual de la página al FINAL del clúster (p. ej. «Guardar en pieza»).
+  accionesFin?: ReactNode;
+  // Entradas extra para el menú «Más» (terciarias de la página, p. ej. «Guardar como…»).
+  menuExtra?: ReactNode;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
   // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
   const stageInfo = useRef<{ stage: Konva.Stage | null; escala: number }>({ stage: null, escala: 1 });
-  // Menú «Más…» (acciones secundarias plegadas: adaptar + legibilidad) abierto.
+  // Menú «Más…» (acciones secundarias plegadas: adaptar + legibilidad + extras) abierto.
   const [menuMas, setMenuMas] = useState(false);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
@@ -198,7 +226,7 @@ export function EditorDocumento({
   };
 
   // REVISAR LEGIBILIDAD: muestrea el canvas bajo cada titular y arregla los que no llegan a AA.
-  const revisarLegibilidad = () => {
+  const revisarLegibilidad = async () => {
     const { stage, escala } = stageInfo.current;
     const doc = store.getState().documento;
     if (!stage) {
@@ -211,9 +239,11 @@ export function EditorDocumento({
       toast.success("Todos los titulares tienen contraste suficiente (AA).");
       return;
     }
-    const arreglar = window.confirm(
-      `${malos.length} ${malos.length === 1 ? "titular es poco legible" : "titulares son poco legibles"} sobre la foto. ¿Arreglar automáticamente (overlay/contorno/sombra)?`,
-    );
+    const arreglar = await confirmar({
+      titulo: "Legibilidad",
+      mensaje: `${malos.length} ${malos.length === 1 ? "titular es poco legible" : "titulares son poco legibles"} sobre la foto. ¿Arreglar automáticamente (overlay/contorno/sombra)?`,
+      textoConfirmar: "Arreglar",
+    });
     if (!arreglar) return;
     const st = store.getState();
     st.comenzarGesto();
@@ -235,10 +265,135 @@ export function EditorDocumento({
   })();
   const tituloTool = HERRAMIENTAS.find((h) => h.clave === tool)?.etiqueta ?? "";
 
+  // ── CLÚSTER DE ACCIONES ─────────────────────────────────────────────────────────────────────
+  // Una sola fila: [página: estado+guardar] · deshacer/rehacer · muestra (sm+) · «Más» ·
+  // Exportar · [página: primaria contextual]. Con `accionesEnCabecera` se portaliza a la barra
+  // de cabecera del shell; si no, se pinta como fila fina propia (overlay de vídeo).
+  const cluster = (
+    <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+      {accionesInicio}
+      <button
+        title="Deshacer (⌘Z)"
+        disabled={!puedeDeshacer}
+        onClick={() => store.getState().deshacer()}
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
+      >
+        <Undo2 className="h-4 w-4" />
+      </button>
+      <button
+        title="Rehacer (⇧⌘Z)"
+        disabled={store.getState().futuro.length === 0}
+        onClick={() => store.getState().rehacer()}
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
+      >
+        <Redo2 className="h-4 w-4" />
+      </button>
+      {/* VISTA CON MUESTRA — dos botones INDEPENDIENTES (foto/copy), editables. Solo presentación:
+          no tocan el documento ni el export. En móvil viven dentro del menú «Más». */}
+      <div className="hidden items-center sm:flex">
+        <BotonesMuestra
+          verFoto={muestraFoto}
+          setVerFoto={setMuestraFoto}
+          verCopy={muestraCopy}
+          setVerCopy={setMuestraCopy}
+        />
+      </div>
+      {/* MÁS — acciones secundarias/terciarias plegadas. */}
+      <div className="relative">
+        <button
+          title="Más acciones"
+          aria-label="Más acciones"
+          aria-expanded={menuMas}
+          onClick={() => setMenuMas((v) => !v)}
+          className={`flex items-center rounded-md p-1.5 hover:bg-accent ${
+            menuMas ? "bg-accent text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+        {menuMas && (
+          <>
+            <Telon
+              onCerrar={() => setMenuMas(false)}
+              etiqueta="Cerrar menú de más acciones"
+              className="fixed inset-0 z-30"
+            />
+            <div className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md">
+              {/* Entradas de la página (terciarias, p. ej. «Guardar como…»). Cierra el menú al
+                  pulsar cualquiera (captura), sin que cada entrada tenga que hacerlo. */}
+              {menuExtra && (
+                <>
+                  <div onClickCapture={() => setMenuMas(false)}>{menuExtra}</div>
+                  <div className="my-1 border-t border-border" />
+                </>
+              )}
+              {/* En móvil los toggles de muestra no caben en la cabecera: viven aquí. */}
+              <div className="sm:hidden">
+                <button
+                  onClick={() => setMuestraFoto(!muestraFoto)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                >
+                  <ImagePlay className="h-4 w-4 text-muted-foreground" />
+                  Foto de muestra
+                  <span className="ml-auto text-[10px] text-muted-foreground">{muestraFoto ? "ON" : "OFF"}</span>
+                </button>
+                <button
+                  onClick={() => setMuestraCopy(!muestraCopy)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                >
+                  <Type className="h-4 w-4 text-muted-foreground" />
+                  Copy de muestra
+                  <span className="ml-auto text-[10px] text-muted-foreground">{muestraCopy ? "ON" : "OFF"}</span>
+                </button>
+                <div className="my-1 border-t border-border" />
+              </div>
+              {/* Revisar legibilidad. */}
+              <button
+                onClick={() => { setMenuMas(false); void revisarLegibilidad(); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+              >
+                <Eye className="h-4 w-4 text-muted-foreground" /> Revisar legibilidad
+              </button>
+              <div className="my-1 border-t border-border" />
+              <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Adaptar a…
+              </div>
+              {PRESETS_FORMATO.map((p) => {
+                const actual = mismoFormato(p.f, store.getState().documento.formato);
+                return (
+                  <button
+                    key={p.etiqueta}
+                    onClick={() => adaptarA(p)}
+                    disabled={actual}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Maximize2 className="h-4 w-4 text-muted-foreground" /> {p.nombre}
+                    </span>
+                    {actual && <span className="text-[10px] text-muted-foreground">actual</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+      {exportar && (
+        <ExportarDialogo
+          store={store}
+          bindings={exportar.bindings}
+          nombre={exportar.nombre}
+          variante={exportar.primario === false ? "secundario" : "primario"}
+        />
+      )}
+      {accionesFin}
+    </div>
+  );
+
   return (
     <ProveedorEditor store={store}>
       <div className="flex h-full min-h-0 w-full bg-background">
-        {/* RAIL (escritorio: vertical izquierda). */}
+        {/* RAIL (escritorio: vertical izquierda). «Ajustes» (inspector) al fondo. */}
         <nav className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex">
           {onPlantillas && (
             <RailBtn etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />
@@ -246,6 +401,9 @@ export function EditorDocumento({
           {HERRAMIENTAS.map((h) => (
             <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
           ))}
+          <div className="mt-auto w-full">
+            <RailBtn etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
+          </div>
         </nav>
 
         {/* FLYOUT del rail (columna en md+, hoja inferior en móvil). */}
@@ -269,111 +427,30 @@ export function EditorDocumento({
           </>
         )}
 
-        {/* COLUMNA CENTRAL: barra contextual + acciones + lienzo. En móvil deja hueco inferior
-            para que el rail fijo (h-16) no tape el lienzo. */}
+        {/* COLUMNA CENTRAL: SOLO el lienzo (las acciones van arriba en la cabecera del shell, o en
+            una fila fina si no hay cabecera). La barra contextual de la selección flota DENTRO del
+            área del lienzo (franja reservada del Lienzo), así el lienzo no se recoloca al
+            seleccionar. En móvil deja hueco inferior para el rail fijo (h-16). */}
         <div className="flex min-w-0 flex-1 flex-col max-md:pb-[calc(4rem_+_env(safe-area-inset-bottom))]">
-          <div className="flex items-stretch border-b border-border">
-            <div className="min-w-0 flex-1">
-              <BarraContextual
-                fuentesExtra={fuentesExtra}
-                onAbrirAjustes={() => setAjustes(true)}
-                onReencuadrar={abrirReencuadre}
-                onReemplazar={abrirReemplazo}
-              />
+          {accionesEnCabecera ? (
+            <AccionesPagina>{cluster}</AccionesPagina>
+          ) : (
+            <div className="flex items-center justify-end border-b border-border bg-background px-2 py-1">
+              {cluster}
             </div>
-            <div className="flex shrink-0 items-center gap-1 border-l border-border bg-background px-2">
-              {faltaHueco && (
-                <span
-                  title="Marca una imagen como «hueco de foto» para que el equipo coloque la foto real."
-                  className="mr-1 hidden items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 sm:inline-flex dark:bg-amber-950 dark:text-amber-400"
-                >
-                  <ImageOff className="h-3 w-3" />
-                  Falta hueco de foto
-                </span>
-              )}
-              {/* VISTA CON MUESTRA — dos botones INDEPENDIENTES (foto/copy), editables. Solo
-                  presentación: no tocan el documento ni el export. */}
-              <BotonesMuestra
-                verFoto={muestraFoto}
-                setVerFoto={setMuestraFoto}
-                verCopy={muestraCopy}
-                setVerCopy={setMuestraCopy}
-              />
-              {/* MÁS — acciones secundarias plegadas (adaptar a otra red + revisar legibilidad). */}
-              <div className="relative">
-                <button
-                  title="Más acciones"
-                  aria-label="Más acciones"
-                  aria-expanded={menuMas}
-                  onClick={() => setMenuMas((v) => !v)}
-                  className={`flex items-center rounded-md p-1.5 hover:bg-accent ${
-                    menuMas ? "bg-accent text-foreground" : "text-muted-foreground"
-                  }`}
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-                {menuMas && (
-                  <>
-                    <Telon
-                      onCerrar={() => setMenuMas(false)}
-                      etiqueta="Cerrar menú de más acciones"
-                      className="fixed inset-0 z-30"
-                    />
-                    <div className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md">
-                      {/* Revisar legibilidad. */}
-                      <button
-                        onClick={() => { setMenuMas(false); revisarLegibilidad(); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-                      >
-                        <Eye className="h-4 w-4 text-muted-foreground" /> Revisar legibilidad
-                      </button>
-                      <div className="my-1 border-t border-border" />
-                      <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Adaptar a…
-                      </div>
-                      {PRESETS_FORMATO.map((p) => {
-                        const actual = mismoFormato(p.f, store.getState().documento.formato);
-                        return (
-                          <button
-                            key={p.etiqueta}
-                            onClick={() => adaptarA(p)}
-                            disabled={actual}
-                            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Maximize2 className="h-4 w-4 text-muted-foreground" /> {p.nombre}
-                            </span>
-                            {actual && <span className="text-[10px] text-muted-foreground">actual</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-              <button
-                title="Deshacer (⌘Z)"
-                disabled={!puedeDeshacer}
-                onClick={() => store.getState().deshacer()}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
-              >
-                <Undo2 className="h-4 w-4" />
-              </button>
-              <button
-                title="Rehacer (⇧⌘Z)"
-                disabled={store.getState().futuro.length === 0}
-                onClick={() => store.getState().rehacer()}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
-              >
-                <Redo2 className="h-4 w-4" />
-              </button>
-              {exportar && (
-                <ExportarDialogo store={store} bindings={exportar.bindings} nombre={exportar.nombre} />
-              )}
-            </div>
-          </div>
+          )}
 
           <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2 md:p-4">
+            {/* Aviso de hueco de foto: chip flotante discreto, abajo y centrado (no roba una
+                franja entera de cromo). */}
+            {faltaHueco && (
+              <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700 shadow-sm dark:bg-amber-950 dark:text-amber-400">
+                  <ImageOff className="h-3 w-3" />
+                  Marca una imagen como «hueco de foto»
+                </span>
+              </div>
+            )}
             <Lienzo
               reencuadreId={reencuadreId}
               onSalirReencuadre={() => setReencuadreId(null)}
@@ -382,6 +459,14 @@ export function EditorDocumento({
               muestraFoto={muestraFoto}
               muestraCopy={muestraCopy}
               onStage={(stage, escala) => { stageInfo.current = { stage, escala }; }}
+              barraSeleccion={
+                <BarraContextual
+                  fuentesExtra={fuentesExtra}
+                  onAbrirAjustes={() => setAjustes(true)}
+                  onReencuadrar={abrirReencuadre}
+                  onReemplazar={abrirReemplazo}
+                />
+              }
             />
           </div>
         </div>
@@ -410,11 +495,12 @@ export function EditorDocumento({
         )}
 
         {/* RAIL móvil (barra inferior fija, respetando el safe-area del notch inferior). */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] grid-cols-5 border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
+        <nav className={`fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] ${onPlantillas ? "grid-cols-5" : "grid-cols-4"} border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden`}>
           {onPlantillas && <RailBtnMovil etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />}
           {HERRAMIENTAS.map((h) => (
             <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
           ))}
+          <RailBtnMovil etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
         </nav>
       </div>
     </ProveedorEditor>

@@ -39,8 +39,9 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
       </div>
 
       {/* BLOQUE COMÚN. Principal: nada imprescindible (lo específico va por tipo más abajo).
-          MÁS: Opacidad. AVANZADO: geometría (X/Y/Ancho/Alto), rotación, mezcla y Estilos. */}
-      <Seccion titulo="Más" defaultAbierta>
+          ASPECTO: Opacidad. POSICIÓN Y ESTILOS: geometría (X/Y/Ancho/Alto), rotación, mezcla y
+          Estilos guardados. (Antes «Más»/«Avanzado»: jerarquía vacía que no decía nada.) */}
+      <Seccion titulo="Aspecto" defaultAbierta>
         <Campo etiqueta="Opacidad">
           <input
             type="range"
@@ -54,7 +55,7 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
         </Campo>
       </Seccion>
 
-      <Seccion titulo="Avanzado">
+      <Seccion titulo="Posición y estilos">
         <div className="grid grid-cols-2 gap-2">
           <Campo etiqueta="X"><Num valor={capa.x} onChange={(v) => set({ x: v } as Partial<Capa>)} /></Campo>
           <Campo etiqueta="Y"><Num valor={capa.y} onChange={(v) => set({ y: v } as Partial<Capa>)} /></Campo>

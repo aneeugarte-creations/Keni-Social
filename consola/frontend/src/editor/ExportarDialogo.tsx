@@ -66,6 +66,7 @@ export function ExportarDialogo({
   store,
   bindings,
   nombre,
+  variante = "primario",
 }: {
   store: StoreEditor;
   // Titular/pleca REAL de la pieza (cuando la pestaña está anclada a una publicación). Sin pieza
@@ -73,6 +74,9 @@ export function ExportarDialogo({
   bindings?: Record<string, string>;
   // Nombre de la plantilla/pieza (si existe) para el archivo descargado.
   nombre?: string;
+  // Jerarquía del botón disparador: "primario" (acción principal del editor) u "outline" cuando la
+  // acción primaria del contexto es otra (p. ej. «Guardar en pieza»).
+  variante?: "primario" | "secundario";
 }) {
   const [abierto, setAbierto] = useState(false);
   const [formato, setFormato] = useState<Formato>("png");
@@ -102,8 +106,9 @@ export function ExportarDialogo({
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button size="sm" className="ml-1">
-          Exportar
+        <Button size="sm" variant={variante === "secundario" ? "outline" : "default"} className="ml-1 h-8" title="Exportar imagen (PNG/JPG)">
+          <Download className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Exportar</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">

@@ -1,7 +1,8 @@
-// Barra CONTEXTUAL superior (patrón Canva/Polotno): muestra los controles MÁS usados de la capa
-// seleccionada, en una fila compacta que en móvil se desplaza en horizontal. Lo profundo (todos
-// los ajustes) vive en el Inspector, que se abre desde el botón «Ajustes». Sin selección, ofrece
-// el tamaño del lienzo y el fondo. Opera sobre el store del documento vía contexto.
+// Barra CONTEXTUAL de la capa seleccionada (patrón Canva): píldora FLOTANTE sobre el lienzo (la
+// aloja la franja reservada del Lienzo, junto a alinear/orden/duplicar/borrar) con los controles
+// MÁS usados. SOLO aparece con selección; sin capa seleccionada no pinta nada (los ajustes del
+// lienzo/fondo viven en el Inspector, vía «Ajustes» del rail). Lo profundo (todos los ajustes)
+// vive en el Inspector, que se abre desde el botón «Ajustes». Opera sobre el store vía contexto.
 
 import {
   AlignCenter,
@@ -10,7 +11,6 @@ import {
   AlignRight,
   Bold,
   Crop,
-  Maximize2,
   Replace,
   Settings2,
 } from "lucide-react";
@@ -137,32 +137,27 @@ export function BarraContextual({
   const set = (cambios: Partial<Capa>) => capa && store.getState().actualizar(capa.id, cambios);
   const familias = [...CATALOGO_FUENTES, ...fuentesExtra.filter((f) => !CATALOGO_FUENTES.includes(f as never))];
 
+  // Estilo de PÍLDORA flotante (mismo lenguaje que la barra de alinear/orden del Lienzo).
+  const PILDORA =
+    "flex min-w-0 max-w-full shrink items-center gap-1 overflow-x-auto rounded-md border border-border bg-popover p-1 shadow-md";
+
   // Varias capas: la barra contextual se mantiene minimalista (las acciones de alineación viven en
-  // la barra flotante sobre la selección).
+  // la píldora de al lado).
   if (seleccionMulti.length > 1) {
     return (
-      <div className="flex h-11 items-center gap-1 overflow-x-auto bg-background px-2">
-        <span className="text-sm text-muted-foreground">{seleccionMulti.length} capas seleccionadas</span>
+      <div className={PILDORA}>
+        <span className="whitespace-nowrap px-1 text-xs text-muted-foreground">{seleccionMulti.length} capas</span>
         <Sep />
         <BotonIcono titulo="Ajustes" onClick={onAbrirAjustes}><Settings2 className="h-4 w-4" /> Ajustes</BotonIcono>
       </div>
     );
   }
 
-  if (!capa) {
-    // Sin selección: pista + acceso al lienzo/fondo (IA vive en el rail; no se duplica).
-    return (
-      <div className="flex h-11 items-center gap-1 overflow-x-auto bg-background px-2">
-        <span className="truncate text-sm text-muted-foreground">Selecciona una capa, o añade elementos desde el panel.</span>
-        <div className="ml-auto flex items-center gap-1">
-          <BotonIcono titulo="Lienzo y fondo" onClick={onAbrirAjustes}><Maximize2 className="h-4 w-4" /> Lienzo</BotonIcono>
-        </div>
-      </div>
-    );
-  }
+  // Sin selección: nada (la barra solo existe para la capa seleccionada).
+  if (!capa) return null;
 
   return (
-    <div className="flex h-11 items-center gap-1 overflow-x-auto bg-background px-2">
+    <div className={PILDORA}>
       {capa.tipo === "texto" && (
         <>
           <select

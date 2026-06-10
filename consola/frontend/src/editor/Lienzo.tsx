@@ -26,6 +26,7 @@ import {
 import {
   type DragEvent as DragEventReact,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -87,6 +88,7 @@ export function Lienzo({
   muestraFoto = false,
   muestraCopy = false,
   onStage,
+  barraSeleccion,
 }: {
   maxAncho?: number;
   maxAlto?: number;
@@ -102,6 +104,10 @@ export function Lienzo({
   muestraCopy?: boolean;
   // Expone el Stage de Konva + la escala actual al padre (para muestrear píxeles, p.ej. legibilidad).
   onStage?: (stage: Konva.Stage | null, escala: number) => void;
+  // Barra CONTEXTUAL de la capa seleccionada (la aporta EditorDocumento): se aloja en la franja
+  // reservada de arriba, junto a la píldora de alinear/orden, y solo se ve con selección (y fuera
+  // de arrastre/edición/modos de imagen, igual que aquella).
+  barraSeleccion?: ReactNode;
 }) {
   const store = useStoreEditor();
   const documento = useEditor((s) => s.documento);
@@ -564,12 +570,16 @@ export function Lienzo({
   return (
     <div className="flex h-full w-full items-stretch gap-2">
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-    {/* Franja superior fija: aloja la barra de acciones ARRIBA de la imagen (fuera del lienzo),
-        en un sitio estable que NO sigue a la selección —igual que el raíl de zoom va a la derecha—.
-        La altura va reservada siempre para que el lienzo no se recoloque al aparecer/desaparecer. */}
-    <div className="flex h-9 shrink-0 items-center justify-center px-1">
+    {/* Franja superior fija: aloja la barra CONTEXTUAL de la capa + la píldora de acciones ARRIBA
+        de la imagen (fuera del lienzo), en un sitio estable que NO sigue a la selección —igual que
+        el raíl de zoom va a la derecha—. La altura va reservada siempre para que el lienzo no se
+        recoloque al aparecer/desaparecer la selección. */}
+    <div className="flex h-11 shrink-0 items-center justify-center px-1">
       {acciones.length > 0 && !arrastrando && !editando && !modoImagen && (
-        <BarraAcciones acciones={acciones} />
+        <div className="flex min-w-0 max-w-full items-center gap-1.5">
+          {barraSeleccion}
+          <BarraAcciones acciones={acciones} />
+        </div>
       )}
     </div>
     <div ref={medirRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
