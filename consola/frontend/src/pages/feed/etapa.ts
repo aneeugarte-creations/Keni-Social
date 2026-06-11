@@ -26,6 +26,8 @@ import type { Publicacion } from "@/types";
 export type EtapaIa =
   | "generando_copy"
   | "generando_arte"
+  | "falta_copy_in"
+  | "falta_hashtags"
   | "lista_para_revisar"
   | "aprobada"
   | "programada"
@@ -48,6 +50,10 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   // Ola F: para piezas video este estado significa "Falta video"; la etiqueta dinámica
   // la calcula `etiquetaEtapa` a partir del formato; aquí "Falta imagen" es el fallback foto.
   generando_arte: { etiqueta: "Falta imagen", enCurso: true },
+  // Acciones del EQUIPO en la fase de revisión (no es la IA trabajando): el texto sobre la
+  // imagen (placa) y los hashtags (clave para campañas/líneas). `enCurso:false` = sin pulso.
+  falta_copy_in: { etiqueta: "Falta copy-in", enCurso: false },
+  falta_hashtags: { etiqueta: "Faltan hashtags", enCurso: false },
   // "Para revisar" (no "Lista"): no colisiona con la pestaña "Lista" del hub y dice la acción.
   lista_para_revisar: { etiqueta: "Para revisar", enCurso: false },
   aprobada: { etiqueta: "Aprobada", enCurso: false },
@@ -71,24 +77,43 @@ export function etiquetaEtapa(etapa: EtapaIa, formato?: string): string {
   return META_ETAPA[etapa].etiqueta;
 }
 
+// Un hashtag en el caption: '#' + letras/dígitos/_ (incluye acentos con la flag `u`). ESPEJO de
+// `campanias._PAT_HASHTAG` del backend; aquí solo nos interesa SI hay alguno.
+const PAT_HASHTAG = /#[\p{L}\p{N}_]+/u;
+
+/** ¿Falta el TEXTO sobre la imagen (placa, `copy_in`)? Solo en piezas de MARCA con placa
+ *  (foto/carrusel), no exentas ni con placa oculta. ESPEJO de `_falta_copy_in` del backend. */
+function faltaCopyIn(p: Publicacion): boolean {
+  if (!p.marca) return false;
+  const fmt = (p.formato ?? "").trim().toLowerCase();
+  if (fmt !== "foto" && fmt !== "carrusel") return false;
+  if (p.copy_in_exento || (p as { placa_oculta?: boolean }).placa_oculta) return false;
+  return !p.copy_in?.trim();
+}
+
+/** ¿El copy no lleva ningún hashtag? Clave para monitorizar campañas y líneas de contenido. */
+function faltaHashtags(p: Publicacion): boolean {
+  return !PAT_HASHTAG.test(p.contenido ?? "");
+}
+
 /**
- * Deriva la etapa IA de una pieza a partir de su estado + checklist.
+ * Deriva la etapa IA de una pieza a partir de su estado + checklist. «Revisión» NO se enseña
+ * como tal (es interno): mientras la pieza no esté aprobada/programada/publicada, la etapa
+ * muestra la PRIMERA ACCIÓN PENDIENTE, también en revisión.
  *
  * Reglas (de "más avanzado" a "menos"):
- *  - `publicado`               → publicada
- *  - `programado`              → programada
- *  - `aprobado`                → aprobada
- *  - `en_revision`             → lista_para_revisar (gate humano: espera tu firma)
- *  - falta copy                → generando_copy
- *  - lleva imagen (copy-in / exenta) pero falta la FOTO real → generando_arte ("Falta imagen")
- *  - de solo texto, o con copy + foto real → lista_para_revisar
+ *  - `publicado` / `programado` / `aprobado` → etapa terminal
+ *  - falta copy                → generando_copy ("Falta copy")
+ *  - falta la FOTO real (o el vídeo) → generando_arte ("Falta imagen"/"Falta video")
+ *  - EN REVISIÓN, falta la placa → falta_copy_in ("Falta copy-in")
+ *  - EN REVISIÓN, sin hashtags  → falta_hashtags ("Faltan hashtags")
+ *  - nada pendiente             → lista_para_revisar (te toca el like/dislike)
  *
- * IMAGEN vs PLANTILLA: la placa (`imagen`) es solo la PLANTILLA (parte del copy-in), no cuenta
- * como imagen real. "Lleva imagen" = hay copy-in o exención; necesita FOTO (`foto`/`imagen_fuente`).
+ * DOS NIVELES: producción (copy + foto, gatea el avance) y revisión (placa + hashtags, acciones
+ * del equipo que NO bloquean el avance, solo se piden ya en revisión).
  *
- * Una pieza COMPLETA fuera de revisión (borrador recién completado o devuelto a redacción) es
- * "Para revisar": el pipeline la mueve sola a la cola de revisión (avance incondicional), así
- * que «borrador» no es un estado donde descanse y no se distingue como etapa aparte.
+ * IMAGEN vs PLANTILLA: la placa (`imagen`) es solo la PLANTILLA, no cuenta como imagen real;
+ * necesita FOTO (`foto`/`imagen_fuente`, o imagen bespoke sin marca).
  *
  * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
  * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
@@ -109,7 +134,6 @@ function etapaBruta(p: Publicacion): EtapaIa {
   if (p.estado === "publicado") return "publicada";
   if (p.estado === "programado") return "programada";
   if (p.estado === "aprobado") return "aprobada";
-  if (p.estado === "en_revision") return "lista_para_revisar";
   // ESPEJO del backend. Solo "generando_copy" si DE VERDAD falta el copy.
   if (!p.contenido?.trim()) return "generando_copy";
   // Ola F: las piezas VIDEO necesitan el asset de video (no una foto).
@@ -123,6 +147,11 @@ function etapaBruta(p: Publicacion): EtapaIa {
     // Foto: la foto cruda (`foto`), imagen de fuente (`imagen_fuente`) o imagen bespoke (`imagen` sin marca).
     const hayImagenReal = !!p.foto || !!p.imagen_fuente || (!p.marca && !!p.imagen);
     if (!hayImagenReal) return "generando_arte";
+  }
+  // Acciones de la FASE DE REVISIÓN (placa + hashtags): se piden YA en revisión, no bloquean el avance.
+  if (p.estado === "en_revision") {
+    if (faltaCopyIn(p)) return "falta_copy_in";
+    if (faltaHashtags(p)) return "falta_hashtags";
   }
   return "lista_para_revisar";
 }

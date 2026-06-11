@@ -25,10 +25,38 @@ constantes neutras `estados` (infra compartida): no importa de `api/`.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .. import marcas, pipeline_estado, redes, repos
 from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
+
+# Un hashtag en el caption: '#' + caracteres de palabra (acentos/dígitos bajo re.UNICODE).
+# MISMO patrón que `campanias._PAT_HASHTAG` (que cruza piezas con campañas por el caption):
+# aquí solo nos interesa SI hay alguno, para saber si falta ponerlos.
+_PAT_HASHTAG = re.compile(r"#\w+", re.UNICODE)
+
+
+def _falta_hashtags(pub: dict[str, Any]) -> bool:
+    """True si el copy (caption) NO lleva ningún hashtag. Los hashtags son clave para
+    monitorizar campañas y líneas de contenido; el equipo los pone en la fase de revisión."""
+    return not _PAT_HASHTAG.search(str(pub.get("contenido") or ""))
+
+
+def _falta_copy_in(pub: dict[str, Any], formato: str) -> bool:
+    """True si la pieza necesita el TEXTO sobre la imagen (placa, `copy_in`) y no lo tiene.
+
+    Solo aplica a piezas de MARCA con placa (foto/carrusel): la placa con su titular es de marca.
+    No aplica a piezas SIN marca (imagen bespoke, sin plantilla) ni a vídeo. Tampoco falta cuando
+    la pieza está EXENTA de copy-in (imagen autoexplicativa, `copy_in_exento`) o se publica sin
+    placa (`placa_oculta`, foto cruda). Es producción (la genera el pipeline con el copy)."""
+    if not str(pub.get("marca") or "").strip():
+        return False
+    if redes.normalizar_formato(formato) not in ("foto", "carrusel"):
+        return False
+    if pub.get("copy_in_exento") or pub.get("placa_oculta"):
+        return False
+    return not str(pub.get("copy_in") or "").strip()
 
 
 def _fuente_original_de(pub: dict[str, Any]) -> str:
@@ -95,13 +123,18 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     )
     # El ASSET requerido depende del formato: vídeo -> `falta_video` (no `falta_imagen`).
     hay_video = (not bool(pub.get("falta_video", False))) or bool(str(pub.get("video") or "").strip())
+    formato = redes.normalizar_formato(pub.get("formato"))
     etapa_ia = pipeline_estado.etapa_de_pieza(
         {
             "estado": pub.get("estado"),
-            "formato": redes.normalizar_formato(pub.get("formato")),
+            "formato": formato,
             "falta_copy": not str(pub.get("contenido") or "").strip(),
             "falta_imagen": not hay_imagen_real,
             "falta_video": not hay_video,
+            # Placa (texto en la imagen) y hashtags: las dos acciones que el feed enseña como
+            # «lo que falta» además de copy/foto (la etapa decide cuándo aplica cada una).
+            "falta_copy_in": _falta_copy_in(pub, formato),
+            "falta_hashtags": _falta_hashtags(pub),
         }
     )
     return {

@@ -103,10 +103,35 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("lista_para_revisar");
   });
 
-  it("en revisión → lista_para_revisar (gate humano)", () => {
-    expect(etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: undefined }))).toBe(
-      "lista_para_revisar",
-    );
+  it("en revisión COMPLETA (copy+foto+placa+hashtags) → lista_para_revisar (te toca el OK)", () => {
+    expect(
+      etapaDePublicacion(
+        pub({ estado: "en_revision", contenido: "copy #Mundial2026", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
+      ),
+    ).toBe("lista_para_revisar");
+  });
+
+  it("en revisión enseña la acción pendiente (revisión es interno): sin foto / sin placa / sin hashtags", () => {
+    // Sin foto real: "Falta imagen" aunque ya esté en revisión (antes cortocircuitaba a lista).
+    expect(
+      etapaDePublicacion(pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "", etapa_ia: undefined })),
+    ).toBe("generando_arte");
+    // Con foto pero sin el texto en la imagen (placa, marca): "Falta copy-in".
+    expect(
+      etapaDePublicacion(pub({ estado: "en_revision", contenido: "copy #x", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
+    ).toBe("falta_copy_in");
+    // Completa pero sin hashtags: "Faltan hashtags" (clave para campañas/líneas).
+    expect(
+      etapaDePublicacion(pub({ estado: "en_revision", contenido: "copy sin tags", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined })),
+    ).toBe("falta_hashtags");
+  });
+
+  it("placa y hashtags NO bloquean en borrador (acciones de la fase de revisión)", () => {
+    // Borrador con copy+foto pero sin placa ni hashtags: sigue "lista" (el avance la mueve y se
+    // piden ya en revisión); no se sacan como pendientes antes de la cola.
+    expect(
+      etapaDePublicacion(pub({ estado: "borrador", contenido: "copy sin tags", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
+    ).toBe("lista_para_revisar");
   });
 
   it("respeta el `etapa_ia` explícito 'lista_para_revisar' tanto en borrador como en revisión", () => {
@@ -133,7 +158,11 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
   });
 
   it("ignora un `etapa_ia` desconocido y cae a la derivación", () => {
-    const conBasura = { ...pub({ estado: "en_revision" }), etapa_ia: "no_existe" };
+    // Pieza COMPLETA en revisión con un `etapa_ia` basura: cae a la derivación local → lista.
+    const conBasura = {
+      ...pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "bg.png" }),
+      etapa_ia: "no_existe",
+    };
     expect(etapaDePublicacion(conBasura as unknown as Publicacion)).toBe("lista_para_revisar");
   });
 
@@ -141,6 +170,8 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     for (const etapa of [
       "generando_copy",
       "generando_arte",
+      "falta_copy_in",
+      "falta_hashtags",
       "lista_para_revisar",
       "aprobada",
       "programada",

@@ -44,6 +44,8 @@ _ESTADO_CERRADO = "hecha"
 ETAPA_PRIORIZADA = "priorizada"          # tema auto-generable en cola, sin copy aun
 ETAPA_GENERANDO_COPY = "generando_copy"  # copy ya encolado (etiqueta autogen), sin copy listo
 ETAPA_GENERANDO_ARTE = "generando_arte"  # tiene copy pero le falta imagen (arte en curso/pendiente)
+ETAPA_FALTA_COPY_IN = "falta_copy_in"    # copy + foto pero sin el texto en la imagen (placa)
+ETAPA_FALTA_HASHTAGS = "falta_hashtags"  # en revision pero sin hashtags (clave para campanas/lineas)
 ETAPA_LISTA_REVISAR = "lista_para_revisar"  # copy + imagen listos / ya en revision o mas alla
 ETAPA_FUERA = "fuera_de_tuberia"         # no entra a la auto-generacion (manual tecleado, tarea)
 
@@ -147,6 +149,8 @@ ETAPA_PUBLICADA = "publicada"
 ETAPAS_PIEZA: tuple[str, ...] = (
     ETAPA_GENERANDO_COPY,
     ETAPA_GENERANDO_ARTE,
+    ETAPA_FALTA_COPY_IN,
+    ETAPA_FALTA_HASHTAGS,
     ETAPA_LISTA_REVISAR,
     ETAPA_APROBADA,
     ETAPA_PROGRAMADA,
@@ -159,21 +163,27 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
 
     `pieza` es la forma publica de una publicacion (`publicacion_a_dict`): usa su `estado`
     editorial (`borrador`/`en_revision`/`aprobado`/`programado`/`publicado`) y la checklist
-    `falta_copy`/`falta_imagen`. Reglas (de "mas avanzado" a "menos"), ESPEJO de la
-    derivacion del front (`etapaDePublicacion` en `feed/etapa.ts`):
+    `falta_copy`/`falta_imagen`/`falta_copy_in`/`falta_hashtags`. ESPEJO de la derivacion del
+    front (`etapaDePublicacion` en `feed/etapa.ts`).
 
-      - estado `publicado`              -> publicada
-      - estado `programado`             -> programada
-      - estado `aprobado`               -> aprobada
-      - estado `en_revision`            -> lista_para_revisar (gate humano)
-      - falta copy                      -> generando_copy
-      - hay copy pero falta el ASSET del formato (foto: `falta_imagen`; vídeo: `falta_video`) -> generando_arte
-      - copy + asset listos (aún sin entrar a revisión) -> lista_para_revisar
+    «Revisión» NO es una etapa que se enseñe como tal: es interna y significa "hay que hacer
+    algo". Por eso, MIENTRAS la pieza no esté aprobada/programada/publicada, la etapa enseña la
+    PRIMERA ACCIÓN PENDIENTE (no un "para revisar" que oculte lo que falta), tanto en borrador
+    como en revisión:
 
-    OJO con el último caso: una pieza con copy + imagen pero todavía en `pendiente` (que el
-    auto-avance no ha movido aún) está LISTA, no "generando copy". Antes el caso por defecto
-    era `generando_copy`, así que estas piezas mentían ("Generando copy" con copy e imagen ya
-    hechos). El orden ahora es explícito: solo es `generando_copy` si DE VERDAD falta el copy.
+      - estado `publicado` / `programado` / `aprobado` -> etapa terminal (ya pasó el gate)
+      - falta copy                      -> generando_copy   ("Falta copy")
+      - falta el ASSET del formato (foto: `falta_imagen`; vídeo: `falta_video`) -> generando_arte
+      - EN REVISIÓN y falta la placa     -> falta_copy_in    ("Falta copy-in")
+      - EN REVISIÓN y sin hashtags       -> falta_hashtags   ("Faltan hashtags")
+      - nada pendiente                   -> lista_para_revisar (te toca el like/dislike)
+
+    DOS NIVELES de "lo que falta":
+      - PRODUCCIÓN (copy + foto): la genera el pipeline y GATEA el avance a revisión. Se exige
+        siempre; sin ella la pieza no entra a la cola.
+      - REVISIÓN (placa `copy_in` + hashtags): acciones del equipo dentro de la cola. NO bloquean
+        el avance —solo se piden YA en revisión—; los hashtags son clave para monitorizar
+        campañas y líneas de contenido.
 
     Backend y front comparten esta misma logica a proposito: el front PREFIERE este
     `etapa_ia` cuando viene y cae a su propia derivacion solo si no llega (degradacion).
@@ -186,19 +196,22 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
         return ETAPA_PROGRAMADA
     if estado == "aprobado":
         return ETAPA_APROBADA
-    if estado == "en_revision":
-        return ETAPA_LISTA_REVISAR
     if pieza.get("falta_copy", True):
         return ETAPA_GENERANDO_COPY
     # El ASSET que falta depende del formato (espejo del front): una pieza de VÍDEO necesita el
     # vídeo (`falta_video`), no una foto (`falta_imagen` es opcional en vídeo: portada/thumbnail).
-    # Sin esto, una pieza de vídeo SIN vídeo salía "lista para revisar" (solo miraba falta_imagen),
-    # p. ej. tras cambiar el formato de foto a vídeo.
     if _norm(pieza.get("formato")) == "video":
         if pieza.get("falta_video", True):
             return ETAPA_GENERANDO_ARTE
     elif pieza.get("falta_imagen", True):
         return ETAPA_GENERANDO_ARTE
+    # Acciones de la FASE DE REVISIÓN (placa + hashtags): se piden YA en revisión y no bloquean el
+    # avance (en borrador la pieza con copy+foto ya está "lista" y la mueve sola el pipeline).
+    if estado == "en_revision":
+        if pieza.get("falta_copy_in", False):
+            return ETAPA_FALTA_COPY_IN
+        if pieza.get("falta_hashtags", False):
+            return ETAPA_FALTA_HASHTAGS
     return ETAPA_LISTA_REVISAR
 
 

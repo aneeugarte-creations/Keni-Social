@@ -80,6 +80,48 @@ def test_con_foto_real_esta_lista():
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
-def test_etapa_en_revision_manda_sobre_contenido():
-    d = publicacion_a_dict(_pub(contenido="copy", copy_in="TITULAR", estado="en_revision"))
+def test_falta_copy_in_en_pieza_de_marca():
+    # Pieza de MARCA en revisión con copy + foto pero SIN texto en la imagen (placa): la acción
+    # pendiente es el copy-in. (En borrador no bloquea; es acción de la fase de revisión.)
+    d = publicacion_a_dict(_pub(estado="en_revision", contenido="copy", copy_in="", foto="bg.png"))
+    assert d["etapa_ia"] == "falta_copy_in"
+
+
+def test_copy_in_no_aplica_sin_marca():
+    # Sin marca (imagen bespoke) no hay placa: no se exige copy-in -> lista (en pendiente, sin
+    # hashtags, no bloquea).
+    d = publicacion_a_dict(_pub(marca="", contenido="copy", copy_in="", imagen="subida.png", foto=""))
     assert d["etapa_ia"] == "lista_para_revisar"
+
+
+def test_en_revision_sin_hashtags_pide_hashtags():
+    # YA en revisión, completa (copy + foto + placa) pero sin hashtags: la acción es ponerlos
+    # (clave para campañas/líneas). Antes salía un "para revisar" que ocultaba el hueco.
+    d = publicacion_a_dict(
+        _pub(estado="en_revision", contenido="Texto sin etiquetas", copy_in="TITULAR", foto="bg.png")
+    )
+    assert d["etapa_ia"] == "falta_hashtags"
+
+
+def test_en_revision_con_hashtags_es_lista():
+    d = publicacion_a_dict(
+        _pub(estado="en_revision", contenido="Texto #Mundial2026 #UnoTV", copy_in="TITULAR", foto="bg.png")
+    )
+    assert d["etapa_ia"] == "lista_para_revisar"
+
+
+def test_hashtags_no_bloquean_en_borrador():
+    # En borrador (pendiente), faltar hashtags NO la saca de "lista": el avance la mueve y los
+    # hashtags se piden ya en revisión.
+    d = publicacion_a_dict(
+        _pub(estado="pendiente", contenido="Texto sin tags", copy_in="TITULAR", foto="bg.png")
+    )
+    assert d["etapa_ia"] == "lista_para_revisar"
+
+
+def test_en_revision_no_oculta_lo_que_falta():
+    # «Revisión» es interno: NO manda sobre el contenido. Una pieza en revisión sin la foto real
+    # (solo copy + placa) enseña la acción pendiente —"Falta imagen"—, no un "para revisar" que
+    # mienta. (Antes en_revision cortocircuitaba a "lista"; ya no.)
+    d = publicacion_a_dict(_pub(contenido="copy", copy_in="TITULAR", estado="en_revision", foto=""))
+    assert d["etapa_ia"] == "generando_arte"

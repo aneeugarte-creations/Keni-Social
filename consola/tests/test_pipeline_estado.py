@@ -176,8 +176,47 @@ def test_pieza_video_con_video_es_lista_aunque_falte_imagen():
     assert etapa == pe.ETAPA_LISTA_REVISAR
 
 
-def test_pieza_en_revision_lista_para_revisar():
-    assert pe.etapa_de_pieza(_pieza(estado="en_revision")) == pe.ETAPA_LISTA_REVISAR
+def test_pieza_en_revision_completa_es_lista():
+    # En revisión y sin nada pendiente: "lista para revisar" = te toca el like/dislike.
+    etapa = pe.etapa_de_pieza(_pieza(estado="en_revision", falta_copy=False, falta_imagen=False))
+    assert etapa == pe.ETAPA_LISTA_REVISAR
+
+
+def test_pieza_en_revision_superfica_lo_que_falta():
+    # «Revisión» es interno: la etapa enseña la acción pendiente, no un "para revisar" que mienta.
+    # Igual que en borrador: sin copy -> generando_copy; con copy y sin foto -> generando_arte.
+    assert (
+        pe.etapa_de_pieza(_pieza(estado="en_revision", falta_copy=True))
+        == pe.ETAPA_GENERANDO_COPY
+    )
+    assert (
+        pe.etapa_de_pieza(_pieza(estado="en_revision", falta_copy=False, falta_imagen=True))
+        == pe.ETAPA_GENERANDO_ARTE
+    )
+
+
+def test_pieza_en_revision_sin_hashtags_es_falta_hashtags():
+    # Completa (copy+foto) pero sin hashtags y YA en revisión: la acción pendiente es ponerlos.
+    etapa = pe.etapa_de_pieza(
+        _pieza(estado="en_revision", falta_copy=False, falta_imagen=False, falta_hashtags=True)
+    )
+    assert etapa == pe.ETAPA_FALTA_HASHTAGS
+
+
+def test_pieza_hashtags_no_bloquean_antes_de_revision():
+    # En borrador, faltar hashtags NO la saca de "lista": el avance la mueve y se piden YA en revisión.
+    etapa = pe.etapa_de_pieza(
+        _pieza(estado="borrador", falta_copy=False, falta_imagen=False, falta_hashtags=True)
+    )
+    assert etapa == pe.ETAPA_LISTA_REVISAR
+
+
+def test_pieza_falta_copy_in_en_la_placa():
+    # Falta el texto sobre la imagen (placa, `copy_in`): es producción, se exige siempre que aplique.
+    etapa = pe.etapa_de_pieza(
+        _pieza(estado="en_revision", falta_copy=False, falta_imagen=False, falta_copy_in=True)
+    )
+    assert etapa == pe.ETAPA_FALTA_COPY_IN
 
 
 def test_pieza_estados_terminales_mapean_a_etapa():
