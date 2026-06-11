@@ -153,7 +153,9 @@ export function ControlContexto() {
             // `hover:bg-accent` (no `bg-muted`): en la barra del editor `--muted` es blanco para la
             // píldora translúcida; un hover a blanco sólido dejaría el texto (blanco) ilegible. El
             // token `accent` es el de hover de toda la app (gris idéntico fuera del editor).
-            : "border-border bg-muted/40 text-foreground hover:bg-accent",
+            // El hover accent solo CERRADO: abierto conserva la píldora `--control-activo`
+            // (un hover naranja bajo el texto naranja la dejaría ilegible justo tras abrir).
+            : cn("border-border bg-muted/40 text-foreground", !abierto && "hover:bg-accent"),
           // Panel ABIERTO con el mismo lenguaje que «Más»/«Adaptar»/campana: píldora
           // `--control-activo`. El aviso de marca ajena MANDA sobre este estado (no se pisa).
           !fueraDeCasa &&

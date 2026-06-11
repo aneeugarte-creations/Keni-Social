@@ -103,10 +103,12 @@ function BotonToggle({
         aria-label={etiqueta}
         aria-pressed={activo}
         onClick={onToggle}
-        className={`flex items-center rounded-l-md py-1.5 pl-1.5 pr-1 hover:bg-accent ${
+        className={`flex items-center rounded-l-md py-1.5 pl-1.5 pr-1 ${
+          // El hover accent SOLO en reposo: sobre el control ACTIVO mantendría el fondo naranja
+          // bajo el glifo naranja (ilegible justo tras clicar, con el cursor aún encima).
           activo
             ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
-            : "text-muted-foreground"
+            : "text-muted-foreground hover:bg-accent"
         }`}
       >
         <Icono className="h-4 w-4" />
@@ -116,10 +118,12 @@ function BotonToggle({
         aria-label={`Editar ${etiqueta.toLowerCase()} de muestra`}
         aria-expanded={editando}
         onClick={onEditar}
-        className={`rounded-r-md py-1.5 pl-0.5 pr-1 hover:bg-accent ${
+        className={`rounded-r-md py-1.5 pl-0.5 pr-1 ${
+          // El hover accent SOLO en reposo: sobre el control ACTIVO mantendría el fondo naranja
+          // bajo el glifo naranja (ilegible justo tras clicar, con el cursor aún encima).
           activo
             ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
-            : "text-muted-foreground"
+            : "text-muted-foreground hover:bg-accent"
         }`}
       >
         <ChevronDown className="h-3.5 w-3.5" />

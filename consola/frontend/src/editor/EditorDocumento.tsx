@@ -446,10 +446,11 @@ export function EditorDocumento({
           aria-label="Adaptar a otro formato"
           aria-expanded={menuFormato}
           onClick={() => { setMenuMas(false); setMenuFormato((v) => !v); }}
-          className={`flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs hover:bg-accent ${
+          className={`flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs ${
+            // Hover accent solo CERRADO: abierto conserva la píldora blanca (glifo legible).
             menuFormato
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
-              : "text-muted-foreground"
+              : "text-muted-foreground hover:bg-accent"
           }`}
         >
           <Maximize2 className="h-4 w-4" />
@@ -494,10 +495,11 @@ export function EditorDocumento({
           aria-label="Más acciones"
           aria-expanded={menuMas}
           onClick={() => { setMenuFormato(false); setMenuMas((v) => !v); }}
-          className={`flex items-center rounded-md p-1.5 hover:bg-accent ${
+          className={`flex items-center rounded-md p-1.5 ${
+            // Hover accent solo CERRADO: abierto conserva la píldora blanca (glifo legible).
             menuMas
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
-              : "text-muted-foreground"
+              : "text-muted-foreground hover:bg-accent"
           }`}
         >
           <MoreHorizontal className="h-4 w-4" />
