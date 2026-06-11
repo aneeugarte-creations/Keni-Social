@@ -119,7 +119,7 @@ export function EditorImagen({
   // --- Generar el fondo con IA (job de imagen en background, sondeado) --- //
   const { generacion: genIA, ejecutando: generandoIA, iniciar: iniciarIA } = useGeneracion();
   const generar = useMutation({
-    mutationFn: () => api.generarMedia({ prompt: prompt.trim() }),
+    mutationFn: () => api.generarMedia({ prompt: prompt.trim(), publicacion_id: publicacionId }),
     onSuccess: (data) => {
       setAvisoGenerar("");
       iniciarIA(data.generacion);

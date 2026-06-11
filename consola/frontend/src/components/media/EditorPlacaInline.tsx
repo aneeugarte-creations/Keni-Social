@@ -49,6 +49,7 @@ export type { EditorPlacaInlineProps } from "@/components/media/placa/tipos";
 
 export function EditorPlacaInline({
   marca,
+  publicacionId,
   documento,
   copyIn,
   onCopyInCambio,
@@ -268,7 +269,7 @@ export function EditorPlacaInline({
   }, [slotActivo]);
 
   const generar = useMutation({
-    mutationFn: () => api.generarMedia({ prompt: prompt.trim() }),
+    mutationFn: () => api.generarMedia({ prompt: prompt.trim(), publicacion_id: publicacionId }),
     onSuccess: (d) => {
       setAvisoGenerar("");
       iniciarIA(d.generacion);

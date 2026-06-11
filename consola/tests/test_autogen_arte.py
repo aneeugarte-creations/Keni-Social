@@ -170,23 +170,25 @@ def test_orden_por_defecto_conserva_entrada():
 # --------------------------------------------------------------------------- #
 
 
-def test_prompt_incluye_titulo_y_descripcion():
-    # La plantilla viene de la Biblioteca (semilla del paquete); el tema se inserta donde
-    # esté el marcador `{{TEMA}}`, que NO debe quedar crudo en la salida.
+def test_prompt_es_el_tema_titulo_y_descripcion():
+    # `prompt_arte` es el mensaje de USUARIO (el tema): título + descripción, sin la directiva
+    # (esa va en el mensaje de SISTEMA `prompt/arte`, que añade `media.generar_imagen`).
     prompt = aa.prompt_arte(_item(titulo="Final de copa", descripcion="Juega Mexico"))
-    bajo = prompt.lower()
-    assert "Final de copa" in prompt
-    assert "Juega Mexico" in prompt
-    assert aa._MARCA_TEMA not in prompt  # marcador sustituido por el tema
-    # Pide UNA foto cruda, sin marcos/placas/collage ni texto editorial (eso lo compone
-    # la consola despues): nada de diseno editorial dentro de la imagen.
-    assert "una sola fotografia" in bajo or "una sola foto" in bajo
-    assert "collage" in bajo and "placas" in bajo
-    assert "texto incrustado" in bajo
+    assert prompt == "Final de copa. Juega Mexico"
+
+
+def test_prompt_solo_titulo_si_no_hay_descripcion():
+    assert aa.prompt_arte(_item(titulo="Final de copa", descripcion="")) == "Final de copa"
 
 
 def test_prompt_vacio_si_no_hay_titulo():
     assert aa.prompt_arte(_item(titulo="", descripcion="")) == ""
+
+
+def test_registrar_arte_sin_contenido_es_noop():
+    # Sin `contenido_id` no hay pipeline al que colgar: no registra nada ni lanza (lo usa el
+    # botón manual cuando la imagen no pertenece a una pieza).
+    aa.registrar_arte(contenido_id="", marca="unotv", titulo="T", prompt="p", imagen="x.png")
 
 
 # --------------------------------------------------------------------------- #

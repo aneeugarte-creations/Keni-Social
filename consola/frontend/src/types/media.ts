@@ -10,6 +10,9 @@ export interface RespuestaMedia {
 /** Cuerpo para generar una imagen con IA. */
 export interface CuerpoGenerarMedia {
   prompt: string;
+  /** Pieza a la que pertenece la imagen: la generación se correlaciona a su pipeline (etapa Arte). */
+  publicacion_id?: string;
+  contenido_id?: string;
 }
 
 // --- Estudio de imagen ---

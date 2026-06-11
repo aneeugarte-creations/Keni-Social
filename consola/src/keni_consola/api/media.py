@@ -26,7 +26,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, media
+from .. import autogen_arte, generaciones, media, repos
 from .._http_json import leer_json
 from ..dominio import extraccion_url
 from ..seguridad import autor_de_peticion
@@ -93,11 +93,16 @@ async def servir(request: Request) -> Response:
 
 
 async def generar(request: Request) -> Response:
-    """Genera una imagen con IA EN SEGUNDO PLANO (JSON `{prompt}`) -> `{generacion}`.
+    """Genera una imagen con IA EN SEGUNDO PLANO -> `{generacion}`.
 
-    400 inmediato si no hay proveedor configurado (no se crea trabajo). Si lo hay, lanza
-    un trabajo (tipo "imagen") que no bloquea; el frontend sondea
-    `GET /api/generaciones/{id}` y, al completarse, recoge `resultado = {id, url}`.
+    Cuerpo JSON: `{prompt, contenido_id?|publicacion_id?}`. Si la imagen es PARA UNA PIEZA
+    (`contenido_id`, o `publicacion_id` que se resuelve a su contenido), la generación se
+    CORRELACIONA a esa pieza (`contenido_id` + marca) y al completarse registra la etapa ARTE
+    de su pipeline (igual que el auto-arte): así sale DENTRO del pipeline de la pieza, no como
+    una generación suelta. Sin pieza, es una generación de imagen suelta (caso sin pipeline).
+
+    400 inmediato si no hay proveedor configurado. El frontend sondea `GET /api/generaciones/{id}`
+    y, al completarse, recoge `resultado = {id, url}`.
     """
     datos = await leer_json(request)
     prompt = datos.get("prompt")
@@ -113,18 +118,44 @@ async def generar(request: Request) -> Response:
         )
     prompt = prompt.strip()
 
+    # Pieza a la que pertenece (opcional): `contenido_id` directo o vía `publicacion_id`. De ella
+    # sacamos marca y título para correlacionar la generación con el pipeline de la pieza.
+    contenido_id = str(datos.get("contenido_id") or "").strip()
+    publicacion_id = str(datos.get("publicacion_id") or "").strip()
+    marca, titulo_pieza = "", ""
+    if not contenido_id and publicacion_id:
+        pub = repos.obtener_publicacion(publicacion_id)
+        if pub:
+            contenido_id = str(pub.get("contenido_id") or "")
+            marca = str(pub.get("marca") or "")
+    if contenido_id:
+        cont = repos.obtener_contenido(contenido_id)
+        if cont:
+            marca = marca or str(cont.get("marca") or "")
+            titulo_pieza = str(cont.get("titulo") or "")
+
     def _generar() -> dict[str, object]:
         crudos = media.generar_imagen(prompt)
         nombre = media.guardar_bytes(crudos, ext="png")
+        # Para una pieza: deja la traza de la etapa ARTE en SU pipeline (prompt + salida reales).
+        if contenido_id:
+            autogen_arte.registrar_arte(
+                contenido_id=contenido_id, marca=marca, titulo=titulo_pieza,
+                prompt=prompt, imagen=nombre,
+            )
         return {"id": nombre, "url": f"/api/media/{nombre}"}
 
     # Atribucion por usuario (#130 Fase 1): la imagen la genera el usuario de la peticion.
     autor = autor_de_peticion(request) or {}
     gen = generaciones.crear(
         {
+            # Con pieza, la generación pertenece a su pipeline (correlada por `contenido_id`); el
+            # `prompt` viaja para que el detalle del pipeline lo muestre (no "prompt no disponible").
             "tipo": "imagen",
-            "marca": "",
-            "etiqueta": f"Imagen · {prompt[:40]}",
+            "marca": marca,
+            "contenido_id": contenido_id,
+            "prompt": prompt if contenido_id else "",
+            "etiqueta": (f"Arte · {titulo_pieza[:40]}" if contenido_id else f"Imagen · {prompt[:40]}"),
             "autor_id": autor.get("id", ""),
             "autor_nombre": autor.get("usuario", ""),
         }

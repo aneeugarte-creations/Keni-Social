@@ -453,6 +453,7 @@ export function DialogoEditar({
               // son nativos en la cabecera del editor.
               <EditorPlacaInline
                 marca={publicacion.marca}
+                publicacionId={publicacion.id}
                 documento={documentoSel}
                 copyIn={copyIn}
                 onCopyInCambio={setCopyIn}

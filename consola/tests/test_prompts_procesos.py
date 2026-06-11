@@ -30,7 +30,7 @@ def test_catalogo_no_tiene_ids_fantasma():
 
 
 def test_procesos_de_prompt_conocido():
-    procs = pp.procesos_de("prompt/arte-sistema")
+    procs = pp.procesos_de("prompt/arte")
     assert procs and any("imagen" in p.lower() for p in procs)
 
 
@@ -43,7 +43,6 @@ def test_catalogo_cubre_los_prompts_inyectados():
     # Los prompts que migramos a la Biblioteca DEBEN estar catalogados: la transparencia exige ver
     # a qué proceso se inyectan. Si cableas un prompt nuevo, añádelo también a `prompts_procesos`.
     esperados = {
-        "prompt/arte-sistema",
         "prompt/arte",
         "prompt/insumos/portal",
         "prompt/insumos/corresponsales",

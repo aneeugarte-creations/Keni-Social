@@ -14,14 +14,8 @@ from __future__ import annotations
 
 PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Imagen
-    "prompt/arte-sistema": [
-        "Generación de imagen · directiva de sistema (Estudio, auto-arte y botón «Generar con IA»)",
-    ],
     "prompt/arte": [
-        "Auto-arte del pipeline · ilustra temas con copy pero sin imagen",
-    ],
-    "prompt/arte-ilustracion": [
-        "Estudio de imagen · prompt base de la variante generada",
+        "Generación de imagen · directiva del generador (auto-arte del pipeline y botón «Generar con IA»)",
     ],
     # Insumos del día (buzón de cajones)
     "prompt/insumos/portal": ["Buzón de insumos · cajón Portal/SMS"],

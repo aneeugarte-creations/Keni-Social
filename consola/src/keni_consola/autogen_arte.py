@@ -161,52 +161,16 @@ def topics_sin_arte(
     return elegidos
 
 
-# Plantilla del prompt de auto-arte: vive en la Biblioteca de Texto como prompt EDITABLE
-# (visible en la pestaña «Prompts»), no hardcodeada. El tema (titulo + descripcion) se inserta
-# donde el equipo ponga el marcador `_MARCA_TEMA`. `_FALLBACK` es la red por si la lectura
-# fallara o el cuerpo viniera vacio.
-_PROMPT_ARTE_ID = "prompt/arte"
-_MARCA_TEMA = "{{TEMA}}"
-_PROMPT_ARTE_FALLBACK = (
-    "Genera UNA sola fotografia realista para el feed de una marca de television que "
-    "represente esta noticia: {{TEMA}}. Foto cruda, un unico encuadre fotografico, sin "
-    "collage, marcos, placas, titulares, logotipos ni texto incrustado. Devuelve unicamente "
-    "la imagen, no texto."
-)
-
-
-def _plantilla_arte() -> str:
-    """Cuerpo EFECTIVO de la plantilla de arte (store del equipo > semilla del paquete).
-
-    Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera vacia, cae
-    al `_PROMPT_ARTE_FALLBACK` para no quedarnos sin prompt.
-    """
-    try:
-        from . import libtexto
-
-        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ARTE_ID) or "").strip()
-    except Exception:  # noqa: BLE001 -- nunca dejar el auto-arte sin prompt por un fallo de lectura
-        cuerpo = ""
-    return cuerpo or _PROMPT_ARTE_FALLBACK
-
-
 def prompt_arte(item: dict[str, Any]) -> str:
-    """Prompt de imagen a partir del titulo + descripcion del tema (sin inventar datos).
+    """Mensaje de USUARIO (el TEMA a ilustrar) para el generador de imagen del auto-arte.
 
-    Toma la plantilla EDITABLE de la Biblioteca (`_PROMPT_ARTE_ID`) e inserta el tema donde
-    esté el marcador `_MARCA_TEMA`; si el equipo lo quitó, adjunta el tema al final para no
-    perderlo. Pide UNA foto cruda (sin marcos, placas ni texto editorial: eso lo compone la
-    consola después). "" si el tema no tiene título (nada que ilustrar).
+    La DIRECTIVA del generador (foto realista, sin texto/placas; "Arte" en la Biblioteca) viaja
+    en el mensaje de SISTEMA, que `media.generar_imagen` añade automáticamente; aquí solo aportamos
+    el tema, a partir del título + descripción. "" si no hay título (nada que ilustrar).
     """
     titulo = (item.get("titulo") or "").strip()
     descripcion = (item.get("descripcion") or "").strip()
-    base = f"{titulo}. {descripcion}".strip(". ").strip() if descripcion else titulo
-    if not base:
-        return ""
-    plantilla = _plantilla_arte()
-    if _MARCA_TEMA in plantilla:
-        return plantilla.replace(_MARCA_TEMA, base).strip()
-    return f"{plantilla}\n\nTema: {base}".strip()
+    return f"{titulo}. {descripcion}".strip(". ").strip() if descripcion else titulo
 
 
 def _marca_legible(item: dict[str, Any]) -> str:
@@ -258,40 +222,48 @@ def lanzar_para_topic(
         repos.asignar_etiqueta(item_id, et_id)
     if actualizado is None:
         return None
-    _registrar_actividad_arte(item, str(item_id), prompt, nombre)
+    registrar_arte(
+        contenido_id=str(item_id), marca=item.get("marca", "") or "",
+        titulo=item.get("titulo", "") or "", prompt=prompt, imagen=nombre,
+    )
     return {"contenido_id": item_id, "plataforma_id": objetivo["id"], "imagen": nombre}
 
 
-def _registrar_actividad_arte(item: dict[str, Any], item_id: str, prompt: str, imagen: str) -> None:
-    """Deja la generación de arte VISIBLE: una generación `tipo='pipeline'` (con su PROMPT real) +
-    el marcador de etapa ARTE correlacionado al tema (para Actividad IA y el detalle del pipeline).
-    Es trabajo de la MÁQUINA: se sella `pipeline` como el resto de etapas; la creación manual de
-    imagen (Estudio) conserva su tipo `imagen`.
+def registrar_arte(
+    *, contenido_id: str, marca: str, titulo: str, prompt: str, imagen: str
+) -> None:
+    """Registra una generación de ARTE en el pipeline de SU pieza (`contenido_id`).
 
-    Best-effort: un fallo de traza no rompe la generación de arte. Import diferido de
-    `pipeline_contenido` para no acoplar el módulo en carga (evita ciclo con `_barrido`).
+    Deja DOS trazas correlacionadas por `contenido_id`: una generación `tipo='pipeline'` con el
+    PROMPT real y la salida, y el marcador de etapa ARTE. Así el arte —tanto el auto-arte del
+    pipeline como el botón manual «Generar con IA»— sale en Actividad IA y en el detalle del
+    pipeline de la pieza, NO como una generación suelta. Sin `contenido_id` no registra (no hay
+    pipeline al que colgar). Best-effort: un fallo de traza no rompe la generación. Import diferido
+    de `pipeline_contenido` para no acoplar en carga (evita ciclo con `_barrido`).
     """
-    marca = item.get("marca", "") or ""
+    if not contenido_id:
+        return
+    marca = marca or ""
     try:
         from .pipeline_contenido import ETAPA_ARTE, registrar_etapa
 
         gen = generaciones.crear({
             "tipo": "pipeline",
             "marca": marca,
-            "contenido_id": item_id,
+            "contenido_id": contenido_id,
             "prompt": prompt[:20000],
             "salida": f"Imagen generada: {imagen}",
-            "etiqueta": f"Arte — {(item.get('titulo') or '')[:80]}",
+            "etiqueta": f"Arte — {(titulo or '')[:80]}",
             "estado": generaciones.ESTADO_COMPLETADO,
             "fase": generaciones.FASE_COMPLETADO,
             "fecha_fin": generaciones.ahora_iso(),
         })
         registrar_etapa(
             ETAPA_ARTE, marca, "Generación de arte",
-            contenido_id=item_id, gen_id=(gen.get("id", "") if gen else ""),
+            contenido_id=contenido_id, gen_id=(gen.get("id", "") if gen else ""),
         )
     except Exception:  # noqa: BLE001 -- la traza de actividad no debe romper el arte
-        _log.warning("Auto-arte: no se pudo registrar la actividad del arte.", exc_info=True)
+        _log.warning("Arte: no se pudo registrar la actividad del arte.", exc_info=True)
 
 
 def _plataformas_por_item(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
