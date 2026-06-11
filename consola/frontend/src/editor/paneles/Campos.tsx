@@ -2,6 +2,7 @@
 // bloques compuestos de sombra, esquinas y degradado.
 
 import { Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { ColorControl } from "../ColorControl";
 
@@ -25,12 +26,41 @@ export function Num({
   onChange: (v: number) => void;
   paso?: number;
 }) {
+  // BORRADOR local mientras se edita, para que el valor del store no machaque el texto a medio
+  // teclear. Antes el input era 100% controlado y `Number("") === 0` (campo vacío, "-" o "."
+  // iniciales reportan value "") escribía 0 al documento al instante: la capa saltaba al origen al
+  // vaciar el campo o al empezar a teclear un negativo, y el value redondeado lo reescribía a "0".
+  // Solo se emite cuando el texto parsea a un número FINITO ("1e999" -> Infinity viajaría como
+  // null en JSON y el guardado lo rechazaría con 400), SIN redondear (el redondeo a 2 decimales es
+  // solo presentación). Escape restaura el valor de entrada; blur/Enter vuelven a la presentación.
+  const [borrador, setBorrador] = useState<string | null>(null);
+  const inicial = useRef(valor);
   return (
     <input
       type="number"
       step={paso}
-      value={Math.round(valor * 100) / 100}
-      onChange={(e) => onChange(Number(e.target.value))}
+      value={borrador ?? Math.round(valor * 100) / 100}
+      onFocus={() => {
+        inicial.current = valor;
+      }}
+      onChange={(e) => {
+        const texto = e.target.value;
+        setBorrador(texto);
+        // Estados PARCIALES no se emiten (badInput cubre "-"/"." sueltos, que reportan "");
+        // el resto se aplica en vivo para conservar la previsualización en el lienzo.
+        if (texto === "" || e.target.validity.badInput) return;
+        const v = Number(texto);
+        if (Number.isFinite(v)) onChange(v);
+      }}
+      onBlur={() => setBorrador(null)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          onChange(inicial.current);
+          setBorrador(null);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
       className="w-20 rounded border border-input bg-background px-1.5 py-0.5 text-right text-xs"
     />
   );

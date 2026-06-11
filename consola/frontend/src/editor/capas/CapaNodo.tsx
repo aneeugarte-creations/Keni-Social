@@ -8,11 +8,13 @@ import { Ellipse, Group, Image as KonvaImage, Line, Rect, Shape, Text, TextPath 
 
 import { MAPA_MEZCLA } from "../../lib/placa/dibujar.mjs";
 import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Forma, RellenoDegradado } from "../documento";
-import { copyMuestra, fotoMuestra } from "../muestra";
+import { bandaOverlay } from "../documento";
+import { fotoMuestra } from "../muestra";
 import { useImagen } from "../useImagen";
 
 import { geometriaImagenEnCaja } from "./geometriaImagen";
-import { estiloFuente, familiaReal } from "./tipografia";
+import { textoMuestra } from "./textoMuestra";
+import { estiloFuente, familiaReal, medirTexto } from "./tipografia";
 
 // Traza, en COORDS LOCALES (0..w, 0..h), la silueta de `forma` — espejo EXACTO de `pathForma`
 // (dibujar.mjs) con origen en (0,0). Lo usan el clip de la imagen y el dibujo del marco en Konva,
@@ -364,23 +366,8 @@ function NodoImagenAjustada({
   );
 }
 
-function textoMuestra(c: CapaTexto, muestraCopy = false): string {
-  // En "Vista con muestra (copy)" los bindings usan copy de ejemplo (titular largo, pleca "EN VIVO"
-  // por defecto, o el que el equipo edite) para ver saltos de línea y auto-encogido — aunque la capa
-  // ya tenga `texto`. Fuera de ese modo, comportamiento de hoy: respeta `texto` y cae a un
-  // placeholder genérico si está vacío.
-  const ejemplo = muestraCopy ? copyMuestra(c.binding) : null;
-  const base = ejemplo
-    ? ejemplo
-    : c.binding === "copy_in"
-      ? c.texto || "Titular de ejemplo"
-      : c.binding === "etiqueta_default"
-        ? c.texto || "PLECA"
-        : c.texto;
-  // MAYÚSCULAS en render (locale es), sin destruir lo escrito: espejo de `dibujarTexto` en
-  // dibujar.mjs. La edición inline (Lienzo) sigue mostrando el `texto` crudo.
-  return c.mayusculas ? base.toLocaleUpperCase("es") : base;
-}
+// `textoMuestra` (texto pintado, con la normalización espejo del export) vive en
+// `textoMuestra.ts` para poder testearlo sin montar Konva.
 
 export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestraFoto = false, muestraCopy = false }: CapaNodoProps) {
   // Hook SIEMPRE llamado (regla de hooks); null para capas sin imagen.
@@ -389,6 +376,44 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
   // Fuerza un redibujo del lienzo cuando la foto de muestra (generada async en cliente) ya está
   // lista, para que el hueco la pinte sin esperar a otra interacción.
   const [, redibujar] = useReducer((n: number) => n + 1, 0);
+
+  // — Texto LEGADO (h<=0) con ancla "abajo": el contrato del export (dibujar.mjs, camino h<=0)
+  // interpreta `y` como borde INFERIOR del bloque (top = y - blockH). Konva siempre dibuja hacia
+  // abajo desde `y`, así que desplazamos el CONTENIDO con offsetY = alto del bloque renderizado:
+  // el nodo conserva las coords almacenadas (drag/transform siguen escribiendo el contrato) y la
+  // rotación pivota en (x,y), igual que el export. Con chip el offset va en el Group envolvente y
+  // suma el padding superior (espejo del blockH del export, que incluye pad_y arriba y abajo).
+  // Sin lista de deps: el alto depende del wrap que Konva acaba de calcular en este render.
+  const nodoTextoRef = useRef<Konva.Text | null>(null);
+  const grupoChipRef = useRef<Konva.Group | null>(null);
+  useEffect(() => {
+    const nodo = grupoChipRef.current ?? nodoTextoRef.current;
+    if (!nodo) return;
+    const c = capa as CapaTexto;
+    const anclaAbajo = capa.tipo === "texto" && c.h <= 0 && c.ancla === "abajo" && !(c.curva && c.curva.radio);
+    const texto = grupoChipRef.current ? grupoChipRef.current.findOne<Konva.Text>("Text") : nodoTextoRef.current;
+    const off = anclaAbajo && texto ? texto.height() + (c.chip ? (c.chip.pad_y ?? 14) : 0) : 0;
+    if (nodo.offsetY() !== off) {
+      nodo.offsetY(off);
+      nodo.getLayer()?.batchDraw();
+    }
+  });
+
+  // El wordmark del logo se mide con canvas 2D (`measureText`) durante el RENDER: si la webfont
+  // entra después, el chip quedaría medido con la fuente de respaldo. Re-render al cargar fuentes.
+  useEffect(() => {
+    if (capa.tipo !== "logo" || typeof document === "undefined" || !("fonts" in document)) return;
+    let vivo = true;
+    const f = () => {
+      if (vivo) redibujar();
+    };
+    document.fonts.ready.then(f).catch(() => {});
+    document.fonts.addEventListener?.("loadingdone", f);
+    return () => {
+      vivo = false;
+      document.fonts.removeEventListener?.("loadingdone", f);
+    };
+  }, [capa.tipo]);
 
   const comun = {
     id: capa.id,
@@ -413,7 +438,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       : {}),
   };
 
-  // Transform genérico: convierte escala -> w/h (y tamaño de fuente en textos), resetea escala.
+  // Transform genérico: convierte escala -> w/h (y caja en textos), resetea escala.
   const onTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
     const nodo = e.target;
     const sx = nodo.scaleX();
@@ -425,6 +450,9 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
     if (sx === 1 && sy === 1 && nodo.x() === capa.x && nodo.y() === capa.y && nodo.rotation() === capa.rotacion) {
       return;
     }
+    // Defensa: una caja degenerada (línea con h=0) puede producir una matriz singular dentro del
+    // Transformer de Konva y dejar attrs NaN; jamás se hornean valores no finitos al documento.
+    if (![sx, sy, nodo.x(), nodo.y(), nodo.rotation()].every(Number.isFinite)) return;
     nodo.scaleX(1);
     nodo.scaleY(1);
     const base: Partial<Capa> = {
@@ -432,23 +460,74 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       y: nodo.y(),
       rotacion: nodo.rotation(),
     } as Partial<Capa>;
+    // ROTACIÓN PURA o movimiento sin escala (sx=sy=1): solo posición/rotación. Antes pasaba por
+    // el horneado de w/h y sus MÍNIMOS: rotar una línea (h=0) escribía h=8 (quedaba diagonal) y
+    // rotar un texto sin caja lo convertía a modo caja de UNA línea (encogido + "…" en el export).
+    if (sx === 1 && sy === 1) {
+      onChange(base);
+      return;
+    }
     if (capa.tipo === "texto") {
+      const c = capa as CapaTexto;
+      // Texto EN ARCO: una sola línea sin caja (el export ignora h con curva activa); persistir
+      // h>0 lo reinterpretaría como modo caja al quitar la curva. Solo ancho + posición/rotación.
+      if (c.curva && c.curva.radio) {
+        onChange({ ...base, w: Math.max(16, c.w * sx) } as Partial<Capa>);
+        return;
+      }
       // "La caja es inamovible, que encoja el texto": al redimensionar una capa de texto
       // dibujamos la CAJA (ancho Y alto). El texto se auto-encoge en el render para caber; NO
-      // crecemos el tamaño de fuente con la escala vertical. Persistimos `h` (no solo `w`), lo que
-      // activa el modo caja (h>0) para esta capa.
-      onChange({
-        ...base,
-        w: Math.max(16, capa.w * sx),
-        h: Math.max(16, capa.h > 0 ? capa.h * sy : (capa as CapaTexto).tamano * (capa as CapaTexto).interlineado * sy),
-      } as Partial<Capa>);
-    } else {
-      onChange({
-        ...base,
-        w: Math.max(8, capa.w * sx),
-        h: Math.max(8, capa.h * sy),
-      } as Partial<Capa>);
+      // crecemos el tamaño de fuente con la escala vertical.
+      if (c.h > 0) {
+        onChange({ ...base, w: Math.max(16, c.w * sx), h: Math.max(16, c.h * sy) } as Partial<Capa>);
+        return;
+      }
+      // Resize solo HORIZONTAL (sy=1, tiradores laterales) de un texto en modo línea: el texto
+      // re-envuelve al nuevo ancho y SIGUE sin caja — activar el modo caja era un efecto
+      // colateral que encogía/truncaba el export sin que el usuario tocara el alto.
+      if (sy === 1) {
+        onChange({ ...base, w: Math.max(16, c.w * sx) } as Partial<Capa>);
+        return;
+      }
+      // Conversión modo LÍNEA (h<=0) -> modo CAJA: persistir h ACTIVA la caja. El alto parte del
+      // bloque REALMENTE renderizado por Konva (todas las líneas envueltas, no UNA como antes,
+      // que dejaba el export encogido a tam_min y truncado con "…"). Con ancla "abajo" la `y`
+      // almacenada era el borde INFERIOR y el modo caja la interpreta como SUPERIOR: se rebasa
+      // y = y - h' (offset rotado con el pivote (x,y), igual que el export) y se fija
+      // valign "abajo" para que el bloque no salte de sitio al exportar.
+      const nodoTxt = nodo instanceof Konva.Group ? nodo.findOne<Konva.Text>("Text") : nodo;
+      const hBloque = nodoTxt instanceof Konva.Text
+        ? nodoTxt.height() + (c.chip ? (c.chip.pad_y ?? 14) * 2 : 0)
+        : c.tamano * c.interlineado;
+      const hN = Math.max(16, hBloque * sy);
+      const wN = Math.max(16, c.w * sx);
+      if (c.ancla === "abajo") {
+        const rad = (nodo.rotation() * Math.PI) / 180;
+        onChange({
+          x: nodo.x() + hN * Math.sin(rad),
+          y: nodo.y() - hN * Math.cos(rad),
+          rotacion: nodo.rotation(),
+          w: wN,
+          h: hN,
+          valign: "abajo",
+        } as Partial<Capa>);
+        return;
+      }
+      onChange({ ...base, w: wN, h: hN } as Partial<Capa>);
+      return;
     }
+    // La LÍNEA es VECTORIAL: el export dibuja de (x,y) a (x+w,y+h) y h = 0 o NEGATIVA son estados
+    // válidos del contrato. El mínimo de 8px del camino genérico la volvía diagonal (h=8) o la
+    // invertía (h<0) al escalarla dentro de una multi-selección.
+    if (capa.tipo === "marco" && (capa as CapaMarco).forma === "linea") {
+      onChange({ ...base, w: capa.w * sx, h: capa.h * sy } as Partial<Capa>);
+      return;
+    }
+    onChange({
+      ...base,
+      w: Math.max(8, capa.w * sx),
+      h: Math.max(8, capa.h * sy),
+    } as Partial<Capa>);
   };
 
   const props = { ...comun, onTransformEnd };
@@ -545,24 +624,36 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
         return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste="contain" foco={[0.5, 0.5]} filtros={null} flipH={c.flip_h} flipV={c.flip_v} props={props} />;
       }
       // VOLTEO del wordmark: igual que la imagen, en un Group INTERIOR (no toca el scale del
-      // Transformer). El motor (`aplicarFlip`) voltea `dibujarLogo` completo (también el wordmark).
+      // Transformer). El motor (`aplicarFlip`) voltea `dibujarLogo` completo (también el wordmark)
+      // alrededor del centro de la CAJA w×h (no del chip): mismos offsets que el export.
       const sx = c.flip_h ? -1 : 1;
       const sy = c.flip_v ? -1 : 1;
       const flipWm = sx !== 1 || sy !== 1
         ? { scaleX: sx, scaleY: sy, offsetX: sx === -1 ? c.w : 0, offsetY: sy === -1 ? c.h : 0 }
         : {};
+      // WORDMARK: chip ceñido al TEXTO, espejo del export (`dibujarLogo`): fondo de
+      // (anchoMedido + 2·20) × (tam + 2·12) SIN radio, anclado a la esquina sup-izq de la caja,
+      // texto en (20,12) con baseline top y tam = round(0.42·h). Antes el editor pintaba la caja
+      // w×h completa redondeada con el texto centrado: el rótulo del PNG salía en otro sitio y de
+      // otro tamaño. La caja w×h sigue siendo la capa (h gobierna `tam` al redimensionar). Texto
+      // vacío => "LOGO" atenuado como ayuda de edición (el export no pinta nada): divergencia
+      // consciente, señalada con la opacidad.
+      const textoWm = (c.wordmark.texto || "").trim();
+      const tamWm = Math.round(c.h * 0.42);
+      const anchoWm = medirTexto(
+        textoWm || "LOGO",
+        `${c.wordmark.peso || 700} ${tamWm}px "${familiaReal(c.wordmark.familia)}"`,
+      );
       return (
         <Group {...props}>
-          <Group {...flipWm}>
-            <Rect width={c.w} height={c.h} fill={c.wordmark.fondo} cornerRadius={6} />
+          <Group {...flipWm} opacity={textoWm ? 1 : 0.6}>
+            <Rect width={anchoWm + 40} height={tamWm + 24} fill={c.wordmark.fondo} />
             <Text
-              text={c.wordmark.texto || "LOGO"}
-              width={c.w}
-              height={c.h}
-              align="center"
-              verticalAlign="middle"
+              text={textoWm || "LOGO"}
+              x={20}
+              y={12}
               fontFamily={familiaReal(c.wordmark.familia)}
-              fontSize={Math.round(c.h * 0.42)}
+              fontSize={tamWm}
               // Peso numérico real, como el export (`dibujarLogo`: `${wm.peso || 700} …px`).
               fontStyle={String(c.wordmark.peso || 700)}
               fill={c.wordmark.color}
@@ -582,6 +673,13 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           <TextPath
             {...props}
             data={pathArco(c.curva.radio, c.w, ancla)}
+            // Alineación SOBRE el path: sin ella Konva tiende el texto desde el INICIO del arco
+            // (que abarca todo el ancho de la caja) y centro/derecha quedaban corridos respecto
+            // al export (`dibujarTextoCurvo` ancla el texto MEDIDO a la vertical del ancla). El
+            // path de "center" es simétrico a esa vertical y el de "right" termina en ella, así
+            // center/right de Konva reproducen la regla del export. Justificado no existe en
+            // arco: cae a izquierda, como el export.
+            align={ancla}
             text={textoMuestra(c, muestraCopy)}
             fontFamily={familiaReal(c.familia)}
             fontSize={c.tamano}
@@ -612,6 +710,10 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       const nodoTexto = (
         <Text
           {...(c.chip ? {} : props)}
+          // El ref mide el bloque renderizado (y recibe el offsetY de ancla "abajo", ver efecto
+          // arriba). Con chip, el nodo interactivo es el Group: el ref de medida va en el Text
+          // interior y el del offset en el Group.
+          ref={c.chip ? undefined : nodoTextoRef}
           text={textoMuestra(c, muestraCopy)}
           width={c.w}
           height={enCaja ? c.h : undefined}
@@ -650,7 +752,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       // Posición del chip dentro del Group (coordenadas relativas a la capa). Aproxima el ancho con
       // la caja de texto; el render real lo ajusta al ancho de cada línea.
       return (
-        <Group {...props}>
+        <Group {...props} ref={grupoChipRef}>
           <Rect
             x={-padX}
             y={-padY}
@@ -692,13 +794,39 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
           }
         : {};
       if (c.forma === "elipse") {
+        // Konva posiciona la ELIPSE por su CENTRO (y el export rota la elipse alrededor del
+        // centro, "igual que Konva": paridad de pivote, ver dibujarCapa). El modelo almacena la
+        // esquina sup-izq, así que los writebacks son DEDICADOS y convierten centro -> esquina:
+        // los genéricos guardaban el centro como x/y y la capa saltaba +w/2,+h/2 en cada gesto
+        // (incluido el clic seco en un tirador, que burlaba la guarda de no-op al comparar el
+        // centro del nodo con la esquina del modelo).
+        const ex = c.x + c.w / 2;
+        const ey = c.y + c.h / 2;
         return (
           <Ellipse
             {...props}
-            x={c.x + c.w / 2}
-            y={c.y + c.h / 2}
+            x={ex}
+            y={ey}
             radiusX={c.w / 2}
             radiusY={c.h / 2}
+            onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
+              onChange({ x: e.target.x() - c.w / 2, y: e.target.y() - c.h / 2 });
+            }}
+            onTransformEnd={(e: Konva.KonvaEventObject<Event>) => {
+              const nodo = e.target;
+              const sx = nodo.scaleX();
+              const sy = nodo.scaleY();
+              // Guarda de no-op del camino genérico, comparando contra el CENTRO del modelo.
+              if (sx === 1 && sy === 1 && nodo.x() === ex && nodo.y() === ey && nodo.rotation() === c.rotacion) return;
+              if (![sx, sy, nodo.x(), nodo.y(), nodo.rotation()].every(Number.isFinite)) return;
+              nodo.scaleX(1);
+              nodo.scaleY(1);
+              const wN = Math.max(8, c.w * sx);
+              const hN = Math.max(8, c.h * sy);
+              // El centro es el punto FIJO en ambas representaciones (también con rotación):
+              // esquina del modelo = centro - (w/2, h/2) SIN rotar.
+              onChange({ x: nodo.x() - wN / 2, y: nodo.y() - hN / 2, w: wN, h: hN, rotacion: nodo.rotation() });
+            }}
             {...rellenoMarco}
             {...sombraMarco}
             stroke={c.borde?.color}
@@ -741,7 +869,8 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
     }
     case "overlay": {
       const c = capa as CapaOverlay;
-      const band = Math.max(1, c.h * c.alto_frac);
+      // Banda visible con la fórmula COMPARTIDA (floor incluido, espejo exacto del export).
+      const band = bandaOverlay(c);
       // Rampa de legibilidad FIEL al servidor (`dibujarOverlayInferior`): ~11 paradas con la curva
       // t^1.5 sobre el alfa máximo (def 238/255). Separamos el RGB del posible alfa de 8 dígitos de
       // `c.color` (un `${c.color}00` lo corrompería) para componer cada parada como rgba(...).
@@ -757,17 +886,25 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
         const t = i / 10;
         stops.push(t, `rgba(${r},${g},${b},${aMax * Math.pow(t, 1.5)})`);
       }
+      // El nodo Konva es un GROUP en (c.x, c.y) — el ORIGEN DEL MODELO — con la banda como Rect
+      // HIJO en coords locales (y = h - band, contrato del export: la y almacenada es el tope de
+      // la CAJA y la banda vive pegada a su fondo). Antes el nodo raíz era el propio Rect en el
+      // tope de la BANDA (y + h - band) heredando los writebacks genéricos, que guardaban esa y
+      // como y del modelo: cada arrastre (o un mero clic en un tirador, que burlaba la guarda de
+      // no-op) desplazaba la banda +(h-band), deriva acumulativa. Con el Group, origen del nodo ==
+      // origen del modelo: onDragEnd/onTransformEnd y su guarda vuelven a ser correctos, el
+      // multi-arrastre vuelca coords válidas y la ROTACIÓN pivota en (x,y) como el export.
       return (
-        <Rect
-          {...props}
-          y={c.y + c.h - band}
-          width={c.w}
-          height={band}
-          listening={!capa.bloqueada}
-          fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-          fillLinearGradientEndPoint={{ x: 0, y: band }}
-          fillLinearGradientColorStops={stops}
-        />
+        <Group {...props} listening={interactivo && !capa.bloqueada}>
+          <Rect
+            y={c.h - band}
+            width={c.w}
+            height={band}
+            fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+            fillLinearGradientEndPoint={{ x: 0, y: band }}
+            fillLinearGradientColorStops={stops}
+          />
+        </Group>
       );
     }
     case "grupo": {

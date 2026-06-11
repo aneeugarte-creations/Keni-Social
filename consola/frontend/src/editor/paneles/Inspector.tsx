@@ -3,8 +3,10 @@
 // El bloque común (opacidad/geometría/mezcla/estilos) vive aquí; lo específico de cada tipo en su
 // `Cuerpo*`.
 
+import { useRef } from "react";
+
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, TipoMezcla } from "../documento";
-import { CATALOGO_FUENTES, ETIQUETA_MEZCLA } from "../documento";
+import { CATALOGO_FUENTES, ETIQUETA_MEZCLA, bandaOverlay, cajaVisual } from "../documento";
 import { Seccion } from "../Seccion";
 import { useEditor, useStoreEditor } from "../usarEditor";
 
@@ -22,6 +24,8 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
   const store = useStoreEditor();
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
   const marca = useEditor((s) => s.documento.marca);
+  // Última edición del inspector (capa + instante), para coalescer ráfagas en el historial.
+  const ultimaEdicion = useRef<{ id: string; t: number } | null>(null);
   // Familias disponibles: catálogo embebido + tipografías propias de la marca (sin duplicar).
   const familias = [...CATALOGO_FUENTES, ...fuentesExtra.filter((f) => !CATALOGO_FUENTES.includes(f as never))];
 
@@ -30,7 +34,25 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
     return <CuerpoLienzo />;
   }
 
-  const set = (cambios: Partial<Capa>) => store.getState().actualizar(capa.id, cambios);
+  // Una RÁFAGA de ediciones sobre la misma capa (teclear "1080" = 4 eventos, arrastrar un slider
+  // = decenas) cuenta como UN paso de deshacer: instantánea en el PRIMER cambio (no al enfocar,
+  // que ensuciaría el redo) + actualizaciones sin registrar — el mismo patrón de coalescencia que
+  // el nudge de flechas en `useAtajosTeclado`. Antes cada pulsación era un paso de historial y
+  // Ctrl+Z deshacía dígito a dígito.
+  const set = (cambios: Partial<Capa>) => {
+    const ahora = Date.now();
+    const st = store.getState();
+    const u = ultimaEdicion.current;
+    if (!u || u.id !== capa.id || ahora - u.t > 500) st.comenzarGesto();
+    ultimaEdicion.current = { id: capa.id, t: ahora };
+    st.actualizar(capa.id, cambios, false);
+  };
+
+  // El OVERLAY solo pinta su BANDA inferior: Y/Alto muestran y editan la banda VISIBLE (con el
+  // modelo crudo los números no correspondían a nada en pantalla: Y=-700/Alto=1350 con la banda
+  // arriba midiendo ~607). Al escribir se deshace la conversión — la `y` almacenada sigue siendo
+  // el tope de la CAJA y `alto_frac` queda intacto: el contrato del export no cambia.
+  const ov = capa.tipo === "overlay" ? (capa as CapaOverlay) : null;
 
   return (
     <div className="flex flex-col gap-3 p-3">
@@ -58,10 +80,32 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
       <Seccion titulo="Posición y estilos">
         <div className="grid grid-cols-2 gap-2">
           <Campo etiqueta="X"><Num valor={capa.x} onChange={(v) => set({ x: v } as Partial<Capa>)} /></Campo>
-          <Campo etiqueta="Y"><Num valor={capa.y} onChange={(v) => set({ y: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Y">
+            <Num
+              valor={ov ? cajaVisual(ov).y : capa.y}
+              onChange={(v) => set({ y: ov ? v - (cajaVisual(ov).y - ov.y) : v } as Partial<Capa>)}
+            />
+          </Campo>
           <Campo etiqueta="Ancho"><Num valor={capa.w} onChange={(v) => set({ w: v } as Partial<Capa>)} /></Campo>
-          <Campo etiqueta="Alto"><Num valor={capa.h} onChange={(v) => set({ h: v } as Partial<Capa>)} /></Campo>
-          <Campo etiqueta="Rotación"><Num valor={capa.rotacion} onChange={(v) => set({ rotacion: v } as Partial<Capa>)} /></Campo>
+          <Campo etiqueta="Alto">
+            <Num
+              valor={ov ? bandaOverlay(ov) : capa.h}
+              onChange={(v) => {
+                if (!ov) return set({ h: v } as Partial<Capa>);
+                // El Alto visible es la BANDA: se escala la caja (h' = banda'/alto_frac) anclando
+                // su FONDO (la banda vive pegada abajo), sin tocar alto_frac.
+                const frac = Math.min(1, Math.max(0.01, ov.alto_frac));
+                const hN = Math.max(1, v) / frac;
+                set({ h: hN, y: ov.y + ov.h - hN } as Partial<Capa>);
+              }}
+            />
+          </Campo>
+          {/* El lienzo no rota GRUPOS (política: se desagrupan para rotar; el Transformer los
+              deshabilita) pero el export SÍ rotaría a las hijas: el campo se oculta para no fijar
+              una rotación que el editor no enseña. Documentos ya guardados no se tocan. */}
+          {capa.tipo !== "grupo" && (
+            <Campo etiqueta="Rotación"><Num valor={capa.rotacion} onChange={(v) => set({ rotacion: v } as Partial<Capa>)} /></Campo>
+          )}
           <Campo etiqueta="Mezcla">
             <select
               value={capa.mezcla ?? "normal"}

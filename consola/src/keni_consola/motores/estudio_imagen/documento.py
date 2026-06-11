@@ -494,11 +494,16 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
 
 
 def _capa_overlay(c: dict[str, Any]) -> dict[str, Any]:
+    # `alto_frac` (fracción 0..1 de la caja que ocupa la banda) se ACOTA en vez de rechazarse: el
+    # validador histórico aceptaba cualquier float (un `float()` a pelo), así que un rango estricto
+    # brickearía documentos ya guardados al re-validarlos. Lo no numérico sí lanza DocumentoError
+    # (400 en español) como el resto de campos — antes escapaba como ValueError crudo (500).
+    alto_frac = _flotante(c.get("alto_frac", _spec._DEGRADADO_ALTO_FRAC), "alto_frac", defecto=_spec._DEGRADADO_ALTO_FRAC)
     return {
         **_base(c),
         "tipo": "overlay",
         "color": c["color"] if _es_hex(c.get("color")) else "#111315",
-        "alto_frac": float(c.get("alto_frac", _spec._DEGRADADO_ALTO_FRAC)),
+        "alto_frac": min(1.0, max(0.0, alto_frac)),
         "alpha": _entero(c.get("alpha", _spec._DEGRADADO_ALPHA), "alpha", minimo=0, maximo=255, defecto=_spec._DEGRADADO_ALPHA),
     }
 

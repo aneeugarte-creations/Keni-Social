@@ -18,7 +18,8 @@
 import type Konva from "konva";
 import { type RefObject, useRef, useState } from "react";
 
-import type { Documento } from "../documento";
+import type { Capa, CapaMarco, Documento } from "../documento";
+import { cajaVisual } from "../documento";
 import type { StoreEditor } from "../store";
 import {
   type CajaIman,
@@ -40,6 +41,22 @@ export interface GuiasArrastre {
 }
 
 const SIN_GUIAS: GuiasArrastre = { x: null, y: null, espX: null, espY: null };
+
+// Conversión posición de NODO Konva <-> posición del MODELO (la x/y almacenada). Para casi todas
+// las capas coinciden; las excepciones: la ELIPSE (Konva la posiciona por su CENTRO, el modelo por
+// la esquina sup-izq) y el GRUPO (su nodo vive en (0,0) y se mueve como DELTA sobre la bbox del
+// modelo). Volcar el nodo "a pelo" corrompía la y/x de esas capas en cada multi-arrastre.
+function modeloDesdeNodo(c: Capa, nx: number, ny: number): { x: number; y: number } {
+  if (c.tipo === "marco" && (c as CapaMarco).forma === "elipse") return { x: nx - c.w / 2, y: ny - c.h / 2 };
+  if (c.tipo === "grupo") return { x: c.x + nx, y: c.y + ny };
+  return { x: nx, y: ny };
+}
+
+function nodoDesdeModelo(c: Capa, mx: number, my: number): { x: number; y: number } {
+  if (c.tipo === "marco" && (c as CapaMarco).forma === "elipse") return { x: mx + c.w / 2, y: my + c.h / 2 };
+  if (c.tipo === "grupo") return { x: mx - c.x, y: my - c.y };
+  return { x: mx, y: my };
+}
 
 export function useArrastreCapas({
   store,
@@ -76,8 +93,14 @@ export function useArrastreCapas({
   // el hook lo muta directamente por frame (textContent/left/top), sin setState.
   etiquetasRef?: RefObject<HTMLDivElement | null>;
 }) {
-  // Arrastre múltiple: posiciones iniciales de todas las capas seleccionadas al empezar a mover.
-  const multiDrag = useRef<{ dragId: string; ini: Map<string, { x: number; y: number }> } | null>(null);
+  // Arrastre múltiple: instantánea al empezar a mover, por capa seleccionada — posición del NODO
+  // (nx,ny), posición del MODELO (cx,cy) y caja VISIBLE (vis). El volcado final escribe
+  // modelo_inicial + delta_de_nodo (no la posición cruda del nodo, que para elipse/overlay/grupo
+  // no es la x/y del modelo) y el imán trabaja sobre la caja visible inicial + delta.
+  const multiDrag = useRef<{
+    dragId: string;
+    ini: Map<string, { nx: number; ny: number; cx: number; cy: number; vis: CajaIman }>;
+  } | null>(null);
   const [guias, setGuias] = useState<GuiasArrastre>(SIN_GUIAS);
   const [arrastrando, setArrastrando] = useState(false);
 
@@ -107,10 +130,11 @@ export function useArrastreCapas({
     const id = e.target.id();
     const st = store.getState();
     if (st.seleccionMulti.length > 1 && st.seleccionMulti.includes(id)) {
-      const ini = new Map<string, { x: number; y: number }>();
+      const ini = new Map<string, { nx: number; ny: number; cx: number; cy: number; vis: CajaIman }>();
       for (const sid of st.seleccionMulti) {
         const n = stageRef.current?.findOne<Konva.Node>(`#${sid}`);
-        if (n) ini.set(sid, { x: n.x(), y: n.y() });
+        const c = st.documento.capas.find((x) => x.id === sid);
+        if (n && c) ini.set(sid, { nx: n.x(), ny: n.y(), cx: c.x, cy: c.y, vis: cajaVisual(c) });
       }
       multiDrag.current = { dragId: id, ini };
     } else {
@@ -125,12 +149,29 @@ export function useArrastreCapas({
     const md = multiDrag.current;
     if (md) {
       const stage = stageRef.current;
+      const st = store.getState();
       const pos: { id: string; x: number; y: number }[] = [];
-      md.ini.forEach((_p, sid) => {
+      const resetear: Konva.Node[] = [];
+      md.ini.forEach((p, sid) => {
+        // La capa AGARRADA ya horneó en su propio onDragEnd (CapaNodo convierte nodo -> modelo,
+        // y onDragEndGrupo además resetea su nodo a (0,0)): re-escribirla aquí con la posición
+        // cruda del nodo la corrompía (elipse/overlay) o la devolvía al origen (grupo reseteado).
+        if (sid === md.dragId) return;
         const n = stage?.findOne<Konva.Node>(`#${sid}`);
-        if (n) pos.push({ id: sid, x: n.x(), y: n.y() });
+        if (!n) return;
+        // Posición final = modelo inicial + delta del nodo: válido para TODA capa (también las
+        // que viven en otro origen: elipse en su centro, grupo en (0,0)).
+        const dx = n.x() - p.nx;
+        const dy = n.y() - p.ny;
+        if (dx === 0 && dy === 0) return;
+        pos.push({ id: sid, x: p.cx + dx, y: p.cy + dy });
+        // El nodo Group del grupo "pasajero" quedó desplazado imperativamente: tras hornear el
+        // delta en el modelo hay que devolverlo a (0,0) — react-konva no re-aplica x=0/y=0
+        // porque los props no cambian, y sin reset el grupo se pintaría desplazado DOBLE.
+        if (st.documento.capas.find((c) => c.id === sid)?.tipo === "grupo") resetear.push(n);
       });
-      store.getState().aplicarPosiciones(pos);
+      if (pos.length) st.aplicarPosiciones(pos);
+      for (const n of resetear) n.position({ x: 0, y: 0 });
       multiDrag.current = null;
     }
   };
@@ -150,8 +191,8 @@ export function useArrastreCapas({
       md.ini.forEach((p, sid) => {
         const n = sid === nodo.id() ? nodo : stage?.findOne<Konva.Node>(`#${sid}`);
         if (n) {
-          n.x(p.x + dx);
-          n.y(p.y + dy);
+          n.x(p.nx + dx);
+          n.y(p.ny + dy);
         }
       });
     };
@@ -165,12 +206,14 @@ export function useArrastreCapas({
     if (esMulti && md) {
       const start = md.ini.get(nodo.id());
       if (!start) return;
-      dxBase = nodo.x() - start.x;
-      dyBase = nodo.y() - start.y;
+      dxBase = nodo.x() - start.nx;
+      dyBase = nodo.y() - start.ny;
+      // La envolvente se construye con las cajas VISIBLES iniciales + delta (la banda del overlay,
+      // el bloque del texto legado, la bbox del grupo): la del modelo metía cajas fantasma que
+      // desbordaban (h - banda) por abajo y el imán/clamp se disparaba donde no hay nada.
       const cajas: CajaIman[] = [];
-      md.ini.forEach((p, sid) => {
-        const c = documento.capas.find((x) => x.id === sid);
-        if (c) cajas.push({ x: p.x + dxBase, y: p.y + dyBase, w: c.w, h: c.h });
+      md.ini.forEach((p) => {
+        cajas.push({ x: p.vis.x + dxBase, y: p.vis.y + dyBase, w: p.vis.w, h: p.vis.h });
       });
       const env = cajaEnvolvente(cajas);
       if (!env) {
@@ -185,7 +228,11 @@ export function useArrastreCapas({
     } else {
       const capa = documento.capas.find((c) => c.id === nodo.id());
       if (!capa) return;
-      caja = { x: nodo.x(), y: nodo.y(), w: capa.w, h: capa.h };
+      // Caja VISIBLE en la posición VIVA del nodo: nodo -> modelo (elipse/grupo viven en otro
+      // origen) y modelo -> caja visible (overlay/texto legado pintan desplazados de su x/y).
+      const m = modeloDesdeNodo(capa, nodo.x(), nodo.y());
+      const vis = cajaVisual(capa);
+      caja = { x: m.x + (vis.x - capa.x), y: m.y + (vis.y - capa.y), w: vis.w, h: vis.h };
       excluidas = new Set([capa.id]);
     }
     // Umbral del imán CONSTANTE en píxeles de PANTALLA: a cualquier zoom se "siente" igual.
@@ -215,9 +262,12 @@ export function useArrastreCapas({
       const otras: CajaIman[] = [];
       for (const c of documento.capas) {
         if (excluidas.has(c.id)) continue;
-        const cajaC: CajaIman = { x: c.x, y: c.y, w: c.w, h: c.h };
-        objX.push({ t: c.x, ref: cajaC }, { t: c.x + c.w / 2, ref: cajaC }, { t: c.x + c.w, ref: cajaC });
-        objY.push({ t: c.y, ref: cajaC }, { t: c.y + c.h / 2, ref: cajaC }, { t: c.y + c.h, ref: cajaC });
+        // Objetivos = cajas VISIBLES: el overlay ofrece como imán su banda (no el tope/centro de
+        // una caja invisible) y el texto legado su bloque; el resto, su caja del modelo.
+        const v = cajaVisual(c);
+        const cajaC: CajaIman = { x: v.x, y: v.y, w: v.w, h: v.h };
+        objX.push({ t: v.x, ref: cajaC }, { t: v.x + v.w / 2, ref: cajaC }, { t: v.x + v.w, ref: cajaC });
+        objY.push({ t: v.y, ref: cajaC }, { t: v.y + v.h / 2, ref: cajaC }, { t: v.y + v.h, ref: cajaC });
         otras.push(cajaC);
       }
       const sx = calcularImanEje(px, caja.w, objX, umbral);
@@ -284,8 +334,17 @@ export function useArrastreCapas({
       // Delta final del grupo = delta del puntero + el ajuste que el imán aplicó a la envolvente.
       aplicarDeltaGrupo(dxBase + px - caja.x, dyBase + py - caja.y);
     } else {
-      nodo.x(px);
-      nodo.y(py);
+      // Deshace la conversión: caja visible ajustada -> modelo -> posición del nodo.
+      const capa = documento.capas.find((c) => c.id === nodo.id());
+      if (capa) {
+        const vis = cajaVisual(capa);
+        const n = nodoDesdeModelo(capa, px - (vis.x - capa.x), py - (vis.y - capa.y));
+        nodo.x(n.x);
+        nodo.y(n.y);
+      } else {
+        nodo.x(px);
+        nodo.y(py);
+      }
     }
     setGuias({ x: lx, y: ly, espX, espY });
     pintarEtiquetas(etiquetas);

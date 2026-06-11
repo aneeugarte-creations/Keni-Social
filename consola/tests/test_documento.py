@@ -488,3 +488,28 @@ def test_capa_overlay_alpha_no_numerico_400():
     with pytest.raises(d.DocumentoError, match="alpha.*número entero"):
         d.validar(_doc(capas=[{"tipo": "overlay", "x": 0, "y": 0, "w": 100, "h": 100,
                                "color": "#000000", "alpha": "opaque"}]))
+
+
+def test_capa_overlay_alto_frac_no_numerico_400():
+    """overlay.alto_frac con valor no-numérico -> DocumentoError (antes: ValueError crudo => 500)."""
+    with pytest.raises(d.DocumentoError, match="alto_frac"):
+        d.validar(_doc(capas=[{"tipo": "overlay", "x": 0, "y": 0, "w": 100, "h": 100,
+                               "color": "#000000", "alto_frac": "alta"}]))
+
+
+def test_capa_overlay_alto_frac_fuera_de_rango_se_acota():
+    """alto_frac fuera de 0..1 se ACOTA, no se rechaza: el validador histórico aceptaba cualquier
+    float, así que documentos ya guardados deben seguir re-validando (sin migración)."""
+    doc = d.validar(_doc(capas=[
+        {"tipo": "overlay", "x": 0, "y": 0, "w": 100, "h": 100, "color": "#000000", "alto_frac": 50},
+        {"tipo": "overlay", "x": 0, "y": 0, "w": 100, "h": 100, "color": "#000000", "alto_frac": -3},
+    ]))
+    assert doc["capas"][0]["alto_frac"] == 1.0
+    assert doc["capas"][1]["alto_frac"] == 0.0
+
+
+def test_capa_overlay_alto_frac_valido_intacto():
+    """Un alto_frac legítimo (0..1) se conserva tal cual (sin redondeos ni clamps)."""
+    doc = d.validar(_doc(capas=[{"tipo": "overlay", "x": 0, "y": 0, "w": 100, "h": 100,
+                                 "color": "#000000", "alto_frac": 0.45}]))
+    assert doc["capas"][0]["alto_frac"] == 0.45

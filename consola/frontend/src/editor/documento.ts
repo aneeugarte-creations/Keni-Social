@@ -375,7 +375,34 @@ export function zTope(doc: Documento): number {
 }
 
 // Alto VISUAL de una capa para centrar/repartir: los textos sin caja (h<=0) ocupan una línea
-// (tamano × interlineado); el resto usa su h del modelo.
+// (tamano × interlineado); el overlay solo pinta su BANDA inferior; el resto usa su h del modelo.
 export function altoVisual(c: Capa): number {
+  if (c.tipo === "overlay") return bandaOverlay(c);
   return c.tipo === "texto" && c.h <= 0 ? Math.round(c.tamano * c.interlineado) : c.h;
+}
+
+// Alto en px de la BANDA visible de un overlay (degradado de legibilidad pegado al fondo de su
+// caja). Espejo EXACTO del export (`dibujarOverlayInferior` en dibujar.mjs:
+// max(1, floor(h * alto_frac)) con default 0.58), INCLUIDO el floor — el editor medía la banda
+// sin floor y derivaba sub-píxel respecto al PNG. Única fuente de la fórmula en el cliente.
+export function bandaOverlay(c: CapaOverlay): number {
+  return Math.max(1, Math.floor(c.h * (c.alto_frac ?? 0.58)));
+}
+
+// Caja VISIBLE de una capa en coords del documento, SIN rotar (la rotación pivota en (c.x, c.y),
+// igual que el export). Donde el modelo y lo pintado difieren: el overlay solo pinta su banda
+// inferior (y + h - banda) y el texto sin caja (h<=0) ocupa el alto de una línea — con ancla
+// "abajo" su `y` almacenada es el borde INFERIOR del bloque (contrato legado del export). La usan
+// inspector, imanes, marquee, alinear/distribuir y la etiqueta del gesto para operar sobre LO QUE
+// SE VE, convirtiendo al escribir (el contrato de almacenamiento no cambia).
+export function cajaVisual(c: Capa): { x: number; y: number; w: number; h: number } {
+  if (c.tipo === "overlay") {
+    const banda = bandaOverlay(c);
+    return { x: c.x, y: c.y + c.h - banda, w: c.w, h: banda };
+  }
+  if (c.tipo === "texto" && c.h <= 0) {
+    const alto = altoVisual(c);
+    return { x: c.x, y: c.ancla === "abajo" ? c.y - alto : c.y, w: c.w, h: alto };
+  }
+  return { x: c.x, y: c.y, w: c.w, h: c.h };
 }

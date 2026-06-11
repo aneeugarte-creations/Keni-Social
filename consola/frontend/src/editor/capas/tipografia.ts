@@ -33,3 +33,25 @@ export function estiloFuente(c: Pick<CapaTexto, "peso" | "cursiva" | "familia">)
   const cursiva = !!c.cursiva && tieneCursiva(familiaReal(c.familia));
   return cursiva ? `italic ${peso}` : String(peso);
 }
+
+// Mide el ancho en px de `texto` con un canvas 2D offscreen — la MISMA medida (`measureText` +
+// shorthand de font) que usa el export en `dibujarLogo`/`dibujarTexto`, para que la previa del
+// wordmark se ciña al texto igual que el PNG. El canvas se crea una vez y se reutiliza. En
+// entornos sin canvas 2D (tests jsdom) cae a una aproximación por glifo (~0.6 em): solo afecta a
+// la previa, nunca al dato ni al export.
+let _ctxMedida: CanvasRenderingContext2D | null | undefined;
+export function medirTexto(texto: string, font: string): number {
+  if (_ctxMedida === undefined) {
+    try {
+      _ctxMedida = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
+    } catch {
+      _ctxMedida = null; // jsdom sin canvas: getContext puede lanzar "Not implemented"
+    }
+  }
+  if (!_ctxMedida) {
+    const m = /(\d+(?:\.\d+)?)px/.exec(font);
+    return texto.length * (m ? parseFloat(m[1]) : 16) * 0.6;
+  }
+  _ctxMedida.font = font;
+  return _ctxMedida.measureText(texto).width;
+}

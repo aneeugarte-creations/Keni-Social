@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { documentoVacio, nuevoId, nuevaCapaTexto, nuevaCapaMarco } from "./documento";
+import { bandaOverlay, cajaVisual, documentoVacio, nuevoId, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto } from "./documento";
 import { crearStoreEditor } from "./store";
 
 describe("Store del editor (Zustand)", () => {
@@ -259,6 +259,98 @@ describe("Store del editor (Zustand)", () => {
       store.getState().ordenarMulti();
       expect(store.getState().pasado.length).toBe(pasadoAntes);
       expect(caja(store, "b").x).toBe(130);
+    });
+  });
+
+  describe("alinear/alinearMulti operan sobre la caja VISIBLE (overlay = banda, texto legado = bloque)", () => {
+    const FORMATO = { w: 1080, h: 1350, safe_top: 0, safe_bottom: 0 };
+    const montarOverlay = () => {
+      const store = crearStoreEditor(documentoVacio(FORMATO, "test"));
+      // Overlay a sangre (la caja cubre el lienzo): solo se VE su banda inferior.
+      store.getState().agregar(nuevaCapaOverlay({ id: "ov", x: 0, y: 0, w: 1080, h: 1350, alto_frac: 0.45, z: 1 }));
+      return store;
+    };
+    const capaDe = (store: ReturnType<typeof crearStoreEditor>, id: string) =>
+      store.getState().documento.capas.find((c) => c.id === id)!;
+
+    it("'arriba' deja la BANDA del overlay pegada al borde superior (antes la dejaba abajo)", () => {
+      const store = montarOverlay();
+      store.getState().alinear("ov", "arriba");
+      const c = capaDe(store, "ov");
+      // y del MODELO = banda - h, para que el tope VISIBLE (y + h - banda) caiga en 0.
+      expect(c.y).toBe(bandaOverlay(c as never) - 1350);
+      expect(cajaVisual(c).y).toBe(0);
+    });
+
+    it("'abajo' del overlay conserva el comportamiento histórico (y = f.h - h: banda al fondo)", () => {
+      const store = montarOverlay();
+      store.getState().alinear("ov", "abajo");
+      expect(capaDe(store, "ov").y).toBe(0); // f.h - h = 1350 - 1350
+    });
+
+    it("'centroV' centra la BANDA visible, no la caja fantasma", () => {
+      const store = montarOverlay();
+      store.getState().alinear("ov", "centroV");
+      const c = capaDe(store, "ov");
+      const vis = cajaVisual(c);
+      expect(vis.y).toBe(Math.round((1350 - vis.h) / 2));
+    });
+
+    it("texto legado (h<=0, ancla 'abajo'): 'arriba' coloca el BLOQUE en y visible 0", () => {
+      const store = crearStoreEditor(documentoVacio(FORMATO, "test"));
+      store.getState().agregar(
+        nuevaCapaTexto({ id: "t", x: 80, y: 1254, w: 760, h: 0, tamano: 96, interlineado: 1.14, ancla: "abajo", z: 1 }),
+      );
+      store.getState().alinear("t", "arriba");
+      const c = capaDe(store, "t");
+      // La y almacenada es el borde INFERIOR del bloque (contrato legado): queda en altoVisual.
+      expect(c.y).toBe(Math.round(96 * 1.14));
+      expect(cajaVisual(c).y).toBe(0);
+    });
+
+    it("alinearMulti aplica la misma conversión visible a toda la selección", () => {
+      const store = montarOverlay();
+      store.getState().agregar(nuevaCapaMarco({ id: "m", x: 10, y: 600, w: 100, h: 100, z: 2 }));
+      store.getState().seleccionarMuchas(["ov", "m"]);
+      store.getState().alinearMulti("arriba");
+      expect(cajaVisual(capaDe(store, "ov")).y).toBe(0);
+      expect(capaDe(store, "m").y).toBe(0);
+    });
+  });
+
+  describe("aplicarPosiciones y grupos (hijas en coordenadas absolutas)", () => {
+    it("mover un grupo desplaza también a sus hijas (el export pinta las hijas, no la bbox)", () => {
+      const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "test"));
+      const estado = store.getState();
+      estado.agregar(nuevaCapaMarco({ id: "a", x: 0, y: 0, w: 100, h: 100, z: 1 }));
+      estado.agregar(nuevaCapaMarco({ id: "b", x: 200, y: 200, w: 100, h: 100, z: 2 }));
+      estado.seleccionarMuchas(["a", "b"]);
+      estado.agrupar();
+      const grupo = store.getState().documento.capas.find((c) => c.tipo === "grupo")!;
+      store.getState().aplicarPosiciones([{ id: grupo.id, x: grupo.x + 10, y: grupo.y + 5 }]);
+      const g = store.getState().documento.capas.find((c) => c.id === grupo.id)!;
+      expect(g.x).toBe(grupo.x + 10);
+      expect(g.y).toBe(grupo.y + 5);
+      // Las hijas viajan con el grupo (mismo horneado que onDragEndGrupo).
+      const hijas = (g as { capas: { id: string; x: number; y: number }[] }).capas;
+      expect(hijas.find((s) => s.id === "a")).toMatchObject({ x: 10, y: 5 });
+      expect(hijas.find((s) => s.id === "b")).toMatchObject({ x: 210, y: 205 });
+    });
+
+    it("duplicar un grupo desplaza la copia ENTERA (+24,+24), hijas incluidas", () => {
+      const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "test"));
+      const estado = store.getState();
+      estado.agregar(nuevaCapaMarco({ id: "a", x: 0, y: 0, w: 100, h: 100, z: 1 }));
+      estado.agregar(nuevaCapaMarco({ id: "b", x: 200, y: 200, w: 100, h: 100, z: 2 }));
+      estado.seleccionarMuchas(["a", "b"]);
+      estado.agrupar();
+      const grupo = store.getState().documento.capas.find((c) => c.tipo === "grupo")!;
+      store.getState().duplicar(grupo.id);
+      const copia = store.getState().documento.capas.filter((c) => c.tipo === "grupo").at(-1)!;
+      expect(copia.id).not.toBe(grupo.id);
+      expect(copia.x).toBe(grupo.x + 24);
+      const hijas = (copia as { capas: { x: number; y: number }[] }).capas;
+      expect(hijas[0]).toMatchObject({ x: 24, y: 24 });
     });
   });
 });

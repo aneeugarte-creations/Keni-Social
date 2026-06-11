@@ -39,8 +39,8 @@ import { toast } from "sonner";
 import { api, urlMedia } from "@/lib/api";
 
 import { CapaNodo } from "./capas/CapaNodo";
-import type { Capa, CapaImagen, CapaOverlay, CapaTexto, Crop } from "./documento";
-import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
+import type { Capa, CapaImagen, CapaTexto, Crop } from "./documento";
+import { cajaVisual, nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
 import { type GestoLateral, type LadoCaja, docALocal, localADoc, recorteLateral } from "./recorte";
 import { useEditor, useStoreEditor } from "./usarEditor";
 import { leerDimensionesUrl } from "./useImagen";
@@ -133,8 +133,15 @@ export function Lienzo({
   const seleccion = useEditor((s) => s.seleccion);
   const seleccionMulti = useEditor((s) => s.seleccionMulti);
   const { w, h } = documento.formato;
+  // Los overlays HTML de recorte/reencuadre se posicionan SIN rotar y sus gestos van en ejes de
+  // pantalla: con una imagen rotada el marco saldría descolocado y el arrastre movería en
+  // diagonal cruzada. Hasta que resuelvan la rotación, esos modos solo se abren con rotación 0
+  // (el gesto LATERAL del Transformer sí la resuelve, vía docALocal, y sigue disponible).
+  const sinRotacion = (c: Capa) => ((c.rotacion % 360) + 360) % 360 === 0;
   // Capa en modo reencuadre (solo imágenes): arrastrar mueve el FOCO, la rueda hace ZOOM.
-  const capaReencuadre = reencuadreId ? documento.capas.find((c) => c.id === reencuadreId && c.tipo === "imagen") ?? null : null;
+  const capaReencuadre = reencuadreId
+    ? documento.capas.find((c) => c.id === reencuadreId && c.tipo === "imagen" && sinRotacion(c)) ?? null
+    : null;
   // MODO RECORTE estilo Canva (solo imágenes): además del modo controlado por el padre (prop
   // `recorteId`, p. ej. desde el inspector), el Lienzo entra POR SÍ MISMO con DOBLE CLIC sobre una
   // capa de imagen (estado interno). Excluyente con reencuadre (el reencuadre manda si coinciden).
@@ -142,7 +149,7 @@ export function Lienzo({
   const recorteActivoId = recorteId ?? recorteInternoId;
   const capaRecorte =
     !capaReencuadre && recorteActivoId
-      ? documento.capas.find((c) => c.id === recorteActivoId && c.tipo === "imagen") ?? null
+      ? documento.capas.find((c) => c.id === recorteActivoId && c.tipo === "imagen" && sinRotacion(c)) ?? null
       : null;
   // Cualquier modo de edición de imagen oculta los tiradores normales del Transformer.
   const modoImagen = capaReencuadre ?? capaRecorte;
@@ -314,9 +321,17 @@ export function Lienzo({
 
   const capas: Capa[] = [...documento.capas].sort((a, b) => a.z - b.z);
   const capaSel = documento.capas.find((c) => c.id === seleccion) ?? null;
-  const ratioFijo = capaSel ? RATIO_FIJO.has(capaSel.tipo) : false;
-  // El grupo solo se mueve (resize/rotación se hacen desagrupando).
-  const esGrupo = capaSel?.tipo === "grupo";
+  // Ratio fijo si CUALQUIER seleccionada lo exige (imagen/logo), no solo la primaria: una
+  // multi-selección con foto debe escalar proporcional aunque la última clicada sea un texto.
+  const ratioFijo = seleccionMulti.some((id) => {
+    const c = documento.capas.find((x) => x.id === id);
+    return !!c && RATIO_FIJO.has(c.tipo);
+  });
+  // El grupo solo se mueve (resize/rotación se hacen desagrupando). Se mira TODA la selección:
+  // antes solo la primaria, y un grupo colado en una multi-selección sí recibía escala/rotación
+  // del Transformer — que su nodo (sin onTransformEnd) jamás horneaba en el documento: transform
+  // fantasma que el export ignoraba y la recarga revertía.
+  const hayGrupo = seleccionMulti.some((id) => documento.capas.find((c) => c.id === id)?.tipo === "grupo");
   // Una IMAGEN sola y no bloqueada gana además los 4 tiradores LATERALES (recorte desde ese borde,
   // estilo Canva; ver `iniciarGestoLateral`). Las esquinas siguen escalando proporcional.
   const lateralesImagen = seleccionMulti.length === 1 && capaSel?.tipo === "imagen" && !capaSel.bloqueada;
@@ -476,15 +491,22 @@ export function Lienzo({
       const c = capa as CapaImagen;
       // Solo si hay imagen EFECTIVA que recortar: foto real, o la muestra activa sobre el hueco.
       if (!c.objeto && !(muestraFoto && c.es_foto)) return;
+      // El overlay de recorte no resuelve rotación (ver `sinRotacion`): avisar en vez de abrir
+      // un marco descolocado con gestos en ejes equivocados.
+      if (!sinRotacion(c)) {
+        toast.info("Para recortar, pon la rotación de la imagen a 0 (el recorte aún no rota).");
+        return;
+      }
       store.getState().seleccionar(id);
       setRecorteInternoId(id);
     }
   };
 
-  // El textarea de edición inline se posiciona en píxeles de pantalla al ABRIR; si cambia la escala
-  // (zoom) o se hace scroll del contenedor mientras se edita, quedaría flotando descolocado. Fix
-  // mínimo: cerrar guardando ante un cambio de escala. (El scroll se ataja en `onScroll` del
-  // contenedor.) Dep SOLO `escala` para no disparar al abrir (cuando cambia `editando`).
+  // El textarea de edición inline vive DENTRO del tablero (mismo sistema de px que el canvas), así
+  // el scroll del contenedor lo arrastra consigo y no queda descolocado (antes se montaba fuera
+  // del scroll y el desplazamiento acumulado lo corría exactamente ese offset). El zoom sí cambia
+  // los px del tablero: ante un cambio de escala se cierra guardando. Dep SOLO `escala` para no
+  // disparar al abrir (cuando cambia `editando`).
   useEffect(() => {
     if (editando) cerrarEdicion(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -658,12 +680,14 @@ export function Lienzo({
       const x1 = Math.max(inicio.x, fin.x);
       const y1 = Math.max(inicio.y, fin.y);
       const hits = st.documento.capas
-        .filter(
-          (c) =>
-            c.visible &&
-            !c.bloqueada &&
-            !(c.x > x1 || c.x + c.w < x0 || c.y > y1 || c.y + c.h < y0),
-        )
+        .filter((c) => {
+          if (!c.visible || c.bloqueada) return false;
+          // Intersección contra la caja VISIBLE (banda del overlay, bloque del texto legado):
+          // con la caja del modelo, un overlay a sangre (0,0,w,h) caía en CUALQUIER marquee
+          // aunque no tocara la banda. AABB sin rotar, como siempre (aproximación preexistente).
+          const v = cajaVisual(c);
+          return !(v.x > x1 || v.x + v.w < x0 || v.y > y1 || v.y + v.h < y0);
+        })
         .map((c) => c.id);
       const ids = shift ? Array.from(new Set([...base, ...hits])) : hits;
       st.seleccionarMuchas(ids);
@@ -746,10 +770,9 @@ export function Lienzo({
     } else if (nodos.length === 1) {
       const capa = documento.capas.find((c) => c.id === nodos[0].id());
       if (!capa) return;
-      // Texto sin caja (h<=0): alto visual de una línea, igual que hornea onTransformEnd.
-      const hBase = capa.tipo === "texto" && capa.h <= 0
-        ? (capa as CapaTexto).tamano * (capa as CapaTexto).interlineado
-        : capa.h;
+      // Alto VISIBLE como base (banda del overlay, línea del texto sin caja): es lo que abraza el
+      // Transformer; con el h del modelo el rótulo decía 1350 mientras la caja medía ~607.
+      const hBase = cajaVisual(capa).h;
       texto = etiquetaTamano(Math.abs(capa.w * nodos[0].scaleX()), Math.abs(hBase * nodos[0].scaleY()));
     } else {
       // Multi-selección: caja envolvente del conjunto en coords del documento.
@@ -922,14 +945,13 @@ export function Lienzo({
         return { x: r.x, y: r.y, w: r.width, h: r.height, rot: 0 };
       }
     }
-    const alto =
-      c.tipo === "overlay"
-        ? Math.max(1, c.h * (c as CapaOverlay).alto_frac)
-        : c.tipo === "texto" && c.h <= 0
-          ? (c as CapaTexto).tamano * (c as CapaTexto).interlineado
-          : c.h;
-    const y = c.tipo === "overlay" ? c.y + c.h - alto : c.y;
-    return { x: c.x, y, w: c.w, h: alto, rot: c.rotacion };
+    // Caja VISIBLE (banda del overlay, bloque del texto legado) rotada alrededor del ORIGEN de la
+    // capa (c.x, c.y): es el pivote del nodo Konva y del export. El desplazamiento local del tope
+    // visible (vis.y - c.y) se rota con la capa para colocar el contorno donde se pinta de verdad.
+    const vis = cajaVisual(c);
+    const d = vis.y - c.y;
+    const rad = ((c.rotacion || 0) * Math.PI) / 180;
+    return { x: c.x - d * Math.sin(rad), y: c.y + d * Math.cos(rad), w: vis.w, h: vis.h, rot: c.rotacion };
   })();
 
   const multi = seleccionMulti.length > 1;
@@ -987,7 +1009,6 @@ export function Lienzo({
         className="h-full w-full overflow-auto rounded-md border border-border shadow-sm"
         style={{ cursor: paneando ? "grabbing" : espacio ? "grab" : undefined }}
         onMouseDown={onMouseDownContenedor}
-        onScroll={() => { if (editando) cerrarEdicion(true); }}
         onDragOver={(e) => {
           // Permite el drop tanto del activo interno como de ficheros del escritorio.
           if (e.dataTransfer.types.includes("application/x-keni-activo") || e.dataTransfer.types.includes("Files")) e.preventDefault();
@@ -1152,13 +1173,13 @@ export function Lienzo({
           <Layer>
             <Transformer
               ref={trRef}
-              rotateEnabled={!esGrupo}
-              resizeEnabled={!esGrupo}
+              rotateEnabled={!hayGrupo}
+              resizeEnabled={!hayGrupo}
               keepRatio={ratioFijo}
               // Imágenes y logos: esquinas con proporción fija. Una imagen sola (no bloqueada)
               // gana además los LATERALES, que recortan en vez de estirar (gesto lateral arriba).
               enabledAnchors={
-                esGrupo
+                hayGrupo
                   ? []
                   : lateralesImagen
                     ? ["top-left", "top-right", "bottom-left", "bottom-right", "middle-left", "middle-right", "top-center", "bottom-center"]
@@ -1216,6 +1237,22 @@ export function Lienzo({
         {/* Etiquetas de DISTANCIA del imán/espaciado igual: contenedor que `useArrastreCapas` puebla
             por mutación directa del DOM durante el arrastre (sin setState por frame). */}
         <div ref={etiquetasImanRef} aria-hidden className="pointer-events-none absolute inset-0 z-30" />
+        {/* Edición de texto en línea: dentro del TABLERO (px del canvas, mismo origen que
+            `getClientRect`), así el scroll del contenedor lo mueve junto al texto. */}
+        {editando && (
+          <textarea
+            autoFocus
+            value={textoEdit}
+            onChange={(e) => setTextoEdit(e.target.value)}
+            onBlur={() => cerrarEdicion(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cerrarEdicion(true); }
+              if (e.key === "Escape") { e.preventDefault(); cerrarEdicion(false); }
+            }}
+            className="absolute z-20 resize-none rounded border border-primary bg-background/95 p-1 leading-tight shadow"
+            style={{ left: editando.x, top: editando.y, width: editando.w, fontSize: Math.max(11, Math.min(40, editando.fontPx)) }}
+          />
+        )}
        </div>
       </div>
 
@@ -1224,22 +1261,6 @@ export function Lienzo({
 
       {/* Banner de recorte (estilo Canva): Hecho confirma (Enter), Cancelar restaura (Esc). */}
       {capaRecorte && <BannerRecorte onListo={confirmarRecorte} onCancelar={cancelarRecorte} />}
-
-      {/* Edición de texto en línea. */}
-      {editando && (
-        <textarea
-          autoFocus
-          value={textoEdit}
-          onChange={(e) => setTextoEdit(e.target.value)}
-          onBlur={() => cerrarEdicion(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cerrarEdicion(true); }
-            if (e.key === "Escape") { e.preventDefault(); cerrarEdicion(false); }
-          }}
-          className="absolute z-20 resize-none rounded border border-primary bg-background/95 p-1 leading-tight shadow"
-          style={{ left: editando.x, top: editando.y, width: editando.w, fontSize: Math.max(11, Math.min(40, editando.fontPx)) }}
-        />
-      )}
 
     </div>
     </div>

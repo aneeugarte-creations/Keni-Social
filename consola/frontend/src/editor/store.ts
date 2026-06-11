@@ -7,9 +7,36 @@
 import { createStore } from "zustand/vanilla";
 
 import type { Capa, CapaImagen, CapaMarco, Documento, Forma } from "./documento";
-import { altoVisual, nuevoId } from "./documento";
+import { cajaVisual, nuevoId } from "./documento";
 
 const LIMITE_HISTORIAL = 50;
+
+// Mueve una capa a (x,y) ABSOLUTOS del documento. Las hijas de un grupo van en coordenadas
+// absolutas (igual que en el export): se desplazan CON él — mismo horneado que `onDragEndGrupo`
+// en CapaNodo —; mover solo la bbox dejaría a las hijas atrás (el export ignora la x/y del grupo).
+function moverCapa(c: Capa, x: number, y: number): Capa {
+  if (c.tipo === "grupo") {
+    const dx = x - c.x;
+    const dy = y - c.y;
+    return { ...c, x, y, capas: c.capas.map((s) => ({ ...s, x: s.x + dx, y: s.y + dy })) } as Capa;
+  }
+  return { ...c, x, y } as Capa;
+}
+
+// Alinea UNA capa respecto al formato `f` operando sobre su caja VISIBLE (`cajaVisual`): para el
+// overlay lo alineado es la BANDA (no la caja contenedora invisible, que dejaba "arriba" pegada
+// abajo) y para el texto legado (h<=0, ancla "abajo") el bloque anclado por su borde inferior.
+// La conversión se deshace al escribir: el contrato de almacenamiento no cambia.
+function alinearCapa(c: Capa, modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo", f: { w: number; h: number }): Capa {
+  const vis = cajaVisual(c);
+  const dy = vis.y - c.y; // desfase modelo -> visible en y (0 salvo overlay/texto legado)
+  if (modo === "izq") return moverCapa(c, 0, c.y);
+  if (modo === "centroH") return moverCapa(c, Math.round((f.w - c.w) / 2), c.y);
+  if (modo === "der") return moverCapa(c, f.w - c.w, c.y);
+  if (modo === "arriba") return moverCapa(c, c.x, 0 - dy);
+  if (modo === "centroV") return moverCapa(c, c.x, Math.round((f.h - vis.h) / 2) - dy);
+  return moverCapa(c, c.x, f.h - vis.h - dy); // abajo
+}
 
 export interface EstadoEditor {
   documento: Documento;
@@ -234,11 +261,10 @@ export function crearStoreEditor(inicial: Documento) {
       duplicar: (id) => {
         const orig = get().documento.capas.find((c) => c.id === id);
         if (!orig) return;
+        // `moverCapa` desplaza también a las hijas si la copia es un grupo (coords absolutas).
         const copia = {
-          ...clonar(orig),
+          ...moverCapa(clonar(orig), orig.x + 24, orig.y + 24),
           id: nuevoId(orig.tipo),
-          x: orig.x + 24,
-          y: orig.y + 24,
           z: Math.max(0, ...get().documento.capas.map((c) => c.z)) + 1,
         } as Capa;
         aplicar((doc) => conCapas(doc, [...doc.capas, copia]));
@@ -276,21 +302,12 @@ export function crearStoreEditor(inicial: Documento) {
         }),
 
       alinear: (id, modo) =>
-        aplicar((doc) => {
-          const f = doc.formato;
-          return conCapas(
+        aplicar((doc) =>
+          conCapas(
             doc,
-            doc.capas.map((c) => {
-              if (c.id !== id) return c;
-              if (modo === "izq") return { ...c, x: 0 } as Capa;
-              if (modo === "centroH") return { ...c, x: Math.round((f.w - c.w) / 2) } as Capa;
-              if (modo === "der") return { ...c, x: f.w - c.w } as Capa;
-              if (modo === "arriba") return { ...c, y: 0 } as Capa;
-              if (modo === "centroV") return { ...c, y: Math.round((f.h - c.h) / 2) } as Capa;
-              return { ...c, y: f.h - c.h } as Capa; // abajo
-            }),
-          );
-        }),
+            doc.capas.map((c) => (c.id === id ? alinearCapa(c, modo, doc.formato) : c)),
+          ),
+        ),
 
       quitarMulti: () => {
         // Las capas bloqueadas (hueco de foto) no se borran ni en lote.
@@ -309,10 +326,8 @@ export function crearStoreEditor(inicial: Documento) {
         const capas = get().documento.capas.filter((c) => sel.includes(c.id));
         let z = get().documento.capas.reduce((m, c) => Math.max(m, c.z), 0);
         const copias = capas.map((c) => ({
-          ...clonar(c),
+          ...moverCapa(clonar(c), c.x + 24, c.y + 24),
           id: nuevoId(c.tipo),
-          x: c.x + 24,
-          y: c.y + 24,
           z: ++z,
         })) as Capa[];
         aplicar((doc) => conCapas(doc, [...doc.capas, ...copias]));
@@ -326,7 +341,10 @@ export function crearStoreEditor(inicial: Documento) {
             doc,
             doc.capas.map((c) => {
               const p = mapa.get(c.id);
-              return p ? ({ ...c, x: p.x, y: p.y } as Capa) : c;
+              // `moverCapa` desplaza también a las hijas de un grupo (coords absolutas): antes
+              // mover un grupo por flechas o multi-arrastre viajaba solo la bbox y el export
+              // (que pinta las hijas e ignora la x/y del grupo) perdía el movimiento.
+              return p ? moverCapa(c, p.x, p.y) : c;
             }),
           ),
           registrar,
@@ -336,21 +354,12 @@ export function crearStoreEditor(inicial: Documento) {
       alinearMulti: (modo) => {
         const ids = new Set(get().seleccionMulti);
         if (ids.size === 0) return;
-        aplicar((doc) => {
-          const f = doc.formato;
-          return conCapas(
+        aplicar((doc) =>
+          conCapas(
             doc,
-            doc.capas.map((c) => {
-              if (!ids.has(c.id)) return c;
-              if (modo === "izq") return { ...c, x: 0 } as Capa;
-              if (modo === "centroH") return { ...c, x: Math.round((f.w - c.w) / 2) } as Capa;
-              if (modo === "der") return { ...c, x: f.w - c.w } as Capa;
-              if (modo === "arriba") return { ...c, y: 0 } as Capa;
-              if (modo === "centroV") return { ...c, y: Math.round((f.h - c.h) / 2) } as Capa;
-              return { ...c, y: f.h - c.h } as Capa;
-            }),
-          );
-        });
+            doc.capas.map((c) => (ids.has(c.id) ? alinearCapa(c, modo, doc.formato) : c)),
+          ),
+        );
       },
 
       distribuir: (eje) => {
@@ -358,18 +367,25 @@ export function crearStoreEditor(inicial: Documento) {
         if (sel.length < 3) return;
         aplicar((doc) => {
           const elegidas = doc.capas.filter((c) => sel.includes(c.id));
-          const orden = [...elegidas].sort((a, b) => (eje === "h" ? a.x - b.x : a.y - b.y));
-          const primero = orden[0];
-          const ultimo = orden[orden.length - 1];
-          const ini = eje === "h" ? primero.x : primero.y;
-          const fin = eje === "h" ? ultimo.x : ultimo.y;
+          // Reparte los ORÍGENES VISIBLES (cajaVisual: la banda del overlay, el bloque del texto
+          // legado), no la esquina del modelo: el resultado en pantalla queda uniforme y la
+          // conversión se deshace al escribir (contrato de almacenamiento intacto).
+          const origen = (c: Capa) => (eje === "h" ? cajaVisual(c).x : cajaVisual(c).y);
+          const orden = [...elegidas].sort((a, b) => origen(a) - origen(b));
+          const ini = origen(orden[0]);
+          const fin = origen(orden[orden.length - 1]);
           const paso = (fin - ini) / (orden.length - 1);
           const nuevaPos = new Map<string, number>();
-          orden.forEach((c, i) => nuevaPos.set(c.id, Math.round(ini + paso * i)));
+          orden.forEach((c, i) => {
+            const desfase = origen(c) - (eje === "h" ? c.x : c.y); // visible -> modelo
+            nuevaPos.set(c.id, Math.round(ini + paso * i) - desfase);
+          });
           return conCapas(
             doc,
             doc.capas.map((c) =>
-              nuevaPos.has(c.id) ? ({ ...c, [eje === "h" ? "x" : "y"]: nuevaPos.get(c.id) } as Capa) : c,
+              nuevaPos.has(c.id)
+                ? moverCapa(c, eje === "h" ? nuevaPos.get(c.id)! : c.x, eje === "v" ? nuevaPos.get(c.id)! : c.y)
+                : c,
             ),
           );
         });
@@ -381,8 +397,11 @@ export function crearStoreEditor(inicial: Documento) {
         aplicar((doc) => {
           const elegidas = doc.capas.filter((c) => sel.includes(c.id));
           if (elegidas.length < 3) return doc;
+          // Todo el reparto opera sobre la caja VISIBLE (`cajaVisual`): la banda del overlay y el
+          // bloque del texto legado, no la caja fantasma del modelo (que descuadraba el tidy up).
+          // Al escribir se deshace la conversión visible -> modelo.
           const cx = (c: Capa) => c.x + c.w / 2;
-          const cy = (c: Capa) => c.y + altoVisual(c) / 2;
+          const cy = (c: Capa) => cajaVisual(c).y + cajaVisual(c).h / 2;
           // Eje DOMINANTE de la disposición actual: el de mayor dispersión de centros (empate => h).
           const xs = elegidas.map(cx);
           const ys = elegidas.map(cy);
@@ -391,20 +410,21 @@ export function crearStoreEditor(inicial: Documento) {
           const orden = [...elegidas].sort((a, b) => (eje === "h" ? cx(a) - cx(b) : cy(a) - cy(b)));
           // Reparto con HUECO uniforme dentro de la extensión actual (del borde inicial del primero
           // al borde final del último); puede ser negativo si se solapan — sigue siendo determinista.
-          const tam = (c: Capa) => (eje === "h" ? c.w : altoVisual(c));
-          const ini = Math.min(...orden.map((c) => (eje === "h" ? c.x : c.y)));
-          const fin = Math.max(...orden.map((c) => (eje === "h" ? c.x + c.w : c.y + altoVisual(c))));
+          const tam = (c: Capa) => (eje === "h" ? c.w : cajaVisual(c).h);
+          const ini = Math.min(...orden.map((c) => (eje === "h" ? c.x : cajaVisual(c).y)));
+          const fin = Math.max(...orden.map((c) => (eje === "h" ? c.x + c.w : cajaVisual(c).y + cajaVisual(c).h)));
           const hueco = (fin - ini - orden.reduce((s, c) => s + tam(c), 0)) / (orden.length - 1);
           // Eje perpendicular: alinea los CENTROS al centro medio del conjunto.
           const perp = orden.reduce((s, c) => s + (eje === "h" ? cy(c) : cx(c)), 0) / orden.length;
           let cursor = ini;
           const pos = new Map<string, { x: number; y: number }>();
           for (const c of orden) {
+            const dy = cajaVisual(c).y - c.y; // visible -> modelo en y
             pos.set(
               c.id,
               eje === "h"
-                ? { x: Math.round(cursor), y: Math.round(perp - altoVisual(c) / 2) }
-                : { x: Math.round(perp - c.w / 2), y: Math.round(cursor) },
+                ? { x: Math.round(cursor), y: Math.round(perp - cajaVisual(c).h / 2) - dy }
+                : { x: Math.round(perp - c.w / 2), y: Math.round(cursor) - dy },
             );
             cursor += tam(c) + hueco;
           }
@@ -412,7 +432,7 @@ export function crearStoreEditor(inicial: Documento) {
             doc,
             doc.capas.map((c) => {
               const p = pos.get(c.id);
-              return p ? ({ ...c, x: p.x, y: p.y } as Capa) : c;
+              return p ? moverCapa(c, p.x, p.y) : c;
             }),
           );
         });
