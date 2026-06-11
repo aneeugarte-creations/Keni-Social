@@ -129,11 +129,20 @@
     background-image: linear-gradient(90deg, #fb7a2a 0%, #f1560f 52%, #dc3c00 100%);
     --foreground: 0 0% 100%;
     --muted-foreground: 0 0% 100%;
-    --muted: 0 0% 100%; /* píldora de marca: blanco translúcido (bg-muted/40) sobre el naranja */
+    --muted: 0 0% 100%; /* superficies muted en blanco (el texto sigue legible); ver regla de la píldora abajo */
     --accent: 20 100% 40%; /* hover: tinte naranja profundo, texto blanco legible */
     --accent-foreground: 0 0% 100%;
     --border: 28 100% 92%; /* hairline cálido tenue */
     --input: 28 100% 92%;
+  }
+  /*
+    La PÍLDORA de marca (ControlContexto, `bg-muted/40`) quedaba RELLENA de blanco translúcido
+    sobre el naranja: parecía un control activado/seleccionado sin estarlo. En la barra del editor
+    su relleno pasa a transparente —solo el hairline la delimita, como el resto del cromo— y el
+    estado real (hover/abierto) lo sigue marcando `--accent` (el `hover:` gana en especificidad).
+  */
+  .topbar-editor :where(.bg-muted\/40) {
+    background-color: transparent;
   }
   /*
     Los menús desplegables de la barra (selector de marca, campana, «Más», editor de muestra) se
