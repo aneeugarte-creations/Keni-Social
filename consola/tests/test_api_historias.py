@@ -562,3 +562,18 @@ def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
     )
     assert h["qa_veredicto"] == ""
     assert h["marca_clasificada_por_ia"] is False
+
+
+def test_marcar_cluster_qa_persiste_y_no_se_pisa_en_recalc(entorno):
+    """ADR 0011 F3: `marcar_cluster_qa` sella el veredicto en la historia y un recalc (upsert) sin
+    veredicto NO lo borra (`qa_veredicto`/`qa_hallazgos` en `_NO_PISAR`)."""
+    _sembrar_cluster("h-v", marca="unotv")
+    repos.marcar_cluster_qa("h-v", "no_verificado", '{"resumen":"ok"}')
+    c = repos.obtener_noticia_cluster("h-v")
+    assert c["qa_veredicto"] == "no_verificado"
+    assert c["qa_hallazgos"] == '{"resumen":"ok"}'
+    # Recalc del daemon (mismo id, sin veredicto): no debe revertir la verificación.
+    _sembrar_cluster("h-v", marca="unotv", titulo="Historia re-puntuada")
+    c2 = repos.obtener_noticia_cluster("h-v")
+    assert c2["qa_veredicto"] == "no_verificado"  # preservado pese al upsert
+    assert c2["titulo"] == "Historia re-puntuada"  # el resto del recalc sí entra

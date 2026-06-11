@@ -309,6 +309,7 @@ from .db_noticias import (  # noqa: F401
     listar_noticias_items,
     listar_sugerencias_editoriales,
     marcar_cluster_marca_ia,
+    marcar_cluster_qa,
     marcar_cluster_traducido,
     marcar_item,
     marcar_items_cluster_usados,
@@ -626,6 +627,7 @@ __all__ = [
     # Traducción + verificación de historias (Ola D).
     "clusters_extranjeros_sin_traducir",
     "marcar_cluster_marca_ia",
+    "marcar_cluster_qa",
     "marcar_cluster_traducido",
     "VERIFICACIONES_CLUSTER",
     "_conectar",

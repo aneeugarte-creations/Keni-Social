@@ -255,6 +255,7 @@ from .repos_noticias import (  # noqa: F401
     listar_noticias_items,
     listar_sugerencias_editoriales,
     marcar_cluster_marca_ia,
+    marcar_cluster_qa,
     marcar_cluster_traducido,
     marcar_item,
     marcar_items_cluster_usados,

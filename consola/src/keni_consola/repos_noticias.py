@@ -288,6 +288,10 @@ def marcar_cluster_marca_ia(cluster_id: str) -> None:
     return db.marcar_cluster_marca_ia(cluster_id)
 
 
+def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> None:
+    return db.marcar_cluster_qa(cluster_id, veredicto, hallazgos)
+
+
 def marcar_cluster_traducido(
     cluster_id: str,
     *,
