@@ -2654,10 +2654,11 @@ async def guardar_config_franjas(request: Request) -> Response:
     """PATCH /api/rota/config/franjas: cambia los rangos vigentes (solo admin).
 
     Cuerpo: `{matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin}` en
-    `HH:MM`. Reglas: `inicio < fin` en cada franja; matutino y vespertino no se
-    solapan internamente, pero `matutino_fin == vespertino_inicio` SI esta permitido
-    (intencional: las franjas se tocan en el limite). Aplica solo a `asignar-franja`
-    (cobertura de eventos por hora), no toca los turnos de trabajo del horario.
+    `HH:MM`. Unica regla: `inicio < fin` en cada franja. Matutino y vespertino SI
+    pueden solaparse: esta config solo siembra las franjas "Mañana"/"Tarde" de la
+    semana, y el modelo de cobertura (`franjas_activas_en`) devuelve la UNION de las
+    franjas activas a una hora, asi que un solape es legitimo (una hora cubierta por
+    ambas). No toca los turnos de trabajo del horario.
     """
     if not _es_admin(request):
         return JSONResponse(
@@ -2699,10 +2700,9 @@ async def guardar_config_franjas(request: Request) -> Response:
             {"error": "El vespertino tiene que terminar después de empezar."},
             status_code=400,
         )
-    if m_fin > v_ini:
-        return JSONResponse(
-            {"error": "El matutino se solapa con el vespertino."}, status_code=400
-        )
+    # Matutino y vespertino PUEDEN solaparse (#185): el modelo de cobertura hace UNION de
+    # las franjas activas a una hora, asi que una hora en ambas es legitima. No validamos
+    # solape: era un vestigio del modelo viejo de dos ventanas excluyentes.
     franjas = repos.guardar_franjas_config(
         datos["matutino_inicio"],
         datos["matutino_fin"],

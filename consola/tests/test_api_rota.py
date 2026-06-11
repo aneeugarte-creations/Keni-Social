@@ -1321,3 +1321,26 @@ def test_patch_config_franjas_con_marca_ok(entorno):
     )
     assert r.status_code == 200, r.text
     assert r.json()["franjas"]["matutino_inicio"] == "09:00"
+
+
+def test_patch_config_franjas_solape_permitido(entorno):
+    """Matutino y vespertino PUEDEN solaparse (#185): la cobertura hace UNION, no excluye.
+
+    El modelo viejo exigia `matutino_fin <= vespertino_inicio`; se eliminó. Una franja
+    matutina que termina DESPUÉS de que empieza la vespertina es config válida -> 200.
+    """
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        "/api/rota/config/franjas?marca=claro-sports",
+        json={
+            "matutino_inicio": "08:00",
+            "matutino_fin": "18:00",  # solapa con el vespertino (12:00-22:00)
+            "vespertino_inicio": "12:00",
+            "vespertino_fin": "22:00",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["franjas"]["matutino_fin"] == "18:00"
+    assert r.json()["franjas"]["vespertino_inicio"] == "12:00"
