@@ -20,6 +20,9 @@ const DIR_FUENTES = join(_aqui, "..", "fuentes");
 // cara cae al vecino, igual que el font-matching del navegador en el lienzo Konva).
 // Montserrat trae 300..900 completos: Light (300) y los titulares ExtraBold (800) / Black (900)
 // estilo Gotham que usa Claro Sports en sus posts deportivos.
+// Oswald cubre 300..700 (Light y Medium reales): Anton solo existe en UN peso (400; así es la
+// familia, no hay Anton Light oficial) y Oswald es su hermana condensada con pesos — el titular
+// condensado fino se pide como Oswald + 300, nunca sintetizando un falso Anton adelgazado.
 // CURSIVA: las caras *Italic* se registran bajo la MISMA familia; Skia elige la itálica cuando el
 // font string lleva `italic` (Skia NUNCA sintetiza oblicuas, por eso hacen falta los TTF reales).
 // Anton / Archivo Black / Oswald no tienen itálica (ver FAMILIAS_CON_CURSIVA en dibujar.mjs).
@@ -38,7 +41,9 @@ const ARCHIVOS = [
   ["Barlow Condensed", "BarlowCondensed-ExtraBoldItalic.ttf"],
   ["Anton", "Anton-Regular.ttf"],
   ["Archivo Black", "ArchivoBlack-Regular.ttf"],
+  ["Oswald", "Oswald-Light.ttf"],
   ["Oswald", "Oswald-Regular.ttf"],
+  ["Oswald", "Oswald-Medium.ttf"],
   ["Oswald", "Oswald-SemiBold.ttf"],
   ["Oswald", "Oswald-Bold.ttf"],
   ["Montserrat", "Montserrat-Light.ttf"],

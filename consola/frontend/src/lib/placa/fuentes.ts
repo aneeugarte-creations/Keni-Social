@@ -23,6 +23,9 @@ interface ArchivoFuente {
 // *Italic* se registran con `style: italic` bajo la MISMA familia: así `ctx.font = "italic …"`
 // usa la itálica REAL, igual que Skia en el servidor (que no sintetiza oblicuas).
 // Montserrat trae 300..900: Light y los titulares ExtraBold/Black estilo Gotham de Claro Sports.
+// Oswald cubre 300..700 (Light/Medium reales): Anton solo existe en UN peso (400, así es la
+// familia), y Oswald es su hermana condensada con pesos — el "Anton Light" se elige como
+// Oswald + peso 300, nunca sintetizando un falso Anton fino.
 const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Barlow", archivo: "Barlow-Regular.ttf", peso: "400" },
   { familia: "Barlow", archivo: "Barlow-SemiBold.ttf", peso: "600" },
@@ -38,7 +41,9 @@ const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Barlow Condensed", archivo: "BarlowCondensed-ExtraBoldItalic.ttf", peso: "800", estilo: "italic" },
   { familia: "Anton", archivo: "Anton-Regular.ttf", peso: "400" },
   { familia: "Archivo Black", archivo: "ArchivoBlack-Regular.ttf", peso: "400" },
+  { familia: "Oswald", archivo: "Oswald-Light.ttf", peso: "300" },
   { familia: "Oswald", archivo: "Oswald-Regular.ttf", peso: "400" },
+  { familia: "Oswald", archivo: "Oswald-Medium.ttf", peso: "500" },
   { familia: "Oswald", archivo: "Oswald-SemiBold.ttf", peso: "600" },
   { familia: "Oswald", archivo: "Oswald-Bold.ttf", peso: "700" },
   { familia: "Montserrat", archivo: "Montserrat-Light.ttf", peso: "300" },

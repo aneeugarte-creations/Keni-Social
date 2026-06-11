@@ -13,8 +13,9 @@ import type { PropsCuerpoCapa } from "./tipos";
 // Pesos tipográficos con nombre: hace descubrible la "Black" (900) —la negra que usa Claro Sports
 // en sus titulares— sin teclear el número. Editor y export eligen la MISMA cara estática por peso
 // (p. ej. Montserrat 900 -> Montserrat-Black.ttf, 300 -> Montserrat-Light.ttf; Montserrat, la
-// Gotham libre de los titulares deportivos, cubre 300..900 completos). Las familias que no tengan
-// ese peso caen al más cercano en AMBOS lados (inocuo: previa y pieza final coinciden).
+// Gotham libre de los titulares deportivos, cubre 300..900 completos; Oswald cubre 300..700 — el
+// "Anton Light" honesto es Oswald + Ligera 300, porque Anton solo existe en un peso). Las familias
+// que no tengan ese peso caen al más cercano en AMBOS lados (inocuo: previa y pieza final coinciden).
 const PESOS: { valor: number; etiqueta: string }[] = [
   { valor: 300, etiqueta: "Ligera (300)" },
   { valor: 400, etiqueta: "Regular (400)" },

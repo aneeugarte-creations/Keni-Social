@@ -46,6 +46,17 @@ describe("espejo del registro de fuentes (front FontFace ↔ back Skia)", () => 
     }
   });
 
+  // "Anton Light" NO existe: Anton es una familia de UN solo peso (400) y no se sintetiza un
+  // falso fino adelgazando trazos. El titular condensado ligero lo da Oswald (la hermana
+  // condensada de Anton, OFL, con pesos): su Light (300) y Medium (500) deben ser caras
+  // ESTÁTICAS reales en ambos lados, elegibles como Oswald + peso en Ajustes (el mismo camino
+  // que los pesos de Montserrat).
+  it("Oswald incluye Light (300) y Medium (500) reales; Anton sigue siendo un solo peso", () => {
+    expect(ttfs(front)).toContain("Oswald-Light.ttf");
+    expect(ttfs(front)).toContain("Oswald-Medium.ttf");
+    expect(ttfs(front).filter((t) => t.startsWith("Anton"))).toEqual(["Anton-Regular.ttf"]);
+  });
+
   // Skia (@napi-rs/canvas) NO instancia el eje `wght` de un TTF variable: lo registra como UNA
   // sola cara (la instancia por defecto) y pedir `300 …px` o `900 …px` pinta siempre lo mismo.
   // Por eso el catálogo solo admite caras ESTÁTICAS (un TTF por peso). Si esto falla, alguien
