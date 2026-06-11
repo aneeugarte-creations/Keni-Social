@@ -39,7 +39,8 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 # limpieza, alertas) en el Monitor.
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido (interruptor general)"),
-    ("maestros_etapa", "Maestros de etapa (todas las marcas)"),
+    ("maestros_investigacion", "Investigación (todas las marcas)"),
+    ("maestros_produccion", "Producción (todas las marcas)"),
     ("automatizacion_marca", "Excepciones por marca"),
     ("pipeline_topes", "Admisión del flujo continuo"),
     ("publicacion", "Publicación"),
@@ -74,7 +75,8 @@ GRUPOS_NOTICIAS: tuple[str, ...] = (
 # máquina" es esta tupla; el front la usa para repartir grupos entre Configuración y Monitor.
 GRUPOS_MAQUINA: tuple[str, ...] = (
     "maquina_global",
-    "maestros_etapa",
+    "maestros_investigacion",
+    "maestros_produccion",
     "automatizacion_marca",
     "pipeline_topes",
 )
@@ -82,24 +84,33 @@ GRUPOS_MAQUINA: tuple[str, ...] = (
 
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Los DOS interruptores de la máquina: «Generar» (noticia → copy en revisión) y «Arte».
+    """Los maestros de la máquina (ADR 0011): «Investigación», «Producción» y «Arte».
 
-    `KENI_GENERAR` es una clave VIRTUAL (no se lee en runtime): al guardarla, la API escribe
-    las cinco etapas internas del tramo (`config.ETAPAS_GENERAR`) con el mismo valor — o llega
-    copy o no empieza, sin botones por etapa. Su valor mostrado es el de la etapa de Copy (el
-    final del embudo). ARTE conserva interruptor propio: es la única etapa con coste externo
-    real (proveedor de imagen). El tercer interruptor clave, «Publicar», vive en su grupo
-    `publicacion` de siempre.
+    `KENI_INVESTIGACION` y `KENI_PRODUCCION` son VIRTUALES (no se leen en runtime): al
+    guardarlas, la API escribe sus etapas físicas (`config.ETAPAS_INVESTIGACION` /
+    `config.ETAPAS_PRODUCCION`) con el mismo valor — un interruptor por proceso, sin botones
+    por etapa. Su valor mostrado es el de una etapa representativa (ingesta para Investigación,
+    copy para Producción). ARTE conserva interruptor propio (única etapa con coste externo
+    real). «Publicar» vive en su grupo `publicacion`.
     """
     return [
         Ajuste(
-            clave=config.ENV_GENERAR,
+            clave=config.ENV_INVESTIGACION,
             tipo="bool",
-            etiqueta="Generar",
-            ayuda="Para todas las marcas: todo el tramo de noticia a copy listo para revisar "
-            "(ingesta, ranking, criba de la fuente y copy). Un solo interruptor: o llega copy "
-            "o no empieza.",
-            grupo="maestros_etapa",
+            etiqueta="Investigación",
+            ayuda="Para todas las marcas: recolectar, deduplicar, clasificar, rankear y "
+            "verificar noticias (ingesta, fusión, ranking y criba de la fuente). Deja el "
+            "pool listo para producir; no escribe copy.",
+            grupo="maestros_investigacion",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PRODUCCION,
+            tipo="bool",
+            etiqueta="Producción",
+            ayuda="Para todas las marcas: convertir una noticia verificada en pieza "
+            "publicable (redacción del copy). El arte tiene su propio interruptor.",
+            grupo="maestros_produccion",
             defecto=False,
         ),
         Ajuste(
@@ -109,7 +120,7 @@ def _maestros_etapa() -> list[Ajuste]:
             ayuda="Para todas las marcas: genera imagen por IA para los temas con copy y sin "
             "imagen. Es la única etapa con coste externo (proveedor de imagen), por eso "
             "conserva interruptor propio.",
-            grupo="maestros_etapa",
+            grupo="maestros_produccion",
             defecto=False,
         ),
     ]
@@ -125,18 +136,30 @@ def _global_de_etapa(env_flag: str) -> bool:
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por marca para «Generar» (virtual: fan-out a las cinco etapas) y «Arte».
+    """Toggles `bool` por marca para «Investigación», «Producción» (virtuales: fan-out a sus
+    etapas) y «Arte».
 
-    Apagar «Generar» en una marca la excluye de TODO el tramo noticia→copy; apagar «Arte»
-    deja a esa marca sin imagen por IA. Se generan en caliente desde el catálogo de marcas."""
+    Apagar «Investigación» en una marca la excluye del tramo de pool (ingesta→verificación);
+    apagar «Producción» la deja sin copy automático; apagar «Arte», sin imagen por IA. Se
+    generan en caliente desde el catálogo de marcas."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
         salida.append(
             Ajuste(
-                clave=config.clave_por_marca(config.ENV_GENERAR, mid),
+                clave=config.clave_por_marca(config.ENV_INVESTIGACION, mid),
                 tipo="bool",
-                etiqueta=f"{nombre} · Generar",
-                ayuda=f"Apaga TODO el tramo de noticia a copy solo para «{nombre}».",
+                etiqueta=f"{nombre} · Investigación",
+                ayuda=f"Apaga la investigación de noticias (pool) solo para «{nombre}».",
+                grupo="automatizacion_marca",
+                defecto=_global_de_etapa(config.ENV_PIPELINE_SELECCION),
+            )
+        )
+        salida.append(
+            Ajuste(
+                clave=config.clave_por_marca(config.ENV_PRODUCCION, mid),
+                tipo="bool",
+                etiqueta=f"{nombre} · Producción",
+                ayuda=f"Apaga la producción de copy solo para «{nombre}».",
                 grupo="automatizacion_marca",
                 defecto=_global_de_etapa(config.ENV_PIPELINE_COPY),
             )
@@ -868,29 +891,43 @@ def _castea(ajuste: Ajuste, crudo: str) -> Any:
     return valor if valor in ids else ajuste.defecto
 
 
+# Maestros VIRTUALES (ADR 0011): cada uno hace fan-out a sus etapas físicas, y su estado
+# mostrado se lee de una etapa REPRESENTATIVA (tras cualquier escritura desde la UI todas las
+# etapas del maestro coinciden, así que la representativa basta).
+_ETAPAS_VIRTUAL: dict[str, tuple[str, ...]] = {
+    config.ENV_INVESTIGACION: config.ETAPAS_INVESTIGACION,
+    config.ENV_PRODUCCION: config.ETAPAS_PRODUCCION,
+}
+_LECTURA_VIRTUAL: dict[str, str] = {
+    config.ENV_INVESTIGACION: config.ENV_PIPELINE_SELECCION,
+    config.ENV_PRODUCCION: config.ENV_PIPELINE_COPY,
+}
+
+
 def claves_fisicas(clave: str) -> list[str]:
     """Claves REALES del store que escribe/borra un ajuste del catálogo.
 
-    Para casi todos es su propia clave. Para la VIRTUAL «Generar» (`KENI_GENERAR`, global o
-    `::marca`) son las cinco etapas internas del tramo noticia→copy (`config.ETAPAS_GENERAR`)
-    con el mismo sufijo de marca: un solo botón, cinco claves coherentes — las etapas no pueden
-    divergir desde la UI.
+    Para casi todos es su propia clave. Para los maestros VIRTUALES «Investigación»/«Producción»
+    (global o `::marca`) son sus etapas físicas (`_ETAPAS_VIRTUAL`) con el mismo sufijo de
+    marca: un botón por proceso, varias claves coherentes — las etapas no pueden divergir desde
+    la UI.
     """
     base, sep, marca = clave.partition(config.SEP_MARCA)
-    if base != config.ENV_GENERAR:
+    etapas = _ETAPAS_VIRTUAL.get(base)
+    if etapas is None:
         return [clave]
     sufijo = f"{sep}{marca}" if sep else ""
-    return [f"{etapa}{sufijo}" for etapa in config.ETAPAS_GENERAR]
+    return [f"{etapa}{sufijo}" for etapa in etapas]
 
 
 def _clave_lectura(clave: str) -> str:
-    """Clave que REPRESENTA el valor de un ajuste: la propia, salvo la virtual «Generar»,
-    cuyo estado mostrado es el de la etapa de COPY (el final del embudo; tras cualquier
-    escritura desde la UI las cinco etapas coinciden)."""
+    """Clave que REPRESENTA el valor de un ajuste: la propia, salvo los maestros virtuales,
+    cuyo estado mostrado se lee de su etapa representativa (`_LECTURA_VIRTUAL`)."""
     base, sep, marca = clave.partition(config.SEP_MARCA)
-    if base != config.ENV_GENERAR:
+    repr_etapa = _LECTURA_VIRTUAL.get(base)
+    if repr_etapa is None:
         return clave
-    return f"{config.ENV_PIPELINE_COPY}{sep}{marca}" if sep else config.ENV_PIPELINE_COPY
+    return f"{repr_etapa}{sep}{marca}" if sep else repr_etapa
 
 
 def valor_y_fuente(ajuste: Ajuste) -> tuple[Any, str]:

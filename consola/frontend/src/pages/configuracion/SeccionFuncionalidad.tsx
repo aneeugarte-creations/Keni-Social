@@ -370,10 +370,12 @@ function GruposAjustes({
    *  grupo: la cabecera de la sección ya lo nombra y repetirlo sobra. */
   mostrarTitulos?: boolean;
 }) {
-  // Maestros de etapa por su clave ENV -> bool. Atenúa las excepciones por marca cuyo maestro está OFF.
+  // Maestros (Investigación/Producción/Arte) por su clave ENV -> bool. Atenúa las excepciones
+  // por marca cuyo maestro está OFF.
   const maestros: Record<string, boolean> = {};
-  for (const m of grupos.find((g) => g.id === "maestros_etapa")?.ajustes ?? [])
-    maestros[m.clave] = Boolean(m.valor);
+  for (const gid of ["maestros_investigacion", "maestros_produccion"])
+    for (const m of grupos.find((g) => g.id === gid)?.ajustes ?? [])
+      maestros[m.clave] = Boolean(m.valor);
 
   // Sub-cabecera de grupo (uppercase fino). Se omite cuando el área tiene un solo grupo: la
   // cabecera de la sección colapsable ya lo nombra. NO crea ninguna caja: solo una etiqueta.

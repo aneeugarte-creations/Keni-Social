@@ -37,12 +37,13 @@ def test_clave_por_marca_formato():
 
 def test_catalogo_expone_toggles_por_marca():
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
-    # Por marca solo hay DOS toggles de máquina: «Generar» (virtual, agrupa el tramo
-    # noticia→copy) y «Arte». La publicación va en su grupo `publicacion_marca`, y el plan
-    # editorial diario (texto) en `noticias_produccion_marca`.
-    assert config.clave_por_marca(config.ENV_GENERAR, "nacion-gamer") in claves
+    # Por marca hay TRES toggles de máquina (ADR 0011): «Investigación» y «Producción»
+    # (virtuales, agrupan sus etapas) y «Arte». La publicación va en su grupo `publicacion_marca`,
+    # y el plan editorial diario (texto) en `noticias_produccion_marca`.
+    assert config.clave_por_marca(config.ENV_INVESTIGACION, "nacion-gamer") in claves
+    assert config.clave_por_marca(config.ENV_PRODUCCION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_ARTE, "unotv") in claves
-    # Las etapas internas YA NO son toggles por marca (las agrupa «Generar»).
+    # Las etapas internas YA NO son toggles por marca (las agrupan los maestros).
     assert config.clave_por_marca(config.ENV_PIPELINE_COPY, "unotv") not in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "unotv") not in claves
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]

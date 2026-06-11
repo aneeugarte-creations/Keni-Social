@@ -20,7 +20,8 @@ export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de 
  *  EXCLUYE estos grupos; el panel del Monitor pinta SOLO estos. */
 export const GRUPOS_MAQUINA = new Set([
   "maquina_global",
-  "maestros_etapa",
+  "maestros_investigacion",
+  "maestros_produccion",
   "automatizacion_marca",
   "pipeline_topes",
 ]);

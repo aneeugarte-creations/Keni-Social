@@ -814,21 +814,27 @@ def autogen_arte_activo() -> bool:
 # («o llega copy o no empieza») y la capa de ajustes lo TRADUCE a las cinco etapas internas
 # del tramo noticia→copy. Las etapas siguen existiendo como mecanismo (daemons, vista
 # Pipelines, tests) pero dejan de ser botones: la única etapa con interruptor propio es
-# ARTE (la única con coste externo real). `KENI_GENERAR` nunca se lee en runtime: las
-# lecturas siguen siendo por etapa; la API de ajustes escribe las cinco claves a la vez.
-ENV_GENERAR = "KENI_GENERAR"
+# ARTE (la única con coste externo real). Estas claves VIRTUALES nunca se leen en runtime:
+# las lecturas siguen siendo por etapa; la API de ajustes escribe las claves físicas a la vez.
+#
+# DOS PROCESOS (ADR 0011): la máquina se gobierna con dos maestros, no con un único «Generar».
+#   - INVESTIGACIÓN: noticia recolectada, deduplicada, rankeada y VERIFICADA (el pool listo).
+#   - PRODUCCIÓN: la noticia verificada se convierte en pieza (copy). ARTE conserva su propio
+#     interruptor (única etapa con coste externo real); el AVANCE a revisión corre siempre.
+ENV_INVESTIGACION = "KENI_INVESTIGACION"
+ENV_PRODUCCION = "KENI_PRODUCCION"
 
-# Las CINCO etapas que agrupa «Generar», en orden de pipeline (de la ingesta al copy). ARTE
-# queda fuera a propósito: es la única con coste externo real (proveedor de imagen) y conserva
-# su interruptor propio. El AVANCE a revisión NO entra: corre incondicionalmente (no es un
-# toggle), así que «Generar» no lo gobierna.
-ETAPAS_GENERAR: tuple[str, ...] = (
+# Etapas que agrupa cada maestro (orden de pipeline). Solo las que admiten override por marca
+# (`etapa_activa`) entran en el fan-out, para que el toggle por marca sea simétrico. La
+# clasificación de marca IA y el ranking por rendimiento son flags propios de Investigación
+# (no per-marca) y se muestran aparte, no en el fan-out del maestro.
+ETAPAS_INVESTIGACION: tuple[str, ...] = (
+    ENV_PIPELINE_SELECCION,
     ENV_PIPELINE_FUSION,
     ENV_PIPELINE_EDITORIAL,
-    ENV_PIPELINE_SELECCION,
     ENV_PIPELINE_VALIDACION,
-    ENV_PIPELINE_COPY,
 )
+ETAPAS_PRODUCCION: tuple[str, ...] = (ENV_PIPELINE_COPY,)
 
 
 def _accesor_global_de_etapa(env_flag: str):
