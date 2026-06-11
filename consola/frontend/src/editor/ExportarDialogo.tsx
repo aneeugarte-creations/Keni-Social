@@ -106,9 +106,8 @@ export function ExportarDialogo({
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button size="sm" variant={variante === "secundario" ? "outline" : "default"} className="ml-1 h-8" title="Exportar imagen (PNG/JPG)">
-          <Download className="h-4 w-4 sm:mr-1" />
-          <span className="hidden sm:inline">Exportar</span>
+        <Button size="sm" variant={variante === "secundario" ? "outline" : "default"} className="ml-1 h-8 w-8 px-0" title="Exportar imagen (PNG/JPG)" aria-label="Exportar">
+          <Download className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
