@@ -96,14 +96,14 @@ function BotonToggle({
     <div className="relative flex items-center">
       <button
         title={titulo}
+        aria-label={etiqueta}
         aria-pressed={activo}
         onClick={onToggle}
-        className={`flex items-center gap-1 rounded-l-md py-1.5 pl-1.5 pr-1 hover:bg-accent ${
+        className={`flex items-center rounded-l-md py-1.5 pl-1.5 pr-1 hover:bg-accent ${
           activo ? "bg-accent text-foreground" : "text-muted-foreground"
         }`}
       >
         <Icono className="h-4 w-4" />
-        <span className="hidden text-xs sm:inline">{etiqueta}</span>
       </button>
       <button
         title={`Editar ${etiqueta.toLowerCase()} de muestra`}
