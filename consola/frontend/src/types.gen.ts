@@ -677,7 +677,15 @@ export interface Publicacion {
   falta_revision: boolean;
   falta_publicar: boolean;
   falta_video: boolean;
-  etapa_ia: "generando_copy" | "generando_arte" | "lista_para_revisar" | "aprobada" | "programada" | "publicada";
+  etapa_ia:
+    | "generando_copy"
+    | "generando_arte"
+    | "falta_copy_in"
+    | "falta_hashtags"
+    | "lista_para_revisar"
+    | "aprobada"
+    | "programada"
+    | "publicada";
   fecha_creacion: string;
   fecha_actualizacion: string;
   fecha_programada: string;

@@ -29,6 +29,8 @@ EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado",
 EtapaIa = Literal[
     "generando_copy",
     "generando_arte",
+    "falta_copy_in",
+    "falta_hashtags",
     "lista_para_revisar",
     "aprobada",
     "programada",
