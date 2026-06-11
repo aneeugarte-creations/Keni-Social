@@ -1,12 +1,16 @@
 /**
- * Biblioteca de Prompts (página Texto, rediseño):
- *   - Vista "La máquina" por defecto: el riel de grupos en orden real, tarjetas de etapa
- *     con su estado de publicación y la pila de capas editoriales de la marca activa.
- *   - Indicadores del header: cambios sin publicar (clic = tabla filtrada) y solicitudes
- *     pendientes (clic = bandeja, solo admin).
- *   - Vista "Todos los documentos" (?vista=todos): tabla plana con estado de publicación.
- *   - Detalle (?doc=…): cabecera de estado con línea de deployment, Publicar (admin),
- *     Probar (prompts) y panel lateral con pestañas (Versiones/Uso/Compilado/Ficha).
+ * Biblioteca de Prompts (página Texto, rediseño TRES MÁQUINAS + Estrategia de marca):
+ *   - Pestañas principales (?vista=): Investigación (default) | Producción | Importación |
+ *     Estrategia de marca | Documentos.
+ *   - Cada pestaña de máquina pinta SU riel de `GET /api/texto/maquina` ({maquinas}),
+ *     discriminando etapas `prompt` (tarjetas clicables) de `mecanica` (nodos fantasma),
+ *     con el evergreen (seccion "taller") separado como anexo «Taller».
+ *   - Estrategia de marca monta `EstrategiaMarca` con la marca activa global.
+ *   - Documentos: tabla plana con filtros + papelera; ahí vive el filtro "sin publicar".
+ *   - Header global: búsqueda (salta a Documentos), badge de cambios sin publicar y
+ *     solicitudes pendientes (admins).
+ *   - Detalle (?doc=…): se conserva; «Uso» describe máquina → etapa, y volver regresa
+ *     a la pestaña de origen.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -85,58 +89,66 @@ const DOC_VOZ: DocumentoTexto = {
 
 const DOCS = [DOC_COPY, DOC_FUSION, DOC_VOZ];
 
+/** Las TRES máquinas del contrato nuevo: etapas discriminadas por `tipo`. */
 const MAQUINA = {
-  grupos: [
+  maquinas: [
     {
-      id: "ingesta",
-      titulo: "Ingesta",
+      id: "investigacion",
+      titulo: "Investigación",
+      subtitulo: "El motor de noticias",
       etapas: [
+        { tipo: "mecanica", id: "ingesta", titulo: "Sondeo RSS + agencias" },
+        { tipo: "mecanica", id: "clustering", titulo: "Clustering y merge léxico" },
         {
+          tipo: "prompt",
           id: "fusion",
-          titulo: "Fusión de historias",
+          titulo: "Fusión semántica",
           doc_id: "prompt/fusion",
           produccion: DOC_FUSION.produccion,
           sha_actual: "a1",
           sin_publicar: false,
         },
-      ],
-    },
-    {
-      id: "priorizacion",
-      titulo: "Priorización",
-      etapas: [
-        {
-          id: "editorial",
-          titulo: "Perfil editorial (keywords por marca)",
-          doc_id: "prompt/editorial",
-          produccion: null,
-          sha_actual: "b1",
-          sin_publicar: false,
-        },
+        { tipo: "mecanica", id: "admision", titulo: "Admisión" },
       ],
     },
     {
       id: "produccion",
       titulo: "Producción",
+      subtitulo: "La máquina de contenido",
       etapas: [
         {
+          tipo: "prompt",
           id: "copy",
-          titulo: "Generación de copy",
+          titulo: "Redacción editorial (copy)",
           doc_id: "prompt/copy",
           produccion: DOC_COPY.produccion,
           sha_actual: "c1",
           sin_publicar: true,
         },
+        { tipo: "mecanica", id: "avance", titulo: "Avance a revisión" },
+        { tipo: "mecanica", id: "publicacion", titulo: "Publicación" },
+        {
+          tipo: "prompt",
+          id: "evergreen",
+          titulo: "Taller evergreen",
+          doc_id: "prompt/evergreen",
+          produccion: null,
+          sha_actual: null,
+          sin_publicar: false,
+          seccion: "taller",
+        },
       ],
     },
     {
-      id: "talleres",
-      titulo: "Talleres y herramientas",
+      id: "importacion",
+      titulo: "Herramientas de importación",
+      subtitulo: "Insumos y documentos del equipo",
       etapas: [
         {
-          id: "sugerencias",
-          titulo: "Sugerencias editoriales",
-          doc_id: "prompt/sugerencias",
+          tipo: "prompt",
+          id: "insumos-portal",
+          titulo: "Insumos · Portal/SMS",
+          doc_id: "prompt/insumos/portal",
           produccion: null,
           sha_actual: null,
           sin_publicar: false,
@@ -144,24 +156,32 @@ const MAQUINA = {
       ],
     },
   ],
-  capas: [
+};
+
+/** `GET /api/texto/estrategia?marca=unotv` (lo consume EstrategiaMarca). */
+const ESTRATEGIA = {
+  marca: "unotv",
+  completitud: {
+    completa: false,
+    faltan: ["tropicalizacion"],
+    recomendacion: "Falta la capa de tropicalización MX.",
+  },
+  pilares: [
     {
-      doc_id: "editorial/voz-unotv",
-      titulo: "Voz UnoTV",
       clase: "voz",
-      orden: 1,
+      titulo: "Voz UnoTV",
+      doc_id: "editorial/voz-unotv",
+      vacio: false,
+      global: false,
       produccion: null,
       sha_actual: null,
       sin_publicar: false,
+      actualizado: "2026-06-02T10:00:00",
+      extracto: "Tono cercano.",
     },
   ],
-};
-
-const VALIDACION = {
-  completa: false,
-  faltan: ["tropicalizacion"],
-  recomendacion: "Falta la capa de tropicalización MX.",
-  pilares: { marca: true, voz: true, plataforma: true, tropicalizacion: false },
+  extras: [],
+  orden_inyeccion: ["editorial/voz-unotv"],
 };
 
 const SOLICITUDES = [
@@ -193,7 +213,14 @@ function stubFetch() {
       if (path === "/api/publicaciones/opciones")
         return json({ marcas: [{ id: "unotv", nombre: "UnoTV" }], redes: [], estados: [] });
       if (path === "/api/texto/maquina") return json(MAQUINA);
-      if (path === "/api/texto/validacion") return json(VALIDACION);
+      if (path === "/api/texto/estrategia") return json(ESTRATEGIA);
+      if (path === "/api/texto/validacion")
+        return json({
+          completa: false,
+          faltan: ["tropicalizacion"],
+          recomendacion: "Falta la capa de tropicalización MX.",
+          pilares: { marca: true, voz: true, plataforma: true, tropicalizacion: false },
+        });
       if (path === "/api/texto/solicitudes") return json({ solicitudes: SOLICITUDES });
       if (path === "/api/texto/variables")
         return json({
@@ -265,53 +292,99 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Biblioteca de Prompts", () => {
-  it("muestra la máquina por defecto: grupos en orden, estado de publicación y capas", async () => {
+describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
+  it("muestra Investigación por defecto: cabecera, etapas prompt y nodos mecánicos", async () => {
     stubFetch();
     montar();
 
-    // Espera a que la marca activa quede resuelta (la pila de capas la nombra).
-    await screen.findByText(/Ensamblaje editorial · UnoTV/);
+    // Cabecera de la máquina: título + lema del ADR 0011.
+    expect(await screen.findByText("El motor de noticias")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Investigación" })).toBeInTheDocument();
 
-    // Los cuatro grupos del riel, en el orden real.
-    expect(screen.getByText("Ingesta")).toBeInTheDocument();
-    expect(screen.getByText("Priorización")).toBeInTheDocument();
-    expect(screen.getByText("Producción")).toBeInTheDocument();
-    expect(screen.getByText("Talleres y herramientas")).toBeInTheDocument();
+    // Las cinco pestañas principales.
+    expect(screen.getByRole("tab", { name: "Investigación" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Producción" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Importación" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Estrategia de marca" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Documentos" })).toBeInTheDocument();
 
-    // Tarjeta de etapa con el nombre del prompt y su estado de publicación.
-    expect(screen.getByText("Generación de copy")).toBeInTheDocument();
-    expect(screen.getAllByText("v. de producción").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("sin publicar").length).toBeGreaterThan(0);
+    // Etapa con prompt: tarjeta clicable con el nombre del doc y su publicación.
+    const tarjeta = screen.getByTitle("Fusión semántica — abrir el prompt");
+    expect(tarjeta.tagName).toBe("BUTTON");
+    // El nombre del doc sale del listado (carga aparte): espera a que aparezca.
+    expect(await screen.findByText("Fusión de historias")).toBeInTheDocument();
+    expect(screen.getAllByText("producción").length).toBeGreaterThan(0);
 
-    // Pila de capas editoriales de la marca activa + pilar que falta.
-    expect(screen.getByText("Voz UnoTV")).toBeInTheDocument();
-    expect(await screen.findByText(/Tropicalización — vacía/)).toBeInTheDocument();
+    // Etapa mecánica: nodo fantasma NO clicable, con tooltip explicativo.
+    const mecanica = screen.getByText("Sondeo RSS + agencias");
+    expect(mecanica.closest("button")).toBeNull();
+    expect(screen.getAllByTitle("Etapa automática sin prompt").length).toBe(3);
 
-    // Indicadores del header: cambios sin publicar y solicitudes (admin).
+    // Salud agregada: en Investigación no hay cambios pendientes.
+    expect(screen.getByText("todo publicado")).toBeInTheDocument();
+
+    // Indicadores del header global: cambios sin publicar y solicitudes (admin).
     expect(await screen.findByText(/1 cambio sin publicar/)).toBeInTheDocument();
     expect(await screen.findByText(/1 solicitud/)).toBeInTheDocument();
   });
 
-  it("el indicador de cambios lleva a la tabla filtrada por «sin publicar»", async () => {
+  it("Producción: salud agregada, anexo «Taller» y enlace a Estrategia de marca", async () => {
+    stubFetch();
+    montar("/?vista=produccion");
+
+    expect(await screen.findByText("La máquina de contenido")).toBeInTheDocument();
+    // Salud agregada: el copy tiene cambios sin publicar.
+    expect(screen.getByText(/1 etapa sin publicar/)).toBeInTheDocument();
+
+    // El evergreen (seccion "taller") vive separado del riel principal.
+    const taller = screen.getByRole("region", { name: "Taller" });
+    expect(taller).toContainElement(screen.getByText("Taller evergreen"));
+
+    // Bajo la etapa de copy, el enlace discreto salta a la pestaña Estrategia de marca.
+    fireEvent.click(
+      screen.getByText(/Las capas editoriales de la marca viven en Estrategia de marca/),
+    );
+    expect(await screen.findByText("Cómo se ensambla para la IA")).toBeInTheDocument();
+  });
+
+  it("Importación pinta su máquina (?vista=importacion)", async () => {
+    stubFetch();
+    montar("/?vista=importacion");
+
+    expect(await screen.findByText("Insumos y documentos del equipo")).toBeInTheDocument();
+    expect(screen.getByTitle("Insumos · Portal/SMS — abrir el prompt")).toBeInTheDocument();
+  });
+
+  it("Estrategia de marca monta el espacio de la marca activa y abre documentos", async () => {
+    stubFetch();
+    montar("/?vista=estrategia");
+
+    // Los pilares (tarjetas grandes) + el ensamblaje real de la marca.
+    expect(await screen.findByText("Identidad de marca")).toBeInTheDocument();
+    expect(screen.getByText("Cómo se ensambla para la IA")).toBeInTheDocument();
+    expect(screen.getByTestId("pilar-voz")).toBeInTheDocument();
+
+    // Abrir el documento de un pilar lleva a la vista detalle de la página.
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
+    expect(await screen.findByDisplayValue("Voz UnoTV")).toBeInTheDocument();
+  });
+
+  it("el indicador de cambios lleva a Documentos filtrado por «sin publicar»", async () => {
     stubFetch();
     montar();
 
-    await screen.findByText(/Ensamblaje editorial · UnoTV/);
-    fireEvent.click(screen.getByText(/1 cambio sin publicar/));
+    await screen.findByText("El motor de noticias");
+    fireEvent.click(await screen.findByText(/1 cambio sin publicar/));
     // Tabla plana con SOLO el documento con cambios, y el chip del filtro activo.
     expect(await screen.findByText(/solo sin publicar/)).toBeInTheDocument();
     expect(await screen.findByText("Prompt de copy")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Voz UnoTV")).not.toBeInTheDocument());
   });
 
-  it("la vista de todos los documentos lista la tabla completa con su publicación", async () => {
+  it("Documentos lista la tabla completa con su publicación y la papelera", async () => {
     stubFetch();
-    montar("/?vista=todos");
+    montar("/?vista=documentos");
 
-    // Espera a que la marca activa quede resuelta (el selector muestra su nombre)
-    // y la tabla cargue su listado definitivo.
-    await screen.findByText("UnoTV");
     await waitFor(() => expect(screen.getByText("Prompt de copy")).toBeInTheDocument());
     expect(screen.getByText("Fusión de historias")).toBeInTheDocument();
     expect(screen.getByText("Voz UnoTV")).toBeInTheDocument();
@@ -322,50 +395,48 @@ describe("Biblioteca de Prompts", () => {
     expect(screen.getByRole("button", { name: /Papelera/ })).toBeInTheDocument();
   });
 
-  it("abre el detalle desde el riel: cabecera de estado, acciones y panel de pestañas", async () => {
+  it("abre el detalle desde el riel, «Uso» sitúa máquina → etapa y vuelve a la pestaña de origen", async () => {
     stubFetch();
-    montar();
+    montar("/?vista=produccion");
 
-    // Espera a que la marca quede resuelta (el riel deja de re-cargarse) antes de clicar.
-    await screen.findByText(/Ensamblaje editorial · UnoTV/);
-    fireEvent.click(screen.getByTitle("Generación de copy — abrir el prompt"));
+    await screen.findByText("La máquina de contenido");
+    fireEvent.click(screen.getByTitle("Redacción editorial (copy) — abrir el prompt"));
 
     // Cabecera: título editable, línea de deployment, badge sin publicar y acciones.
     expect(await screen.findByDisplayValue("Prompt de copy")).toBeInTheDocument();
     expect(screen.getByText(/v\. producción desde/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Publicar/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Probar/ })).toBeInTheDocument();
-    // Nota informativa de inyección (sustituye al candado).
-    expect(screen.getByText(/Inyectado en:/)).toBeInTheDocument();
-    // Panel lateral: pestañas Versiones / Uso / Compilado (es prompt base) / Ficha.
-    expect(screen.getByRole("tab", { name: "Versiones" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Uso" })).toBeInTheDocument();
-    await screen.findByRole("tab", { name: "Compilado" });
-    expect(screen.getByRole("tab", { name: "Ficha" })).toBeInTheDocument();
-    // El candado desapareció: ya no existe "forzar edición".
-    expect(screen.queryByText(/forzar/i)).not.toBeInTheDocument();
+
+    // Pestaña «Uso»: la posición nueva, máquina → etapa (del endpoint nuevo).
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Uso" }), { button: 0 });
+    expect(await screen.findByText("Producción → Redacción editorial (copy)")).toBeInTheDocument();
+
+    // Volver regresa a la pestaña de origen (Producción), no a la vista por defecto.
+    fireEvent.click(screen.getByRole("button", { name: "Volver a la biblioteca" }));
+    expect(await screen.findByText("La máquina de contenido")).toBeInTheDocument();
   });
 
   it("abre la bandeja de solicitudes desde el indicador (admin)", async () => {
     stubFetch();
     montar();
 
-    await screen.findByText(/Ensamblaje editorial · UnoTV/);
-    fireEvent.click(screen.getByText(/1 solicitud/));
+    await screen.findByText("El motor de noticias");
+    fireEvent.click(await screen.findByText(/1 solicitud/));
     expect(await screen.findByText("Bandeja de solicitudes")).toBeInTheDocument();
     expect(await screen.findByText("Mejora el gancho")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Aprobar y publicar/ })).toBeInTheDocument();
   });
 
-  it("la búsqueda desde la máquina salta a la tabla y filtra en cliente", async () => {
+  it("la búsqueda global salta a Documentos y filtra en cliente", async () => {
     stubFetch();
     montar();
 
-    await screen.findByText(/Ensamblaje editorial · UnoTV/);
+    await screen.findByText("El motor de noticias");
     fireEvent.change(screen.getByLabelText("Buscar documentos"), {
       target: { value: "voz" },
     });
     expect(await screen.findByText("Voz UnoTV")).toBeInTheDocument();
-    expect(screen.queryByText(/Talleres y herramientas/)).not.toBeInTheDocument();
+    expect(screen.queryByText("El motor de noticias")).not.toBeInTheDocument();
   });
 });

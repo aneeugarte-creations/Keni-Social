@@ -1,17 +1,19 @@
 /**
- * Biblioteca de Prompts: el corazón editorial de la máquina de contenido.
+ * Biblioteca de Prompts: el corazón editorial del sistema, organizado alrededor de las
+ * TRES MÁQUINAS del ADR 0011 + la Estrategia de marca.
  *
- * Tres superficies en una página (estado en la URL: `?vista=`, `?doc=`, `?filtro=`):
- *   - "La máquina" (default): el riel de pipelines en el ORDEN REAL de ejecución
- *     (GET /api/texto/maquina), con el ensamblaje editorial de la marca bajo la etapa
- *     de copy. Es el mapa del sistema: cada tarjeta abre su documento.
- *   - "Todos los documentos": tabla plana para gestión/búsqueda (filtros + papelera).
- *   - Detalle de documento: cabecera de estado (línea de deployment + publicar/solicitar),
- *     cuerpo SIEMPRE WYSIWYG con chips de variables, y panel lateral (versiones / uso /
- *     compilado / ficha). Sin candado: editar es libre, producción solo cambia al publicar.
+ * Pestañas principales (estado en la URL: `?vista=`, `?doc=`, `?filtro=`):
+ *   - Investigación (default) · Producción · Importación: el riel de SU máquina
+ *     (GET /api/texto/maquina, riel GLOBAL), etapas `prompt` como tarjetas clicables y
+ *     etapas `mecanica` como nodos fantasma; el evergreen aparte como anexo «Taller».
+ *   - Estrategia de marca: el espacio editorial de la marca activa (EstrategiaMarca).
+ *   - Documentos: tabla plana para gestión/búsqueda (filtros + papelera + sin publicar).
  *
- * Header común: selector de vista, marca (reusa el estado GLOBAL del workspace), búsqueda,
- * "Nuevo documento", e indicadores de cambios sin publicar y solicitudes pendientes (admins).
+ * Header global (sobre las pestañas): búsqueda (salta a Documentos), «Nuevo documento»,
+ * badge de cambios sin publicar (→ Documentos filtrado) y solicitudes (admins, bandeja).
+ *
+ * Detalle de documento (`?doc=`): ocupa la página; al cerrar vuelve a la pestaña de
+ * origen (la `vista` queda intacta en la URL).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FilePlus2, Inbox, Plus } from "lucide-react";
@@ -39,10 +41,26 @@ import { api, mensajeError } from "@/lib/api";
 import type { DocumentoTexto } from "@/types";
 
 import { DetalleDocumento } from "./texto/DetalleDocumento";
+import { EstrategiaMarca } from "./texto/estrategia/EstrategiaMarca";
+import { RielMaquina } from "./texto/RielMaquina";
 import { TablaDocumentos } from "./texto/TablaDocumentos";
-import { VistaMaquina } from "./texto/VistaMaquina";
 
-type Vista = "maquina" | "todos";
+/** Las pestañas principales: las tres máquinas + estrategia + gestión. */
+const VISTAS = ["investigacion", "produccion", "importacion", "estrategia", "documentos"] as const;
+type Vista = (typeof VISTAS)[number];
+const VISTA_DEFECTO: Vista = "investigacion";
+
+const ETIQUETA_VISTA: Record<Vista, string> = {
+  investigacion: "Investigación",
+  produccion: "Producción",
+  importacion: "Importación",
+  estrategia: "Estrategia de marca",
+  documentos: "Documentos",
+};
+
+function vistaDe(param: string | null): Vista {
+  return (VISTAS as readonly string[]).includes(param ?? "") ? (param as Vista) : VISTA_DEFECTO;
+}
 
 /** Filtro de búsqueda en cliente (título, descripción, carpeta, etiquetas y cuerpo). */
 function coincide(d: DocumentoTexto, q: string): boolean {
@@ -59,12 +77,12 @@ function coincide(d: DocumentoTexto, q: string): boolean {
 export default function Texto() {
   const qc = useQueryClient();
   const esAdmin = useEsAdmin();
-  const { marcaActiva, nombreActiva, marcasParaSwitch, esMultiMarca, puedeTodas, cambiarMarca } =
+  const { marcaActiva, marcasParaSwitch, esMultiMarca, puedeTodas, cambiarMarca } =
     useMarcaActiva();
 
   // ── Estado en la URL: vista, documento abierto y filtro "sin publicar". ──
   const [searchParams, setSearchParams] = useSearchParams();
-  const vista: Vista = searchParams.get("vista") === "todos" ? "todos" : "maquina";
+  const vista = vistaDe(searchParams.get("vista"));
   const docAbierto = searchParams.get("doc");
   const soloSinPublicar = searchParams.get("filtro") === "sin-publicar";
   const mutarParams = React.useCallback(
@@ -83,13 +101,17 @@ export default function Texto() {
     },
     [setSearchParams],
   );
+  const irAVista = React.useCallback(
+    (v: Vista) => mutarParams({ vista: v === VISTA_DEFECTO ? null : v }),
+    [mutarParams],
+  );
   const abrirDoc = React.useCallback((id: string) => mutarParams({ doc: id }), [mutarParams]);
   const cerrarDoc = React.useCallback(() => mutarParams({ doc: null }), [mutarParams]);
 
   const [q, setQ] = React.useState("");
 
-  // ── Datos: listado completo de la marca (búsqueda y filtros finos en cliente), el riel
-  //    de la máquina, la validación editorial y las solicitudes pendientes (admins). ──
+  // ── Datos: listado de la marca (tabla, búsqueda y títulos del riel), el riel GLOBAL
+  //    de las tres máquinas y las solicitudes pendientes (admins). ──
   const docsQuery = useQuery({
     queryKey: ["texto", "lista", marcaActiva],
     queryFn: ({ signal }) => api.texto({ marca: marcaActiva ?? undefined }, signal),
@@ -105,13 +127,8 @@ export default function Texto() {
   );
 
   const maquinaQuery = useQuery({
-    queryKey: ["texto-maquina", marcaActiva],
-    queryFn: ({ signal }) => api.maquinaTexto(marcaActiva ?? undefined, signal),
-  });
-  const validacionQuery = useQuery({
-    queryKey: ["texto-validacion", marcaActiva],
-    queryFn: ({ signal }) => api.validacionTexto(marcaActiva as string, signal),
-    enabled: !!marcaActiva,
+    queryKey: ["texto-maquina"],
+    queryFn: ({ signal }) => api.maquinaTexto(signal),
   });
   const solicitudesQuery = useQuery({
     queryKey: claveSolicitudes("abierta"),
@@ -143,7 +160,8 @@ export default function Texto() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // ── Vista detalle: ocupa la página entera (el estado vive en la URL). ──
+  // ── Vista detalle: ocupa la página entera. Al cerrar (`doc` fuera de la URL) se
+  //    vuelve a la pestaña de origen: la `vista` nunca se toca al abrir un doc. ──
   if (docAbierto) {
     return (
       <DetalleDocumento
@@ -156,42 +174,24 @@ export default function Texto() {
     );
   }
 
+  const maquinaActiva =
+    vista === "investigacion" || vista === "produccion" || vista === "importacion"
+      ? maquinaQuery.data?.maquinas.find((m) => m.id === vista)
+      : undefined;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      {/* ───────── Dashboard superior ───────── */}
+      {/* ───────── Header global (sobre las pestañas) ───────── */}
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs
-          value={vista}
-          onValueChange={(v) => mutarParams({ vista: v === "todos" ? "todos" : null })}
-        >
-          <TabsList>
-            <TabsTrigger value="maquina" title="El riel de pipelines en orden real de ejecución">
-              La máquina
-            </TabsTrigger>
-            <TabsTrigger value="todos" title="Tabla plana de todos los documentos">
-              Todos los documentos
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {esMultiMarca ? (
-          <SelectorMarca
-            marcas={marcasParaSwitch}
-            valor={marcaActiva ?? MARCA_TODAS}
-            onCambio={(v) => cambiarMarca(marcaParam(v) ?? null)}
-            incluirTodas={puedeTodas}
-            className="w-[180px]"
-            ariaLabel="Marca de la biblioteca"
-          />
-        ) : null}
         <Input
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
-            // Buscar es gestionar: la búsqueda vive en la tabla, no en el riel.
-            if (e.target.value && vista === "maquina") mutarParams({ vista: "todos" });
+            // Buscar es gestionar: la búsqueda vive en Documentos, no en los rieles.
+            if (e.target.value && vista !== "documentos") irAVista("documentos");
           }}
           placeholder="Buscar documentos…"
-          className="h-9 w-full sm:w-56"
+          className="h-9 w-full sm:w-64"
           aria-label="Buscar documentos"
         />
         <Button
@@ -227,7 +227,7 @@ export default function Texto() {
           {sinPublicar > 0 ? (
             <button
               type="button"
-              onClick={() => mutarParams({ vista: "todos", filtro: "sin-publicar" })}
+              onClick={() => mutarParams({ vista: "documentos", filtro: "sin-publicar" })}
               className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
               title="Documentos cuyo borrador difiere de lo publicado. Clic para verlos."
             >
@@ -249,20 +249,29 @@ export default function Texto() {
         </div>
       </div>
 
+      {/* ───────── Pestañas principales ───────── */}
+      <Tabs value={vista} onValueChange={(v) => irAVista(vistaDe(v))}>
+        <TabsList>
+          <TabsTrigger value="investigacion" title="El motor de noticias">
+            {ETIQUETA_VISTA.investigacion}
+          </TabsTrigger>
+          <TabsTrigger value="produccion" title="La máquina de contenido">
+            {ETIQUETA_VISTA.produccion}
+          </TabsTrigger>
+          <TabsTrigger value="importacion" title="Insumos y documentos del equipo">
+            {ETIQUETA_VISTA.importacion}
+          </TabsTrigger>
+          <TabsTrigger value="estrategia" title="El espacio editorial de la marca">
+            {ETIQUETA_VISTA.estrategia}
+          </TabsTrigger>
+          <TabsTrigger value="documentos" title="Tabla plana de todos los documentos">
+            {ETIQUETA_VISTA.documentos}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {/* ───────── Vista activa ───────── */}
-      {vista === "maquina" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-          <VistaMaquina
-            grupos={maquinaQuery.data?.grupos ?? []}
-            capas={maquinaQuery.data?.capas ?? []}
-            validacion={validacionQuery.data}
-            nombreMarca={marcaActiva ? nombreActiva : null}
-            cargando={maquinaQuery.isPending}
-            tituloDe={(id) => tituloPorId.get(id)}
-            onAbrir={abrirDoc}
-          />
-        </div>
-      ) : (
+      {vista === "documentos" ? (
         <TablaDocumentos
           documentos={filtrados}
           cargando={docsQuery.isPending}
@@ -270,6 +279,38 @@ export default function Texto() {
           onCambioSinPublicar={(v) => mutarParams({ filtro: v ? "sin-publicar" : null })}
           onAbrir={abrirDoc}
         />
+      ) : vista === "estrategia" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+          {esMultiMarca ? (
+            <div className="mb-4">
+              <SelectorMarca
+                marcas={marcasParaSwitch}
+                valor={marcaActiva ?? MARCA_TODAS}
+                onCambio={(v) => cambiarMarca(marcaParam(v) ?? null)}
+                incluirTodas={puedeTodas}
+                className="w-[200px]"
+                ariaLabel="Marca de la estrategia"
+              />
+            </div>
+          ) : null}
+          <EstrategiaMarca marca={marcaActiva ?? ""} onAbrirDoc={abrirDoc} />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+          {maquinaQuery.isError ? (
+            <p className="text-sm text-muted-foreground">{mensajeError(maquinaQuery.error)}</p>
+          ) : (
+            <RielMaquina
+              maquina={maquinaActiva}
+              cargando={maquinaQuery.isPending}
+              tituloDe={(id) => tituloPorId.get(id)}
+              onAbrir={abrirDoc}
+              onIrAEstrategia={
+                vista === "produccion" ? () => irAVista("estrategia") : undefined
+              }
+            />
+          )}
+        </div>
       )}
 
       {/* ───────── Bandeja de solicitudes (admins) ───────── */}

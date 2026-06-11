@@ -151,32 +151,40 @@ export interface EstadoPublicacionDoc {
   sin_publicar: boolean;
 }
 
-/** Una etapa del riel de la máquina (`GET /api/texto/maquina`): el doc que se inyecta. */
-export interface EtapaMaquina extends EstadoPublicacionDoc {
+/**
+ * Etapa MECÁNICA del riel (`GET /api/texto/maquina`): paso del proceso SIN prompt de la
+ * Biblioteca (código puro o prompt hardcodeado). Da contexto: cuenta la historia completa.
+ */
+export interface EtapaMecanica {
+  tipo: "mecanica";
+  id: string;
+  titulo: string;
+}
+
+/** Etapa con PROMPT editable: el documento de la Biblioteca que se inyecta en ese paso. */
+export interface EtapaPrompt extends EstadoPublicacionDoc {
+  tipo: "prompt";
   id: string;
   titulo: string;
   doc_id: string;
+  /** Sección visual opcional: `"taller"` separa el evergreen del riel principal. */
+  seccion?: string;
 }
 
-/** Un grupo de etapas del riel (ingesta → priorización → producción → talleres). */
-export interface GrupoMaquina {
+/** Una etapa del riel, discriminada por `tipo`. */
+export type EtapaMaquina = EtapaMecanica | EtapaPrompt;
+
+/** Una de las TRES máquinas del ADR 0011 (investigacion | produccion | importacion). */
+export interface MaquinaTexto {
   id: string;
   titulo: string;
+  subtitulo: string;
   etapas: EtapaMaquina[];
 }
 
-/** Una capa del ensamblaje editorial de la marca (orden real de `adjuntos_copy`). */
-export interface CapaMaquina extends EstadoPublicacionDoc {
-  doc_id: string;
-  titulo: string;
-  clase: string;
-  orden: number;
-}
-
-/** `GET /api/texto/maquina?marca=`: el riel de pipelines + las capas editoriales. */
+/** `GET /api/texto/maquina`: las tres máquinas en orden, con sus etapas. Riel GLOBAL. */
 export interface RespuestaMaquinaTexto {
-  grupos: GrupoMaquina[];
-  capas: CapaMaquina[];
+  maquinas: MaquinaTexto[];
 }
 
 /** Una entrada del historial de versiones (git) de un documento. */

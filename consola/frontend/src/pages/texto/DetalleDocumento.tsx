@@ -43,8 +43,9 @@ import { useEsAdmin } from "@/hooks/use-biblioteca";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
-import type { DocumentoTexto, RespuestaMaquinaTexto } from "@/types";
+import type { DocumentoTexto, EtapaPrompt, RespuestaMaquinaTexto } from "@/types";
 
+import { claveEstrategiaBase } from "./estrategia/api";
 import { separarFrontmatter } from "./lib";
 import { PanelLanzar } from "./PanelLanzar";
 
@@ -53,24 +54,22 @@ const CLASES_EDITORIAL = ["marca", "voz", "plataforma", "tropicalizacion", "regl
 
 type PestanaPanel = "versiones" | "uso" | "compilado" | "ficha";
 
-/** Pestaña "Uso": dónde entra este documento (procesos, pipelines y riel de la máquina). */
+/** Pestaña "Uso": dónde entra este documento (procesos, pipelines y su etapa en las máquinas). */
 function PanelUso({ doc, maquina }: { doc: DocumentoTexto; maquina?: RespuestaMaquinaTexto }) {
-  // Sitio del doc en el riel: etapas cuyo doc_id es este doc, y capas que lo contienen.
+  // Posición del doc en las TRES máquinas: etapas `prompt` cuyo doc_id es este doc.
   const etapas = React.useMemo(
     () =>
-      (maquina?.grupos ?? []).flatMap((g) =>
-        g.etapas.filter((e) => e.doc_id === doc.id).map((e) => `${g.titulo} → ${e.titulo}`),
+      (maquina?.maquinas ?? []).flatMap((m) =>
+        m.etapas
+          .filter((e): e is EtapaPrompt => e.tipo === "prompt" && e.doc_id === doc.id)
+          .map((e) => `${m.titulo} → ${e.titulo}`),
       ),
-    [maquina, doc.id],
-  );
-  const capa = React.useMemo(
-    () => (maquina?.capas ?? []).find((c) => c.doc_id === doc.id),
     [maquina, doc.id],
   );
   const procesos = doc.procesos ?? [];
   const pipelines = doc.pipelines ?? [];
   const nada =
-    procesos.length === 0 && pipelines.length === 0 && etapas.length === 0 && !capa && !doc.rol;
+    procesos.length === 0 && pipelines.length === 0 && etapas.length === 0 && !doc.rol;
 
   return (
     <div className="space-y-4 text-sm">
@@ -108,21 +107,15 @@ function PanelUso({ doc, maquina }: { doc: DocumentoTexto; maquina?: RespuestaMa
           </div>
         </section>
       ) : null}
-      {etapas.length > 0 || capa ? (
+      {etapas.length > 0 ? (
         <section>
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            En el riel de la máquina
+            En las máquinas
           </h4>
           <ul className="mt-1.5 space-y-1 text-sm">
             {etapas.map((e) => (
               <li key={e}>{e}</li>
             ))}
-            {capa ? (
-              <li>
-                Producción → Generación de copy · capa {capa.orden}
-                {capa.clase ? ` (${capa.clase})` : ""}
-              </li>
-            ) : null}
           </ul>
         </section>
       ) : null}
@@ -351,6 +344,10 @@ export function DetalleDocumento({
       qc.invalidateQueries({ queryKey: ["texto"] });
       qc.invalidateQueries({ queryKey: ["texto-maquina"] });
       qc.invalidateQueries({ queryKey: ["texto-historial", r.documento.id] });
+      // Documentos editoriales: la Estrategia de marca refleja extractos y estado.
+      if (r.documento.tipo !== "prompt") {
+        qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+      }
       if (r.documento.id !== docId) {
         // Renombrado/movido: el id cambia; resincroniza la URL y la caché del nuevo id.
         qc.setQueryData(["texto-doc", r.documento.id], r);
@@ -612,6 +609,9 @@ export function DetalleDocumento({
                   sincronizado.current = null;
                   qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
                   qc.invalidateQueries({ queryKey: ["texto-maquina"] });
+                  if (borrador.tipo !== "prompt") {
+                    qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+                  }
                 }}
               />
             ) : pestana === "uso" ? (
@@ -640,6 +640,9 @@ export function DetalleDocumento({
         onHecho={() => {
           qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
           qc.invalidateQueries({ queryKey: ["texto-maquina"] });
+          if (borrador.tipo !== "prompt") {
+            qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+          }
         }}
       />
 

@@ -7,8 +7,11 @@ import { peticion, query } from "@/lib/api/_core";
 
 import type { RespuestaEstrategia } from "./tipos";
 
+/** Prefijo de la clave de query (invalida la estrategia de TODAS las marcas). */
+export const claveEstrategiaBase = ["texto-estrategia"] as const;
+
 /** Clave de query del endpoint nuevo (por marca). */
-export const claveEstrategia = (marca: string) => ["texto-estrategia", marca] as const;
+export const claveEstrategia = (marca: string) => [...claveEstrategiaBase, marca] as const;
 
 export const apiEstrategia = {
   estrategia: (marca: string, signal?: AbortSignal) =>
