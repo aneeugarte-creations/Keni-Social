@@ -13,16 +13,15 @@ export const CLAVE_AJUSTES = ["ajustes"];
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
-/** Grupos de ajustes de la MÁQUINA DE CONTENIDO: viven en el MONITOR (junto a la cola que
- *  gobiernan), NO en Configuración. Son el interruptor general, los seis maestros de etapa
- *  (Fusión/Editorial/Selección/Validación/Copy/Arte), sus excepciones por marca y la admisión del
- *  flujo continuo. Debe coincidir con `ajustes_catalogo.GRUPOS_MAQUINA` del backend. Configuración
- *  EXCLUYE estos grupos; el panel del Monitor pinta SOLO estos. */
+/** Grupos de ajustes que pinta el MONITOR (proceso de PRODUCCIÓN, ADR 0011): el interruptor
+ *  general, el maestro de Producción (Producción/Arte), sus excepciones por marca y la admisión del
+ *  flujo continuo. El proceso de INVESTIGACIÓN (su maestro y sus excepciones por marca) NO vive
+ *  aquí: se edita en la página Investigación. Debe coincidir con `ajustes_catalogo.GRUPOS_MAQUINA`
+ *  del backend. Configuración EXCLUYE estos grupos; el panel del Monitor pinta SOLO estos. */
 export const GRUPOS_MAQUINA = new Set([
   "maquina_global",
-  "maestros_investigacion",
   "maestros_produccion",
-  "automatizacion_marca",
+  "automatizacion_marca_produccion",
   "pipeline_topes",
 ]);
 

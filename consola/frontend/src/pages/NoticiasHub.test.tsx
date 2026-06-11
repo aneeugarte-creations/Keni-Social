@@ -70,6 +70,18 @@ const AJUSTES: RespuestaAjustes = {
       ajustes: [bool("KENI_INVESTIGACION", "maestros_investigacion", true, "Investigación")],
     },
     {
+      id: "automatizacion_marca_investigacion",
+      titulo: "Investigación · excepciones por marca",
+      ajustes: [
+        bool(
+          "KENI_INVESTIGACION::unotv",
+          "automatizacion_marca_investigacion",
+          true,
+          "UnoTV · Investigación",
+        ),
+      ],
+    },
+    {
       id: "noticias_entrada",
       titulo: "Entrada al pool",
       ajustes: [bool("KENI_TRADUCCION", "noticias_entrada", false, "Traducir al español")],
@@ -127,5 +139,14 @@ describe("NoticiasHub · proceso de Investigación", () => {
       expect(screen.getByText(/Investigación \(interruptor general\)/i)).toBeTruthy(),
     );
     expect(screen.getByText(/Entrada al pool/i)).toBeTruthy();
+  });
+
+  it("admin: el panel de ajustes incluye las excepciones por marca de Investigación (ADR 0011, C4)", async () => {
+    renderHub(usuario("admin"));
+    fireEvent.click(screen.getByRole("button", { name: /Acciones/i }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Ajustes/i }));
+    // El área de excepciones por marca de Investigación (grupo `automatizacion_marca_investigacion`)
+    // vive AQUÍ, no en el Monitor (que solo muestra Producción).
+    await waitFor(() => expect(screen.getByText(/Investigación · por marca/i)).toBeTruthy());
   });
 });

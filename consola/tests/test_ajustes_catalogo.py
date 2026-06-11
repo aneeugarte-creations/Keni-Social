@@ -158,14 +158,24 @@ def test_produccion_se_lee_desde_copy_e_investigacion_desde_ingesta(store):
     assert valor is True and fuente == "store"
 
 
-def test_toggles_por_marca_son_los_tres_maestros(store):
-    """Las excepciones por marca del grupo `automatizacion_marca` son los tres maestros."""
-    por_marca = [
-        a for a in ajustes_catalogo.catalogo()
-        if a.grupo == "automatizacion_marca" and config.SEP_MARCA in a.clave
-    ]
-    bases = {a.clave.split(config.SEP_MARCA, 1)[0] for a in por_marca}
-    assert bases == _MAESTROS_ENV
+def test_toggles_por_marca_repartidos_por_proceso(store):
+    """Las excepciones por marca son los tres maestros, REPARTIDAS por proceso (ADR 0011, C4):
+    Investigación en `automatizacion_marca_investigacion`; Producción y Arte en
+    `automatizacion_marca_produccion`. Juntas siguen siendo los tres maestros."""
+    def _bases(grupo: str) -> set[str]:
+        return {
+            a.clave.split(config.SEP_MARCA, 1)[0]
+            for a in ajustes_catalogo.catalogo()
+            if a.grupo == grupo and config.SEP_MARCA in a.clave
+        }
+
+    investigacion = _bases("automatizacion_marca_investigacion")
+    produccion = _bases("automatizacion_marca_produccion")
+    assert investigacion == {config.ENV_INVESTIGACION}
+    assert produccion == {config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE}
+    # El grupo viejo unificado ya no existe.
+    assert _bases("automatizacion_marca") == set()
+    assert investigacion | produccion == _MAESTROS_ENV
 
 
 def test_maquina_global_kill_switch(store):
@@ -186,7 +196,8 @@ def test_grupos_estables(store):
     ids = {g[0] for g in ajustes_catalogo.GRUPOS}
     assert ids == {
         "maquina_global", "maestros_investigacion", "maestros_produccion",
-        "automatizacion_marca", "pipeline_topes",
+        "automatizacion_marca_investigacion", "automatizacion_marca_produccion",
+        "pipeline_topes",
         "publicacion", "publicacion_marca", "automatismos_generales",
         "noticias_entrada", "noticias_orden", "noticias_rendimiento",
         "noticias_breaking", "noticias_produccion", "noticias_produccion_marca",
@@ -333,9 +344,11 @@ def test_grupos_maquina_son_los_del_monitor(store):
     en la sección «Máquina de contenido» del Monitor (master + etapas + por marca + topes)."""
     ids_grupo = {g[0] for g in ajustes_catalogo.GRUPOS}
     assert set(ajustes_catalogo.GRUPOS_MAQUINA) <= ids_grupo
+    # SOLO Producción (ADR 0011, C4): el Monitor ya no pinta el proceso de Investigación
+    # (su maestro y sus excepciones por marca viven en la página Investigación).
     assert set(ajustes_catalogo.GRUPOS_MAQUINA) == {
-        "maquina_global", "maestros_investigacion", "maestros_produccion",
-        "automatizacion_marca", "pipeline_topes",
+        "maquina_global", "maestros_produccion",
+        "automatizacion_marca_produccion", "pipeline_topes",
     }
 
 

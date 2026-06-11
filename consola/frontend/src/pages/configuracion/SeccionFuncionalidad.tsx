@@ -395,7 +395,7 @@ function GruposAjustes({
 
         // Excepciones por marca (Generar/Arte): patrón único `ExcepcionesPorMarca` (fila por marca,
         // todas a la vista). Sin tocar, cada marca sigue el maestro global de la etapa.
-        if (grupo.id === "automatizacion_marca") {
+        if (grupo.id.startsWith("automatizacion_marca")) {
           return (
             <div key={grupo.id} className="space-y-1.5">
               {subtitulo(grupo.titulo)}

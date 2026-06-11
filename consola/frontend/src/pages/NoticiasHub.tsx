@@ -35,6 +35,13 @@ const AREAS_NOTICIAS = [
     abiertaInicial: true,
   },
   {
+    titulo: "Investigación · por marca",
+    descripcion:
+      "Desvía marcas concretas del maestro de Investigación: sin tocar, cada marca lo sigue; apágala para excluirla del pool sin afectar al resto.",
+    grupos: ["automatizacion_marca_investigacion"],
+    abiertaInicial: false,
+  },
+  {
     titulo: "Entrada al pool",
     descripcion: "Qué noticias entran (filtro por temas, fuentes caídas) y su traducción.",
     grupos: ["noticias_entrada"],

@@ -40,8 +40,9 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido (interruptor general)"),
     ("maestros_investigacion", "Investigación (todas las marcas)"),
+    ("automatizacion_marca_investigacion", "Investigación · excepciones por marca"),
     ("maestros_produccion", "Producción (todas las marcas)"),
-    ("automatizacion_marca", "Excepciones por marca"),
+    ("automatizacion_marca_produccion", "Producción · excepciones por marca"),
     ("pipeline_topes", "Admisión del flujo continuo"),
     ("publicacion", "Publicación"),
     ("publicacion_marca", "Publicación · excepciones por marca"),
@@ -69,15 +70,16 @@ GRUPOS_NOTICIAS: tuple[str, ...] = (
     "noticias_tecnico",
 )
 
-# Grupos de la MÁQUINA DE CONTENIDO: el interruptor general, los maestros de etapa, sus excepciones
-# por marca y los topes por barrido. Estos NO viven en Configuración (que se queda con lo global/
-# genérico): se editan en el MONITOR, junto a la cola que controlan. La fuente de verdad de "qué es
-# máquina" es esta tupla; el front la usa para repartir grupos entre Configuración y Monitor.
+# Grupos de la MÁQUINA DE CONTENIDO que pinta el MONITOR (proceso de PRODUCCIÓN, ADR 0011): el
+# interruptor general, el maestro de Producción (Producción/Arte), sus excepciones por marca y los
+# topes de admisión. El proceso de INVESTIGACIÓN (su maestro y sus excepciones por marca) NO vive
+# aquí: se edita en la página Investigación (`NoticiasHub`). Estos grupos NO viven en Configuración
+# (que se queda con lo global/genérico): se editan en el Monitor, junto a la cola que controlan. La
+# fuente de verdad de "qué pinta el Monitor" es esta tupla; el front la usa para repartir grupos.
 GRUPOS_MAQUINA: tuple[str, ...] = (
     "maquina_global",
-    "maestros_investigacion",
     "maestros_produccion",
-    "automatizacion_marca",
+    "automatizacion_marca_produccion",
     "pipeline_topes",
 )
 
@@ -150,7 +152,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 tipo="bool",
                 etiqueta=f"{nombre} · Investigación",
                 ayuda=f"Apaga la investigación de noticias (pool) solo para «{nombre}».",
-                grupo="automatizacion_marca",
+                grupo="automatizacion_marca_investigacion",
                 defecto=_global_de_etapa(config.ENV_PIPELINE_SELECCION),
             )
         )
@@ -160,7 +162,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 tipo="bool",
                 etiqueta=f"{nombre} · Producción",
                 ayuda=f"Apaga la producción de copy solo para «{nombre}».",
-                grupo="automatizacion_marca",
+                grupo="automatizacion_marca_produccion",
                 defecto=_global_de_etapa(config.ENV_PIPELINE_COPY),
             )
         )
@@ -170,7 +172,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 tipo="bool",
                 etiqueta=f"{nombre} · Arte IA",
                 ayuda=f"Apaga la imagen por IA solo para «{nombre}».",
-                grupo="automatizacion_marca",
+                grupo="automatizacion_marca_produccion",
                 defecto=_global_de_etapa(config.ENV_PIPELINE_ARTE),
             )
         )
@@ -226,7 +228,7 @@ class Ajuste:
     tipo: str  # 'bool' | 'int' | 'float' | 'select'
     etiqueta: str
     ayuda: str
-    grupo: str  # 'maestros_etapa' | 'automatizacion_marca' | 'automatismos_generales' | 'publicacion' | 'tuning'
+    grupo: str  # 'maestros_etapa' | 'automatizacion_marca_investigacion' | 'automatizacion_marca_produccion' | 'automatismos_generales' | 'publicacion' | 'tuning'
     defecto: Any
     peligroso: bool = False
     opciones: tuple[dict[str, str], ...] = ()  # solo 'select': [{id, etiqueta}, ...]

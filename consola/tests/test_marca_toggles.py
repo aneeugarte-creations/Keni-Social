@@ -47,12 +47,20 @@ def test_catalogo_expone_toggles_por_marca():
     assert config.clave_por_marca(config.ENV_PIPELINE_COPY, "unotv") not in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "unotv") not in claves
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
-    toggles = [a for a in por_marca if a.grupo in {"automatizacion_marca", "publicacion_marca"}]
+    # Las excepciones de máquina por marca van REPARTIDAS por proceso (ADR 0011, C4):
+    # Investigación en su grupo, Producción/Arte en el suyo.
+    grupos_marca_maquina = {
+        "automatizacion_marca_investigacion",
+        "automatizacion_marca_produccion",
+    }
+    toggles = [
+        a for a in por_marca if a.grupo in grupos_marca_maquina | {"publicacion_marca"}
+    ]
     planes = [a for a in por_marca if a.grupo == "noticias_produccion_marca"]
     assert toggles and all(a.tipo == "bool" for a in toggles)
     assert planes and all(a.tipo == "texto" for a in planes)
-    assert {a.grupo for a in por_marca} == {
-        "automatizacion_marca", "publicacion_marca", "noticias_produccion_marca"
+    assert {a.grupo for a in por_marca} == grupos_marca_maquina | {
+        "publicacion_marca", "noticias_produccion_marca"
     }
     assert config.clave_por_marca(config.ENV_PLAN_DIA, "unotv") in claves
 
