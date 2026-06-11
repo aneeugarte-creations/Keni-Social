@@ -1,5 +1,6 @@
 ---
-titulo: "Noticias · Perfil editorial de marca (keywords)"
+titulo: "Editorial"
+descripcion: "Extrae las keywords y temas de la línea editorial de una marca para priorizar el pool."
 tipo: prompt
 carpeta: "noticias"
 creado: 2026-06-08T00:00:00+00:00

@@ -1,5 +1,6 @@
 ---
-titulo: "Imagen · Ilustración / fondo"
+titulo: "Arte · ilustración"
+descripcion: "Genera una ilustración o fondo cuando la pieza no tiene foto."
 tipo: prompt
 carpeta: "imagen"
 creado: 2026-05-31T00:00:00+00:00

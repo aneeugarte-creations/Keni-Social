@@ -1,5 +1,6 @@
 ---
-titulo: "Importación · Calendario de contenido"
+titulo: "Importar calendario"
+descripcion: "Lee un calendario de contenido (.xlsx/CSV) y lo convierte en piezas."
 tipo: prompt
 carpeta: "importacion"
 creado: 2026-06-08T00:00:00+00:00

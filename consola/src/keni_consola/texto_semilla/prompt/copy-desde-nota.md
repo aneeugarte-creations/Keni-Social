@@ -1,5 +1,6 @@
 ---
-titulo: "Copy desde nota"
+titulo: "Copy"
+descripcion: "Convierte una nota, varias fuentes o un clip en copy publicable por red."
 tipo: prompt
 carpeta: ""
 salida: piezas

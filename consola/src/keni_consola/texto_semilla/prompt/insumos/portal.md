@@ -1,5 +1,6 @@
 ---
-titulo: "Insumos · Portal/SMS"
+titulo: "Insumo: portal/SMS"
+descripcion: "Parsea el insumo del portal/SMS al pool de noticias."
 tipo: prompt
 carpeta: "insumos"
 creado: 2026-06-08T00:00:00+00:00

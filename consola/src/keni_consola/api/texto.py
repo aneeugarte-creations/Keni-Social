@@ -108,7 +108,7 @@ async def crear(request: Request) -> Response:
     if not isinstance(titulo, str) or not titulo.strip():
         return JSONResponse({"error": "El título es obligatorio."}, status_code=400)
     kwargs: dict[str, object] = {}
-    for clave in ("tipo", "carpeta", "cuerpo", "clase", "estado", "rol"):
+    for clave in ("descripcion", "tipo", "carpeta", "cuerpo", "clase", "estado", "rol"):
         valor = datos.get(clave)
         if isinstance(valor, str):
             kwargs[clave] = valor
@@ -137,7 +137,7 @@ async def guardar(request: Request) -> Response:
     doc_id = request.path_params["doc_id"]
     datos = await leer_json(request)
     kwargs: dict[str, object] = {}
-    for clave in ("titulo", "cuerpo", "carpeta", "clase", "estado", "rol"):
+    for clave in ("titulo", "descripcion", "cuerpo", "carpeta", "clase", "estado", "rol"):
         valor = datos.get(clave)
         if isinstance(valor, str):
             kwargs[clave] = valor

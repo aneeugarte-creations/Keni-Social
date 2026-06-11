@@ -1,5 +1,6 @@
 ---
-titulo: "Voz · UnoTV"
+titulo: "Voz y tono · UnoTV"
+descripcion: "Cómo escribe UnoTV: registro, tono y estilo. Se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [unotv]
@@ -7,11 +8,7 @@ creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-10T00:00:00+00:00
 ---
 
-# Voz · UnoTV
-
 Voz informativa, directa, verificada e imparcial: el medio informa, no opina. Español de México neutro y profesional, sin coloquialismos ni jerga. Frase corta, voz activa y pretérito simple; el gancho es el dato, no el adjetivo. La emoción la pone el hecho, nunca el sensacionalismo.
-
-(Pautas contrastadas con 12 meses de piezas publicadas y su rendimiento; las bandas medidas por red viven en el documento "Patrones", que se regenera periódicamente desde Metricool.)
 
 ## Registro
 

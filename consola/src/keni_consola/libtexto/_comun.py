@@ -73,19 +73,19 @@ ROLES_PROMPT = ("", "copy", "qa", "evergreen", "arte")
 #   titulo/descripcion : etiquetas humanas para la UI.
 PIPELINES: dict[str, dict[str, str]] = {
     "copy": {
-        "titulo": "Copy desde nota",
+        "titulo": "Copy",
         "descripcion": "Convierte una nota/clip/tendencia en copy publicable por red.",
         "prompt_defecto": "prompt/copy-desde-nota",
         "rol": "copy",
     },
     "qa": {
-        "titulo": "Criba editorial de la fuente",
+        "titulo": "Validación",
         "descripcion": "Verifica la nota de origen antes de generar copy (pipeline de contenido).",
         "prompt_defecto": "prompt/qa-fuente",
         "rol": "qa",
     },
     "evergreen": {
-        "titulo": "Ideas evergreen (EVERGREEN)",
+        "titulo": "Evergreen",
         "descripcion": "Propone ideas de contenido evergreen para la marca.",
         "prompt_defecto": "prompt/brainstorming-evergreen",
         "rol": "evergreen",
@@ -135,6 +135,9 @@ class Documento:
     cuerpo: str
     creado: str
     actualizado: str
+    # Explicación HUMANA (UI): qué es el doc y para qué sirve. NO se inyecta en ningún prompt
+    # (a diferencia de `cuerpo`): separa la meta del documento del contenido que ve el agente.
+    descripcion: str = ""
     clase: str = ""  # solo editorial
     marcas: list[str] = field(default_factory=list)  # solo editorial (clase marca/voz)
     # Solo prompt: "" | "documento" (texto) | "piezas" (copy por red -> borradores en Parrilla).
@@ -153,6 +156,7 @@ class Documento:
         return {
             "id": self.id,
             "titulo": self.titulo,
+            "descripcion": self.descripcion,
             "tipo": self.tipo,
             "carpeta": self.carpeta,
             "cuerpo": self.cuerpo,

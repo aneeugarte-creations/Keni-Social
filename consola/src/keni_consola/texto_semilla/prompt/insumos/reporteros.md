@@ -1,5 +1,6 @@
 ---
-titulo: "Insumos · Reporteros (agenda de coberturas)"
+titulo: "Insumo: reporteros"
+descripcion: "Parsea la agenda de coberturas de reporteros al pool de noticias."
 tipo: prompt
 carpeta: "insumos"
 creado: 2026-06-08T00:00:00+00:00

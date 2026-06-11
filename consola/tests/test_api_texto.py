@@ -46,6 +46,20 @@ def test_crear_listar_obtener(cliente):
     assert r.json()["documento"]["cuerpo"].strip() == "haz algo"
 
 
+def test_crear_y_guardar_descripcion(cliente):
+    # La descripcion (metadata humana) entra por POST y PUT y vuelve en el JSON del documento.
+    r = cliente.post("/api/texto", json={
+        "titulo": "Validación", "tipo": "prompt", "cuerpo": "Eres el revisor…",
+        "descripcion": "Criba editorial de la fuente.",
+    })
+    doc = r.json()["documento"]
+    assert doc["descripcion"] == "Criba editorial de la fuente."
+    r = cliente.put(f"/api/texto/{doc['id']}", json={"descripcion": "Otra."})
+    assert r.json()["documento"]["descripcion"] == "Otra."
+    # Se conserva al releer.
+    assert cliente.get(f"/api/texto/{doc['id']}").json()["documento"]["descripcion"] == "Otra."
+
+
 def test_doc_incluye_procesos_de_transparencia(cliente):
     # `procesos` (solo lectura) sale del catálogo en código: un prompt CATALOGADO lo trae; uno
     # cualquiera lo trae vacío. Y va en TODOS los documentos del listado.

@@ -41,7 +41,9 @@ def version(doc_id: str, sha: str) -> Documento | None:
     clase = meta.get("clase")
     clase = clase if isinstance(clase, str) and clase in CLASES else ""
     return Documento(
-        id=doc_id, titulo=titulo, tipo=tipo, carpeta="/".join(doc_id.split("/")[1:-1]),
+        id=doc_id, titulo=titulo,
+        descripcion=meta.get("descripcion", "") if isinstance(meta.get("descripcion"), str) else "",
+        tipo=tipo, carpeta="/".join(doc_id.split("/")[1:-1]),
         cuerpo=cuerpo, creado=meta.get("creado", "") if isinstance(meta.get("creado"), str) else "",
         actualizado=meta.get("actualizado", "") if isinstance(meta.get("actualizado"), str) else "",
         clase=clase, marcas=_lista_str(meta.get("marcas")), salida=meta.get("salida", "") if isinstance(meta.get("salida"), str) else "",
@@ -71,6 +73,7 @@ def restaurar_version(doc_id: str, sha: str, *, autor: dict[str, str] | None = N
     assert actual is not None  # is_file arriba lo garantiza
     restaurado = Documento(
         id=actual.id, titulo=(meta.get("titulo") if isinstance(meta.get("titulo"), str) else actual.titulo) or actual.titulo,
+        descripcion=meta.get("descripcion", actual.descripcion) if isinstance(meta.get("descripcion"), str) else actual.descripcion,
         tipo=actual.tipo, carpeta=actual.carpeta, cuerpo=cuerpo, creado=actual.creado,
         actualizado=_ahora_iso(),
         clase=meta.get("clase", actual.clase) if isinstance(meta.get("clase"), str) and meta.get("clase") in CLASES else actual.clase,

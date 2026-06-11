@@ -1,5 +1,6 @@
 ---
 titulo: "Patrones medidos · UnoTV"
+descripcion: "Bandas de rendimiento medidas en Metricool (longitud, emojis, hashtags) de UnoTV; se regenera periódicamente."
 tipo: editorial
 clase: ""
 marcas: [unotv]
@@ -8,9 +9,7 @@ creado: 2026-06-10T00:00:00+00:00
 actualizado: 2026-06-10T06:09:09+00:00
 ---
 
-# Patrones medidos · UnoTV
-
-Derivado automáticamente de 22,208 piezas publicadas (2025-06-01 → 2026-06-09), comparando el cuartil de mayor engagement (TOP) contra el peor (FONDO) por red. Regenerable con `python -m keni_consola.patrones_derivar`; NO editar a mano (el criterio editorial va en Voz/Reglas). Estas bandas son recomendación medida: el copy nuevo debe caer dentro de la banda TOP de su red.
+Bandas de rendimiento por red (cuartil TOP de engagement): el copy nuevo debe caer dentro de la banda TOP de su red.
 
 ## Instagram (7,911 piezas)
 

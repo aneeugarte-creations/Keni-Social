@@ -57,6 +57,9 @@ def _serializar(doc: Documento) -> str:
         "creado": doc.creado,
         "actualizado": doc.actualizado,
     }
+    # Descripción HUMANA (no inyectada): se escribe solo si la hay, tras el título.
+    if doc.descripcion:
+        meta["descripcion"] = doc.descripcion
     if doc.tipo == "editorial":
         meta["clase"] = doc.clase
         meta["marcas"] = list(doc.marcas)
@@ -99,6 +102,8 @@ def _leer(ruta: Path) -> Documento | None:
     carpeta = "/".join(partes[1:-1])
     titulo = meta.get("titulo")
     titulo = titulo.strip() if isinstance(titulo, str) and titulo.strip() else partes[-1].replace("-", " ")
+    descripcion = meta.get("descripcion")
+    descripcion = descripcion.strip() if isinstance(descripcion, str) else ""
     clase = meta.get("clase")
     clase = clase if isinstance(clase, str) and clase in CLASES else ""
     marcas_crudas = meta.get("marcas")
@@ -116,7 +121,8 @@ def _leer(ruta: Path) -> Documento | None:
     prioridad = meta.get("prioridad")
     prioridad = prioridad if isinstance(prioridad, int) and not isinstance(prioridad, bool) else 0
     return Documento(
-        id=doc_id, titulo=titulo, tipo=tipo, carpeta=carpeta, cuerpo=cuerpo,
-        creado=creado, actualizado=actualizado, clase=clase, marcas=marcas, salida=salida,
-        estado=estado, etiquetas=etiquetas, pipelines=pipelines, rol=rol, prioridad=prioridad,
+        id=doc_id, titulo=titulo, descripcion=descripcion, tipo=tipo, carpeta=carpeta,
+        cuerpo=cuerpo, creado=creado, actualizado=actualizado, clase=clase, marcas=marcas,
+        salida=salida, estado=estado, etiquetas=etiquetas, pipelines=pipelines, rol=rol,
+        prioridad=prioridad,
     )

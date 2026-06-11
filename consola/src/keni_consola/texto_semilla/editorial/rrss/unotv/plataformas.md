@@ -1,19 +1,18 @@
 ---
-titulo: "Plataformas · UnoTV"
+titulo: "Formato por red · UnoTV"
+descripcion: "Ajustes de formato por red propios de UnoTV, sobre el formato común."
 tipo: editorial
-clase: 
+clase: plataforma
 marcas: [unotv]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-10T00:00:00+00:00
 ---
 
-# Plataformas · UnoTV
-
-Notas de formato por red propias de UnoTV (lo que no cubre la ficha global de plataformas). Última hora breve y con fuente; explicadores en carrusel o hilo de claves. Servicio accionable (clima, tránsito, alertas). Las bandas numéricas (longitud, emojis, hashtags) viven en el documento "Patrones", medido sobre 12 meses y regenerable; los límites técnicos por red los pone el sistema.
+Notas de formato por red propias de UnoTV (lo que no cubre la ficha global de plataformas). Última hora breve y con fuente; explicadores en carrusel o hilo de claves. Servicio accionable (clima, tránsito, alertas).
 
 ## X / Twitter
 
-- (Sin datos de Metricool aún para esta cuenta.) Convención: una idea por tuit, el dato primero, fuente atribuida; sin emojis ni hashtags de relleno.
+- Convención: una idea por tuit, el dato primero, fuente atribuida; sin emojis ni hashtags de relleno.
 
 ## Instagram
 
@@ -34,4 +33,4 @@ Notas de formato por red propias de UnoTV (lo que no cubre la ficha global de pl
 
 ## YouTube
 
-- (Sin datos de Metricool en el rango.) Convención: título informativo directo, sin emojis; la descripción repite el dato clave y la fuente.
+- Convención: título informativo directo, sin emojis; la descripción repite el dato clave y la fuente.

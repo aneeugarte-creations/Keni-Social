@@ -1,5 +1,6 @@
 ---
-titulo: "Insumos · Eventos Claro Sports"
+titulo: "Insumo: eventos Claro Sports"
+descripcion: "Parsea la agenda de eventos de Claro Sports al pool de noticias."
 tipo: prompt
 carpeta: "insumos"
 creado: 2026-06-08T00:00:00+00:00

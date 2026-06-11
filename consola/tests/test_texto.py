@@ -35,6 +35,25 @@ def test_crear_y_obtener_prompt():
     assert leido.creado and leido.creado == leido.actualizado
 
 
+def test_descripcion_round_trip_y_separada_del_cuerpo():
+    # La descripcion es metadata HUMANA: se persiste en frontmatter y NO forma parte del cuerpo
+    # (lo unico que se inyecta en la IA). Round-trip crear -> obtener -> guardar.
+    doc = libtexto.crear(
+        "Validación", tipo="prompt", cuerpo="Eres el revisor…",
+        descripcion="Criba editorial de la fuente antes de generar copy.",
+    )
+    leido = libtexto.obtener(doc.id)
+    assert leido is not None
+    assert leido.descripcion == "Criba editorial de la fuente antes de generar copy."
+    assert "Criba editorial" not in leido.cuerpo  # separada del contenido inyectable
+    assert leido.a_dict()["descripcion"] == leido.descripcion
+    # Editar solo la descripcion no toca el cuerpo.
+    libtexto.guardar(doc.id, descripcion="Otra cosa.")
+    leido2 = libtexto.obtener(doc.id)
+    assert leido2.descripcion == "Otra cosa."
+    assert leido2.cuerpo.strip() == "Eres el revisor…"
+
+
 def test_crear_id_unico_cuando_choca_el_slug():
     a = libtexto.crear("Nota", tipo="prompt")
     b = libtexto.crear("Nota", tipo="prompt")

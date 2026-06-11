@@ -1,5 +1,6 @@
 ---
-titulo: "Voz · Fundación"
+titulo: "Voz y tono · Fundación"
+descripcion: "Cómo escribe Fundación: registro, tono y estilo. Se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [fundacion]
@@ -7,11 +8,7 @@ creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---
 
-# Voz · Fundación
-
 Sobria, respetuosa y humana: cercana pero no desenfadada, sin jerga de TikTok ni humor. es-MX cálido; emotivo desde el respeto, nunca morboso ni dramatizado. Habla con la comunidad, no sobre ella. La historia conmueve por sí sola; no necesita espectacularizarse.
-
-(Sin datos de Metricool en el último mes —cuenta sin actividad—; pautas por convención de marca, a revisar con datos cuando los haya.)
 
 ## Registro
 

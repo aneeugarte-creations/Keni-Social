@@ -10,6 +10,8 @@ export type TipoDocumento = "prompt" | "editorial";
 export interface DocumentoTexto {
   id: string;
   titulo: string;
+  /** Explicación humana (qué es / para qué). NO se inyecta en ningún prompt; solo UI. */
+  descripcion?: string;
   tipo: TipoDocumento | string;
   carpeta: string;
   cuerpo: string;
@@ -130,6 +132,7 @@ export interface RespuestaMarcasTexto {
 
 export interface CuerpoCrearDocumento {
   titulo: string;
+  descripcion?: string;
   tipo?: TipoDocumento;
   carpeta?: string;
   cuerpo?: string;
@@ -144,6 +147,7 @@ export interface CuerpoCrearDocumento {
 
 export interface CuerpoGuardarDocumento {
   titulo?: string;
+  descripcion?: string;
   cuerpo?: string;
   carpeta?: string;
   clase?: string;

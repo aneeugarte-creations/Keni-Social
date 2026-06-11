@@ -1,5 +1,6 @@
 ---
-titulo: "Voz · Nación Gamer"
+titulo: "Voz y tono · Nación Gamer"
+descripcion: "Cómo escribe Nación Gamer: registro, tono y estilo. Se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [nacion-gamer]
@@ -7,11 +8,7 @@ creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-10T00:00:00+00:00
 ---
 
-# Voz · Nación Gamer
-
 Juvenil y entusiasta, con los códigos de la comunidad gamer sin pasarse de nicho. Anglicismos gamer (hype, drop, meta, loot) con criterio: cuando son el término real, no para "sonar gamer". Mexicanismos ligeros, sin forzar la jerga ni el "wey" en cada frase. De la comunidad para la comunidad: complicidad, no explicar de más lo que ya saben.
-
-(Pautas contrastadas con 12 meses de piezas publicadas y su rendimiento; las bandas medidas por red viven en el documento "Patrones", que se regenera periódicamente desde Metricool.)
 
 ## Registro
 

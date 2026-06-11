@@ -1,19 +1,18 @@
 ---
-titulo: "Plataformas · Nación Gamer"
+titulo: "Formato por red · Nación Gamer"
+descripcion: "Ajustes de formato por red propios de Nación Gamer, sobre el formato común."
 tipo: editorial
-clase: 
+clase: plataforma
 marcas: [nacion-gamer]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-10T00:00:00+00:00
 ---
 
-# Plataformas · Nación Gamer
-
 Notas de formato por red propias de Nación Gamer. El tráiler, la filtración y el lanzamiento son el gancho. Formatos cortos y de comunidad funcionan mejor que el comunicado. Las bandas numéricas viven en el documento "Patrones", medido sobre 12 meses y regenerable; los límites técnicos por red los pone el sistema.
 
 ## X / Twitter
 
-- (Sin datos de Metricool aún para esta cuenta.) Convención: el golpe en una línea con la entidad como hashtag.
+- Convención: el golpe en una línea con la entidad como hashtag.
 
 ## Instagram
 
@@ -33,4 +32,4 @@ Notas de formato por red propias de Nación Gamer. El tráiler, la filtración y
 
 ## YouTube
 
-- (Sin datos de Metricool en el rango.) Convención: título con la entidad + el ángulo, sin clickbait vacío; la comunidad castiga el engaño.
+- Convención: título con la entidad + el ángulo, sin clickbait vacío; la comunidad castiga el engaño.

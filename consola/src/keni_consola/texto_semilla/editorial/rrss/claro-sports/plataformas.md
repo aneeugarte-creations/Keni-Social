@@ -1,19 +1,18 @@
 ---
-titulo: "Plataformas · Claro Sports"
+titulo: "Formato por red · Claro Sports"
+descripcion: "Ajustes de formato por red propios de Claro Sports, sobre el formato común."
 tipo: editorial
-clase: 
+clase: plataforma
 marcas: [claro-sports]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-10T00:00:00+00:00
 ---
 
-# Plataformas · Claro Sports
-
 Notas de formato por red propias de Claro Sports. En días de jornada/gran evento sube la frecuencia; fuera de pico, agenda y contexto. El minuto a minuto y la reacción mandan en tiempo real. Las bandas numéricas viven en el documento "Patrones", medido sobre 12 meses y regenerable; los límites técnicos por red los pone el sistema.
 
 ## X / Twitter
 
-- (Sin datos de Metricool aún para esta cuenta.) Convención: gancho + dato en un tuit; emojis 1-3; el hilo para el desglose de jornada.
+- Convención: gancho + dato en un tuit; emojis 1-3; el hilo para el desglose de jornada.
 
 ## Instagram
 

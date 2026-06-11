@@ -1,5 +1,6 @@
 ---
-titulo: "Editorial · Sugerencias de plataforma (algoritmo)"
+titulo: "Sugerencias editoriales"
+descripcion: "Sugerencias diarias de plataforma y algoritmo para el equipo."
 tipo: prompt
 carpeta: "editorial"
 creado: 2026-06-08T00:00:00+00:00

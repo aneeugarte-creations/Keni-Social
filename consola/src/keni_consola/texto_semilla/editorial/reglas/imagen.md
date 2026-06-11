@@ -1,13 +1,12 @@
 ---
 titulo: "Reglas de imagen"
+descripcion: "Reglas del texto en imagen (placa) y del arte. Se usa al generar copy y arte."
 tipo: editorial
-clase: ""
+clase: reglas
 marcas: []
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-05-31T00:00:00+00:00
 ---
-
-# Reglas legales y editoriales de IMAGEN — checklist de revisión
 
 > **Punto de partida; el equipo lo afina.** Estas reglas alimentan la revisión de imagen del
 > Estudio (gate humano antes de "Usar en la pieza"). No bloquean la generación: marcan ✅/⚠️/❌

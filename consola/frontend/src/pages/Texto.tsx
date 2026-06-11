@@ -47,6 +47,20 @@ import { PanelLanzar } from "./texto/PanelLanzar";
 
 const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
 
+// Etiqueta humana de cada pipeline/etapa (mismo vocabulario que la vista Pipelines y el back
+// `_ETAPAS`): para mostrar "se inyecta en la etapa …" en los editoriales con un nombre que el
+// equipo ya reconoce, no la clave técnica.
+const ETAPA_LABEL: Record<string, string> = {
+  fusion: "Fusión",
+  editorial: "Editorial",
+  ci: "Selección",
+  qa: "Validación",
+  copy: "Copy",
+  cd: "Copy",
+  arte: "Arte",
+  evergreen: "Evergreen",
+};
+
 // Pestañas del estudio: PROMPTS (los que inyectamos en los agentes) separados de los
 // documentos editoriales, y estos a su vez en MARCA (marca/voz: la cara de cada marca) y
 // REGLAS (reglas/plataforma/tropicalización: lo transversal). Catch-all: cualquier editorial
@@ -322,6 +336,7 @@ export default function Texto() {
         id: borrador.id,
         cuerpo: {
           titulo: siguiente.titulo,
+          descripcion: siguiente.descripcion ?? "",
           // Readjunta el frontmatter oculto para no perderlo del fichero.
           cuerpo: frontmatterOculto + siguiente.cuerpo,
           carpeta: siguiente.carpeta,
@@ -609,6 +624,39 @@ export default function Texto() {
                 </Button>
               ) : null}
             </div>
+
+            {/* Descripción HUMANA: qué es el doc y para qué. NO se inyecta en la IA (a diferencia
+                del cuerpo); solo orienta al equipo en la Biblioteca. */}
+            {editable ? (
+              <Input
+                value={borrador.descripcion ?? ""}
+                onChange={(e) => editar({ descripcion: e.target.value })}
+                className="h-8 text-xs text-muted-foreground"
+                placeholder="Descripción: qué es y para qué (no se inyecta en la IA)"
+              />
+            ) : borrador.descripcion ? (
+              <p className="text-xs text-muted-foreground">{borrador.descripcion}</p>
+            ) : null}
+
+            {/* Editoriales: indicador de DÓNDE se inyecta, con el vocabulario de etapas del
+                producto. El editorial es material de referencia que entra en la etapa Copy de su
+                marca (o las etapas que declare `pipelines`). Los prompts lo muestran en su panel. */}
+            {!esPrompt ? (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span>Se inyecta en la etapa:</span>
+                {(borrador.pipelines && borrador.pipelines.length > 0
+                  ? borrador.pipelines.map((p) => ETAPA_LABEL[p] ?? p)
+                  : ["Copy"]
+                ).map((etapa) => (
+                  <span
+                    key={etapa}
+                    className="rounded-full bg-keni/10 px-2 py-0.5 font-medium text-keni"
+                  >
+                    {etapa}
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
             {/* Panel de INYECCIÓN (solo prompts): el objetivo de esta vista es ENTENDER qué se
                 inyecta y DÓNDE. Sale del catálogo en código (`procesos`), no del contenido editable. */}

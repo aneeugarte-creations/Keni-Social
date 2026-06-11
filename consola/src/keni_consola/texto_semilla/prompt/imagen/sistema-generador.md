@@ -1,5 +1,6 @@
 ---
-titulo: "Imagen · Sistema del generador (foto, no infografía)"
+titulo: "Arte · sistema"
+descripcion: "Instrucción de sistema del generador de imagen (foto realista, no infografía)."
 tipo: prompt
 carpeta: "imagen"
 creado: 2026-06-08T00:00:00+00:00

@@ -1,5 +1,6 @@
 ---
-titulo: "Imagen · Arte de noticia (foto para el feed)"
+titulo: "Arte"
+descripcion: "Genera la foto o arte de una pieza de noticia para el feed."
 tipo: prompt
 carpeta: "imagen"
 creado: 2026-06-08T00:00:00+00:00

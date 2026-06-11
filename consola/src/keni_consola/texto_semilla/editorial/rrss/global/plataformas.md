@@ -1,5 +1,6 @@
 ---
-titulo: "Plataformas (límites y formato)"
+titulo: "Formato por red (común)"
+descripcion: "Convenciones de formato por red comunes a todas las marcas."
 tipo: editorial
 clase: plataforma
 marcas: []
@@ -7,9 +8,7 @@ creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---
 
-# Plataformas (límites y formato)
-
-Convenciones por red comunes a todas las marcas: formato y hábitos de cada plataforma. Cada marca afina lo suyo en su propia ficha de plataformas. Los LÍMITES TÉCNICOS de caracteres por red los inyecta el sistema en cada generación (fuente única en código): aquí no se duplican números técnicos, solo el formato editorial. (Patrones comunes medidos sobre 6,543 piezas de las 4 marcas activas, 12-may a 9-jun-2026.)
+Convenciones por red comunes a todas las marcas: formato y hábitos de cada plataforma. Cada marca afina lo suyo en su propia ficha de plataformas. Los LÍMITES TÉCNICOS de caracteres por red los inyecta el sistema en cada generación (fuente única en código): aquí no se duplican números técnicos, solo el formato editorial.
 
 ## X / Twitter
 

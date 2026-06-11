@@ -1,5 +1,6 @@
 ---
-titulo: "Voz · Claro Sports"
+titulo: "Voz y tono · Claro Sports"
+descripcion: "Cómo escribe Claro Sports: registro, tono y estilo. Se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [claro-sports]
@@ -7,11 +8,7 @@ creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-10T00:00:00+00:00
 ---
 
-# Voz · Claro Sports
-
 Emoción, cercanía y pasión por el deporte, con energía desde la primera palabra. Coloquial pero correcto (es-MX): modismos sí, groserías no. Léxico vibrante ("golazo", "se armó", "la rompió") y picos de intensidad en días de partido. El registro de Golf es más sobrio y técnico.
-
-(Pautas contrastadas con 12 meses de piezas publicadas y su rendimiento; las bandas medidas por red viven en el documento "Patrones", que se regenera periódicamente desde Metricool.)
 
 ## Registro
 

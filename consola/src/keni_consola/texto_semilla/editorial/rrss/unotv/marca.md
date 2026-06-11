@@ -1,13 +1,12 @@
 ---
-titulo: "Marca · UnoTV"
+titulo: "Identidad · UnoTV"
+descripcion: "Qué es UnoTV, qué cubre y su posicionamiento. Referencia para redactar el copy."
 tipo: editorial
 clase: marca
 marcas: [unotv]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---
-
-# UnoTV
 
 UnoTV es el medio de noticias en español de México y la marca insignia de noticias del portafolio. Cubre actualidad nacional e internacional con inmediatez: política, seguridad, economía, sociedad, clima, salud y servicio. Su prioridad es la distribución y el alcance: que la nota llegue y sea útil. La interacción es secundaria; el valor está en informar primero, claro y verificado.
 

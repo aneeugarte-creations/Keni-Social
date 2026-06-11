@@ -1,5 +1,6 @@
 ---
-titulo: "Noticias · Traducción/localización (MX)"
+titulo: "Selección · traducción"
+descripcion: "Traduce y localiza a México las notas de fuentes en otro idioma durante la ingesta."
 tipo: prompt
 carpeta: "noticias"
 creado: 2026-06-08T00:00:00+00:00

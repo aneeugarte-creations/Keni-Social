@@ -1,5 +1,6 @@
 ---
-titulo: "Insumos · Corresponsales (así vamos)"
+titulo: "Insumo: corresponsales"
+descripcion: "Parsea el insumo de corresponsales (\"así vamos\") al pool de noticias."
 tipo: prompt
 carpeta: "insumos"
 creado: 2026-06-08T00:00:00+00:00

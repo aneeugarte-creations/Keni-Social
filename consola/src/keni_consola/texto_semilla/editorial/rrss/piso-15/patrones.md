@@ -1,5 +1,6 @@
 ---
 titulo: "Patrones medidos · Piso 15"
+descripcion: "Bandas de rendimiento medidas en Metricool (longitud, emojis, hashtags) de Piso 15; se regenera periódicamente."
 tipo: editorial
 clase: ""
 marcas: [piso-15]
@@ -8,9 +9,7 @@ creado: 2026-06-10T00:00:00+00:00
 actualizado: 2026-06-10T07:31:32+00:00
 ---
 
-# Patrones medidos · Piso 15
-
-Derivado automáticamente de 1,545 piezas publicadas (2025-08-17 → 2026-06-08), comparando el cuartil de mayor engagement (TOP) contra el peor (FONDO) por red. Regenerable con `python -m keni_consola.patrones_derivar`; NO editar a mano (el criterio editorial va en Voz/Reglas). Estas bandas son recomendación medida: el copy nuevo debe caer dentro de la banda TOP de su red.
+Bandas de rendimiento por red (cuartil TOP de engagement): el copy nuevo debe caer dentro de la banda TOP de su red.
 
 ## Instagram (514 piezas)
 

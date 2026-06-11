@@ -1,5 +1,6 @@
 ---
-titulo: "QA fuente"
+titulo: "Validación"
+descripcion: "Criba editorial de la fuente antes de generar copy: decide si la nota es apta."
 tipo: prompt
 carpeta: ""
 creado: 2026-06-08T00:00:00+00:00

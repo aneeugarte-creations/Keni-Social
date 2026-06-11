@@ -1,13 +1,12 @@
 ---
-titulo: "Tropicalización MX"
+titulo: "Tropicalización (México)"
+descripcion: "Adaptación al español de México (léxico y giros). Común a todas las marcas."
 tipo: editorial
 clase: tropicalizacion
 marcas: []
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---
-
-# Tropicalización MX
 
 Adaptación al español de México: el texto suena local, no de prensa española. Léxico: "celular" (no móvil), "computadora" (no ordenador), "boleto" (no billete). Registro es-MX neutro; pretérito simple ("confirmó"), no perfecto compuesto. Evita acentos y giros peninsulares al reescribir de una fuente española.
 

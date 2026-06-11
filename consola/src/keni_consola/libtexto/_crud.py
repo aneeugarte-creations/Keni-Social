@@ -150,6 +150,7 @@ def listar_carpetas(tipo: str | None = None) -> list[str]:
 def crear(
     titulo: str,
     *,
+    descripcion: str = "",
     tipo: str = "prompt",
     carpeta: str = "",
     cuerpo: str = "",
@@ -172,7 +173,9 @@ def crear(
     doc_id, ruta = _id_unico(tipo, partes, slug)
     ahora = _ahora_iso()
     doc = Documento(
-        id=doc_id, titulo=titulo.strip(), tipo=tipo, carpeta="/".join(partes),
+        id=doc_id, titulo=titulo.strip(),
+        descripcion=descripcion.strip() if isinstance(descripcion, str) else "",
+        tipo=tipo, carpeta="/".join(partes),
         cuerpo=cuerpo if isinstance(cuerpo, str) else "", creado=ahora, actualizado=ahora,
         clase=clase, marcas=_validar_marcas(marcas),
         estado=_validar_estado(estado), etiquetas=_validar_etiquetas(etiquetas),
@@ -189,6 +192,7 @@ def guardar(
     doc_id: str,
     *,
     titulo: str | None = None,
+    descripcion: str | None = None,
     cuerpo: str | None = None,
     carpeta: str | None = None,
     clase: str | None = None,
@@ -209,6 +213,7 @@ def guardar(
         raise TextoError("Ese documento no existe.")
 
     nuevo_titulo = titulo.strip() if isinstance(titulo, str) and titulo.strip() else actual.titulo
+    nueva_descripcion = actual.descripcion if descripcion is None else (descripcion.strip() if isinstance(descripcion, str) else "")
     nuevo_cuerpo = cuerpo if isinstance(cuerpo, str) else actual.cuerpo
     nueva_clase = actual.clase if clase is None else _validar_clase(actual.tipo, clase)
     nuevas_marcas = actual.marcas if marcas is None else _validar_marcas(marcas)
@@ -220,7 +225,8 @@ def guardar(
     partes_carpeta = _carpeta_relativa(actual.tipo, actual.carpeta if carpeta is None else carpeta)
 
     nuevo = Documento(
-        id=actual.id, titulo=nuevo_titulo, tipo=actual.tipo, carpeta="/".join(partes_carpeta),
+        id=actual.id, titulo=nuevo_titulo, descripcion=nueva_descripcion, tipo=actual.tipo,
+        carpeta="/".join(partes_carpeta),
         cuerpo=nuevo_cuerpo, creado=actual.creado, actualizado=_ahora_iso(),
         clase=nueva_clase, marcas=nuevas_marcas, salida=actual.salida,
         estado=nuevo_estado, etiquetas=nuevas_etiquetas, pipelines=nuevos_pipelines,

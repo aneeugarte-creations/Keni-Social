@@ -1,5 +1,6 @@
 ---
-titulo: "Noticias · Fusión de historias (mismo evento)"
+titulo: "Fusión"
+descripcion: "Agrupa historias del mismo evento (deduplicación semántica del pool de noticias)."
 tipo: prompt
 carpeta: "noticias"
 creado: 2026-06-08T00:00:00+00:00

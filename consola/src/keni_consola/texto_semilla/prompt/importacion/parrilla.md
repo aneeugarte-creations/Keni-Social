@@ -1,5 +1,6 @@
 ---
-titulo: "Importación · Rota/Parrilla (operaciones)"
+titulo: "Importar parrilla"
+descripcion: "Interpreta una parrilla/rota de operaciones para importarla."
 tipo: prompt
 carpeta: "importacion"
 creado: 2026-06-08T00:00:00+00:00

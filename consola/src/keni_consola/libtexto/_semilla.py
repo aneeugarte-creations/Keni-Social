@@ -61,13 +61,16 @@ def obtener_semilla(doc_id: str) -> Documento | None:
     tipo = partes[0]
     titulo = meta.get("titulo")
     titulo = titulo.strip() if isinstance(titulo, str) and titulo.strip() else partes[-1].replace("-", " ")
+    descripcion = meta.get("descripcion")
+    descripcion = descripcion.strip() if isinstance(descripcion, str) else ""
     clase = meta.get("clase") if isinstance(meta.get("clase"), str) and meta.get("clase") in CLASES else ""
     marcas_crudas = meta.get("marcas")
     marcas = [m for m in marcas_crudas if isinstance(m, str)] if isinstance(marcas_crudas, list) else []
     rol = meta.get("rol")
     rol = rol if tipo == "prompt" and isinstance(rol, str) and rol in ROLES_PROMPT else ""
     return Documento(
-        id=doc_id, titulo=titulo, tipo=tipo, carpeta="/".join(partes[1:-1]), cuerpo=cuerpo,
+        id=doc_id, titulo=titulo, descripcion=descripcion, tipo=tipo,
+        carpeta="/".join(partes[1:-1]), cuerpo=cuerpo,
         creado="", actualizado="", clase=clase, marcas=marcas,
         etiquetas=_lista_str(meta.get("etiquetas")), pipelines=_lista_str(meta.get("pipelines")),
         rol=rol,

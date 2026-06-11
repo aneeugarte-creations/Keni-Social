@@ -1,5 +1,6 @@
 ---
-titulo: "Brainstorming evergreen (evergreen)"
+titulo: "Evergreen"
+descripcion: "Propone ideas de contenido evergreen para una marca."
 tipo: prompt
 carpeta: ""
 creado: 2026-06-02T00:00:00+00:00

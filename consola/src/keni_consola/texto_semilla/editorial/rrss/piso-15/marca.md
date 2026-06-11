@@ -1,13 +1,12 @@
 ---
-titulo: "Marca · Piso 15"
+titulo: "Identidad · Piso 15"
+descripcion: "Qué es Piso 15, qué cubre y su posicionamiento. Referencia para redactar el copy."
 tipo: editorial
 clase: marca
 marcas: [piso-15]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---
-
-# Piso 15
 
 Piso 15 es la marca de podcast del portafolio. El producto es la conversación —episodios con invitados, charlas, entrevistas largas— y sus mejores momentos. Las redes son el escaparate que invita a escuchar o ver el episodio completo. Su prioridad es que escuchen/vean el episodio; los clips que enganchan son la clave.
 

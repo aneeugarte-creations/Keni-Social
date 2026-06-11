@@ -1,13 +1,12 @@
 ---
-titulo: "Plataformas · Fundación"
+titulo: "Formato por red · Fundación"
+descripcion: "Ajustes de formato por red propios de Fundación, sobre el formato común."
 tipo: editorial
-clase: 
+clase: plataforma
 marcas: [fundacion]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---
-
-# Plataformas · Fundación
 
 Notas de formato por red propias de Fundación. La voz de la comunidad y el impacto real son el centro de cada pieza. Sobriedad también en el formato: menos artificio, más historia. (Sin datos de Metricool en el último mes; convenciones de marca, a calibrar con datos.)
 
