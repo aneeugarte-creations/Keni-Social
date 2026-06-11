@@ -15,6 +15,11 @@ from ._config_comun import (
     ENV_AFP_CLIENT_ID,
     ENV_AFP_CLIENT_SECRET,
     ENV_AUTO_PROGRAMAR,
+    ENV_CLASIFICAR_MARCA_IA,
+    ENV_MARCAS_ACTIVAS,
+    ENV_MARCA_NOTICIAS,
+    MARCAS_ACTIVAS_DEF,
+    MARCA_NOTICIAS_DEF,
     ENV_CLUSTER_BREAKING_FUENTES,
     ENV_BREAKING_EXTRA_DIA,
     ENV_CLUSTER_BREAKING_PESO,
@@ -124,6 +129,36 @@ def ingesta_activa() -> bool:
     SOLO LEE feeds públicos y persiste artículos; no genera ni publica nada.
     """
     return _crudo(ENV_PIPELINE_SELECCION).lower() in _VERDADEROS
+
+
+def clasificar_marca_ia() -> bool:
+    """True si un BREAKING sin marca se clasifica con Haiku (`KENI_CLASIFICAR_MARCA_IA`).
+
+    Def OFF: la clasificación por IA gasta tokens, así que se activa a propósito. Con OFF el
+    comportamiento es el de siempre (solo encaje por vocabulario); los breakings que no casen
+    siguen sin marca hasta encenderlo.
+    """
+    return _crudo(ENV_CLASIFICAR_MARCA_IA).lower() in _VERDADEROS
+
+
+def marcas_activas() -> list[str]:
+    """Marcas CANDIDATAS del encaje automático (`KENI_MARCAS_ACTIVAS`, CSV de ids; def piloto).
+
+    Orden estable y sin duplicados. NO valida contra el catálogo (lo hace quien la usa): así
+    este módulo no importa `marcas` y evita ciclos.
+    """
+    crudo = _crudo(ENV_MARCAS_ACTIVAS) or MARCAS_ACTIVAS_DEF
+    vistas: list[str] = []
+    for parte in crudo.split(","):
+        m = parte.strip()
+        if m and m not in vistas:
+            vistas.append(m)
+    return vistas
+
+
+def marca_noticias() -> str:
+    """Marca de NOTICIAS GENERALES (catch-all del encaje) (`KENI_MARCA_NOTICIAS`, def 'unotv')."""
+    return (_crudo(ENV_MARCA_NOTICIAS) or MARCA_NOTICIAS_DEF).strip()
 
 
 def ingesta_batch() -> int:

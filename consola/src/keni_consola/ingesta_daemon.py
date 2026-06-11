@@ -203,6 +203,41 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
         _log.warning("ingesta_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
 
 
+def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
+    """Asigna marca a un BREAKING sin marca con Haiku. '' si no hay candidatas válidas.
+
+    Las candidatas son `config.marcas_activas()` (validadas contra el catálogo); el fallback
+    es `config.marca_noticias()` (o la primera candidata). Best-effort: cualquier fallo del
+    clasificador devuelve el fallback. Sella la actividad IA (coste visible en Producción).
+    """
+    from .dominio import clasificador_marca
+
+    activas = [m for m in config.marcas_activas() if marcas.es_marca(m)]
+    if not activas:
+        return ""
+    fallback = config.marca_noticias()
+    if fallback not in activas:
+        fallback = activas[0]
+    candidatas = [(m, marcas.etiqueta_de(m)) for m in activas]
+    try:
+        marca = clasificador_marca.clasificar_marca(
+            str(cluster.get("titulo") or ""),
+            str(cluster.get("resumen") or ""),
+            candidatas,
+            fallback=fallback,
+        )
+    except Exception:  # noqa: BLE001 -- best-effort: nunca rompe el barrido de ingesta
+        _log.warning("ingesta_daemon: fallo el clasificador de marca IA.", exc_info=True)
+        return ""
+    _registrar_actividad_ia(
+        marca,
+        f"Encaje de marca — breaking → {marcas.etiqueta_de(marca)}",
+        f'{{"marca": "{marca}"}}',
+        prompt=str(cluster.get("titulo") or "")[:300],
+    )
+    return marca
+
+
 def paso_clustering() -> dict[str, Any]:
     """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
 
@@ -337,6 +372,19 @@ def paso_clustering() -> dict[str, Any]:
                         m: _palabras_relevancia(m, perfil_activo) for m in marcas.ids()
                     }
                 marca_c = clustering.marca_por_vocabulario(recalc, vocabularios)
+                if not marca_c:
+                    # Ya clasificada en un tick anterior (vocabulario o IA): preserva la
+                    # asignación en vez de re-derivarla (evita reclasificar y perder marca).
+                    marca_c = str(base.get("marca") or "")
+                if (
+                    not marca_c
+                    and bool(int(recalc.get("breaking") or 0))
+                    and config.clasificar_marca_ia()
+                ):
+                    # Última hora SIN marca: encaje por IA (Haiku) en una de las marcas
+                    # activas; cae a la de noticias si la IA duda. Así el breaking deja de
+                    # estar varado y puede salir al feed de su marca cuando esté activa.
+                    marca_c = _clasificar_marca_ia(recalc)
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
