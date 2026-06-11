@@ -437,7 +437,9 @@ export function EditorDocumento({
       </div>
       {/* ADAPTAR A OTRO FORMATO — el «Redimensionar» de Canva: control propio y VISIBLE (icono de
           redimensionar + formato actual), ya no escondido en «Más». Abre el desplegable de presets;
-          cada uno reencuadra el documento y lo abre en una pestaña nueva. */}
+          cada uno reencuadra el documento y lo abre en una pestaña nueva.
+          ABIERTO = píldora `--control-activo` (blanca con glifo naranja en la barra del editor;
+          equivale al accent fuera), distinta del hover transitorio. Mismo lenguaje en «Más». */}
       <div className="relative">
         <button
           title="Adaptar a otro formato (story, feed, horizontal…)"
@@ -445,7 +447,9 @@ export function EditorDocumento({
           aria-expanded={menuFormato}
           onClick={() => { setMenuMas(false); setMenuFormato((v) => !v); }}
           className={`flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs hover:bg-accent ${
-            menuFormato ? "bg-accent text-foreground" : "text-muted-foreground"
+            menuFormato
+              ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
+              : "text-muted-foreground"
           }`}
         >
           <Maximize2 className="h-4 w-4" />
@@ -491,7 +495,9 @@ export function EditorDocumento({
           aria-expanded={menuMas}
           onClick={() => { setMenuFormato(false); setMenuMas((v) => !v); }}
           className={`flex items-center rounded-md p-1.5 hover:bg-accent ${
-            menuMas ? "bg-accent text-foreground" : "text-muted-foreground"
+            menuMas
+              ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
+              : "text-muted-foreground"
           }`}
         >
           <MoreHorizontal className="h-4 w-4" />

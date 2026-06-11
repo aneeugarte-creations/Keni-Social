@@ -145,11 +145,20 @@ export function ControlContexto() {
         className={cn(
           "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors",
           fueraDeCasa
-            ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            // Aviso «marca ajena» vía tokens `--aviso-*`: fuera del editor resuelven a los ámbar
+            // de siempre (amber-500/60, amber-500/10, amber-700/400); en la barra naranja del
+            // editor pasan a píldora BLANCA sólida con texto ámbar-700, que sí se lee (el ámbar
+            // oscuro sobre el degradado era casi invisible, justo en el aviso de seguridad).
+            ? "border-[hsl(var(--aviso-borde))] bg-[hsl(var(--aviso-superficie))] text-[hsl(var(--aviso-texto))]"
             // `hover:bg-accent` (no `bg-muted`): en la barra del editor `--muted` es blanco para la
             // píldora translúcida; un hover a blanco sólido dejaría el texto (blanco) ilegible. El
             // token `accent` es el de hover de toda la app (gris idéntico fuera del editor).
             : "border-border bg-muted/40 text-foreground hover:bg-accent",
+          // Panel ABIERTO con el mismo lenguaje que «Más»/«Adaptar»/campana: píldora
+          // `--control-activo`. El aviso de marca ajena MANDA sobre este estado (no se pisa).
+          !fueraDeCasa &&
+            abierto &&
+            "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
         )}
       >
         <Building2 className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />

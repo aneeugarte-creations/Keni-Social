@@ -43,6 +43,22 @@
     --border: 0 0% 94%; /* #f0f0f0 lineas divisorias mas claras (como Vercel) */
     --input: 0 0% 92%;
 
+    /*
+      Tokens SEMÁNTICOS del cromo (los reasigna la barra del editor, `.topbar-editor`):
+      - `--control-activo*`: fondo/texto de un toggle ACTIVO o menú ABIERTO. Fuera del
+        editor valen EXACTAMENTE lo mismo que `--accent`/`--accent-foreground`, así los
+        componentes que los consumen se ven igual que antes en el resto de la app.
+      - `--aviso-*`: avisos ámbar (píldora «marca ajena», texto «Sin guardar»). Fuera del
+        editor replican los ámbar de Tailwind que sustituyen (amber-500/60, amber-500/10,
+        amber-700, amber-600), así el cambio es neutro fuera del scope.
+    */
+    --control-activo: 0 0% 95%;
+    --control-activo-foreground: 0 0% 9%;
+    --aviso-borde: 38 92% 50% / 0.6; /* = border-amber-500/60 */
+    --aviso-superficie: 38 92% 50% / 0.1; /* = bg-amber-500/10 */
+    --aviso-texto: 26 90% 37%; /* = text-amber-700 (aviso con superficie/píldora) */
+    --aviso-texto-plano: 32 95% 44%; /* = text-amber-600 (aviso de texto suelto) */
+
     --radius: 0.625rem; /* botones/inputs ~8px; tarjetas usan rounded-xl (12px) */
   }
 
@@ -74,6 +90,12 @@
 
     --border: 0 0% 14%; /* lineas divisorias mas sutiles */
     --input: 0 0% 16%;
+
+    /* Estado activo = accent oscuro; avisos en ámbar claro (= dark:text-amber-400). */
+    --control-activo: 0 0% 14%;
+    --control-activo-foreground: 0 0% 93%;
+    --aviso-texto: 43 96% 56%; /* = text-amber-400 */
+    --aviso-texto-plano: 43 96% 56%; /* = text-amber-400 */
   }
 }
 
@@ -124,9 +146,26 @@
     usa tokens semánticos. En vez de recolorear cada componente, REASIGNAMOS los tokens A BLANCO
     SOLO en este scope, así todo el texto e iconos se leen sobre el degradado. `--accent` (el hover
     de toda la app) pasa a un naranja más profundo para que el hover se note sobre el degradado.
+
+    CONTRATO del esquema (un solo lenguaje sobre el degradado, patrón Canva):
+      · reposo: texto/iconos BLANCOS sobre fondo transparente (nada en negro/gris);
+      · hover / estado transitorio: tinte `--accent` naranja profundo;
+      · toggle ACTIVO / menú ABIERTO: píldora BLANCA SÓLIDA con glifo naranja profundo
+        (`--control-activo*`), inequívoca y distinta del hover;
+      · CTA primaria (Exportar, «Guardar en pieza»): `--primary` blanco sólido con texto
+        naranja profundo (#dc3c00, el extremo del propio degradado);
+      · deshabilitado: blanco a baja opacidad (lo dan las utilidades disabled:opacity-*);
+      · avisos (Sin guardar, marca ajena): ámbar legible sobre el naranja vía `--aviso-*`.
   */
   .topbar-editor {
     background-image: linear-gradient(90deg, #fb7a2a 0%, #f1560f 52%, #dc3c00 100%);
+    /*
+      `color` EXPLÍCITO, no solo tokens: las custom properties se resuelven donde se DECLARA
+      la propiedad, no donde se usa. Sin esta línea, los controles sin clase de texto (campana,
+      Save, hamburguesa: cualquier Button `ghost`) heredan el `color` ya computado en `body`
+      (#171717) y salen NEGROS sobre el naranja aunque `--foreground` esté reasignado.
+    */
+    color: hsl(var(--foreground));
     --foreground: 0 0% 100%;
     --muted-foreground: 0 0% 100%;
     --muted: 0 0% 100%; /* superficies muted en blanco (el texto sigue legible); ver regla de la píldora abajo */
@@ -134,15 +173,53 @@
     --accent-foreground: 0 0% 100%;
     --border: 28 100% 92%; /* hairline cálido tenue */
     --input: 28 100% 92%;
+    /*
+      `--background` pasa al naranja central del degradado: la variante `outline` de Button
+      (Exportar secundario) deja de ser un bloque #fafafa y se funde con la barra (queda como
+      ghost con hairline), y el `ring-offset-background` del foco se funde también, dejando el
+      foco como un anillo blanco limpio (`--ring`).
+    */
+    --background: 19 88% 50%;
+    --primary: 0 0% 100%; /* CTA: píldora blanca sólida… */
+    --primary-foreground: 16 100% 43%; /* …con texto/icono #dc3c00 */
+    --ring: 0 0% 100%;
+    /* `--secondary` alineado con el accent por si un control futuro lo trae a la barra;
+       `--destructive` se deja intacto A PROPÓSITO (rojo sobre naranja no se usa aquí). */
+    --secondary: 20 100% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --control-activo: 0 0% 100%; /* activo/abierto: píldora blanca sólida… */
+    --control-activo-foreground: 16 100% 43%; /* …con glifo naranja profundo */
+    --aviso-borde: 0 0% 100%;
+    --aviso-superficie: 0 0% 100%; /* aviso con superficie = píldora blanca sólida… */
+    --aviso-texto: 26 90% 37%; /* …con texto ámbar-700, legible sobre blanco */
+    --aviso-texto-plano: 48 96% 89%; /* texto suelto: ámbar-100, legible sobre el naranja */
+  }
+  /*
+    El badge ROJO de no-leídas de la campana (`bg-red-500`) se funde con el extremo rojo-naranja
+    del degradado (#dc3c00): un anillo blanco le devuelve la silueta de alerta sin cambiar su
+    semántica. Solo aplica dentro de la barra; fuera el badge sigue igual que siempre.
+  */
+  .topbar-editor :where(.bg-red-500) {
+    box-shadow: 0 0 0 2px hsl(0 0% 100% / 0.9);
   }
   /*
     La PÍLDORA de marca (ControlContexto, `bg-muted/40`) quedaba RELLENA de blanco translúcido
     sobre el naranja: parecía un control activado/seleccionado sin estarlo. En la barra del editor
     su relleno pasa a transparente —solo el hairline la delimita, como el resto del cromo— y el
     estado real (hover/abierto) lo sigue marcando `--accent` (el `hover:` gana en especificidad).
+
+    OJO `:is()`, no `:where()`: este selector compite con la PROPIA utilidad `.bg-muted\/40`
+    por `background-color`. Con `:where()` (especificidad cero) la regla empataba a (0,1,0)
+    y PERDÍA el desempate por orden (las utilities van después en el CSS compilado): la regla
+    estaba muerta y la píldora seguía rellena. `:is()` la sube a (0,2,0) y gana siempre.
   */
-  .topbar-editor :where(.bg-muted\/40) {
+  .topbar-editor :is(.bg-muted\/40) {
     background-color: transparent;
+  }
+  /* Dentro de los paneles `bg-popover` (tokens restaurados) las superficies `bg-muted/40`
+     vuelven a su relleno normal: la regla de arriba no debe vaciarlas. */
+  .topbar-editor :is(.bg-popover) :is(.bg-muted\/40) {
+    background-color: hsl(var(--muted) / 0.4);
   }
   /*
     Los menús desplegables de la barra (selector de marca, campana, «Más», editor de muestra) se
@@ -151,6 +228,12 @@
     `bg-popover` (claro y oscuro), de modo que cada panel vuelve a ser legible.
   */
   .topbar-editor :where(.bg-popover) {
+    /*
+      `color` explícito también aquí: el texto SIN clase de color de los paneles (p. ej. el
+      título «Notificaciones» del cajón) heredaría el blanco declarado en `.topbar-editor`
+      y quedaría blanco-sobre-blanco; con esta línea re-resuelve al `--foreground` restaurado.
+    */
+    color: hsl(var(--foreground));
     --foreground: 0 0% 9%;
     --muted-foreground: 0 0% 40%;
     --muted: 0 0% 96%;
@@ -158,8 +241,23 @@
     --accent-foreground: 0 0% 9%;
     --border: 0 0% 94%;
     --input: 0 0% 92%;
+    --background: 0 0% 98%;
+    /* `--primary` restaurado: el punto «no leída» (`bg-primary`) y las filas `bg-primary/5`
+       del cajón de la campana serían blanco-sobre-blanco con el primario del scope. */
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 0 0% 9%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 9%;
+    --control-activo: 0 0% 95%;
+    --control-activo-foreground: 0 0% 9%;
+    --aviso-borde: 38 92% 50% / 0.6;
+    --aviso-superficie: 38 92% 50% / 0.1;
+    --aviso-texto: 26 90% 37%;
+    --aviso-texto-plano: 32 95% 44%;
   }
   .dark .topbar-editor :where(.bg-popover) {
+    color: hsl(var(--foreground));
     --foreground: 0 0% 93%;
     --muted-foreground: 0 0% 56%;
     --muted: 0 0% 11%;
@@ -167,5 +265,15 @@
     --accent-foreground: 0 0% 93%;
     --border: 0 0% 14%;
     --input: 0 0% 16%;
+    --background: 0 0% 4%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --ring: 0 0% 83%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 93%;
+    --control-activo: 0 0% 14%;
+    --control-activo-foreground: 0 0% 93%;
+    --aviso-texto: 43 96% 56%;
+    --aviso-texto-plano: 43 96% 56%;
   }
 }

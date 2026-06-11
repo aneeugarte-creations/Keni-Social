@@ -141,10 +141,17 @@ export function CampanaNotificaciones() {
 
   return (
     <div ref={contenedorRef} className="relative">
+      {/* Cajón ABIERTO marcado con el mismo lenguaje que «Más»/«Adaptar»: píldora
+          `--control-activo` (blanca con glifo naranja en la barra del editor; fuera de
+          ella equivale al accent estándar). En reposo, ghost: hereda el color del scope. */}
       <Button
         variant="ghost"
         size="icon"
-        className="relative h-8 w-8"
+        className={cn(
+          "relative h-8 w-8",
+          abierto &&
+            "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
+        )}
         onClick={alternar}
         aria-label={noLeidas > 0 ? `Notificaciones (${noLeidas} sin leer)` : "Notificaciones"}
         aria-expanded={abierto}

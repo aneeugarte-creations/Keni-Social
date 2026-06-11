@@ -94,13 +94,19 @@ function BotonToggle({
 }) {
   return (
     <div className="relative flex items-center">
+      {/* ACTIVO = píldora `--control-activo` (en la barra del editor: blanca sólida con glifo
+          naranja, distinta del hover accent; fuera del editor equivale al accent de siempre).
+          El chevron comparte el fondo cuando está activo para que el par toggle+chevron se lea
+          como UNA sola píldora (rounded-l + rounded-r), no como un activo partido por la mitad. */}
       <button
         title={titulo}
         aria-label={etiqueta}
         aria-pressed={activo}
         onClick={onToggle}
         className={`flex items-center rounded-l-md py-1.5 pl-1.5 pr-1 hover:bg-accent ${
-          activo ? "bg-accent text-foreground" : "text-muted-foreground"
+          activo
+            ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
+            : "text-muted-foreground"
         }`}
       >
         <Icono className="h-4 w-4" />
@@ -111,7 +117,9 @@ function BotonToggle({
         aria-expanded={editando}
         onClick={onEditar}
         className={`rounded-r-md py-1.5 pl-0.5 pr-1 hover:bg-accent ${
-          activo ? "text-foreground" : "text-muted-foreground"
+          activo
+            ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
+            : "text-muted-foreground"
         }`}
       >
         <ChevronDown className="h-3.5 w-3.5" />

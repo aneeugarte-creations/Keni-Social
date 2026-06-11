@@ -407,11 +407,13 @@ export default function Video() {
           no hay borrador en edición. */}
       {seccion !== "gestor" && (
         <AccionesPaginaFin>
+          {/* «Sin guardar» en ámbar vía `--aviso-texto-plano`: amber-600/400 de siempre fuera
+              del editor, ámbar-100 claro sobre la barra naranja (mismo criterio que Imagen). */}
           <span
             aria-live="polite"
             className={`whitespace-nowrap text-xs ${
               !guardando && !composicionId
-                ? "text-amber-600 dark:text-amber-400"
+                ? "text-[hsl(var(--aviso-texto-plano))]"
                 : "text-muted-foreground"
             }`}
           >

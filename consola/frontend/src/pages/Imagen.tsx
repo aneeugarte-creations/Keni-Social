@@ -776,11 +776,14 @@ export default function Imagen() {
             accionesEnCabecera
             accionesInicio={
               <>
-                {/* Estado de guardado LEGIBLE (texto, no glifos montados sobre un icono). */}
+                {/* Estado de guardado LEGIBLE (texto, no glifos montados sobre un icono).
+                    «Sin guardar» avisa en ámbar vía `--aviso-texto-plano`: amber-600/400 de
+                    siempre fuera del editor, y ámbar-100 claro dentro de la barra naranja
+                    (el amber-600 sobre el degradado era casi invisible). */}
                 <span
                   aria-live="polite"
                   className={`mr-0.5 hidden whitespace-nowrap text-xs md:inline ${
-                    !guardando && sucia ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+                    !guardando && sucia ? "text-[hsl(var(--aviso-texto-plano))]" : "text-muted-foreground"
                   }`}
                 >
                   {guardando ? "Guardando…" : sucia ? "Sin guardar" : "Guardado"}
