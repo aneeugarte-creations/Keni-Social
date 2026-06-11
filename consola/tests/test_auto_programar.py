@@ -210,8 +210,13 @@ def test_evergreen_diario_no_reemite_si_hoy_ya_hay_green(cliente, ahora_fijo, mo
     monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1")
     _green_aprobado()
     # El equipo YA creo un green hoy (cuenta en la ventana): el automatismo no anade otro.
-    repos.crear_contenido(
+    # Es una publicacion real -> lleva su pieza por red (un tema sin piezas no contaria).
+    green_hoy = repos.crear_contenido(
         clase="contenido", titulo="Green de hoy", marca="unotv", flujo="evergreen",
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=green_hoy["id"], red="x", copy="Green de hoy", estado="aprobado",
+        falta_revision=False,
     )
     assert evergreen_diario.barrer() == 0
 
