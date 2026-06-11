@@ -16,6 +16,10 @@ import type { PropsCuerpoCapa } from "./tipos";
 // Gotham libre de los titulares deportivos, cubre 300..900 completos; Oswald cubre 300..700 — el
 // "Anton Light" honesto es Oswald + Ligera 300, porque Anton solo existe en un peso). Las familias
 // que no tengan ese peso caen al más cercano en AMBOS lados (inocuo: previa y pieza final coinciden).
+// Mapeo honesto de las comerciales pedidas por diseño (no embebibles) a sus gemelas OFL:
+// Univers Condensed -> Roboto Condensed (300/400/700), Proxima Nova Bold -> Mulish + Negrita 700
+// (400/700/800), Avenir Next Heavy -> Nunito Sans + Black 900 (400/700/900), y Poppins cubre
+// 300..900 completos (+cursiva real) como geométrica estilo Gotham/Proxima.
 const PESOS: { valor: number; etiqueta: string }[] = [
   { valor: 300, etiqueta: "Ligera (300)" },
   { valor: 400, etiqueta: "Regular (400)" },

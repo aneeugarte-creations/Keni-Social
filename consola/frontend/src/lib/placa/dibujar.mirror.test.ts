@@ -848,13 +848,18 @@ import { FAMILIAS_CON_CURSIVA, tieneCursiva } from "./dibujar.mjs";
 
 describe("cursiva (itálica real, nunca sintética)", () => {
   it("el catálogo de familias con itálica es el esperado y `tieneCursiva` lo refleja", () => {
-    expect(FAMILIAS_CON_CURSIVA).toEqual(["Barlow", "Barlow Condensed", "Montserrat", "Lora", "Exo 2", "Lato"]);
+    expect(FAMILIAS_CON_CURSIVA).toEqual(["Barlow", "Barlow Condensed", "Montserrat", "Lora", "Exo 2", "Lato", "Poppins"]);
     expect(tieneCursiva("Barlow")).toBe(true);
     expect(tieneCursiva("Lora")).toBe(true);
-    // Sin cara itálica registrada: ni Anton/Oswald/Archivo Black ni una tipografía de marca.
+    expect(tieneCursiva("Poppins")).toBe(true);
+    // Sin cara itálica registrada: ni Anton/Oswald/Archivo Black, ni las gemelas OFL solo-upright
+    // (Roboto Condensed/Mulish/Nunito Sans), ni una tipografía de marca.
     expect(tieneCursiva("Anton")).toBe(false);
     expect(tieneCursiva("Oswald")).toBe(false);
     expect(tieneCursiva("Archivo Black")).toBe(false);
+    expect(tieneCursiva("Roboto Condensed")).toBe(false);
+    expect(tieneCursiva("Mulish")).toBe(false);
+    expect(tieneCursiva("Nunito Sans")).toBe(false);
     expect(tieneCursiva("Mi Fuente De Marca")).toBe(false);
   });
 

@@ -24,9 +24,10 @@ export const MAPA_MEZCLA = {
 // servidor/`fuentes.mjs` y webfont itálica en el editor). Única fuente de verdad cliente/servidor:
 // el editor deshabilita el botón de cursiva fuera de esta lista y ambos renders IGNORAN el flag
 // para el resto (Skia no sintetiza oblicuas, y una oblicua sintética del navegador rompería la
-// regla previa==export). Anton/Archivo Black/Oswald y las tipografías propias de marca (un solo
-// TTF, sin cara itálica) quedan fuera.
-export const FAMILIAS_CON_CURSIVA = ["Barlow", "Barlow Condensed", "Montserrat", "Lora", "Exo 2", "Lato"];
+// regla previa==export). Anton/Archivo Black/Oswald, las gemelas OFL solo-upright (Roboto
+// Condensed, Mulish, Nunito Sans: itálicas no registradas) y las tipografías propias de marca
+// (un solo TTF, sin cara itálica) quedan fuera.
+export const FAMILIAS_CON_CURSIVA = ["Barlow", "Barlow Condensed", "Montserrat", "Lora", "Exo 2", "Lato", "Poppins"];
 
 // ¿La familia REAL (ya resuelta por `familiaReal`) tiene itálica registrada?
 export function tieneCursiva(familia) {

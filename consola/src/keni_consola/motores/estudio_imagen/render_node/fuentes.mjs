@@ -26,6 +26,11 @@ const DIR_FUENTES = join(_aqui, "..", "fuentes");
 // CURSIVA: las caras *Italic* se registran bajo la MISMA familia; Skia elige la itálica cuando el
 // font string lleva `italic` (Skia NUNCA sintetiza oblicuas, por eso hacen falta los TTF reales).
 // Anton / Archivo Black / Oswald no tienen itálica (ver FAMILIAS_CON_CURSIVA en dibujar.mjs).
+// Gemelas OFL de comerciales (las comerciales NO se pueden embeber): Poppins 300..900 (+itálicas;
+// geométrica estilo Gotham/Proxima), Roboto Condensed 300/400/700 (≈ Univers Condensed),
+// Mulish 400/700/800 (≈ Proxima Nova; su Bold es la cara pedida) y Nunito Sans 400/700/900
+// (≈ Avenir Next; el 900 hace de "Heavy"). Solo uprights salvo Poppins: registrar una familia
+// sin itálica la deja FUERA de FAMILIAS_CON_CURSIVA (botón I deshabilitado honesto).
 const ARCHIVOS = [
   ["Barlow", "Barlow-Regular.ttf"],
   ["Barlow", "Barlow-SemiBold.ttf"],
@@ -78,10 +83,33 @@ const ARCHIVOS = [
   ["Lato", "Lato-Italic.ttf"],
   ["Lato", "Lato-BoldItalic.ttf"],
   ["Lato", "Lato-BlackItalic.ttf"],
+  ["Poppins", "Poppins-Light.ttf"],
+  ["Poppins", "Poppins-Regular.ttf"],
+  ["Poppins", "Poppins-Medium.ttf"],
+  ["Poppins", "Poppins-SemiBold.ttf"],
+  ["Poppins", "Poppins-Bold.ttf"],
+  ["Poppins", "Poppins-ExtraBold.ttf"],
+  ["Poppins", "Poppins-Black.ttf"],
+  ["Poppins", "Poppins-LightItalic.ttf"],
+  ["Poppins", "Poppins-Italic.ttf"],
+  ["Poppins", "Poppins-MediumItalic.ttf"],
+  ["Poppins", "Poppins-SemiBoldItalic.ttf"],
+  ["Poppins", "Poppins-BoldItalic.ttf"],
+  ["Poppins", "Poppins-ExtraBoldItalic.ttf"],
+  ["Poppins", "Poppins-BlackItalic.ttf"],
+  ["Roboto Condensed", "RobotoCondensed-Light.ttf"],
+  ["Roboto Condensed", "RobotoCondensed-Regular.ttf"],
+  ["Roboto Condensed", "RobotoCondensed-Bold.ttf"],
+  ["Mulish", "Mulish-Regular.ttf"],
+  ["Mulish", "Mulish-Bold.ttf"],
+  ["Mulish", "Mulish-ExtraBold.ttf"],
+  ["Nunito Sans", "NunitoSans-Regular.ttf"],
+  ["Nunito Sans", "NunitoSans-Bold.ttf"],
+  ["Nunito Sans", "NunitoSans-Black.ttf"],
 ];
 
 // Catálogo de familias ofrecidas (el editor mantiene su propia copia para el selector).
-export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora", "Exo 2", "Lato"];
+export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora", "Exo 2", "Lato", "Poppins", "Roboto Condensed", "Mulish", "Nunito Sans"];
 
 let _registradas = false;
 

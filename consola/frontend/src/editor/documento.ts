@@ -248,6 +248,10 @@ export const CATALOGO_FUENTES = [
   "Lora",
   "Exo 2",
   "Lato",
+  "Poppins",
+  "Roboto Condensed",
+  "Mulish",
+  "Nunito Sans",
 ] as const;
 
 // ---------------------------------------------------------------------------

@@ -65,6 +65,90 @@ describe("espejo del registro de fuentes (front FontFace ↔ back Skia)", () => 
     expect(ttfs(front).filter((t) => t.includes("Variable"))).toEqual([]);
   });
 
+  // Gemelas OFL de las comerciales pedidas por diseño (Univers Condensed, Proxima Nova, Avenir
+  // Next y la línea Gotham/Proxima geométrica NO se pueden embeber: son de pago). Cada gemela
+  // registra caras ESTÁTICAS reales por peso; Poppins además con su itálica real por cara
+  // (las otras tres van solo-upright: ver el guard de FAMILIAS_CON_CURSIVA más abajo).
+  it("Poppins (≈ Gotham/Proxima geométrica) registra 300..900 con sus itálicas", () => {
+    for (const cara of [
+      "Poppins-Light.ttf", "Poppins-Regular.ttf", "Poppins-Medium.ttf", "Poppins-SemiBold.ttf",
+      "Poppins-Bold.ttf", "Poppins-ExtraBold.ttf", "Poppins-Black.ttf",
+      "Poppins-LightItalic.ttf", "Poppins-Italic.ttf", "Poppins-MediumItalic.ttf",
+      "Poppins-SemiBoldItalic.ttf", "Poppins-BoldItalic.ttf", "Poppins-ExtraBoldItalic.ttf",
+      "Poppins-BlackItalic.ttf",
+    ]) {
+      expect(ttfs(front), cara).toContain(cara);
+    }
+  });
+
+  it("Roboto Condensed (≈ Univers Condensed), Mulish (≈ Proxima Nova) y Nunito Sans (≈ Avenir Next) registran sus pesos reales", () => {
+    for (const cara of [
+      "RobotoCondensed-Light.ttf", "RobotoCondensed-Regular.ttf", "RobotoCondensed-Bold.ttf",
+      "Mulish-Regular.ttf", "Mulish-Bold.ttf", "Mulish-ExtraBold.ttf",
+      "NunitoSans-Regular.ttf", "NunitoSans-Bold.ttf", "NunitoSans-Black.ttf",
+    ]) {
+      expect(ttfs(front), cara).toContain(cara);
+    }
+  });
+
+  // El nombre del archivo no basta: un TTF VARIABLE renombrado a "-Bold.ttf" colaría. Se abren
+  // los BYTES de cada cara de las gemelas nuevas en AMBOS directorios (public/fonts del front y
+  // motores/estudio_imagen/fuentes del back) y se comprueba que el espejo es byte-idéntico y que
+  // ninguna trae tabla `fvar` (estática de verdad: Skia pintaría solo la instancia por defecto).
+  it("cada cara nueva existe en ambos directorios, byte-idéntica y SIN tabla fvar", () => {
+    const dirFront = resolve(aqui, "../../../public/fonts");
+    const dirBack = resolve(aqui, "../../../../src/keni_consola/motores/estudio_imagen/fuentes");
+    const tieneFvar = (buf: Buffer): boolean => {
+      const n = buf.readUInt16BE(4);
+      for (let i = 0; i < n; i++) {
+        if (buf.toString("ascii", 12 + i * 16, 16 + i * 16) === "fvar") return true;
+      }
+      return false;
+    };
+    const nuevas = ttfs(front).filter((t) =>
+      /^(Poppins|RobotoCondensed|Mulish|NunitoSans)-/.test(t),
+    );
+    expect(nuevas.length).toBe(23); // 14 Poppins + 3 + 3 + 3
+    for (const cara of nuevas) {
+      const enFront = readFileSync(resolve(dirFront, cara));
+      const enBack = readFileSync(resolve(dirBack, cara));
+      expect(enFront.equals(enBack), `${cara}: espejo divergente`).toBe(true);
+      expect(tieneFvar(enFront), `${cara}: trae tabla fvar`).toBe(false);
+    }
+  });
+
+  // FAMILIAS_CON_CURSIVA es la única fuente de verdad del botón I: Poppins entra (itálicas
+  // reales registradas) y las gemelas solo-upright quedan FUERA (sin cara itálica en ningún
+  // lado, el botón se deshabilita honesto en vez de sintetizar una oblicua solo en la previa).
+  it("Poppins tiene cursiva; Roboto Condensed/Mulish/Nunito Sans quedan fuera (sin itálica registrada)", () => {
+    expect(FAMILIAS_CON_CURSIVA).toContain("Poppins");
+    for (const familia of ["Roboto Condensed", "Mulish", "Nunito Sans"]) {
+      expect(FAMILIAS_CON_CURSIVA, familia).not.toContain(familia);
+      expect(readFileSync(front, "utf-8")).not.toMatch(
+        new RegExp(`familia: "${familia}", archivo: "[\\w-]*Italic`),
+      );
+    }
+  });
+
+  // Las familias nuevas deben ser ELEGIBLES en la UI: el selector de Fuente del editor se nutre
+  // de CATALOGO_FUENTES (documento.ts / specPlantilla.ts) y el servidor publica su CATALOGO en
+  // fuentes.mjs. Si una copia se queda atrás, la fuente existe pero nadie puede elegirla (o la
+  // UI ofrece una familia que el export no registra).
+  it("las tres copias del catálogo de familias coinciden e incluyen las gemelas nuevas", () => {
+    const catalogo = (src: string): string[] => {
+      const m = src.match(/export const CATALOGO(?:_FUENTES)? = \[([^\]]+)\]/);
+      return (m![1].match(/"([^"]+)"/g) ?? []).map((s) => s.slice(1, -1));
+    };
+    const enBack = catalogo(readFileSync(back, "utf-8"));
+    const enDocumento = catalogo(readFileSync(resolve(aqui, "../../editor/documento.ts"), "utf-8"));
+    const enSpec = catalogo(readFileSync(resolve(aqui, "../specPlantilla.ts"), "utf-8"));
+    expect(enDocumento).toEqual(enBack);
+    expect(enSpec).toEqual(enBack);
+    for (const familia of ["Poppins", "Roboto Condensed", "Mulish", "Nunito Sans"]) {
+      expect(enBack, familia).toContain(familia);
+    }
+  });
+
   // CURSIVA real end-to-end: cada familia de FAMILIAS_CON_CURSIVA (dibujar.mjs, la lista que
   // habilita el botón del editor) debe registrar una cara *Italic* en AMBOS lados. Si este guard
   // falla, el editor ofrecería una cursiva que el export no puede pintar (o al revés).
