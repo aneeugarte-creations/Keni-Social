@@ -24,11 +24,16 @@ import {
   useLotes,
 } from "@/components/plantillas/FiltroPlantillas";
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
-import { agruparPorCategoria } from "@/lib/categoriasPlantilla";
+import { agruparPorCategoria, normalizarCategoria } from "@/lib/categoriasPlantilla";
 
 import { Telon, useCerrarConEscape } from "./Telon";
 
 type FiltroTipo = "foto" | "miniatura";
+
+/** Clase Tailwind (estática) de columnas para la rejilla uniforme de reordenación. */
+function claseColumnas(columnas: number): string {
+  return columnas >= 4 ? "grid-cols-4" : columnas === 3 ? "grid-cols-3" : "grid-cols-2";
+}
 
 // Agrupa plantillas por marca (orden alfabético por nombre de marca). Para la vista «Todas»,
 // donde conviven varias marcas: amontonarlas en una sola rejilla no aporta nada, así que se
@@ -73,6 +78,13 @@ interface PropsContenido {
   onRotar?: (p: PlantillaDiseno, rotar: boolean) => void;
   /** Si se omite, el badge de categoría es solo informativo (modo SELECTOR). */
   onCategorizar?: (p: PlantillaDiseno, categoria: string) => void;
+  /**
+   * Si se pasa (modo GESTIÓN), las tarjetas se pueden REORDENAR arrastrándolas dentro de su sección
+   * (misma marca + categoría), en una rejilla uniforme. Recibe la lista COMPLETA de ids en el nuevo
+   * orden (el llamante la persiste). Se desactiva mientras hay una búsqueda activa (subconjunto
+   * arbitrario sin posición clara).
+   */
+  onReordenar?: (ids: string[]) => void;
   /** Si se pasa, el selector de tipo queda fijo y no se puede cambiar (ej: DialogoEditar). */
   tipoFijo?: "foto" | "miniatura";
   /** Modo PANEL estrecho (columna del rail ~350px): rejilla fija de 2 columnas y padding menor. */
@@ -95,6 +107,7 @@ export function ContenidoPlantillas({
   onRenombrar,
   onRotar,
   onCategorizar,
+  onReordenar,
   tipoFijo,
   compacto,
   agruparPorMarca,
@@ -104,6 +117,9 @@ export function ContenidoPlantillas({
   const [editVal, setEditVal] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(tipoFijo ?? "foto");
   const [imagenRota, setImagenRota] = useState<Set<string>>(new Set());
+  // Drag-and-drop de reordenación: id que se arrastra y id sobre el que se soltaría (para el realce).
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
 
   // Ref para rastrear si el commit ya se ejecutó (evita doble PATCH en blur después de Enter).
   const commitHecho = useRef(false);
@@ -146,6 +162,29 @@ export function ContenidoPlantillas({
   const columnasGaleria = useColumnasGaleria();
   const columnas = compacto ? 2 : columnasGaleria;
 
+  // ── REORDENAR (drag-and-drop) ─────────────────────────────────────────────────────────────────
+  // Activo solo en modo gestión (`onReordenar`) y SIN búsqueda (un subconjunto buscado no tiene
+  // posición clara). En rejilla uniforme: se arrastra una tarjeta y se suelta sobre otra de la
+  // MISMA sección (misma marca + categoría); la arrastrada se inserta ANTES de la destino. El
+  // llamante recibe la lista COMPLETA de ids en el nuevo orden y la persiste.
+  const dndActivo = !!onReordenar && !q;
+  const claveSeccion = (p: PlantillaDiseno) => `${p.marca}|${normalizarCategoria(p.categoria)}`;
+  const soltarSobre = (destinoId: string) => {
+    const origenId = arrastrando;
+    setArrastrando(null);
+    setSobre(null);
+    if (!origenId || origenId === destinoId || !onReordenar) return;
+    const origen = plantillas.find((p) => p.id === origenId);
+    const destino = plantillas.find((p) => p.id === destinoId);
+    // Solo dentro de la misma sección: arrastrar entre marcas/categorías no recoloca ni recategoriza.
+    if (!origen || !destino || claveSeccion(origen) !== claveSeccion(destino)) return;
+    const ids = plantillas.filter((p) => p.id !== origenId).map((p) => p.id);
+    const idx = ids.indexOf(destinoId);
+    if (idx < 0) return;
+    ids.splice(idx, 0, origenId);
+    onReordenar(ids);
+  };
+
   const commit = (p: PlantillaDiseno) => {
     // Si el commit ya se hizo, noop. Así evitamos doble PATCH: Enter ejecuta commit,
     // luego onBlur sería un noop.
@@ -163,7 +202,46 @@ export function ContenidoPlantillas({
   // reserva el alto exacto antes de cargar la imagen: placeholder sin layout shift y altura
   // variable del masonry) + título/acciones debajo. Hover: elevación + scale sutil (~150ms).
   const tarjeta = (p: PlantillaDiseno) => (
-    <div key={p.id} className="group relative">
+    <div
+      key={p.id}
+      data-plantilla-id={p.id}
+      draggable={dndActivo || undefined}
+      onDragStart={
+        dndActivo
+          ? (e) => {
+              setArrastrando(p.id);
+              e.dataTransfer.effectAllowed = "move";
+            }
+          : undefined
+      }
+      onDragEnter={
+        dndActivo
+          ? () => {
+              if (!arrastrando || arrastrando === p.id) return;
+              const o = plantillas.find((x) => x.id === arrastrando);
+              if (o && claveSeccion(o) === claveSeccion(p)) setSobre(p.id);
+            }
+          : undefined
+      }
+      onDragOver={
+        dndActivo
+          ? (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+            }
+          : undefined
+      }
+      onDragLeave={dndActivo ? () => setSobre((s) => (s === p.id ? null : s)) : undefined}
+      onDrop={dndActivo ? (e) => { e.preventDefault(); soltarSobre(p.id); } : undefined}
+      onDragEnd={dndActivo ? () => { setArrastrando(null); setSobre(null); } : undefined}
+      className={`group relative rounded transition-[outline] ${dndActivo ? "cursor-move" : ""} ${
+        arrastrando === p.id ? "opacity-50" : ""
+      } ${
+        sobre === p.id && arrastrando && arrastrando !== p.id
+          ? "outline-dashed outline-2 outline-offset-2 outline-primary"
+          : "outline-none"
+      }`}
+    >
       <button
         onClick={() => onCargar(p)}
         title={`Cargar «${p.nombre}»`}
@@ -181,6 +259,7 @@ export function ContenidoPlantillas({
               src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
               alt={p.nombre}
               loading="lazy"
+              draggable={false}
               onError={() => setImagenRota((prev) => new Set([...prev, p.id]))}
               className="h-full w-full object-contain"
             />
@@ -340,11 +419,19 @@ export function ContenidoPlantillas({
                               {grupo.etiqueta}
                             </Cabecera>
                           )}
-                          <MasonryPlantillas
-                            plantillas={grupo.plantillas}
-                            columnas={columnas}
-                            render={tarjeta}
-                          />
+                          {dndActivo ? (
+                            // Rejilla UNIFORME (filas/columnas regulares) para que arrastrar a una
+                            // posición exacta sea predecible (el masonry por columnas no lo es).
+                            <div className={`grid gap-3 ${claseColumnas(columnas)}`}>
+                              {grupo.plantillas.map((p) => tarjeta(p))}
+                            </div>
+                          ) : (
+                            <MasonryPlantillas
+                              plantillas={grupo.plantillas}
+                              columnas={columnas}
+                              render={tarjeta}
+                            />
+                          )}
                         </section>
                       );
                     })}
@@ -368,11 +455,7 @@ export function ContenidoPlantillas({
         )}
         {/* «Lienzo en blanco» va al FINAL de la galería (no el primero), en todos los estados. */}
         {onLienzoBlanco && (
-          <div
-            className={`mt-6 grid gap-3 ${
-              columnas >= 4 ? "grid-cols-4" : columnas === 3 ? "grid-cols-3" : "grid-cols-2"
-            }`}
-          >
+          <div className={`mt-6 grid gap-3 ${claseColumnas(columnas)}`}>
             <button
               onClick={onLienzoBlanco}
               className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground"

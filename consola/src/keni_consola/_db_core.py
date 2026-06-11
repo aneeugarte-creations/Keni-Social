@@ -975,6 +975,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         lineas       TEXT NOT NULL DEFAULT '[]',
         activo       INTEGER NOT NULL DEFAULT 1,
         rotar        INTEGER NOT NULL DEFAULT 0,
+        orden        INTEGER NOT NULL DEFAULT 0,
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',
         creado       TEXT NOT NULL DEFAULT '',
@@ -984,6 +985,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_marca ON plantillas_diseno (marca)",
     "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_categoria ON plantillas_diseno (categoria)",
     "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_tipo ON plantillas_diseno (tipo)",
+    # Orden MANUAL del equipo dentro de cada marca (drag-and-drop de la galería). `orden`=0 es el
+    # default «sin ordenar» (filas legadas y plantillas nuevas), que cae a «recientes primero» por
+    # el `creado DESC` secundario; al reordenar se asignan 1..N en la secuencia exacta elegida.
+    "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_orden ON plantillas_diseno (marca, orden)",
     # BLOQUES (almacén de capas reutilizables): un bloque es un GRUPO de capas con sentido propio
     # (lower-third, módulo de infografía, pleca de marca) que se suelta en cualquier documento.
     # `capas` es un JSON con la lista de capas (mismo esquema que `documento.capas`). Se etiqueta
@@ -1919,6 +1924,13 @@ def _migrar_columnas_plantillas_diseno(con: Any) -> None:
     if "rotar" not in cols:
         con.execute(
             "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS rotar INTEGER NOT NULL DEFAULT 0"
+        )
+    # `orden`: posición MANUAL del equipo dentro de la marca (drag-and-drop de la galería). Las
+    # existentes reciben 0 ("sin ordenar" → recientes primero por el `creado DESC` secundario), que
+    # preserva el comportamiento previo hasta que alguien las reordena a mano.
+    if "orden" not in cols:
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 0"
         )
     # `categoria` pasa de DEFAULT 'post' a 'general' (el fallback del catálogo de categorías).
     # Solo cambia el DEFAULT (metadato): las filas existentes NO se reescriben (el legado "post"

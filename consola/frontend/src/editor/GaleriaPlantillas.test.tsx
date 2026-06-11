@@ -56,6 +56,7 @@ const FOTO: PlantillaDiseno = {
   lineas: [],
   activo: true,
   rotar: false,
+  orden: 0,
   marca_nombre: "UnoTV",
   autor_id: "u1",
   autor_nombre: "Ana",
@@ -407,5 +408,46 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
     expect(screen.getByText(/aún no hay plantillas para esta marca/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /lienzo en blanco/i }));
     expect(onLienzoBlanco).toHaveBeenCalledTimes(1);
+  });
+
+  // ── REORDENAR (drag-and-drop) ────────────────────────────────────────────────────────────────
+  const dtFalso = () => ({ effectAllowed: "", dropEffect: "", setData: vi.fn(), getData: () => "" });
+
+  it("con onReordenar, arrastrar una tarjeta sobre otra de la misma sección avisa con la lista COMPLETA de ids en el nuevo orden", () => {
+    const onReordenar = vi.fn();
+    const f1 = { ...FOTO, id: "f1", nombre: "Uno" };
+    const f2 = { ...FOTO, id: "f2", nombre: "Dos" };
+    const f3 = { ...FOTO, id: "f3", nombre: "Tres" };
+    const { container } = render(
+      <ContenidoPlantillas plantillas={[f1, f2, f3]} onCargar={vi.fn()} onReordenar={onReordenar} />,
+    );
+    const card = (id: string) => container.querySelector(`[data-plantilla-id="${id}"]`)!;
+    expect(card("f1")).toHaveAttribute("draggable", "true"); // modo reordenable
+    const dt = dtFalso();
+    fireEvent.dragStart(card("f3"), { dataTransfer: dt });
+    fireEvent.dragEnter(card("f1"), { dataTransfer: dt });
+    fireEvent.dragOver(card("f1"), { dataTransfer: dt });
+    fireEvent.drop(card("f1"), { dataTransfer: dt });
+    // f3 se inserta ANTES de f1: [f3, f1, f2].
+    expect(onReordenar).toHaveBeenCalledWith(["f3", "f1", "f2"]);
+  });
+
+  it("no reordena entre secciones distintas (otra categoría): arrastrar de una a otra no hace nada", () => {
+    const onReordenar = vi.fn();
+    const general = { ...FOTO, id: "g1", categoria: "post" };
+    const deportes = { ...FOTO, id: "d1", categoria: "deportes" };
+    const { container } = render(
+      <ContenidoPlantillas plantillas={[general, deportes]} onCargar={vi.fn()} onReordenar={onReordenar} />,
+    );
+    const card = (id: string) => container.querySelector(`[data-plantilla-id="${id}"]`)!;
+    const dt = dtFalso();
+    fireEvent.dragStart(card("g1"), { dataTransfer: dt });
+    fireEvent.drop(card("d1"), { dataTransfer: dt });
+    expect(onReordenar).not.toHaveBeenCalled();
+  });
+
+  it("sin onReordenar (modo selector) las tarjetas no son arrastrables", () => {
+    const { container } = render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
+    expect(container.querySelector(`[data-plantilla-id="${FOTO.id}"]`)).not.toHaveAttribute("draggable");
   });
 });

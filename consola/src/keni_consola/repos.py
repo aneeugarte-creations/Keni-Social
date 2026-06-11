@@ -159,6 +159,7 @@ from .repos_editor import (  # noqa: F401
     obtener_plantilla_diseno,
     obtener_video_composicion,
     obtener_video_subtitulo,
+    reordenar_plantillas_diseno,
     ultima_documento_version,
 )
 from .repos_hashtags_franjas import (  # noqa: F401

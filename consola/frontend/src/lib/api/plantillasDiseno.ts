@@ -32,5 +32,8 @@ export const apiPlantillasDiseno = {
   ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  // Fija el ORDEN MANUAL de la galería (drag-and-drop): `ids` en la secuencia exacta deseada.
+  reordenarPlantillasDiseno: (ids: string[]) =>
+    peticion<{ actualizadas: number }>("/plantillas-diseno/reordenar", { metodo: "POST", json: { ids } }),
 
 };

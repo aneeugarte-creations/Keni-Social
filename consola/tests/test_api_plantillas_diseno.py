@@ -218,3 +218,65 @@ def test_listar_filtro_tipo(cliente):
 
     # Tipo inválido -> 400.
     assert cliente.get("/api/plantillas-diseno?tipo=raro").status_code == 400
+
+
+# ── Orden manual (drag-and-drop de la galería) ──────────────────────────────────────────────────
+
+def _crear(cliente, nombre, marca="unotv"):
+    r = cliente.post("/api/plantillas-diseno", json={"marca": marca, "nombre": nombre, "documento": _DOC})
+    assert r.status_code == 200, r.text
+    return r.json()["plantilla"]["id"]
+
+
+def test_orden_por_defecto_es_cero(cliente):
+    # Las nuevas nacen "sin ordenar" (orden=0): el orden visible lo da `creado DESC` hasta reordenar.
+    _crear(cliente, "A")
+    _crear(cliente, "B")
+    plantillas = cliente.get("/api/plantillas-diseno?marca=unotv").json()["plantillas"]
+    assert all(p["orden"] == 0 for p in plantillas)
+
+
+def test_reordenar_fija_la_secuencia_exacta(cliente):
+    a = _crear(cliente, "A")
+    b = _crear(cliente, "B")
+    c = _crear(cliente, "C")
+    r = cliente.post("/api/plantillas-diseno/reordenar", json={"ids": [a, c, b]})
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizadas"] == 3
+    plantillas = cliente.get("/api/plantillas-diseno?marca=unotv").json()["plantillas"]
+    assert [p["id"] for p in plantillas] == [a, c, b]  # orden visible == secuencia pedida
+    assert {p["id"]: p["orden"] for p in plantillas} == {a: 1, c: 2, b: 3}  # orden 1..N
+
+
+def test_reordenar_las_nuevas_caen_al_final(cliente):
+    a = _crear(cliente, "A")
+    b = _crear(cliente, "B")
+    cliente.post("/api/plantillas-diseno/reordenar", json={"ids": [b, a]})
+    nueva = _crear(cliente, "Nueva")  # orden=0: cae DESPUÉS de las ya ordenadas
+    ids = [p["id"] for p in cliente.get("/api/plantillas-diseno?marca=unotv").json()["plantillas"]]
+    assert ids == [b, a, nueva]
+
+
+def test_reordenar_es_por_marca(cliente):
+    a = _crear(cliente, "A", "unotv")
+    x = _crear(cliente, "X", "claro-sports")
+    cliente.post("/api/plantillas-diseno/reordenar", json={"ids": [a]})
+    # Reordenar unotv no toca claro-sports.
+    otra = cliente.get("/api/plantillas-diseno?marca=claro-sports").json()["plantillas"]
+    assert [p["id"] for p in otra] == [x]
+    assert otra[0]["orden"] == 0
+
+
+def test_reordenar_ignora_ids_inexistentes(cliente):
+    a = _crear(cliente, "A")
+    b = _crear(cliente, "B")
+    r = cliente.post("/api/plantillas-diseno/reordenar", json={"ids": [a, "no-existe", b]})
+    assert r.status_code == 200
+    assert r.json()["actualizadas"] == 2  # solo a y b existen
+    ids = [p["id"] for p in cliente.get("/api/plantillas-diseno?marca=unotv").json()["plantillas"]]
+    assert ids == [a, b]
+
+
+def test_reordenar_cuerpo_invalido_400(cliente):
+    assert cliente.post("/api/plantillas-diseno/reordenar", json={"ids": "no-es-lista"}).status_code == 400
+    assert cliente.post("/api/plantillas-diseno/reordenar", json={"ids": [1, 2]}).status_code == 400

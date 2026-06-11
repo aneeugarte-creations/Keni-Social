@@ -191,6 +191,10 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
     return db.borrar_plantilla_diseno(plantilla_id)
 
 
+def reordenar_plantillas_diseno(ids: list[str]) -> int:
+    return db.reordenar_plantillas_diseno(ids)
+
+
 
 # --------------------------------------------------------------------------- #
 # Motor de video: composiciones + subtitulos (Ola VIDEO)                        #

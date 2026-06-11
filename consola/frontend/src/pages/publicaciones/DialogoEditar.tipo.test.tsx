@@ -28,6 +28,7 @@ function plantilla(overrides: Partial<PlantillaDiseno>): PlantillaDiseno {
     lineas: [],
     activo: true,
     rotar: false,
+    orden: 0,
     marca_nombre: "Marca",
     autor_id: "u1",
     autor_nombre: "Ana",

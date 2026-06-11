@@ -61,6 +61,7 @@ from .plantillas_diseno import (
     crear_plantilla_diseno,
     listar_plantillas_diseno,
     obtener_plantilla_diseno,
+    reordenar_plantillas_diseno,
 )
 from .video import (
     _CAMPOS_EDITABLES_VIDEO_COMPOSICIONES,
@@ -122,6 +123,7 @@ __all__ = [
     "crear_plantilla_diseno",
     "listar_plantillas_diseno",
     "obtener_plantilla_diseno",
+    "reordenar_plantillas_diseno",
     # video
     "ESTADOS_VIDEO_COMPOSICION",
     "ESTADOS_VIDEO_SUBTITULO",

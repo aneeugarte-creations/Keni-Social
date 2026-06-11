@@ -633,6 +633,31 @@ export default function Imagen() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo cambiar la rotación."),
   });
 
+  // REORDENAR: orden MANUAL de la galería (drag-and-drop). Update OPTIMISTA (la rejilla se recoloca
+  // al instante) + persistencia (POST) + invalidación. `ids` es la lista COMPLETA de la marca en su
+  // nuevo orden. En error, revierte al orden previo.
+  const reordenarPlantillas = useMutation({
+    mutationFn: (ids: string[]) => api.reordenarPlantillasDiseno(ids),
+    onMutate: async (ids: string[]) => {
+      await qc.cancelQueries({ queryKey: ["plantillas-diseno"] });
+      const clave = ["plantillas-diseno", marcaPanel];
+      const previo = qc.getQueryData<{ plantillas: PlantillaDiseno[] }>(clave);
+      if (previo) {
+        const pos = new Map(ids.map((id, i) => [id, i]));
+        const reordenadas = [...previo.plantillas].sort(
+          (a, b) => (pos.get(a.id) ?? Infinity) - (pos.get(b.id) ?? Infinity),
+        );
+        qc.setQueryData(clave, { ...previo, plantillas: reordenadas });
+      }
+      return { clave, previo };
+    },
+    onError: (e: unknown, _ids, ctx) => {
+      if (ctx?.previo) qc.setQueryData(ctx.clave, ctx.previo);
+      toast.error(e instanceof Error ? e.message : "No se pudo reordenar.");
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["plantillas-diseno"] }),
+  });
+
   // CATEGORIZAR: cambia la categoría de una plantilla ya guardada (badge-selector de la galería).
   const categorizarPlantilla = useMutation({
     mutationFn: ({ id, categoria }: { id: string; categoria: string }) =>
@@ -841,6 +866,7 @@ export default function Imagen() {
                 onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
                 onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
                 onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
+                onReordenar={(ids) => reordenarPlantillas.mutate(ids)}
               />
             }
             // «Adaptar a…»: abre el documento reencuadrado en una PESTAÑA NUEVA (no machaca la actual).
@@ -868,6 +894,7 @@ export default function Imagen() {
                 onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
                 onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
                 onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
+                onReordenar={(ids) => reordenarPlantillas.mutate(ids)}
                 onLienzoBlanco={() => abrirPestana()}
               />
             )}

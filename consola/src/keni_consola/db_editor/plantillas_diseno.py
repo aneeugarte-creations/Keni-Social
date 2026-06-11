@@ -19,6 +19,7 @@ _COLS_PLANTILLAS_DISENO = (
     "lineas",
     "activo",
     "rotar",
+    "orden",
     "autor_id",
     "autor_nombre",
     "creado",
@@ -43,6 +44,7 @@ def _fila_a_plantilla_diseno(fila: Any) -> dict[str, Any]:
     item: dict[str, Any] = {col: fila[col] for col in _COLS_PLANTILLAS_DISENO}
     item["activo"] = bool(fila["activo"])
     item["rotar"] = bool(fila["rotar"])
+    item["orden"] = int(fila["orden"] or 0)
     item["documento"] = fila["documento"] or "{}"
     item["lineas"] = fila["lineas"] or "[]"
     item["categoria"] = fila["categoria"] or "general"
@@ -80,6 +82,9 @@ def crear_plantilla_diseno(
         "lineas": lineas or "[]",
         "activo": 1 if activo else 0,
         "rotar": 1 if rotar else 0,
+        # `orden`=0: las nuevas nacen "sin ordenar" (recientes primero); entran en la secuencia
+        # manual al reordenarlas con drag-and-drop (`reordenar_plantillas_diseno`).
+        "orden": 0,
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",
         "creado": creado or ahora,
@@ -122,7 +127,10 @@ def listar_plantillas_diseno(
     sql = _SELECT_PLANTILLAS_DISENO
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)
-    sql += " ORDER BY creado DESC, id DESC"
+    # Orden MANUAL primero (1..N por marca, el que fija el drag-and-drop); las "sin ordenar"
+    # (`orden`=0: legadas y recién creadas) caen DESPUÉS, recientes primero. Para que el 0 quede al
+    # final y no al principio, lo mapeamos a +infinito con un CASE.
+    sql += " ORDER BY CASE WHEN orden = 0 THEN 1 ELSE 0 END, orden ASC, creado DESC, id DESC"
     con = _conectar()
     try:
         filas = con.execute(sql, tuple(params)).fetchall()
@@ -181,3 +189,28 @@ def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
     finally:
         con.close()
     return item
+
+
+def reordenar_plantillas_diseno(ids: list[str]) -> int:
+    """Fija el ORDEN MANUAL: asigna `orden`=1..N a `ids` en la secuencia EXACTA dada (el resto
+    queda como está). Ignora ids inexistentes. Devuelve cuántas filas se actualizaron.
+
+    El llamante (galería) envía la lista completa de ids de la marca en su nuevo orden; al listar,
+    `orden` 1..N va primero y los `orden`=0 ("sin ordenar") caen al final por `creado DESC`.
+    """
+    ids = [i for i in ids if isinstance(i, str) and i]
+    if not ids:
+        return 0
+    con = _conectar()
+    try:
+        n = 0
+        for posicion, plantilla_id in enumerate(ids, start=1):
+            cur = con.execute(
+                "UPDATE plantillas_diseno SET orden = ? WHERE id = ?",
+                (posicion, plantilla_id),
+            )
+            n += cur.rowcount or 0
+        con.commit()
+    finally:
+        con.close()
+    return n

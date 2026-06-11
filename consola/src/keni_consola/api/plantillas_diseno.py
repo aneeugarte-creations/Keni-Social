@@ -180,6 +180,23 @@ async def crear(request: Request) -> Response:
     return JSONResponse({"plantilla": _plantilla_a_dict(plantilla)})
 
 
+async def reordenar(request: Request) -> Response:
+    """POST /api/plantillas-diseno/reordenar: fija el orden MANUAL de la galería (drag-and-drop).
+
+    Cuerpo `{"ids": ["id1", "id2", …]}` con la secuencia EXACTA deseada; asigna `orden`=1..N a esos
+    ids (el resto queda igual). -> `{actualizadas: n}` | 400. El llamante envía la lista completa de
+    la marca en su nuevo orden.
+    """
+    datos = await leer_json(request)
+    if not isinstance(datos, dict):
+        return JSONResponse({"error": "Cuerpo JSON inválido."}, status_code=400)
+    ids = datos.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        return JSONResponse({"error": "«ids» debe ser una lista de identificadores."}, status_code=400)
+    n = repos.reordenar_plantillas_diseno([i for i in ids if i])
+    return JSONResponse({"actualizadas": n})
+
+
 async def obtener(request: Request) -> Response:
     """GET /api/plantillas-diseno/{id}: una plantilla con su documento listo para cargar. -> 404 si no existe."""
     item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
@@ -277,6 +294,8 @@ async def preview(request: Request) -> Response:
 RUTAS = [
     Route("/api/plantillas-diseno", listar, methods=["GET"]),
     Route("/api/plantillas-diseno", crear, methods=["POST"]),
+    # Antes que `/{plantilla_id}` para que «reordenar» no se interprete como un id.
+    Route("/api/plantillas-diseno/reordenar", reordenar, methods=["POST"]),
     Route("/api/plantillas-diseno/{plantilla_id}", obtener, methods=["GET"]),
     Route("/api/plantillas-diseno/{plantilla_id}/preview", preview, methods=["GET"]),
     Route("/api/plantillas-diseno/{plantilla_id}", actualizar, methods=["PATCH"]),

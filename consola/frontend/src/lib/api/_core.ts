@@ -344,6 +344,8 @@ export interface PlantillaDiseno {
   activo: boolean;
   /** Entra en la ROTACIÓN automática de la marca (cada post nuevo se lleva la siguiente del grupo). */
   rotar: boolean;
+  /** Posición MANUAL dentro de la marca (drag-and-drop de la galería). 0 = sin ordenar (recientes primero). */
+  orden: number;
   marca_nombre: string;
   autor_id: string;
   autor_nombre: string;

@@ -78,6 +78,7 @@ function plantilla(): PlantillaDiseno {
     lineas: [],
     activo: true,
     rotar: false,
+    orden: 0,
     marca_nombre: "UnoTV",
     autor_id: "",
     autor_nombre: "",
