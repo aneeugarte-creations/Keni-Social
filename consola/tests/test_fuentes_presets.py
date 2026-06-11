@@ -182,13 +182,17 @@ def test_seed_rutea_categorias_correctas_por_marca():
     for p in seed:
         cats_por_marca.setdefault(p["marca_sugerida"], set()).add(p["categoria"])
 
-    # UnoTV: noticias (mx/regional/internacional/negocios/ciencia-tech/tendencias), NUNCA gaming/deportes.
+    # UnoTV: noticias (mx/internacional/negocios/ciencia-tech/tendencias), NUNCA gaming/deportes.
+    # `regional` se sembraba SOLO vía Google News (corresponsalías por estado); excluido el
+    # Google News del auto-seed (snippet sin cuerpo; la tendencia la cubre Google Trends), esa
+    # categoría se queda sin presets y ya no entra al seed.
     assert "mx" in cats_por_marca["unotv"]
-    assert "regional" in cats_por_marca["unotv"]
     assert "internacional" in cats_por_marca["unotv"]
     assert "ciencia-tech" in cats_por_marca["unotv"]
     assert "gaming" not in cats_por_marca["unotv"]
     assert "deportes" not in cats_por_marca["unotv"]
+    # Ningún preset de auto-seed es de Google News (se excluyen por `_es_google_news`).
+    assert all("news.google.com" not in p["url"] for p in seed)
 
     # Claro Sports: deportes (todas las competiciones).
     assert cats_por_marca["claro-sports"] == {"deportes"} or "deportes" in cats_por_marca[
@@ -209,6 +213,15 @@ def test_seed_excluye_plantillas():
     assert plantillas, "Debe haber plantillas en el catálogo"
     for p in plantillas:
         assert not bl._preset_va_en_seed(p), f"Plantilla '{p['id']}' no debe entrar al auto-seed"
+
+
+def test_seed_excluye_google_news():
+    from keni_consola import bootstrap_lineas as bl
+
+    gn = [p for p in fuentes_presets.listar_presets() if "news.google.com" in (p.get("url") or "")]
+    assert gn, "El catálogo debe seguir teniendo presets de Google News (activables a mano)"
+    for p in gn:
+        assert not bl._preset_va_en_seed(p), f"Google News '{p['id']}' no debe entrar al auto-seed"
 
 
 def test_seed_excluye_presets_sin_marca():

@@ -199,15 +199,26 @@ def _es_plantilla(preset: dict) -> bool:
     return "[PLANTILLA]" in (preset.get("nombre") or "")
 
 
+def _es_google_news(preset: dict) -> bool:
+    """True si el preset es un feed de Google News (`news.google.com`).
+
+    Google News solo entrega titular + snippet corto (sin `content:encoded`) tras un redirect
+    de consentimiento: aporta ruido sin cuerpo para el copy. La señal de tendencia ya la cubre
+    Google Trends, así que NO se auto-siembran. Siguen en el catálogo (activables a mano).
+    """
+    return "news.google.com" in (preset.get("url") or "")
+
+
 def _preset_va_en_seed(preset: dict) -> bool:
     """True si el preset debe activarse en el auto-seed por defecto.
 
     Función PURA (sin red ni BD), reutilizable en tests. Un preset entra si:
       - NO es plantilla (su URL es un feed real, sondeable directamente), y
+      - NO es Google News (snippet sin cuerpo; la tendencia la cubre Google Trends), y
       - su `marca_sugerida` tiene categorías de interés declaradas, y
       - su `categoria` está entre las de interés de esa marca.
     """
-    if _es_plantilla(preset):
+    if _es_plantilla(preset) or _es_google_news(preset):
         return False
     marca = (preset.get("marca_sugerida") or "").strip()
     categoria = (preset.get("categoria") or "").strip()
