@@ -147,13 +147,35 @@ def _tokens_ordenados(clave: str) -> str:
     return " ".join(sorted(set(clave.split())))
 
 
+_RE_NUMEROS = re.compile(r"\d+")
+
+
+def _numeros_incompatibles(ka: str, kb: str) -> bool:
+    """True si AMBAS claves traen números y NO comparten ninguno (eventos distintos).
+
+    Veto de seguridad del fuzzy: "sismo de 6.2" y "sismo de 7.1" comparten casi todo el
+    texto (ratio alto) pero son acontecimientos DISTINTOS; igual con jornadas, marcadores o
+    fechas. Solo veta cuando los dos lados tienen números y son disjuntos: un titular sin
+    números nunca se penaliza (no se castiga la ausencia de dato).
+    """
+    na = frozenset(_RE_NUMEROS.findall(ka))
+    if not na:
+        return False
+    nb = frozenset(_RE_NUMEROS.findall(kb))
+    return bool(nb) and not (na & nb)
+
+
 def _ratio_claves(ka: str, kb: str) -> float:
     """Ratio fuzzy [0,1] entre dos claves YA normalizadas: el MÁXIMO del directo y el token-sort.
 
     El directo respeta el orden (titulares casi idénticos); el token-sort tolera la
     reordenación (mismo evento, sintaxis distinta). Tomar el máximo solo puede UNIR más pares
-    del mismo evento, nunca menos (monótono respecto al comportamiento anterior).
+    del mismo evento, nunca menos (monótono respecto al comportamiento anterior). VETO de
+    números incompatibles (`_numeros_incompatibles`): dos titulares con cifras disjuntas son
+    eventos distintos por mucho texto que compartan → ratio 0.
     """
+    if _numeros_incompatibles(ka, kb):
+        return 0.0
     directo = SequenceMatcher(None, ka, kb).ratio()
     ordenado = SequenceMatcher(None, _tokens_ordenados(ka), _tokens_ordenados(kb)).ratio()
     return max(directo, ordenado)
@@ -200,14 +222,19 @@ def asignar(
             if str(c.get("clave") or "") == clave:
                 return str(c["id"])
 
-    # (b) Fuzzy del título contra el título representativo de cada cluster.
+    # (b) Fuzzy del título contra el título representativo de cada cluster — y contra su
+    # TRADUCCIÓN (`titulo_es`): un titular en español debe poder unirse a la historia
+    # extranjera ya traducida (antes solo casaba contra el título original EN/PT/...).
     titulo = str(item.get("titulo") or "")
     if not titulo.strip():
         return None
     mejor_id: str | None = None
     mejor_ratio = umbral
     for c in clusters_recientes:
-        ratio = _ratio_titulos(titulo, str(c.get("titulo") or ""))
+        ratio = max(
+            _ratio_titulos(titulo, str(c.get("titulo") or "")),
+            _ratio_titulos(titulo, str(c.get("titulo_es") or "")),
+        )
         # A EMPATE exacto de ratio gana el PRIMER candidato visto (determinista); antes el
         # `>=` dejaba ganar al último, y el resultado dependía del orden de la lista.
         if ratio >= umbral and (mejor_id is None or ratio > mejor_ratio):
@@ -241,7 +268,9 @@ class Asignador:
         self.umbral = float(umbral)
         self._orden: dict[str, int] = {}        # id -> orden de entrada (desempate estable)
         self._por_clave_url: dict[str, str] = {}  # clave url -> id (cruce exacto)
-        self._fuzzy: dict[str, str] = {}        # id -> clave fuzzy del título (precomputada)
+        # id -> claves fuzzy del cluster (título representativo Y su traducción `titulo_es`,
+        # si la hay): un titular en español casa contra la historia extranjera ya traducida.
+        self._fuzzy: dict[str, list[str]] = {}
         self._por_token: dict[str, set[str]] = {}  # token significativo -> ids
         for c in clusters_recientes:
             self.agregar(c)
@@ -255,12 +284,17 @@ class Asignador:
         clave = str(cluster.get("clave") or "")
         if clave.startswith("url:") and clave not in self._por_clave_url:
             self._por_clave_url[clave] = cid
-        kf = similitud.clave_fuzzy(str(cluster.get("titulo") or ""))
-        if len(kf) >= _MIN_LONGITUD_FUZZY:
-            self._fuzzy[cid] = kf
-            for token in set(kf.split()):
-                if len(token) >= _MIN_TOKEN_BLOCKING:
-                    self._por_token.setdefault(token, set()).add(cid)
+        claves_fuzzy: list[str] = []
+        for campo in ("titulo", "titulo_es"):
+            kf = similitud.clave_fuzzy(str(cluster.get(campo) or ""))
+            if len(kf) >= _MIN_LONGITUD_FUZZY and kf not in claves_fuzzy:
+                claves_fuzzy.append(kf)
+        if claves_fuzzy:
+            self._fuzzy[cid] = claves_fuzzy
+            for kf in claves_fuzzy:
+                for token in set(kf.split()):
+                    if len(token) >= _MIN_TOKEN_BLOCKING:
+                        self._por_token.setdefault(token, set()).add(cid)
 
     def asignar(self, item: dict[str, Any]) -> str | None:
         """Cluster destino para `item` (mismas reglas que `asignar`), o None si ninguno casa."""
@@ -284,11 +318,84 @@ class Asignador:
         mejor_id: str | None = None
         mejor_ratio = self.umbral
         for cid in sorted(candidatos, key=lambda c: self._orden.get(c, 0)):
-            ratio = _ratio_claves(kf, self._fuzzy[cid])
+            ratio = max(_ratio_claves(kf, k) for k in self._fuzzy[cid])
             if ratio >= self.umbral and (mejor_id is None or ratio > mejor_ratio):
                 mejor_ratio = ratio
                 mejor_id = cid
         return mejor_id
+
+
+def grupos_lexicos(
+    clusters: list[dict[str, Any]], *, umbral: float = 0.86
+) -> list[list[str]]:
+    """Grupos de historias que el LÉXICO descubre iguales TARDE (merge de ventana). PURA.
+
+    La asignación incremental solo compara un item contra los clusters que existían en su
+    momento: dos historias del mismo evento pueden nacer por separado (distinto orden de
+    llegada, traducción tardía) y quedarse duplicadas. Esto barre los clusters de la ventana
+    y agrupa los pares cuyo título (o su traducción `titulo_es`) casa con ratio >= `umbral`
+    — MÁS ESTRICTO que el de asignación (0.86 vs 0.82: fundir historias ya formadas pide más
+    certeza), con el veto de números incompatibles y sin cruzar categorías distintas (una
+    categoría vacía casa con cualquiera). Devuelve listas de ids (≥2) para que el daemon las
+    funda con `_fusionar_grupo` (que ya trae anti-TOCTOU). Determinista; `umbral<=0` apaga.
+    """
+    if umbral <= 0 or len(clusters) < 2:
+        return []
+    entradas: list[tuple[str, list[str], str]] = []
+    for c in clusters:
+        cid = str(c.get("id") or "")
+        if not cid:
+            continue
+        claves: list[str] = []
+        for campo in ("titulo", "titulo_es"):
+            kf = similitud.clave_fuzzy(str(c.get(campo) or ""))
+            if len(kf) >= _MIN_LONGITUD_FUZZY and kf not in claves:
+                claves.append(kf)
+        if claves:
+            entradas.append((cid, claves, str(c.get("categoria") or "")))
+    if len(entradas) < 2:
+        return []
+
+    # Blocking por token significativo (mismo criterio que `Asignador`): el ratio solo se
+    # evalúa entre clusters que comparten >= 1 token.
+    por_token: dict[str, set[int]] = {}
+    for i, (_cid, claves, _cat) in enumerate(entradas):
+        for kf in claves:
+            for token in set(kf.split()):
+                if len(token) >= _MIN_TOKEN_BLOCKING:
+                    por_token.setdefault(token, set()).add(i)
+
+    # Union-find con compresión de camino (los grupos pueden encadenarse: a~b, b~c).
+    padre = list(range(len(entradas)))
+
+    def _raiz(i: int) -> int:
+        while padre[i] != i:
+            padre[i] = padre[padre[i]]
+            i = padre[i]
+        return i
+
+    for i, (_cid, claves, cat) in enumerate(entradas):
+        candidatos: set[int] = set()
+        for kf in claves:
+            for token in set(kf.split()):
+                if len(token) >= _MIN_TOKEN_BLOCKING:
+                    candidatos |= por_token.get(token, set())
+        for j in sorted(candidatos):
+            if j <= i:
+                continue
+            _cid_j, claves_j, cat_j = entradas[j]
+            if cat and cat_j and cat != cat_j:
+                continue  # categorías declaradas y distintas: no se cruzan
+            ratio = max(_ratio_claves(a, b) for a in claves for b in claves_j)
+            if ratio >= umbral:
+                ra, rb = _raiz(i), _raiz(j)
+                if ra != rb:
+                    padre[max(ra, rb)] = min(ra, rb)
+
+    grupos: dict[int, list[str]] = {}
+    for i, (cid, _claves, _cat) in enumerate(entradas):
+        grupos.setdefault(_raiz(i), []).append(cid)
+    return [g for g in grupos.values() if len(g) >= 2]
 
 
 # --------------------------------------------------------------------------- #

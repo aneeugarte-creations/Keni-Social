@@ -268,6 +268,10 @@ def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
     return db.items_sin_cluster(desde, limite)
 
 
+def cluster_por_url_canonica(url_recortada: str, desde: str) -> str:
+    return db.cluster_por_url_canonica(url_recortada, desde)
+
+
 def clusters_extranjeros_sin_traducir(
     ventana_h: int, *, min_score: float = 0.0, limite: int = 40
 ) -> list[dict[str, Any]]:

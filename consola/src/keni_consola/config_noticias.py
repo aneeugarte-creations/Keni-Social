@@ -8,6 +8,7 @@ from ._config_comun import (
     CLUSTER_BREAKING_PESO_DEF,
     CLUSTER_BREAKING_VENTANA_H_DEF,
     CLUSTER_UMBRAL_DEF,
+    CLUSTER_UMBRAL_MERGE_DEF,
     CLUSTER_VENTANA_H_DEF,
     ENV_AFP_BASE_URL,
     ENV_AFP_CLIENT_ID,
@@ -17,6 +18,7 @@ from ._config_comun import (
     ENV_CLUSTER_BREAKING_PESO,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_UMBRAL,
+    ENV_CLUSTER_UMBRAL_MERGE,
     ENV_CLUSTER_VENTANA_H,
     ENV_FEED_SLA_MIN,
     ENV_FUENTES_BAJA_CONFIANZA,
@@ -205,6 +207,25 @@ def cluster_umbral() -> float:
         return CLUSTER_UMBRAL_DEF
     if valor < 0.0 or valor > 1.0:
         return CLUSTER_UMBRAL_DEF
+    return valor
+
+
+def cluster_umbral_merge() -> float:
+    """Umbral fuzzy del MERGE LÉXICO TARDÍO (`KENI_CLUSTER_UMBRAL_MERGE`, def 0.86; 0 apaga).
+
+    Fundir dos historias YA formadas pide más certeza que unir un item suelto, por eso el
+    default es más estricto que `cluster_umbral` (0.86 vs 0.82). Valor inválido/fuera de
+    [0,1] → def.
+    """
+    crudo = _crudo(ENV_CLUSTER_UMBRAL_MERGE)
+    if not crudo:
+        return CLUSTER_UMBRAL_MERGE_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return CLUSTER_UMBRAL_MERGE_DEF
+    if valor < 0.0 or valor > 1.0:
+        return CLUSTER_UMBRAL_MERGE_DEF
     return valor
 
 

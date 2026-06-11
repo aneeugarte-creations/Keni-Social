@@ -163,6 +163,8 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
                         lambda: llamados.append("agencias") or {"items": 0})
     monkeypatch.setattr(ingesta_daemon, "paso_clustering",
                         lambda: llamados.append("clustering") or {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_merge_lexico",
+                        lambda *a, **k: llamados.append("merge") or {"grupos": 0, "fusionadas": 0})
     monkeypatch.setattr(ingesta_daemon, "paso_rescore",
                         lambda *a, **k: llamados.append("rescore") or {"revisados": 0, "actualizados": 0})
     monkeypatch.setattr(ingesta_daemon, "paso_fusion_semantica",
@@ -175,7 +177,7 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
     assert resumen["items_nuevos"] == 0
     assert resumen["errores"] == 0
     # Los pasos post-RSS corrieron AUNQUE no hubiera feeds vencidos.
-    assert llamados == ["agencias", "clustering", "rescore", "fusion", "traduccion"]
+    assert llamados == ["agencias", "clustering", "merge", "rescore", "fusion", "traduccion"]
 
 
 def test_barrido_respeta_single_flight(monkeypatch):
@@ -707,6 +709,38 @@ def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(mon
         fuentes_baja=frozenset(), perfil_activo=False, ahora=datetime.now(UTC),
     )
     assert fusionado is False  # nada que fundir: la única absorbible ya fue promovida
+
+
+# --------------------------------------------------------------------------- #
+# paso_merge_lexico: duplicados tardíos de la ventana (sin IA)                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_paso_merge_lexico_funde_duplicados_y_excluye_promovidas(monkeypatch):
+    c1 = {"id": "c1", "titulo": "El presidente anuncia una nueva reforma para los estados",
+          "categoria": "mx", "estado": "nuevo", "contenido_id": ""}
+    c2 = {"id": "c2", "titulo": "El presidente anuncia nueva reforma para los estados",
+          "categoria": "mx", "estado": "nuevo", "contenido_id": ""}
+    # Promovida: aunque su título case, NO entra al merge (lo usado no se toca).
+    c3 = {"id": "c3", "titulo": "El presidente anuncia nueva reforma para los estados",
+          "categoria": "mx", "estado": "usado", "contenido_id": "tema-1"}
+    llamadas: list[list[str]] = []
+    monkeypatch.setattr(
+        ingesta_daemon, "_fusionar_grupo",
+        lambda grupo, por_id, **kw: llamadas.append(sorted(grupo)) or True,
+    )
+    resumen = ingesta_daemon.paso_merge_lexico([c1, c2, c3], forzar=True)
+    assert llamadas == [["c1", "c2"]]
+    assert resumen == {"grupos": 1, "fusionadas": 1}
+
+
+def test_paso_merge_lexico_umbral_cero_apaga(monkeypatch):
+    monkeypatch.setenv(config.ENV_CLUSTER_UMBRAL_MERGE, "0")
+    def _no_llamar(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("con el umbral a 0 no debe fundir nada")
+    monkeypatch.setattr(ingesta_daemon, "_fusionar_grupo", _no_llamar)
+    resumen = ingesta_daemon.paso_merge_lexico([], forzar=True)
+    assert resumen == {"grupos": 0, "fusionadas": 0}
 
 
 # --------------------------------------------------------------------------- #

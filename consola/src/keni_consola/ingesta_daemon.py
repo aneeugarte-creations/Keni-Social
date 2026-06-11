@@ -265,6 +265,20 @@ def paso_clustering() -> dict[str, Any]:
         try:
             destino = asignador.asignar(item)
             if destino is None:
+                # Cruce exacto por URL a NIVEL DE ITEM: la clave del cluster solo guarda la
+                # url del representativo; si otra fuente ya archivó este MISMO recurso, su
+                # cluster está en BD aunque el asignador no lo viera. Best-effort.
+                url_rec = clustering.url_canonica_clustering(
+                    str(item.get("url") or item.get("url_canonica") or "")
+                )
+                if url_rec:
+                    try:
+                        candidato = repos.cluster_por_url_canonica(url_rec, desde)
+                    except Exception:  # noqa: BLE001 -- el cruce por url es aditivo
+                        candidato = ""
+                    if candidato and (candidato in indice or repos.obtener_noticia_cluster(candidato)):
+                        destino = candidato
+            if destino is None:
                 # Cluster nuevo: lo funda este item (un cluster en blanco con su identidad).
                 # Se PERSISTE el stub ANTES de asignarle items (durabilidad ante caída).
                 destino = uuid.uuid4().hex[:12]
@@ -540,6 +554,86 @@ def _fusionar_grupo(
     )
     repos.upsert_noticia_cluster(recalc)
     return True
+
+
+# Merge léxico tardío: como mucho una pasada por intervalo (mismo throttle que el re-score:
+# los duplicados tardíos aparecen despacio; barrer la ventana entera cada tick sería caro).
+_MERGE_LEXICO_INTERVALO_SEG = 900.0
+_ultimo_merge_lexico = 0.0  # time.monotonic() de la última pasada completada
+
+
+def paso_merge_lexico(
+    clusters_ventana: list[dict[str, Any]] | None = None, *, forzar: bool = False
+) -> dict[str, Any]:
+    """Funde historias de la ventana que el LÉXICO descubre iguales TARDE. Best-effort.
+
+    La asignación incremental compara cada item solo contra los clusters que existían en su
+    momento: dos historias del mismo evento pueden nacer por separado (orden de llegada,
+    traducción tardía) y quedarse duplicadas en el pool. Esto agrupa los clusters `nuevo`
+    sin promover cuyo título (o traducción) casa con ratio >= `KENI_CLUSTER_UMBRAL_MERGE`
+    (0.86, más estricto que el de asignación; 0 apaga) y los funde con `_fusionar_grupo`
+    (anti-TOCTOU incluido). SIN IA: complementa la fusión semántica de Haiku (gateada), no
+    la sustituye. Throttled a una pasada por `_MERGE_LEXICO_INTERVALO_SEG`.
+    """
+    global _ultimo_merge_lexico
+    umbral = config.cluster_umbral_merge()
+    if umbral <= 0:
+        return {"grupos": 0, "fusionadas": 0}
+    ahora_mono = time.monotonic()
+    if (
+        not forzar
+        and _ultimo_merge_lexico
+        and (ahora_mono - _ultimo_merge_lexico) < _MERGE_LEXICO_INTERVALO_SEG
+    ):
+        return {"grupos": 0, "fusionadas": 0}
+    try:
+        clusters = (
+            clusters_ventana
+            if clusters_ventana is not None
+            else repos.clusters_recientes(config.cluster_ventana_h())
+        )
+    except Exception:  # noqa: BLE001 -- sin pool legible no se funde nada (no toca el throttle)
+        _log.warning("ingesta_daemon: no se pudo leer la ventana para el merge léxico.", exc_info=True)
+        return {"grupos": 0, "fusionadas": 0}
+
+    # Solo historias del pool sin promover: lo usado/descartado no se toca (y _fusionar_grupo
+    # re-verifica anti-TOCTOU por si el pipeline promueve entre la lectura y la fusión).
+    candidatos = [
+        c for c in clusters
+        if (c.get("estado") or "nuevo") == "nuevo" and not (c.get("contenido_id") or "")
+    ]
+    grupos = clustering.grupos_lexicos(candidatos, umbral=umbral)
+    if not grupos:
+        _ultimo_merge_lexico = ahora_mono
+        return {"grupos": 0, "fusionadas": 0}
+
+    pesos = config.score_pesos()
+    breaking_peso = config.cluster_breaking_peso()
+    breaking_ventana_h = config.cluster_breaking_ventana_h()
+    fuentes_baja = config.fuentes_baja_confianza()
+    perfil_activo = config.perfil_editorial_activo()
+    ahora = datetime.now(UTC)
+    por_id = {str(c["id"]): c for c in candidatos}
+    grupos_total = 0
+    fusionadas_total = 0
+    for grupo in grupos:
+        try:
+            if _fusionar_grupo(
+                grupo, por_id, pesos=pesos, breaking_peso=breaking_peso,
+                breaking_ventana_h=breaking_ventana_h, fuentes_baja=fuentes_baja,
+                perfil_activo=perfil_activo, ahora=ahora,
+            ):
+                grupos_total += 1
+                fusionadas_total += len(grupo) - 1
+        except Exception:  # noqa: BLE001 -- una fusión problemática no aborta la pasada
+            _log.exception("ingesta_daemon: fallo al fundir un grupo léxico de historias.")
+    _ultimo_merge_lexico = ahora_mono
+    if grupos_total:
+        _log.info(
+            "ingesta_daemon: merge léxico: %d grupo(s), %d historia(s) absorbida(s).",
+            grupos_total, fusionadas_total,
+        )
+    return {"grupos": grupos_total, "fusionadas": fusionadas_total}
 
 
 def paso_fusion_semantica(
@@ -944,6 +1038,17 @@ def ejecutar_barrido() -> dict[str, Any]:
         # Ventana ya cargada/actualizada por el clustering (si la hay): se REUTILIZA en el
         # re-score y la fusión del mismo barrido, sin re-leer la BD.
         clusters_ventana = cluster_resumen.pop("clusters_ventana", None)
+
+        # Paso de MERGE LÉXICO tardío: funde historias de la ventana que se descubrieron
+        # iguales después de nacer por separado (sin IA; throttled). Best-effort. ANTES del
+        # re-score para que las fundidas se repunten ya consolidadas.
+        merge_resumen: dict[str, Any] = {"grupos": 0, "fusionadas": 0}
+        try:
+            merge_resumen = paso_merge_lexico(clusters_ventana)
+            if merge_resumen.get("fusionadas"):
+                clusters_ventana = None  # la ventana cambió: que el re-score la recargue
+        except Exception:  # noqa: BLE001 -- el merge es aditivo; nunca tumba la ingesta
+            _log.exception("ingesta_daemon: fallo en el paso de merge léxico.")
 
         # Paso de RE-SCORE (score que envejece): repuntúa periódicamente la ventana para que
         # la frescura DECAIGA aunque no entren items nuevos (ver `paso_rescore`). Best-effort.

@@ -1349,6 +1349,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_categoria ON noticias_items (categoria)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_estado ON noticias_items (estado)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_cluster ON noticias_items (cluster_id)",
+    # Cruce exacto del clustering por URL canónica de CUALQUIER item del cluster (no solo la
+    # clave del representativo). `text_pattern_ops`: el lookup usa igualdad y LIKE de prefijo.
+    "CREATE INDEX IF NOT EXISTS idx_noticias_items_urlcan ON noticias_items (url_canonica text_pattern_ops)",
     # HISTORIAS (Ola B): una fila por cluster = la misma noticia contada por varias fuentes y
     # en el tiempo (dedup + corroboración + score). `clave` es la clave de cluster del título
     # representativo (url canónica o hash); `n_fuentes` es la corroboración (fuentes distintas);

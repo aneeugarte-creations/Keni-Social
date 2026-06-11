@@ -228,6 +228,7 @@ from .repos_noticias import (  # noqa: F401
     borrar_noticia_cluster,
     claves_vistas,
     cluster_por_contenido,
+    cluster_por_url_canonica,
     clusters_extranjeros_sin_traducir,
     clusters_por_contenidos,
     clusters_recientes,

@@ -312,6 +312,20 @@ def test_stats_fuentes_marca_invalida_400(cliente):
     assert cliente.get("/api/noticias/fuentes/stats", params={"marca": "nope"}).status_code == 400
 
 
+def test_cluster_por_url_canonica_cruza_items_de_cualquier_fuente(cliente):
+    # Cruce exacto del clustering a NIVEL DE ITEM: encuentra el cluster aunque la url no sea
+    # la clave del representativo (igualdad o prefijo `?` sobre la canónica de dedup).
+    _sembrar_cluster("c1")
+    repos.crear_noticias_items([{
+        "fuente_id": "fx", "fuente_nombre": "Medio X", "titulo": "Titular",
+        "clave": "a.com/nota?id=7", "cluster_id": "c1",
+        "url": "https://a.com/nota?id=7", "url_canonica": "a.com/nota?id=7",
+    }])
+    assert repos.cluster_por_url_canonica("a.com/nota", "2020-01-01T00:00:00") == "c1"
+    assert repos.cluster_por_url_canonica("a.com/otra", "2020-01-01T00:00:00") == ""
+    assert repos.cluster_por_url_canonica("", "2020-01-01T00:00:00") == ""
+
+
 # --------------------------------------------------------------------------- #
 # usar / descartar                                                              #
 # --------------------------------------------------------------------------- #

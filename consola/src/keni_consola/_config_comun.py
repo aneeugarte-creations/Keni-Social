@@ -196,6 +196,9 @@ ENV_INGESTA_INTERVALO_DEFECTO = "KENI_INGESTA_INTERVALO_DEFECTO"
 # acotado por la ventana: nunca re-cluster el archivo entero. Corre dentro del barrido de ingesta.
 ENV_CLUSTER_VENTANA_H = "KENI_CLUSTER_VENTANA_H"
 ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
+# Umbral del MERGE LÉXICO TARDÍO de la ventana (fundir historias ya formadas que se
+# descubren iguales): MÁS estricto que el de asignación. 0 = apagado.
+ENV_CLUSTER_UMBRAL_MERGE = "KENI_CLUSTER_UMBRAL_MERGE"
 # LEGADO: umbral breaking por CONTEO de fuentes. Sustituido por el umbral PONDERADO
 # (`KENI_CLUSTER_BREAKING_PESO`); si el conteo está fijado y el peso no, se mapea (peso =
 # conteo) para no romper despliegues configurados. Ver `config.cluster_breaking_peso()`.
@@ -545,6 +548,7 @@ INGESTA_BACKOFF_TOPE_SEG = 3600
 # ACTUAL de 6h: 3 normales, 1 potente + 1 normal, o 2 potentes. Anclado en ahora: decae solo.
 CLUSTER_VENTANA_H_DEF = 72
 CLUSTER_UMBRAL_DEF = 0.82
+CLUSTER_UMBRAL_MERGE_DEF = 0.86
 CLUSTER_BREAKING_FUENTES_DEF = 3  # LEGADO (conteo); ver CLUSTER_BREAKING_PESO_DEF
 CLUSTER_BREAKING_PESO_DEF = 3.0
 CLUSTER_BREAKING_VENTANA_H_DEF = 6
@@ -737,6 +741,7 @@ __all__ = [
     'CLUSTER_BREAKING_PESO_DEF',
     'CLUSTER_BREAKING_VENTANA_H_DEF',
     'CLUSTER_UMBRAL_DEF',
+    'CLUSTER_UMBRAL_MERGE_DEF',
     'CLUSTER_VENTANA_H_DEF',
     'Callable',
     'DB_POOL_MAX_DEF',
@@ -766,6 +771,7 @@ __all__ = [
     'ENV_CLUSTER_BREAKING_PESO',
     'ENV_CLUSTER_BREAKING_VENTANA_H',
     'ENV_CLUSTER_UMBRAL',
+    'ENV_CLUSTER_UMBRAL_MERGE',
     'ENV_CLUSTER_VENTANA_H',
     'ENV_COMERCIAL_INTERVALO_HORAS',
     'ENV_COMERCIAL_INTERVALO_SEGUNDOS',

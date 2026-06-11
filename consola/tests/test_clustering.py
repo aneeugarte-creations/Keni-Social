@@ -104,6 +104,92 @@ def test_asignar_gana_el_mas_parecido():
     assert clustering.asignar(item, [c_lejos, c_cerca], umbral=0.6) == "cerca"
 
 
+def test_asignar_une_por_titulo_traducido():
+    # La historia extranjera ya TRADUCIDA debe atrapar al titular en español que llega después.
+    cluster = {
+        "id": "c-ext",
+        "clave": "t:abc",
+        "titulo": "Earthquake of 6.2 shakes Guerrero this afternoon",
+        "titulo_es": "Un sismo de 6.2 sacude Guerrero esta tarde",
+    }
+    item = _item(url="", titulo="Sismo de 6.2 sacude Guerrero esta tarde")
+    assert clustering.asignar(item, [cluster], umbral=0.82) == "c-ext"
+    # El Asignador (índice) toma la misma decisión.
+    asignador = clustering.Asignador([cluster], umbral=0.82)
+    assert asignador.asignar(item) == "c-ext"
+
+
+def test_fuzzy_veta_numeros_incompatibles():
+    # Mismo texto, cifras DISTINTAS = eventos distintos: el fuzzy no debe unirlos.
+    cluster = {"id": "c1", "clave": "t:abc", "titulo": "Sismo de magnitud 5.8 sacude Guerrero hoy"}
+    item = _item(url="", titulo="Sismo de magnitud 7.1 sacude Guerrero hoy")
+    assert clustering.asignar(item, [cluster], umbral=0.7) is None
+    # Con la MISMA cifra sí une (la compatibilidad de números no castiga el caso bueno).
+    mismo = _item(url="", titulo="Sismo de magnitud 5.8 sacude Guerrero hoy")
+    assert clustering.asignar(mismo, [cluster], umbral=0.7) == "c1"
+
+
+def test_fuzzy_sin_numeros_no_se_penaliza():
+    cluster = {"id": "c1", "clave": "t:abc", "titulo": "Sismo de magnitud 5.8 sacude Guerrero"}
+    item = _item(url="", titulo="Sismo sacude Guerrero esta tarde")
+    # Un lado sin números no dispara el veto (puede unir o no por ratio, pero no por veto).
+    assert not clustering._numeros_incompatibles(
+        clustering.similitud.clave_fuzzy(item["titulo"]),
+        clustering.similitud.clave_fuzzy(cluster["titulo"]),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# grupos_lexicos: merge tardío de la ventana                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_grupos_lexicos_agrupa_duplicados_tardios():
+    clusters = [
+        {"id": "a", "titulo": "El presidente anuncia una nueva reforma para los estados", "categoria": "mx"},
+        {"id": "b", "titulo": "El presidente anuncia nueva reforma para los estados", "categoria": "mx"},
+        {"id": "c", "titulo": "Resultados de la jornada de futbol del domingo", "categoria": "deportes"},
+    ]
+    grupos = clustering.grupos_lexicos(clusters, umbral=0.86)
+    assert grupos == [["a", "b"]]
+
+
+def test_grupos_lexicos_no_cruza_categorias_distintas():
+    clusters = [
+        {"id": "a", "titulo": "El presidente anuncia una nueva reforma para los estados", "categoria": "mx"},
+        {"id": "b", "titulo": "El presidente anuncia nueva reforma para los estados", "categoria": "deportes"},
+    ]
+    assert clustering.grupos_lexicos(clusters, umbral=0.86) == []
+    # Una categoría VACÍA casa con cualquiera.
+    clusters[1]["categoria"] = ""
+    assert clustering.grupos_lexicos(clusters, umbral=0.86) == [["a", "b"]]
+
+
+def test_grupos_lexicos_une_por_traduccion():
+    clusters = [
+        {"id": "ext", "titulo": "Earthquake shakes Mexico City",
+         "titulo_es": "Un sismo sacude la Ciudad de Mexico esta manana", "categoria": "mx"},
+        {"id": "mx", "titulo": "Un sismo sacude la Ciudad de Mexico esta manana", "categoria": "mx"},
+    ]
+    assert clustering.grupos_lexicos(clusters, umbral=0.86) == [["ext", "mx"]]
+
+
+def test_grupos_lexicos_respeta_veto_de_numeros():
+    clusters = [
+        {"id": "a", "titulo": "Sismo de magnitud 5.8 sacude Guerrero hoy", "categoria": "mx"},
+        {"id": "b", "titulo": "Sismo de magnitud 7.1 sacude Guerrero hoy", "categoria": "mx"},
+    ]
+    assert clustering.grupos_lexicos(clusters, umbral=0.5) == []
+
+
+def test_grupos_lexicos_umbral_cero_apaga():
+    clusters = [
+        {"id": "a", "titulo": "El presidente anuncia una nueva reforma", "categoria": ""},
+        {"id": "b", "titulo": "El presidente anuncia una nueva reforma", "categoria": ""},
+    ]
+    assert clustering.grupos_lexicos(clusters, umbral=0) == []
+
+
 # --------------------------------------------------------------------------- #
 # recalcular                                                                    #
 # --------------------------------------------------------------------------- #
