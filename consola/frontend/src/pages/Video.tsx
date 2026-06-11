@@ -21,7 +21,7 @@ import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPaginaFin, TituloPagina } from "@/components/layout/encabezado";
 import { EditorSubtitulos } from "@/components/video/EditorSubtitulos";
 import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 // El editor de capas (Konva) se carga PEREZOSAMENTE: pesa y solo se necesita en la sección
@@ -401,11 +401,12 @@ export default function Video() {
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Video" icono={VideoIcon} />
 
-      {/* Estado de guardado en la CABECERA unificada (mismo patrón que Imagen): se portaliza vía
-          `AccionesPagina` (bajo `md` cae a la fila de acciones móvil). Honesto con el estado real:
-          lee los isPending de crear/guardar/actualizar. En el gestor no hay borrador en edición. */}
+      {/* Estado de guardado en la CABECERA unificada (mismo patrón que Imagen): se portaliza al
+          flanco DERECHO vía `AccionesPaginaFin` (bajo `md` cae a la fila de acciones móvil).
+          Honesto con el estado real: lee los isPending de crear/guardar/actualizar. En el gestor
+          no hay borrador en edición. */}
       {seccion !== "gestor" && (
-        <AccionesPagina>
+        <AccionesPaginaFin>
           <span
             aria-live="polite"
             className={`whitespace-nowrap text-xs ${
@@ -416,7 +417,7 @@ export default function Video() {
           >
             {guardando ? "Guardando…" : composicionId ? "Guardado" : "Sin guardar"}
           </span>
-        </AccionesPagina>
+        </AccionesPaginaFin>
       )}
 
       {/* Sub-navegación de secciones */}
@@ -458,7 +459,7 @@ export default function Video() {
       )}
 
       {/* Barra del BORRADOR: título, estado (borrador/listo) y acciones. El indicador de
-          guardado vive en la cabecera unificada (AccionesPagina, arriba). Fuera del gestor
+          guardado vive en la cabecera unificada (AccionesPaginaFin, arriba). Fuera del gestor
           (en el gestor no se edita un borrador concreto). */}
       {seccion !== "gestor" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">

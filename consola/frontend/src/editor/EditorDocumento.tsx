@@ -1,6 +1,6 @@
 // Shell del editor (patrón Canva: lienzo protagonista, cromo a los lados):
 //
-//   cabecera del shell ←(portal)— [estado/guardar · deshacer/rehacer · muestra · Más · Exportar]
+//   cabecera del shell ←(portales)— centro: [deshacer/rehacer · muestra · Más] · derecha: [estado/guardar · Exportar]
 //   [rail] [flyout?] [        LIENZO centrado         ] [inspector?]
 //                    [barra contextual flotante (solo con selección)]
 //
@@ -13,11 +13,12 @@
 //   sin fijar lo cierra a los ~300 ms.
 //   «Diseño» pinta el panel que aporta la página (`panelDiseno`); si la página solo da
 //   `onPlantillas` (overlay de vídeo), el botón cae al modal clásico.
-// - ACCIONES: un único clúster (deshacer/rehacer, vista con muestra, menú «Más», Exportar) que con
-//   `accionesEnCabecera` se PORTALIZA a la barra de cabecera unificada del shell (vía
-//   `AccionesPagina`); sin ella (p. ej. overlay de vídeo) se pinta como fila fina propia. La página
-//   puede aportar `accionesInicio` (estado de guardado + guardar), `accionesFin` (acción primaria
-//   contextual) y `menuExtra` (entradas para el menú «Más»).
+// - ACCIONES: con `accionesEnCabecera` se PORTALIZAN a la barra de cabecera unificada del shell en
+//   DOS portales (patrón Canva): las herramientas (deshacer/rehacer, vista con muestra, menú
+//   «Más») al carril CENTRADO (`AccionesPagina`) y guardado/exportar al flanco DERECHO
+//   (`AccionesPaginaFin`); sin ella (p. ej. overlay de vídeo) todo se pinta como una fila fina
+//   propia. La página puede aportar `accionesInicio` (estado de guardado + guardar),
+//   `accionesFin` (acción primaria contextual) y `menuExtra` (entradas para el menú «Más»).
 // - BARRA CONTEXTUAL: controles de la capa seleccionada; FLOTA sobre el lienzo (franja reservada
 //   del Lienzo, junto a alinear/orden/duplicar/borrar) y SOLO aparece con selección.
 // - INSPECTOR: panel de ajustes profundos, desde «Ajustes» del rail o de la barra contextual
@@ -48,7 +49,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { AccionesPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, AccionesPaginaFin } from "@/components/layout/encabezado";
 import { confirmar } from "@/components/comunes/confirmar";
 
 import { BarraContextual } from "./BarraContextual";
@@ -388,12 +389,14 @@ export function EditorDocumento({
   const tituloTool = HERRAMIENTAS.find((h) => h.clave === tool)?.etiqueta ?? "";
 
   // ── CLÚSTER DE ACCIONES ─────────────────────────────────────────────────────────────────────
-  // Una sola fila: [página: estado+guardar] · deshacer/rehacer · muestra (sm+) · «Más» ·
-  // Exportar · [página: primaria contextual]. Con `accionesEnCabecera` se portaliza a la barra
-  // de cabecera del shell; si no, se pinta como fila fina propia (overlay de vídeo).
-  const cluster = (
-    <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
-      {accionesInicio}
+  // Dos piezas: HERRAMIENTAS (deshacer/rehacer · muestra (sm+) · «Más») y GUARDADO/EXPORTAR
+  // ([página: estado+guardar] · Exportar · [página: primaria contextual]). Con
+  // `accionesEnCabecera` cada pieza va a SU portal de la cabecera del shell (patrón Canva):
+  // herramientas al carril CENTRADO (`AccionesPagina`) y guardado/exportar al flanco DERECHO,
+  // junto al contexto de marca (`AccionesPaginaFin`). Sin cabecera (overlay de vídeo) se pinta
+  // todo como una sola fila fina propia, en el orden de siempre.
+  const botonesHerramientas = (
+    <>
       <button
         title="Deshacer (⌘Z)"
         disabled={!puedeDeshacer}
@@ -500,6 +503,11 @@ export function EditorDocumento({
           </>
         )}
       </div>
+    </>
+  );
+
+  const exportarYFin = (
+    <>
       {exportar && (
         <ExportarDialogo
           store={store}
@@ -509,7 +517,7 @@ export function EditorDocumento({
         />
       )}
       {accionesFin}
-    </div>
+    </>
   );
 
   return (
@@ -565,10 +573,24 @@ export function EditorDocumento({
             seleccionar. En móvil deja hueco inferior para el rail fijo (h-16). */}
         <div className="flex min-w-0 flex-1 flex-col max-md:pb-[calc(4rem_+_env(safe-area-inset-bottom))]">
           {accionesEnCabecera ? (
-            <AccionesPagina>{cluster}</AccionesPagina>
+            <>
+              <AccionesPagina>
+                <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">{botonesHerramientas}</div>
+              </AccionesPagina>
+              <AccionesPaginaFin>
+                <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+                  {accionesInicio}
+                  {exportarYFin}
+                </div>
+              </AccionesPaginaFin>
+            </>
           ) : (
             <div className="flex items-center justify-end border-b border-border bg-background px-2 py-1">
-              {cluster}
+              <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+                {accionesInicio}
+                {botonesHerramientas}
+                {exportarYFin}
+              </div>
             </div>
           )}
 

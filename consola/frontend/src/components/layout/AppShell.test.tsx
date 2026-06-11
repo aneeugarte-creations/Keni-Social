@@ -4,7 +4,7 @@ import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/layout/AppShell";
-import { AccionesPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, AccionesPaginaFin } from "@/components/layout/encabezado";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import { FiltrosContenidoProvider } from "@/hooks/use-filtros-contenido";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
@@ -221,6 +221,9 @@ describe("AppShell · sidebar siempre presente", () => {
                       <AccionesPagina>
                         <button type="button">herramienta-editor</button>
                       </AccionesPagina>
+                      <AccionesPaginaFin>
+                        <button type="button">exportar-editor</button>
+                      </AccionesPaginaFin>
                     </div>
                   }
                 />
@@ -239,6 +242,12 @@ describe("AppShell · sidebar siempre presente", () => {
     // en el carril centrado entre los flancos `flex-1` (no en el hueco pegado al título).
     expect(boton.closest("header")).not.toBeNull();
     expect(boton.parentElement?.className).toContain("justify-center");
+    // GUARDADO/EXPORTAR (`AccionesPaginaFin`) aterriza en el FLANCO DERECHO, dentro del
+    // contenedor `justify-end` que comparte con el contexto de marca.
+    const exportarBtn = await screen.findByRole("button", { name: "exportar-editor" });
+    expect(exportarBtn.closest("header")).not.toBeNull();
+    expect(exportarBtn.parentElement?.className).not.toContain("justify-center");
+    expect(exportarBtn.parentElement?.parentElement?.className).toContain("justify-end");
   });
 
   it("fuera del editor las acciones siguen junto al título (sin carril centrado)", async () => {

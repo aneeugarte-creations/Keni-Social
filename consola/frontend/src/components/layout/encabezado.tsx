@@ -23,6 +23,13 @@ export interface EncabezadoCtx {
   slotInicio: HTMLElement | null;
   /** Hueco derecho de la barra (acciones / menú "⋯"). */
   slotAcciones: HTMLElement | null;
+  /**
+   * Hueco del FLANCO DERECHO de la barra, junto al contexto de marca (guardado/exportar del
+   * editor). Solo lo monta el AppShell en las rutas del editor (donde `slotAcciones` pasa a ser
+   * el carril CENTRADO); opcional para no romper a quien construya el ctx a mano (tests):
+   * `AccionesPaginaFin` cae a `slotAcciones` si falta.
+   */
+  slotAccionesFin?: HTMLElement | null;
   /** Marca que hay un título de página montado (para que la barra se pinte y tome borde). */
   registrarTitulo: () => () => void;
 }
@@ -76,6 +83,21 @@ export function TituloPagina({ titulo, icono: Icono }: { titulo: string; icono?:
 export function AccionesPagina({ children }: { children: React.ReactNode }) {
   const ctx = useEncabezado();
   if (ctx?.slotAcciones) return createPortal(children, ctx.slotAcciones);
+  // Sin proveedor (tests sueltos): render inline. Con proveedor pero hueco sin montar: nada.
+  if (!ctx) return <>{children}</>;
+  return null;
+}
+
+/**
+ * Acciones del FLANCO DERECHO de la barra (guardado/exportar del editor): se portalizan al
+ * hueco junto al contexto de marca. Donde ese hueco no existe (páginas sin carril centrado,
+ * o en móvil, donde el AppShell apunta ambos huecos a la fila bajo el header) cae al hueco
+ * de acciones normal, así el contenido nunca se pierde.
+ */
+export function AccionesPaginaFin({ children }: { children: React.ReactNode }) {
+  const ctx = useEncabezado();
+  const destino = ctx?.slotAccionesFin ?? ctx?.slotAcciones ?? null;
+  if (destino) return createPortal(children, destino);
   // Sin proveedor (tests sueltos): render inline. Con proveedor pero hueco sin montar: nada.
   if (!ctx) return <>{children}</>;
   return null;

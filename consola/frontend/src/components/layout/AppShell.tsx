@@ -75,6 +75,9 @@ export function AppShell() {
   // para no romper el contrato de `<TituloPagina/>`.
   const [slotInicio, setSlotInicio] = React.useState<HTMLElement | null>(null);
   const [slotAcciones, setSlotAcciones] = React.useState<HTMLElement | null>(null);
+  // Hueco del FLANCO DERECHO (guardado/exportar del editor, vía `AccionesPaginaFin`). Solo se
+  // monta en las rutas del editor; en el resto queda null y ese portal cae a `slotAcciones`.
+  const [slotAccionesFin, setSlotAccionesFin] = React.useState<HTMLElement | null>(null);
   // MÓVIL: las acciones de página NO caben en la topbar (una sola fila de h-12 que ya
   // lleva hamburguesa + sección + contexto + campana; un selector de 200px la desborda
   // y quedaba CORTADO, p. ej. los atajos de Métricas). Bajo `md` el portal de acciones
@@ -86,9 +89,12 @@ export function AppShell() {
     () => ({
       slotInicio,
       slotAcciones: esEscritorio ? slotAcciones : slotAccionesMovil,
+      // En móvil ambos huecos apuntan a la misma fila bajo el header: guardado/exportar y
+      // herramientas conviven allí con wrap.
+      slotAccionesFin: esEscritorio ? slotAccionesFin : slotAccionesMovil,
       registrarTitulo,
     }),
-    [slotInicio, slotAcciones, slotAccionesMovil, esEscritorio, registrarTitulo],
+    [slotInicio, slotAcciones, slotAccionesFin, slotAccionesMovil, esEscritorio, registrarTitulo],
   );
 
   // Hidrata la caché de límites de caracteres desde la fuente única del backend
@@ -169,14 +175,16 @@ export function AppShell() {
                   apiladas tras el título. Tres zonas: título a la izquierda y contexto a la
                   derecha como flancos `flex-1` de base 0 (iguales => el carril central queda
                   en el centro REAL de la barra y, si falta sitio, ceden antes de solaparse),
-                  y el hueco de acciones entre ambos. En móvil el portal de acciones apunta a
-                  su fila bajo el header (como siempre): el carril queda vacío y `empty:hidden`
-                  lo quita del flujo. */}
+                  y el hueco de acciones entre ambos. El flanco derecho lleva además el hueco
+                  de GUARDADO/EXPORTAR (`AccionesPaginaFin`), antes del contexto de marca. En
+                  móvil ambos portales apuntan a la fila bajo el header (como siempre): los
+                  huecos quedan vacíos y `empty:hidden` los quita del flujo. */}
               <div className="flex h-full min-w-0 flex-1 items-center">
                 <EncabezadoSeccion refInicio={setSlotInicio} />
               </div>
               <div ref={setSlotAcciones} className="flex h-full min-w-0 items-center justify-center empty:hidden" />
               <div className="flex flex-1 items-center justify-end gap-2">
+                <div ref={setSlotAccionesFin} className="flex min-w-0 items-center gap-1 empty:hidden" />
                 <ControlContexto />
                 <CampanaNotificaciones />
               </div>
