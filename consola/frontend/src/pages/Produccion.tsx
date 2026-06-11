@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Factory, RefreshCw } from "lucide-react";
+import { Factory, RefreshCw, SquarePen } from "lucide-react";
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -336,6 +336,28 @@ export default function Produccion() {
           </span>
         )}
       </div>
+
+      {/* Enlace cruzado proceso → Biblioteca (ADR 0011 F2): las etapas con IA del proceso
+          (Copy, Arte) se editan en la Biblioteca de Prompts; deep-link con el doc abierto. */}
+      <p className="-mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+        <SquarePen className="h-3 w-3" aria-hidden />
+        Prompts del proceso en la Biblioteca:
+        <Link
+          to="/contenido/texto/documentos?doc=prompt%2Fcopy"
+          className="underline-offset-2 hover:text-foreground hover:underline"
+          title="Editar el prompt de Copy en la Biblioteca"
+        >
+          Copy
+        </Link>
+        ·
+        <Link
+          to="/contenido/texto/documentos?doc=prompt%2Farte"
+          className="underline-offset-2 hover:text-foreground hover:underline"
+          title="Editar el prompt de Arte en la Biblioteca"
+        >
+          Arte
+        </Link>
+      </p>
 
       {/* Feed unificado: runs del pipeline + actividad suelta, recientes primero. */}
       {cargandoTodo && listaQuery.isPending ? (

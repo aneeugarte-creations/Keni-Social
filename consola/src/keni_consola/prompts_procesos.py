@@ -33,14 +33,14 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/fusion-verificacion": [
         "Ingesta de noticias · verificación de cada grupo propuesto antes de fundir",
     ],
-    "prompt/editorial": ["Priorización · perfil de keywords por marca"],
+    "prompt/editorial": ["Investigación · ranking (perfil de keywords por marca)"],
     "prompt/clasificacion-marca": ["Investigación · clasificación de marca"],
     # Importación de documentos
     "prompt/importar/calendario": ["Importar calendario de contenido (documento → parrilla)"],
     "prompt/importar/parrilla": ["Importar rota/parrilla (documento → operaciones)"],
     # Pipeline de contenido
-    "prompt/validacion": ["Pipeline · criba QA de la fuente (pre-copy)"],
-    "prompt/copy": ["Pipeline · generación de copy desde la nota"],
+    "prompt/validacion": ["Investigación · verificación de la fuente (antes del copy)"],
+    "prompt/copy": ["Producción · generación de copy desde la nota"],
     "prompt/evergreen": ["Taller evergreen · brainstorming de ideas"],
     # Envoltorios del copy (instrucciones aditivas que `dominio.generar.componer` concatena
     # al prompt base; el código decide CUÁNDO se inyectan y rellena sus {{VARIABLES}}).

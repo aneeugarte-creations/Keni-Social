@@ -67,7 +67,8 @@ def test_doc_incluye_procesos_de_transparencia(cliente):
     assert cualq["procesos"] == []
     cat = cliente.post("/api/texto", json={"titulo": "Validación", "tipo": "prompt"}).json()["documento"]
     assert cat["id"] == "prompt/validacion"
-    assert cat["procesos"] and any("criba" in p.lower() for p in cat["procesos"])
+    # Vocabulario ADR 0011 §5: la etapa se llama "verificación" (sin "criba"/"QA").
+    assert cat["procesos"] and any("verificación" in p.lower() for p in cat["procesos"])
     docs = cliente.get("/api/texto", params={"tipo": "prompt"}).json()["documentos"]
     assert all("procesos" in d for d in docs)
 

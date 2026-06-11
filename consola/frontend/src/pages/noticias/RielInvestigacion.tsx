@@ -13,8 +13,9 @@
  * viven en el panel «Ajustes del motor» del menú «⋮» de la página.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -36,6 +37,8 @@ interface EtapaProceso {
   claves: readonly string[];
   /** Qué hace la etapa (tooltip). */
   ayuda: string;
+  /** Doc de la Biblioteca cuyo prompt alimenta la etapa (enlace «Editar prompt»). */
+  doc?: string;
 }
 
 // Las cinco etapas del proceso Investigación (ADR 0011), en orden de flujo. Cada una resuelve su
@@ -50,23 +53,32 @@ const ETAPAS: readonly EtapaProceso[] = [
     nombre: "Fusión",
     claves: ["KENI_PIPELINE_FUSION", MAESTRO_INVESTIGACION],
     ayuda: "Agrupa con IA las notas del mismo evento en una sola historia.",
+    doc: "prompt/fusion",
   },
   {
     nombre: "Clasificación",
     claves: ["KENI_CLASIFICAR_MARCA_IA", MAESTRO_INVESTIGACION],
     ayuda: "Asigna marca con IA a una última hora sin marca.",
+    doc: "prompt/clasificacion-marca",
   },
   {
     nombre: "Ranking",
     claves: ["KENI_RANKING_PERFIL_IA", MAESTRO_INVESTIGACION],
     ayuda: "Ordena el pool por el perfil de relevancia de la marca.",
+    doc: "prompt/editorial",
   },
   {
     nombre: "Verificación",
     claves: ["KENI_PIPELINE_VALIDACION", MAESTRO_INVESTIGACION],
-    ayuda: "Criba la fuente (QA) antes de dejarla pasar a copy.",
+    ayuda: "Verifica la fuente antes de dejarla pasar a copy.",
+    doc: "prompt/validacion",
   },
 ] as const;
+
+/** Deep-link a la Biblioteca con el documento abierto (`?doc=`, ver `pages/Texto.tsx`). */
+function rutaDoc(doc: string): string {
+  return `/contenido/texto/documentos?doc=${encodeURIComponent(doc)}`;
+}
 
 function Punto({ estado }: { estado: EstadoEtapa }) {
   return (
@@ -140,6 +152,17 @@ export function RielInvestigacion() {
                 >
                   <Punto estado={estado} />
                   <span className="font-medium leading-none">{etapa.nombre}</span>
+                  {/* Enlace cruzado proceso → Biblioteca: la etapa con prompt se edita allí. */}
+                  {etapa.doc ? (
+                    <Link
+                      to={rutaDoc(etapa.doc)}
+                      className="ml-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
+                      aria-label={`Editar el prompt de ${etapa.nombre} en la Biblioteca`}
+                      title="Editar prompt en la Biblioteca"
+                    >
+                      <SquarePen className="h-3 w-3" aria-hidden />
+                    </Link>
+                  ) : null}
                 </div>
               </Tooltip>
             </React.Fragment>

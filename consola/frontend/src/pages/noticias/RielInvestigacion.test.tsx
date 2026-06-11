@@ -5,6 +5,7 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
@@ -58,7 +59,9 @@ function renderRiel(u: UsuarioSesion | null) {
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={sesionValor(u)}>
-        <RielInvestigacion />
+        <MemoryRouter>
+          <RielInvestigacion />
+        </MemoryRouter>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
@@ -95,6 +98,21 @@ describe("RielInvestigacion", () => {
     await waitFor(() =>
       expect(screen.getByTestId("etapa-ingesta").getAttribute("data-estado")).toBe("off"),
     );
+  });
+
+  it("las etapas con prompt enlazan a su documento en la Biblioteca (deep-link ?doc=)", () => {
+    renderRiel(usuario("admin"));
+    const enlace = screen.getByLabelText("Editar el prompt de Verificación en la Biblioteca");
+    expect(enlace.getAttribute("href")).toBe(
+      "/contenido/texto/documentos?doc=prompt%2Fvalidacion",
+    );
+    expect(
+      screen
+        .getByLabelText("Editar el prompt de Ranking en la Biblioteca")
+        .getAttribute("href"),
+    ).toBe("/contenido/texto/documentos?doc=prompt%2Feditorial");
+    // La ingesta es mecánica (sin prompt): no lleva enlace.
+    expect(screen.queryByLabelText(/Editar el prompt de Ingesta/)).toBeNull();
   });
 
   it("no admin: no consulta el catálogo y las etapas quedan «desconocido»", async () => {

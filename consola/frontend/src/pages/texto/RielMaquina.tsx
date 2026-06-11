@@ -13,9 +13,17 @@
  */
 import { AlertTriangle, ArrowRight, CheckCircle2, Cog, Hammer } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EtapaMaquina, EtapaPrompt, MaquinaTexto } from "@/types";
+
+/** Enlace cruzado Biblioteca → página de proceso (ADR 0011 F2): cada máquina con página
+ *  propia enlaza a su proceso EN VIVO. Importación no tiene página de proceso: sin enlace. */
+const RUTA_PROCESO: Record<string, string> = {
+  investigacion: "/datos/investigacion",
+  produccion: "/datos/produccion",
+};
 
 /** Badge del estado de publicación de una etapa con prompt (producción / sin publicar). */
 function BadgesPublicacion({ etapa }: { etapa: EtapaPrompt }) {
@@ -142,6 +150,15 @@ export function RielMaquina({
         <div className="min-w-0">
           <h2 className="text-lg font-semibold leading-tight">{maquina.titulo}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">{maquina.subtitulo}</p>
+          {RUTA_PROCESO[maquina.id] ? (
+            <Link
+              to={RUTA_PROCESO[maquina.id]}
+              className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Ver el proceso en vivo
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </Link>
+          ) : null}
         </div>
         {conCambios > 0 ? (
           <span

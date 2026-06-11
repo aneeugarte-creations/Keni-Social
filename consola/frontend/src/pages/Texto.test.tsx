@@ -97,12 +97,12 @@ const MAQUINA = {
       titulo: "Investigación",
       subtitulo: "El motor de noticias",
       etapas: [
-        { tipo: "mecanica", id: "ingesta", titulo: "Sondeo RSS + agencias" },
+        { tipo: "mecanica", id: "ingesta", titulo: "Ingesta" },
         { tipo: "mecanica", id: "clustering", titulo: "Clustering y merge léxico" },
         {
           tipo: "prompt",
           id: "fusion",
-          titulo: "Fusión semántica",
+          titulo: "Fusión",
           doc_id: "prompt/fusion",
           produccion: DOC_FUSION.produccion,
           sha_actual: "a1",
@@ -119,13 +119,13 @@ const MAQUINA = {
         {
           tipo: "prompt",
           id: "copy",
-          titulo: "Redacción editorial (copy)",
+          titulo: "Copy",
           doc_id: "prompt/copy",
           produccion: DOC_COPY.produccion,
           sha_actual: "c1",
           sin_publicar: true,
         },
-        { tipo: "mecanica", id: "avance", titulo: "Avance a revisión" },
+        { tipo: "mecanica", id: "aprobacion", titulo: "Aprobación" },
         { tipo: "mecanica", id: "publicacion", titulo: "Publicación" },
         {
           tipo: "prompt",
@@ -309,16 +309,21 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     expect(screen.getByRole("tab", { name: "Documentos" })).toBeInTheDocument();
 
     // Etapa con prompt: tarjeta clicable con el nombre del doc y su publicación.
-    const tarjeta = screen.getByTitle("Fusión semántica — abrir el prompt");
+    const tarjeta = screen.getByTitle("Fusión — abrir el prompt");
     expect(tarjeta.tagName).toBe("BUTTON");
     // El nombre del doc sale del listado (carga aparte): espera a que aparezca.
     expect(await screen.findByText("Fusión de historias")).toBeInTheDocument();
     expect(screen.getAllByText("producción").length).toBeGreaterThan(0);
 
     // Etapa mecánica: nodo fantasma NO clicable, con tooltip explicativo.
-    const mecanica = screen.getByText("Sondeo RSS + agencias");
+    const mecanica = screen.getByText("Ingesta");
     expect(mecanica.closest("button")).toBeNull();
     expect(screen.getAllByTitle("Etapa automática sin prompt").length).toBe(3);
+
+    // Enlace cruzado a la página del proceso (ADR 0011 F2).
+    expect(
+      screen.getByRole("link", { name: /Ver el proceso en vivo/ }).getAttribute("href"),
+    ).toBe("/datos/investigacion");
 
     // Salud agregada: en Investigación no hay cambios pendientes.
     expect(screen.getByText("todo publicado")).toBeInTheDocument();
@@ -335,6 +340,11 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     expect(await screen.findByText("La máquina de contenido")).toBeInTheDocument();
     // Salud agregada: el copy tiene cambios sin publicar.
     expect(screen.getByText(/1 etapa sin publicar/)).toBeInTheDocument();
+
+    // Enlace cruzado a la página del proceso (el hub Producción).
+    expect(
+      screen.getByRole("link", { name: /Ver el proceso en vivo/ }).getAttribute("href"),
+    ).toBe("/datos/produccion");
 
     // El evergreen (seccion "taller") vive separado del riel principal.
     const taller = screen.getByRole("region", { name: "Taller" });
@@ -400,7 +410,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     montar("/?vista=produccion");
 
     await screen.findByText("La máquina de contenido");
-    fireEvent.click(screen.getByTitle("Redacción editorial (copy) — abrir el prompt"));
+    fireEvent.click(screen.getByTitle("Copy — abrir el prompt"));
 
     // Cabecera: título editable, línea de deployment, badge sin publicar y acciones.
     expect(await screen.findByDisplayValue("Prompt de copy")).toBeInTheDocument();
@@ -410,7 +420,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
 
     // Pestaña «Uso»: la posición nueva, máquina → etapa (del endpoint nuevo).
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Uso" }), { button: 0 });
-    expect(await screen.findByText("Producción → Redacción editorial (copy)")).toBeInTheDocument();
+    expect(await screen.findByText("Producción → Copy")).toBeInTheDocument();
 
     // Volver regresa a la pestaña de origen (Producción), no a la vista por defecto.
     fireEvent.click(screen.getByRole("button", { name: "Volver a la biblioteca" }));

@@ -333,30 +333,36 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
     assert prod["titulo"] == "Producción" and prod["subtitulo"] == "La máquina de contenido"
     assert imp["titulo"] == "Herramientas de importación"
 
-    # Investigación: el proceso COMPLETO en orden (la frontera del ADR: QA es Investigación),
-    # con las etapas sin prompt de la Biblioteca como `mecanica` (contexto del riel).
+    # Investigación: el proceso COMPLETO en orden (la frontera del ADR: la verificación es
+    # Investigación), con las etapas sin prompt de la Biblioteca como `mecanica` (contexto).
+    # Ids/títulos de las etapas compartidas casan 1:1 con el riel de la página Investigación
+    # (Ingesta · Fusión · Clasificación · Ranking · Verificación).
     assert [(e["tipo"], e["id"]) for e in inv["etapas"]] == [
         ("mecanica", "ingesta"),
         ("mecanica", "clustering"),
         ("prompt", "fusion-verificacion"),
         ("prompt", "fusion"),
         ("prompt", "traduccion"),
-        ("prompt", "clasificacion-marca"),
+        ("prompt", "clasificacion"),
         ("prompt", "ranking"),
         ("mecanica", "admision"),
-        ("prompt", "validacion"),
+        ("prompt", "verificacion"),
         ("prompt", "algoritmos"),
     ]
     por_id = {e["id"]: e for e in inv["etapas"]}
-    assert por_id["validacion"]["doc_id"] == "prompt/validacion"  # prompt_base_de("qa")
+    assert por_id["verificacion"]["doc_id"] == "prompt/validacion"  # prompt_base_de("qa")
+    assert por_id["verificacion"]["titulo"] == "Verificación"
     assert por_id["ranking"]["doc_id"] == "prompt/editorial"
+    assert por_id["ranking"]["titulo"] == "Ranking"
+    assert por_id["fusion"]["titulo"] == "Fusión"
     assert por_id["algoritmos"]["doc_id"] == "prompt/sugerencias"
     # El clasificador de marca ya es un prompt de la Biblioteca (migrado del hardcodeado).
-    assert por_id["clasificacion-marca"]["doc_id"] == "prompt/clasificacion-marca"
+    assert por_id["clasificacion"]["doc_id"] == "prompt/clasificacion-marca"
     # Etapas mecánicas: SOLO contexto (sin doc_id ni estado de publicación).
     for eid in ("ingesta", "clustering", "admision"):
         assert set(por_id[eid]) == {"tipo", "id", "titulo"}
-    assert por_id["clasificacion-marca"]["titulo"] == "Clasificación de marca (IA)"
+    assert por_id["ingesta"]["titulo"] == "Ingesta"
+    assert por_id["clasificacion"]["titulo"] == "Clasificación"
     # Etapas prompt: doc + estado de publicación (degradado sin BD: sin puntero).
     for m in maquinas:
         for e in m["etapas"]:
@@ -365,17 +371,20 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
                         "sin_publicar"} <= set(e)
                 assert e["produccion"] is None
 
-    # Producción: copy -> arte -> avance -> publicación, y el taller evergreen al final.
+    # Producción: copy -> arte -> aprobación -> publicación, y el taller evergreen al final
+    # (mismo vocabulario que el hub Producción: Copy · Arte · Aprobación).
     assert [(e["tipo"], e["id"]) for e in prod["etapas"]] == [
         ("prompt", "copy"),
         ("prompt", "arte"),
-        ("mecanica", "avance"),
+        ("mecanica", "aprobacion"),
         ("mecanica", "publicacion"),
         ("prompt", "evergreen"),
     ]
     pp = {e["id"]: e for e in prod["etapas"]}
     assert pp["copy"]["doc_id"] == "prompt/copy"
+    assert pp["copy"]["titulo"] == "Copy"
     assert pp["arte"]["doc_id"] == "prompt/arte"
+    assert pp["arte"]["titulo"] == "Arte"
     assert pp["evergreen"]["doc_id"] == "prompt/evergreen"
     # `seccion` es OPCIONAL: solo el taller la lleva.
     assert pp["evergreen"]["seccion"] == "taller"

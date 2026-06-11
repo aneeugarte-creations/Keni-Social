@@ -535,32 +535,39 @@ async def variables(request: Request) -> Response:
 #   - `prompt` : etapa cuyo prompt vive en la Biblioteca. `doc_id=None` => se resuelve por el
 #     REGISTRO (`prompt_base_de`, ver `_ETAPA_PIPELINE`): respeta rebindeos sin tocar código.
 #
-# El ORDEN sigue el modelo conceptual del ADR 0011 (frontera: la validación QA es
+# El ORDEN sigue el modelo conceptual del ADR 0011 (frontera: la verificación de fuente es
 # Investigación; copy/arte son Producción), apoyado en el orden real de los daemons
 # (`ingesta_daemon.ejecutar_barrido`, `pipeline_contenido._barrido`). Donde difieren hoy
-# manda el ADR: la clasificación de marca corre DENTRO del clustering y la QA corre tras
-# la admisión del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
-# proceso de Investigación. La fusión semántica son DOS prompts: la verificación
+# manda el ADR: la clasificación de marca corre DENTRO del clustering y la verificación corre
+# tras la admisión del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
+# proceso de Investigación. La fusión son DOS prompts: la comprobación previa
 # (`prompt/fusion-verificacion`) corre por grupo propuesto ANTES de fundir.
+#
+# TERMINOLOGÍA (ADR 0011 §5 + páginas de proceso de F2): los títulos e ids de las etapas
+# compartidas casan 1:1 con el riel de la página Investigación (`/datos/investigacion`:
+# Ingesta · Fusión · Clasificación · Ranking · Verificación) y con las etapas que muestra el
+# hub Producción (`/datos/produccion`: Copy · Arte · Aprobación). Las etapas intermedias que
+# esas páginas NO muestran (clustering, traducción, admisión…) se mantienen solo como
+# contexto del proceso, en el vocabulario nuevo (sin "QA", "criba" ni "priorización").
 # Tupla de etapa: (tipo, id, titulo, doc_id | None, seccion | None).
 _Etapa = tuple[str, str, str, str | None, str | None]
 _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
     ("investigacion", "Investigación", "El motor de noticias", (
-        ("mecanica", "ingesta", "Sondeo RSS + agencias", None, None),
+        ("mecanica", "ingesta", "Ingesta", None, None),
         ("mecanica", "clustering", "Clustering y merge léxico", None, None),
-        ("prompt", "fusion-verificacion", "Verificación pre-fusión", "prompt/fusion-verificacion", None),
-        ("prompt", "fusion", "Fusión semántica", "prompt/fusion", None),
+        ("prompt", "fusion-verificacion", "Fusión · comprobación previa", "prompt/fusion-verificacion", None),
+        ("prompt", "fusion", "Fusión", "prompt/fusion", None),
         ("prompt", "traduccion", "Traducción y localización MX", "prompt/traduccion", None),
-        ("prompt", "clasificacion-marca", "Clasificación de marca (IA)", "prompt/clasificacion-marca", None),
-        ("prompt", "ranking", "Ranking · perfil de relevancia", "prompt/editorial", None),
+        ("prompt", "clasificacion", "Clasificación", "prompt/clasificacion-marca", None),
+        ("prompt", "ranking", "Ranking", "prompt/editorial", None),
         ("mecanica", "admision", "Admisión", None, None),
-        ("prompt", "validacion", "Validación de fuente (QA)", None, None),  # prompt_base_de("qa")
+        ("prompt", "verificacion", "Verificación", None, None),  # prompt_base_de("qa")
         ("prompt", "algoritmos", "Algoritmos · digest diario", "prompt/sugerencias", None),
     )),
     ("produccion", "Producción", "La máquina de contenido", (
-        ("prompt", "copy", "Redacción editorial (copy)", None, None),       # prompt_base_de("copy")
-        ("prompt", "arte", "Arte (imagen de la pieza)", "prompt/arte", None),
-        ("mecanica", "avance", "Avance a revisión", None, None),
+        ("prompt", "copy", "Copy", None, None),                  # prompt_base_de("copy")
+        ("prompt", "arte", "Arte", "prompt/arte", None),
+        ("mecanica", "aprobacion", "Aprobación", None, None),
         ("mecanica", "publicacion", "Publicación", None, None),
         ("prompt", "evergreen", "Taller evergreen", None, "taller"),        # prompt_base_de("evergreen")
     )),
@@ -575,7 +582,7 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
 )
 
 # id de etapa -> pipeline del registro cuyo prompt base efectivo la alimenta (rebindeable).
-_ETAPA_PIPELINE = {"validacion": "qa", "copy": "copy", "evergreen": "evergreen"}
+_ETAPA_PIPELINE = {"verificacion": "qa", "copy": "copy", "evergreen": "evergreen"}
 
 
 def _doc_id_de_etapa(eid: str, doc_id: str | None) -> str:

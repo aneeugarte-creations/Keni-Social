@@ -37,24 +37,24 @@ __all__ = ["catalogo_variables"]
 # Una entrada por variable: nombre (sin llaves), descripcion (1 frase: que inyecta la
 # Consola), ejemplo (valor realista) y origen (que proceso la sustituye).
 _CATALOGO: tuple[dict[str, str], ...] = (
-    # --- Priorizacion: perfil de keywords por marca (prompt/editorial) ---
+    # --- Ranking (Investigacion): perfil de keywords por marca (prompt/editorial) ---
     {
         "nombre": "MARCA",
         "descripcion": "Id de la marca para la que se compone el prompt (perfil editorial o hashtags).",
         "ejemplo": "unotv",
-        "origen": "Priorización · perfil de keywords por marca (prompt/editorial) y sugerencia de hashtags (prompt/hashtags)",
+        "origen": "Ranking · perfil de keywords por marca (prompt/editorial) y sugerencia de hashtags (prompt/hashtags)",
     },
     {
         "nombre": "MAX_KEYWORDS",
         "descripcion": "Tope numérico de keywords que puede devolver el perfil de la marca.",
         "ejemplo": "30",
-        "origen": "Priorización · perfil de keywords por marca (prompt/editorial)",
+        "origen": "Ranking · perfil de keywords por marca (prompt/editorial)",
     },
     {
         "nombre": "EDITORIAL",
         "descripcion": "Texto completo de la línea editorial de la marca, del que se extraen los temas.",
         "ejemplo": "## Qué cubre UnoTV\nNoticias nacionales, …",
-        "origen": "Priorización · perfil de keywords por marca (prompt/editorial)",
+        "origen": "Ranking · perfil de keywords por marca (prompt/editorial)",
     },
     # --- Ingesta: fusion de historias + verificacion (prompt/fusion, prompt/fusion-verificacion) ---
     {
