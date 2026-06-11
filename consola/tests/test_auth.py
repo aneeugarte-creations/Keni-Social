@@ -381,6 +381,21 @@ def test_me_incluye_creado_y_ultimo_acceso_para_mi_cuenta(entorno):
     assert cuerpo["ultimo_acceso"]
 
 
+def test_me_incluye_es_admin_segun_rol(entorno):
+    """`me` expone `es_admin` (bool plano): True solo para una sesión con rol admin.
+
+    Lo usa el frontend del rediseño de la Biblioteca para gatear publicar/aprobar.
+    """
+    _crear("edi", CLAVE, "editor")
+    _crear("root", CLAVE, "admin")
+    c = _cli()
+    _login(c, "edi", CLAVE)
+    assert c.get("/api/auth/me").json()["usuario"]["es_admin"] is False
+    c2 = _cli()
+    _login(c2, "root", CLAVE)
+    assert c2.get("/api/auth/me").json()["usuario"]["es_admin"] is True
+
+
 def test_login_no_filtra_creado_ni_ultimo_acceso(entorno):
     """El login mantiene su forma minima de 4 campos (esos extras solo van por `me`)."""
     _crear("ana", CLAVE, "editor")

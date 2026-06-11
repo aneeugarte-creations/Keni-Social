@@ -97,6 +97,15 @@ from ._editorial import (
     validacion_editorial,
 )
 from ._io import _leer, _parsear, _serializar
+from ._publicacion import (
+    aplicar_produccion,
+    cuerpo_publicado,
+    estado_publicacion,
+    produccion_de,
+    producciones,
+    sha_actual,
+    shas_actuales,
+)
 from ._rutas import (
     _carpeta_relativa,
     _id_de_ruta,
@@ -114,6 +123,7 @@ from ._semilla import (
     migrar_nombres_biblioteca,
     obtener_semilla,
 )
+from ._variables import catalogo_variables
 from ._validacion import (
     _validar_clase,
     _validar_estado,
@@ -184,6 +194,16 @@ __all__ = [
     "historial",
     "version",
     "restaurar_version",
+    # publicacion (_publicacion): versiones inmutables + puntero "produccion"
+    "produccion_de",
+    "producciones",
+    "sha_actual",
+    "shas_actuales",
+    "cuerpo_publicado",
+    "aplicar_produccion",
+    "estado_publicacion",
+    # variables (_variables): catalogo de marcadores {{VAR}} que sustituye la Consola
+    "catalogo_variables",
     # editorial / pipelines (_editorial)
     "editoriales_de_marca",
     "editoriales_de_pipeline",

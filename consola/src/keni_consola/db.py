@@ -374,6 +374,20 @@ from .db_publicaciones import (  # noqa: F401
     reclamar_preparacion,
     transicionar_estado_publicacion,
 )
+from .db_texto_pub import (  # noqa: F401
+    ESTADO_SOLICITUD_ABIERTA,
+    ESTADO_SOLICITUD_APROBADA,
+    ESTADO_SOLICITUD_RECHAZADA,
+    ESTADOS_SOLICITUD_TEXTO,
+    crear_texto_publicacion,
+    crear_texto_solicitud,
+    historial_texto_publicaciones,
+    listar_texto_solicitudes,
+    obtener_texto_solicitud,
+    resolver_texto_solicitud,
+    texto_produccion_de,
+    texto_producciones,
+)
 from .db_rota import (  # noqa: F401
     actualizar_ausencia_rota,
     actualizar_evento_rota,

@@ -102,6 +102,11 @@ _TABLAS = (
     # Latidos de daemons (observabilidad): sin truncar, un latido de un test contamina las
     # aserciones de estado/contadores del siguiente.
     "daemon_latidos",
+    # Publicaciones y solicitudes de la Biblioteca de Texto (modelo "versión publicada").
+    # Sin truncar, un puntero de producción de un test contaminaría el `produccion`/
+    # `sin_publicar` (y el ensamblaje) del siguiente.
+    "texto_publicaciones",
+    "texto_solicitudes",
     # Journal de migraciones VERSIONADAS de esquema (`_db_core.MIGRACIONES`). Truncarlo entre
     # tests es DELIBERADO: vacia el journal, de modo que la primera conexion de cada test
     # re-aplica las migraciones (idempotentes) y se preserva la auto-curacion "BD vieja" que

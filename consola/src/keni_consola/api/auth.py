@@ -30,7 +30,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, config, seguridad
+from .. import auth, config, permisos, seguridad
 from .._http_json import leer_json
 from ..observabilidad import NOMBRE_LOGGER
 
@@ -408,6 +408,10 @@ async def me(request: Request) -> Response:
                 "id": usuario["id"],
                 "usuario": usuario["usuario"],
                 "rol": usuario["rol"],
+                # `es_admin` (rediseño de la Biblioteca): bool plano para que el frontend
+                # gatee acciones de admin (publicar a producción, aprobar solicitudes) sin
+                # re-derivar el rol. Fuente única: `permisos.es_admin`.
+                "es_admin": permisos.es_admin(request),
                 "debe_cambiar_password": usuario["debe_cambiar_password"],
                 "creado": usuario.get("creado", ""),
                 "ultimo_acceso": usuario.get("ultimo_acceso", ""),

@@ -185,6 +185,60 @@ def version(doc_id: str, sha: str) -> str | None:
     return res.stdout if res.returncode == 0 else None
 
 
+def sha_documento(doc_id: str) -> str | None:
+    """SHA del ULTIMO commit que toco el `.md` de `doc_id` (el "HEAD" del documento).
+
+    Es el sha que el modelo de PUBLICACION compara contra el puntero de produccion
+    (`sin_publicar = sha_actual != produccion.sha`). None si el versionado esta apagado,
+    no hay repo o el documento aun no tiene commits.
+    """
+    if not _habilitado():
+        return None
+    base = _base()
+    if not (base / ".git").exists():
+        return None
+    res = _git(base, "log", "-n1", "--format=%H", "--", _rel(base, doc_id))
+    if res.returncode != 0:
+        return None
+    sha = res.stdout.strip()
+    return sha or None
+
+
+def shas_documentos() -> dict[str, str]:
+    """Mapa doc_id -> sha del ultimo commit que toco su `.md`, para TODO el repo.
+
+    Version POR LOTE de `sha_documento`: UNA sola llamada a git (`log --name-only` sobre
+    el historial completo del repo de la Texto, que es pequeno) en vez de un subproceso
+    por documento. La usan el listado de la Biblioteca y el endpoint de la maquina.
+    {} si el versionado esta apagado o no hay repo. Los ficheros borrados/renombrados
+    pueden aparecer con su ultima ruta; los consumidores cruzan contra los docs vivos.
+    """
+    if not _habilitado():
+        return {}
+    base = _base()
+    if not (base / ".git").exists():
+        return {}
+    # \x01 marca la linea del sha (un separador que no aparece en rutas) y el resto de
+    # lineas son las rutas tocadas por ese commit. El PRIMER commit (mas reciente) que
+    # menciona una ruta gana: es su "HEAD".
+    res = _git(base, "log", "--format=%x01%H", "--name-only")
+    if res.returncode != 0:
+        return {}
+    mapa: dict[str, str] = {}
+    sha = ""
+    for linea in res.stdout.splitlines():
+        if linea.startswith("\x01"):
+            sha = linea[1:].strip()
+            continue
+        ruta = linea.strip()
+        if not ruta or not ruta.endswith(".md") or not sha:
+            continue
+        doc_id = ruta[: -len(".md")]
+        if doc_id not in mapa:
+            mapa[doc_id] = sha
+    return mapa
+
+
 def _sha_valido(sha: object) -> bool:
     """Acepta solo hex (defensa: el sha viaja en la URL/JSON del cliente)."""
     return isinstance(sha, str) and 4 <= len(sha) <= 40 and all(c in "0123456789abcdef" for c in sha.lower())

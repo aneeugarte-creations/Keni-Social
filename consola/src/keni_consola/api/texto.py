@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import libtexto, marcas, prompts_procesos, redes
+from .. import libtexto, marcas, permisos, prompts_procesos, redes
 from .._http_json import leer_json
 from ..dominio import texto_lanzar, extraccion_url
 from ..seguridad import autor_de_peticion
@@ -48,14 +48,24 @@ _RE_EXT = re.compile(r"^\.[a-z0-9]{1,8}$")
 # --------------------------------------------------------------------------- #
 
 
-def _doc_json(doc: libtexto.Documento) -> dict[str, object]:
-    """Serializa un documento + el campo de TRANSPARENCIA `procesos` (a qué procesos se inyecta).
+def _doc_json(
+    doc: libtexto.Documento, *, estado_pub: dict[str, object] | None = None
+) -> dict[str, object]:
+    """Serializa un documento + `procesos` (transparencia) + el estado de PUBLICACIÓN.
 
     `procesos` es de SOLO LECTURA y sale del catálogo en código (`prompts_procesos`), no del
     contenido editable: refleja qué módulo inyecta el prompt en un agente. [] si no está catalogado
     (p. ej. documentos editoriales o prompts aún sin cablear).
+
+    Estado de PUBLICACIÓN (rediseño de la Biblioteca; CONTRATO con el frontend, también en
+    el listado): `produccion` (`{sha, autor, nota, creado}` | null), `sha_actual` (HEAD git
+    del doc | null) y `sin_publicar` (hay cambios sin publicar; false sin puntero).
+    `estado_pub` (opcional) lo precalculan los listados POR LOTE para no pagar una consulta
+    SQL + un subproceso git por documento.
     """
-    return {**doc.a_dict(), "procesos": prompts_procesos.procesos_de(doc.id)}
+    if estado_pub is None:
+        estado_pub = libtexto.estado_publicacion(doc.id)
+    return {**doc.a_dict(), "procesos": prompts_procesos.procesos_de(doc.id), **estado_pub}
 
 
 def _facetas(docs: list[libtexto.Documento]) -> dict[str, object]:
@@ -94,8 +104,15 @@ async def listar(request: Request) -> Response:
         clase=qp.get("clase") or None,
         pipeline=qp.get("pipeline") or None,
     )
+    # Estado de publicación POR LOTE: una consulta SQL (punteros) + una llamada git (HEADs)
+    # para TODO el listado, en vez de una por documento.
+    punteros = libtexto.producciones()
+    shas = libtexto.shas_actuales()
     return JSONResponse({
-        "documentos": [_doc_json(d) for d in docs],
+        "documentos": [
+            _doc_json(d, estado_pub=libtexto.estado_publicacion(d.id, punteros=punteros, shas=shas))
+            for d in docs
+        ],
         "carpetas": libtexto.listar_carpetas(tipo=qp.get("tipo") or None),
         "facetas": _facetas(docs),
     })
@@ -301,6 +318,298 @@ async def revertir(request: Request) -> Response:
         codigo = 404 if ("no existe" in str(e) or "esa versión" in str(e)) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
     return JSONResponse({"documento": _doc_json(doc)})
+
+
+# --------------------------------------------------------------------------- #
+# Publicación: versiones inmutables + puntero "producción" + solicitudes       #
+# --------------------------------------------------------------------------- #
+#
+# Modelo (rediseño de la Biblioteca): EDITAR es libre (working copy + commits git); los
+# pipelines inyectan SIEMPRE la versión PUBLICADA (sha git fijado). Publicar = mover el
+# puntero (solo ADMIN). Un editor PROPONE publicar vía una SOLICITUD que el admin aprueba
+# (publica) o rechaza. Sin puntero, fallback a working copy (migración suave).
+
+_MSG_SOLO_ADMIN_PUBLICAR = "Solo un administrador puede publicar a producción."
+
+
+def _autor_nombre(request: Request) -> str:
+    """Nombre del usuario autenticado para la atribución de publicaciones/solicitudes."""
+    autor = autor_de_peticion(request)
+    return (autor or {}).get("usuario", "") or ""
+
+
+def _resolver_sha(doc_id: str, datos: dict) -> tuple[str | None, Response | None]:
+    """Resuelve el sha del body (o el HEAD git del doc por defecto) y lo VALIDA.
+
+    Devuelve `(sha, None)` o `(None, respuesta_de_error)`. El sha debe corresponder a una
+    versión LEGIBLE del documento (`libtexto.version`); sin versionado git no hay nada que
+    fijar (400 accionable).
+    """
+    sha = datos.get("sha")
+    if sha is not None and not isinstance(sha, str):
+        return None, JSONResponse({"error": "El sha no es válido."}, status_code=400)
+    sha = (sha or "").strip() or libtexto.sha_actual(doc_id)
+    if not sha:
+        return None, JSONResponse(
+            {"error": "Este documento no tiene versiones (el versionado git no está disponible)."},
+            status_code=400,
+        )
+    if libtexto.version(doc_id, sha) is None:
+        return None, JSONResponse(
+            {"error": "No se encontró esa versión del documento."}, status_code=400
+        )
+    return sha, None
+
+
+async def publicar(request: Request) -> Response:
+    """`POST /api/texto/{doc_id}/publicar` body `{sha?, nota}` -> `{documento}`. SOLO ADMIN.
+
+    Mueve el puntero de PRODUCCIÓN del documento al `sha` (por defecto, el HEAD git del
+    doc). 403 si no es admin; 404 si el doc no existe; 400 si el sha no es una versión.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN_PUBLICAR)
+    doc_id = request.path_params["doc_id"]
+    doc = libtexto.obtener(doc_id)
+    if doc is None:
+        return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
+    datos = await leer_json(request)
+    sha, error = _resolver_sha(doc_id, datos)
+    if error is not None:
+        return error
+    from .. import db
+
+    db.crear_texto_publicacion(
+        doc_id=doc_id, sha=sha,
+        autor=_autor_nombre(request),
+        nota=datos.get("nota") if isinstance(datos.get("nota"), str) else "",
+    )
+    return JSONResponse({"documento": _doc_json(doc)})
+
+
+async def solicitar(request: Request) -> Response:
+    """`POST /api/texto/{doc_id}/solicitar` body `{sha?, nota}` -> `{solicitud}`.
+
+    Crea una solicitud ABIERTA de publicación (cualquier usuario autenticado). Si ya había
+    una abierta para ese doc, la SUSTITUYE (la última propuesta del equipo es la que cuenta).
+    """
+    doc_id = request.path_params["doc_id"]
+    doc = libtexto.obtener(doc_id)
+    if doc is None:
+        return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
+    datos = await leer_json(request)
+    sha, error = _resolver_sha(doc_id, datos)
+    if error is not None:
+        return error
+    from .. import db
+
+    sol = db.crear_texto_solicitud(
+        doc_id=doc_id, sha_propuesto=sha,
+        autor=_autor_nombre(request),
+        nota=datos.get("nota") if isinstance(datos.get("nota"), str) else "",
+    )
+    return JSONResponse({"solicitud": _solicitud_json(sol)})
+
+
+def _solicitud_json(sol: dict) -> dict[str, object]:
+    """Forma pública de una solicitud (CONTRATO con el frontend del rediseño).
+
+    `titulo` se resuelve del documento (cae al doc_id si el doc ya no existe);
+    `revisor`/`comentario`/`resuelto` salen como null mientras la solicitud está abierta.
+    """
+    doc = libtexto.obtener(str(sol.get("doc_id", "")))
+    return {
+        "id": sol["id"],
+        "doc_id": sol["doc_id"],
+        "titulo": doc.titulo if doc is not None else sol["doc_id"],
+        "sha_propuesto": sol["sha_propuesto"],
+        "autor": sol["autor"],
+        "nota": sol["nota"],
+        "estado": sol["estado"],
+        "revisor": sol["revisor"] or None,
+        "comentario": sol["comentario"] or None,
+        "creado": sol["creado"],
+        "resuelto": sol["resuelto"] or None,
+    }
+
+
+async def solicitudes_listar(request: Request) -> Response:
+    """`GET /api/texto/solicitudes?estado=abierta` -> `{solicitudes: [...]}` (recientes 1º).
+
+    `estado` (opcional) filtra por `abierta`/`aprobada`/`rechazada`; sin él, todas.
+    """
+    from .. import db
+
+    estado = request.query_params.get("estado") or None
+    if estado is not None and estado not in db.ESTADOS_SOLICITUD_TEXTO:
+        return JSONResponse({"error": "Estado de solicitud desconocido."}, status_code=400)
+    items = db.listar_texto_solicitudes(estado)
+    return JSONResponse({"solicitudes": [_solicitud_json(s) for s in items]})
+
+
+async def solicitud_aprobar(request: Request) -> Response:
+    """`POST /api/texto/solicitudes/{sid}/aprobar` body `{comentario?}`. SOLO ADMIN.
+
+    PUBLICA el sha propuesto (mueve el puntero de producción) y marca la solicitud como
+    `aprobada`. -> `{solicitud, documento}`. 404 si no existe; 409 si ya estaba resuelta;
+    400 si la versión propuesta ya no es legible (la solicitud queda abierta).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN_PUBLICAR)
+    from .. import db
+
+    sol = db.obtener_texto_solicitud(request.path_params["sid"])
+    if sol is None:
+        return JSONResponse({"error": "Esa solicitud no existe."}, status_code=404)
+    if sol["estado"] != db.ESTADO_SOLICITUD_ABIERTA:
+        return JSONResponse({"error": "Esa solicitud ya fue resuelta."}, status_code=409)
+    doc = libtexto.obtener(sol["doc_id"])
+    if doc is None:
+        return JSONResponse({"error": "El documento de esa solicitud ya no existe."}, status_code=400)
+    if libtexto.version(sol["doc_id"], sol["sha_propuesto"]) is None:
+        return JSONResponse(
+            {"error": "La versión propuesta ya no se puede leer del historial."}, status_code=400
+        )
+    datos = await leer_json(request)
+    comentario = datos.get("comentario") if isinstance(datos.get("comentario"), str) else ""
+    resuelta = db.resolver_texto_solicitud(
+        sol["id"], estado=db.ESTADO_SOLICITUD_APROBADA,
+        revisor=_autor_nombre(request), comentario=comentario,
+    )
+    if resuelta is None:  # carrera: otro admin la resolvió entre el SELECT y el UPDATE
+        return JSONResponse({"error": "Esa solicitud ya fue resuelta."}, status_code=409)
+    db.crear_texto_publicacion(
+        doc_id=sol["doc_id"], sha=sol["sha_propuesto"],
+        autor=_autor_nombre(request), nota=sol["nota"],
+    )
+    return JSONResponse({
+        "solicitud": _solicitud_json(resuelta),
+        "documento": _doc_json(doc),
+    })
+
+
+async def solicitud_rechazar(request: Request) -> Response:
+    """`POST /api/texto/solicitudes/{sid}/rechazar` body `{comentario?}`. SOLO ADMIN.
+
+    Marca la solicitud como `rechazada` (no toca el puntero). -> `{solicitud}`.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN_PUBLICAR)
+    from .. import db
+
+    sol = db.obtener_texto_solicitud(request.path_params["sid"])
+    if sol is None:
+        return JSONResponse({"error": "Esa solicitud no existe."}, status_code=404)
+    if sol["estado"] != db.ESTADO_SOLICITUD_ABIERTA:
+        return JSONResponse({"error": "Esa solicitud ya fue resuelta."}, status_code=409)
+    datos = await leer_json(request)
+    comentario = datos.get("comentario") if isinstance(datos.get("comentario"), str) else ""
+    resuelta = db.resolver_texto_solicitud(
+        sol["id"], estado=db.ESTADO_SOLICITUD_RECHAZADA,
+        revisor=_autor_nombre(request), comentario=comentario,
+    )
+    if resuelta is None:
+        return JSONResponse({"error": "Esa solicitud ya fue resuelta."}, status_code=409)
+    return JSONResponse({"solicitud": _solicitud_json(resuelta)})
+
+
+# --------------------------------------------------------------------------- #
+# Catálogo de variables {{VAR}} + la "máquina" (riel de pipelines)             #
+# --------------------------------------------------------------------------- #
+
+
+async def variables(request: Request) -> Response:
+    """`GET /api/texto/variables` -> `{variables: [{nombre, descripcion, ejemplo, origen}]}`.
+
+    Catálogo (en código, fuente única) de los marcadores `{{VAR}}` que la Consola sustituye
+    al inyectar prompts: transparencia para el editor de la Biblioteca.
+    """
+    return JSONResponse({"variables": libtexto.catalogo_variables()})
+
+
+# Estructura del RIEL de la máquina de contenido, en el ORDEN REAL de ejecución del código:
+#   - ingesta (ingesta_daemon): fusión de historias (agrupación, `prompt/fusion`) ->
+#     verificación de cada grupo ANTES de fundir (`prompt/fusion-verificacion`) ->
+#     traducción/localización MX (`prompt/traduccion`).
+#   - priorización: perfil de keywords por marca (`prompt/editorial`).
+#   - producción (pipeline de contenido): criba QA de la fuente -> copy -> arte.
+#   - talleres: lo que se ejecuta a demanda/diario sin un orden de pipeline (evergreen,
+#     sugerencias, insumos del día, importadores).
+# El doc_id de qa/copy/evergreen se resuelve por el REGISTRO (`prompt_base_de`): respeta
+# rebindeos hechos en la Biblioteca sin tocar código. None => id por defecto del registro.
+_ETAPAS_MAQUINA: tuple[tuple[str, str, tuple[tuple[str, str, str | None], ...]], ...] = (
+    ("ingesta", "Ingesta", (
+        ("fusion", "Fusión de historias", "prompt/fusion"),
+        ("fusion-verificacion", "Verificación pre-fusión", "prompt/fusion-verificacion"),
+        ("traduccion", "Traducción y localización MX", "prompt/traduccion"),
+    )),
+    ("priorizacion", "Priorización", (
+        ("editorial", "Perfil editorial (keywords por marca)", "prompt/editorial"),
+    )),
+    ("produccion", "Producción", (
+        ("qa", "Validación de la fuente (QA)", None),     # prompt_base_de("qa")
+        ("copy", "Generación de copy", None),             # prompt_base_de("copy")
+        ("arte", "Arte (imagen de la pieza)", "prompt/arte"),
+    )),
+    ("talleres", "Talleres y herramientas", (
+        ("evergreen", "Taller evergreen", None),          # prompt_base_de("evergreen")
+        ("sugerencias", "Sugerencias editoriales", "prompt/sugerencias"),
+        ("insumos-portal", "Insumos · Portal/SMS", "prompt/insumos/portal"),
+        ("insumos-corresponsales", "Insumos · Corresponsales", "prompt/insumos/corresponsales"),
+        ("insumos-reporteros", "Insumos · Reporteros", "prompt/insumos/reporteros"),
+        ("insumos-eventos-claro", "Insumos · Eventos Claro Sports", "prompt/insumos/eventos-claro"),
+        ("importar-calendario", "Importar calendario", "prompt/importar/calendario"),
+        ("importar-parrilla", "Importar rota/parrilla", "prompt/importar/parrilla"),
+    )),
+)
+
+# id de etapa -> pipeline del registro cuyo prompt base efectivo la alimenta.
+_ETAPA_PIPELINE = {"qa": "qa", "copy": "copy", "evergreen": "evergreen"}
+
+
+async def maquina(request: Request) -> Response:
+    """`GET /api/texto/maquina?marca=` -> el RIEL de la máquina + las CAPAS editoriales.
+
+    Forma (CONTRATO con el frontend del rediseño):
+      - `grupos`: etapas en el ORDEN REAL de ejecución (ver `_ETAPAS_MAQUINA`); cada etapa
+        `{id, titulo, doc_id, produccion, sha_actual, sin_publicar}` (estado de publicación
+        del documento que se inyecta en esa etapa).
+      - `capas`: el ensamblaje editorial para la marca pedida, en el ORDEN real de
+        `adjuntos_copy()` (lo que se adjunta al copy, capa a capa):
+        `{doc_id, titulo, clase, orden, produccion, sha_actual, sin_publicar}`.
+    """
+    from ..dominio import generar  # perezoso: generar importa libtexto
+
+    marca = request.query_params.get("marca") or ""
+    punteros = libtexto.producciones()
+    shas = libtexto.shas_actuales()
+
+    def estado(doc_id: str) -> dict[str, object]:
+        return libtexto.estado_publicacion(doc_id, punteros=punteros, shas=shas)
+
+    grupos = []
+    for gid, gtitulo, etapas in _ETAPAS_MAQUINA:
+        filas = []
+        for eid, etitulo, doc_id in etapas:
+            if doc_id is None:
+                try:
+                    doc_id = libtexto.prompt_base_de(_ETAPA_PIPELINE[eid])
+                except libtexto.TextoError:
+                    doc_id = libtexto.PIPELINES.get(_ETAPA_PIPELINE[eid], {}).get("prompt_defecto", "")
+            filas.append({"id": eid, "titulo": etitulo, "doc_id": doc_id, **estado(doc_id)})
+        grupos.append({"id": gid, "titulo": gtitulo, "etapas": filas})
+
+    capas = [
+        {
+            "doc_id": d.id,
+            "titulo": d.titulo,
+            "clase": d.clase,
+            "orden": i,
+            **estado(d.id),
+        }
+        for i, d in enumerate(generar.adjuntos_copy(marca), 1)
+    ]
+    return JSONResponse({"grupos": grupos, "capas": capas})
 
 
 # --------------------------------------------------------------------------- #
@@ -514,10 +823,18 @@ RUTAS = [
     Route("/api/texto/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
     Route("/api/texto/lanzar", lanzar, methods=["POST"]),
     Route("/api/texto/lanzar-archivo", lanzar_archivo, methods=["POST"]),
+    # Publicación (rediseño): catálogo de variables, riel de la máquina y solicitudes.
+    Route("/api/texto/variables", variables, methods=["GET"]),
+    Route("/api/texto/maquina", maquina, methods=["GET"]),
+    Route("/api/texto/solicitudes", solicitudes_listar, methods=["GET"]),
+    Route("/api/texto/solicitudes/{sid}/aprobar", solicitud_aprobar, methods=["POST"]),
+    Route("/api/texto/solicitudes/{sid}/rechazar", solicitud_rechazar, methods=["POST"]),
     # Multi-segmento de versionado: el sufijo literal ancla la captura del `doc_id:path`.
     Route("/api/texto/{doc_id:path}/historial", historial, methods=["GET"]),
     Route("/api/texto/{doc_id:path}/version/{sha}", version, methods=["GET"]),
     Route("/api/texto/{doc_id:path}/revertir/{sha}", revertir, methods=["POST"]),
+    Route("/api/texto/{doc_id:path}/publicar", publicar, methods=["POST"]),
+    Route("/api/texto/{doc_id:path}/solicitar", solicitar, methods=["POST"]),
     Route("/api/texto/{doc_id:path}", obtener, methods=["GET"]),
     Route("/api/texto/{doc_id:path}", guardar, methods=["PUT"]),
     Route("/api/texto/{doc_id:path}", borrar, methods=["DELETE"]),

@@ -328,6 +328,12 @@ def componer(
     if sin_emojis:
         partes.append(INSTRUCCION_SIN_EMOJIS)
     if adjuntos:
+        # MODELO DE PUBLICACION (rediseno de la Biblioteca): los pipelines inyectan la
+        # version PUBLICADA de cada adjunto editorial (sha fijado por un admin), no la
+        # working copy. Sin puntero (o sin BD/git) el doc queda intacto: fallback suave.
+        # Este es el UNICO punto de ensamblaje de adjuntos (lo cruzan lanzamientos reales
+        # Y la previsualizacion: "lo que inyectas es lo que ves").
+        adjuntos = libtexto.aplicar_produccion(adjuntos)
         # Filtra documentos sin texto efectivo (solo headings): no aportan y gastan tokens.
         bloques = [
             f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos if not cuerpo_sin_texto(d.cuerpo)

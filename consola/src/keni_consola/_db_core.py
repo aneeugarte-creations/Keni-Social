@@ -1500,6 +1500,42 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
+    # PUBLICACIONES de la Biblioteca de Texto (rediseno "version publicada"): cada fila es un
+    # acto de PUBLICAR un documento (`doc_id` de libtexto) fijando un `sha` git inmutable. La
+    # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;
+    # el resto queda como audit log (quien publico que y cuando). Sin filas para un doc, los
+    # pipelines caen a la working copy (migracion suave). Timestamps ISO con MICROSEGUNDOS
+    # (desempatan publicaciones consecutivas; el id es uuid, no monotonico).
+    """
+    CREATE TABLE IF NOT EXISTS texto_publicaciones (
+        id      TEXT PRIMARY KEY,
+        doc_id  TEXT NOT NULL,
+        sha     TEXT NOT NULL,
+        autor   TEXT NOT NULL DEFAULT '',
+        nota    TEXT NOT NULL DEFAULT '',
+        creado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_texto_publicaciones_doc ON texto_publicaciones (doc_id, creado)",
+    # SOLICITUDES de publicacion (flujo editor -> admin): un editor propone fijar `sha_propuesto`
+    # como produccion de `doc_id`; un admin la aprueba (publica + marca `aprobada`) o la rechaza.
+    # A lo sumo UNA solicitud `abierta` por doc (una nueva SUSTITUYE a la abierta anterior).
+    # `revisor`/`comentario`/`resuelto` se rellenan al resolver ('' = aun abierta).
+    """
+    CREATE TABLE IF NOT EXISTS texto_solicitudes (
+        id            TEXT PRIMARY KEY,
+        doc_id        TEXT NOT NULL,
+        sha_propuesto TEXT NOT NULL,
+        autor         TEXT NOT NULL DEFAULT '',
+        nota          TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'abierta',
+        revisor       TEXT NOT NULL DEFAULT '',
+        comentario    TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        resuelto      TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_texto_solicitudes_estado ON texto_solicitudes (estado, doc_id)",
     # LATIDOS de los daemons de fondo (observabilidad del panel Sistema): UNA fila por daemon,
     # upsert en cada ciclo/barrido (escritura best-effort desde `latidos.py`; un fallo aqui
     # JAMAS rompe un barrido). `visto` = ultimo ciclo del bucle (el hilo vive aunque el gate

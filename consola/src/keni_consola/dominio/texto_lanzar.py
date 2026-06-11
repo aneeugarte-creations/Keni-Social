@@ -134,7 +134,10 @@ def lanzar(
         doc = libtexto.obtener(prompt_id)
         if doc is None or doc.tipo != "prompt":
             raise libtexto.TextoError("Ese prompt no existe.")
-        cuerpo_prompt = doc.cuerpo
+        # MODELO DE PUBLICACION: si el prompt tiene puntero de produccion se inyecta ESA
+        # version (sha fijado); sin puntero, la working copy como siempre (fallback suave).
+        publicado = libtexto.cuerpo_publicado(prompt_id)
+        cuerpo_prompt = publicado if publicado is not None else doc.cuerpo
         titulo = titulo.strip() or doc.titulo
         salida = doc.salida
         origen_historial = prompt_id.rsplit("/", 1)[-1] or "prompt"

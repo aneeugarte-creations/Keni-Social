@@ -19,6 +19,7 @@ from ._comun import (
 )
 from ._crud import obtener
 from ._io import _parsear
+from ._publicacion import cuerpo_publicado
 from ._rutas import raiz
 
 __all__ = [
@@ -115,15 +116,19 @@ def obtener_semilla(doc_id: str) -> Documento | None:
 
 
 def cuerpo_efectivo(prompt_id: str) -> str | None:
-    """Cuerpo de un prompt: la versión del STORE si el equipo la editó, si no la SEMILLA.
+    """Cuerpo de un prompt: version PUBLICADA > working copy del store > SEMILLA.
 
-    Es la fuente de verdad para las features que se apoyan en un prompt base: el equipo
-    puede editarlo en la Texto (gana el store) y, si no, se usa el que viaja en el
-    paquete (semilla). None si no existe ni en uno ni en otro.
+    Es la fuente de verdad para las features que se apoyan en un prompt base. Con el
+    modelo de PUBLICACION (rediseno de la Biblioteca), si el documento tiene puntero de
+    produccion los pipelines inyectan ESA version (sha git inmutable), no la working
+    copy: editar es libre, pero lo que corre es lo publicado. Sin puntero (o si la BD/
+    git no estan disponibles) gana la working copy del store, como siempre; y si el doc
+    no existe en el store, la semilla del paquete. None si no existe en ninguno.
     """
     doc = obtener(prompt_id)
     if doc is not None:
-        return doc.cuerpo
+        publicado = cuerpo_publicado(prompt_id)
+        return publicado if publicado is not None else doc.cuerpo
     semilla = obtener_semilla(prompt_id)
     return semilla.cuerpo if semilla is not None else None
 
