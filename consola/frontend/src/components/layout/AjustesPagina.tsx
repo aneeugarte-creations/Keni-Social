@@ -83,7 +83,9 @@ export function AjustesPagina({
                   <X className="h-4 w-4" />
                 </Button>
               </header>
-              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">{children}</div>
+              {/* Capa BASE del panel: las áreas (secciones colapsables) se apilan PLANAS, cada una
+                  con su propio divisor superior (`border-t`); sin tarjetas ni cajas anidadas. */}
+              <div className="flex-1 overflow-y-auto px-4 py-1">{children}</div>
             </aside>
           </div>,
           document.body,

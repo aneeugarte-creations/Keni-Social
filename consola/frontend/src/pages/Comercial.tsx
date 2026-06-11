@@ -127,7 +127,8 @@ export default function Comercial() {
         titulo="Ajustes de campañas"
         descripcion="Preferencias persistentes de esta vista."
       >
-        <div className="space-y-1.5 rounded-lg border border-border p-3">
+        {/* Fila de capa base (con su divisor), no una caja con borde dentro del panel. */}
+        <section className="border-t border-border py-3 first:border-t-0">
           <label className="flex items-center justify-between gap-3 text-sm font-medium">
             Modo cliente
             <Switch
@@ -136,11 +137,11 @@ export default function Comercial() {
               aria-label="Modo cliente: ocultar todo lo de Ads"
             />
           </label>
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Oculta todo lo de Ads y suma las visualizaciones pagadas a las orgánicas (para
             enseñar al cliente). Persiste al recargar.
           </p>
-        </div>
+        </section>
       </AjustesPagina>
       <MenuAcciones>
         <ItemMenu icono={Plus} onClick={abrirNueva}>

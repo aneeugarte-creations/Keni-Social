@@ -322,7 +322,7 @@ function PanelPresupuesto({
 
 // Grupos del catálogo que son TUNING DE SISTEMA (jobs, limpieza, alertas): se ajustan
 // aquí porque es el Monitor quien vigila sus efectos (cola, daemons, salud).
-const GRUPOS_SISTEMA = new Set(["automatismos_generales", "tuning"]);
+const GRUPOS_SISTEMA = ["automatismos_generales", "tuning"] as const;
 
 export default function Monitor() {
   const { usuario } = useSesion();
@@ -418,7 +418,7 @@ export default function Monitor() {
                 en el editor de plantillas. Se oculta solo a un editor. */}
             <SeccionImagen />
             <PanelAjustes
-              ids={GRUPOS_SISTEMA}
+              grupos={GRUPOS_SISTEMA}
               titulo="Sistema"
               descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
             />

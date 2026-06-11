@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import type { MarcaMetricool, PerfilMetricool } from "@/types";
 
 import { CLAVE_METRICOOL, mensajeError } from "./lib";
-import { TarjetaColapsable } from "./TarjetaColapsable";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 /**
  * Tarjeta de UNA marca de Metricool. Cada marca es una cuenta Metricool distinta:
@@ -340,9 +340,9 @@ function SeccionMetricoolAdmin() {
   });
 
   return (
-    <TarjetaColapsable
+    <SeccionColapsable
       titulo="Métricas (Metricool)"
-      contentClassName="space-y-4 pt-0"
+      contentClassName="space-y-4"
       descripcion={
         <>
           Conecta cada marca con su cuenta de Metricool. Pega el token y el user ID, pulsa «Buscar
@@ -384,6 +384,6 @@ function SeccionMetricoolAdmin() {
             ))}
           </div>
         )}
-    </TarjetaColapsable>
+    </SeccionColapsable>
   );
 }

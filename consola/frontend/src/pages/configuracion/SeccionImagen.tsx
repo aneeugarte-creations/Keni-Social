@@ -29,7 +29,7 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
 
 import { CLAVE_IMAGEN, PROVEEDORES, mensajeError } from "./lib";
-import { TarjetaColapsable } from "./TarjetaColapsable";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Envoltorio con AUTOGUARDADO por rol (#153): los secretos de conexión son de admin.
  * Montada en su página contextual, se oculta sola a un editor (sesión null = modo local
@@ -110,9 +110,9 @@ function SeccionImagenAdmin() {
     guardar.isPending || probar.isPending || quitar.isPending || guardarModelo.isPending;
 
   return (
-    <TarjetaColapsable
+    <SeccionColapsable
       titulo="Imagen con IA"
-      contentClassName="space-y-4 pt-0"
+      contentClassName="space-y-4"
       descripcion={
         <>
           Configura la clave del proveedor para activar <strong>«Generar con IA»</strong> al crear
@@ -299,6 +299,6 @@ function SeccionImagenAdmin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </TarjetaColapsable>
+    </SeccionColapsable>
   );
 }

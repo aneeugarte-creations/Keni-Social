@@ -32,7 +32,7 @@ import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 import { useSesion } from "@/hooks/sesion-contexto";
 
 import { CLAVE_AJUSTES, GRUPOS_MAQUINA, mensajeError } from "./lib";
-import { TarjetaColapsable } from "./TarjetaColapsable";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
  *
@@ -343,42 +343,41 @@ function GruposAjustes({
   grupos,
   onGuardar,
   guardando,
+  mostrarTitulos = true,
 }: {
   grupos: RespuestaAjustes["grupos"];
   onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
   guardando: boolean;
+  /** Pinta el título de cada grupo como sub-cabecera. Se apaga cuando el área envuelve UN solo
+   *  grupo: la cabecera de la sección ya lo nombra y repetirlo sobra. */
+  mostrarTitulos?: boolean;
 }) {
   // Maestros de etapa por su clave ENV -> bool. Atenúa las excepciones por marca cuyo maestro está OFF.
   const maestros: Record<string, boolean> = {};
   for (const m of grupos.find((g) => g.id === "maestros_etapa")?.ajustes ?? [])
     maestros[m.clave] = Boolean(m.valor);
 
+  // Sub-cabecera de grupo (uppercase fino). Se omite cuando el área tiene un solo grupo: la
+  // cabecera de la sección colapsable ya lo nombra. NO crea ninguna caja: solo una etiqueta.
+  const subtitulo = (texto: string) =>
+    mostrarTitulos ? (
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {texto}
+      </h4>
+    ) : null;
+
   return (
-    <>
+    <div className="space-y-5">
       {grupos.map((grupo) => {
         const filas = grupo.ajustes.map((ajuste) => (
           <FilaAjuste key={ajuste.clave} ajuste={ajuste} onGuardar={onGuardar} guardando={guardando} />
         ));
 
-        // Maestros de etapa (Fusión/Ranking/Selección/Validación/Copy/Arte IA): título + filas.
-        if (grupo.id === "maestros_etapa") {
-          return (
-            <div key={grupo.id} className="space-y-1">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {grupo.titulo}
-              </h4>
-              <div>{filas}</div>
-            </div>
-          );
-        }
-
-        // Excepciones por marca: una pestaña por marca; atenuadas si su maestro está OFF.
+        // Excepciones por marca: una pestaña por marca; ocultas si su maestro está OFF.
         if (grupo.id === "automatizacion_marca") {
           return (
             <div key={grupo.id} className="space-y-1">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {grupo.titulo}
-              </h4>
+              {subtitulo(grupo.titulo)}
               <AjustesPorMarca
                 ajustes={grupo.ajustes}
                 onGuardar={onGuardar}
@@ -389,33 +388,21 @@ function GruposAjustes({
           );
         }
 
-        // Publicación: el mega-maestro del paso final (postea de verdad), en su BLOQUE PROPIO
-        // destacado (acento ámbar) por ser el más peligroso. Mismo patrón maestro+excepción:
-        // el maestro autoriza el posteo real global; debajo, las excepciones por marca lo
-        // restan (apagan una marca -> dry-run). El grupo `publicacion_marca` se pinta AQUÍ.
+        // Publicación: el maestro del paso final (postea de verdad). Mismo patrón maestro+excepción
+        // (el maestro autoriza el posteo real global; debajo, las excepciones por marca lo restan).
+        // Su peligrosidad la señala el acento ámbar de la SECCIÓN y el badge «Publica de verdad» de
+        // la fila: una franja a la izquierda, NO una caja anidada. `publicacion_marca` se pinta aquí.
         if (grupo.id === "publicacion") {
-          const maestroPub = grupo.ajustes[0];
-          const maestroPubOn = Boolean(maestroPub?.valor);
+          const maestroPubOn = Boolean(grupo.ajustes[0]?.valor);
           const exMarca = grupos.find((g) => g.id === "publicacion_marca")?.ajustes ?? [];
           return (
-            <div
-              key={grupo.id}
-              className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"
-            >
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                  {grupo.titulo} · publica de verdad
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Autoriza el posteo <strong>REAL</strong> a Metricool.
-                </p>
-              </div>
+            <div key={grupo.id} className="space-y-3 border-l-2 border-amber-500/40 pl-3">
               <div>{filas}</div>
               {exMarca.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Excepciones por marca
-                  </p>
+                  </h4>
                   <div>
                     {exMarca.map((a) => (
                       <FilaAjuste
@@ -436,59 +423,16 @@ function GruposAjustes({
         // Las excepciones de publicación se pintan dentro del bloque «publicacion» de arriba.
         if (grupo.id === "publicacion_marca") return null;
 
-        // Automatismos generales: barridos del sistema; van en un colapsible para no confundir
-        // con los controles de las etapas de la máquina de arriba.
-        if (grupo.id === "automatismos_generales") {
-          return (
-            <TarjetaColapsable
-              key={grupo.id}
-              titulo={grupo.titulo}
-              descripcion="Barridos del sistema sin dimensión por marca (radar, alertas, vencimientos, limpieza…)."
-            >
-              <div>{filas}</div>
-            </TarjetaColapsable>
-          );
-        }
-
-        // Cupos de producción por marca: overrides del cupo global. Colapsado: solo se tocan
-        // al calibrar una marca a su cadencia real de publicación.
-        if (grupo.id === "noticias_produccion_marca") {
-          return (
-            <TarjetaColapsable
-              key={grupo.id}
-              titulo={grupo.titulo}
-              descripcion="Ajusta el volumen auto-producido de cada marca a su ritmo real de publicación. Sin tocar, cada marca usa el cupo global."
-            >
-              <div>{filas}</div>
-            </TarjetaColapsable>
-          );
-        }
-
-        // Técnico del motor de noticias: capacidad y ritmo. Colapsado para que la subpágina de
-        // Noticias muestre solo lo editorial; los defectos van bien salvo problema de carga/coste.
-        if (grupo.id === "noticias_tecnico") {
-          return (
-            <TarjetaColapsable
-              key={grupo.id}
-              titulo={grupo.titulo}
-              descripcion="Cuánto trabajo hace el motor en cada ronda. Los valores por defecto van bien; tócalos solo si el motor se queda corto o gasta de más."
-            >
-              <div>{filas}</div>
-            </TarjetaColapsable>
-          );
-        }
-
-        // Resto (interruptor general, topes, ajustes finos): título + lista plana.
+        // Resto (maestros de etapa, automatismos, topes, noticias, técnico, tuning…): sub-cabecera
+        // (si procede) + lista plana de filas. SIN cajas ni colapsables anidados: capa base.
         return (
           <div key={grupo.id} className="space-y-1">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {grupo.titulo}
-            </h4>
+            {subtitulo(grupo.titulo)}
             <div>{filas}</div>
           </div>
         );
       })}
-    </>
+    </div>
   );
 }
 
@@ -523,34 +467,41 @@ function EstadoAjustes({
   );
 }
 
-/** Panel GENÉRICO de ajustes del catálogo para montar EN LA PÁGINA A LA QUE AFECTAN
- * (reparto contextual: el motor de noticias en Noticias, la publicación en Programación,
- * el sistema en el Monitor…). Filtra los grupos del catálogo por id y se AUTO-GUARDA por
- * rol: si la sesión no es admin no monta nada (el endpoint /api/ajustes exige admin).
- * Mismo motor y misma mutación en caliente en todas las páginas. */
+/** Área (sección colapsable de CAPA BASE) con uno o varios grupos del catálogo, para montar EN
+ * LA PÁGINA A LA QUE AFECTA (reparto contextual: el motor de noticias en Noticias, la publicación
+ * en Programación, el sistema en el Monitor…). `grupos` es una lista ORDENADA de ids: se pintan
+ * en ese orden y, si hay más de uno, cada uno lleva su sub-cabecera. Se AUTO-GUARDA por rol: si la
+ * sesión no es admin no monta nada (el endpoint /api/ajustes exige admin). Mismo motor y misma
+ * mutación en caliente en todas las páginas. */
 export function PanelAjustes({
-  ids,
+  grupos: ids,
   titulo,
   descripcion,
   abiertaInicial = false,
+  acento,
 }: {
-  ids: ReadonlySet<string>;
+  /** Ids de grupo del catálogo, EN EL ORDEN en que se quieren pintar dentro de la sección. */
+  grupos: readonly string[];
   titulo: string;
   descripcion?: React.ReactNode;
   abiertaInicial?: boolean;
+  acento?: "amber";
 }) {
   const { usuario } = useSesion();
   const esAdmin = usuario === null || usuario.rol === "admin";
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
   if (!esAdmin) return null;
-  const grupos = (data?.grupos ?? []).filter((g) => ids.has(g.id));
+  const orden = new Map(ids.map((id, i) => [id, i]));
+  const grupos = (data?.grupos ?? [])
+    .filter((g) => orden.has(g.id))
+    .sort((a, b) => orden.get(a.id)! - orden.get(b.id)!);
   if (!isPending && !isError && grupos.length === 0) return null;
   return (
-    <TarjetaColapsable
+    <SeccionColapsable
       titulo={titulo}
       abiertaInicial={abiertaInicial}
-      contentClassName="space-y-6 pt-0"
       descripcion={descripcion}
+      acento={acento}
     >
       {isPending || isError ? (
         <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
@@ -559,39 +510,10 @@ export function PanelAjustes({
           grupos={grupos}
           onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
           guardando={guardar.isPending}
+          mostrarTitulos={ids.length > 1}
         />
       )}
-    </TarjetaColapsable>
-  );
-}
-
-/** Secciones de ajustes A PÁGINA COMPLETA (sin tarjeta colapsable), para subpáginas dedicadas
- * (p. ej. «Ajustes del motor de noticias» del hub Investigación). Cada grupo del catálogo se
- * pinta como una sección con su título; mismo catálogo, query y mutación que `PanelAjustes`.
- * Solo admin: para el resto avisa en vez de desaparecer (la subpágina no debe quedar en blanco). */
-export function SeccionesAjustes({ ids }: { ids: ReadonlySet<string> }) {
-  const { usuario } = useSesion();
-  const esAdmin = usuario === null || usuario.rol === "admin";
-  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
-  if (!esAdmin)
-    return (
-      <p className="text-sm text-muted-foreground">
-        Estos ajustes solo los puede ver y editar un administrador.
-      </p>
-    );
-  if (isPending || isError)
-    return (
-      <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
-    );
-  const grupos = (data?.grupos ?? []).filter((g) => ids.has(g.id));
-  return (
-    <div className="space-y-6">
-      <GruposAjustes
-        grupos={grupos}
-        onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-        guardando={guardar.isPending}
-      />
-    </div>
+    </SeccionColapsable>
   );
 }
 
@@ -603,10 +525,9 @@ export function PanelMaquinaContenido() {
   const grupos = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));
 
   return (
-    <TarjetaColapsable
+    <SeccionColapsable
       titulo="Máquina de contenido"
       abiertaInicial
-      contentClassName="space-y-6 pt-0"
       descripcion={
         <>
           Enciende/apaga las etapas (Selección→Validación→Copy→Arte), por marca, y regula la
@@ -624,6 +545,6 @@ export function PanelMaquinaContenido() {
           guardando={guardar.isPending}
         />
       )}
-    </TarjetaColapsable>
+    </SeccionColapsable>
   );
 }

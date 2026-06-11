@@ -15,22 +15,43 @@
 import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { SeccionesAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
+import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 import Cobertura from "./Cobertura";
 
-// Grupos del catálogo que gobiernan el motor de noticias (espejan
-// `ajustes_catalogo.GRUPOS_NOTICIAS` del backend), en lenguaje editorial:
-// qué entra → orden → rendimiento → última hora → producción + bloque técnico.
-const GRUPOS_NOTICIAS = new Set([
-  "noticias_entrada",
-  "noticias_orden",
-  "noticias_rendimiento",
-  "noticias_breaking",
-  "noticias_produccion",
-  "noticias_produccion_marca",
-  "noticias_tecnico",
-]);
+// Los siete grupos del catálogo del motor de noticias (`ajustes_catalogo.GRUPOS_NOTICIAS`)
+// REAGRUPADOS en cuatro ÁREAS colapsables de capa base, por afinidad editorial: entrada →
+// orden/prioridad del pool → producción automática → técnico. Cada área lista sus grupos en
+// este orden; la primera abre desplegada.
+const AREAS_NOTICIAS = [
+  {
+    titulo: "Entrada al pool",
+    descripcion: "Qué noticias entran (filtro por temas, fuentes caídas) y su traducción.",
+    grupos: ["noticias_entrada"],
+    abiertaInicial: true,
+  },
+  {
+    titulo: "Orden y prioridad del pool",
+    descripcion:
+      "Cómo se ordenan las historias: pesos del score, qué cuenta como última hora y el empujón a lo que mejor funciona en redes.",
+    grupos: ["noticias_orden", "noticias_breaking", "noticias_rendimiento"],
+    abiertaInicial: false,
+  },
+  {
+    titulo: "Producción automática",
+    descripcion:
+      "Cuándo una historia dispara copy con IA (listón, maduración, cupos) y el plan editorial diario por marca.",
+    grupos: ["noticias_produccion", "noticias_produccion_marca"],
+    abiertaInicial: false,
+  },
+  {
+    titulo: "Técnico · capacidad y ritmo del motor",
+    descripcion:
+      "Cuánto trabajo hace el motor en cada ronda. Los valores por defecto van bien; tócalos solo si se queda corto o gasta de más.",
+    grupos: ["noticias_tecnico"],
+    abiertaInicial: false,
+  },
+] as const;
 
 export default function NoticiasHub() {
   const { usuario } = useSesion();
@@ -46,7 +67,15 @@ export default function NoticiasHub() {
             titulo="Ajustes del motor de noticias"
             descripcion="Controlan qué noticias entran al pool, en qué orden se muestran y cuáles disparan producción automática. Los cambios aplican al momento (hasta ~1 minuto)."
           >
-            <SeccionesAjustes ids={GRUPOS_NOTICIAS} />
+            {AREAS_NOTICIAS.map((area) => (
+              <PanelAjustes
+                key={area.titulo}
+                titulo={area.titulo}
+                descripcion={area.descripcion}
+                grupos={area.grupos}
+                abiertaInicial={area.abiertaInicial}
+              />
+            ))}
           </AjustesPagina>
         </AccionesPagina>
       )}

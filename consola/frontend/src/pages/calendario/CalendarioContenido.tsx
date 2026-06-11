@@ -1,7 +1,7 @@
 import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 // Grupos del catálogo que gobiernan la publicación (global + por marca).
-const GRUPOS_PUBLICACION = new Set(["publicacion", "publicacion_marca"]);
+const GRUPOS_PUBLICACION = ["publicacion", "publicacion_marca"] as const;
 import { CalendarDays, Gauge, Target, Upload } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
@@ -68,8 +68,10 @@ export default function CalendarioContenido() {
             titulo="Ajustes de programación"
             descripcion="El plan diario por línea, la cadencia por red y el interruptor de publicación real."
           >
+            {/* Lanzadores de los diálogos de plan y cadencia: filas de capa base (con su divisor),
+                no cajas con borde. Abren su editor; por eso no son secciones colapsables. */}
             {marcaActiva && (
-              <div className="space-y-1.5 rounded-lg border border-border p-3">
+              <section className="border-t border-border py-3 first:border-t-0">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-medium">Plan y horarios</span>
                   <Button variant="outline" size="sm" onClick={() => setPlanAbierto(true)}>
@@ -77,12 +79,12 @@ export default function CalendarioContenido() {
                     Configurar…
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   El objetivo diario por línea de contenido y sus horarios de salida.
                 </p>
-              </div>
+              </section>
             )}
-            <div className="space-y-1.5 rounded-lg border border-border p-3">
+            <section className="border-t border-border py-3 first:border-t-0">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium">Cadencia</span>
                 <Button variant="outline" size="sm" onClick={() => setCadenciaAbierto(true)}>
@@ -90,16 +92,17 @@ export default function CalendarioContenido() {
                   Configurar…
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Cada cuántos minutos puede salir un post por red: el reparto que alimenta este
                 calendario.
               </p>
-            </div>
+            </section>
             {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
                 ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
             <PanelAjustes
-              ids={GRUPOS_PUBLICACION}
+              grupos={GRUPOS_PUBLICACION}
               titulo="Ajustes de publicación"
+              acento="amber"
               descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
             />
           </AjustesPagina>

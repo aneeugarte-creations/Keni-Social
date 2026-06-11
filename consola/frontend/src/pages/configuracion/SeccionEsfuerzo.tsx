@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { CLAVE_ESFUERZO, mensajeError } from "./lib";
-import { TarjetaColapsable } from "./TarjetaColapsable";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 /**
  * Nivel de esfuerzo de razonamiento que la IA usa al generar (copy, RSS,
@@ -43,9 +43,9 @@ export function SeccionEsfuerzo() {
   const hayCambios = data !== undefined && esfuerzo !== data.esfuerzo;
 
   return (
-    <TarjetaColapsable
+    <SeccionColapsable
       titulo="Esfuerzo de generación"
-      contentClassName="space-y-2 pt-0"
+      contentClassName="space-y-2"
       descripcion={
         <>
           Cuánto «piensa» la IA al generar copy, RSS, hashtags y agentes. Más esfuerzo mejora la
@@ -106,6 +106,6 @@ export function SeccionEsfuerzo() {
             </div>
           </>
         )}
-    </TarjetaColapsable>
+    </SeccionColapsable>
   );
 }
