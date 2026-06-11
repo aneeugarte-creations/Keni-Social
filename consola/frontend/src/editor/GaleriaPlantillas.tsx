@@ -352,26 +352,30 @@ export function ContenidoPlantillas({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {/* Filtro de tipo (solo si no está fijo) */}
+      {/* Filtro de tipo (solo si no está fijo): segmented control estilo «Turnos» (Apple/Canva) —
+          track gris con la pestaña activa como píldora BLANCA con sombra (sin la antigua píldora
+          negra `bg-primary`). */}
       {!tipoFijo && (
-        <div className={`flex shrink-0 gap-1 border-b border-border py-2 ${padX}`}>
-          {(["foto", "miniatura"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setFiltroTipo(t)}
-              className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                filtroTipo === t
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-            >
-              {t === "foto" ? (
-                <><Image className="h-3 w-3" />Fotos</>
-              ) : (
-                <><Video className="h-3 w-3" />Miniaturas</>
-              )}
-            </button>
-          ))}
+        <div className={`flex shrink-0 border-b border-border py-2 ${padX}`}>
+          <div className="inline-flex items-center rounded-lg bg-muted p-1">
+            {(["foto", "miniatura"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setFiltroTipo(t)}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-all ${
+                  filtroTipo === t
+                    ? "bg-background text-foreground shadow"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t === "foto" ? (
+                  <><Image className="h-3.5 w-3.5" />Fotos</>
+                ) : (
+                  <><Video className="h-3.5 w-3.5" />Miniaturas</>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
