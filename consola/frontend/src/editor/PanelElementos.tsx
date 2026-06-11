@@ -85,11 +85,11 @@ export function PanelElementos() {
               key={t.etiqueta}
               onClick={() => insertar(t.crear())}
               title={t.atajo ? `${t.etiqueta} (${t.atajo})` : t.etiqueta}
-              className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-neutral-900 px-3 py-2.5 text-left hover:border-primary"
+              className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-primary hover:bg-accent/40"
             >
-              <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-neutral-500">{t.etiqueta}</span>
-              <span className={`truncate text-white ${t.clase}`}>
-                {t.chip ? <span className="rounded-sm bg-[#E30613] px-1.5 py-0.5">{t.vista}</span> : t.vista}
+              <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">{t.etiqueta}</span>
+              <span className={`truncate text-foreground ${t.clase}`}>
+                {t.chip ? <span className="rounded-sm bg-[#E30613] px-1.5 py-0.5 text-white">{t.vista}</span> : t.vista}
               </span>
             </button>
           ))}
