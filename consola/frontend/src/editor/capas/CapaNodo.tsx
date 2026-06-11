@@ -127,6 +127,9 @@ export interface CapaNodoProps {
   // no mutan la capa ni afectan al export.
   muestraFoto?: boolean;
   muestraCopy?: boolean;
+  // Pinta la capa INVISIBLE (opacity 0) manteniendo el nodo vivo: la edición de texto en línea la
+  // sustituye por su editable WYSIWYG sin que el Transformer pierda el marco de selección.
+  oculta?: boolean;
 }
 
 const ALIN: Record<string, string> = {
@@ -369,7 +372,7 @@ function NodoImagenAjustada({
 // `textoMuestra` (texto pintado, con la normalización espejo del export) vive en
 // `textoMuestra.ts` para poder testearlo sin montar Konva.
 
-export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestraFoto = false, muestraCopy = false }: CapaNodoProps) {
+export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestraFoto = false, muestraCopy = false, oculta = false }: CapaNodoProps) {
   // Hook SIEMPRE llamado (regla de hooks); null para capas sin imagen.
   const objetoImg = capa.tipo === "imagen" ? capa.objeto : capa.tipo === "logo" ? capa.media_id : null;
   const img = useImagen(objetoImg);
@@ -420,7 +423,7 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
     x: capa.x,
     y: capa.y,
     rotation: capa.rotacion,
-    opacity: capa.opacidad,
+    opacity: oculta ? 0 : capa.opacidad,
     // Modo de fusión (espejo de `dibujarCapa`): sin `mezcla` => "source-over" (idéntico al legado).
     globalCompositeOperation: (MAPA_MEZCLA[capa.mezcla ?? "normal"] ??
       "source-over") as GlobalCompositeOperation,

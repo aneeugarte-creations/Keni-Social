@@ -46,6 +46,7 @@ import { useEditor, useStoreEditor } from "./usarEditor";
 import { leerDimensionesUrl } from "./useImagen";
 
 import { BannerRecorte, BannerReencuadre } from "./lienzo/BannersModo";
+import { type DestinoEdicion, destinoEdicion, estiloCajaEdicion, estiloTextoEdicion, textoInicial } from "./lienzo/edicionInline";
 import { type AccionLienzo, BarraAcciones } from "./lienzo/BarraAcciones";
 import { ControlesEncuadre } from "./lienzo/ControlesEncuadre";
 import { CropOverlay } from "./lienzo/CropOverlay";
@@ -62,6 +63,7 @@ import {
   prefNum,
 } from "./lienzo/lib";
 import { ReframeOverlay } from "./lienzo/ReframeOverlay";
+import { setEtiquetaMuestra, setTitularMuestra } from "./muestra";
 import { useArrastreCapas } from "./lienzo/useArrastreCapas";
 import { type LienzoApi, type ZoomApi, useAtajosTeclado } from "./lienzo/useAtajosTeclado";
 
@@ -294,7 +296,7 @@ export function Lienzo({
     safeRight,
     etiquetasRef: etiquetasImanRef,
   });
-  const [editando, setEditando] = useState<{ id: string; x: number; y: number; w: number; fontPx: number } | null>(null);
+  const [editando, setEditando] = useState<{ id: string; destino: DestinoEdicion } | null>(null);
   const [textoEdit, setTextoEdit] = useState("");
 
   // ── Interacciones de lienzo (estilo Canva) ───────────────────────────────
@@ -438,30 +440,43 @@ export function Lienzo({
     cont.scrollTop = a.docY * escala - a.sy;
   }, [escala]);
 
-  // Doble clic en una capa de texto -> edición en línea.
+  // Doble clic en una capa de texto -> edición en línea WYSIWYG sobre la imagen (patrón Canva).
+  // Se edita LO QUE SE VE: con binding y «Copy de muestra» activo, el copy de muestra (antes se
+  // editaba `capa.texto` y el lienzo seguía pintando la muestra: la edición parecía rota); en el
+  // resto de casos, el texto real de la capa.
   const abrirEdicionTexto = (id: string) => {
-    const stage = stageRef.current;
     const capa = documento.capas.find((c) => c.id === id);
-    if (!stage || !capa || capa.tipo !== "texto") return;
-    const nodo = stage.findOne<Konva.Node>(`#${id}`);
-    if (!nodo) return;
-    const r = nodo.getClientRect();
-    setTextoEdit((capa as CapaTexto).texto);
-    setEditando({ id, x: r.x, y: r.y, w: Math.max(120, r.width), fontPx: (capa as CapaTexto).tamano * escala });
+    if (!capa || capa.tipo !== "texto") return;
+    const c = capa as CapaTexto;
+    const destino = destinoEdicion(c, muestraCopy);
+    setTextoEdit(textoInicial(c, muestraCopy));
+    setEditando({ id, destino });
     store.getState().seleccionar(id);
-    // Si el texto tiene binding, lo que se edita es solo la MUESTRA de la plantilla (el render usa el
-    // copy real de la pieza). Avisamos una vez para que no confunda. No bloquea la edición.
-    if ((capa as CapaTexto).binding != null && !avisoBinding.current) {
+    // Aviso ÚNICO por sesión para los textos con binding: que quede claro qué se está editando.
+    if (c.binding != null && !avisoBinding.current) {
       avisoBinding.current = true;
       toast.info(
-        "Este texto se rellena con el copy real de la pieza; lo que escribas es el texto de muestra de la plantilla.",
+        destino === "texto"
+          ? "Este texto se rellena con el copy real de la pieza; lo que escribas es el texto de muestra de la plantilla."
+          : "Editas el copy de MUESTRA (solo presentación): la pieza final usa su copy real.",
       );
     }
   };
 
   const cerrarEdicion = (guardar: boolean) => {
-    if (editando && guardar) store.getState().actualizar(editando.id, { texto: textoEdit } as Partial<Capa>);
+    if (editando && guardar) {
+      // El destino se decidió al abrir: muestra (titular/pleca, módulo muestra.ts) o texto real.
+      if (editando.destino === "muestra-titular") setTitularMuestra(textoEdit);
+      else if (editando.destino === "muestra-etiqueta") setEtiquetaMuestra(textoEdit);
+      else store.getState().actualizar(editando.id, { texto: textoEdit } as Partial<Capa>);
+    }
     setEditando(null);
+  };
+
+  // Auto-alto del editable: el textarea crece con el contenido (sin scroll interno), como Canva.
+  const ajustarAltoEdicion = (el: HTMLTextAreaElement) => {
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
   };
 
   // Centro del VIEWPORT visible en coords del documento (los elementos nuevos —atajos T/R/C/L,
@@ -501,16 +516,6 @@ export function Lienzo({
       setRecorteInternoId(id);
     }
   };
-
-  // El textarea de edición inline vive DENTRO del tablero (mismo sistema de px que el canvas), así
-  // el scroll del contenedor lo arrastra consigo y no queda descolocado (antes se montaba fuera
-  // del scroll y el desplazamiento acumulado lo corría exactamente ese offset). El zoom sí cambia
-  // los px del tablero: ante un cambio de escala se cierra guardando. Dep SOLO `escala` para no
-  // disparar al abrir (cuando cambia `editando`).
-  useEffect(() => {
-    if (editando) cerrarEdicion(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [escala]);
 
   // Sube un fichero de imagen (portapapeles del SO o arrastre del escritorio) reutilizando el mismo
   // cliente de media del editor y lo inserta como capa imagen centrada en `centro` (coords del
@@ -1057,6 +1062,7 @@ export function Lienzo({
                 seleccionada={capa.id === seleccion}
                 muestraFoto={muestraFoto}
                 muestraCopy={muestraCopy}
+                oculta={editando?.id === capa.id}
                 onSelect={(e) => {
                   const add = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
                   const st = store.getState();
@@ -1237,22 +1243,34 @@ export function Lienzo({
         {/* Etiquetas de DISTANCIA del imán/espaciado igual: contenedor que `useArrastreCapas` puebla
             por mutación directa del DOM durante el arrastre (sin setState por frame). */}
         <div ref={etiquetasImanRef} aria-hidden className="pointer-events-none absolute inset-0 z-30" />
-        {/* Edición de texto en línea: dentro del TABLERO (px del canvas, mismo origen que
-            `getClientRect`), así el scroll del contenedor lo mueve junto al texto. */}
-        {editando && (
-          <textarea
-            autoFocus
-            value={textoEdit}
-            onChange={(e) => setTextoEdit(e.target.value)}
-            onBlur={() => cerrarEdicion(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cerrarEdicion(true); }
-              if (e.key === "Escape") { e.preventDefault(); cerrarEdicion(false); }
-            }}
-            className="absolute z-20 resize-none rounded border border-primary bg-background/95 p-1 leading-tight shadow"
-            style={{ left: editando.x, top: editando.y, width: editando.w, fontSize: Math.max(11, Math.min(40, editando.fontPx)) }}
-          />
-        )}
+        {/* Edición de texto en línea WYSIWYG (patrón Canva): vive dentro del TABLERO (px del
+            canvas) para que el scroll lo arrastre consigo, en la MISMA caja que la capa (posición,
+            valign y rotación) y con el MISMO estilo que el texto pintado (el nodo Konva queda
+            oculto mientras tanto; el Transformer conserva el marco). Doble clic selecciona todo,
+            Enter guarda (Shift+Enter = salto de línea), Escape cancela, clic fuera guarda. */}
+        {editando && (() => {
+          const c = documento.capas.find((x) => x.id === editando.id) as CapaTexto | undefined;
+          if (!c) return null;
+          return (
+            <div style={estiloCajaEdicion(c, escala)} className="z-20">
+              <textarea
+                autoFocus
+                rows={1}
+                value={textoEdit}
+                spellCheck={false}
+                onChange={(e) => { setTextoEdit(e.target.value); ajustarAltoEdicion(e.currentTarget); }}
+                onFocus={(e) => { e.currentTarget.select(); ajustarAltoEdicion(e.currentTarget); }}
+                onBlur={() => cerrarEdicion(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cerrarEdicion(true); }
+                  if (e.key === "Escape") { e.preventDefault(); cerrarEdicion(false); }
+                }}
+                className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none"
+                style={estiloTextoEdicion(c, escala)}
+              />
+            </div>
+          );
+        })()}
        </div>
       </div>
 
