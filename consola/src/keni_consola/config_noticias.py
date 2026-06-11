@@ -5,6 +5,7 @@ from ._config_comun import (
     _FALSOS,
     _VERDADEROS,
     CLUSTER_BREAKING_FUENTES_DEF,
+    CLUSTER_BREAKING_PESO_DEF,
     CLUSTER_BREAKING_VENTANA_H_DEF,
     CLUSTER_UMBRAL_DEF,
     CLUSTER_VENTANA_H_DEF,
@@ -13,6 +14,7 @@ from ._config_comun import (
     ENV_AFP_CLIENT_SECRET,
     ENV_AUTO_PROGRAMAR,
     ENV_CLUSTER_BREAKING_FUENTES,
+    ENV_CLUSTER_BREAKING_PESO,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_UMBRAL,
     ENV_CLUSTER_VENTANA_H,
@@ -59,6 +61,7 @@ from ._config_comun import (
     ENV_SCORE_PESO_FRESCURA,
     ENV_SCORE_PESO_MARCA,
     ENV_SCORE_PESO_RENDIMIENTO,
+    ENV_SCORE_PESO_VELOCIDAD,
     ENV_SCORE_PESO_VIRALIDAD,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
@@ -94,6 +97,7 @@ from ._config_comun import (
     SCORE_PESO_FRESCURA_DEF,
     SCORE_PESO_MARCA_DEF,
     SCORE_PESO_RENDIMIENTO_DEF,
+    SCORE_PESO_VELOCIDAD_DEF,
     SCORE_PESO_VIRALIDAD_DEF,
     TRAD_LOTE_DEF,
     TRAD_MIN_SCORE_DEF,
@@ -205,8 +209,32 @@ def cluster_umbral() -> float:
 
 
 def cluster_breaking_fuentes() -> int:
-    """Fuentes distintas mínimas para marcar una historia "breaking" (`KENI_CLUSTER_BREAKING_FUENTES`, def 3, min 2)."""
+    """LEGADO: umbral breaking por CONTEO de fuentes (`KENI_CLUSTER_BREAKING_FUENTES`, def 3, min 2).
+
+    El motor ya usa el umbral PONDERADO (`cluster_breaking_peso`); este accesor queda para el
+    mapeo de compatibilidad y para despliegues que aún lo lean.
+    """
     return _entero(ENV_CLUSTER_BREAKING_FUENTES, CLUSTER_BREAKING_FUENTES_DEF, minimo=2)
+
+
+def cluster_breaking_peso() -> float:
+    """Masa PONDERADA mínima (Σ peso por outlet) en la ventana actual para marcar "breaking".
+
+    (`KENI_CLUSTER_BREAKING_PESO`, def 3.0, min 1.0.) Con los pesos por defecto: 3 fuentes
+    normales, 1 potente + 1 normal, o 2 potentes. COMPATIBILIDAD: si el peso NO está fijado
+    pero el umbral legado por conteo (`KENI_CLUSTER_BREAKING_FUENTES`) sí, se mapea
+    (peso = conteo) para no cambiar el comportamiento de un despliegue ya configurado.
+    """
+    crudo = _crudo(ENV_CLUSTER_BREAKING_PESO).strip()
+    if not crudo and _crudo(ENV_CLUSTER_BREAKING_FUENTES).strip():
+        return float(cluster_breaking_fuentes())
+    if not crudo:
+        return CLUSTER_BREAKING_PESO_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return CLUSTER_BREAKING_PESO_DEF
+    return max(1.0, valor)
 
 
 def cluster_breaking_ventana_h() -> int:
@@ -248,6 +276,7 @@ def score_pesos():
     from .dominio.clustering import PesosScore
 
     corroboracion = _peso01(ENV_SCORE_PESO_CORROBORACION, SCORE_PESO_CORROBORACION_DEF)
+    velocidad = _peso01(ENV_SCORE_PESO_VELOCIDAD, SCORE_PESO_VELOCIDAD_DEF)
     frescura = _peso01(ENV_SCORE_PESO_FRESCURA, SCORE_PESO_FRESCURA_DEF)
     viralidad = _peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF)
     marca = _peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF)
@@ -256,11 +285,13 @@ def score_pesos():
         rendimiento = SCORE_PESO_RENDIMIENTO_AUTO
         factor = 1.0 - rendimiento
         corroboracion *= factor
+        velocidad *= factor
         frescura *= factor
         viralidad *= factor
         marca *= factor
     return PesosScore(
         corroboracion=corroboracion,
+        velocidad=velocidad,
         frescura=frescura,
         viralidad=viralidad,
         marca=marca,

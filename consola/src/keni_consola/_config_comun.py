@@ -196,13 +196,18 @@ ENV_INGESTA_INTERVALO_DEFECTO = "KENI_INGESTA_INTERVALO_DEFECTO"
 # acotado por la ventana: nunca re-cluster el archivo entero. Corre dentro del barrido de ingesta.
 ENV_CLUSTER_VENTANA_H = "KENI_CLUSTER_VENTANA_H"
 ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
+# LEGADO: umbral breaking por CONTEO de fuentes. Sustituido por el umbral PONDERADO
+# (`KENI_CLUSTER_BREAKING_PESO`); si el conteo está fijado y el peso no, se mapea (peso =
+# conteo) para no romper despliegues configurados. Ver `config.cluster_breaking_peso()`.
 ENV_CLUSTER_BREAKING_FUENTES = "KENI_CLUSTER_BREAKING_FUENTES"
+ENV_CLUSTER_BREAKING_PESO = "KENI_CLUSTER_BREAKING_PESO"
 ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
 
 # Pesos del ALGORITMO DE PONDERACIÓN del score de cluster (jerarquización de noticias). Editables
 # por la consola para que el equipo afine el ranking sin tocar código (clamp [0,1]; default =
 # los de `dominio.clustering.PesosScore`). El daemon de ingesta los inyecta en `clustering.puntuar`.
 ENV_SCORE_PESO_CORROBORACION = "KENI_SCORE_PESO_CORROBORACION"
+ENV_SCORE_PESO_VELOCIDAD = "KENI_SCORE_PESO_VELOCIDAD"
 ENV_SCORE_PESO_FRESCURA = "KENI_SCORE_PESO_FRESCURA"
 ENV_SCORE_PESO_VIRALIDAD = "KENI_SCORE_PESO_VIRALIDAD"
 ENV_SCORE_PESO_MARCA = "KENI_SCORE_PESO_MARCA"
@@ -536,18 +541,23 @@ INGESTA_BACKOFF_TOPE_SEG = 3600
 
 # Clustering de historias (Ola B): defaults. Ventana de 72h (una historia evoluciona varios
 # días); umbral fuzzy 0.82 (alto, conservador: solo une variantes claras del mismo titular);
-# breaking = 3 fuentes distintas en < 6h (aceleración real, no goteo).
+# breaking PONDERADO = masa de fuentes (Σ peso por outlet) >= 3.0 sumadas en la ventana
+# ACTUAL de 6h: 3 normales, 1 potente + 1 normal, o 2 potentes. Anclado en ahora: decae solo.
 CLUSTER_VENTANA_H_DEF = 72
 CLUSTER_UMBRAL_DEF = 0.82
-CLUSTER_BREAKING_FUENTES_DEF = 3
+CLUSTER_BREAKING_FUENTES_DEF = 3  # LEGADO (conteo); ver CLUSTER_BREAKING_PESO_DEF
+CLUSTER_BREAKING_PESO_DEF = 3.0
 CLUSTER_BREAKING_VENTANA_H_DEF = 6
 
 # Pesos del algoritmo de ponderación del score (defaults; espejan `clustering.PesosScore`).
-SCORE_PESO_CORROBORACION_DEF = 0.35
-SCORE_PESO_FRESCURA_DEF = 0.25
-SCORE_PESO_VIRALIDAD_DEF = 0.20
+# El bonus breaking es 0.0: breaking ya emerge del ranking (corroboración ponderada ×
+# velocidad); el knob queda para rollback/ajuste sin tocar código.
+SCORE_PESO_CORROBORACION_DEF = 0.30
+SCORE_PESO_VELOCIDAD_DEF = 0.20
+SCORE_PESO_FRESCURA_DEF = 0.20
+SCORE_PESO_VIRALIDAD_DEF = 0.10
 SCORE_PESO_MARCA_DEF = 0.20
-SCORE_BONUS_BREAKING_DEF = 0.10
+SCORE_BONUS_BREAKING_DEF = 0.0
 
 # Monitor de cobertura + traducción + verificación (Ola D): defaults.
 #   8 errores seguidos ya es señal robusta de feed muerto (con backoff, son horas de fallos).
@@ -724,6 +734,7 @@ __all__ = [
     'QA_EN_CURSO_TTL_MIN_DEF',
     'QA_FUENTE_TIMEOUT_DEF',
     'CLUSTER_BREAKING_FUENTES_DEF',
+    'CLUSTER_BREAKING_PESO_DEF',
     'CLUSTER_BREAKING_VENTANA_H_DEF',
     'CLUSTER_UMBRAL_DEF',
     'CLUSTER_VENTANA_H_DEF',
@@ -752,6 +763,7 @@ __all__ = [
     'ENV_CLAUDE_SKIP_PERMISSIONS',
     'ENV_CLAUDE_TIMEOUT',
     'ENV_CLUSTER_BREAKING_FUENTES',
+    'ENV_CLUSTER_BREAKING_PESO',
     'ENV_CLUSTER_BREAKING_VENTANA_H',
     'ENV_CLUSTER_UMBRAL',
     'ENV_CLUSTER_VENTANA_H',
@@ -863,6 +875,7 @@ __all__ = [
     'ENV_SCORE_PESO_CORROBORACION',
     'ENV_SCORE_PESO_FRESCURA',
     'ENV_SCORE_PESO_MARCA',
+    'ENV_SCORE_PESO_VELOCIDAD',
     'ENV_SCORE_PESO_VIRALIDAD',
     'ENV_SECRETOS',
     'ENV_SESION_HORAS',
@@ -937,6 +950,7 @@ __all__ = [
     'SCORE_PESO_FRESCURA_DEF',
     'SCORE_PESO_MARCA_DEF',
     'SCORE_PESO_RENDIMIENTO_DEF',
+    'SCORE_PESO_VELOCIDAD_DEF',
     'SCORE_PESO_VIRALIDAD_DEF',
     'SESION_HORAS_DEF',
     'SESION_MAX_HORAS_DEF',

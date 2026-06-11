@@ -703,7 +703,7 @@ def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(mon
 
     fusionado = ingesta_daemon._fusionar_grupo(
         ["c1", "c2"], {"c1": c1, "c2": c2},
-        pesos=None, breaking_fuentes=3, breaking_ventana_h=6,
+        pesos=None, breaking_peso=3.0, breaking_ventana_h=6,
         fuentes_baja=frozenset(), perfil_activo=False, ahora=datetime.now(UTC),
     )
     assert fusionado is False  # nada que fundir: la única absorbible ya fue promovida

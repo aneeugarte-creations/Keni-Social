@@ -686,14 +686,15 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=1,
         ),
         Ajuste(
-            clave=config.ENV_CLUSTER_BREAKING_FUENTES,
-            tipo="int",
-            etiqueta="Medios distintos necesarios",
-            ayuda="Una historia se marca como última hora cuando al menos estos medios distintos "
-            "la cuentan casi a la vez.",
+            clave=config.ENV_CLUSTER_BREAKING_PESO,
+            tipo="float",
+            etiqueta="Peso de medios necesario",
+            ayuda="Una historia se marca como última hora cuando los medios que la cuentan casi "
+            "a la vez SUMAN este peso (una fuente potente vale 2, una normal 1, una de baja "
+            "confiabilidad 0.5). Con 3: dos potentes, o una potente y una normal, o tres normales.",
             grupo="noticias_breaking",
-            defecto=config.CLUSTER_BREAKING_FUENTES_DEF,
-            minimo=2,
+            defecto=config.CLUSTER_BREAKING_PESO_DEF,
+            minimo=1,
         ),
         Ajuste(
             clave=config.ENV_CLUSTER_BREAKING_VENTANA_H,
@@ -736,6 +737,17 @@ def _construir_catalogo() -> list[Ajuste]:
             "que llega. De 0 a 1.",
             grupo="noticias_orden",
             defecto=config.SCORE_PESO_FRESCURA_DEF,
+            minimo=0,
+            maximo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_SCORE_PESO_VELOCIDAD,
+            tipo="float",
+            etiqueta="Se corrobora rápido",
+            ayuda="Cuánto sube una historia cuando varios medios se suman en poco tiempo (la "
+            "señal de última hora). Decae sola al envejecer. De 0 a 1.",
+            grupo="noticias_orden",
+            defecto=config.SCORE_PESO_VELOCIDAD_DEF,
             minimo=0,
             maximo=1,
         ),

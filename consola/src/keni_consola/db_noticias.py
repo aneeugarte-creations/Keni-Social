@@ -1531,8 +1531,10 @@ def actualizar_scores_clusters(scores: dict[str, float | dict[str, Any]]) -> int
     Para el RE-SCORE periódico de la ventana (la frescura decae con el tiempo aunque no entren
     items nuevos): toca únicamente el score y su explicación, sin pisar agregados ni estado.
     Cada valor puede ser un float (solo score; la explicación persistida se conserva) o un dict
-    `{score, score_razon?, score_desglose?}` para refrescar también la razón/el desglose (si no,
-    la razón explicaría un score viejo). Devuelve nº filas.
+    `{score, score_razon?, score_desglose?, breaking?, velocidad?}` para refrescar también la
+    razón/el desglose y el flag breaking/velocidad VIVOS (anclados en ahora, decaen con el
+    reloj; si no se refrescaran, el listón trataría como última hora una historia de ayer).
+    Devuelve nº filas.
     """
     ahora = ahora_iso()
     n = 0
@@ -1542,16 +1544,22 @@ def actualizar_scores_clusters(scores: dict[str, float | dict[str, Any]]) -> int
             if not cid:
                 continue
             if isinstance(valor, dict):
+                sets = ["score = ?", "score_razon = ?", "score_desglose = ?", "actualizado = ?"]
+                params: list[Any] = [
+                    float(valor.get("score") or 0.0),
+                    (str(valor.get("score_razon") or ""))[:500],
+                    _desglose_a_json(valor.get("score_desglose")),
+                    ahora,
+                ]
+                if "breaking" in valor:
+                    sets.append("breaking = ?")
+                    params.append(int(valor.get("breaking") or 0))
+                if "velocidad" in valor:
+                    sets.append("velocidad = ?")
+                    params.append(float(valor.get("velocidad") or 0.0))
                 cur = con.execute(
-                    "UPDATE noticias_clusters SET score = ?, score_razon = ?, "
-                    "score_desglose = ?, actualizado = ? WHERE id = ?",
-                    (
-                        float(valor.get("score") or 0.0),
-                        (str(valor.get("score_razon") or ""))[:500],
-                        _desglose_a_json(valor.get("score_desglose")),
-                        ahora,
-                        cid,
-                    ),
+                    f"UPDATE noticias_clusters SET {', '.join(sets)} WHERE id = ?",  # noqa: S608 -- columnas de allowlist
+                    (*params, cid),
                 )
             else:
                 cur = con.execute(

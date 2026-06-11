@@ -138,24 +138,76 @@ def test_recalcular_titulo_representativo_prefiere_es():
     assert r["titulo"] == "Gran noticia en español hoy"
 
 
-def test_recalcular_breaking_si_muchas_fuentes_en_poco_tiempo():
+def test_recalcular_breaking_si_masa_de_fuentes_en_la_ventana_actual():
+    # Tres outlets NORMALES (peso 1.0) sumados en la ventana actual: masa 3.0 >= 3.0.
     items = [
-        _item(fuente_id="a", publicado_en=_T0.isoformat()),
-        _item(fuente_id="b", publicado_en=(_T0 + timedelta(hours=1)).isoformat()),
-        _item(fuente_id="c", publicado_en=(_T0 + timedelta(hours=2)).isoformat()),
+        _item(fuente_id="a", url="https://a.com/n", publicado_en=_T0.isoformat()),
+        _item(fuente_id="b", url="https://b.com/n", publicado_en=(_T0 + timedelta(hours=1)).isoformat()),
+        _item(fuente_id="c", url="https://c.com/n", publicado_en=(_T0 + timedelta(hours=2)).isoformat()),
     ]
-    r = clustering.recalcular(_base_cluster(), items, breaking_fuentes=3, breaking_ventana_h=6)
+    r = clustering.recalcular(
+        _base_cluster(), items, breaking_peso=3.0, breaking_ventana_h=6,
+        ahora=_T0 + timedelta(hours=2),
+    )
     assert r["breaking"] == 1
+    assert r["velocidad"] == 0.75  # masa 3.0 / satura 4.0
+
+
+def test_recalcular_dos_potentes_a_la_vez_son_breaking():
+    # 2 fuentes POTENTES (peso 2.0) casi a la vez: masa 4.0 >= 3.0 → última hora.
+    items = [
+        _item(fuente_id="a", url="https://reuters.com/n", fuente_peso=2.0, publicado_en=_T0.isoformat()),
+        _item(fuente_id="b", url="https://bbc.com/n", fuente_peso=2.0,
+              publicado_en=(_T0 + timedelta(minutes=15)).isoformat()),
+    ]
+    r = clustering.recalcular(
+        _base_cluster(), items, breaking_peso=3.0, breaking_ventana_h=6,
+        ahora=_T0 + timedelta(minutes=20),
+    )
+    assert r["breaking"] == 1
+    assert r["velocidad"] == 1.0  # masa 4.0 satura la señal
+
+
+def test_recalcular_dos_normales_no_son_breaking():
+    items = [
+        _item(fuente_id="a", url="https://a.com/n", publicado_en=_T0.isoformat()),
+        _item(fuente_id="b", url="https://b.com/n", publicado_en=(_T0 + timedelta(minutes=15)).isoformat()),
+    ]
+    r = clustering.recalcular(
+        _base_cluster(), items, breaking_peso=3.0, breaking_ventana_h=6,
+        ahora=_T0 + timedelta(minutes=20),
+    )
+    assert r["breaking"] == 0  # masa 2.0 < 3.0
+    assert r["velocidad"] == 0.5
+
+
+def test_recalcular_breaking_decae_al_envejecer():
+    # La MISMA historia, evaluada 10 horas después: los outlets salen de la ventana actual
+    # (anclada en ahora) y el flag decae — un breaking de ayer deja de serlo.
+    items = [
+        _item(fuente_id="a", url="https://a.com/n", publicado_en=_T0.isoformat()),
+        _item(fuente_id="b", url="https://b.com/n", publicado_en=(_T0 + timedelta(hours=1)).isoformat()),
+        _item(fuente_id="c", url="https://c.com/n", publicado_en=(_T0 + timedelta(hours=2)).isoformat()),
+    ]
+    r = clustering.recalcular(
+        _base_cluster(), items, breaking_peso=3.0, breaking_ventana_h=6,
+        ahora=_T0 + timedelta(hours=12),
+    )
+    assert r["breaking"] == 0
+    assert r["velocidad"] == 0.0
 
 
 def test_recalcular_no_breaking_si_fuentes_dispersas_en_el_tiempo():
     items = [
-        _item(fuente_id="a", publicado_en=_T0.isoformat()),
-        _item(fuente_id="b", publicado_en=(_T0 + timedelta(hours=10)).isoformat()),
-        _item(fuente_id="c", publicado_en=(_T0 + timedelta(hours=30)).isoformat()),
+        _item(fuente_id="a", url="https://a.com/n", publicado_en=_T0.isoformat()),
+        _item(fuente_id="b", url="https://b.com/n", publicado_en=(_T0 + timedelta(hours=10)).isoformat()),
+        _item(fuente_id="c", url="https://c.com/n", publicado_en=(_T0 + timedelta(hours=30)).isoformat()),
     ]
-    r = clustering.recalcular(_base_cluster(), items, breaking_fuentes=3, breaking_ventana_h=6)
-    assert r["breaking"] == 0
+    r = clustering.recalcular(
+        _base_cluster(), items, breaking_peso=3.0, breaking_ventana_h=6,
+        ahora=_T0 + timedelta(hours=30),
+    )
+    assert r["breaking"] == 0  # solo 1 outlet en la ventana actual
 
 
 def test_recalcular_conserva_identidad_del_cluster():
@@ -306,10 +358,79 @@ def test_puntuar_monotono_en_viralidad():
     assert s_alta > s_baja
 
 
-def test_puntuar_breaking_sube_el_score():
+def test_puntuar_breaking_sin_bonus_por_defecto():
+    # Breaking ya NO es un empujón aditivo (emerge de corroboración ponderada × velocidad):
+    # con los pesos por defecto el flag solo no cambia el score…
     sin = clustering.puntuar(_cluster(n_fuentes=3, breaking=0), ahora=_T0)[0]
     con = clustering.puntuar(_cluster(n_fuentes=3, breaking=1), ahora=_T0)[0]
-    assert con > sin
+    assert con == sin
+    # …pero el knob de rollback sigue funcionando si config lo reactiva.
+    pesos = clustering.PesosScore(breaking=0.10)
+    con_bonus = clustering.puntuar(_cluster(n_fuentes=3, breaking=1), ahora=_T0, pesos=pesos)[0]
+    assert con_bonus > sin
+
+
+def _detalle(*entradas):
+    """Atajo: timeline de outlets como lo persiste `recalcular` (peso + primer_visto)."""
+    return [
+        {"fuente_id": f"f{i}", "fuente": f"Fuente {i}", "host": f"f{i}.com",
+         "peso": peso, "primer_visto": visto.isoformat(), "n_items": 1}
+        for i, (peso, visto) in enumerate(entradas)
+    ]
+
+
+def test_puntuar_dos_potentes_simultaneas_rankean_top_y_breaking():
+    # 2 fuentes potentes a la vez → corroboración 0.67 + velocidad 1.0 + frescura ≈ score 0.6+
+    # y flag breaking EN VIVO: tiene que salir al top del pool y al feed (vía listón).
+    cl = _cluster(
+        n_fuentes=2, peso_fuentes=4.0, ultimo_visto=_T0.isoformat(),
+        fuentes_detalle=_detalle((2.0, _T0 - timedelta(minutes=20)), (2.0, _T0 - timedelta(minutes=5))),
+    )
+    score, _razon, desglose = clustering.puntuar_detalle(cl, ahora=_T0)
+    assert score >= 0.55
+    assert desglose["breaking"] == 1
+    assert desglose["velocidad"] == 1.0
+    assert desglose["peso_fuentes"] == 4.0
+
+
+def test_puntuar_velocidad_decae_al_envejecer():
+    detalle = _detalle((2.0, _T0), (2.0, _T0 + timedelta(minutes=15)))
+    cl = _cluster(n_fuentes=2, peso_fuentes=4.0, ultimo_visto=(_T0 + timedelta(minutes=15)).isoformat(),
+                  fuentes_detalle=detalle)
+    fresca = clustering.puntuar_detalle(cl, ahora=_T0 + timedelta(minutes=20))
+    vieja = clustering.puntuar_detalle(cl, ahora=_T0 + timedelta(hours=12))
+    assert fresca[2]["velocidad"] == 1.0
+    assert vieja[2]["velocidad"] == 0.0
+    assert fresca[2]["breaking"] == 1
+    assert vieja[2]["breaking"] == 0  # el breaking decae con la ventana
+    assert fresca[0] > vieja[0]
+
+
+def test_puntuar_corroboracion_pondera_el_peso_no_solo_el_conteo():
+    # 2 potentes (masa 4.0) corroboran MÁS que 3 normales (masa 3.0).
+    dos_potentes = _cluster(n_fuentes=2, peso_fuentes=4.0)
+    tres_normales = _cluster(n_fuentes=3, peso_fuentes=3.0)
+    s2 = clustering.puntuar_detalle(dos_potentes, ahora=_T0)[2]["corroboracion"]
+    s3 = clustering.puntuar_detalle(tres_normales, ahora=_T0)[2]["corroboracion"]
+    assert s2 > s3
+
+
+def test_puntuar_unica_fuente_fresca_queda_bajo_el_liston():
+    # Una sola fuente recién llegada, sin encaje de marca, NO debe abrir el listón (0.35).
+    sola = _cluster(n_fuentes=1, peso_fuentes=1.0, senal=0, ultimo_visto=_T0.isoformat())
+    score = clustering.puntuar(sola, ahora=_T0)[0]
+    assert score < clustering.LISTON_MIN_SCORE_DEF
+
+
+def test_puntuar_fallback_a_n_fuentes_sin_peso_persistido():
+    # Cluster pre-migración (peso_fuentes=0): la masa cae al conteo de fuentes — el pool
+    # vivo no colapsa a 0 en el primer arranque.
+    viejo = _cluster(n_fuentes=4, peso_fuentes=0.0)
+    nuevo = _cluster(n_fuentes=4, peso_fuentes=4.0)
+    assert (
+        clustering.puntuar_detalle(viejo, ahora=_T0)[2]["corroboracion"]
+        == clustering.puntuar_detalle(nuevo, ahora=_T0)[2]["corroboracion"]
+    )
 
 
 def test_puntuar_relevancia_de_marca_sube_el_score():
@@ -362,11 +483,12 @@ def test_puntuar_detalle_desglosa_las_senales_y_las_palabras():
     score, razon, desglose = clustering.puntuar_detalle(cl, palabras_marca=pal, ahora=_T0)
     assert clustering.puntuar(cl, palabras_marca=pal, ahora=_T0) == (score, razon)  # wrapper fiel
     assert set(desglose) == {
-        "corroboracion", "frescura", "viralidad", "marca", "rendimiento", "breaking", "palabras",
+        "corroboracion", "velocidad", "frescura", "viralidad", "marca", "rendimiento",
+        "peso_fuentes", "breaking", "palabras",
     }
-    for senal in ("corroboracion", "frescura", "viralidad", "marca", "rendimiento"):
+    for senal in ("corroboracion", "velocidad", "frescura", "viralidad", "marca", "rendimiento"):
         assert 0.0 <= desglose[senal] <= 1.0
-    assert desglose["breaking"] == 1
+    assert desglose["breaking"] == 1  # sin timeline persistido se respeta el flag
     assert desglose["palabras"] == ["cdmx", "sismo"]  # qué del vocabulario casó (explicable)
     assert "cdmx" in razon  # la razón humana nombra las palabras que casaron
 
@@ -512,6 +634,28 @@ def test_liston_exime_de_marca_a_breaking_corroborada():
     breaking = _cluster_apto(titulo="Evento inesperado sin vocabulario aun", breaking=1)
     ok, _motivo = clustering.evaluar_liston(breaking, palabras_marca=_PAL, ahora=_T0)
     assert ok  # evento mayor confirmado por varias fuentes a la vez
+
+
+def test_liston_dos_potentes_recien_nacida_sale_sin_madurar():
+    # El caso de diseño: una nota en 2 fuentes potentes A LA VEZ sube al top y sale al feed
+    # sin esperar maduración ni encaje de marca (breaking derivado EN VIVO del timeline).
+    detalle = [
+        {"fuente_id": "a", "fuente": "Reuters", "host": "reuters.com", "peso": 2.0,
+         "primer_visto": (_T0 - timedelta(minutes=20)).isoformat(), "n_items": 1},
+        {"fuente_id": "b", "fuente": "BBC", "host": "bbc.com", "peso": 2.0,
+         "primer_visto": (_T0 - timedelta(minutes=5)).isoformat(), "n_items": 1},
+    ]
+    cl = _cluster(
+        n_fuentes=2, peso_fuentes=4.0, fuentes_detalle=detalle, verificacion="corroborada",
+        titulo="Evento inesperado sin vocabulario", ultimo_visto=_T0.isoformat(),
+        primer_visto=(_T0 - timedelta(minutes=2)).isoformat(),
+        breaking=0,  # flag persistido desfasado: el listón deriva el vivo del timeline
+    )
+    ok, motivo = clustering.evaluar_liston(
+        cl, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
+    )
+    assert ok
+    assert "score" in motivo
 
 
 def test_liston_breaking_sin_corroborar_no_queda_exenta():

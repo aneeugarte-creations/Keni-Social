@@ -39,20 +39,26 @@ from . import dedup, similitud
 # ("nfl", "f1") disparan ratios altos espurios entre sí: solo casan por url exacta.
 _MIN_LONGITUD_FUZZY = 8
 
-# Umbral de scoring "breaking" por defecto si no se inyecta otro (lo fija el daemon vía
-# config). Una historia es "breaking" si junta >= N fuentes distintas en < M horas.
-BREAKING_FUENTES_DEF = 3
+# Umbral de "breaking" PONDERADO por defecto (lo fija el daemon vía config). Una historia es
+# breaking si la MASA de fuentes (Σ peso por outlet) que se sumaron en la ventana ACTUAL
+# alcanza este mínimo: 3 normales, 1 potente + 1 normal, o 2 potentes. Como la ventana se
+# ancla en AHORA, el flag DECAE solo (un breaking de ayer deja de serlo): breaking es una
+# consecuencia del ranking (corroboración ponderada × velocidad), no un carril aparte.
+BREAKING_PESO_DEF = 3.0
 BREAKING_VENTANA_H_DEF = 6
 
 # Pesos del score (ver `puntuar`). Suman 1.0: el score vive en [0, 1] y es comparable
 # entre marcas/categorías para el ranking. Son los DEFAULTS; el daemon los puede inyectar
 # desde la configuración (ajustes editables por la consola), de ahí la dataclass `PesosScore`.
-_PESO_CORROBORACION = 0.35
-_PESO_FRESCURA = 0.25
-_PESO_VIRALIDAD = 0.20
+_PESO_CORROBORACION = 0.30
+_PESO_VELOCIDAD = 0.20
+_PESO_FRESCURA = 0.20
+_PESO_VIRALIDAD = 0.10
 _PESO_MARCA = 0.20
-# Empujón aditivo si la historia es breaking (no es un peso de la combinación lineal).
-_BONUS_BREAKING = 0.10
+# Empujón aditivo si la historia es breaking. DEFAULT 0.0 = SIN bonus: breaking ya emerge del
+# ranking (2 fuentes potentes a la vez ⇒ corroboración 0.67 + velocidad 1.0 ⇒ top del pool);
+# el knob queda por compatibilidad/rollback (config puede reactivarlo sin tocar código).
+_BONUS_BREAKING = 0.0
 # Peso de la señal de RENDIMIENTO (líneas que mejor funcionan). DEFAULT 0.0 = INERTE: la señal
 # (Fase 2c) solo cuenta cuando el equipo le da peso desde config; así no cambia nada por defecto.
 _PESO_RENDIMIENTO = 0.0
@@ -62,13 +68,15 @@ _PESO_RENDIMIENTO = 0.0
 class PesosScore:
     """Pesos del algoritmo de ponderación del score de cluster (inyectables desde config).
 
-    `corroboracion/frescura/viralidad/marca` son la combinación lineal (idealmente suman ~1.0);
-    `breaking` es el empujón aditivo; `rendimiento` es la señal de líneas que mejor funcionan
-    (Fase 2c), INERTE por defecto (peso 0). `puntuar()` usa estos; el daemon construye una
-    instancia desde `config.score_pesos()`. Sin inyección, `puntuar()` cae a `_PESOS_DEF`.
+    `corroboracion/velocidad/frescura/viralidad/marca` son la combinación lineal (idealmente
+    suman ~1.0); `breaking` es el empujón aditivo (def 0.0: breaking ya emerge del ranking);
+    `rendimiento` es la señal de líneas que mejor funcionan (Fase 2c), INERTE por defecto
+    (peso 0). `puntuar()` usa estos; el daemon construye una instancia desde
+    `config.score_pesos()`. Sin inyección, `puntuar()` cae a `_PESOS_DEF`.
     """
 
     corroboracion: float = _PESO_CORROBORACION
+    velocidad: float = _PESO_VELOCIDAD
     frescura: float = _PESO_FRESCURA
     viralidad: float = _PESO_VIRALIDAD
     marca: float = _PESO_MARCA
@@ -79,7 +87,8 @@ class PesosScore:
 _PESOS_DEF = PesosScore()
 
 # Normalizadores de cada señal (ver fórmula).
-_FUENTES_SATURA = 6  # 6+ fuentes distintas saturan la corroboración a 1.0
+_PESO_SATURA = 8.0  # masa ponderada (Σ peso por outlet) que satura la corroboración a 1.0
+_VEL_SATURA = 4.0  # masa en la ventana actual que satura la velocidad (= 2 potentes a la vez)
 _SENAL_SATURA = 1_000_000  # escala log de viralidad (alineada con parrilla)
 _FRESCURA_VIDA_H = 72.0  # a las 72h la frescura cae a ~0 (lineal acotada)
 
@@ -442,6 +451,49 @@ def peso_corroboracion(detalle: list[dict[str, Any]]) -> float:
     return round(sum(float(d.get("peso") or 1.0) for d in detalle), 3)
 
 
+def peso_ventana_actual(
+    detalle: list[dict[str, Any]],
+    *,
+    ventana_h: int = BREAKING_VENTANA_H_DEF,
+    ahora: datetime | None = None,
+) -> tuple[float, int]:
+    """Masa ponderada de los outlets que SE SUMARON en la ventana actual. `(masa, n_outlets)`.
+
+    Cuenta los outlets de `fuentes_detalle` cuyo `primer_visto` cae en las últimas
+    `ventana_h` horas (anclado en `ahora`): es la señal de VELOCIDAD del ranking y la base
+    del flag breaking. Como se computa desde el timeline PERSISTIDO, el re-score periódico
+    la hace decaer sin releer items. Outlets sin timestamp no cuentan (no se inventa señal).
+    """
+    ref = ahora or datetime.now(UTC)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=UTC)
+    desde = ref - timedelta(hours=max(1, int(ventana_h)))
+    masa = 0.0
+    n = 0
+    for d in detalle:
+        dt = _parse_iso(str(d.get("primer_visto") or ""))
+        if dt is None or dt < desde:
+            continue
+        try:
+            masa += float(d.get("peso") or 1.0)
+        except (TypeError, ValueError):
+            masa += 1.0
+        n += 1
+    return round(masa, 3), n
+
+
+def _velocidad(masa_ventana: float, n_outlets_ventana: int) -> float:
+    """Señal de VELOCIDAD [0,1]: masa ponderada que se sumó en la ventana actual.
+
+    0 con menos de 2 outlets (una sola fuente no es corroboración rápida, por potente que
+    sea); satura en `_VEL_SATURA` (= 2 fuentes potentes a la vez ⇒ 1.0). Decae sola: al
+    envejecer la historia, los outlets salen de la ventana y la señal cae a 0.
+    """
+    if n_outlets_ventana < 2:
+        return 0.0
+    return min(1.0, masa_ventana / _VEL_SATURA)
+
+
 def clasificar_verificacion(
     items: list[dict[str, Any]],
     *,
@@ -478,9 +530,10 @@ def recalcular(
     cluster: dict[str, Any],
     items: list[dict[str, Any]],
     *,
-    breaking_fuentes: int = BREAKING_FUENTES_DEF,
+    breaking_peso: float = BREAKING_PESO_DEF,
     breaking_ventana_h: int = BREAKING_VENTANA_H_DEF,
     fuentes_baja_confianza: frozenset[str] = frozenset(),
+    ahora: datetime | None = None,
 ) -> dict[str, Any]:
     """Recomputa los agregados de un cluster a partir de TODOS sus items. PURA.
 
@@ -492,8 +545,12 @@ def recalcular(
       - `titulo`/`resumen` representativos (idioma es / mayor señal), `clave` del cluster,
         `categoria`/`geo`/`marca` (marca dominante).
       - `primer_visto`/`ultimo_visto` (min/máx instante de los items).
-      - `breaking`: 1 si junta >= `breaking_fuentes` fuentes distintas dentro de una ventana
-        de `breaking_ventana_h` horas (aceleración real, no goteo lento).
+      - `fuentes_detalle`/`peso_fuentes`/`primera_fuente(_nombre)`: timeline de outlets y
+        masa de corroboración PONDERADA por el peso editorial de cada fuente.
+      - `breaking`: 1 si la masa ponderada de outlets que se sumaron en la ventana ACTUAL
+        (`breaking_ventana_h` horas hasta `ahora`) alcanza `breaking_peso` (2 potentes, o
+        1 potente + 1 normal, o 3 normales). Anclado en AHORA: decae solo al envejecer.
+      - `velocidad`: la señal [0,1] de esa misma masa (la lee el scoring y la UI).
       - `verificacion`: corroborada / unica_fuente / dudosa (corroboración multi-outlet).
     Conserva `id`/`estado`/`contenido_id`/`creado` del cluster existente.
     """
@@ -507,6 +564,7 @@ def recalcular(
             "idioma": "",
             "senal": 0,
             "breaking": 0,
+            "velocidad": 0.0,
             "verificacion": "unica_fuente",
             "fuentes_detalle": [],
             "peso_fuentes": 0.0,
@@ -531,6 +589,9 @@ def recalcular(
     # Se PERSISTEN en el cluster para que el re-score periódico (que repuntúa sin releer
     # items) pueda envejecer la señal de velocidad y la UI explique la corroboración.
     detalle_fuentes = fuentes_detalle(items)
+    masa_ventana, n_ventana = peso_ventana_actual(
+        detalle_fuentes, ventana_h=breaking_ventana_h, ahora=ahora
+    )
 
     return {
         **cluster,
@@ -547,47 +608,14 @@ def recalcular(
         "senal": senal,
         "primer_visto": primer_visto,
         "ultimo_visto": ultimo_visto,
-        "breaking": 1 if _es_breaking(
-            items, fuentes_min=breaking_fuentes, ventana_h=breaking_ventana_h
-        ) else 0,
+        "breaking": 1 if (n_ventana >= 2 and masa_ventana >= breaking_peso) else 0,
+        "velocidad": round(_velocidad(masa_ventana, n_ventana), 3),
         "verificacion": clasificar_verificacion(items, fuentes_baja=fuentes_baja_confianza),
         "fuentes_detalle": detalle_fuentes,
         "peso_fuentes": peso_corroboracion(detalle_fuentes),
         "primera_fuente": detalle_fuentes[0]["fuente_id"] if detalle_fuentes else "",
         "primera_fuente_nombre": detalle_fuentes[0]["fuente"] if detalle_fuentes else "",
     }
-
-
-def _es_breaking(
-    items: list[dict[str, Any]], *, fuentes_min: int, ventana_h: int
-) -> bool:
-    """True si >= `fuentes_min` fuentes DISTINTAS cubren la historia en < `ventana_h` horas.
-
-    Heurística de aceleración: una historia que muchas fuentes recogen casi a la vez es
-    "breaking", distinta de una que acumula fuentes a lo largo de días. Mira los instantes de
-    los items (publicado/capturado) por fuente y busca una ventana deslizante de `ventana_h`
-    que contenga >= `fuentes_min` fuentes distintas. Si faltan timestamps, no marca breaking.
-    """
-    if fuentes_min <= 1:
-        return False
-    eventos: list[tuple[datetime, str]] = []
-    for it in items:
-        dt = _parse_iso(_instante_item(it))
-        fid = str(it.get("fuente_id") or "")
-        if dt is not None and fid:
-            eventos.append((dt, fid))
-    if len({fid for _, fid in eventos}) < fuentes_min:
-        return False
-    eventos.sort(key=lambda e: e[0])
-    ventana = timedelta(hours=max(1, ventana_h))
-    # Ventana deslizante: por cada inicio, cuenta fuentes distintas dentro de [t, t+ventana].
-    for i, (t0, _) in enumerate(eventos):
-        distintas = {
-            fid for dt, fid in eventos[i:] if dt - t0 <= ventana
-        }
-        if len(distintas) >= fuentes_min:
-            return True
-    return False
 
 
 # --------------------------------------------------------------------------- #
@@ -768,13 +796,16 @@ def puntuar(
     palabras_marca: frozenset[str] = frozenset(),
     ahora: datetime | None = None,
     pesos: PesosScore | None = None,
+    breaking_peso: float = BREAKING_PESO_DEF,
+    breaking_ventana_h: int = BREAKING_VENTANA_H_DEF,
 ) -> tuple[float, str]:
     """Puntúa una historia para el ranking newsroom. Devuelve `(score, razon)`. PURA.
 
     Atajo de `puntuar_detalle` para los llamantes que no necesitan el desglose por señal.
     """
     score, razon, _desglose = puntuar_detalle(
-        cluster, palabras_marca=palabras_marca, ahora=ahora, pesos=pesos
+        cluster, palabras_marca=palabras_marca, ahora=ahora, pesos=pesos,
+        breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
     )
     return score, razon
 
@@ -785,33 +816,63 @@ def puntuar_detalle(
     palabras_marca: frozenset[str] = frozenset(),
     ahora: datetime | None = None,
     pesos: PesosScore | None = None,
+    breaking_peso: float = BREAKING_PESO_DEF,
+    breaking_ventana_h: int = BREAKING_VENTANA_H_DEF,
 ) -> tuple[float, str, dict[str, Any]]:
     """Puntúa una historia y EXPLICA el porqué. Devuelve `(score, razon, desglose)`. PURA.
 
-    FÓRMULA — score en [0, 1], combinación lineal ponderada de cuatro señales independientes:
+    FÓRMULA — score en [0, 1], combinación lineal ponderada de cinco señales independientes:
 
-        score = 0.35 · corroboracion   (n_fuentes distintas, escala log; satura a 6 fuentes)
-              + 0.25 · frescura         (recencia de `ultimo_visto`; lineal, 0 a las 72h)
-              + 0.20 · viralidad        (`senal` agregada, escala log; satura a 1e6)
+        W     = peso_fuentes (Σ peso editorial por outlet; potente 2.0 / normal 1.0 / baja 0.5;
+                cae a n_fuentes si el cluster aún no trae timeline — pre-migración)
+        score = 0.30 · corroboracion    (log(W)/log(8): 1 fuente→0; 2 potentes→0.67; satura 8)
+              + 0.20 · velocidad        (masa que SE SUMÓ en la ventana actual / 4; 2 potentes
+                                         a la vez = 1.0; DECAE sola al envejecer)
+              + 0.20 · frescura         (recencia de `ultimo_visto`; lineal, 0 a las 72h)
+              + 0.10 · viralidad        (`senal` agregada, escala log; satura a 1e6)
               + 0.20 · relevancia_marca (palabras de la marca en título/resumen; 0 sin marca)
-        +breaking → score = min(1.0, score + 0.10)  (empujón si es breaking)
 
-    Diseño: la CORROBORACIÓN pesa más (newsroom-grade: una historia que muchas fuentes
-    distintas confirman es más fiable y noticiable que un único artículo viral). La frescura
-    evita que historias viejas dominen. La viralidad y la marca inclinan el ranking. Es
-    MONÓTONA en cada señal: a igualdad de lo demás, más fuentes / más fresca / más señal /
-    más relevante ⇒ score mayor (los tests lo verifican). `razon` resume las señales activas.
+    BREAKING emerge de aquí, no es un carril aparte: 2 fuentes potentes a la vez ⇒
+    corroboración 0.67 + velocidad 1.0 + frescura ≈ 1 ⇒ ~0.6+, top del pool, y el flag
+    `breaking` (masa en ventana ≥ `breaking_peso`) exime de maduración en el listón ⇒ sale
+    al feed en el siguiente barrido. El bonus aditivo (`pesos.breaking`) queda en 0.0 por
+    defecto (knob de rollback). Es MONÓTONA en cada señal (los tests lo verifican).
 
     `desglose` es la EXPLICACIÓN estructurada (se persiste junto al score, la lee la UI):
-    cada señal CRUDA en [0,1] (`corroboracion`/`frescura`/`viralidad`/`marca`/`rendimiento`),
-    `breaking` (0/1) y `palabras` (los términos del vocabulario de la marca que casaron).
-    Señales crudas, no ponderadas: el desglose explica QUÉ tiene la historia; los pesos
-    (editables en caliente) explican cuánto cuenta cada cosa.
+    cada señal CRUDA en [0,1] (`corroboracion`/`velocidad`/`frescura`/`viralidad`/`marca`/
+    `rendimiento`), `peso_fuentes` (la masa W), `breaking` (0/1, computado EN VIVO: decae) y
+    `palabras` (los términos del vocabulario que casaron). Señales crudas, no ponderadas: el
+    desglose explica QUÉ tiene la historia; los pesos (editables en caliente) cuánto cuenta.
     """
     p = pesos or _PESOS_DEF
     n_fuentes = int(cluster.get("n_fuentes") or 0)
     senal = int(cluster.get("senal") or 0)
-    s_corro = _log_norm(n_fuentes, _FUENTES_SATURA)
+
+    # Corroboración PONDERADA por el peso editorial de cada outlet. Fallback honesto para
+    # clusters sin timeline (pre-migración / stubs): la masa es el conteo de fuentes.
+    try:
+        masa = float(cluster.get("peso_fuentes") or 0.0)
+    except (TypeError, ValueError):
+        masa = 0.0
+    if masa <= 0.0:
+        masa = float(n_fuentes)
+    s_corro = 0.0
+    if masa > 1.0:
+        s_corro = min(1.0, math.log(masa) / math.log(_PESO_SATURA))
+
+    # Velocidad + breaking EN VIVO desde el timeline persistido (decaen con el reloj). Sin
+    # timeline no se inventa señal: velocidad 0 y el flag persistido se respeta tal cual.
+    detalle = cluster.get("fuentes_detalle") or []
+    if isinstance(detalle, list) and detalle:
+        masa_ventana, n_ventana = peso_ventana_actual(
+            detalle, ventana_h=breaking_ventana_h, ahora=ahora
+        )
+        s_vel = _velocidad(masa_ventana, n_ventana)
+        es_breaking = n_ventana >= 2 and masa_ventana >= breaking_peso
+    else:
+        s_vel = min(1.0, max(0.0, float(cluster.get("velocidad") or 0.0)))
+        es_breaking = bool(int(cluster.get("breaking") or 0))
+
     s_fresca = _frescura(str(cluster.get("ultimo_visto") or ""), ahora=ahora)
     s_viral = _log_norm(senal, _SENAL_SATURA)
     s_marca, palabras_casadas = relevancia_marca_detalle(cluster, palabras_marca)
@@ -821,19 +882,27 @@ def puntuar_detalle(
 
     score = (
         p.corroboracion * s_corro
+        + p.velocidad * s_vel
         + p.frescura * s_fresca
         + p.viralidad * s_viral
         + p.marca * s_marca
         + p.rendimiento * s_rend
     )
-    es_breaking = bool(int(cluster.get("breaking") or 0))
-    if es_breaking:
+    if es_breaking and p.breaking:
         score = min(1.0, score + p.breaking)
     score = min(1.0, score)
 
     razones: list[str] = []
+    if es_breaking:
+        razones.append("última hora: varias fuentes casi a la vez")
     if n_fuentes > 1:
-        razones.append(f"{n_fuentes} fuentes")
+        potentes = sum(
+            1 for d in detalle if isinstance(d, dict) and float(d.get("peso") or 1.0) >= 1.5
+        ) if isinstance(detalle, list) else 0
+        if potentes:
+            razones.append(f"{n_fuentes} fuentes ({potentes} potente{'s' if potentes > 1 else ''})")
+        else:
+            razones.append(f"{n_fuentes} fuentes")
     if s_fresca >= 0.5:
         razones.append("reciente")
     if senal > 0:
@@ -842,15 +911,15 @@ def puntuar_detalle(
         # Las palabras casadas EXPLICAN la relevancia (qué del vocabulario de la marca casó).
         muestra = ", ".join(palabras_casadas[:4])
         razones.append(f"relevante para la marca ({muestra})" if muestra else "relevante para la marca")
-    if es_breaking:
-        razones.append("breaking")
     razon = " · ".join(razones) if razones else "historia única"
     desglose: dict[str, Any] = {
         "corroboracion": round(s_corro, 3),
+        "velocidad": round(s_vel, 3),
         "frescura": round(s_fresca, 3),
         "viralidad": round(s_viral, 3),
         "marca": round(s_marca, 3),
         "rendimiento": round(s_rend, 3),
+        "peso_fuentes": round(masa, 3),
         "breaking": 1 if es_breaking else 0,
         "palabras": list(palabras_casadas),
     }
@@ -877,6 +946,8 @@ def evaluar_liston(
     min_marca: float = LISTON_MIN_MARCA_DEF,
     min_maduracion_min: int = 0,
     ahora: datetime | None = None,
+    breaking_peso: float = BREAKING_PESO_DEF,
+    breaking_ventana_h: int = BREAKING_VENTANA_H_DEF,
 ) -> tuple[bool, str]:
     """¿Esta historia supera el LISTÓN de producción automática? `(supera, motivo)`. PURA.
 
@@ -903,7 +974,18 @@ def evaluar_liston(
     if (cluster.get("verificacion") or "") == "dudosa":
         return False, "verificación dudosa (única fuente no fiable o clickbait)"
     curada = int(cluster.get("senal") or 0) >= SENAL_CURADO
-    breaking_corroborada = bool(int(cluster.get("breaking") or 0)) and (
+    # Breaking EN VIVO si hay timeline (misma derivación que el scoring: masa ponderada en la
+    # ventana actual, decae sola); sin timeline se respeta el flag persistido. Así el listón
+    # no depende de un flag desfasado entre re-scores.
+    detalle_liston = cluster.get("fuentes_detalle") or []
+    if isinstance(detalle_liston, list) and detalle_liston:
+        masa_v, n_v = peso_ventana_actual(
+            detalle_liston, ventana_h=breaking_ventana_h, ahora=ahora
+        )
+        es_breaking_vivo = n_v >= 2 and masa_v >= breaking_peso
+    else:
+        es_breaking_vivo = bool(int(cluster.get("breaking") or 0))
+    breaking_corroborada = es_breaking_vivo and (
         (cluster.get("verificacion") or "") == "corroborada"
     )
     if min_maduracion_min > 0 and not curada and not breaking_corroborada:
@@ -918,7 +1000,10 @@ def evaluar_liston(
                     f"madurando ({edad_min:.0f} de {min_maduracion_min} min en el pool): "
                     "se promueve cuando la corroboración haya tenido tiempo de acumularse"
                 )
-    score, _razon, desglose = puntuar_detalle(cluster, palabras_marca=palabras_marca, ahora=ahora)
+    score, _razon, desglose = puntuar_detalle(
+        cluster, palabras_marca=palabras_marca, ahora=ahora,
+        breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
+    )
     if score < min_score:
         return False, f"score {score:.2f} < {min_score:.2f} (listón de producción)"
     s_marca = float(desglose["marca"])

@@ -226,7 +226,7 @@ def paso_clustering() -> dict[str, Any]:
     """
     ventana_h = config.cluster_ventana_h()
     umbral = config.cluster_umbral()
-    breaking_fuentes = config.cluster_breaking_fuentes()
+    breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
     pesos = config.score_pesos()  # pesos editables del algoritmo de ponderación
@@ -307,9 +307,10 @@ def paso_clustering() -> dict[str, Any]:
             recalc = clustering.recalcular(
                 base,
                 items_cluster,
-                breaking_fuentes=breaking_fuentes,
+                breaking_peso=breaking_peso,
                 breaking_ventana_h=breaking_ventana_h,
                 fuentes_baja_confianza=fuentes_baja,
+                ahora=ahora,
             )
             marca_c = recalc.get("marca") or ""
             if not marca_c:
@@ -351,7 +352,8 @@ def paso_clustering() -> dict[str, Any]:
                         recalc, top_lineas, vert_id_a_nombre, vert_etiquetas
                     )
             score, razon, desglose = clustering.puntuar_detalle(
-                recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
+                recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos,
+                breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
             )
             recalc["score"] = score
             # Explicación PERSISTIDA: la razón humana y el desglose por señal viajan con el
@@ -409,6 +411,8 @@ def paso_rescore(
         return {"revisados": 0, "actualizados": 0}
 
     pesos = config.score_pesos()
+    breaking_peso = config.cluster_breaking_peso()
+    breaking_ventana_h = config.cluster_breaking_ventana_h()
     perfil_activo = config.perfil_editorial_activo()
     rendimiento_activo = config.rendimiento_ranking_activo()
     ahora = datetime.now(UTC)
@@ -435,13 +439,23 @@ def paso_rescore(
                         cl, top_lineas, vert_id_a_nombre, vert_etiquetas
                     )
             score, razon, desglose = clustering.puntuar_detalle(
-                cl, palabras_marca=palabras_cache[marca_c], ahora=ahora, pesos=pesos
+                cl, palabras_marca=palabras_cache[marca_c], ahora=ahora, pesos=pesos,
+                breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
             )
-            if abs(score - float(c.get("score") or 0.0)) >= 0.001:
+            # Breaking/velocidad DECAEN con el reloj (la ventana se ancla en ahora): el
+            # re-score persiste el flag vivo para que el listón/los cupos no traten como
+            # última hora una historia de ayer.
+            breaking_vivo = int(desglose.get("breaking") or 0)
+            vel_viva = float(desglose.get("velocidad") or 0.0)
+            cambia_score = abs(score - float(c.get("score") or 0.0)) >= 0.001
+            cambia_breaking = breaking_vivo != int(c.get("breaking") or 0)
+            cambia_vel = abs(vel_viva - float(c.get("velocidad") or 0.0)) >= 0.001
+            if cambia_score or cambia_breaking or cambia_vel:
                 # El re-score refresca TAMBIÉN la explicación (si no, la razón persistida
-                # explicaría el score viejo: p. ej. seguiría diciendo "reciente" días después).
+                # explicaría un score viejo: p. ej. seguiría diciendo "reciente" días después).
                 cambios[str(c["id"])] = {
                     "score": score, "score_razon": razon, "score_desglose": desglose,
+                    "breaking": breaking_vivo, "velocidad": vel_viva,
                 }
         except Exception:  # noqa: BLE001 -- una historia problemática no aborta la pasada
             _log.exception("ingesta_daemon: fallo al re-puntuar el cluster %s.", c.get("id"))
@@ -464,7 +478,7 @@ def _fusionar_grupo(
     por_id: dict[str, dict[str, Any]],
     *,
     pesos: Any,
-    breaking_fuentes: int,
+    breaking_peso: float,
     breaking_ventana_h: int,
     fuentes_baja: frozenset[str],
     perfil_activo: bool,
@@ -514,13 +528,15 @@ def _fusionar_grupo(
     base = repos.obtener_noticia_cluster(canon_id) or canon
     recalc = clustering.recalcular(
         base, items,
-        breaking_fuentes=breaking_fuentes,
+        breaking_peso=breaking_peso,
         breaking_ventana_h=breaking_ventana_h,
         fuentes_baja_confianza=fuentes_baja,
+        ahora=ahora,
     )
     palabras = _palabras_relevancia(recalc.get("marca") or "", perfil_activo)
     recalc["score"], recalc["score_razon"], recalc["score_desglose"] = clustering.puntuar_detalle(
-        recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos
+        recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos,
+        breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
     )
     repos.upsert_noticia_cluster(recalc)
     return True
@@ -545,7 +561,7 @@ def paso_fusion_semantica(
     ventana_h = config.cluster_ventana_h()
     maximo = config.fusion_semantica_max()
     pesos = config.score_pesos()
-    breaking_fuentes = config.cluster_breaking_fuentes()
+    breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
     perfil_activo = config.perfil_editorial_activo()
@@ -594,7 +610,7 @@ def paso_fusion_semantica(
         for grupo in grupos:
             try:
                 if _fusionar_grupo(
-                    grupo, por_id, pesos=pesos, breaking_fuentes=breaking_fuentes,
+                    grupo, por_id, pesos=pesos, breaking_peso=breaking_peso,
                     breaking_ventana_h=breaking_ventana_h, fuentes_baja=fuentes_baja,
                     perfil_activo=perfil_activo, ahora=ahora,
                 ):

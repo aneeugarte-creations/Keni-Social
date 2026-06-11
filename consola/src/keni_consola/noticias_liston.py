@@ -73,4 +73,6 @@ def evaluar(
         min_marca=config.promover_min_marca(),
         min_maduracion_min=config.promover_maduracion_min(),
         ahora=ahora,
+        breaking_peso=config.cluster_breaking_peso(),
+        breaking_ventana_h=config.cluster_breaking_ventana_h(),
     )
