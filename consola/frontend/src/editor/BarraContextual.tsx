@@ -9,10 +9,12 @@ import {
   AlignJustify,
   AlignLeft,
   AlignRight,
+  AlignVerticalSpaceAround,
+  ArrowDownToLine,
+  ArrowUpToLine,
   Bold,
-  ChevronsLeftRight,
-  ChevronsUpDown,
   Crop,
+  FoldVertical,
   Italic,
   Replace,
   Settings2,
@@ -20,7 +22,8 @@ import {
   Underline,
 } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { tieneCursiva } from "../lib/placa/dibujar.mjs";
 
@@ -32,11 +35,13 @@ import { useEditor, useStoreEditor } from "./usarEditor";
 const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignJustify } as const;
 const ALIN_CICLO = ["izquierda", "centro", "derecha", "justificado"] as const;
 
-// Presets de INTERLINEADO (line-height relativo, patrón Canva). El valor actual del documento se
-// añade como opción extra si no coincide con ninguno (p. ej. el 1.14 por defecto de las plantillas).
-const INTERLINEADOS = [1.0, 1.15, 1.3, 1.5, 2.0] as const;
-// "1" -> "1.0", "1.15" -> "1.15" (siempre con al menos un decimal, legible como factor).
-const fmtInterlineado = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+// Anclaje VERTICAL de la caja de texto (patrón Canva: en el popover de espaciado): valign del
+// documento, soportado end-to-end (Konva `verticalAlign` y el camino caja de `dibujarTexto`).
+const ANCLAJES = [
+  { valor: "arriba", etiqueta: "Anclar arriba", Icono: ArrowUpToLine },
+  { valor: "centro", etiqueta: "Anclar al centro", Icono: FoldVertical },
+  { valor: "abajo", etiqueta: "Anclar abajo", Icono: ArrowDownToLine },
+] as const;
 
 function Sep() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
@@ -124,6 +129,158 @@ function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12
         className={`${ancho} bg-background px-1 text-center text-sm outline-none`}
       />
       <button className="px-1.5 text-muted-foreground hover:bg-accent" onClick={() => fija(valor + paso)} title={`${etiqueta}: más`}>+</button>
+    </div>
+  );
+}
+
+// Icono de TABLERO DE AJEDREZ (transparencia, convención Canva/GIMP): lucide no trae uno, así que
+// es un SVG inline mínimo (marco + dos celdas alternas rellenas).
+function IconoTablero({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden="true" fill="none">
+      <rect x="1.25" y="1.25" width="13.5" height="13.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="2.5" y="2.5" width="5.5" height="5.5" fill="currentColor" />
+      <rect x="8" y="8" width="5.5" height="5.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+// Botón de la barra que abre un POPOVER anclado (patrón Canva: espaciado, transparencia…). El
+// popover va en un PORTAL a `body` con posición fija: la píldora tiene `overflow-x-auto` y
+// recortaría cualquier hijo absoluto (mismo truco que `ColorControl`). Cierra con clic fuera,
+// Escape, scroll o resize.
+function BotonPopover({ titulo, ariaLabel, activo, icono, ancho = 256, children }: {
+  titulo: string;
+  ariaLabel: string;
+  // Pinta el botón "encendido" aunque el popover esté cerrado (p. ej. transparencia < 100%).
+  activo?: boolean;
+  icono: React.ReactNode;
+  ancho?: number;
+  children: React.ReactNode;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const botonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const cerrar = () => setAbierto(false);
+    const conTecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        cerrar();
+        botonRef.current?.focus();
+      }
+    };
+    window.addEventListener("click", cerrar);
+    window.addEventListener("scroll", cerrar, { capture: true });
+    window.addEventListener("resize", cerrar);
+    window.addEventListener("keydown", conTecla);
+    return () => {
+      window.removeEventListener("click", cerrar);
+      window.removeEventListener("scroll", cerrar, { capture: true });
+      window.removeEventListener("resize", cerrar);
+      window.removeEventListener("keydown", conTecla);
+    };
+  }, [abierto]);
+
+  const abrir = () => {
+    const r = botonRef.current?.getBoundingClientRect();
+    if (r) {
+      const left = Math.max(8, Math.min(window.innerWidth - ancho - 8, r.left));
+      setPos({ top: r.bottom + 6, left });
+    }
+    setAbierto((v) => !v);
+  };
+
+  return (
+    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={botonRef}
+        onClick={abrir}
+        title={titulo}
+        aria-label={ariaLabel}
+        aria-expanded={abierto}
+        aria-haspopup="dialog"
+        className={`flex h-8 items-center gap-1 rounded-md px-2 text-sm transition-colors ${
+          abierto || activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+        }`}
+      >
+        {icono}
+      </button>
+      {abierto && pos &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-label={titulo}
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: ancho }}
+            className="z-[100] flex flex-col gap-3 rounded-md border border-border bg-popover p-3 shadow-lg"
+          >
+            {children}
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+// Fila de SLIDER con caja numérica editable (patrón Canva del popover de espaciado): el slider
+// cubre el rango habitual y la caja admite teclear valores EXACTOS, incluso fuera del paso del
+// slider (p. ej. el interlineado 1.14 por defecto de las plantillas: compatibilidad con los
+// documentos existentes). Slider y caja comparten etiqueta accesible (roles distintos).
+function FilaSlider({ etiqueta, valor, min, max, paso, decimales = 0, onChange }: {
+  etiqueta: string;
+  valor: number;
+  min: number;
+  max: number;
+  paso: number;
+  decimales?: number; // decimales al formatear la caja (0 = enteros)
+  onChange: (v: number) => void;
+}) {
+  // `null` = sin edición en curso (la caja muestra `valor` formateado); string mientras se teclea.
+  const [edicion, setEdicion] = useState<string | null>(null);
+  const fmt = (v: number) => (decimales ? String(Number(v.toFixed(decimales))) : String(Math.round(v)));
+  const fija = (v: number) => onChange(Math.max(min, Math.min(max, v)));
+  const commitear = () => {
+    if (edicion !== null) {
+      const v = Number(edicion);
+      if (!isNaN(v)) fija(v);
+    }
+    setEdicion(null);
+  };
+  return (
+    <div className="flex flex-col gap-1" title={etiqueta}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">{etiqueta}</span>
+        <input
+          type="number"
+          aria-label={etiqueta}
+          value={edicion ?? fmt(valor)}
+          min={min}
+          max={max}
+          step={paso}
+          onChange={(e) => setEdicion(e.target.value)}
+          onBlur={commitear}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitear();
+            if (e.key === "Escape") setEdicion(null);
+          }}
+          className="h-7 w-16 rounded-md border border-input bg-background px-1.5 text-center text-sm outline-none"
+        />
+      </div>
+      <input
+        type="range"
+        aria-label={etiqueta}
+        min={min}
+        max={max}
+        step={paso}
+        value={Math.max(min, Math.min(max, valor))}
+        onChange={(e) => {
+          setEdicion(null);
+          fija(Number(e.target.value));
+        }}
+        className="w-full"
+      />
     </div>
   );
 }
@@ -256,6 +413,17 @@ export function BarraContextual({
               </>
             );
           })()}
+          {/* aA MAYÚSCULAS: transforma EN RENDER (toLocaleUpperCase("es") en Konva y en ambos
+              dibujar.mjs) sin destruir lo escrito; la edición inline sigue mostrando el texto
+              crudo. Vale también para el texto en arco (ambos renders lo aplican antes de pintar). */}
+          <BotonIcono
+            titulo="Mayúsculas"
+            ariaLabel="Mayúsculas"
+            activo={(capa as CapaTexto).mayusculas}
+            onClick={() => set({ mayusculas: !(capa as CapaTexto).mayusculas } as Partial<Capa>)}
+          >
+            <span className="text-[13px] font-semibold leading-none">aA</span>
+          </BotonIcono>
           <Swatch color={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} titulo="Color del texto" />
           {(() => {
             const al = (capa as CapaTexto).alineacion;
@@ -270,41 +438,55 @@ export function BarraContextual({
               </BotonIcono>
             );
           })()}
-          {/* INTERLINEADO (line-height relativo): presets estilo Canva. Soportado end-to-end:
-              `interlineado` viaja en el documento y lo pinta igual el editor (Konva `lineHeight`)
-              y el export del servidor (`dibujar.mjs`). */}
+          {/* POPOVER DE ESPACIADO (patrón Canva): un solo icono que agrupa interletrado (tracking,
+              px) e interlineado (line-height relativo) como sliders con caja numérica, más el
+              ANCLAJE vertical de la caja. Todo soportado end-to-end: `interletra`/`interlineado`/
+              `valign` viajan en el documento y los pintan igual el editor (Konva `letterSpacing`/
+              `lineHeight`/`verticalAlign`) y el export del servidor (`dibujar.mjs`). */}
           {(() => {
-            const v = (capa as CapaTexto).interlineado;
-            const opciones: number[] = INTERLINEADOS.includes(v as (typeof INTERLINEADOS)[number])
-              ? [...INTERLINEADOS]
-              : [...INTERLINEADOS, v].sort((a, b) => a - b);
+            const c = capa as CapaTexto;
+            // El anclaje vertical solo actúa en modo CAJA (h>0), igual en Konva (`enCaja` en
+            // CapaNodo) y en el export (`boxH` en dibujarTexto): sin caja se apaga con tooltip.
+            const enCaja = c.h > 0;
             return (
-              <label title="Interlineado" className="flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-input bg-background pl-1.5 pr-1">
-                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                <select
-                  aria-label="Interlineado"
-                  value={String(v)}
-                  onChange={(e) => set({ interlineado: Number(e.target.value) } as Partial<Capa>)}
-                  className="h-full bg-background text-sm outline-none"
-                >
-                  {opciones.map((o) => (
-                    <option key={o} value={String(o)}>{fmtInterlineado(o)}</option>
-                  ))}
-                </select>
-              </label>
+              <BotonPopover titulo="Espaciado" ariaLabel="Espaciado" icono={<AlignVerticalSpaceAround className="h-4 w-4" />}>
+                <FilaSlider
+                  etiqueta="Interletrado"
+                  valor={c.interletra || 0}
+                  min={-20}
+                  max={200}
+                  paso={1}
+                  onChange={(v) => set({ interletra: v } as Partial<Capa>)}
+                />
+                <FilaSlider
+                  etiqueta="Interlineado"
+                  valor={c.interlineado}
+                  min={1}
+                  max={2.5}
+                  paso={0.05}
+                  decimales={2}
+                  onChange={(v) => set({ interlineado: v } as Partial<Capa>)}
+                />
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Anclar caja de texto</span>
+                  <div className="flex gap-1">
+                    {ANCLAJES.map(({ valor, etiqueta, Icono }) => (
+                      <BotonIcono
+                        key={valor}
+                        titulo={enCaja ? etiqueta : "El anclaje vertical aplica al texto con caja (estira primero el alto de la caja)"}
+                        ariaLabel={etiqueta}
+                        activo={enCaja && c.valign === valor}
+                        deshabilitado={!enCaja}
+                        onClick={() => set({ valign: valor } as Partial<Capa>)}
+                      >
+                        <Icono className="h-4 w-4" />
+                      </BotonIcono>
+                    ))}
+                  </div>
+                </div>
+              </BotonPopover>
             );
           })()}
-          {/* ESPACIADO ENTRE LETRAS (tracking, px): también end-to-end (`interletra` en el
-              documento; Konva `letterSpacing` y `ctx.letterSpacing` en el render del servidor). */}
-          <Stepper
-            valor={(capa as CapaTexto).interletra || 0}
-            min={-20}
-            max={200}
-            ancho="w-10"
-            etiqueta="Espaciado entre letras"
-            icono={<ChevronsLeftRight className="h-3.5 w-3.5" />}
-            onChange={(v) => set({ interletra: v } as Partial<Capa>)}
-          />
         </>
       )}
 
@@ -323,6 +505,25 @@ export function BarraContextual({
 
       <div className="ml-auto flex items-center gap-1">
         <Sep />
+        {/* TRANSPARENCIA (patrón Canva, icono de tablero): para TODAS las capas. `opacidad` es de
+            CapaBase y la respetan igual Konva (`opacity` en CapaNodo) y el export (`globalAlpha`
+            en `dibujarCapa`). 100 = opaco (misma escala que Canva). */}
+        <BotonPopover
+          titulo="Transparencia"
+          ariaLabel="Transparencia"
+          activo={capa.opacidad < 1}
+          ancho={224}
+          icono={<IconoTablero className="h-4 w-4" />}
+        >
+          <FilaSlider
+            etiqueta="Transparencia"
+            valor={Math.round(capa.opacidad * 100)}
+            min={0}
+            max={100}
+            paso={1}
+            onChange={(v) => set({ opacidad: v / 100 } as Partial<Capa>)}
+          />
+        </BotonPopover>
         <BotonIcono titulo="Todos los ajustes" onClick={onAbrirAjustes}><Settings2 className="h-4 w-4" /> Ajustes</BotonIcono>
       </div>
     </div>

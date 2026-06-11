@@ -208,6 +208,30 @@ describe("caja de texto y valign en dibujarTexto", () => {
   });
 });
 
+describe("mayúsculas (aA) en dibujarTexto", () => {
+  it("transforma EN RENDER con locale español (toLocaleUpperCase('es')) antes de pintar", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, {
+      documento: docConTexto({ texto: "hola ñandú", mayusculas: true }),
+      imgs: {},
+      bindings: {},
+    } as never);
+    // El documento conserva el texto crudo; lo PINTADO va en mayúsculas (Ñ/Ú incluidas).
+    expect(ctx.fills.find((f) => f.texto === "HOLA ÑANDÚ")).toBeTruthy();
+    expect(ctx.fills.find((f) => f.texto === "hola ñandú")).toBeFalsy();
+  });
+
+  it("sin `mayusculas` el texto se pinta tal cual (default retrocompatible)", () => {
+    const ctx = ctxFalso();
+    dibujarDocumento(ctx as never, {
+      documento: docConTexto({ texto: "hola ñandú", mayusculas: false }),
+      imgs: {},
+      bindings: {},
+    } as never);
+    expect(ctx.fills.find((f) => f.texto === "hola ñandú")).toBeTruthy();
+  });
+});
+
 describe("visibilidad: ayuda de edición, NO afecta a la imagen final", () => {
   it("PREVIA (sin final): una capa visible:false NO se pinta", () => {
     const ctx = ctxFalso();

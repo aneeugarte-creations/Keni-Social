@@ -377,7 +377,9 @@ function textoMuestra(c: CapaTexto, muestraCopy = false): string {
       : c.binding === "etiqueta_default"
         ? c.texto || "PLECA"
         : c.texto;
-  return c.mayusculas ? base.toUpperCase() : base;
+  // MAYÚSCULAS en render (locale es), sin destruir lo escrito: espejo de `dibujarTexto` en
+  // dibujar.mjs. La edición inline (Lienzo) sigue mostrando el `texto` crudo.
+  return c.mayusculas ? base.toLocaleUpperCase("es") : base;
 }
 
 export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, interactivo = true, muestraFoto = false, muestraCopy = false }: CapaNodoProps) {

@@ -408,7 +408,10 @@ function dibujarTextoCurvo(ctx, t, texto, radio, fontFor, relleno, sombra, conto
 }
 
 function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
-  const texto = (t.mayusculas ? String(valor).toUpperCase() : String(valor)).trim();
+  // MAYÚSCULAS: transformación EN RENDER (el documento conserva el texto crudo), con reglas de
+  // locale español y ANTES de medir/ajustar para que el wrap/chip cuadre con lo pintado. Espejo
+  // exacto de `textoMuestra` en CapaNodo.tsx (Konva).
+  const texto = (t.mayusculas ? String(valor).toLocaleUpperCase("es") : String(valor)).trim();
   if (!texto) return; // binding vacío (p. ej. pleca "" ) => se omite la capa
   const familia = familiaReal(t.familia);
   // CURSIVA: el prefijo `italic` solo si la familia REAL tiene itálica registrada (espejo del
