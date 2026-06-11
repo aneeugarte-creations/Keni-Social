@@ -33,11 +33,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
-import { calculoScoreTexto, factoresRanking, fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
+import { fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
 import type { Historia } from "@/types";
 
+import { CalculoScore } from "./CalculoScore";
 import { DetalleHistoria } from "./DetalleHistoria";
 
 export interface PropsTarjetaHistoria {
@@ -67,6 +75,7 @@ export function TarjetaHistoria({
   const queryClient = useQueryClient();
   const [expandida, setExpandida] = React.useState(false);
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
+  const [calculoAbierto, setCalculoAbierto] = React.useState(false);
 
   const invalidar = () => {
     for (const clave of clavesAInvalidar) {
@@ -281,20 +290,16 @@ export function TarjetaHistoria({
 
         {/* Fila de meta: prioridad explicable + traducción + fuentes expandibles */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Tooltip
-            label={`${calculoScoreTexto(historia)}\n${factoresRanking(historia)
-              .map((f) => `• ${f}`)
-              .join("\n")}`}
-            side="top"
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums hover:text-foreground transition-colors"
+            onClick={() => setCalculoAbierto(true)}
+            title="Ver el cálculo del score"
+            data-testid="punto-prioridad"
           >
-            <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground cursor-default tabular-nums"
-              data-testid="punto-prioridad"
-            >
-              <span className={`h-2 w-2 rounded-full ${COLOR_PRIORIDAD[prioridad]}`} />
-              Score {Math.round(historia.score * 100)}
-            </span>
-          </Tooltip>
+            <span className={`h-2 w-2 rounded-full ${COLOR_PRIORIDAD[prioridad]}`} />
+            Score {Math.round(historia.score * 100)}
+          </button>
 
           {historia.traducido && historia.idioma && (
             <Tooltip
@@ -358,6 +363,21 @@ export function TarjetaHistoria({
           onCerrar={() => setDetalleAbierto(false)}
           clavesAInvalidar={clavesAInvalidar}
         />
+      )}
+
+      {/* Pop-up COMPACTO del cálculo del score (un tooltip no da para leer una fórmula). */}
+      {calculoAbierto && (
+        <Dialog open={calculoAbierto} onOpenChange={(o) => !o && setCalculoAbierto(false)}>
+          <DialogContent className="max-w-md" data-testid="popup-calculo">
+            <DialogHeader>
+              <DialogTitle className="text-base">
+                Score {Math.round(historia.score * 100)}
+              </DialogTitle>
+              <DialogDescription className="line-clamp-1">{historia.titulo}</DialogDescription>
+            </DialogHeader>
+            <CalculoScore historia={historia} />
+          </DialogContent>
+        </Dialog>
       )}
     </Card>
   );

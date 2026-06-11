@@ -154,17 +154,3 @@ export function calculoScore(h: Historia): { lineas: LineaCalculo[]; total: numb
   }
   return { lineas, total: Math.min(1, total) };
 }
-
-/** El cálculo como texto multilínea (tooltip de la tarjeta). */
-export function calculoScoreTexto(h: Historia): string {
-  const { lineas, total } = calculoScore(h);
-  if (lineas.length === 0) {
-    return h.score_razon || "El motor aún no puntuó esta historia.";
-  }
-  const cuerpo = lineas.map(
-    (l) => `${l.etiqueta}: ${l.senal.toFixed(2)} × ${l.peso.toFixed(2)} = ${l.aporte.toFixed(2)}`,
-  );
-  cuerpo.push(`Score = ${total.toFixed(2)} (guardado: ${h.score.toFixed(2)})`);
-  if (h.score_razon) cuerpo.push(h.score_razon);
-  return cuerpo.join("\n");
-}

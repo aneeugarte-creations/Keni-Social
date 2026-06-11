@@ -268,8 +268,11 @@ describe("Cobertura · Mesa — plan del día", () => {
     const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
     expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
     expect(frase).toMatch(/la abrió Reforma/);
-    // El SCORE es visible (con el cálculo completo en el tooltip/detalle).
+    // El SCORE es visible; el cálculo completo vive en su pop-up (clic), no en un tooltip.
     expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Score 55/);
+    fireEvent.click(mx.getByTestId("punto-prioridad"));
+    await waitFor(() => expect(screen.getByTestId("popup-calculo")).toBeTruthy());
+    expect(screen.getByTestId("calculo-score")).toBeTruthy();
   });
 
   it("una línea con cupo pendiente y sin candidatas avisa del hueco", async () => {
