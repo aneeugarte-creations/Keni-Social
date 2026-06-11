@@ -107,8 +107,6 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `ajustes_catalogo.py` — catálogo DECLARATIVO de ajustes editables (verdad para la API admin).
 - `preferencias.py` — preferencias locales no secretas del equipo.
 - `secretos.py` — almacén LOCAL de secretos (clave del proveedor de imagen IA).
-- `termometro.py` — config local del Termómetro mundial (no secreta).
-- `termometro_cli.py` — CLI `keni-termometro`: genera el Termómetro (cron 07:00).
 - `rutas.py` — raíz de estado ÚNICA (un solo volumen en contenedor, #130).
 - `permisos.py` — permisos por ROL: helper "¿es admin?" (#153).
 - `seguridad.py` — autenticación + protección CSRF (#134).

@@ -1,9 +1,7 @@
 """Algoritmos: inteligencia de PLATAFORMA (cambios de algoritmo + tendencias por red).
 
-Tercera superficie de descubrimiento, DISTINTA de:
-  - Radar (lo MAS VIRAL del momento por tema, Google Trends + RSS del equipo),
-  - Termometro (noticias internacionales CURADAS a mano para el posteo de galeria),
-  - Fuentes (RSS de MARCA para convertir notas en copy).
+Superficie de descubrimiento DISTINTA de Fuentes (RSS de MARCA para convertir
+notas en copy) y del antiguo Radar/Termometro (retirados).
 
 Aqui seguimos los BLOGS OFICIALES de las plataformas (Meta, YouTube, ...) y agregadores
 de industria (Social Media Today, ...) para saber QUE cambia en los algoritmos y que

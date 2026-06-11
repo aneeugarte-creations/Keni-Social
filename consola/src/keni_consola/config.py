@@ -92,7 +92,6 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CONSOLA_SECRETOS       secretos.toml
     - KENI_CONSOLA_PREFERENCIAS   preferencias.toml
     - KENI_CONSOLA_SUGERENCIAS    sugerencias.json
-    - KENI_CONSOLA_TERMOMETRO     termometro.json
     - KENI_CONSOLA_CONFIG         consola.toml (allowlist de proyectos)
     - KENI_CONSOLA_GENERACIONES   dir de registros de generacion
 """
@@ -253,7 +252,6 @@ from ._config_comun import (  # noqa: F401
     ENV_SUGERENCIAS_EDITORIALES,
     ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS,
     ENV_SUGERENCIAS_EDITORIALES_MAX,
-    ENV_TERMOMETRO,
     ENV_TEXTO_DIR,
     ENV_TOKEN,
     ENV_TRAD_LOTE,

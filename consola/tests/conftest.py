@@ -9,7 +9,6 @@ ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_SECRETOS`-> almacen de secretos (clave de imagen) aislado en tmp
   - `KENI_CONSOLA_PREFERENCIAS`-> preferencias (esfuerzo de generacion) aisladas en tmp
   - `KENI_CONSOLA_SUGERENCIAS`-> buzon de sugerencias (JSON local) aislado en tmp
-  - `KENI_CONSOLA_TERMOMETRO`-> config del Termometro mundial (JSON local) aislada en tmp
   - `KENI_METRICAS_CONFIG` -> archivo inexistente + `KENI_METRICAS_FUENTE=muestra` => fuente de muestra
   - `KENI_TEXTO_DIR`  -> almacen de la Texto (prompts) FALSO en tmp (no toca el real)
 
@@ -179,7 +178,6 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_CONSOLA_SECRETOS", str(tmp_path / "secretos.toml"))
     monkeypatch.setenv("KENI_CONSOLA_PREFERENCIAS", str(tmp_path / "preferencias.toml"))
     monkeypatch.setenv("KENI_CONSOLA_SUGERENCIAS", str(tmp_path / "sugerencias.json"))
-    monkeypatch.setenv("KENI_CONSOLA_TERMOMETRO", str(tmp_path / "termometro.json"))
     # Store de AJUSTES editables aislado en tmp. Sin esto caia a la ruta COMPARTIDA
     # `${XDG_CONFIG_HOME:-~/.config}/keni-social/ajustes.toml`: con xdist, un test que
     # ESCRIBE un ajuste (knobs de economia, kill switch, media_gc...) contaminaba a los
@@ -430,7 +428,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_api_reciclar": "app_operacion",
     "test_db_piezas": "app_operacion",
     "test_mcp_operativo": "app_operacion",
-    # App A · Produccion (actividad, generaciones, skills, rss, radar, termometro...).
+    # App A · Produccion (actividad, generaciones, skills, rss, radar...).
     "test_actividad": "app_produccion",
     "test_api_cola_monitor": "app_produccion",
     "test_pipeline_contenido": "app_produccion",
@@ -442,7 +440,6 @@ _APP_POR_STEM: dict[str, str] = {
     "test_api_verificaciones": "app_produccion",
     "test_api_patrones": "app_produccion",
     "test_api_rss": "app_produccion",
-    "test_api_termometro": "app_produccion",
     "test_api_algoritmos": "app_produccion",
     "test_algoritmos": "app_produccion",
     "test_sugerencias_editoriales": "app_produccion",

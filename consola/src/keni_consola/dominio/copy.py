@@ -454,48 +454,6 @@ def construir_procesar_copy(
     return procesar
 
 
-def construir_procesar_galeria(
-    prompt_id: str,
-    marca: str,
-    *,
-    redes_ids: list[str],
-    titulo_base: str,
-    titulo_dado: str = "",
-    autor: dict[str, str] | None = None,
-) -> generaciones.Procesar:
-    """Callback de post-procesado de una GALERÍA (termómetro): piezas SIN auto-borradores.
-
-    A medio camino entre copy y documento: parsea la salida en piezas por red (igual que
-    copy, vía el bloque ```json) y las REGISTRA en el historial, pero NO crea publicaciones
-    todavía. El usuario elige al guardar QUÉ redes quiere (`POST .../guardar` con `redes`),
-    y ahí se crean los borradores (uno por red). Así un termómetro no inunda el tablero con
-    una pieza por cada red de golpe. Devuelve `{documento, resultado, verdicto, historial_id,
-    piezas, publicaciones: []}` (`documento` por compat del visor de termómetro).
-    """
-
-    def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
-        parsed = stream.parsear_salida(salida, redes_ids)
-        resultado = str(parsed["resultado"])
-        titulo = titulo_dado or stream.derivar_titulo(titulo_base or resultado)
-        historial_id = repos.registrar_historial_prompt(
-            prompt_id, marca, resultado, piezas=parsed["piezas"], titulo=titulo,
-            metricas=stream.metricas_a_dict(metricas), autor=autor,
-        )
-        # SIN verificacion de voz aqui: la galeria (termometro) es un formato propio con
-        # captions cortas por diseno; las bandas del perfil se midieron sobre el feed y
-        # darian falsos avisos. El lint vive en el pipeline de COPY (construir_procesar_copy).
-        return {
-            "documento": resultado,
-            "resultado": resultado,
-            "verdicto": parsed["verdicto"],
-            "historial_id": historial_id,
-            "piezas": parsed["piezas"],
-            "publicaciones": [],
-        }
-
-    return procesar
-
-
 def construir_procesar_documento(
     prompt_id: str,
     marca: str,

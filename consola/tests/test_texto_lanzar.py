@@ -245,7 +245,7 @@ def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     assert reg["tipo"] == "prompt"
     assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
     # El camino IDENTIDAD NO endurece la web (igual que hoy): puede enrutar prompts de
-    # INVESTIGACIÓN (brief-tendencias / termometro-mundial) que la usan legítimamente.
+    # INVESTIGACIÓN (brief-tendencias) que la usan legítimamente.
     assert encolado["spec"]["endurecer"] is None
 
 

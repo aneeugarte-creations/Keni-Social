@@ -156,7 +156,7 @@ def arg_tools_restringidas() -> list[str]:
     defecto `Bash`/`Write`/`Edit` —los vectores de mayor impacto (ejecucion de comandos,
     escritura de ficheros)— que NINGUN flujo de generacion necesita. Web (`WebFetch`/
     `WebSearch`) y `Read` NO se vetan por defecto: los prompts de investigacion
-    (`brief-tendencias`/`termometro-mundial`) y la verificacion/QA usan web para corroborar
+    (`brief-tendencias`) y la verificacion/QA usan web para corroborar
     datos, y comparten este constructor de argv. Asi, aunque el contenido de usuario/RSS
     inyectado intente abrir una shell o escribir, `claude` lo rechaza. La lista es configurable
     (`config.claude_disallowed_tools`); un operador puede endurecerla.

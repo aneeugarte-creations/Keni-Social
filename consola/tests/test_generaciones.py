@@ -107,8 +107,8 @@ def test_argv_veta_write_y_edit_por_defecto(entorno, monkeypatch):
 
 
 def test_argv_no_veta_web_por_defecto(entorno, monkeypatch):
-    # Web NO se veta por defecto: los prompts de investigacion (brief-tendencias /
-    # termometro-mundial) usan WebSearch/WebFetch y comparten este constructor de argv.
+    # Web NO se veta por defecto: el prompt de investigacion (brief-tendencias)
+    # usa WebSearch/WebFetch y comparte este constructor de argv.
     monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
     argv = generaciones._argv_claude("hola")
     assert "WebFetch" not in argv

@@ -2,7 +2,7 @@
 # Espejo del job `tests-app-produccion` de .github/workflows/ci.yml.
 #
 # Un cambio en los módulos de A (agentes, generaciones, rss,
-# termometro, qa_editorial, verificaciones, hashtags) corre
+# qa_editorial, verificaciones, hashtags) corre
 # SOLO los tests de A + el contrato de fronteras (pipeline `fronteras`) + keni-shared.
 # El aislamiento de apps (lo garantiza el lint de fronteras) hace seguro NO correr la
 # suite completa. Un cambio en keni-shared dispara la suite COMPLETA (`tests-python`).
@@ -16,7 +16,6 @@ when:
         - "consola/src/keni_consola/api/qa_editorial.py"
         - "consola/src/keni_consola/api/verificaciones.py"
         - "consola/src/keni_consola/api/rss.py"
-        - "consola/src/keni_consola/api/termometro.py"
         - "consola/src/keni_consola/dominio/{hashtags,qa_editorial,extraccion_url}.py"
         - "consola/src/keni_consola/apps/produccion.toml"
 

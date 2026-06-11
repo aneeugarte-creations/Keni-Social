@@ -18,7 +18,7 @@ PRECEDENCIA (de mayor a menor prioridad):
 SUBPATHS POR RECURSO (NO cambian respecto al layout local previo, para no orfanar
 datos existentes):
   - Recursos de CONFIG (db, indice, media, secretos, preferencias, sugerencias,
-    termometro, consola.toml, tareas.json, generaciones): cuelgan de
+    consola.toml, tareas.json, generaciones): cuelgan de
     `data_dir() / "keni-social" / <recurso>`. La unica salvedad es que antes
     `generaciones` ignoraba `XDG_CONFIG_HOME` (siempre `~/.config`); ahora lo unifica
     bajo `data_dir()` (mismo subpath `keni-social/generaciones`), de modo que con
@@ -69,7 +69,7 @@ def dir_config() -> Path:
     """Carpeta de CONFIG de la consola: `data_dir() / keni-social`.
 
     Es la base de la que cuelgan los recursos de config (db, indice, media, secretos,
-    preferencias, sugerencias, termometro, consola.toml, tareas.json, generaciones).
+    preferencias, sugerencias, consola.toml, tareas.json, generaciones).
     El subpath `keni-social` no cambia respecto al layout local previo.
     """
     return data_dir() / SUBDIR_CONFIG

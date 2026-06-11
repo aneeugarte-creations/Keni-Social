@@ -406,30 +406,6 @@ def test_reconstruir_procesar_copy_guarda_copy_in(entorno):
     assert recargada["copy_in"] == "TITULAR EN LA IMAGEN"
 
 
-def test_reconstruir_procesar_galeria_registra_piezas_sin_publicaciones(entorno):
-    # La galería (termómetro) reconstruida parsea piezas por red y las REGISTRA en el
-    # historial, pero NO auto-crea publicaciones: el usuario elige las redes al guardar.
-    spec = jobspec.construir(
-        prompt="p",
-        procesar=jobspec.construir_galeria(
-            prompt_id="termometro-mundial", marca=_MARCA, redes_ids=["x", "instagram"],
-            titulo_base="Termómetro mundial · 2026-05-25", titulo_dado="Termómetro mundial · 2026-05-25",
-        ),
-    )
-    procesar = jobspec.reconstruir_procesar(spec)
-    salida = (
-        'PORTADA\nTermómetro mundial · 2026-05-25\n\n```json\n'
-        '{"piezas": [{"red": "x", "texto": "Pulso de hoy"}, {"red": "instagram", "texto": "Desliza"}]}\n```'
-    )
-    resultado = procesar(salida, None)
-    assert resultado["historial_id"]
-    assert {p["red"] for p in resultado["piezas"]} == {"x", "instagram"}
-    # SIN publicaciones auto-creadas y el JSON no contamina el documento.
-    assert resultado["publicaciones"] == []
-    assert "documento" in resultado and "```json" not in resultado["documento"]
-    assert repos.listar_publicaciones(marca=_MARCA) == []
-
-
 def test_no_hornea_placa_al_crear_marca_visual(entorno, monkeypatch):
     # Render ON-DEMAND: al crear el borrador NO se hornea ninguna placa (no se llama al
     # compositor). La pieza nace con `imagen` vacío y su `imagen_url` apunta al render

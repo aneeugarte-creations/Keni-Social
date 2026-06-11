@@ -43,7 +43,6 @@ modulos_backend = [
   "verificaciones",
   "reciclaje",
   "rss",
-  "termometro",
   "breaking",
   "noticias",
   "fuentes",
@@ -75,7 +74,6 @@ rutas_frontend = [
   "/datos/investigacion/descubrimiento",
   "/datos/investigacion/fuentes",
   "/datos/investigacion/cajones",
-  "/datos/investigacion/termometro",
   "/datos/produccion",
 ]
 

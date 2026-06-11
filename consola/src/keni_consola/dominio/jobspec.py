@@ -63,7 +63,6 @@ CWD_GENERACION = "generacion"
 
 # Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`qa`/`hashtags`.
 PROC_COPY = "copy"
-PROC_GALERIA = "galeria"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
 # QA de la FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la nota de origen por TEMA antes
@@ -223,27 +222,6 @@ def construir_copy(
         "url_fuente": url_fuente or "",
         "limpiar_pendiente": bool(limpiar_pendiente),
         "etiqueta_exito": etiqueta_exito or "",
-    }
-
-
-def construir_galeria(
-    *,
-    prompt_id: str,
-    marca: str,
-    redes_ids: list[str],
-    titulo_base: str,
-    titulo_dado: str = "",
-    autor: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Spec del post-procesado de una GALERÍA (termómetro): piezas sin auto-borradores."""
-    return {
-        "kind": PROC_GALERIA,
-        "prompt_id": prompt_id,
-        "marca": marca,
-        "redes_ids": list(redes_ids),
-        "titulo_base": titulo_base,
-        "titulo_dado": titulo_dado,
-        "autor": _autor_spec(autor),
     }
 
 
@@ -537,13 +515,6 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return dom_qa.construir_procesar_qa_fuente(
             p["marca"], p.get("titulo", ""), autor=autor,
             contenido_id=p.get("contenido_id", "") or "",
-        )
-
-    if kind == PROC_GALERIA:
-        return dom_copy.construir_procesar_galeria(
-            p["prompt_id"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
-            titulo_base=p.get("titulo_base", ""), titulo_dado=p.get("titulo_dado", ""),
-            autor=autor,
         )
 
     if kind == PROC_DOCUMENTO:
