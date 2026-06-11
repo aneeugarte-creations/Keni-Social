@@ -64,12 +64,19 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
         redes.redes_de_formato(_FORMATO_PIPELINE)
     )
     imagen = (pend.get("imagen") or "").strip()
-    # TODAS las fotos de fuente propia de la historia (portada primero): con 2+, el prompt
-    # ofrece al modelo decidir entre post y CARRUSEL. Compat: un pendiente viejo sin la
-    # lista cae a [imagen].
-    imagenes = [
-        i.strip() for i in (pend.get("imagenes") or []) if isinstance(i, str) and i.strip()
-    ] or ([imagen] if imagen else [])
+    # CARRUSEL EDITORIAL: cuántas SUB-HISTORIAS agrupa la historia (con 2+, el prompt ofrece
+    # al modelo decidir entre post y carrusel) y el catálogo de fotos propias por nota (para
+    # que asigne foto a cada slide). Pendientes anteriores sin estos campos: n_notas=1 (sin
+    # carrusel), comportamiento de siempre.
+    fotos_notas = [
+        {"titulo": str(f.get("titulo") or ""), "imagen": str(f.get("imagen") or "").strip()}
+        for f in (pend.get("fotos_notas") or [])
+        if isinstance(f, dict) and str(f.get("imagen") or "").strip()
+    ]
+    try:
+        n_notas = max(1, int(pend.get("n_notas") or 1))
+    except (TypeError, ValueError):
+        n_notas = 1
     tipo_contenido = "fuente" if imagen else ""
     fuente_id = (pend.get("fuente_id") or "").strip() or None
     clave = (pend.get("clave") or "").strip() or None
@@ -88,7 +95,8 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
         clave=clave,
         contenido_id=tema_id,
         imagen_fuente=imagen,
-        imagenes_fuente=imagenes,
+        fotos_notas=fotos_notas,
+        n_notas=n_notas,
         tipo_contenido=tipo_contenido,
         # La fuente pasó como `no_verificado` (criba permisiva, sin verificación a fondo): las
         # piezas heredan ese aviso (⚠️) en su veredicto, para que la parrilla y Pipelines lo

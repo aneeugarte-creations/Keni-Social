@@ -165,7 +165,48 @@ def instruccion_redes(redes_ids: list[str]) -> str:
 UMBRAL_COPY_ESTRECHO = 600
 
 
-def instruccion_copy_unico(redes_ids: list[str], *, n_imagenes: int = 0) -> str:
+# Tope de SLIDES extra de un carrusel editorial (10 nativas de IG/FB - 1 de portada).
+MAX_SLIDES_CARRUSEL = 9
+
+
+def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -> str:
+    """Bloque del prompt que pide DECIDIR entre DOS tipos de output: `post` o `carrusel`.
+
+    El carrusel es EDITORIAL (una placa por SUB-HISTORIA, no una foto por slide): la portada
+    lleva el titular PARAGUAS (`copy_in`) y cada slide su propio `titular` ("Panel de
+    conciertos del Mundial" -> un slide por concierto). `fotos_notas` es el catálogo NUMERADO
+    de fotos de fuente propia (con el título de su nota) para que el modelo asigne a cada
+    slide la foto de SU sub-historia por número; 0 = slide sin foto (placa solo de texto).
+    """
+    if fotos_notas:
+        lineas = "\n".join(
+            f"  {i}. {f.get('titulo') or '(sin título)'}" for i, f in enumerate(fotos_notas, 1)
+        )
+        catalogo = (
+            "FOTOS DISPONIBLES (de nuestras propias notas; asigna cada una al slide de SU "
+            f"sub-historia, por número):\n{lineas}"
+        )
+    else:
+        catalogo = "FOTOS DISPONIBLES: ninguna (todos los slides salen como placa de solo texto)."
+    return (
+        " DECIDE además el `tipo` de salida y decláralo en el json: esta HISTORIA agrupa "
+        f"{n_notas} notas relacionadas. Elige \"carrusel\" SOLO si gana contándose como PANEL "
+        "(una tarjeta por sub-historia: agenda de conciertos, partidos del día, lista de "
+        "medidas…): la PORTADA lleva el titular paraguas (ese es el `copy_in`) y añades "
+        '"slides": [{"titular": "<titular corto de ESA sub-historia, sin emojis, misma línea '
+        'editorial de texto-en-imagen>", "foto": <número del catálogo o 0 si ninguna>}, …] con '
+        f"una entrada por sub-historia (2 a {MAX_SLIDES_CARRUSEL}). Si la historia es UNA sola "
+        'noticia contada por varios medios, elige "post" y NO incluyas "slides". Ante la duda, '
+        f'"post". {catalogo}'
+    )
+
+
+def instruccion_copy_unico(
+    redes_ids: list[str],
+    *,
+    n_notas: int = 0,
+    fotos_notas: list[dict[str, str]] | None = None,
+) -> str:
     """Instrucción ADITIVA (copy UNIFICADO): un copy + un texto-en-imagen, SIN encoger IG/FB a X.
 
     El `copy_in` se reutiliza en cada red pedida (así X nunca queda sin él). El copy sale SIN
@@ -176,9 +217,11 @@ def instruccion_copy_unico(redes_ids: list[str], *, n_imagenes: int = 0) -> str:
     de las estrechas). Antes anclaba TODO al límite más estricto (X=280) y publicaba un tuit en
     Instagram/Facebook. Si todas las redes son del mismo tipo, pide un único `texto`.
 
-    `n_imagenes` (pipeline, historias con varias fuentes): con 2+, el modelo DECIDE entre DOS
-    tipos de output —`post` (una imagen) o `carrusel` (las fotos de fuente como slides)— y lo
-    declara en el campo `tipo` del json. Con 0/1 no se ofrece (no hay slides que armar)."""
+    `n_notas` (pipeline, historias): cuántas SUB-HISTORIAS agrupa la historia. Con 2+, el
+    modelo DECIDE entre DOS tipos de output —`post` (lo de siempre) o `carrusel` EDITORIAL
+    (portada paraguas + un slide con titular por sub-historia)— y lo declara en `tipo`;
+    `fotos_notas` es el catálogo numerado de fotos propias por nota para asignar foto a cada
+    slide. Con 0/1 notas no se ofrece (no hay panel que armar)."""
     etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
     estrechas = [
         r for r in redes_ids
@@ -190,17 +233,13 @@ def instruccion_copy_unico(redes_ids: list[str], *, n_imagenes: int = 0) -> str:
         '\\"\\" si no lleva imagen>"}. El `copy_in` es el texto SOBRE la imagen, distinto del '
         "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta."
     )
-    if n_imagenes >= 2:
+    if n_notas >= 2:
         cierre_json_copy_in = (
             '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
             '\\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto '
-            "SOBRE la imagen (en un carrusel, sobre la PORTADA), distinto del `texto`; respeta "
-            "la línea editorial de texto-en-imagen de la marca adjunta. DECIDE el `tipo` de "
-            f"salida: esta historia trae {n_imagenes} fotos de la fuente original (la primera "
-            'es la portada). Elige "carrusel" SOLO si la historia gana contándose en varias '
-            "imágenes (cobertura con varios ángulos/momentos, lista, comparativa): se publicará "
-            'como carrusel nativo con esas fotos como slides. Si una sola imagen basta, "post". '
-            'Ante la duda, "post".'
+            "SOBRE la imagen (en un carrusel, el titular PARAGUAS de la PORTADA), distinto del "
+            "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta."
+            + _bloque_decision_carrusel(n_notas, list(fotos_notas or []))
         )
     if estrechas and amplias:
         tope_corto = min(limites_plataforma.limite_de(r) for r in estrechas)
@@ -263,7 +302,8 @@ def componer(
     sin_emojis: bool = False,
     redes_ids: list[str] | None = None,
     copy_unico: bool = False,
-    n_imagenes: int = 0,
+    n_notas: int = 0,
+    fotos_notas: list[dict[str, str]] | None = None,
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
@@ -299,7 +339,7 @@ def componer(
             )
     if redes_ids:
         partes.append(
-            instruccion_copy_unico(redes_ids, n_imagenes=n_imagenes)
+            instruccion_copy_unico(redes_ids, n_notas=n_notas, fotos_notas=fotos_notas)
             if copy_unico
             else instruccion_redes(redes_ids)
         )
@@ -459,19 +499,26 @@ def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
 
 
 def componer_copy(
-    cuerpo: str, *, marca: str, contexto: str, redes_ids: list[str], n_imagenes: int = 0
+    cuerpo: str,
+    *,
+    marca: str,
+    contexto: str,
+    redes_ids: list[str],
+    n_notas: int = 0,
+    fotos_notas: list[dict[str, str]] | None = None,
 ) -> str:
     """Composición ÚNICA del prompt de copy (la usan `lanzar_copy` y la previsualización).
 
     "Lo que lanzas es lo que previsualizas": la Biblioteca (`libtexto.previsualizar_pipeline`)
     pasa por AQUÍ, así el prompt mostrado es el mismo que recibe `claude -p`. El pipeline de
     copy pide copy UNIFICADO (un texto+copy_in para todas las redes), también en la preview.
-    `n_imagenes` (historias con varias fotos de fuente): con 2+, la instrucción ofrece al
-    modelo decidir entre `post` y `carrusel` (campo `tipo` del json final).
+    `n_notas` (historias que agrupan varias notas): con 2+, la instrucción ofrece al modelo
+    decidir entre `post` y `carrusel` EDITORIAL (un slide con titular por sub-historia);
+    `fotos_notas` es el catálogo numerado de fotos propias por nota.
     """
     return componer(
         cuerpo, adjuntos_copy(marca), contexto,
-        redes_ids=redes_ids, copy_unico=True, n_imagenes=n_imagenes,
+        redes_ids=redes_ids, copy_unico=True, n_notas=n_notas, fotos_notas=fotos_notas,
     )
 
 
@@ -493,7 +540,8 @@ def lanzar_copy(
     tipo: str = "copy",
     contenido_id: str = "",
     imagen_fuente: str = "",
-    imagenes_fuente: list[str] | None = None,
+    fotos_notas: list[dict[str, str]] | None = None,
+    n_notas: int = 0,
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
@@ -522,10 +570,11 @@ def lanzar_copy(
     procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
     URL). "" = no se toca (comportamiento de hoy).
 
-    `imagenes_fuente` (pipeline, historias con varias fuentes): TODAS las fotos de fuente
-    propia de la historia (portada primero). Con 2+, el prompt ofrece al modelo decidir entre
-    `post` y `carrusel` y el post-procesado arma la pieza carrusel si lo elige. None/[] o una
-    sola = comportamiento de hoy (post con `imagen_fuente`).
+    `n_notas`/`fotos_notas` (pipeline, historias): cuántas SUB-HISTORIAS agrupa la historia y
+    el catálogo de fotos de fuente propia por nota. Con `n_notas` 2+, el prompt ofrece al
+    modelo decidir entre `post` y `carrusel` EDITORIAL (portada paraguas + un slide con
+    titular por sub-historia) y el post-procesado HORNEA una placa por slide si lo elige.
+    Defaults = comportamiento de hoy (post con `imagen_fuente`).
     """
     # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
     # "copy" decide su prompt base (que puede haberse re-bindeado en la Texto sin tocar
@@ -534,11 +583,16 @@ def lanzar_copy(
     cuerpo = libtexto.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
         raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")
-    imagenes = [i for i in (imagenes_fuente or []) if isinstance(i, str) and i.strip()]
+    fotos = [
+        {"titulo": str(f.get("titulo") or ""), "imagen": str(f.get("imagen") or "").strip()}
+        for f in (fotos_notas or [])
+        if isinstance(f, dict) and str(f.get("imagen") or "").strip()
+    ]
     # Sin `sin_emojis`: la política de emojis del copy vive en el prompt + editorial adjunta
     # (única fuente); el hardcode "No uses emojis" contradecía al prompt de copy.
     prompt = componer_copy(
-        cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids, n_imagenes=len(imagenes)
+        cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids,
+        n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos,
     )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Saneamos y enviamos ambos o ninguno.
@@ -549,7 +603,7 @@ def lanzar_copy(
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
         contenido_id=contenido_id or "",
-        imagen_fuente=imagen_fuente or "", imagenes_fuente=imagenes,
+        imagen_fuente=imagen_fuente or "", fotos_notas=fotos,
         tipo_contenido=tipo_contenido or "",
         veredicto_inicial=veredicto_inicial or "",
         url_fuente=url_fuente or "",

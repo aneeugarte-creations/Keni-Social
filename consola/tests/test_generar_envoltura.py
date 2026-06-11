@@ -12,20 +12,39 @@ import re
 from keni_consola.dominio import generar
 
 
-def test_instruccion_copy_unico_sin_imagenes_no_ofrece_carrusel():
-    # Sin fotos de fuente (o con una sola) NO se ofrece la decisión: no hay slides que armar.
+def test_instruccion_copy_unico_con_una_nota_no_ofrece_carrusel():
+    # Una historia de UNA sola nota no es un panel: no se ofrece la decisión post|carrusel.
     assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x", "facebook"])
-    assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x"], n_imagenes=1)
+    assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x"], n_notas=1)
 
 
-def test_instruccion_copy_unico_con_imagenes_pide_decidir_tipo():
-    # Con 2+ fotos, el modelo DECIDE entre DOS tipos de output y lo declara en `tipo`.
-    instr = generar.instruccion_copy_unico(["instagram", "x", "facebook"], n_imagenes=3)
+def test_instruccion_copy_unico_con_varias_notas_pide_decidir_tipo():
+    # Con 2+ NOTAS agrupadas, el modelo DECIDE entre DOS tipos de output (post|carrusel
+    # EDITORIAL: un slide con titular por sub-historia) y lo declara en `tipo`.
+    instr = generar.instruccion_copy_unico(["instagram", "x", "facebook"], n_notas=4)
     assert '"tipo": "<post|carrusel>"' in instr
-    assert "3 fotos" in instr
+    assert '"slides"' in instr
+    assert "4 notas" in instr
     # Misma decisión en la variante sin redes estrechas (solo amplias).
-    instr2 = generar.instruccion_copy_unico(["instagram", "facebook"], n_imagenes=2)
+    instr2 = generar.instruccion_copy_unico(["instagram", "facebook"], n_notas=2)
     assert '"tipo": "<post|carrusel>"' in instr2
+
+
+def test_instruccion_copy_unico_numera_el_catalogo_de_fotos():
+    # El catálogo de fotos propias por nota va NUMERADO con el título de su nota (así el
+    # modelo asigna a cada slide la foto de SU sub-historia por número); sin catálogo, se
+    # avisa de que los slides salen como placa de solo texto.
+    fotos = [
+        {"titulo": "Concierto de apertura en el Zócalo", "imagen": "https://casa.test/a.jpg"},
+        {"titulo": "FIFA Countdown Concert", "imagen": "https://casa.test/b.jpg"},
+    ]
+    instr = generar.instruccion_copy_unico(["instagram", "x"], n_notas=3, fotos_notas=fotos)
+    assert "1. Concierto de apertura en el Zócalo" in instr
+    assert "2. FIFA Countdown Concert" in instr
+    # Las URLs NO viajan al prompt (el mapeo número->URL queda del lado del servidor).
+    assert "https://casa.test" not in instr
+    sin_fotos = generar.instruccion_copy_unico(["instagram", "x"], n_notas=3)
+    assert "ninguna" in sin_fotos
 
 
 def test_envoltura_usa_nonce_por_llamada():

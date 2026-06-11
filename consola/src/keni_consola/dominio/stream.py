@@ -773,15 +773,21 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
 
     `tipo` (opcional, DOS tipos de output del pipeline): cuando la historia trae varias fotos
     de fuente, el prompt deja al modelo DECIDIR entre `"post"` (una imagen, lo de siempre) y
-    `"carrusel"` (las fotos como slides). Se valida contra ese par cerrado; ausente, otro
-    valor o sin JSON -> `"post"` (degradación honesta: nunca se arma un carrusel por accidente).
+    `"carrusel"` EDITORIAL (portada paraguas + un slide con titular por SUB-HISTORIA). Se
+    valida contra ese par cerrado; ausente, otro valor o sin JSON -> `"post"` (degradación
+    honesta: nunca se arma un carrusel por accidente).
+
+    `slides` (solo con `tipo=carrusel`): `[{titular, foto}, …]` saneados — `titular` no vacío
+    SIN emojis (es texto de placa, misma política que `copy_in`) y `foto` el número del
+    catálogo del prompt (int >= 0; 0 = sin foto, valores raros caen a 0). Tope
+    `_MAX_SLIDES`. Con `tipo=post` (o slides ilegibles), lista vacía.
 
     Resiliente: si el modelo emite el array `piezas` (forma vieja), toma la PRIMERA pieza con
     `texto`. Si no hay JSON utilizable, el copy es el texto limpio entero (fallback). `resultado`
     y el `contenido` conservan los emojis que el modelo escribió (la política de emojis vive en
     el prompt + editorial de marca); el `copy_in` (placa) se limpia SIEMPRE con `quitar_emojis`.
-    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str, "tipo": str}` (misma forma
-    que `parsear_salida` + el `tipo` elegido).
+    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str, "tipo": str, "slides": [...]}`
+    (misma forma que `parsear_salida` + el `tipo` elegido y sus `slides`).
     """
     salida = salida or ""
     verdicto = derivar_verdicto(salida)
@@ -802,10 +808,12 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     texto_corto = ""
     copy_in_base = ""
     tipo = "post"
+    slides: list[dict[str, object]] = []
     if isinstance(datos, dict):
         # Tipo de output (post|carrusel): par CERRADO; cualquier otra cosa cae a "post".
         if datos.get("tipo") == "carrusel":
             tipo = "carrusel"
+            slides = _slides_de(datos.get("slides"))
         if isinstance(datos.get("texto"), str):
             texto_base = datos["texto"]
             tc = datos.get("texto_corto")
@@ -840,7 +848,40 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
         piezas.append(
             {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
         )
-    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto, "tipo": tipo}
+    return {
+        "resultado": limpio, "piezas": piezas, "verdicto": verdicto, "tipo": tipo,
+        "slides": slides,
+    }
+
+
+# Tope de SLIDES de un carrusel editorial (10 nativas de IG/FB - 1 de portada). Espejo de
+# `generar.MAX_SLIDES_CARRUSEL` (no se importa: `stream` es parseo puro, sin ese acople).
+_MAX_SLIDES = 9
+
+
+def _slides_de(crudo: object) -> list[dict[str, object]]:
+    """Sanea el array `slides` del json del copy a `[{titular, foto}, …]` (PURA).
+
+    `titular` se limpia con `quitar_emojis` (es texto DE PLACA, como `copy_in`); slides sin
+    titular útil se omiten. `foto` es el NÚMERO del catálogo numerado que vio el modelo
+    (1-based; 0 = sin foto); un valor no entero o negativo cae a 0. Tope `_MAX_SLIDES`.
+    """
+    if not isinstance(crudo, list):
+        return []
+    slides: list[dict[str, object]] = []
+    for s in crudo:
+        if not isinstance(s, dict):
+            continue
+        titular = quitar_emojis(s.get("titular") if isinstance(s.get("titular"), str) else "")
+        if not titular.strip():
+            continue
+        foto = s.get("foto")
+        # bool es subclase de int: un `true` accidental no debe contar como foto 1.
+        n_foto = foto if isinstance(foto, int) and not isinstance(foto, bool) and foto > 0 else 0
+        slides.append({"titular": titular.strip(), "foto": n_foto})
+        if len(slides) >= _MAX_SLIDES:
+            break
+    return slides
 
 
 # --------------------------------------------------------------------------- #

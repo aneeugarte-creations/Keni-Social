@@ -401,30 +401,34 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
     pend = json.loads(pc.temas_pipeline()[0]["copy_pendiente"])
     assert pend["imagen"] == "https://casa.test/foto.jpg"
     assert pend["tipo_contenido"] == "fuente"
-    # La lista `imagenes` acompaña a `imagen` (un item suelto = una sola foto).
-    assert pend["imagenes"] == ["https://casa.test/foto.jpg"]
+    # Un item RSS suelto NO es un panel: una sola nota y sin catálogo de fotos por nota.
+    assert pend["n_notas"] == 1
+    assert pend["fotos_notas"] == []
 
 
-def test_imagenes_de_cluster_solo_propias_dedup_y_portada(entorno, monkeypatch):
-    """`_imagenes_de_cluster`: junta las fotos de fuentes PROPIAS (sin duplicar); ajenas fuera."""
+def test_fotos_notas_de_cluster_solo_propias_con_su_titulo(entorno, monkeypatch):
+    """`_fotos_notas_de_cluster`: foto propia POR NOTA (con su título), sin duplicar; ajenas fuera."""
     from keni_consola.pipeline_contenido import _ingesta
 
     propia = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
     ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
     items = [
-        {"fuente_id": propia["id"], "imagen": "https://casa.test/a.jpg", "url": "https://casa.test/1"},
-        {"fuente_id": ajena["id"], "imagen": "https://otro.test/robada.jpg", "url": "https://otro.test/1"},
-        {"fuente_id": propia["id"], "imagen": "https://casa.test/a.jpg", "url": "https://casa.test/1b"},
-        {"fuente_id": propia["id"], "imagen": "https://casa.test/b.jpg", "url": "https://casa.test/2"},
+        {"fuente_id": propia["id"], "titulo": "Concierto A", "imagen": "https://casa.test/a.jpg", "url": "https://casa.test/1"},
+        {"fuente_id": ajena["id"], "titulo": "Robada", "imagen": "https://otro.test/robada.jpg", "url": "https://otro.test/1"},
+        {"fuente_id": propia["id"], "titulo": "Concierto A bis", "imagen": "https://casa.test/a.jpg", "url": "https://casa.test/1b"},
+        {"fuente_id": propia["id"], "titulo": "Concierto B", "imagen": "https://casa.test/b.jpg", "url": "https://casa.test/2"},
+        {"fuente_id": propia["id"], "titulo": "Sin foto", "imagen": "", "url": "https://casa.test/3"},
     ]
-    imagenes = _ingesta._imagenes_de_cluster(items)
-    # Propias sin duplicar, en orden (la primera es la PORTADA); la foto ajena NO se cuela.
-    assert imagenes == ["https://casa.test/a.jpg", "https://casa.test/b.jpg"]
+    assert _ingesta._fotos_notas_de_cluster(items) == [
+        {"titulo": "Concierto A", "imagen": "https://casa.test/a.jpg"},
+        {"titulo": "Concierto B", "imagen": "https://casa.test/b.jpg"},
+    ]
+    # La PORTADA del tema es la primera foto propia.
     assert _ingesta._imagen_de_cluster(items) == "https://casa.test/a.jpg"
 
 
-def test_imagenes_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
-    """Sin foto en NINGÚN item propia, se resuelve la og:image del primero (un solo fetch)."""
+def test_imagen_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
+    """Sin foto en NINGÚN item propia, la portada se resuelve por og:image (un solo fetch)."""
     from keni_consola.pipeline_contenido import _ingesta
 
     propia = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
@@ -433,36 +437,41 @@ def test_imagenes_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
         {"fuente_id": propia["id"], "imagen": "", "url": "https://casa.test/1"},
         {"fuente_id": propia["id"], "imagen": "", "url": "https://casa.test/2"},
     ]
-    assert _ingesta._imagenes_de_cluster(items) == ["https://casa.test/og.jpg"]
-    # Sin fuentes propias, lista vacía (no se toca la red ni se usa la foto de un tercero).
+    assert _ingesta._imagen_de_cluster(items) == "https://casa.test/og.jpg"
+    # Sin fuentes propias, "" (no se toca la red ni se usa la foto de un tercero).
     ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
-    assert _ingesta._imagenes_de_cluster(
+    assert _ingesta._imagen_de_cluster(
         [{"fuente_id": ajena["id"], "imagen": "https://otro.test/x.jpg", "url": "https://otro.test/1"}]
-    ) == []
+    ) == ""
 
 
-def test_cd_pasa_imagenes_fuente_al_copy(entorno, monkeypatch):
-    """CD: las `imagenes` del copy_pendiente viajan a `lanzar_copy` (habilitan el carrusel)."""
+def test_cd_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
+    """CD: `fotos_notas`/`n_notas` del copy_pendiente viajan a `lanzar_copy` (habilitan el carrusel)."""
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
+    fotos = [
+        {"titulo": "Concierto A", "imagen": "https://casa.test/a.jpg"},
+        {"titulo": "Concierto B", "imagen": "https://casa.test/b.jpg"},
+    ]
     tema = _tema_pipeline(
-        titulo="Historia con fotos",
+        titulo="Panel de conciertos",
         qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
         copy_pendiente=json.dumps({
             "nota": "Nota", "redes_ids": ["x", "instagram", "facebook"],
             "imagen": "https://casa.test/a.jpg",
-            "imagenes": ["https://casa.test/a.jpg", "https://casa.test/b.jpg"],
+            "fotos_notas": fotos, "n_notas": 4,
             "tipo_contenido": "fuente",
         }),
     )
     pc.lanzar_copy_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
     assert len(llamadas) == 1
     assert llamadas[0]["imagen_fuente"] == "https://casa.test/a.jpg"
-    assert llamadas[0]["imagenes_fuente"] == ["https://casa.test/a.jpg", "https://casa.test/b.jpg"]
+    assert llamadas[0]["fotos_notas"] == fotos
+    assert llamadas[0]["n_notas"] == 4
 
 
-def test_cd_pendiente_viejo_sin_imagenes_cae_a_imagen(entorno, monkeypatch):
-    """Compat: un copy_pendiente anterior al carrusel (sin `imagenes`) sigue funcionando."""
+def test_cd_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypatch):
+    """Compat: un copy_pendiente anterior al carrusel sigue funcionando (n_notas=1, sin fotos)."""
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(
@@ -473,7 +482,8 @@ def test_cd_pendiente_viejo_sin_imagenes_cae_a_imagen(entorno, monkeypatch):
         }),
     )
     pc.lanzar_copy_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
-    assert llamadas[0]["imagenes_fuente"] == ["https://casa.test/a.jpg"]
+    assert llamadas[0]["fotos_notas"] == []
+    assert llamadas[0]["n_notas"] == 1
 
 
 def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):

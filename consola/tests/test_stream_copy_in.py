@@ -136,6 +136,50 @@ def test_unificada_tipo_desconocido_cae_a_post():
     assert stream.parsear_salida_unificada(salida2, ["x"])["tipo"] == "post"
 
 
+def test_unificada_slides_se_sanean_y_exponen():
+    # Carrusel EDITORIAL: cada slide trae su titular (texto de placa, sin emojis) y el
+    # NÚMERO de la foto del catálogo (0 = sin foto). Valores raros se sanean.
+    salida = (
+        '```json\n{"texto": "Copy", "copy_in": "PANEL", "tipo": "carrusel", '
+        '"slides": ['
+        '{"titular": "Concierto A 🔥", "foto": 1}, '
+        '{"titular": "Concierto B", "foto": 0}, '
+        '{"titular": "Concierto C", "foto": "dos"}, '
+        '{"titular": "   ", "foto": 2}, '
+        '{"titular": "Concierto D", "foto": -3}]}\n```'
+    )
+    res = stream.parsear_salida_unificada(salida, ["x"])
+    assert res["tipo"] == "carrusel"
+    # El slide sin titular útil se omite; emojis fuera (es texto de placa); fotos raras -> 0.
+    assert res["slides"] == [
+        {"titular": "Concierto A", "foto": 1},
+        {"titular": "Concierto B", "foto": 0},
+        {"titular": "Concierto C", "foto": 0},
+        {"titular": "Concierto D", "foto": 0},
+    ]
+
+
+def test_unificada_slides_vacios_con_tipo_post():
+    # Con tipo=post los slides NO se exponen aunque el modelo los emita por error.
+    salida = (
+        '```json\n{"texto": "Copy", "copy_in": "", "tipo": "post", '
+        '"slides": [{"titular": "X", "foto": 1}]}\n```'
+    )
+    res = stream.parsear_salida_unificada(salida, ["x"])
+    assert res["tipo"] == "post"
+    assert res["slides"] == []
+
+
+def test_unificada_slides_respetan_el_tope():
+    # Tope de 9 slides (10 nativas de IG/FB menos la portada).
+    slides = ", ".join(f'{{"titular": "Nota {i}", "foto": 0}}' for i in range(12))
+    salida = (
+        '```json\n{"texto": "Copy", "copy_in": "P", "tipo": "carrusel", '
+        f'"slides": [{slides}]}}\n```'
+    )
+    assert len(stream.parsear_salida_unificada(salida, ["x"])["slides"]) == 9
+
+
 # --------------------------------------------------------------------------- #
 # Politica de emojis del parseo (vive en prompt + editorial, no en limpieza)   #
 # --------------------------------------------------------------------------- #

@@ -152,12 +152,16 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
     fuente = trabajo.get("fuente") or {}
     item = trabajo.get("item") or {}
     imagen = trabajo.get("imagen") or ""
-    # TODAS las imágenes de fuente propia de la historia (portada primero). Con 2+, la fase
-    # CD ofrece a Claude el output CARRUSEL además del post simple. Compat: si el trabajo no
-    # las trae (item RSS suelto), cae a [imagen].
-    imagenes = [i for i in (trabajo.get("imagenes") or []) if isinstance(i, str) and i.strip()]
-    if not imagenes and imagen:
-        imagenes = [imagen]
+    # CARRUSEL EDITORIAL (historias): cuántas NOTAS agrupa la historia (`n_notas`, con 2+ la
+    # fase CD ofrece a Claude el output carrusel: una placa por sub-historia) y las fotos de
+    # fuente PROPIA con el título de SU nota (`fotos_notas`), para que el modelo asigne foto
+    # a cada slide. Un item RSS suelto lleva n_notas=1 (sin carrusel) y su propia foto.
+    fotos_notas = [
+        {"titulo": str(f.get("titulo") or "")[:300], "imagen": str(f.get("imagen") or "")}
+        for f in (trabajo.get("fotos_notas") or [])
+        if isinstance(f, dict) and str(f.get("imagen") or "").strip()
+    ]
+    n_notas = int(trabajo.get("n_notas") or 0) or 1
     try:
         return json.dumps({
             "nota": nota,
@@ -165,7 +169,8 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
             "fuente_id": fuente.get("id") or "",
             "clave": (item.get("clave") or "").strip(),
             "imagen": imagen,
-            "imagenes": imagenes,
+            "fotos_notas": fotos_notas,
+            "n_notas": n_notas,
             "tipo_contenido": "fuente" if imagen else "",
         }, ensure_ascii=False)
     except (TypeError, ValueError):  # pragma: no cover -- entrada simple, no debería fallar
@@ -447,54 +452,60 @@ def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:
     return cache[fuente_id]
 
 
-# Tope de imágenes de fuente por historia: los carruseles nativos de IG/FB admiten 10,
-# pero más allá de unas pocas fotos el carrusel de noticias pierde foco editorial.
-_MAX_IMAGENES_CLUSTER = 5
+# Tope de fotos de fuente por historia: los carruseles nativos de IG/FB admiten 10 slides,
+# pero más allá de unas pocas tarjetas el carrusel de noticias pierde foco editorial.
+_MAX_FOTOS_CLUSTER = 9
 
 
-def _imagenes_de_cluster(items: list[dict[str, Any]]) -> list[str]:
-    """Imágenes de los items del cluster, SOLO de fuentes PROPIAS (derechos), sin duplicados.
+def _fotos_notas_de_cluster(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Fotos de los items del cluster CON el título de su nota, SOLO de fuentes PROPIAS.
 
-    Para un item de fuente PROPIA (`unotv.com`, `clarosports.com`…) reutilizamos su foto: la
-    `imagen` del feed si la trae. No tenemos derechos sobre la foto de un medio AJENO: esos
-    items se saltan. Si NINGÚN item propia traía imagen en el feed, se intenta RESOLVER la
-    `og:image` del primer artículo propia (la foto real de la nota) —igual que `ingerir_marca`—;
-    si tampoco, lista vacía (el arte lo pone la etapa de Arte IA o el equipo). La PRIMERA
-    imagen es la PORTADA; con 2+ se habilita el output CARRUSEL (Claude decide en CD).
-    Tope `_MAX_IMAGENES_CLUSTER`.
+    `[{titulo, imagen}, …]` sin imágenes duplicadas, en el orden de los items. Es el catálogo
+    que la fase CD numera en el prompt para que el modelo asigne a cada SLIDE del carrusel la
+    foto de SU sub-historia. No tenemos derechos sobre la foto de un medio AJENO: esos items
+    se saltan. Tope `_MAX_FOTOS_CLUSTER`.
     """
     cache: dict[str, bool] = {}
-    imagenes: list[str] = []
-    propias_sin_imagen: list[str] = []
+    fotos: list[dict[str, str]] = []
+    vistas: set[str] = set()
     for it in items:
         if not _es_fuente_propia(it.get("fuente_id") or "", cache):
             continue
         img = (it.get("imagen") or "").strip()
-        if img:
-            if img not in imagenes:
-                imagenes.append(img)
-                if len(imagenes) >= _MAX_IMAGENES_CLUSTER:
-                    break
-        else:
-            enlace = (it.get("url") or "").strip()
-            if enlace:
-                propias_sin_imagen.append(enlace)
-    if not imagenes:
-        # og:image SOLO como rescate (un fetch HTTP por historia, no uno por item).
-        for enlace in propias_sin_imagen[:1]:
-            try:
-                resuelta = (_ref._FETCH_OG_IMAGE(enlace) or "").strip()
-            except Exception:  # noqa: BLE001 -- og:image best-effort; nunca rompe el barrido
-                resuelta = ""
-            if resuelta:
-                imagenes.append(resuelta)
-    return imagenes
+        if not img or img in vistas:
+            continue
+        vistas.add(img)
+        fotos.append({"titulo": (it.get("titulo") or "").strip()[:300], "imagen": img})
+        if len(fotos) >= _MAX_FOTOS_CLUSTER:
+            break
+    return fotos
 
 
 def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
-    """Arte (portada) del tema desde los items del cluster: primera de `_imagenes_de_cluster`."""
-    imagenes = _imagenes_de_cluster(items)
-    return imagenes[0] if imagenes else ""
+    """Arte (PORTADA) del tema desde los items del cluster, SOLO de fuentes PROPIAS (derechos).
+
+    La `imagen` del feed del primer item propia que la traiga (`_fotos_notas_de_cluster`) o,
+    si ninguno la traía, la `og:image` resuelta del primer artículo propia (un solo fetch por
+    historia) —igual que `ingerir_marca`—. "" si nada: el arte lo pone la etapa de Arte IA
+    (o el equipo). Nunca la foto de un medio ajeno.
+    """
+    fotos = _fotos_notas_de_cluster(items)
+    if fotos:
+        return fotos[0]["imagen"]
+    cache: dict[str, bool] = {}
+    for it in items:
+        if not _es_fuente_propia(it.get("fuente_id") or "", cache):
+            continue
+        enlace = (it.get("url") or "").strip()
+        if not enlace:
+            continue
+        try:
+            resuelta = (_ref._FETCH_OG_IMAGE(enlace) or "").strip()
+        except Exception:  # noqa: BLE001 -- og:image best-effort; nunca rompe el barrido
+            resuelta = ""
+        # Un solo intento por historia (el primer artículo propia con URL).
+        return resuelta
+    return ""
 
 
 def crear_tema_de_cluster(
@@ -538,10 +549,15 @@ def crear_tema_de_cluster(
                 cuerpos[url] = cuerpo
     nota = _nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
-    imagenes = _imagenes_de_cluster(items)
-    imagen = imagenes[0] if imagenes else ""
+    imagen = _imagen_de_cluster(items)
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
-    trabajo = {"fuente": {}, "item": {"clave": ""}, "imagen": imagen, "imagenes": imagenes}
+    # `n_notas` (cuántas SUB-HISTORIAS agrupa) + `fotos_notas` (foto propia por nota) habilitan
+    # el output CARRUSEL en la fase CD (una placa por sub-historia; Claude decide).
+    trabajo = {
+        "fuente": {}, "item": {"clave": ""}, "imagen": imagen,
+        "fotos_notas": _fotos_notas_de_cluster(items),
+        "n_notas": min(len(items), _MAX_ENLACES_CLUSTER),
+    }
     url_fuente = (items[0].get("url_canonica") if items else "") or ""
     try:
 

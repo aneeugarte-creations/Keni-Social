@@ -286,6 +286,60 @@ def _descargar_original_a_biblioteca(
     return objeto
 
 
+def _componer_slide_real(marca: str, titular: str, foto_url: str) -> str:
+    """HORNEA la placa de UN slide del carrusel editorial; devuelve su key de media ("" si falla).
+
+    Compone la plantilla de estudio EFECTIVA de la marca (la MISMA del editor/portada) con el
+    `titular` del slide como texto-en-imagen y, si la sub-historia traía foto propia, esa foto
+    de fondo. El PNG va CONTENT-ADDRESSED a la carpeta protegida `artes` (el GC no la borra:
+    los slides viven en el campo `carrusel` de la pieza, fuera del catálogo regenerable).
+    Sin plantilla de estudio (marca sin placa), cae a la foto cruda promovida a `artes` (mismo
+    criterio que la portada sin receta); sin foto NI plantilla, "" (el slide se omite).
+    NUNCA lanza: el carrusel es un extra del copy, no debe romper el post-procesado.
+    """
+    if not (titular or "").strip() and not (foto_url or "").strip():
+        return ""
+    from .. import almacen_media, media
+    from . import estudio_imagen, render_pieza
+
+    # Foto de la sub-historia (si la trae): se baja a media; el PNG horneado la lleva dentro,
+    # así que no hace falta catalogarla ni protegerla por separado.
+    foto_key = ""
+    if (foto_url or "").strip():
+        try:
+            from . import extraccion_url
+
+            foto_key = extraccion_url.descargar_imagen_a_media(foto_url.strip())
+        except Exception:  # noqa: BLE001 -- sin foto, el slide sale como placa de solo texto
+            foto_key = ""
+    try:
+        plantilla = render_pieza._plantilla_efectiva({"marca": marca})
+    except Exception:  # noqa: BLE001 -- sin plantilla legible, tratamos como marca sin placa
+        plantilla = None
+    if plantilla is not None:
+        try:
+            datos = estudio_imagen.componer_desde_plantilla_bytes(
+                plantilla.get("documento") or "{}",
+                copy_in=(titular or "").strip(),
+                foto=foto_key,
+            )
+            return media.guardar_bytes_contenido(datos, ext="png", categoria="artes")
+        except Exception:  # noqa: BLE001 -- render best-effort: este slide se omite
+            _log.warning("copy: no se pudo componer el slide «%s»", (titular or "")[:60], exc_info=True)
+            return ""
+    # Marca sin plantilla de estudio: el slide solo vale si la sub-historia traía foto.
+    if foto_key:
+        try:
+            return almacen_media.promover_objeto(foto_key, "artes")
+        except Exception:  # noqa: BLE001 -- sin promoción, mejor omitir que arriesgar el GC
+            return ""
+    return ""
+
+
+# Seam INYECTABLE (los tests lo parchean): la composición real corre el renderer Node.
+_COMPONER_SLIDE = _componer_slide_real
+
+
 def crear_publicaciones_desde_piezas(
     piezas: list[dict[str, object]],
     *,
@@ -299,7 +353,7 @@ def crear_publicaciones_desde_piezas(
     atomico: bool = False,
     imagen_fuente: str = "",
     tipo_contenido: str = "",
-    carrusel_extras: list[str] | None = None,
+    slides_carrusel: list[dict[str, str]] | None = None,
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -323,12 +377,14 @@ def crear_publicaciones_desde_piezas(
     borrador. Se descarta SOLO esa pieza (las válidas del lote se crean igual), se loguea
     WARN y, si hay tema (`contenido_id`), se deja una nota en él.
 
-    `carrusel_extras` (pipeline, output CARRUSEL elegido por el modelo): URLs de las fotos de
-    fuente EXTRA (sin la portada, que viaja en `imagen_fuente`). Solo aplica NIDADO bajo un
-    tema (`contenido_id`): se descargan a la Biblioteca, el tema pasa a `formato='carrusel'`,
-    las piezas se acotan a las redes de ese formato (IG/FB) y cada borrador nace con los
-    slides extra en su campo `carrusel`. Degradación honesta: si NINGUNA extra se pudo
-    descargar (o no hay tema), todo sigue como post normal de foto.
+    `slides_carrusel` (pipeline, output CARRUSEL elegido por el modelo): slides EDITORIALES
+    `[{titular, foto}, …]` —una tarjeta por SUB-HISTORIA, `foto` la URL de la nota o ""—.
+    Solo aplica NIDADO bajo un tema (`contenido_id`): cada slide se HORNEA como placa de la
+    marca (plantilla efectiva + titular + su foto) a la carpeta protegida `artes`, el tema
+    pasa a `formato='carrusel'`, las piezas se acotan a las redes de ese formato (IG/FB) y
+    cada borrador nace con esos slides en su campo `carrusel` (la PORTADA sigue siendo
+    `imagen`/`imagen_fuente` + el `copy_in` paraguas). Degradación honesta: si NINGÚN slide
+    se pudo componer (o no hay tema), todo sigue como post normal de foto.
     """
     creadas: list[dict[str, object]] = []
     # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez, la
@@ -340,15 +396,18 @@ def crear_publicaciones_desde_piezas(
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
         )
-    # CARRUSEL (DOS tipos de output del pipeline): el modelo eligió `carrusel` y la historia
-    # trae fotos extra. Cada extra se baja/cataloga como la portada; con 1+ descargada, el
-    # tema FLIP a formato carrusel y los borradores llevan los slides en crudo.
+    # CARRUSEL EDITORIAL (DOS tipos de output del pipeline): el modelo eligió `carrusel` y
+    # emitió un slide por SUB-HISTORIA. Cada slide se hornea como PLACA de la marca (titular
+    # + su foto); con 1+ horneada, el tema FLIP a formato carrusel y los borradores llevan
+    # los slides detrás de la portada.
     carrusel_json = ""
-    if carrusel_extras and contenido_id:
+    if slides_carrusel and contenido_id:
         objetos = [
             obj
-            for url in carrusel_extras
-            if (obj := _descargar_original_a_biblioteca(url, marca=marca, titulo=titulo, autor=autor))
+            for s in slides_carrusel
+            if (obj := _COMPONER_SLIDE(
+                marca, str(s.get("titular") or ""), str(s.get("foto") or "")
+            ))
         ]
         if objetos:
             import json
@@ -365,7 +424,7 @@ def crear_publicaciones_desde_piezas(
                 carrusel_json = ""
         else:
             _log.warning(
-                "copy: carrusel degradado a post (ninguna foto extra descargable) — tema %s",
+                "copy: carrusel degradado a post (ningún slide componible) — tema %s",
                 contenido_id,
             )
     if carrusel_json:
@@ -477,7 +536,7 @@ def construir_procesar_copy(
     autor: dict[str, str] | None = None,
     contenido_id: str = "",
     imagen_fuente: str = "",
-    imagenes_fuente: list[str] | None = None,
+    fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
@@ -495,9 +554,10 @@ def construir_procesar_copy(
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, se PERSISTE en
     `contenido.url_fuente` del tema padre de cada borrador creado (dedup por URL). Best-effort:
     un fallo NUNCA rompe el post-procesado (el copy ya esta hecho). "" = no se toca.
-    `imagenes_fuente` (pipeline, DOS tipos de output): TODAS las fotos de fuente propia de la
-    historia (portada primero). Si la salida declara `tipo=carrusel` y hay 2+, las EXTRA
-    (todas menos la portada) arman la pieza CARRUSEL; si no, post de foto como siempre.
+    `fotos_notas` (pipeline, DOS tipos de output): catálogo de fotos de fuente propia por
+    NOTA (`[{titulo, imagen}, …]`, mismo orden numerado que vio el modelo en el prompt). Si
+    la salida declara `tipo=carrusel` con 2+ `slides`, cada slide se resuelve a su foto por
+    número y se HORNEA como placa; si no, post de foto como siempre.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -516,18 +576,26 @@ def construir_procesar_copy(
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
         if avisos_voz:
             _avisar_voz(avisos_voz, contenido_id=contenido_id, marca=marca)
-        # CARRUSEL solo si el MODELO lo eligió (`tipo` del json) Y la historia trae fotos
-        # extra de fuente. La portada sigue viajando como `imagen_fuente`.
-        extras_carrusel: list[str] = []
+        # CARRUSEL EDITORIAL solo si el MODELO lo eligió (`tipo`) Y emitió 2+ slides (un panel
+        # de una tarjeta no es panel). Cada slide resuelve su foto por NÚMERO contra el
+        # catálogo que vio en el prompt; la portada sigue viajando como `imagen_fuente`.
+        slides_resueltos: list[dict[str, str]] = []
         if parsed.get("tipo") == "carrusel":
-            fotos = [f for f in (imagenes_fuente or []) if isinstance(f, str) and f.strip()]
-            extras_carrusel = [f for f in fotos if f != (imagen_fuente or "")][:9]
+            urls = [str(f.get("imagen") or "") for f in (fotos_notas or [])]
+            crudos = parsed.get("slides") or []
+            if isinstance(crudos, list) and len(crudos) >= 2:
+                for s in crudos:
+                    n = s.get("foto") if isinstance(s, dict) else 0
+                    foto = urls[n - 1] if isinstance(n, int) and 1 <= n <= len(urls) else ""
+                    slides_resueltos.append(
+                        {"titular": str(s.get("titular") or ""), "foto": foto}
+                    )
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=verdicto, origen=historial_id, autor=autor,
             contenido_id=contenido_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
-            carrusel_extras=extras_carrusel,
+            slides_carrusel=slides_resueltos,
         )
         # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de
         # cada borrador creado. Best-effort: el copy YA esta hecho; un fallo aqui no debe romper

@@ -353,25 +353,28 @@ def test_jobspec_copy_sin_contenido_id_default_vacio_puro():
     assert spec["contenido_id"] == ""
 
 
-def test_jobspec_copy_imagenes_fuente_roundtrip_puro():
-    # PURO (sin DB): `imagenes_fuente` (fotos de la historia, portada primero) viaja en el
-    # spec y sobrevive al round-trip, para que el worker pueda armar el CARRUSEL si el
-    # modelo lo elige. Sin ellas, lista vacía (post de siempre).
-    fotos = ["https://casa.test/a.jpg", "https://casa.test/b.jpg"]
+def test_jobspec_copy_fotos_notas_roundtrip_puro():
+    # PURO (sin DB): `fotos_notas` (catálogo de fotos propias por NOTA, mismo orden numerado
+    # que vio el modelo) viaja en el spec y sobrevive al round-trip, para que el worker pueda
+    # resolver la foto de cada SLIDE del carrusel. Sin él, lista vacía (post de siempre).
+    fotos = [
+        {"titulo": "Concierto A", "imagen": "https://casa.test/a.jpg"},
+        {"titulo": "Concierto B", "imagen": "https://casa.test/b.jpg"},
+    ]
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
             prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
-            texto_base="nota", imagen_fuente=fotos[0], imagenes_fuente=fotos,
+            texto_base="nota", imagen_fuente=fotos[0]["imagen"], fotos_notas=fotos,
         ),
     )
     vuelto = jobspec.deserializar(jobspec.serializar(spec))
-    assert vuelto["procesar"]["imagenes_fuente"] == fotos
+    assert vuelto["procesar"]["fotos_notas"] == fotos
     sin = jobspec.construir_copy(
         prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
         texto_base="nota",
     )
-    assert sin["imagenes_fuente"] == []
+    assert sin["fotos_notas"] == []
 
 
 def test_reconstruir_procesar_hashtags(entorno):
