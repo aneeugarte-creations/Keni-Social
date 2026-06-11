@@ -9,6 +9,7 @@ de `_comun`, no al revés.
 
 from __future__ import annotations
 
+import html as _html
 import logging
 import re
 from typing import Any
@@ -53,6 +54,11 @@ __all__ = [
     "_FETCH_OG_IMAGE",
     "_fetch_og_image_real",
     "_extraer_og_image",
+    # cuerpo del artículo + limpieza del snippet (enriquecer la nota de origen)
+    "_FETCH_ARTICULO",
+    "_fetch_articulo_real",
+    "_extraer_texto_articulo",
+    "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
     "_autor_pipeline",
@@ -255,6 +261,162 @@ def _extraer_og_image(html: str) -> str:
 
 # Seam inyectable (los tests lo parchean): NO se llama a la red en tests.
 _FETCH_OG_IMAGE = _fetch_og_image_real
+
+
+# --------------------------------------------------------------------------- #
+# Cuerpo del ARTÍCULO + limpieza del snippet RSS (enriquecer la nota de origen) #
+# --------------------------------------------------------------------------- #
+# Gateado por `config.pipeline_fetch_fuente()`: cuando está ON, la ingesta baja el CUERPO del
+# artículo (no solo el snippet RSS) para que `claude -p` sintetice sobre material real. El snippet
+# RSS además llega sucio (entidades HTML sin decodificar, boilerplate "The post … appeared first on
+# …"): `_limpiar_snippet` lo normaliza SIEMPRE (no depende del flag; es barato y puro).
+
+# Tope de bytes que leemos del artículo para extraer el cuerpo. Mayor que el de og:image: el
+# cuerpo suele estar más abajo en el documento, no solo en el <head>.
+_ART_MAX_BYTES = 1024 * 1024
+_ART_TIMEOUT_S = 8.0
+# Tope de caracteres del cuerpo extraído que anexamos a la nota (acota el tamaño del prompt; el
+# modelo no necesita el artículo entero para sintetizar, basta el grueso de la nota).
+_ART_MAX_CHARS = 5000
+# Un <p> con menos de esto suele ser cruft (navegación, pies, créditos): se descarta.
+_ART_MIN_P_CHARS = 40
+# Si el texto extraído no llega a esto, lo tratamos como fallo (página sin cuerpo legible) -> "".
+_ART_MIN_TEXTO = 200
+
+_RE_JSONLD = re.compile(
+    r"""<script[^>]+type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_ARTICLE = re.compile(r"<article\b[^>]*>(.*?)</article>", re.IGNORECASE | re.DOTALL)
+_RE_P = re.compile(r"<p\b[^>]*>(.*?)</p>", re.IGNORECASE | re.DOTALL)
+# <script>/<style> con su contenido: hay que borrarlos ENTEROS antes de quitar tags sueltos.
+_RE_SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+_RE_TAG = re.compile(r"<[^>]+>")
+_RE_WS_HORIZ = re.compile(r"[ \t ]+")
+_RE_WS_NL = re.compile(r"\n{3,}")
+# Boilerplate de WordPress al final del snippet RSS ("The post <título> appeared first on <medio>.").
+_RE_WP_BOILER = re.compile(r"\s*The post\b.*?appeared first on\b.*$", re.IGNORECASE | re.DOTALL)
+# Marca de truncado del feed: "[…]" (tras decodificar `[&#8230;]`) o "[...]".
+_RE_ELIPSIS_CORCHETE = re.compile(r"\s*\[\s*(?:…|\.\.\.)\s*\]\s*")
+
+
+def _texto_de_html(fragmento: str) -> str:
+    """HTML -> texto plano: quita tags, decodifica entidades y normaliza espacios. PURO."""
+    sin_tags = _RE_TAG.sub(" ", fragmento)
+    return _RE_WS_HORIZ.sub(" ", _html.unescape(sin_tags)).strip()
+
+
+def _articlebody_de_jsonld(crudo: str) -> str:
+    """Busca recursivamente la clave `articleBody` en un bloque JSON-LD. "" si no la halla."""
+    import json
+
+    try:
+        datos = json.loads(crudo.strip())
+    except (json.JSONDecodeError, ValueError):
+        return ""
+
+    def _buscar(nodo: Any) -> str:
+        if isinstance(nodo, dict):
+            cuerpo = nodo.get("articleBody")
+            if isinstance(cuerpo, str) and cuerpo.strip():
+                return cuerpo.strip()
+            for valor in nodo.values():
+                hallado = _buscar(valor)
+                if hallado:
+                    return hallado
+        elif isinstance(nodo, list):
+            for item in nodo:
+                hallado = _buscar(item)
+                if hallado:
+                    return hallado
+        return ""
+
+    return _buscar(datos)
+
+
+def _extraer_texto_articulo(html_doc: str) -> str:
+    """Extrae el CUERPO de un artículo de su HTML. PURA y testeable. "" si no hay cuerpo legible.
+
+    Estrategia, de más fiable a menos: (1) `articleBody` del JSON-LD `NewsArticle`/`Article` (lo
+    publican Infobae, UnoTV y la mayoría de medios); (2) los `<p>` dentro de `<article>` si lo
+    hay, o del documento entero; tags fuera, entidades decodificadas, espacios normalizados.
+    Trunca a `_ART_MAX_CHARS`. Por debajo de `_ART_MIN_TEXTO` se considera que no hubo cuerpo.
+    """
+    if not html_doc:
+        return ""
+    # (1) JSON-LD articleBody.
+    for bloque in _RE_JSONLD.finditer(html_doc):
+        cuerpo = _articlebody_de_jsonld(bloque.group(1))
+        if cuerpo:
+            texto = _RE_WS_HORIZ.sub(" ", _html.unescape(cuerpo)).strip()
+            if len(texto) >= _ART_MIN_TEXTO:
+                return texto[:_ART_MAX_CHARS]
+    # (2) Párrafos: preferimos los de dentro de <article>; si no hay, los del documento.
+    m = _RE_ARTICLE.search(html_doc)
+    ambito = m.group(1) if m else html_doc
+    ambito = _RE_SCRIPT_STYLE.sub(" ", ambito)
+    parrafos: list[str] = []
+    for p in _RE_P.finditer(ambito):
+        texto_p = _texto_de_html(p.group(1))
+        if len(texto_p) >= _ART_MIN_P_CHARS:
+            parrafos.append(texto_p)
+    cuerpo = _RE_WS_NL.sub("\n\n", "\n\n".join(parrafos)).strip()
+    if len(cuerpo) < _ART_MIN_TEXTO:
+        return ""
+    return cuerpo[:_ART_MAX_CHARS]
+
+
+def _limpiar_snippet(texto: str) -> str:
+    """Normaliza el snippet RSS: decodifica entidades, quita tags y el boilerplate de WordPress.
+
+    PURA. Aplica SIEMPRE (no depende del flag de fetch): el resumen del feed llega con entidades
+    sin decodificar (`[&#8230;]`), a veces HTML, y cola de WordPress ("The post … appeared first
+    on UnoTV."). Devuelve el resumen limpio listo para la nota. "" -> "".
+    """
+    if not texto:
+        return ""
+    limpio = _html.unescape(texto)
+    limpio = _RE_TAG.sub(" ", limpio)
+    limpio = _RE_WP_BOILER.sub("", limpio)
+    limpio = _RE_ELIPSIS_CORCHETE.sub(" ", limpio)
+    return _RE_WS_HORIZ.sub(" ", limpio).strip()
+
+
+def _fetch_articulo_real(enlace: str) -> str:
+    """Descarga y extrae el CUERPO del artículo de `enlace`. "" si falla / no hay. NUNCA lanza.
+
+    Best-effort, mismo patrón que `_fetch_og_image_real` (GET con redirects, timeout corto, tope
+    de bytes), pero leyendo más cuerpo y extrayendo texto con `_extraer_texto_articulo`. Es el
+    punto INYECTABLE: los tests lo parchean (`_FETCH_ARTICULO`) para no tocar la red.
+    """
+    if not isinstance(enlace, str) or not enlace.strip().startswith(("http://", "https://")):
+        return ""
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover -- httpx es dependencia
+        return ""
+    try:
+        cabeceras = {"User-Agent": "keni-social/pipeline (+https://social.kenitech.io)"}
+        with httpx.Client(
+            timeout=_ART_TIMEOUT_S, follow_redirects=True, headers=cabeceras
+        ) as cliente:
+            with cliente.stream("GET", enlace.strip()) as respuesta:
+                respuesta.raise_for_status()
+                trozos: list[bytes] = []
+                total = 0
+                for trozo in respuesta.iter_bytes():
+                    trozos.append(trozo)
+                    total += len(trozo)
+                    if total >= _ART_MAX_BYTES:
+                        break
+        html_doc = b"".join(trozos).decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- el cuerpo es un extra; nunca rompe el barrido
+        return ""
+    return _extraer_texto_articulo(html_doc)
+
+
+# Seam inyectable (los tests lo parchean): NO se llama a la red en tests.
+_FETCH_ARTICULO = _fetch_articulo_real
 
 
 # --------------------------------------------------------------------------- #

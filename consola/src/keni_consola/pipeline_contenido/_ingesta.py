@@ -24,6 +24,7 @@ from ._comun import (
     QA_EN_CURSO,
     QA_SALTADA,
     VERDICTO_NO_VERIFICADO,
+    _limpiar_snippet,
     _log,
     registrar_etapa,
     temas_pipeline,
@@ -50,6 +51,8 @@ __all__ = [
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",
+    "_nota_de_cluster",
+    "_fetch_cuerpo",
     "ingerir_marca",
 ]
 
@@ -245,7 +248,8 @@ def crear_tema_de(
                 _log.warning("pipeline: no se pudo marcar item dup usado (%s)", clave, exc_info=True)
         _log.info("pipeline: omito duplicado «%s» (%s)", titulo[:60], marca)
         return None
-    nota = _nota_de_item(item)[: gen_dom.MAX_TEXTO]
+    cuerpo = _fetch_cuerpo((item.get("enlace") or "").strip())
+    nota = _nota_de_item(item, cuerpo)[: gen_dom.MAX_TEXTO]
     redes_ids = _redes_de_fuente(fuente)
     try:
 
@@ -289,14 +293,44 @@ def crear_tema_de(
     return tema
 
 
-def _nota_de_cluster(titulo: str, resumen: str, enlaces: list[str]) -> str:
-    """Nota de partida del copy desde una HISTORIA: titulo + resumen + enlaces corroborantes."""
-    partes = [titulo.strip(), resumen.strip()]
-    nota = "\n\n".join(p for p in partes if p)
-    urls = [u for u in enlaces if u][:_MAX_ENLACES_CLUSTER]
-    if urls:
-        nota = (nota + "\n\nFuentes:\n" + "\n".join(urls)).strip()
-    return nota
+def _nota_de_cluster(
+    titulo: str,
+    resumen: str,
+    items: list[dict[str, Any]],
+    cuerpos: dict[str, str] | None = None,
+) -> str:
+    """Nota de partida del copy desde una HISTORIA (cluster): texto de CADA fuente, no solo URLs.
+
+    PURA. Antes la nota era titulo + UN resumen + una lista de URLs; el modelo no tenía el texto
+    de las otras fuentes y no podía cruzar datos. Ahora arma un BLOQUE por fuente (medio · título
+    · URL · resumen limpio · cuerpo del artículo si `cuerpos` lo trae) para que `claude -p`
+    sintetice de verdad. `cuerpos` mapea URL del item -> cuerpo descargado (`_fetch_cuerpo`); sin
+    él, cada bloque queda con medio+título+resumen (mejor que solo el link). Tope `_MAX_ENLACES_CLUSTER`.
+    """
+    cuerpos = cuerpos or {}
+    partes = [titulo.strip(), _limpiar_snippet(resumen)]
+    bloques: list[str] = []
+    urls: list[str] = []
+    for it in items[:_MAX_ENLACES_CLUSTER]:
+        url = (it.get("url") or "").strip()
+        medio = (it.get("fuente_nombre") or "").strip()
+        it_titulo = (it.get("titulo") or "").strip()
+        it_resumen = _limpiar_snippet(it.get("resumen") or "")
+        it_cuerpo = (cuerpos.get(url) or "").strip()
+        if url:
+            urls.append(url)
+        encabezado = " · ".join(p for p in [medio, it_titulo] if p)
+        lineas = [p for p in [encabezado, url, it_resumen, it_cuerpo] if p]
+        if lineas:
+            bloques.append("\n".join(lineas))
+    if bloques:
+        partes.append(
+            "Fuentes (una misma historia; sintetiza y cruza sus datos, no copies literal):\n\n"
+            + "\n\n---\n\n".join(bloques)
+        )
+    elif urls:
+        partes.append("Fuentes:\n" + "\n".join(urls))
+    return "\n\n".join(p for p in partes if p).strip()
 
 
 def clusters_para_promover(
@@ -461,8 +495,15 @@ def crear_tema_de_cluster(
         _log.info("pipeline: omito historia duplicada «%s» (%s)", titulo[:60], marca)
         return None
     resumen = (cluster.get("resumen") or "").strip()
-    enlaces = [it.get("url") or "" for it in items if it.get("url")]
-    nota = _nota_de_cluster(titulo, resumen, enlaces)[: gen_dom.MAX_TEXTO]
+    # Cuerpo de CADA fuente del cluster (gateado por el flag): así la nota lleva el texto de todas
+    # las fuentes, no solo sus URLs. `_fetch_cuerpo` cae a "" si el flag está off o el fetch falla.
+    cuerpos = {
+        url: cuerpo
+        for it in items[:_MAX_ENLACES_CLUSTER]
+        if (url := (it.get("url") or "").strip())
+        and (cuerpo := _fetch_cuerpo(url))
+    }
+    nota = _nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
     imagen = _imagen_de_cluster(items)
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
@@ -737,13 +778,36 @@ def _url_fuente_de(item: dict[str, Any]) -> str:
     return dedup.url_canonica(enlace)
 
 
-def _nota_de_item(item: dict[str, Any]) -> str:
-    """Nota de partida del copy: titulo + resumen + enlace (los vacíos se omiten)."""
-    partes = [
-        (item.get("titulo") or "").strip(),
-        (item.get("resumen") or "").strip(),
-        (item.get("enlace") or "").strip(),
-    ]
+def _fetch_cuerpo(enlace: str) -> str:
+    """Cuerpo del artículo de `enlace` SI el flag `pipeline_fetch_fuente` está ON; "" si no.
+
+    Concentra el gate + el seam: las builders de nota quedan PURAS (sin red) y la decisión de
+    pegar a la red vive aquí. Best-effort: gateada off o ante cualquier fallo, devuelve "" y la
+    nota cae a título+resumen como hasta ahora.
+    """
+    if not enlace or not config.pipeline_fetch_fuente():
+        return ""
+    try:
+        return (_ref._FETCH_ARTICULO(enlace) or "").strip()
+    except Exception:  # noqa: BLE001 -- el cuerpo es un extra; nunca rompe el barrido
+        return ""
+
+
+def _nota_de_item(item: dict[str, Any], cuerpo: str = "") -> str:
+    """Nota de partida del copy: titulo + resumen LIMPIO + cuerpo del artículo + enlace.
+
+    PURA. `cuerpo` (opcional) es el texto del artículo ya descargado (`_fetch_cuerpo`): cuando
+    viene, el modelo redacta sobre el artículo real, no solo sobre el snippet RSS. El resumen se
+    normaliza SIEMPRE (`_limpiar_snippet`: entidades, boilerplate de WordPress). Vacíos se omiten.
+    """
+    titulo = (item.get("titulo") or "").strip()
+    resumen = _limpiar_snippet(item.get("resumen") or "")
+    enlace = (item.get("enlace") or "").strip()
+    partes = [titulo, resumen]
+    if cuerpo.strip():
+        partes.append("Artículo:\n" + cuerpo.strip())
+    if enlace:
+        partes.append("Fuente: " + enlace)
     return "\n\n".join(p for p in partes if p)
 
 

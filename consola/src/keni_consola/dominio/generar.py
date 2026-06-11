@@ -156,16 +156,53 @@ def instruccion_redes(redes_ids: list[str]) -> str:
     )
 
 
-def instruccion_copy_unico(redes_ids: list[str]) -> str:
-    """Instrucción ADITIVA (copy UNIFICADO): UN solo copy + UN solo texto-en-imagen para TODAS.
+# Una red es "estrecha" si su límite la obliga a un copy mucho más corto que el de las redes
+# amplias (X = 280). Mezclar X con Instagram (2200)/Facebook (sin tope) en UN solo copy forzaba
+# todo a 280 = un tuit publicado en IG/FB. Por debajo de esto pedimos un `texto_corto` aparte
+# para esas redes, dejando el copy completo para las amplias. La asignación final por red la hace
+# `stream.parsear_salida_unificada` por longitud real, no por este umbral (que solo decide el
+# fraseo del prompt).
+UMBRAL_COPY_ESTRECHO = 600
 
-    El mismo `texto` y el mismo `copy_in` se reutilizan en cada red pedida (X, Instagram,
-    Facebook, TikTok, YouTube): NO una variante por plataforma. Así X nunca queda sin copy_in
-    (heredaba el "" cuando el modelo la trataba como red sin imagen). El copy sale SIN hashtags:
-    el equipo los añade aparte por grupos donde corresponde (Instagram/TikTok). Pide un único
-    bloque ```json con un OBJETO PLANO (sin array `piezas` por red). El límite de longitud va
-    anclado al MÁS ESTRICTO de las redes pedidas (desde `limites_plataforma`, fuente única)."""
+
+def instruccion_copy_unico(redes_ids: list[str]) -> str:
+    """Instrucción ADITIVA (copy UNIFICADO): un copy + un texto-en-imagen, SIN encoger IG/FB a X.
+
+    El `copy_in` se reutiliza en cada red pedida (así X nunca queda sin él). El copy sale SIN
+    hashtags (el equipo los añade aparte). Pide un único bloque ```json con un OBJETO PLANO.
+
+    Cuando se mezclan redes AMPLIAS (Instagram, Facebook…) con ESTRECHAS (X), pide DOS versiones
+    del mismo mensaje: `texto` (completa, para las amplias) y `texto_corto` (condensada ≤ límite
+    de las estrechas). Antes anclaba TODO al límite más estricto (X=280) y publicaba un tuit en
+    Instagram/Facebook. Si todas las redes son del mismo tipo, pide un único `texto`."""
     etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
+    estrechas = [
+        r for r in redes_ids
+        if (lim := limites_plataforma.limite_de(r)) is not None and lim < UMBRAL_COPY_ESTRECHO
+    ]
+    amplias = [r for r in redes_ids if r not in set(estrechas)]
+    cierre_json_copy_in = (
+        '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
+        '\\"\\" si no lleva imagen>"}. El `copy_in` es el texto SOBRE la imagen, distinto del '
+        "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta."
+    )
+    if estrechas and amplias:
+        tope_corto = min(limites_plataforma.limite_de(r) for r in estrechas)
+        nom_amplias = ", ".join(redes.nombre_por_id(r) for r in amplias)
+        nom_estrechas = ", ".join(redes.nombre_por_id(r) for r in estrechas)
+        return (
+            f"Este copy se publicará en estas redes: {etiquetas}. Escribe DOS versiones del MISMO "
+            "mensaje (no una variante distinta por red) y UN SOLO texto-en-imagen: "
+            f"`texto` es la versión COMPLETA para {nom_amplias}: aprovecha el espacio, desarrolla "
+            "la nota con contexto, datos y un cierre (NO la encojas a un tuit). "
+            f"`texto_corto` es la MISMA historia condensada para {nom_estrechas}, máximo "
+            f"{tope_corto} caracteres. "
+            "NO añadas hashtags: el equipo los pone aparte por grupos donde corresponde. "
+            "Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu "
+            "respuesta, añade un único bloque de código cercado ```json con esta forma exacta: "
+            '{"texto": "<el copy completo>", "texto_corto": "<el copy breve>", '
+            + cierre_json_copy_in
+        )
     limites = [
         limites_plataforma.limite_de(r) for r in redes_ids
         if limites_plataforma.limite_de(r) is not None
@@ -182,10 +219,7 @@ def instruccion_copy_unico(redes_ids: list[str]) -> str:
         "NO añadas hashtags: el equipo los pone aparte por grupos donde corresponde. "
         "Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu "
         "respuesta, añade un único bloque de código cercado ```json con esta forma exacta: "
-        '{"texto": "<el copy>", "copy_in": "<texto que va DENTRO de la imagen: titular/claim '
-        'corto, sin emojis; \\"\\" si no lleva imagen>"}. El `copy_in` es el texto SOBRE la '
-        "imagen, distinto del `texto` que la acompaña; respeta la línea editorial de "
-        "texto-en-imagen de la marca adjunta."
+        '{"texto": "<el copy>", ' + cierre_json_copy_in
     )
 
 

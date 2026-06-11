@@ -166,6 +166,115 @@ def test_extraer_og_image_ausente():
     assert pc._extraer_og_image("") == ""
 
 
+# --------------------------------------------------------------------------- #
+# Cuerpo del artículo + limpieza del snippet RSS (enriquecer la nota)          #
+# --------------------------------------------------------------------------- #
+
+
+def test_limpiar_snippet_decodifica_y_quita_boilerplate():
+    # Caso REAL de UnoTV: entidad sin decodificar + cola de WordPress.
+    crudo = (
+        "Normalistas mantienen cerrada la autopista [&#8230;] "
+        "The post Normalistas bloquean la caseta appeared first on UnoTV ."
+    )
+    limpio = pc._limpiar_snippet(crudo)
+    assert "The post" not in limpio
+    assert "appeared first on" not in limpio
+    assert "&#8230;" not in limpio and "[…]" not in limpio
+    assert limpio.startswith("Normalistas mantienen cerrada la autopista")
+
+
+def test_limpiar_snippet_vacio():
+    assert pc._limpiar_snippet("") == ""
+
+
+def test_extraer_texto_articulo_jsonld():
+    cuerpo = "Primer párrafo del cuerpo. " * 20  # supera _ART_MIN_TEXTO
+    html = (
+        '<html><head><script type="application/ld+json">'
+        '{"@type": "NewsArticle", "headline": "T", "articleBody": ' + json.dumps(cuerpo) + "}"
+        "</script></head><body><p>ruido</p></body></html>"
+    )
+    texto = pc._extraer_texto_articulo(html)
+    assert texto.startswith("Primer párrafo del cuerpo.")
+    assert "ruido" not in texto
+
+
+def test_extraer_texto_articulo_parrafos_fallback():
+    parrafo = "Este es un párrafo de cuerpo con suficiente longitud para no ser cruft."
+    html = (
+        "<html><body><article>"
+        "<p>corto</p>"  # < _ART_MIN_P_CHARS: se descarta
+        f"<p>{parrafo}</p><p>{parrafo}</p><p>{parrafo}</p>"
+        "</article></body></html>"
+    )
+    texto = pc._extraer_texto_articulo(html)
+    assert parrafo in texto
+    assert "corto" not in texto
+
+
+def test_extraer_texto_articulo_sin_cuerpo_es_vacio():
+    assert pc._extraer_texto_articulo("<html><body><p>x</p></body></html>") == ""
+    assert pc._extraer_texto_articulo("") == ""
+
+
+def test_nota_de_item_limpia_resumen_y_anexa_cuerpo():
+    item = {
+        "titulo": "Título",
+        "resumen": "Resumen [&#8230;] The post Título appeared first on UnoTV .",
+        "enlace": "https://ejemplo.test/n",
+    }
+    nota = pc._nota_de_item(item, "Cuerpo real del artículo.")
+    assert "The post" not in nota
+    assert "Artículo:\nCuerpo real del artículo." in nota
+    assert "Fuente: https://ejemplo.test/n" in nota
+
+
+def test_nota_de_cluster_incluye_texto_de_cada_fuente():
+    # Antes la nota solo llevaba título + 1 resumen + URLs; ahora lleva el texto de CADA fuente.
+    items = [
+        {"fuente_nombre": "UnoTV", "titulo": "Bloqueo en caseta", "url": "https://uno.test/a",
+         "resumen": "Normalistas cierran la autopista."},
+        {"fuente_nombre": "Infobae", "titulo": "Refuerzan seguridad", "url": "https://info.test/b",
+         "resumen": "Autoridades vigilan la zona."},
+    ]
+    cuerpos = {"https://uno.test/a": "Cuerpo UnoTV largo.", "https://info.test/b": "Cuerpo Infobae largo."}
+    nota = pc._nota_de_cluster("Caseta bajo vigilancia", "Resumen del cluster", items, cuerpos)
+    # Las dos fuentes aportan medio, resumen y cuerpo (no solo el link).
+    assert "UnoTV" in nota and "Infobae" in nota
+    assert "Cuerpo UnoTV largo." in nota and "Cuerpo Infobae largo." in nota
+    assert "https://uno.test/a" in nota and "https://info.test/b" in nota
+    assert "sintetiza y cruza" in nota
+
+
+def test_nota_de_cluster_sin_cuerpos_cae_a_resumenes():
+    items = [{"fuente_nombre": "UnoTV", "titulo": "T", "url": "https://uno.test/a", "resumen": "Resumen A"}]
+    nota = pc._nota_de_cluster("Título", "Resumen", items, None)
+    assert "Resumen A" in nota and "https://uno.test/a" in nota
+
+
+def test_fetch_cuerpo_gateado_off_no_toca_la_red(monkeypatch):
+    # Sin el flag, NO se llama al seam de red y devuelve "" (comportamiento previo).
+    monkeypatch.delenv("KENI_PIPELINE_FETCH_FUENTE", raising=False)
+    llamado = {"n": 0}
+
+    def _boom(enlace):
+        llamado["n"] += 1
+        return "no debería"
+
+    monkeypatch.setattr(pc, "_FETCH_ARTICULO", _boom)
+    assert pc._fetch_cuerpo("https://ejemplo.test/n") == ""
+    assert llamado["n"] == 0
+
+
+def test_fetch_cuerpo_gateado_on_usa_el_seam(monkeypatch):
+    monkeypatch.setenv("KENI_PIPELINE_FETCH_FUENTE", "1")
+    monkeypatch.setattr(pc, "_FETCH_ARTICULO", lambda enlace: "  Cuerpo del artículo.  ")
+    assert pc._fetch_cuerpo("https://ejemplo.test/n") == "Cuerpo del artículo."
+    # Enlace vacío: ni se intenta.
+    assert pc._fetch_cuerpo("") == ""
+
+
 def test_en_backoff_puro_segun_intentos_y_timestamp():
     """`en_backoff` (PURO sobre el dict): espera tras un intento RECIENTE; sin ts/intentos no."""
     from keni_consola.tiempo import ahora_iso

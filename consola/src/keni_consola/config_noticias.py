@@ -46,6 +46,7 @@ from ._config_comun import (
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
+    ENV_PIPELINE_FETCH_FUENTE,
     ENV_PIPELINE_TEMA_TTL_HORAS,
     ENV_PIPELINE_FUSION,
     ENV_PIPELINE_MAX,
@@ -670,6 +671,18 @@ def pipeline_en_vuelo_max() -> int:
     COMPLETA lo que entró, luego entran nuevas.
     """
     return _entero(ENV_PIPELINE_EN_VUELO_MAX, PIPELINE_EN_VUELO_MAX_DEF, minimo=1)
+
+
+def pipeline_fetch_fuente() -> bool:
+    """True si la ingesta debe DESCARGAR el cuerpo del artículo para la nota (`KENI_PIPELINE_FETCH_FUENTE`).
+
+    Def OFF (conservador): sin el flag la nota de origen es título+resumen (snippet RSS) como
+    hasta ahora. Con el flag, antes de encolar el copy el daemon baja el cuerpo del/los
+    artículo(s) y, en clusters, agrega el texto de CADA fuente —no solo sus URLs—, dándole a
+    `claude -p` material real para sintetizar sin gastar turnos en WebFetch. Best-effort: un
+    fetch que falle cae a título+resumen.
+    """
+    return _crudo(ENV_PIPELINE_FETCH_FUENTE).lower() in _VERDADEROS
 
 
 def pipeline_tema_ttl_horas() -> int:

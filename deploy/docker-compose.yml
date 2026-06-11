@@ -408,6 +408,11 @@ services:
       # para en la cola de revision; nada sale a redes sin que el humano lo autorice. Los flags
       # también se encienden EN CALIENTE desde el store editable (/data/ajustes.toml), sin
       # reiniciar el contenedor (store > env > defecto).
+      # ENRIQUECER LA NOTA: con esto, antes de generar copy la ingesta DESCARGA el cuerpo del
+      # artículo (no solo el snippet RSS) y, en clusters, agrega el texto de CADA fuente. Da a
+      # `claude -p` material real para sintetizar (clave en notas multi-fuente). Implica egress
+      # del daemon a los medios; OFF por defecto. Encender por env (descomentar) o en caliente:
+      #   KENI_PIPELINE_FETCH_FUENTE: "1"   # ingerir el cuerpo del/los artículo(s) en la nota
     volumes:
       - keni-data:/data
     # Secretos como ficheros en /run/secrets (no como env -> no salen en docker inspect).

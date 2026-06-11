@@ -86,6 +86,35 @@ def test_unificada_contenido_conserva_emojis_y_copy_in_no():
     assert all(p["copy_in"] == "GOLAZO" for p in piezas)
 
 
+def test_unificada_texto_corto_va_a_x_y_el_largo_a_ig_fb():
+    # X (límite 280) recibe `texto_corto`; Instagram/Facebook reciben el copy COMPLETO.
+    largo = "L" * 400  # supera el límite de X (280), no el de Instagram (2200)
+    salida = '```json\n{"texto": "' + largo + '", "texto_corto": "Versión breve", "copy_in": "T"}\n```'
+    piezas = stream.parsear_salida_unificada(salida, ["x", "instagram", "facebook"])["piezas"]
+    por_red = {p["red"]: p["contenido"] for p in piezas}
+    assert por_red["x"] == "Versión breve"
+    assert por_red["instagram"] == largo
+    assert por_red["facebook"] == largo
+    # Todas comparten el mismo copy_in.
+    assert all(p["copy_in"] == "T" for p in piezas)
+
+
+def test_unificada_texto_corto_se_ignora_si_el_largo_cabe():
+    # Si el copy completo cabe en X, NO se usa la versión corta (todas iguales).
+    salida = '```json\n{"texto": "Cabe en X", "texto_corto": "Más corto aún", "copy_in": ""}\n```'
+    piezas = stream.parsear_salida_unificada(salida, ["x", "instagram"])["piezas"]
+    assert all(p["contenido"] == "Cabe en X" for p in piezas)
+
+
+def test_unificada_sin_texto_corto_el_largo_no_se_trunca():
+    # Sin `texto_corto`, X hereda el copy largo TAL CUAL (la validación de longitud lo cribará
+    # después; el parser no trunca). Comportamiento previo intacto.
+    largo = "L" * 400
+    salida = '```json\n{"texto": "' + largo + '", "copy_in": ""}\n```'
+    piezas = stream.parsear_salida_unificada(salida, ["x", "instagram"])["piezas"]
+    assert all(p["contenido"] == largo for p in piezas)
+
+
 # --------------------------------------------------------------------------- #
 # Politica de emojis del parseo (vive en prompt + editorial, no en limpieza)   #
 # --------------------------------------------------------------------------- #

@@ -414,8 +414,9 @@ def avisos_de_piezas(
 ) -> list[str]:
     """Avisos de patrón de un LOTE de piezas parseadas (forma de `stream.parsear_salida*`).
 
-    En copy unificado el texto es el mismo en todas las redes: se deduplican los avisos
-    idénticos salvo el prefijo de red, conservando la red más restrictiva (la primera).
+    En copy unificado el texto suele coincidir entre redes (X puede llevar una versión más
+    corta): se lintea CADA pieza y se deduplican los avisos idénticos salvo el prefijo de red,
+    conservando la red más restrictiva (la primera).
     """
     avisos: list[str] = []
     vistos: set[str] = set()

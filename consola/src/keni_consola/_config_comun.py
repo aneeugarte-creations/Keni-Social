@@ -244,6 +244,12 @@ ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (QA/Copy/autogen/revisar):
 # el volumen lo regula la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la cola.
 ENV_PIPELINE_EN_VUELO_MAX = "KENI_PIPELINE_EN_VUELO_MAX"  # gate serial: temas en vuelo por marca
+# Enriquecimiento de la NOTA de origen en ingesta: antes de encolar el copy, el daemon descarga
+# el CUERPO del/los artículo(s) (no solo el snippet RSS) y, en clusters, agrega el texto de CADA
+# fuente —no solo sus URLs—. Así `claude -p` sintetiza sobre material real sin gastar turnos en
+# WebFetch ni pedir permisos. CONSERVADOR por defecto (OFF): sin el flag la nota es título+resumen
+# como hasta ahora. Best-effort: un fetch que falle cae a título+resumen (nunca rompe el barrido).
+ENV_PIPELINE_FETCH_FUENTE = "KENI_PIPELINE_FETCH_FUENTE"  # ingerir el cuerpo del artículo en la nota
 # Frescura del pipeline (ventana deslizante sobre el ranking): TTL en horas de un tema EN VUELO.
 # Lo que no se completó a tiempo CADUCA y libera su hueco; hoy entra lo de hoy, no el backlog.
 ENV_PIPELINE_TEMA_TTL_HORAS = "KENI_PIPELINE_TEMA_TTL_HORAS"  # caducidad de temas en vuelo

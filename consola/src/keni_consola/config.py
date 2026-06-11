@@ -463,6 +463,7 @@ from .config_noticias import (  # noqa: F401
     perfil_editorial_ttl_horas,
     pipeline_activo,
     pipeline_en_vuelo_max,
+    pipeline_fetch_fuente,
     pipeline_tema_ttl_horas,
     parsear_plan,
     pipeline_max,

@@ -19,7 +19,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
-from .. import config
+from .. import config, limites_plataforma
 from ..tiempo import hoy_utc
 
 
@@ -762,8 +762,14 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     """Variante de `parsear_salida` para copy UNIFICADO: UN copy + UN copy_in para TODAS las redes.
 
     A diferencia de `parsear_salida` (una pieza por red, vía el array `piezas`), aquí el bloque
-    ```json final trae un OBJETO PLANO `{"texto","copy_in"}`; ese mismo copy + copy_in se EMITE
-    para CADA red de `redes_ids`. Así X nunca queda sin `copy_in` (lo hereda como las demás).
+    ```json final trae un OBJETO PLANO `{"texto", "copy_in"}` (+ opcional `texto_corto`); ese copy
+    + copy_in se EMITE para CADA red de `redes_ids`. Así X nunca queda sin `copy_in`.
+
+    `texto_corto` (opcional): versión condensada para las redes ESTRECHAS. Cada red usa
+    `texto_corto` SOLO si su límite técnico es menor que la longitud de `texto` (p. ej. X=280
+    frente a un copy largo); las amplias (Instagram, Facebook…) usan `texto` completo. Sin
+    `texto_corto`, todas heredan `texto` (comportamiento previo): un copy demasiado largo para X
+    lo descartará luego la validación de longitud, no este parser.
 
     Resiliente: si el modelo emite el array `piezas` (forma vieja), toma la PRIMERA pieza con
     `texto`. Si no hay JSON utilizable, el copy es el texto limpio entero (fallback). `resultado`
@@ -787,10 +793,13 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
             limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
 
     texto_base: str | None = None
+    texto_corto = ""
     copy_in_base = ""
     if isinstance(datos, dict):
         if isinstance(datos.get("texto"), str):
             texto_base = datos["texto"]
+            tc = datos.get("texto_corto")
+            texto_corto = tc if isinstance(tc, str) else ""
             ci = datos.get("copy_in")
             copy_in_base = ci if isinstance(ci, str) else ""
         else:
@@ -808,12 +817,19 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     if texto_base is None:
         texto_base = limpio
 
-    contenido = texto_base.strip()
+    contenido_largo = texto_base.strip()
+    contenido_corto = texto_corto.strip()
     copy_in_base = quitar_emojis(copy_in_base)
-    piezas: list[dict[str, object]] = [
-        {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
-        for r in redes_ids
-    ]
+    piezas: list[dict[str, object]] = []
+    for r in redes_ids:
+        # Una red usa el copy CORTO solo si su límite técnico no admite el largo (X=280 vs un copy
+        # de Instagram/Facebook). Sin `texto_corto`, todas usan el largo (comportamiento previo).
+        limite = limites_plataforma.limite_de(r)
+        usar_corto = bool(contenido_corto) and limite is not None and len(contenido_largo) > limite
+        contenido = contenido_corto if usar_corto else contenido_largo
+        piezas.append(
+            {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
+        )
     return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
 
 
