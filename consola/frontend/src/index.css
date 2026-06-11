@@ -114,4 +114,49 @@
   .text-label {
     @apply text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground;
   }
+
+  /*
+    BARRA SUPERIOR DEL EDITOR (Imagen / Vídeo) — degradado naranja de marca, estilo Canva.
+    Lo activa `AppShell` con la clase `.topbar-editor` solo en las rutas del editor. El degradado
+    recorre el naranja del logo (favicon): ámbar cálido → naranja → rojo-naranja profundo.
+
+    El cromo de la barra (título, selector de marca, campana, deshacer/rehacer, «Más», Exportar…)
+    usa tokens semánticos. En vez de recolorear cada componente, REASIGNAMOS los tokens A BLANCO
+    SOLO en este scope, así todo el texto e iconos se leen sobre el degradado. `--accent` (el hover
+    de toda la app) pasa a un naranja más profundo para que el hover se note sobre el degradado.
+  */
+  .topbar-editor {
+    background-image: linear-gradient(90deg, #fb7a2a 0%, #f1560f 52%, #dc3c00 100%);
+    --foreground: 0 0% 100%;
+    --muted-foreground: 0 0% 100%;
+    --muted: 0 0% 100%; /* píldora de marca: blanco translúcido (bg-muted/40) sobre el naranja */
+    --accent: 20 100% 40%; /* hover: tinte naranja profundo, texto blanco legible */
+    --accent-foreground: 0 0% 100%;
+    --border: 28 100% 92%; /* hairline cálido tenue */
+    --input: 28 100% 92%;
+  }
+  /*
+    Los menús desplegables de la barra (selector de marca, campana, «Más», editor de muestra) se
+    pintan INLINE dentro del header, así que heredarían los tokens en blanco y su texto quedaría
+    invisible sobre su panel blanco. Restauramos los tokens por defecto en sus superficies
+    `bg-popover` (claro y oscuro), de modo que cada panel vuelve a ser legible.
+  */
+  .topbar-editor :where(.bg-popover) {
+    --foreground: 0 0% 9%;
+    --muted-foreground: 0 0% 40%;
+    --muted: 0 0% 96%;
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 9%;
+    --border: 0 0% 94%;
+    --input: 0 0% 92%;
+  }
+  .dark .topbar-editor :where(.bg-popover) {
+    --foreground: 0 0% 93%;
+    --muted-foreground: 0 0% 56%;
+    --muted: 0 0% 11%;
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 93%;
+    --border: 0 0% 14%;
+    --input: 0 0% 16%;
+  }
 }

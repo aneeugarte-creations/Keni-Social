@@ -38,6 +38,14 @@ export function AppShell() {
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
 
+  // Editor de contenido (Imagen / Vídeo): la barra superior se viste con el degradado naranja de
+  // marca (estilo Canva) y su cromo pasa a blanco. El degradado y el recoloreado del cromo viven
+  // en `.topbar-editor` (index.css), acotados a esta cabecera; los menús desplegables, que se
+  // pintan inline dentro de la barra, restauran sus tokens allí para seguir siendo legibles.
+  const enEditor =
+    location.pathname.startsWith("/contenido/imagen") ||
+    location.pathname.startsWith("/contenido/video");
+
   // Detecta un deploy nuevo y recarga en la siguiente navegación (sin pedirlo a mano).
   useDetectorActualizacion();
 
@@ -133,7 +141,14 @@ export function AppShell() {
             ANTES que `<main>` en el DOM, el feed lo tapa. z-30 lo eleva sobre el
             contenido pero queda por debajo de overlays en portal (menú móvil z-40,
             diálogos z-50, toasts z-[100]). */}
-        <header className="relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:px-6">
+        <header
+          className={cn(
+            "relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border px-4 lg:px-6",
+            enEditor
+              ? "topbar-editor"
+              : "bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          )}
+        >
           <Button
             variant="ghost"
             size="icon"
