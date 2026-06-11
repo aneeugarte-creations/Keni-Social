@@ -1104,6 +1104,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         marca        TEXT NOT NULL DEFAULT '',
         color        TEXT NOT NULL DEFAULT '',
         keywords     TEXT NOT NULL DEFAULT '',
+        hashtags     TEXT NOT NULL DEFAULT '',
         activo       INTEGER NOT NULL DEFAULT 1,
         ttl_dias     INTEGER NOT NULL DEFAULT 0,
         es_evergreen     INTEGER NOT NULL DEFAULT 0,
@@ -1914,6 +1915,8 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
     - `ttl_dias` (INTEGER, def 0): días que un ítem de esta línea se considera fresco.
       0 = sin caducidad / evergreen.
     - `es_evergreen` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
+    - `hashtags` (CSV/JSON, def ''): hashtags propios de la línea/estrategia, que se inyectan al
+      final del copy de sus piezas (un único sitio para hashtags + estrategia de marca).
 
     Solo aplica si la tabla ya existe (un primer arranque la crea con las columnas).
     """
@@ -1923,6 +1926,10 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
     if "keywords" not in cols:
         con.execute(
             "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS keywords TEXT NOT NULL DEFAULT ''"
+        )
+    if "hashtags" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS hashtags TEXT NOT NULL DEFAULT ''"
         )
     if "ttl_dias" not in cols:
         con.execute(

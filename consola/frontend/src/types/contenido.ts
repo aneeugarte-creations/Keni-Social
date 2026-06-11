@@ -102,6 +102,8 @@ export interface Etiqueta {
   color: string;
   /** CSV de palabras clave para auto-clasificar piezas en esta etiqueta. */
   keywords: string;
+  /** CSV de hashtags propios (SIN '#') que se inyectan al final del copy de sus piezas. */
+  hashtags: string;
   activo: boolean;
   /** Días que un ítem de esta línea se considera fresco. 0 = sin caducidad / evergreen. */
   ttl_dias: number;
@@ -131,6 +133,8 @@ export interface CuerpoCrearEtiqueta {
   color?: string;
   /** CSV de palabras clave para auto-clasificar. */
   keywords?: string;
+  /** CSV de hashtags propios (SIN '#') que se inyectan al final del copy. */
+  hashtags?: string;
   /** Días de vida del ítem (0 = sin caducidad / evergreen). */
   ttl_dias?: number;
   /** True = línea evergreen, nunca caduca. */
@@ -143,6 +147,8 @@ export interface CuerpoActualizarEtiqueta {
   marca?: string;
   color?: string;
   keywords?: string;
+  /** CSV de hashtags propios (SIN '#') que se inyectan al final del copy. */
+  hashtags?: string;
   activo?: boolean;
   /** Días de vida del ítem (0 = sin caducidad / evergreen). */
   ttl_dias?: number;

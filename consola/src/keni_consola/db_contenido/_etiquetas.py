@@ -20,6 +20,7 @@ __all__ = [
     "obtener_etiqueta_por_nombre",
     "actualizar_etiqueta",
     "borrar_etiqueta",
+    "hashtags_de_contenido",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -35,6 +36,7 @@ _COLS_ETIQUETA = (
     "marca",
     "color",
     "keywords",
+    "hashtags",
     "activo",
     "ttl_dias",
     "es_evergreen",
@@ -48,6 +50,7 @@ _CAMPOS_EDITABLES_ETIQUETA: tuple[str, ...] = (
     "marca",
     "color",
     "keywords",
+    "hashtags",
     "activo",
     "ttl_dias",
     "es_evergreen",
@@ -70,6 +73,7 @@ def crear_etiqueta(
     marca: str = "",
     color: str = "",
     keywords: str = "",
+    hashtags: str = "",
     activo: bool = True,
     ttl_dias: int = 0,
     es_evergreen: bool = False,
@@ -86,6 +90,7 @@ def crear_etiqueta(
         "marca": marca or "",
         "color": color or "",
         "keywords": keywords or "",
+        "hashtags": hashtags or "",
         "activo": 1 if activo else 0,
         "ttl_dias": max(0, int(ttl_dias or 0)),
         "es_evergreen": 1 if es_evergreen else 0,
@@ -133,6 +138,37 @@ def listar_etiquetas(
     finally:
         con.close()
     return [_fila_a_etiqueta(f) for f in filas]
+
+
+def hashtags_de_contenido(contenido_id: str) -> list[str]:
+    """Hashtags (SIN '#', en orden, sin duplicar) de TODAS las etiquetas asignadas a un
+    contenido que tengan hashtags propios — contenido (verticales) y estrategia (campañas).
+
+    Para INYECTAR al final del copy de sus piezas: un único sitio (la línea/etiqueta) gobierna
+    los hashtags. Orden estable (clase, nombre) y dedup case-insensitive entre líneas.
+    """
+    if not contenido_id:
+        return []
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT e.hashtags AS hashtags FROM etiquetas e "
+            "JOIN contenido_etiquetas ce ON ce.etiqueta_id = e.id "
+            "WHERE ce.contenido_id = ? AND e.hashtags <> '' "
+            "ORDER BY e.clase ASC, e.nombre ASC",
+            (contenido_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    salida: list[str] = []
+    claves: set[str] = set()
+    for fila in filas:
+        for tag in str(fila["hashtags"] or "").split(","):
+            t = tag.strip()
+            if t and t.lower() not in claves:
+                claves.add(t.lower())
+                salida.append(t)
+    return salida
 
 
 def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:

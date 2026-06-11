@@ -149,6 +149,7 @@ from .db_contenido import (  # noqa: F401
     estado_pieza_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
+    hashtags_de_contenido,
     ids_contenido_con_copy,
     existe_publicado_similar_en_cache,
     listar_contenido,

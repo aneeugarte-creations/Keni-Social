@@ -441,6 +441,7 @@ def crear_etiqueta(
     marca: str = "",
     color: str = "",
     keywords: str = "",
+    hashtags: str = "",
     activo: bool = True,
     ttl_dias: int = 0,
     es_evergreen: bool = False,
@@ -455,6 +456,7 @@ def crear_etiqueta(
         marca=marca,
         color=color,
         keywords=keywords,
+        hashtags=hashtags,
         activo=activo,
         ttl_dias=ttl_dias,
         es_evergreen=es_evergreen,
@@ -469,6 +471,11 @@ def listar_etiquetas(
 ) -> list[dict[str, Any]]:
     """Lista etiquetas (`marca` incluye las globales). Delegado en `db.py`."""
     return db.listar_etiquetas(marca=marca, clase=clase, solo_activas=solo_activas)
+
+
+def hashtags_de_contenido(contenido_id: str) -> list[str]:
+    """Hashtags (sin '#') de las etiquetas asignadas a un contenido. Delegado en `db.py`."""
+    return db.hashtags_de_contenido(contenido_id)
 
 
 def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:

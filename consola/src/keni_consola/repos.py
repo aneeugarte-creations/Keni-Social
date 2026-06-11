@@ -101,6 +101,7 @@ from .repos_contenido import (  # noqa: F401
     etiquetas_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
+    hashtags_de_contenido,
     ids_contenido_con_copy,
     ids_contenido_con_etiqueta,
     listar_contenido,

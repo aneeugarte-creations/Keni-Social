@@ -141,6 +141,38 @@ def _motivo_invalida(pieza: dict[str, object]) -> str | None:
     return None
 
 
+_RE_HASHTAG = re.compile(r"#(\w+)", re.UNICODE)
+
+
+def _inyectar_hashtags(texto: str, tags: list[str], *, red: str) -> str:
+    """Añade al FINAL del copy los hashtags de la línea que NO estén ya, sin pasarse del límite
+    técnico de la red.
+
+    - Dedup case-insensitive contra los hashtags YA presentes en el texto (la IA pudo ponerlos).
+    - Respeta `limites_plataforma`: añade los que QUEPAN (mide el tramo más largo, igual que
+      `_motivo_invalida`); si alguno no cabe, lo salta. Si ninguno cabe, deja el texto igual
+      (el badge marcará «Faltan hashtags» y el equipo lo ajusta en revisión).
+    - Inline al final (separado por espacio): compacto y seguro para el límite de X.
+    """
+    if not tags:
+        return texto
+    presentes = {m.lower() for m in _RE_HASHTAG.findall(texto)}
+    faltan = [t for t in tags if t.lower() not in presentes]
+    if not faltan:
+        return texto
+    limite = limites_plataforma.limite_de(red)
+    resultado = texto.rstrip()
+    for tag in faltan:
+        candidato = f"{resultado} #{tag}" if resultado else f"#{tag}"
+        if limite is not None:
+            tramos = _tramos_publicables(candidato)
+            mas_largo = max((len(t) for t in tramos), default=len(candidato))
+            if mas_largo > limite:
+                continue  # este hashtag no cabe; probamos el siguiente
+        resultado = candidato
+    return resultado
+
+
 def _avisar_piezas_descartadas(motivos: list[str], *, contenido_id: str, marca: str) -> None:
     """Deja rastro de las piezas descartadas: WARN + nota en el tema (si lo hay).
 
@@ -300,12 +332,22 @@ def crear_publicaciones_desde_piezas(
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
         )
+    # HASHTAGS DE LÍNEA: los hashtags propios de las líneas/estrategias asignadas al tema se
+    # inyectan al final del copy de CADA pieza (un único sitio gobierna hashtags + estrategia).
+    # Se calcula una vez (todas las piezas cuelgan del mismo tema). Sin tema, no hay línea -> [].
+    hashtags_linea = repos.hashtags_de_contenido(contenido_id) if contenido_id else []
     descartes: list[str] = []
     try:
         for pieza in piezas:
             red = pieza.get("red")
             if redes_filtro is not None and isinstance(red, str) and red not in redes_filtro:
                 continue  # filtro del llamante (eligió menos redes), no es una pieza inválida
+            # Inyecta los hashtags de la línea ANTES de validar (para no pasarnos del límite). Se
+            # trabaja sobre una copia de la pieza (no muta la entrada del llamante).
+            if hashtags_linea and isinstance(red, str):
+                crudo = pieza.get("contenido")
+                if isinstance(crudo, str):
+                    pieza = {**pieza, "contenido": _inyectar_hashtags(crudo, hashtags_linea, red=red)}
             motivo = _motivo_invalida(pieza)
             if motivo is not None:
                 descartes.append(motivo)

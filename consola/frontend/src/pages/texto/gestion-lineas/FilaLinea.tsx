@@ -39,6 +39,7 @@ export function FilaLinea({
   const [nombre, setNombre] = React.useState(etiqueta.nombre);
   const [marca, setMarca] = React.useState(etiqueta.marca || GLOBAL);
   const [keywords, setKeywords] = React.useState(etiqueta.keywords ?? "");
+  const [hashtags, setHashtags] = React.useState(etiqueta.hashtags ?? "");
   const [ttlDias, setTtlDias] = React.useState(etiqueta.ttl_dias ?? 0);
   const [esEvergreen, setEsEvergreen] = React.useState(etiqueta.es_evergreen ?? false);
 
@@ -49,6 +50,7 @@ export function FilaLinea({
     setNombre(etiqueta.nombre);
     setMarca(etiqueta.marca || GLOBAL);
     setKeywords(etiqueta.keywords ?? "");
+    setHashtags(etiqueta.hashtags ?? "");
     setTtlDias(etiqueta.ttl_dias ?? 0);
     setEsEvergreen(etiqueta.es_evergreen ?? false);
     setEditando(true);
@@ -60,6 +62,7 @@ export function FilaLinea({
         nombre: nombre.trim(),
         marca: marca === GLOBAL ? "" : marca,
         keywords: keywords.trim(),
+        hashtags: hashtags.trim(),
         ttl_dias: ttlDias,
         es_evergreen: esEvergreen,
       }),
@@ -149,6 +152,21 @@ export function FilaLinea({
             rows={2}
           />
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`edit-hashtags-${etiqueta.id}`}>
+            Hashtags{" "}
+            <span className="font-normal text-muted-foreground">
+              (sin #, separados por coma; se añaden al final del copy)
+            </span>
+          </Label>
+          <Textarea
+            id={`edit-hashtags-${etiqueta.id}`}
+            value={hashtags}
+            onChange={(e) => setHashtags(e.target.value)}
+            placeholder="Nacional, Mundial2026"
+            rows={2}
+          />
+        </div>
         <div className="flex justify-end gap-2">
           <Button
             variant="ghost"
@@ -179,6 +197,10 @@ export function FilaLinea({
   const palabras = (etiqueta.keywords ?? "")
     .split(",")
     .map((k) => k.trim())
+    .filter(Boolean);
+  const tags = (etiqueta.hashtags ?? "")
+    .split(",")
+    .map((t) => t.trim())
     .filter(Boolean);
 
   return (
@@ -236,6 +258,19 @@ export function FilaLinea({
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">Sin palabras clave.</p>
+      )}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {tags.map((t) => (
+            <Badge
+              key={t}
+              variant="outline"
+              className="font-normal text-keni-700 dark:text-keni-300"
+            >
+              #{t}
+            </Badge>
+          ))}
+        </div>
       )}
     </FilaConAcciones>
   );

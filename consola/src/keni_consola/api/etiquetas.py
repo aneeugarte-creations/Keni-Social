@@ -78,6 +78,30 @@ def _normalizar_keywords(valor: object) -> str:
     return ", ".join(vistas)[:_MAX_KEYWORDS]
 
 
+_MAX_HASHTAGS = 400
+# Lo que NO es carácter de palabra (acentos/dígitos incluidos bajo UNICODE) se quita del tag.
+_RE_TAG_NO_PALABRA = re.compile(r"[^\w]", re.UNICODE)
+
+
+def _normalizar_hashtags(valor: object) -> str:
+    """CSV de hashtags propios de la línea/estrategia, SIN el '#' (se añade al inyectar).
+
+    Cada tag se sanea a un token de palabra (sin espacios ni símbolos: «Mundial 2026» →
+    «Mundial2026»), se admite un '#' inicial opcional, se deduplica case-insensitive y se
+    PRESERVA el casing (los hashtags se estilizan: #Nacional, #Finanzas). Acepta separadores
+    por coma o espacio. Se inyectan al final del copy de las piezas de esta línea."""
+    if not isinstance(valor, str):
+        return ""
+    vistas: list[str] = []
+    claves: set[str] = set()
+    for crudo in re.split(r"[,\s]+", valor):
+        tag = _RE_TAG_NO_PALABRA.sub("", crudo.lstrip("#"))
+        if tag and tag.lower() not in claves:
+            claves.add(tag.lower())
+            vistas.append(tag)
+    return ", ".join(vistas)[:_MAX_HASHTAGS]
+
+
 async def listar(request: Request) -> Response:
     """GET /api/etiquetas: catálogo de etiquetas.
 
@@ -110,7 +134,8 @@ def _validar_ttl_dias(valor: object) -> int:
 
 async def crear(request: Request) -> Response:
     """POST /api/etiquetas: crea una etiqueta. Cuerpo: `nombre` (obligatorio), `clase`,
-    `marca` ('' = global), `color`, `ttl_dias` (int, def 0), `es_evergreen` (bool, def false)."""
+    `marca` ('' = global), `color`, `keywords`, `hashtags` (CSV sin '#'), `ttl_dias` (int,
+    def 0), `es_evergreen` (bool, def false)."""
     datos = await leer_json(request)
     nombre = datos.get("nombre")
     if not isinstance(nombre, str) or not nombre.strip():
@@ -134,6 +159,7 @@ async def crear(request: Request) -> Response:
         marca=marca,
         color=_validar_color(datos.get("color")),
         keywords=_normalizar_keywords(datos.get("keywords")),
+        hashtags=_normalizar_hashtags(datos.get("hashtags")),
         ttl_dias=_validar_ttl_dias(datos.get("ttl_dias", 0)),
         es_evergreen=bool(datos.get("es_evergreen", False)),
     )
@@ -141,7 +167,8 @@ async def crear(request: Request) -> Response:
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/etiquetas/{id}: edita nombre/clase/marca/color/activo (todos opcionales)."""
+    """PATCH /api/etiquetas/{id}: edita nombre/clase/marca/color/keywords/hashtags/activo/
+    ttl_dias/es_evergreen (todos opcionales)."""
     etiqueta_id = request.path_params["etiqueta_id"]
     actual = repos.obtener_etiqueta(etiqueta_id)
     if actual is None:
@@ -167,6 +194,8 @@ async def actualizar(request: Request) -> Response:
         campos["color"] = _validar_color(datos.get("color"))
     if "keywords" in datos:
         campos["keywords"] = _normalizar_keywords(datos.get("keywords"))
+    if "hashtags" in datos:
+        campos["hashtags"] = _normalizar_hashtags(datos.get("hashtags"))
     if "activo" in datos:
         campos["activo"] = bool(datos["activo"])
     if "ttl_dias" in datos:
