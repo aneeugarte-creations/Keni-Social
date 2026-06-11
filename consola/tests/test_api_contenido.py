@@ -410,6 +410,73 @@ def test_aportar_sin_redes_usa_canonicas(entorno):
     assert all(p["red"] != "web" for p in cont["plataformas"])
 
 
+def test_post_directo_crea_borradores_con_copy(entorno):
+    """El alta directa deposita UNA pieza-borrador por red con el copy FINAL del equipo."""
+    c = _cli()
+    r = c.post(
+        "/api/contenido/post-directo",
+        json={
+            "titulo": "Arranque del Mundial",
+            "copy": "Arranca el Mundial 2026 en CDMX 🎉",
+            "marca": "unotv",
+            "redes": ["x", "instagram"],
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    # Origen propio, EXCLUIDO de la auto-generación: aquí no hay nada que redactar.
+    assert cont["origen"] == "post-directo"
+    assert {p["red"] for p in cont["plataformas"]} == {"x", "instagram"}
+    # Las piezas nacen con el copy del humano y a falta SOLO del arte.
+    assert all(p["copy"] == "Arranca el Mundial 2026 en CDMX 🎉" for p in cont["plataformas"])
+    assert all(not p["falta_copy"] for p in cont["plataformas"])
+    assert all(p["falta_imagen"] for p in cont["plataformas"])
+    # Y son PUBLICACIONES del feed (mismo motor que el copy generado), no checklist suelto.
+    pubs = c.get("/api/publicaciones").json()["publicaciones"]
+    assert {p["red"] for p in pubs} == {"x", "instagram"}
+    assert all(p["contenido"] == "Arranca el Mundial 2026 en CDMX 🎉" for p in pubs)
+    assert all(p["contenido_id"] == cont["id"] for p in pubs)
+
+
+def test_post_directo_deriva_titulo_y_redes_por_defecto(entorno):
+    """Sin título usa la primera línea del copy; sin redes, las del formato foto."""
+    c = _cli()
+    r = c.post(
+        "/api/contenido/post-directo",
+        json={"copy": "Última hora desde el estadio.\n\nMéxico gana 2-1.", "marca": "unotv"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["titulo"] == "Última hora desde el estadio."
+    # Mismas redes a las que el flujo automático manda una pieza foto.
+    assert {p["red"] for p in cont["plataformas"]} == {"instagram", "x", "facebook"}
+
+
+def test_post_directo_validaciones_400(entorno):
+    c = _cli()
+    # Sin copy no hay post (es justo lo que diferencia esta alta).
+    r = c.post("/api/contenido/post-directo", json={"marca": "unotv"}, headers=_ORIGIN)
+    assert r.status_code == 400
+    # La marca es obligatoria y debe existir.
+    r = c.post("/api/contenido/post-directo", json={"copy": "Hola"}, headers=_ORIGIN)
+    assert r.status_code == 400
+    r = c.post(
+        "/api/contenido/post-directo",
+        json={"copy": "Hola", "marca": "no-existe"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    # Una red desconocida (o el canal "web" del tablero) se rechaza: esto crea publicaciones.
+    r = c.post(
+        "/api/contenido/post-directo",
+        json={"copy": "Hola", "marca": "unotv", "redes": ["web"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
 # Bytes mínimos de un "clip" (no es un MP4 real: la transcripción real está MOCKEADA).
 _CLIP_FALSO = b"\x00\x00\x00\x18ftypmp42fakeclipbytes"
 

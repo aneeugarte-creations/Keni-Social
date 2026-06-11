@@ -6,6 +6,7 @@ import type {
   CuerpoActualizarPlataforma,
   CuerpoAportarMaterial,
   CuerpoCrearContenido,
+  CuerpoCrearPostDirecto,
   CuerpoSugerirHora,
   RespuestaContenido,
   RespuestaContenidoItem,
@@ -92,6 +93,11 @@ export const apiContenido = {
       timeoutMs: 120_000,
     });
   },
+  // ALTA DIRECTA de un post desde el feed: el equipo teclea el COPY FINAL y nace un
+  // borrador por red por el MISMO motor que el copy generado (sin generación: el copy es
+  // del humano). La pieza sigue el flujo normal (arte, revisión, programación).
+  crearPostDirecto: (cuerpo: CuerpoCrearPostDirecto) =>
+    peticion<RespuestaContenidoItem>("/contenido/post-directo", { metodo: "POST", json: cuerpo }),
   // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).
   sugerirHora: (cuerpo: CuerpoSugerirHora) =>
     peticion<RespuestaSugerirHora>("/planificacion/sugerir-hora", { metodo: "POST", json: cuerpo }),

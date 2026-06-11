@@ -280,6 +280,13 @@ ORIGEN_EQUIPO = "equipo"
 # curación HUMANA explícita (el equipo empujó esa historia, a menudo una breaking).
 ORIGEN_HISTORIA = "historia"
 
+# Tema creado por el ALTA DIRECTA de un post desde el feed (`api/contenido.post_directo`):
+# el equipo teclea el COPY FINAL de la publicación (no material para redactar). NO está en
+# `ORIGENES_AUTOGEN` a propósito: no hay nada que redactar (las piezas nacen con copy);
+# el resto del flujo (arte por red, revisión, programación) las trata como a cualquier
+# borrador depositado por el motor de copy.
+ORIGEN_POST_DIRECTO = "post-directo"
+
 # Tema creado desde el cajón PRESIDENCIA (`api/presidencia`): nota que llega por WhatsApp
 # desde presidencia (texto + 4-5 imágenes y algún video) y que el equipo vuelca tal cual.
 # Genera AUTOMÁTICAMENTE una pieza `formato='carrusel'` en el feed (portada con placa +

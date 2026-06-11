@@ -41,6 +41,7 @@ import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 
+import { DialogoCrearPost } from "./DialogoCrearPost";
 import { GRID_COLS, MAX_W_FEED, REDES_POR_FORMATO } from "./formato";
 import { CabeceraIdea, GrupoIdea, PlaceholderRed, type GrupoDeIdea } from "./GrupoIdea";
 import { PieFeed, SkeletonPost, useSentinelInfinito } from "./infinito";
@@ -103,6 +104,10 @@ export default function FeedIdeacion() {
   const { red, linea } = useFiltrosContenido();
 
   const rootRef = React.useRef<HTMLDivElement>(null);
+
+  // Diálogo "Crear post" (alta directa): el equipo teclea el copy FINAL y nace un
+  // borrador por red por el mismo motor que el copy generado.
+  const [creandoPost, setCreandoPost] = React.useState(false);
 
   // La vista activa vive SOLO en la URL (`?vista=`): derivada, sin useState que se
   // desincronice. "todo" (el default) va sin parámetro para no ensuciar el enlace.
@@ -475,8 +480,18 @@ export default function FeedIdeacion() {
               Actualizar
             </ItemMenu>
           </MenuAcciones>
+          {/* Frontera con el alta: crear un post es de OTRA naturaleza que ver/refrescar. */}
+          <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
+          {/* Alta directa: tu copy FINAL, tal cual, como borrador por red — el mismo motor
+              que las piezas que nacen al usar una noticia/investigación, sin generación.
+              Sin tooltip: el botón ya se nombra a sí mismo (texto visible). */}
+          <Button size="sm" className="h-8 gap-1.5" onClick={() => setCreandoPost(true)}>
+            <Plus className="h-4 w-4" />
+            Crear post
+          </Button>
         </div>
       </AccionesPagina>
+      <DialogoCrearPost abierto={creandoPost} onCerrar={() => setCreandoPost(false)} />
 
       {/* UN SOLO EJE de composición: pestañas, estados (skeleton/error/vacío), feed y pie viven
           en la MISMA columna centrada (`MAX_W_FEED` por columnas efectivas). Antes las pestañas

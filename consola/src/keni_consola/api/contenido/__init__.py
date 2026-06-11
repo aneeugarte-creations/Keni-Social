@@ -32,6 +32,7 @@ variable `RUTAS` que este `__init__` exporta (mismo orden/paths/métodos que ant
   - `asistente.py`  : previsualizar (placeholders) + asistente_ia (copy IA).
   - `importar.py`   : importar (calendario tabular o IA al worker).
   - `aportar.py`    : aportar (puerta creativa del equipo).
+  - `post_directo.py`: crear_post_directo (alta directa de un post con copy final).
 ================================================================================
 """
 
@@ -50,6 +51,7 @@ from .plataformas import (
     agregar_plataforma,
     borrar_plataforma,
 )
+from .post_directo import crear_post_directo
 from .radar import desde_radar
 from .tablero import actualizar, borrar, crear, listar
 
@@ -62,6 +64,7 @@ __all__ = [
     "metricas",
     "desde_radar",
     "aportar",
+    "crear_post_directo",
     "importar",
     "previsualizar",
     "asistente_ia",
@@ -80,6 +83,7 @@ RUTAS = [
     Route("/api/contenido/metricas", metricas, methods=["GET"]),
     Route("/api/contenido/desde-radar", desde_radar, methods=["POST"]),
     Route("/api/contenido/aportar", aportar, methods=["POST"]),
+    Route("/api/contenido/post-directo", crear_post_directo, methods=["POST"]),
     Route("/api/contenido/importar", importar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/preview", previsualizar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/asistente", asistente_ia, methods=["POST"]),

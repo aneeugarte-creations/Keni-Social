@@ -432,6 +432,21 @@ export interface CuerpoAportarMaterial {
   clip?: File;
 }
 
+/** `POST /api/contenido/post-directo`: ALTA DIRECTA de un post desde el feed.
+ *  El equipo teclea el COPY FINAL y nace un borrador por red por el MISMO motor que el
+ *  copy generado (origen='post-directo', excluido de la auto-generación: no hay nada que
+ *  redactar). La pieza sigue el flujo normal (arte, revisión, programación). */
+export interface CuerpoCrearPostDirecto {
+  /** El texto final de la publicación, tal cual lo teclea el humano. */
+  copy: string;
+  /** Marca obligatoria (id canónico). */
+  marca: string;
+  /** Rótulo de la idea en el feed; si falta, el backend lo deriva del copy. */
+  titulo?: string;
+  /** Redes destino; por defecto las del formato foto (las del flujo automático). */
+  redes?: string[];
+}
+
 // --- Fase3 auto-planificación: sugerencia de hora + auto-promoción del Radar ---
 
 /** `POST /api/planificacion/sugerir-hora`: pide la mejor fecha-hora para una marca/red. */

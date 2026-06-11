@@ -113,6 +113,15 @@ function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]
       if (ruta.includes("/comentarios")) {
         return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
       }
+      if (ruta.includes("/api/contenido/post-directo")) {
+        // Alta directa: el back devuelve el tema con una pieza-borrador por red pedida.
+        return new Response(
+          JSON.stringify({
+            contenido: { id: "t-directo", plataformas: [{ id: "pl1", red: "x" }] },
+          }),
+          { status: 200 },
+        );
+      }
       if (ruta.includes("/api/publicaciones")) {
         const params = new URL(ruta, "http://localhost").searchParams;
         const estado = params.get("estado");
@@ -533,6 +542,35 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     await waitFor(() =>
       expect(screen.getByPlaceholderText(/escribe un comentario/i)).toBeInTheDocument(),
     );
+  });
+
+  it("«Crear post» (alta directa): abre el diálogo y postea el copy manual a /api/contenido/post-directo", async () => {
+    stubFetch();
+    renderFeed();
+    // El botón de alta vive en las acciones de página (en tests, render inline sin AppShell).
+    fireEvent.click(await screen.findByRole("button", { name: /crear post/i }));
+    const dialogo = await screen.findByRole("dialog");
+    // La marca llega sola (la activa del perfil: unotv) y las redes por defecto se acotan
+    // al catálogo (aquí solo "x"); el humano aporta justo lo suyo: el copy final.
+    fireEvent.change(within(dialogo).getByLabelText("Copy"), {
+      target: { value: "Mi copy final ✍️" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Crear post" }));
+    await waitFor(() => {
+      const llamada = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.find((c) => String(c[0]).includes("/api/contenido/post-directo"));
+      expect(llamada).toBeTruthy();
+      const init = llamada?.[1] as RequestInit | undefined;
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body ?? "{}"))).toMatchObject({
+        copy: "Mi copy final ✍️",
+        marca: "unotv",
+        redes: ["x"],
+      });
+    });
+    // Al crear, el diálogo se cierra (el feed se refresca por invalidación de su query).
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("/opciones caído (500): el feed degrada al catálogo estático y pinta tarjetas reales, no «No generado»", async () => {
