@@ -3,83 +3,53 @@
  * social interna. SOLO MUESTRA estado —la acción (dar OK / rechazar) vive en la fila de acciones
  * del post (`PostFeed`), igual que el "me gusta" y "comentar"—:
  *
- *   - Un veredicto de IA arriba (QA Editorial), como Badge ok/aviso/error: lista · revisar ·
- *     no publicar (mismas variantes que `META_VEREDICTOS`).
  *   - Los OK del equipo como "likes": cuántos van (p. ej. "OK 1/2") y DE QUIÉN.
  *   - El desenlace: "Lista para publicar" (cadena aprobada) · "Rechazada" (vuelve a redacción) ·
  *     o cuántos OK faltan.
+ *
+ * NO se muestra el veredicto de IA (QA Editorial): de cara al equipo, menos IA — el feed enseña
+ * solo decisiones humanas y lo que falta. El nivel QA sigue EXISTIENDO en la cadena (lo filtramos
+ * de los "humanos"), solo no se pinta como badge.
  *
  * Componente PURO de presentación: sin estado, sin mutaciones, sin sesión. El gate (no apruebas
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, MessageSquare, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { plural } from "@/lib/formato";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
 import { umbralDislikes } from "./aprobacion";
 import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 
-/** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada. */
+/** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada: se EXCLUYE del
+ *  conteo de OK humanos (no se pinta su veredicto). */
 const ETIQUETA_QA = "qa editorial";
 const esNivelIA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
 
-/** Veredicto de la "aprobación de IA": del nivel QA de la cadena, o del veredicto suelto. */
-function pintaIA(
-  nivelIA: NivelAprobacion | undefined,
-  veredicto: string | undefined,
-): { texto: string; variante: "ok" | "aviso" | "error" } | null {
-  // Si hay nivel QA en la cadena, su decisión manda; si no, el último veredicto de la pieza.
-  const v = nivelIA
-    ? nivelIA.decision === "aprobado"
-      ? "listo"
-      : nivelIA.decision === "rechazado"
-        ? "no_publicar"
-        : "revisar"
-    : (veredicto || "").trim().toLowerCase();
-  if (v === "listo") return { texto: "IA: lista", variante: "ok" };
-  if (v === "no_publicar") return { texto: "IA: no publicar", variante: "error" };
-  if (v === "revisar") return { texto: "IA: revisar", variante: "aviso" };
-  return null; // sin veredicto: no afirmamos nada sobre la IA.
-}
-
 export function CadenaAprobacion({
   cadena,
-  veredictoIA,
   sinResolver = 0,
 }: {
   cadena: TCadena;
-  /** Veredicto de QA suelto (cuando la IA no es un nivel de la cadena). Pinta el badge. */
-  veredictoIA?: string;
   /** Comentarios sin resolver: > 0 añade la línea de bloqueo dentro del panel ("lo que falta"). */
   sinResolver?: number;
 }) {
   const niveles = [...cadena.niveles].sort((a, b) => a.nivel - b.nivel);
   const humanos = niveles.filter((n) => !esNivelIA(n));
-  const nivelIA = niveles.find(esNivelIA);
   const okDados = humanos.filter((n) => n.decision === "aprobado");
   const disDados = humanos.filter((n) => n.decision === "rechazado");
   const totalOK = humanos.length || 1;
   // Dos dislikes (de dos personas) rechazan la pieza; la regla vive en `aprobacion.ts`
   // (fuente única, junto a `esDislikeDecisivo`).
   const umbralDislike = umbralDislikes(cadena);
-  const ia = pintaIA(nivelIA, veredictoIA);
 
   const lista = cadena.estado === "aprobado";
   const rechazada = cadena.estado === "rechazado";
 
   return (
     <section className="border-t border-border px-4 py-3" aria-label="Estado de aprobación de la pieza">
-      {/* Veredicto de IA (la "aprobación de IA"), con las variantes de META_VEREDICTOS. */}
-      {ia && (
-        <Badge variant={ia.variante} className="mb-2 gap-1">
-          <Sparkles className="h-3 w-3" aria-hidden="true" />
-          {ia.texto}
-        </Badge>
-      )}
-
       {/* Los OK del equipo: el conteo con su icono (no solo color) y de quién. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <span

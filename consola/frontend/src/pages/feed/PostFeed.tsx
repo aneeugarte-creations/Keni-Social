@@ -13,8 +13,8 @@
  *     (`elegibilidadOK`); QUITAR tu propia reacción siempre puedes. Dos dislikes (dos personas)
  *     rechazan la pieza. El override de FORZAR vive como botón discreto al pie del panel de
  *     estado (no escondido en un toast).
- *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): veredicto de IA + OK del
- *     equipo (cuántos y de quién) + lo que falta. La acción vive en la fila, no aquí.
+ *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): OK del equipo (cuántos y
+ *     de quién) + lo que falta. Sin veredicto de IA (menos IA de cara al equipo). La acción vive en la fila.
  *
  * Like/dislike/deshacer van por `aprobar`/`rechazar`/`deshacer` de `api/aprobacion`, que
  * forwardean al nivel ACTUAL de la cadena multinivel (respetando "otro par de ojos" y "dos
@@ -731,7 +731,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {enRevision && tieneCadena && cadena && (
         <CadenaAprobacion
           cadena={cadena}
-          veredictoIA={publicacion.veredicto}
           sinResolver={sinResolver}
         />
       )}

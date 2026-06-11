@@ -40,8 +40,8 @@ function cadenaOK(over: Partial<TCadena> = {}): TCadena {
   };
 }
 
-function renderCadena(cadena: TCadena, veredictoIA?: string) {
-  return render(<CadenaAprobacion cadena={cadena} veredictoIA={veredictoIA} />);
+function renderCadena(cadena: TCadena) {
+  return render(<CadenaAprobacion cadena={cadena} />);
 }
 
 describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
@@ -53,11 +53,20 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.queryByText(/Faltan/i)).not.toBeInTheDocument();
   });
 
-  it("pinta el veredicto de IA cuando hay, como badge SIN emoji", () => {
-    renderCadena(cadenaOK(), "listo");
-    expect(screen.getByText("IA: lista")).toBeInTheDocument();
-    // El veredicto va como Badge ok/aviso/error (icono + color), no triple-codificado con emoji.
-    expect(document.body.textContent).not.toContain("🟢");
+  it("NO pinta el veredicto de IA (menos IA de cara al equipo): ni 'IA: …' ni el nivel QA", () => {
+    // La cadena trae el nivel automático «QA Editorial» aprobado; NO debe pintarse como badge.
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "qa", nivel: 0, etiqueta: "QA Editorial", decision: "aprobado" }),
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
+      ],
+    });
+    renderCadena(c);
+    expect(screen.queryByText(/^IA:/)).not.toBeInTheDocument();
+    expect(screen.queryByText("IA: lista")).not.toBeInTheDocument();
+    // El nivel QA se excluye del conteo de OK humanos: siguen siendo 1/2 (Ana + Coordinación).
+    expect(screen.getByText("1/2")).toBeInTheDocument();
   });
 
   it("NO renderiza botones de acción (la acción vive en la fila del post; el override de forzar, en el toast del primer OK)", () => {
