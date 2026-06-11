@@ -267,6 +267,7 @@ from .repos_noticias import (  # noqa: F401
     registrar_sondeo_feed,
     resumen_cobertura,
     salud_feeds,
+    stats_fuentes,
     upsert_noticia_cluster,
     vaciar_clusters,
 )

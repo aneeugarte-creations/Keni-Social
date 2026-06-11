@@ -1380,6 +1380,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         titulo_original TEXT NOT NULL DEFAULT '',
         idioma        TEXT NOT NULL DEFAULT '',
         traducido     INTEGER NOT NULL DEFAULT 0,
+        peso_fuentes  REAL NOT NULL DEFAULT 0,
+        velocidad     REAL NOT NULL DEFAULT 0,
+        primera_fuente TEXT NOT NULL DEFAULT '',
+        primera_fuente_nombre TEXT NOT NULL DEFAULT '',
+        fuentes_detalle TEXT NOT NULL DEFAULT '',
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )
@@ -2905,6 +2910,15 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # escribe el daemon al puntuar; la UI/el listón de promoción las muestran al equipo.
     ("score_razon", "TEXT NOT NULL DEFAULT ''"),
     ("score_desglose", "TEXT NOT NULL DEFAULT ''"),
+    # TRACKING DE FUENTES (ranking ponderado): masa de corroboración (Σ peso por outlet),
+    # señal de velocidad [0,1] (qué tan rápido se sumaron fuentes potentes), quién ABRIÓ la
+    # historia y el timeline JSON de outlets (`clustering.fuentes_detalle`). Persistidos en
+    # el cluster para que el re-score periódico no tenga que releer items.
+    ("peso_fuentes", "REAL NOT NULL DEFAULT 0"),
+    ("velocidad", "REAL NOT NULL DEFAULT 0"),
+    ("primera_fuente", "TEXT NOT NULL DEFAULT ''"),
+    ("primera_fuente_nombre", "TEXT NOT NULL DEFAULT ''"),
+    ("fuentes_detalle", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:

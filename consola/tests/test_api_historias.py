@@ -215,6 +215,104 @@ def test_detalle_inexistente_404(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# Tracking de fuentes: timeline + corroboración ponderada en la respuesta       #
+# --------------------------------------------------------------------------- #
+
+
+def test_historia_expone_timeline_de_fuentes_y_peso(cliente):
+    # El daemon persiste `fuentes_detalle`/`peso_fuentes`/`primera_fuente*` al recalcular;
+    # aquí se siembran directo y la API debe exponerlos (timeline con tier legible).
+    repos.upsert_noticia_cluster({
+        "id": "c1",
+        "titulo": "Historia corroborada por potentes",
+        "marca": "unotv",
+        "clave": "t:c1",
+        "n_fuentes": 2,
+        "score": 0.7,
+        "ultimo_visto": "2026-06-05T12:00:00+00:00",
+        "peso_fuentes": 4.0,
+        "velocidad": 1.0,
+        "primera_fuente": "fa",
+        "primera_fuente_nombre": "Reuters",
+        "fuentes_detalle": [
+            {"fuente_id": "fa", "fuente": "Reuters", "host": "reuters.com", "peso": 2.0,
+             "primer_visto": "2026-06-05T10:00:00+00:00", "n_items": 1},
+            {"fuente_id": "fb", "fuente": "BBC", "host": "bbc.com", "peso": 2.0,
+             "primer_visto": "2026-06-05T10:15:00+00:00", "n_items": 1},
+        ],
+    })
+    h = cliente.get("/api/noticias/historias/c1").json()["historia"]
+    assert h["peso_fuentes"] == 4.0
+    assert h["primera_fuente_nombre"] == "Reuters"
+    assert [f["fuente"] for f in h["fuentes"]] == ["Reuters", "BBC"]
+    assert all(f["tier"] == "potente" for f in h["fuentes"])
+    assert h["fuentes"][0]["primer_visto"] == "2026-06-05T10:00:00+00:00"
+
+
+def test_enlaces_traen_publicado_en_y_tier(cliente):
+    _sembrar_cluster("c1", items=[
+        {"fuente_nombre": "Medio A", "url": "https://a.com/1", "titulo": "Titular A"},
+    ])
+    enlaces = cliente.get("/api/noticias/historias").json()["historias"][0]["enlaces"]
+    assert enlaces[0]["publicado_en"]  # cae a capturado_en si el feed no traía pubDate
+    assert enlaces[0]["tier"] == "normal"  # items sembrados sin fuente_peso -> 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Rendimiento por fuente (GET /api/noticias/fuentes/stats)                      #
+# --------------------------------------------------------------------------- #
+
+
+def _sembrar_para_stats():
+    """Dos historias (una usada) y dos fuentes: `fa` abrió la usada; `fb` corrobora ambas."""
+    repos.upsert_noticia_cluster({
+        "id": "h1", "titulo": "Historia usada", "marca": "unotv", "clave": "t:h1",
+        "estado": "usado", "contenido_id": "cont-1", "primera_fuente": "fa",
+        "ultimo_visto": "2026-06-05T12:00:00+00:00",
+    })
+    repos.upsert_noticia_cluster({
+        "id": "h2", "titulo": "Historia nueva", "marca": "unotv", "clave": "t:h2",
+        "estado": "nuevo", "primera_fuente": "fb",
+        "ultimo_visto": "2026-06-05T12:00:00+00:00",
+    })
+    # capturado_en por defecto = ahora: dentro de la ventana de stats.
+    repos.crear_noticias_items([
+        {"fuente_id": "fa", "fuente_nombre": "Reuters", "fuente_peso": 2.0, "marca": "unotv",
+         "titulo": "A1", "clave": "fa-1", "cluster_id": "h1"},
+        {"fuente_id": "fa", "fuente_nombre": "Reuters", "fuente_peso": 2.0, "marca": "unotv",
+         "titulo": "A2", "clave": "fa-2", "cluster_id": "h1"},
+        {"fuente_id": "fb", "fuente_nombre": "Medio B", "fuente_peso": 1.0, "marca": "unotv",
+         "titulo": "B1", "clave": "fb-1", "cluster_id": "h1"},
+        {"fuente_id": "fb", "fuente_nombre": "Medio B", "fuente_peso": 1.0, "marca": "unotv",
+         "titulo": "B2", "clave": "fb-2", "cluster_id": "h2"},
+    ])
+
+
+def test_stats_fuentes_cuenta_historias_primeras_y_usadas(cliente):
+    _sembrar_para_stats()
+    datos = cliente.get("/api/noticias/fuentes/stats", params={"marca": "unotv"}).json()
+    por_fuente = {f["fuente_id"]: f for f in datos["fuentes"]}
+    fa, fb = por_fuente["fa"], por_fuente["fb"]
+    assert fa["items"] == 2
+    assert fa["historias"] == 1
+    assert fa["primeras"] == 1  # abrió h1
+    assert fa["usadas"] == 1
+    assert fa["tasa_uso"] == 1.0
+    assert fa["tier"] == "potente"
+    assert fb["items"] == 2
+    assert fb["historias"] == 2
+    assert fb["primeras"] == 1  # abrió h2
+    assert fb["usadas"] == 1
+    assert fb["tasa_uso"] == 0.5
+    # Orden: más historias primero.
+    assert datos["fuentes"][0]["fuente_id"] == "fb"
+
+
+def test_stats_fuentes_marca_invalida_400(cliente):
+    assert cliente.get("/api/noticias/fuentes/stats", params={"marca": "nope"}).status_code == 400
+
+
+# --------------------------------------------------------------------------- #
 # usar / descartar                                                              #
 # --------------------------------------------------------------------------- #
 

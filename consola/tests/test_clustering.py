@@ -168,6 +168,62 @@ def test_recalcular_conserva_identidad_del_cluster():
 
 
 # --------------------------------------------------------------------------- #
+# Tracking de fuentes: fuentes_detalle / peso_corroboracion                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_fuentes_detalle_deduplica_por_outlet_y_ordena_cronologico():
+    items = [
+        _item(fuente_id="b", fuente_nombre="Medio B", url="https://b.com/n1", fuente_peso=1.0,
+              publicado_en=(_T0 + timedelta(minutes=30)).isoformat()),
+        _item(fuente_id="a", fuente_nombre="Reuters", url="https://reuters.com/n1", fuente_peso=2.0,
+              publicado_en=_T0.isoformat()),
+        # Segundo enlace del MISMO outlet (host reuters.com): no es una fuente nueva.
+        _item(fuente_id="a", fuente_nombre="Reuters", url="https://reuters.com/n2", fuente_peso=2.0,
+              publicado_en=(_T0 + timedelta(hours=1)).isoformat()),
+    ]
+    detalle = clustering.fuentes_detalle(items)
+    assert [d["fuente"] for d in detalle] == ["Reuters", "Medio B"]  # cronológico: quién abrió
+    assert detalle[0]["primer_visto"] == _T0.isoformat()
+    assert detalle[0]["n_items"] == 2  # dos artículos del mismo outlet
+    assert detalle[0]["peso"] == 2.0
+    assert clustering.peso_corroboracion(detalle) == 3.0  # 2.0 + 1.0
+
+
+def test_fuentes_detalle_sin_url_cae_a_fuente_id():
+    items = [
+        _item(fuente_id="cajon-portal", fuente_nombre="portal", url="", fuente_peso=1.0),
+        _item(fuente_id="cajon-portal", fuente_nombre="portal", url="", fuente_peso=1.0),
+    ]
+    detalle = clustering.fuentes_detalle(items)
+    assert len(detalle) == 1
+    assert detalle[0]["fuente_id"] == "cajon-portal"
+    assert detalle[0]["n_items"] == 2
+
+
+def test_recalcular_persiste_timeline_y_peso_de_fuentes():
+    items = [
+        _item(fuente_id="b", fuente_nombre="Medio B", url="https://b.com/n1", fuente_peso=1.0,
+              publicado_en=(_T0 + timedelta(minutes=20)).isoformat()),
+        _item(fuente_id="a", fuente_nombre="Reuters", url="https://reuters.com/n1", fuente_peso=2.0,
+              publicado_en=_T0.isoformat()),
+    ]
+    r = clustering.recalcular(_base_cluster(), items)
+    assert r["peso_fuentes"] == 3.0
+    assert r["primera_fuente"] == "a"
+    assert r["primera_fuente_nombre"] == "Reuters"
+    assert [d["fuente"] for d in r["fuentes_detalle"]] == ["Reuters", "Medio B"]
+
+
+def test_recalcular_sin_items_deja_tracking_vacio():
+    r = clustering.recalcular(_base_cluster(), [])
+    assert r["fuentes_detalle"] == []
+    assert r["peso_fuentes"] == 0.0
+    assert r["primera_fuente"] == ""
+    assert r["primera_fuente_nombre"] == ""
+
+
+# --------------------------------------------------------------------------- #
 # Dedup por EVENTO: titulares reordenados (token-sort)                          #
 # --------------------------------------------------------------------------- #
 

@@ -933,6 +933,59 @@ def conteos_items_recientes(
     return {"por_categoria": por_categoria, "por_idioma": por_idioma}
 
 
+def stats_fuentes(marca: str | None = None, *, dias: int = 7) -> list[dict[str, Any]]:
+    """RENDIMIENTO editorial por fuente en los últimos `dias`: qué fuentes aportan de verdad.
+
+    Por `fuente_id` con items capturados en la ventana:
+      - `items`: artículos aportados.
+      - `historias`: clusters distintos en los que participó.
+      - `primeras`: historias que ABRIÓ (cluster.primera_fuente = fuente).
+      - `usadas`: historias suyas que acabaron usadas (promovidas al tablero).
+      - `peso`: peso editorial observado (máx de sus items: cubre agencias sin fila en
+        `fuentes_rss`).
+    Con `marca`, cuenta los items de ESA marca + los compartidos (marca vacía) — el mismo
+    criterio que el listado de fuentes. `tasa_uso` la deriva el llamante (usadas/historias).
+    Orden: más historias primero. Una sola conexión; sin red.
+    """
+    desde = iso_utc(datetime.now(UTC) - timedelta(days=max(1, int(dias))))
+    cond = "i.capturado_en >= ?"
+    params: list[Any] = [desde]
+    if marca:
+        cond += " AND (i.marca = ? OR i.marca = '')"
+        params.append(marca)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- cond de allowlist; valores parametrizados
+            "SELECT i.fuente_id AS fuente_id, "
+            "  MAX(i.fuente_nombre) AS fuente_nombre, "
+            "  MAX(i.fuente_peso) AS peso, "
+            "  COUNT(*) AS items, "
+            "  COUNT(DISTINCT c.id) AS historias, "
+            "  COUNT(DISTINCT c.id) FILTER (WHERE c.primera_fuente = i.fuente_id) AS primeras, "
+            "  COUNT(DISTINCT c.id) FILTER (WHERE c.estado = 'usado') AS usadas "
+            "FROM noticias_items i "
+            "LEFT JOIN noticias_clusters c ON c.id = i.cluster_id "
+            f"WHERE {cond} AND i.fuente_id <> '' "
+            "GROUP BY i.fuente_id "
+            "ORDER BY historias DESC, items DESC, fuente_id",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "fuente_id": f["fuente_id"],
+            "fuente_nombre": f["fuente_nombre"] or "",
+            "peso": float(f["peso"] or 1.0),
+            "items": int(f["items"] or 0),
+            "historias": int(f["historias"] or 0),
+            "primeras": int(f["primeras"] or 0),
+            "usadas": int(f["usadas"] or 0),
+        }
+        for f in filas
+    ]
+
+
 
 # --- Clustering de HISTORIAS (Ola B): noticias_clusters -------------------- #
 # Una historia = la misma noticia contada por varias fuentes y en el tiempo. El daemon de
@@ -965,6 +1018,11 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "titulo_original",
     "idioma",
     "traducido",
+    "peso_fuentes",
+    "velocidad",
+    "primera_fuente",
+    "primera_fuente_nombre",
+    "fuentes_detalle",
     "creado",
     "actualizado",
 )
@@ -990,6 +1048,27 @@ def _desglose_a_dict(crudo: Any) -> dict[str, Any]:
     except (ValueError, TypeError):
         return {}
     return datos if isinstance(datos, dict) else {}
+
+
+def _detalle_fuentes_a_json(valor: Any) -> str:
+    """Serializa `fuentes_detalle` para la columna: lista -> JSON; str -> tal cual; resto -> ''."""
+    if isinstance(valor, list):
+        try:
+            return json.dumps(valor, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return ""
+    return valor if isinstance(valor, str) else ""
+
+
+def _detalle_fuentes_a_lista(crudo: Any) -> list[dict[str, Any]]:
+    """Deserializa `fuentes_detalle` (JSON) a lista de dicts; [] si vacío o malformado."""
+    try:
+        datos = json.loads(crudo or "[]")
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(datos, list):
+        return []
+    return [d for d in datos if isinstance(d, dict)]
 
 
 def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
@@ -1029,6 +1108,13 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "titulo_original": fila["titulo_original"] or "",
         "idioma": fila["idioma"] or "",
         "traducido": bool(fila["traducido"]),
+        # Tracking de fuentes (ranking ponderado): masa de corroboración, velocidad, quién
+        # abrió la historia y el timeline de outlets (JSON -> lista).
+        "peso_fuentes": float(fila["peso_fuentes"] or 0.0),
+        "velocidad": float(fila["velocidad"] or 0.0),
+        "primera_fuente": fila["primera_fuente"] or "",
+        "primera_fuente_nombre": fila["primera_fuente_nombre"] or "",
+        "fuentes_detalle": _detalle_fuentes_a_lista(fila["fuentes_detalle"]),
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -1082,6 +1168,13 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "titulo_original": cluster.get("titulo_original") or "",
         "idioma": cluster.get("idioma") or "",
         "traducido": 1 if cluster.get("traducido") else 0,
+        # Tracking de fuentes: los recalcula el clustering en cada barrido (SÍ entran al SET
+        # de conflicto, como el score: si no, explicarían una corroboración vieja).
+        "peso_fuentes": float(cluster.get("peso_fuentes") or 0.0),
+        "velocidad": float(cluster.get("velocidad") or 0.0),
+        "primera_fuente": cluster.get("primera_fuente") or "",
+        "primera_fuente_nombre": cluster.get("primera_fuente_nombre") or "",
+        "fuentes_detalle": _detalle_fuentes_a_json(cluster.get("fuentes_detalle")),
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }

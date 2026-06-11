@@ -201,6 +201,10 @@ def conteos_items_recientes(
     return db.conteos_items_recientes(marca, horas=horas)
 
 
+def stats_fuentes(marca: str | None = None, *, dias: int = 7) -> list[dict[str, Any]]:
+    return db.stats_fuentes(marca, dias=dias)
+
+
 
 # --- Clustering de historias (Ola B): delega 1:1 en db.py ------------------ #
 

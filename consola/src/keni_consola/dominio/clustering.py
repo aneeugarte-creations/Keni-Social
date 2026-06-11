@@ -392,6 +392,56 @@ def _hay_clickbait(items: list[dict[str, Any]]) -> bool:
     return False
 
 
+def fuentes_detalle(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """TIMELINE de OUTLETS de una historia: quién la abrió y quién se fue sumando. PURA.
+
+    Deduplica por OUTLET (host de la url; cae a `fuente_id` sin url — mismo criterio que
+    `clasificar_verificacion`: dos enlaces del mismo medio no son dos fuentes). Por outlet:
+      - `fuente_id` / `fuente` (nombre humano) / `host`,
+      - `peso` (el MÁXIMO de sus items: el peso editorial de la fuente),
+      - `primer_visto` (el instante más temprano de sus items: cuándo se sumó),
+      - `n_items` (cuántos artículos aportó).
+    Orden CRONOLÓGICO por `primer_visto` (el primero ABRIÓ la historia); outlets sin
+    timestamp van al final. Es la base de la corroboración PONDERADA (`peso_fuentes` =
+    Σ peso por outlet) y de la señal de velocidad del scoring.
+    """
+    por_outlet: dict[str, dict[str, Any]] = {}
+    for it in items:
+        host = _host_de(str(it.get("url") or it.get("url_canonica") or "")).lower()
+        clave = host or str(it.get("fuente_id") or "")
+        if not clave:
+            continue
+        instante = _instante_item(it)
+        try:
+            peso = float(it.get("fuente_peso") or 1.0)
+        except (TypeError, ValueError):
+            peso = 1.0
+        d = por_outlet.get(clave)
+        if d is None:
+            por_outlet[clave] = {
+                "fuente_id": str(it.get("fuente_id") or ""),
+                "fuente": str(it.get("fuente_nombre") or ""),
+                "host": host,
+                "peso": peso,
+                "primer_visto": instante,
+                "n_items": 1,
+            }
+            continue
+        d["n_items"] += 1
+        d["peso"] = max(d["peso"], peso)
+        if instante and (not d["primer_visto"] or instante < d["primer_visto"]):
+            d["primer_visto"] = instante
+    # ISO canon UTC: el orden lexicográfico ES el cronológico. Sin timestamp -> al final.
+    return sorted(
+        por_outlet.values(), key=lambda d: (d["primer_visto"] or "9999", d["fuente"])
+    )
+
+
+def peso_corroboracion(detalle: list[dict[str, Any]]) -> float:
+    """Masa de corroboración PONDERADA: Σ peso por outlet distinto (de `fuentes_detalle`)."""
+    return round(sum(float(d.get("peso") or 1.0) for d in detalle), 3)
+
+
 def clasificar_verificacion(
     items: list[dict[str, Any]],
     *,
@@ -458,6 +508,10 @@ def recalcular(
             "senal": 0,
             "breaking": 0,
             "verificacion": "unica_fuente",
+            "fuentes_detalle": [],
+            "peso_fuentes": 0.0,
+            "primera_fuente": "",
+            "primera_fuente_nombre": "",
         }
 
     rep = _representativo(items)
@@ -472,6 +526,11 @@ def recalcular(
     instantes = sorted(i for i in (_instante_item(it) for it in items) if i)
     primer_visto = instantes[0] if instantes else (cluster.get("primer_visto") or "")
     ultimo_visto = instantes[-1] if instantes else (cluster.get("ultimo_visto") or "")
+
+    # Timeline de outlets (quién abrió / quién se sumó) + masa de corroboración ponderada.
+    # Se PERSISTEN en el cluster para que el re-score periódico (que repuntúa sin releer
+    # items) pueda envejecer la señal de velocidad y la UI explique la corroboración.
+    detalle_fuentes = fuentes_detalle(items)
 
     return {
         **cluster,
@@ -492,6 +551,10 @@ def recalcular(
             items, fuentes_min=breaking_fuentes, ventana_h=breaking_ventana_h
         ) else 0,
         "verificacion": clasificar_verificacion(items, fuentes_baja=fuentes_baja_confianza),
+        "fuentes_detalle": detalle_fuentes,
+        "peso_fuentes": peso_corroboracion(detalle_fuentes),
+        "primera_fuente": detalle_fuentes[0]["fuente_id"] if detalle_fuentes else "",
+        "primera_fuente_nombre": detalle_fuentes[0]["fuente"] if detalle_fuentes else "",
     }
 
 

@@ -321,6 +321,7 @@ from .db_noticias import (  # noqa: F401
     registrar_sondeo_feed,
     resumen_cobertura,
     salud_feeds,
+    stats_fuentes,
     upsert_noticia_cluster,
     vaciar_clusters,
 )
@@ -581,6 +582,7 @@ __all__ = [
     # Monitor de cobertura (Ola D).
     "salud_feeds",
     "conteos_items_recientes",
+    "stats_fuentes",
     # Clustering de historias (Ola B).
     "upsert_noticia_cluster",
     "borrar_clusters_con_items",

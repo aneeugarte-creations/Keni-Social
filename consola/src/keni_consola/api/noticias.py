@@ -62,15 +62,48 @@ def _redes_iniciales(crudo: Any) -> list[str]:
 
 
 def _item_a_dict(item: dict[str, Any]) -> dict[str, Any]:
-    """Serializa un item del archivo resolviendo el nombre humano de la marca."""
+    """Serializa un item del archivo resolviendo el nombre humano de la marca y su tier."""
+    from ..dominio import fuentes_pesos
+
     return {
         **item,
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
+        # Tier legible del peso de la fuente (potente/normal/baja): para el timeline del detalle.
+        "tier": fuentes_pesos.tier_de_peso(float(item.get("fuente_peso") or 1.0)),
     }
 
 
 # Máximo de enlaces corroborantes (fuentes) a exponer en una Historia.
 _MAX_ENLACES_HISTORIA = 8
+
+
+def _fuentes_timeline(detalle: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Timeline de outlets de una historia (de `fuentes_detalle` persistido) para la UI.
+
+    Cada entrada: `{fuente, fuente_id, peso, tier, primer_visto, n_items}` en orden
+    cronológico (el primero ABRIÓ la historia). Best-effort: entradas malformadas se saltan.
+    """
+    from ..dominio import fuentes_pesos
+
+    salida: list[dict[str, Any]] = []
+    for d in detalle:
+        if not isinstance(d, dict):
+            continue
+        try:
+            peso = float(d.get("peso") or 1.0)
+        except (TypeError, ValueError):
+            peso = 1.0
+        salida.append(
+            {
+                "fuente": str(d.get("fuente") or ""),
+                "fuente_id": str(d.get("fuente_id") or ""),
+                "peso": peso,
+                "tier": fuentes_pesos.tier_de_peso(peso),
+                "primer_visto": str(d.get("primer_visto") or ""),
+                "n_items": int(d.get("n_items") or 0),
+            }
+        )
+    return salida
 
 
 def _pieza_estado(estado: str, contenido_id: str, resumen: dict[str, str]) -> str:
@@ -146,8 +179,10 @@ def _historia_a_dict(
     pueda mostrar "traducido de {idioma}". Si no, se sirven los originales. `verificacion` expone
     el veredicto de corroboración (corroborada / unica_fuente / dudosa).
     """
+    from ..dominio import fuentes_pesos
+
     vistos: set[str] = set()
-    enlaces_pub: list[dict[str, str]] = []
+    enlaces_pub: list[dict[str, Any]] = []
     for it in enlaces:
         url = (it.get("url") or "").strip()
         clave = url.lower() or (it.get("titulo") or "").strip().lower()
@@ -159,6 +194,10 @@ def _historia_a_dict(
                 "titulo": it.get("titulo") or "",
                 "url": url,
                 "fuente": it.get("fuente_nombre") or "",
+                # Cuándo publicó este enlace y el tier de su fuente: la UI arma con esto la
+                # frase de corroboración ("la abrió Reuters hace 42 min") sin pedir el detalle.
+                "publicado_en": it.get("publicado_en") or it.get("capturado_en") or "",
+                "tier": fuentes_pesos.tier_de_peso(float(it.get("fuente_peso") or 1.0)),
             }
         )
         if len(enlaces_pub) >= _MAX_ENLACES_HISTORIA:
@@ -210,6 +249,12 @@ def _historia_a_dict(
         # pinta el badge con ESTE campo: nunca dice "En el feed" si la pieza no está.
         "pieza_estado": pieza_estado,
         "enlaces": enlaces_pub,
+        # TRACKING DE FUENTES (ranking ponderado): masa de corroboración (Σ peso por outlet),
+        # quién ABRIÓ la historia y el timeline de outlets (orden cronológico, con peso/tier).
+        "peso_fuentes": float(cluster.get("peso_fuentes") or 0.0),
+        "velocidad": float(cluster.get("velocidad") or 0.0),
+        "primera_fuente_nombre": cluster.get("primera_fuente_nombre") or "",
+        "fuentes": _fuentes_timeline(cluster.get("fuentes_detalle") or []),
     }
 
 
@@ -451,6 +496,37 @@ def construir_salud(
         },
         "feeds": feeds_pub,
     }
+
+
+async def stats_fuentes_handler(request: Request) -> Response:
+    """GET /api/noticias/fuentes/stats?marca=&dias=: RENDIMIENTO editorial por fuente.
+
+    Para evaluar fuentes: cuántas historias aporta cada una, cuántas ABRIÓ (publicó primero),
+    cuántas acabaron usadas (promovidas al tablero) y su tasa de uso. `dias` acota la ventana
+    (def 7, máx 90). Marca-aware (items de la marca + compartidos). Orden: más historias 1º.
+    """
+    from ..dominio import fuentes_pesos
+
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    try:
+        dias = int(request.query_params.get("dias") or 7)
+    except ValueError:
+        dias = 7
+    dias = max(1, min(dias, 90))
+    fuentes = []
+    for f in repos.stats_fuentes(marca or None, dias=dias):
+        historias = int(f.get("historias") or 0)
+        usadas = int(f.get("usadas") or 0)
+        fuentes.append(
+            {
+                **f,
+                "tier": fuentes_pesos.tier_de_peso(float(f.get("peso") or 1.0)),
+                "tasa_uso": round(usadas / historias, 3) if historias else 0.0,
+            }
+        )
+    return JSONResponse({"fuentes": fuentes, "dias": dias})
 
 
 async def salud(request: Request) -> Response:
@@ -711,6 +787,9 @@ RUTAS = [
     Route("/api/noticias", listar, methods=["GET"]),
     Route("/api/noticias/cobertura", cobertura, methods=["GET"]),
     Route("/api/noticias/salud", salud, methods=["GET"]),
+    # Rendimiento editorial por fuente (tracking de fuentes). ANTES de `/{item_id}/...` para
+    # que `fuentes` nunca se interprete como un item_id.
+    Route("/api/noticias/fuentes/stats", stats_fuentes_handler, methods=["GET"]),
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
     # Los lotes van ANTES de `/historias/{cluster_id}` para que `descartar-lote`/`borrar-lote`/
     # `borrar-todo` no se confundan con un cluster_id (difieren en método, pero el orden lo deja
