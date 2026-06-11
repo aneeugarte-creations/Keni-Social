@@ -26,6 +26,7 @@ import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
 import { prepararDocumento } from "@/lib/placa/docPieza";
+import type { LineaEditorialOpcion } from "@/types";
 
 type TipoPlantilla = "foto" | "miniatura";
 
@@ -606,6 +607,7 @@ export default function Imagen() {
         ) : (
           <GaleriaInline
             plantillas={plantillas}
+            lineas={opciones.data?.lineas ?? []}
             agruparPorMarca={marcaActiva === null}
             cargando={plantillasQ.isLoading}
             onAbrir={abrirPlantilla}
@@ -687,11 +689,52 @@ function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDise
   );
 }
 
+// Agrupa plantillas por LÍNEA editorial, en el orden canónico del catálogo. Una plantilla con
+// varias líneas aparece en CADA sección (repetir es intencional). Las que no tienen línea van a
+// «Sin línea» al final. Líneas que aparecen en una plantilla pero no en el catálogo (huérfanas)
+// se sitúan tras las del catálogo y antes de «Sin línea», usando su id como título. No se
+// devuelven secciones vacías.
+function agruparPlantillasPorLinea(
+  plantillas: PlantillaDiseno[],
+  lineas: LineaEditorialOpcion[],
+): { id: string; nombre: string; plantillas: PlantillaDiseno[] }[] {
+  const nombrePorId = new Map<string, string>();
+  for (const l of lineas) nombrePorId.set(l.id, l.nombre);
+
+  // Buckets por línea (orden de inserción): primero las del catálogo, luego huérfanas; «Sin línea» aparte.
+  const buckets = new Map<string, PlantillaDiseno[]>();
+  for (const l of lineas) buckets.set(l.id, []);
+  const sinLinea: PlantillaDiseno[] = [];
+
+  for (const p of plantillas) {
+    const ids = p.lineas ?? [];
+    if (ids.length === 0) {
+      sinLinea.push(p);
+      continue;
+    }
+    for (const id of ids) {
+      const arr = buckets.get(id);
+      if (arr) arr.push(p);
+      else buckets.set(id, [p]); // línea huérfana (no en catálogo): tras las del catálogo.
+    }
+  }
+
+  const secciones = [...buckets.entries()]
+    .filter(([, arr]) => arr.length > 0)
+    .map(([id, arr]) => ({ id, nombre: nombrePorId.get(id) ?? id, plantillas: arr }));
+
+  if (sinLinea.length > 0) {
+    secciones.push({ id: "", nombre: "Sin línea", plantillas: sinLinea });
+  }
+  return secciones;
+}
+
 // Galería del estado vacío: rejilla de plantillas + tarjeta de «lienzo en blanco». Con una marca
 // concreta es una sola rejilla; en «Todas» (`agruparPorMarca`) se parte en secciones por marca.
 // La marca y «Plantillas» no se rotulan en el toolbar: aquí lo dicen las cabeceras de sección.
 function GaleriaInline({
   plantillas,
+  lineas,
   agruparPorMarca,
   cargando,
   onAbrir,
@@ -702,6 +745,7 @@ function GaleriaInline({
   onBlanco,
 }: {
   plantillas: PlantillaDiseno[];
+  lineas: LineaEditorialOpcion[];
   agruparPorMarca: boolean;
   cargando: boolean;
   onAbrir: (p: PlantillaDiseno) => void;
@@ -810,23 +854,40 @@ function GaleriaInline({
       {cargando ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
       ) : agruparPorMarca ? (
+        // Vista «Todas»: la MARCA es la sección de primer nivel; dentro, sub-secciones por línea
+        // (jerarquía marca > línea). Cabecera de marca con borde (h3); cabecera de línea más ligera (h4).
         <div className="space-y-8">
           {agruparPlantillasPorMarca(plantillas).map((grupo) => (
             <section key={grupo[0].marca}>
               <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
                 {grupo[0].marca_nombre || grupo[0].marca}
               </h3>
-              <div className={REJILLA}>{grupo.map(tarjeta)}</div>
+              <div className="space-y-6">
+                {agruparPlantillasPorLinea(grupo, lineas).map((sec) => (
+                  <div key={sec.id || "__sin_linea__"}>
+                    <h4 className="mb-1.5 text-xs font-medium text-muted-foreground">{sec.nombre}</h4>
+                    <div className={REJILLA}>{sec.plantillas.map(tarjeta)}</div>
+                  </div>
+                ))}
+              </div>
             </section>
           ))}
           {/* «Lienzo en blanco» va al FINAL de la galería (no el primero). */}
           <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       ) : (
-        <div className={REJILLA}>
-          {plantillas.map(tarjeta)}
-          {/* «Lienzo en blanco» va al FINAL de la lista (no el primero). */}
-          {tarjetaBlanco}
+        // Marca concreta: una sección por LÍNEA editorial, en el orden canónico del catálogo.
+        <div className="space-y-8">
+          {agruparPlantillasPorLinea(plantillas, lineas).map((sec) => (
+            <section key={sec.id || "__sin_linea__"}>
+              <h3 className="mb-2 border-b border-border pb-1 text-sm font-medium text-foreground">
+                {sec.nombre}
+              </h3>
+              <div className={REJILLA}>{sec.plantillas.map(tarjeta)}</div>
+            </section>
+          ))}
+          {/* «Lienzo en blanco» va al FINAL de la galería (no el primero). */}
+          <div className={REJILLA}>{tarjetaBlanco}</div>
         </div>
       )}
     </div>
