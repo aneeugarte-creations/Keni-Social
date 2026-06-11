@@ -531,13 +531,55 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
         cid = (g.get("contenido_id") or "") or cid_por_gen.get(g.get("id") or "", "")
         if cid not in ids_runs:
             continue
-        m = actividad.normalizar_generacion(g)["metricas"]
-        acc = out.setdefault(cid, dict(_METRICAS_CERO))
-        acc["items"] += 1
-        acc["tokens"] += m["tokens"] or 0
-        acc["coste_usd"] = round(acc["coste_usd"] + (m["coste_usd"] or 0.0), 6)
-        acc["duration_ms"] += m["duration_ms"] or 0
+        _sumar_gen(out.setdefault(cid, dict(_METRICAS_CERO)), g)
     return out
+
+
+def _sumar_gen(acc: dict, g: dict) -> None:
+    """Acumula en `acc` las métricas de UNA generación (normalización del dominio `actividad`)."""
+    m = actividad.normalizar_generacion(g)["metricas"]
+    acc["items"] += 1
+    acc["tokens"] += m["tokens"] or 0
+    acc["coste_usd"] = round(acc["coste_usd"] + (m["coste_usd"] or 0.0), 6)
+    acc["duration_ms"] += m["duration_ms"] or 0
+
+
+def _pool_por_marca(gens: list[dict]) -> dict[str, list[dict]]:
+    """Por marca, las generaciones de POOL que el detalle ENLAZA en Fusión/Editorial: la
+    "Fusión de historias" más reciente y el "Encaje editorial" más reciente.
+
+    Es la MISMA selección que `_generacion_pool_de_marca` (recientes por fecha_fin/inicio),
+    pero en lote para la lista. Las métricas de la run suman ESTAS generaciones (las etapas
+    que su detalle muestra), de modo que la tarjeta cuadra con el agregado de sus etapas.
+    OJO: el pool corre por LOTE de marca, así que su coste aparece en cada run del lote
+    (es contexto por-tarjeta); el coste GLOBAL sin duplicar son los KPIs de agregados.
+    """
+    mejores: dict[tuple[str, str], dict] = {}
+    for g in gens:
+        if (g.get("tipo") or "") != "pipeline":
+            continue
+        etiqueta = g.get("etiqueta", "") or ""
+        for prefijo in (_PREFIJO_POOL_FUSION, _PREFIJO_POOL_EDITORIAL):
+            if not etiqueta.startswith(prefijo):
+                continue
+            clave = (g.get("marca", "") or "", prefijo)
+            fecha = g.get("fecha_fin") or g.get("fecha_inicio") or ""
+            previa = mejores.get(clave)
+            fecha_previa = (previa or {}).get("fecha_fin") or (previa or {}).get("fecha_inicio") or ""
+            if previa is None or fecha >= fecha_previa:
+                mejores[clave] = g
+    out: dict[str, list[dict]] = {}
+    for (marca, _), g in mejores.items():
+        out.setdefault(marca, []).append(g)
+    return out
+
+
+def _con_pool(metricas: dict | None, pool: list[dict]) -> dict:
+    """Métricas de la run + las de sus etapas de POOL (Fusión/Encaje enlazadas). Copia nueva."""
+    acc = dict(metricas or _METRICAS_CERO)
+    for g in pool:
+        _sumar_gen(acc, g)
+    return acc
 
 
 def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
@@ -739,12 +781,22 @@ async def listar(request: Request) -> Response:
         por_contenido.setdefault(plat.get("contenido_id", ""), []).append(plat)
     # Una sola lectura de las HISTORIAS (clusters) de estos temas (procedencia IA; evita N consultas).
     clusters = repos.clusters_por_contenidos([it.get("id", "") or "" for it in runs_items])
+    pool_marca = _pool_por_marca(gens)
     todas = [
         _run_de(
             it,
             por_contenido.get(it.get("id", ""), []),
             cluster=clusters.get(it.get("id", "")),
-            metricas=met_por_run.get(it.get("id", "")),
+            # La run suma sus generaciones correlacionadas + las etapas de POOL que su
+            # detalle enlaza (solo temas del pipeline: al tablero el pool no le aplica).
+            metricas=(
+                _con_pool(
+                    met_por_run.get(it.get("id", "")),
+                    pool_marca.get(it.get("marca", "") or "", []),
+                )
+                if (it.get("origen") or "") == ORIGEN_PIPELINE
+                else met_por_run.get(it.get("id", ""))
+            ),
             pool_fusion=(it.get("marca", "") or "") in pool_fusion,
             pool_editorial=(it.get("marca", "") or "") in pool_editorial,
             arte_ia=(it.get("id", "") or "") in arte_ia_runs,
@@ -994,7 +1046,11 @@ async def detalle(request: Request) -> Response:
         generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
     # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
+    # La suma incluye las etapas de POOL enlazadas (Fusión/Encaje): la cabecera cuadra con el
+    # agregado de los bloques de etapa que esta misma página enseña.
     met = _metricas_por_run(gens, {pipeline_id}).get(pipeline_id)
+    if es_pipeline:
+        met = _con_pool(met, _pool_por_marca(gens).get(marca_tema, []))
     return JSONResponse(
         {
             "pipeline": _run_de(

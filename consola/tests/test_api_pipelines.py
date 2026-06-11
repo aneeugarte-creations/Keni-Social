@@ -773,3 +773,40 @@ def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
         contenido_id="tema-xyz",
     )
     assert (generaciones.obtener(gen["id"]) or {}).get("contenido_id") == "tema-xyz"
+
+
+def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
+    """La tarjeta de una run del pipeline cuadra con el AGREGADO de sus etapas: además de las
+    generaciones correlacionadas (copy/criba/arte), suma las etapas de POOL que su detalle
+    enlaza (la Fusión y el Encaje más recientes de la marca). Un tema del TABLERO no las suma
+    (el pool no le aplica)."""
+    tema = _tema_pipeline("Run con pool sumado")
+    _gen_suelta("Copy de la run", contenido_id=tema["id"])  # 150 tok · 0.02 · 3000 ms
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 10, "tokens_out": 90, "total_cost_usd": 0.01,
+                     "duration_ms": 2000},
+    })
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 5, "tokens_out": 45, "total_cost_usd": 0.005,
+                     "duration_ms": 1000},
+    })
+    run = _run_por_titulo(cliente, "Run con pool sumado")
+    assert run["metricas"]["items"] == 3  # copy + fusión + encaje
+    assert run["metricas"]["tokens"] == 150 + 100 + 50
+    assert run["metricas"]["coste_usd"] == pytest.approx(0.035)
+    assert run["metricas"]["duration_ms"] == 6000
+    # El detalle cuadra con la tarjeta (misma suma).
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()["pipeline"]
+    assert det["metricas"] == run["metricas"]
+    # Un tema del TABLERO trabajado NO hereda el pool de la marca.
+    tablero = repos.crear_contenido(
+        clase="contenido", titulo="Tablero sin pool", marca="unotv", origen="equipo",
+    )
+    _gen_suelta("Copy tablero", tipo="pipeline", contenido_id=tablero["id"])
+    run_t = _run_por_titulo(cliente, "Tablero sin pool")
+    assert run_t["metricas"]["items"] == 1
+    assert run_t["metricas"]["tokens"] == 150
