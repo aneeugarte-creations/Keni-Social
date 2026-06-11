@@ -1,6 +1,6 @@
 # ADR 0011 — Dos procesos: Investigación y Producción
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado (F0–F3 implementadas)
 - **Fecha:** 2026-06-11
 - **Decisores:** equipo keni-social
 - **Componente:** `keni-consola` (`ingesta_daemon.py`, `pipeline_contenido/` —`_barrido.py`, `_ingesta.py`, `_qa.py`, `_copy.py`, `_avance.py`—, `config_noticias.py` / `_config_comun.py` / `ajustes_catalogo.py`, frontend `pages/noticias/*` y `pages/Produccion.tsx`/`Monitor.tsx`)
@@ -119,10 +119,16 @@ etapa; los maestros son una capa de agrupación encima, no reemplazan los flags 
   `KENI_PIPELINE_EDITORIAL` con alias legado. Sin cambios de modelo de datos.
 - **F2 — UI.** Página Investigación como proceso (etapas + marca + QA visibles + monitor +
   toggles); sacar los toggles de investigación del Monitor de Producción.
-- **F3 — Split físico (futuro, mayor).** Separar `_barrido` para que Investigación
-  (admisión + QA) y Producción (copy + arte + avance) corran como loops independientes con su
-  propia cadencia/gate, alineando el modelo de datos con la frontera (QA verifica antes de
-  materializar producción), desacoplados por el contrato `contenido`/cola.
+- **F3 — Split físico (hecho).** `_barrido` se partió en dos loops independientes (Investigación
+  = caducidad + admisión + QA; Producción = copy + arte + avance) con hilo, cadencia, gate y
+  single-flight (`pipeline_investigacion`/`pipeline_produccion`) propios. El modelo de datos se
+  alineó con la frontera: la QA verifica la HISTORIA (`noticias_clusters.qa_veredicto`, sellada
+  por `marcar_cluster_qa`) ANTES de materializar contenido; la admisión solo promueve las
+  verificadas (heredando el veredicto al `contenido`) y las `problema` no cruzan a producción.
+  La criba se acota por un EMBUDO (tope en vuelo) y un reaper sanea las QA `en_curso` zombi. Las
+  vistas de historias leen el veredicto NATIVO del cluster (fallback al contenido heredado para
+  lo admitido antes de F3). Queda como evolución posible separar también la CADENCIA de los dos
+  loops (hoy ambos 15 s) si conviene investigar más rápido que producir.
 
 ## Consecuencias
 
