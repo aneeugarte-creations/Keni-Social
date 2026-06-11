@@ -1,6 +1,6 @@
 ---
 titulo: "Identidad · Piso 15"
-descripcion: "Qué es Piso 15, qué cubre y su posicionamiento. Referencia para redactar el copy."
+descripcion: "Qué cubre y su posicionamiento; referencia del copy."
 tipo: editorial
 clase: marca
 marcas: [piso-15]

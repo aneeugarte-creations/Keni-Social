@@ -216,7 +216,7 @@ export function GrupoIdea({
       </div>
       {redesFaltantes.length > 0 && (
         <div className="mt-2 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
-          <span>Falta generar:</span>
+          <span>Por generar:</span>
           {redesFaltantes.map((r) => {
             const Icono = iconoRed(r);
             return (

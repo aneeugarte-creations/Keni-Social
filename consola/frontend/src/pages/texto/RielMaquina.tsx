@@ -210,9 +210,6 @@ export function RielMaquina({
           <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             <Hammer className="h-3.5 w-3.5" aria-hidden /> Taller
           </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Herramientas a demanda, fuera del flujo automático.
-          </p>
           <div className="mt-3 space-y-3">
             {taller.map((e) => (
               <TarjetaEtapa key={e.id} etapa={e} tituloDoc={tituloDe(e.doc_id)} onAbrir={onAbrir} />

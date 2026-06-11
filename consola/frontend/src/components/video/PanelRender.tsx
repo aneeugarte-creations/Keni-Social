@@ -101,14 +101,13 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
       {/* Razón VISIBLE del disabled: sin composición guardada no hay nada que renderizar. */}
       {!composicionId && (
         <p className="text-xs text-muted-foreground">
-          Para renderizar, sube un clip base en la sección Base: la composición se crea y se
-          guarda al subirlo.
+          Sube un clip base en la sección Base
         </p>
       )}
 
-      {renderizando && (
+      {renderizando && generacion?.fase && (
         <p className="text-xs text-muted-foreground">
-          {generacion?.fase ? `Render en curso (${generacion.fase})…` : "Componiendo con FFmpeg…"}
+          {generacion.fase}
         </p>
       )}
 
@@ -149,7 +148,7 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               <Play className="h-3 w-3" />
-              Abrir el mp4 en una pestaña nueva
+              Abrir en pestaña nueva
             </a>
           </div>
           {/* Error de descarga EN LÍNEA y persistente (con el fallback al lado, no solo un toast). */}

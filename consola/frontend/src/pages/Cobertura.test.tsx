@@ -275,7 +275,7 @@ describe("Cobertura · Mesa — plan del día", () => {
     expect(screen.getByTestId("calculo-score")).toBeTruthy();
   });
 
-  it("una línea con cupo pendiente y sin candidatas avisa del hueco", async () => {
+  it("una línea con cupo pendiente y sin candidatas no muestra el aviso redundante", async () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("seccion-internacional")).toBeTruthy());
     // internacional: cupo 1, generados 1 → sin hueco pendiente, no avisa.
@@ -290,9 +290,8 @@ describe("Cobertura · Mesa — plan del día", () => {
       }),
     );
     renderConProviders(<Cobertura />);
-    await waitFor(() =>
-      expect(screen.getByText(/sin candidatas en el pool — faltan 2/i)).toBeTruthy(),
-    );
+    // El aviso redundante fue eliminado; el KPI visual ya lo indica.
+    expect(screen.queryByText(/sin candidatas en el pool/)).toBeNull();
   });
 
   it("«Fuera del plan» está plegado por defecto y se expande al clic", async () => {

@@ -276,7 +276,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     const ok = await confirmar({
       titulo: "Saltar la cadena de aprobación",
       mensaje:
-        "Vas a aprobar esta pieza directamente, sin el visto bueno del resto del equipo: te saltas la cadena de aprobación. ¿Continuar?",
+        "Vas a aprobar esta pieza sin el visto bueno del equipo. ¿Continuar?",
       textoConfirmar: "Forzar aprobación",
     });
     if (ok) forzar.mutate();
@@ -295,7 +295,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const motivoBloqueo = yaAprobada
     ? publicacion.revisor_nombre
       ? `Ya aprobada · último OK: ${publicacion.revisor_nombre}`
-      : "Esta pieza ya está aprobada."
+      : ""
     : enRevision
       ? cadenaQuery.isError
         ? "No se pudo cargar el estado de aprobación; reintenta."
@@ -374,7 +374,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         const ok = await confirmar({
           titulo: "Rechazar la pieza",
           mensaje:
-            "Tu dislike es el decisivo: la pieza se rechaza y vuelve a redacción, y los OK dados se pierden. ¿Continuar?",
+            "La pieza se rechaza y vuelve a redacción. ¿Continuar?",
           textoConfirmar: "Rechazar",
         });
         if (!ok) return;
@@ -466,7 +466,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               Sparkles ya significa "usa IA" en esta misma tarjeta. La caja h-8/w-8 con márgenes
               negativos da target táctil sin mover el layout. */}
           {publicacion.pipeline_id && (
-            <Tooltip label="Ver el proceso de IA que produjo esta pieza (dedup, jerarquización, criba)">
+            <Tooltip label="Ver proceso de generación">
               <Link
                 to={`/datos/produccion/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
                 onClick={(e) => e.stopPropagation()}
@@ -555,9 +555,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
                 miReaccion === "like"
                   ? "Ya diste tu OK · vuelve a pulsar para quitarlo"
                   : miReaccion === "dislike"
-                    ? "Tu dislike está puesto; púlsalo para retirarlo y poder dar el OK"
+                    ? "Tu dislike está puesto"
                     : puedeDar && sinResolver > 0
-                      ? `Resuelve ${plural(sinResolver, "comentario")} antes de aprobar`
+                      ? `Hay comentarios sin resolver`
                       : tituloLike
               }
             >
@@ -602,7 +602,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             <Tooltip
               label={
                 miReaccion === "like"
-                  ? "Tu OK está puesto; quítalo con «Me gusta»"
+                  ? "Tu OK está puesto"
                   : miReaccion === "dislike"
                     ? "Quitar tu dislike"
                     : "No me gusta"
@@ -769,7 +769,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           onClick={(e) => e.stopPropagation()}
         >
           <p className="mb-2 text-xs text-muted-foreground">
-            Conversación de la idea (común a todas sus redes)
+            Conversación de la idea
           </p>
           <Comentarios contenidoId={publicacion.contenido_id} />
         </div>

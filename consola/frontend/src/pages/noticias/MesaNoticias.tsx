@@ -104,11 +104,6 @@ function SeccionLinea({
         <span className="text-xs tabular-nums text-muted-foreground">
           {linea.generados} de {linea.cupo} hoy
         </span>
-        {linea.restante > 0 && linea.en_pool === 0 && (
-          <span className="text-xs text-amber-600">
-            sin candidatas en el pool — faltan {linea.restante}
-          </span>
-        )}
         {hayMas && linea.en_pool > 0 && (
           <button
             type="button"
@@ -194,7 +189,7 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
         <EstadoVacio
           icono={Newspaper}
           titulo="Sin candidatas por ahora"
-          texto="El motor agrupa y rankea las noticias conforme llegan de las fuentes. Las candidatas aparecerán aquí segmentadas por línea."
+          texto="Las candidatas aparecerán aquí"
         />
       )}
 

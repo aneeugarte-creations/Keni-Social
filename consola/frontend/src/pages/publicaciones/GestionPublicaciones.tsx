@@ -178,7 +178,7 @@ function Cuerpo({
       ) : publicaciones.length === 0 ? (
         <EstadoVacio
           icono={Send}
-          titulo={filtrando ? "Sin resultados con estos filtros" : "Aún no hay publicaciones"}
+          titulo={filtrando ? "Sin resultados con estos filtros" : "Sin publicaciones"}
           texto={
             filtrando
               ? "Prueba a cambiar o limpiar los filtros."

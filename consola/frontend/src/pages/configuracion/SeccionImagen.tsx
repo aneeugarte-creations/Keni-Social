@@ -113,13 +113,7 @@ function SeccionImagenAdmin() {
     <SeccionColapsable
       titulo="Imagen con IA"
       contentClassName="space-y-4"
-      descripcion={
-        <>
-          Configura la clave del proveedor para activar <strong>«Generar con IA»</strong> al crear
-          imágenes en las publicaciones. La clave se guarda{" "}
-          <strong>solo en esta máquina</strong> y nunca se muestra.
-        </>
-      }
+      descripcion="Activa la generación de imágenes. Configura tu clave de proveedor."
     >
         {isPending ? (
           <div className="space-y-3">
@@ -191,8 +185,7 @@ function SeccionImagenAdmin() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Elige modelos económicos para posts sin foto de persona; los GPT-5 generan
-                personas.
+                Los modelos económicos no generan personas.
               </p>
             </div>
 
@@ -209,8 +202,7 @@ function SeccionImagenAdmin() {
                 disabled={ocupado}
               />
               <p className="text-xs text-muted-foreground">
-                Por seguridad nunca mostramos la clave guardada. Para cambiarla, pega una nueva y
-                guarda.
+                Pega una nueva para cambiarla.
               </p>
             </div>
 

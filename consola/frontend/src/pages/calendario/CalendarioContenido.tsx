@@ -64,7 +64,6 @@ export default function CalendarioContenido() {
             (plan y horarios + cadencia + publicación real). */}
         <MenuAcciones
           ajustesTitulo="Ajustes de programación"
-          ajustesDescripcion="El plan diario por línea, la cadencia por red y el interruptor de publicación real."
           ajustesAbiertoInicial={cadenciaDeepLink}
           ajustes={
             <>
@@ -73,14 +72,13 @@ export default function CalendarioContenido() {
               {marcaActiva && (
                 <SeccionColapsable
                   titulo="Plan y horarios"
-                  descripcion="El objetivo diario por línea de contenido y sus horarios de salida."
                 >
-                  <PanelPlan marca={marcaActiva} nombreMarca={nombreActiva ?? marcaActiva} />
+                  <PanelPlan marca={marcaActiva} />
                 </SeccionColapsable>
               )}
               <SeccionColapsable
                 titulo="Cadencia"
-                descripcion="Cada cuántos minutos puede salir un post por red: el reparto que alimenta este calendario."
+                descripcion="Intervalo mínimo entre posts por red."
                 abiertaInicial={cadenciaDeepLink}
               >
                 <PanelCadencia marcas={marcas} redes={redes} />
@@ -91,7 +89,7 @@ export default function CalendarioContenido() {
                 grupos={GRUPOS_PUBLICACION}
                 titulo="Ajustes de publicación"
                 acento="amber"
-                descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
+                descripcion="Habilita/deshabilita publicación automática en redes, con excepciones por marca."
               />
             </>
           }

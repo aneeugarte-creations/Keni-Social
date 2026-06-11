@@ -64,7 +64,7 @@ export function MetricaPorLinea({
   return (
     <SeccionColapsable
       titulo="Rendimiento por línea y origen"
-      descripcion="Qué líneas de contenido y qué orígenes (interno / petición externa) rinden mejor en el periodo: piezas publicadas, vistas, interacciones y engagement promedio por pieza."
+      descripcion="Rendimiento por línea y origen en el periodo."
       icono={GitBranch}
       contentClassName="space-y-8"
     >
@@ -76,8 +76,7 @@ export function MetricaPorLinea({
           </p>
         ) : data.lineas.length === 0 && data.origenes.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            Aún no hay rendimiento por línea u origen para este periodo (la fuente de
-            métricas no lo entrega).
+            Aún no hay rendimiento por línea u origen para este periodo.
           </p>
         ) : (
           <>
@@ -162,7 +161,7 @@ function TablaLineas({
                   onClick={() => alClicar("engagement_pct")}
                   alinear="right"
                 >
-                  Engagement (promedio por pieza)
+                  Engagement
                 </CabeceraOrdenable>
               </TableRow>
             </TableHeader>

@@ -88,8 +88,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
         <DialogHeader>
           <DialogTitle>Galería de artes</DialogTitle>
           <DialogDescription>
-            Elige una imagen guardada como fondo. La placa de marca y el copy-in se aplican
-            encima automáticamente.
+            Elige una imagen como fondo.
           </DialogDescription>
         </DialogHeader>
 
@@ -133,9 +132,6 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
               <ImageOff className="h-6 w-6" />
               <p className="text-sm">
                 No hay artes guardadas{marca ? " para esta marca" : ""} todavía.
-              </p>
-              <p className="text-xs">
-                Guarda artes desde el Estudio o tras componer una imagen aquí.
               </p>
             </div>
           ) : (

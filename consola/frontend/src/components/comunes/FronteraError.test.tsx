@@ -92,7 +92,7 @@ describe("FronteraError", () => {
     );
     expect(reload).not.toHaveBeenCalled();
     expect(screen.getByText("Hay una versión nueva de la consola")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /recargar la app/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^recargar$/i })).toBeInTheDocument();
     espia.mockRestore();
   });
 });

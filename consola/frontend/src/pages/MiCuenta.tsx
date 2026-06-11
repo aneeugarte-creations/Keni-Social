@@ -69,7 +69,6 @@ function SeccionTuCuenta() {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Tu cuenta</CardTitle>
-        <CardDescription>Datos de la cuenta con la que tienes la sesión iniciada.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 pt-0">
         {isPending ? (
@@ -293,8 +292,7 @@ function SeccionMfa({ activo }: { activo: boolean }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Llaves de acceso (passkeys)</CardTitle>
         <CardDescription>
-          Confirma tu identidad con Face ID, huella, Windows Hello o tu teléfono, además de la
-          contraseña, al iniciar sesión.
+          Segundo factor con reconocimiento biométrico o dispositivo
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">

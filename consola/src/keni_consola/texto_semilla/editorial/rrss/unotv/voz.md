@@ -1,6 +1,6 @@
 ---
 titulo: "Voz y tono · UnoTV"
-descripcion: "Cómo escribe UnoTV: registro, tono y estilo. Se inyecta al generar copy."
+descripcion: "Registro, tono y estilo; se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [unotv]

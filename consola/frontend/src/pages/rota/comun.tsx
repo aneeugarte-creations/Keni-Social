@@ -198,8 +198,7 @@ export function LeyendaCobertura() {
         </span>
       ))}
       <span className="inline-flex items-center gap-1.5">
-        <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Cambió
-        (reprogramado, falta avisar)
+        <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Reprogramado
       </span>
       <span className="inline-flex items-center gap-1.5">
         <ShieldCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> Coordinador
@@ -313,7 +312,7 @@ export function MenuMasAcciones({
       onClick: onAbrirFranjasSemana,
     });
     items.push({
-      etiqueta: "Plantilla por defecto de franjas",
+      etiqueta: "Plantilla de franjas",
       icono: Clock,
       onClick: onAbrirPlantillaFranjas,
     });
@@ -360,7 +359,7 @@ export function MenuMasAcciones({
 export function BadgeEstadoSemana({ aprobada, hayTurnos }: { aprobada: boolean; hayTurnos: boolean }) {
   if (aprobada) {
     return (
-      <Tooltip label="Visible para el equipo (publicada).">
+      <Tooltip label="Visible para el equipo">
         <Badge variant="ok" className="font-normal">
           <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicada
         </Badge>

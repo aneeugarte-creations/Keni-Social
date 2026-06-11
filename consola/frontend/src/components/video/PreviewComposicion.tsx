@@ -584,7 +584,7 @@ export function PreviewComposicion({
             {pipInteractivo && (
               <div
                 data-testid="pip-redimensionar"
-                title="Redimensionar (mantiene la proporción)"
+                title="Redimensionar"
                 onMouseDown={iniciarRedimensionPip}
                 className="absolute bottom-0 right-0 h-3.5 w-3.5 cursor-nwse-resize rounded-tl-md border-l-2 border-t-2 border-white/80 bg-primary/80"
               />
@@ -732,7 +732,7 @@ export function PreviewComposicion({
         )}
       </div>
       <p className="text-[11px] text-muted-foreground/70">
-        Preview aproximado (DOM). El render fiel lo produce el servidor con FFmpeg.
+        Preview aproximado
       </p>
     </div>
   );

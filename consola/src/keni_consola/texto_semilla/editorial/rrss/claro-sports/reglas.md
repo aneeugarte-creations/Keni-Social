@@ -1,6 +1,6 @@
 ---
 titulo: "Reglas · Claro Sports"
-descripcion: "Reglas y límites editoriales de Claro Sports al generar copy."
+descripcion: "Límites editoriales al generar copy."
 tipo: editorial
 clase: reglas
 marcas: [claro-sports]

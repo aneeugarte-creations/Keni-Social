@@ -214,11 +214,6 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
               <CardTitle className="flex items-center gap-2 text-base">
                 <ArrowLeftRight className="h-4 w-4" /> Cambios y ausencias
               </CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Pide un cambio de turno con un compañero o registra una ausencia
-                (vacaciones, descanso, baja). Aparece todo en una lista, mas reciente
-                arriba.
-              </p>
             </div>
             <Button
               type="button"
@@ -263,7 +258,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
             {tipoSolicitud === "cambio" ? (
               sinSesion ? (
                 <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-                  Inicia sesion para pedir un cambio de turno con tus compañeros.
+                  Inicia sesión para continuar.
                 </div>
               ) : (
                 <FormularioNuevoSwap
@@ -346,11 +341,6 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
             filtroEstado === "historial"
               ? "Sin historial"
               : "Sin solicitudes activas"
-          }
-          texto={
-            filtroEstado === "historial"
-              ? "Aqui apareceran los cambios cerrados y las ausencias ya pasadas."
-              : "Crea una con el boton 'Nueva solicitud'."
           }
         />
       ) : (
@@ -782,7 +772,7 @@ export function DialogAccionSwap({
     aceptar: {
       titulo: "Aceptar el cambio",
       descripcion:
-        "Confirmas que puedes cubrir el turno de tu compañero. Aún falta que Elías lo apruebe.",
+        "Aceptar: tu compañero recibirá tu respuesta",
       botonConfirmar: "Aceptar",
       llamar: (cuerpo) => api.aceptarSwap(swapId, cuerpo),
       toastOk: "Cambio aceptado. Espera la aprobación de Elías.",
@@ -799,14 +789,14 @@ export function DialogAccionSwap({
     aprobar: {
       titulo: "Aprobar y aplicar el cambio",
       descripcion:
-        "Vas a intercambiar los turnos en el horario del equipo. Si los turnos han cambiado a mano desde la solicitud, la consola lo avisará y no aplicará nada.",
+        "Los turnos se intercambiarán en el horario del equipo",
       botonConfirmar: "Aprobar y aplicar",
       llamar: (cuerpo) => api.aprobarSwap(swapId, cuerpo),
       toastOk: "Cambio aprobado y aplicado al horario.",
       placeholder: "Ojo con el relevo / nota interna…",
     },
     rechazar_admin: {
-      titulo: "Rechazar el cambio (admin)",
+      titulo: "Rechazar el cambio",
       descripcion: "Vas a rechazar el cambio aunque tus compañeros ya lo hubieran acordado.",
       botonConfirmar: "Rechazar",
       llamar: (cuerpo) => api.rechazarSwapAdmin(swapId, cuerpo),

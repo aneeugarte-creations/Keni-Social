@@ -73,9 +73,7 @@ export function DialogoClonar({
             Clonar a otra red
           </DialogTitle>
           <DialogDescription>
-            Copia el copy, el texto en imagen y la foto de esta pieza
-            {publicacion ? ` (${publicacion.red_nombre})` : ""} a otra red de la misma idea. Si la
-            idea no salía en esa red, la pieza se crea; si ya salía, su contenido se sobrescribe.
+            Copia el contenido a otra red
           </DialogDescription>
         </DialogHeader>
 

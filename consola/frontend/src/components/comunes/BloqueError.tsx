@@ -32,7 +32,7 @@ export function BloqueError({
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">{titulo}</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            {mensaje ?? "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento."}
+            {mensaje ?? "Ocurrió un problema. Vuelve a intentarlo."}
           </p>
         </div>
         <Button variant="outline" onClick={onReintentar} disabled={cargando}>

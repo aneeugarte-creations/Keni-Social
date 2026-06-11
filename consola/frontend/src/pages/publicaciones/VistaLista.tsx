@@ -266,7 +266,7 @@ function TarjetaPublicacion({
           <DialogHeader>
             <DialogTitle>Borrar publicación</DialogTitle>
             <DialogDescription>
-              ¿Seguro que quieres borrar “{publicacion.titulo}”? Esta acción no se puede deshacer.
+              ¿Borrar “{publicacion.titulo}”?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -493,8 +493,7 @@ export function VistaLista({
               Borrar {n} {n === 1 ? "publicación" : "publicaciones"}
             </DialogTitle>
             <DialogDescription>
-              Vas a borrar {n} {n === 1 ? "publicación seleccionada" : "publicaciones seleccionadas"}.
-              Esta acción no se puede deshacer.
+              Se eliminarán {n} pieza(s).
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -1,6 +1,6 @@
 ---
 titulo: "Patrones medidos · UnoTV"
-descripcion: "Bandas de rendimiento medidas en Metricool (longitud, emojis, hashtags) de UnoTV; se regenera periódicamente."
+descripcion: "Bandas medidas en Metricool (longitud, emojis, hashtags); se regeneran periódicamente."
 tipo: editorial
 clase: ""
 marcas: [unotv]

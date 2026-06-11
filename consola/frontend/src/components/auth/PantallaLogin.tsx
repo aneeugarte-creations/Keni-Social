@@ -220,7 +220,6 @@ export function PantallaLogin() {
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1.5 text-center">
           <CardTitle className="text-xl">Consola</CardTitle>
-          <p className="text-sm text-muted-foreground">Inicia sesión para continuar.</p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={alEnviar} noValidate>

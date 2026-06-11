@@ -369,7 +369,7 @@ export function Calendario({
             <Tooltip
               label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
                 nCambiados === 1 ? "" : "s"
-              } sin avisar al equipo.`}
+              } sin aviso.`}
             >
               <Badge variant="aviso" className="gap-1 font-normal">
                 <BellRing className="h-3.5 w-3.5" /> {nCambiados}

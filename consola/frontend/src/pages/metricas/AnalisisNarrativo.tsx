@@ -151,8 +151,7 @@ function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
-            Datos parciales de: {data.cobertura_parcial.join(", ")} — el periodo aún no
-            está completo para esas marcas.
+            Datos parciales de: {data.cobertura_parcial.join(", ")}
           </span>
         </p>
       )}

@@ -53,7 +53,7 @@ export function BadgeVeredictoFuente({
   if (!veredicto) return null;
   if (veredicto === "problema") {
     return (
-      <Tooltip label="La criba encontró un problema de peso en la fuente." side="top">
+      <Tooltip label="Problema detectado en la fuente" side="top">
         <Badge
           variant="secondary"
           className={cn(

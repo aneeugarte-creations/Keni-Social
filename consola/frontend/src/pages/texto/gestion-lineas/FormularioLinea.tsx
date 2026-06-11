@@ -124,8 +124,7 @@ export function FormularioLinea({
       )}
       <div className="space-y-1.5">
         <Label htmlFor={`linea-keywords-${clase}`}>
-          Palabras clave{" "}
-          <span className="font-normal text-muted-foreground">(separadas por comas)</span>
+          Palabras clave
         </Label>
         <Textarea
           id={`linea-keywords-${clase}`}
@@ -137,10 +136,7 @@ export function FormularioLinea({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`linea-hashtags-${clase}`}>
-          Hashtags{" "}
-          <span className="font-normal text-muted-foreground">
-            (sin #, separados por coma; se añaden al final del copy)
-          </span>
+          Hashtags
         </Label>
         <Textarea
           id={`linea-hashtags-${clase}`}

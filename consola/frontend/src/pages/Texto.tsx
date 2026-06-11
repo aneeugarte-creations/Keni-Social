@@ -258,13 +258,13 @@ export default function Texto() {
           <TabsTrigger value="produccion" title="La máquina de contenido">
             {ETIQUETA_VISTA.produccion}
           </TabsTrigger>
-          <TabsTrigger value="importacion" title="Insumos y documentos del equipo">
+          <TabsTrigger value="importacion" title="Insumos del equipo">
             {ETIQUETA_VISTA.importacion}
           </TabsTrigger>
-          <TabsTrigger value="estrategia" title="El espacio editorial de la marca">
+          <TabsTrigger value="estrategia" title="Configuración editorial">
             {ETIQUETA_VISTA.estrategia}
           </TabsTrigger>
-          <TabsTrigger value="documentos" title="Tabla plana de todos los documentos">
+          <TabsTrigger value="documentos" title="Gestión y búsqueda">
             {ETIQUETA_VISTA.documentos}
           </TabsTrigger>
         </TabsList>

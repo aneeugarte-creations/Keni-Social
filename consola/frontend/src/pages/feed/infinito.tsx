@@ -64,7 +64,7 @@ export function PieFeed({
   if (estado === "fin") {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
-        Has llegado al final del feed.
+        Fin del feed
       </p>
     );
   }
@@ -75,7 +75,7 @@ export function PieFeed({
         role="status"
         aria-live="polite"
       >
-        <span>No se pudo cargar más.</span>
+        <span>Error al cargar más</span>
         {onReintentar && (
           <Button variant="outline" size="sm" onClick={onReintentar}>
             Reintentar

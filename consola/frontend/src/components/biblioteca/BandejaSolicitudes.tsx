@@ -111,7 +111,7 @@ function FilaSolicitud({ solicitud }: { solicitud: SolicitudPublicacion }) {
         className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
       >
         {desplegada ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        {desplegada ? "Ocultar cambios" : "Ver cambios (producción ↔ propuesta)"}
+        {desplegada ? "Ocultar cambios" : "Ver cambios"}
       </button>
       {desplegada ? (
         <div className="max-h-72 overflow-y-auto rounded-md border border-border p-3">

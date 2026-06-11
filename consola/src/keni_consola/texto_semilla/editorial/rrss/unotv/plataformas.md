@@ -1,6 +1,6 @@
 ---
 titulo: "Formato por red · UnoTV"
-descripcion: "Ajustes de formato por red propios de UnoTV, sobre el formato común."
+descripcion: "Excepciones de la marca sobre el formato común."
 tipo: editorial
 clase: plataforma
 marcas: [unotv]

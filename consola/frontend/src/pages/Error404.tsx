@@ -24,8 +24,7 @@ export default function Error404() {
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Página no encontrada (404)</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            No encontramos la página que buscabas. Puede que el enlace esté
-            desactualizado o que la dirección tenga un error.
+            La URL que buscas no existe. Verifica la dirección.
           </p>
           <p className="max-w-md break-all pt-1 font-mono text-xs text-muted-foreground">
             {location.pathname}

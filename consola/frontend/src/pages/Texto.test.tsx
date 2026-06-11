@@ -142,7 +142,7 @@ const MAQUINA = {
     {
       id: "importacion",
       titulo: "Herramientas de importación",
-      subtitulo: "Insumos y documentos del equipo",
+      subtitulo: "Insumos del equipo",
       etapas: [
         {
           tipo: "prompt",
@@ -361,7 +361,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     stubFetch();
     montar("/?vista=importacion");
 
-    expect(await screen.findByText("Insumos y documentos del equipo")).toBeInTheDocument();
+    expect(await screen.findByText("Insumos del equipo")).toBeInTheDocument();
     expect(screen.getByTitle("Insumos · Portal/SMS — abrir el prompt")).toBeInTheDocument();
   });
 

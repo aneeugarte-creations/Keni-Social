@@ -38,7 +38,7 @@ export function BarraReencuadre({
       )}
       <span className="flex items-center gap-1.5">
         <Move className="h-3.5 w-3.5" />
-        Arrastra la foto para encuadrarla
+        Arrastra la foto
       </span>
       <span className="flex flex-1 items-center gap-2">
         <Crop className="h-3.5 w-3.5 shrink-0" />

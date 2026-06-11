@@ -33,7 +33,7 @@ const CLAVE_NOTAS = ["presidencia", "notas"] as const;
 function BadgeEstadoPieza({ nota }: { nota: NotaPresidencia }) {
   if (nota.estado_pieza === "generando") {
     return (
-      <Badge variant="aviso" className="gap-1" title="La IA está redactando el copy; la pieza saldrá en el feed al terminar.">
+      <Badge variant="aviso" className="gap-1" title="Redactando copy automático...">
         <Loader2 className="h-3 w-3 animate-spin" />
         Generando…
       </Badge>
@@ -102,15 +102,13 @@ export default function CajonPresidencia() {
           Presidencia
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Pega la nota que llega por WhatsApp y sube TODO su media (imágenes y video). Se
-          genera sola una pieza CARRUSEL en el feed: la primera imagen lleva la placa de
-          marca como portada y el resto sale en crudo, en este orden.
+          Nota de WhatsApp con media. La primera imagen es la portada del carrusel.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
           <Label htmlFor="presidencia-titulo" className="text-xs text-muted-foreground">
-            Título (opcional: si no, se toma la primera línea de la nota)
+            Título (opcional)
           </Label>
           <Input
             id="presidencia-titulo"
@@ -135,14 +133,7 @@ export default function CajonPresidencia() {
           idPrefijo="presidencia"
           base={1}
           marcarPortada
-          etiqueta={
-            <>
-              Media de la nota
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                (la primera imagen será la portada; el resto sale en crudo, en este orden)
-              </span>
-            </>
-          }
+          etiqueta="Media de la nota"
         />
         {!hayImagen && media.length > 0 && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
@@ -158,7 +149,7 @@ export default function CajonPresidencia() {
             title={
               puedeEnviar
                 ? undefined
-                : "Necesita el texto de la nota y al menos una imagen."
+                : "Completa nota e imagen"
             }
           >
             {crearMut.isPending ? (

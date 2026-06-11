@@ -97,7 +97,6 @@ export function HerramientasHashtags({
           size="sm"
           className="ml-auto text-muted-foreground"
           onClick={onGestionar}
-          title="Gestionar grupos de hashtags"
         >
           <Settings2 className="h-4 w-4" />
           Gestionar grupos

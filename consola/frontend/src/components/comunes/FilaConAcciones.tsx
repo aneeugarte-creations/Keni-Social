@@ -153,7 +153,7 @@ export function FilaConAcciones({
         type="button"
         aria-label={etiquetaKebab}
         aria-haspopup="menu"
-        title={`${etiquetaKebab} (click derecho)`}
+        title={etiquetaKebab}
         onClick={(e) => {
           e.stopPropagation();
           menu.abrirEn(e, kebabRef.current);

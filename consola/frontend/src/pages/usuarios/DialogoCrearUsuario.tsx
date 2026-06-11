@@ -84,8 +84,7 @@ export function DialogoCrearUsuario({
         <DialogHeader>
           <DialogTitle>Nueva persona</DialogTitle>
           <DialogDescription>
-            Crea una cuenta de acceso. Tras crearla, ábrela en el organigrama para asignarle
-            cargo, marcas y a quién reporta. Deberá cambiar su contraseña al entrar.
+            Crea una cuenta de acceso. Los detalles (cargo, marcas, superior) se asignan tras crearla en el organigrama.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -97,7 +96,7 @@ export function DialogoCrearUsuario({
           noValidate
         >
           <div className="space-y-1.5">
-            <Label htmlFor="nuevo-nombre">Nombre (organigrama)</Label>
+            <Label htmlFor="nuevo-nombre">Nombre</Label>
             <Input
               id="nuevo-nombre"
               value={nombre}

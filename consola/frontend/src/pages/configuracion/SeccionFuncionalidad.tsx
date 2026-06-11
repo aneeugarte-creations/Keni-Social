@@ -105,8 +105,7 @@ function FilaAjuste({
             <DialogHeader>
               <DialogTitle>Activar publicación real</DialogTitle>
               <DialogDescription>
-                «{ajuste.etiqueta}» hará que las piezas aprobadas y programadas se publiquen DE
-                VERDAD en las redes (vía Metricool). Asegúrate de que es lo que quieres.
+                Esto publicará realmente en las redes. ¿Estás seguro?
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -400,8 +399,7 @@ function GruposAjustes({
             <div key={grupo.id} className="space-y-1.5">
               {subtitulo(grupo.titulo)}
               <p className="text-xs text-muted-foreground">
-                Sin tocar, cada marca sigue el valor global de la etapa; apágala para desviar esa
-                marca. Con el maestro de la etapa apagado, su excepción no aplica.
+                Sin tocar, cada marca sigue el global. Apágala para desviarse.
               </p>
               <ExcepcionesPorMarca
                 ajustes={grupo.ajustes}
@@ -434,8 +432,7 @@ function GruposAjustes({
                     Excepciones por marca
                   </h4>
                   <p className="text-xs text-muted-foreground">
-                    Sin tocar, cada marca sigue el maestro; apágala para dejarla en dry-run aunque
-                    el maestro publique de verdad.
+                    Apágala para no publicar aunque el maestro sí publique.
                   </p>
                   <ExcepcionesPorMarca
                     ajustes={exMarca}
@@ -558,9 +555,8 @@ export function PanelMaquinaContenido() {
       abiertaInicial
       descripcion={
         <>
-          Enciende/apaga las etapas (Selección→Validación→Copy→Arte), por marca, y regula la
-          admisión del flujo continuo: solo entra lo que cabe en vuelo (in=out). Aplican{" "}
-          <strong>en caliente</strong> (hasta ~1 minuto).
+          Enciende/apaga Selección, Validación, Copy, Arte por marca. Los cambios aplican{" "}
+          <strong>en caliente</strong>.
         </>
       }
     >

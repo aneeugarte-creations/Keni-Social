@@ -1,6 +1,6 @@
 ---
 titulo: "Formato por red · Nación Gamer"
-descripcion: "Ajustes de formato por red propios de Nación Gamer, sobre el formato común."
+descripcion: "Excepciones de la marca sobre el formato común."
 tipo: editorial
 clase: plataforma
 marcas: [nacion-gamer]

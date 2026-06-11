@@ -128,7 +128,7 @@ export function CadenaAprobacion({
         </p>
       ) : rechazada ? (
         <p className={`mt-2 text-sm ${TEXTO_ERROR}`}>
-          Rechazada; la pieza vuelve a la redacción.
+          Rechazada
         </p>
       ) : null}
 

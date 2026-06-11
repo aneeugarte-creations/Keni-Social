@@ -17,7 +17,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  CheckCircle2,
   Fingerprint,
   Layers,
   LayoutGrid,
@@ -252,7 +251,7 @@ function FranjaEnsamblaje({
         <Layers className="h-3.5 w-3.5" aria-hidden /> Cómo se ensambla para la IA
       </h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        Este es el orden real con el que las capas se adjuntan al prompt al generar copy.
+        Orden de inyección de capas
       </p>
       {orden.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -443,12 +442,7 @@ export function EstrategiaMarca({
             Estrategia de marca
           </p>
           <h2 className="truncate text-lg font-semibold leading-tight">{nombreMarca}</h2>
-          {datos.completa ? (
-            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-              Estrategia completa: los {datos.total} pilares obligatorios tienen contenido.
-            </p>
-          ) : (
+          {!datos.completa && (
             <p className="mt-0.5 text-sm text-muted-foreground">
               {datos.recomendacion ||
                 `Faltan ${datos.total - datos.cubiertos} de ${datos.total} pilares obligatorios por definir.`}

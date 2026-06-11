@@ -7,11 +7,9 @@ export const CLASE_LABEL: Record<ClaseLinea, string> = {
 
 export const CLASE_AYUDA: Record<ClaseLinea, string> = {
   vertical:
-    "Las líneas (verticales) agrupan el contenido por tema/sección. Las keywords ayudan a " +
-    "auto-clasificar cada pieza en su línea.",
+    "Agrupan contenido por tema/sección. Auto-clasifican con keywords.",
   origen:
-    "El origen distingue contenido interno de externo. Las keywords ayudan a " +
-    "clasificarlo automáticamente.",
+    "Distinguen contenido interno de externo.",
 };
 
 /** Centinela del selector de marca: etiqueta global (sin marca). */

@@ -215,7 +215,7 @@ export function GestionHashtags({
             Grupos de hashtags
           </DialogTitle>
           <DialogDescription>
-            Guarda conjuntos de hashtags reutilizables para insertarlos al componer.
+            Crea conjuntos de hashtags reutilizables.
           </DialogDescription>
         </DialogHeader>
 
@@ -243,7 +243,7 @@ export function GestionHashtags({
           ) : grupos.length === 0 ? (
             <p className="flex items-center justify-center gap-2 py-6 text-center text-sm text-muted-foreground">
               <X className="h-4 w-4" />
-              Aún no hay grupos. Crea el primero arriba.
+              Sin grupos. Crea uno nuevo.
             </p>
           ) : (
             <div className="space-y-2">

@@ -149,7 +149,7 @@ function PildoraPub({
           e.dataTransfer.effectAllowed = "move";
         }}
         onClick={() => onAbrir(publicacion)}
-        title={`${publicado ? "Publicado" : "Programado"} · ${formatearHora(publicacion.fecha_programada)} · ${nombreRed(publicacion.red)} · ${publicacion.titulo} · arrastra para reprogramar · clic derecho para más`}
+        title={`${publicacion.titulo} (${nombreRed(publicacion.red)}) · arrastra para mover · clic derecho para más`}
         className={cn(
           "flex w-full cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
           publicado
@@ -350,8 +350,7 @@ export function VistaCalendario({
         {programadas.length === 0 && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             <CalendarOff className="h-4 w-4 shrink-0" />
-            No hay publicaciones programadas todavía: aprueba una pieza (o deja que el motor
-            la reparta) y aparecerá en su hueco.
+            No hay piezas programadas.
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">

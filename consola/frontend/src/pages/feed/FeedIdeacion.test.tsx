@@ -531,7 +531,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     const boton = await screen.findByRole("button", { name: /comentar/i });
     fireEvent.click(boton);
     await waitFor(() =>
-      expect(screen.getByPlaceholderText(/comentario para el equipo/i)).toBeInTheDocument(),
+      expect(screen.getByPlaceholderText(/escribe un comentario/i)).toBeInTheDocument(),
     );
   });
 
@@ -742,7 +742,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // El post de la red generada (X).
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Franja compacta con SOLO Instagram (TikTok no es red de foto); sin placeholders gigantes.
-    expect(screen.getByText("Falta generar:")).toBeInTheDocument();
+    expect(screen.getByText("Por generar:")).toBeInTheDocument();
     expect(screen.getByText("Instagram")).toBeInTheDocument();
     expect(screen.queryByText("TikTok")).toBeNull();
     expect(screen.queryByText("No generado")).toBeNull();
@@ -806,7 +806,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // El post (X) + UNA franja compacta con las 4 redes pendientes (sin placeholders gigantes).
-    expect(screen.getByText("Falta generar:")).toBeInTheDocument();
+    expect(screen.getByText("Por generar:")).toBeInTheDocument();
     for (const red of ["Instagram", "Facebook", "TikTok", "YouTube"]) {
       expect(screen.getByText(red)).toBeInTheDocument();
     }
@@ -908,7 +908,6 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // Tope alcanzado: el vacío de la casa (EstadoVacio) ofrece reanudar y el rastreo se detiene.
     expect(await screen.findByRole("button", { name: "Seguir buscando" })).toBeInTheDocument();
     expect(screen.getByText("Sin piezas aprobadas ni publicadas")).toBeInTheDocument();
-    expect(screen.getByText("Puede haber piezas más antiguas aún sin cargar.")).toBeInTheDocument();
     // Disparar lo que quede registrado no pide la 6ª página (los observers están apagados).
     observers.forEach((o) => o.fire());
     await waitFor(() => expect(urls.length).toBe(5));
@@ -986,9 +985,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     disparadores[0]();
     // El pie inline con Reintentar (reintenta SOLO la página fallida), no el BloqueError a
     // página completa que descartaba el feed visible y la posición de scroll.
-    expect(await screen.findByText("No se pudo cargar más.")).toBeInTheDocument();
+    expect(await screen.findByText("Error al cargar más")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
     expect(screen.getByText("¡Increíble remontada!")).toBeInTheDocument();
-    expect(screen.queryByText("No se pudo cargar el feed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Error al cargar")).not.toBeInTheDocument();
   });
 });

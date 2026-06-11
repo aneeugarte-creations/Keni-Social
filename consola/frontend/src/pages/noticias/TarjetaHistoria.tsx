@@ -88,7 +88,7 @@ export function TarjetaHistoria({
     mutationFn: () => api.noticias.usarHistoria(historia.id, { generar: true }),
     onSuccess: () => {
       invalidar();
-      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
+      toast.success("Copy en marcha");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -97,7 +97,7 @@ export function TarjetaHistoria({
     mutationFn: () => api.noticias.descartarHistoria(historia.id),
     onSuccess: () => {
       invalidar();
-      toast.success("Historia descartada. La encuentras en «Descartadas» si te arrepientes.");
+      toast.success("Historia descartada");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -173,7 +173,7 @@ export function TarjetaHistoria({
               <Badge
                 variant="aviso"
                 className="gap-1 text-xs"
-                title="La pieza ya existe; la IA está redactando el copy. Aparecerá en el feed al terminar."
+                title="Redactando copy"
               >
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Generando…
@@ -182,7 +182,7 @@ export function TarjetaHistoria({
               <Badge
                 variant="aviso"
                 className="gap-1 text-xs"
-                title="Promovida, pero aún SIN pieza en el feed (copy por encolar, sin redes, o duplicada)."
+                title="En cola de procesamiento"
               >
                 <Clock className="h-3 w-3" />
                 En cola
@@ -214,7 +214,7 @@ export function TarjetaHistoria({
                   <Tooltip
                     label={
                       historia.promovible_motivo ||
-                      "Supera el listón: el sistema la produce solo. No hacer nada es una decisión válida."
+                      "Supera el umbral automático"
                     }
                     side="top"
                   >
@@ -237,8 +237,8 @@ export function TarjetaHistoria({
                   aria-label={historia.promovible ? "Adelantar al feed" : "Empujar al feed"}
                   title={
                     historia.promovible
-                      ? "El sistema ya la va a producir; esto se salta la espera y la manda ahora."
-                      : "Forzar esta nota al feed ahora aunque no supere el listón automático."
+                      ? "Adelantar la producción"
+                      : "Producir aunque no supere el umbral"
                   }
                   data-testid="btn-empujar"
                 >

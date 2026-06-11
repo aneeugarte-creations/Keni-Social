@@ -40,7 +40,7 @@ export interface EditorSubtitulosProps {
 
 const ETIQUETA_ESTADO: Record<EstadoSubtitulos, string> = {
   pendiente: "Pendiente",
-  transcrito: "Transcrito (sin revisar)",
+  transcrito: "Transcrito",
   editado: "Editado",
   listo: "Listo para quemar",
 };
@@ -207,13 +207,11 @@ export function EditorSubtitulos({
               role="status"
               className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-300"
             >
-              Tienes cambios sin guardar restaurados de tu sesión anterior. Pulsa «Guardar
-              correcciones» para conservarlos.
+              Cambios sin guardar de tu sesión anterior.
             </p>
           )}
           <p className="text-[11px] text-amber-700 dark:text-amber-400">
-            Corrige la ortografía y erratas (es-MX). Nada se quema en el video hasta que marques los
-            subtítulos como listos.
+            Corrige ortografía y erratas. Los cambios no se usan hasta marcar como listos.
           </p>
           <ul className="max-h-72 space-y-2 overflow-auto pr-1">
             {segmentos.map((s) => (

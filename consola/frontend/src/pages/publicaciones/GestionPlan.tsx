@@ -60,10 +60,8 @@ interface FilaLinea {
 
 export function PanelPlan({
   marca,
-  nombreMarca,
 }: {
   marca: string;
-  nombreMarca: string;
 }) {
   const queryClient = useQueryClient();
   const clavePlan = `KENI_PLAN_DIA::${marca}`;
@@ -175,9 +173,7 @@ export function PanelPlan({
   return (
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
-        Para <span className="font-medium text-foreground">{nombreMarca}</span>: cuántos
-        contenidos salen al día de cada línea y a qué horas (hora CDMX). La cantidad gobierna la
-        producción automática; los horarios, la programación. «Breaking» no lleva horario.
+        Cuántos contenidos por línea y a qué horas (CDMX).
       </p>
       {ajustes.isPending || franjasQuery.isPending ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">

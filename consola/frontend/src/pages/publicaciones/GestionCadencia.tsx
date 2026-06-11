@@ -298,8 +298,7 @@ export function PanelCadencia({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Cada cuántos minutos puede salir un post por red, dentro de una ventana horaria y unos
-        días. Guardar con la misma marca y red sobrescribe la cadencia.
+        Define el espaciamiento mínimo y horarios de publicación.
       </p>
       <FormularioCadencia marcas={marcas} redes={redes} />
 
@@ -309,7 +308,7 @@ export function PanelCadencia({
         <p className="py-6 text-center text-sm text-destructive">{mensajeError(query.error)}</p>
       ) : cadencias.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted-foreground">
-          Aún no hay cadencias. Define la primera arriba.
+          Sin cadencias aún. Crea una arriba.
         </p>
       ) : (
         <div className="space-y-2">

@@ -34,12 +34,12 @@ const CUENTAS: CuentaMetrica[] = [
 ];
 
 describe("GraficaMarcas", () => {
-  it("el título es dinámico según la métrica activa («Vistas por marca» al inicio)", () => {
+  it("el título es fijo y la métrica activa vive en el selector", () => {
     render(<GraficaMarcas cuentas={CUENTAS} />);
 
-    // La gráfica enseña UNA métrica a la vez: el título lo dice (no «Vistas e interacciones»).
-    expect(screen.getByText("Vistas por marca")).toBeInTheDocument();
-    expect(screen.queryByText("Vistas e interacciones por marca")).not.toBeInTheDocument();
+    // La gráfica enseña UNA métrica a la vez: el selector la dice; el título no la repite.
+    expect(screen.getByText("Por marca")).toBeInTheDocument();
+    expect(screen.queryByText("Vistas e interacciones")).not.toBeInTheDocument();
   });
 
   it("ofrece una alternativa textual del chart (role=img con marcas y valores)", () => {

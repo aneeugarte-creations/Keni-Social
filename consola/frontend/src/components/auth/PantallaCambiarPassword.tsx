@@ -19,7 +19,7 @@ const MIN_PASSWORD = 8;
  * que `debe_cambiar_password` pase a `false` y la app continúe.
  */
 export function PantallaCambiarPassword() {
-  const { usuario, refrescar } = useSesion();
+  const { refrescar } = useSesion();
   const [actual, setActual] = React.useState("");
   const [nueva, setNueva] = React.useState("");
   const [confirmar, setConfirmar] = React.useState("");
@@ -58,11 +58,6 @@ export function PantallaCambiarPassword() {
             <KeyRound className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
           </div>
           <CardTitle className="text-xl">Cambia tu contraseña</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {usuario
-              ? `Por seguridad, ${usuario.usuario} debe elegir una contraseña nueva antes de continuar.`
-              : "Por seguridad, elige una contraseña nueva antes de continuar."}
-          </p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={alEnviar} noValidate>

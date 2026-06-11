@@ -142,7 +142,7 @@ export function SeccionDaemons() {
             to="/configuracion"
             className="ml-auto inline-flex items-center gap-1 text-xs font-normal underline-offset-2 hover:text-foreground hover:underline"
           >
-            Encender/apagar en Configuración
+            Configuración
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </Link>
         </CardTitle>

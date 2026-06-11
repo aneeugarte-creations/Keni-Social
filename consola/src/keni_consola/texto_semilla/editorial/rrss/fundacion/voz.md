@@ -1,6 +1,6 @@
 ---
 titulo: "Voz y tono · Fundación"
-descripcion: "Cómo escribe Fundación: registro, tono y estilo. Se inyecta al generar copy."
+descripcion: "Registro, tono y estilo; se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [fundacion]

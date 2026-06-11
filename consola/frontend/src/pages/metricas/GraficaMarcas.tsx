@@ -120,7 +120,7 @@ export function GraficaMarcas({
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Título dinámico: la gráfica enseña UNA métrica a la vez (la del Select). */}
-            <CardTitle className="text-base">{etiqueta} por marca</CardTitle>
+            <CardTitle className="text-base">Por marca</CardTitle>
             <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
               <SelectTrigger className="w-[170px]" aria-label="Métrica de la comparativa">
                 <SelectValue />

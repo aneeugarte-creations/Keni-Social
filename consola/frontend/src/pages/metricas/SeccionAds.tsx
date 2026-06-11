@@ -84,7 +84,7 @@ export function SeccionAds({
     <SeccionColapsable
       titulo="Publicidad"
       icono={Megaphone}
-      descripcion="Campañas de pago del periodo, separadas del contenido orgánico."
+      descripcion="Campañas de pago"
       contentClassName="p-0"
     >
       {isPending ? (

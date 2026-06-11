@@ -227,7 +227,7 @@ describe("MobileFeed · feed móvil de revisión", () => {
     stubFetch(); // 1 pieza, sin cursor_siguiente -> no hay más páginas
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    expect(screen.getByText("Has llegado al final del feed.")).toBeInTheDocument();
+    expect(screen.getByText("Fin del feed")).toBeInTheDocument();
   });
 
   it("vacío HONESTO: con la página llena de otras marcas y más por traer, busca en vez de afirmar 'Nada por aprobar'", async () => {

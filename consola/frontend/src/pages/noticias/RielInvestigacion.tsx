@@ -47,30 +47,30 @@ const ETAPAS: readonly EtapaProceso[] = [
   {
     nombre: "Ingesta",
     claves: ["KENI_PIPELINE_SELECCION", MAESTRO_INVESTIGACION],
-    ayuda: "Recolecta artículos de las fuentes RSS y los archiva.",
+    ayuda: "Recolecta artículos de las fuentes",
   },
   {
     nombre: "Fusión",
     claves: ["KENI_PIPELINE_FUSION", MAESTRO_INVESTIGACION],
-    ayuda: "Agrupa con IA las notas del mismo evento en una sola historia.",
+    ayuda: "Agrupa notas del mismo evento",
     doc: "prompt/fusion",
   },
   {
     nombre: "Clasificación",
     claves: ["KENI_CLASIFICAR_MARCA_IA", MAESTRO_INVESTIGACION],
-    ayuda: "Asigna marca con IA a una última hora sin marca.",
+    ayuda: "Asigna marca a últimas horas",
     doc: "prompt/clasificacion-marca",
   },
   {
     nombre: "Ranking",
     claves: ["KENI_RANKING_PERFIL_IA", MAESTRO_INVESTIGACION],
-    ayuda: "Ordena el pool por el perfil de relevancia de la marca.",
+    ayuda: "Ordena por relevancia para tu marca",
     doc: "prompt/editorial",
   },
   {
     nombre: "Verificación",
     claves: ["KENI_PIPELINE_VALIDACION", MAESTRO_INVESTIGACION],
-    ayuda: "Verifica la fuente antes de dejarla pasar a copy.",
+    ayuda: "Verifica las fuentes",
     doc: "prompt/validacion",
   },
 ] as const;

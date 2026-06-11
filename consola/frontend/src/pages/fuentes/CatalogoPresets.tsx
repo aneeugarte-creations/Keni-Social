@@ -121,8 +121,7 @@ export function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
             Feeds curados listos para activar
           </p>
           <p className="text-sm text-muted-foreground">
-            Selecciona uno o varios feeds del catálogo y actívalos con un clic. Aparecerán
-            inmediatamente en la pestaña RSS y alimentarán el Radar.
+            Activa feeds con un clic.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

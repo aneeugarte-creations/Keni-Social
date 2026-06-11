@@ -128,7 +128,7 @@ export function DesgloseInteracciones({
     <SeccionColapsable
       titulo="Desglose de interacciones"
       icono={Activity}
-      descripcion="De qué se componen las interacciones de cada marca y red: me gusta, comentarios, compartidos, guardados y reproducciones del periodo. La gráfica apila solo las interacciones; las reproducciones van en la tabla."
+      descripcion="Componentes: me gusta, comentarios, compartidos, guardados y reproducciones."
       acciones={acciones}
     >
       {isPending ? (

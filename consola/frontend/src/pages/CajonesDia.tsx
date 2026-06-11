@@ -272,7 +272,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
     mutationFn: () => api.insumos.usarItem(item.id, { generar: true }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
-      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
+      toast.success("Copy en marcha");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -335,7 +335,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                       onClick={() => usarMut.mutate()}
                       disabled={usarMut.isPending}
                       aria-label="Empujar ya (fuerza al feed)"
-                      title="Forzar esta nota al feed ahora. Normalmente el auto-feed lleva solas las historias relevantes."
+                      title="Forzar al feed ahora"
                     >
                       {usarMut.isPending ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -361,7 +361,6 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 <Badge
                   variant="aviso"
                   className="gap-1"
-                  title="La pieza existe; la IA está redactando el copy. Saldrá en el feed al terminar."
                 >
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Generando…
@@ -370,7 +369,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 <Badge
                   variant="aviso"
                   className="gap-1"
-                  title="Pieza creada pero aún sin copy en el feed (en cola). Si no avanza, revisa que «Generar copy» esté activo."
+                  title="Pieza en cola, esperando copy"
                 >
                   <Clock className="h-3 w-3" />
                   En cola
@@ -625,7 +624,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
                         if (
                           await confirmar({
                             mensaje:
-                              "¿Borrar este lote y todos sus apuntes (incluidos los no usados)?",
+                              "¿Borrar este lote y todos sus apuntes?",
                             destructivo: true,
                             textoConfirmar: "Borrar lote",
                           })
@@ -652,7 +651,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
 
         {items.length === 0 && lotes.length === 0 && (
           <p className="py-2 text-center text-xs text-muted-foreground">
-            Sin insumos para este cajón en la fecha seleccionada.
+            Sin insumos
           </p>
         )}
       </CardContent>
@@ -718,7 +717,7 @@ export default function CajonesDia() {
 
       {/* Explainer del pool */}
       <p className="mb-4 text-xs text-muted-foreground">
-        El auto-feed lleva al feed las historias relevantes (tope por marca, configurable). Aquí curas el pool: descarta lo que no sirva o empuja algo concreto con "Empujar ya".
+        Cura el pool: descarta lo que no sirva o empuja historias con Empujar ya.
       </p>
 
       {/* Controles de fecha e historial */}

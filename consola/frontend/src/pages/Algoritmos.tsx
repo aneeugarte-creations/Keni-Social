@@ -219,8 +219,7 @@ export default function Algoritmos() {
                 </CardHeader>
                 <CardContent>
                   <p className="pb-2 text-xs text-muted-foreground">
-                    Propuestas de cambio a la ficha de plataforma y a los límites, a partir de
-                    las noticias importantes. Revisa y aplica o descarta; nunca se aplican solas.
+                    Cambios sugeridos a la ficha de plataforma. Aplica o descarta.
                   </p>
                   <ul className="space-y-2">
                     {listaSugerencias.map((s) => (
@@ -299,7 +298,7 @@ export default function Algoritmos() {
                   <EstadoVacio
                     icono={Sparkles}
                     titulo="Sin fuentes todavía"
-                    texto="Añade las fuentes recomendadas (Meta, YouTube, agregadores) y refresca para ver lo último en algoritmos."
+                    texto="Configura fuentes para ver noticias."
                     accion={
                       <Button onClick={() => sembrar.mutate()} disabled={sembrar.isPending} size="sm">
                         <Sparkles className="mr-1 h-4 w-4" aria-hidden="true" />
@@ -311,7 +310,7 @@ export default function Algoritmos() {
                   <EstadoVacio
                     icono={Newspaper}
                     titulo="Nada que mostrar"
-                    texto="No hay noticias para este filtro. Pulsa Refrescar para ingerir lo último de los feeds."
+                    texto="No hay noticias con este filtro."
                   />
                 )}
               </CardContent>
@@ -369,8 +368,7 @@ export default function Algoritmos() {
                 </CardHeader>
                 <CardContent>
                   <p className="pb-2 text-xs text-muted-foreground">
-                    Estas plataformas no publican un feed RSS oficial. Su cobertura llega vía
-                    los agregadores (no se inventan datos).
+                    Estas plataformas no publican un feed RSS oficial. Su cobertura llega vía agregadores.
                   </p>
                   <ul className="space-y-1.5">
                     {data.pendientes.map((p) => (

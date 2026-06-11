@@ -120,8 +120,7 @@ export function TendenciaDiaria({
           </p>
         ) : datos.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            Aún no hay datos día a día para este periodo (la fuente de métricas no los
-            entrega).
+            Aún no hay datos día a día para este periodo
           </p>
         ) : (
           <div

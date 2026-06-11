@@ -1,6 +1,6 @@
 ---
 titulo: "Reglas · UnoTV"
-descripcion: "Reglas y límites editoriales de UnoTV al generar copy."
+descripcion: "Límites editoriales al generar copy."
 tipo: editorial
 clase: reglas
 marcas: [unotv]

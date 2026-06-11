@@ -103,14 +103,7 @@ export function EditorCarrusel({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">
-          {etiqueta ?? (
-            <>
-              Slides del carrusel
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                (van EN CRUDO detrás de la portada, en este orden)
-              </span>
-            </>
-          )}
+          {etiqueta ?? "Slides del carrusel"}
         </p>
         <Button
           type="button"
@@ -142,8 +135,7 @@ export function EditorCarrusel({
 
       {slides.length === 0 ? (
         <p className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
-          Sin slides extra: el carrusel saldría solo con la portada. Sube aquí el resto del
-          media de la nota (imágenes y videos).
+          Sube aquí imágenes y videos adicionales
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -174,7 +166,7 @@ export function EditorCarrusel({
                 {i === idxPortada && (
                   <span
                     className="inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground"
-                    title="Esta imagen será la portada (se compone con la placa de marca)"
+                    title="Será la portada"
                   >
                     <Star className="h-2.5 w-2.5" aria-hidden="true" />
                     Portada
@@ -188,7 +180,7 @@ export function EditorCarrusel({
                     className="h-7 gap-1 px-1.5 text-xs text-muted-foreground"
                     onClick={() => onPortada(i)} disabled={disabled}
                     aria-label={`Hacer portada el slide ${i + base}`}
-                    title="Usar esta imagen como portada (la portada actual pasa a ser un slide)"
+                    title="Usar como portada"
                   >
                     <Star className="h-3.5 w-3.5" />
                     Portada

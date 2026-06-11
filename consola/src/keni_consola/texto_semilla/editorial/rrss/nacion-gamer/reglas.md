@@ -1,6 +1,6 @@
 ---
 titulo: "Reglas · Nación Gamer"
-descripcion: "Reglas y límites editoriales de Nación Gamer al generar copy."
+descripcion: "Límites editoriales al generar copy."
 tipo: editorial
 clase: reglas
 marcas: [nacion-gamer]

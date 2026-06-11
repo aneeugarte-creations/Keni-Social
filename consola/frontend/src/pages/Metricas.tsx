@@ -279,10 +279,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
-              <p className="text-sm text-muted-foreground">
-                Crecimiento de audiencia, de qué se componen las interacciones y qué
-                formatos rinden mejor.
-              </p>
             </div>
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />

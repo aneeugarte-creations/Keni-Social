@@ -456,7 +456,7 @@ export default function Video() {
           role="alert"
           className="shrink-0 border-b border-amber-300/60 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-300"
         >
-          Selecciona una marca arriba para empezar a editar: la composición se guarda por marca.
+          Selecciona una marca arriba para empezar a editar.
         </div>
       )}
 
@@ -533,7 +533,6 @@ export default function Video() {
           <div className="h-full overflow-y-auto">
             <div className="mx-auto max-w-4xl space-y-3 p-4 sm:p-6">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-foreground">Mis composiciones</h2>
                 <button
                   type="button"
                   onClick={nuevaComposicion}
@@ -543,8 +542,7 @@ export default function Video() {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Reabre una composición para seguir editándola o gestionar sus subtítulos. El estado
-                de subtítulos y el video adjunto a la pieza se muestran por fila.
+                El estado de subtítulos y el video adjunto se muestran por fila.
               </p>
               <GestorComposiciones marca={marca} onAbrir={abrirComposicion} />
             </div>
@@ -580,8 +578,7 @@ export default function Video() {
               <>
                 <h2 className="text-sm font-semibold text-foreground">Capas de overlay</h2>
                 <p className="text-xs text-muted-foreground">
-                  Logos, marcos de marca, imagen-in-video y textos. Se sobreimprimen sobre el video
-                  (el render rasteriza estas capas y las compone con FFmpeg).
+                  Logos, marcos de marca, imagen-in-video y textos.
                 </p>
                 {/* En lg+ el editor LLENA el alto restante de la columna (flex-1); por debajo
                     conserva un alto fijo (la columna apilada scrollea). */}
@@ -638,8 +635,7 @@ export default function Video() {
               <>
                 <h2 className="text-sm font-semibold text-foreground">Renderizar</h2>
                 <p className="text-xs text-muted-foreground">
-                  Genera el mp4 final componiendo base, overlay, PiP y subtítulos con FFmpeg en el
-                  servidor. El preview de la derecha es solo una aproximación.
+                  El preview de la derecha es solo una aproximación.
                 </p>
                 <PanelRender
                   composicionId={composicionId}

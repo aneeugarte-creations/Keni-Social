@@ -59,8 +59,7 @@ export const VISTAS: VistaFeed[] = [
     filtra: () => true,
     vacio: {
       titulo: "El feed está vacío",
-      texto:
-        "El equipo postea material y la IA lo convierte en piezas; aparecerán aquí, las más recientes primero, y aprobarás en línea cuando alguna esté lista.",
+      texto: "Esperando piezas del equipo.",
     },
   },
   {
@@ -72,7 +71,7 @@ export const VISTAS: VistaFeed[] = [
     vacio: {
       titulo: "Nada por aprobar",
       // El detalle de cuántos OK lleva cada pieza lo enseña `CadenaAprobacion` pieza a pieza.
-      texto: "Cuando la IA deje una pieza lista, aparecerá aquí para los OK del equipo.",
+      texto: "Esperando piezas listas para revisar.",
     },
   },
   {
@@ -83,7 +82,7 @@ export const VISTAS: VistaFeed[] = [
     filtra: (p) => ["aprobado", "programado", "publicado"].includes(p.estado),
     vacio: {
       titulo: "Sin piezas aprobadas ni publicadas",
-      texto: "Las piezas aprobadas, las programadas con hueco y las ya publicadas salen aquí.",
+      texto: "",
     },
   },
 ];

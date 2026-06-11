@@ -33,7 +33,7 @@ import { CLAVE_FUENTES, CLAVE_ITEMS } from "./lib";
 export function GestionFuentes({ marcas }: { marcas: MarcaDisponible[] }) {
   // Por marca: cada equipo gestiona los feeds de SU marca + los compartidos (sin marca).
   // El radar/plan de la marca lee exactamente este conjunto. Admin (sin marca activa) ve todo.
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
 
   const query = useQuery({
     queryKey: [...CLAVE_FUENTES, marcaActiva ?? ""],
@@ -66,8 +66,7 @@ export function GestionFuentes({ marcas }: { marcas: MarcaDisponible[] }) {
       </CardHeader>
       {marcaActiva && (
         <div className="px-6 pb-1 text-xs text-muted-foreground">
-          Las fuentes de {nombreActiva ?? "tu marca"} y las compartidas alimentan su radar y plan
-          del día.{compartidas > 0 && ` ${compartidas} compartida(s).`}
+          {compartidas > 0 ? compartidas + ' feed(s) compartida(s)' : ''}
         </div>
       )}
       <CardContent className="space-y-4">
@@ -83,7 +82,7 @@ export function GestionFuentes({ marcas }: { marcas: MarcaDisponible[] }) {
           <EstadoVacioTexto
             texto={
               marcaActiva
-                ? `Aún no hay feeds de ${nombreActiva ?? "tu marca"} ni compartidos. Añade el primero: nutrirá su radar y plan del día.`
+                ? "Añade el primer feed."
                 : "Aún no hay feeds. Añade el primero con el botón de arriba."
             }
             className="py-4"
@@ -197,7 +196,7 @@ function FilaFuente({
             <Badge
               variant="secondary"
               className="font-normal"
-              title="Categoría del feed: marca la cadencia con la que el motor lo sondea"
+              title="Cadencia de sondeo"
             >
               {fuente.categoria}
             </Badge>

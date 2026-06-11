@@ -45,11 +45,7 @@ export function TarjetaSugerencia({
           size="sm"
           onClick={() => onAplicar(sugerencia)}
           disabled={ocupada}
-          title={
-            esLimite
-              ? "Marcar como atendida (los límites se cambian en el código)"
-              : "Añadir esta propuesta a la ficha editorial de la plataforma"
-          }
+          title={esLimite ? "Marcar como atendida" : undefined}
         >
           <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
           {esLimite ? "Atendida" : "Aplicar a la ficha"}

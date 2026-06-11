@@ -101,7 +101,7 @@ export function PanelOverlay({ doc, marca, capas, onCapas }: PanelOverlayProps) 
     if (store.getState().documento.capas.length > 0) {
       const ok = await confirmar({
         titulo: "Aplicar plantilla",
-        mensaje: `Esto reemplaza las capas actuales del overlay por «${p.nombre || "sin nombre"}». ¿Continuar?`,
+        mensaje: `¿Reemplazar las capas actuales?`,
         destructivo: true,
         textoConfirmar: "Aplicar",
       });

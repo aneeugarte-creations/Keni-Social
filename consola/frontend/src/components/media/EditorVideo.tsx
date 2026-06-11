@@ -75,7 +75,7 @@ export function EditorVideo({
     <div className="space-y-2.5">
       <Label className="flex items-center gap-1.5">
         <Video className="h-4 w-4 text-muted-foreground" />
-        Video <span className="font-normal text-muted-foreground">(clip para publicar)</span>
+        Video
       </Label>
 
       <input
@@ -134,9 +134,6 @@ export function EditorVideo({
         </div>
       ) : (
         <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
-          <p className="text-xs text-muted-foreground">
-            Sube el clip de video que se publicará en esta pieza:
-          </p>
           <Button
             type="button"
             variant="outline"

@@ -536,7 +536,7 @@ export function CalendarioPreview({
                       </span>
                       <span className="text-xs font-normal text-muted-foreground">
                         {franja.es_descanso
-                          ? "(descanso)"
+                          ? ""
                           : franja.inicio && franja.fin
                             ? `${franja.inicio}–${franja.fin}`
                             : ""}

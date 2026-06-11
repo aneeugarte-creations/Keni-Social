@@ -1,6 +1,6 @@
 ---
 titulo: "Voz y tono · Nación Gamer"
-descripcion: "Cómo escribe Nación Gamer: registro, tono y estilo. Se inyecta al generar copy."
+descripcion: "Registro, tono y estilo; se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [nacion-gamer]

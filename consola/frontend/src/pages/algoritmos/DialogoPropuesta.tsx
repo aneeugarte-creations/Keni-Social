@@ -25,10 +25,9 @@ export function DialogoPropuesta({
     <Dialog open={propuesta !== null} onOpenChange={(v) => !v && onCerrar()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Propuesta para la texto</DialogTitle>
+          <DialogTitle>Propuesta para la Texto</DialogTitle>
           <DialogDescription>
-            Borrador listo para pegar en la ficha editorial de la plataforma. La línea
-            editorial la decide el equipo: cópialo y confírmalo en la Texto.
+            Cópialo a la ficha editorial de la Texto.
           </DialogDescription>
         </DialogHeader>
         {propuesta && (

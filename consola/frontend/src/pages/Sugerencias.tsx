@@ -127,7 +127,6 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Lightbulb className="h-4 w-4" />
-          Nueva sugerencia
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -143,7 +142,7 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="sugerencia-detalle">
-            Detalle <span className="font-normal text-muted-foreground">(opcional)</span>
+            Detalle
           </Label>
           <Textarea
             id="sugerencia-detalle"
@@ -172,7 +171,7 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sugerencia-autor">
-              Tu nombre <span className="font-normal text-muted-foreground">(opcional)</span>
+              Tu nombre
             </Label>
             <Input
               id="sugerencia-autor"

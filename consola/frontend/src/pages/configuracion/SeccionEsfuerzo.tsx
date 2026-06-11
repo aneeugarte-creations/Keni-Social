@@ -48,9 +48,7 @@ export function SeccionEsfuerzo() {
       contentClassName="space-y-2"
       descripcion={
         <>
-          Cuánto «piensa» la IA al generar copy, RSS, hashtags y agentes. Más esfuerzo mejora la
-          calidad pero tarda más; menos responde antes. Se guarda{" "}
-          <strong>solo en esta máquina</strong>.
+          Define la velocidad vs. calidad. Se almacena localmente.
         </>
       }
     >

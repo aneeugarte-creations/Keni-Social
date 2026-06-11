@@ -77,7 +77,7 @@ function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: s
       <Badge
         variant="secondary"
         className={cn("gap-1 border border-amber-500/30 bg-amber-500/15 text-amber-600", className)}
-        title="Fuente apta pero NO verificada a fondo: revisa antes de aprobar."
+        title="No verificada a fondo"
       >
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
         No verificado
@@ -253,7 +253,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="shrink-0">{run.marca_nombre || run.marca}</Badge>
             {esActividad && (
-              <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title="Trabajo de IA fuera del pipeline">
+              <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title="Trabajo manual">
                 <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />
                 {etiquetaTipoGeneracion(run.tipo || "")}
               </Badge>
@@ -350,7 +350,7 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
             </div>
           ) : (
             <p className="text-xs italic text-muted-foreground">
-              {enCurso ? "En curso…" : "Pendiente: esta etapa aún no se ha ejecutado."}
+              {enCurso ? "En curso…" : "Aún no ejecutada"}
             </p>
           )}
         </div>

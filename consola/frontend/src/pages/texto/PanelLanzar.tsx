@@ -310,7 +310,7 @@ export function PanelLanzar({
                   la Parrilla. Lo decimos al completar para que no se busque en este panel. */}
               {esPiezas && !ejecutando && generacion.salida ? (
                 <p className="text-xs text-muted-foreground">
-                  El copy se guardó como borradores en la Parrilla (uno por red), listos para revisar.
+                  El copy se guardó como borradores en la Parrilla.
                 </p>
               ) : null}
             </>

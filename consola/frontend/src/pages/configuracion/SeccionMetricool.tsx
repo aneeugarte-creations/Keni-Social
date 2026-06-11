@@ -160,7 +160,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
 
       <div className="space-y-2">
         <Label htmlFor={idTok} className="text-xs text-muted-foreground">
-          Token de Metricool (user_token)
+          Token de Metricool
         </Label>
         <Input
           id={idTok}
@@ -188,7 +188,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
             autoComplete="off"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
-            placeholder="userId (en la misma pantalla de Metricool)"
+            placeholder="userId (de Metricool)"
             disabled={ocupado}
           />
           <Button
@@ -231,7 +231,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
         ) : (
           <p className="text-xs text-muted-foreground">
             {blogId
-              ? `Marca actual (blogId ${blogId}). Usa «Buscar marcas» para cambiarla.`
+              ? `Marca actual. Usa «Buscar marcas» para cambiarla.`
               : "Pulsa «Buscar marcas» para elegir la marca de Metricool."}
           </p>
         )}
@@ -343,20 +343,12 @@ function SeccionMetricoolAdmin() {
     <SeccionColapsable
       titulo="Métricas (Metricool)"
       contentClassName="space-y-4"
-      descripcion={
-        <>
-          Conecta cada marca con su cuenta de Metricool. Pega el token y el user ID, pulsa «Buscar
-          marcas» y elige la marca; el blog ID se rellena solo.
-        </>
-      }
+      descripcion="Conecta cada marca con Metricool."
     >
         <div className="flex items-start gap-3 rounded-lg border border-border bg-primary/5 p-3">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            En AMX cada marca es una <strong>cuenta de Metricool distinta</strong>. El token se
-            guarda <strong>solo en esta máquina</strong>, es <strong>revocable</strong> y nunca se
-            muestra; al buscar marcas <strong>no se guarda nada</strong>. Usa «Probar» para validar
-            la conexión en vivo.
+            Cada marca es una cuenta Metricool distinta. El token se almacena localmente. Usa «Probar» para validar.
           </p>
         </div>
 

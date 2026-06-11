@@ -198,7 +198,7 @@ export function TablaDocumentos({
         <EstadoVacio
           icono={FileText}
           titulo="Sin documentos"
-          texto="Ningún documento coincide con los filtros. Crea uno con «Nuevo documento»."
+          texto="No hay documentos con estos filtros."
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">

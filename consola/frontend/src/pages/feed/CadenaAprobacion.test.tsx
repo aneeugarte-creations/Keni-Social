@@ -80,7 +80,7 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.getByText(/Falta resolver 2 comentarios antes de publicar/)).toBeInTheDocument();
   });
 
-  it("cadena RECHAZADA: explica que vuelve a redacción", () => {
+  it("cadena RECHAZADA: lo señala", () => {
     const c = cadenaOK({
       niveles: [
         nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "rechazado", decisor_nombre: "Ana" }),
@@ -90,7 +90,7 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
       nivel_actual: "",
     });
     renderCadena(c);
-    expect(screen.getByText(/vuelve a la redacción/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Rechazada$/i)).toBeInTheDocument();
   });
 
   it("cadena TOTALMENTE aprobada: «Lista para publicar» y 2/2", () => {

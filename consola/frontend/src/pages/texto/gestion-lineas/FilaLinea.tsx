@@ -124,7 +124,7 @@ export function FilaLinea({
                 onChange={(e) => setTtlDias(Math.max(0, parseInt(e.target.value) || 0))}
                 className="w-24"
               />
-              <p className="text-xs text-muted-foreground">0 días = sin caducidad / evergreen</p>
+              <p className="text-xs text-muted-foreground">0 días = sin caducidad</p>
             </div>
             <div className="flex items-center gap-3 pt-5">
               <Switch
@@ -141,8 +141,7 @@ export function FilaLinea({
         )}
         <div className="space-y-1.5">
           <Label htmlFor={`edit-keywords-${etiqueta.id}`}>
-            Palabras clave{" "}
-            <span className="font-normal text-muted-foreground">(separadas por comas)</span>
+            Palabras clave
           </Label>
           <Textarea
             id={`edit-keywords-${etiqueta.id}`}
@@ -154,10 +153,7 @@ export function FilaLinea({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`edit-hashtags-${etiqueta.id}`}>
-            Hashtags{" "}
-            <span className="font-normal text-muted-foreground">
-              (sin #, separados por coma; se añaden al final del copy)
-            </span>
+            Hashtags
           </Label>
           <Textarea
             id={`edit-hashtags-${etiqueta.id}`}

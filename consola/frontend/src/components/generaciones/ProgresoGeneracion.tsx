@@ -186,7 +186,7 @@ export function ProgresoGeneracion({
         {error ? (
           <>
             <p className="text-sm text-destructive">
-              {generacion.error || "La generación terminó con un error."}
+              {generacion.error || "Error"}
             </p>
             {onReintentar && (
               <Button variant="outline" size="sm" onClick={onReintentar}>

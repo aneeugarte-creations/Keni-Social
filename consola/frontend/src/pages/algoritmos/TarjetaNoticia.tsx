@@ -28,7 +28,7 @@ export function TarjetaNoticia({
           <Badge
             variant="outline"
             className="border-amber-500/40 text-amber-700 dark:text-amber-300"
-            title="Parece un cambio de algoritmo confirmado: candidato a la ficha editorial."
+            title="Candidato a la ficha editorial"
           >
             Cambio de algoritmo
           </Badge>
@@ -39,7 +39,7 @@ export function TarjetaNoticia({
           </Badge>
         )}
         {noticia.aplicada && (
-          <Badge variant="ok" title="Ya propuesta a la texto editorial.">
+          <Badge variant="ok" title="Ya propuesta a la Texto">
             En texto
           </Badge>
         )}
@@ -87,7 +87,7 @@ export function TarjetaNoticia({
             variant="ghost"
             size="sm"
             onClick={() => onProponer(noticia)}
-            title="Proponer esta noticia a la ficha editorial de la plataforma"
+            title="Proponer a la Texto"
           >
             <Library className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
             A texto

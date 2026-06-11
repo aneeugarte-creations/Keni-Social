@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/select";
 import { api, mensajeError } from "@/lib/api";
 import {
-  cabezaDeArea,
   descendientes,
   type IndiceUsuarios,
   metaZona,
@@ -132,7 +131,6 @@ export function DialogoMiembro({
     .filter((u) => u.id !== usuario.id && !prohibidos.has(u.id))
     .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
 
-  const cabeza = cabezaDeArea(usuario, porId);
   const zona = zonaDe(usuario, porId);
   const meta = metaZona(zona);
 
@@ -154,7 +152,6 @@ export function DialogoMiembro({
           </DialogTitle>
           <DialogDescription>
             @{usuario.usuario} · {meta.etiqueta}
-            {cabeza && cabeza.id !== usuario.id ? ` · área de ${nombreVisible(cabeza)}` : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -201,7 +198,7 @@ export function DialogoMiembro({
 
             {/* Rol de permisos */}
             <div className="space-y-1.5">
-              <Label>Rol (permisos)</Label>
+              <Label>Rol</Label>
               <Select
                 value={usuario.rol}
                 onValueChange={(v) => guardar.mutate({ rol: v as RolUsuario })}
@@ -223,7 +220,7 @@ export function DialogoMiembro({
 
           {/* Superior (organigrama) */}
           <div className="space-y-1.5">
-            <Label>Reporta a (superior)</Label>
+            <Label>Reporta a</Label>
             <Select
               value={superiorActual}
               onValueChange={(v) =>
@@ -243,14 +240,11 @@ export function DialogoMiembro({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Define el árbol. La marca (área) sale de quién encabeza la cadena de reporte.
-            </p>
           </div>
 
           {/* Marcas */}
           <div className="space-y-1.5">
-            <Label>Marcas (verticales)</Label>
+            <Label>Marcas</Label>
             <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-md border p-3">
               {catalogoMarcas.length === 0 ? (
                 <p className="col-span-2 text-sm text-muted-foreground">

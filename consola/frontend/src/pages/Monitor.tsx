@@ -146,7 +146,6 @@ function TablaJobs({
                       variant="ghost"
                       size="sm"
                       disabled={priorizandoId === j.gen_id}
-                      title="Adelanta este job a todo el lote de fondo que espera."
                       onClick={() => onPriorizar(j.gen_id)}
                     >
                       <ArrowUp className="mr-1 h-3.5 w-3.5" />
@@ -224,9 +223,6 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
           </div>
         );
       })}
-      <p className="text-[11px] text-muted-foreground">
-        Barra ámbar = encolados, verde = completados, roja = errores.
-      </p>
     </div>
   );
 }
@@ -282,13 +278,9 @@ function PanelPresupuesto({
                 <> · restan {numeroCompacto(presupuesto.restante_tokens)}</>
               )}
               {pct != null && <> · {pct.toFixed(0)}% usado</>}
-              {" · al agotarse se corta el trabajo automático (lo manual sigue hasta el margen)"}
+              {" · al agotarse se pausa el automático"}
             </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Sin presupuesto diario configurado (se fija en Configuración → Máquina de contenido).
-            </p>
-          )}
+          ) : null}
           {conPresupuesto && pct != null && (
             <div className="h-1.5 w-56 overflow-hidden rounded-full bg-muted">
               <div
@@ -418,7 +410,7 @@ export default function Monitor() {
               <PanelAjustes
                 grupos={GRUPOS_SISTEMA}
                 titulo="Sistema"
-                descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
+                descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Se aplican sin reiniciar."
               />
               <SeccionEsfuerzo />
             </>
@@ -500,21 +492,18 @@ export default function Monitor() {
               icono={Cpu}
               titulo="En curso"
               valor={`${cola.data.procesando}/${cola.data.capacidad.max_jobs}`}
-              subtitulo="claude -p en vuelo / slots"
               tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
             />
             <Kpi
               icono={Clock}
               titulo="Esperando"
               valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
-              subtitulo="en cola, esperando un slot"
               tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
             />
             <Kpi
               icono={Layers}
               titulo="Activos"
               valor={`${cola.data.conteo.activos}/${cola.data.capacidad.tope}`}
-              subtitulo="en vuelo / tope total"
               tono={cola.data.cola_llena ? "alerta" : undefined}
             />
             <Kpi

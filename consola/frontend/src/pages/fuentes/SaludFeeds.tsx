@@ -197,7 +197,6 @@ export function SaludFeeds() {
         <EstadoVacio
           icono={Radio}
           titulo="Sin feeds registrados"
-          texto="No hay fuentes RSS configuradas para esta marca."
         />
       ) : (
         <div data-testid="salud-tabla-feeds">

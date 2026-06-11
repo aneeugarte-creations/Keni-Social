@@ -80,9 +80,7 @@ export function DialogFranjasDeSemana({
         <DialogHeader>
           <DialogTitle>Franjas de esta semana ({lunes})</DialogTitle>
           <DialogDescription>
-            Cada semana tiene sus franjas (nombre libre, rangos HH:MM, solapes
-            permitidos). La franja Descanso marca turnos de no-laboral: la persona NO
-            cubre eventos ese día pero tiene turno explícito.
+            Franjas con rangos horarios. La franja Descanso indica no-laboral pero con turno asignado
           </DialogDescription>
         </DialogHeader>
         {q.isPending ? (
@@ -373,8 +371,7 @@ export function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
         <DialogHeader>
           <DialogTitle>Configurar franjas</DialogTitle>
           <DialogDescription>
-            Los rangos horarios determinan qué eventos caen en cada franja al calcular
-            la cobertura. Usa formato HH:MM (24h).
+            Los rangos horarios determinan qué eventos caen en cada franja
           </DialogDescription>
         </DialogHeader>
         {q.isPending ? (
@@ -435,8 +432,7 @@ export function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Lo que cae fuera de ambos rangos (madrugada típica) se asigna a «descanso»:
-              no se cubre, pero los eventos aparecen para que sepas que están ahí.
+              Lo que cae fuera de ambos rangos se asigna a «descanso»; los eventos aparecen como referencia
             </p>
           </div>
         )}

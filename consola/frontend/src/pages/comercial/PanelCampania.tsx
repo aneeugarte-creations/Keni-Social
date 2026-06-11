@@ -86,7 +86,6 @@ function TarjetaKpiComparada({
         >
           <Icono className="h-3.5 w-3.5 shrink-0" />
           <span>{v == null ? "—" : variacion(v)}</span>
-          <span className="text-muted-foreground">vs. periodo anterior</span>
         </div>
       </CardContent>
     </Card>
@@ -384,7 +383,7 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
             <h3 className="text-sm font-medium">Piezas del periodo</h3>
             {crossCount > 0 && (
               <p className="text-xs text-muted-foreground">
-                Incluye {crossCount} por cross-post (mismo contenido en otra red, sin el hashtag).
+                Incluye {crossCount} por cross-post (mismo contenido en otra red).
               </p>
             )}
           </div>

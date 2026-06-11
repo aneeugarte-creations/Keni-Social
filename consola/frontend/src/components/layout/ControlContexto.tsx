@@ -237,7 +237,7 @@ export function ControlContexto() {
               </Grupo>
               <Grupo titulo="Línea editorial">
                 <Fila activo={linea === FILTRO_TODOS} onClick={() => cambiarLinea(FILTRO_TODOS)}>
-                  Todas las líneas
+                  Todas las líneas editoriales
                 </Fila>
                 {lineasElegibles.map((l) => (
                   <Fila key={l.id} activo={linea === l.id} onClick={() => cambiarLinea(l.id)}>

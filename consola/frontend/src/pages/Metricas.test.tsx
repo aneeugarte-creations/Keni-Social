@@ -132,9 +132,9 @@ describe("Metricas · aviso de datos de muestra", () => {
     mockReporte.mockResolvedValue(reporte("muestra"));
     renderMetricas();
 
-    expect(await screen.findByText("Datos de muestra (sintéticos)")).toBeInTheDocument();
+    expect(await screen.findByText("Datos de muestra")).toBeInTheDocument();
     expect(
-      screen.getByText("Las cifras son de demostración, no datos reales del cliente."),
+      screen.getByText("Cifras de demostración, no reales."),
     ).toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe("Metricas · aviso de datos de muestra", () => {
     expect(await screen.findByText("Por marca")).toBeInTheDocument();
     expect(screen.queryByText("Corte de prueba (1–7 jun)")).not.toBeInTheDocument();
     // …y el aviso de muestra no aparece.
-    expect(screen.queryByText("Datos de muestra (sintéticos)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Datos de muestra")).not.toBeInTheDocument();
   });
 });
 

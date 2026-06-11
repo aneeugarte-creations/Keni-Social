@@ -125,7 +125,7 @@ function DialogoCrear({
         <DialogHeader>
           <DialogTitle>Nueva pieza</DialogTitle>
           <DialogDescription>
-            Crea una idea rápida; el copy se afina luego en el editor.
+            Idea rápida — afina el copy luego en el editor
           </DialogDescription>
         </DialogHeader>
         {/* <form>: el Enter/«ir» del teclado móvil envía el alta (el flujo que más se repite). */}

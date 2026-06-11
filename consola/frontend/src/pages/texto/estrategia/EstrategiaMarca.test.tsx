@@ -274,9 +274,6 @@ describe("EstrategiaMarca", () => {
     montar();
 
     expect(await screen.findByText("4/4")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Estrategia completa: los 4 pilares obligatorios tienen contenido/),
-    ).toBeInTheDocument();
   });
 
   it("enseña el orden real de inyección como chips numerados clicables", async () => {

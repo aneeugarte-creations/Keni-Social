@@ -238,7 +238,6 @@ export function LineaTiempo({
           )}
           <div
             data-testid="clip-base"
-            title={`Clip base · ${formatearDuracionMs(outMs - inMs)}`}
             className="absolute inset-y-1 overflow-hidden rounded border border-primary/60 bg-primary/15"
             style={{ left: pct(inMs), width: pct(Math.max(0, outMs - inMs)) }}
           >
@@ -334,8 +333,7 @@ export function LineaTiempo({
         </div>
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground/70">
-        La reproducción y el render respetan el recorte (in/out); el scrubbing recorre el clip
-        completo.
+        El scrubbing recorre todo el clip; la reproducción respeta el recorte.
       </p>
     </div>
   );

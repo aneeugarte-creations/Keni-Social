@@ -126,7 +126,7 @@ describe("GestorComposiciones", () => {
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({ composiciones: [] });
     renderGestor();
     await waitFor(() =>
-      expect(screen.getByText(/aún no hay composiciones para esta marca/i)).toBeInTheDocument(),
+      expect(screen.getByText(/aún no hay composiciones/i)).toBeInTheDocument(),
     );
   });
 

@@ -690,7 +690,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
       ),
     );
     expect(
-      await screen.findByPlaceholderText(/comentario para el equipo/i),
+      await screen.findByPlaceholderText(/escribe un comentario/i),
     ).toBeInTheDocument();
   });
 

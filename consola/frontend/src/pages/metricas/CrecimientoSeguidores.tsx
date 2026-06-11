@@ -103,8 +103,7 @@ export function CrecimientoSeguidores({
           </p>
         ) : (data.puntos ?? []).length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            Aún no hay datos de seguidores para este periodo (la fuente de métricas no los
-            entrega).
+            Aún no hay datos de seguidores para este periodo
           </p>
         ) : (
           <>

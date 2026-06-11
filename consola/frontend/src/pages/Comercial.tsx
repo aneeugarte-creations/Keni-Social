@@ -123,7 +123,6 @@ export default function Comercial() {
   const acciones = (
     <MenuAcciones
       ajustesTitulo="Ajustes de campañas"
-      ajustesDescripcion="Preferencias persistentes de esta vista."
       ajustes={
         // Fila de capa base (con su divisor), no una caja con borde dentro del panel.
         <section className="border-t border-border py-3 first:border-t-0">

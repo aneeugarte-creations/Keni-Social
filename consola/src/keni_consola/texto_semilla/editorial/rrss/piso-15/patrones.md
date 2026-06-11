@@ -1,6 +1,6 @@
 ---
 titulo: "Patrones medidos · Piso 15"
-descripcion: "Bandas de rendimiento medidas en Metricool (longitud, emojis, hashtags) de Piso 15; se regenera periódicamente."
+descripcion: "Bandas medidas en Metricool (longitud, emojis, hashtags); se regeneran periódicamente."
 tipo: editorial
 clase: ""
 marcas: [piso-15]

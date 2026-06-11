@@ -191,7 +191,7 @@ export function CompararPeriodos({
         <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
             <span className="w-28 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
-              Comparar con (antes)
+              Comparar con
             </span>
             <SelectorTiempo
               rangos={rangos}
@@ -214,7 +214,7 @@ export function CompararPeriodos({
     >
       {!habilitado ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Elige dos periodos para comparar.
+            Selecciona dos periodos
           </p>
         ) : isPending ? (
           <EsqueletoComparar />

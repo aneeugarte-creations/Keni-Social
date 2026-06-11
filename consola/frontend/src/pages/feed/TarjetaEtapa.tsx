@@ -63,7 +63,6 @@ export function BadgeEtapa({
     <Badge
       variant="outline"
       className={cn("gap-1.5", clase, className)}
-      title={meta.enCurso ? "La IA aún está trabajando esta pieza" : undefined}
     >
       <span
         className={cn("h-1.5 w-1.5 rounded-full", PUNTO_DE_ETAPA[etapa])}

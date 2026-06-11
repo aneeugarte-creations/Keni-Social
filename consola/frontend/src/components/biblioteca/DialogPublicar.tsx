@@ -97,7 +97,7 @@ export function DialogPublicar({
 
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
           {esAdmin
-            ? "Al publicar, esta versión pasará a servir TODAS las generaciones (todo lo que la IA produzca con este documento desde ese momento)."
+            ? "Esta versión servirá TODAS las generaciones."
             : "Si un admin la aprueba, esta versión pasará a servir TODAS las generaciones. Hasta entonces, producción no cambia."}
         </p>
 
@@ -122,7 +122,7 @@ export function DialogPublicar({
             value={nota}
             onChange={(e) => setNota(e.target.value)}
             rows={2}
-            placeholder="Qué cambia y por qué (queda en el registro de publicaciones)"
+            placeholder="Qué cambia y por qué"
           />
         </div>
 

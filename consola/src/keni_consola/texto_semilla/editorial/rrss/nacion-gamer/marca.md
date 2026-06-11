@@ -1,6 +1,6 @@
 ---
 titulo: "Identidad · Nación Gamer"
-descripcion: "Qué es Nación Gamer, qué cubre y su posicionamiento. Referencia para redactar el copy."
+descripcion: "Qué cubre y su posicionamiento; referencia del copy."
 tipo: editorial
 clase: marca
 marcas: [nacion-gamer]

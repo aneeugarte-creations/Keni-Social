@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -73,9 +72,6 @@ export function DialogoFuente({
             <Rss className="h-5 w-5" />
             {fuente ? "Editar feed" : "Nuevo feed"}
           </DialogTitle>
-          <DialogDescription>
-            Configura el feed RSS: nombre, URL, categoría, relevancia y si está activo.
-          </DialogDescription>
         </DialogHeader>
         {abierto && (
           <FormularioFuente fuente={fuente} marcas={marcas} onListo={onCerrar} />
@@ -202,7 +198,7 @@ function FormularioFuente({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Marca la frecuencia con la que el motor sondea este feed.
+            Cadencia de sondeo
           </p>
         </div>
       </div>
@@ -249,8 +245,7 @@ function FormularioFuente({
             Fuente de marca propia
           </Label>
           <p className="text-xs text-muted-foreground">
-            Sitio propio: su imagen original es reutilizable, así que las piezas generadas
-            desde sus noticias nacen con la imagen del artículo lista para usarse.
+            Reutiliza imágenes originales en las piezas generadas.
           </p>
         </div>
       </div>

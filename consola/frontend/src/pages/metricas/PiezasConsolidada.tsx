@@ -247,7 +247,7 @@ export function PiezasConsolidada({
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del periodo de la marca activa. Se muestran 5; con «Mostrar más» despliegas el listado completo. Filtra por línea o red, ordena con las columnas (Vistas de mayor a menor = el top del periodo) y toca una pieza para ver su detalle."
+        descripcion="Todas las piezas del periodo. Filtra, ordena y toca para ver detalles."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">
@@ -307,7 +307,7 @@ export function PiezasConsolidada({
             <TarjetaKpi
               etiqueta="Engagement (agregado)"
               valor={stats.engPooled == null ? "—" : porcentaje(stats.engPooled)}
-              titulo="Interacciones ÷ vistas del conjunto filtrado"
+              titulo="Total de interacciones dividido por total de vistas del filtro actual"
             />
             <TarjetaKpi
               etiqueta="Engagement (mediana por pieza)"
@@ -508,7 +508,7 @@ function FilaPieza({
           {pieza.rendimiento_relativo != null && (
             <Badge
               variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
-              title="Vistas de la pieza ÷ mediana de vistas de su marca×red (media del grupo si la mediana es 0)"
+              title="Cómo se compara esta pieza contra el promedio de su red y marca"
             >
               {rendimientoRel(pieza.rendimiento_relativo)}
             </Badge>

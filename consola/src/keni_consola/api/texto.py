@@ -571,7 +571,7 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
         ("mecanica", "publicacion", "Publicación", None, None),
         ("prompt", "evergreen", "Taller evergreen", None, "taller"),        # prompt_base_de("evergreen")
     )),
-    ("importacion", "Herramientas de importación", "Insumos y documentos del equipo", (
+    ("importacion", "Herramientas de importación", "Insumos del equipo", (
         ("prompt", "insumos-portal", "Insumos · Portal/SMS", "prompt/insumos/portal", None),
         ("prompt", "insumos-corresponsales", "Insumos · Corresponsales", "prompt/insumos/corresponsales", None),
         ("prompt", "insumos-reporteros", "Insumos · Reporteros", "prompt/insumos/reporteros", None),

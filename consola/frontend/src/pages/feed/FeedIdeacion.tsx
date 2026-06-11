@@ -328,7 +328,7 @@ export default function FeedIdeacion() {
       { replace: true },
     );
     if (!existe) {
-      toast("No encontramos esa pieza en el feed de la marca activa.");
+      toast("No encontramos esa pieza");
       return;
     }
     setPiezaDestacada(piezaParam);
@@ -410,13 +410,13 @@ export default function FeedIdeacion() {
   const valorColumnas = (
     <span
       aria-live="polite"
-      title={topado ? `Mostrando ${colsEfectivas} de ${columnas} por el ancho disponible` : undefined}
+      title={topado ? `Limitado por el ancho` : undefined}
       className="min-w-5 px-0.5 text-center text-xs font-medium tabular-nums"
     >
       {columnas}
       <span className="sr-only">
         {topado
-          ? ` por fila (mostrando ${colsEfectivas} por el ancho disponible)`
+          ? ` por fila (limitado por el ancho)`
           : " por fila"}
       </span>
     </span>
@@ -529,7 +529,7 @@ export default function FeedIdeacion() {
           // El BloqueError a página completa queda para el PRIMER load: con páginas ya cargadas
           // un fallo de `fetchNextPage` NO descarta el feed visible (el pie ofrece reintentar).
           <BloqueError
-            titulo="No se pudo cargar el feed"
+            titulo="Error al cargar"
             mensaje={mensajeError(feedQuery.error)}
             onReintentar={() => void feedQuery.refetch()}
             cargando={feedQuery.isFetching}
@@ -545,7 +545,6 @@ export default function FeedIdeacion() {
             <EstadoVacio
               icono={vistaActual.icono}
               titulo={vistaActual.vacio.titulo}
-              texto="Puede haber piezas más antiguas aún sin cargar."
               accion={
                 <Button variant="outline" size="sm" onClick={() => setLotesBusqueda((n) => n + 1)}>
                   Seguir buscando

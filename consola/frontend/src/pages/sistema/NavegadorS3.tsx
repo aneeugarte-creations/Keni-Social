@@ -316,8 +316,7 @@ export function SeccionNavegadorS3() {
         {/* Nota honesta cuando el bucket no usa carpetas */}
         {bucketPlano && (
           <p className="text-xs text-muted-foreground">
-            Este bucket no usa carpetas: se listan los objetos en la raíz. Haz clic en una
-            fila para previsualizar o descargar.
+            Este bucket no usa carpetas; se listan los objetos en la raíz
           </p>
         )}
 

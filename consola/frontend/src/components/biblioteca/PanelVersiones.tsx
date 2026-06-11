@@ -96,7 +96,7 @@ export function PanelVersiones({
   const revertirMut = useMutation({
     mutationFn: (sha: string) => api.revertirTexto(docId, sha),
     onSuccess: () => {
-      toast.success("Versión restaurada como un cambio nuevo (el historial se conserva).");
+      toast.success("Versión restaurada como un cambio nuevo.");
       qc.invalidateQueries({ queryKey: ["texto"] });
       qc.invalidateQueries({ queryKey: ["texto-historial", docId] });
       onRestaurado?.();
@@ -107,7 +107,7 @@ export function PanelVersiones({
     const ok = await confirmar({
       titulo: "Restaurar esta versión",
       mensaje:
-        "El contenido del documento volverá a esta versión. Se guarda como un cambio nuevo: no se pierde el historial ni cambia lo publicado en producción.",
+        "El documento volverá a esta versión. Se guarda como un cambio nuevo.",
       textoConfirmar: "Restaurar",
     });
     if (ok) revertirMut.mutate(sha);
@@ -124,7 +124,7 @@ export function PanelVersiones({
   if (historial.length === 0) {
     return (
       <p className={cn("text-sm text-muted-foreground", className)}>
-        Sin versiones registradas. (El versionado git puede estar desactivado.)
+        Sin versiones registradas.
       </p>
     );
   }

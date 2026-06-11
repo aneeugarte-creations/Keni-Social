@@ -107,7 +107,7 @@ describe("PanelRender", () => {
     renderPanel("comp-7");
     // El video renderizado y el enlace de pestaña nueva siguen presentes.
     expect(screen.getByLabelText(/video renderizado/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /abrir el mp4/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /abrir en pestaña nueva/i })).toHaveAttribute(
       "href",
       "/api/media/render-final.mp4",
     );

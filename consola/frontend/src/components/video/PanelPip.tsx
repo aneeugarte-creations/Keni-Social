@@ -37,8 +37,7 @@ export function PanelPip({
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Picture-in-Picture: un segundo video flotando sobre el principal (cámara, reacción,
-        marca de agua animada). Opcional.
+        Un segundo video sobre el principal (cámara, reacción, marca de agua animada).
       </p>
 
       <EditorVideo
@@ -52,7 +51,7 @@ export function PanelPip({
       {clip && (
         <div className="space-y-3 rounded-md border border-border p-3">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold">Posición de la ventana (px)</Label>
+            <Label className="text-sm font-semibold">Posición</Label>
             <Button
               type="button"
               variant="ghost"
@@ -72,8 +71,7 @@ export function PanelPip({
             <CampoNum etiqueta="Alto" valor={clip.h} max={lienzoH} onCambio={(h) => onCaja({ h })} disabled={disabled} />
           </div>
           <p className="text-[11px] text-muted-foreground">
-            También puedes arrastrar la ventana directamente sobre la vista previa (la esquina
-            inferior derecha redimensiona manteniendo la proporción).
+            Arrastra en el preview o ajusta los valores.
           </p>
         </div>
       )}

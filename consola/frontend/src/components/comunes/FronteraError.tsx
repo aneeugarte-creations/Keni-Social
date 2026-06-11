@@ -94,14 +94,14 @@ export class FronteraError extends React.Component<Props, Estado> {
             </p>
             <p className="max-w-md text-sm text-muted-foreground">
               {chunk
-                ? "Se publicó una actualización mientras tenías la pestaña abierta. Recarga para cargar la versión nueva."
+                ? "Se publicó una actualización mientras tenías la pestaña abierta. Recarga para continuar."
                 : "Esta sección tuvo un problema al mostrarse. Puedes reintentar, recargar la consola o volver al feed del equipo."}
             </p>
           </div>
           {chunk ? (
             <Button onClick={() => window.location.reload()}>
               <RotateCw className="h-4 w-4" />
-              Recargar la app
+              Recargar
             </Button>
           ) : (
             // Crash de render (no chunk): tres salidas. "Reintentar" remonta los

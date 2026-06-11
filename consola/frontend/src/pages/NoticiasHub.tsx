@@ -30,14 +30,14 @@ const AREAS_NOTICIAS = [
   {
     titulo: "Investigación (interruptor general)",
     descripcion:
-      "El maestro del proceso de Investigación: enciende/apaga de golpe ingesta, fusión, ranking y verificación para todas las marcas. Deja el pool listo para producir; no escribe copy.",
+      "Control maestro: ingesta, fusión, ranking y verificación",
     grupos: ["maestros_investigacion"],
     abiertaInicial: true,
   },
   {
     titulo: "Investigación · por marca",
     descripcion:
-      "Desvía marcas concretas del maestro de Investigación: sin tocar, cada marca lo sigue; apágala para excluirla del pool sin afectar al resto.",
+      "Desactivar marcas específicas del maestro",
     grupos: ["automatizacion_marca_investigacion"],
     abiertaInicial: false,
   },
@@ -50,21 +50,21 @@ const AREAS_NOTICIAS = [
   {
     titulo: "Orden y prioridad del pool",
     descripcion:
-      "Cómo se ordenan las historias: pesos del score, qué cuenta como última hora y el empujón a lo que mejor funciona en redes.",
+      "Score, breaking y rendimiento en redes",
     grupos: ["noticias_orden", "noticias_breaking", "noticias_rendimiento"],
     abiertaInicial: false,
   },
   {
     titulo: "Producción automática",
     descripcion:
-      "Cuándo una historia dispara copy con IA: listón, maduración y cupos globales. El plan diario POR MARCA se edita en Programación → «Plan y horarios» (cupo y horarios, con buen formulario).",
+      "Umbral de producción, maduración y cupos",
     grupos: ["noticias_produccion"],
     abiertaInicial: false,
   },
   {
     titulo: "Técnico · capacidad y ritmo del motor",
     descripcion:
-      "Cuánto trabajo hace el motor en cada ronda. Los valores por defecto van bien; tócalos solo si se queda corto o gasta de más.",
+      "Trabajo del motor por ronda",
     grupos: ["noticias_tecnico"],
     abiertaInicial: false,
   },
@@ -82,7 +82,7 @@ export default function NoticiasHub() {
         <AccionesPagina>
           <MenuAcciones
             ajustesTitulo="Ajustes del motor de noticias"
-            ajustesDescripcion="Controlan qué noticias entran al pool, en qué orden se muestran y cuáles disparan producción automática. Los cambios aplican al momento (hasta ~1 minuto)."
+            ajustesDescripcion="Qué entra, cómo se ordena y qué se produce"
             ajustes={AREAS_NOTICIAS.map((area) => (
               <PanelAjustes
                 key={area.titulo}

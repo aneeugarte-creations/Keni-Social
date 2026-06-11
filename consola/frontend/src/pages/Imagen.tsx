@@ -823,7 +823,7 @@ export default function Imagen() {
                     pestanaActiva.plantillaId
                       ? sucia
                         ? "Guardar la plantilla (hay cambios sin guardar)"
-                        : "Guardado — la plantilla se autoguarda a los 3 s"
+                        : "Guardado"
                       : "Guardar como plantilla…"
                   }
                 >
@@ -938,7 +938,7 @@ export default function Imagen() {
           {/* Categoría: combobox del catálogo (datalist) + texto libre. Vacía cae a «General». */}
           <div className="space-y-1">
             <label htmlFor="plantilla-categoria" className="text-xs text-muted-foreground">
-              Categoría (opcional; sin categoría va a «General»)
+              Categoría (opcional)
             </label>
             <Input
               id="plantilla-categoria"

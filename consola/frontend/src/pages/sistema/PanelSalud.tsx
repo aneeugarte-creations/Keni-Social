@@ -40,7 +40,6 @@ export function PanelSalud() {
       <EstadoVacio
         icono={ShieldAlert}
         titulo="No tienes permiso"
-        texto="Solo los administradores pueden ver la salud del sistema."
       />
     );
   }

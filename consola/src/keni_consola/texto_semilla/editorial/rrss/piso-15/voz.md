@@ -1,6 +1,6 @@
 ---
 titulo: "Voz y tono · Piso 15"
-descripcion: "Cómo escribe Piso 15: registro, tono y estilo. Se inyecta al generar copy."
+descripcion: "Registro, tono y estilo; se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [piso-15]

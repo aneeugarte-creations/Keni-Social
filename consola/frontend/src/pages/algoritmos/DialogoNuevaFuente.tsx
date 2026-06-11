@@ -56,8 +56,7 @@ export function DialogoNuevaFuente({
         <DialogHeader>
           <DialogTitle>Nueva fuente de algoritmo</DialogTitle>
           <DialogDescription>
-            Un feed RSS de un blog oficial o agregador. La URL se valida (solo http/https,
-            sin direcciones internas).
+            Un feed RSS de un blog oficial o agregador.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

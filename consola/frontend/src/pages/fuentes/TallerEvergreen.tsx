@@ -145,7 +145,7 @@ export function TallerEvergreen({
             />
           ) : ideas.length === 0 ? (
             <EstadoVacioTexto
-              texto="No hay ideas para este filtro. Propón algunas con la IA o crea la primera a mano."
+              texto="No hay ideas para este filtro."
               className="py-4"
             />
           ) : (
@@ -236,7 +236,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            La IA propone ideas de contenido evergreen (evergreen) para la marca. Añade un
+            La IA propone ideas de contenido evergreen. Añade un
             contexto opcional para enfocarla (temporada, programa, ángulo…).
           </p>
 
@@ -399,14 +399,14 @@ function ListaIdeas({
       ))}
       {activas.length === 0 && historico.length > 0 && (
         <EstadoVacioTexto
-          texto="No hay ideas activas. Propón algunas con la IA o crea una a mano."
+          texto="No hay ideas activas."
           className="py-4"
         />
       )}
       {historico.length > 0 && (
         <details className="rounded-md border border-border/60">
           <summary className="cursor-pointer select-none px-3 py-2 text-sm text-muted-foreground">
-            Histórico ({historico.length}) — generadas y descartadas
+            Histórico ({historico.length})
           </summary>
           <div className="space-y-3 p-3 pt-1">
             {historico.map((idea) => (

@@ -131,7 +131,7 @@ function PanelUso({ doc, maquina }: { doc: DocumentoTexto; maquina?: RespuestaMa
 
 /** Pestaña "Compilado": el prompt ENSAMBLADO del pipeline (lo que verá el modelo). */
 function PanelCompilado({ pipelineId }: { pipelineId: string }) {
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
   const previewQuery = useQuery({
     queryKey: ["texto-preview", pipelineId, marcaActiva],
     queryFn: ({ signal }) => api.previewPipeline(pipelineId, marcaActiva as string, undefined, signal),
@@ -153,8 +153,7 @@ function PanelCompilado({ pipelineId }: { pipelineId: string }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Lo que verá el modelo en el pipeline «{pipelineId}» con la marca {nombreActiva}:
-        prompt base + capas editoriales ensambladas.
+        Prompt ensamblado para esta marca
       </p>
       {preview.adjuntos.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
@@ -187,7 +186,7 @@ function PanelFicha({
     <div className="space-y-3 text-sm">
       <div className="space-y-1">
         <Label htmlFor="ficha-descripcion" className="text-xs">
-          Descripción (no se inyecta en la IA)
+          Descripción
         </Label>
         <Input
           id="ficha-descripcion"
@@ -257,7 +256,7 @@ function PanelFicha({
       ) : null}
       <div className="space-y-1">
         <Label htmlFor="ficha-etiquetas" className="text-xs">
-          Etiquetas (separadas por comas)
+          Etiquetas
         </Label>
         <Input
           id="ficha-etiquetas"

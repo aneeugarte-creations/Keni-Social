@@ -1,6 +1,6 @@
 ---
 titulo: "Reglas · Piso 15"
-descripcion: "Reglas y límites editoriales de Piso 15 al generar copy."
+descripcion: "Límites editoriales al generar copy."
 tipo: editorial
 clase: reglas
 marcas: [piso-15]

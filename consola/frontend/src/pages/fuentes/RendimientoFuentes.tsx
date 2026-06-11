@@ -75,7 +75,7 @@ export function RendimientoFuentes() {
           </p>
         ) : fuentes.length === 0 ? (
           <EstadoVacioTexto
-            texto="Aún no hay datos de la ventana: el rendimiento se llena conforme el motor ingiere y el equipo usa historias."
+            texto="Sin datos en esta ventana aún."
             className="py-4"
           />
         ) : (
@@ -113,8 +113,7 @@ export function RendimientoFuentes() {
               </TableBody>
             </Table>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              «Abrió» = publicó primero la historia (la fuente que rompe). «% uso» = de las
-              historias en las que participó, cuántas acabaron en el tablero.
+              «Abrió» = primer medio. «% uso» = tasa de uso en tablero.
             </p>
           </>
         )}

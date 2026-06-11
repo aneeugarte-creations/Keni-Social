@@ -1,6 +1,6 @@
 ---
 titulo: "Reglas · Fundación"
-descripcion: "Reglas y límites editoriales de Fundación al generar copy."
+descripcion: "Límites editoriales al generar copy."
 tipo: editorial
 clase: reglas
 marcas: [fundacion]

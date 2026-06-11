@@ -333,7 +333,7 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
               texto={
                 estadoFijo
                   ? "Lo que descartes o empujes desde Candidatas aparecerá aquí."
-                  : "El motor de clustering agrupará las noticias conforme lleguen artículos corroborados de múltiples fuentes."
+                  : "Las historias se agrupan conforme llegan artículos de múltiples fuentes."
               }
             />
           ) : (

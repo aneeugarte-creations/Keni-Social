@@ -413,7 +413,7 @@ export function DialogoEditar({
                 />
                 <Label
                   htmlFor="editar-espejo-toggle"
-                  title="Con el espejo puesto, lo que edites aquí (copy, texto en imagen, foto) se aplica también a las demás redes de la idea. Apágalo para editar cada red por separado."
+                  title="Aplica cambios a todas las redes de la idea"
                 >
                   Espejo entre redes
                 </Label>

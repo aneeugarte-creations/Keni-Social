@@ -130,7 +130,7 @@ function VistaChipVariable({ node, selected }: NodeViewProps) {
               ) : null}
               {info.ejemplo ? (
                 <span className="mt-1 block text-muted-foreground">
-                  Ejemplo: <span className="italic">{info.ejemplo}</span>
+                  Ej: <span className="italic">{info.ejemplo}</span>
                 </span>
               ) : null}
               {info.origen ? (

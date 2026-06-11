@@ -96,7 +96,7 @@ export function SeccionBackups() {
                 <span className="text-foreground">
                   {tiempoRelativo(ultimo_dump.modificado)}
                 </span>{" "}
-                · {formatoBytes(ultimo_dump.bytes)} · {dumps} dump(s) retenidos
+                · {formatoBytes(ultimo_dump.bytes)} · {dumps} dumps retenidos
               </p>
             ) : (
               <p className="text-red-500">

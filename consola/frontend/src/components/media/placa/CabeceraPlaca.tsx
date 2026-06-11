@@ -38,8 +38,8 @@ export function CabeceraPlaca({
           onClick={onAlternarSinPlantilla}
           title={
             sinPlantilla
-              ? "Solo foto (sin plantilla). Toca para volver a aplicar la plantilla"
-              : "Quitar la plantilla: publicar solo la foto, sin nada encima"
+              ? "Solo foto. Toca para restaurar"
+              : "Quitar la plantilla"
           }
           aria-pressed={sinPlantilla}
         >
@@ -55,7 +55,7 @@ export function CabeceraPlaca({
             size="icon"
             className="h-7 w-7"
             onClick={onAbrirGaleria}
-            title="Elegir una plantilla del estudio (por marca)"
+            title="Elegir plantilla"
           >
             <LayoutTemplate className="h-3.5 w-3.5" />
           </Button>

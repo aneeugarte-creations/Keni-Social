@@ -1,6 +1,6 @@
 ---
 titulo: "Patrones medidos · Nación Gamer"
-descripcion: "Bandas de rendimiento medidas en Metricool (longitud, emojis, hashtags) de Nación Gamer; se regenera periódicamente."
+descripcion: "Bandas medidas en Metricool (longitud, emojis, hashtags); se regeneran periódicamente."
 tipo: editorial
 clase: ""
 marcas: [nacion-gamer]

@@ -38,23 +38,23 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 # rendimiento → última hora → producción automática → técnico); los finos operacionales (jobs,
 # limpieza, alertas) en el Monitor.
 GRUPOS: tuple[tuple[str, str], ...] = (
-    ("maquina_global", "Máquina de contenido (interruptor general)"),
-    ("maestros_investigacion", "Investigación (todas las marcas)"),
-    ("automatizacion_marca_investigacion", "Investigación · excepciones por marca"),
-    ("maestros_produccion", "Producción (todas las marcas)"),
-    ("automatizacion_marca_produccion", "Producción · excepciones por marca"),
-    ("pipeline_topes", "Admisión del flujo continuo"),
+    ("maquina_global", "Máquina de contenido"),
+    ("maestros_investigacion", "Investigación"),
+    ("automatizacion_marca_investigacion", "Excepciones por marca"),
+    ("maestros_produccion", "Producción"),
+    ("automatizacion_marca_produccion", "Excepciones por marca"),
+    ("pipeline_topes", "Admisión del flujo"),
     ("publicacion", "Publicación"),
-    ("publicacion_marca", "Publicación · excepciones por marca"),
-    ("automatismos_generales", "Automatismos generales"),
+    ("publicacion_marca", "Excepciones por marca"),
+    ("automatismos_generales", "Automatismos"),
     ("noticias_entrada", "Qué entra al pool"),
-    ("noticias_orden", "Cómo se ordena el pool"),
-    ("noticias_rendimiento", "Priorizar lo que mejor funciona en redes"),
-    ("noticias_breaking", "Qué cuenta como última hora"),
-    ("noticias_produccion", "Cuándo se produce en automático"),
-    ("noticias_produccion_marca", "Plan editorial diario por marca"),
-    ("noticias_tecnico", "Ajustes técnicos · capacidad y ritmo del motor"),
-    ("tuning", "Ajustes finos · sistema, limpieza y alertas"),
+    ("noticias_orden", "Orden del pool"),
+    ("noticias_rendimiento", "Rendimiento en redes"),
+    ("noticias_breaking", "Última hora"),
+    ("noticias_produccion", "Producción automática"),
+    ("noticias_produccion_marca", "Plan diario por marca"),
+    ("noticias_tecnico", "Capacidad y ritmo"),
+    ("tuning", "Sistema, limpieza y alertas"),
 )
 
 # Grupos del MOTOR DE NOTICIAS: las secciones de la subpágina «Ajustes del motor de noticias»
@@ -360,7 +360,7 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_PIPELINE_EN_VUELO_MAX,
             tipo="int",
-            etiqueta="Piezas en vuelo por marca (regulador del flujo)",
+            etiqueta="Piezas en vuelo por marca",
             ayuda="Tope de piezas sin terminar (Validación pendiente o sin copy) por marca. Es EL "
             "regulador: no se admite más hasta que algo sale por el otro lado (in=out). Una pieza "
             "que falla repetidamente sale del cupo marcada como problema.",
@@ -394,8 +394,8 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_PRESUPUESTO_TOKENS_DIA,
             tipo="int",
-            etiqueta="Presupuesto diario de tokens (0 = sin límite)",
-            ayuda="Tokens (entrada+salida) de generación por día UTC. Al agotarse se corta el "
+            etiqueta="Presupuesto diario de tokens",
+            ayuda="Tokens (entrada+salida) de generación por día UTC; 0 = sin límite. Al agotarse se corta el "
             "trabajo automático (lo manual sigue hasta el margen). La suscripción es compartida "
             "con el equipo: este tope protege su cupo.",
             grupo="pipeline_topes",
@@ -416,8 +416,8 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_PROMPT_MAX_CHARS,
             tipo="int",
-            etiqueta="Contexto máximo por generación (caracteres; 0 = sin tope)",
-            ayuda="Tope duro del prompt que entra a una generación (~4 caracteres = 1 token). "
+            etiqueta="Contexto máximo por generación (caracteres)",
+            ayuda="Tope duro del prompt que entra a una generación (~4 caracteres = 1 token; 0 = sin tope). "
             "Un contexto patológico (feeds sin criba, documentos enormes) se rechaza antes "
             "de gastar tokens de la suscripción compartida.",
             grupo="pipeline_topes",

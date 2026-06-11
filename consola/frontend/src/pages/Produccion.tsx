@@ -383,8 +383,8 @@ export default function Produccion() {
           titulo={hayFiltro ? "Sin items con ese filtro" : "Aún no hay producción"}
           texto={
             hayFiltro
-              ? "Ningún item coincide con los filtros elegidos. Prueba a quitarlos."
-              : "Cuando la máquina produzca (pipeline automático, copys, imágenes, investigaciones…), cada trabajo aparecerá aquí con sus etapas, coste y tiempo."
+              ? "No hay items con ese filtro"
+              : "Los trabajos aparecerán aquí cuando la máquina produzca"
           }
         />
       ) : (

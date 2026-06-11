@@ -520,7 +520,6 @@ function PreviaInstagram({ marca, contenido, copyIn, imagen, limpia }: MockupPro
               <Send className="h-6 w-6" />
               <Bookmark className="ml-auto h-6 w-6" />
             </div>
-            <p className="text-[13px] font-semibold">128 Me gusta</p>
           </>
         )}
         <p className="text-[13px] leading-snug">
@@ -589,11 +588,9 @@ function PreviaTikTok({ marca, contenido, copyIn, imagen, limpia }: MockupProps)
             <Avatar marca={marca} className="h-9 w-9 border-2 border-white text-[11px]" />
             <div className="flex flex-col items-center gap-1">
               <Heart className="h-7 w-7 fill-white drop-shadow" />
-              <span className="text-[11px] font-semibold drop-shadow">12.4k</span>
             </div>
             <div className="flex flex-col items-center gap-1">
               <MessageCircle className="h-7 w-7 fill-white drop-shadow" />
-              <span className="text-[11px] font-semibold drop-shadow">312</span>
             </div>
             <div className="flex flex-col items-center gap-1">
               <Share2 className="h-7 w-7 fill-white drop-shadow" />
@@ -632,18 +629,13 @@ function PreviaYouTube({ marca, contenido, copyIn, imagen, limpia }: MockupProps
             <Play className="h-6 w-6 fill-current" />
           </div>
         </div>
-        <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-[11px] font-medium text-white">
-          10:24
-        </span>
       </div>
       <div className="mt-3 flex gap-3">
         <Avatar marca={marca} className="h-9 w-9 text-xs" />
         <div className="min-w-0">
           <p className="line-clamp-2 text-[15px] font-medium leading-snug">{titulo}</p>
           <p className="mt-0.5 text-[13px] text-muted-foreground">{marca}</p>
-          {!limpia && (
-            <p className="text-[13px] text-muted-foreground">1.2 mil vistas · Hace un momento</p>
-          )}
+          {!limpia && null}
         </div>
       </div>
     </div>
@@ -787,10 +779,6 @@ export function VistaPreviaRed({
         imagen={imagen}
         limpia={false}
       />
-      <p className="text-[11px] text-muted-foreground">
-        Mockup aproximado. El render real puede variar según la red. Las redes no aplican formato
-        Markdown.
-      </p>
     </div>
   );
 }

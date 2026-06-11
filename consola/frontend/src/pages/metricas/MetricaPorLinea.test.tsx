@@ -90,7 +90,7 @@ describe("MetricaPorLinea", () => {
     expect(screen.getAllByText("Piezas").length).toBe(2);
     expect(screen.getAllByText("Vistas").length).toBe(2);
     expect(screen.getAllByText("Interacciones").length).toBe(2);
-    expect(screen.getAllByText("Engagement (promedio por pieza)").length).toBe(2);
+    expect(screen.getAllByText("Engagement").length).toBe(2);
 
     // Filas de datos legibles con cifras es-MX y fila Total en ambas tablas.
     expect(screen.getByText("Deportes")).toBeInTheDocument();

@@ -72,7 +72,7 @@ export function PistaBase({
                     : "border-border text-muted-foreground hover:bg-accent/50"
                 }`}
               >
-                {a === "cover" ? "Llenar (cover)" : "Caber (contain)"}
+                {a === "cover" ? "Llenar" : "Caber"}
               </button>
             ))}
           </div>

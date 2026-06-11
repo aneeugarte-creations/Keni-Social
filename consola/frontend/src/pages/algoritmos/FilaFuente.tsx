@@ -54,7 +54,7 @@ export function FilaFuente({
           size="sm"
           onClick={() => onBorrar(fuente)}
           disabled={ocupada}
-          title="Borrar fuente"
+          aria-label="Borrar fuente"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
         </Button>

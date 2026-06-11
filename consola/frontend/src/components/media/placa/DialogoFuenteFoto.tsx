@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -67,7 +66,6 @@ export function DialogoFuenteFoto({
           <DialogTitle>
             {esCollage ? `Foto del hueco ${slotActivo + 1} de ${nHuecos}` : "Imagen de la pieza"}
           </DialogTitle>
-          <DialogDescription>Elígela de la galería, súbela o genérala con IA.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -94,7 +92,7 @@ export function DialogoFuenteFoto({
           </div>
           <div className="space-y-1.5">
             <span className="text-xs text-muted-foreground">
-              o genera con IA (sugerencia: el copy del post):
+              O genera con IA:
             </span>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input

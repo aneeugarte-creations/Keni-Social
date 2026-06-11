@@ -241,7 +241,7 @@ export function EvolucionRedes({
                 Vistas por red
               </p>
               <p className="text-xs text-muted-foreground">
-                Vistas de lo publicado en cada tramo
+                Por red y tramo
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5">
@@ -304,7 +304,7 @@ export function EvolucionRedes({
     <SeccionColapsable
       titulo="Evolución por red"
       icono={BarChart3}
-      descripcion="Vistas por tramo (día, semana o mes según el periodo), apiladas por red."
+      descripcion="Por tramo, apiladas por red."
     >
       {contenido}
     </SeccionColapsable>

@@ -148,7 +148,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
   const comentarios = query.data?.comentarios ?? [];
 
   if (!contenidoId) {
-    return <EstadoVacio titulo="Sin tema" texto="Esta pieza no tiene un tema al que atar comentarios." />;
+    return <EstadoVacio titulo="Sin tema" texto="Asigna un tema para comentar" />;
   }
 
   return (
@@ -162,7 +162,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
             onKeyDown={alTeclear}
             onBlur={() => setMenu(null)}
             aria-label="Escribe un comentario"
-            placeholder="Escribe un comentario para el equipo… usa @ para mencionar"
+            placeholder="Escribe un comentario…"
             rows={2}
             className="text-sm"
           />
@@ -207,12 +207,12 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
           {comentarios.map((c) => {
             const acciones: EntradaMenuContextual[] = [
               {
-                etiqueta: "Borrar comentario",
+                etiqueta: "Borrar",
                 icono: Trash2,
                 onClick: async () => {
                   if (
                     await confirmar({
-                      mensaje: "¿Borrar este comentario? No se puede deshacer.",
+                      mensaje: "¿Borrar? Esta acción no se puede deshacer.",
                       destructivo: true,
                       textoConfirmar: "Borrar",
                     })
@@ -228,7 +228,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
                 key={c.id}
                 como="li"
                 acciones={acciones}
-                etiquetaAcciones="Acciones del comentario"
+                etiquetaAcciones="Acciones"
                 kebab="hover"
                 className={cn(
                   "rounded-md border p-2 pr-10 text-sm",

@@ -192,7 +192,7 @@ export function DetalleHistoria({
               ) : (
                 <Newspaper className="h-3 w-3" />
               )}
-              {historia.promovible ? "Adelantar al feed" : "Empujar al feed"}
+              Pasar al feed
             </Button>
           </div>
         )}

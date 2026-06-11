@@ -27,7 +27,7 @@ import {
 
 const ETIQUETA_ESTADO_SUBS: Record<EstadoSubtitulos, string> = {
   pendiente: "Subtítulos pendientes",
-  transcrito: "Transcrito (sin revisar)",
+  transcrito: "Transcrito",
   editado: "Subtítulos editados",
   listo: "Subtítulos listos",
 };
@@ -114,9 +114,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
   if (comps.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-        Aún no hay composiciones para esta marca. Empieza una nueva en la sección «Base» (al primer
-        cambio o con «Guardar borrador» se crea la composición), o edita una pieza de video desde la
-        lista de contenido.
+        Aún no hay composiciones. Crea una nueva al subir un video.
       </p>
     );
   }
@@ -149,8 +147,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
 
       {visibles.length === 0 ? (
         <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-          No hay composiciones {filtro === "borrador" ? "en borrador" : "marcadas como listas"} para
-          esta marca.
+          No hay composiciones.
         </p>
       ) : (
         <ul className="space-y-2" aria-label="Mis composiciones de video">

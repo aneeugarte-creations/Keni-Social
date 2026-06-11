@@ -60,7 +60,6 @@ export default function Usuarios() {
         <EstadoVacio
           icono={ShieldAlert}
           titulo="No tienes permiso"
-          texto="Solo los administradores pueden ver y editar el organigrama."
         />
       ) : query.isPending ? (
         <Skeleton className="h-80 w-full rounded-md" />

@@ -56,7 +56,7 @@ export function GraficaPorSerie({
   return (
     <SeccionColapsable
       titulo="Rendimiento por serie y tipo"
-      descripcion="Engagement promedio por pieza del periodo, agrupado por la clasificación editorial de cada pieza (cruce con el tablero por id de Metricool; título como respaldo)."
+      descripcion="Engagement promedio por pieza del periodo, agrupado por clasificación editorial."
       icono={Layers}
     >
       {isPending ? (

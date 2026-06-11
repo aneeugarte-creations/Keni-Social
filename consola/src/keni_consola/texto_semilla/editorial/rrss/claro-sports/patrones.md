@@ -1,6 +1,6 @@
 ---
 titulo: "Patrones medidos · Claro Sports"
-descripcion: "Bandas de rendimiento medidas en Metricool (longitud, emojis, hashtags) de Claro Sports; se regenera periódicamente."
+descripcion: "Bandas medidas en Metricool (longitud, emojis, hashtags); se regeneran periódicamente."
 tipo: editorial
 clase: ""
 marcas: [claro-sports]

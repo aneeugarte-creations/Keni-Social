@@ -149,10 +149,7 @@ export function DialogoImportarCalendario({
         <DialogHeader>
           <DialogTitle>Importar calendario</DialogTitle>
           <DialogDescription>
-            Sube un archivo en cualquier formato (Excel, CSV, PDF, Word, una imagen o
-            captura…). La IA lo interpreta y extrae título, fecha, marca, redes, prioridad y
-            compromiso. Las filas marcadas como obligatorias se etiquetan “compromiso”.
-            Previsualiza antes de volcar al tablero.
+            Importa contenido desde Excel, PDF, Word, imagen o captura.
           </DialogDescription>
         </DialogHeader>
 
@@ -167,10 +164,6 @@ export function DialogoImportarCalendario({
               <p className="flex items-center gap-2 font-medium">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Procesando con IA…
-              </p>
-              <p className="text-xs text-muted-foreground">
-                La IA está leyendo el archivo y extrayendo el calendario. Los temas
-                aparecerán como borradores en el tablero al terminar.
               </p>
               <ProgresoGeneracion
                 generacion={generacion}

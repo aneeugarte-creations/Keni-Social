@@ -106,8 +106,8 @@ describe("CompararPeriodos", () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
 
-    // Etiquetas claras: A = "Comparar con (antes)", B = "Periodo actual".
-    expect(screen.getByText("Comparar con (antes)")).toBeInTheDocument();
+    // Etiquetas claras: A = "Comparar con", B = "Periodo actual".
+    expect(screen.getByText("Comparar con")).toBeInTheDocument();
     expect(screen.getByText("Periodo actual")).toBeInTheDocument();
 
     // SelectorTiempo expone un combobox "Tipo de periodo" por cada periodo (A y B),

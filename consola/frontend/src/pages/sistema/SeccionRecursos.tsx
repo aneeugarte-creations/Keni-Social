@@ -119,7 +119,7 @@ export function SeccionRecursos() {
           icono={Cpu}
           titulo="CPU"
           valor={formatoPorcentaje(cpu.porcentaje)}
-          subtitulo={cpu.cores != null ? `${cpu.cores} núcleos` : "psutil no disponible"}
+          subtitulo={cpu.cores != null ? `${cpu.cores} núcleos` : undefined}
           porcentaje={cpu.porcentaje}
         />
         <TarjetaMetrica

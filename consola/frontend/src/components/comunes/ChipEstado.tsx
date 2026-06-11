@@ -33,10 +33,10 @@ const ASPECTO: Record<string, Aspecto> = {
   reclamado: { variant: "secondary", clase: CIELO, texto: "En curso" },
   // Esperando turno.
   pendiente: { variant: "outline", clase: "text-muted-foreground", texto: "Pendiente" },
-  lanzado: { variant: "outline", clase: "text-muted-foreground", texto: "Lanzado" },
+  lanzado: { variant: "outline", clase: "text-muted-foreground", texto: "En cola" },
   // Atención humana / cribas.
   revisar: { variant: "secondary", clase: AMBAR, texto: "Revisar" },
-  saltada: { variant: "outline", clase: "text-muted-foreground/60 border-dashed line-through", texto: "Saltada" },
+  saltada: { variant: "outline", clase: "text-muted-foreground/60 border-dashed line-through", texto: "Omitida" },
   // Terminales con problema.
   fallo: { variant: "destructive", texto: "Error" },
   error: { variant: "destructive", texto: "Error" },

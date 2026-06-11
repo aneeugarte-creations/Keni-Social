@@ -67,7 +67,7 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
       expect(JSON.parse(crudo!)[0].texto).toBe("Hola desde México");
     });
     // Sin respaldo previo restaurado, el aviso NO aparece.
-    expect(screen.queryByText(/cambios sin guardar restaurados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cambios sin guardar/i)).not.toBeInTheDocument();
   });
 
   it("restaura el respaldo pendiente al volver, con aviso y guardado habilitado", async () => {
@@ -79,7 +79,7 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
     // Gana el respaldo, no el texto del servidor.
     expect(await screen.findByDisplayValue("Hola desde México (corregido)")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("ola desde mejico")).not.toBeInTheDocument();
-    expect(screen.getByText(/cambios sin guardar restaurados/i)).toBeInTheDocument();
+    expect(screen.getByText(/cambios sin guardar/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /guardar correcciones/i })).not.toBeDisabled();
   });
 
@@ -99,7 +99,7 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
     expect(guardar.mock.calls[0][1].estado).toBe("editado");
     await waitFor(() => expect(sessionStorage.getItem(CLAVE)).toBeNull());
     await waitFor(() =>
-      expect(screen.queryByText(/cambios sin guardar restaurados/i)).not.toBeInTheDocument(),
+      expect(screen.queryByText(/cambios sin guardar/i)).not.toBeInTheDocument(),
     );
   });
 
@@ -109,7 +109,7 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
     renderEditor();
     // Cae al dato del servidor, sin aviso de restauración (no había nada restaurable).
     expect(await screen.findByDisplayValue("ola desde mejico")).toBeInTheDocument();
-    expect(screen.queryByText(/cambios sin guardar restaurados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cambios sin guardar/i)).not.toBeInTheDocument();
     // Y deja rastro con CONTEXTO (la clave del respaldo) + el error original.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining(CLAVE), expect.anything());
   });

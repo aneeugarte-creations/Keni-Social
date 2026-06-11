@@ -99,7 +99,7 @@ function ResumenCorrelacion({ items }: { items: ItemCorrelacion[] }) {
   const pares = plural(n, "par día–red", "pares día–red");
   const texto =
     n < N_MINIMA_CORRELACION
-      ? `n insuficiente para estimar correlación (${pares}; mínimo ${N_MINIMA_CORRELACION}).`
+      ? `Insuficientes observaciones (n < 10)`
       : rho == null
         ? `Correlación no calculable: sin variación en los datos (${pares}).`
         : `Correlación (ρ de Spearman, robusta a valores extremos): ${rho.toLocaleString(
@@ -176,7 +176,7 @@ export function Correlacion({
     <SeccionColapsable
       titulo="Seguidores frente a piezas publicadas"
       icono={GitCompareArrows}
-      descripcion="Por día y red: seguidores ganados frente a piezas publicadas, con la pieza que mejor rindió ese día."
+      descripcion="Con la pieza que mejor rindió cada día"
       acciones={filtroRed}
       contentClassName="space-y-4"
     >
@@ -188,8 +188,7 @@ export function Correlacion({
         </p>
       ) : items.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay datos de seguidores para este periodo (la fuente de métricas no los
-          entrega).
+          Aún no hay datos de seguidores para este periodo
         </p>
       ) : (
         <>

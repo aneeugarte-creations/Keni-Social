@@ -1,6 +1,6 @@
 ---
 titulo: "Identidad · Claro Sports"
-descripcion: "Qué es Claro Sports, qué cubre y su posicionamiento. Referencia para redactar el copy."
+descripcion: "Qué cubre y su posicionamiento; referencia del copy."
 tipo: editorial
 clase: marca
 marcas: [claro-sports]

@@ -657,10 +657,6 @@ export function DialogEditarEvento({
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Editar evento</DialogTitle>
-          <DialogDescription>
-            Los cambios de fecha/hora/cobertura marcan el evento como reprogramado para que
-            avisen al equipo.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -1033,8 +1029,7 @@ export function DialogEditarTurno({
         <DialogHeader>
           <DialogTitle>Editar turno</DialogTitle>
           <DialogDescription>
-            Cambia persona, fecha, franja, motivo o nota de relevo. Se valida el sábado
-            consecutivo y las ausencias; si chocan, te ofrecemos forzar override.
+            Edita los detalles del turno. Las reglas se validan al guardar.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

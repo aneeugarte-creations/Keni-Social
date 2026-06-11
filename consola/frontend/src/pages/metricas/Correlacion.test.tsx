@@ -150,14 +150,14 @@ describe("Correlacion (seguidores vs publicación)", () => {
     expect(screen.queryByText("UnoTV")).not.toBeInTheDocument();
   });
 
-  it("con menos de 8 pares suprime el coeficiente: «n insuficiente para estimar correlación»", async () => {
+  it("con menos de 8 pares suprime el coeficiente: «Insuficientes observaciones»", async () => {
     vi.spyOn(api, "metricasCorrelacion").mockResolvedValue(RESP); // 2 pares
     renderConProviders(
       <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
     );
 
     expect(
-      await screen.findByText(/n insuficiente para estimar correlación \(2 pares día–red; mínimo 8\)/),
+      await screen.findByText(/Insuficientes observaciones \(n < 10\)/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/ρ de Spearman/)).not.toBeInTheDocument();
   });

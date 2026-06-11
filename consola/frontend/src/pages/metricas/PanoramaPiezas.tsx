@@ -472,13 +472,13 @@ export function PanoramaPiezas({
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
               <span className="h-3 w-3 rounded-full bg-muted-foreground" aria-hidden="true" />
               <span className="text-xs text-muted-foreground">
-                Eje vertical: vistas en escala logarítmica · tamaño del punto = engagement
+                Eje vertical: vistas · tamaño del punto = engagement
               </span>
             </span>
             {sinVistas > 0 && (
               <span className="text-xs text-muted-foreground">
                 {plural(sinVistas, "pieza")} con 0 vistas se {sinVistas === 1 ? "apoya" : "apoyan"}{" "}
-                en la línea «1» del eje (escala logarítmica)
+                en la línea «1» del eje
               </span>
             )}
           </div>
@@ -551,7 +551,7 @@ export function PanoramaPiezas({
     <SeccionColapsable
       titulo="Panorama de piezas"
       icono={Telescope}
-      descripcion="Cada punto es una pieza: altura = vistas (escala logarítmica), tamaño = engagement, color = red. Este panorama usa su propio periodo (selector de la derecha), independiente del periodo global de arriba."
+      descripcion="Cada punto es una pieza: altura = vistas, tamaño = engagement, color = red. Usa su propio selector de periodo, independiente del global."
       acciones={selectorPeriodo}
     >
       {contenido}

@@ -42,8 +42,7 @@ export function SelectorFormato({ aspecto, onCambio, disabled }: SelectorFormato
         })}
       </div>
       <p className="text-[11px] text-muted-foreground/70">
-        Zona segura: deja texto y logos dentro de los márgenes punteados del preview (el chrome
-        de cada red tapa los bordes superior e inferior).
+        Mantén contenido dentro de los márgenes punteados del preview
       </p>
     </div>
   );

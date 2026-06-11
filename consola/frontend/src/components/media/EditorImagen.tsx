@@ -342,8 +342,7 @@ function FuenteFondo({
     <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
       {!compacto && (
         <p className="text-xs text-muted-foreground">
-          Elige de dónde sale la foto/fondo (puedes subir una foto real, elegir de la galería
-          o generarla con IA):
+          Elige la fuente:
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">

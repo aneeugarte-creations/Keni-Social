@@ -1,6 +1,6 @@
 ---
 titulo: "Voz y tono · Claro Sports"
-descripcion: "Cómo escribe Claro Sports: registro, tono y estilo. Se inyecta al generar copy."
+descripcion: "Registro, tono y estilo; se inyecta al generar copy."
 tipo: editorial
 clase: voz
 marcas: [claro-sports]

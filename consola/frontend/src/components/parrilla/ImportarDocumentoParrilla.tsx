@@ -250,7 +250,7 @@ function Dropzone({
           <Upload className="h-6 w-6 text-muted-foreground" />
           <p className="text-sm font-medium">Arrastra un documento o haz clic para elegir</p>
           <p className="text-xs text-muted-foreground">
-            PDF, imagen, Word, Excel o texto. Keni lo analizará y propondrá los cambios.
+            PDF, imagen, Word, Excel o texto.
           </p>
         </>
       )}
@@ -343,17 +343,12 @@ function DialogImportarParrilla({
         <DialogHeader>
           <DialogTitle>Importar documento a la parrilla</DialogTitle>
           <DialogDescription>
-            Sube una nota, parrilla o calendario; Keni lo analiza y propone los cambios
-            (eventos y turnos). Revisa la previsualización antes de aplicar.
+            Revisa los cambios propuestos antes de aplicar.
           </DialogDescription>
         </DialogHeader>
 
         {enSubida ? (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              El documento puede cubrir una semana o todo el año: Keni detecta las fechas y
-              propone los cambios en las semanas que correspondan.
-            </p>
             <Dropzone archivo={archivo} setArchivo={setArchivo} />
           </div>
         ) : generando || !propuesta ? (
@@ -369,8 +364,7 @@ function DialogImportarParrilla({
               </div>
             )}
             <p className="text-sm text-muted-foreground">
-              Keni está leyendo el documento y preparando la propuesta. Puedes cerrar y volver
-              desde el badge de pendientes; el análisis sigue en segundo plano.
+              El análisis sigue en segundo plano.
             </p>
             {generacion?.prompt && <VerPrompt prompt={generacion.prompt} />}
           </div>

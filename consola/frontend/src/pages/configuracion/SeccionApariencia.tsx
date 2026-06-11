@@ -21,7 +21,7 @@ export function SeccionApariencia() {
         <div className="min-w-0">
           <p className="text-sm font-medium">Apariencia</p>
           <p className="text-xs text-muted-foreground">
-            Tema de la consola. Se guarda <strong>solo en este equipo</strong>.
+            Tema de la consola (guardado localmente).
           </p>
         </div>
         <div role="radiogroup" aria-label="Tema" className="flex shrink-0 flex-wrap gap-2">
