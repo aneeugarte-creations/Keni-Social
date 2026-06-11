@@ -99,10 +99,12 @@ export function PanelElementos() {
       <Seccion titulo="Bloques">
         <button
           onClick={insertarPleca}
-          className="flex w-full items-end overflow-hidden rounded-md border border-border bg-neutral-800 p-0 text-left hover:border-primary"
+          className="w-full overflow-hidden rounded-md border border-border bg-card p-1.5 text-left transition-colors hover:border-primary hover:bg-accent/40"
         >
-          {/* Mini-maqueta de la pleca inferior. */}
-          <div className="relative h-20 w-full bg-gradient-to-t from-black via-black/60 to-transparent">
+          {/* Mini-maqueta: foto (placeholder gris) con la pleca SOLO en la franja inferior
+              (degradado + etiqueta + titular). La tarjeta es clara; lo oscuro es la pleca real. */}
+          <div className="relative h-20 w-full overflow-hidden rounded bg-gradient-to-br from-zinc-300 to-zinc-500">
+            <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/55 to-transparent" />
             <div className="absolute bottom-2 left-2 flex flex-col gap-1">
               <span className="w-fit rounded-sm bg-[#E30613] px-1.5 py-0.5 text-[8px] font-bold text-white">EN VIVO</span>
               <span className="text-[11px] font-extrabold uppercase leading-tight text-white">Titular de la noticia</span>
