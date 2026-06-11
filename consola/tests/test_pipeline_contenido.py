@@ -1028,6 +1028,11 @@ def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
 def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     """Al promover, la LÍNEA queda en `contenido.categoria` ('breaking' si lo era)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    # El plan declara la línea 'breaking' para que la última hora consuma SU cupo (y no el
+    # de su categoría de feed): así la breaking sale a la vez que la nacional. Sin línea
+    # 'breaking' en el plan, una última hora competiría por el cupo 'mx' (ver
+    # test_plan_sin_linea_breaking_compite_por_su_feed) y desplazaría a la nacional.
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,breaking:1")
     _sembrar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx")
     _sembrar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1)
 
