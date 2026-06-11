@@ -34,6 +34,7 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
         "Ingesta de noticias · verificación de cada grupo propuesto antes de fundir",
     ],
     "prompt/editorial": ["Priorización · perfil de keywords por marca"],
+    "prompt/clasificacion-marca": ["Investigación · clasificación de marca"],
     # Importación de documentos
     "prompt/importar/calendario": ["Importar calendario de contenido (documento → parrilla)"],
     "prompt/importar/parrilla": ["Importar rota/parrilla (documento → operaciones)"],
@@ -42,6 +43,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/copy": ["Pipeline · generación de copy desde la nota"],
     "prompt/evergreen": ["Taller evergreen · brainstorming de ideas"],
     # De LANZAMIENTO MANUAL (no se inyectan en un proceso de fondo; se ejecutan a demanda).
+    "prompt/hashtags": ["Herramienta · sugerencia de hashtags"],
+    "prompt/asistente/variantes": ["Asistente del editor · modo variantes"],
+    "prompt/asistente/resumir": ["Asistente del editor · modo resumir"],
 }
 
 

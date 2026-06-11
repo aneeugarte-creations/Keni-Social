@@ -14,6 +14,14 @@ from keni_consola.dominio import clasificador_marca
 _CANDIDATAS = [("unotv", "UnoTV"), ("claro-sports", "Claro Sports"), ("nacion-gamer", "Nación Gamer")]
 
 
+@pytest.fixture(autouse=True)
+def _texto_tmp(monkeypatch, tmp_path):
+    # El prompt sale ahora de la Biblioteca de Texto: aislar el store en tmp para que ningún
+    # test lea el store REAL (sin store, `cuerpo_efectivo` cae a la semilla del paquete).
+    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    return tmp_path
+
+
 def _ejecutor_que_devuelve(salida: str):
     llamadas: list[str] = []
 
@@ -140,3 +148,55 @@ def test_clasificar_marca_ia_wiring_usa_candidatas_validas(monkeypatch):
     ids = {c[0] for c in capturado["candidatas"]}  # type: ignore[index]
     assert ids == {"unotv", "claro-sports", "nacion-gamer"}
     assert capturado["fallback"] == "unotv"
+
+
+# --------------------------------------------------------------------------- #
+# El prompt vive en la Biblioteca (prompt/clasificacion-marca)                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_prompt_sale_de_la_biblioteca_y_sustituye_variables():
+    # Sin store, el cuerpo EFECTIVO es la semilla del paquete: las variables {{MARCAS}},
+    # {{MARCA_FALLBACK}} y {{NOTICIA}} no pueden quedar crudas en la llamada a la IA.
+    ej = _ejecutor_que_devuelve('{"marca": "unotv"}')
+    clasificador_marca.clasificar_marca(
+        "Titular X", "Resumen Y", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    p = ej.llamadas[0]
+    for marcador in ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"):
+        assert marcador not in p
+    assert "- claro-sports — Claro Sports" in p  # candidatas (id — nombre)
+    assert "«unotv»" in p                        # marca de noticias generales
+    assert "Titular X" in p and "Resumen Y" in p  # la noticia (JSON)
+
+
+def test_prompt_editado_en_la_biblioteca_gana():
+    # El equipo edita el doc en el store: la siguiente clasificación usa SU texto.
+    from keni_consola import libtexto
+
+    libtexto.importar_semilla()
+    libtexto.guardar(
+        "prompt/clasificacion-marca",
+        cuerpo="PERSONALIZADO\n{{MARCAS}}\nfallback={{MARCA_FALLBACK}}\n{{NOTICIA}}",
+    )
+    ej = _ejecutor_que_devuelve('{"marca": "unotv"}')
+    clasificador_marca.clasificar_marca(
+        "Titular", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    p = ej.llamadas[0]
+    assert p.startswith("PERSONALIZADO")
+    assert "fallback=unotv" in p and "{{MARCAS}}" not in p
+
+
+def test_sin_doc_ni_semilla_cae_al_fallback_del_modulo(monkeypatch, tmp_path):
+    # Robustez ante stores sin re-seed: sin doc en el store NI semilla disponible, el módulo
+    # usa su copia de respaldo (mismo texto) y sigue sustituyendo las variables.
+    monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
+    ej = _ejecutor_que_devuelve('{"marca": "claro-sports"}')
+    marca = clasificador_marca.clasificar_marca(
+        "Gol agónico", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    assert marca == "claro-sports"
+    p = ej.llamadas[0]
+    assert "editor que reparte" in p
+    assert "{{MARCAS}}" not in p and "- unotv — UnoTV" in p and "Gol agónico" in p

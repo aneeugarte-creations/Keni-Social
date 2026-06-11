@@ -341,7 +341,7 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
         ("prompt", "fusion-verificacion"),
         ("prompt", "fusion"),
         ("prompt", "traduccion"),
-        ("mecanica", "clasificacion-marca"),
+        ("prompt", "clasificacion-marca"),
         ("prompt", "ranking"),
         ("mecanica", "admision"),
         ("prompt", "validacion"),
@@ -351,8 +351,10 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
     assert por_id["validacion"]["doc_id"] == "prompt/validacion"  # prompt_base_de("qa")
     assert por_id["ranking"]["doc_id"] == "prompt/editorial"
     assert por_id["algoritmos"]["doc_id"] == "prompt/sugerencias"
+    # El clasificador de marca ya es un prompt de la Biblioteca (migrado del hardcodeado).
+    assert por_id["clasificacion-marca"]["doc_id"] == "prompt/clasificacion-marca"
     # Etapas mecánicas: SOLO contexto (sin doc_id ni estado de publicación).
-    for eid in ("ingesta", "clustering", "clasificacion-marca", "admision"):
+    for eid in ("ingesta", "clustering", "admision"):
         assert set(por_id[eid]) == {"tipo", "id", "titulo"}
     assert por_id["clasificacion-marca"]["titulo"] == "Clasificación de marca (IA)"
     # Etapas prompt: doc + estado de publicación (degradado sin BD: sin puntero).

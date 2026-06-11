@@ -529,9 +529,9 @@ async def variables(request: Request) -> Response:
 
 # Las TRES MÁQUINAS del riel (ADR 0011): Investigación (el motor de noticias), Producción
 # (la máquina de contenido) y las Herramientas de importación. Cada etapa es:
-#   - `mecanica`: paso del proceso SIN prompt de la Biblioteca (código puro o prompt
-#     hardcodeado, p. ej. el clasificador de marca con Haiku). Da contexto: el riel cuenta
-#     la historia completa del proceso, no solo los prompts editables.
+#   - `mecanica`: paso del proceso SIN prompt de la Biblioteca (código puro, p. ej. el
+#     clustering léxico o la admisión). Da contexto: el riel cuenta la historia completa
+#     del proceso, no solo los prompts editables.
 #   - `prompt` : etapa cuyo prompt vive en la Biblioteca. `doc_id=None` => se resuelve por el
 #     REGISTRO (`prompt_base_de`, ver `_ETAPA_PIPELINE`): respeta rebindeos sin tocar código.
 #
@@ -551,9 +551,7 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
         ("prompt", "fusion-verificacion", "Verificación pre-fusión", "prompt/fusion-verificacion", None),
         ("prompt", "fusion", "Fusión semántica", "prompt/fusion", None),
         ("prompt", "traduccion", "Traducción y localización MX", "prompt/traduccion", None),
-        # El clasificador de marca usa un prompt HARDCODEADO (dominio.clasificador_marca),
-        # no un doc de la Biblioteca: etapa mecánica hasta que ese prompt se externalice.
-        ("mecanica", "clasificacion-marca", "Clasificación de marca (IA)", None, None),
+        ("prompt", "clasificacion-marca", "Clasificación de marca (IA)", "prompt/clasificacion-marca", None),
         ("prompt", "ranking", "Ranking · perfil de relevancia", "prompt/editorial", None),
         ("mecanica", "admision", "Admisión", None, None),
         ("prompt", "validacion", "Validación de fuente (QA)", None, None),  # prompt_base_de("qa")

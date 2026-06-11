@@ -17,6 +17,8 @@ en un modulo, se anade aqui su entrada. Origen = el proceso/modulo que la sustit
   - `importador_calendario.py`     -> {{RUTA}} {{MARCAS}} {{REDES}}
   - `dominio/parrilla_import_job.py` -> {{FUENTE}} {{MIEMBROS}} {{SLOTS}} {{REGLA_FUENTE}}
                                         {{ESQUEMA_JSON}} {{COLA_FUENTE}}
+  - `dominio/clasificador_marca.py` -> {{MARCAS}} {{MARCA_FALLBACK}} {{NOTICIA}}
+  - `dominio/hashtags.py`          -> {{RED}} {{MARCA}} {{TEXTO}}
 
 Lo sirve `GET /api/texto/variables` con la forma `{variables: [{nombre, descripcion,
 ejemplo, origen}]}` (contrato con el frontend del rediseno).
@@ -32,9 +34,9 @@ _CATALOGO: tuple[dict[str, str], ...] = (
     # --- Priorizacion: perfil de keywords por marca (prompt/editorial) ---
     {
         "nombre": "MARCA",
-        "descripcion": "Id de la marca cuyo perfil editorial de temas/keywords se está derivando.",
+        "descripcion": "Id de la marca para la que se compone el prompt (perfil editorial o hashtags).",
         "ejemplo": "unotv",
-        "origen": "Priorización · perfil de keywords por marca (prompt/editorial)",
+        "origen": "Priorización · perfil de keywords por marca (prompt/editorial) y sugerencia de hashtags (prompt/hashtags)",
     },
     {
         "nombre": "MAX_KEYWORDS",
@@ -54,6 +56,19 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "descripcion": "Lista JSON de historias candidatas (id, título, resumen) a agrupar o verificar antes de fundir.",
         "ejemplo": '[{"id": "c41", "texto": "Sheinbaum anuncia plan hídrico…"}]',
         "origen": "Ingesta de noticias · fusión de historias y verificación pre-fusión (prompt/fusion, prompt/fusion-verificacion)",
+    },
+    # --- Ingesta: clasificacion de marca (prompt/clasificacion-marca) ---
+    {
+        "nombre": "MARCA_FALLBACK",
+        "descripcion": "Id de la marca de noticias generales a la que cae una noticia sin encaje temático claro.",
+        "ejemplo": "unotv",
+        "origen": "Investigación · clasificación de marca (prompt/clasificacion-marca)",
+    },
+    {
+        "nombre": "NOTICIA",
+        "descripcion": "JSON con el título y el resumen de la noticia a clasificar entre las marcas.",
+        "ejemplo": '{"titulo": "Sismo de 5.8 en CDMX", "resumen": "…"}',
+        "origen": "Investigación · clasificación de marca (prompt/clasificacion-marca)",
     },
     # --- Ingesta: traduccion/localizacion (prompt/traduccion) ---
     {
@@ -96,9 +111,9 @@ _CATALOGO: tuple[dict[str, str], ...] = (
     },
     {
         "nombre": "MARCAS",
-        "descripcion": "Catálogo vigente de marcas válidas a las que puede asignarse cada fila importada.",
+        "descripcion": "Catálogo de marcas válidas: las asignables a cada fila importada o las candidatas (id — nombre) entre las que clasificar una noticia.",
         "ejemplo": "UnoTV, Claro Sports",
-        "origen": "Importar calendario de contenido (prompt/importar/calendario)",
+        "origen": "Importar calendario de contenido (prompt/importar/calendario) y clasificación de marca (prompt/clasificacion-marca)",
     },
     {
         "nombre": "REDES",
@@ -142,6 +157,19 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "descripcion": "Transcripción del documento embebida al final del prompt (vacía si se lee por ruta).",
         "ejemplo": "DOCUMENTO (transcripción):\n```\nLUNES Ana 9-14…\n```",
         "origen": "Importar rota/parrilla (prompt/importar/parrilla)",
+    },
+    # --- Herramienta: sugerencia de hashtags (prompt/hashtags) ---
+    {
+        "nombre": "RED",
+        "descripcion": "Nombre de la red destino de los hashtags («redes sociales» si no se especifica una).",
+        "ejemplo": "Instagram",
+        "origen": "Herramienta · sugerencia de hashtags (prompt/hashtags)",
+    },
+    {
+        "nombre": "TEXTO",
+        "descripcion": "Texto de la pieza a partir del cual se sugieren los hashtags.",
+        "ejemplo": "La selección mexicana arranca su gira esta noche…",
+        "origen": "Herramienta · sugerencia de hashtags (prompt/hashtags)",
     },
 )
 

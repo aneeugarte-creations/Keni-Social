@@ -32,16 +32,43 @@ Ejecutor = Callable[[str, str], str]
 # Tope de caracteres de titulo+resumen al prompt (protege contra notas larguísimas).
 _MAX_CHARS = 600
 
-_PROMPT = (
+# El prompt vive en la Biblioteca de Texto como documento EDITABLE (pestaña «Prompts», doc
+# `prompt/clasificacion-marca`): el equipo lo ajusta sin tocar código. Las variables
+# {{MARCAS}}, {{MARCA_FALLBACK}} y {{NOTICIA}} se sustituyen aquí al componer la llamada.
+# `_PROMPT_FALLBACK` es la red defensiva (mismo texto que la semilla) por si un store viejo
+# no tuviera el doc ni la semilla disponible: la clasificación NUNCA se queda sin prompt.
+_PROMPT_ID = "prompt/clasificacion-marca"
+_PROMPT_FALLBACK = (
     "Eres el editor que reparte las noticias entrantes entre las marcas de un grupo de "
     "medios. Clasifica la noticia en la marca que mejor le cuadre por TEMÁTICA.\n"
-    "Marcas disponibles (id — nombre):\n{marcas}\n"
+    "Marcas disponibles (id — nombre):\n{{MARCAS}}\n"
     "Si la noticia es de interés general y no encaja claramente en una temática específica "
-    "(p. ej. deportes o videojuegos), elige la marca de noticias generales: «{fallback}».\n"
-    'Responde SOLO con un JSON: {{"marca": "<id>", "confianza": <0..1>}}. El id debe ser '
+    "(p. ej. deportes o videojuegos), elige la marca de noticias generales: «{{MARCA_FALLBACK}}».\n"
+    'Responde SOLO con un JSON: {"marca": "<id>", "confianza": <0..1>}. El id debe ser '
     "uno de los listados.\n\n"
-    "Noticia:\n{noticia}"
+    "Noticia:\n{{NOTICIA}}"
 )
+
+
+def _plantilla() -> str:
+    """Cuerpo EFECTIVO del prompt (publicado > store del equipo > semilla del paquete).
+
+    Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera vacía,
+    cae al `_PROMPT_FALLBACK` del módulo (con warning) para no dejar la ingesta sin prompt.
+    """
+    try:
+        from .. import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- best-effort: nunca dejar la clasificación sin prompt
+        cuerpo = ""
+    if cuerpo:
+        return cuerpo
+    _log.warning(
+        "clasificar_marca: %s no disponible en la Biblioteca; uso el fallback del módulo.",
+        _PROMPT_ID,
+    )
+    return _PROMPT_FALLBACK
 
 
 def clasificar_marca(
@@ -71,7 +98,12 @@ def clasificar_marca(
 
     lineas = "\n".join(f"- {cid} — {nombre}" for cid, nombre in candidatas)
     noticia = json.dumps({"titulo": titulo, "resumen": resumen}, ensure_ascii=False)
-    prompt = _PROMPT.format(marcas=lineas, fallback=fallback, noticia=noticia)
+    prompt = (
+        _plantilla()
+        .replace("{{MARCAS}}", lineas)
+        .replace("{{MARCA_FALLBACK}}", fallback)
+        .replace("{{NOTICIA}}", noticia)
+    )
 
     correr = ejecutor or _ejecutar
     try:

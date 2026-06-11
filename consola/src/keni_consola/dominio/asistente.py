@@ -21,7 +21,11 @@ El handler HTTP (`api/contenido`) solo valida y llama aqui.
 
 from __future__ import annotations
 
+import logging
+
 from . import generar
+
+_log = logging.getLogger("keni_consola.dominio.asistente")
 
 # Etiqueta de origen del historial: el asistente REUTILIZA la pipeline de copy por red
 # (piezas + veredicto + voz de marca). Solo cambia el TEXTO BASE (brief) y una instruccion
@@ -33,6 +37,11 @@ MODOS: tuple[str, ...] = ("generar", "variantes", "resumir")
 
 # Instruccion ADITIVA por modo. Se ANEXA al prompt de copy (el prompt mantiene su voz
 # de marca, tropicalizacion y auto-verificacion). `generar` no anade nada extra.
+#
+# El TEXTO de cada instruccion vive en la Biblioteca de Texto como documento EDITABLE
+# (pestaña «Prompts», docs `prompt/asistente/<modo>`): el equipo lo ajusta sin tocar codigo.
+# Este dict es la red defensiva (mismo texto que la semilla) por si un store viejo no
+# tuviera el doc ni la semilla disponible: el asistente NUNCA se queda sin instruccion.
 _INSTRUCCION_MODO: dict[str, str] = {
     "variantes": (
         "Además del copy por red, propón TRES variantes alternativas del copy "
@@ -44,6 +53,30 @@ _INSTRUCCION_MODO: dict[str, str] = {
         "una idea por red, sin relleno."
     ),
 }
+
+
+def _instruccion_modo(modo: str) -> str:
+    """Instruccion aditiva EFECTIVA del modo (publicado > store > semilla > dict del modulo).
+
+    Solo los modos con instruccion ("variantes"/"resumir") leen la Biblioteca; "generar" no
+    anade nada. Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera
+    vacia, cae al texto de `_INSTRUCCION_MODO` (con warning).
+    """
+    if modo not in _INSTRUCCION_MODO:
+        return ""
+    doc_id = f"prompt/asistente/{modo}"
+    try:
+        from .. import libtexto
+
+        cuerpo = (libtexto.cuerpo_efectivo(doc_id) or "").strip()
+    except Exception:  # noqa: BLE001 -- best-effort: nunca dejar el asistente sin instruccion
+        cuerpo = ""
+    if cuerpo:
+        return cuerpo
+    _log.warning(
+        "asistente: %s no disponible en la Biblioteca; uso el fallback del módulo.", doc_id
+    )
+    return _INSTRUCCION_MODO[modo]
 
 
 def _brief(titulo: str, descripcion: str, notas: str) -> str:
@@ -71,7 +104,7 @@ def construir_texto_base(
     para no tocar el cuerpo del prompt de copy (que ya trae voz de marca, etc.).
     """
     base = _brief(titulo, descripcion, notas)
-    extra = _INSTRUCCION_MODO.get(modo, "")
+    extra = _instruccion_modo(modo)
     return f"{base}\n\n{extra}".rstrip() if extra else base
 
 

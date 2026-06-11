@@ -240,6 +240,38 @@ def test_importar_semilla_no_pisa_lo_editado():
     assert libtexto.obtener(prompt.id).cuerpo.strip() == "EDITADO POR EL EQUIPO"
 
 
+def test_semilla_trae_los_prompts_migrados_del_codigo():
+    # Los 4 prompts que estaban hardcodeados en Python viajan ahora como semilla EDITABLE,
+    # con sus variables {{...}} en el cuerpo (las sustituye el módulo que los inyecta).
+    casos = {
+        "prompt/clasificacion-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
+        "prompt/hashtags": ("{{MARCA}}", "{{RED}}", "{{TEXTO}}"),
+        "prompt/asistente/variantes": (),
+        "prompt/asistente/resumir": (),
+    }
+    for doc_id, marcadores in casos.items():
+        cuerpo = libtexto.cuerpo_efectivo(doc_id)
+        assert cuerpo and cuerpo.strip(), f"semilla vacía o ausente: {doc_id}"
+        for m in marcadores:
+            assert m in cuerpo, f"{doc_id} sin el marcador {m}"
+
+
+def test_importar_semilla_materializa_docs_nuevos_en_store_existente():
+    # SEED-SYNC: un store YA inicializado (deploy viejo) recibe los seeds NUEVOS en el
+    # siguiente `python -m keni_consola.sembrar` (deploy.sh lo corre en cada deploy):
+    # `importar_semilla` copia SOLO lo que falta, sin pisar lo editado por el equipo.
+    from keni_consola.libtexto._rutas import raiz
+
+    assert libtexto.importar_semilla() > 0
+    # Simula el store viejo: aún no tenía uno de los docs nuevos, y otro está editado.
+    (raiz() / "prompt" / "clasificacion-marca.md").unlink()
+    libtexto.guardar("prompt/hashtags", cuerpo="EDITADO POR EL EQUIPO")
+    assert libtexto.importar_semilla() == 1  # solo el que faltaba
+    cuerpo = libtexto.cuerpo_efectivo("prompt/clasificacion-marca")
+    assert cuerpo and "{{MARCAS}}" in cuerpo
+    assert libtexto.obtener("prompt/hashtags").cuerpo.strip() == "EDITADO POR EL EQUIPO"
+
+
 def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     # Simula un store con el ID VIEJO (de antes del rediseño), un patrones (script) y un doc del
     # equipo que NO está en la semilla (termometro). La migración renombra/refresca sin pisar esos.
